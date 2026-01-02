@@ -1,0 +1,11 @@
+[package]
+name = "hal-core"
+version = "0.1.0"
+edition = "2021"
+description = "Hardware Abstraction Layer Traits for ViOS"
+
+[dependencies]
+# We keep dependencies minimal here. 
+# 'bitflags' is often useful for registers, but strictly for traits we might not need it yet.
+# 'log' is essential for structured logging.
+log = "0.4"

@@ -1,0 +1,2 @@
+Hello ViOS Filesystem!
+This file is read from FAT32 via VirtIO.

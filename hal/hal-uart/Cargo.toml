@@ -1,0 +1,9 @@
+[package]
+name = "hal-uart"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hal-core = { path = "../hal-core" }
+volatile = "0.4"
+bitflags = "2.4"

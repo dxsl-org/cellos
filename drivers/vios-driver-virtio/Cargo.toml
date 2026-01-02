@@ -1,0 +1,8 @@
+[package]
+name = "vios-driver-virtio"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hal-core = { path = "../../hal/hal-core" }
+log = "0.4"

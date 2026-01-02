@@ -1,0 +1,17 @@
+# Rust
+/target
+Cargo.lock
+
+# ViOS Private/Agent directories
+.agent
+.reference
+
+# OS Build artifacts
+*.bin
+*.iso
+*.img
+
+# Logs
+*.log
+build_error_*.txt
+check.json
