@@ -1,17 +1,26 @@
-# Rust
+# Build artifacts
 /target
 Cargo.lock
 
-# ViOS Private/Agent directories
-.agent
-.reference
+# IDE
+.vscode/
+.idea/
 
-# OS Build artifacts
-*.bin
-*.iso
-*.img
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup
+.backup/
 
 # Logs
 *.log
-build_error_*.txt
-check.json
+
+# Reference materials
+.reference/
+
+# Agent workspace
+.agent/
+
+# Disk Images
+*.img

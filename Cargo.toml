@@ -1,31 +1,54 @@
+# ViOS v0.2 Workspace - Cell-Based Architecture
+
 [workspace]
 members = [
-  "kernel",
-  "hal/hal-core", "hal/hal-uart", "hal/hal-riscv",
-  "drivers/vios-driver-motor", "drivers/vios-driver-network", "drivers/vios-driver-virtio", "drivers/vios-driver-gpu", "libs/ostd", 
-  "apps/vios-shell", "apps/vios-ockam-service", "apps/vios-hello", "hal/hal-display",
+    "kernel",
+    "libs/types",
+    "libs/api",
+    "libs/ostd",
+    
+    # HAL
+    "hal/core",
+    "hal/traits/arch",
+    "hal/traits/timer",
+    "hal/traits/interrupt",
+    "hal/traits/uart",
+    "hal/traits/display",
+    "hal/arch/riscv",
+    "hal/arch/arm",
+    "hal/arch/x86",
+    
+    # Cells - Drivers
+    "cells/drivers/disk",
+    "cells/drivers/gpu",
+    "cells/drivers/input",
+    "cells/drivers/net",
+    "cells/drivers/serial",
+    "cells/drivers/wasm",
+    
+    # Cells - Services
+    "cells/services/vfs",
+    "cells/services/compositor",
+    "cells/services/net",
+    "cells/services/input",
+    "cells/services/power",
+    "cells/services/config",
+    
+    # Cells - Apps
+    "cells/apps/init",
+    "cells/apps/shell",
+    "cells/apps/test-isolation",
 ]
-resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["ViOS Team"]
-license = "MIT"
-
-[workspace.dependencies]
-log = "0.4"
-# Local crates
-hal-core = { path = "hal/hal-core" }
-
-[profile.release]
-lto = true
-opt-level = "z"  # Optimize for size
-codegen-units = 1
-panic = "abort"
-strip = true
 
 [profile.dev]
-opt-level = 0
-debug = true
 panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = true
+opt-level = "z"

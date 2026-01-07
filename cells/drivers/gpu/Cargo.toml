@@ -1,0 +1,19 @@
+[package]
+name = "driver-gpu"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+types = { path = "../../../libs/types" }
+api = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd" }
+
+[features]
+default = []
+
+[lib]
+crate-type = ["staticlib"]
+
+[profile.release]
+panic = "abort"
+opt-level = "z"

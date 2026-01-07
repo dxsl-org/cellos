@@ -1,30 +1,50 @@
-#![no_std]
-// #![deny(unsafe_code)]
-// #![deny(unsafe_code)]
+// SPDX-License-Identifier: MPL-2.0
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! # ViOS Safe Standard Library (ostd)
-//!
-//! This library provides the "Safe Rust" surface for all Drivers and Applications.
-//! It abstracts away the raw System Calls and Unsafe bindings.
-//!
-//! ## Philosophy (Asterinas Model)
-//! - **No Unsafe**: Users of this crate cannot write `unsafe` code.
-//! - **Abstractions**: We provide high-level wrappers for Kernel capabilities.
+#![no_std]
+#![feature(alloc_error_handler)]
 
 extern crate alloc;
 
-pub mod console;
-pub mod io;
-pub mod memory;
-pub mod prelude;
-pub mod syscall;
-pub mod executor;
-pub mod ipc;
-pub mod task;
-pub mod sync;
+// ostd - ViOS Standard Library
+// 
+// Replacement for Rust's std library for ViOS Cells.
+// INTERFACE ONLY - NO IMPLEMENTATION YET.
 
-/// A marker trait for Drivers that are "Safe"
-pub trait SafeDriver {
-    fn name(&self) -> &str;
-    fn init(&mut self) -> Result<(), &'static str>;
+pub use types::*;
+pub use api::*;
+
+// Re-export alloc types
+pub use alloc::string;
+pub use alloc::vec;
+pub use alloc::boxed;
+
+/// Result type used throughout ViOS.
+pub type Result<T, E = ViError> = core::result::Result<T, E>;
+
+pub mod startup;
+pub mod syscall;
+
+/// Allocator hooks (to be implemented).
+pub mod heap;
+
+/// I/O traits and functions.
+pub mod io;
+
+/// Filesystem.
+pub mod fs;
+
+pub mod prelude;
+
+/// Task spawning.
+pub mod task {
+    use crate::*;
+    use core::future::Future;
+    
+    /// Yield current task.
+    pub fn yield_now() {
+        syscall::sys_yield();
+    }
 }

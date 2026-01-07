@@ -1,0 +1,15 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+[lints.rust]
+# Deny unsafe code by default, but allow exceptions in specific modules (e.g., allocator)
+unsafe_code = "deny"
+
+[dependencies]
+types = { path = "../types" }
+
+[features]
+default = []

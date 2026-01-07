@@ -1,0 +1,289 @@
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\hal\arch\riscv\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\drivers\disk\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\drivers\gpu\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\drivers\input\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\drivers\net\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\drivers\serial\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\drivers\wasm\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\services\vfs\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\services\compositor\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\services\net\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\services\input\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\services\power\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\services\config\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\apps\init\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\apps\shell\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
+package:   C:\Users\Admin\Download\ViOS\cells\apps\test-isolation\Cargo.toml
+workspace: C:\Users\Admin\Download\ViOS\Cargo.toml
+warning: virtual workspace defaulting to `resolver = "1"` despite one or more workspace members being on edition 2021 which implies `resolver = "2"`
+  |
+  = note: to keep the current resolver, specify `workspace.resolver = "1"` in the workspace root's manifest
+  = note: to use the edition 2021 resolver, specify `workspace.resolver = "2"` in the workspace root's manifest
+  = note: for more details see https://doc.rust-lang.org/cargo/reference/resolver.html#resolver-versions
+warning: unused import: `core::future::Future`
+ --> libs\api\src\fs.rs:9:5
+  |
+9 | use core::future::Future;
+  |     ^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `types::*`
+  --> libs\api\src\fs.rs:12:5
+   |
+12 | use types::*;
+   |     ^^^^^^^^
+
+warning: `api` (lib) generated 2 warnings (run `cargo fix --lib -p api` to apply 2 suggestions)
+warning: variable `bits` is assigned to, but never used
+ --> hal\arch\riscv\src\rv64\paging.rs:9:9
+  |
+9 |     let mut bits = 0;
+  |         ^^^^^^^^
+  |
+  = note: consider using `_bits` instead
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `bits` is never read
+  --> hal\arch\riscv\src\rv64\paging.rs:10:27
+   |
+10 |     if flags.is_valid() { bits |= 1 << 0; } /...
+   |                           ^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `bits` is never read
+  --> hal\arch\riscv\src\rv64\paging.rs:11:31
+   |
+11 | ...writeable() { bits |= 1 << 2; } // WRITE
+   |                  ^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: associated function `new` is never used
+  --> hal\arch\riscv\src\rv64\paging.rs:27:8
+   |
+26 | impl PageTableEntry {
+   | ------------------- associated function in this implementation
+27 |     fn new(addr: PhysAddr, flags: usize) -> S...
+   |        ^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `hal-riscv` (lib) generated 4 warnings
+    Checking vios-kernel v0.2.0 (C:\Users\Admin\Download\ViOS\kernel)
+warning: unused import: `alloc::vec::Vec`
+ --> kernel\src\fs\fat.rs:3:5
+  |
+3 | use alloc::vec::Vec;
+  |     ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `ToString`
+ --> kernel\src\fs\fat.rs:4:29
+  |
+4 | use alloc::string::{String, ToString};
+  |                             ^^^^^^^^
+
+warning: unused import: `core::cell::RefCell`
+ --> kernel\src\fs\fat.rs:7:5
+  |
+7 | use core::cell::RefCell;
+  |     ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `FileHandle`
+  --> kernel\src\fs\fat.rs:10:47
+   |
+10 | use api::fs::{ViFileSystem, ViFile, OpenMode, FileHandle};
+   |                                               ^^^^^^^^^^
+
+warning: unused import: `alloc::string::String`
+ --> kernel\src\task\syscall.rs:8:5
+  |
+8 | use alloc::string::String;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+ --> kernel\src\task\syscall.rs:9:5
+  |
+9 | use alloc::vec::Vec;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `log::info`
+  --> kernel\src\task\syscall.rs:10:5
+   |
+10 | use log::info;
+   |     ^^^^^^^^^
+
+warning: unused import: `alloc::collections::BTreeMap`
+ --> kernel\src\task\tcb.rs:5:5
+  |
+5 | use alloc::collections::BTreeMap;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `alloc::sync::Arc`
+ --> kernel\src\task\tcb.rs:7:5
+  |
+7 | use alloc::sync::Arc;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused imports: `error` and `warn`
+ --> kernel\src\task\scheduler.rs:3:17
+  |
+3 | use log::{info, warn, error};
+  |                 ^^^^  ^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+ --> kernel\src\task\scheduler.rs:5:5
+  |
+5 | use alloc::vec::Vec;
+  |     ^^^^^^^^^^^^^^^
+
+warning: unused import: `core::ptr::NonNull`
+ --> kernel\src\task\drivers\virtio_blk.rs:4:5
+  |
+4 | use core::ptr::NonNull;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `log::info`
+ --> kernel\src\task\drivers\virtio_gpu.rs:1:5
+  |
+1 | use log::info;
+  |     ^^^^^^^^^
+
+warning: unused import: `alloc::vec::Vec`
+  --> kernel\src\task.rs:15:5
+   |
+15 | use alloc::vec::Vec;
+   |     ^^^^^^^^^^^^^^^
+
+warning: the feature `naked_functions` has been stable since 1.88.0 and no longer requires an attribute to enable
+ --> kernel\src\main.rs:7:12
+  |
+7 | #![feature(naked_functions)]
+  |            ^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(stable_features)]` on by default
+
+warning: unreachable expression
+   --> kernel\src\task\syscall.rs:208:13
+    |
+206 |                 return Ok(0);
+    |                 ------------ any code following this expression is unreachable
+207 |             }
+208 |             Err(SyscallError::InvalidDriverId)
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unreachable expression
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> kernel\src\memory\frame.rs:48:13
+   |
+48 |         let mut aligned_start = (best_start + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+   |             ----^^^^^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `page_offset`
+  --> kernel\src\loader\elf.rs:48:25
+   |
+48 |                     let page_offset = current_page - start_page; // Offset from allocation start
+   |                         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_page_offset`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `slice`
+   --> kernel\src\task\syscall.rs:202:21
+    |
+202 |                 let slice = core::slice::from_raw_parts(name_ptr as *const u8, name_len);
+    |                     ^^^^^ help: if this is intentional, prefix it with an underscore: `_slice`
+
+warning: unused variable: `path_str`
+   --> kernel\src\task\syscall.rs:275:22
+    |
+275 |                  let path_str = core::str::from_utf8_unchecked(path_slice);
+    |                      ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_path_str`
+
+warning: unused variable: `path_str`
+   --> kernel\src\task\syscall.rs:287:22
+    |
+287 |                  let path_str = core::str::from_utf8_unchecked(path_slice);
+    |                      ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_path_str`
+
+warning: unnecessary `unsafe` block
+  --> kernel\src\main.rs:49:13
+   |
+49 |             unsafe { &boot::FALLBACK_BOOT_INFO }
+   |             ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> kernel\src\main.rs:62:9
+   |
+62 |     let mut frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+   |         ----^^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+error[E0382]: use of moved value: `locked_frame_allocator`
+   --> kernel\src\main.rs:102:10
+    |
+ 75 |     let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
+    |         -------------------------- move occurs because `locked_frame_allocator` has type `SpinlockGuard<'_, Option<FrameAllocator>>`, which does not implement the `Copy` trait
+...
+ 80 |     drop(locked_frame_allocator);
+    |          ---------------------- value moved here
+...
+102 |     drop(locked_frame_allocator);
+    |          ^^^^^^^^^^^^^^^^^^^^^^ value used here after move
+    |
+note: if `SpinlockGuard<'_, Option<FrameAllocator>>` implemented `Clone`, you could clone the value
+   --> kernel\src\sync.rs:42:1
+    |
+ 42 | pub struct SpinlockGuard<'a, T> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ consider implementing `Clone` for this type
+    |
+   ::: kernel\src\main.rs:80:10
+    |
+ 80 |     drop(locked_frame_allocator);
+    |          ---------------------- you could clone this value
+
+For more information about this error, try `rustc --explain E0382`.
+warning: `vios-kernel` (bin "vios-kernel") generated 23 warnings
+error: could not compile `vios-kernel` (bin "vios-kernel") due to 1 previous error; 23 warnings emitted

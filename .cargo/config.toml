@@ -1,8 +1,2 @@
 [build]
 target = "riscv64gc-unknown-none-elf"
-
-[target.riscv64gc-unknown-none-elf]
-rustflags = [
-    "-C", "link-arg=-Thal/hal-riscv/linker.ld",
-    "-C", "relocation-model=static",
-]

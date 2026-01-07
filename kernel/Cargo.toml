@@ -1,26 +1,24 @@
 [package]
-name = "kernel"
-version = "0.1.0"
+name = "vios-kernel"
+version = "0.2.0"
 edition = "2021"
+license = "MPL-2.0"
 
 [dependencies]
+types = { path = "../libs/types" }
+api = { path = "../libs/api" }
 log = "0.4"
-hal-core = { path = "../hal/hal-core" }
-hal-uart = { path = "../hal/hal-uart" }
-hal-riscv = { path = "../hal/hal-riscv" }
-ostd = { path = "../libs/ostd" }
-vios-driver-motor = { path = "../drivers/vios-driver-motor" }
-vios-shell = { path = "../apps/vios-shell" }
-vios-hello = { path = "../apps/vios-hello" }
-vios-ipc-test = { path = "../apps/vios-ipc-test" }
-linked_list_allocator = { version = "0.10.5", default-features = false, features = ["use_spin"] }
-virtio-drivers = "0.7.2"
-sbi-rt = { version = "0.0.3", features = ["legacy"] }
-async-trait = "0.1.88"
-bitflags = "2.9.1"
-ringbuf = { version = "0.4.8", default-features = false, features = ["alloc"] }
+virtio-drivers = "0.7.0"
+linked_list_allocator = "0.10"
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv64"] }
+async-trait = "0.1.89"
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc"] }
+xmas-elf = "0.9"
+riscv = "0.16.0"
+
+
+
 
 
 [features]
-default = []  # Default to no_std (bare metal)
-std = []
+default = []

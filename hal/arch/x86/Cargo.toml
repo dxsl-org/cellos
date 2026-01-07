@@ -1,0 +1,11 @@
+[package]
+name = "hal-x86"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hal-arch-trait = { path = "../../traits/arch" }
+types = { path = "../../../libs/types" }
+
+[features]
+default = []

@@ -1,50 +1,71 @@
+// SPDX-License-Identifier: MPL-2.0
+
+use crate::*;
 use alloc::string::String;
-use crate::syscall::sys_read;
+
+/// Print to console.
+pub fn print(s: &str) {
+    let _ = syscall::sys_log(s);
+}
+
+/// Print line to console.
+pub fn println(s: &str) {
+    print(s);
+    print("\n");
+}
 
 pub struct Stdin;
 
-pub fn stdin() -> Stdin {
-    Stdin
+impl Stdin {
+    pub fn read_line(&self, buf: &mut String) -> ViResult<usize> {
+        let mut bytes_read = 0;
+        loop {
+             let mut c = [0u8; 1];
+             if let Ok(n) = syscall::sys_read(0, &mut c) {
+                 if n > 0 {
+                     let ch = c[0] as char;
+                     // Echo is handled by kernel now?
+                     // Kernel sys_read implementation I wrote DOES echo.
+                     
+                     // Echo back
+                     if ch == '\r' || ch == '\n' {
+                         print("\n");
+                         buf.push('\n');
+                         return Ok(bytes_read + 1);
+                     }
+                     
+                     // Handle Backspace (127 or 8)
+                     if c[0] == 8 || c[0] == 127 {
+                         if !buf.is_empty() {
+                             // Print backspace sequence to erase char on screen
+                             // \x08 (Back) space \x08
+                             print("\x08 \x08");
+                             buf.pop();
+                             bytes_read -= 1;
+                         }
+                         continue;
+                     }
+                     
+                     // Normal char
+                     let mut tmp = [0u8; 4];
+                     let s = ch.encode_utf8(&mut tmp);
+                     print(s);
+                     
+                     buf.push(ch);
+                     bytes_read += 1;
+                 } else {
+                     // NO BLOCKING? sys_read usually blocks.
+                     // But my sys_read implementation loops.
+                     // Wait, my sys_read implementation loops with yielding.
+                     // So it blocks until input.
+                 }
+             } else {
+                 return Err(ViError::IO);
+             }
+        }
+    }
 }
 
-impl Stdin {
-    pub fn read_line(&self, buffer: &mut String) -> Result<usize, ()> {
-        loop {
-            let mut b = [0u8; 1];
-            // sys_read(0, ...) maps to Stdin in Kernel
-            match sys_read(0, &mut b) {
-                Ok(n) if n > 0 => {
-                    let c = b[0] as char;
-                    
-                    // Handle Enter
-                    if c == '\n' || c == '\r' {
-                        crate::print!("\n");
-                        break;
-                    }
-                    
-                    // Handle Backspace (0x08 or 0x7F)
-                    if c == '\x08' || c == '\x7F' {
-                        if !buffer.is_empty() {
-                            buffer.pop();
-                            // Erase on screen: Backspace, Space, Backspace
-                            crate::print!("\x08 \x08");
-                        }
-                        continue;
-                    }
-                    
-                    // Normal Printable Char
-                    // We assume ASCII for now.
-                    buffer.push(c);
-                    crate::print!("{}", c);
-                }
-                _ => {
-                    // Start of logic error: sys_read(0) should block.
-                    // If it returns 0 or Err, something failed.
-                    // We can yield just in case.
-                    crate::syscall::sys_yield();
-                }
-            }
-        }
-        Ok(buffer.len())
-    }
+pub fn stdin() -> Stdin {
+    Stdin
 }

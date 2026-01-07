@@ -1,0 +1,60 @@
+use core::ptr::NonNull;
+use virtio_drivers::device::input::VirtIOInput;
+use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
+use virtio_drivers::transport::{DeviceType, Transport};
+use crate::task::drivers::virtio_hal::VirtioHal;
+use crate::sync::Spinlock;
+use alloc::collections::VecDeque;
+
+pub struct KeyboardEvent {
+    pub event_type: u16,
+    pub code: u16,
+    pub value: u32,
+}
+
+pub struct VirtIOInputDriver {
+    pub input: VirtIOInput<VirtioHal, MmioTransport>,
+    pub event_queue: VecDeque<KeyboardEvent>,
+}
+
+pub static KEYBOARD_DRIVER: Spinlock<Option<VirtIOInputDriver>> = Spinlock::new(None);
+
+pub fn init_driver() {
+    for i in 0..8 {
+        let addr = 0x1000_1000 + i * 0x1000;
+        let header = unsafe { NonNull::new_unchecked(addr as *mut VirtIOHeader) };
+        match unsafe { MmioTransport::new(header) } {
+            Ok(transport) => {
+                if transport.device_type() == DeviceType::Input {
+                    log::info!("VirtIO: Found device at 0x{:X} type Input", addr);
+                    log::info!("VirtIO: Input device found. Initializing...");
+                    match VirtIOInput::<VirtioHal, MmioTransport>::new(transport) {
+                        Ok(input) => {
+                            log::info!("VirtIO: Input Driver initialized successfully!");
+                            *KEYBOARD_DRIVER.lock() = Some(VirtIOInputDriver {
+                                input,
+                                event_queue: VecDeque::new(),
+                            });
+                            return;
+                        }
+                        Err(e) => log::warn!("VirtIO Input init failed: {:?}", e),
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+    }
+}
+
+pub fn poll_events() {
+    if let Some(driver) = KEYBOARD_DRIVER.lock().as_mut() {
+        while let Some(event) = driver.input.pop_pending_event() {
+            log::debug!("VirtIO Input Event: type={}, code={}, value={}", event.event_type, event.code, event.value);
+            driver.event_queue.push_back(KeyboardEvent {
+                event_type: event.event_type,
+                code: event.code,
+                value: event.value,
+            });
+        }
+    }
+}

@@ -1,0 +1,18 @@
+[package]
+name = "app-init"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+types = { path = "../../../libs/types" }
+api = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd" }
+
+[features]
+default = []
+
+
+
+[profile.release]
+panic = "abort"
+opt-level = "z"

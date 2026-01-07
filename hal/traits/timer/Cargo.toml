@@ -1,0 +1,10 @@
+[package]
+name = "hal-timer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+types = { path = "../../../libs/types" }
+
+[lib]
+crate-type = ["rlib"]

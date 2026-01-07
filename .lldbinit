@@ -1,0 +1,2 @@
+target create --arch aarch64 target/aarch64-unknown-none-softfloat/debug/moss
+gdb-remote 1234

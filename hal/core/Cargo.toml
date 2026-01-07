@@ -1,0 +1,27 @@
+[package]
+name = "hal-core"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+types = { path = "../../libs/types" }
+
+
+hal-arch-trait = { path = "../traits/arch" }
+hal-timer = { path = "../traits/timer" }
+hal-interrupt = { path = "../traits/interrupt" }
+hal-paging = { path = "../traits/paging" }
+
+hal-uart = { path = "../traits/uart" }
+hal-display = { path = "../traits/display" }
+
+hal-riscv = { path = "../arch/riscv", optional = true }
+hal-arm = { path = "../arch/arm", optional = true }
+hal-x86 = { path = "../arch/x86", optional = true }
+
+[features]
+default = ["riscv64"]
+riscv64 = ["dep:hal-riscv"]
+riscv32 = ["dep:hal-riscv"]
+aarch64 = ["dep:hal-arm"]
+x86_64 = ["dep:hal-x86"]

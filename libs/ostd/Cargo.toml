@@ -1,9 +1,12 @@
 [package]
 name = "ostd"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
+version = "0.2.0"
+edition = "2021"
+license = "MPL-2.0"
 
 [dependencies]
-thiserror = { version = "2.0.17", default-features = false }
+types = { path = "../types" }
+api = { path = "../api" }
+
+[features]
+default = []

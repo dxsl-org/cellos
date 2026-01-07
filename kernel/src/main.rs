@@ -1,104 +1,200 @@
-#![cfg_attr(not(feature = "std"), no_std)]
-#![cfg_attr(not(feature = "std"), no_main)]
-#![allow(static_mut_refs)]
+// SPDX-License-Identifier: MPL-2.0
+//! ViOS Kernel - Entry point
 
-#[cfg(not(feature = "std"))]
+#![no_std]
+#![no_main]
+#![feature(alloc_error_handler)]
+#![feature(naked_functions)]
+
+extern crate alloc;
+
 use core::panic::PanicInfo;
 
-use kernel::init;
+// Core kernel modules
+pub mod boot;
+pub mod memory;
+pub mod cell;
+pub mod loader;
+pub mod fs; // Filesystem
+pub mod task;      // Renamed from 'process'
+// pub mod arch; // Moved to HAL
+pub extern crate hal; // HAL (Architecture specific)
+use hal::Arch;
+use boot::BootInfo;
+use api::block::ViBlockDevice;
 
-/// THE NUCLEUS (ViOS Microkernel)
-/// Feature="std": Runs as a process on Host OS (for Simulation/Testing)
-/// Feature="no_std": Runs as Bare Metal Kernel (on Robot/Server hardware)
 
-#[cfg(not(feature = "std"))]
+// Internal utilities
+mod sync;
+
+// Re-export types for convenience
+pub use types::*;
+
+/// Kernel entry point called from HAL boot code
+#[no_mangle]
+pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
+    // 0. Initialize UART immediately for early logging
+    task::drivers::uart::init();
+    
+    // 1. Initialize HAL (Architecture specific) - Early Trap Setup
+    hal::ARCH.init();
+    
+    // Manual puts helper for debugging
+    let puts = |s: &str| {
+        for c in s.bytes() {
+            crate::hal::sbi::console_putchar(c);
+        }
+    };
+    puts("VIOS K MAIN ENTRY\n");
+
+    log::info!("Kernel started (Hart: {}, DTB: 0x{:X})", hartid, dtb);
+
+    // Parse bootloader information
+    let boot_info_result = boot::parse_bootloader_info();
+    
+    // Check if Limine failed, if so, use fallback (SimpleBootInfo)
+    let boot_info: &dyn BootInfo = match &boot_info_result {
+        Ok(info) => info,
+        Err(_) => {
+            log::warn!("Limine not found, using QEMU/OpenSBI fallback");
+            // Use fallback static instance (defined in boot.rs or created here)
+            // For now, let's just use the fallback function we will create
+            unsafe { &boot::FALLBACK_BOOT_INFO }
+        }
+    };
+    // Force type validity (we can't return reference to local without more work, 
+    // so we assume FALLBACK_BOOT_INFO is static)
+    
+    // Initialize kernel subsystems
+    
+    // 1. Memory Management
+    // Get memory map from Boot Info (Converted to ViOS format)
+    let mmap_entries = boot_info.memory_map();
+    
+    // Initialize frame allocator with the largest usable region
+    let mut frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+    
+    // 2. Frame Allocator (Physical Memory)
+    // The local `frame_allocator` is moved into the global static.
+    // A mutable reference to the global static will be used for paging setup.
+    unsafe {
+        core::ptr::write(&mut *memory::frame::FRAME_ALLOCATOR.lock(), Some(frame_allocator));
+    }
+    log::info!("Frame allocator initialized");
+
+    // 3. Paging (Virtual Memory) Setup
+    log::info!("Initializing paging...");
+    // Get a mutable reference to the global frame allocator for paging initialization.
+    let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
+    let root_table_phys = memory::paging::init_kernel_paging(
+        locked_frame_allocator.as_mut().expect("Frame allocator not initialized"),
+        mmap_entries
+    ).expect("Failed to initialize paging");
+    drop(locked_frame_allocator);
+    log::info!("Paging initialized at 0x{:X}", root_table_phys);
+
+    // Activate Paging (SV39)
+    log::info!("Activating paging...");
+    unsafe {
+        memory::paging::activate_paging(root_table_phys);
+    }
+    log::info!("Paging activated");
+
+    // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
+    // Allocate 16MB for heap (4096 pages)
+    let heap_start = {
+        let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
+        let allocator = allocator_guard.as_mut().expect("Frame allocator not initialized");
+        let start = allocator.allocate_frame().expect("OOM: Heap start");
+        for _ in 0..4095 {
+            allocator.allocate_frame().expect("OOM: Heap continuation");
+        }
+        start
+    };
+    let heap_size = 4096 * 4096; // 16MB
+    unsafe {
+        memory::heap::init_heap(heap_start, heap_size);
+    }
+    log::info!("Heap initialized: 16MB at 0x{:X}", heap_start);
+
+    // Test Heap
+    let mut vec = alloc::vec::Vec::new();
+    vec.push(1);
+    vec.push(2);
+    vec.push(3);
+    log::info!("Heap test passed: vec = {:?}", vec);
+
+    // 5. Hardware Abstraction Layer (HAL) Initialization
+    // Already initialized at step 1 for trap handling
+    log::info!("HAL initialized");
+
+    // 6. Logger & Drivers & FS
+    task::drivers::uart::init();
+    task::drivers::init();
+
+    fs::init(); // Re-enabled with RAM disk
+    log::info!("Kernel subsystems initialized successfully.");
+
+    // 7. Initialize Scheduler
+    log::info!("Initializing scheduler...");
+    task::init();
+    log::info!("Scheduler initialized");
+
+    log::info!("Initializing Filesystem...");
+    if crate::fs::VIFS1.lock().is_some() {
+        log::info!("Filesystem mounted successfully.");
+    } else {
+        log::error!("Filesystem: Not mounted.");
+    }
+
+    // 7. Spawn User Shell/Init
+    log::info!("Spawning /init from filesystem...");
+    match task::spawn_from_file("/init", "init", types::CellId(1), alloc::vec![]) {
+        Ok(tid) => log::info!("Successfully spawned /init (TID: {})", tid),
+        Err(e) => {
+            log::error!("Failed to spawn /init: {:?}", e);
+            log::warn!("Attempting /INIT (case sensitivity check)...");
+            match task::spawn_from_file("/INIT", "init", types::CellId(1), alloc::vec![]) {
+                Ok(tid) => log::info!("Successfully spawned /INIT (TID: {})", tid),
+                Err(e) => {
+                     log::error!("Failed to spawn /INIT: {:?}", e);
+                     // Fallback to synthetic
+                     log::warn!("Falling back to synthetic task...");
+                     match task::spawn_synthetic("/synthetic", types::CellId(99), 0x1000) {
+                          Ok(tid) => log::info!("Successfully spawned /synthetic (TID: {})", tid),
+                          Err(e) => log::error!("Failed to spawn /synthetic: {:?}", e),
+                     }
+                }
+            }
+        }
+    }
+    
+    log::info!("Kernel initialization complete. Entering idle loop.");
+    
+    // 7. Start multitasking
+    log::info!("Starting scheduler...");
+    
+    // Ensure SPP bit is set in sstatus so that context switch saves it as Supervisor Mode.
+    // DISABLE Interrupts (0x100) to avoid potential trap handler bugs for now.
+    unsafe {
+        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x100);
+    }
+
+    loop {
+        if !crate::task::has_ready_tasks() {
+             log::info!("kmain: idle loop (no tasks)");
+        }
+        crate::task::yield_cpu();
+        // Use global HAL instance
+        crate::hal::ARCH.wait_for_interrupt();
+    }
+}
+
+/// Panic handler
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    log::error!("KERNEL PANIC: {}", info);
-    loop {}
-}
-
-#[cfg(not(feature = "std"))]
-#[no_mangle]
-pub extern "C" fn kmain() -> ! {
-    // DEBUG: Write 'V' to UART0 (0x10000000) directly
-    unsafe {
-        core::ptr::write_volatile(0x1000_0000 as *mut u8, b'V');
-    }
-
-    // Called from hal-riscv boot.s
-    init();
-    
-    // Initialize trap handler for interrupt handling
-    unsafe {
-        kernel::arch::trap::init();
-        log::info!("Trap handler initialized");
-    }
-    
-    // Initialize timer for preemptive multitasking
-    // Timer will fire every 10ms
-    unsafe {
-        kernel::timer::init(10);
-        log::info!("Timer initialized (10ms interval)");
-    }
-    
-    // Enable interrupts globally
-    unsafe {
-        kernel::arch::trap::enable_interrupts();
-        log::info!("Interrupts enabled");
-    }
-    
-    log::info!("Kernel initialized, entering scheduler loop...");
-    
-    // Main Scheduler Loop
-    // This is the kernel's idle task - runs when no other tasks are ready
-    let mut cycle_count = 0u64;
-    let mut last_stats_cycle = 0u64;
-    
+    log::error!("{}", info);
     loop {
-        // Check if we have any tasks to run
-        if kernel::process::has_ready_tasks() {
-            // Schedule next task
-            kernel::process::yield_cpu();
-            cycle_count += 1;
-        } else {
-            // No tasks ready - we're truly idle
-            // Log stats periodically
-            if cycle_count > 0 && cycle_count != last_stats_cycle {
-                let (total, ready) = kernel::process::scheduler_stats();
-                log::info!("Scheduler: {} cycles, {} total tasks, {} ready", 
-                    cycle_count, total, ready);
-                last_stats_cycle = cycle_count;
-            }
-            
-            // Wait for interrupt (timer, IPC, etc)
-            unsafe {
-                core::arch::asm!("wfi");
-            }
-            continue;
-        }
-        
-        // Every 10000 cycles, log status
-        if cycle_count % 10000 == 0 {
-            let (total, ready) = kernel::process::scheduler_stats();
-            log::debug!("Scheduler: {} cycles, {} tasks ({} ready)", 
-                cycle_count, total, ready);
-        }
+        hal::ARCH.wait_for_interrupt();
     }
-}
-
-#[cfg(feature = "std")]
-fn main() {
-    println!(">>> ViOS Bootloader v0.1 (Simulated) <<<");
-    init();
-    
-    println!(">>> Starting Scheduler Loop (5 cycles) <<<");
-    for i in 0..5 {
-        println!("--- Cycle {} ---", i);
-        kernel::process::yield_cpu();
-        // Simulate some work or time passing
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
-    
-    println!(">>> System Halting <<<");
 }

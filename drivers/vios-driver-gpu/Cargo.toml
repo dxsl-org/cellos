@@ -1,8 +1,0 @@
-[package]
-name = "vios-driver-gpu"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-vios-driver-virtio = { path = "../vios-driver-virtio" }
-ostd = { path = "../../libs/ostd" }
