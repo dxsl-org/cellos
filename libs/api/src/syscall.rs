@@ -15,8 +15,13 @@ pub enum ViSyscall {
     // === Process Management (10-49) ===
     Exit = 60,  // Linux compat usually, but we define our own space
     Spawn = 5,
-    Exec = 6,
+    Exec = 6, // Deprecated/Legacy
+    SpawnFromMem = 10, // New Spawn from Memory (Struct based)
+    Wait = 8, // Wait for task
     Yield = 104, // Linux sched_yield is 24, but we use 104 in current code
+    SetTimer = 35, // Added SetTimer
+    ShmAlloc = 20, // Allocate Shared Memory
+    ShmMap = 21,   // Map Shared Memory to Task
     
     // === Logging (50-59) ===
     Log = 11,   // Current implementation uses 11
@@ -42,7 +47,12 @@ impl From<usize> for ViSyscall {
             60 => ViSyscall::Exit,
             5 => ViSyscall::Spawn,
             6 => ViSyscall::Exec,
+            10 => ViSyscall::SpawnFromMem,
+            8 => ViSyscall::Wait,
             104 => ViSyscall::Yield,
+            35 => ViSyscall::SetTimer,
+            20 => ViSyscall::ShmAlloc,
+            21 => ViSyscall::ShmMap,
             11 => ViSyscall::Log,
             101 => ViSyscall::Open,
             102 => ViSyscall::Read,
@@ -52,4 +62,22 @@ impl From<usize> for ViSyscall {
             _ => ViSyscall::Unknown,
         }
     }
+}
+
+/// Arguments for SpawnFromMem syscall.
+/// Using repr(C) for ABI stability.
+#[repr(C)]
+pub struct ViSpawnArgs {
+    /// Address of buffer containing ELF.
+    pub buffer_addr: usize,
+    /// Size of buffer.
+    pub buffer_size: usize,
+    /// Pointer to name string (utf8).
+    pub name_ptr: usize,
+    /// Length of name string.
+    pub name_len: usize,
+    /// Pointer to arguments string (utf8, space separated or null separated).
+    pub args_ptr: usize,
+    /// Length of arguments string.
+    pub args_len: usize,
 }

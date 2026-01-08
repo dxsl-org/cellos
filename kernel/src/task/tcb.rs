@@ -25,6 +25,8 @@ pub enum TaskState {
     /// Blocked on a Futex wait.
     /// `addr`: The address being waited on.
     FutexWait { addr: VAddr },
+    /// Waiting for another task to exit (Join).
+    Waiting { target: usize },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -100,6 +102,10 @@ pub struct Task {
     // Stack management
     pub kernel_stack: Option<super::stack::Stack>,
     pub user_stack: Option<super::stack::Stack>,
+
+    // Lifecycle
+    pub waiters: Vec<usize>,
+    pub exit_code: Option<usize>,
 }
 
 impl Task {
@@ -122,6 +128,8 @@ impl Task {
             cwd: String::from("/"),
             kernel_stack: None,
             user_stack: None,
+            waiters: Vec::new(),
+            exit_code: None,
         }
     }
     

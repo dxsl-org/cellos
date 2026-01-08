@@ -9,7 +9,8 @@ api = { path = "../../../libs/api" }
 ostd = { path = "../../../libs/ostd" }
 
 [lib]
-crate-type = ["staticlib"]
+# Dual output: rlib for Rust deps, staticlib for final Cell linking
+crate-type = ["rlib", "staticlib"]
 
 [profile.release]
 panic = "abort"

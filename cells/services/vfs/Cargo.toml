@@ -7,9 +7,11 @@ edition = "2021"
 types = { path = "../../../libs/types" }
 api = { path = "../../../libs/api" }
 ostd = { path = "../../../libs/ostd" }
+driver-disk = { path = "../../drivers/disk" }
 
-[lib]
-crate-type = ["staticlib"]
+[[bin]]
+name = "service-vfs"
+path = "src/main.rs"
 
 [profile.release]
 panic = "abort"

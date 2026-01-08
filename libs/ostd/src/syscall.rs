@@ -1,7 +1,7 @@
 #![allow(unsafe_code)]
 
 use core::arch::asm;
-use api::syscall::ViSyscall;
+use api::syscall::{ViSyscall, ViSpawnArgs};
 
 
 #[derive(Debug, Copy, Clone)]
@@ -78,6 +78,60 @@ pub fn sys_spawn(entry: usize, arg: usize) -> SyscallResult {
     }
 }
 
+pub fn sys_spawn_from_mem(data: &[u8], name: &str, args: &str) -> SyscallResult {
+    unsafe {
+        let spawn_args = ViSpawnArgs {
+            buffer_addr: data.as_ptr() as usize,
+            buffer_size: data.len(),
+            name_ptr: name.as_ptr() as usize,
+            name_len: name.len(),
+            args_ptr: args.as_ptr() as usize,
+            args_len: args.len(),
+        };
+
+        let ret = syscall(ViSyscall::SpawnFromMem,
+                          &spawn_args as *const _ as usize, 0, 0, 0);
+        if ret > 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
+pub fn sys_wait(pid: usize) -> SyscallResult {
+    unsafe {
+        let ret = syscall(ViSyscall::Wait, pid, 0, 0, 0);
+        if ret >= 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
+pub fn sys_shm_alloc(size: usize) -> SyscallResult {
+    unsafe {
+        let ret = syscall(ViSyscall::ShmAlloc, size, 0, 0, 0);
+        if ret > 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
+pub fn sys_shm_map(handle: usize, target_pid: usize) -> SyscallResult {
+    unsafe {
+        let ret = syscall(ViSyscall::ShmMap, handle, target_pid, 0, 0);
+        if ret != 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
 pub fn sys_open(path: &str) -> Result<usize, SyscallError> {
     unsafe {
         let ret = syscall(ViSyscall::Open, path.as_ptr() as usize, path.len(), 0, 0);
@@ -143,3 +197,16 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     }
 }
 
+pub fn sys_set_timer(ticks: usize) -> SyscallResult {
+    unsafe {
+        syscall(ViSyscall::SetTimer, ticks, 0, 0, 0);
+        SyscallResult::Ok(0)
+    }
+}
+
+pub fn sys_grant(target: usize, ptr: usize, len: usize, flags: usize) -> SyscallResult {
+    unsafe {
+        // Assume Grant mapped to ID 12
+        SyscallResult::Err(SyscallError::Unknown)
+    }
+}

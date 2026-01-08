@@ -79,29 +79,13 @@ impl Future for SleepFuture {
 
     fn poll(mut self: core::pin::Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         // We lack a proper "User-accessible" System Time for now.
-        // But sys_set_timer expects absolute time? No, let's make sys_set_timer handle relative?
-        // Wait, Kernel's SetTimer used absolute check: `deadline > now`.
-        // So User needs to know `now`.
-        //
-        // WORKAROUND: For MVP, we pass relative ticks to sys_set_timer, 
-        // and Kernel adds it to current time.
-        // 
-        // WAIT: I implemented `Syscall::SetTimer { deadline }` in Kernel expecting Absolute.
-        // I need to fix Kernel or expose `sys_time` syscall.
-        //
-        // Let's fix Kernel SetTimer to be "WakeAt" (Absolute) 
-        // AND Assume User guesses 'now' is purely looped?
-        // No, let's use a "SleepFor" syscall which is easier.
-        // Modification: Rename sys_set_timer to sys_sleep_for?
-        // OR: Loop reading `sys_set_timer`. 
-        //
-        // Let's rely on the fact that if we set a deadline 0, maybe we can read time?
-        // 
-        // Let's change strategy:
-        // Use a loop counter here for valid polling.
+        // We assume Syscall SetTimer is "Sleep For Delta" in this context
+        // because we updated the kernel wrapper to pass 'ticks' as deadline?
+        // No, in kernel wrapper (syscall.rs) I mapped it to Syscall::SetTimer { deadline: ticks }.
+        // And in kernel implementation I used `now + deadline`.
+        // So `ticks` IS `delta`. Correct.
         
         if !self.started {
-             // If we assume Syscall 3 is "Sleep For Delta":
              let _ = crate::syscall::sys_set_timer(self.ticks); // Sleep for X ticks
              self.started = true;
              Poll::Pending

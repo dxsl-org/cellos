@@ -9,6 +9,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use log::info;
 use types::*;
+use api::syscall::ViSpawnArgs;
 
 
 /// Result of a System Call
@@ -60,6 +61,14 @@ pub enum Syscall {
     Exit { code: usize },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
+    /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
+    SpawnFromMem { args_ptr: usize },
+    /// 8: Wait (Wait for task)
+    Wait { pid: usize },
+    /// 20: ShmAlloc
+    ShmAlloc { size: usize },
+    /// 21: ShmMap
+    ShmMap { handle: usize, target_pid: usize },
     
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -148,6 +157,85 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(SyscallError::Unknown)
             }
         }
+        Syscall::Wait { pid } => {
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(target) = sched.tasks.get_mut(&pid) {
+                    if target.state == TaskState::Terminated {
+                        // Already dead? Return exit code if stored or just 0?
+                        let code = target.exit_code.unwrap_or(0);
+                        return Ok(code);
+                    } else {
+                        // Add to waiters
+                        target.waiters.push(caller_id);
+                    }
+                } else {
+                    return Err(SyscallError::InvalidDriverId); // Task not found
+                }
+
+                // Block caller
+                if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+                    caller.state = TaskState::Waiting { target: pid };
+                }
+            }
+            super::yield_cpu(); // Block
+            // Resume with exit code (set by Exit handler)
+            if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                return Ok(sched.tasks.get(&caller_id).and_then(|t| t.reply_value).unwrap_or(0));
+            }
+            Ok(0)
+        }
+        Syscall::ShmAlloc { size } => {
+            // Allocate a global frame
+            // For MVP, we just allocate from frame allocator and return physical address as handle?
+            // Handle MUST be secure.
+            // We use PAddr as Handle for now (Insecure but works for single user SAS logic).
+            let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+            if let Some(allocator) = frame_guard.as_mut() {
+                if let Some(frame) = allocator.allocate_frame() {
+                    return Ok(frame);
+                }
+            }
+            Err(SyscallError::BufferTooSmall)
+        }
+        Syscall::ShmMap { handle, target_pid } => {
+            // Map the frame (handle) into target_pid's address space.
+            // We need to find a free VAddr in target.
+            // Simplified: Map at Identity + Offset? Or hardcoded region?
+            // Let's map at 0x8000_0000 + handle (if handle is small offset?).
+            // Handle is PhysAddr (e.g. 0x80200000).
+            // We map it to VAddr = Handle (Identity) for SAS simplicity if not already mapped.
+            // Actually, in SAS, if we use Identity Mapping for User Space (which we do for now mostly),
+            // then ShmAlloc returning PAddr is enough! The user can just use it?
+            // NO. User runs in U-mode. They can only access mapped pages.
+            // We need to ensure PAddr is mapped with U-bit.
+
+            let frame = handle;
+            let vaddr = frame; // Identity map for simplicity
+
+            // Map it for Target
+            // Permissions: R/W/U
+            use crate::memory::paging::Flags;
+            let flags = Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
+
+            // We need access to Frame Allocator to clone the mapping?
+            // Or just update the Page Table.
+            // Page Table is shared? SAS means One Page Table?
+            // If SAS means One Page Table, then mapping it once makes it available to ALL.
+            // ViOS SAS: "Single Address Space". Yes.
+            // So ShmMap just ensures it is mapped with U permission.
+
+            let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+            if let Some(allocator) = frame_guard.as_mut() {
+                 unsafe {
+                     // Check if already mapped?
+                     // We just force map.
+                     if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags.bits())).is_ok() {
+                         return Ok(vaddr);
+                     }
+                 }
+            }
+            Err(SyscallError::Unknown)
+        }
         Syscall::FutexWait { addr, val } => {
             // Returns Ok(0) if blocked (then yield), Err(TryAgain) if val mismatch
             match super::futex_wait(caller_id, addr, val) {
@@ -188,21 +276,30 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
              super::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
         }
         Syscall::Exit { code } => {
-            log::info!("Syscall::Exit handler called for {}", caller_id);
+            log::info!("Syscall::Exit handler called for {} with code {}", caller_id, code);
+            let mut waiters = alloc::vec::Vec::new();
+
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                sched.exit_task(caller_id);
+                // sched.exit_task(caller_id); // Don't remove yet! Mark Terminated.
+                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                    task.state = TaskState::Terminated;
+                    task.exit_code = Some(code);
+                    // Steal waiters
+                    waiters.append(&mut task.waiters);
+                }
+
+                // Wake up waiters
+                for wid in waiters {
+                    if let Some(w) = sched.tasks.get_mut(&wid) {
+                        w.state = TaskState::Ready;
+                        w.reply_value = Some(code);
+                        sched.ready_queue.push_back(wid);
+                    }
+                }
             }
-            // Logic: The task is removed. The scheduler loop (yield_cpu) will run next.
-            // We need to return SOMETHING to the syscall dispatch, but it won't be used
-            // because the context is dead.
-            // yield_cpu call happens AFTER this return in syscall_dispatch?
-            // NO. dispatch calls handle_syscall, then return.
-            // Then exception handler returns.
-            // BUT if task is removed, yielding happens later?
-            // Wait. We need to YIELD IMMEDIATELY.
-            // Otherwise, we return to the dead task code!
+
             super::yield_cpu(); 
-            // Yield cpu won't return here if task is dead.
+            // Should not return
             Ok(0) 
         }
         Syscall::Reply { caller: _, result } => {              super::ipc_reply(caller_id, result).map_err(|_| SyscallError::InvalidCommand)
@@ -312,15 +409,33 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
              unsafe {
                  let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
                  if let Ok(path) = core::str::from_utf8(slice) {
-                     // Default to Root Cell (0) and no extra drivers for now
-                     let cell_id = CellId(0);
-                     let drivers = alloc::vec::Vec::new();
-                     match super::spawn_from_file(path, path, cell_id, drivers) {
-                         Ok(tid) => Ok(tid),
-                         Err(_) => Err(SyscallError::FileNotFound),
-                     }
+                     // Legacy Exec support removed/depreciated
+                     // We should use SpawnFromMem for modern apps
+                     Err(SyscallError::NotSupported)
                  } else {
                      Err(SyscallError::InvalidCommand)
+                 }
+             }
+        }
+        Syscall::SpawnFromMem { args_ptr } => {
+             unsafe {
+                 // Read struct from user pointer
+                 let args = &*(args_ptr as *const ViSpawnArgs);
+
+                 let data_slice = core::slice::from_raw_parts(args.buffer_addr as *const u8, args.buffer_size);
+                 let name_slice = core::slice::from_raw_parts(args.name_ptr as *const u8, args.name_len);
+                 let name = core::str::from_utf8(name_slice).unwrap_or("unknown");
+
+                 // TODO: Handle args.args_ptr (Command Line Arguments)
+                 // For now, ignore args or pass them to spawn_from_mem?
+                 // spawn_from_mem needs update to take args?
+
+                 let cell_id = CellId(0);
+                 let drivers = alloc::vec::Vec::new();
+
+                 match super::spawn_from_mem(data_slice, name, cell_id, drivers) {
+                     Ok(tid) => Ok(tid),
+                     Err(_) => Err(SyscallError::InvalidInput),
                  }
              }
         }
@@ -427,8 +542,13 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
             
         ViSyscall::Spawn => Syscall::Spawn { entry: a0, arg: a1 },
         ViSyscall::Exec => Syscall::Exec { path_ptr: a0, path_len: a1 },
+        ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { args_ptr: a0 },
+        ViSyscall::Wait => Syscall::Wait { pid: a0 },
+        ViSyscall::ShmAlloc => Syscall::ShmAlloc { size: a0 },
+        ViSyscall::ShmMap => Syscall::ShmMap { handle: a0, target_pid: a1 },
         ViSyscall::Exit => Syscall::Exit { code: a0 },
         ViSyscall::Yield => Syscall::Yield,
+        ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
         ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },
         
         ViSyscall::Open => Syscall::Open { path_ptr: a0, path_len: a1 },
