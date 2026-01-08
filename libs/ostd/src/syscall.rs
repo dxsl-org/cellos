@@ -143,3 +143,9 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     }
 }
 
+pub fn sys_set_timer(ticks: usize) -> SyscallResult {
+    unsafe {
+        syscall(ViSyscall::SetTimer, ticks, 0, 0, 0);
+        SyscallResult::Ok(0)
+    }
+}

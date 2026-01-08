@@ -38,6 +38,9 @@ pub mod fs;
 
 pub mod prelude;
 
+/// Executor
+pub mod executor;
+
 /// Task spawning.
 pub mod task {
     use crate::*;

@@ -6,13 +6,19 @@ extern crate ostd;
 
 mod shell;
 mod commands;
+mod async_utils;
 
 use shell::ViShell;
+use ostd::executor;
 
 #[no_mangle]
 pub fn main() {
-    let _ = ostd::syscall::sys_log("DEBUG: Shell Started\n");
+    let _ = ostd::syscall::sys_log("DEBUG: Shell Started (Async Mode)\n");
 
     let shell = ViShell::new();
-    shell.run();
+
+    // Execute the async shell using the block_on executor
+    executor::block_on(async {
+        shell.run().await;
+    });
 }

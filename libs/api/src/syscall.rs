@@ -17,6 +17,7 @@ pub enum ViSyscall {
     Spawn = 5,
     Exec = 6,
     Yield = 104, // Linux sched_yield is 24, but we use 104 in current code
+    SetTimer = 35, // Added SetTimer
     
     // === Logging (50-59) ===
     Log = 11,   // Current implementation uses 11
@@ -43,6 +44,7 @@ impl From<usize> for ViSyscall {
             5 => ViSyscall::Spawn,
             6 => ViSyscall::Exec,
             104 => ViSyscall::Yield,
+            35 => ViSyscall::SetTimer,
             11 => ViSyscall::Log,
             101 => ViSyscall::Open,
             102 => ViSyscall::Read,
