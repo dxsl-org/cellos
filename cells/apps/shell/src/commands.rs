@@ -60,9 +60,21 @@ pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 
             match syscall::sys_spawn_from_mem(&data, path) {
                 syscall::SyscallResult::Ok(tid) => {
-                     // ostd::io::println("Spawned task ID: {}", tid);
-                     // We probably want to wait for it, but for now we just return.
-                     ostd::io::println("Spawn success.");
+                     // Wait for task
+                     ostd::io::print("exec: waiting for pid ");
+                     // ostd::io::print(tid...);
+                     ostd::io::println("...");
+
+                     match syscall::sys_wait(tid) {
+                         syscall::SyscallResult::Ok(code) => {
+                             ostd::io::print("exec: process exited with code ");
+                             // ostd::io::println(code...);
+                             ostd::io::println(".");
+                         },
+                         _ => {
+                             ostd::io::println("exec: wait failed (detached?)");
+                         }
+                     }
                 },
                 syscall::SyscallResult::Err(_) => {
                      ostd::io::println("exec: spawn failed");

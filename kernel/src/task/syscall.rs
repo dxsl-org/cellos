@@ -60,8 +60,10 @@ pub enum Syscall {
     Exit { code: usize },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
-    /// 7: SpawnFromMem (Spawn from Memory buffer)
+    /// 10: SpawnFromMem (Spawn from Memory buffer)
     SpawnFromMem { ptr: usize, len: usize, name_ptr: usize, name_len: usize },
+    /// 8: Wait (Wait for task)
+    Wait { pid: usize },
     
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -150,6 +152,37 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(SyscallError::Unknown)
             }
         }
+        Syscall::Wait { pid } => {
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(target) = sched.tasks.get_mut(&pid) {
+                    if target.state == TaskState::Terminated {
+                        // Already dead? Return exit code if stored or just 0?
+                        // If we support Zombies, we get it. If simplified, assume 0.
+                        // But wait, if Terminated, we might have cleaned it up already?
+                        // Scheduler::exit_task usually removes it? No, in Exit handler we didn't remove it yet?
+                        // Let's check Exit handler logic below.
+                        let code = target.exit_code.unwrap_or(0);
+                        return Ok(code);
+                    } else {
+                        // Add to waiters
+                        target.waiters.push(caller_id);
+                    }
+                } else {
+                    return Err(SyscallError::InvalidDriverId); // Task not found
+                }
+
+                // Block caller
+                if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+                    caller.state = TaskState::Waiting { target: pid };
+                }
+            }
+            super::yield_cpu(); // Block
+            // Resume with exit code (set by Exit handler)
+            if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                return Ok(sched.tasks.get(&caller_id).and_then(|t| t.reply_value).unwrap_or(0));
+            }
+            Ok(0)
+        }
         Syscall::FutexWait { addr, val } => {
             // Returns Ok(0) if blocked (then yield), Err(TryAgain) if val mismatch
             match super::futex_wait(caller_id, addr, val) {
@@ -190,21 +223,36 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
              super::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
         }
         Syscall::Exit { code } => {
-            log::info!("Syscall::Exit handler called for {}", caller_id);
+            log::info!("Syscall::Exit handler called for {} with code {}", caller_id, code);
+            let mut waiters = alloc::vec::Vec::new();
+
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                sched.exit_task(caller_id);
+                // sched.exit_task(caller_id); // Don't remove yet! Mark Terminated.
+                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                    task.state = TaskState::Terminated;
+                    task.exit_code = Some(code);
+                    // Steal waiters
+                    waiters.append(&mut task.waiters);
+                }
+
+                // Wake up waiters
+                for wid in waiters {
+                    if let Some(w) = sched.tasks.get_mut(&wid) {
+                        w.state = TaskState::Ready;
+                        w.reply_value = Some(code);
+                        sched.ready_queue.push_back(wid);
+                    }
+                }
             }
-            // Logic: The task is removed. The scheduler loop (yield_cpu) will run next.
-            // We need to return SOMETHING to the syscall dispatch, but it won't be used
-            // because the context is dead.
-            // yield_cpu call happens AFTER this return in syscall_dispatch?
-            // NO. dispatch calls handle_syscall, then return.
-            // Then exception handler returns.
-            // BUT if task is removed, yielding happens later?
-            // Wait. We need to YIELD IMMEDIATELY.
-            // Otherwise, we return to the dead task code!
+            // Cleanup Logic (SAS Lease Revocation)
+            // Ideally we iterate leases and revoke.
+            // But for now, we just switch context.
+            // The task struct remains as Zombie (Terminated) if we don't remove it.
+            // If we want to clean up memory, we should do it here or in a Reaper.
+            // For MVP, we leave it as Terminated.
+
             super::yield_cpu(); 
-            // Yield cpu won't return here if task is dead.
+            // Should not return
             Ok(0) 
         }
         Syscall::Reply { caller: _, result } => {              super::ipc_reply(caller_id, result).map_err(|_| SyscallError::InvalidCommand)
@@ -441,6 +489,7 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::Spawn => Syscall::Spawn { entry: a0, arg: a1 },
         ViSyscall::Exec => Syscall::Exec { path_ptr: a0, path_len: a1 },
         ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { ptr: a0, len: a1, name_ptr: a2, name_len: a3 },
+        ViSyscall::Wait => Syscall::Wait { pid: a0 },
         ViSyscall::Exit => Syscall::Exit { code: a0 },
         ViSyscall::Yield => Syscall::Yield,
         ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },

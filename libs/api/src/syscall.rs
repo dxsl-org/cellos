@@ -17,6 +17,7 @@ pub enum ViSyscall {
     Spawn = 5,
     Exec = 6, // Deprecated/Legacy
     SpawnFromMem = 10, // New Spawn from Memory (Struct based)
+    Wait = 8, // Wait for task
     Yield = 104, // Linux sched_yield is 24, but we use 104 in current code
     SetTimer = 35, // Added SetTimer
     
@@ -45,6 +46,7 @@ impl From<usize> for ViSyscall {
             5 => ViSyscall::Spawn,
             6 => ViSyscall::Exec,
             10 => ViSyscall::SpawnFromMem,
+            8 => ViSyscall::Wait,
             104 => ViSyscall::Yield,
             35 => ViSyscall::SetTimer,
             11 => ViSyscall::Log,
@@ -67,7 +69,7 @@ pub struct ViSpawnArgs {
     /// Size of buffer.
     pub buffer_size: usize,
     /// Pointer to name string (utf8).
-    pub name_ptr: usize, // Changed from *const u8 to usize for transport safety
+    pub name_ptr: usize,
     /// Length of name string.
     pub name_len: usize,
 }
