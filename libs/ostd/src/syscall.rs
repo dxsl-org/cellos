@@ -164,3 +164,22 @@ pub fn sys_set_timer(ticks: usize) -> SyscallResult {
         SyscallResult::Ok(0)
     }
 }
+
+pub fn sys_grant(target: usize, ptr: usize, len: usize, flags: usize) -> SyscallResult {
+    // Assuming Grant is defined in kernel, ID 12 based on kernel source read earlier
+    // But ViSyscall enum in API doesn't have Grant exposed yet in current version of file?
+    // Let's check ViSyscall enum definition in `api`. I just updated it but didn't add Grant.
+    // Kernel syscall.rs has `Syscall::Grant` logic (ID 12).
+    // I should add Grant to ViSyscall in `libs/api/src/syscall.rs` first if I want to use it.
+    // But `ostd` wraps raw syscalls.
+    // I will cast ID 12 for now or update `ViSyscall` properly.
+    // Let's update `ViSyscall` first in next step if needed.
+    // For now, assume Grant is ID 12.
+    unsafe {
+        // ID 12 is hardcoded in kernel logic for Grant?
+        // Need to be careful. Kernel `match ViSyscall::from(id)` handles dispatch.
+        // If ViSyscall enum doesn't have Grant, Kernel dispatch won't match it!
+        // So I MUST update ViSyscall enum in `libs/api/src/syscall.rs`.
+        SyscallResult::Err(SyscallError::Unknown)
+    }
+}
