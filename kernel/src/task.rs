@@ -135,67 +135,34 @@ pub fn spawn_with_arg(name: &str, cell_id: CellId, allowed_drivers: alloc::vec::
     }
 }
 
-pub fn spawn_from_file(path: &str, name: &str, cell_id: CellId, allowed_drivers: alloc::vec::Vec<usize>) -> core::result::Result<usize, ViError> {
+pub fn spawn_from_mem(data: &[u8], name: &str, cell_id: CellId, allowed_drivers: alloc::vec::Vec<usize>) -> core::result::Result<usize, ViError> {
     use crate::loader::{ElfLoader, ElfParser};
-    use api::fs::{OpenMode, SeekFrom};
     
-    // 1. Open File
-    let mut file = {
-         let fs_lock = crate::fs::VIFS1.lock();
-         let fs = fs_lock.as_ref().ok_or(ViError::NotFound)?;
-         fs.open(path, OpenMode::Read).map_err(|_| ViError::NotFound)?
-    };
-
-    // 2. Read entire content
-    log::info!("Spawn: seeking end of {}", path);
-    let size = file.seek(SeekFrom::End(0)).map_err(|e| { log::error!("Seek End failed: {:?}", e); ViError::IO })?;
-    log::info!("Spawn: file size: {}", size);
-    
-    file.seek(SeekFrom::Start(0)).map_err(|e| { log::error!("Seek Start failed: {:?}", e); ViError::IO })?;
-    
-    let mut data = alloc::vec![0u8; size as usize];
-    log::info!("Spawn: reading {} bytes", size);
-    
-    let mut offset = 0;
-    while offset < size as usize {
-        let chunk = &mut data[offset..];
-        let n = file.read(chunk).map_err(|e| { log::error!("Read failed at offset {}: {:?}", offset, e); ViError::IO })?;
-        if n == 0 {
-            break; // EOF
-        }
-        offset += n;
+    // 1. Check Magic
+    if data.len() < 4 || &data[0..4] != b"\x7fELF" {
+        log::error!("Spawn: Invalid ELF magic");
+        return Err(ViError::InvalidInput);
     }
 
-    if offset != size as usize {
-        log::error!("Spawn: Short read. Expected {}, got {}", size, offset);
-        return Err(ViError::IO);
-    }
-    
-    // 3. Load ELF
-    log::info!("Spawn: parsing elf");
+    // 2. Parse ELF Header
+    log::info!("Spawn: parsing elf from memory ({} bytes)", data.len());
     let loader = ElfLoader;
-    let header = loader.parse_header(&data)?;
+    let header = loader.parse_header(data)?;
     
-    // 4. Load Segments
+    // 3. Load Segments
     {
          let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
          let frame_allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-         loader.load_segments(&data, frame_allocator)?;
+         loader.load_segments(data, frame_allocator)?;
     }
     
-    // 5. Spawn Task
+    // 4. Spawn Task
     let tid = spawn(name, cell_id, allowed_drivers);
     if tid == 0 { return Err(ViError::Unknown); }
     
-
-
-    // 6. Update Task Context
+    // 5. Update Task Context
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
-            // Setup Trap Frame for return to User Mode
-            // We DO NOT set context.ra to user entry, because that runs in S-mode!
-            // Instead we return to __trap_exit which restores context and uses sret.
-            
             task.trap_frame.sepc = header.entry;
             task.trap_frame.sstatus = 0x20; // SPIE=1, SPP=0 (User)
             
@@ -218,19 +185,13 @@ pub fn spawn_from_file(path: &str, name: &str, cell_id: CellId, allowed_drivers:
             task.kernel_stack = Some(kstack);
             task.user_stack = Some(ustack);
 
-            // 3. Setup TrapFrame on KERNEL Stack
-            // Top of Kernel Stack - TrapFrame
+            // Setup TrapFrame on KERNEL Stack
             let tf_ptr = kstack_top - TRAP_FRAME_SIZE;
 
             // Set User SP in TrapFrame
             task.trap_frame.regs[2] = user_stack_top;
 
             // CRITICAL: Set User Mode Status in TrapFrame!
-            // SPP=0 (User Mode)
-            // SPIE=1 (Interrupts enabled after sret)
-            // FS=Dirty (11) => 0x6000 (Bits 13/14)
-            // SUM=0 (User doesn't use SUM)
-            // Total: 0x6020
             task.trap_frame.sstatus = 0x6020;
 
             // Copy TrapFrame to Kernel Stack
@@ -239,18 +200,23 @@ pub fn spawn_from_file(path: &str, name: &str, cell_id: CellId, allowed_drivers:
                 *tf_dest = task.trap_frame;
             }
             
-            // 4. Point Context to Kernel Stack
+            // Point Context to Kernel Stack
             task.context.sp = tf_ptr;
             task.context.ra = __trap_exit as usize;
 
             // Enable SUM (Bit 18) so Kernel can access User Pointers (e.g. Syscalls)
-            // SPP=1 (S-mode ret), SPIE=1, SUM=1
             task.context.sstatus = 0x42120; // SUM=1, FS=1 (Initial), SPP=1, SPIE=1
 
-            info!("Spawned ELF task '{}' (ID {}) at entry 0x{:X}", name, tid, header.entry);
+            info!("Spawned ELF task '{}' (ID {}) from memory at entry 0x{:X}", name, tid, header.entry);
         }
     }
     Ok(tid)
+}
+
+pub fn spawn_from_file(path: &str, name: &str, cell_id: CellId, allowed_drivers: alloc::vec::Vec<usize>) -> core::result::Result<usize, ViError> {
+    // Deprecated / Removed logic
+    log::error!("spawn_from_file is deprecated. Use spawn_from_mem.");
+    Err(ViError::NotSupported)
 }
 
 pub fn current_task_id() -> usize {

@@ -15,7 +15,8 @@ pub enum ViSyscall {
     // === Process Management (10-49) ===
     Exit = 60,  // Linux compat usually, but we define our own space
     Spawn = 5,
-    Exec = 6,
+    Exec = 6, // Deprecated/Legacy
+    SpawnFromMem = 7, // New Spawn from Memory
     Yield = 104, // Linux sched_yield is 24, but we use 104 in current code
     SetTimer = 35, // Added SetTimer
     
@@ -43,6 +44,7 @@ impl From<usize> for ViSyscall {
             60 => ViSyscall::Exit,
             5 => ViSyscall::Spawn,
             6 => ViSyscall::Exec,
+            7 => ViSyscall::SpawnFromMem,
             104 => ViSyscall::Yield,
             35 => ViSyscall::SetTimer,
             11 => ViSyscall::Log,

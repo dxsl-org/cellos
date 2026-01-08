@@ -78,6 +78,21 @@ pub fn sys_spawn(entry: usize, arg: usize) -> SyscallResult {
     }
 }
 
+pub fn sys_spawn_from_mem(data: &[u8], name: &str) -> SyscallResult {
+    unsafe {
+        // a0 = data ptr, a1 = data len
+        // a2 = name ptr, a3 = name len
+        let ret = syscall(ViSyscall::SpawnFromMem,
+                          data.as_ptr() as usize, data.len(),
+                          name.as_ptr() as usize, name.len());
+        if ret > 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
 pub fn sys_open(path: &str) -> Result<usize, SyscallError> {
     unsafe {
         let ret = syscall(ViSyscall::Open, path.as_ptr() as usize, path.len(), 0, 0);

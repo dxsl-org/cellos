@@ -21,22 +21,60 @@ pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     }
     let path = path.unwrap();
 
-    // We assume Kernel Loader has access to the file at path.
-    // We don't need to read it here if Kernel handles loading from FS directly.
-    // But `sys_exec` just takes a path.
+    // Read file from VFS into memory
+    // This uses the User VFS (RamDisk), bypassing Kernel VIFS1 mismatch.
+    match syscall::sys_open(path) {
+        Ok(fd) => {
+            // Read all data
+            // Since we don't know size, we read chunks until EOF.
+            // Vector to hold data
+            let mut data: Vec<u8> = Vec::new();
+            let mut buf = [0u8; 512];
+            loop {
+                match syscall::sys_read(fd, &mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        data.extend_from_slice(&buf[..n]);
+                    },
+                    Err(_) => {
+                        ostd::io::println("exec: read error");
+                        syscall::sys_close(fd);
+                        return Ok(());
+                    }
+                }
+            }
+            syscall::sys_close(fd);
 
-    match syscall::sys_exec(path) {
-        syscall::SyscallResult::Ok(_) => {
-            // Exec replaces process, so we shouldn't return unless it spawned a new one.
-            // If Syscall::Exec spawns (Design 11 implies spawn new execution space),
-            // then we just continue shell.
+            if data.is_empty() {
+                ostd::io::println("exec: empty file");
+                return Ok(());
+            }
+
+            // Invoke SpawnFromMem
+            // We pass the slice pointer and length
+            ostd::io::print("exec: spawning ");
+            ostd::io::print(path);
+            ostd::io::print(" (");
+            // print len? we don't have int formatting in ostd::io::print easily unless using format!
+            ostd::io::println(" bytes)");
+
+            match syscall::sys_spawn_from_mem(&data, path) {
+                syscall::SyscallResult::Ok(tid) => {
+                     // ostd::io::println("Spawned task ID: {}", tid);
+                     // We probably want to wait for it, but for now we just return.
+                     ostd::io::println("Spawn success.");
+                },
+                syscall::SyscallResult::Err(_) => {
+                     ostd::io::println("exec: spawn failed");
+                }
+            }
             Ok(())
         },
-        syscall::SyscallResult::Err(e) => {
-             ostd::io::print("exec: failed to execute '");
-             ostd::io::print(path);
-             ostd::io::println("'");
-             Ok(())
+        Err(_) => {
+            ostd::io::print("exec: cannot open '");
+            ostd::io::print(path);
+            ostd::io::println("'");
+            Ok(())
         }
     }
 }
@@ -87,7 +125,7 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             loop {
                 // Read into buffer starting after pending bytes
                 // Buffer size is small, so we must be careful not to overflow if pending is large (max utf8 char is 4 bytes)
-                let max_read = buffer.len() - pending;
+                let _max_read = buffer.len() - pending;
                 match syscall::sys_read(fd, &mut buffer[pending..]) {
                     Ok(n) if n > 0 => {
                         let total = pending + n;

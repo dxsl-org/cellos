@@ -60,6 +60,8 @@ pub enum Syscall {
     Exit { code: usize },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
+    /// 7: SpawnFromMem (Spawn from Memory buffer)
+    SpawnFromMem { ptr: usize, len: usize, name_ptr: usize, name_len: usize },
     
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -312,15 +314,26 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
              unsafe {
                  let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
                  if let Ok(path) = core::str::from_utf8(slice) {
-                     // Default to Root Cell (0) and no extra drivers for now
-                     let cell_id = CellId(0);
-                     let drivers = alloc::vec::Vec::new();
-                     match super::spawn_from_file(path, path, cell_id, drivers) {
-                         Ok(tid) => Ok(tid),
-                         Err(_) => Err(SyscallError::FileNotFound),
-                     }
+                     // Legacy Exec support removed/depreciated
+                     // We should use SpawnFromMem for modern apps
+                     Err(SyscallError::NotSupported)
                  } else {
                      Err(SyscallError::InvalidCommand)
+                 }
+             }
+        }
+        Syscall::SpawnFromMem { ptr, len, name_ptr, name_len } => {
+             unsafe {
+                 let data_slice = core::slice::from_raw_parts(ptr as *const u8, len);
+                 let name_slice = core::slice::from_raw_parts(name_ptr as *const u8, name_len);
+                 let name = core::str::from_utf8(name_slice).unwrap_or("unknown");
+
+                 let cell_id = CellId(0);
+                 let drivers = alloc::vec::Vec::new();
+
+                 match super::spawn_from_mem(data_slice, name, cell_id, drivers) {
+                     Ok(tid) => Ok(tid),
+                     Err(_) => Err(SyscallError::InvalidInput),
                  }
              }
         }
@@ -427,6 +440,7 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
             
         ViSyscall::Spawn => Syscall::Spawn { entry: a0, arg: a1 },
         ViSyscall::Exec => Syscall::Exec { path_ptr: a0, path_len: a1 },
+        ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { ptr: a0, len: a1, name_ptr: a2, name_len: a3 },
         ViSyscall::Exit => Syscall::Exit { code: a0 },
         ViSyscall::Yield => Syscall::Yield,
         ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
