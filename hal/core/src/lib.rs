@@ -17,11 +17,15 @@ pub use traits::*; // Khớp với cấu trúc hal/traits của mày
 
 // Hỗ trợ RV64 (Jarvis)
 #[cfg(feature = "riscv64")]
-pub use hal_riscv::rv64::*; 
+pub use hal_riscv::rv64::*;
+#[cfg(feature = "riscv64")]
+pub use hal_riscv::common;
 
 // Hỗ trợ RV32 (Robot Nano)
 #[cfg(feature = "riscv32")]
-pub use hal_riscv::rv32::*; 
+pub use hal_riscv::rv32::*;
+#[cfg(feature = "riscv32")]
+pub use hal_riscv::common;
 
 // Hỗ trợ ARM (AArch64)
 #[cfg(feature = "aarch64")]

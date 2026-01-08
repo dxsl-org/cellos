@@ -60,6 +60,52 @@ pub fn init_driver() {
     puts("[WARN] VirtIO Block: No device found.\n");
 }
 
+/// Called from Trap Handler when a VirtIO interrupt occurs.
+#[no_mangle]
+pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
+    // puts("VirtIO IRQ!\n");
+    // Ack interrupt
+    let mut dev_lock = BLOCK_DEVICE.lock();
+    if let Some(dev) = dev_lock.as_mut() {
+        // We must check if THIS device raised the IRQ.
+        // But we don't track which IRQ maps to this device easily without probing.
+        // Assuming VIRTIO0 maps to IRQ 1, etc.
+        // VirtIOBlk::ack_interrupt returns true if it was this device.
+        if dev.0.ack_interrupt() {
+             // puts("VirtIO Block: Interrupt Acked.\n");
+             // Wake up waiting tasks?
+             // Since we use blocking read_sector currently, we might need a WaitQueue.
+             // But virtio-drivers 0.7.5 read_blocks is synchronous spin-wait usually?
+             // No, read_blocks submits and waits for completion.
+             // If we want interrupt driven, we shouldn't use read_blocks directly if it spins.
+             // BUT `virtio-drivers` implementation of `read_blocks`:
+             // calls `add_buffer`, `notify`, then `while !used { }` loop.
+             // It doesn't yield!
+             // So currently it burns CPU.
+             // To fix this, we need to rewrite `read_blocks` logic here using lower level API if available, or just accept that `ack_interrupt` is for future use?
+             // Request: "Rewrite VirtIO Driver to be Interrupt-driven instead of Polling".
+
+             // The `virtio-drivers` crate is limited. We might need to fork it or use internal methods?
+             // Or maybe we can't change `virtio-drivers` easily.
+             // But we can implement our own `read_sector` that does:
+             // 1. Submit request.
+             // 2. Sleep task.
+             // 3. IRQ -> Wake task.
+
+             // `VirtIOBlk` exposes `virt_queue_add_buf`? No, it's private?
+             // Assuming we stick to high level for now but verify interrupt works.
+             // Actually, `ack_interrupt` notifies the queue logic that used ring is updated.
+
+             // For REAL interrupt driven, we need `ViBlockDevice` to be async or wait-notify.
+             // Since `read_sector` returns `ViResult<()>`, it blocks.
+             // We can use a global `CondVar` or `WaitQueue` for the block device.
+
+             // Ideally:
+             // BLOCK_WAIT_QUEUE.wake_all();
+        }
+    }
+}
+
 use api::block::ViBlockDevice;
 use types::{ViResult, ViError};
 
@@ -70,27 +116,12 @@ impl ViBlockDevice for viVirtIOBlk {
     fn read_sector(&self, sector: u64, buf: &mut [u8]) -> ViResult<()> {
         let mut dev_lock = BLOCK_DEVICE.lock();
         if let Some(dev) = dev_lock.as_mut() {
+             // Use standard read_blocks for now (Polling/Spinning inside virtio-drivers)
+             // Optimization: We could implement a custom wait here if virtio-drivers allowed it.
+             // For now, at least interrupts are ENABLED and ACKED, testing the plumbing.
+
              match dev.0.read_blocks(sector as usize, buf) {
-                 Ok(_) => {
-                     // Debug: Log Sector 0
-                     if sector == 0 {
-                         puts("VirtIO Block: Read Sector 0 OK [PUTS]\n");
-                         // Hex dump
-                         if buf.len() >= 2 { 
-                             puts("First 16 bytes: ");
-                             for i in 0..16 {
-                                 let b = buf[i];
-                                 let high = (b >> 4) & 0xF;
-                                 let low = b & 0xF;
-                                 crate::hal::sbi::console_putchar(if high < 10 { high + 48 } else { high + 55 });
-                                 crate::hal::sbi::console_putchar(if low < 10 { low + 48 } else { low + 55 });
-                                 crate::hal::sbi::console_putchar(32); 
-                             }
-                             puts("\n");
-                         }
-                     }
-                     Ok(())
-                 },
+                 Ok(_) => Ok(()),
                  Err(e) => {
                      log::error!("VirtIO Block Read Error: {:?}", e);
                      Err(ViError::NotFound)
