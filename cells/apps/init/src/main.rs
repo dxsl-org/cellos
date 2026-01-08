@@ -17,7 +17,7 @@ pub extern "C" fn main() {
     
     // 1. Spawn Config Service
     println("Init: Spawning Config Service...");
-    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(CONFIG_ELF, "config") {
+    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(CONFIG_ELF, "config", "") {
         println("Init: Config Service spawned.");
     } else {
         println("Init: Failed to spawn Config Service.");
@@ -25,7 +25,7 @@ pub extern "C" fn main() {
 
     // 2. Spawn VFS Service
     println("Init: Spawning VFS Service...");
-    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(VFS_ELF, "vfs") {
+    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(VFS_ELF, "vfs", "") {
         println("Init: VFS Service spawned.");
     } else {
         println("Init: Failed to spawn VFS Service.");
@@ -73,7 +73,7 @@ pub extern "C" fn main() {
                     // SAFETY: In current SAS model, we assume we can read it.
                     let shell_data = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
 
-                    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(shell_data, "shell") {
+                    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(shell_data, "shell", "") {
                         println("Init: Shell spawned successfully.");
                     } else {
                         println("Init: Failed to spawn shell.");

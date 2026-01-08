@@ -31,7 +31,6 @@ mod sync;
 pub use types::*;
 
 // Embed Init Binary
-#[repr(align(4096))]
 static INIT_ELF: &[u8] = include_bytes!("embedded/init");
 
 /// Kernel entry point called from HAL boot code
@@ -76,7 +75,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let mmap_entries = boot_info.memory_map();
     
     // Initialize frame allocator with the largest usable region
-    let mut frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+    let frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
     
     // 2. Frame Allocator (Physical Memory)
     // The local `frame_allocator` is moved into the global static.

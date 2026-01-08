@@ -1,12 +1,32 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::boxed::Box;
 use log::{info, warn, error};
-use super::tcb::{Task, TaskState};
+use super::tcb::{Task, TaskState, SyscallFuture, FileHandle};
 use alloc::vec::Vec;
 use types::*;
-// use alloc::collections::BTreeMap;
-// use alloc::collections::VecDeque;
-// use log::{info, warn, error};
+use core::task::{Context, Poll};
+use core::pin::Pin;
+
+// Dummy Waker
+// In a real executor, we'd have a way to wake specific tasks.
+// Here we just poll in the loop.
+// We need a dummy waker to pass to poll.
+use core::task::{Waker, RawWaker, RawWakerVTable};
+
+fn dummy_waker() -> Waker {
+    unsafe { Waker::from_raw(dummy_raw_waker()) }
+}
+
+fn dummy_raw_waker() -> RawWaker {
+    RawWaker::new(core::ptr::null(), &DUMMY_VTABLE)
+}
+
+static DUMMY_VTABLE: RawWakerVTable = RawWakerVTable::new(
+    |_| dummy_raw_waker(),
+    |_| {},
+    |_| {},
+    |_| {},
+);
 
 /// Round-Robin Scheduler with Central Task Table (Hubris-like)
 pub struct Scheduler {
@@ -152,7 +172,50 @@ impl Scheduler {
             self.ready_queue.push_back(id);
         }
 
-        // 2. Decide if current task needs to yield
+        // 2. Poll Async Tasks
+        let mut polled_tasks = Vec::new();
+        let waker = dummy_waker();
+        let mut cx = Context::from_waker(&waker);
+
+        // Iterate keys to avoid borrow check issues
+        let keys: Vec<usize> = self.tasks.keys().cloned().collect();
+        for id in keys {
+             if let Some(task) = self.tasks.get_mut(&id) {
+                 if task.state == TaskState::Polling {
+                     if let Some(ref mut future_enum) = task.pending_future {
+                         match future_enum {
+                             SyscallFuture::FileRead(fd, future) => {
+                                 // Poll the future
+                                 match future.as_mut().poll(&mut cx) {
+                                     Poll::Ready((file, res)) => {
+                                         // Restore file handle
+                                         // file is Box<dyn ViFile>
+                                         task.open_files.insert(*fd, FileHandle::new(file));
+
+                                         // Set return value (a0 / regs[10])
+                                         task.trap_frame.regs[10] = res.unwrap_or(0); // TODO: Handle Error Properly (negative?)
+
+                                         // Wake task
+                                         task.state = TaskState::Ready;
+                                         task.pending_future = None;
+                                         polled_tasks.push(id);
+                                     }
+                                     Poll::Pending => {
+                                         // Still waiting
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+             }
+        }
+        for id in polled_tasks {
+            self.ready_queue.push_back(id);
+        }
+
+
+        // 3. Decide if current task needs to yield
         let current_id = self.current_task_id;
         if let Some(cid) = current_id {
             if let Some(task) = self.tasks.get_mut(&cid) {
@@ -163,7 +226,7 @@ impl Scheduler {
             }
         }
 
-        // 3. Get next task
+        // 4. Get next task
         let next_id = self.ready_queue.pop_front();
         
         if let Some(nid) = next_id {

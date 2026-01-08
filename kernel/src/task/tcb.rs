@@ -8,6 +8,8 @@ use alloc::sync::Arc;
 use alloc::boxed::Box;
 use types::*;
 
+use api::fs::{ViFile, FileResult, BoxFuture};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskState {
     Ready,
@@ -27,6 +29,8 @@ pub enum TaskState {
     FutexWait { addr: VAddr },
     /// Waiting for another task to exit (Join).
     Waiting { target: usize },
+    /// Polling an async future (e.g. syscall)
+    Polling,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -58,21 +62,16 @@ pub struct GrantEntry {
 }
 
 // File Handle for Stateful IO
-use api::fs::ViFile;
+pub use api::fs::FileHandle;
 
-// File Handle for Stateful IO
-pub struct FileHandle(pub Box<dyn ViFile + Send + Sync>);
-
-// Manual Debug
-impl core::fmt::Debug for FileHandle {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "FileHandle")
-    }
+/// Enum to hold the different types of futures a task might be waiting on.
+pub enum SyscallFuture {
+    FileRead(usize, BoxFuture<'static, FileResult<usize>>), // fd, future
+    // Add other syscall futures here (FileWrite, Connect, etc.)
 }
 
 /// Task Control Block (TCB)
 #[allow(dead_code)]
-#[derive(Debug)] // Removed Clone
 pub struct Task {
     pub id: usize,
     pub cell_id: CellId, // OWNER CELL
@@ -106,6 +105,9 @@ pub struct Task {
     // Lifecycle
     pub waiters: Vec<usize>,
     pub exit_code: Option<usize>,
+
+    // Async Kernel Support
+    pub pending_future: Option<SyscallFuture>,
 }
 
 impl Task {
@@ -130,6 +132,7 @@ impl Task {
             user_stack: None,
             waiters: Vec::new(),
             exit_code: None,
+            pending_future: None,
         }
     }
     
