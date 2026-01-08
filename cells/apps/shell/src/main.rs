@@ -7,6 +7,7 @@ extern crate ostd;
 mod shell;
 mod commands;
 mod async_utils;
+mod config_client;
 
 use shell::ViShell;
 use ostd::executor;

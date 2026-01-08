@@ -39,30 +39,24 @@ impl ConfigService {
     }
 }
 
-// Implement ViConfig trait (conceptual, but here we handle IPC loop)
-impl ViConfig for ConfigService {
-    fn get(&self, key: &str) -> ViResult<(usize, usize)> {
+// Implement ViConfig trait
+// Note: We implement this on the Service side struct.
+// The `get` returns &str, which is tied to the lifetime of `self` (the service).
+// This fits the SAS model.
+impl ConfigService {
+    fn get_value(&self, key: &str) -> Option<(usize, usize)> {
         let store = self.store.borrow();
         if let Some(val) = store.map.get(key) {
-            // Return address and length of the string in THIS cell's memory.
-            // SAS Assumption: Other cells can read this address if we grant it.
-            // Or if protection is lax.
-            Ok((val.as_ptr() as usize, val.len()))
+            Some((val.as_ptr() as usize, val.len()))
         } else {
-            Err(ViError::NotFound)
+            None
         }
     }
 
-    fn set(&self, key: &str, value: &str) -> ViResult<()> {
+    fn set_value(&self, key: &str, value: &str) {
         let mut store = self.store.borrow_mut();
         store.map.insert(String::from(key), String::from(value));
-        // Todo: Notify subscribers
-        Ok(())
-    }
-
-    fn subscribe(&self, _key: &str, _subscriber_cell_id: usize) -> ViResult<()> {
-        // Todo: Implement subscription logic
-        Ok(())
+        // TODO: Notification
     }
 }
 
@@ -76,13 +70,14 @@ pub fn main() {
     loop {
         match ostd::syscall::sys_recv(0, &mut buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                // Handle Message
+                // Protocol:
+                // 1: Get (Key) -> Ptr/Len
+                // 2: Set (Key, Val) -> OK
+
                 if buf[0] == 1 { // Get
                     let key_len = buf[1] as usize;
                     if let Ok(key) = core::str::from_utf8(&buf[2..2+key_len]) {
-                        if let Ok((ptr, len)) = service.get(key) {
-                            // Reply with Pointer and Length (8 bytes each, little endian)
-                            // We construct a response buffer: [Ptr(8) | Len(8)]
+                        if let Some((ptr, len)) = service.get_value(key) {
                             let mut resp = [0u8; 16];
                             unsafe {
                                 let ptr_bytes = (ptr as u64).to_le_bytes();
@@ -90,9 +85,6 @@ pub fn main() {
                                 resp[0..8].copy_from_slice(&ptr_bytes);
                                 resp[8..16].copy_from_slice(&len_bytes);
                             }
-
-                            // Send reply.
-                            // In strict SAS with MPU, we should call sys_grant(sender, ptr, len, READ) here.
                             ostd::syscall::sys_send(sender, &resp);
                         } else {
                             ostd::syscall::sys_send(sender, b"");
@@ -103,7 +95,7 @@ pub fn main() {
                     let val_len = buf[2] as usize;
                     if let Ok(key) = core::str::from_utf8(&buf[3..3+key_len]) {
                         if let Ok(val) = core::str::from_utf8(&buf[3+key_len..3+key_len+val_len]) {
-                             let _ = service.set(key, val);
+                             service.set_value(key, val);
                              ostd::syscall::sys_send(sender, b"OK");
                         }
                     }

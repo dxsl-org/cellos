@@ -8,12 +8,9 @@ use types::ViResult;
 /// Configuration Service Interface.
 pub trait ViConfig: Send + Sync {
     /// Get a configuration value (Zero-Copy).
-    /// Returns (Pointer, Length) to the value in the Service's memory.
-    fn get(&self, key: &str) -> ViResult<(usize, usize)>;
+    /// Returns a reference to the string in the Service's memory.
+    fn get(&self, key: &str) -> ViResult<&str>;
 
     /// Set a configuration value.
-    fn set(&self, key: &str, value: &str) -> ViResult<()>;
-
-    /// Subscribe to changes for a key.
-    fn subscribe(&self, key: &str, subscriber_cell_id: usize) -> ViResult<()>;
+    fn set(&mut self, key: &str, value: &str) -> ViResult<()>;
 }
