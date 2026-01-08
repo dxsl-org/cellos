@@ -16,7 +16,7 @@ pub enum ViSyscall {
     Exit = 60,  // Linux compat usually, but we define our own space
     Spawn = 5,
     Exec = 6, // Deprecated/Legacy
-    SpawnFromMem = 7, // New Spawn from Memory
+    SpawnFromMem = 10, // New Spawn from Memory (Struct based)
     Yield = 104, // Linux sched_yield is 24, but we use 104 in current code
     SetTimer = 35, // Added SetTimer
     
@@ -44,7 +44,7 @@ impl From<usize> for ViSyscall {
             60 => ViSyscall::Exit,
             5 => ViSyscall::Spawn,
             6 => ViSyscall::Exec,
-            7 => ViSyscall::SpawnFromMem,
+            10 => ViSyscall::SpawnFromMem,
             104 => ViSyscall::Yield,
             35 => ViSyscall::SetTimer,
             11 => ViSyscall::Log,
@@ -56,4 +56,18 @@ impl From<usize> for ViSyscall {
             _ => ViSyscall::Unknown,
         }
     }
+}
+
+/// Arguments for SpawnFromMem syscall.
+/// Using repr(C) for ABI stability.
+#[repr(C)]
+pub struct ViSpawnArgs {
+    /// Address of buffer containing ELF.
+    pub buffer_addr: usize,
+    /// Size of buffer.
+    pub buffer_size: usize,
+    /// Pointer to name string (utf8).
+    pub name_ptr: usize, // Changed from *const u8 to usize for transport safety
+    /// Length of name string.
+    pub name_len: usize,
 }
