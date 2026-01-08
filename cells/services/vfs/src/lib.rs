@@ -3,12 +3,15 @@
 //! VFS Manager Service Cell - INTERFACE & IMPLEMENTATION (RAMFS)
 
 extern crate alloc;
+extern crate driver_disk; // Explicit extern crate
 
 use ostd::prelude::*;
 use api::fs::*;
-use types::*; // Import DirEntry, FileType directly from types crate
+use api::block::ViBlockDevice;
+use types::*;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use driver_disk::RamDisk;
 
 // Simple RamFS File Representation
 #[derive(Clone)]
@@ -42,6 +45,7 @@ impl RamFile {
 
 pub struct VfsManager {
     root: Box<RamFile>,
+    disk: RamDisk, // The raw block device
 }
 
 impl VfsManager {
@@ -55,11 +59,19 @@ impl VfsManager {
         );
 
         // Add bin directory
-        let bin = Box::new(RamFile::new_dir("bin"));
-        // Maybe add some fake binaries?
+        let mut bin = Box::new(RamFile::new_dir("bin"));
+
+        // Add hello executable (mock)
+        bin.children.insert(
+            String::from("hello"),
+            Box::new(RamFile::new_file("hello", b"\x7fELF...Mock Hello App..."))
+        );
         root.children.insert(String::from("bin"), bin);
 
-        Self { root }
+        Self {
+            root,
+            disk: RamDisk::new(),
+        }
     }
 
     fn find_node(&self, path: &str) -> Option<&RamFile> {
@@ -77,25 +89,25 @@ impl VfsManager {
         }
         Some(current)
     }
-
-    pub fn mount(&mut self, _path: &str, _fs: Box<dyn ViFileSystem>) -> ViResult<()> {
-        // Todo: Implement mount points
-        Err(ViError::NotSupported)
-    }
-
-    pub fn unmount(&mut self, _path: &str) -> ViResult<()> {
-        Err(ViError::NotSupported)
-    }
 }
 
 // Implement ViFileSystem
 impl ViFileSystem for VfsManager {
     fn open(&self, path: &str, _mode: OpenMode) -> ViResult<Box<dyn ViFile + Send + Sync>> {
+        // Special handling for raw disk access
+        if path == "/disk.img" {
+            // Expose the raw disk as a file
+            return Ok(Box::new(DiskFileHandle {
+                // We use unsafe pointer to avoid lifetime issues for this prototype
+                disk: &self.disk as *const RamDisk,
+                pos: 0,
+            }));
+        }
+
         // Find the node
         if let Some(node) = self.find_node(path) {
             if node.is_dir {
                  // Open directory
-                 // We need to collect entries
                  let entries: Vec<DirEntry> = node.children.values().map(|child| {
                      let mut entry = DirEntry::default();
                      let name_bytes = child.name.as_bytes();
@@ -127,11 +139,54 @@ impl ViFileSystem for VfsManager {
     }
 
     fn mkdir(&self, _path: &str) -> ViResult<()> {
-        Err(ViError::NotSupported) // Read-only for now
+        Err(ViError::NotSupported)
     }
 
     fn remove(&self, _path: &str) -> ViResult<()> {
         Err(ViError::NotSupported)
+    }
+}
+
+struct DiskFileHandle {
+    disk: *const RamDisk, // Raw pointer
+    pos: u64,
+}
+
+unsafe impl Send for DiskFileHandle {}
+unsafe impl Sync for DiskFileHandle {}
+
+impl ViFile for DiskFileHandle {
+    fn read(&mut self, buf: &mut [u8]) -> ViResult<usize> {
+        // Read sector logic mock
+        // We use unsafe to deref the disk pointer
+        // SAFETY: VfsManager is assumed to be alive (static service)
+        let disk = unsafe { &*self.disk };
+
+        // Simple logic: read sector 0
+        // To be real: use self.pos to find sector
+        // Sector size = 512
+        let sector = self.pos / 512;
+        let offset = (self.pos % 512) as usize;
+
+        let mut temp_buf = [0u8; 512];
+        if disk.read_sector(sector, &mut temp_buf).is_ok() {
+            let available = 512 - offset;
+            let to_copy = core::cmp::min(buf.len(), available);
+            buf[..to_copy].copy_from_slice(&temp_buf[offset..offset+to_copy]);
+            self.pos += to_copy as u64;
+            return Ok(to_copy);
+        }
+
+        Ok(0)
+    }
+
+    fn write(&mut self, _buf: &[u8]) -> ViResult<usize> { Err(ViError::NotSupported) }
+    fn seek(&mut self, pos: SeekFrom) -> ViResult<u64> {
+        match pos {
+            SeekFrom::Start(p) => self.pos = p,
+            _ => {},
+        }
+        Ok(self.pos)
     }
 }
 

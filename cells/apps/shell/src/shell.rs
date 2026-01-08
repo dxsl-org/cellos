@@ -38,6 +38,7 @@ impl<'a> ViShell<'a> {
             "cat" => commands::cmd_cat(parts), // cat is sync for now
             "help" => commands::cmd_help(),
             "clear" => commands::cmd_clear(),
+            "exec" => commands::cmd_exec(parts),
             _ => {
                 ostd::io::print("ViOS: command not found: ");
                 ostd::io::println(cmd);

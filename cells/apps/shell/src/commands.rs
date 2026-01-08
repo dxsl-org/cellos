@@ -3,7 +3,7 @@ use ostd::fs;
 use ostd::syscall;
 
 pub fn cmd_help() -> ViResult<()> {
-    ostd::io::println("Available commands: help, ls, cat, clear");
+    ostd::io::println("Available commands: help, ls, cat, clear, exec");
     Ok(())
 }
 
@@ -11,6 +11,34 @@ pub fn cmd_clear() -> ViResult<()> {
     // ANSI escape code for clear screen
     ostd::io::print("\x1b[2J\x1b[1;1H");
     Ok(())
+}
+
+pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let path = args.next();
+    if path.is_none() {
+        ostd::io::println("Usage: exec <path>");
+        return Ok(());
+    }
+    let path = path.unwrap();
+
+    // We assume Kernel Loader has access to the file at path.
+    // We don't need to read it here if Kernel handles loading from FS directly.
+    // But `sys_exec` just takes a path.
+
+    match syscall::sys_exec(path) {
+        syscall::SyscallResult::Ok(_) => {
+            // Exec replaces process, so we shouldn't return unless it spawned a new one.
+            // If Syscall::Exec spawns (Design 11 implies spawn new execution space),
+            // then we just continue shell.
+            Ok(())
+        },
+        syscall::SyscallResult::Err(e) => {
+             ostd::io::print("exec: failed to execute '");
+             ostd::io::print(path);
+             ostd::io::println("'");
+             Ok(())
+        }
+    }
 }
 
 pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {

@@ -429,6 +429,7 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::Exec => Syscall::Exec { path_ptr: a0, path_len: a1 },
         ViSyscall::Exit => Syscall::Exit { code: a0 },
         ViSyscall::Yield => Syscall::Yield,
+        ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
         ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },
         
         ViSyscall::Open => Syscall::Open { path_ptr: a0, path_len: a1 },
