@@ -24,6 +24,8 @@ pub enum SyscallError {
     FileNotFound,
     TryAgain,
     Unknown,
+    NotSupported,
+    InvalidInput,
 }
 
 /// The Fundamental Verbs of ViOS IPC (Hubris ABI + Lease System)
@@ -184,7 +186,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             Ok(0)
         }
-        Syscall::ShmAlloc { size } => {
+        Syscall::ShmAlloc { size: _ } => {
             // Allocate a global frame
             // For MVP, we just allocate from frame allocator and return physical address as handle?
             // Handle MUST be secure.
@@ -197,7 +199,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             Err(SyscallError::BufferTooSmall)
         }
-        Syscall::ShmMap { handle, target_pid } => {
+        Syscall::ShmMap { handle, target_pid: _ } => {
             // Map the frame (handle) into target_pid's address space.
             // We need to find a free VAddr in target.
             // Simplified: Map at Identity + Offset? Or hardcoded region?
@@ -229,7 +231,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                  unsafe {
                      // Check if already mapped?
                      // We just force map.
-                     if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags.bits())).is_ok() {
+                     if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags)).is_ok() {
                          return Ok(vaddr);
                      }
                  }
@@ -323,13 +325,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         Syscall::ServiceLookup { name_ptr, name_len } => {
             unsafe {
-                let slice = core::slice::from_raw_parts(name_ptr as *const u8, name_len);
+                let _slice = core::slice::from_raw_parts(name_ptr as *const u8, name_len);
                 // if let Some(id) = crate::task::drivers::registry::resolve(name) {
                 //    return Ok(id);
                 // }
                 return Ok(0);
             }
-            Err(SyscallError::InvalidDriverId)
         }
         Syscall::Open { path_ptr, path_len } => {
             unsafe {
@@ -396,7 +397,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::MkDir { path_ptr, path_len } => {
              unsafe {
                  let path_slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                 let path_str = core::str::from_utf8_unchecked(path_slice);
+                 let _path_str = core::str::from_utf8_unchecked(path_slice);
                  // let res = super::file_mkdir(path_str);  // FIXME: not implemented
                  let res: core::result::Result<usize, ()> = Err(());  // Temporary
                  if res.is_ok() {
@@ -408,7 +409,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::Exec { path_ptr, path_len } => {
              unsafe {
                  let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                 if let Ok(path) = core::str::from_utf8(slice) {
+                 if let Ok(_path) = core::str::from_utf8(slice) {
                      // Legacy Exec support removed/depreciated
                      // We should use SpawnFromMem for modern apps
                      Err(SyscallError::NotSupported)
@@ -442,7 +443,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::Create { path_ptr, path_len } => {
              unsafe {
                  let path_slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
-                 let path_str = core::str::from_utf8_unchecked(path_slice);
+                 let _path_str = core::str::from_utf8_unchecked(path_slice);
                  // let res = super::file_create(path_str);  // FIXME: not implemented
                  let res: core::result::Result<usize, ()> = Err(());  // Temporary
                  if let Ok(fd) = res { // Assuming res would be Ok(fd) on success
@@ -450,41 +451,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                      }
                  }
              Err(SyscallError::PermissionDenied)
-        }
-        Syscall::Read { fd, buf_ptr, buf_len } => {
-            if fd == 0 {
-                // Console Input (Stdin)
-                // Busy-loop with yield until a character is available
-                loop {
-                    let mut byte_opt = None;
-                    {
-                        let mut cons = crate::task::drivers::console_drv::CONSOLE.lock();
-                        // Poll hardware
-                        cons.poll();
-                        // Check buffer
-                        byte_opt = cons.read_byte();
-                    }
-                    
-                     if let Some(byte) = byte_opt {
-                         // log::info!("Syscall::Read: Got byte {}", byte);
-                         unsafe {
-                             let slice = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len);
-                             if slice.len() > 0 {
-                                 slice[0] = byte;
-                                 return Ok(1);
-                             } else {
-                                 return Ok(0);
-                             }
-                         }
-                    }
-                    
-                    // No input yet, yield and try again
-                    super::yield_cpu();
-                }
-            } else {
-                 // Filesystem Read not linked yet
-                 Err(SyscallError::InvalidDriverId)
-            }
         }
         Syscall::SetTimer { deadline } => {
             // Check if deadline passed
@@ -513,7 +479,7 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
     let a0 = frame.regs[10];
     let a1 = frame.regs[11];
     let a2 = frame.regs[12];
-    let a3 = frame.regs[13];
+    let _a3 = frame.regs[13];
     
     // Debug log
     // log::info!("SYSCALL DISPATCH: ID={}, a0={:X}, sstatus={:X}", syscall_id, a0, frame.sstatus);

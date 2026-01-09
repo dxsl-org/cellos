@@ -30,7 +30,7 @@ pub enum HalError {
 
 /// Unique identifier for a Cell.
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CellId(pub u64);
 
 /// State of a Cell in its lifecycle.

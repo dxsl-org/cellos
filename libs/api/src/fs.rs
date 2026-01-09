@@ -5,11 +5,20 @@
 
 //! Filesystem API traits.
 
+#![allow(unsafe_code)] // Allow unsafe for buffer slicing in async shim
+
 use crate::*;
 use core::future::Future;
 use alloc::boxed::Box;
+use core::pin::Pin;
 use core::ops::{Deref, DerefMut};
 use types::*;
+
+/// Type alias for boxed futures.
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// Result type for async file operations that take ownership of the file handle.
+pub type FileResult<T> = (Box<dyn ViFile + Send + Sync>, ViResult<T>);
 
 /// Filesystem interface.
 pub trait ViFileSystem: Send + Sync {
@@ -40,6 +49,17 @@ pub trait ViFile: Send + Sync {
     /// Read next directory entry.
     /// Returns Ok(None) if end of directory.
     fn read_dir(&mut self) -> ViResult<Option<DirEntry>> { Err(ViError::NotSupported) }
+
+    // --- Async Methods (Rule 7 & 8) ---
+
+    /// Async Read: Takes ownership of the file handle and returns a Future.
+    ///
+    /// Implementations MUST return the file handle back in the result tuple.
+    ///
+    /// The buffer is passed as raw pointer/len because the Future is 'static and we cannot
+    /// easily bind the lifetime of a user-space slice to it safely without complex logic.
+    /// The caller (Kernel) ensures safety.
+    fn read_async(self: Box<Self>, buf_ptr: usize, buf_len: usize) -> BoxFuture<'static, FileResult<usize>>;
 }
 
 /// A handle to an open file.
@@ -47,12 +67,16 @@ pub trait ViFile: Send + Sync {
 /// Wraps the low-level `ViFile` trait object and ensures usage of Drop
 /// for resource cleanup.
 pub struct FileHandle {
-    file: Box<dyn ViFile + Send + Sync>,
+    pub file: Option<Box<dyn ViFile + Send + Sync>>,
 }
 
 impl FileHandle {
     pub fn new(file: Box<dyn ViFile + Send + Sync>) -> Self {
-        Self { file }
+        Self { file: Some(file) }
+    }
+
+    pub fn into_inner(mut self) -> Box<dyn ViFile + Send + Sync> {
+        self.file.take().expect("FileHandle already consumed")
     }
 }
 
@@ -60,23 +84,24 @@ impl Deref for FileHandle {
     type Target = dyn ViFile + Send + Sync;
 
     fn deref(&self) -> &Self::Target {
-        &*self.file
+        // Double deref: &Box<T> -> &T
+        &**self.file.as_ref().expect("FileHandle use after consume")
     }
 }
 
 impl DerefMut for FileHandle {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.file
+        // Double deref: &mut Box<T> -> &mut T
+        &mut **self.file.as_mut().expect("FileHandle use after consume")
     }
 }
 
 impl Drop for FileHandle {
     fn drop(&mut self) {
-        // Resource reclamation happens here.
-        // For Box<dyn ViFile>, the Drop impl of the concrete type (e.g. FatFile)
-        // will be called automatically when the Box is dropped.
-        // We add this impl to satisfy the architectural requirement and 
-        // to allow for future global hook injection (e.g. usage stats).
+        if let Some(_file) = self.file.take() {
+            // Resource reclamation happens here.
+            // _file drop will be called.
+        }
     }
 }
 
@@ -110,4 +135,3 @@ pub enum SeekFrom {
     End(i64),
     Current(i64),
 }
-
