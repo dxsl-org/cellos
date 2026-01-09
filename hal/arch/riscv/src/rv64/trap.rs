@@ -67,13 +67,30 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
             5 => {
                 // S-mode timer interrupt
                 // TODO: Clear timer and handle scheduling
+                // For now, mask it to prevent storm? Or update time?
+                // Just log once?
             }
             9 => {
-                // S-mode external interrupt
-                // TODO: Handle device interrupts
+                // S-mode external interrupt (PLIC)
+                if let Some(irq) = handle_external_interrupt() {
+                    // Dispatch IRQ
+                    // TODO: Move this dispatch to a driver manager
+                    if irq >= 1 && irq <= 8 {
+                        // VirtIO Interrupt
+                        // log::info!("VirtIO Interrupt IRQ {}", irq);
+                        // Notify VirtIO Block Driver
+                        // We need to call into kernel::task::drivers::virtio_blk::handle_irq()
+                        // But we can't easily dependency inject here without global.
+                        // We use an extern "Rust" function defined in kernel.
+                        unsafe {
+                            vi_handle_virtio_irq(irq);
+                        }
+                    }
+                }
             }
             _ => {
                 // Unknown interrupt - log but don't panic
+                // log::warn!("Unknown interrupt: {}", code);
             }
         }
     } else {
@@ -117,6 +134,21 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
     }
 }
 
+/// Handle External Interrupt via PLIC
+fn handle_external_interrupt() -> Option<u32> {
+    use crate::common::plic::PLIC;
+    // Claim
+    let irq = PLIC.claim(1); // Context 1 = S-mode
+    if irq != 0 {
+        // Run handler (caller does this)
+
+        // Complete
+        PLIC.complete(1, irq);
+        return Some(irq);
+    }
+    None
+}
+
 /// Handle syscall from userspace (Vi prefix per Luật 6)
 fn vi_handle_syscall(frame: &mut ViTrapFrame) {
     extern "Rust" {
@@ -127,3 +159,6 @@ fn vi_handle_syscall(frame: &mut ViTrapFrame) {
     }
 }
 
+extern "Rust" {
+    fn vi_handle_virtio_irq(irq: u32);
+}

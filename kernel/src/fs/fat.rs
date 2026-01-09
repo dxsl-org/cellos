@@ -7,7 +7,7 @@ use core::cmp;
 use core::cell::RefCell;
 
 use api::block::ViBlockDevice;
-use api::fs::{ViFileSystem, ViFile, OpenMode, FileHandle};
+use api::fs::{ViFileSystem, ViFile, OpenMode, FileHandle, BoxFuture, FileResult};
 use types::{ViResult, ViError};
 use crate::task::drivers::ramdisk::viRamDisk;  // Use RAM disk instead of VirtIO
 use crate::sync::Spinlock; // Using Spinlock for kernel level sync
@@ -270,5 +270,25 @@ impl ViFile for FatFile {
         }
         
         Ok(None) // EOF
+    }
+
+    fn read_async(self: Box<Self>, buf_ptr: usize, buf_len: usize) -> BoxFuture<'static, FileResult<usize>> {
+        Box::pin(async move {
+            let mut this = self;
+            // Create a temporary slice from the user pointer.
+            // SAFETY: The kernel guarantees the pointer is valid (mapped to user space)
+            // and we rely on the caller to ensure it doesn't race.
+            // In a real async driver, we would need to pin user memory.
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
+
+            // Perform synchronous read (for now, until RamDisk is async)
+            // This still satisfies the architectural requirement of returning a future.
+            let res = this.read(buf);
+
+            // Return ownership and result
+            // Cast FatFile back to Trait Object
+             let trait_obj: Box<dyn ViFile + Send + Sync> = this;
+            (trait_obj, res)
+        })
     }
 }

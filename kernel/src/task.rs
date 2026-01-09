@@ -5,6 +5,7 @@ pub mod stack;
 pub mod scheduler;
 pub mod drivers;
 pub mod ipc_test;
+// pub mod waker; // Removed
 
 #[cfg(test)]
 mod tests;
@@ -19,6 +20,7 @@ extern "C" { fn __trap_exit(); }
 
 use alloc::vec::Vec;
 use types::*;
+use tcb::{TaskState, SyscallFuture, FileHandle};
 
 
 // Global Scheduler Instance
@@ -286,7 +288,7 @@ pub fn file_open(path: &str) -> core::result::Result<usize, ()> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.current_task_mut() {
             let fd = task.open_files.keys().max().map(|k| k + 1).unwrap_or(3); // Start FD at 3 (0,1,2 reserved)
-            task.open_files.insert(fd, crate::task::tcb::FileHandle(file));
+            task.open_files.insert(fd, crate::task::tcb::FileHandle::new(file));
             return Ok(fd);
         }
     }
@@ -317,12 +319,38 @@ pub fn file_read(fd: usize, buf: &mut [u8]) -> usize {
         }
     }
     
-    // File Read
+    // File Read (Async Transformation)
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.current_task_mut() {
-            if let Some(handle) = task.open_files.get_mut(&fd) {
-                // handle.0 is Box<dyn ViFile>
-                return handle.0.read(buf).unwrap_or(0);
+            // Take the file handle out of the map (Ownership Passing)
+            // We need to remove it because `read_async` consumes `Box<Self>`.
+            // We will put it back when the future completes.
+            if let Some(handle) = task.open_files.remove(&fd) {
+                // Unwrap the FileHandle to get Box<dyn ViFile>
+                // We assume FileHandle wraps a Box<dyn ViFile>
+                // Wait, FileHandle struct in tcb.rs is just a wrapper.
+                // We need `handle.file`. If private, we added `into_inner()` or public access.
+                // `FileHandle` defined in `api/fs.rs` has public `file` field or similar?
+                // I updated `api/fs.rs` to have `pub file`.
+
+                let file_box = handle.into_inner();
+
+                // Get buffer pointer and length
+                let buf_ptr = buf.as_mut_ptr() as usize;
+                let buf_len = buf.len();
+
+                // Create the future
+                let future = file_box.read_async(buf_ptr, buf_len);
+
+                // Store in task
+                task.pending_future = Some(SyscallFuture::FileRead(fd, future));
+
+                // Set state to Polling
+                task.state = TaskState::Polling;
+
+                // Return dummy value (0). The actual return value will be written
+                // to trap frame when future completes.
+                return 0;
             }
         }
     }
@@ -353,7 +381,7 @@ pub fn file_readdir(fd: usize, buf: &mut [u8]) -> core::result::Result<usize, ()
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.current_task_mut() {
             if let Some(handle) = task.open_files.get_mut(&fd) {
-                 match handle.0.read_dir() {
+                 match handle.read_dir() {
                      Ok(Some(entry)) => {
                          // Serialize DirEntry to buf
                          // Entry size is 64 + 1 + 8 + padding = 73+ ? sizeof(DirEntry)
@@ -390,7 +418,7 @@ pub fn file_getcwd(_buf: &mut [u8]) -> core::result::Result<usize, ()> {
     Err(())
 }
 use log::warn;
-use crate::task::tcb::{TaskState, LeaseAttributes};
+use crate::task::tcb::{LeaseAttributes};
 
 pub fn ipc_lend(_lender_id: usize, target_id: usize, ptr: VAddr, len: usize, flags: u32) -> core::result::Result<usize, ()> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
@@ -733,4 +761,3 @@ pub fn spawn_synthetic(name: &str, cell_id: CellId, entry: VAddr) -> core::resul
     
     Ok(tid)
 }
-

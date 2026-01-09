@@ -31,7 +31,6 @@ mod sync;
 pub use types::*;
 
 // Embed Init Binary
-#[repr(align(4096))]
 static INIT_ELF: &[u8] = include_bytes!("embedded/init");
 
 /// Kernel entry point called from HAL boot code
@@ -76,7 +75,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let mmap_entries = boot_info.memory_map();
     
     // Initialize frame allocator with the largest usable region
-    let mut frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+    let frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
     
     // 2. Frame Allocator (Physical Memory)
     // The local `frame_allocator` is moved into the global static.
@@ -129,8 +128,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log::info!("Heap test passed: vec = {:?}", vec);
 
     // 5. Hardware Abstraction Layer (HAL) Initialization
-    // Already initialized at step 1 for trap handling
-    log::info!("HAL initialized");
+    // Already initialized at step 1 for trap handling.
+    // Initialize PLIC for external interrupts.
+    #[cfg(target_arch = "riscv64")]
+    crate::hal::common::plic::init();
+
+    log::info!("HAL initialized (PLIC enabled)");
 
     // 6. Logger & Drivers & FS
     task::drivers::uart::init();
@@ -157,14 +160,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log::info!("Starting scheduler...");
     
     // Ensure SPP bit is set in sstatus so that context switch saves it as Supervisor Mode.
-    // DISABLE Interrupts (0x100) to avoid potential trap handler bugs for now.
+    // ENABLE Interrupts (SIE=1) now that we are ready to handle them!
+    // We used to disable (0x100) but now we want to test PLIC.
+    // sstatus = 0x102 (SPP=1, SIE=1)
     unsafe {
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x100);
+        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x102);
     }
 
     loop {
         if !crate::task::has_ready_tasks() {
-             log::info!("kmain: idle loop (no tasks)");
+             // log::info!("kmain: idle loop (no tasks)");
         }
         crate::task::yield_cpu();
         // Use global HAL instance
