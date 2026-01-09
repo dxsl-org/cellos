@@ -26,6 +26,7 @@ pub mod syscall;
 pub mod vm;
 pub mod async_io;
 pub mod config;
+pub mod posix;
 
 // POSIX Shim Layer
 pub mod posix;
