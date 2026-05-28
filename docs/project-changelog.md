@@ -103,7 +103,7 @@
 | Version | Date | Phase(s) | Status |
 |---------|------|----------|--------|
 | 0.2.0 | 2026-05-01 | Phase 0 (Alpha) | Stable baseline |
-| 0.2.1-dev | 2026-05-28 | Phases 01, 02, 04, 05 | In progress |
+| 0.2.1-dev | 2026-05-29 | Phases 01, 02, 04, 05 | In progress |
 | 0.2.1 | TBD | Phase 1 complete | Pending |
 | 0.3.0 | 2026-09-30 | Phases 2–3 | Planned |
 | 1.0.0 | 2027-03-31 | Phases 4+ | Planned |

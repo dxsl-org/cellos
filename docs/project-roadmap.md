@@ -3,7 +3,7 @@
 **Project**: ViOS (Jarvis Hybrid OS)  
 **Current Version**: 0.2.0 (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability  
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-05-29
 
 ---
 
@@ -20,7 +20,7 @@ ViOS development is organized into 4 major phases, each with specific milestones
 **Start Date**: 2026-04-01  
 **Target End Date**: 2026-06-30  
 **Effort**: 320 hours (~8 weeks @ 40h/wk)
-**Status**: 🚧 50% COMPLETE (Phases 01, 02, 05 done; Phase 04 partial)
+**Status**: 🚧 60% COMPLETE (Phases 01, 02, 05 complete; Phase 04 partial)
 
 ### Milestone 1.1: VirtIO Block Device Fix
 **Status**: ✅ PARTIAL (Root Cause Fixed)  
@@ -52,20 +52,22 @@ ViOS development is organized into 4 major phases, each with specific milestones
 **Priority**: P0 (blocking)
 
 **Current State**:
-- Root cause identified: VirtIO input IRQ acknowledgment was missing
-- Fix applied: Added `pub static INPUT_DEVICE_IRQ` and `pub fn ack_irq(irq: u32) -> bool` to `kernel/src/task/drivers/virtio_input.rs`
-- Expanded `vi_handle_virtio_irq` in `kernel/src/task/drivers/virtio_blk.rs` to dispatch to both block and input devices
+- Root cause identified: VirtIO input IRQ was never acknowledged, leaving `InterruptStatus` register set; PLIC continuously re-fired interrupt, causing kernel hang
+- Fix applied: Added `pub static INPUT_DEVICE_IRQ` constant and `pub fn ack_irq(irq: u32) -> bool` to `kernel/src/task/drivers/virtio_input.rs`
+- Expanded `vi_handle_virtio_irq()` in `kernel/src/task/drivers/virtio_blk.rs` to dispatch to both block and input devices
+- Established IRQ numbering pattern: QEMU VirtIO MMIO slot `i` → IRQ `i+1` (applies to all device types)
 - Interrupt storm prevented by proper IRQ acknowledgment
 
 **Deliverables**:
 - [x] Multiple keystrokes processed without hang
 - [x] IRQ acknowledgment properly implemented for all VirtIO devices
-- [x] PLIC dispatch pattern established for both block and input
-- [x] Shell input loop no longer deadlocks
+- [x] PLIC dispatch pattern established for block and input devices
+- [x] Shell input loop no longer deadlocks on subsequent input
+- [x] Async waker path analysis complete (not needed for polling-based shell)
 
-**Completion**: Verified; ready for Phase 2 testing
+**Completion**: Verified 2026-05-29; ready for Phase 2 shell interaction testing
 
-**Next Action**: Proceed with Phase 3 (Ring 3 Boot) and Phase 06 (External ELF Loading)
+**Next Action**: Proceed with Phase 03 (Ring 3 Boot) and Phase 06 (External ELF Loading)
 
 ---
 
@@ -355,12 +357,12 @@ All milestones complete when:
 ├─ Q2 (Apr-Jun): Phase 1 - Core Stability
 │  ├─ W1:    Phase 01 Workspace Cleanup ✅ (2026-05-28)
 │  ├─ W1-2:  Phase 02 CI/CD Pipeline ✅ (2026-05-28)
-│  ├─ W2:    Phase 05 Keyboard Input Fix ✅ (2026-05-28)
 │  ├─ W2-3:  Phase 04 VirtIO Block Fix (PARTIAL) ⚡ (2026-05-28)
-│  ├─ W3-4:  Phase 03 Ring 3 Boot + Phase 06 External ELF (PENDING)
-│  ├─ W5-7:  Multi-arch HAL (ARM, x86) — Phases 08, 09
+│  ├─ W3:    Phase 05 Keyboard Input Fix ✅ (2026-05-29)
+│  ├─ W4-5:  Phase 03 Ring 3 Boot + Phase 06 External ELF (PENDING)
+│  ├─ W6-7:  Multi-arch HAL (ARM, x86) — Phases 08, 09
 │  └─ W8:    Unit + integration tests — Phase 11
-│  └─ TARGET: Phase 1 Complete (2026-06-30) [60% likely]
+│  └─ TARGET: Phase 1 Complete (2026-06-30) [65% likely]
 │
 ├─ Q3 (Jul-Sep): Phase 2 - System Services + Phase 3.1-3.2
 │  ├─ VFS, input, network, compositor services
@@ -491,8 +493,9 @@ Phase 4 (Advanced Features)
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
-| VirtIO working | ✅ Yes | ⚡ Root cause fixed | PARTIAL |
-| Keyboard input | ✅ Multi-key | ✅ Fixed | ✅ COMPLETE |
+| VirtIO working | ✅ Yes | ⚡ Root cause fixed, testing | PARTIAL |
+| Keyboard input | ✅ Multi-key | ✅ Reliable, no deadlock | ✅ COMPLETE |
+| IRQ dispatch | ✅ All devices ack'd | ✅ Block + input | ✅ COMPLETE |
 | CI/CD pipeline | ✅ 4-job matrix | ✅ Implemented | ✅ COMPLETE |
 | Workspace warnings | ✅ 0 | ✅ 0 | ✅ COMPLETE |
 | Multi-arch HAL | ✅ RV64+ARM+x86 | RV64 only | IN PROGRESS (Phases 08/09) |

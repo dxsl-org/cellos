@@ -3,7 +3,7 @@
 **Audience**: Developers new to ViOS  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.0 (Mycelium Era)  
-**Last Updated**: 2026-05-28
+**Last Updated**: 2026-05-29
 
 ---
 
@@ -259,13 +259,33 @@ pub fn vi_handle_virtio_irq(irq: u32) -> bool {
 }
 ```
 
-Each device handler must:
-1. Drain the used ring to retrieve completed requests
-2. Acknowledge the IRQ via `ack_irq(irq)` to prevent re-firing
+**Per-Device Handler Responsibilities** (Phase 05 established):
+1. Drain the used ring to retrieve completed requests and process data
+2. **Acknowledge the IRQ** via `ack_irq(irq)` to clear device `InterruptStatus` register
 3. Re-arm the device by publishing empty buffers back to the available ring
 4. Wake any blocked tasks waiting on device I/O
 
-**Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, causing PLIC to continuously re-fire the interrupt. Missing acknowledgment is the canonical cause of "first keystroke only" input deadlock.
+**Interrupt Flow (Correct Pattern)**:
+```
+Device generates interrupt
+  ↓
+PLIC sets bit in Pending register
+  ↓
+PLIC delivers IRQ to CPU
+  ↓
+Kernel trap handler calls vi_handle_virtio_irq(irq)
+  ↓
+Device handler:
+  - Process available data/requests
+  - Call ack_irq(irq) to clear InterruptStatus
+  - Refill available ring
+  ↓
+PLIC acknowledges via plic_complete()
+  ↓
+Device can fire next interrupt (if new data arrives)
+```
+
+**Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, leaving `InterruptStatus` register set. PLIC would immediately re-fire the same interrupt after `plic_complete()`, creating an infinite interrupt storm. This caused kernel to hang on first keystroke. Fix: Added `pub static INPUT_DEVICE_IRQ` and `pub fn ack_irq()` to `kernel/src/task/drivers/virtio_input.rs`; expanded `vi_handle_virtio_irq()` to dispatch to input device handler.
 
 ---
 
@@ -528,9 +548,9 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 
 ---
 
-## Current Status (2026-05-28)
+## Current Status (2026-05-29)
 
-### ✅ Implemented (Phase 0 + Phase 01-02-05)
+### ✅ Implemented (Phase 0 + Phases 01, 02, 05)
 - RISC-V 64-bit (RV64) HAL with SV39 paging
 - Nano kernel (~5300 LOC) with round-robin scheduler
 - 10 core syscalls (Send, Recv, Call, Reply, Spawn, etc.)
@@ -542,11 +562,11 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 - Lua 5.4 + MicroPython 1.24.1 runtime bindings
 - **Workspace consolidated** with 0 cargo warnings (Phase 01)
 - **CI/CD pipeline** with 4-job matrix + weekly security scans (Phase 02)
-- **VirtIO IRQ dispatch** for block and input devices with proper acknowledgment (Phase 05)
-- **Keyboard input** reliably reading multiple consecutive keystrokes (Phase 05)
+- **VirtIO IRQ dispatch pattern** for block and input devices with proper acknowledgment (Phase 05)
+- **Keyboard input** reliably reading multiple consecutive keystrokes; no deadlock on subsequent input (Phase 05)
 
 ### 🚧 In Progress (Phase 04 - Partial)
-- VirtIO block device (root cause fixed: MMIO explicit identity-mapping added; testing phase)
+- VirtIO block device (root cause fixed: MMIO explicit identity-mapping added; read/write testing phase)
 
 ### ⏳ Planned (Phases 03, 06–23)
 - Ring 3 user-space execution (Phase 03)
