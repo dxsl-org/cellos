@@ -1,6 +1,6 @@
 # Phase 03 — Boot Stability & Ring 3 Execution
 
-**Effort:** 40h | **Priority:** P0 (BLOCKING) | **Status:** pending | **Blockers:** none
+**Effort:** 40h | **Priority:** P0 (BLOCKING) | **Status:** complete | **Blockers:** none
 
 ## Overview
 
@@ -150,18 +150,18 @@ Fix the `init_kernel_paging` hang during early boot on RV64 and establish workin
 
 ## Todo List
 
-- [ ] Verify intrinsics symbols present, no undefined externals
-- [ ] Capture failing boot trace `before.log`
-- [ ] Audit `paging.rs` PTE flags (U bit handling)
-- [ ] Audit `satp` write + `sfence.vma` order in `rv64/boot.rs`
-- [ ] Implement `enter_user` in `rv64/trap.rs`
-- [ ] Implement trap handler dispatch (ecall, interrupt, fault paths)
-- [ ] Create `user_hello.rs` blob
-- [ ] Wire `spawn_user_task` in `task/task.rs`
-- [ ] Wire `Log` + `Exit` syscalls (or stubs) in `task/syscall.rs`
-- [ ] Boot → see "Hi from U-mode" on serial
-- [ ] Add `tests/integration/ring3_smoke.rs`
-- [ ] CI green
+- [x] Verify intrinsics symbols present, no undefined externals
+- [x] Capture failing boot trace `before.log`
+- [x] Audit `paging.rs` PTE flags (U bit handling)
+- [x] Audit `satp` write + `sfence.vma` order in `rv64/boot.rs`
+- [x] Implement `enter_user` in `rv64/trap.rs`
+- [x] Implement trap handler dispatch (ecall, interrupt, fault paths)
+- [x] Create `user_hello.rs` blob
+- [x] Wire `spawn_user_task` in `task/task.rs`
+- [x] Wire `Log` + `Exit` syscalls (or stubs) in `task/syscall.rs`
+- [x] Boot → see "Hi from U-mode" on serial
+- [x] Add `tests/integration/ring3_smoke.rs`
+- [x] CI green
 
 ## Success Criteria
 

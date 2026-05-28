@@ -164,8 +164,16 @@ impl PageTableTrait for PageTable {
 
     unsafe fn activate(&self) {
         let root_addr = self as *const _ as usize;
-        let satp_val = (8 << 60) | (root_addr >> 12);
-        core::arch::asm!("csrw satp, {}", in(reg) satp_val);
-        core::arch::asm!("sfence.vma");
+        let satp_val = (8usize << 60) | (root_addr >> 12);
+        // SAFETY: fence ensures all PTE stores reach the memory system before the
+        // SATP write, preventing the hardware page-walker from seeing stale entries.
+        // Required by RISC-V privileged spec §4.3 (sfence.vma ordering).
+        core::arch::asm!(
+            "fence rw, rw",
+            "csrw satp, {satp}",
+            "sfence.vma zero, zero",
+            satp = in(reg) satp_val,
+            options(nostack),
+        );
     }
 }

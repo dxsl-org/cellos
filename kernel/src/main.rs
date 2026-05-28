@@ -199,6 +199,25 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         Err(_e) => log_info("Failed to spawn init"),
     }
 
+    // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
+    // Expected serial output: "Hi from U-mode!\n" followed by task exit.
+    match task::user_hello::spawn() {
+        Ok(tid) => {
+            puts("[task] spawning user_hello at ");
+            // Print tid as decimal (max 20 digits for usize)
+            let mut buf = [0u8; 20];
+            let mut n = tid;
+            let mut i = 20usize;
+            if n == 0 { i -= 1; buf[i] = b'0'; } else {
+                while n > 0 { i -= 1; buf[i] = b'0' + (n % 10) as u8; n /= 10; }
+            }
+            let _ = core::str::from_utf8(&buf[i..]).map(|s| puts(s));
+            puts("\n");
+            let _ = tid; // suppress unused warning
+        }
+        Err(_) => log_info("[task] user_hello spawn failed"),
+    }
+
     log_info("Kernel initialization complete. Entering idle loop.");
 
     // 9. Start multitasking

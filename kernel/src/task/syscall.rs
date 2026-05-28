@@ -422,23 +422,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
         }
         Syscall::Exit { code } => {
-            log::info!(
-                "Syscall::Exit handler called for {} with code {}",
-                caller_id,
-                code
-            );
+            log::info!("Syscall::Exit: task {} exited with code {}", caller_id, code);
             let mut waiters = alloc::vec::Vec::new();
 
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                // sched.exit_task(caller_id); // Don't remove yet! Mark Terminated.
+                // Record exit code and collect waiters before reaping so their
+                // reply_value can carry the exit code.
                 if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.state = TaskState::Terminated;
                     task.exit_code = Some(code);
-                    // Steal waiters
                     waiters.append(&mut task.waiters);
                 }
-
-                // Wake up waiters
+                // Move task to sched.zombies so its context pointer remains valid
+                // across the context switch in yield_cpu; pick_next checks zombies.
+                sched.exit_task(caller_id);
+                // Wake any tasks blocked on Wait(caller_id).
                 for wid in waiters {
                     if let Some(w) = sched.tasks.get_mut(&wid) {
                         w.state = TaskState::Ready;
@@ -448,8 +445,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             }
 
+            // yield_cpu switches away; this task is never rescheduled.
             super::yield_cpu();
-            // Should not return
             Ok(0)
         }
         Syscall::Reply { caller: _, result } => {
