@@ -1,7 +1,8 @@
 #![no_std]
+#![forbid(unsafe_code)]
 
 //! Input Dispatcher Service Cell - INTERFACE ONLY
-//! 
+//!
 //! Routes input events to focused application.
 
 use ostd::prelude::*;
@@ -19,7 +20,13 @@ pub enum InputEvent {
 pub struct InputDispatcher;
 
 impl InputDispatcher {
-    pub fn new() -> Self { todo!() }
-    pub fn dispatch(&self, _event: InputEvent) -> Result<()> { todo!() }
-    pub fn set_focus(&mut self, _app_id: u64) -> Result<()> { todo!() }
+    pub fn new() -> Self {
+        todo!()
+    }
+    pub fn dispatch(&self, _event: InputEvent) -> Result<()> {
+        todo!()
+    }
+    pub fn set_focus(&mut self, _app_id: u64) -> Result<()> {
+        todo!()
+    }
 }

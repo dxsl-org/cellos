@@ -6,7 +6,7 @@
 #![no_std]
 
 //! Core types for ViOS Cellular SAS architecture.
-//! 
+//!
 //! This crate defines fundamental types used across the entire system.
 
 /// Kernel Result Type
@@ -58,7 +58,11 @@ pub struct SemVer {
 
 impl SemVer {
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 }
 

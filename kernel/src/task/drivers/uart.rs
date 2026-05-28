@@ -1,23 +1,23 @@
 //! Minimal 16550 UART Driver for QEMU RISC-V Virt
-//! 
+//!
 //! Used for kernel logging and early debug output.
 //! Base Address: 0x10000000
 
-use core::fmt;
 use crate::sync::Spinlock;
+use core::fmt;
 
 /// UART Registers (offset from base)
-const RHR: usize = 0; // Receive Holding Register (read)
-const THR: usize = 0; // Transmit Holding Register (write)
+const _RHR: usize = 0; // Receive Holding Register (read)
+const _THR: usize = 0; // Transmit Holding Register (write)
 const IER: usize = 1; // Interrupt Enable Register
 const FCR: usize = 2; // FIFO Control Register
-const ISR: usize = 2; // Interrupt Status Register
+const _ISR: usize = 2; // Interrupt Status Register
 const LCR: usize = 3; // Line Control Register
 const LSR: usize = 5; // Line Status Register
 
 /// Line Status Flags
-const LSR_RX_READY: u8 = 1 << 0;
-const LSR_TX_EMPTY: u8 = 1 << 5;
+const _LSR_RX_READY: u8 = 1 << 0;
+const _LSR_TX_EMPTY: u8 = 1 << 5;
 
 #[allow(non_camel_case_types)]
 pub struct viUART {
@@ -34,70 +34,46 @@ impl viUART {
     pub fn init(&mut self) {
         unsafe {
             let ptr = self.base_addr as *mut u8;
-            
+
             // Disable interrupts
             ptr.add(IER).write_volatile(0x00);
-            
+
             // Enable FIFO
             ptr.add(FCR).write_volatile(0x01);
-            
+
             // Set 8-bit mode (Word Length Select bits 0 and 1)
             ptr.add(LCR).write_volatile(0x03);
-            
+
             // Enable interrupts (Receive Data Available) - Optional for polling
             ptr.add(IER).write_volatile(0x01);
         }
     }
 
-    /// Write a single byte
-    pub fn write_byte(&mut self, byte: u8) {
-        unsafe {
-            let ptr = self.base_addr as *mut u8;
-            
-            // Wait for TX FIFO to be empty
-            while (ptr.add(LSR).read_volatile() & LSR_TX_EMPTY) == 0 {}
-            
-            // Write byte
-            ptr.add(THR).write_volatile(byte);
-        }
-    }
+    // /// Write a single byte (Unused - Output via SBI)
+    // pub fn write_byte(&mut self, byte: u8) { ... }
 }
 
-impl fmt::Write for viUART {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for byte in s.bytes() {
-            self.write_byte(byte);
-        }
-        Ok(())
-    }
-}
+// impl fmt::Write for viUART { ... }
 
 // Global Serial Instance protected by Spinlock
 pub static SERIAL: Spinlock<viUART> = Spinlock::new(unsafe { viUART::new(0x10_000_000) });
 
-struct StackWrite<'a> {
-    buf: &'a mut [u8],
-    offset: usize,
-}
+// Direct writer to avoid stack buffering issues
+struct DirectWriter;
 
-impl<'a> StackWrite<'a> {
-    fn new(buf: &'a mut [u8]) -> Self {
-        Self { buf, offset: 0 }
-    }
-    fn as_bytes(&self) -> &[u8] {
-        &self.buf[..self.offset]
-    }
-}
-
-impl<'a> fmt::Write for StackWrite<'a> {
+impl fmt::Write for DirectWriter {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let bytes = s.as_bytes();
-        let len = bytes.len();
-        if self.offset + len > self.buf.len() {
-            return Err(fmt::Error);
+        // 1. SBI Output
+        for c in s.bytes() {
+            let _ = crate::hal::sbi::console_putchar(c);
         }
-        self.buf[self.offset..self.offset + len].copy_from_slice(bytes);
-        self.offset += len;
+        
+        // 2. Framebuffer Output (Protected internally)
+        // if !s.is_empty() {
+        //      crate::task::drivers::fb_console::FramebufferConsole::write_str(s);
+        // }
+        // TRACE:
+        let _ = crate::hal::sbi::console_putchar(b'.' as u8);
         Ok(())
     }
 }
@@ -113,25 +89,8 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
             use fmt::Write;
-            
-            // 1. Write to Serial
-            {
-                let mut serial = SERIAL.lock();
-                let _ = write!(serial, "[{:>5}] {}\n", record.level(), record.args());
-            }
-
-            // 2. Write to Framebuffer Console - DISABLED for stability debugging
-            /*
-            let mut buf = [0u8; 256];
-            let mut wrapper = StackWrite::new(&mut buf);
-            // We ignore errors here. If it's too long, it's truncated or partially written.
-            let _ = write!(wrapper, "[{}] {}\n", record.level(), record.args());
-            if let Ok(s) = core::str::from_utf8(wrapper.as_bytes()) {
-                if !s.is_empty() {
-                    crate::task::drivers::fb_console::FramebufferConsole::write_str(s);
-                }
-            }
-            */
+            let mut writer = DirectWriter;
+            let _ = write!(writer, "[{:>5}] {}\n", record.level(), record.args());
         }
     }
 
@@ -142,7 +101,59 @@ static LOGGER: SimpleLogger = SimpleLogger;
 
 pub fn init() {
     SERIAL.lock().init();
-    
+
     // Initialize Logger
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Info));
+}
+
+// --- Input Handling ---
+
+use alloc::collections::VecDeque;
+
+// Global RX Buffer (Initialized late)
+pub static RX_BUFFER: Spinlock<Option<VecDeque<u8>>> = Spinlock::new(None);
+
+/// Initialize Input Buffer (Must be called after Heap Init)
+pub fn init_input() {
+    *RX_BUFFER.lock() = Some(VecDeque::with_capacity(128));
+    log::info!("UART Input Buffer Initialized");
+}
+
+/// Poll for a character from the buffer
+pub fn getchar() -> Option<u8> {
+    if let Some(buf) = RX_BUFFER.lock().as_mut() {
+        return buf.pop_front();
+    }
+    None
+}
+
+/// Called from Trap Handler (IRQ 10)
+#[no_mangle]
+pub extern "Rust" fn vi_handle_uart_irq() {
+    if let Some(buf) = RX_BUFFER.lock().as_mut() {
+        let serial = SERIAL.lock();
+        unsafe {
+             let ptr = serial.base_addr as *mut u8;
+             // Check if data is ready (LSR bit 0)
+             if (ptr.add(LSR).read_volatile() & 1) != 0 {
+                 let c = ptr.add(0).read_volatile(); // RHR
+                 
+                 // Handle Enter (CR -> LF)
+                 let c = if c == b'\r' { b'\n' } else { c };
+                 
+                 // Basic Backspace handling
+                 if c == 0x7F || c == 0x08 {
+                     // In a real line discipline, we would modify a line buffer.
+                     // Here we just push it, assuming the shell handles it.
+                     // Or we can drop the last char?
+                     // Let's just push raw for now.
+                 }
+                 
+                 buf.push_back(c);
+                 
+                 // Optional: Echo back immediately (Half-duplex feeling)
+                 // serial.write_byte(c); 
+             }
+        }
+    }
 }

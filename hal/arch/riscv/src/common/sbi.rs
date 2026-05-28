@@ -1,5 +1,5 @@
 //! Supervisor Binary Interface (SBI) wrappers
-//! 
+//!
 //! Allows S-mode kernel to make requests to M-mode OpenSBI firmware.
 
 #![allow(dead_code)]
@@ -36,7 +36,7 @@ pub fn console_putchar(c: u8) -> Result<(), usize> {
     let ptr = &byte as *const u8 as usize;
     // console_write(num_bytes=1, base_addr_lo=ptr, base_addr_hi=0)
     let (error, _value) = sbi_call(SBI_EID_DBCN, SBI_FID_DBCN_WRITE, 1, ptr, 0);
-    
+
     if error == 0 {
         Ok(())
     } else {
@@ -51,7 +51,7 @@ pub fn console_getchar() -> isize {
     let mut byte: u8 = 0;
     let ptr = &mut byte as *mut u8 as usize;
     let (error, value) = sbi_call(SBI_EID_DBCN, SBI_FID_DBCN_READ, 1, ptr, 0);
-    
+
     if error == 0 && value == 1 {
         byte as isize
     } else {

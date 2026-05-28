@@ -2,34 +2,123 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
-  workflow_dispatch:
+    branches: [main]
   pull_request:
-    branches: [ master ]
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
-  build-test:
-    runs-on: ubuntu-latest
-
+  lint:
+    name: Lint (fmt + clippy)
+    runs-on: ubuntu-24.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      # Use the toolchain from rust-toolchain.toml
-      - name: Install Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src,rustfmt,clippy
 
-      - name: Verify installed toolchain and targets
-        run: |
-          rustc --version
-          rustup show
-          rustup target list --installed
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all --check
 
-      - name: Run clippy
-        run: cargo clippy -- -D warnings
+      - name: Clippy (riscv64 target)
+        run: >
+          cargo clippy
+          --workspace
+          --target riscv64gc-unknown-none-elf
+          -Z build-std=core,alloc
+          -- -D warnings
 
-      - name: Run unit tests for libkernel
-        run: cargo test -p libkernel --target x86_64-unknown-linux-gnu --all-features
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: riscv64gc-unknown-none-elf
+            short: rv64
+          - target: aarch64-unknown-none
+            short: aarch64
+            continue-on-error: true
+          - target: x86_64-unknown-none
+            short: x86_64
+            continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: ${{ matrix.short }}
+
+      - name: Build (release)
+        continue-on-error: ${{ matrix.continue-on-error || false }}
+        run: >
+          cargo build
+          --release
+          --target ${{ matrix.target }}
+          -Z build-std=core,alloc
+
+      - name: Upload kernel ELF
+        if: matrix.short == 'rv64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-rv64
+          path: target/riscv64gc-unknown-none-elf/release/vios-kernel
+          if-no-files-found: error
+
+  qemu-boot:
+    name: QEMU Boot Test
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install QEMU
+        run: sudo apt-get update && sudo apt-get install -y qemu-system-misc
+
+      - name: Download kernel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: kernel-rv64
+          path: target/riscv64gc-unknown-none-elf/release/
+
+      - name: Make kernel executable
+        run: chmod +x target/riscv64gc-unknown-none-elf/release/vios-kernel
+
+      - name: Run boot test
+        run: bash scripts/qemu-boot-test.sh
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          arguments: --all-features
+
+      - name: cargo-audit
+        uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

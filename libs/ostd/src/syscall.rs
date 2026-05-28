@@ -1,8 +1,7 @@
 #![allow(unsafe_code)]
 
+use api::syscall::{ViSpawnArgs, ViSyscall};
 use core::arch::asm;
-use api::syscall::{ViSyscall, ViSpawnArgs};
-
 
 #[derive(Debug, Copy, Clone)]
 pub enum SyscallResult {
@@ -53,28 +52,30 @@ pub fn sys_exit(code: usize) -> ! {
     unsafe {
         syscall(ViSyscall::Exit, code, 0, 0, 0);
     }
-    loop { sys_yield(); }
+    loop {
+        sys_yield();
+    }
 }
 
 pub fn sys_exec(path: &str) -> SyscallResult {
     unsafe {
-         let ret = syscall(ViSyscall::Exec, path.as_ptr() as usize, path.len(), 0, 0);
-         if ret != -1 {
-             SyscallResult::Ok(ret as usize)
-         } else {
-             SyscallResult::Err(SyscallError::Unknown)
-         }
+        let ret = syscall(ViSyscall::Exec, path.as_ptr() as usize, path.len(), 0, 0);
+        if ret != -1 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
     }
 }
 
 pub fn sys_spawn(entry: usize, arg: usize) -> SyscallResult {
     unsafe {
-         let ret = syscall(ViSyscall::Spawn, entry, arg, 0, 0);
-         if ret > 0 {
-             SyscallResult::Ok(ret as usize)
-         } else {
-             SyscallResult::Err(SyscallError::Unknown)
-         }
+        let ret = syscall(ViSyscall::Spawn, entry, arg, 0, 0);
+        if ret > 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
     }
 }
 
@@ -89,8 +90,13 @@ pub fn sys_spawn_from_mem(data: &[u8], name: &str, args: &str) -> SyscallResult 
             args_len: args.len(),
         };
 
-        let ret = syscall(ViSyscall::SpawnFromMem,
-                          &spawn_args as *const _ as usize, 0, 0, 0);
+        let ret = syscall(
+            ViSyscall::SpawnFromMem,
+            &spawn_args as *const _ as usize,
+            0,
+            0,
+            0,
+        );
         if ret > 0 {
             SyscallResult::Ok(ret as usize)
         } else {
@@ -151,7 +157,13 @@ pub fn sys_close(fd: usize) {
 
 pub fn sys_read(fd: usize, buffer: &mut [u8]) -> Result<usize, SyscallError> {
     unsafe {
-        let ret = syscall(ViSyscall::Read, fd, buffer.as_mut_ptr() as usize, buffer.len(), 0);
+        let ret = syscall(
+            ViSyscall::Read,
+            fd,
+            buffer.as_mut_ptr() as usize,
+            buffer.len(),
+            0,
+        );
         if ret >= 0 {
             Ok(ret as usize)
         } else {
@@ -162,7 +174,13 @@ pub fn sys_read(fd: usize, buffer: &mut [u8]) -> Result<usize, SyscallError> {
 
 pub fn sys_write(fd: usize, buffer: &[u8]) -> Result<usize, SyscallError> {
     unsafe {
-        let ret = syscall(ViSyscall::Write, fd, buffer.as_ptr() as usize, buffer.len(), 0);
+        let ret = syscall(
+            ViSyscall::Write,
+            fd,
+            buffer.as_ptr() as usize,
+            buffer.len(),
+            0,
+        );
         if ret >= 0 {
             Ok(ret as usize)
         } else {
@@ -181,7 +199,13 @@ pub fn sys_send(target: usize, msg: &[u8]) -> SyscallResult {
 
 pub fn sys_read_dir(fd: usize, buffer: &mut [u8]) -> Result<usize, SyscallError> {
     unsafe {
-        let ret = syscall(ViSyscall::ReadDir, fd, buffer.as_mut_ptr() as usize, buffer.len(), 0);
+        let ret = syscall(
+            ViSyscall::ReadDir,
+            fd,
+            buffer.as_mut_ptr() as usize,
+            buffer.len(),
+            0,
+        );
         if ret >= 0 {
             Ok(ret as usize)
         } else {
@@ -192,7 +216,13 @@ pub fn sys_read_dir(fd: usize, buffer: &mut [u8]) -> Result<usize, SyscallError>
 
 pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     unsafe {
-        let ret = syscall(ViSyscall::Recv, mask, buf.as_mut_ptr() as usize, buf.len(), 0);
+        let ret = syscall(
+            ViSyscall::Recv,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        );
         SyscallResult::Ok(ret as usize)
     }
 }
@@ -204,9 +234,18 @@ pub fn sys_set_timer(ticks: usize) -> SyscallResult {
     }
 }
 
-pub fn sys_grant(target: usize, ptr: usize, len: usize, flags: usize) -> SyscallResult {
+pub fn sys_grant(_target: usize, _ptr: usize, _len: usize, _flags: usize) -> SyscallResult {
+    // Assume Grant mapped to ID 12
+    SyscallResult::Err(SyscallError::Unknown)
+}
+
+pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, SyscallError> {
     unsafe {
-        // Assume Grant mapped to ID 12
-        SyscallResult::Err(SyscallError::Unknown)
+        let ret = syscall(ViSyscall::GetProcs, buffer.as_mut_ptr() as usize, buffer.len(), 0, 0);
+        if ret >= 0 {
+            Ok(ret as usize)
+        } else {
+            Err(SyscallError::Unknown)
+        }
     }
 }

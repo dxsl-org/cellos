@@ -3,8 +3,7 @@
 
 extern crate ostd;
 
-use ostd::io::{print, println};
-use ostd::string::ToString;
+use ostd::io::println;
 
 // Embed Service Binaries
 // We need to launch these first.
@@ -14,10 +13,13 @@ static CONFIG_ELF: &[u8] = include_bytes!("../../../../kernel/src/embedded/confi
 #[no_mangle]
 pub extern "C" fn main() {
     println("Init: Starting ViOS Orchestrator...");
-    
+    println("Hello from Userspace!");
+
     // 1. Spawn Config Service
     println("Init: Spawning Config Service...");
-    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(CONFIG_ELF, "config", "") {
+    if let ostd::syscall::SyscallResult::Ok(_) =
+        ostd::syscall::sys_spawn_from_mem(CONFIG_ELF, "config", "")
+    {
         println("Init: Config Service spawned.");
     } else {
         println("Init: Failed to spawn Config Service.");
@@ -25,7 +27,9 @@ pub extern "C" fn main() {
 
     // 2. Spawn VFS Service
     println("Init: Spawning VFS Service...");
-    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(VFS_ELF, "vfs", "") {
+    if let ostd::syscall::SyscallResult::Ok(_) =
+        ostd::syscall::sys_spawn_from_mem(VFS_ELF, "vfs", "")
+    {
         println("Init: VFS Service spawned.");
     } else {
         println("Init: Failed to spawn VFS Service.");
@@ -72,8 +76,22 @@ pub extern "C" fn main() {
                     // We need a slice from that pointer.
                     // SAFETY: In current SAS model, we assume we can read it.
                     let shell_data = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+                    
+                    // Check Magic
+                    if len >= 4 {
+                        let magic = shell_data[0];
+                        if magic != 0x7F {
+                             let _ = ostd::syscall::sys_log("Init: BAD MAGIC! VFS returned garbage.\n");
+                             // Trap here to stop
+                             loop { ostd::task::yield_now(); }
+                        } else {
+                             let _ = ostd::syscall::sys_log("Init: GOOD MAGIC (0x7F).\n");
+                        }
+                    }
 
-                    if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_spawn_from_mem(shell_data, "shell", "") {
+                    if let ostd::syscall::SyscallResult::Ok(_) =
+                        ostd::syscall::sys_spawn_from_mem(shell_data, "shell", "")
+                    {
                         println("Init: Shell spawned successfully.");
                     } else {
                         println("Init: Failed to spawn shell.");
@@ -81,7 +99,7 @@ pub extern "C" fn main() {
                 } else {
                     println("Init: VFS returned empty/null for shell.");
                 }
-            },
+            }
             _ => println("Init: VFS did not reply."),
         }
     } else {

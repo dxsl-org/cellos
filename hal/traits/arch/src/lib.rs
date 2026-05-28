@@ -7,18 +7,18 @@ pub trait Arch: Send + Sync {
 
     /// Initialize the architecture.
     fn init(&self);
-    
+
     /// Perform context switch.
     /// # Safety
     /// This function is unsafe because it manipulates raw pointers and machine state.
     unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context);
-    
+
     /// Enable interrupts.
     fn enable_interrupts(&self);
-    
+
     /// Disable interrupts.
     fn disable_interrupts(&self);
-    
+
     /// Wait for interrupt.
     fn wait_for_interrupt(&self);
 

@@ -6,11 +6,11 @@
 #![no_std]
 extern crate alloc;
 
+#[allow(unused_imports)]
 use ostd::prelude::*;
 
-use api::*;
-
 // ✅ This should work - apps can use API
+#[allow(dead_code)]
 fn test_api_usage() {
     // We can reference API types
     use api::fs::{OpenMode, SeekFrom};
@@ -20,7 +20,7 @@ fn test_api_usage() {
 
 // ❌ This should NOT compile if uncommented:
 // use kernel::memory::allocate;
-// 
+//
 // Compile error expected:
 // "error[E0432]: unresolved import `kernel`"
 

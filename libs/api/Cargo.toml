@@ -11,7 +11,8 @@ unsafe_code = "deny"
 [dependencies]
 libm = "0.2.15"
 types = { path = "../types" }
-libm = "0.2"
+
 
 [features]
 default = []
+posix = []

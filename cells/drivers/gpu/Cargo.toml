@@ -13,7 +13,3 @@ default = []
 
 [lib]
 crate-type = ["staticlib"]
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

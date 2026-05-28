@@ -12,7 +12,3 @@ driver-disk = { path = "../../drivers/disk" }
 [[bin]]
 name = "service-vfs"
 path = "src/main.rs"
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

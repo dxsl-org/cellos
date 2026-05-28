@@ -1,5 +1,5 @@
 /// Timer Interface (S-mode)
-/// 
+///
 /// Provides access to the RISC-V timer via SBI calls and 'time' CSR.
 /// Direct CLINT access is NOT allowed in S-mode.
 
@@ -12,8 +12,10 @@ pub fn read_mtime() -> u64 {
         core::arch::asm!("csrr {0}, time", out(reg) time);
     }
     #[cfg(not(target_arch = "riscv64"))]
-    { time = 0; }
-    
+    {
+        time = 0;
+    }
+
     time
 }
 
@@ -26,7 +28,7 @@ pub fn time_ms() -> u64 {
 pub fn set_timer_ms(ms: u64) {
     let current = read_mtime();
     let target = current + (ms * 10_000);
-    
+
     // Use SBI call to set timer in M-mode
     crate::common::sbi::set_timer(target);
 }

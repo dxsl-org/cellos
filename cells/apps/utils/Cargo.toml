@@ -17,7 +17,3 @@ path = "src/bin/cat.rs"
 [[bin]]
 name = "ls"
 path = "src/bin/ls.rs"
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

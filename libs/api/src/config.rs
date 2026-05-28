@@ -2,7 +2,7 @@
 
 //! Configuration API traits.
 
-use crate::*;
+// use crate::*;
 use types::ViResult;
 
 /// Configuration Service Interface.

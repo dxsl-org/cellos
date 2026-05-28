@@ -1,8 +1,8 @@
 #![allow(unsafe_code)]
 
+use crate::syscall::sys_yield;
 use core::future::Future;
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use crate::syscall::sys_yield;
 
 /// A simple executor that blocks the current thread until the future completes.
 /// It yields to the OS kernel when the future is pending.
@@ -36,9 +36,9 @@ pub fn block_on<F: Future>(mut future: F) -> F::Output {
 fn dummy_raw_waker() -> RawWaker {
     static VTABLE: RawWakerVTable = RawWakerVTable::new(
         |data| RawWaker::new(data, &VTABLE), // clone
-        |_| {}, // wake
-        |_| {}, // wake_by_ref
-        |_| {}, // drop
+        |_| {},                              // wake
+        |_| {},                              // wake_by_ref
+        |_| {},                              // drop
     );
     RawWaker::new(core::ptr::null(), &VTABLE)
 }
@@ -66,7 +66,10 @@ impl Future for YieldFuture {
 }
 
 pub fn sleep(ticks: usize) -> impl Future<Output = ()> {
-    SleepFuture { ticks, started: false }
+    SleepFuture {
+        ticks,
+        started: false,
+    }
 }
 
 struct SleepFuture {
@@ -84,13 +87,13 @@ impl Future for SleepFuture {
         // No, in kernel wrapper (syscall.rs) I mapped it to Syscall::SetTimer { deadline: ticks }.
         // And in kernel implementation I used `now + deadline`.
         // So `ticks` IS `delta`. Correct.
-        
+
         if !self.started {
-             let _ = crate::syscall::sys_set_timer(self.ticks); // Sleep for X ticks
-             self.started = true;
-             Poll::Pending
-         } else {
-             Poll::Ready(()) // If we woke up, we are done
-         }
+            let _ = crate::syscall::sys_set_timer(self.ticks); // Sleep for X ticks
+            self.started = true;
+            Poll::Pending
+        } else {
+            Poll::Ready(()) // If we woke up, we are done
+        }
     }
 }

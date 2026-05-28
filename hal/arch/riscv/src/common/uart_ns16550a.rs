@@ -1,7 +1,5 @@
-
-use types::HalResult;
-use hal_uart::SerialPort; // Use trait from hal-uart trait crate
-
+use hal_uart::SerialPort;
+use types::HalResult; // Use trait from hal-uart trait crate
 
 /// NS16550A UART Driver
 pub struct Ns16550a {
@@ -32,11 +30,11 @@ impl Ns16550a {
 impl SerialPort for Ns16550a {
     fn init(&mut self) -> HalResult<()> {
         // 1. Disable Interrupts
-        self.write_reg(1, 0x00); 
-        
+        self.write_reg(1, 0x00);
+
         // 2. Enable FIFO
         self.write_reg(2, 0x01);
-        
+
         // 3. Set standard 8N1 mode (8 bits, No parity, 1 stop bit)
         // LCR = 0x03
         self.write_reg(3, 0x03);

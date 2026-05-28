@@ -1,10 +1,10 @@
+use crate::sync::Spinlock;
+use crate::task::drivers::virtio_hal::VirtioHal as VirtIOHal;
 use core::ptr::NonNull;
-use log::info;
+// use log::info;
 use virtio_drivers::device::gpu::VirtIOGpu;
 use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
 use virtio_drivers::transport::{DeviceType, Transport};
-use crate::task::drivers::virtio_hal::VirtioHal as VirtIOHal;
-use crate::sync::Spinlock;
 
 pub struct GpuContext {
     pub gpu: VirtIOGpu<VirtIOHal, MmioTransport>,
@@ -26,14 +26,14 @@ impl GpuContext {
 
 pub fn init_driver() {
     log::info!("VirtIO GPU: Probing...");
-    
+
     // We scan standard VirtIO MMIO slots (0x10001000 region)
     let transport_interval = 0x1000;
-    
+
     for i in 0..8 {
         let addr = 0x1000_1000 + i * transport_interval;
         let header = unsafe { NonNull::new_unchecked((addr) as *mut VirtIOHeader) };
-        
+
         match unsafe { MmioTransport::new(header) } {
             Ok(transport) => {
                 if transport.device_type() == DeviceType::GPU {
@@ -46,12 +46,15 @@ pub fn init_driver() {
                                 Err(_) => (1280, 800), // Fallback
                             };
                             log::info!("VirtIO GPU: Probed Resolution: {}x{}", width, height);
-                            
+
                             // Setup 2D Resource
                             match gpu.setup_framebuffer() {
                                 Ok(fb_slice) => {
-                                    log::info!("VirtIO GPU: Framebuffer setup success. Len: {}", fb_slice.len());
-                                    
+                                    log::info!(
+                                        "VirtIO GPU: Framebuffer setup success. Len: {}",
+                                        fb_slice.len()
+                                    );
+
                                     let fb_ptr = fb_slice.as_mut_ptr();
                                     let fb_len = fb_slice.len();
 
@@ -62,16 +65,18 @@ pub fn init_driver() {
                                         width,
                                         height,
                                     });
-                                    
+
                                     // Flush
                                     if let Some(ctx) = GPU_CONTEXT.lock().as_mut() {
                                         let _ = ctx.gpu.flush();
                                     }
-                                    
+
                                     // Init Framebuffer Console here
                                     crate::task::drivers::fb_console::FramebufferConsole::init();
                                 }
-                                Err(e) => log::error!("VirtIO GPU: Setup Framebuffer failed: {:?}", e),
+                                Err(e) => {
+                                    log::error!("VirtIO GPU: Setup Framebuffer failed: {:?}", e)
+                                }
                             }
                             return;
                         }

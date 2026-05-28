@@ -6,7 +6,3 @@ edition = "2021"
 [dependencies]
 ostd = { path = "../../../libs/ostd" }
 api = { path = "../../../libs/api" }
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

@@ -117,8 +117,13 @@ pub trait ViGlobalAllocator: Send + Sync {
     ///
     /// # Safety
     /// `ptr` must have been allocated by this allocator.
-    unsafe fn realloc(&self, ptr: *mut u8, old_size: usize, new_size: usize, align: usize) 
-        -> ViResult<*mut u8>;
+    unsafe fn realloc(
+        &self,
+        ptr: *mut u8,
+        old_size: usize,
+        new_size: usize,
+        align: usize,
+    ) -> ViResult<*mut u8>;
 
     /// Get total allocated bytes.
     fn total_allocated(&self) -> usize;

@@ -1,5 +1,5 @@
-use ostd::prelude::*;
 use ostd::fs;
+use ostd::prelude::*;
 use ostd::syscall;
 
 pub fn cmd_help() -> ViResult<()> {
@@ -21,15 +21,8 @@ pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     }
     let path = path.unwrap();
 
-    // Parse arguments
-    // We can't easily reconstruct the original string slice from SplitWhitespace if we don't have the original string.
-    // ViShell passes `parts` which is `SplitWhitespace`.
-    // We can iterate and join into a new String (requires heap).
-    // Or we modify ViShell to pass the raw arguments string?
-    // For now, join.
-    let mut cmd_args = String::new();
     // Reconstruct args
-    // Note: SplitWhitespace consumes the iterator.
+    let mut cmd_args = String::new();
     for arg in args {
         if !cmd_args.is_empty() {
             cmd_args.push(' ');
@@ -37,65 +30,84 @@ pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         cmd_args.push_str(arg);
     }
 
-    // Read file from VFS into memory
-    match syscall::sys_open(path) {
-        Ok(fd) => {
-            // Read all data
-            let mut data: Vec<u8> = Vec::new();
-            let mut buf = [0u8; 512];
-            loop {
-                match syscall::sys_read(fd, &mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        data.extend_from_slice(&buf[..n]);
-                    },
-                    Err(_) => {
-                        ostd::io::println("exec: read error");
-                        syscall::sys_close(fd);
-                        return Ok(());
-                    }
-                }
-            }
-            syscall::sys_close(fd);
-
-            if data.is_empty() {
-                ostd::io::println("exec: empty file");
-                return Ok(());
-            }
-
-            ostd::io::print("exec: spawning ");
-            ostd::io::print(path);
-            ostd::io::println("...");
-
-            match syscall::sys_spawn_from_mem(&data, path, &cmd_args) {
-                syscall::SyscallResult::Ok(tid) => {
-                     ostd::io::print("exec: waiting for pid ");
-                     // ostd::io::print(tid...);
-                     ostd::io::println("...");
-
-                     match syscall::sys_wait(tid) {
-                         syscall::SyscallResult::Ok(_) => { // exit code ignored for now
-                             ostd::io::println("exec: process exited.");
-                         },
-                         _ => {
-                             ostd::io::println("exec: wait failed (detached?)");
-                         }
-                     }
-                },
-                syscall::SyscallResult::Err(_) => {
-                     ostd::io::println("exec: spawn failed");
-                }
-            }
-            Ok(())
+    // 1. Open file using Kernel FS (same as ls/cat)
+    // This ensures consistency with 'ls' and avoids relying on potentially out-of-sync Userspace VFS.
+    // 1. Open file using Kernel FS
+    match ostd::fs::File::open(path) {
+        Ok(file) => {
+            ostd::io::print("exec: loading (KERNEL-FS) ");
+            ostd::io::println(path);
+            exec_load_and_spawn(file, path, &cmd_args)?;
         },
         Err(_) => {
-            ostd::io::print("exec: cannot open '");
-            ostd::io::print(path);
-            ostd::io::println("'");
-            Ok(())
+            // Fallback: Try with '/' prefix
+            let mut rooted = String::from("/");
+            rooted.push_str(path);
+            match ostd::fs::File::open(&rooted) {
+                 Ok(file) => {
+                     ostd::io::print("exec: loading (KERNEL-FS) ");
+                     ostd::io::println(&rooted);
+                     exec_load_and_spawn(file, &rooted, &cmd_args)?;
+                 },
+                 Err(_) => {
+                    ostd::io::print("exec: cannot open '");
+                    ostd::io::print(path);
+                    ostd::io::println("' (File not found)");
+                 }
+            }
         }
     }
+
+    Ok(())
 }
+
+fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> ViResult<()> {
+    // Read file into memory
+    let mut data = Vec::new();
+    if let Err(_) = file.read_to_end(&mut data) {
+            ostd::io::println("exec: failed to read file.");
+            return Ok(());
+    }
+
+    if data.len() >= 4 {
+        if data[0] != 0x7F || data[1] != 0x45 || data[2] != 0x4C || data[3] != 0x46 {
+            ostd::io::println("exec: Bad ELF magic.");
+            return Ok(());
+        }
+    }
+
+    ostd::io::print("exec: spawning (");
+    ostd::io::print_usize(data.len());
+    ostd::io::println(" bytes)...");
+
+    // Spawn
+    match syscall::sys_spawn_from_mem(&data, path, cmd_args) {
+        syscall::SyscallResult::Ok(tid) => {
+            ostd::io::print("exec: process spawned (pid ");
+            ostd::io::print_usize(tid);
+            ostd::io::println(")");
+            
+            // Wait for it
+            match syscall::sys_wait(tid) {
+                syscall::SyscallResult::Ok(_) => {
+                    ostd::io::println("exec: process exited.");
+                }
+                _ => {
+                    ostd::io::println("exec: wait failed.");
+                }
+            }
+        }
+        syscall::SyscallResult::Err(_) => {
+            ostd::io::println("exec: spawn failed.");
+        }
+    }
+    Ok(())
+}
+// Removed IPC Logic
+/*
+let vfs_cell_id = 3;
+*/
+
 
 pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let path = args.next().unwrap_or("/");
@@ -111,19 +123,19 @@ pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                 ostd::io::println(name);
             }
             Ok(())
-        },
+        }
         Err(e) => {
-             // Use e to avoid unused variable warning
-             ostd::io::print("ls: cannot access '");
-             ostd::io::print(path);
-             ostd::io::print("': ");
-             match e {
-                 ViError::NotFound => ostd::io::println("No such file or directory"),
-                 ViError::PermissionDenied => ostd::io::println("Permission denied"),
-                 _ => ostd::io::println("Error"),
-             }
-             // Return Ok so shell doesn't crash on user error
-             Ok(())
+            // Use e to avoid unused variable warning
+            ostd::io::print("ls: cannot access '");
+            ostd::io::print(path);
+            ostd::io::print("': ");
+            match e {
+                ViError::NotFound => ostd::io::println("No such file or directory"),
+                ViError::PermissionDenied => ostd::io::println("Permission denied"),
+                _ => ostd::io::println("Error"),
+            }
+            // Return Ok so shell doesn't crash on user error
+            Ok(())
         }
     }
 }
@@ -150,11 +162,13 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                             Ok(s) => {
                                 ostd::io::print(s);
                                 pending = 0;
-                            },
+                            }
                             Err(e) => {
                                 let valid_len = e.valid_up_to();
                                 if valid_len > 0 {
-                                    let s = unsafe { core::str::from_utf8_unchecked(&buffer[..valid_len]) };
+                                    let s = unsafe {
+                                        core::str::from_utf8_unchecked(&buffer[..valid_len])
+                                    };
                                     ostd::io::print(s);
                                 }
 
@@ -175,30 +189,63 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                                 }
                             }
                         }
-                    },
+                    }
                     Ok(0) => {
-                         if pending > 0 {
-                             ostd::io::print("\u{FFFD}");
-                         }
-                         break;
-                    },
+                        if pending > 0 {
+                            ostd::io::print("\u{FFFD}");
+                        }
+                        break;
+                    }
                     Err(_) => {
                         ostd::io::println("cat: read error");
                         break;
                     }
-                     _ => break,
+                    _ => break,
                 }
             }
             syscall::sys_close(fd);
             ostd::io::println(""); // Newline at end
             Ok(())
-        },
+        }
         Err(_) => {
             ostd::io::print("cat: ");
             ostd::io::print(path);
             ostd::io::println(": No such file or directory");
-             // Return Ok to keep shell running
-             Ok(())
+            // Return Ok to keep shell running
+            Ok(())
+        }
+    }
+}
+
+pub fn cmd_ps<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let mut buffer = [api::syscall::ProcessInfo::default(); 16];
+    match syscall::sys_get_procs(&mut buffer) {
+        Ok(count) => {
+            ostd::io::println("PID   STATE     NAME");
+            ostd::io::println("------------------------");
+            for i in 0..count {
+                let info = &buffer[i];
+                let name = core::str::from_utf8(&info.name).unwrap_or("???").trim_matches('\0');
+                let state_str = match info.state {
+                    0 => "Ready",
+                    1 => "Running",
+                    2 => "Waiting",
+                    3 => "Dead",
+                    _ => "???",
+                };
+                
+                // Format manually since we don't have fancy formatting
+                ostd::io::print_usize(info.id);
+                ostd::io::print("     ");
+                ostd::io::print(state_str);
+                ostd::io::print("   ");
+                ostd::io::println(name);
+            }
+            Ok(())
+        }
+        Err(_) => {
+            ostd::io::println("ps: failed to get process list");
+            Ok(())
         }
     }
 }

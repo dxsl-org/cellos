@@ -1,5 +1,5 @@
-use alloc::collections::BTreeMap;
 use crate::sync::Spinlock;
+use alloc::collections::BTreeMap;
 
 // use crate::task::drivers::console_drv;
 // use crate::task::drivers::virtio_blk;
@@ -25,7 +25,7 @@ impl DriverRegistry {
             name_to_id: BTreeMap::new(),
             // ID 0 is reserved for Kernel/System
             // ID 1 is reserved for Console (for now, or we register it properly)
-            next_id: 2, 
+            next_id: 2,
         }
     }
 
@@ -33,7 +33,7 @@ impl DriverRegistry {
         if let Some(&id) = self.name_to_id.get(name) {
             return id;
         }
-        
+
         let id = self.next_id;
         self.name_to_id.insert(name, id);
         self.next_id += 1;
@@ -50,7 +50,7 @@ pub static DRIVER_REGISTRY: Spinlock<Option<DriverRegistry>> = Spinlock::new(Non
 pub fn init() {
     let mut reg = DRIVER_REGISTRY.lock();
     *reg = Some(DriverRegistry::new());
-    
+
     // Manually register Console as ID 1 for now, to keep compatibility
     if let Some(r) = reg.as_mut() {
         r.name_to_id.insert("console", 1);

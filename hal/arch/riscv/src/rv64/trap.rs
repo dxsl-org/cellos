@@ -72,20 +72,18 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
             }
             9 => {
                 // S-mode external interrupt (PLIC)
-                if let Some(irq) = handle_external_interrupt() {
-                    // Dispatch IRQ
-                    // TODO: Move this dispatch to a driver manager
+                // Claim first, dispatch handler, complete AFTER handler per PLIC spec.
+                if let Some(irq) = plic_claim() {
                     if irq >= 1 && irq <= 8 {
-                        // VirtIO Interrupt
-                        // log::info!("VirtIO Interrupt IRQ {}", irq);
-                        // Notify VirtIO Block Driver
-                        // We need to call into kernel::task::drivers::virtio_blk::handle_irq()
-                        // But we can't easily dependency inject here without global.
-                        // We use an extern "Rust" function defined in kernel.
-                        unsafe {
-                            vi_handle_virtio_irq(irq);
-                        }
+                        // SAFETY: vi_handle_virtio_irq is defined in kernel/src/task/drivers/virtio_blk.rs
+                        // and linked via extern "Rust". The irq argument is a valid PLIC claim value (1-8).
+                        unsafe { vi_handle_virtio_irq(irq); }
+                    } else if irq == 10 {
+                        // SAFETY: vi_handle_uart_irq is defined in the kernel and linked via extern "Rust".
+                        unsafe { vi_handle_uart_irq(); }
                     }
+                    // PLIC complete must come AFTER the device handler has run.
+                    plic_complete(irq);
                 }
             }
             _ => {
@@ -108,45 +106,56 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
             }
             2 => {
                 // Illegal instruction
-                panic!("ViOS: Illegal instruction at 0x{:X}, stval=0x{:X}", 
-                    frame.sepc, frame.stval);
+                panic!(
+                    "ViOS: Illegal instruction at 0x{:X}, stval=0x{:X}",
+                    frame.sepc, frame.stval
+                );
             }
             12 => {
                 // Instruction page fault
-                panic!("ViOS: Instruction page fault at 0x{:X}, addr=0x{:X}", 
-                    frame.sepc, frame.stval);
+                panic!(
+                    "ViOS: Instruction page fault at 0x{:X}, addr=0x{:X}",
+                    frame.sepc, frame.stval
+                );
             }
             13 => {
                 // Load page fault
-                panic!("ViOS: Load page fault at 0x{:X}, addr=0x{:X}", 
-                    frame.sepc, frame.stval);
+                panic!(
+                    "ViOS: Load page fault at 0x{:X}, addr=0x{:X}",
+                    frame.sepc, frame.stval
+                );
             }
             15 => {
                 // Store page fault
-                panic!("ViOS: Store page fault at 0x{:X}, addr=0x{:X}", 
-                    frame.sepc, frame.stval);
+                panic!(
+                    "ViOS: Store page fault at 0x{:X}, addr=0x{:X}",
+                    frame.sepc, frame.stval
+                );
             }
             _ => {
-                panic!("ViOS: Unhandled exception: scause={}, sepc=0x{:X}, stval=0x{:X}", 
-                    code, frame.sepc, frame.stval);
+                panic!(
+                    "ViOS: Unhandled exception: scause={}, sepc=0x{:X}, stval=0x{:X}",
+                    code, frame.sepc, frame.stval
+                );
             }
         }
     }
 }
 
-/// Handle External Interrupt via PLIC
-fn handle_external_interrupt() -> Option<u32> {
+/// Claim the highest-priority pending IRQ from PLIC (S-mode context 1).
+/// Returns the IRQ number, or None if no interrupt is pending.
+/// The caller MUST call `plic_complete(irq)` after the device handler returns.
+fn plic_claim() -> Option<u32> {
     use crate::common::plic::PLIC;
-    // Claim
-    let irq = PLIC.claim(1); // Context 1 = S-mode
-    if irq != 0 {
-        // Run handler (caller does this)
+    let irq = PLIC.claim(1);
+    if irq != 0 { Some(irq) } else { None }
+}
 
-        // Complete
-        PLIC.complete(1, irq);
-        return Some(irq);
-    }
-    None
+/// Notify PLIC that IRQ handling is complete (S-mode context 1).
+/// Must be called AFTER the device handler has finished.
+fn plic_complete(irq: u32) {
+    use crate::common::plic::PLIC;
+    PLIC.complete(1, irq);
 }
 
 /// Handle syscall from userspace (Vi prefix per Luật 6)
@@ -161,4 +170,5 @@ fn vi_handle_syscall(frame: &mut ViTrapFrame) {
 
 extern "Rust" {
     fn vi_handle_virtio_irq(irq: u32);
+    fn vi_handle_uart_irq();
 }

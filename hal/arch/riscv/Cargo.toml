@@ -20,7 +20,3 @@ default = []
 
 [lib]
 crate-type = ["rlib"]
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

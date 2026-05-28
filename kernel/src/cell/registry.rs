@@ -1,13 +1,13 @@
 //! Cell Registry Implementation
 //! Manages the lifecycle and metadata of all loaded Cells in the system.
 
-use alloc::collections::BTreeMap;
-use alloc::sync::Arc;
 use crate::sync::Spinlock;
-use types::{CellId, ViResult, ViError};
+use alloc::collections::BTreeMap;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use types::VAddr;
+use types::{CellId, ViError, ViResult};
 
 /// Global Cell Registry
 pub static CELL_REGISTRY: Spinlock<CellRegistry> = Spinlock::new(CellRegistry::new());
@@ -95,6 +95,8 @@ impl CellRegistry {
     }
 
     pub fn get_by_name(&self, name: &str) -> Option<Arc<CellNode>> {
-        self.name_index.get(name).and_then(|id| self.cells.get(id).cloned())
+        self.name_index
+            .get(name)
+            .and_then(|id| self.cells.get(id).cloned())
     }
 }

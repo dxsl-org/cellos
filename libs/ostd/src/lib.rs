@@ -9,22 +9,22 @@
 extern crate alloc;
 
 // ostd - ViOS Standard Library
-// 
+//
 // Replacement for Rust's std library for ViOS Cells.
 // INTERFACE ONLY - NO IMPLEMENTATION YET.
 
-pub use types::*;
 pub use api::*;
 
 // Re-export alloc types
+pub use alloc::boxed;
 pub use alloc::string;
 pub use alloc::vec;
-pub use alloc::boxed;
 
 /// Result type used throughout ViOS.
 pub type Result<T, E = ViError> = core::result::Result<T, E>;
 
 pub mod startup;
+pub mod sync;
 pub mod syscall;
 
 /// Allocator hooks (to be implemented).
@@ -44,8 +44,7 @@ pub mod executor;
 /// Task spawning.
 pub mod task {
     use crate::*;
-    use core::future::Future;
-    
+
     /// Yield current task.
     pub fn yield_now() {
         syscall::sys_yield();

@@ -33,7 +33,7 @@ impl Context {
     pub unsafe fn switch(old: *mut Context, new: *const Context) {
         // External assembly implementation
         extern "C" {
-             fn __switch(old: *mut Context, new: *const Context);
+            fn __switch(old: *mut Context, new: *const Context);
         }
         __switch(old, new);
     }
@@ -49,7 +49,10 @@ pub fn get_gp_tp() -> (usize, usize) {
             core::arch::asm!("mv {0}, tp", out(reg) tp);
         }
         #[cfg(not(target_arch = "riscv64"))]
-        { gp = 0; tp = 0; }
+        {
+            gp = 0;
+            tp = 0;
+        }
     }
     (gp, tp)
 }

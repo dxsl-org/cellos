@@ -10,10 +10,10 @@
 //! other latency-sensitive applications.
 
 use crate::*;
+use alloc::boxed::Box;
 use core::future::Future;
 use core::pin::Pin;
-use types::ViResult; // Fix import
-use alloc::boxed::Box; // Fix import
+use types::ViResult; // Fix import // Fix import
 
 /// Type alias for boxed futures.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -23,11 +23,15 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Provides non-blocking file operations for concurrent I/O.
 pub trait ViAsyncFileSystem: Send + Sync {
     /// Open a file asynchronously.
-    fn open_async(&mut self, path: &str, mode: OpenMode) -> BoxFuture<'_, ViResult<Box<dyn ViAsyncFile>>>;
-    
+    fn open_async(
+        &mut self,
+        path: &str,
+        mode: OpenMode,
+    ) -> BoxFuture<'_, ViResult<Box<dyn ViAsyncFile>>>;
+
     /// Create a directory asynchronously.
     fn mkdir_async(&mut self, path: &str) -> BoxFuture<'_, ViResult<()>>;
-    
+
     /// Remove a file or directory asynchronously.
     fn remove_async(&mut self, path: &str) -> BoxFuture<'_, ViResult<()>>;
 }
@@ -38,10 +42,10 @@ pub trait ViAsyncFileSystem: Send + Sync {
 pub trait ViAsyncFile: Send + Sync {
     /// Read data asynchronously.
     fn read_async<'a>(&'a mut self, buf: &'a mut [u8]) -> BoxFuture<'a, ViResult<usize>>;
-    
+
     /// Write data asynchronously.
     fn write_async<'a>(&'a mut self, buf: &'a [u8]) -> BoxFuture<'a, ViResult<usize>>;
-    
+
     /// Seek asynchronously.
     fn seek_async(&mut self, pos: SeekFrom) -> BoxFuture<'_, ViResult<u64>>;
 }
@@ -49,8 +53,9 @@ pub trait ViAsyncFile: Send + Sync {
 /// Async TCP stack interface.
 pub trait ViAsyncTcpStack: Send + Sync {
     /// Connect asynchronously.
-    fn connect_async(&self, addr: IpEndpoint) -> BoxFuture<'_, ViResult<Box<dyn ViAsyncTcpStream>>>;
-    
+    fn connect_async(&self, addr: IpEndpoint)
+        -> BoxFuture<'_, ViResult<Box<dyn ViAsyncTcpStream>>>;
+
     /// Listen asynchronously.
     fn listen_async(&self, port: u16) -> BoxFuture<'_, ViResult<Box<dyn ViAsyncTcpListener>>>;
 }
@@ -59,10 +64,10 @@ pub trait ViAsyncTcpStack: Send + Sync {
 pub trait ViAsyncTcpStream: Send + Sync {
     /// Read asynchronously.
     fn read_async<'a>(&'a mut self, buf: &'a mut [u8]) -> BoxFuture<'a, ViResult<usize>>;
-    
+
     /// Write asynchronously.
     fn write_async<'a>(&'a mut self, buf: &'a [u8]) -> BoxFuture<'a, ViResult<usize>>;
-    
+
     /// Close asynchronously.
     fn close_async(&mut self) -> BoxFuture<'_, ViResult<()>>;
 }
@@ -76,17 +81,21 @@ pub trait ViAsyncTcpListener: Send + Sync {
 /// Async block device interface.
 pub trait ViAsyncBlockDevice: Send + Sync {
     /// Read sector asynchronously.
-    fn read_sector_async<'a>(&'a self, sector: u64, buf: &'a mut [u8]) -> BoxFuture<'a, ViResult<()>>;
-    
+    fn read_sector_async<'a>(
+        &'a self,
+        sector: u64,
+        buf: &'a mut [u8],
+    ) -> BoxFuture<'a, ViResult<()>>;
+
     /// Write sector asynchronously.
     fn write_sector_async<'a>(&'a self, sector: u64, buf: &'a [u8]) -> BoxFuture<'a, ViResult<()>>;
-    
+
     /// Flush asynchronously.
     fn flush_async(&self) -> BoxFuture<'_, ViResult<()>>;
-    
+
     /// Get sector count (synchronous, metadata only).
     fn sector_count(&self) -> u64;
-    
+
     /// Get sector size (synchronous, metadata only).
     fn sector_size(&self) -> usize;
 }

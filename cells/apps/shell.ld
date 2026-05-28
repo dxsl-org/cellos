@@ -3,8 +3,8 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* App base address - Relocated to avoid INIT collision (0x88000000) */
-    . = 0x88100000;
+    /* App base address - Relocated to avoid VFS collision (0x88500000 + 4MB) */
+    . = 0x88A00000;
     
     .text : {
         *(.text.boot)

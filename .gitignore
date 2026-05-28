@@ -12,9 +12,25 @@ Thumbs.db
 
 # Backup
 .backup/
+*.bak
 
 # Logs
 *.log
+*_log.txt
+*_error.txt
+check_*.txt
+contract_test_log*.txt
+test_log*.txt
+test_error*.txt
+
+# Disassembly / scratch dumps
+*.asm
+
+# Vendored upstream tarballs (extract into src/ instead)
+*.tar.gz
+*.tar.xz
+*.tar.bz2
+*.zip
 
 # Reference materials
 reference/

@@ -11,7 +11,3 @@ ostd = { path = "../../../libs/ostd" }
 [lib]
 # Dual output: rlib for Rust deps, staticlib for final Cell linking
 crate-type = ["rlib", "staticlib"]
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

@@ -1,34 +1,46 @@
-use alloc::string::String;
-use alloc::vec::Vec; 
 use crate::hal::arch::Context;
 use crate::hal::arch::ViTrapFrame;
-use alloc::collections::BTreeMap;
-// use crate::fs::{Inode, DirStream};
-use alloc::sync::Arc;
-use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
+// use alloc::boxed::Box;
+// use alloc::sync::Arc;
 use types::*;
 
-use api::fs::{ViFile, FileResult, BoxFuture};
+use api::fs::{BoxFuture, FileResult};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskState {
     Ready,
     Running,
     /// Sleeping until a specific monotonic time (ticks/ms)
-    Sleeping { until: usize },
+    Sleeping {
+        until: usize,
+    },
     /// Blocked waiting to send a message to `target_id`.
     /// Stores the message pointer and length temporarily.
-    Sending { target: usize, msg_ptr: VAddr, msg_len: usize },
+    Sending {
+        target: usize,
+        msg_ptr: VAddr,
+        msg_len: usize,
+    },
     /// Blocked waiting to receive a message.
     /// `mask`: Filter mask (e.g., from specific sender or any).
-    Recv { mask: usize, buf_ptr: VAddr, buf_len: usize },
+    Recv {
+        mask: usize,
+        buf_ptr: VAddr,
+        buf_len: usize,
+    },
     /// This task has finished running.
     Terminated,
     /// Blocked on a Futex wait.
     /// `addr`: The address being waited on.
-    FutexWait { addr: VAddr },
+    FutexWait {
+        addr: VAddr,
+    },
     /// Waiting for another task to exit (Join).
-    Waiting { target: usize },
+    Waiting {
+        target: usize,
+    },
     /// Polling an async future (e.g. syscall)
     Polling,
 }
@@ -47,9 +59,9 @@ impl LeaseAttributes {
 
 #[derive(Debug, Clone)]
 pub struct Lease {
-    pub id: usize,    // Logic Lease ID (Index)
-    pub ptr: VAddr,   // Address in Task's space
-    pub len: usize,   // Length
+    pub id: usize,  // Logic Lease ID (Index)
+    pub ptr: VAddr, // Address in Task's space
+    pub len: usize, // Length
     pub attributes: LeaseAttributes,
 }
 
@@ -67,7 +79,7 @@ pub use api::fs::FileHandle;
 /// Enum to hold the different types of futures a task might be waiting on.
 pub enum SyscallFuture {
     FileRead(usize, BoxFuture<'static, FileResult<usize>>), // fd, future
-    // Add other syscall futures here (FileWrite, Connect, etc.)
+                                                            // Add other syscall futures here (FileWrite, Connect, etc.)
 }
 
 /// Task Control Block (TCB)
@@ -84,7 +96,7 @@ pub struct Task {
     pub leases: alloc::collections::BTreeMap<usize, Lease>,
     // Next available Lease ID
     pub next_lease_id: usize,
-    
+
     // Grant Table (Zero-Copy IPC)
     // Maps GrantID -> GrantEntry
     pub grant_table: alloc::collections::BTreeMap<usize, GrantEntry>,
@@ -118,7 +130,7 @@ impl Task {
             name: String::from(name),
             state: TaskState::Ready,
             context: Context::default(),
-            trap_frame: ViTrapFrame::default(), 
+            trap_frame: ViTrapFrame::default(),
             allowed_drivers,
             leases: alloc::collections::BTreeMap::new(),
             next_lease_id: 1, // Start efficiently
@@ -135,21 +147,26 @@ impl Task {
             pending_future: None,
         }
     }
-    
+
     pub fn add_lease(&mut self, ptr: VAddr, len: usize, attributes: LeaseAttributes) -> usize {
         let id = self.next_lease_id;
         self.next_lease_id += 1;
-        
-        let lease = Lease { id, ptr, len, attributes };
-        
+
+        let lease = Lease {
+            id,
+            ptr,
+            len,
+            attributes,
+        };
+
         self.leases.insert(id, lease);
         id
     }
-    
+
     pub fn get_lease(&self, id: usize) -> Option<&Lease> {
         self.leases.get(&id)
     }
-    
+
     pub fn revoke_lease(&mut self, id: usize) {
         self.leases.remove(&id);
     }
@@ -158,7 +175,15 @@ impl Task {
     pub fn add_grant(&mut self, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -> usize {
         let id = self.next_grant_id;
         self.next_grant_id += 1;
-        self.grant_table.insert(id, GrantEntry { ptr, len, flags, sender_id });
+        self.grant_table.insert(
+            id,
+            GrantEntry {
+                ptr,
+                len,
+                flags,
+                sender_id,
+            },
+        );
         id
     }
 

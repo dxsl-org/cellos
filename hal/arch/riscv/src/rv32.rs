@@ -1,4 +1,3 @@
-
 // RV32 Stub
 pub struct RiscVArch;
 

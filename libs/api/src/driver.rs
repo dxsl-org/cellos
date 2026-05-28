@@ -10,7 +10,7 @@ use types::*;
 pub trait ViDriver: Send + Sync {
     /// Get the driver name.
     fn name(&self) -> &str;
-    
+
     /// Initialize the driver.
     fn init(&mut self) -> ViResult<()>;
 }

@@ -65,24 +65,25 @@
 
 | Task Area | Read First |
 |-----------|------------|
-| **Fork code from other projects** | `design/00-fork.md` |
-| **Cellular philosophy & Linker** | `design/01-core.md` |
-| **Memory (SAS, HHDM, Registry)** | `design/02-memory.md` |
-| **Async safety & Owned Buffers** | `design/03-runtime.md` |
-| **Multi-arch HAL (RV32/64/128)** | `design/04-hardware.md` |
-| **Native/WASM/VM applications** | `design/05-application.md` |
-| **Graphics & Compositor** | `design/06-graphics.md` |
-| **Network stack** | `design/07-networking.md` |
-| **Power management** | `design/08-power.md` |
-| **Filesystem (VFS)** | `design/09-vfs.md` |
-| **Testing strategy** | `design/10-testing.md` |
+| **Fork code from other projects** | `docs/00-fork.md` |
+| **Cellular philosophy & Linker** | `docs/01-core.md` |
+| **Memory (SAS, HHDM, Registry)** | `docs/02-memory.md` |
+| **Async safety & Owned Buffers** | `docs/03-runtime.md` |
+| **Multi-arch HAL (RV32/64/128)** | `docs/04-hardware.md` |
+| **Native/WASM/VM applications** | `docs/05-application.md` |
+| **Graphics & Compositor** | `docs/06-graphics.md` |
+| **Network stack** | `docs/07-networking.md` |
+| **Power management** | `docs/08-power.md` |
+| **Filesystem (VFS)** | `docs/09-vfs.md` |
+| **Testing strategy** | `docs/10-testing.md` |
+| **Shell** | `docs/11-shell.md` |
 
 ---
 
 ## 🔧 Agent Workflow (Standard Process)
 
 ```
-1. Check Specs → Read relevant design/*.md to understand "Why"
+1. Check Specs → Read relevant docs/*.md to understand "Why"
 2. Interface First → Define traits in libs/api/ before implementation
 3. Implement → Write code, use Result<T, E> not panic!
 4. Verify → Write tests for critical logic
@@ -143,7 +144,7 @@ impl Drop for ResourceHandle {
 
 ## 📖 Complete Documentation
 
-**Full Rules & Details**: [`design/00-context.md`](./design/00-context.md)
+**Full Rules & Details**: [`docs/00-context.md`](./docs/00-context.md)
 
 **For Developers**:
 - [ARCHITECTURE.md](./docs/ARCHITECTURE.md) - System design
@@ -196,8 +197,8 @@ cargo build --release
 ---
 
 **Version**: 0.2.0
-**Last Updated**: 2026-01-07
-**Full Rules**: See [`design/00-context.md`](./design/00-context.md) for complete specifications
+**Last Updated**: 2026-05-21
+**Full Rules**: See [`docs/00-context.md`](./docs/00-context.md) for complete specifications
 
 ---
 

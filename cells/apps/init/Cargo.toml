@@ -11,8 +11,3 @@ ostd = { path = "../../../libs/ostd" }
 [features]
 default = []
 
-
-
-[profile.release]
-panic = "abort"
-opt-level = "z"

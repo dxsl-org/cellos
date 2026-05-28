@@ -8,11 +8,11 @@
 #![allow(unsafe_code)] // Allow unsafe for buffer slicing in async shim
 
 use crate::*;
-use core::future::Future;
 use alloc::boxed::Box;
-use core::pin::Pin;
+use core::future::Future;
 use core::ops::{Deref, DerefMut};
-use types::*;
+use core::pin::Pin;
+// use types::*;
 
 /// Type alias for boxed futures.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -24,10 +24,10 @@ pub type FileResult<T> = (Box<dyn ViFile + Send + Sync>, ViResult<T>);
 pub trait ViFileSystem: Send + Sync {
     /// Open a file at the given path.
     fn open(&self, path: &str, mode: OpenMode) -> ViResult<Box<dyn ViFile + Send + Sync>>;
-    
+
     /// Create a directory.
     fn mkdir(&self, path: &str) -> ViResult<()>;
-    
+
     /// Remove a file or directory.
     fn remove(&self, path: &str) -> ViResult<()>;
 }
@@ -36,19 +36,23 @@ pub trait ViFileSystem: Send + Sync {
 pub trait ViFile: Send + Sync {
     /// Read data into buffer.
     fn read(&mut self, buf: &mut [u8]) -> ViResult<usize>;
-    
+
     /// Write data from buffer.
     fn write(&mut self, buf: &[u8]) -> ViResult<usize>;
-    
+
     /// Seek to position.
     fn seek(&mut self, pos: SeekFrom) -> ViResult<u64>;
 
     /// Check if this is a directory.
-    fn is_dir(&self) -> bool { false }
+    fn is_dir(&self) -> bool {
+        false
+    }
 
     /// Read next directory entry.
     /// Returns Ok(None) if end of directory.
-    fn read_dir(&mut self) -> ViResult<Option<DirEntry>> { Err(ViError::NotSupported) }
+    fn read_dir(&mut self) -> ViResult<Option<DirEntry>> {
+        Err(ViError::NotSupported)
+    }
 
     // --- Async Methods (Rule 7 & 8) ---
 
@@ -59,7 +63,11 @@ pub trait ViFile: Send + Sync {
     /// The buffer is passed as raw pointer/len because the Future is 'static and we cannot
     /// easily bind the lifetime of a user-space slice to it safely without complex logic.
     /// The caller (Kernel) ensures safety.
-    fn read_async(self: Box<Self>, buf_ptr: usize, buf_len: usize) -> BoxFuture<'static, FileResult<usize>>;
+    fn read_async(
+        self: Box<Self>,
+        buf_ptr: usize,
+        buf_len: usize,
+    ) -> BoxFuture<'static, FileResult<usize>>;
 }
 
 /// A handle to an open file.

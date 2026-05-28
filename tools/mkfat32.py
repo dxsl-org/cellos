@@ -5,7 +5,7 @@ import sys
 def create_fat32_image(output_path, files):
     # Parameters
     sector_size = 512
-    sector_count = 1048576 # 512MB to ensure FAT32 cluster count (> 65525)
+    sector_count = 81920 # 40MB
     reserved_sectors = 32
     fats = 2
     root_cluster = 2
@@ -24,7 +24,7 @@ def create_fat32_image(output_path, files):
             })
     
     # Calculate Cluster Size
-    cluster_size = 4096 # 8 sectors
+    cluster_size = 512 # 1 sector (needed for FAT32 on 40MB)
     sectors_per_cluster = cluster_size // sector_size
     
     # Calculate required FAT size

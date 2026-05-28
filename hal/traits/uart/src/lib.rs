@@ -6,10 +6,10 @@ use types::HalResult;
 pub trait SerialPort {
     /// Initialize the serial port (baud rate, etc.)
     fn init(&mut self) -> HalResult<()>;
-    
+
     /// Write a single byte
     fn send(&mut self, data: u8) -> HalResult<()>;
-    
+
     /// Read a single byte (blocking or polling)
     fn receive(&mut self) -> HalResult<u8>;
 }

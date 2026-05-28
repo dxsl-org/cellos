@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 
 //! Input Driver Cell (Keyboard & Mouse) - INTERFACE ONLY
 
@@ -17,7 +18,13 @@ pub enum InputEvent {
 pub struct InputDriver;
 
 impl InputDriver {
-    pub fn new() -> Self { todo!() }
-    pub fn init(&mut self) -> Result<()> { todo!() }
-    pub fn poll_event(&self) -> Option<InputEvent> { todo!() }
+    pub fn new() -> Self {
+        todo!()
+    }
+    pub fn init(&mut self) -> Result<()> {
+        todo!()
+    }
+    pub fn poll_event(&self) -> Option<InputEvent> {
+        todo!()
+    }
 }

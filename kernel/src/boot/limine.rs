@@ -16,7 +16,12 @@ pub struct LimineBaseRevision {
 #[used]
 #[link_section = ".requests"]
 static BASE_REVISION: LimineBaseRevision = LimineBaseRevision {
-    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1], 0xf9562b2d5c95a6c8, 0x6a7b384944536bdc],
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0xf9562b2d5c95a6c8,
+        0x6a7b384944536bdc,
+    ],
     revision: 0,
 };
 
@@ -49,7 +54,12 @@ pub struct LimineMemoryMapEntry {
 #[used]
 #[link_section = ".requests"]
 static mut MEMORY_MAP_REQUEST: LimineMemoryMapRequest = LimineMemoryMapRequest {
-    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1], 0x67cf3d9d378a806f, 0xe304acdfc50c3c62],
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0x67cf3d9d378a806f,
+        0xe304acdfc50c3c62,
+    ],
     revision: 0,
     response: core::ptr::null(),
 };
@@ -95,7 +105,12 @@ pub struct LimineFramebuffer {
 #[used]
 #[link_section = ".requests"]
 static mut FRAMEBUFFER_REQUEST: LimineFramebufferRequest = LimineFramebufferRequest {
-    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1], 0x9d5827dcd881dd75, 0xa3148604f6fab11b],
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0x9d5827dcd881dd75,
+        0xa3148604f6fab11b,
+    ],
     revision: 0,
     response: core::ptr::null(),
 };
@@ -120,7 +135,12 @@ pub struct LimineHhdmResponse {
 #[used]
 #[link_section = ".requests"]
 static mut HHDM_REQUEST: LimineHhdmRequest = LimineHhdmRequest {
-    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1], 0x48dcf1cb8ad2b852, 0x63984e959a98244b],
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0x48dcf1cb8ad2b852,
+        0x63984e959a98244b,
+    ],
     revision: 0,
     response: core::ptr::null(),
 };
@@ -146,7 +166,12 @@ pub struct LimineKernelAddressResponse {
 #[used]
 #[link_section = ".requests"]
 static mut KERNEL_ADDRESS_REQUEST: LimineKernelAddressRequest = LimineKernelAddressRequest {
-    id: [LIMINE_COMMON_MAGIC[0], LIMINE_COMMON_MAGIC[1], 0x71ba76863cc55f63, 0xb2644a48c516a487],
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0x71ba76863cc55f63,
+        0xb2644a48c516a487,
+    ],
     revision: 0,
     response: core::ptr::null(),
 };

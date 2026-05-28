@@ -9,8 +9,8 @@
 //! of critical operations in ViOS.
 
 use crate::*;
-use alloc::vec::Vec;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 /// Benchmark result with timing and metadata.
 #[derive(Debug, Clone)]
@@ -73,7 +73,7 @@ pub trait ViBenchmark {
             total += cycles;
             min = min.min(cycles);
             max = max.max(cycles);
-            
+
             // Store sample for std dev (up to 100 samples)
             if i < 100 {
                 samples[i as usize] = cycles;
@@ -103,12 +103,14 @@ fn calculate_std_dev(samples: &[u64], mean: u64) -> u64 {
         return 0;
     }
 
-    let variance: u64 = samples.iter()
+    let variance: u64 = samples
+        .iter()
         .map(|&x| {
             let diff = if x > mean { x - mean } else { mean - x };
             diff * diff
         })
-        .sum::<u64>() / samples.len() as u64;
+        .sum::<u64>()
+        / samples.len() as u64;
 
     // Integer square root approximation
     integer_sqrt(variance)
@@ -165,11 +167,11 @@ pub struct PerformanceTargets {
 impl Default for PerformanceTargets {
     fn default() -> Self {
         Self {
-            file_read_4kb: 10_000,      // 10K cycles
-            net_send_1kb: 5_000,         // 5K cycles
-            hotswap_1kb: 50_000,         // 50K cycles
-            vm_exit: 1_000,              // 1K cycles
-            ipc_roundtrip: 2_000,        // 2K cycles
+            file_read_4kb: 10_000, // 10K cycles
+            net_send_1kb: 5_000,   // 5K cycles
+            hotswap_1kb: 50_000,   // 50K cycles
+            vm_exit: 1_000,        // 1K cycles
+            ipc_roundtrip: 2_000,  // 2K cycles
         }
     }
 }

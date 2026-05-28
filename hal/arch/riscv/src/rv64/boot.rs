@@ -1,7 +1,6 @@
 /// Boot module - Assembly entry point and early initialization
-/// 
+///
 /// This module handles the transition from bootloader to Rust code
-
 use core::arch::global_asm;
 
 // Assembly boot code

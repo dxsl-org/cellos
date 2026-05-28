@@ -12,6 +12,8 @@ cargo build -p app-shell
 # 2. Check Paths
 $init_bin = "$target_dir\app-init"
 $shell_bin = "$target_dir\app-shell"
+$lua_bin = "$kernel_root\target\riscv64gc-unknown-none-elf\release\lua"
+$mpy_bin = "$kernel_root\target\riscv64gc-unknown-none-elf\release\micropython"
 
 if (-not (Test-Path $init_bin)) {
     Write-Host "Error: Init binary not found at $init_bin"
@@ -23,8 +25,18 @@ if (-not (Test-Path $shell_bin)) {
     exit 1
 }
 
-# 3. Create Disk Image
-Write-Host "Generating disk.img (512MB)..."
-python "$tools_dir\mkfat32.py" "disk.img" $init_bin "init" $shell_bin "shell"
+if (-not (Test-Path $lua_bin)) {
+    Write-Host "Error: Lua binary not found at $lua_bin"
+    exit 1
+}
+
+if (-not (Test-Path $mpy_bin)) {
+    Write-Host "Warning: MicroPython binary not found at $mpy_bin. Skipping."
+    # Remove mpy from args if missing
+    python "$tools_dir\mkfat32.py" "disk_v3.img" $init_bin "init" $shell_bin "shell" $lua_bin "lua"
+} else {
+    Write-Host "Generating disk_v3.img (40MB) with MicroPython..."
+    python "$tools_dir\mkfat32.py" "disk_v3.img" $init_bin "init" $shell_bin "shell" $lua_bin "lua" $mpy_bin "micropython"
+}
 
 Write-Host "Done."

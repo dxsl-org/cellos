@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 
 //! Power management interfaces.
 
@@ -8,7 +9,7 @@ use ostd::prelude::*;
 pub trait Powerable: Send + Sync {
     /// Suspend the device (enter low power state).
     fn suspend(&mut self) -> Result<()>;
-    
+
     /// Resume the device (return to active state).
     fn resume(&mut self) -> Result<()>;
 }
@@ -17,7 +18,7 @@ pub trait Powerable: Send + Sync {
 pub trait Governor: Send + Sync {
     /// Set CPU frequency in Hz.
     fn set_frequency(&self, hz: u64) -> Result<()>;
-    
+
     /// Get current CPU frequency.
     fn get_frequency(&self) -> u64;
 }

@@ -3,7 +3,6 @@
 
 extern crate ostd;
 
-use ostd::prelude::*;
 
 #[no_mangle]
 pub fn main() {

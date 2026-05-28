@@ -12,7 +12,6 @@
 
 use crate::*;
 
-
 /// Guest virtual machine state.
 #[derive(Debug, Clone, Copy)]
 pub struct VmState {
@@ -31,40 +30,40 @@ pub struct VmState {
 pub enum VmTrap {
     /// Guest attempted a syscall
     Syscall { nr: usize, args: [usize; 6] },
-    
+
     /// Guest triggered a page fault
     PageFault { addr: VAddr, write: bool },
-    
+
     /// Guest executed an I/O instruction
     IoAccess { port: u16, write: bool, size: u8 },
-    
+
     /// Guest executed HLT or WFI
     Halt,
-    
+
     /// Guest received an interrupt
-    Interrupt { 
+    Interrupt {
         /// Interrupt vector number
         vector: u8,
         /// Is external interrupt (vs timer/software)
         external: bool,
     },
-    
+
     /// Guest triggered an exception
-    Exception { 
+    Exception {
         /// Exception code (e.g., illegal instruction, breakpoint)
         code: u8,
         /// Faulting address (if applicable)
         addr: VAddr,
     },
-    
+
     /// Guest made a hypercall to VMM
-    Hypercall { 
+    Hypercall {
         /// Hypercall number
         nr: usize,
         /// Hypercall arguments
         args: [usize; 4],
     },
-    
+
     /// Debug trap (breakpoint, watchpoint)
     Debug {
         /// Debug event type
@@ -72,7 +71,7 @@ pub enum VmTrap {
         /// Associated address
         addr: VAddr,
     },
-    
+
     /// Other trap not covered above
     Other(usize),
 }
@@ -87,7 +86,6 @@ pub enum DebugEvent {
     /// Single-step
     SingleStep,
 }
-
 
 /// Trait for Virtual Machine Monitor (VMM) Cells.
 ///

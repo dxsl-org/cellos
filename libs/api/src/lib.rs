@@ -6,7 +6,6 @@
 //! Public API for ViOS.
 
 #![no_std]
-#![feature(c_variadic)] // Needed for printf varargs if we were to implement it properly
 
 extern crate alloc;
 
@@ -15,20 +14,20 @@ extern crate alloc;
 pub use types::*;
 
 pub mod allocator;
+pub mod async_io;
 pub mod benchmark;
 pub mod block;
+pub mod config;
 pub mod driver;
 pub mod fs;
 pub mod hotswap;
 pub mod net;
+pub mod posix;
 pub mod serde_helpers;
 pub mod syscall;
 pub mod vm;
-pub mod async_io;
-pub mod config;
-pub mod posix;
 
 // POSIX Shim Layer
-pub mod posix;
+
 
 pub use syscall::ViSyscall;

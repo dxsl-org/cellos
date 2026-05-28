@@ -1,6 +1,6 @@
-use virtio_drivers::{BufferDirection, Hal, PhysAddr};
 use core::alloc::Layout;
 use core::ptr::NonNull;
+use virtio_drivers::{BufferDirection, Hal, PhysAddr};
 
 /// VirtIO HAL Implementation for ViOS.
 ///
@@ -14,22 +14,17 @@ unsafe impl Hal for VirtioHal {
         let layout = Layout::from_size_align(pages * 4096, 4096).unwrap();
         unsafe {
             let ptr = alloc::alloc::alloc(layout);
-            if ptr.is_null() {
-                {
-                    let mut serial = crate::task::drivers::uart::SERIAL.lock();
-                    let _ = core::fmt::Write::write_str(&mut *serial, "[ERROR] VirtIO HAL: DMA Allocation Failed (OOM). Driver will hang.\n");
+                if ptr.is_null() {
+                    log::error!("[ERROR] VirtIO HAL: DMA Allocation Failed (OOM). Driver will hang.");
+                    loop {
+                        core::hint::spin_loop();
+                    }
                 }
-                loop { core::hint::spin_loop(); }
-            }
-            core::ptr::write_bytes(ptr, 0, layout.size()); // Zero memory
-            
-            let paddr = ptr as usize; // Identity mapping
-            {
-                let mut serial = crate::task::drivers::uart::SERIAL.lock();
-                use core::fmt::Write;
-                let _ = write!(serial, "[VIRTIO] DMA Alloc {} pages at V:{:p} P:0x{:X}\n", pages, ptr, paddr);
-            }
-            (paddr, NonNull::new_unchecked(ptr))
+                core::ptr::write_bytes(ptr, 0, layout.size()); // Zero memory
+
+                let paddr = ptr as usize; // Identity mapping
+                log::trace!("[VIRTIO] DMA Alloc {} pages at V:{:p} P:0x{:X}", pages, ptr, paddr);
+                (paddr, NonNull::new_unchecked(ptr))
         }
     }
 

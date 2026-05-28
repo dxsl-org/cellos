@@ -1,12 +1,16 @@
-use ostd::prelude::*;
-use crate::commands;
 use crate::async_utils::AsyncStdin;
+use crate::commands;
 use crate::config_client::ConfigClient;
 use api::config::ViConfig;
+use ostd::prelude::*;
+
+use alloc::collections::VecDeque;
+use alloc::string::String;
 
 pub struct ViShell<'a> {
     prompt: &'a str,
     config: ConfigClient,
+    history: VecDeque<String>,
 }
 
 impl<'a> ViShell<'a> {
@@ -15,22 +19,34 @@ impl<'a> ViShell<'a> {
         Self {
             prompt: "ViOS > ",
             config: ConfigClient::new(2),
+            history: VecDeque::with_capacity(32),
         }
     }
 
-    pub async fn run(&self) {
+    pub async fn run(&mut self) {
         let stdin = AsyncStdin;
         loop {
             // Show custom prompt if PATH set? Or USER?
             // For now static prompt.
             ostd::io::print(self.prompt);
 
-            let mut buffer = [0u8; 128];
-            let len = stdin.read_line(&mut buffer).await;
+            let buffer = stdin.read_line(128, &mut self.history).await;
+            let len = buffer.len();
 
             if len > 0 {
-                if let Ok(line) = core::str::from_utf8(&buffer[..len]) {
-                     let _ = self.dispatch(line).await;
+                if let Ok(line) = core::str::from_utf8(&buffer) {
+                    // Add to history if not empty and not repeat of last
+                    let trim_line = line.trim();
+                    if !trim_line.is_empty() {
+                         if self.history.back().map(|s| s.as_str()) != Some(trim_line) {
+                             if self.history.len() >= 32 {
+                                 self.history.pop_front();
+                             }
+                             self.history.push_back(String::from(trim_line));
+                         }
+                    }
+                    
+                    let _ = self.dispatch(line).await;
                 }
             }
         }
@@ -41,11 +57,13 @@ impl<'a> ViShell<'a> {
         let cmd = parts.next().ok_or(ViError::InvalidInput)?;
 
         match cmd {
-            "ls" => commands::cmd_ls(parts),
-            "cat" => commands::cmd_cat(parts),
             "help" => commands::cmd_help(),
             "clear" => commands::cmd_clear(),
             "exec" => commands::cmd_exec(parts),
+            "ls" => commands::cmd_ls(parts),
+            "cat" => commands::cmd_cat(parts),
+            "ps" => commands::cmd_ps(parts),
+            "" => Ok(()),
             "export" => {
                 // export KEY=VALUE
                 if let Some(arg) = parts.next() {
@@ -75,7 +93,7 @@ impl<'a> ViShell<'a> {
                 } else {
                     Ok(())
                 }
-            },
+            }
             "echo" => {
                 // echo $VAR or echo text
                 for arg in parts {
@@ -91,7 +109,7 @@ impl<'a> ViShell<'a> {
                 }
                 ostd::io::println("");
                 Ok(())
-            },
+            }
             _ => {
                 ostd::io::print("ViOS: command not found: ");
                 ostd::io::println(cmd);

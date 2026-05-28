@@ -1,9 +1,9 @@
 //! Synchronization primitives.
 
-use core::sync::atomic::{AtomicBool, Ordering};
+use crate::hal::Arch;
 use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
-use crate::hal::Arch;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Simple spinlock.
 pub struct Spinlock<T> {
@@ -22,22 +22,29 @@ impl<T> Spinlock<T> {
         }
     }
 
-    pub fn lock(&self) -> SpinlockGuard<T> {
+    pub fn lock(&self) -> SpinlockGuard<'_, T> {
         // Disable interrupts to prevent ISR from deadlocking on this lock
-        // We use crate::hal::ARCH directly. 
+        // We use crate::hal::ARCH directly.
         // Note: Generic code in sync.rs depending on crate::hal is acceptable in this kernel structure.
         let saved_int = crate::hal::ARCH.interrupts_enabled();
         crate::hal::ARCH.disable_interrupts();
-        
-        while self.lock.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+
+        while self
+            .lock
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_err()
+        {
             // Spin
             core::hint::spin_loop();
         }
-        SpinlockGuard { lock: self, saved_int }
+        SpinlockGuard {
+            lock: self,
+            saved_int,
+        }
     }
 
     /// Force unlock the spinlock.
-    /// 
+    ///
     /// # Safety
     /// This is unsafe because it bypasses the lock guard.
     /// Should only be used in context switching or panic handlers.
@@ -69,7 +76,7 @@ impl<'a, T> Drop for SpinlockGuard<'a, T> {
         self.lock.lock.store(false, Ordering::Release);
         // Restore interrupt state
         if self.saved_int {
-             crate::hal::ARCH.enable_interrupts();
+            crate::hal::ARCH.enable_interrupts();
         }
     }
 }

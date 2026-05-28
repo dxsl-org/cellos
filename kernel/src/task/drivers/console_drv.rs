@@ -1,5 +1,5 @@
-use alloc::collections::VecDeque;
 use crate::sync::Spinlock;
+use alloc::collections::VecDeque;
 
 #[allow(non_camel_case_types)]
 pub struct viConsole {
@@ -28,10 +28,15 @@ impl viConsole {
 
         // 2. Poll VirtIO Keyboard
         crate::task::drivers::virtio_input::poll_events();
-        if let Some(drv) = crate::task::drivers::virtio_input::KEYBOARD_DRIVER.lock().as_mut() {
+        if let Some(drv) = crate::task::drivers::virtio_input::KEYBOARD_DRIVER
+            .lock()
+            .as_mut()
+        {
             while let Some(event) = drv.event_queue.pop_front() {
                 if event.event_type == crate::task::drivers::input_map::EV_KEY {
-                    if let Some(c) = crate::task::drivers::input_map::scancode_to_ascii(event.code, event.value) {
+                    if let Some(c) =
+                        crate::task::drivers::input_map::scancode_to_ascii(event.code, event.value)
+                    {
                         if c as u8 > 0 {
                             log::info!("Console: VirtIO Input c={}", c);
                             self.buffer.push_back(c as u8);
@@ -51,7 +56,9 @@ impl viConsole {
     }
 }
 
-pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole { buffer: VecDeque::new() });
+pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole {
+    buffer: VecDeque::new(),
+});
 
 pub fn init() {
     // Nothing special to init for SBI Console so far

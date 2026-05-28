@@ -12,7 +12,7 @@ use alloc::boxed::Box;
 pub trait ViTcpStack: Send + Sync {
     /// Connect to a remote endpoint.
     fn connect(&self, addr: IpEndpoint) -> ViResult<Box<dyn ViTcpStream>>;
-    
+
     /// Listen on a port.
     fn listen(&self, port: u16) -> ViResult<Box<dyn ViTcpListener>>;
 }
@@ -21,10 +21,10 @@ pub trait ViTcpStack: Send + Sync {
 pub trait ViTcpStream: Send + Sync {
     /// Read data from stream.
     fn read(&mut self, buf: &mut [u8]) -> ViResult<usize>;
-    
+
     /// Write data to stream.
     fn write(&mut self, buf: &[u8]) -> ViResult<usize>;
-    
+
     /// Close the stream.
     fn close(&mut self) -> ViResult<()>;
 }

@@ -1,45 +1,83 @@
 use api::block::ViBlockDevice;
-use types::{ViResult, ViError};
+use types::{ViError, ViResult};
 
 /// RAM Disk - Zero-copy block device with embedded FAT32 image
 /// Implements Luật 8: Direct memory access without copying
-pub struct viRamDisk;
+#[allow(non_camel_case_types)]
+// pub struct viRamDisk; // Removed duplicate
 
 // Embed the real FAT32 disk image created by build script
 // Path from kernel/src/task/drivers/ramdisk.rs to workspace root
 // Using 40MB image to ensure FAT32 compliance (> 65525 clusters)
-static DISK_IMAGE: &[u8] = include_bytes!("../../../../disk_40mb.img");
+static DISK_IMAGE: &[u8] = include_bytes!("../../../../disk_v3.img"); // Force Rebuild 73
 
 const SECTOR_SIZE: usize = 512;
 
-impl ViBlockDevice for viRamDisk {
-    fn read_sector(&self, sector: u64, buf: &mut [u8]) -> ViResult<()> {
-        let offset = (sector as usize) * SECTOR_SIZE;
-        
-        if offset + SECTOR_SIZE > DISK_IMAGE.len() {
-            log::error!("RAM Disk: Read beyond disk boundary (sector {})", sector);
-            return Err(ViError::InvalidArgument);
+use alloc::vec;
+use alloc::vec::Vec;
+use crate::sync::Spinlock;
+
+// Global Mutable Storage for the RAM Disk
+// We use a Spinlock to ensure thread/core safety.
+// The vector is initialized lazily or at boot.
+static RAM_DISK_STORAGE: Spinlock<Option<Vec<u8>>> = Spinlock::new(None);
+
+pub struct ViRamDisk;
+
+impl ViRamDisk {
+    // Helper to access storage.
+    // NOTE: This locks the storage for the duration of the copy, which is fast for 512 bytes.
+    fn with_storage<F, R>(op: F) -> ViResult<R>
+    where
+        F: FnOnce(&mut Vec<u8>) -> ViResult<R>,
+    {
+        let mut guard = RAM_DISK_STORAGE.lock();
+        if let Some(storage) = guard.as_mut() {
+            op(storage)
+        } else {
+            // Not initialized yet? Or panic?
+            log::error!("RAM Disk: Storage not initialized!");
+            Err(ViError::IO)
         }
-        
-        // Zero-copy: Direct slice access from static memory
-        buf.copy_from_slice(&DISK_IMAGE[offset..offset + SECTOR_SIZE]);
-        Ok(())
+    }
+}
+
+impl ViBlockDevice for ViRamDisk {
+    fn read_sector(&self, sector: u64, buf: &mut [u8]) -> ViResult<()> {
+        Self::with_storage(|storage| {
+            let offset = (sector as usize) * SECTOR_SIZE;
+            if offset + SECTOR_SIZE > storage.len() {
+                return Err(ViError::InvalidArgument);
+            }
+            buf.copy_from_slice(&storage[offset..offset + SECTOR_SIZE]);
+            Ok(())
+        })
     }
 
-    fn write_sector(&self, _sector: u64, _buf: &[u8]) -> ViResult<()> {
-        // Read-only for now (static embedded image)
-        log::warn!("RAM Disk: Write attempted but device is read-only");
-        Err(ViError::PermissionDenied)
+    fn write_sector(&self, sector: u64, buf: &[u8]) -> ViResult<()> {
+        Self::with_storage(|storage| {
+            let offset = (sector as usize) * SECTOR_SIZE;
+            if offset + SECTOR_SIZE > storage.len() {
+                return Err(ViError::InvalidArgument);
+            }
+            storage[offset..offset + SECTOR_SIZE].copy_from_slice(buf);
+            Ok(())
+        })
     }
 
     fn sector_count(&self) -> u64 {
-        (DISK_IMAGE.len() / SECTOR_SIZE) as u64
+        let guard = RAM_DISK_STORAGE.lock();
+        if let Some(s) = guard.as_ref() {
+            (s.len() / SECTOR_SIZE) as u64
+        } else {
+            0
+        }
     }
 
     fn sector_size(&self) -> usize {
         SECTOR_SIZE
     }
-    
+
     fn flush(&self) -> ViResult<()> {
         Ok(())
     }
@@ -47,8 +85,21 @@ impl ViBlockDevice for viRamDisk {
 
 /// Initialize RAM disk
 pub fn init_driver() {
-    log::info!("RAM Disk: Embedded FAT32 image loaded");
-    log::info!("  Size: {} KB ({} sectors)", 
-               DISK_IMAGE.len() / 1024, 
-               DISK_IMAGE.len() / SECTOR_SIZE);
+    log::info!("RAM Disk: Initializing Mutable Storage...");
+    
+    // Allocate 40MB on Heap (Might be heavy!)
+    let mut storage = vec![0u8; DISK_IMAGE.len()];
+    storage.copy_from_slice(DISK_IMAGE);
+    
+    {
+        let mut guard = RAM_DISK_STORAGE.lock();
+        *guard = Some(storage);
+    }
+    
+    log::info!("RAM Disk: Embedded FAT32 image loaded into Heap");
+    log::info!(
+        "  Size: {} KB ({} sectors)",
+        DISK_IMAGE.len() / 1024,
+        DISK_IMAGE.len() / SECTOR_SIZE
+    );
 }

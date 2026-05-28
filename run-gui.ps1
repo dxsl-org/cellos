@@ -13,7 +13,7 @@ $kernel = "target/riscv64gc-unknown-none-elf/debug/vios-kernel"
 $disk = "disk.img"
 
 # Build kernel
-cargo build -p vios-kernel
+# cargo build -p vios-kernel
 
 Write-Host "Starting ViOS in Graphical Mode..."
 & $qemu -machine virt -cpu rv64 -smp 1 -m 256M -serial stdio -bios default -kernel $kernel `

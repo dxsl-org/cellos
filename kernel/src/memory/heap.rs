@@ -6,7 +6,7 @@ use linked_list_allocator::LockedHeap;
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 /// Initialize the heap
-/// 
+///
 /// # Safety
 /// This function must be called only once and with a valid memory region.
 pub unsafe fn init_heap(heap_start: usize, heap_size: usize) {

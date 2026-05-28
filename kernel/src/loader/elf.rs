@@ -1,86 +1,147 @@
 //! ELF Parsing Logic
+use super::{ElfHeader, ElfParser};
 use types::*;
-use super::{ElfParser, ElfHeader};
 use xmas_elf::ElfFile;
+
+/// Maximum permitted virtual address for a user-loadable ELF segment.
+/// Picked to lie comfortably below the kernel's identity-mapped region
+/// (0x80200000+). Any segment claiming to load above this is rejected so
+/// a malicious ELF can't ask the loader to map user pages over kernel VA.
+///
+/// This is a coarse guard — the proper fix is a per-cell VA layout passed
+/// in from `spawn_*`. Tracked as TODO.
+const USER_VADDR_MAX: usize = 0x8000_0000;
 
 pub struct ElfLoader;
 
 impl ElfLoader {
     /// Load loadable segments into memory.
     /// This is not part of ElfParser trait but required for process loading.
-    pub fn load_segments(&self, data: &[u8], frame_allocator: &mut crate::memory::frame::FrameAllocator) -> ViResult<()> {
+    pub fn load_segments(
+        &self,
+        data: &[u8],
+        frame_allocator: &mut crate::memory::frame::FrameAllocator,
+    ) -> ViResult<()> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
-        
+
         for ph in elf.program_iter() {
             if let Ok(xmas_elf::program::Type::Load) = ph.get_type() {
                 let file_offset = ph.offset() as usize;
                 let vaddr = ph.virtual_addr() as usize;
                 let mem_size = ph.mem_size() as usize;
                 let file_size = ph.file_size() as usize;
-                
+                let ph_flags = ph.flags();
+
+                // --- Header sanity checks ---
+                // file_size MUST NOT exceed mem_size (the rest is BSS).
+                if file_size > mem_size {
+                    log::error!(
+                        "ELF: rejecting segment with file_size={} > mem_size={}",
+                        file_size,
+                        mem_size
+                    );
+                    return Err(ViError::InvalidInput);
+                }
+                // file_offset + file_size must fit inside the ELF buffer.
+                let file_end = file_offset.checked_add(file_size).ok_or(ViError::InvalidInput)?;
+                if file_end > data.len() {
+                    log::error!(
+                        "ELF: segment file range {}..{} exceeds buffer len {}",
+                        file_offset,
+                        file_end,
+                        data.len()
+                    );
+                    return Err(ViError::InvalidInput);
+                }
+                // vaddr + mem_size must not overflow and must lie below the
+                // kernel VA window — prevents user ELF clobbering kernel maps.
+                let end_addr = vaddr.checked_add(mem_size).ok_or(ViError::InvalidInput)?;
+                if vaddr >= USER_VADDR_MAX || end_addr > USER_VADDR_MAX {
+                    log::error!(
+                        "ELF: segment VA range 0x{:X}-0x{:X} outside user space",
+                        vaddr,
+                        end_addr
+                    );
+                    return Err(ViError::PermissionDenied);
+                }
+
                 let start_addr = vaddr;
-                let end_addr = vaddr + mem_size;
-                
+
                 // Align start/end to page boundaries
                 let start_page = start_addr & !(4096 - 1);
-                let end_page = (end_addr + 4096 - 1) & !(4096 - 1);
-                
+                let end_page = end_addr.checked_add(4095).ok_or(ViError::InvalidInput)? & !(4096 - 1);
+
+                // --- Translate ELF p_flags to page-table flags ---
+                // p_flags bits: 0x1=X, 0x2=W, 0x4=R. Default deny if all zero.
+                use crate::memory::paging::Flags;
+                let mut perm_bits = Flags::VALID | Flags::USER | Flags::ACCESSED;
+                if ph_flags.is_read() {
+                    perm_bits = perm_bits | Flags::READ;
+                }
+                if ph_flags.is_write() {
+                    perm_bits = perm_bits | Flags::WRITE | Flags::DIRTY;
+                }
+                if ph_flags.is_execute() {
+                    perm_bits = perm_bits | Flags::EXECUTE;
+                }
+                let flags = Flags::from_bits(perm_bits);
+
                 // Map pages
                 let mut current_page = start_page;
                 while current_page < end_page {
-                    // Allocate frame
-                    let buf_frame = frame_allocator.allocate_frame().ok_or(ViError::OutOfMemory)?;
-                    
-                    // Map it
-                    // Permissions: R/W/X + USER (for U-mode access)
-                    // TODO: Parse ph.flags for more fine-grained permissions
-                    use crate::memory::paging::Flags;
-                    let flags_bits = Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
-                    let flags = Flags::from_bits(flags_bits);
-                    
-                    crate::memory::paging::map_page(frame_allocator, current_page, buf_frame, flags)
-                        .map_err(|_| ViError::OutOfMemory)?;
-                    
-                    // Copy Data
-                    // We can write to `buf_frame` directly because of Identity Mapping
-                    // BUT: We need to know which part of the file goes here.
-                    
-                    let page_offset = current_page - start_page; // Offset from allocation start
-                    // Actually, ELF loads relative to vaddr.
-                    // If vaddr starts at 0x10050, first page 0x10000.
-                    // We need to calculate overlaps.
-                    
-                    // Zero the frame first (simplifies BSS and padding)
+                    let buf_frame = frame_allocator
+                        .allocate_frame()
+                        .ok_or(ViError::OutOfMemory)?;
+
+                    crate::memory::paging::map_page(
+                        frame_allocator,
+                        current_page,
+                        buf_frame,
+                        flags,
+                    )
+                    .map_err(|_| ViError::OutOfMemory)?;
+
+                    // Zero the frame first (simplifies BSS and padding, and
+                    // prevents info-leak from previous frame owner).
                     unsafe {
                         core::ptr::write_bytes(buf_frame as *mut u8, 0, 4096);
                     }
-                    
-                    // Calculate intersection with file data
+
+                    // Intersection of [page, page+4096) AND [vaddr, vaddr+file_size)
                     let page_start_vaz = current_page;
                     let page_end_vaz = current_page + 4096;
-                    
-                    // Intersection of [page_start_vaz, page_end_vaz) AND [vaddr, vaddr + file_size)
                     let copy_start_v = core::cmp::max(page_start_vaz, vaddr);
                     let copy_end_v = core::cmp::min(page_end_vaz, vaddr + file_size);
-                    
+
                     if copy_start_v < copy_end_v {
                         let len = copy_end_v - copy_start_v;
-                        let dst_offset = copy_start_v - page_start_vaz; // offset in page
-                        
+                        let dst_offset = copy_start_v - page_start_vaz;
                         let src_offset_in_file = file_offset + (copy_start_v - vaddr);
-                        if src_offset_in_file + len <= data.len() {
-                            let src = &data[src_offset_in_file .. src_offset_in_file + len];
+                        // file_end was already validated above; this guards
+                        // arithmetic on `len` from any rounding surprise.
+                        let src_end = src_offset_in_file
+                            .checked_add(len)
+                            .ok_or(ViError::InvalidInput)?;
+                        if src_end <= data.len() {
+                            let src = &data[src_offset_in_file..src_end];
                             unsafe {
                                 let dst = (buf_frame as *mut u8).add(dst_offset);
                                 core::ptr::copy_nonoverlapping(src.as_ptr(), dst, len);
                             }
                         }
                     }
-                    
+
                     current_page += 4096;
                 }
-                
-                log::info!("ELF LOAD: Segment loaded at 0x{:X}-0x{:X}", start_addr, end_addr);
+
+                log::info!(
+                    "ELF LOAD: 0x{:X}-0x{:X} flags={}{}{}",
+                    start_addr,
+                    end_addr,
+                    if ph_flags.is_read() { 'R' } else { '-' },
+                    if ph_flags.is_write() { 'W' } else { '-' },
+                    if ph_flags.is_execute() { 'X' } else { '-' },
+                );
             }
         }
         Ok(())
@@ -90,22 +151,22 @@ impl ElfLoader {
 impl ElfParser for ElfLoader {
     fn parse_header(&self, data: &[u8]) -> ViResult<ElfHeader> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
-        
+
         // Verify architecture (RISC-V 64)
-         // Header check is implicit in successful new(), but specific machine check?
-         // elf.header.pt2.machine() == xmas_elf::header::Machine::RISC_V
-        
+        // Header check is implicit in successful new(), but specific machine check?
+        // elf.header.pt2.machine() == xmas_elf::header::Machine::RISC_V
+
         Ok(ElfHeader {
             entry: elf.header.pt2.entry_point() as usize,
             shoff: elf.header.pt2.sh_offset() as usize,
         })
     }
-    
+
     fn get_section<'a>(&self, data: &'a [u8], name: &str) -> ViResult<&'a [u8]> {
-         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
-         match elf.find_section_by_name(name) {
-             Some(section) => Ok(section.raw_data(&elf)),
-             None => Err(ViError::NotFound),
-         }
+        let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
+        match elf.find_section_by_name(name) {
+            Some(section) => Ok(section.raw_data(&elf)),
+            None => Err(ViError::NotFound),
+        }
     }
 }

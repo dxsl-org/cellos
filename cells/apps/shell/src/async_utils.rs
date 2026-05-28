@@ -1,60 +1,106 @@
-use ostd::prelude::*;
-use core::future::Future;
-use core::task::{Context, Poll};
 use ostd::executor::yield_now;
+use ostd::prelude::*;
 
 pub struct AsyncStdin;
 
 impl AsyncStdin {
-    pub async fn read_line(&self, buffer: &mut [u8]) -> usize {
-        let mut idx = 0;
+    /// Read a line from stdin into an owned Vec<u8>.
+    ///
+    /// Returns the bytes entered (excluding the newline). Passing ownership
+    /// instead of `&mut [u8]` satisfies Law 2: no borrowed slice across `.await`.
+    pub async fn read_line(
+        &self,
+        max_len: usize,
+        history: &mut alloc::collections::VecDeque<alloc::string::String>,
+    ) -> Vec<u8> {
+        let mut buffer: Vec<u8> = Vec::with_capacity(max_len);
+        let mut history_idx = history.len();
+        let mut escape_state: u8 = 0; // 0=Normal 1=Esc 2=Bracket
+
         loop {
-            if idx >= buffer.len() {
+            if buffer.len() >= max_len {
                 break;
             }
             let mut c = [0u8; 1];
-            // sys_read is blocking/yielding in kernel, but here we treat it as "potentially blocking"
-            // To make this "async" in spirit (allowing other tasks to run if we had any),
-            // we could yield before reading if we suspect no data.
-            // But sys_read is the one that blocks.
-            // So for now, we just call it.
-            //
-            // Ideally, we would have `sys_read_async` or `poll_read`.
-            // Design 11 says "Async Shell: Shell will not block when waiting for RAM Disk".
-            // Since we don't have true async syscalls exposed yet in ostd::syscall (they return Result, not Future),
-            // and sys_read is likely blocking in the kernel implementation (waiting for interrupt),
-            // we are limited.
-            //
-            // However, we can simulate async structure.
-
-            // Try to read 1 byte
             match ostd::syscall::sys_read(0, &mut c) {
                 Ok(n) if n > 0 => {
-                     let ch = c[0];
-                     if ch == b'\r' || ch == b'\n' {
-                         ostd::io::print("\n");
-                         break;
-                     }
-                     if ch == 8 || ch == 127 { // Backspace
-                         if idx > 0 {
-                             ostd::io::print("\x08 \x08");
-                             idx -= 1;
-                         }
-                         continue;
-                     }
-                     // Echo
-                     if let Ok(s) = core::str::from_utf8(&c) {
-                         ostd::io::print(s);
-                     }
-                     buffer[idx] = ch;
-                     idx += 1;
-                },
+                    let ch = c[0];
+
+                    // ANSI escape sequence state machine
+                    if escape_state == 0 {
+                        if ch == 0x1B {
+                            escape_state = 1;
+                            continue;
+                        }
+                    } else if escape_state == 1 {
+                        if ch == b'[' {
+                            escape_state = 2;
+                        } else {
+                            escape_state = 0;
+                        }
+                        continue;
+                    } else if escape_state == 2 {
+                        escape_state = 0;
+                        match ch {
+                            b'A' => {
+                                // Up arrow — load previous history entry
+                                if history_idx > 0 {
+                                    history_idx -= 1;
+                                    Self::clear_line(&buffer);
+                                    buffer.clear();
+                                    if let Some(cmd) = history.get(history_idx) {
+                                        ostd::io::print(cmd);
+                                        buffer.extend_from_slice(cmd.as_bytes());
+                                    }
+                                }
+                            }
+                            b'B' => {
+                                // Down arrow — load next history entry or blank
+                                if history_idx < history.len() {
+                                    history_idx += 1;
+                                    Self::clear_line(&buffer);
+                                    buffer.clear();
+                                    if let Some(cmd) = history.get(history_idx) {
+                                        ostd::io::print(cmd);
+                                        buffer.extend_from_slice(cmd.as_bytes());
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
+
+                    // Normal character processing
+                    if ch == b'\r' || ch == b'\n' {
+                        ostd::io::print("\n");
+                        break;
+                    }
+                    if ch == 8 || ch == 127 {
+                        // Backspace
+                        if !buffer.is_empty() {
+                            ostd::io::print("\x08 \x08");
+                            buffer.pop();
+                        }
+                        continue;
+                    }
+                    // Echo and append
+                    if let Ok(s) = core::str::from_utf8(&c) {
+                        ostd::io::print(s);
+                    }
+                    buffer.push(ch);
+                }
                 _ => {
-                    // If read failed or returned 0 (and not EOF intended), yield.
                     yield_now().await;
                 }
             }
         }
-        idx
+        buffer
+    }
+
+    fn clear_line(current: &[u8]) {
+        for _ in 0..current.len() {
+            ostd::io::print("\x08 \x08");
+        }
     }
 }

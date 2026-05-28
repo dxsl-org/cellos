@@ -1,5 +1,4 @@
-use hal_arch_trait::{Arch, BootController};
-use types::HalResult;
+use hal_arch_trait::Arch;
 
 pub struct AArch64Arch;
 
@@ -13,20 +12,20 @@ impl Arch for AArch64Arch {
     fn init(&self) {
         // TODO: Initialize AArch64
     }
-    
+
     unsafe fn switch_context(&self, _old: *mut Self::Context, _new: *const Self::Context) {
         // TODO: Implement context switching
         unimplemented!("AArch64 context switch not implemented");
     }
-    
+
     fn enable_interrupts(&self) {
         // TODO
     }
-    
+
     fn disable_interrupts(&self) {
         // TODO
     }
-    
+
     fn wait_for_interrupt(&self) {
         // TODO
     }

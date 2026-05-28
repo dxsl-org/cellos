@@ -1,4 +1,5 @@
 #![no_std]
+#![forbid(unsafe_code)]
 
 //! GPU Driver Cell
 //! INTERFACE ONLY - NO IMPLEMENTATION
@@ -12,11 +13,11 @@ impl GpuDriver {
     pub fn new() -> Self {
         todo!("Implementation phase")
     }
-    
+
     pub fn init(&mut self) -> Result<()> {
         todo!("Implementation phase")
     }
-    
+
     pub fn get_framebuffer(&self) -> &mut [u8] {
         todo!("Implementation phase")
     }

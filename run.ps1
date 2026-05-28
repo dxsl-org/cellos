@@ -10,6 +10,9 @@ if (Get-Command $qemu -ErrorAction SilentlyContinue) {
 }
 
 $kernel = "target/riscv64gc-unknown-none-elf/debug/vios-kernel"
-$disk = "disk.img"
+$disk = "disk_v3.img"
 
-& $qemu -machine virt -cpu rv64,c=true -smp 1 -m 128M -nographic -serial mon:stdio -bios default -kernel $kernel -drive "file=$disk,format=raw,id=hd0,if=none" -device virtio-blk-device,drive=hd0
+$cpu = "rv64,c=true"
+Write-Host "Starting ViOS in QEMU (Nographic Mode)..."
+Write-Host "Tip: Press 'Ctrl-a' then 'x' to exit QEMU."
+& $qemu -machine virt -cpu $cpu -smp 1 -m 128M -nographic -serial mon:stdio -bios default -kernel $kernel -drive "file=$disk,format=raw,id=hd0,if=none" -device virtio-blk-device,drive=hd0

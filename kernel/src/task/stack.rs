@@ -5,9 +5,9 @@
 
 use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
-use types::{VAddr, ViError};
 use alloc::vec::Vec;
 use log::{error, trace};
+use types::{VAddr, ViError};
 
 /// Represents an allocated Stack.
 /// Implements Drop to automatically free pages.
@@ -105,40 +105,49 @@ impl Stack {
         let usable_start_idx = if guard { 1 } else { 0 };
 
         // For SAS Identity Map:
-        // Memory is ALREADY mapped as Kernel RWX by `init_kernel_paging`.
-        // We just need to CHANGE permissions for User stack.
-        // Or unmap the Guard Page.
-
-        // Guard Page: Unmap it.
+        // Memory is already identity-mapped as kernel RWX by init_kernel_paging.
+        // Guard Page: unmap the bottom frame so any stack overflow causes a
+        // page fault immediately instead of silently corrupting adjacent memory.
+        // The physical frame is still allocated (owned by this Stack) but its
+        // PTE is cleared so the hardware traps on any access.
         if guard {
-            // How to unmap? `paging::unmap`?
-            // `paging.rs` doesn't expose unmap yet.
-            // We can map it as INVALID (Valid=0).
-            let flags = Flags::from_bits(0); // Invalid
-             paging::map_page(allocator, base_addr, base_addr, flags)
-                 .map_err(|_| ViError::OutOfMemory)?;
+            paging::unmap_page(base_addr).map_err(|_| ViError::OutOfMemory)?;
         }
 
         // Usable Pages
         let flags = if user_mode {
             // User Read/Write (Exec?)
-            Flags::from_bits(Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY)
+            Flags::from_bits(
+                Flags::VALID
+                    | Flags::READ
+                    | Flags::WRITE
+                    | Flags::USER
+                    | Flags::ACCESSED
+                    | Flags::DIRTY,
+            )
         } else {
             // Kernel Read/Write
-            Flags::from_bits(Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY)
+            Flags::from_bits(
+                Flags::VALID | Flags::READ | Flags::WRITE | Flags::ACCESSED | Flags::DIRTY,
+            )
         };
 
         for i in usable_start_idx..total_pages {
             let addr = base_addr + (i * PAGE_SIZE);
-            paging::map_page(allocator, addr, addr, flags)
-                 .map_err(|_| ViError::OutOfMemory)?;
+            paging::map_page(allocator, addr, addr, flags).map_err(|_| ViError::OutOfMemory)?;
         }
 
         // Calculate Top (Stack grows down)
         // Top is at the END of the allocated range.
         let top = base_addr + (total_pages * PAGE_SIZE);
 
-        trace!("Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, User={}", base_addr, top, pages, user_mode);
+        trace!(
+            "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, User={}",
+            base_addr,
+            top,
+            pages,
+            user_mode
+        );
 
         Ok(Stack {
             base: base_addr,
@@ -151,14 +160,20 @@ impl Stack {
 
 impl Drop for Stack {
     fn drop(&mut self) {
-        // We need to free frames.
-        // Since we don't have a `deallocate_frame` exposed cleanly in `FrameAllocator` trait usage
-        // (often it's just a bump pointer in early OS), we might leak.
-        // But if `FrameAllocator` supports it, we should call it.
-
-        // Assuming `FRAME_ALLOCATOR` has dealloc.
-        // Checking memory/frame.rs would be good.
-        // For now, we just log.
         trace!("Dropping Stack at 0x{:X}", self.base);
+        let total_pages = if self.has_guard {
+            self.pages + 1
+        } else {
+            self.pages
+        };
+        let mut frame_guard = FRAME_ALLOCATOR.lock();
+        if let Some(allocator) = frame_guard.as_mut() {
+            for i in 0..total_pages {
+                let frame = self.base + (i * PAGE_SIZE);
+                // Unmap first so the PTE doesn't dangle after the frame is freed.
+                let _ = paging::unmap_page(frame);
+                allocator.deallocate_frame(frame);
+            }
+        }
     }
 }

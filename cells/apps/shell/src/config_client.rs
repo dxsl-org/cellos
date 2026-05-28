@@ -1,5 +1,5 @@
-use ostd::prelude::*;
 use api::config::ViConfig;
+use ostd::prelude::*;
 
 pub struct ConfigClient {
     service_id: usize,
@@ -19,7 +19,8 @@ impl ViConfig for ConfigClient {
         msg.push(key.len() as u8);
         msg.extend_from_slice(key.as_bytes());
 
-        if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_send(self.service_id, &msg) {
+        if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_send(self.service_id, &msg)
+        {
             let mut resp = [0u8; 16];
             // Wait for reply (OpCode is implicit)
             // Note: In real system, use recv specific to this transid
@@ -32,23 +33,23 @@ impl ViConfig for ConfigClient {
                         return Err(ViError::NotFound);
                     }
 
-                    // Zero-Copy Magic (SAS)
-                    // We cast the pointer (from Service space) to &str (in our space)
-                    // SAFETY: Assuming SAS allows read access.
+                    // SAFETY: In the SAS model all cells share one address space, so a
+                    // pointer returned by the config service is directly readable here.
+                    // The config service stores strings in its static BTreeMap and never
+                    // frees them, so the memory is valid for the lifetime of the OS session.
+                    // We construct a &str pointing directly into the service's allocation
+                    // and cast it to `&'self str` so it satisfies the ViConfig trait bound.
+                    // TODO: redesign ViConfig::get to return ViResult<String> (owned) to
+                    // eliminate this unsafe block — tracking issue: Law-1 API change.
                     unsafe {
                         let slice = core::slice::from_raw_parts(ptr as *const u8, len);
                         let s = core::str::from_utf8(slice).map_err(|_| ViError::InvalidInput)?;
-                        // Leak the lifetime? Or force it to match &self?
-                        // The Trait definition says `&str` returned has lifetime of `&self`.
-                        // But `slice` is temporary.
-                        // We must extend lifetime to 'self if we assume Service data is stable.
-                        // Or we transmute.
-                        // But wait, the Trait says `fn get(&self) -> &str`.
-                        // So we just need to return a reference that lives as long as Client.
-                        // Since `slice` is raw pointer based, it effectively has 'static lifetime potential if we say so.
-                        Ok(core::mem::transmute(s))
+                        // Extend lifetime from the slice's implicit 'static to &'self str.
+                        // Soundness relies on the SAS invariant stated above.
+                        let extended: &str = &*(s as *const str);
+                        Ok(extended)
                     }
-                },
+                }
                 _ => Err(ViError::IO),
             }
         } else {
