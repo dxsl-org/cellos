@@ -2,51 +2,67 @@ use core::alloc::Layout;
 use core::ptr::NonNull;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr};
 
-/// VirtIO HAL Implementation for ViOS.
+/// VirtIO HAL adapter for ViOS.
 ///
-/// CAUTION: This implementation assumes Identity Mapping (Virtual Address = Physical Address)
-/// for DMA regions. This is valid for the current simplistic memory model but MUST be
-/// revisited if IOMMU or higher-half kernel mapping is strictly enforced for drivers.
+/// Assumes identity mapping (VAddr == PAddr) throughout, which holds for the
+/// kernel's current single-address-space model.  Revisit if an HHDM or IOMMU
+/// is introduced: every `paddr = ptr as usize` line must become
+/// `paddr = ptr as usize - HHDM_OFFSET`.
 pub struct VirtioHal;
 
+// SAFETY: VirtioHal holds no state — all methods are stateless function calls.
 unsafe impl Hal for VirtioHal {
     fn dma_alloc(pages: usize, _direction: BufferDirection) -> (PhysAddr, NonNull<u8>) {
-        let layout = Layout::from_size_align(pages * 4096, 4096).unwrap();
-        unsafe {
-            let ptr = alloc::alloc::alloc(layout);
-                if ptr.is_null() {
-                    log::error!("[ERROR] VirtIO HAL: DMA Allocation Failed (OOM). Driver will hang.");
-                    loop {
-                        core::hint::spin_loop();
-                    }
-                }
-                core::ptr::write_bytes(ptr, 0, layout.size()); // Zero memory
+        let layout = Layout::from_size_align(pages * 4096, 4096)
+            .expect("VirtIO DMA layout must be valid — pages > 0 and align is power-of-two");
 
-                let paddr = ptr as usize; // Identity mapping
-                log::trace!("[VIRTIO] DMA Alloc {} pages at V:{:p} P:0x{:X}", pages, ptr, paddr);
-                (paddr, NonNull::new_unchecked(ptr))
+        // SAFETY: layout is non-zero size and properly aligned (4096-byte alignment
+        // satisfies VirtIO virtqueue alignment requirement of ≥16 bytes).
+        let ptr = unsafe { alloc::alloc::alloc(layout) };
+
+        if ptr.is_null() {
+            log::error!("[virtio] DMA alloc OOM — {} pages requested", pages);
+            // SAFETY: spin_loop is safe; we diverge here because OOM is unrecoverable.
+            loop {
+                core::hint::spin_loop();
+            }
         }
+
+        // SAFETY: ptr is non-null and points to `pages * 4096` bytes — safe to zero.
+        unsafe { core::ptr::write_bytes(ptr, 0, layout.size()) };
+
+        // Identity mapping: physical address == virtual address.
+        let paddr = ptr as usize;
+        log::trace!("[virtio] DMA alloc {} pages at V:{:p} P:0x{:X}", pages, ptr, paddr);
+
+        // SAFETY: ptr is non-null (checked above).
+        (paddr, unsafe { NonNull::new_unchecked(ptr) })
     }
 
-    unsafe fn dma_dealloc(paddr: PhysAddr, _vaddr: NonNull<u8>, pages: usize) -> i32 {
-        let layout = Layout::from_size_align(pages * 4096, 4096).unwrap();
-        unsafe {
-            alloc::alloc::dealloc(paddr as usize as *mut u8, layout);
-        }
+    unsafe fn dma_dealloc(_paddr: PhysAddr, vaddr: NonNull<u8>, pages: usize) -> i32 {
+        let layout = Layout::from_size_align(pages * 4096, 4096)
+            .expect("dma_dealloc layout must match dma_alloc — invariant upheld by virtio-drivers");
+        // SAFETY: vaddr was returned by dma_alloc for the same layout; virtio-drivers
+        // guarantees dma_dealloc is called at most once per dma_alloc.  Using vaddr
+        // (not paddr) keeps correctness when HHDM is introduced (paddr != vaddr).
+        unsafe { alloc::alloc::dealloc(vaddr.as_ptr(), layout) };
         0
     }
 
     unsafe fn mmio_phys_to_virt(paddr: PhysAddr, _size: usize) -> NonNull<u8> {
-        NonNull::new(paddr as usize as *mut u8).expect("MMIO Address is 0")
+        // SAFETY: identity mapping — paddr is a valid MMIO address mapped by
+        // init_kernel_paging (CLINT/PLIC/UART/VirtIO explicit block).
+        NonNull::new(paddr as *mut u8).expect("VirtIO MMIO address must be non-zero")
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
-        // Identity mapping: Virtual Address IS Physical Address
+        // SAFETY: identity mapping — virtual address IS the physical address for all
+        // heap-allocated DMA buffers in the kernel's single address space.
         let vaddr = buffer.as_ptr() as *mut u8 as usize;
-        vaddr as usize
+        vaddr
     }
 
     unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
-        // Nothing to do for identity mapping
+        // Identity mapping: no IOMMU to flush, no cache coherency action needed.
     }
 }

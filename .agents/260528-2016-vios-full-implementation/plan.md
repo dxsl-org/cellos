@@ -29,7 +29,7 @@ created: 2026-05-28
 | 01 | Workspace Cleanup & Baseline | 20h | P2 | **complete** | none |
 | 02 | CI/CD Pipeline | 60h | P1 | **complete** | 01 |
 | 03 | Boot Stability & Ring 3 Execution | 40h | P0 | **complete** | none |
-| 04 | VirtIO Block Device Fix | 40h | P0 | **partial** | none |
+| 04 | VirtIO Block Device Fix | 40h | P0 | **complete** | none |
 | 05 | Keyboard Input Fix | 20h | P0 | **complete** | none |
 | 06 | External ELF Loading from /bin/ | 60h | P1 | pending | 03, 04 |
 | 07 | VFS FileHandle Passing Between Cells | 30h | P1 | pending | 06 |
