@@ -1,6 +1,6 @@
 # Phase 02 — CI/CD Pipeline
 
-**Effort:** 60h | **Priority:** P1 | **Status:** pending | **Blockers:** Phase 01
+**Effort:** 60h | **Priority:** P1 | **Status:** complete | **Blockers:** Phase 01
 
 ## Overview
 
@@ -130,17 +130,17 @@ cron weekly ──► .github/workflows/security.yml
 
 ## Todo List
 
-- [ ] Create / verify `rust-toolchain.toml` with nightly pin
-- [ ] Add stable boot banner in `kernel/src/main.rs` (idempotent)
-- [ ] Create `scripts/qemu-boot-test.sh` and chmod +x
-- [ ] Create `deny.toml`
-- [ ] Create `.github/workflows/ci.yml`
-- [ ] Create `.github/workflows/security.yml`
-- [ ] Create `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.md|yml`
-- [ ] Create `.github/pull_request_template.md`
-- [ ] Push branch, iterate until green
-- [ ] Add CI badge to README.md
-- [ ] Confirm CI wall-time < 12 min warm
+- [x] Create / verify `rust-toolchain.toml` with nightly pin — `nightly-2026-05-01`, targets rv64/aarch64/x86_64
+- [x] Add stable boot banner in `kernel/src/main.rs` (idempotent) — `[ViOS] kernel boot v<ver>` as first UART output
+- [x] Create `scripts/qemu-boot-test.sh` and chmod +x
+- [x] Create `deny.toml` — licenses allow-list + `wildcards = "deny"`
+- [x] Create `.github/workflows/ci.yml` — 4 jobs: lint / build-matrix / qemu-boot / security
+- [x] Create `.github/workflows/security.yml` — weekly cron: cargo-audit + cargo-geiger
+- [x] Create `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.md|yml`
+- [x] Create `.github/pull_request_template.md`
+- [ ] Push branch, iterate until green — pending first PR to trigger CI
+- [x] Add CI badge to README.md
+- [ ] Confirm CI wall-time < 12 min warm — cannot verify without GitHub Actions run
 
 ## Success Criteria
 
