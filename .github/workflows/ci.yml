@@ -107,6 +107,48 @@ jobs:
       - name: Run boot test
         run: bash scripts/qemu-boot-test.sh
 
+  geiger-gate:
+    name: Unsafe regression (cells/ must have 0 unsafe)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-geiger
+        run: cargo install --locked cargo-geiger
+
+      - name: Assert zero unsafe in cells/
+        run: |
+          cargo geiger --workspace --output-format json \
+            --target riscv64gc-unknown-none-elf \
+            -Z build-std=core,alloc \
+            > geiger.json 2>&1 || true
+          python3 - << 'PYEOF'
+          import json, sys
+          with open("geiger.json") as f:
+              data = json.load(f)
+          violations = [
+              pkg["package"]["manifest_path"]
+              for pkg in data.get("packages", [])
+              if "cells/" in pkg.get("package", {}).get("manifest_path", "")
+              and pkg.get("unsafety", {}).get("used", {}).get("unsafe_used", 0) > 0
+          ]
+          if violations:
+              print("FAIL: unsafe code found in cells/:")
+              for v in violations: print(f"  {v}")
+              sys.exit(1)
+          print("PASS: cells/ contains zero unsafe blocks")
+          PYEOF
+
   security:
     name: Security Scan
     runs-on: ubuntu-24.04

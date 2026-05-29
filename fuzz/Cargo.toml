@@ -1,0 +1,27 @@
+[package]
+name = "fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[[bin]]
+name = "elf_parser"
+path = "src/elf_parser.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "vfs_path"
+path = "src/vfs_path.rs"
+test = false
+doc = false
+
+[dependencies]
+libfuzzer-sys = "0.4"
+types = { path = "../libs/types" }
+api   = { path = "../libs/api" }
+
+[workspace]
