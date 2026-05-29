@@ -93,6 +93,20 @@ impl File {
         syscall::sys_read_cap(self.cap_id, buf).map_err(|_| ViError::IO)
     }
 
+    /// Read the entire file into a `String`.  Returns `Err(IO)` if content is not valid UTF-8.
+    pub fn read_to_string(&mut self) -> ViResult<alloc::string::String> {
+        let mut bytes = alloc::vec::Vec::new();
+        self.read_to_end(&mut bytes)?;
+        alloc::string::String::from_utf8(bytes).map_err(|_| ViError::IO)
+    }
+
+    /// Write all bytes from `buf` to the file (stub — writable VFS requires VirtIO-FAT).
+    ///
+    /// Currently always returns `Err(NotSupported)` until Phase 13 write path is complete.
+    pub fn write_all(&mut self, _buf: &[u8]) -> ViResult<()> {
+        Err(ViError::NotSupported)
+    }
+
     /// Explicitly close the file and revoke its capability.
     pub fn close(mut self) -> ViResult<()> {
         self.closed = true;

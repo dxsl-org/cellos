@@ -20,16 +20,42 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Result type for async file operations that take ownership of the file handle.
 pub type FileResult<T> = (Box<dyn ViFile + Send + Sync>, ViResult<T>);
 
+/// Metadata about a file or directory.
+#[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
+pub struct Stat {
+    /// Total size in bytes (0 for directories).
+    pub size:    u64,
+    /// True if this is a directory.
+    pub is_dir:  bool,
+    /// True if the path exists.
+    pub exists:  bool,
+    /// Padding to reach 16-byte size for IPC serialisation.
+    pub _pad:    [u8; 6],
+}
+
 /// Filesystem interface.
 pub trait ViFileSystem: Send + Sync {
     /// Open a file at the given path.
     fn open(&self, path: &str, mode: OpenMode) -> ViResult<Box<dyn ViFile + Send + Sync>>;
 
-    /// Create a directory.
+    /// Create a directory (and any missing parent components).
     fn mkdir(&self, path: &str) -> ViResult<()>;
 
-    /// Remove a file or directory.
+    /// Remove a file.
     fn remove(&self, path: &str) -> ViResult<()>;
+
+    /// Return metadata for `path`.  Returns `Err(NotFound)` if absent.
+    fn stat(&self, path: &str) -> ViResult<Stat> {
+        let _ = path;
+        Err(ViError::NotSupported)
+    }
+
+    /// Remove an empty directory.
+    fn rmdir(&self, path: &str) -> ViResult<()> {
+        let _ = path;
+        Err(ViError::NotSupported)
+    }
 }
 
 /// File interface.
