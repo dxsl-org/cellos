@@ -240,6 +240,7 @@ cargo test --all --release
 3. Read [CONTRIBUTING.md](CONTRIBUTING.md) — step-by-step first PR walkthrough
 4. Browse [docs/FAQ.md](docs/FAQ.md) — architecture questions answered
 5. Check [docs/ROADMAP.md](docs/ROADMAP.md) — where the project is headed
+6. Review [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community standards
 
 We aim to respond to PRs and new issues within **3 business days**.
 
