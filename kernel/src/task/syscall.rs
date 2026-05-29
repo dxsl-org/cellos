@@ -159,6 +159,12 @@ pub enum Syscall {
     /// 12: SpawnFromPath (Spawn cell by filesystem path)
     /// ABI: path_ptr in a0, path_len in a1.
     SpawnFromPath { path_ptr: usize, path_len: usize },
+    /// 13: OpenCap — open a file and return a CapId.
+    OpenCap { path_ptr: usize, path_len: usize },
+    /// 14: ReadCap — read bytes from a cap-backed file.
+    ReadCap { cap_id: usize, buf_ptr: usize, buf_len: usize },
+    /// 15: CloseCap — revoke a capability.
+    CloseCap { cap_id: usize },
     /// 8: Wait (Wait for task)
     Wait { pid: usize },
     /// 20: ShmAlloc
@@ -448,6 +454,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             }
 
+            // Revoke all capabilities owned by this cell so the cap table doesn't
+            // retain orphaned entries and so a future cell with the same ID cannot
+            // inherit them.
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+            crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(cell_id);
+
             // yield_cpu switches away; this task is never rescheduled.
             super::yield_cpu();
             Ok(0)
@@ -621,6 +637,92 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             })
         }
 
+        // ── Capability-based file I/O ────────────────────────────────────────
+        Syscall::OpenCap { path_ptr, path_len } => {
+            if path_len == 0 || path_len > 256 {
+                return Err(SyscallError::InvalidInput);
+            }
+            validate_user_buf(path_ptr, path_len, 256)?;
+            // SAFETY: validated above; SUM=1.
+            let path_str = unsafe {
+                let s = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
+                core::str::from_utf8(s).map_err(|_| SyscallError::InvalidInput)?
+            };
+
+            // Open via kernel-internal FS.
+            use crate::fs::VIFS1;
+            let file = {
+                let mut guard = VIFS1.lock();
+                guard.as_mut().ok_or(SyscallError::FileNotFound)?
+                    .open(path_str, api::fs::OpenMode::Read)
+                    .map_err(|_| SyscallError::FileNotFound)?
+            };
+
+            // Resolve the cell ID of the calling task (distinct from task ID).
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+
+            // Allocate capability; file starts as Some (unparked).
+            let cap_id = crate::cell::cap_registry::CAP_TABLE.lock().alloc(
+                cell_id,
+                crate::cell::cap_registry::CapResource::File { file: Some(file) },
+                api::cap::CapPerms::FILE_READ.0,
+            );
+            Ok(cap_id.0 as usize)
+        }
+
+        Syscall::ReadCap { cap_id, buf_ptr, buf_len } => {
+            if buf_len == 0 {
+                return Ok(0);
+            }
+            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
+
+            // Resolve caller's cell_id.
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+
+            // Park the file Box (releases the cap-table lock so other caps are unblocked).
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+
+            // Perform I/O outside the cap-table lock.
+            // SAFETY: buf_ptr validated; SUM=1 allows S-mode writes to U-mode pages.
+            let read_result = unsafe {
+                let buf = core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len);
+                boxed_file.read(buf)
+            };
+
+            // Return the file Box (unpark). No-op if the cap was revoked during I/O.
+            crate::cell::cap_registry::CAP_TABLE.lock()
+                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+
+            // Return bytes_read, or usize::MAX on I/O error (distinguishable from 0 = EOF).
+            match read_result {
+                Ok(n) => Ok(n),
+                Err(_) => Err(SyscallError::Unknown), // maps to usize::MAX at ABI level
+            }
+        }
+
+        Syscall::CloseCap { cap_id } => {
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+            let mut table = crate::cell::cap_registry::CAP_TABLE.lock();
+            table.verify(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+            table.revoke(crate::cell::cap_registry::CapId(cap_id as u64));
+            Ok(0)
+        }
+
         Syscall::SpawnFromMem { args_ptr } => {
             if args_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
@@ -786,6 +888,9 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::Exec => Syscall::Exec { path_ptr: a0, path_len: a1 },
         ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { args_ptr: a0 },
         ViSyscall::SpawnFromPath => Syscall::SpawnFromPath { path_ptr: a0, path_len: a1 },
+        ViSyscall::OpenCap   => Syscall::OpenCap { path_ptr: a0, path_len: a1 },
+        ViSyscall::ReadCap   => Syscall::ReadCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::CloseCap  => Syscall::CloseCap { cap_id: a0 },
         ViSyscall::Wait => Syscall::Wait { pid: a0 },
         ViSyscall::ShmAlloc => Syscall::ShmAlloc { size: a0 },
         ViSyscall::ShmMap => Syscall::ShmMap { handle: a0, target_pid: a1 },

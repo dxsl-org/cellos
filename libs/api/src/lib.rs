@@ -15,6 +15,7 @@ pub use types::*;
 
 pub mod allocator;
 pub mod async_io;
+pub mod cap;
 pub mod benchmark;
 pub mod block;
 pub mod config;

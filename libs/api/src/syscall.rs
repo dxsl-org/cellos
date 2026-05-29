@@ -20,6 +20,15 @@ pub enum ViSyscall {
     /// Spawn a cell by reading its ELF from a VFS path.
     /// ABI: a0 = path_ptr, a1 = path_len; returns cell id or error code.
     SpawnFromPath = 12,
+    /// Open a file by path, returning a kernel capability ID.
+    /// ABI: a0 = path_ptr, a1 = path_len → CapId (> 0) on success.
+    OpenCap = 13,
+    /// Read bytes from a cap-backed file.
+    /// ABI: a0 = cap_id, a1 = buf_ptr, a2 = buf_len → bytes_read.
+    ReadCap = 14,
+    /// Revoke a capability (close).
+    /// ABI: a0 = cap_id → 0 on success.
+    CloseCap = 15,
     Wait = 8,          // Wait for task
     Yield = 104,       // Linux sched_yield is 24, but we use 104 in current code
     SetTimer = 35,     // Added SetTimer
@@ -60,6 +69,9 @@ impl From<usize> for ViSyscall {
             6 => ViSyscall::Exec,
             10 => ViSyscall::SpawnFromMem,
             12 => ViSyscall::SpawnFromPath,
+            13 => ViSyscall::OpenCap,
+            14 => ViSyscall::ReadCap,
+            15 => ViSyscall::CloseCap,
             8 => ViSyscall::Wait,
             104 => ViSyscall::Yield,
             35 => ViSyscall::SetTimer,

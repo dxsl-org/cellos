@@ -97,6 +97,31 @@ impl Deref for FileHandle {
     }
 }
 
+// ─── Capability-based file handle ────────────────────────────────────────────
+
+/// A capability-scoped handle to an open file.
+///
+/// Wraps a kernel-assigned [`CapId`].  The capability is single-owner: moving
+/// `ViFileHandle` transfers ownership; `close` revokes the capability.  Dropping
+/// without calling `close` is safe but leaks the kernel resource until the cell exits.
+///
+/// Operations are synchronous in the current implementation.  Future versions
+/// may offer async variants once the async executor is extended.
+#[must_use = "dropping a ViFileHandle without calling close() leaks the kernel capability"]
+pub struct ViFileHandle(crate::cap::CapId);
+
+impl ViFileHandle {
+    /// Create from a raw capability ID returned by the kernel.
+    pub fn from_cap(id: crate::cap::CapId) -> Self {
+        Self(id)
+    }
+
+    /// Return the underlying capability ID.
+    pub fn cap_id(&self) -> crate::cap::CapId {
+        self.0
+    }
+}
+
 impl DerefMut for FileHandle {
     fn deref_mut(&mut self) -> &mut Self::Target {
         // Double deref: &mut Box<T> -> &mut T

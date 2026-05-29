@@ -130,6 +130,52 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
     }
 }
 
+/// Open a file by path and return a capability ID.
+///
+/// Returns `Ok(cap_id)` where `cap_id > 0`, or `Err` if the path is not found.
+///
+/// # Errors
+/// Returns `SyscallError::FileNotFound` if the path does not exist.
+pub fn sys_open_cap(path: &str) -> Result<u64, SyscallError> {
+    // SAFETY: path is a valid UTF-8 str; kernel copies it before returning.
+    let ret = unsafe {
+        syscall(ViSyscall::OpenCap, path.as_ptr() as usize, path.len(), 0, 0)
+    };
+    if ret > 0 {
+        Ok(ret as u64)
+    } else {
+        Err(SyscallError::FileNotFound)
+    }
+}
+
+/// Read bytes from a cap-backed file into `buf`.
+///
+/// # Errors
+/// Returns `SyscallError::PermissionDenied` if the caller does not own the cap.
+pub fn sys_read_cap(cap_id: u64, buf: &mut [u8]) -> Result<usize, SyscallError> {
+    // SAFETY: buf is a valid mutable slice; kernel writes into it.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::ReadCap,
+            cap_id as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    if ret >= 0 {
+        Ok(ret as usize)
+    } else {
+        Err(SyscallError::Unknown)
+    }
+}
+
+/// Revoke a capability (close the associated resource).
+pub fn sys_close_cap(cap_id: u64) {
+    // SAFETY: no memory access; just passes an integer to the kernel.
+    unsafe { syscall(ViSyscall::CloseCap, cap_id as usize, 0, 0, 0) };
+}
+
 pub fn sys_wait(pid: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::Wait, pid, 0, 0, 0);
