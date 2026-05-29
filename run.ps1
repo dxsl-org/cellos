@@ -9,10 +9,24 @@ if (Get-Command $qemu -ErrorAction SilentlyContinue) {
     exit 1
 }
 
-$kernel = "target/riscv64gc-unknown-none-elf/debug/vios-kernel"
-$disk = "disk_v3.img"
+# Use release kernel for production boot (debug is too large for 128MB).
+# Release kernel requires 512MB RAM to fit: ~52MB kernel + 64MB heap + cells + stacks.
+$kernel = "target/riscv64gc-unknown-none-elf/release/vios-kernel"
+$disk   = "disk_v3.img"
 
-$cpu = "rv64,c=true"
+# Build release kernel if not present
+if (-not (Test-Path $kernel)) {
+    Write-Host "Release kernel not found — building..."
+    cargo build --release -p vios-kernel
+}
+
 Write-Host "Starting ViOS in QEMU (Nographic Mode)..."
 Write-Host "Tip: Press 'Ctrl-a' then 'x' to exit QEMU."
-& $qemu -machine virt -cpu $cpu -smp 1 -m 128M -nographic -serial mon:stdio -bios default -kernel $kernel -drive "file=$disk,format=raw,id=hd0,if=none" -device virtio-blk-device,drive=hd0
+Write-Host "Boot sequence: OpenSBI → kernel → init → VFS → config → shell (ViOS>)"
+Write-Host ""
+
+# 512M: kernel(52MB) + heap(64MB) + cells + stacks fit comfortably.
+# VirtIO block passes disk_v3.img which contains the cell bootstrap table.
+& $qemu -machine virt -m 512M -nographic -bios default -kernel $kernel `
+        -drive file=$disk,format=raw,id=hd0,if=none `
+        -device virtio-blk-device,drive=hd0

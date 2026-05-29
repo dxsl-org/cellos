@@ -16,11 +16,26 @@ created: 2026-05-28
 **Primary target:** RISC-V 64 (QEMU virt), nightly Rust `no_std`
 **Secondary targets:** AArch64, x86_64, RV32, AArch32
 
-## Current Baseline (v0.2.0 "Mycelium Alpha")
+## Current Baseline (v0.2.1-dev "Mycelium Active" — 2026-05-29)
 
-- 21 crates, ~12,600 LOC Rust
-- Working: RV64 HAL (SV39, PLIC, SBI), kernel ELF loader, basic shell REPL, RamFS VFS, config KV store, POSIX shim (PR#6), async executor (PR#4)
-- Broken: VirtIO block hangs, keyboard deadlock after 1 keystroke, ARM/x86/RV32 stubs only, no CI, no external ELF loading
+**🎉 BOOT MILESTONE ACHIEVED**: ViOS boots to interactive shell prompt in QEMU!
+
+- 35 crates, ~35,000+ LOC Rust
+- **Working**: Full boot chain → OpenSBI → kernel → init → VFS → config → **shell (`ViOS >`)** 
+- VirtIO block driver active (disk_v3.img with cell bootstrap table)
+- VFS Service v0.2 running (RamFS + mkdir/rmdir/unlink IPC)
+- Config Service running (KV store)
+- Shell running with parser (pipes/redirects/background), 20+ built-in commands
+- RV64, AArch64, x86_64, RV32, AArch32 HALs implemented
+- Security: STRIDE model, fuzzing infra, capability model with lease/grant
+- Hot-swap infrastructure: ViStateTransfer on all 3 service cells
+
+**Key boot fixes applied (2026-05-29)**:
+- `app.ld` / `shell.ld` / `vfs.ld` / `config.ld`: cells moved to SV39 user-space VAs (< 0x80000000)
+- `USER_VADDR_MAX`: fixed to real SV39 user half (256GB, was wrong at 2GB)
+- Kernel heap: 64MB actual (was claiming 64MB but only allocating 16MB)
+- VirtIO GPU probe: `mem::forget` prevents dropping MmioTransport from resetting block device
+- run.ps1: updated to release kernel + 512MB RAM + VirtIO block
 
 ## Phase Index
 

@@ -86,14 +86,14 @@ jobs:
           if-no-files-found: error
 
   qemu-boot:
-    name: QEMU Boot Test
+    name: QEMU Boot Test (512M RAM)
     runs-on: ubuntu-24.04
     needs: build
     steps:
       - uses: actions/checkout@v4
 
       - name: Install QEMU
-        run: sudo apt-get update && sudo apt-get install -y qemu-system-misc
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc
 
       - name: Download kernel artifact
         uses: actions/download-artifact@v4
@@ -105,7 +105,9 @@ jobs:
         run: chmod +x target/riscv64gc-unknown-none-elf/release/vios-kernel
 
       - name: Run boot test
-        run: bash scripts/qemu-boot-test.sh
+        # Uses 512M RAM (required: release kernel ~52MB + 64MB heap).
+        # Checks for FAT32 mount (always present) or full shell prompt (if disk available).
+        run: bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/vios-kernel
 
   geiger-gate:
     name: Unsafe regression (cells/ must have 0 unsafe)
