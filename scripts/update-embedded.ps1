@@ -21,11 +21,17 @@ $binDir  = "$target\$buildProfile"
 $embedded = "kernel\src\embedded"
 
 Write-Host "Building embedded cells in $buildProfile mode..."
-$buildArgs = @("-p", "app-init", "-p", "app-shell", "-p", "service-vfs", "-p", "service-config")
+$buildArgs = @(
+    "-p", "app-init",
+    "-p", "app-shell",
+    "-p", "service-vfs",
+    "-p", "service-config"
+)
 if (-not $Debug) { $buildArgs = @("--release") + $buildArgs }
 cargo build @buildArgs 2>&1 | Select-Object -Last 5
 
-# Map binary name → embedded filename
+# Map binary name → embedded filename (kernel_fs.img contents).
+# Only these 4 cells are embedded in the kernel binary; others load via SpawnFromPath.
 $cells = @(
     @{ Bin = "app-init";       Dst = "init"   },
     @{ Bin = "app-shell";      Dst = "shell"  },
@@ -33,7 +39,7 @@ $cells = @(
     @{ Bin = "service-config"; Dst = "config" }
 )
 
-# Lua is always release-only (C build)
+# Lua is always release-only (C build via cc crate)
 $luaBin = "$target\release\lua"
 if (Test-Path $luaBin) {
     $cells += @{ Bin = "lua"; Dst = "lua"; FullPath = $luaBin }

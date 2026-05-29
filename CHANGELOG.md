@@ -1,3 +1,33 @@
+## [Unreleased] - v0.2.2-dev (2026-05-30)
+
+### Added
+
+**Complete 8-Task Boot Chain on 128MB RAM**
+
+All services wired and running in QEMU:
+- Task 3: VFS Service (RamFS + IPC) at 0x02000000
+- Task 4: Config Service (KV store + ViStateTransfer) at 0x00800000
+- Task 5: Input Service (US QWERTY + focus dispatch) at 0x04000000 — Phase 14 ✅
+- Task 6: Network Service (smoltcp + VirtIO NIC + DHCP) at 0x06000000 — Phase 15 ✅  
+- Task 7: Compositor (software blending + VirtIO GPU) at 0x0A000000 — Phase 16 ✅
+- Task 8: Shell ("ViOS >") at 0x08000000 — Phase 17 ✅
+
+**Performance**: All bootstrap table entries use release builds (10-100x smaller than debug).
+  VFS: 5.7MB→3MB, Net: 4.2MB→~1MB, Shell: 3.2MB→98KB, Compositor: 38KB
+
+**QEMU Configuration** (`run.ps1`):
+  - VirtIO block (disk_v3.img with 8 cell entries)
+  - VirtIO NIC (user-mode, DHCP assigns 10.0.2.15)
+  - VirtIO keyboard (for input service)
+  - VirtIO GPU (for compositor rendering)
+
+**Other improvements**:
+- Lua `os.execute()`: real implementation via sys_spawn_from_path() (was stub)
+- UART input: drains RX_BUFFER AND polls SBI (covers both S-mode and M-mode UART IRQ paths)
+- VirtIO input IRQ: calls poll_events() immediately on IRQ fire (reduces input latency)
+- Boot log: keystroke events demoted to trace level (no per-key INFO spam)
+- gen_disk.ps1: auto-generates both kernel_fs.img and disk_v3.img in one run
+- mkfat32.py: full subdirectory support (/bin/, /etc/ in kernel_fs.img)
 # ViOS Changelog
 
 All notable changes to ViOS are documented here.
@@ -49,3 +79,4 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 [Unreleased]: https://github.com/vi-group/ViCell/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/vi-group/ViCell/releases/tag/v0.2.0
+

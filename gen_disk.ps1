@@ -27,6 +27,16 @@ cargo build --release `
     -p service-input -p service-net -p service-compositor 2>&1 | Select-Object -Last 5
 cargo build --release -p app-bench 2>&1 | Select-Object -Last 3
 
+# 1b. Update kernel embedded cells (init, shell, vfs, config) from release builds.
+# These 4 cells are embedded in kernel_fs.img via include_bytes!.
+Write-Host "Updating kernel embedded cells..."
+$embedded = "kernel\src\embedded"
+Copy-Item "$rel_dir\app-init"       "$embedded\init"   -Force
+Copy-Item "$rel_dir\app-shell"      "$embedded\shell"  -Force
+Copy-Item "$rel_dir\service-vfs"    "$embedded\vfs"    -Force
+Copy-Item "$rel_dir\service-config" "$embedded\config" -Force
+if (Test-Path "$rel_dir\lua") { Copy-Item "$rel_dir\lua" "$embedded\lua" -Force }
+
 # 2. Paths — all bootstrap table entries use RELEASE builds.
 $init_bin   = "$rel_dir\app-init"
 $shell_bin  = "$rel_dir\app-shell"
