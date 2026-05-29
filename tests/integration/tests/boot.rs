@@ -109,3 +109,25 @@ fn shell_executes_echo() {
         panic!("shell did not echo command: {e}\n--- output ---\n{}", qemu.dump())
     });
 }
+
+/// Phase 10/18: the Lua runtime cell must load and execute. Spawning `/bin/lua`
+/// from the shell should print the Lua banner, proving the C-linked cell boots,
+/// initialises its interpreter, and runs its Rust `main`.
+///
+/// Note: arguments are not yet passed to spawned cells (`sys_spawn_from_path`
+/// takes only a path), so `lua -e "..."` cannot be tested until argv passing
+/// lands. The banner is sufficient proof that the runtime executes.
+#[test]
+fn lua_runtime_executes() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt not reached: {e}"));
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("lua");
+    qemu.wait_for("Lua 5.4 on ViOS", 20).unwrap_or_else(|e| {
+        panic!("lua runtime did not start: {e}\n--- output ---\n{}", qemu.dump())
+    });
+}

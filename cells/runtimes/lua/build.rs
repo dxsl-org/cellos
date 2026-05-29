@@ -46,6 +46,12 @@ fn main() {
 
     build.compile("lua54");
 
+    // Place the cell at a unique user-space VA (0x0C000000). Without this the
+    // linker defaults to 0x10000, which overlapped other mappings and stopped
+    // the spawned cell from running.
+    println!("cargo:rustc-link-arg=-Tcells/runtimes/lua/lua.ld");
+    println!("cargo:rerun-if-changed=cells/runtimes/lua/lua.ld");
+
     // Link picolibc/newlib from the riscv-none-elf-gcc toolchain so the C
     // runtime symbols Lua needs (setjmp, longjmp, strchr, frexp, fwrite,
     // strtod, sprintf, _impure_ptr, ...) resolve.  Without this the cell
