@@ -1,0 +1,1 @@
+- [ViOS Functional Audit 2026-05-30](project-vios-functional-status.md) — 12 complete, 6 partial; 5 bugs fixed; 100% claim was file-based, not functional
