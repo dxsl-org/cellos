@@ -3,12 +3,19 @@ import os
 import sys
 
 def create_fat32_image(output_path, files):
-    # Parameters
+    # Parameters — auto-size the disk to fit all input files with 20% slack.
     sector_size = 512
-    sector_count = 81920 # 40MB
     reserved_sectors = 32
     fats = 2
     root_cluster = 2
+
+    # Compute total file data size and choose a disk size that fits.
+    total_file_bytes = sum(os.path.getsize(src) for src, _ in files if os.path.exists(src))
+    # FAT32 overhead: reserved (16KB) + 2 FATs + root dir. Add 20% slack.
+    needed_bytes = int(total_file_bytes * 1.2) + 1 * 1024 * 1024  # 1MB overhead
+    # Round up to at least 40MB and align to 4MB boundary.
+    min_sectors = max(81920, (needed_bytes + sector_size - 1) // sector_size)
+    sector_count = ((min_sectors + 8191) // 8192) * 8192  # align to 4MB
     
     # Read all input files
     file_entries = []
@@ -98,16 +105,21 @@ def create_fat32_image(output_path, files):
         # 4. FAT Tables & Data Placement
         fat_data = bytearray(fat_sectors * sector_size)
         
-        # Init 0, 1, 2
+        # Init FAT entries 0 and 1 (reserved).
         struct.pack_into('<I', fat_data, 0, 0x0FFFFFF8)
         struct.pack_into('<I', fat_data, 4, 0x0FFFFFFF)
-        struct.pack_into('<I', fat_data, 8, 0x0FFFFFFF) # Root Cluster 2 is EOC (Dir is in Cluster 2 only?)
-        
-        # Assign clusters to files
-        current_data_cluster = 3 # Start allocating from 3
-        
-        # Root Dir is fixed at Cluster 2. We assume it fits in 1 cluster for simplicity (4KB = 128 entries).
-        # We need to write Root Dir entries later.
+
+        # Root directory: use as many clusters as needed (32 bytes/entry, 512 bytes/cluster = 16 per cluster).
+        num_files = len(file_entries)
+        root_dir_clusters = max(1, (num_files + 15) // 16)  # 16 entries per cluster
+        for i in range(root_dir_clusters):
+            if i < root_dir_clusters - 1:
+                struct.pack_into('<I', fat_data, (2 + i) * 4, 3 + i)   # chain
+            else:
+                struct.pack_into('<I', fat_data, (2 + i) * 4, 0x0FFFFFFF)  # EOC
+
+        # Assign clusters to files (start after root dir clusters).
+        current_data_cluster = 2 + root_dir_clusters
         
         clusters_map = {} # dst -> start_cluster
         
@@ -151,12 +163,15 @@ def create_fat32_image(output_path, files):
             f.write(struct.pack('<H', 0))
             f.write(struct.pack('<H', 0))
             f.write(struct.pack('<H', 0))
-            f.write(struct.pack('<H', 0)) # High Cluster 0
+            # FAT32 stores cluster number split: HIGH (bits 31-16) then LOW (bits 15-0).
+            start        = clusters_map[entry['dst']]
+            high_cluster = (start >> 16) & 0xFFFF
+            low_cluster  =  start        & 0xFFFF
+            f.write(struct.pack('<H', high_cluster)) # High Cluster
             f.write(struct.pack('<H', 0))
             f.write(struct.pack('<H', 0))
-            
-            start = clusters_map[entry['dst']]
-            f.write(struct.pack('<H', start)) # Low Cluster
+
+            f.write(struct.pack('<H', low_cluster)) # Low Cluster
             f.write(struct.pack('<I', entry['size']))
 
         # 6. Write File Data

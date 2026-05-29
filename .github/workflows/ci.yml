@@ -109,6 +109,29 @@ jobs:
         # Checks for FAT32 mount (always present) or full shell prompt (if disk available).
         run: bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/vios-kernel
 
+  unit-tests:
+    name: Host unit tests (types + api)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run host-side unit tests
+        # libs/types and libs/api use cfg_attr(not(test), no_std) so they can
+        # run on the host without a bare-metal target.
+        run: |
+          cargo test -p types --target x86_64-unknown-linux-gnu
+          cargo test -p api   --target x86_64-unknown-linux-gnu
+
   geiger-gate:
     name: Unsafe regression (cells/ must have 0 unsafe)
     runs-on: ubuntu-24.04
