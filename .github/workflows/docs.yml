@@ -1,0 +1,39 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'libs/**', 'kernel/**', 'cells/**', 'hal/**']
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rustdoc:
+    name: Build and deploy rustdoc
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+        with: { cache-on-failure: true }
+      - name: Build rustdoc
+        run: >
+          cargo doc --workspace --no-deps
+          --target riscv64gc-unknown-none-elf
+          -Z build-std=core,alloc
+      - name: Generate llms.txt
+        run: bash scripts/gen-llms-txt.sh
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: target/riscv64gc-unknown-none-elf/doc
+          destination_dir: api

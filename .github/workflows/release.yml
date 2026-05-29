@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+      - uses: Swatinem/rust-cache@v2
+        with: { cache-on-failure: true }
+      - name: Install git-cliff
+        run: cargo install --locked git-cliff
+      - name: Generate CHANGELOG for this tag
+        run: git-cliff --current > RELEASE_NOTES.md
+      - name: Update full CHANGELOG.md
+        run: |
+          git-cliff --output CHANGELOG.md
+          git config user.name "ViOS Team"
+          git config user.email "ci@vios"
+          git add CHANGELOG.md
+          git commit -m "chore(release): update CHANGELOG" || true
+      - name: Build kernel (RV64)
+        run: >
+          cargo build --release
+          --target riscv64gc-unknown-none-elf
+          -Z build-std=core,alloc
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          files: target/riscv64gc-unknown-none-elf/release/vios-kernel

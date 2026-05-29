@@ -1,0 +1,29 @@
+# ViOS
+
+> ViOS is a Rust no_std OS using Cellular Single Address Space + Language-Based Isolation.
+
+## Core
+
+- [Architecture Overview](docs/ARCHITECTURE.md): System design and Cell lifecycle
+- [Coding Guide](docs/CODING_GUIDE.md): How to write ViOS code
+- [Patterns](docs/PATTERNS.md): Common design patterns
+- [API Reference](docs/API.md): Public API for Cells and the kernel
+- [Onboarding](docs/ONBOARDING.md): Getting started
+
+## Technical Design
+
+- [Memory Model](docs/02-memory.md): SAS, frame allocator, capability system
+- [Hardware Abstraction](docs/04-hardware.md): Multi-arch HAL
+- [VFS Architecture](docs/09-vfs.md): Virtual filesystem design
+- [Testing Strategy](docs/10-testing.md): Test pyramid and QEMU harness
+
+## Security
+
+- [Security Model](docs/security-model.md): STRIDE threat model
+- [Code Standards](docs/code-standards.md): Unsafe management
+
+## Optional
+
+- [System Architecture](docs/system-architecture.md): VirtIO, interrupts, paging
+- [Project Roadmap](docs/development-roadmap.md): v0.2 to v1.0 milestones
+- [Changelog](CHANGELOG.md): Version history
