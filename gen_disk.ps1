@@ -31,12 +31,7 @@ $shell_bin  = "$target_dir\app-shell"
 $vfs_bin    = "$target_dir\service-vfs"
 $config_bin = "$target_dir\service-config"
 $lua_bin    = "$rel_dir\lua"
-$mpy_bin    = "$rel_dir\micropython"
 $bench_bin  = "$target_dir\bench"       # Phase 22 benchmark cell
-# Phase 17b utility binaries
-$util_bins  = @("wc","head","tail","grep","sort","sed","cp","mv","rm","mkdir","touch") | ForEach-Object { @{ Name = $_; Path = "$target_dir\$_" } }
-$sys_bins   = @("ps","env","uname","date","free","shutdown") | ForEach-Object { @{ Name = $_; Path = "$target_dir\$_" } }
-$net_bins   = @("ping","curl","nc","wget") | ForEach-Object { @{ Name = $_; Path = "$target_dir\$_" } }
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -60,21 +55,19 @@ if (-not (Test-Path $bench_bin)) {
     $bench_bin = $null
 }
 
-# 3. Generate FAT32 image
-Write-Host "Generating FAT32 filesystem (disk_v3.img)..."
-$fat_args = @("disk_v3.img", $init_bin, "init", $shell_bin, "shell",
-              $vfs_bin, "vfs", $config_bin, "config")
-if ($lua_bin)   { $fat_args += @($lua_bin, "lua") }
-if (Test-Path $mpy_bin) { $fat_args += @($mpy_bin, "micropython") }
-if ($bench_bin) { $fat_args += @($bench_bin, "bench") }
-# Phase 17b: standard, system, and network utilities
-foreach ($b in $util_bins + $sys_bins + $net_bins) {
-    if (Test-Path $b.Path) { $fat_args += @($b.Path, $b.Name) }
-    else { Write-Warning "  Skipping /bin/$($b.Name) — not found (build first)" }
-}
-python "$tools_dir\mkfat32.py" @fat_args
+# 3. Create a blank disk image (40MB = 81920 sectors).
+# The FAT32 region is reserved for future use by the VFS Cell once it can
+# access VirtIO block sectors directly.  For now, SpawnFromPath reads cells
+# exclusively from the bootstrap table in step 4.
+Write-Host "Creating blank disk image (disk_v3.img)..."
+$diskSize = 81920 * 512     # 40 MB — matches CELL_TABLE_BASE_LBA = 82000
+$blankImg = New-Object byte[] $diskSize
+[System.IO.File]::WriteAllBytes("disk_v3.img", $blankImg)
+Write-Host "  Blank 40 MB image created."
 
-# 4. Append cell bootstrap table (for kernel early loader)
+# 4. Append cell bootstrap table (for kernel early loader).
+# Only include the cells that the kernel early loader needs: VFS, config, shell.
+# Optionally include lua and bench when built.
 Write-Host "Appending cell bootstrap table..."
 $table_args = @(
     "disk_v3.img",
