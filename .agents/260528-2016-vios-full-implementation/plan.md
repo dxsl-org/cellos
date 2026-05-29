@@ -36,7 +36,7 @@ created: 2026-05-28
 | 08 | Multi-Arch HAL — ARM AArch64 | 80h | P1 | **complete** | none |
 | 09 | Multi-Arch HAL — x86_64 | 80h | P1 | **complete** | none |
 | 10 | Lua C Binding via cc Crate | 40h | P1 | **complete** | none |
-| 11 | Unit & Integration Tests | 80h | P2 | pending | 03, 04 |
+| 11 | Unit & Integration Tests | 80h | P2 | partial | 03, 04 |
 | 12 | Security Audit Infrastructure | 80h | P1 | pending | 02 |
 | 13 | Complete VFS Service | 100h | P2 | pending | 04, 06 |
 | 14 | Complete Input Service | 80h | P2 | pending | 05, 13 |

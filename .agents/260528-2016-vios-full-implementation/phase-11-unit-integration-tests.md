@@ -1,6 +1,6 @@
 # Phase 11 — Unit & Integration Tests
 
-**Effort:** 80h | **Priority:** P2 | **Status:** pending | **Blockers:** Phase 03, Phase 04
+**Effort:** 80h | **Priority:** P2 | **Status:** partial | **Blockers:** Phase 03, Phase 04
 
 ## Overview
 
