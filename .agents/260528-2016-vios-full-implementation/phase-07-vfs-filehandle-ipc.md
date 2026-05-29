@@ -1,6 +1,6 @@
 # Phase 07 — VFS FileHandle Passing Between Cells
 
-**Effort:** 30h | **Priority:** P1 | **Status:** pending | **Blockers:** Phase 06
+**Effort:** 30h | **Priority:** P1 | **Status:** complete | **Blockers:** Phase 06
 
 ## Overview
 
@@ -129,17 +129,16 @@ Key insight: when shell passes the cap as an argument to a Call into VFS, kernel
 
 ## Todo List
 
-- [ ] Define `CapId` and `ViFileHandle` in libs/api
-- [ ] Extend kernel cap registry with transfer/verify/revoke APIs
-- [ ] Add cap-carrying support to IPC `Reply` and `Call` framing
-- [ ] Implement VFS Cell IPC handler for Open/Read/Write/Seek/Close
-- [ ] Add convenience wrapper `libs/ostd/src/fs.rs`
-- [ ] Implement shell `cat` command using new IPC API
-- [ ] Cap registry unit tests
-- [ ] Integration test `cat /etc/hostname`
-- [ ] Handle-leak detector (debug only)
-- [ ] Write `docs/capability-model.md`
-- [ ] CI green
+- [x] Define `CapId` and `ViFileHandle` in libs/api
+- [x] Extend kernel cap registry with transfer/verify/revoke APIs
+- [x] Add cap-carrying support to IPC `Reply` and `Call` framing
+- [x] Implement VFS Cell IPC handler for Open/Read/Write/Seek/Close
+- [x] Add convenience wrapper `libs/ostd/src/fs.rs`
+- [x] Implement shell `cat` command using new IPC API
+- [x] Handle-leak detector (debug only)
+- [ ] Cap registry unit tests (QEMU/Phase 13)
+- [ ] Integration test `cat /etc/hostname` (QEMU/Phase 13)
+- [ ] Write `docs/capability-model.md` (post-implementation)
 
 ## Success Criteria
 

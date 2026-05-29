@@ -36,6 +36,9 @@ pub mod io;
 /// Filesystem.
 pub mod fs;
 
+/// Shared readline / REPL state machine (used by Lua, MicroPython, and Shell).
+pub mod repl;
+
 pub mod prelude;
 
 /// Executor

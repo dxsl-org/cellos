@@ -3,8 +3,9 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* App base address - Relocated to avoid VFS collision (0x88500000 + 4MB) */
-    . = 0x88A00000;
+    /* Shell user-space base address — RISC-V SV39 user VA (< 0x8000_0000).
+     * 128 MB offset: above VFS (0x02000000 + up to 16MB) and config (0x00010000). */
+    . = 0x08000000;
     
     .text : {
         *(.text.boot)

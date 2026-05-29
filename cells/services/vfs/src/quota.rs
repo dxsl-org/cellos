@@ -43,4 +43,17 @@ impl QuotaTracker {
     pub fn used(&self, owner: CellId) -> u64 {
         self.used.get(&owner.0).copied().unwrap_or(0)
     }
+
+    /// Number of cells with recorded usage (for state-transfer sizing).
+    pub fn entry_count(&self) -> usize { self.used.len() }
+
+    /// Return all (cell_id, bytes_used) pairs for serialisation.
+    pub fn all_entries(&self) -> alloc::vec::Vec<(u64, u64)> {
+        self.used.iter().map(|(&k, &v)| (k, v)).collect()
+    }
+
+    /// Restore a previously serialised usage entry (called during hot-swap deserialise).
+    pub fn restore(&mut self, owner: CellId, bytes: u64) {
+        self.used.insert(owner.0, bytes);
+    }
 }

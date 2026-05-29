@@ -56,6 +56,16 @@ pub trait ViFileSystem: Send + Sync {
         let _ = path;
         Err(ViError::NotSupported)
     }
+
+    /// List directory entries at `path`.
+    ///
+    /// Returns `Err(NotADirectory)` if path exists but is a file.
+    /// Returns `Err(NotFound)` if path does not exist.
+    /// Returns `Err(NotSupported)` if the filesystem does not implement directory listing.
+    fn readdir(&self, path: &str) -> ViResult<alloc::vec::Vec<DirEntry>> {
+        let _ = path;
+        Err(ViError::NotSupported)
+    }
 }
 
 /// File interface.

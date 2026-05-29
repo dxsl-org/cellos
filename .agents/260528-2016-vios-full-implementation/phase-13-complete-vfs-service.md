@@ -1,6 +1,6 @@
 # Phase 13 — Complete VFS Service
 
-**Effort:** 100h | **Priority:** P2 | **Status:** pending | **Blockers:** Phase 04, Phase 06
+**Effort:** 100h | **Priority:** P2 | **Status:** partial | **Blockers:** Phase 04, Phase 06
 
 ## Overview
 
@@ -128,17 +128,17 @@ Internal state of VFS Cell:
 
 ## Todo List
 
-- [ ] Add `fatfs` dependency to vfs cell
-- [ ] Implement `FatFsAdapter` wrapping the fatfs crate
-- [ ] Extend `ViFileSystem` trait with mkdir/rmdir/unlink/stat/readdir
-- [ ] Implement IPC dispatch in vfs/src/main.rs
-- [ ] Implement mount/unmount
-- [ ] Implement quota tracking
-- [ ] Extend OSTD wrapper (File::create, write_all, Dir::read_entries)
-- [ ] Write `scripts/format-disk.sh`; regenerate disk image
-- [ ] Integration test `tests/integration/vfs_full.rs`
-- [ ] Write `docs/vfs-api.md`
-- [ ] Bench: ≥ 5 MB/s read, ≥ 2 MB/s write
+- [ ] Add `fatfs` dependency to vfs cell (deferred — FAT32 needs VirtIO stable)
+- [ ] Implement `FatFsAdapter` wrapping the fatfs crate (deferred)
+- [x] Extend `ViFileSystem` trait with readdir (mkdir/rmdir/stat already present)
+- [x] Implement IPC dispatch: OP_MKDIR, OP_RMDIR, OP_UNLINK added to vfs/src/main.rs
+- [x] Implement mount table (MountTable with "/" and "/tmp" entries)
+- [x] Implement quota tracking (QuotaTracker with 32 MiB default per cell)
+- [ ] Extend OSTD wrapper (File::create, Dir::read_entries — deferred to FAT32 phase)
+- [x] Write `scripts/format-disk.ps1`; disk image regeneration documented
+- [ ] Integration test `tests/integration/vfs_full.rs` (QEMU + FAT32 deferred)
+- [x] Write `docs/vfs-api.md` (complete IPC protocol reference)
+- [ ] Bench: ≥ 5 MB/s read, ≥ 2 MB/s write (requires VirtIO-FAT)
 - [ ] CI green
 
 ## Success Criteria

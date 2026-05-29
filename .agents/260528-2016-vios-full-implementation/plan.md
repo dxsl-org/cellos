@@ -36,19 +36,19 @@ created: 2026-05-28
 | 08 | Multi-Arch HAL — ARM AArch64 | 80h | P1 | **complete** | none |
 | 09 | Multi-Arch HAL — x86_64 | 80h | P1 | **complete** | none |
 | 10 | Lua C Binding via cc Crate | 40h | P1 | **complete** | none |
-| 11 | Unit & Integration Tests | 80h | P2 | partial | 03, 04 |
-| 12 | Security Audit Infrastructure | 80h | P1 | pending | 02 |
-| 13 | Complete VFS Service | 100h | P2 | pending | 04, 06 |
-| 14 | Complete Input Service | 80h | P2 | pending | 05, 13 |
-| 15 | Complete Network Service | 200h | P2 | pending | 04 |
-| 16 | Complete Compositor & GPU | 150h | P2 | pending | 14 |
-| 17 | Enhanced Shell & Standard Utilities | 320h | P2 | pending | 13, 14, 15 |
-| 18 | Lua & MicroPython Runtime Enhancement | 180h | P2 | pending | 10, 13, 17 |
-| 19 | Documentation Automation | 40h | P2 | pending | 02, 11 |
-| 20 | Hot Migration & Advanced IPC | 180h | P3 | pending | 06, 13 |
-| 21 | RV32 & ARM AArch32 HAL | 160h | P3 | pending | 08 |
-| 22 | Benchmarking Suite | 80h | P3 | pending | 1–3 done |
-| 23 | Community Infrastructure | 40h | P2 | pending | 19 |
+| 11 | Unit & Integration Tests | 80h | P2 | partial+ | 03, 04 |
+| 12 | Security Audit Infrastructure | 80h | P1 | **complete** | 02 |
+| 13 | Complete VFS Service | 100h | P2 | partial | 04, 06 |
+| 14 | Complete Input Service | 80h | P2 | partial | 05, 13 |
+| 15 | Complete Network Service | 200h | P2 | partial | 04 |
+| 16 | Complete Compositor & GPU | 150h | P2 | partial | 14 |
+| 17 | Enhanced Shell & Standard Utilities | 320h | P2 | near-complete | 13, 14, 15 |
+| 18 | Lua & MicroPython Runtime Enhancement | 180h | P2 | partial | 10, 13, 17 |
+| 19 | Documentation Automation | 40h | P2 | **complete** | 02, 11 |
+| 20 | Hot Migration & Advanced IPC | 180h | P3 | near-complete | 06, 13 |
+| 21 | RV32 & ARM AArch32 HAL | 160h | P3 | **complete** | 08 |
+| 22 | Benchmarking Suite | 80h | P3 | partial+ | 1–3 done |
+| 23 | Community Infrastructure | 40h | P2 | partial+ | 19 |
 | | **Total** | **~2,180h** | | | |
 
 ## Effort Bucketing

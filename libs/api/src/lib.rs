@@ -5,7 +5,9 @@
 
 //! Public API for ViOS.
 
-#![no_std]
+// Disable `no_std` when running the test harness so `#[test]` can link
+// against the host libstd.  All production builds remain bare-metal.
+#![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
 
@@ -20,8 +22,10 @@ pub mod benchmark;
 pub mod block;
 pub mod config;
 pub mod driver;
+pub mod display;
 pub mod fs;
 pub mod hotswap;
+pub mod input;
 pub mod net;
 pub mod posix;
 pub mod serde_helpers;
@@ -32,3 +36,5 @@ pub mod vm;
 
 
 pub use syscall::ViSyscall;
+
+pub mod syscall_tests;

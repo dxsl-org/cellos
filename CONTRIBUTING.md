@@ -1,48 +1,218 @@
 # Contributing to ViOS
 
-Welcome! ViOS is a `no_std` Rust OS with a Cellular Single Address Space architecture.
+Welcome! ViOS is a `no_std` Rust OS built on a **Cellular Single Address Space**
+architecture — a different design point from traditional Linux/Windows-style OSes.
+This guide gets you from zero to your first merged PR.
 
-## Quick Start
+---
 
-### Prerequisites
-- Rust nightly (pinned in `rust-toolchain.toml`)
-- QEMU with RISC-V support: `qemu-system-riscv64`
-- RISC-V cross-compiler: `riscv-none-elf-gcc` (xpack release)
-- Python 3.10+ (for disk image tooling)
+## Table of Contents
 
-### Build
+1. [Setup](#setup)
+2. [Code Standards](#code-standards)
+3. [Your First PR — Step by Step](#your-first-pr--step-by-step)
+4. [Commit Messages](#commit-messages)
+5. [Submitting a PR](#submitting-a-pr)
+6. [Review Checklist](#review-checklist)
+7. [Where to Start](#where-to-start)
+8. [Getting Help](#getting-help)
+
+---
+
+## Setup
+
+**Automated (recommended):**
+
 ```bash
-cargo build --release --target riscv64gc-unknown-none-elf -Z build-std=core,alloc
+# Linux / macOS
+./scripts/dev-setup.sh
+
+# Windows (PowerShell 7+)
+.\scripts\dev-setup.ps1
 ```
 
-### Run
-```powershell
-./run.ps1
-```
-or
-```bash
-bash scripts/run-aarch64.sh  # AArch64
-bash scripts/run-x86-64.sh  # x86_64
-```
+Both scripts are idempotent — safe to run again after a toolchain update.
+
+**Manual prerequisites:**
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Rust nightly | pinned in `rust-toolchain.toml` | `rustup toolchain install nightly` |
+| `rust-src` component | — | `rustup component add rust-src` |
+| QEMU RV64 | ≥ 8.0 | `apt install qemu-system-misc` / `brew install qemu` |
+| mtools | any | needed for `scripts/format-disk.ps1` |
+
+For detailed setup help — including a **Common Errors table** — see
+[docs/ONBOARDING.md](docs/ONBOARDING.md).
+
+---
 
 ## Code Standards
 
-1. **Law 4 (unsafe):** Every `unsafe` block requires `// SAFETY:` explaining the invariant.
-2. **Law 5 (module style):** Use `foo.rs` + `foo/` — never `mod.rs`.
-3. **Law 6 (naming):** Public traits get the `Vi` prefix (`ViFileSystem`, `ViDriver`).
-4. **YAGNI / KISS / DRY** — see `docs/code-standards.md`.
+### The 8 Laws (non-negotiable)
+
+1. **Interface is Sacred** — changes to `libs/api/` or `libs/types/` require 2×
+   confirmation. These define the ABI between kernel and Cells.
+2. **Owned Buffers for Async** — `async fn process(data: Box<[u8]>) -> Box<[u8]>`,
+   never `async fn process(data: &mut [u8])`.
+3. **Multi-Architecture Awareness** — use `VAddr`, `PAddr` from `libs/types`;
+   never hard-code 32/64-bit pointer sizes.
+4. **No `unsafe` in Cells** — `#![forbid(unsafe_code)]` in every Cell crate.
+   Kernel and HAL `unsafe` must have `// SAFETY:` comments.
+5. **No `mod.rs`** — use `foo.rs` parallel to `foo/` directory.
+6. **`Vi` prefix for public types** — `ViFileSystem`, `ViDriver`, `ViError`.
+7. **`dyn Trait` at boundaries** — `Arc<dyn ViDriver + Send + Sync>` for shared
+   resources; `Box` for single-owner.
+8. **Implement `Drop`** — all resources must clean up explicitly via `Drop`.
+
+### Smoke check before every PR
+
+```bash
+./scripts/check-baseline.sh
+# runs: cargo fmt --check, cargo check --workspace, cargo clippy -D warnings
+```
+
+See [docs/code-standards.md](docs/code-standards.md) for full style guidance.
+
+---
+
+## Your First PR — Step by Step
+
+A concrete walk-through using the shell as an example. Adapt file paths for your
+actual change.
+
+### 1 — Find something to work on
+
+Browse issues labelled
+[`good-first-issue`](../../issues?q=label%3Agood-first-issue).  Each issue lists
+context, acceptance criteria, and relevant files.
+
+### 2 — Read the relevant spec
+
+Check [CLAUDE.md](CLAUDE.md) → "Before Coding — Read Specifications" to find which
+`docs/0N-*.md` file covers your area.  Spend 5–10 minutes on it.
+
+### 3 — Create a branch
+
+```bash
+git checkout main
+git pull --ff-only
+git checkout -b feat/shell-my-command   # or fix/, docs/, test/, refactor/
+```
+
+### 4 — Implement
+
+Follow the patterns already in the file you are editing.  For a shell command:
+
+```bash
+# find the command dispatch table
+grep -n '"ls"' cells/apps/shell/src/commands.rs
+```
+
+Add your implementation next to a similar existing command.
+
+### 5 — Verify
+
+```bash
+# Must pass before submitting
+cargo check --workspace
+cargo fmt --all --check
+cargo clippy --workspace -- -D warnings
+
+# Run host-side unit tests (types + api crates)
+cargo test -p types -p api --target x86_64-pc-windows-msvc   # Windows
+cargo test -p types -p api --target x86_64-unknown-linux-gnu  # Linux
+```
+
+### 6 — Commit
+
+```bash
+git add <files>
+git commit -m "feat(shell): add my-command
+
+Brief explanation of what this does and why.
+
+Closes #NNN"
+```
+
+### 7 — Push and open PR
+
+```bash
+git push -u origin feat/shell-my-command
+```
+
+Then open a Pull Request on GitHub.  The PR template will prompt you for:
+
+- What changed and why
+- How you tested it
+- Screenshot / log output (for user-visible changes)
+
+### 8 — Address review feedback
+
+Make changes, `git push` again (no force-push needed unless requested), and reply
+to every comment — even with "Done" — so reviewers know each item was addressed.
+
+---
+
+## Commit Messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <subject>       ← max 72 chars, imperative mood
+
+<body>                           ← optional; explain WHY not WHAT
+
+<footer>                         ← optional; "Closes #N", "BREAKING CHANGE: ..."
+```
+
+**Types:** `feat` · `fix` · `docs` · `refactor` · `test` · `chore` · `perf`
+
+**Scopes:** `kernel` · `hal` · `vfs` · `shell` · `input` · `net` · `types` · `api`
+
+---
 
 ## Submitting a PR
 
-1. Fork and create a feature branch.
-2. Write code; run `cargo check --workspace` (must be zero warnings).
-3. Add a test or document why one isn't needed.
-4. Submit PR — the CI template will guide you through the checklist.
+- **One logical change per PR.** Separate refactors from features.
+- **CI must be green.** Do not open a PR you know is broken (use a draft PR
+  instead).
+- **Tests.** Add at least one test or document why one is not needed.
+- **Docs.** Update relevant `docs/` files if behaviour changes.
+- **No secrets.** Never commit `.env`, credentials, or private keys.
+
+---
+
+## Review Checklist
+
+Reviewers check these before approving:
+
+- [ ] Follows the 8 Laws above
+- [ ] `// SAFETY:` present on every `unsafe` block
+- [ ] Public items have rustdoc (`///`)
+- [ ] `cargo check --workspace` clean
+- [ ] `cargo clippy` clean (no new warnings)
+- [ ] Tests added or reason given
+- [ ] No `mod.rs` files introduced
+- [ ] Law 2 (no `&mut [u8]` across async boundaries) obeyed
+
+---
 
 ## Where to Start
 
-Look for issues labelled [`good-first-issue`](../../issues?q=label%3Agood-first-issue).
+- [`good-first-issue`](../../issues?q=label%3Agood-first-issue) — curated issues
+  with full context
+- [docs/ONBOARDING.md](docs/ONBOARDING.md) — full setup guide + common errors
+- [docs/FAQ.md](docs/FAQ.md) — architecture questions answered
+- [docs/ROADMAP.md](docs/ROADMAP.md) — where the project is headed
 
-## Questions
+---
 
-Open a Discussion or join the project chat (see README for links).
+## Getting Help
+
+- **GitHub Discussions** — Q&A, ideas, show-and-tell
+- **GitHub Issues** — bug reports and feature requests
+- Review the [Common Errors table](docs/ONBOARDING.md#common-errors--fixes) before
+  opening a new thread
+
+We aim to respond to PRs and issues within 3 business days.

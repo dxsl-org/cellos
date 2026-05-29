@@ -5,6 +5,7 @@ extern crate alloc;
 extern crate ostd;
 
 use alloc::collections::BTreeMap;
+use api::hotswap::ViStateTransfer;
 use ostd::io::println;
 use ostd::prelude::*;
 
@@ -102,5 +103,61 @@ pub fn main() {
                 ostd::task::yield_now();
             }
         }
+    }
+}
+
+// ─── Hot-swap state transfer ──────────────────────────────────────────────────
+//
+// Wire format (little-endian):
+//   [count: u32][key_len: u16][key bytes][val_len: u16][val bytes]...
+//
+// Schema version 1 is prepended as a u32 for forward compatibility.
+
+const SCHEMA_VERSION: u32 = 1;
+
+impl ViStateTransfer for ConfigStore {
+    fn state_size(&self) -> usize {
+        // version(4) + count(4) + per-entry overhead(4) + key+val bytes
+        4 + 4 + self.map.iter().map(|(k, v)| 2 + k.len() + 2 + v.len()).sum::<usize>()
+    }
+
+    fn serialize_state(&self, buf: &mut [u8]) -> ViResult<usize> {
+        let needed = self.state_size();
+        if buf.len() < needed { return Err(ViError::InvalidArgument); }
+        let mut pos = 0;
+        buf[pos..pos+4].copy_from_slice(&SCHEMA_VERSION.to_le_bytes()); pos += 4;
+        let count = self.map.len() as u32;
+        buf[pos..pos+4].copy_from_slice(&count.to_le_bytes()); pos += 4;
+        for (k, v) in &self.map {
+            let kl = k.len() as u16;
+            let vl = v.len() as u16;
+            buf[pos..pos+2].copy_from_slice(&kl.to_le_bytes()); pos += 2;
+            buf[pos..pos+k.len()].copy_from_slice(k.as_bytes()); pos += k.len();
+            buf[pos..pos+2].copy_from_slice(&vl.to_le_bytes()); pos += 2;
+            buf[pos..pos+v.len()].copy_from_slice(v.as_bytes()); pos += v.len();
+        }
+        Ok(pos)
+    }
+
+    fn deserialize_state(&mut self, buf: &[u8]) -> ViResult<()> {
+        if buf.len() < 8 { return Err(ViError::InvalidInput); }
+        let _version = u32::from_le_bytes([buf[0],buf[1],buf[2],buf[3]]);
+        let count = u32::from_le_bytes([buf[4],buf[5],buf[6],buf[7]]) as usize;
+        let mut pos = 8usize;
+        self.map.clear();
+        for _ in 0..count {
+            if pos + 2 > buf.len() { return Err(ViError::InvalidInput); }
+            let kl = u16::from_le_bytes([buf[pos], buf[pos+1]]) as usize; pos += 2;
+            if pos + kl > buf.len() { return Err(ViError::InvalidInput); }
+            let key = core::str::from_utf8(&buf[pos..pos+kl]).map_err(|_| ViError::InvalidInput)?;
+            pos += kl;
+            if pos + 2 > buf.len() { return Err(ViError::InvalidInput); }
+            let vl = u16::from_le_bytes([buf[pos], buf[pos+1]]) as usize; pos += 2;
+            if pos + vl > buf.len() { return Err(ViError::InvalidInput); }
+            let val = core::str::from_utf8(&buf[pos..pos+vl]).map_err(|_| ViError::InvalidInput)?;
+            pos += vl;
+            self.map.insert(String::from(key), String::from(val));
+        }
+        Ok(())
     }
 }

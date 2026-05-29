@@ -5,6 +5,7 @@ use types::*;
 pub mod disk_layout;
 pub mod early;
 pub mod elf;
+pub mod elf_tests;
 pub mod reloc;
 pub use elf::ElfLoader;
 

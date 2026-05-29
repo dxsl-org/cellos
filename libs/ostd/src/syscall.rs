@@ -268,6 +268,50 @@ pub fn sys_send(target: usize, msg: &[u8]) -> SyscallResult {
     }
 }
 
+/// A contiguous (ptr, len) segment for scatter/gather IPC.
+///
+/// The layout matches what the kernel reads: two `usize` values back-to-back.
+#[repr(C)]
+pub struct IoVec {
+    pub ptr: usize,
+    pub len: usize,
+}
+
+/// Send one IPC message gathered from up to 8 non-contiguous buffers.
+///
+/// The kernel concatenates the segments and delivers them to `target` as a
+/// single contiguous message.
+///
+/// # Errors
+/// Returns `Err` if `target` is not found or more than 8 segments are passed.
+pub fn sys_send_gather(target: usize, segments: &[IoVec]) -> SyscallResult {
+    let iovec_ptr  = segments.as_ptr() as usize;
+    let iovec_count = segments.len();
+    // SAFETY: segments is a valid slice; kernel reads iovec_count * 2 * sizeof(usize) bytes.
+    let ret = unsafe {
+        syscall(ViSyscall::SendGather, target, iovec_ptr, iovec_count, 0)
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
+/// Receive one IPC message scattered into up to 8 non-contiguous buffers.
+///
+/// The kernel fills each segment in order; if the message is shorter than
+/// the total capacity, remaining bytes in later segments are zeroed.
+///
+/// # Returns
+/// `Ok(sender_id)` on success.  `Ok(0)` means the task is now blocked waiting
+/// for a message (non-blocking fast path returned no sender).
+pub fn sys_recv_scatter(mask: usize, segments: &mut [IoVec]) -> SyscallResult {
+    let iovec_ptr   = segments.as_mut_ptr() as usize;
+    let iovec_count = segments.len();
+    // SAFETY: segments is a valid mutable slice; kernel writes into the pointed-to buffers.
+    let ret = unsafe {
+        syscall(ViSyscall::RecvScatter, mask, iovec_ptr, iovec_count, 0)
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
 pub fn sys_read_dir(fd: usize, buffer: &mut [u8]) -> Result<usize, SyscallError> {
     unsafe {
         let ret = syscall(
@@ -298,6 +342,32 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     }
 }
 
+/// Receive a message with a timeout deadline.
+///
+/// `timeout_ticks` is the maximum number of kernel monotonic ticks to wait
+/// (10 MHz on QEMU RV64 → 100 ns per tick).  Pass `u64::MAX` for no timeout.
+///
+/// # Returns
+/// - `Ok(sender_id)` on success.
+/// - `Ok(0)` if no message arrived before the deadline (timeout).
+pub fn sys_recv_timeout(mask: usize, buf: &mut [u8], timeout_ticks: u64) -> SyscallResult {
+    // SAFETY: buf is a valid mutable slice; kernel writes into it.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::RecvTimeout,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            timeout_ticks as usize,
+        )
+    };
+    if ret >= 0 {
+        SyscallResult::Ok(ret as usize)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
+}
+
 pub fn sys_set_timer(ticks: usize) -> SyscallResult {
     unsafe {
         syscall(ViSyscall::SetTimer, ticks, 0, 0, 0);
@@ -319,4 +389,58 @@ pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, 
             Err(SyscallError::Unknown)
         }
     }
+}
+
+/// Live-replace a running Cell with a new ELF version without message loss.
+///
+/// `cell_id` is the task ID of the cell to replace; `new_elf_path` must be a
+/// valid `/bin/<name>` path present on the bootstrap disk.
+///
+/// # Returns
+/// `Ok(new_task_id)` on success.  Returns `Err` if the cell is not found,
+/// the ELF cannot be loaded, or the state-transfer protocol fails.
+pub fn sys_hotswap(cell_id: usize, new_elf_path: &str) -> SyscallResult {
+    // SAFETY: new_elf_path is a valid UTF-8 str; kernel copies it before returning.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::HotSwap,
+            cell_id,
+            new_elf_path.as_ptr() as usize,
+            new_elf_path.len(),
+            0,
+        )
+    };
+    if ret > 0 { SyscallResult::Ok(ret as usize) } else { SyscallResult::Err(SyscallError::Unknown) }
+}
+
+/// Flush a rectangular region of pixels to the VirtIO GPU framebuffer.
+///
+/// `pixels` must be `w * h * 4` bytes in BGRA8888 format.
+///
+/// # Errors
+/// Returns `Err` if the GPU driver is not initialised in the running kernel.
+pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<(), SyscallError> {
+    // Pack geometry: a2 = xy (x<<16 | y), a3 = wh (w<<16 | h).
+    let xy = (((x as usize) & 0xFFFF) << 16) | ((y as usize) & 0xFFFF);
+    let wh = ((w as usize & 0xFFFF) << 16) | (h as usize & 0xFFFF);
+    // SAFETY: pixels is a valid immutable slice; kernel validates length against w*h*4.
+    let ret = unsafe {
+        syscall(ViSyscall::GpuFlush, pixels.as_ptr() as usize, pixels.len(), xy, wh)
+    };
+    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+}
+
+/// Read the kernel's monotonic timer (ticks since boot).
+///
+/// The tick frequency is architecture-dependent; query the Config Cell at
+/// `system.timer_freq_hz` to convert to nanoseconds.  On RV64 this maps to
+/// the `mtime` register frequency (typically 10 MHz on QEMU).
+///
+/// # Returns
+/// Tick count as a `u64`.  Returns 0 if the syscall is not yet wired in the
+/// running kernel build.
+pub fn sys_get_time() -> u64 {
+    // SAFETY: no memory is read or written; the kernel returns a register-size integer.
+    let ret = unsafe { syscall(ViSyscall::GetTime, 0, 0, 0, 0) };
+    if ret >= 0 { ret as u64 } else { 0 }
 }

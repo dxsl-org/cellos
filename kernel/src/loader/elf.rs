@@ -3,14 +3,19 @@ use super::{ElfHeader, ElfParser};
 use types::*;
 use xmas_elf::ElfFile;
 
-/// Maximum permitted virtual address for a user-loadable ELF segment.
-/// Picked to lie comfortably below the kernel's identity-mapped region
-/// (0x80200000+). Any segment claiming to load above this is rejected so
-/// a malicious ELF can't ask the loader to map user pages over kernel VA.
+/// Maximum user-space virtual address for RISC-V SV39.
 ///
-/// This is a coarse guard — the proper fix is a per-cell VA layout passed
-/// in from `spawn_*`. Tracked as TODO.
-const USER_VADDR_MAX: usize = 0x8000_0000;
+/// SV39 splits the 39-bit VA space into:
+///   0x0000_0000_0000 – 0x003F_FFFF_FFFF  (user / lower half, 256 GB)
+///   0xFFC0_0000_0000 – 0xFFFF_FFFF_FFFF  (kernel / upper half, 256 GB)
+///
+/// 0x8000_0000 was wrong — it only allowed 2 GB and coincidentally matched
+/// the RISC-V physical RAM base (0x8000_0000 on QEMU virt), causing every
+/// cell ELF compiled at 0x8800_0000+ to be rejected.
+///
+/// The real boundary is half the SV39 address space: 2^38 = 0x40_0000_0000.
+/// Cells compiled at 0x0040_0000 (4 MB) are safely within this range.
+const USER_VADDR_MAX: usize = 0x40_0000_0000; // 256 GB — SV39 user half
 
 pub struct ElfLoader;
 

@@ -3,8 +3,10 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* App base address - Offset from Kernel */
-    . = 0x88000000;
+    /* User-space base address for RISC-V SV39.
+     * User VA range: 0x0000_0000 – 0x7FFF_FFFF (lower half of 39-bit VA).
+     * 4 MB base keeps cells well below the kernel at 0x80200000. */
+    . = 0x00400000;
     
     .text : {
         *(.text.boot)

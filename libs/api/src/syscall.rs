@@ -50,6 +50,27 @@ pub enum ViSyscall {
     // === Time/System (120-129) ===
     GetTime = 120,
 
+    // === GPU / Display (Phase 16) ===
+    /// Flush a pixel rectangle from a cell-provided buffer to the GPU framebuffer.
+    /// ABI: a0 = data_ptr, a1 = data_len, a2 = x, a3 = y (w+h embedded in len)
+    GpuFlush = 300,
+
+    // === Advanced IPC (Phase 20) ===
+    /// Recv with a deadline in monotonic ticks.
+    /// ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = timeout_ticks → sender_id or ViError::Timeout.
+    RecvTimeout = 201,
+    /// Gather-send: one IPC message assembled from up to 8 non-contiguous buffers.
+    /// ABI: a0 = target, a1 = iovec_ptr ([ptr:usize, len:usize] × count), a2 = iovec_count.
+    SendGather = 202,
+    /// Scatter-receive: one IPC message written into up to 8 non-contiguous buffers.
+    /// ABI: a0 = mask, a1 = iovec_ptr, a2 = iovec_count → sender_id.
+    RecvScatter = 203,
+
+    // === Hot-swap (Phase 20) ===
+    /// Live-replace a running Cell without message loss.
+    /// ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.
+    HotSwap = 400,
+
     // === Unknown ===
     Unknown = 9999,
 
@@ -86,7 +107,12 @@ impl From<usize> for ViSyscall {
             106 => ViSyscall::Seek,
             107 => ViSyscall::FileOp,
             120 => ViSyscall::GetTime,
-            30 => ViSyscall::GetProcs,
+            30  => ViSyscall::GetProcs,
+            201 => ViSyscall::RecvTimeout,
+            202 => ViSyscall::SendGather,
+            203 => ViSyscall::RecvScatter,
+            300 => ViSyscall::GpuFlush,
+            400 => ViSyscall::HotSwap,
             _ => ViSyscall::Unknown,
         }
     }

@@ -142,20 +142,21 @@ cells/apps/bench/src/
 
 ## Todo List
 
-- [ ] Finalize `ViBenchmark` trait
-- [ ] Implement high-res timer (per-arch)
-- [ ] Implement runner (warmup, percentiles)
-- [ ] Implement context_switch scenario
-- [ ] Implement ipc_send_recv scenario
-- [ ] Implement syscall_yield scenario
-- [ ] Implement memory_footprint scenario
-- [ ] Implement bench `main.rs` arg parsing + scenario dispatch
-- [ ] Create `.github/workflows/perf.yml` (cron + artifact + compare)
-- [ ] Write `scripts/compare-bench-results.sh`
-- [ ] Bake `/bin/bench` in disk image
-- [ ] Capture baseline + write `docs/performance-report.md`
+- [x] Finalize `ViBenchmark` trait (extended with `BenchReport` p50/p99 + JSON in libs/api/src/benchmark.rs)
+- [x] Implement high-res timer (sys_get_time → GetTime syscall; fallback 10 MHz in framework/timer.rs)
+- [x] Implement runner (warmup=100, iters=1000, sort → percentiles in framework/runner.rs)
+- [x] Implement context_switch scenario (double sys_yield round-trip)
+- [x] Implement ipc_send_recv scenario (64-byte message to VFS endpoint)
+- [x] Implement syscall_yield scenario (single ecall → U-mode return)
+- [x] Implement memory_footprint scenario (approximation; TODO: MemInfo syscall)
+- [x] Implement bench `main.rs` (4 scenarios + PASS/FAIL summary + JSON output)
+- [x] Create `.github/workflows/perf.yml` (weekly cron + artifact upload + PDR check)
+- [x] Write `scripts/compare-bench-results.sh` (rolling median + 3-run regression gate)
+- [ ] Bake `/bin/bench` in disk image (needs gen_disk.ps1 update)
+- [x] Write `docs/performance-report.md` (methodology + expected numbers + add-scenario guide)
 - [ ] Chart.js historical timeline on docs site
-- [ ] Verify all 4 PDR targets met
+- [ ] Capture actual baseline numbers (first QEMU CI run)
+- [ ] Verify all 4 PDR targets met (pending first boot)
 - [ ] CI green
 
 ## Success Criteria

@@ -127,19 +127,24 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
     puts("TRACE: Allocating heap frames\n");
     // Allocate 16MB for heap (4096 pages)
+    // Allocate 64 MB for the kernel heap.
+    // Rationale: `ramdisk.rs` copies disk_v3.img (up to 55 MB) into heap at boot.
+    // The heap must be larger than the disk image.
+    // 64 MB = 16 384 frames of 4 KB each.
+    const HEAP_FRAMES: usize = 16_384;
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = allocator_guard
             .as_mut()
             .expect("Frame allocator not initialized");
         let start = allocator.allocate_frame().expect("OOM: Heap start");
-        for _ in 0..4095 {
+        for _ in 1..HEAP_FRAMES {
             allocator.allocate_frame().expect("OOM: Heap continuation");
         }
         start
     };
     puts("TRACE: frames allocated, calling init_heap\n");
-    let heap_size = 4096 * 4096 * 4; // 64MB
+    let heap_size = HEAP_FRAMES * 4096; // 48 MB — matches frames above
     unsafe {
         memory::heap::init_heap(heap_start, heap_size);
     }

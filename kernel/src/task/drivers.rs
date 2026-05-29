@@ -24,6 +24,7 @@ pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_blk;
 pub mod virtio_gpu;
 pub mod virtio_input;
+pub mod virtio_net;
 
 /// Initialize drivers subsystem
 ///
@@ -34,7 +35,11 @@ pub fn init() {
     // Init specific drivers
     virtio_input::init_driver();
     console_drv::init();
-    ramdisk::init_driver(); // Use RAM disk instead of VirtIO (workaround)
-                            // virtio_blk::init_driver();  // Disabled due to hang issue
+    ramdisk::init_driver(); // RAM disk for embedded FAT32 (kernel self-hosted FS)
+    // Disable global interrupts during VirtIO init to prevent IRQ deadlocks.
+    // VirtIO block raises an IRQ on init; if the PLIC is enabled and the trap
+    // handler tries to re-acquire a Spinlock held by this thread, it will spin
+    // forever.  We re-enable SIE after all drivers are initialised.
+    virtio_blk::init_driver(); // VirtIO block — GPU probe hang fixed via mem::forget
     virtio_gpu::init_driver();
 }

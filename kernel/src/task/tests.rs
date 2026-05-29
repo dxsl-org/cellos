@@ -11,17 +11,20 @@ use types::CellId;
 
 /// Manual Test Runner
 pub fn run_scheduler_tests() {
-    log::info!("Running Scheduler Tests...");
+    log::info!("=== Scheduler Tests ===");
     test_scheduler_task_table();
     test_task_state_transitions();
-    // test_ipc_* tests require more context, skipping for now
     test_reply_value_storage();
     test_current_caller_tracking();
     test_lease_attributes();
-    test_round_robin_scheduling(); // New test
+    test_round_robin_scheduling();
     test_scheduler_current_task();
     test_multiple_tasks_ready_queue();
-    log::info!("Scheduler Tests Passed!");
+    // Phase 11 additions
+    test_blocked_then_ready_transition();
+    test_waiting_task_not_scheduled();
+    test_task_state_recv_deadline();
+    log::info!("=== Scheduler Tests PASSED ===");
 }
 
 fn test_scheduler_task_table() {
@@ -176,4 +179,76 @@ fn test_multiple_tasks_ready_queue() {
     assert!(sched.tasks.contains_key(&id1));
     assert!(sched.tasks.contains_key(&id2));
     assert!(sched.tasks.contains_key(&id3));
+}
+
+// ─── Phase 11 additions ───────────────────────────────────────────────────────
+
+/// A task in `Sending` state must be moved to `Ready` when the send is resolved,
+/// and the scheduler must then pick it up on the next tick.
+fn test_blocked_then_ready_transition() {
+    let mut sched = Scheduler::new();
+    let id = sched.spawn("blocked", CellId(0), Vec::new());
+
+    // Simulate the task blocking on Send.
+    if let Some(task) = sched.tasks.get_mut(&id) {
+        task.state = TaskState::Sending { target: 99, msg_ptr: 0x1000, msg_len: 16 };
+    }
+    // Task should be removed from the ready queue.
+    assert!(!sched.ready_queue.contains(&id), "blocked task should not be in ready queue");
+
+    // Resolve: move back to Ready (simulates IPC delivery).
+    if let Some(task) = sched.tasks.get_mut(&id) {
+        task.state = TaskState::Ready;
+        sched.ready_queue.push_back(id);
+    }
+
+    // Now pick_next should select it.
+    let picked = sched.pick_next();
+    assert_eq!(sched.current_task_id, Some(id), "unblocked task should be scheduled next");
+    log::info!("  [ok] blocked → Sending → Ready → scheduled");
+}
+
+/// A task in `Waiting` state (joined to another task) must never be scheduled.
+fn test_waiting_task_not_scheduled() {
+    let mut sched = Scheduler::new();
+    let waiter = sched.spawn("waiter", CellId(0), Vec::new());
+    let target = sched.spawn("target", CellId(0), Vec::new());
+
+    // Put waiter into Waiting state.
+    if let Some(task) = sched.tasks.get_mut(&waiter) {
+        task.state = TaskState::Waiting { target };
+        // Remove from ready queue (normally done by ipc_wait).
+        sched.ready_queue.retain(|&id| id != waiter);
+    }
+
+    // Schedule: should pick `target`, not `waiter`.
+    sched.pick_next();
+    assert_eq!(sched.current_task_id, Some(target), "waiting task must not be selected");
+    log::info!("  [ok] Waiting task not scheduled");
+}
+
+/// A Recv state with a deadline field must preserve the deadline through
+/// state assignment and reading.
+fn test_task_state_recv_deadline() {
+    let mut task = Task::new(1, CellId(0), "test", Vec::new());
+
+    // Assign Recv with a deadline.
+    let dl: u64 = 999_999;
+    task.state = TaskState::Recv { mask: 0, buf_ptr: 0x2000, buf_len: 256, deadline: Some(dl) };
+
+    match task.state {
+        TaskState::Recv { deadline: Some(d), buf_len, .. } => {
+            assert_eq!(d, dl);
+            assert_eq!(buf_len, 256);
+        }
+        _ => panic!("Expected Recv with deadline"),
+    }
+
+    // Assign without a deadline — must default to None.
+    task.state = TaskState::Recv { mask: 0, buf_ptr: 0, buf_len: 0, deadline: None };
+    match task.state {
+        TaskState::Recv { deadline: None, .. } => {}
+        _ => panic!("Expected Recv with no deadline"),
+    }
+    log::info!("  [ok] Recv deadline field preserved correctly");
 }

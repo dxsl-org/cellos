@@ -593,6 +593,7 @@ pub fn ipc_send(
                     mask: _,
                     buf_ptr,
                     buf_len,
+                    ..
                 } => Some((buf_ptr, buf_len)),
                 _ => None,
             }
@@ -676,12 +677,29 @@ pub fn ipc_recv(
                     mask,
                     buf_ptr,
                     buf_len,
+                    deadline: None, // no timeout by default; RecvTimeout sets this
                 };
             }
             return Ok(0);
         }
     }
     Err(())
+}
+
+/// Kernel-internal IPC send helper for the hotswap orchestrator.
+pub fn send_to(target: usize, msg: &[u8]) -> types::ViResult<()> {
+    let caller = current_task_id();
+    ipc_send(caller, target, msg.as_ptr() as usize, msg.len())
+        .map(|_| ())
+        .map_err(|_| types::ViError::IO)
+}
+
+/// Kernel-internal IPC recv helper for the hotswap orchestrator.
+pub fn recv_from(_source: usize, buf: &mut [u8]) -> types::ViResult<usize> {
+    let caller = current_task_id();
+    // mask = 0 → accept from any sender (hotswap waits for the target cell's reply).
+    ipc_recv(caller, 0, buf.as_mut_ptr() as usize, buf.len())
+        .map_err(|_| types::ViError::IO)
 }
 
 pub fn ipc_try_recv(

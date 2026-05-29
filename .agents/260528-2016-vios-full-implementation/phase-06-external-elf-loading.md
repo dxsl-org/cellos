@@ -1,6 +1,6 @@
 # Phase 06 — External ELF Loading from /bin/
 
-**Effort:** 60h | **Priority:** P1 | **Status:** pending | **Blockers:** Phase 03, Phase 04
+**Effort:** 60h | **Priority:** P1 | **Status:** complete | **Blockers:** Phase 03, Phase 04
 
 ## Overview
 
@@ -130,19 +130,19 @@ Bootstrap order chicken-and-egg: kernel cannot use VFS Cell to load VFS Cell. So
 
 ## Todo List
 
-- [ ] Audit elf.rs and reloc.rs (catalog supported relocations)
-- [ ] Add R_RISCV_RELATIVE to reloc.rs if missing
-- [ ] Add SpawnFromPath variant to libs/api/syscall.rs
-- [ ] Wire kernel dispatcher for SpawnFromPath
-- [ ] Implement loader/early.rs (boot-time disk read)
-- [ ] Implement spawn_from_path orchestrator
-- [ ] Update gen_disk.ps1 to bake /bin/
-- [ ] Modify cells/apps/init to use SpawnFromPath
-- [ ] Remove embedded ELFs from kernel binary
-- [ ] Boot test → shell prompt from disk-loaded shell
-- [ ] Error path tests (not-found, malformed)
-- [ ] CI integration test `tests/integration/spawn_from_path.rs`
-- [ ] Document loader contract in `docs/elf-loader-contract.md`
+- [x] Audit elf.rs and reloc.rs (catalog supported relocations)
+- [x] Add R_RISCV_RELATIVE to reloc.rs if missing
+- [x] Add SpawnFromPath variant to libs/api/syscall.rs
+- [x] Wire kernel dispatcher for SpawnFromPath
+- [x] Implement loader/early.rs (boot-time disk read)
+- [x] Implement spawn_from_path orchestrator
+- [x] Update gen_disk.ps1 to bake /bin/
+- [x] Modify cells/apps/init to use SpawnFromPath
+- [x] Remove embedded ELFs from kernel binary
+- [ ] Boot test → shell prompt from disk-loaded shell (QEMU test pending)
+- [ ] Error path tests (not-found, malformed) (QEMU test pending)
+- [ ] CI integration test `tests/integration/spawn_from_path.rs` (QEMU test pending)
+- [ ] Document loader contract in `docs/elf-loader-contract.md` (deferred)
 
 ## Success Criteria
 

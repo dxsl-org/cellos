@@ -24,11 +24,15 @@ pub enum TaskState {
         msg_len: usize,
     },
     /// Blocked waiting to receive a message.
-    /// `mask`: Filter mask (e.g., from specific sender or any).
+    ///
+    /// `mask`: sender filter (0 = any sender).
+    /// `deadline`: optional monotonic tick count after which the kernel wakes
+    ///   this task with `ViError::Timeout`.  `None` = wait indefinitely.
     Recv {
         mask: usize,
         buf_ptr: VAddr,
         buf_len: usize,
+        deadline: Option<u64>,
     },
     /// This task has finished running.
     Terminated,

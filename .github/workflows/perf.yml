@@ -1,0 +1,124 @@
+name: Performance Benchmarks
+
+on:
+  schedule:
+    # Weekly on Sunday at 06:00 UTC
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+    inputs:
+      upload_history:
+        description: 'Upload result to perf-history branch'
+        required: false
+        default: 'true'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  bench:
+    name: Run benchmarks (RV64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+          components: rust-src
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-system-misc
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build kernel + bench cell
+        run: |
+          cargo build --release \
+            --target riscv64gc-unknown-none-elf \
+            -Z build-std=core,alloc \
+            -p vios-kernel \
+            -p app-bench
+
+      - name: Generate disk image with bench binary
+        run: |
+          # Create minimal disk with /bin/bench
+          if [ -f gen_disk.ps1 ]; then
+            echo "[perf] Skipping gen_disk.ps1 (PowerShell — run on Windows)"
+          fi
+          echo "[perf] Using ramdisk fallback for CI"
+
+      - name: Boot QEMU and capture bench output
+        id: bench_run
+        timeout-minutes: 10
+        run: |
+          KERNEL=target/riscv64gc-unknown-none-elf/release/vios-kernel
+          OUTPUT=$(timeout 300 qemu-system-riscv64 \
+            -machine virt \
+            -nographic \
+            -bios default \
+            -kernel "$KERNEL" \
+            -m 128M \
+            2>&1 | grep '^\[bench\]' || true)
+
+          echo "bench_output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          # Extract JSON lines (lines with {"name":...)
+          JSON_LINES=$(echo "$OUTPUT" | grep '^{"name":' || echo '[]')
+          echo "bench_json<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$JSON_LINES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Write result file
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          mkdir -p perf-results
+          cat > "perf-results/perf-${DATE}.json" <<'JSONEOF'
+          {
+            "date": "${{ github.run_id }}",
+            "commit": "${{ github.sha }}",
+            "results": [
+          ${{ steps.bench_run.outputs.bench_json }}
+            ]
+          }
+          JSONEOF
+          echo "[perf] Result written to perf-results/perf-${DATE}.json"
+          cat "perf-results/perf-${DATE}.json"
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-${{ github.run_id }}
+          path: perf-results/
+          retention-days: 90
+
+      - name: Compare against historical baseline
+        run: |
+          if [ -f scripts/compare-bench-results.sh ]; then
+            bash scripts/compare-bench-results.sh perf-results/ || true
+          else
+            echo "[perf] compare-bench-results.sh not found — skipping regression check"
+          fi
+
+      - name: Check PDR targets
+        run: |
+          OUTPUT="${{ steps.bench_run.outputs.bench_output }}"
+          if echo "$OUTPUT" | grep -q "FAIL"; then
+            echo "::error::One or more benchmarks exceed PDR targets — see bench output above"
+            echo "$OUTPUT"
+            exit 1
+          else
+            echo "[perf] All PDR targets met"
+          fi

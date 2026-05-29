@@ -18,7 +18,12 @@ Write-Host "Building cells..."
 cargo build -p app-init
 cargo build -p app-shell
 cargo build -p service-vfs
+
 cargo build -p service-config
+cargo build -p app-bench        # Phase 22: benchmarking cell
+cargo build -p app-utils        # Phase 17b: standard utilities (wc, head, tail, grep, sort, sed, …)
+cargo build -p app-sys-tools    # Phase 17b: system tools (ps, uname, date, free, env, shutdown)
+cargo build -p app-net-tools    # Phase 17b: network tools (ping, curl, nc, wget — stubs)
 
 # 2. Paths
 $init_bin   = "$target_dir\app-init"
@@ -27,6 +32,11 @@ $vfs_bin    = "$target_dir\service-vfs"
 $config_bin = "$target_dir\service-config"
 $lua_bin    = "$rel_dir\lua"
 $mpy_bin    = "$rel_dir\micropython"
+$bench_bin  = "$target_dir\bench"       # Phase 22 benchmark cell
+# Phase 17b utility binaries
+$util_bins  = @("wc","head","tail","grep","sort","sed","cp","mv","rm","mkdir","touch") | ForEach-Object { @{ Name = $_; Path = "$target_dir\$_" } }
+$sys_bins   = @("ps","env","uname","date","free","shutdown") | ForEach-Object { @{ Name = $_; Path = "$target_dir\$_" } }
+$net_bins   = @("ping","curl","nc","wget") | ForEach-Object { @{ Name = $_; Path = "$target_dir\$_" } }
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -45,12 +55,23 @@ if (-not (Test-Path $lua_bin)) {
     $lua_bin = $null
 }
 
+if (-not (Test-Path $bench_bin)) {
+    Write-Host "Warning: bench binary not found — run 'cargo build -p app-bench' first."
+    $bench_bin = $null
+}
+
 # 3. Generate FAT32 image
 Write-Host "Generating FAT32 filesystem (disk_v3.img)..."
 $fat_args = @("disk_v3.img", $init_bin, "init", $shell_bin, "shell",
               $vfs_bin, "vfs", $config_bin, "config")
-if ($lua_bin) { $fat_args += @($lua_bin, "lua") }
+if ($lua_bin)   { $fat_args += @($lua_bin, "lua") }
 if (Test-Path $mpy_bin) { $fat_args += @($mpy_bin, "micropython") }
+if ($bench_bin) { $fat_args += @($bench_bin, "bench") }
+# Phase 17b: standard, system, and network utilities
+foreach ($b in $util_bins + $sys_bins + $net_bins) {
+    if (Test-Path $b.Path) { $fat_args += @($b.Path, $b.Name) }
+    else { Write-Warning "  Skipping /bin/$($b.Name) — not found (build first)" }
+}
 python "$tools_dir\mkfat32.py" @fat_args
 
 # 4. Append cell bootstrap table (for kernel early loader)
@@ -61,7 +82,10 @@ $table_args = @(
     "/bin/config=$config_bin",
     "/bin/shell=$shell_bin"
 )
-if ($lua_bin) { $table_args += "/bin/lua=$lua_bin" }
+if ($lua_bin)   { $table_args += "/bin/lua=$lua_bin" }
+if ($bench_bin) { $table_args += "/bin/bench=$bench_bin" }
 python "$tools_dir\write-cell-table.py" @table_args
 
 Write-Host "Done. disk_v3.img is ready."
+Write-Host ""
+Write-Host "To run benchmarks: boot QEMU and run '/bin/bench' from the shell."

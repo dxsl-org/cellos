@@ -103,8 +103,56 @@
 | Version | Date | Phase(s) | Status |
 |---------|------|----------|--------|
 | 0.2.0 | 2026-05-01 | Phase 0 (Alpha) | Stable baseline |
-| 0.2.1-dev | 2026-05-29 | Phases 01, 02, 04, 05 | In progress |
+| 0.2.1-dev | 2026-05-29 | Phases 01–23 (all partial+) | In progress |
 | 0.2.1 | TBD | Phase 1 complete | Pending |
 | 0.3.0 | 2026-09-30 | Phases 2–3 | Planned |
 | 1.0.0 | 2027-03-31 | Phases 4+ | Planned |
+
+---
+
+## [2026-05-29] Phases 11–23 — Major Feature Wave (0.2.1-dev)
+
+**Changes** (key deliverables across all 23 phases):
+
+### Libraries / API
+- `libs/api/src/input.rs` — `InputEvent`, `KeyEvent`, `KeySym`, `Modifiers`, `MouseButton` types
+- `libs/api/src/display.rs` — `Rect`, `PixelFormat`, `SurfaceCap`, compositor IPC opcodes
+- `libs/api/src/benchmark.rs` — `BenchReport` with p50/p99 percentiles + JSON output
+- `libs/api/src/syscall.rs` — added `RecvTimeout`, `SendGather`, `RecvScatter`, `HotSwap`, `GpuFlush`
+- `libs/ostd/src/repl.rs` — shared readline + history state machine
+- `libs/ostd/src/syscall.rs` — `sys_get_time`, `sys_gpu_flush`, `sys_hotswap`, `sys_recv_timeout`, scatter/gather wrappers
+
+### Kernel
+- `kernel/src/task/tcb.rs` — `Recv::deadline` field for timeout IPC
+- `kernel/src/task/syscall.rs` — dispatchers for HotSwap, GpuFlush, RecvTimeout, SendGather, RecvScatter
+- `kernel/src/cell/cap_registry.rs` — `expires_at` lease + `grant_depth` enforcement + `alloc_with_lease`
+- `kernel/src/cell/hotswap.rs` — 5-step live Cell replacement orchestrator
+- `kernel/src/task/drivers/virtio_net.rs` — VirtIO NIC kernel driver (mirrors virtio_blk)
+
+### Services / Cells
+- `cells/services/vfs/` — OP_MKDIR/RMDIR/UNLINK IPC, `readdir` trait, `ViStateTransfer` (quota table)
+- `cells/services/input/` — full US QWERTY translator, modifier state, focus dispatcher
+- `cells/services/net/` — smoltcp TCP/IPv4 + VirtIO NIC IPC + DHCP client
+- `cells/services/compositor/` — software blending, damage tracking, 30 FPS render loop, `GpuFlush` integration
+- `cells/runtimes/lua/` — multi-line REPL, history, `bindings_io` VFS I/O FFI
+- `cells/services/config/` — `ViStateTransfer` for KV map
+- `cells/apps/shell/` — parser (pipe/redirect/background/sequence), executor, jobs, history, aliases, `ViStateTransfer`
+- `cells/apps/bench/` — 4-scenario benchmark cell (ctx-switch, IPC, syscall, footprint)
+- `cells/apps/sys-tools/` — ps, env, uname, date, free, kill, shutdown, hotswap
+- `cells/apps/net-tools/` — ping, curl, nc, wget (stubs for Phase 15 data-path)
+- `cells/apps/utils/` — wc, head, tail, grep, sort, sed, cp, mv, rm, mkdir, touch
+
+### Infrastructure
+- `.github/workflows/perf.yml` — weekly benchmark CI with regression gate
+- `scripts/format-disk.ps1` — FAT32 disk image generator
+- `scripts/compare-bench-results.sh` — rolling-median regression detector
+- `gen_disk.ps1` — updated to bake all Phase 17b utility binaries
+
+### Docs
+- `docs/vfs-api.md`, `docs/input-api.md`, `docs/display-api.md`, `docs/network-api.md`
+- `docs/hotswap-guide.md`, `docs/scripting-guide.md`, `docs/performance-report.md`
+- `docs/ROADMAP.md`, `docs/FAQ.md`, `docs/CONTRIBUTING.md` (polished)
+- `scripts/dev-setup.sh`, `scripts/dev-setup.ps1`
+
+**Impact**: All 23 plan phases are at least `partial`; the system compiles clean with zero new errors.
 

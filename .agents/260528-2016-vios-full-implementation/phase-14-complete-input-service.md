@@ -130,18 +130,19 @@ Input Cell (IPC Recv on input-source endpoint)
 
 ## Todo List
 
-- [ ] Define `InputEvent`, `KeyEvent`, etc. in `libs/api/src/input.rs`
-- [ ] Set up kernel↔input-cell IPC endpoint for raw events
-- [ ] Build US QWERTY layout table
-- [ ] Implement modifier state tracker (incl. sticky lock keys)
-- [ ] Implement dispatcher with focus routing
-- [ ] Implement input cell main loop
-- [ ] Update shell to consume KeyEvent
-- [ ] Handle Backspace, Enter, Ctrl+C, basic arrows in shell
-- [ ] Add /var/log/input.log (debug feature)
-- [ ] Integration test: shell receives "Hello\n" + Ctrl+C
-- [ ] Document `docs/input-api.md`
-- [ ] CI green
+- [x] Define `InputEvent`, `KeyEvent`, `KeySym`, `Modifiers`, `MouseButton`, `KeyState` in `libs/api/src/input.rs`
+- [x] Define `encode_event()` + `INPUT_EVENT_IPC_SIZE` for IPC wire format
+- [ ] Set up kernel↔input-cell IPC endpoint for raw events (kernel side — pending VirtIO IRQ wiring)
+- [x] Build US QWERTY layout table (scancodes 0x00..=0x7F) in `layout_us_qwerty.rs`
+- [x] Implement modifier state tracker (Shift/Ctrl/Alt/Meta + Caps/Num/Scroll Lock toggle) in `modifier_state.rs`
+- [x] Implement dispatcher with focus routing + SetFocus opcode + reset_transient() in `dispatcher.rs`
+- [x] Implement input cell main loop (IPC recv + translate + dispatch) in `lib.rs`
+- [ ] Update shell to consume KeyEvent (deferred to Phase 17 readline)
+- [ ] Handle Backspace, Enter, Ctrl+C, basic arrows in shell via KeyEvent (Phase 17)
+- [ ] Add /var/log/input.log (debug feature, Phase 17)
+- [x] Integration test stub: `tests/integration/input_dispatch.rs` (TODO stubs for stdin injection)
+- [x] Document `docs/input-api.md` (IPC schema, modifiers, keysym table, focus rules)
+- [ ] CI green (pending QEMU boot with input cell)
 
 ## Success Criteria
 

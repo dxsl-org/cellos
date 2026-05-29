@@ -102,6 +102,18 @@ pub enum Syscall {
         buf_ptr: usize,
         buf_len: usize,
     },
+    /// 202: SendGather — send one IPC message from multiple non-contiguous buffers.
+    SendGather { target: usize, iovec_ptr: usize, iovec_count: usize },
+    /// 203: RecvScatter — receive one IPC message into multiple non-contiguous buffers.
+    RecvScatter { mask: usize, iovec_ptr: usize, iovec_count: usize },
+    /// 201: RecvTimeout — Recv with a monotonic-tick deadline (Phase 20).
+    RecvTimeout {
+        mask: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+        /// Deadline in kernel monotonic ticks from boot.  0 = non-blocking.
+        deadline: u64,
+    },
     /// 2: Reply (Unblocking Reply to Caller)
     Reply { caller: usize, result: usize },
     /// 3: SetTimer (Wake up after ticks)
@@ -226,6 +238,10 @@ pub enum Syscall {
     },
     /// 120: GetTime (Op)
     GetTime { op: usize },
+    /// 300: GpuFlush — copy cell pixel buffer to VirtIO GPU framebuffer.
+    GpuFlush { data_ptr: usize, data_len: usize, xy: usize, wh: usize },
+    /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
+    HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
 }
 
 /// Dispatches a system call to the appropriate handler.
@@ -281,6 +297,119 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     Ok(0)
                 }
                 Ok(id) => Ok(id), // Got message instantly
+                Err(_) => Err(SyscallError::InvalidCommand),
+            }
+        }
+        // ── Scatter/gather IPC ────────────────────────────────────────────────
+        Syscall::SendGather { target, iovec_ptr, iovec_count } => {
+            // Concatenate all segments into a contiguous kernel buffer, then
+            // deliver as a single IPC message to `target`.
+            const MAX_IOVEC: usize = 8;
+            const IOVEC_ENTRY: usize = core::mem::size_of::<usize>() * 2;
+            if iovec_count == 0 || iovec_count > MAX_IOVEC {
+                return Err(SyscallError::InvalidInput);
+            }
+            // Allocate a temporary gather buffer.
+            let mut total = 0usize;
+            for i in 0..iovec_count {
+                // SAFETY: iovec_ptr is a valid user-space array of [ptr,len] pairs;
+                // iovec_count is bounded by MAX_IOVEC; each element is 2×sizeof(usize).
+                let len = unsafe {
+                    core::ptr::read_unaligned(
+                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>()) as *const usize,
+                    )
+                };
+                total = total.saturating_add(len);
+            }
+            if total > MAX_USER_BUF { return Err(SyscallError::BufferTooSmall); }
+            let mut gathered: alloc::vec::Vec<u8> = alloc::vec![0u8; total];
+            let mut pos = 0;
+            for i in 0..iovec_count {
+                // SAFETY: bounds validated above; ptr/len come from user-validated iovec.
+                let (ptr, len) = unsafe {
+                    let base = iovec_ptr + i * IOVEC_ENTRY;
+                    let p = core::ptr::read_unaligned(base as *const usize);
+                    let l = core::ptr::read_unaligned((base + core::mem::size_of::<usize>()) as *const usize);
+                    (p, l)
+                };
+                // SAFETY: ptr is a valid user-space pointer; len validated against MAX_USER_BUF.
+                unsafe {
+                    core::ptr::copy_nonoverlapping(ptr as *const u8, gathered[pos..].as_mut_ptr(), len);
+                }
+                pos += len;
+            }
+            let msg_ptr = gathered.as_ptr() as usize;
+            super::ipc_send(caller_id, target, msg_ptr, total)
+                .map_err(|_| SyscallError::InvalidCommand)
+        }
+        Syscall::RecvScatter { mask, iovec_ptr, iovec_count } => {
+            // Receive a single IPC message and scatter it across the iovec buffers.
+            // For v1.0: receive into one temp buffer then scatter.
+            const MAX_IOVEC: usize = 8;
+            const IOVEC_ENTRY: usize = core::mem::size_of::<usize>() * 2;
+            if iovec_count == 0 || iovec_count > MAX_IOVEC {
+                return Err(SyscallError::InvalidInput);
+            }
+            let mut total = 0usize;
+            for i in 0..iovec_count {
+                // SAFETY: iovec_ptr valid user-space array; bounds checked.
+                let len = unsafe {
+                    core::ptr::read_unaligned(
+                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>()) as *const usize,
+                    )
+                };
+                total = total.saturating_add(len);
+            }
+            if total > MAX_USER_BUF { return Err(SyscallError::BufferTooSmall); }
+            let mut tmp: alloc::vec::Vec<u8> = alloc::vec![0u8; total];
+            let sender = super::ipc_recv(caller_id, mask, tmp.as_mut_ptr() as usize, total)
+                .map_err(|_| SyscallError::InvalidCommand)?;
+            // Scatter from tmp into the user's iovec buffers.
+            let mut pos = 0;
+            for i in 0..iovec_count {
+                // SAFETY: iovec_ptr is a valid user-space array; ptr/len validated.
+                let (ptr, len) = unsafe {
+                    let base = iovec_ptr + i * IOVEC_ENTRY;
+                    let p = core::ptr::read_unaligned(base as *const usize);
+                    let l = core::ptr::read_unaligned((base + core::mem::size_of::<usize>()) as *const usize);
+                    (p, l)
+                };
+                let copy_len = len.min(total.saturating_sub(pos));
+                if copy_len > 0 {
+                    // SAFETY: ptr is a valid user-space mutable buffer; copy_len ≤ len.
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(tmp[pos..].as_ptr(), ptr as *mut u8, copy_len);
+                    }
+                    pos += copy_len;
+                }
+            }
+            Ok(sender)
+        }
+        Syscall::RecvTimeout { mask, buf_ptr, buf_len, deadline } => {
+            // Set the Recv state with deadline so the scheduler can time it out.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                    task.state = super::tcb::TaskState::Recv {
+                        mask, buf_ptr, buf_len, deadline: Some(deadline),
+                    };
+                }
+            }
+            // Immediately check for a pending message (non-blocking fast path).
+            let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
+            match res {
+                Ok(0) => {
+                    // Blocked — yield and let the scheduler handle the timeout.
+                    super::yield_cpu();
+                    if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                        return Ok(sched
+                            .tasks
+                            .get(&caller_id)
+                            .and_then(|t| t.current_caller)
+                            .unwrap_or(0));
+                    }
+                    Ok(0)
+                }
+                Ok(id) => Ok(id),
                 Err(_) => Err(SyscallError::InvalidCommand),
             }
         }
@@ -845,6 +974,57 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Ok(ticks)
             }
         }
+        Syscall::GpuFlush { data_ptr, data_len, xy, wh } => {
+            use crate::task::drivers::virtio_gpu::GPU_CONTEXT;
+            let x = ((xy >> 16) & 0xFFFF) as i32;
+            let y = (xy & 0xFFFF) as i32;
+            let w = ((wh >> 16) & 0xFFFF) as u32;
+            let h = (wh & 0xFFFF) as u32;
+            let expected = (w * h * 4) as usize;
+            if data_len < expected {
+                log::warn!("[gpu_flush] data_len {} < expected {}", data_len, expected);
+                return Err(SyscallError::BufferTooSmall);
+            }
+            let mut guard = GPU_CONTEXT.lock();
+            if let Some(ctx) = guard.as_mut() {
+                let stride = ctx.width as usize * 4; // read width before mutable borrow
+                let fb = ctx.framebuffer();
+                // SAFETY: data_ptr is a user-space address in the same SAS;
+                // data_len was validated against w*h*4 above; we read exactly
+                // that many bytes without writing past fb bounds.
+                let src = unsafe { core::slice::from_raw_parts(data_ptr as *const u8, data_len) };
+                let dy = y as usize;
+                let dx = x as usize;
+                for row in 0..h as usize {
+                    let fb_off = (dy + row) * stride + dx * 4;
+                    let src_off = row * w as usize * 4;
+                    let row_bytes = w as usize * 4;
+                    if fb_off + row_bytes <= fb.len() {
+                        fb[fb_off..fb_off + row_bytes]
+                            .copy_from_slice(&src[src_off..src_off + row_bytes]);
+                    }
+                }
+                let _ = ctx.gpu.flush();
+                Ok(0)
+            } else {
+                Err(SyscallError::Unknown) // GPU not initialised
+            }
+        }
+        Syscall::HotSwap { cell_id, path_ptr, path_len } => {
+            // Validate and copy the path string from user space.
+            let path_len = path_len.min(crate::loader::disk_layout::MAX_CELL_PATH);
+            // SAFETY: path_ptr is a user-space string pointer passed via syscall registers;
+            // path_len is bounded by MAX_CELL_PATH (≤ 256); the caller is responsible for
+            // ensuring the pointed-to memory is valid for their task's lifetime.
+            let path_bytes = unsafe {
+                core::slice::from_raw_parts(path_ptr as *const u8, path_len)
+            };
+            let path = core::str::from_utf8(path_bytes)
+                .map_err(|_| SyscallError::InvalidInput)?;
+            let target = types::CellId(cell_id as u64);
+            crate::cell::hotswap::hotswap(target, path)
+                .map_err(|_| SyscallError::Unknown)
+        }
     }
 }
 
@@ -868,6 +1048,12 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
     let syscall = match ViSyscall::from(syscall_id) {
         ViSyscall::Send => Syscall::Send { target: a0, msg_ptr: a1, msg_len: a2 },
         ViSyscall::Recv => Syscall::Recv { mask: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::SendGather  => Syscall::SendGather { target: a0, iovec_ptr: a1, iovec_count: a2 },
+        ViSyscall::RecvScatter => Syscall::RecvScatter { mask: a0, iovec_ptr: a1, iovec_count: a2 },
+        ViSyscall::RecvTimeout => Syscall::RecvTimeout {
+            mask: a0, buf_ptr: a1, buf_len: a2,
+            deadline: (super::system_ticks() as u64).wrapping_add(_a3 as u64),
+        },
         ViSyscall::Reply => Syscall::Reply { caller: a0, result: a1 },
         // SetTimer? ID 3?
         ViSyscall::Call =>     // Call is not in Syscall enum? Ah, Syscall enum has: Reply (3). Call (2).
@@ -910,6 +1096,8 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::Seek => Syscall::Seek { fd: a0, offset: a1 as isize, whence: a2 },
         ViSyscall::FileOp => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
         ViSyscall::GetTime => Syscall::GetTime { op: a0 },
+        ViSyscall::GpuFlush  => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: _a3 },
+        ViSyscall::HotSwap   => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
         
         // Handle non-matching/legacy manually
         _ => match syscall_id {

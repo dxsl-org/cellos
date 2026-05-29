@@ -36,7 +36,17 @@ pub fn init_driver() {
 
         match unsafe { MmioTransport::new(header) } {
             Ok(transport) => {
-                if transport.device_type() == DeviceType::GPU {
+                let dev_type = transport.device_type();
+                if dev_type != DeviceType::GPU {
+                    // Dropping MmioTransport resets the device via set_status(0).
+                    // For slots already owned by another driver (e.g. VirtIO block at slot 0),
+                    // that reset would corrupt the driver's state.  `forget` prevents the Drop.
+                    // SAFETY: the transport is valid but we intentionally skip cleanup to
+                    // avoid resetting a device that belongs to another kernel driver.
+                    core::mem::forget(transport);
+                    continue;
+                }
+                if true /* dev_type == DeviceType::GPU */ {
                     log::info!("VirtIO GPU: Found at 0x{:X}", addr);
                     match VirtIOGpu::<VirtIOHal, MmioTransport>::new(transport) {
                         Ok(mut gpu) => {

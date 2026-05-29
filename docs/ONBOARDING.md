@@ -133,6 +133,38 @@ Data transfer via ownership (like Rust's `move`):
 
 ## Getting Started
 
+### Setup Time Estimates
+
+| Platform | Experience | Estimated Time |
+|----------|-----------|----------------|
+| Ubuntu 22.04 / 24.04 | Any | ~30 min |
+| macOS 14+ (Homebrew installed) | Any | ~30 min |
+| Windows 11 (winget + PowerShell 7) | Any | ~45 min |
+| Windows 10 (manual) | Rust experience | ~60 min |
+
+Run `./scripts/dev-setup.sh` (Linux/macOS) or `.\scripts\dev-setup.ps1` (Windows)
+to automate the setup.  See [CONTRIBUTING.md](../CONTRIBUTING.md) for step-by-step
+instructions.
+
+---
+
+### Common Errors & Fixes
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `error: can't find crate for 'core'` | Missing `rust-src` component | `rustup component add rust-src` |
+| `error[E0463]: can't find crate for 'test'` | Running `cargo test` without `--target x86_64-...` on a `no_std` crate | Add `--target x86_64-pc-windows-msvc` (Windows) or `--target x86_64-unknown-linux-gnu` (Linux) |
+| `qemu-system-riscv64: command not found` | QEMU not installed or not on PATH | Install: `sudo apt install qemu-system-misc` (Linux) / `brew install qemu` (macOS) |
+| `linker 'riscv64-unknown-elf-gcc' not found` | RISC-V cross-toolchain missing | `sudo apt install gcc-riscv64-linux-gnu` and check `.cargo/config.toml` linker entry |
+| Kernel boots then hangs (no shell prompt) | VirtIO block device not found | Confirm `disk.img` was generated; check `./gen_disk.ps1` completed without errors |
+| `cargo check` passes but QEMU shows `PANIC` | Stack overflow in kernel | Increase `KERNEL_STACK_SIZE` in `kernel/src/memory/heap.rs` or reduce recursive depth |
+| `include_bytes!` path not found | Embedded binary stubs missing | Run `cargo build --release` for the relevant cell before building the kernel |
+| `rustup: error: toolchain 'nightly-...' is not installed` | Stale `rust-toolchain.toml` | `rustup toolchain install $(grep channel rust-toolchain.toml \| cut -d'"' -f2)` |
+| Black screen in QEMU (no serial output) | `-nographic` flag missing | Ensure your QEMU command includes `-nographic`; see `scripts/run-x86-64.sh` for reference |
+| `fatfs::FileSystem: no 'alloc' feature` | Cargo feature not enabled | Add `features = ["alloc"]` to the `fatfs` dependency in `Cargo.toml` |
+
+---
+
 ### Prerequisites
 
 Before diving in, ensure you have:
@@ -775,8 +807,8 @@ You've completed the onboarding guide. You're now ready to contribute to ViOS!
 
 ---
 
-**Last Updated**: 2026-01-07
-**Version**: 0.2.0
+**Last Updated**: 2026-05-29
+**Version**: 0.2.1
 **Maintainer**: ViOS Team
 
 ---

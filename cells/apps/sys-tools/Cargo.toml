@@ -1,0 +1,41 @@
+[package]
+name = "app-sys-tools"
+version = "0.1.0"
+edition = "2021"
+description = "ViOS system administration utilities: ps, kill, env, uname, date, free, shutdown"
+
+[dependencies]
+ostd = { path = "../../../libs/ostd" }
+api  = { path = "../../../libs/api" }
+
+[[bin]]
+name = "ps"
+path = "src/bin/ps.rs"
+
+[[bin]]
+name = "kill"
+path = "src/bin/kill.rs"
+
+[[bin]]
+name = "env"
+path = "src/bin/env.rs"
+
+[[bin]]
+name = "uname"
+path = "src/bin/uname.rs"
+
+[[bin]]
+name = "date"
+path = "src/bin/date.rs"
+
+[[bin]]
+name = "free"
+path = "src/bin/free.rs"
+
+[[bin]]
+name = "shutdown"
+path = "src/bin/shutdown.rs"
+
+[[bin]]
+name = "hotswap"
+path = "src/bin/hotswap.rs"

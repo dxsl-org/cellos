@@ -4,6 +4,8 @@
 extern crate alloc;
 extern crate driver_disk;
 
+use api::hotswap::ViStateTransfer;
+
 mod handle_table;
 mod mount;
 mod quota;
@@ -30,6 +32,9 @@ const OP_GET_FILE: u8 = 1; // path -> (ptr:u64, len:u64)
 const OP_LIST_DIR: u8 = 2; // path -> newline-separated names
 const OP_STAT:     u8 = 3; // path -> (size:u64, is_dir:u8, pad:[u8;7])
 const OP_WRITE:    u8 = 4; // stub — requires VirtIO-FAT, returns 0xff
+const OP_MKDIR:    u8 = 5; // path -> 0=ok, 1=err
+const OP_RMDIR:    u8 = 6; // path -> 0=ok, 1=err (only empty dirs)
+const OP_UNLINK:   u8 = 7; // path -> 0=ok, 1=err (only files)
 
 #[derive(Clone)]
 struct RamFile {
@@ -122,12 +127,81 @@ impl VfsManager {
             None => false,
         }
     }
+
+    /// Mutable tree traversal — returns `None` if `path` does not exist.
+    fn find_node_mut(&mut self, path: &str) -> Option<&mut RamFile> {
+        if path == "/" { return Some(&mut self.root); }
+        let mut cur: &mut RamFile = &mut self.root;
+        for part in path.split('/').filter(|p| !p.is_empty()) {
+            cur = cur.children.get_mut(part)?.as_mut();
+        }
+        Some(cur)
+    }
+
+    /// Split `path` into (parent_path, child_name). Returns `None` for root "/".
+    fn split_parent_name(path: &str) -> Option<(String, String)> {
+        let path = path.trim_end_matches('/');
+        if path.is_empty() { return None; }
+        let slash = path.rfind('/')?;
+        let parent = if slash == 0 { String::from("/") } else { String::from(&path[..slash]) };
+        let name   = String::from(&path[slash + 1..]);
+        if name.is_empty() { return None; }
+        Some((parent, name))
+    }
+
+    /// Create a new empty directory at `path`. Returns false if it already exists or
+    /// if the parent is not a directory.
+    fn mkdir(&mut self, path: &str) -> bool {
+        if let Some((parent_path, name)) = Self::split_parent_name(path) {
+            if let Some(parent) = self.find_node_mut(&parent_path) {
+                if parent.is_dir && !parent.children.contains_key(&name) {
+                    parent.children.insert(name.clone(), Box::new(RamFile::new_dir(&name)));
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Remove an empty directory at `path`. Returns false if it does not exist,
+    /// is not a directory, or is non-empty.
+    fn rmdir(&mut self, path: &str) -> bool {
+        if let Some((parent_path, name)) = Self::split_parent_name(path) {
+            if let Some(parent) = self.find_node_mut(&parent_path) {
+                let removable = parent.children.get(&name)
+                    .map(|c| c.is_dir && c.children.is_empty())
+                    .unwrap_or(false);
+                if removable {
+                    parent.children.remove(&name);
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Remove a regular file at `path`. Returns false if it does not exist or is
+    /// a directory.
+    fn unlink(&mut self, path: &str) -> bool {
+        if let Some((parent_path, name)) = Self::split_parent_name(path) {
+            if let Some(parent) = self.find_node_mut(&parent_path) {
+                let removable = parent.children.get(&name)
+                    .map(|c| !c.is_dir)
+                    .unwrap_or(false);
+                if removable {
+                    parent.children.remove(&name);
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 #[no_mangle]
 pub fn main() {
-    println("VFS Service v0.2: RamFS + extended IPC protocol");
-    let vfs = VfsManager::new();
+    println("VFS Service v0.2: RamFS + mkdir/rmdir/unlink IPC");
+    let mut vfs = VfsManager::new();
     let mut buf = [0u8; 512];
 
     loop {
@@ -165,6 +239,24 @@ pub fn main() {
                         // Requires VirtIO-FAT backing; stub returns 0xff (error).
                         ostd::syscall::sys_send(sender, b"\xff");
                     }
+                    OP_MKDIR => {
+                        if let Some(p) = path {
+                            let ok = vfs.mkdir(p);
+                            ostd::syscall::sys_send(sender, if ok { b"\x00" } else { b"\x01" });
+                        }
+                    }
+                    OP_RMDIR => {
+                        if let Some(p) = path {
+                            let ok = vfs.rmdir(p);
+                            ostd::syscall::sys_send(sender, if ok { b"\x00" } else { b"\x01" });
+                        }
+                    }
+                    OP_UNLINK => {
+                        if let Some(p) = path {
+                            let ok = vfs.unlink(p);
+                            ostd::syscall::sys_send(sender, if ok { b"\x00" } else { b"\x01" });
+                        }
+                    }
                     _ => {
                         ostd::syscall::sys_send(sender, b"");
                     }
@@ -174,5 +266,52 @@ pub fn main() {
                 ostd::task::yield_now();
             }
         }
+    }
+}
+
+// ─── Hot-swap state transfer ───────────────────────────────────────────────────
+//
+// VFS serialises its quota table so per-cell byte-usage accounting survives a
+// live upgrade.  The handle table is NOT serialised — open handles are inherently
+// session-scoped and client cells reopen files after the swap completes.
+//
+// Wire format (little-endian, schema v1):
+//   [version: u32][cell_count: u32]
+//     [cell_id: u64][bytes_used: u64]...
+
+const VFS_SCHEMA_VERSION: u32 = 1;
+
+impl ViStateTransfer for VfsManager {
+    fn state_size(&self) -> usize {
+        4 + 4 + self.quota.entry_count() * 16 // version + count + (id,used) pairs
+    }
+
+    fn serialize_state(&self, buf: &mut [u8]) -> ViResult<usize> {
+        let needed = self.state_size();
+        if buf.len() < needed { return Err(ViError::InvalidArgument); }
+        let mut pos = 0;
+        buf[pos..pos+4].copy_from_slice(&VFS_SCHEMA_VERSION.to_le_bytes()); pos += 4;
+        let entries = self.quota.all_entries();
+        buf[pos..pos+4].copy_from_slice(&(entries.len() as u32).to_le_bytes()); pos += 4;
+        for (id, used) in &entries {
+            buf[pos..pos+8].copy_from_slice(&id.to_le_bytes());   pos += 8;
+            buf[pos..pos+8].copy_from_slice(&used.to_le_bytes()); pos += 8;
+        }
+        Ok(pos)
+    }
+
+    fn deserialize_state(&mut self, buf: &[u8]) -> ViResult<()> {
+        if buf.len() < 8 { return Err(ViError::InvalidInput); }
+        let _version   = u32::from_le_bytes([buf[0],buf[1],buf[2],buf[3]]);
+        let count      = u32::from_le_bytes([buf[4],buf[5],buf[6],buf[7]]) as usize;
+        let mut pos    = 8;
+        for _ in 0..count {
+            if pos + 16 > buf.len() { return Err(ViError::InvalidInput); }
+            let id   = u64::from_le_bytes(buf[pos..pos+8].try_into().map_err(|_| ViError::InvalidInput)?);
+            let used = u64::from_le_bytes(buf[pos+8..pos+16].try_into().map_err(|_| ViError::InvalidInput)?);
+            self.quota.restore(types::CellId(id), used);
+            pos += 16;
+        }
+        Ok(())
     }
 }

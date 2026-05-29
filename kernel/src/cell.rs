@@ -3,6 +3,7 @@
 //! Complies with Agent Manifest "LINH HỒN: Quản lý Metadata, Registry, Dependency".
 
 pub mod cap_registry;
+pub mod hotswap;
 pub mod metadata;
 pub mod registry;
 

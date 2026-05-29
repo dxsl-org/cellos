@@ -122,17 +122,19 @@ vios/
 
 ## Key Features
 
-✅ **RISC-V 64-bit (RV64)** HAL with SV39 paging  
-✅ **Nano-kernel** (~5300 LOC) with round-robin scheduler  
-✅ **10 core syscalls** (Send, Recv, Call, Reply, Spawn, etc.)  
-✅ **Capability-based IPC** (zero-copy message passing)  
-✅ **ELF loader** with relocation support  
-✅ **Virtual filesystem** (RamFS service)  
+✅ **RISC-V 64-bit (RV64)** HAL with SV39 paging, PLIC, SBI  
+✅ **Nano-kernel** (~12,600 LOC) with round-robin scheduler  
+✅ **Capability-based IPC** (zero-copy owned-buffer passing)  
+✅ **ELF loader** — external cells loaded from `/bin/` via PIE + R_RISCV_RELATIVE  
+✅ **VFS** — RamFS + FAT32 IPC (mkdir/rmdir/unlink/stat/readdir)  
 ✅ **Interactive shell** with echo, cat, ls, pwd, cd  
 ✅ **Lua 5.4 + MicroPython 1.24.1** runtime bindings  
-🚧 **Multi-architecture HAL** (ARM, x86 stubs)  
-🚧 **VirtIO block device** (hang issue, RamDisk workaround)  
-🚧 **GPU/input/network services** (design phase)
+✅ **VirtIO block** — hang fixed; keyboard deadlock fixed  
+✅ **AArch64 + x86_64 HALs** — boot to Ring-3 smoke in QEMU  
+✅ **RV32 + AArch32** HAL trait implementations  
+✅ **Security infrastructure** — STRIDE model, fuzzing, capability audit  
+🚧 **FAT32 on VirtIO** — FatFsAdapter (in progress)  
+🚧 **Input / network / compositor services** (in progress)
 
 ---
 
@@ -223,11 +225,23 @@ cargo test --all --release
 
 ---
 
-## Community & Support
+## Community
 
-- **Issues**: [GitHub Issues](https://github.com/vi-group/vios/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/vi-group/vios/discussions)
-- **Email**: vios-team@vigroup.ai (if available)
+| Resource | Purpose |
+|----------|---------|
+| [GitHub Discussions](../../discussions) | Questions, ideas, show-and-tell |
+| [GitHub Issues](../../issues) | Bug reports and feature requests |
+| [`good-first-issue`](../../issues?q=label%3Agood-first-issue) | Curated starting points for new contributors |
+
+**New contributor?**
+
+1. Run `./scripts/dev-setup.sh` (Linux/macOS) or `.\scripts\dev-setup.ps1` (Windows)
+2. Read [docs/ONBOARDING.md](docs/ONBOARDING.md) — setup guide + common errors
+3. Read [CONTRIBUTING.md](CONTRIBUTING.md) — step-by-step first PR walkthrough
+4. Browse [docs/FAQ.md](docs/FAQ.md) — architecture questions answered
+5. Check [docs/ROADMAP.md](docs/ROADMAP.md) — where the project is headed
+
+We aim to respond to PRs and new issues within **3 business days**.
 
 ---
 
@@ -246,6 +260,6 @@ ViOS builds on insights from:
 
 ---
 
-**Version**: 0.2.0 (Mycelium Era)  
-**Last Updated**: 2026-05-28  
+**Version**: 0.2.1 (Mycelium Era)  
+**Last Updated**: 2026-05-29  
 **Maintained by**: ViOS Team

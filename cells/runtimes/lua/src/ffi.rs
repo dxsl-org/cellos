@@ -56,6 +56,28 @@ extern "C" {
 
     /// Pop `n` elements from the stack.
     pub fn lua_settop(L: *mut LuaState, idx: c_int);
+
+    // ── Stack push ───────────────────────────────────────────────────────────
+
+    /// Push a nil value.
+    pub fn lua_pushnil(L: *mut LuaState);
+    /// Push a boolean (0 = false, non-zero = true).
+    pub fn lua_pushboolean(L: *mut LuaState, b: c_int);
+    /// Push a 64-bit integer.
+    pub fn lua_pushinteger(L: *mut LuaState, n: i64);
+    /// Push a NUL-terminated C string; returns the internal pointer.
+    pub fn lua_pushstring(L: *mut LuaState, s: *const c_char) -> *const c_char;
+    /// Push `len` bytes of string data (may contain NUL bytes).
+    pub fn lua_pushlstring(L: *mut LuaState, s: *const c_char, len: usize) -> *const c_char;
+    /// Push a light userdata (opaque pointer, not GC-managed).
+    pub fn lua_pushlightuserdata(L: *mut LuaState, p: *mut core::ffi::c_void);
+
+    // ── Stack read ───────────────────────────────────────────────────────────
+
+    /// Return the integer at stack index `idx` (0 if not a number).
+    pub fn lua_tointegerx(L: *mut LuaState, idx: c_int, isnum: *mut c_int) -> i64;
+    /// Return the light userdata pointer at stack index `idx` (null if wrong type).
+    pub fn lua_touserdata(L: *mut LuaState, idx: c_int) -> *mut core::ffi::c_void;
 }
 
 /// Convenience: pop `n` items from the stack.
@@ -63,6 +85,7 @@ extern "C" {
 /// # Safety
 /// `L` must be a valid, non-null Lua state.
 #[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
+#[allow(dead_code)] // reason: called by repl_session and bindings_io when stack cleanup is needed
 pub unsafe fn lua_pop(L: *mut LuaState, n: c_int) {
     // SAFETY: caller guarantees L is valid; settop(-n-1) is the canonical pop.
     unsafe { lua_settop(L, -(n) - 1) }

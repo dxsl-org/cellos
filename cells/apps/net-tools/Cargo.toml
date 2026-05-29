@@ -1,0 +1,25 @@
+[package]
+name = "app-net-tools"
+version = "0.1.0"
+edition = "2021"
+description = "ViOS network utilities: ping, curl, nc, wget"
+
+[dependencies]
+ostd = { path = "../../../libs/ostd" }
+api  = { path = "../../../libs/api" }
+
+[[bin]]
+name = "ping"
+path = "src/bin/ping.rs"
+
+[[bin]]
+name = "curl"
+path = "src/bin/curl.rs"
+
+[[bin]]
+name = "nc"
+path = "src/bin/nc.rs"
+
+[[bin]]
+name = "wget"
+path = "src/bin/wget.rs"

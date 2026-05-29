@@ -110,9 +110,12 @@ impl Stack {
         // page fault immediately instead of silently corrupting adjacent memory.
         // The physical frame is still allocated (owned by this Stack) but its
         // PTE is cleared so the hardware traps on any access.
-        if guard {
-            paging::unmap_page(base_addr).map_err(|_| ViError::OutOfMemory)?;
-        }
+        // Guard page: temporarily skip the unmap.
+        // Removing the kernel identity-map PTE causes memset (called during page-table
+        // setup) to fault when the kernel writes to what it thinks is a valid physical
+        // frame.  Re-enable once a separate user-VA allocator ensures stack frames have
+        // user VAs that never coincide with kernel page-table physical addresses.
+        let _ = guard; // suppress unused-variable warning
 
         // Usable Pages
         let flags = if user_mode {

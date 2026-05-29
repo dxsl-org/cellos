@@ -38,8 +38,11 @@ members = [
     # Cells - Apps
     "cells/apps/init",
     "cells/apps/shell",
+    "cells/apps/bench",
     "cells/apps/hello",
     "cells/apps/utils",
+    "cells/apps/sys-tools",
+    "cells/apps/net-tools",
     "cells/apps/test-isolation",
 
     # Cells - Runtimes

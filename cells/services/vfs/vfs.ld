@@ -3,8 +3,9 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* VFS base address - 0x88500000 (Safe gap after Init 4MB heap) */
-    . = 0x88500000;
+    /* VFS user-space base address — RISC-V SV39 user VA (< 0x8000_0000).
+     * 32 MB offset leaves room for init/config below and other services above. */
+    . = 0x02000000;
     
     .text : {
         *(.text.boot)

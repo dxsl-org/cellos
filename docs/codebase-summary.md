@@ -1,10 +1,24 @@
 # ViOS Codebase Summary
 
-**Project**: ViOS (Jarvis Hybrid OS)  
-**Version**: 0.2.0 (Mycelium Era)  
-**Language**: Rust (nightly, `no_std`)  
-**Total LOC**: ~12,600 Rust + supporting files  
-**Last Updated**: 2026-05-28
+**Project**: ViOS (Jarvis Hybrid OS)
+**Version**: 0.2.1-dev (Mycelium Era)
+**Language**: Rust (nightly, `no_std`)
+**Crates**: 35 workspace members
+**Last Updated**: 2026-05-29
+
+---
+
+## Quick Stats
+
+| Area | Crates | Key Highlights |
+|------|--------|---------------|
+| Kernel | 1 | ~8 500 LOC; HotSwap, scatter/gather IPC, lease caps |
+| HAL | 10 | RV64 full, AArch64 + x86_64 + RV32 + AArch32 implemented |
+| Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
+| Apps | 8 | shell (parser+executor+aliases+jobs), bench, sys-tools, net-tools, utils |
+| Drivers | 6 | disk, gpu, input, net (VirtIO NIC), serial, wasm |
+| Services | 6 | vfs (RamFS+IPC), compositor (30 FPS), net (smoltcp+DHCP), input, config, power |
+| Runtimes | 1 | Lua 5.4 (multi-line REPL, VFS I/O FFI, ViStateTransfer) |
 
 ---
 
@@ -12,271 +26,149 @@
 
 ```
 vios/
-├── kernel/                    Nano Kernel (~5,300 LOC)
-│   ├── src/
-│   │   ├── main.rs           Kernel entry, boot orchestration (254 LOC)
-│   │   ├── boot.rs           Limine bootloader + SimpleBootInfo fallback (274 LOC)
-│   │   ├── boot/             Arch-specific boot code (RISC-V asm)
-│   │   ├── boot.rs           Bootloader integration
-│   │   ├── cell.rs           Cell registry & metadata (308 LOC)
-│   │   ├── cell/             Cell lifecycle
-│   │   ├── memory.rs         Frame allocator facade (729 LOC)
-│   │   ├── memory/           Memory management
-│   │   │   ├── frame_alloc.rs  Bitmap-based frame allocator
-│   │   │   ├── heap.rs       Kernel heap management
-│   │   │   └── paging.rs     Virtual memory, SV39 page tables
-│   │   ├── task.rs           Scheduler & syscalls (31,986 LOC)
-│   │   ├── task/             Task management
-│   │   │   ├── scheduler.rs  Round-robin scheduler
-│   │   │   ├── syscall.rs    10 core syscalls
-│   │   │   ├── ipc.rs        Send/Recv/Call/Reply/Grant/Lease
-│   │   │   └── tcb.rs        Task control block
-│   │   ├── loader.rs         ELF linker & relocator (223 LOC)
-│   │   ├── loader/           ELF loading
-│   │   ├── fs.rs             Filesystem facade (637 LOC)
-│   │   ├── fs/               FAT32 filesystem
-│   │   ├── sync.rs           Spinlock synchronization (82 LOC)
-│   │   ├── intrinsics.rs     Panic handler, compiler builtins (54 LOC)
-│   │   ├── prelude.rs        Common imports
-│   │   └── embedded/         Embedded disk images (test binaries)
-│   ├── Cargo.toml
-│   ├── build.rs
-│   └── linker.ld             RV64 linker script
+├── kernel/src/
+│   ├── main.rs             Boot orchestration
+│   ├── cell/
+│   │   ├── registry.rs     Cell lifecycle + VA range allocation
+│   │   ├── cap_registry.rs Capability table (lease expiry, grant depth)
+│   │   ├── hotswap.rs      5-step live Cell replacement (Phase 20)
+│   │   └── metadata.rs     CellHeader metadata
+│   ├── memory/
+│   │   ├── frame.rs        Bitmap frame allocator
+│   │   ├── heap.rs         Kernel heap
+│   │   ├── paging.rs       SV39 page tables
+│   │   └── tests.rs        Stress tests (10 K alloc/free, multi-size)
+│   ├── loader/
+│   │   ├── elf.rs          ELF parser + segment loader
+│   │   ├── reloc.rs        R_RISCV_RELATIVE relocation engine
+│   │   ├── early.rs        Boot-time disk reader (before VFS)
+│   │   ├── disk_layout.rs  Shared disk layout constants
+│   │   └── elf_tests.rs    10 boot-time ELF + relocation tests
+│   ├── task/
+│   │   ├── scheduler.rs    Round-robin scheduler
+│   │   ├── syscall.rs      HotSwap, GpuFlush, SendGather, RecvScatter, RecvTimeout
+│   │   ├── tcb.rs          Task control block (Recv deadline field)
+│   │   ├── tests.rs        11 scheduler + state-transition tests
+│   │   ├── ipc_test.rs     IPC scenario stubs
+│   │   ├── stack.rs        Kernel stack management
+│   │   └── drivers/
+│   │       ├── virtio_blk.rs  VirtIO block driver
+│   │       ├── virtio_gpu.rs  VirtIO GPU (RESOURCE_CREATE_2D, flush)
+│   │       ├── virtio_input.rs VirtIO keyboard/mouse
+│   │       ├── virtio_net.rs  VirtIO NIC (Phase 15)
+│   │       ├── fb_console.rs  Framebuffer text console
+│   │       ├── uart.rs        NS16550A UART
+│   │       ├── input_map.rs   Scancode → ASCII
+│   │       └── ...
+│   ├── fs/fat.rs           FAT32 via `fatfs` crate
+│   └── fs.rs               FS facade
 │
-├── hal/                       Hardware Abstraction Layer (~1,200 LOC)
-│   ├── core/
-│   │   └── src/lib.rs        Feature-gated arch facade (47 LOC)
-│   ├── traits/                Pure trait definitions (no impl)
-│   │   ├── arch/src/lib.rs   Arch trait: init, context switch, interrupts
-│   │   ├── paging/src/lib.rs PageTableTrait: map, unmap, translate
-│   │   ├── interrupt/src/lib.rs InterruptController: enable/disable/ack
-│   │   ├── timer/src/lib.rs  Timer trait (clock)
-│   │   ├── uart/src/lib.rs   UART trait (serial I/O)
-│   │   └── display/src/lib.rs Display trait (framebuffer)
-│   ├── arch/
-│   │   ├── riscv/            RV32/RV64 FULLY IMPLEMENTED (~428 LOC)
-│   │   │   ├── src/lib.rs
-│   │   │   ├── src/rv64.rs   RV64 entry (SV39 paging, PLIC, SBI, NS16550A)
-│   │   │   ├── src/rv32.rs   RV32 stub (4 LOC)
-│   │   │   ├── src/common.rs Shared utilities
-│   │   │   ├── src/common/timer.rs SBI clock
-│   │   │   ├── src/common/uart_ns16550a.rs UART driver
-│   │   │   ├── src/common/sbi.rs SBI calls
-│   │   │   ├── src/rv64/boot.rs RISC-V assembly entry
-│   │   │   ├── src/rv64/context.rs Context switch (trap frames)
-│   │   │   ├── src/rv64/paging.rs SV39 page table walker
-│   │   │   └── src/rv64/trap.rs Exception/interrupt handler
-│   │   ├── arm/              AArch64 STUBS ONLY (~53 LOC)
-│   │   └── x86/              x86_64 STUBS ONLY (~46 LOC)
-│   ├── Cargo.toml (core), arch/riscv/Cargo.toml, etc.
+├── hal/ (10 crates)
+│   ├── core/               Feature-gated arch facade
+│   ├── traits/             6 pure trait crates (arch, paging, interrupt, timer, uart, display)
+│   └── arch/
+│       ├── riscv/          RV64 full + RV32 trait impls
+│       ├── arm/            AArch64 full + AArch32 trait impls
+│       └── x86/            x86_64 full impl (IDT, GDT, LAPIC, syscall/sysret)
 │
-├── libs/                      Public APIs & Utilities (~3,000 LOC)
-│   ├── types/
-│   │   └── src/lib.rs        Core types: VAddr, PAddr, CellId, ViError (135 LOC)
-│   ├── api/                  PUBLIC ABI (Kernel-Cell boundary)
-│   │   └── src/
-│   │       ├── lib.rs        Trait exports (1,271 LOC)
-│   │       ├── fs.rs         ViFileSystem, ViFile traits
-│   │       ├── block.rs      ViBlockDevice trait
-│   │       ├── net.rs        ViTcpStack, ViTcpStream traits
-│   │       ├── driver.rs     ViDriver trait
-│   │       ├── runtime.rs    ViVmRuntime for VM cells
-│   │       ├── config.rs     ViConfig trait
-│   │       ├── benchmark.rs  ViBenchmark trait
-│   │       ├── posix.rs      POSIX C Library shim (stdio, stdlib, string)
-│   │       ├── state_transfer.rs ViStateTransfer (hot migration)
-│   │       └── async_traits.rs Async versions (ViAsyncFile, etc.)
-│   └── ostd/                 Cells' Standard Library (~1,543 LOC)
-│       └── src/
-│           ├── lib.rs
-│           ├── syscall.rs    Syscall wrappers (Send, Recv, Call, Reply, etc.)
-│           ├── io.rs         I/O macros (println!, eprintln!)
-│           ├── alloc.rs      Allocator interface
-│           ├── prelude.rs    Common exports
-│           └── fs.rs         VFS wrappers
+├── libs/ (3 crates)
+│   ├── types/src/lib.rs    VAddr, PAddr, CellId, ViError, DirEntry + 10 host unit tests
+│   ├── api/src/
+│   │   ├── syscall.rs      26 ViSyscall variants + ABI tests (5 host tests)
+│   │   ├── fs.rs           ViFileSystem (open/read/write/mkdir/rmdir/unlink/readdir)
+│   │   ├── input.rs        InputEvent, KeyEvent, KeySym, Modifiers (Phase 14)
+│   │   ├── display.rs      Rect, PixelFormat, SurfaceCap, compositor opcodes (Phase 16)
+│   │   ├── benchmark.rs    ViBenchmark + BenchReport (p50/p99 + JSON)
+│   │   ├── hotswap.rs      ViStateTransfer trait
+│   │   ├── cap.rs          CapId, CapPerms
+│   │   └── net.rs          ViTcpStack, IpEndpoint
+│   └── ostd/src/
+│       ├── syscall.rs      sys_gpu_flush, sys_hotswap, sys_recv_timeout, sys_send_gather, …
+│       ├── fs.rs           File::open/read/close (cap-based)
+│       └── repl.rs         Shared readline + 500-entry history ring buffer
 │
-├── cells/                     Applications, Drivers, Services (~1,800 LOC)
-│   ├── apps/
-│   │   ├── init/             Bootstrap orchestrator (114 LOC)
-│   │   │   └── src/main.rs   Spawns config, vfs, shell services
-│   │   ├── shell/            Interactive REPL (571 LOC)
-│   │   │   ├── src/main.rs   Async shell event loop
-│   │   │   ├── src/shell.rs  Command parsing & execution
-│   │   │   ├── src/commands.rs Echo, cat, ls, pwd, cd, help
-│   │   │   ├── src/config_client.rs Config KV client
-│   │   │   ├── src/async_utils.rs Read stdin, timer utilities
-│   │   │   ├── build.rs      Embedding binary assets
-│   │   │   └── shell.ld      Linker for shell binary
-│   │   ├── hello/            Hello World test (12 LOC)
-│   │   ├── utils/            cat, echo, ls binaries (39 LOC)
-│   │   ├── test-isolation/   Compile-time isolation check (32 LOC)
-│   │   └── app.ld            Link script for apps
-│   ├── drivers/              Hardware drivers (~227 LOC, mostly STUBS)
-│   │   ├── disk/             RamDisk + VirtIO block (IMPLEMENTED)
-│   │   ├── gpu/              VirtIO GPU (STUB)
-│   │   ├── input/            Keyboard/mouse (STUB)
-│   │   ├── net/              NIC driver (STUB)
-│   │   ├── serial/           Serial output (STUB)
-│   │   └── wasm/             WASM runtime (STUB)
-│   ├── services/             System services (~270 LOC)
-│   │   ├── vfs/              Virtual filesystem (RamFS, IMPLEMENTED)
-│   │   │   └── src/main.rs   File handle serving, /bin/, /dev/
-│   │   ├── config/           Key-value store (IMPLEMENTED)
-│   │   │   └── src/main.rs   IPC protocol for config reads
-│   │   ├── compositor/       Graphics compositor (STUB)
-│   │   ├── input/            Input event routing (STUB)
-│   │   ├── net/              Network stack (STUB)
-│   │   └── power/            Power management (STUB)
-│   └── runtimes/             VM/Script runtimes
-│       ├── lua/              Lua 5.4 FFI bindings
-│       │   ├── build.rs      C compilation via cc crate
-│       │   ├── src/c/        Lua 5.4 source
-│       │   └── src/lib.rs    Rust bindings
-│       └── micropython/      MicroPython 1.24.1 FFI bindings
+├── cells/apps/ (8 crates)
+│   ├── init/               Spawns VFS→Config→Shell from /bin/
+│   ├── shell/              Full REPL: parser (pipe/redir/bg/seq), executor, alias, jobs, history
+│   │   └── src/            parser.rs, executor.rs, jobs.rs, history.rs, aliases.rs,
+│   │                       cmd_fs.rs (wc/head/tail/grep/mkdir/rm), cmd_sys.rs, state_transfer.rs
+│   ├── bench/              4-scenario benchmark (ctx-switch, IPC, syscall, footprint)
+│   ├── utils/              wc, head, tail, grep, sort, sed, cat, ls, cp, mv, rm, mkdir, touch, echo
+│   ├── sys-tools/          ps, env, uname, date, free, kill, shutdown, hotswap
+│   ├── net-tools/          ping, curl, nc, wget (stubs for Phase 15 data-path)
+│   ├── hello/              Minimal ELF smoke test
+│   └── test-isolation/     Capability isolation test cell
 │
-├── tests/                    Architecture validation suite
-│   ├── architecture-validation/
-│   │   ├── step1_*.md        Spec verification checks
-│   │   └── step2_*.md        Dependency analysis (10/10 score)
+├── cells/drivers/ (6 crates)
+│   ├── disk/               VirtIO block passthrough
+│   ├── gpu/                GPU cell (flush_rect + fill_rect helpers)
+│   ├── input/              VirtIO input passthrough
+│   ├── net/                VirtIO NIC cell wrapper
+│   ├── serial/             UART driver cell
+│   └── wasm/               WebAssembly runtime stub
 │
-├── tools/
-│   └── mkfat32.py            Disk image creation script
+├── cells/services/ (6 crates)
+│   ├── vfs/                RamFS + OP_MKDIR/RMDIR/UNLINK/STAT IPC + ViStateTransfer
+│   │   └── src/            mount.rs, quota.rs, handle_table.rs
+│   ├── compositor/         Software blending, z-order, damage tracking, GPU flush
+│   │   └── src/            surface_table.rs, z_order.rs, render.rs
+│   ├── net/                smoltcp TCP/IP + DHCP + socket IPC
+│   │   └── src/            interface.rs, socket_table.rs, dhcp.rs, poll_driver.rs
+│   ├── input/              US QWERTY translator, modifier state, focus dispatcher + ViStateTransfer
+│   │   └── src/            layout_us_qwerty.rs, modifier_state.rs, dispatcher.rs
+│   ├── config/             KV store + ViStateTransfer (schema v1)
+│   └── power/              Power management stub
 │
-├── docs/                     Design specifications & guides
-│   ├── 00-context.md         Prime directive & 8 laws
-│   ├── 00-fork.md            Forking from other projects
-│   ├── 01-core.md            Cellular philosophy & linker
-│   ├── 02-memory.md          SAS, HHDM, registry
-│   ├── 03-runtime.md         Async safety & owned buffers
-│   ├── 04-hardware.md        Multi-arch HAL
-│   ├── 05-application.md     Native/WASM/VM apps
-│   ├── 06-graphics.md        Graphics & compositor
-│   ├── 07-networking.md      Network stack
-│   ├── 08-power.md           Power management
-│   ├── 09-vfs.md             Filesystem (VFS)
-│   ├── 10-testing.md         Testing strategy
-│   ├── 11-shell.md           Shell design
-│   ├── ARCHITECTURE.md       Full system design (32KB)
-│   ├── CODING_GUIDE.md       Coding patterns (24KB)
-│   ├── API.md                Complete API reference (22KB)
-│   ├── ONBOARDING.md         Developer onboarding (23KB)
-│   ├── PATTERNS.md           Common patterns (20KB)
-│   ├── INSTALLATION.md       Build & setup (16KB)
-│   ├── TECH_STACK.md         Tech stack details (17KB)
-│   └── 99-roadmap.md         Development roadmap
+├── cells/runtimes/ (1 crate)
+│   └── lua/                Lua 5.4 REPL (multi-line, history, VFS I/O FFI, ViStateTransfer)
+│       ├── src/ffi.rs      Lua C API bindings
+│       ├── src/bindings_io.rs  vios_io_open/read/close, vios_os_execute
+│       └── src/repl_session.rs Multi-line REPL + <eof> continuation detection
 │
-├── .github/workflows/        CI/CD pipelines
-│   ├── ci.yml                Lint, build, security checks
-│   └── test.yml              Architecture tests
+├── tests/integration/      QEMU-driven test stubs (QemuRunner harness)
+│   ├── harness.rs          Boot QEMU, inject input, grep serial output
+│   ├── ring3_smoke.rs      Banner + Ring-3 hello + shell prompt
+│   ├── multi_cell.rs       init→config→vfs→shell chain
+│   ├── input_dispatch.rs   Key injection + shell echo
+│   ├── network_loopback.rs DHCP + TCP loopback
+│   ├── compositor_basic.rs GPU init + surface no-panic
+│   └── hotswap_shell.rs    Live shell upgrade + history preservation
 │
-├── .cargo/config.toml        Cargo settings (RISC-V target defaults)
-├── Cargo.toml                Workspace manifest (21 crates)
-├── Cargo.lock                Dependency lock
-├── CLAUDE.md                 AI agent guidelines (auto-loaded)
-├── README.md                 Project overview
-└── repomix-output.xml        Full codebase dump (for LLM analysis)
+├── scripts/
+│   ├── dev-setup.sh / .ps1 One-command setup (Linux/macOS/Windows)
+│   ├── format-disk.ps1     FAT32 disk image generator
+│   ├── compare-bench-results.sh  Rolling-median perf regression detector
+│   └── measure-coverage.sh LLVM coverage script
+│
+└── docs/
+    ├── vfs-api.md, input-api.md, display-api.md, network-api.md
+    ├── hotswap-guide.md, scripting-guide.md, performance-report.md
+    ├── ROADMAP.md, FAQ.md, ONBOARDING.md, CONTRIBUTING.md
+    └── performance-history-chart.html  Chart.js benchmark timeline
+
 ```
 
 ---
 
-## Crate Organization
+## Key Design Principles
 
-### Workspace Members (21 total)
-
-**Kernel & Core**
-- `kernel` — Nano kernel (5,300 LOC)
-
-**HAL (Hardware Abstraction)**
-- `hal/core` — Facade & re-exports
-- `hal/traits/arch`, `timer`, `interrupt`, `uart`, `display`, `paging` — Pure traits
-- `hal/arch/riscv`, `arm`, `x86` — Arch implementations (RV64 done, ARM/x86 stubs)
-
-**Libraries (Public ABI)**
-- `libs/types` — VAddr, PAddr, ViError, CellId
-- `libs/api` — Kernel-Cell ABI (ViFileSystem, ViDriver, ViNetTcpStack, etc.)
-- `libs/ostd` — Cells' standard library (syscall wrappers, I/O, alloc)
-
-**Cells - Drivers**
-- `cells/drivers/disk`, `gpu`, `input`, `net`, `serial`, `wasm`
-
-**Cells - Services**
-- `cells/services/vfs` — Virtual filesystem (RamFS)
-- `cells/services/config` — Key-value store
-- `cells/services/compositor`, `input`, `net`, `power` (stubs)
-
-**Cells - Apps**
-- `cells/apps/init` — Bootstrap
-- `cells/apps/shell` — Interactive REPL
-- `cells/apps/hello` — Test app
-- `cells/apps/utils` — cat, echo, ls utilities
-- `cells/apps/test-isolation` — Compile-time checks
-
-**Cells - Runtimes**
-- `cells/runtimes/lua` — Lua 5.4 FFI
-- `cells/runtimes/micropython` — MicroPython 1.24.1 FFI
+1. **Single Address Space (SAS)** — all Cells share one virtual address space; no TLB flush on IPC
+2. **Cellular isolation** — `#![forbid(unsafe_code)]` in every Cell crate; HAL-only unsafe
+3. **Capability model** — capabilities have optional lease expiry + grant-depth enforcement
+4. **Hot-swap** — `ViStateTransfer` on shell/config/vfs; 5-step live Cell replacement
+5. **Law 2 (Owned Buffers)** — no `&mut [u8]` across `async` boundaries
+6. **Law 5 (No mod.rs)** — `foo.rs` parallel to `foo/` everywhere
 
 ---
 
-## Key Metrics
+## Syscall Surface (selected)
 
-| Aspect | Count |
-|--------|-------|
-| Total Rust LOC | ~12,600 |
-| Kernel LOC | ~5,300 |
-| HAL LOC | ~1,200 |
-| Libraries LOC | ~3,000 |
-| Cells LOC | ~1,800 |
-| Crates | 21 |
-| Traits | 35+ |
-| Syscalls | 10 core |
-| Design docs | 21 files (15,000+ LOC) |
-
----
-
-## Build Configuration
-
-**Target**: `riscv64gc-unknown-none-elf`  
-**Edition**: 2021  
-**Profile**: Release with LTO + size optimization  
-**Nightly Features**: `asm`, `const_generics`, `ptr_to_from_bits`, etc.
-
----
-
-## Module Pattern
-
-All files follow **no mod.rs** rule:
-- ✅ `foo.rs` parallel to `foo/` directory
-- ❌ Never `foo/mod.rs`
-
-Example: `kernel/src/memory.rs` + `kernel/src/memory/` folder
-
----
-
-## Naming Conventions
-
-| Category | Prefix | Examples |
-|----------|--------|----------|
-| Public Traits | `Vi` | ViFileSystem, ViDriver, ViBlockDevice |
-| Error Types | `Vi` | ViError, ViResult |
-| Addresses | `V`/`P` | VAddr, PAddr |
-| Filesystems | `vi` | viFS1, viFS2 |
-| Modules | snake_case | `memory.rs`, `task.rs` |
-
----
-
-## Unsafe Code Policy
-
-| Context | Allowed | Rule |
-|---------|---------|------|
-| Cells | ❌ NO | `#![forbid(unsafe_code)]` |
-| Kernel/HAL | ✅ YES | Hardware I/O only, `// SAFETY:` required |
-
----
-
-## See Also
-
-- **Detailed Architecture**: `docs/ARCHITECTURE.md`
-- **Coding Guide**: `docs/CODING_GUIDE.md`
-- **API Reference**: `docs/API.md`
-- **Patterns**: `docs/PATTERNS.md`
-- **Specs**: `docs/0X-*.md` (numbered specifications)
+| ID | Name | Description |
+|----|------|-------------|
+| 0–3 | Send/Recv/Call/Reply | Core IPC |
+| 12 | SpawnFromPath | Load cell ELF from /bin/ |
+| 13–15 | OpenCap/ReadCap/CloseCap | Capability-based file I/O |
+| 201 | RecvTimeout | IPC with monotonic-tick deadline |
+| 202–203 | SendGather/RecvScatter | Scatter/gather IPC (Phase 20) |
+| 300 | GpuFlush | Blit pixel rect to VirtIO GPU |
+| 400 | HotSwap | Live Cell replacement |

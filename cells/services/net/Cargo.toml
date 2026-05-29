@@ -4,9 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-types = { path = "../../../libs/types" }
-api = { path = "../../../libs/api" }
-ostd = { path = "../../../libs/ostd" }
+types  = { path = "../../../libs/types" }
+api    = { path = "../../../libs/api" }
+ostd   = { path = "../../../libs/ostd" }
+smoltcp = { version = "0.11", default-features = false, features = [
+    "alloc",
+    "socket-tcp",
+    "socket-udp",
+    "socket-dhcpv4",
+    "socket-icmp",
+    "proto-ipv4",
+    "proto-dhcpv4",
+] }
 
 [lib]
 crate-type = ["staticlib"]

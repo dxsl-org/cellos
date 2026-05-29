@@ -129,15 +129,17 @@ Test pyramid:
 
 ## Todo List
 
-- [ ] Build `tests/integration/harness.rs` (QEMU subprocess driver)
+- [x] Build `tests/integration/harness.rs` (QEMU subprocess driver)
 - [ ] Migrate existing phase smoke tests into `tests/integration/`
-- [ ] Expand `kernel/src/memory/tests.rs` (4 new cases + 10K stress)
+- [x] Expand `kernel/src/memory/tests.rs` (7 cases + 10K stress + multi-size + nested-box)
 - [ ] Expand `kernel/src/task/tests.rs` (round-robin, blocked, preempt)
 - [ ] Expand `kernel/src/task/ipc_test.rs` (call/reply, cap transfer, 100K stress)
-- [ ] Create `kernel/src/loader/elf_tests.rs`
-- [ ] Create `kernel/src/loader/reloc_tests.rs`
-- [ ] Create `libs/api/src/syscall_tests.rs`
-- [ ] Create `libs/types/src/tests.rs`
+- [x] Create `kernel/src/loader/elf_tests.rs` (path validation + reloc R_RISCV_RELATIVE + error cases)
+- [x] Create relocation tests (in elf_tests.rs: non-multiple, over-limit, unknown type, NONE no-op, RELATIVE patches memory)
+- [x] Create `libs/api/src/syscall_tests.rs` (26 ABI round-trips, stable discriminants, unknown ID → Unknown, no aliasing)
+- [x] Create `libs/types/src/tests.rs` (10 VAddr/PAddr arithmetic + type tests, host-runnable)
+- [x] Create `tests/integration/ring3_smoke.rs` (boot banner + Ring-3 hello + shell prompt + no-panic)
+- [x] Create `tests/integration/multi_cell.rs` (init→config→vfs→shell chain + no-panic)
 - [ ] Run `cargo llvm-cov` baseline, identify gaps
 - [ ] Add tests until coverage ≥80%
 - [ ] Add `cargo test` + `cargo llvm-cov` jobs to CI

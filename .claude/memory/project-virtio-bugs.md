@@ -31,8 +31,10 @@ After `activate_paging()`, accesses to VirtIO MMIO registers at `0x10001000+` wo
 
 **Fix applied:** Added explicit identity mappings in `init_kernel_paging` (`kernel/src/memory/paging.rs`):
 - CLINT: `0x0200_0000 - 0x0201_0000`
-- PLIC: `0x0C00_0000 - 0x1000_0000` (64MB — WARNING: creates ~16K page table entries, may stress frame allocator)
+- PLIC: `0x0C00_0000 - 0x1000_0000` (64MB — code review confirmed: ~16K leaf PTEs, ~128KB page-table memory, no OOM risk)
 - UART + VirtIO: `0x1000_0000 - 0x1001_0000`
+
+`FALLBACK_MEMORY_MAP` in `kernel/src/boot.rs` no longer contains MMIO entries — single source of truth is paging.rs.
 
 **Remaining:** Full verification requires QEMU testing (Phase 03 boot hang must be fixed first).
 **How to apply:** If a new device is added at a non-RAM MMIO address, add it to the MMIO mapping list.

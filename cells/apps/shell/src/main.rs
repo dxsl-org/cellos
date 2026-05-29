@@ -4,17 +4,24 @@
 extern crate alloc;
 extern crate ostd;
 
+mod aliases;
 mod async_utils;
+mod state_transfer;
+mod cmd_fs;
+mod cmd_sys;
 mod commands;
 mod config_client;
+mod executor;
+mod history;
+mod jobs;
+mod parser;
 mod shell;
 
-use ostd::executor;
 use shell::ViShell;
 
 #[no_mangle]
 pub fn main() {
     let _ = ostd::syscall::sys_log("DEBUG: Shell Started (Async Mode)\n");
     let mut shell = ViShell::new();
-    executor::block_on(shell.run());
+    ostd::executor::block_on(shell.run());
 }

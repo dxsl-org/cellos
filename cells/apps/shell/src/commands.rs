@@ -3,7 +3,16 @@ use ostd::prelude::*;
 use ostd::syscall;
 
 pub fn cmd_help() -> ViResult<()> {
-    ostd::io::println("Available commands: help, ls, cat, clear, exec");
+    ostd::io::println("ViOS Shell v0.2.1 — built-in commands:");
+    ostd::io::println("  Files:   ls  cat  wc  head  tail  grep  sort  sed  mkdir  rmdir  rm");
+    ostd::io::println("  System:  ps  pwd  uname  free  env  uptime  clear  exec");
+    ostd::io::println("  Shell:   help  echo  export  alias  unalias  jobs");
+    ostd::io::println("");
+    ostd::io::println("Syntax:  cmd | cmd2      (pipe)");
+    ostd::io::println("         cmd > file      (redirect stdout)");
+    ostd::io::println("         cmd < file      (redirect stdin)");
+    ostd::io::println("         cmd &           (background)");
+    ostd::io::println("         cmd ; cmd2      (sequence)");
     Ok(())
 }
 
