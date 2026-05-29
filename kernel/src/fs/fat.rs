@@ -174,23 +174,15 @@ impl ViFatFS {
                         boot_sector[35]
                     ])
                 );
+                // FAT16 stores the FAT size in the 16-bit BPB_FATSz16 (offset 22);
+                // BPB_FATSz32 (offset 36) is zero on FAT16. Read the FAT16 field.
                 log::info!(
-                    "  Sectors/FAT: {}",
-                    u32::from_le_bytes([
-                        boot_sector[36],
-                        boot_sector[37],
-                        boot_sector[38],
-                        boot_sector[39]
-                    ])
+                    "  Sectors/FAT (FAT16): {}",
+                    u16::from_le_bytes([boot_sector[22], boot_sector[23]])
                 );
                 log::info!(
-                    "  Root Cluster: {}",
-                    u32::from_le_bytes([
-                        boot_sector[44],
-                        boot_sector[45],
-                        boot_sector[46],
-                        boot_sector[47]
-                    ])
+                    "  Root Entry Count: {}",
+                    u16::from_le_bytes([boot_sector[17], boot_sector[18]])
                 );
             }
             // Reset stream position

@@ -12,14 +12,14 @@ pub static VIFS1: Spinlock<Option<Box<dyn ViFileSystem>>> = Spinlock::new(None);
 pub fn init() {
     log::info!("Filesystem: Initializing...");
 
-    // Attempt to mount FAT32 from VirtIO Block
+    // Attempt to mount the embedded FAT filesystem (FAT16) from the RAM disk.
     match fat::ViFatFS::new() {
         Ok(fs) => {
-            log::info!("Filesystem: FAT32 Mounted Successfully.");
+            log::info!("Filesystem: FAT16 mounted successfully.");
             *VIFS1.lock() = Some(Box::new(fs));
         }
         Err(e) => {
-            log::error!("Filesystem: Failed to mount FAT32: {:?}", e);
+            log::error!("Filesystem: Failed to mount FAT: {:?}", e);
         }
     }
 }
