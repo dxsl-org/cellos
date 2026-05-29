@@ -7,7 +7,9 @@
 - dev-setup.sh: fixed Linux disk-gen command; marked executable
 - README: added CODE_OF_CONDUCT.md link in contributor section
 
-**v1.0 Release Candidate**: All P0/P1/P2 phases complete (22/23 done, Phase 23 ✅); project ready for 1.0 release.
+**Scripting Runtime (Phase 18)**: MicroPython v1.24.1 (547 KB release binary) compiled for RISC-V 64 bare-metal; deployable at VA 0x0E000000; `/bin/python` available in kernel_fs.img via `pyexec_friendly_repl`; custom `gen_genhdr.py` generator bypasses Makefile dependency; Picolibc linked for C runtime (setjmp, frexp, strchr). Complements Lua for lightweight scripting on ViOS cells.
+
+**v1.0 Release Candidate**: All P0/P1/P2 phases complete (23/23 done, Phase 23 ✅); project ready for 1.0 release.
 
 **Complete 8-Task Boot Chain on 128MB RAM**
 

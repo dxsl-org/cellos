@@ -39,8 +39,10 @@ pub extern "C" fn main(_argc: isize, _argv: *const *const u8) -> isize {
     // recorded by mp_stack_set_top inside mp_embed_init.
     let stack_anchor: u8 = 0;
 
-    // SAFETY: HEAP is a static array only touched here; no concurrent access
-    // possible because this cell runs single-threaded.
+    // SAFETY: HEAP is a `static mut` array used exclusively here. This cell is
+    // single-threaded with no concurrent access; MicroPython owns the buffer
+    // for the lifetime of pyexec_friendly_repl.
+    #[allow(static_mut_refs)]
     unsafe {
         mp_embed_init(
             HEAP.as_mut_ptr(),
