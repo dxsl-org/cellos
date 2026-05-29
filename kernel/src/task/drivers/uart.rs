@@ -38,14 +38,17 @@ impl viUART {
             // Disable interrupts
             ptr.add(IER).write_volatile(0x00);
 
-            // Enable FIFO
-            ptr.add(FCR).write_volatile(0x01);
+            // Enable + clear FIFO (bit0=enable, bit1=clear RX, bit2=clear TX).
+            ptr.add(FCR).write_volatile(0x07);
 
             // Set 8-bit mode (Word Length Select bits 0 and 1)
             ptr.add(LCR).write_volatile(0x03);
 
-            // Enable interrupts (Receive Data Available) - Optional for polling
-            ptr.add(IER).write_volatile(0x01);
+            // Keep UART RX interrupts DISABLED (IER=0): the console driver polls
+            // the RHR directly. If RX IRQs were enabled, OpenSBI's M-mode console
+            // handler could drain the RHR before the kernel's S-mode poll sees
+            // the byte, swallowing all keyboard input.
+            ptr.add(IER).write_volatile(0x00);
         }
     }
 
@@ -119,12 +122,33 @@ pub fn init_input() {
     log::info!("UART Input Buffer Initialized");
 }
 
-/// Poll for a character from the buffer
+/// Poll for a character from the IRQ-filled buffer.
 pub fn getchar() -> Option<u8> {
     if let Some(buf) = RX_BUFFER.lock().as_mut() {
         return buf.pop_front();
     }
     None
+}
+
+/// Directly poll the 16550 Receive Holding Register.
+///
+/// This is the most robust input path on QEMU virt: it does not depend on
+/// PLIC interrupt delegation to S-mode (which OpenSBI may keep in M-mode) nor
+/// on the SBI DBCN console-read extension being implemented. Returns the byte
+/// if LSR.DR (Data Ready, bit 0) is set, else `None`.
+pub fn poll_rhr() -> Option<u8> {
+    let serial = SERIAL.lock();
+    // SAFETY: base_addr is the identity-mapped QEMU virt UART MMIO region,
+    // mapped explicitly in init_kernel_paging. RHR (offset 0) is read-only and
+    // side-effect-free to read when LSR.DR is clear, but we gate on DR anyway.
+    unsafe {
+        let ptr = serial.base_addr as *mut u8;
+        if (ptr.add(LSR).read_volatile() & _LSR_RX_READY) != 0 {
+            Some(ptr.add(_RHR).read_volatile())
+        } else {
+            None
+        }
+    }
 }
 
 /// Called from Trap Handler (IRQ 10)

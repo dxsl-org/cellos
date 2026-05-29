@@ -9,9 +9,10 @@
 //! keyboard. The GPU is intentionally omitted (its framebuffer setup currently
 //! blocks the boot — see run.ps1).
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -43,21 +44,31 @@ pub fn qemu_binary() -> String {
 }
 
 /// QEMU-driven ViOS integration test runner.
+///
+/// The guest serial port is exposed over a TCP socket (QEMU
+/// `-serial tcp:...,server`) rather than stdio. A TCP byte stream is the
+/// reliable channel for *bidirectional* automated serial I/O: piped stdio is
+/// subject to host/QEMU buffering that can swallow injected keystrokes.
 pub struct QemuRunner {
     child: Child,
-    stdin: Option<ChildStdin>,
-    /// Lines captured from the guest serial output so far.
-    output: Arc<Mutex<Vec<String>>>,
+    writer: Option<TcpStream>,
+    /// Raw bytes captured from the guest serial output so far.
+    output: Arc<Mutex<String>>,
 }
 
 impl QemuRunner {
     /// Spawn QEMU booting `kernel` with `disk` attached as the VirtIO block
-    /// device. Serial output is captured on a background reader thread.
+    /// device, with the guest serial bridged to a localhost TCP socket.
     ///
     /// `kernel` and `disk` are paths relative to the current working directory
     /// (typically the repo root).
     pub fn boot(kernel: &str, disk: &str) -> Self {
-        let mut child = Command::new(qemu_binary())
+        // Bind an ephemeral port on the host; QEMU connects to it as a serial
+        // backend (server=off,nowait → QEMU is the client and connects on start).
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_binary())
             .args([
                 "-machine", "virt",
                 "-m", "128M",
@@ -70,31 +81,39 @@ impl QemuRunner {
                 "-device", "virtio-net-device,netdev=net0",
                 "-device", "virtio-keyboard-device",
                 "-monitor", "none",
-                "-serial", "stdio",
+                "-serial", &format!("tcp:127.0.0.1:{port}"),
             ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .expect("qemu-system-riscv64 must be on PATH");
 
-        let stdin = child.stdin.take();
-        let stdout = child.stdout.take().expect("stdout piped");
-        let output = Arc::new(Mutex::new(Vec::<String>::new()));
+        // Accept QEMU's connection to our serial socket.
+        listener
+            .set_nonblocking(false)
+            .expect("blocking listener");
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
+        let writer = stream.try_clone().expect("clone serial stream");
 
-        // Background reader: append every serial line to the shared buffer.
+        let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
+        // Background reader: append all serial bytes to the shared buffer.
         thread::spawn(move || {
-            let reader = BufReader::new(stdout);
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => buf.lock().unwrap().push(l),
-                    Err(_) => break,
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
                 }
             }
         });
 
-        Self { child, stdin, output }
+        Self { child, writer: Some(writer), output }
     }
 
     /// Block until any captured line contains `pattern`, or `timeout_secs`
@@ -102,15 +121,8 @@ impl QemuRunner {
     pub fn wait_for(&self, pattern: &str, timeout_secs: u64) -> Result<String, String> {
         let deadline = Instant::now() + Duration::from_secs(timeout_secs);
         loop {
-            if let Some(hit) = self
-                .output
-                .lock()
-                .unwrap()
-                .iter()
-                .find(|l| l.contains(pattern))
-                .cloned()
-            {
-                return Ok(hit);
+            if self.output.lock().unwrap().contains(pattern) {
+                return Ok(pattern.to_string());
             }
             if Instant::now() > deadline {
                 return Err(format!(
@@ -124,21 +136,21 @@ impl QemuRunner {
 
     /// Send `line` (a newline is appended) to the guest serial console.
     pub fn send_line(&mut self, line: &str) {
-        if let Some(stdin) = self.stdin.as_mut() {
-            let _ = stdin.write_all(line.as_bytes());
-            let _ = stdin.write_all(b"\n");
-            let _ = stdin.flush();
+        if let Some(w) = self.writer.as_mut() {
+            let _ = w.write_all(line.as_bytes());
+            let _ = w.write_all(b"\n");
+            let _ = w.flush();
         }
     }
 
-    /// True if any captured line contains `needle`.
+    /// True if the captured serial output contains `needle`.
     pub fn output_contains(&self, needle: &str) -> bool {
-        self.output.lock().unwrap().iter().any(|l| l.contains(needle))
+        self.output.lock().unwrap().contains(needle)
     }
 
-    /// Full captured output joined by newlines (for diagnostics on failure).
+    /// Full captured serial output (for diagnostics on failure).
     pub fn dump(&self) -> String {
-        self.output.lock().unwrap().join("\n")
+        self.output.lock().unwrap().clone()
     }
 }
 

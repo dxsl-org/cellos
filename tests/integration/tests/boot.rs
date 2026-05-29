@@ -92,16 +92,9 @@ fn fat_filesystem_mounts() {
 }
 
 /// Phase 17: the shell must process an interactive command. We wait for the
-/// prompt, send `echo`, and expect the argument echoed back.
-///
-/// KNOWN ISSUE (ignored): the shell prints `ViOS >` but does not currently
-/// act on serial console input delivered this way — bulk-piped stdin to the
-/// guest UART is not picked up by the shell's async readline. Whether real
-/// char-by-char keyboard input works has not been confirmed. Tracked as a
-/// Phase 05 (keyboard input) / Phase 17 (shell) follow-up. Remove `#[ignore]`
-/// once the UART RX → shell input path is verified.
+/// prompt, send `echo` over the serial socket, and expect the argument echoed
+/// back. Verifies the full UART RX → console driver → shell readline path.
 #[test]
-#[ignore = "shell does not consume piped serial input yet — Phase 05/17 follow-up"]
 fn shell_executes_echo() {
     if !prerequisites_ok() {
         return;

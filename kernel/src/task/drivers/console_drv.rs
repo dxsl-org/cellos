@@ -18,18 +18,23 @@ impl viConsole {
     pub fn poll(&mut self) -> bool {
         let mut received = false;
 
-        // 1a. Drain any chars that the UART IRQ handler put in RX_BUFFER.
-        //     This path is active when UART IRQs are delegated to S-mode.
-        while let Some(c) = crate::task::drivers::uart::getchar() {
-            log::trace!("Console: UART IRQ byte {}", c);
+        // 1a. Directly poll the 16550 RHR. This is the primary, most reliable
+        //     path on QEMU virt: independent of PLIC IRQ delegation and the SBI
+        //     DBCN read extension (both of which may be unavailable here).
+        while let Some(c) = crate::task::drivers::uart::poll_rhr() {
             self.buffer.push_back(c);
             received = true;
         }
 
-        // 1b. Poll via SBI as a fallback — active when OpenSBI keeps UART in M-mode.
+        // 1b. Drain any chars the UART IRQ handler buffered (when IRQs reach S-mode).
+        while let Some(c) = crate::task::drivers::uart::getchar() {
+            self.buffer.push_back(c);
+            received = true;
+        }
+
+        // 1c. SBI DBCN read fallback — active when OpenSBI keeps the UART in M-mode.
         let c = crate::hal::sbi::console_getchar();
         if c > 0 {
-            log::trace!("Console: SBI UART byte {}", c);
             self.buffer.push_back(c as u8);
             received = true;
         }
