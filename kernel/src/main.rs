@@ -126,12 +126,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
     puts("TRACE: Allocating heap frames\n");
-    // Allocate 16MB for heap (4096 pages)
-    // Allocate 64 MB for the kernel heap.
-    // Rationale: `ramdisk.rs` copies disk_v3.img (up to 55 MB) into heap at boot.
-    // The heap must be larger than the disk image.
-    // 64 MB = 16 384 frames of 4 KB each.
-    const HEAP_FRAMES: usize = 16_384;
+    // Allocate 16 MB for the kernel heap.
+    // Rationale: kernel_fs.img is ~4 MB so the heap needs to be > 4 MB.
+    // 16 MB gives plenty of room for the RAM-disk copy + all kernel data structures
+    // (BTreeMaps for tasks, capabilities, page table frames, etc.).
+    // 16 MB = 4 096 frames of 4 KB each → requires only 16 MB of physical RAM beyond
+    // the kernel binary, so the system boots on 128 MB QEMU instances.
+    const HEAP_FRAMES: usize = 4_096;
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = allocator_guard
@@ -144,7 +145,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         start
     };
     puts("TRACE: frames allocated, calling init_heap\n");
-    let heap_size = HEAP_FRAMES * 4096; // 48 MB — matches frames above
+    let heap_size = HEAP_FRAMES * 4096; // 16 MB — matches frames above
     unsafe {
         memory::heap::init_heap(heap_start, heap_size);
     }

@@ -27,6 +27,6 @@ Write-Host ""
 
 # kernel_fs.img (4 MB FAT32 with release cells) is embedded in the kernel binary.
 # disk_v3.img (40 MB blank + bootstrap table) is the VirtIO block disk.
-& $qemu -machine virt -m 256M -nographic -bios default -kernel $kernel `
+& $qemu -machine virt -m 128M -nographic -bios default -kernel $kernel `
         -drive file=$disk,format=raw,id=hd0,if=none `
         -device virtio-blk-device,drive=hd0

@@ -16,7 +16,7 @@ DISK="${2:-}"
 # Build QEMU args — disk is optional.
 QEMU_ARGS=(
   -machine virt
-  -m 256M           # kernel(4.4MB) + heap(64MB) + cells fit in 256MB
+  -m 128M           # kernel(4.4MB) + heap(16MB) + cells fit in 128MB
   -nographic
   -bios default
   -kernel "$KERNEL"
