@@ -18,10 +18,18 @@ impl viConsole {
     pub fn poll(&mut self) -> bool {
         let mut received = false;
 
-        // 1. Poll SBI/UART (Physical Serial) — primary input for -nographic QEMU.
+        // 1a. Drain any chars that the UART IRQ handler put in RX_BUFFER.
+        //     This path is active when UART IRQs are delegated to S-mode.
+        while let Some(c) = crate::task::drivers::uart::getchar() {
+            log::trace!("Console: UART IRQ byte {}", c);
+            self.buffer.push_back(c);
+            received = true;
+        }
+
+        // 1b. Poll via SBI as a fallback — active when OpenSBI keeps UART in M-mode.
         let c = crate::hal::sbi::console_getchar();
         if c > 0 {
-            log::trace!("Console: UART byte {}", c); // trace-level: don't flood on every keystroke
+            log::trace!("Console: SBI UART byte {}", c);
             self.buffer.push_back(c as u8);
             received = true;
         }
