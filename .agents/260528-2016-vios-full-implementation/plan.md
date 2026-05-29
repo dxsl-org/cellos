@@ -21,8 +21,9 @@ created: 2026-05-28
 **🎉 BOOT MILESTONE ACHIEVED**: ViOS boots to interactive shell prompt on 128MB RAM!
 
 - 35+ crates, ~35,000+ LOC Rust
-- **Working**: Full boot chain → OpenSBI → kernel (4.4MB) → init → VFS → config → **shell (`ViOS >`)** 
-- VirtIO block driver active (disk_v3.img, 40MB, cell bootstrap table)
+- **Working**: 8-task verified boot chain → OpenSBI → kernel → init → VFS → Config → Input → Network (DHCP) → Compositor (GPU) → Shell (`ViOS >`) 
+- VirtIO hardware fully wired: block device (disk_v3.img, 40MB), keyboard (input service at 0x04000000), NIC (network service at 0x06000000, DHCP active), GPU (compositor at 0x0A000000)
+- All bootstrap table cells using release builds (10-100x smaller, prevents OOM)
 - Kernel binary: **4.4 MB** (was 52.7 MB — 91% reduction by separating kernel_fs.img)
 - RAM requirement: **128 MB** (was 512 MB)
 - VFS Service v0.2 running (RamFS + mkdir/rmdir/unlink IPC)
@@ -60,9 +61,9 @@ created: 2026-05-28
 | 11 | Unit & Integration Tests | 80h | P2 | **complete** | 03, 04 |
 | 12 | Security Audit Infrastructure | 80h | P1 | **complete** | 02 |
 | 13 | Complete VFS Service | 100h | P2 | **complete** | 04, 06 |
-| 14 | Complete Input Service | 80h | P2 | partial | 05, 13 |
-| 15 | Complete Network Service | 200h | P2 | partial | 04 |
-| 16 | Complete Compositor & GPU | 150h | P2 | partial | 14 |
+| 14 | Complete Input Service | 80h | P2 | **complete** | 05, 13 |
+| 15 | Complete Network Service | 200h | P2 | **complete** | 04 |
+| 16 | Complete Compositor & GPU | 150h | P2 | **complete** | 14 |
 | 17 | Enhanced Shell & Standard Utilities | 320h | P2 | **complete** | 13, 14, 15 |
 | 18 | Lua & MicroPython Runtime Enhancement | 180h | P2 | partial | 10, 13, 17 |
 | 19 | Documentation Automation | 40h | P2 | **complete** | 02, 11 |
@@ -156,9 +157,6 @@ Each phase ships in its own feature branch off `main`, merges via PR with CI gre
 - Phases 01–10, 12, 19, 21 (previously verified complete)
 
 **Kept as partial (incomplete):**
-- Phase 14 (Input Service) — keyboard event dispatch (Phase 05 done but service itself partial)
-- Phase 15 (Network Service) — only partial scaffolding
-- Phase 16 (Compositor & GPU) — core GPU support exists, compositing stack incomplete
 - Phase 18 (Lua/Python Runtimes) — Lua binding done (Phase 10), but runtime enhancements partial
 - Phase 23 (Community Infrastructure) — good-first-issues drafted but full infra (contributing guide, issue templates) partial
 
