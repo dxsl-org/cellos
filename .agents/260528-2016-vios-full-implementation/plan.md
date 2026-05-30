@@ -65,7 +65,7 @@ created: 2026-05-28
 | 13 | Complete VFS Service | 100h | P2 | **complete** | 04, 06 |
 | 14 | Complete Input Service | 80h | P2 | **complete** | 05, 13 |
 | 15 | Complete Network Service | 200h | P2 | **complete** | 04 |
-| 16 | Complete Compositor & GPU | 150h | P2 | **partial** | 14 |
+| 16 | Complete Compositor & GPU | 150h | P2 | **complete** | 14 |
 | 17 | Enhanced Shell & Standard Utilities | 320h | P2 | **complete** | 13, 14, 15 |
 | 18 | Lua & MicroPython Runtime Enhancement | 180h | P2 | **complete** | 10, 13, 17 |
 | 19 | Documentation Automation | 40h | P2 | **complete** | 02, 11 |
@@ -349,7 +349,14 @@ Each phase ships in its own feature branch off `main`, merges via PR with CI gre
 
 **Result:** net cell leases **10.0.2.15** from QEMU SLIRP. Phase 15 → **complete**. Integration test `network_dhcp_acquires_ip` passes; full suite now 6/6 green.
 
-**Still partial:** 16 (GPU hardware hangs in setup_framebuffer), 20 (hot-migration not exercised by a runnable test).
+### Session 8 — VirtIO GPU (2026-05-30)
+**Trigger:** "gpu" — make Phase 16 GPU hardware actually work.
+
+**Root cause:** the "setup_framebuffer hang" was a `VirtioHal::dma_alloc` OOM spin-loop. The framebuffer is ~4 MB (1280×800×4); against the old 16 MB heap with the 8 MB FAT32 RAM disk resident, the contiguous 4 MB allocation failed and dma_alloc spins forever on failure. The earlier heap bump (32 MB) plus the FAT16 RAM-disk shrink (8 MB → 4 MB) leave enough contiguous space, so `setup_framebuffer` now completes.
+
+**Result:** full VirtIO set (block + NIC + keyboard + GPU) boots to `ViOS >`. `run.ps1` re-attaches `-device virtio-gpu-device` by default. New test `gpu_framebuffer_initialises` asserts framebuffer setup + shell reached. Phase 16 → **complete**. Integration suite now **7/7 green**.
+
+**Still partial:** 20 (hot-migration not exercised by a runnable test).
 
 **Known limitation surfaced:** `sys_spawn_from_path` does not pass argv, so `lua -e`/`python -c` one-liners can't run yet (argv passing = future work).
 
