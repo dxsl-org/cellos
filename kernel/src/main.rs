@@ -193,6 +193,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 
     fs::init(); // Re-enabled with RAM disk
+
+    // Phase 20: verify the hot-migration state-transfer primitive round-trips.
+    crate::cell::state_stash::self_test();
+
     log_info("Kernel subsystems initialized successfully.");
 
     // 7. Initialize Scheduler

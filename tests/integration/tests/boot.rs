@@ -132,6 +132,20 @@ fn lua_runtime_executes() {
     });
 }
 
+/// Phase 20: the kernel state-stash primitive that underpins hot migration
+/// must round-trip. The kernel runs a boot self-test (stash a sentinel,
+/// restore it, compare) and logs the outcome.
+#[test]
+fn hot_migration_state_transfer_works() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("state-stash: round-trip OK", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!("state-stash round-trip failed: {e}\n--- output ---\n{}", qemu.dump())
+    });
+}
+
 /// Phase 16: the VirtIO GPU must initialise its framebuffer. With a 4 MB
 /// framebuffer the kernel needs the 32 MB heap; this guards the regression
 /// where setup_framebuffer hung / OOM'd and blocked the boot.

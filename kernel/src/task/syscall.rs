@@ -244,6 +244,10 @@ pub enum Syscall {
     NetTx { frame_ptr: usize, frame_len: usize },
     /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
     NetRx { buf_ptr: usize, buf_len: usize },
+    /// 410: StateStash — save serialized cell state under `key` for hot-swap.
+    StateStash { key: usize, buf_ptr: usize, buf_len: usize },
+    /// 411: StateRestore — recover stashed state for `key` into the buffer.
+    StateRestore { key: usize, buf_ptr: usize, buf_len: usize },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
 }
@@ -1030,6 +1034,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let n = crate::task::drivers::virtio_net::recv_frame(buf);
             Ok(n)
         }
+        Syscall::StateStash { key, buf_ptr, buf_len } => {
+            validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
+            // SAFETY: validated above — readable user buffer of exactly buf_len bytes.
+            let bytes = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, buf_len) };
+            Ok(crate::cell::state_stash::stash(key as u64, bytes))
+        }
+        Syscall::StateRestore { key, buf_ptr, buf_len } => {
+            validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
+            // SAFETY: validated above — writable user buffer of exactly buf_len bytes.
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
+            Ok(crate::cell::state_stash::restore(key as u64, buf))
+        }
         Syscall::HotSwap { cell_id, path_ptr, path_len } => {
             // Validate and copy the path string from user space.
             let path_len = path_len.min(crate::loader::disk_layout::MAX_CELL_PATH);
@@ -1120,6 +1136,8 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::GpuFlush  => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: _a3 },
         ViSyscall::NetTx     => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
         ViSyscall::NetRx     => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
+        ViSyscall::StateStash   => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::StateRestore => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::HotSwap   => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
         
         // Handle non-matching/legacy manually

@@ -81,6 +81,13 @@ pub enum ViSyscall {
     /// Live-replace a running Cell without message loss.
     /// ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.
     HotSwap = 400,
+    /// Stash a Cell's serialized state in the kernel under `key`, so a
+    /// replacement instance can recover it across a hot-swap / respawn.
+    /// ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes stored.
+    StateStash = 410,
+    /// Restore previously stashed state for `key` into the caller's buffer.
+    /// ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes written (0 if none).
+    StateRestore = 411,
 
     // === Unknown ===
     Unknown = 9999,
@@ -127,6 +134,8 @@ impl From<usize> for ViSyscall {
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,
             400 => ViSyscall::HotSwap,
+            410 => ViSyscall::StateStash,
+            411 => ViSyscall::StateRestore,
             _ => ViSyscall::Unknown,
         }
     }

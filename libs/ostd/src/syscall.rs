@@ -480,6 +480,29 @@ pub fn sys_net_rx(buf: &mut [u8]) -> usize {
     if ret > 0 { ret as usize } else { 0 }
 }
 
+/// Stash serialized cell state in the kernel under `key`.
+///
+/// A replacement instance recovers it with [`sys_state_restore`] after a
+/// hot-swap or respawn. Returns the number of bytes stored.
+pub fn sys_state_stash(key: u64, bytes: &[u8]) -> usize {
+    // SAFETY: bytes is a valid immutable slice; the kernel copies it out.
+    let ret = unsafe {
+        syscall(ViSyscall::StateStash, key as usize, bytes.as_ptr() as usize, bytes.len(), 0)
+    };
+    if ret > 0 { ret as usize } else { 0 }
+}
+
+/// Restore previously stashed state for `key` into `buf`.
+///
+/// Returns the number of bytes written (0 if nothing was stashed for `key`).
+pub fn sys_state_restore(key: u64, buf: &mut [u8]) -> usize {
+    // SAFETY: buf is a valid mutable slice; the kernel writes at most buf.len().
+    let ret = unsafe {
+        syscall(ViSyscall::StateRestore, key as usize, buf.as_mut_ptr() as usize, buf.len(), 0)
+    };
+    if ret > 0 { ret as usize } else { 0 }
+}
+
 /// Read the kernel's monotonic timer (ticks since boot).
 ///
 /// The tick frequency is architecture-dependent; query the Config Cell at

@@ -13,31 +13,41 @@ impl viConsole {
         }
     }
 
-    /// Polls SBI for a character and pushes it to buffer if available.
+    /// Hard cap on buffered input bytes. A line-oriented console never needs
+    /// more than this; the cap prevents a misbehaving input source (e.g. an
+    /// SBI/IRQ path that returns phantom bytes every poll) from growing the
+    /// VecDeque unboundedly and exhausting the kernel heap while a reader spins.
+    const MAX_BUFFERED: usize = 4096;
+
+    /// Polls input sources and pushes available characters to the buffer.
     /// Returns true if a character was received.
     pub fn poll(&mut self) -> bool {
+        // Already have plenty buffered — don't poll/push more until it drains.
+        if self.buffer.len() >= Self::MAX_BUFFERED {
+            return false;
+        }
         let mut received = false;
 
         // 1a. Directly poll the 16550 RHR. This is the primary, most reliable
         //     path on QEMU virt: independent of PLIC IRQ delegation and the SBI
         //     DBCN read extension (both of which may be unavailable here).
-        while let Some(c) = crate::task::drivers::uart::poll_rhr() {
+        while self.buffer.len() < Self::MAX_BUFFERED {
+            let Some(c) = crate::task::drivers::uart::poll_rhr() else { break };
             self.buffer.push_back(c);
             received = true;
         }
 
         // 1b. Drain any chars the UART IRQ handler buffered (when IRQs reach S-mode).
-        while let Some(c) = crate::task::drivers::uart::getchar() {
+        while self.buffer.len() < Self::MAX_BUFFERED {
+            let Some(c) = crate::task::drivers::uart::getchar() else { break };
             self.buffer.push_back(c);
             received = true;
         }
 
-        // 1c. SBI DBCN read fallback — active when OpenSBI keeps the UART in M-mode.
-        let c = crate::hal::sbi::console_getchar();
-        if c > 0 {
-            self.buffer.push_back(c as u8);
-            received = true;
-        }
+        // NOTE: the SBI DBCN console-read fallback was removed — on this QEMU /
+        // OpenSBI build it returns phantom bytes on every call, which (combined
+        // with a spinning reader) grew the buffer without bound. The direct RHR
+        // poll (1a) is the reliable UART input path.
 
         // 2. Poll VirtIO Keyboard — used when a graphical display is attached.
         crate::task::drivers::virtio_input::poll_events();
