@@ -503,6 +503,25 @@ pub fn sys_state_restore(key: u64, buf: &mut [u8]) -> usize {
     if ret > 0 { ret as usize } else { 0 }
 }
 
+/// Reserved state-stash slot used to hand a command line to a freshly spawned
+/// cell. `sys_spawn_from_path` does not yet carry argv on the new cell's stack,
+/// so the spawner stashes the argument string here and the spawned cell reads
+/// it on startup. Single-spawner (the shell) makes this race-free in practice.
+pub const ARGV_STASH_KEY: u64 = 0x0061_7267_7600_0000; // "argv"
+
+/// Publish `args` as the command line for the next cell spawned by this task.
+/// Always call before `sys_spawn_from_path` (pass `""` when there are no args)
+/// so the spawned cell never reads a previous command's leftovers.
+pub fn sys_set_spawn_args(args: &str) {
+    sys_state_stash(ARGV_STASH_KEY, args.as_bytes());
+}
+
+/// Read the command line published for this cell by its spawner. Returns the
+/// number of bytes written into `buf` (0 if none).
+pub fn sys_spawn_args(buf: &mut [u8]) -> usize {
+    sys_state_restore(ARGV_STASH_KEY, buf)
+}
+
 /// Read the kernel's monotonic timer (ticks since boot).
 ///
 /// The tick frequency is architecture-dependent; query the Config Cell at

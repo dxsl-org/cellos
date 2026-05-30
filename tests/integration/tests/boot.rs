@@ -132,6 +132,7 @@ fn lua_runtime_executes() {
     });
 }
 
+
 /// Phase 20: the kernel state-stash primitive that underpins hot migration
 /// must round-trip. The kernel runs a boot self-test (stash a sentinel,
 /// restore it, compare) and logs the outcome.

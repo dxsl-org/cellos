@@ -22,7 +22,14 @@ extern "C" fn main() -> usize {
     // SAFETY: L is non-null; luaL_openlibs is safe to call once.
     unsafe { ffi::luaL_openlibs(L) };
 
-    // Enhanced REPL: multi-line support, history, Ctrl+C/D.
+    // NOTE: `lua -e <code>` (evaluate a chunk from argv) is not wired yet.
+    // Executing any Lua chunk currently faults inside the interpreter's number
+    // formatting (picolibc sprintf dereferences an uninitialised reentrancy/
+    // locale global — we enter Rust `main` directly and never run the C
+    // runtime init that sets `_impure_ptr`). The argv transport itself works
+    // (see sys_spawn_args); evaluation is blocked on C-runtime initialisation.
+    // Until that is fixed the cell only prints its banner.
+
     ostd::io::println("Lua 5.4 on ViOS  (Ctrl+D to exit)");
     // SAFETY: L is non-null and valid; run_repl drives the full REPL loop.
     unsafe { repl_session::run_repl(L); }

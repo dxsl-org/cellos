@@ -167,7 +167,14 @@ fn print_jobs(jobs: &Jobs) {
 }
 
 /// Attempt to spawn an external binary from `/bin/<prog>`.
-fn spawn_external(prog: &str, _args: &[&str]) -> i32 {
+///
+/// Arguments are published via `sys_set_spawn_args` (a reserved state-stash
+/// slot) for the spawned cell to read on startup — `sys_spawn_from_path` does
+/// not yet carry argv on the new cell's stack. We always set the slot (empty
+/// when there are no args) so the cell never reads a previous command's args.
+fn spawn_external(prog: &str, args: &[&str]) -> i32 {
+    syscall::sys_set_spawn_args(&args.join(" "));
+
     let mut path = alloc::string::String::from("/bin/");
     path.push_str(prog);
     match syscall::sys_spawn_from_path(&path) {
