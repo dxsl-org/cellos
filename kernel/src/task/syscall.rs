@@ -240,6 +240,10 @@ pub enum Syscall {
     GetTime { op: usize },
     /// 300: GpuFlush — copy cell pixel buffer to VirtIO GPU framebuffer.
     GpuFlush { data_ptr: usize, data_len: usize, xy: usize, wh: usize },
+    /// 310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.
+    NetTx { frame_ptr: usize, frame_len: usize },
+    /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
+    NetRx { buf_ptr: usize, buf_len: usize },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
 }
@@ -1010,6 +1014,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(SyscallError::Unknown) // GPU not initialised
             }
         }
+        Syscall::NetTx { frame_ptr, frame_len } => {
+            validate_user_buf(frame_ptr, frame_len, MAX_USER_BUF)?;
+            // SAFETY: validated above — frame_ptr/frame_len is a readable user buffer
+            // in the shared address space; we only read `frame_len` bytes from it.
+            let frame = unsafe { core::slice::from_raw_parts(frame_ptr as *const u8, frame_len) };
+            let ok = crate::task::drivers::virtio_net::send_frame(frame);
+            Ok(if ok { 1 } else { 0 })
+        }
+        Syscall::NetRx { buf_ptr, buf_len } => {
+            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
+            // SAFETY: validated above — buf_ptr/buf_len is a writable user buffer;
+            // recv_frame writes at most `buf_len` bytes and returns the count.
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
+            let n = crate::task::drivers::virtio_net::recv_frame(buf);
+            Ok(n)
+        }
         Syscall::HotSwap { cell_id, path_ptr, path_len } => {
             // Validate and copy the path string from user space.
             let path_len = path_len.min(crate::loader::disk_layout::MAX_CELL_PATH);
@@ -1048,6 +1068,7 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
     let syscall = match ViSyscall::from(syscall_id) {
         ViSyscall::Send => Syscall::Send { target: a0, msg_ptr: a1, msg_len: a2 },
         ViSyscall::Recv => Syscall::Recv { mask: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::TryRecv => Syscall::TryRecv { mask: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::SendGather  => Syscall::SendGather { target: a0, iovec_ptr: a1, iovec_count: a2 },
         ViSyscall::RecvScatter => Syscall::RecvScatter { mask: a0, iovec_ptr: a1, iovec_count: a2 },
         ViSyscall::RecvTimeout => Syscall::RecvTimeout {
@@ -1097,6 +1118,8 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::FileOp => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
         ViSyscall::GetTime => Syscall::GetTime { op: a0 },
         ViSyscall::GpuFlush  => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: _a3 },
+        ViSyscall::NetTx     => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
+        ViSyscall::NetRx     => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
         ViSyscall::HotSwap   => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
         
         // Handle non-matching/legacy manually

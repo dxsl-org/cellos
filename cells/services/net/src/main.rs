@@ -19,7 +19,7 @@ use alloc::boxed::Box;
 use dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use interface::VirtioNetDevice;
 use ostd::io::println;
-use ostd::syscall::{sys_get_time, sys_recv, sys_send, SyscallResult};
+use ostd::syscall::{sys_get_time, sys_send, sys_try_recv, SyscallResult};
 use poll_driver::{cell_opcodes, decode_message, NetMessage, POLL_INTERVAL_MS};
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
@@ -72,10 +72,39 @@ pub fn main() {
     println("[net] Starting DHCP...");
 
     loop {
+        // ── Pull inbound frames from the kernel NIC ───────────────────────────
+        // Without this the smoltcp stack never sees DHCP OFFER/ACK and stays
+        // stuck in DISCOVER forever.
+        device.pump_rx();
+
         // ── DHCP until acquired ───────────────────────────────────────────────
         if dhcp_state == DhcpState::Pending {
             dhcp_state =
                 poll_dhcp(dhcp_handle, &mut iface, &mut sockets, &mut device, now_instant());
+            // Cache the leased address octets for GET_LOCAL_IP queries.
+            if dhcp_state == DhcpState::Acquired {
+                if let Some(smoltcp::wire::IpCidr::Ipv4(cidr)) =
+                    iface.ip_addrs().iter().find(|a| matches!(a, smoltcp::wire::IpCidr::Ipv4(_)))
+                {
+                    local_ip.copy_from_slice(cidr.address().as_bytes());
+                    let mut s = alloc::string::String::from("[net] IP address: ");
+                    for (i, oct) in local_ip.iter().enumerate() {
+                        if i > 0 { s.push('.'); }
+                        // u8 → decimal without std fmt machinery on the hot path.
+                        let mut n = *oct as u32;
+                        let mut digits = [0u8; 3];
+                        let mut di = 3;
+                        loop {
+                            di -= 1;
+                            digits[di] = b'0' + (n % 10) as u8;
+                            n /= 10;
+                            if n == 0 { break; }
+                        }
+                        for d in &digits[di..] { s.push(*d as char); }
+                    }
+                    println(&s);
+                }
+            }
         }
 
         // ── Forced periodic poll ──────────────────────────────────────────────
@@ -85,8 +114,11 @@ pub fn main() {
             last_poll_ticks = now;
         }
 
-        // ── Receive one IPC message ───────────────────────────────────────────
-        match sys_recv(0, &mut buf) {
+        // ── Receive one IPC message (non-blocking) ────────────────────────────
+        // Must NOT block: the loop has to keep pumping RX frames and polling
+        // DHCP. A blocking recv would park the cell forever (no IPC arrives
+        // during DHCP) and the lease would never complete.
+        match sys_try_recv(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
                 handle_ipc(
                     &buf,

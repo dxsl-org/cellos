@@ -41,5 +41,6 @@ pub fn init() {
     // handler tries to re-acquire a Spinlock held by this thread, it will spin
     // forever.  We re-enable SIE after all drivers are initialised.
     virtio_blk::init_driver(); // VirtIO block — GPU probe hang fixed via mem::forget
+    virtio_net::init_driver(); // VirtIO NIC — backs the net service cell (Phase 15)
     virtio_gpu::init_driver();
 }

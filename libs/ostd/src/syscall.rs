@@ -342,6 +342,26 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     }
 }
 
+/// Non-blocking receive: returns immediately with `Ok(0)` when no message is
+/// queued, instead of parking the task like [`sys_recv`].
+///
+/// Use this in cells that must keep polling other work (e.g. the net service
+/// driving DHCP) while also servicing incoming IPC.
+pub fn sys_try_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
+    // SAFETY: buf is a valid mutable slice; the kernel writes into it and
+    // returns the sender id (or 0 when the queue is empty).
+    let ret = unsafe {
+        syscall(
+            ViSyscall::TryRecv,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
 /// Receive a message with a timeout deadline.
 ///
 /// `timeout_ticks` is the maximum number of kernel monotonic ticks to wait
@@ -428,6 +448,36 @@ pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<()
         syscall(ViSyscall::GpuFlush, pixels.as_ptr() as usize, pixels.len(), xy, wh)
     };
     if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+}
+
+/// Transmit one Ethernet frame through the kernel VirtIO NIC.
+///
+/// `frame` must contain a complete Ethernet frame (the kernel prepends the
+/// VirtIO net header internally).
+///
+/// # Returns
+/// `true` if the frame was queued for transmission, `false` if the NIC is not
+/// present or the TX ring is full.
+pub fn sys_net_tx(frame: &[u8]) -> bool {
+    // SAFETY: frame is a valid immutable slice; the kernel reads exactly
+    // frame.len() bytes after validating the buffer.
+    let ret = unsafe {
+        syscall(ViSyscall::NetTx, frame.as_ptr() as usize, frame.len(), 0, 0)
+    };
+    ret == 1
+}
+
+/// Receive one pending Ethernet frame from the kernel VirtIO NIC.
+///
+/// # Returns
+/// The number of bytes written into `buf` (0 if no frame is ready).
+pub fn sys_net_rx(buf: &mut [u8]) -> usize {
+    // SAFETY: buf is a valid mutable slice; the kernel writes at most buf.len()
+    // bytes and returns the count.
+    let ret = unsafe {
+        syscall(ViSyscall::NetRx, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
+    };
+    if ret > 0 { ret as usize } else { 0 }
 }
 
 /// Read the kernel's monotonic timer (ticks since boot).

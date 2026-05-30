@@ -38,6 +38,8 @@ mod tests {
         (107,  ViSyscall::FileOp),
         (109,  ViSyscall::Write),
         (120,  ViSyscall::GetTime),
+        (310,  ViSyscall::NetTx),
+        (311,  ViSyscall::NetRx),
     ];
 
     #[test]

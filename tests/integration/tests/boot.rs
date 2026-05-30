@@ -132,6 +132,24 @@ fn lua_runtime_executes() {
     });
 }
 
+/// Phase 15: the network service must complete a DHCP lease. QEMU's user-mode
+/// SLIRP stack runs a DHCP server that hands out 10.0.2.15; the net cell must
+/// transmit DISCOVER, receive OFFER/ACK, and configure that address.
+#[test]
+fn network_dhcp_acquires_ip() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("DHCP acquired", 40).unwrap_or_else(|e| {
+        panic!("DHCP did not complete: {e}\n--- output ---\n{}", qemu.dump())
+    });
+    // QEMU SLIRP always leases 10.0.2.15 to the first client.
+    qemu.wait_for("10.0.2.15", 5).unwrap_or_else(|e| {
+        panic!("expected leased IP 10.0.2.15: {e}\n--- output ---\n{}", qemu.dump())
+    });
+}
+
 /// Phase 18: the MicroPython runtime cell must load and execute. Spawning
 /// `/bin/python` should print the MicroPython banner.
 #[test]

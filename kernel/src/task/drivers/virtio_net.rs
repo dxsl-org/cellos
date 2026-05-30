@@ -17,10 +17,14 @@ const VIRTIO0: usize = 0x10001000;
 const VIRTIO_MMIO_INTERVAL: usize = 0x1000;
 const VIRTIO_MAX_DEVICES: usize = 8;
 
-/// RX ring buffer size (frames).
-const NET_QUEUE_SIZE: usize = 32;
-/// Maximum Ethernet frame size in bytes (excluding VirtIO net header).
-const MAX_FRAME_SIZE: usize = 1514;
+/// RX/TX virtqueue size (frames). Power of two, ≤ the device's advertised
+/// `max_queue_size` (QEMU reports 1024).
+const NET_QUEUE_SIZE: usize = 16;
+/// RX buffer length passed to `VirtIONet::new`. Must be ≥ virtio-drivers'
+/// `MIN_BUFFER_LEN` (1526 = 1514 max Ethernet frame + 12-byte VirtioNetHdr);
+/// a smaller value makes `receive_begin` reject every buffer with
+/// `InvalidParam`. Round up to 2048 for headroom.
+const RX_BUFFER_LEN: usize = 2048;
 
 type SafeNet = VirtIONet<VirtioHal, MmioTransport, NET_QUEUE_SIZE>;
 struct SafeVirtIONet(SafeNet);
@@ -45,9 +49,16 @@ pub fn init_driver() {
         };
         // SAFETY: same invariant as header; MmioTransport::new validates magic/version.
         let Ok(transport) = (unsafe { MmioTransport::new(header) }) else { continue };
-        if transport.device_type() != DeviceType::Network { continue; }
+        if transport.device_type() != DeviceType::Network {
+            // Dropping MmioTransport resets the device via set_status(0). This
+            // probe runs after the block driver is initialised, so resetting a
+            // foreign slot (e.g. the block device) would corrupt it. Forget the
+            // transport to skip the Drop, matching the GPU probe's approach.
+            core::mem::forget(transport);
+            continue;
+        }
 
-        match VirtIONet::<VirtioHal, MmioTransport, NET_QUEUE_SIZE>::new(transport, MAX_FRAME_SIZE) {
+        match VirtIONet::<VirtioHal, MmioTransport, NET_QUEUE_SIZE>::new(transport, RX_BUFFER_LEN) {
             Ok(net) => {
                 *NET_DEVICE.lock() = Some(SafeVirtIONet(net));
                 *NET_IRQ.lock() = (i as u32) + 1;

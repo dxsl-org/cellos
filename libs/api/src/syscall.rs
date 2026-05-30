@@ -11,6 +11,9 @@ pub enum ViSyscall {
     Recv = 1,
     Call = 2,
     Reply = 3,
+    /// Non-blocking receive: returns 0 immediately when no message is queued
+    /// (vs `Recv`, which parks the task until a message arrives).
+    TryRecv = 7,
 
     // === Process Management (10-49) ===
     Exit = 60, // Linux compat usually, but we define our own space
@@ -55,6 +58,14 @@ pub enum ViSyscall {
     /// ABI: a0 = data_ptr, a1 = data_len, a2 = x, a3 = y (w+h embedded in len)
     GpuFlush = 300,
 
+    // === Network (Phase 15) ===
+    /// Transmit one Ethernet frame through the kernel VirtIO NIC.
+    /// ABI: a0 = frame_ptr, a1 = frame_len → 1 on success, 0 on failure.
+    NetTx = 310,
+    /// Receive one pending Ethernet frame from the kernel VirtIO NIC.
+    /// ABI: a0 = buf_ptr, a1 = buf_len → bytes written (0 if none ready).
+    NetRx = 311,
+
     // === Advanced IPC (Phase 20) ===
     /// Recv with a deadline in monotonic ticks.
     /// ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = timeout_ticks → sender_id or ViError::Timeout.
@@ -83,6 +94,7 @@ impl From<usize> for ViSyscall {
         match id {
             0 => ViSyscall::Send,
             1 => ViSyscall::Recv,
+            7 => ViSyscall::TryRecv,
             2 => ViSyscall::Call,
             3 => ViSyscall::Reply,
             60 => ViSyscall::Exit,
@@ -112,6 +124,8 @@ impl From<usize> for ViSyscall {
             202 => ViSyscall::SendGather,
             203 => ViSyscall::RecvScatter,
             300 => ViSyscall::GpuFlush,
+            310 => ViSyscall::NetTx,
+            311 => ViSyscall::NetRx,
             400 => ViSyscall::HotSwap,
             _ => ViSyscall::Unknown,
         }
