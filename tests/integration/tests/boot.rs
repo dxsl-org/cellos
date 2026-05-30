@@ -132,6 +132,24 @@ fn lua_runtime_executes() {
     });
 }
 
+/// Phase 16: the VirtIO GPU must initialise its framebuffer. With a 4 MB
+/// framebuffer the kernel needs the 32 MB heap; this guards the regression
+/// where setup_framebuffer hung / OOM'd and blocked the boot.
+#[test]
+fn gpu_framebuffer_initialises() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("Framebuffer setup success", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!("GPU framebuffer setup did not complete: {e}\n--- output ---\n{}", qemu.dump())
+    });
+    // Boot must still reach the shell with the GPU attached (no hang).
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+        panic!("boot did not reach shell with GPU attached: {e}")
+    });
+}
+
 /// Phase 15: the network service must complete a DHCP lease. QEMU's user-mode
 /// SLIRP stack runs a DHCP server that hands out 10.0.2.15; the net cell must
 /// transmit DISCOVER, receive OFFER/ACK, and configure that address.

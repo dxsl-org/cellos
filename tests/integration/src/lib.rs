@@ -80,6 +80,7 @@ impl QemuRunner {
                 "-netdev", "user,id=net0",
                 "-device", "virtio-net-device,netdev=net0",
                 "-device", "virtio-keyboard-device",
+                "-device", "virtio-gpu-device",
                 "-monitor", "none",
                 "-serial", &format!("tcp:127.0.0.1:{port}"),
             ])

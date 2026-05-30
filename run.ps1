@@ -32,17 +32,12 @@ Write-Host ""
 #   virt-input: VirtIO keyboard for the input service (separate from UART)
 #
 # Note: -nographic sends serial/UART to stdin/stdout; VirtIO keyboard is for graphical mode.
-#
-# GPU NOTE: the VirtIO GPU device is intentionally NOT attached by default.
-# The kernel's GPU framebuffer setup (virtio-drivers 0.7.0 setup_framebuffer)
-# currently hangs after the display-info probe, which would block the boot
-# before the shell appears.  The compositor cell runs fine without the GPU
-# (software path).  To experiment with the GPU, append:
-#     -device virtio-gpu-device
-# See run-gpu.ps1 and docs — Phase 16 GPU hardware init is work-in-progress.
+# Full VirtIO hardware: block, NIC (DHCP → 10.0.2.15), keyboard, and GPU
+# (framebuffer setup needs the 32 MB heap; it allocates a ~4 MB framebuffer).
 & $qemu -machine virt -m 128M -nographic -bios default -kernel $kernel `
         -drive file=$disk,format=raw,id=hd0,if=none `
         -device virtio-blk-device,drive=hd0 `
         -netdev user,id=net0 `
         -device virtio-net-device,netdev=net0 `
-        -device virtio-keyboard-device
+        -device virtio-keyboard-device `
+        -device virtio-gpu-device
