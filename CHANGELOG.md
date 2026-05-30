@@ -1,5 +1,33 @@
 ## [Unreleased] - v0.2.2-dev (2026-05-30)
 
+### Functional Audit & Verification
+
+A function-based audit replaced the earlier file-existence "100% complete"
+claim. Each phase is now verified by a runnable QEMU integration test
+(`tests/integration/`, 8/8 green): boot-to-shell, FAT16 mount, interactive
+shell echo, Lua REPL, MicroPython REPL, network DHCP lease, GPU framebuffer,
+and the hot-migration state-stash round-trip.
+
+Real bugs found and fixed during the audit:
+- **Lua** did not link (`lua_pcall` is a macro → bind `lua_pcallk`; link picolibc).
+- **x86_64 HAL** did not build (AT&T `global_asm!` needs `options(att_syntax)`).
+- **RV32 HAL** did not build (rv64 module compiled unconditionally → gated by `target_arch`).
+- **Embedded FS** mount failed (`CorruptedFileSystem`): emit FAT16, not an
+  undersized FAT32 (< 65525 clusters).
+- **Shell input** never reached the command processor: added a direct 16550 RHR
+  poll (UART RX IRQ was never delivered to S-mode) and bounded the console buffer.
+- **Network**: built the missing net-cell ↔ kernel-NIC bridge — `NetTx`/`NetRx`
+  syscalls, `virtio_net::init_driver()` call, RX buffer ≥ `MIN_BUFFER_LEN`, and a
+  non-blocking `TryRecv` loop; the net cell now leases 10.0.2.15.
+- **GPU**: framebuffer setup no longer hangs — the root cause was a `dma_alloc`
+  OOM (now panics instead of spinning) once the heap (32 MB) and FAT16 RAM disk
+  left room for the 4 MB framebuffer.
+- **Hot migration (Phase 20)**: kernel state-stash primitive
+  (`StateStash`/`StateRestore` syscalls, bounded) with a boot self-test.
+
+New kernel↔cell ABI (additive, backward-compatible): syscalls `TryRecv` (7),
+`NetTx` (310), `NetRx` (311), `StateStash` (410), `StateRestore` (411).
+
 ### Added
 
 **Community Infrastructure (Phase 23)**
