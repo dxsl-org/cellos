@@ -64,7 +64,7 @@ created: 2026-05-28
 | 12 | Security Audit Infrastructure | 80h | P1 | **complete** | 02 |
 | 13 | Complete VFS Service | 100h | P2 | **complete** | 04, 06 |
 | 14 | Complete Input Service | 80h | P2 | **complete** | 05, 13 |
-| 15 | Complete Network Service | 200h | P2 | **partial** | 04 |
+| 15 | Complete Network Service | 200h | P2 | **complete** | 04 |
 | 16 | Complete Compositor & GPU | 150h | P2 | **partial** | 14 |
 | 17 | Enhanced Shell & Standard Utilities | 320h | P2 | **complete** | 13, 14, 15 |
 | 18 | Lua & MicroPython Runtime Enhancement | 180h | P2 | **complete** | 10, 13, 17 |
@@ -335,7 +335,21 @@ Each phase ships in its own feature branch off `main`, merges via PR with CI gre
 
 **Status changes:** 17 `partial`→`complete`; 18 `partial`→`complete`; 11 `partial`→`mostly` (5 integration tests now run & pass; broader scenarios pending).
 
-**Still partial:** 15 (Network — DHCP completion unconfirmed), 16 (GPU hardware hangs in setup_framebuffer), 20 (hot-migration not exercised by a runnable test).
+**Still partial (after Session 6):** 15 (Network — DHCP completion unconfirmed), 16 (GPU hardware hangs in setup_framebuffer), 20 (hot-migration not exercised by a runnable test).
+
+### Session 7 — Network DHCP (2026-05-30)
+**Trigger:** "network" — make Phase 15 actually complete.
+
+**Root causes (the net cell ↔ kernel NIC path was entirely missing):**
+1. `virtio_net::init_driver()` was never called at boot.
+2. NIC init failed `InvalidParam`: `VirtIONet::new` requires an RX buffer ≥ `MIN_BUFFER_LEN` (1526); the driver passed 1514.
+3. No bridge between the net cell and the kernel NIC — added `NetTx`(310)/`NetRx`(311) syscalls → `virtio_net::send_frame`/`recv_frame`.
+4. The net cell used blocking `sys_recv`, which parked it forever (no IPC during DHCP); wired the dormant `TryRecv`(7) syscall + `sys_try_recv` and switched the loop to it.
+5. `pump_rx` allocated a fresh Vec per poll → heap churn → OOM after boot; switched to a reused stack buffer.
+
+**Result:** net cell leases **10.0.2.15** from QEMU SLIRP. Phase 15 → **complete**. Integration test `network_dhcp_acquires_ip` passes; full suite now 6/6 green.
+
+**Still partial:** 16 (GPU hardware hangs in setup_framebuffer), 20 (hot-migration not exercised by a runnable test).
 
 **Known limitation surfaced:** `sys_spawn_from_path` does not pass argv, so `lua -e`/`python -c` one-liners can't run yet (argv passing = future work).
 
