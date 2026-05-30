@@ -58,7 +58,7 @@ pub enum ViSyscall {
     /// ABI: a0 = data_ptr, a1 = data_len, a2 = x, a3 = y (w+h embedded in len)
     GpuFlush = 300,
 
-    // === Network (Phase 15) ===
+    // === Network ===
     /// Transmit one Ethernet frame through the kernel VirtIO NIC.
     /// ABI: a0 = frame_ptr, a1 = frame_len → 1 on success, 0 on failure.
     NetTx = 310,

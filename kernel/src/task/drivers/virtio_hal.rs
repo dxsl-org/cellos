@@ -21,11 +21,13 @@ unsafe impl Hal for VirtioHal {
         let ptr = unsafe { alloc::alloc::alloc(layout) };
 
         if ptr.is_null() {
-            log::error!("[virtio] DMA alloc OOM — {} pages requested", pages);
-            // SAFETY: spin_loop is safe; we diverge here because OOM is unrecoverable.
-            loop {
-                core::hint::spin_loop();
-            }
+            // The Hal trait cannot signal failure (it must return an address),
+            // so we cannot propagate OOM to the caller. Panic rather than spin
+            // silently forever: a kernel panic prints a diagnosable message and
+            // halts, whereas an infinite spin looks like an unexplained hang
+            // (this was exactly the symptom when the GPU framebuffer alloc
+            // outgrew the heap).
+            panic!("[virtio] DMA alloc OOM: {} pages ({} KB) requested", pages, pages * 4);
         }
 
         // SAFETY: ptr is non-null and points to `pages * 4096` bytes — safe to zero.

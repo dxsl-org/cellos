@@ -1,29 +1,40 @@
-//! Kernel state stash for hot-migration (Phase 20).
+//! Kernel state stash for hot migration.
 //!
 //! A Cell about to be replaced serialises its state and `stash`es it under a
-//! well-known key; the replacement instance `restore`s it on startup. This is
-//! the kernel-mediated state-transfer primitive that survives a cell respawn —
-//! the live, message-preserving orchestrator in `hotswap.rs` builds on top of
-//! it. Keeping the bytes in the kernel (not a file) means the transfer works
-//! before the VFS is reachable and outlives the old cell's address space.
+//! well-known key; the replacement instance `restore`s it on startup. Keeping
+//! the bytes in the kernel (not a file) means the transfer works before the
+//! VFS is reachable and outlives the old cell's address space. This is the
+//! standalone state-transfer primitive; it is independent of the IPC-based
+//! orchestrator in `hotswap.rs`.
 
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use crate::sync::Spinlock;
 
-/// Upper bound on a single stashed blob (64 KB) — matches the hotswap
-/// serialise buffer and bounds kernel memory held on a cell's behalf.
+/// Upper bound on a single stashed blob (64 KB) — bounds kernel memory held on
+/// a cell's behalf for one slot.
 pub const MAX_STASH_LEN: usize = 64 * 1024;
+
+/// Upper bound on the number of distinct stash slots. Caps total kernel memory
+/// the stash can hold (≤ MAX_ENTRIES × MAX_STASH_LEN) so a misbehaving cell
+/// cannot exhaust the heap by stashing under unboundedly many keys.
+pub const MAX_ENTRIES: usize = 64;
 
 /// key → serialized state bytes. Keys are cell-chosen (typically a stable
 /// FNV hash of the cell name), so a replacement instance reads the same slot.
 static STASH: Spinlock<BTreeMap<u64, Vec<u8>>> = Spinlock::new(BTreeMap::new());
 
 /// Store `bytes` under `key`, replacing any previous value. Returns the number
-/// of bytes stored (clamped to [`MAX_STASH_LEN`]).
+/// of bytes stored (clamped to [`MAX_STASH_LEN`]), or 0 if the stash is full
+/// (at [`MAX_ENTRIES`] distinct keys) and `key` is not already present.
 pub fn stash(key: u64, bytes: &[u8]) -> usize {
+    let mut map = STASH.lock();
+    if map.len() >= MAX_ENTRIES && !map.contains_key(&key) {
+        log::warn!("[state-stash] full ({} entries); rejecting new key", MAX_ENTRIES);
+        return 0;
+    }
     let n = bytes.len().min(MAX_STASH_LEN);
-    STASH.lock().insert(key, bytes[..n].to_vec());
+    map.insert(key, bytes[..n].to_vec());
     n
 }
 
