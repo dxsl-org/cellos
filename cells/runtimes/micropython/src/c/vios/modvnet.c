@@ -2,12 +2,17 @@
  * ViOS MicroPython `vnet` module.
  *
  * Exposes TCP socket IPC to Python scripts via:
- *   vnet.connect(ip_str, port_int)  -> cap_int | None
- *   vnet.send(cap_int, data)        -> bytes_sent
- *   vnet.recv(cap_int)              -> str | None
- *   vnet.close(cap_int)             -> None
- *   vnet.resolve(host_str)          -> ip_str | None
+ *   vnet.connect(ip_str, port_int)       -> cap_int | None
+ *   vnet.send(cap_int, data)             -> bytes_sent
+ *   vnet.recv(cap_int)                   -> str | None
+ *   vnet.close(cap_int)                  -> None
+ *   vnet.resolve(host_str)               -> ip_str | None  (static + DNS)
+ *   vnet.udp_socket()                    -> cap_int | None
+ *   vnet.bind(cap, port)                 -> assigned_port | None
+ *   vnet.udp_send(cap, ip, port, data)   -> bytes_sent
+ *   vnet.udp_recv(cap)                   -> (ip, port, data) | None
  *
+ * UDP ops are implemented in modvnet_udp.c; DNS in modvnet_dns.c.
  * Wire format mirrors bindings_net.rs in the Lua cell.
  * All IPC goes to the net service cell at endpoint 6.
  *
@@ -212,10 +217,15 @@ static MP_DEFINE_CONST_FUN_OBJ_1(vnet_close_obj, vnet_close);
 /* ── vnet.resolve(host_str) -> ip_str | None ─────────────────────────────── */
 /*
  * Resolution order:
- *   1. Static SLIRP aliases
- *   2. IPv4 literal pass-through
- * DNS is not implemented in the C module (use Lua vnet.resolve for DNS).
+ *   1. Static SLIRP aliases (no IPC).
+ *   2. IPv4 literal — returned unchanged.
+ *   3. DNS A-record query via modvnet_dns.c.
  */
+
+/* Provided by modvnet_dns.c. Returns byte count of dotted-decimal IP written
+ * to out[0..out_len], or 0 on failure. out is NOT NUL-terminated. */
+extern int vnet_do_dns_query(const char *hostname, size_t hlen,
+                             char *out, size_t out_len);
 
 static mp_obj_t vnet_resolve(mp_obj_t host_obj) {
     size_t hlen;
@@ -231,13 +241,12 @@ static mp_obj_t vnet_resolve(mp_obj_t host_obj) {
         if (strlen(STATICS[si].name) == hlen &&
             memcmp(STATICS[si].name, host, hlen) == 0) {
             const uint8_t *a = STATICS[si].ip;
-            char buf[16];
-            int n = 0, oi;
+            char buf[16]; int n = 0, oi;
             for (oi = 0; oi < 4; oi++) {
                 if (oi > 0) buf[n++] = '.';
                 unsigned v = a[oi];
                 if (v >= 100) { buf[n++]=(char)('0'+v/100); v%=100; buf[n++]=(char)('0'+v/10); }
-                else if (v >= 10) { buf[n++]=(char)('0'+v/10); }
+                else if (v >= 10) buf[n++]=(char)('0'+v/10);
                 buf[n++]=(char)('0'+v%10);
             }
             return mp_obj_new_str(buf, (size_t)n);
@@ -250,19 +259,35 @@ static mp_obj_t vnet_resolve(mp_obj_t host_obj) {
         return mp_obj_new_str(host, hlen);
     }
 
+    /* 3. DNS query */
+    if (hlen == 0 || hlen > 253) return mp_const_none;
+    char ip_buf[16];
+    int n = vnet_do_dns_query(host, hlen, ip_buf, sizeof(ip_buf));
+    if (n > 0) return mp_obj_new_str(ip_buf, (size_t)n);
+
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(vnet_resolve_obj, vnet_resolve);
 
+/* ── UDP function objects (defined in modvnet_udp.c) ─────────────────────── */
+extern const mp_obj_fun_builtin_fixed_t vnet_udp_socket_obj;
+extern const mp_obj_fun_builtin_fixed_t vnet_bind_obj;
+extern const mp_obj_fun_builtin_var_t   vnet_udp_send_obj; /* VAR_BETWEEN(4,4) */
+extern const mp_obj_fun_builtin_fixed_t vnet_udp_recv_obj;
+
 /* ── Module table ────────────────────────────────────────────────────────── */
 
 static const mp_rom_map_elem_t vnet_module_globals_table[] = {
-    { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR_vnet) },
-    { MP_ROM_QSTR(MP_QSTR_connect),  MP_ROM_PTR(&vnet_connect_obj) },
-    { MP_ROM_QSTR(MP_QSTR_send),     MP_ROM_PTR(&vnet_send_obj) },
-    { MP_ROM_QSTR(MP_QSTR_recv),     MP_ROM_PTR(&vnet_recv_obj) },
-    { MP_ROM_QSTR(MP_QSTR_close),    MP_ROM_PTR(&vnet_close_obj) },
-    { MP_ROM_QSTR(MP_QSTR_resolve),  MP_ROM_PTR(&vnet_resolve_obj) },
+    { MP_ROM_QSTR(MP_QSTR___name__),   MP_ROM_QSTR(MP_QSTR_vnet) },
+    { MP_ROM_QSTR(MP_QSTR_connect),    MP_ROM_PTR(&vnet_connect_obj) },
+    { MP_ROM_QSTR(MP_QSTR_send),       MP_ROM_PTR(&vnet_send_obj) },
+    { MP_ROM_QSTR(MP_QSTR_recv),       MP_ROM_PTR(&vnet_recv_obj) },
+    { MP_ROM_QSTR(MP_QSTR_close),      MP_ROM_PTR(&vnet_close_obj) },
+    { MP_ROM_QSTR(MP_QSTR_resolve),    MP_ROM_PTR(&vnet_resolve_obj) },
+    { MP_ROM_QSTR(MP_QSTR_udp_socket), MP_ROM_PTR(&vnet_udp_socket_obj) },
+    { MP_ROM_QSTR(MP_QSTR_bind),       MP_ROM_PTR(&vnet_bind_obj) },
+    { MP_ROM_QSTR(MP_QSTR_udp_send),   MP_ROM_PTR(&vnet_udp_send_obj) },
+    { MP_ROM_QSTR(MP_QSTR_udp_recv),   MP_ROM_PTR(&vnet_udp_recv_obj) },
 };
 static MP_DEFINE_CONST_DICT(vnet_module_globals, vnet_module_globals_table);
 

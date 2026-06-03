@@ -889,3 +889,27 @@ fn python_vnet_tcp_http_get() {
     qemu.wait_for("200", 25)
         .unwrap_or_else(|e| panic!("no HTTP 200 from Python: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+/// Phase I: Python `vnet.resolve('google.com')` must return a dotted-decimal IP
+/// via a real DNS A-record query to the QEMU SLIRP DNS server at 10.0.2.3:53.
+///
+/// Mirrors `lua_vnet_resolve_dns`. Output is wrapped in `RESOLVED:` to avoid
+/// false-positive matches against boot messages that contain dots (e.g. IP address).
+/// `__import__('vnet').resolve(...)` avoids a separate `import` statement and
+/// avoids semicolons that the ViOS shell would split on.
+#[test]
+fn python_vnet_resolve_dns() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP failed: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(500));
+
+    // concat 'RESOLVED:' + ip to make the marker unambiguous.
+    // If resolve() returns None, Python raises TypeError and nothing is printed.
+    qemu.send_line("python -c print('RESOLVED:'+__import__('vnet').resolve('google.com'))");
+    qemu.wait_for("RESOLVED:", 25)
+        .unwrap_or_else(|e| panic!("Python DNS resolution failed: {e}\n--- output ---\n{}", qemu.dump()));
+}

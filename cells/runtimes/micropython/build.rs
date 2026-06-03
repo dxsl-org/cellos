@@ -115,6 +115,10 @@ fn main() {
     build.file(port_dir.join("vios_stubs.c"));
     // vnet Python module: TCP socket IPC via vios_net_* bridge (net_bridge.rs)
     build.file(port_dir.join("modvnet.c"));
+    // UDP socket ops for vnet (udp_socket/bind/udp_send/udp_recv)
+    build.file(port_dir.join("modvnet_udp.c"));
+    // DNS A-record resolver used by vnet.resolve for non-literal hostnames
+    build.file(port_dir.join("modvnet_dns.c"));
     // vfs Python module: VFS filesystem IPC (read/write/append/mkdir)
     build.file(port_dir.join("modvfs.c"));
     // GC register collector: gchelper_rv64i.s provides gc_helper_get_regs_and_sp;
@@ -141,6 +145,8 @@ fn main() {
     println!("cargo:rerun-if-changed=src/c/vios/mpconfigport.h");
     println!("cargo:rerun-if-changed=src/c/vios/mphalport.c");
     println!("cargo:rerun-if-changed=src/c/vios/modvnet.c");
+    println!("cargo:rerun-if-changed=src/c/vios/modvnet_udp.c");
+    println!("cargo:rerun-if-changed=src/c/vios/modvnet_dns.c");
     println!("cargo:rerun-if-changed=src/c/vios/modvfs.c");
     println!("cargo:rerun-if-changed=src/c/vios/vios_stubs.c");
     println!("cargo:rerun-if-changed=gen_genhdr.py");

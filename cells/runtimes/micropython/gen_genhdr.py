@@ -104,7 +104,7 @@ STATIC_QSTRS = [
     "throw", "to_bytes", "tuple", "type", "update", "upper", "utf-8",
     "value", "values", "write", "zip",
     # ViOS port-specific QSTRs (vnet module)
-    "vnet", "resolve", "udp_send", "udp_recv",
+    "vnet", "resolve", "udp_send", "udp_recv", "udp_socket",
 ]
 
 # ── Unsorted pool (small index, from makeqstrdata.py) ────────────────────
