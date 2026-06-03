@@ -553,15 +553,15 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 
 ## Current Status (2026-06-03)
 
-### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20)
+### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, C)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
 - **Nano kernel** (~8,700 LOC) with round-robin scheduler
 - **48 syscall variants** (IPC, memory, task, FS, GPU, network, state)
 - Frame allocator (bitmap) and virtual memory
 - ELF loader with PIE relocation support
-- **VFS service** (RamFS + FAT32 read)
+- **VFS service** (RamFS read/write, FAT32 read)
 - **Config service** (KV store with ViStateTransfer)
-- **Interactive shell** with pipes, redirection, background jobs, history, aliases
+- **Interactive shell** with pipes, redirection, background jobs, history, aliases, echo built-in
 - **Lua 5.4** runtime (multi-line REPL, VFS I/O FFI, ViStateTransfer) — verified
 - **MicroPython 1.24.1** runtime (REPL, 256KB heap) — verified
 - **Keyboard input** (VirtIO, multi-key support, no deadlock)
@@ -572,7 +572,7 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 - **CI/CD pipeline** with architecture validation (10/10 score)
 
 ### 🚧 In Progress / Partial
-- **VFS write** (FAT32 integration in progress)
+- **VFS write** (RamFS write complete; FAT32 integration deferred to Phase D)
 - **Network opcodes** (SOCKET_STATE 0x19 added; LISTEN/ACCEPT partial; full multi-connection server deferred)
 - **KASLR** (not implemented)
 

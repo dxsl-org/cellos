@@ -6,8 +6,13 @@
 use ostd::prelude::*;
 use ostd::syscall;
 
-/// VFS service cell endpoint (init=1, vfs=2 in the default boot sequence).
-const VFS_ENDPOINT: usize = 2;
+/// VFS service cell endpoint.
+///
+/// Boot order: init=1, user_hello=2 (kernel smoke-test), vfs=3 (init's first
+/// sys_spawn_from_path). The previous value `2` silently routed all mkdir/rm
+/// IPC to the user_hello task instead of the VFS service. Verified from QEMU
+/// serial log — see kernel/src/task/syscall.rs ServiceLookup table.
+const VFS_ENDPOINT: usize = 3;
 const OP_MKDIR:  u8 = 5;
 const OP_RMDIR:  u8 = 6;
 const OP_UNLINK: u8 = 7;
@@ -244,6 +249,71 @@ pub fn cmd_rm<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         ostd::io::print("rm: cannot remove '");
         ostd::io::print(path);
         ostd::io::println("'");
+    }
+    Ok(())
+}
+
+const OP_WRITE: u8 = 4;
+const OP_READ:  u8 = 8;
+
+/// Write `content` to `path` via VFS OP_WRITE (3-byte header: opcode, path_len, content_len).
+///
+/// Path+content are capped to fit the 256-byte client buffer. The VFS server
+/// enforces `/tmp/` authorization; this call is a transparent passthrough.
+pub fn write_file(path: &str, content: &[u8]) -> bool {
+    let pb = path.as_bytes();
+    let pl = pb.len().min(253);
+    let cl = content.len().min(253_usize.saturating_sub(pl));
+    let mut buf = [0u8; 256];
+    buf[0] = OP_WRITE;
+    buf[1] = pl as u8;
+    buf[2] = cl as u8;
+    buf[3..3 + pl].copy_from_slice(&pb[..pl]);
+    buf[3 + pl..3 + pl + cl].copy_from_slice(&content[..cl]);
+    syscall::sys_send(VFS_ENDPOINT, &buf[..3 + pl + cl]);
+    let mut reply = [0u8; 1];
+    match syscall::sys_recv(0, &mut reply) {
+        syscall::SyscallResult::Ok(_) => reply[0] == 0,
+        _ => false,
+    }
+}
+
+/// Read file content from VFS via OP_READ; returns byte count written into `out`.
+///
+/// Returns 0 if the file is not found or the path is a directory.
+/// Uses zero-scan to detect byte count (sys_recv returns sender_id, not length).
+pub fn read_file_vfs(path: &str, out: &mut [u8]) -> usize {
+    let pb = path.as_bytes();
+    let pl = pb.len().min(253) as u8;
+    let mut req = [0u8; 256];
+    req[0] = OP_READ;
+    req[1] = pl;
+    req[2..2 + pl as usize].copy_from_slice(&pb[..pl as usize]);
+    syscall::sys_send(VFS_ENDPOINT, &req[..2 + pl as usize]);
+    match syscall::sys_recv(0, out) {
+        syscall::SyscallResult::Ok(_) => {
+            out.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0)
+        }
+        _ => 0,
+    }
+}
+
+/// `vcat <path>` — print file content via VFS OP_READ (reads RamFS including /tmp/).
+///
+/// Unlike `cat`, which reads the kernel-embedded FS, `vcat` reads from the
+/// VFS cell's RamFS — the same store that OP_WRITE targets.
+pub fn cmd_vcat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let path = match args.next() {
+        Some(p) => p,
+        None => { ostd::io::println("Usage: vcat <path>"); return Ok(()); }
+    };
+    let mut buf = [0u8; 480];
+    let n = read_file_vfs(path, &mut buf);
+    if n == 0 {
+        ostd::io::print("vcat: not found: ");
+        ostd::io::println(path);
+    } else if let Ok(s) = core::str::from_utf8(&buf[..n]) {
+        ostd::io::print(s);
     }
     Ok(())
 }

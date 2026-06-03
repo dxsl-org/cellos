@@ -110,6 +110,55 @@
 
 ---
 
+## [2026-06-03] Phase C — VFS RamFS Write + Shell Echo Redirect (Complete)
+
+**Changes**:
+- **Phase 1 (VFS Endpoint Fix)**: Fixed shell's hardcoded `VFS_ENDPOINT = 2` (silently misrouted to user_hello); replaced with dynamic `sys_service_lookup("vfs")` wrapper (hardcoded fallback 3)
+  - Added `sys_service_lookup` ostd syscall wrapper for ServiceLookup (opcode 100)
+  - Updated shell `cmd_fs.rs` to use `vfs_endpoint()` helper for all VFS IPC
+  - Verified correct routing: shell → VFS cell (task 3) for all path operations
+- **Phase 2 (OP_WRITE Handler)**: Implemented RamFS file write in VFS service
+  - Added `write_file(&mut self, path: &str, content: &[u8]) -> bool` to VfsManager
+  - Implemented `OP_WRITE (opcode 4)` handler: 3-byte header `[4][path_len][content_len]`, validates `/tmp/` prefix guard, writes to RamFS tree
+  - Added `OP_READ (opcode 8)` handler: reads file bytes back from RamFS (used by vcat built-in)
+  - Returns 0x00 on success, 0x01 on error (path outside /tmp, parent missing, etc.)
+- **Phase 3 (Echo Built-in + Redirect)**: Added real echo built-in and stdout redirect capture for persistent writes
+  - Implemented `cmd_echo` built-in in shell (replaces spawn of `/bin/echo`)
+  - Wired `StdoutTo` redirect to intercept echo output: builds bytes, sends OP_WRITE to VFS, skips console print
+  - Added `write_file()` client function with 3-byte header protocol matching VFS handler
+  - Added `vcat` built-in for VFS-backed file read (reads via OP_READ)
+  - Integration with shell executor: early-return for echo+redirect, log-only for other built-ins with redirects (deferred)
+- **Phase 4 (Integration Test)**: End-to-end round-trip test validates all phases together
+  - Added `vfs_write_echo_redirect` integration test: boot → echo PHASE_C_WRITE > /tmp/test.txt → vcat /tmp/test.txt → assert read-back
+  - All 12 integration tests pass ✅
+
+**Files Modified**:
+- `libs/ostd/src/syscall.rs` — added `sys_service_lookup` wrapper
+- `cells/apps/shell/src/cmd_fs.rs` — fixed VFS_ENDPOINT, added vfs_endpoint(), write_file() client, read_file_vfs() client
+- `cells/apps/shell/src/commands.rs` — added cmd_echo_to_vec(), cmd_echo(), cmd_vcat() built-ins
+- `cells/apps/shell/src/executor.rs` — registered echo in dispatch_builtin, added StdoutTo redirect capture for echo
+- `cells/services/vfs/src/main.rs` — added write_file(), get_file_data() to VfsManager, implemented OP_WRITE + OP_READ handlers
+- `tests/integration/tests/boot.rs` — added vfs_write_echo_redirect test
+
+**Status**: Complete. RamFS write functional for session-local `/tmp/` writes. FAT32 persistence deferred to Phase D.
+
+**Impact**: 
+- Shell output now persists in-session: `echo TEXT > /tmp/file` writes to VFS RamFS
+- `vcat` built-in reads back VFS-stored files
+- `/tmp/` prefix guard prevents unauthorized writes
+- Foundation for Phase D (FAT32 disk integration) and Phase E+ (persistent storage)
+
+**Known Limitations**:
+- Writes are volatile (RamFS only; lost on reboot)
+- Kernel FS (`/bin`, `/etc`) and VFS RamFS (`/tmp`) are separate stores; `cat` reads kernel FS, `vcat` reads VFS
+- Multi-KB writes truncated to 253-byte client buffer (chunking deferred)
+- No append (>>) or other redirect modes (2>); only StdoutTo working for echo
+
+**Next Phase**:
+- Phase D: FAT32 disk write integration + `/tmp` → FAT32 redirect
+
+---
+
 ## [2026-06-03] Phase A–B — Network TCP Data-Path (Complete)
 
 **Changes**:

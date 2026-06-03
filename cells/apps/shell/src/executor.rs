@@ -83,6 +83,22 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     let prog = &cmd.argv[0];
     let args: Vec<&str> = cmd.argv[1..].iter().map(String::as_str).collect();
 
+    // Phase C: capture `echo` output when a StdoutTo redirect is present.
+    // Only `echo` is supported — external-process capture requires pipe caps (Phase 17a).
+    if prog == "echo" {
+        if let Some(Redirect::StdoutTo(path)) =
+            cmd.redirects.iter().find(|r| matches!(r, Redirect::StdoutTo(_)))
+        {
+            let bytes = crate::commands::cmd_echo_to_vec(&args);
+            if !crate::cmd_fs::write_file(path, &bytes) {
+                ostd::io::print("echo: cannot write '");
+                ostd::io::print(path);
+                ostd::io::println("'");
+            }
+            return 0;
+        }
+    }
+
     // Apply input redirect if present (read from file into buffer).
     // For v1.0 the redirected data is not plumbed into the command yet.
     for r in &cmd.redirects {
@@ -133,6 +149,7 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         "mkdir" => crate::cmd_fs::cmd_mkdir(make_parts(args)),
         "rmdir" => crate::cmd_fs::cmd_rmdir(make_parts(args)),
         "rm"    => crate::cmd_fs::cmd_rm(make_parts(args)),
+        "vcat"  => crate::cmd_fs::cmd_vcat(make_parts(args)),
         // ── System ──────────────────────────────────────────────────────
         "ps"     => crate::commands::cmd_ps(make_parts(args)),
         "pwd"    => crate::cmd_sys::cmd_pwd(make_parts(args)),
@@ -140,6 +157,7 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         "free"   => crate::cmd_sys::cmd_free(make_parts(args)),
         "env"    => crate::cmd_sys::cmd_env(make_parts(args)),
         "uptime" => crate::cmd_sys::cmd_uptime(make_parts(args)),
+        "echo"   => crate::commands::cmd_echo(make_parts(args)),
         "clear"  => crate::commands::cmd_clear(),
         "help"   => crate::commands::cmd_help(),
         "exec"   => crate::commands::cmd_exec(make_parts(args)),

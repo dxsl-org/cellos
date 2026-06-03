@@ -258,3 +258,26 @@ pub fn cmd_ps<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         }
     }
 }
+
+/// Build `echo` output bytes (`"a b c\n"`) without printing.
+///
+/// Used by the shell redirect path to capture echo output for OP_WRITE.
+pub fn cmd_echo_to_vec(args: &[&str]) -> alloc::vec::Vec<u8> {
+    let mut out = alloc::vec::Vec::new();
+    for (i, a) in args.iter().enumerate() {
+        if i > 0 { out.push(b' '); }
+        out.extend_from_slice(a.as_bytes());
+    }
+    out.push(b'\n');
+    out
+}
+
+/// `echo a b c` — print args joined by a single space, followed by newline.
+pub fn cmd_echo<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let parts: alloc::vec::Vec<&str> = args.collect();
+    let bytes = cmd_echo_to_vec(&parts);
+    if let Ok(s) = core::str::from_utf8(&bytes) {
+        ostd::io::print(s);
+    }
+    Ok(())
+}

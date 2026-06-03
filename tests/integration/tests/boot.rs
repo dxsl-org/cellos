@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use vios_integration_tests::{qemu_binary, spawn_echo_server, spawn_http_server, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 40;
+/// Timeout for individual shell command round-trips after boot.
+const CMD_TIMEOUT: u64 = 10;
 
 /// Repo root = tests/integration/.. /..
 fn repo_root() -> PathBuf {
@@ -290,4 +292,30 @@ fn network_curl_http_get() {
 
     qemu.wait_for("HELLO", 10)
         .unwrap_or_else(|e| panic!("no response body: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Phase C: VFS write — echo redirected to /tmp, then vcat reads it back via VFS.
+///
+/// `cat` reads from the kernel-embedded FS (VIFS1 / kernel_fs.img) which does
+/// not include /tmp. `vcat` reads from the VFS cell's RamFS via OP_READ opcode,
+/// which is the same store OP_WRITE targets — making the round-trip verifiable.
+#[test]
+fn vfs_write_echo_redirect() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    qemu.send_line("echo PHASE_C_WRITE > /tmp/test.txt");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt not returned after write: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.send_line("vcat /tmp/test.txt");
+    qemu.wait_for("PHASE_C_WRITE", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("file content not read back: {e}\n--- output ---\n{}", qemu.dump()));
 }

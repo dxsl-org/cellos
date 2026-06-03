@@ -31,7 +31,8 @@ static LUA_ELF:   &[u8] = include_bytes!("../../../../kernel/src/embedded/lua");
 const OP_GET_FILE: u8 = 1; // path -> (ptr:u64, len:u64)
 const OP_LIST_DIR: u8 = 2; // path -> newline-separated names
 const OP_STAT:     u8 = 3; // path -> (size:u64, is_dir:u8, pad:[u8;7])
-const OP_WRITE:    u8 = 4; // stub — requires VirtIO-FAT, returns 0xff
+const OP_WRITE:    u8 = 4; // [path_len][content_len][path][content] under /tmp -> 0=ok, 1=err (RamFS, volatile)
+const OP_READ:     u8 = 8; // path -> file bytes (up to 480), empty = not found
 const OP_MKDIR:    u8 = 5; // path -> 0=ok, 1=err
 const OP_RMDIR:    u8 = 6; // path -> 0=ok, 1=err (only empty dirs)
 const OP_UNLINK:   u8 = 7; // path -> 0=ok, 1=err (only files)
@@ -196,6 +197,38 @@ impl VfsManager {
         }
         false
     }
+
+    /// Create or overwrite a regular file at `path` with `content`.
+    ///
+    /// Returns false if the parent directory does not exist or if `path` names
+    /// an existing directory. Authorization (e.g. `/tmp/` prefix check) is the
+    /// caller's responsibility.
+    fn write_file(&mut self, path: &str, content: &[u8]) -> bool {
+        let (parent_path, name) = match Self::split_parent_name(path) {
+            Some(pn) => pn,
+            None => return false,
+        };
+        let parent = match self.find_node_mut(&parent_path) {
+            Some(p) if p.is_dir => p,
+            _ => return false,
+        };
+        match parent.children.get_mut(&name) {
+            Some(existing) if existing.is_dir => false,
+            Some(existing) => { existing.data = Vec::from(content); true }
+            None => {
+                parent.children.insert(name.clone(),
+                    Box::new(RamFile::new_file(&name, content)));
+                true
+            }
+        }
+    }
+
+    /// Return a reference to the file's raw bytes, or `None` if not found or is a directory.
+    fn get_file_data(&self, path: &str) -> Option<&[u8]> {
+        let n = self.find_node(path)?;
+        if n.is_dir { return None; }
+        Some(&n.data)
+    }
 }
 
 #[no_mangle]
@@ -236,8 +269,30 @@ pub fn main() {
                         }
                     }
                     OP_WRITE => {
-                        // Requires VirtIO-FAT backing; stub returns 0xff (error).
-                        ostd::syscall::sys_send(sender, b"\xff");
+                        // Message: [4][path_len][content_len][path][content]
+                        // Note: OP_WRITE uses its own 3-byte header (not the shared
+                        // 2-byte path-only header) so content_len is unambiguous.
+                        let pl = buf[1] as usize;
+                        let cl = buf[2] as usize;
+                        let ok = if 3 + pl + cl <= buf.len() {
+                            match core::str::from_utf8(&buf[3..3 + pl]) {
+                                Ok(p) if p.starts_with("/tmp/") => {
+                                    vfs.write_file(p, &buf[3 + pl..3 + pl + cl])
+                                }
+                                _ => false,
+                            }
+                        } else { false };
+                        ostd::syscall::sys_send(sender, if ok { b"\x00" } else { b"\x01" });
+                    }
+                    OP_READ => {
+                        if let Some(p) = path {
+                            if let Some(data) = vfs.get_file_data(p) {
+                                let n = data.len().min(480);
+                                ostd::syscall::sys_send(sender, &data[..n]);
+                            } else {
+                                ostd::syscall::sys_send(sender, b"");
+                            }
+                        }
                     }
                     OP_MKDIR => {
                         if let Some(p) = path {
