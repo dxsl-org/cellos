@@ -115,6 +115,8 @@ fn main() {
     build.file(port_dir.join("vios_stubs.c"));
     // vnet Python module: TCP socket IPC via vios_net_* bridge (net_bridge.rs)
     build.file(port_dir.join("modvnet.c"));
+    // vfs Python module: VFS filesystem IPC (read/write/append/mkdir)
+    build.file(port_dir.join("modvfs.c"));
     // GC register collector: gchelper_rv64i.s provides gc_helper_get_regs_and_sp;
     // gchelper_native.c wraps it into gc_helper_collect_regs_and_stack.
     build.file(shared_rt.join("gchelper_native.c"));
@@ -139,6 +141,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src/c/vios/mpconfigport.h");
     println!("cargo:rerun-if-changed=src/c/vios/mphalport.c");
     println!("cargo:rerun-if-changed=src/c/vios/modvnet.c");
+    println!("cargo:rerun-if-changed=src/c/vios/modvfs.c");
     println!("cargo:rerun-if-changed=src/c/vios/vios_stubs.c");
     println!("cargo:rerun-if-changed=gen_genhdr.py");
     println!("cargo:rerun-if-changed=vendor/py");

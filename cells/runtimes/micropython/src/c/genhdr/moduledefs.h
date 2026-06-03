@@ -52,6 +52,10 @@ extern const struct _mp_obj_module_t mp_module_sys;
 #undef MODULE_DEF_SYS
 #define MODULE_DEF_SYS { MP_ROM_QSTR(MP_QSTR_sys), MP_ROM_PTR(&mp_module_sys) },
 
+extern const struct _mp_obj_module_t mp_module_vfs_vios;
+#undef MODULE_DEF_VFS
+#define MODULE_DEF_VFS { MP_ROM_QSTR(MP_QSTR_vfs), MP_ROM_PTR(&mp_module_vfs_vios) },
+
 extern const struct _mp_obj_module_t mp_module_vnet;
 #undef MODULE_DEF_VNET
 #define MODULE_DEF_VNET { MP_ROM_QSTR(MP_QSTR_vnet), MP_ROM_PTR(&mp_module_vnet) },
@@ -66,6 +70,7 @@ extern const struct _mp_obj_module_t mp_module_vnet;
     MODULE_DEF_MATH \
     MODULE_DEF_MICROPYTHON \
     MODULE_DEF_SYS \
+    MODULE_DEF_VFS \
     MODULE_DEF_VNET \
 // MICROPY_REGISTERED_MODULES
 

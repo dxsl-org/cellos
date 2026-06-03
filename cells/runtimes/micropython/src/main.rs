@@ -47,10 +47,20 @@ fn vfs_read_to_buf(path: &str, buf: &mut [u8]) -> usize {
 
 #[no_mangle]
 pub extern "C" fn main(_argc: isize, _argv: *const *const u8) -> isize {
-    // Always initialise the interpreter before executing any code.
-    // Stack-anchor gives the GC root scanner a top-of-stack marker.
-    let stack_anchor: u8 = 0;
+    // Read spawn args FIRST — before any heavy initialisation — so the
+    // ARGV_STASH_KEY is consumed before the shell can overwrite it with the next
+    // spawned cell's args. mp_embed_init (GC setup) is slow; without this early
+    // read a second rapid spawn races and both cells get the later cell's args.
+    let mut argbuf = [0u8; 512];
+    let n = ostd::syscall::sys_spawn_args(&mut argbuf);
+    let args = core::str::from_utf8(&argbuf[..n]).unwrap_or("").trim();
+    // Copy to a fixed-size array so the borrow isn't tied to argbuf's lifetime.
+    let mut args_copy = [0u8; 512];
+    args_copy[..args.len()].copy_from_slice(args.as_bytes());
+    let args_len = args.len();
 
+    // Initialise the MicroPython interpreter (GC heap + VM).
+    let stack_anchor: u8 = 0;
     // SAFETY: HEAP is a `static mut` array used exclusively here. This cell is
     // single-threaded with no concurrent access; mp_embed_init takes sole
     // ownership of the buffer for the lifetime of the interpreter.
@@ -63,10 +73,7 @@ pub extern "C" fn main(_argc: isize, _argv: *const *const u8) -> isize {
         );
     }
 
-    // Read the command line published by the spawner (e.g. the shell).
-    let mut argbuf = [0u8; 512];
-    let n = ostd::syscall::sys_spawn_args(&mut argbuf);
-    let args = core::str::from_utf8(&argbuf[..n]).unwrap_or("").trim();
+    let args = core::str::from_utf8(&args_copy[..args_len]).unwrap_or("").trim();
 
     // `python -c <code>` — evaluate and park.
     if let Some(code) = args.strip_prefix("-c ").or_else(|| args.strip_prefix("-c")) {

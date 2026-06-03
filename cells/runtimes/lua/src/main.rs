@@ -36,6 +36,13 @@ fn vfs_read_to_buf(path: &str, buf: &mut [u8]) -> usize {
 #[no_mangle]
 #[allow(non_snake_case)] // reason: L is the Lua API convention
 extern "C" fn main() -> usize {
+    // Read spawn args immediately before any heavy initialisation so that the
+    // ARGV_STASH_KEY is consumed before the shell overwrites it with the next
+    // cell's args.  luaL_newstate + luaL_openlibs are slow; without this early
+    // read a second rapid spawn races and both cells receive the later cell's args.
+    let mut argbuf_early = [0u8; 512];
+    let args_early_len = ostd::syscall::sys_spawn_args(&mut argbuf_early);
+
     // Create the state with Lua's default allocator. It routes through the C
     // malloc family, whose heap is backed by our `__wrap__sbrk` (the glue's
     // static heap) — the toolchain's own `_sbrk` stub returns null.
@@ -87,10 +94,8 @@ extern "C" fn main() -> usize {
         ffi::lua_setglobal(L, c"vfs".as_ptr());
     }
 
-    // Read the command line published by the spawner (e.g. the shell).
-    let mut argbuf = [0u8; 512];
-    let n = ostd::syscall::sys_spawn_args(&mut argbuf);
-    let args = core::str::from_utf8(&argbuf[..n]).unwrap_or("");
+    // Use the args captured before initialisation (avoids the ARGV_STASH_KEY race).
+    let args = core::str::from_utf8(&argbuf_early[..args_early_len]).unwrap_or("");
 
     // `lua -e <code>`: evaluate the chunk and exit (no REPL). The text after
     // "-e " is the Lua source; the shell whitespace-joins argv, so a space-free

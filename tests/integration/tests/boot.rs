@@ -822,3 +822,70 @@ fn python_vnet_resolve() {
     qemu.wait_for("10.0.2.2", 20)
         .unwrap_or_else(|e| panic!("vnet.resolve('gateway') failed: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+// ── Phase H: MicroPython vfs module + Python TCP HTTP ────────────────────────
+
+/// Phase H.1: `import vfs; vfs.write(...)` then `vfs.read(...)` must round-trip.
+///
+/// The ARGV_STASH_KEY in ViOS is a single global slot; a second spawn immediately
+/// after the first can overwrite it before the first cell gets scheduled.  Avoid
+/// all sequential-spawn races by doing the entire write+read in ONE Python `-c`
+/// invocation — single expression, no semicolons (shell splits on `;`):
+///
+///   lambda v: (write, read)[1]  →  imports vfs, writes, reads, returns read value
+#[test]
+fn python_vfs_write_read() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
+    std::thread::sleep(Duration::from_millis(500));
+
+    // One Python `-c` call: lambda writes, reads, returns the read content.
+    // tuple indexing [1] selects the read result; print() outputs it.
+    // No semicolons needed — shell-safe.
+    qemu.send_line(
+        "python -c print((lambda v:(v.write('/data/vp.txt','PYTHON_VFS_OK'),v.read('/data/vp.txt'))[1])(__import__('vfs')))"
+    );
+    qemu.wait_for("PYTHON_VFS_OK", 25)
+        .unwrap_or_else(|e| panic!("python vfs roundtrip failed: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Phase H.2: Python script does an HTTP/1.0 GET via `import vnet`.
+///
+/// A Lua one-liner writes the Python script to VFS (Lua interprets `\n` as
+/// newline and `\\r\\n` as the literal escape sequence that Python parses as
+/// CR+LF).  `python /data/http.py` is then spawned; the host HTTP server must
+/// reply with a line containing `200`.
+#[test]
+fn python_vnet_tcp_http_get() {
+    if !prerequisites_ok() { return; }
+
+    let (port, _server) = spawn_http_server();
+
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+    assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
+
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP failed: {e}\n{}", qemu.dump()));
+
+    std::thread::sleep(Duration::from_millis(500));
+
+    // Lua writes the Python HTTP script to VFS.
+    // In Lua: \n = newline; \\r\\n = literal \r\n (Python escape sequences).
+    // The script: import vnet, connect, send HTTP GET, print response, close.
+    // Uses 8.3-compatible filename and double-quoted Python strings (safe inside
+    // Lua single-quoted string literals).
+    qemu.send_line(&format!(
+        r#"lua -e vfs.write('/data/http.py','import vnet\nc=vnet.connect("10.0.2.2",{port})\nvnet.send(c,"GET / HTTP/1.0\\r\\n\\r\\n")\nprint(vnet.recv(c))\nvnet.close(c)')"#
+    ));
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("lua vfs.write did not return: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("python /data/http.py");
+    qemu.wait_for("200", 25)
+        .unwrap_or_else(|e| panic!("no HTTP 200 from Python: {e}\n--- output ---\n{}", qemu.dump()));
+}
