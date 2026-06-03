@@ -297,6 +297,47 @@ fn network_curl_http_get() {
         .unwrap_or_else(|e| panic!("no response body: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
+/// Phase D.2: HTTP/1.0 GET from Lua via the `vnet.*` TCP bindings.
+///
+/// A host HTTP server is started before QEMU boots. SLIRP routes guest
+/// `10.0.2.2:<port>` → host `127.0.0.1:<port>`. Lua connects out, sends a
+/// minimal GET, and prints the response — proving Phase D.1 SEND-length fix
+/// and the vnet bindings work end-to-end. No hostfwd needed (Lua dials out).
+#[test]
+fn lua_tcp_http_get() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    // Keep `_server` alive — dropping early can race with the accept thread.
+    let (port, _server) = spawn_http_server();
+
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP failed: {e}\n--- output ---\n{}", qemu.dump()));
+
+    std::thread::sleep(Duration::from_millis(500));
+
+    // The ViOS shell splits on `;` (sequence separator) and whitespace.
+    // Adjacent Lua statements without `;` are valid Lua — the parser ends each
+    // statement at the closing `)`. `'\r\n\r\n'` is space-free and sufficient
+    // to trigger the test server, which only looks for that terminator.
+    qemu.send_line(&format!(
+        "lua -e local c=vnet.connect('10.0.2.2',{port}) vnet.send(c,'\\r\\n\\r\\n') print(vnet.recv(c,512)) vnet.close(c)"
+    ));
+
+    // The host server replies "HTTP/1.0 200 OK\r\n...\r\n\r\nHELLO".
+    qemu.wait_for("200", 20)
+        .unwrap_or_else(|e| panic!("no HTTP 200: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.wait_for("HELLO", 10)
+        .unwrap_or_else(|e| panic!("no body: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
 /// Phase C (network): guest as TCP server — `nc -l 9090` listens; the host
 /// connects through QEMU SLIRP hostfwd, sends "PING_VIOS\n", and nc echoes
 /// the bytes to serial — proving LISTEN/ACCEPT and the inbound data-path.

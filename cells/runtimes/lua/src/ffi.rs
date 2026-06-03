@@ -87,6 +87,30 @@ extern "C" {
     pub fn lua_tointegerx(L: *mut LuaState, idx: c_int, isnum: *mut c_int) -> i64;
     /// Return the light userdata pointer at stack index `idx` (null if wrong type).
     pub fn lua_touserdata(L: *mut LuaState, idx: c_int) -> *mut core::ffi::c_void;
+
+    // ── Function registration / tables ───────────────────────────────────────
+
+    /// Push a C closure with `n` upvalues.
+    ///
+    /// `lua_pushcfunction(L,f)` in lua.h is the macro `lua_pushcclosure(L,f,0)`;
+    /// bind the real exported symbol and pass `n=0` for a plain C function.
+    pub fn lua_pushcclosure(
+        L: *mut LuaState,
+        f: unsafe extern "C" fn(*mut LuaState) -> c_int,
+        n: c_int,
+    );
+
+    /// Pop the value at stack top and set it as the global `name`.
+    pub fn lua_setglobal(L: *mut LuaState, name: *const c_char);
+
+    /// Create a new empty table and push it onto the stack.
+    ///
+    /// `lua_newtable(L)` in lua.h is the macro `lua_createtable(L,0,0)`.
+    pub fn lua_createtable(L: *mut LuaState, narr: c_int, nrec: c_int);
+
+    /// `t[k] = v` where `t` is at stack index `idx` and `v` is at the top
+    /// (popped). `k` is a NUL-terminated C string.
+    pub fn lua_setfield(L: *mut LuaState, idx: c_int, k: *const c_char);
 }
 
 /// Convenience: pop `n` items from the stack.

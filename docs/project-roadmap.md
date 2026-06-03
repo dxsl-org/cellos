@@ -3,7 +3,7 @@
 **Project**: ViOS (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability  
-**Last Updated**: 2026-06-03 (Phase H complete, Phase A–B complete)
+**Last Updated**: 2026-06-03 (Phase H, A–B, D complete)
 
 ---
 
@@ -20,7 +20,7 @@ ViOS development is organized into 4 major phases, each with specific milestones
 **Start Date**: 2026-04-01  
 **Target End Date**: 2026-06-30  
 **Effort**: 320 hours (~8 weeks @ 40h/wk)
-**Status**: ✅ 95% COMPLETE (Phases 01, 02, 05, C, D, E, F, G, H, A, B all complete)
+**Status**: ✅ 96% COMPLETE (Phases 01, 02, 05, C, D, E, F, G, H, A, B, D all complete)
 
 ### Milestone 1.1: VirtIO Block Device Fix
 **Status**: ✅ PARTIAL (Root Cause Fixed)  
@@ -199,17 +199,19 @@ All milestones complete when:
 ---
 
 ### Milestone 2.3: Complete Network Service
-**Status**: ✅ PARTIAL (TCP data-path + HTTP/1.0 GET + server LISTEN/ACCEPT working)  
+**Status**: ✅ PARTIAL (TCP data-path + HTTP/1.0 GET + server LISTEN/ACCEPT + Lua bindings working)  
 **Priority**: P1
 
-**Phases A+B+C Complete**:
+**Phases A+B+C+D Complete**:
 - [x] TCP client (CONNECT, SEND, RECV, CLOSE)
 - [x] HTTP/1.0 GET client (curl)
 - [x] nc utility (TCP echo client + server mode with LISTEN/ACCEPT)
 - [x] Socket state introspection (SOCKET_STATE opcode)
 - [x] TCP server (LISTEN opcode 0x17, ACCEPT opcode 0x18)
 - [x] Static hostname resolution table (resolve_host)
-- [x] Integration tests (network_tcp_send_recv, network_curl_http_get, network_tcp_listen_accept)
+- [x] IPC buffer length fix (zero-scan with per-opcode floors)
+- [x] Lua TCP bindings (vnet_connect, vnet_send, vnet_recv, vnet_close)
+- [x] Integration tests (network_tcp_send_recv, network_curl_http_get, network_tcp_listen_accept, lua_tcp_http_get)
 
 **Remaining**:
 - DHCP client
@@ -217,7 +219,7 @@ All milestones complete when:
 - Full socket API (bind, listen, etc.)
 - VirtIO NIC kernel driver
 
-**Effort**: 200 hours (150 hours Phases A+B+C complete, 50 hours remaining)
+**Effort**: 200 hours (175 hours Phases A+B+C+D complete, 25 hours remaining)
 
 ---
 
@@ -471,7 +473,8 @@ Phase 4 (Advanced Features)
 ✅ **Phase H**: Kernel permissions + FAT16 type guards (KernelPerms, rmdir type-safe, recursive rm, append)  
 ✅ **Phase A**: Network TCP Data-Path (CONNECT, SEND, RECV, CLOSE, socket state)  
 ✅ **Phase B**: HTTP/1.0 GET via curl (nc binary, curl binary, state introspection)  
-✅ **Phase C**: TCP Server (LISTEN, ACCEPT, hostname resolution, nc -l server mode)
+✅ **Phase C**: TCP Server (LISTEN, ACCEPT, hostname resolution, nc -l server mode)  
+✅ **Phase D**: IPC buffer hardening + Lua TCP bindings (vnet.*, zero-scan, per-opcode floors)
 
 ---
 
@@ -523,8 +526,9 @@ Phase 4 (Advanced Features)
 | External ELF | ✅ Working | ✅ spawn_from_path verified | ✅ COMPLETE |
 | HotSwap | ✅ Working | ✅ 5-step protocol verified | ✅ COMPLETE |
 | FAT16 persistence | ✅ Full stack | ✅ All phases C–H verified (21/21 tests) | ✅ COMPLETE |
-| Network TCP | ✅ Data-path functional | ✅ Phases A–B verified (2 new tests) | ✅ COMPLETE |
-| Test coverage | ✅ 80%+ | ✅ 90%+ (phases C–H + A–B: 23/23) | ✅ MET |
+| Network TCP | ✅ Data-path functional | ✅ Phases A–B–D verified (24/24 tests) | ✅ COMPLETE |
+| Lua TCP bindings | ✅ Working | ✅ vnet.* + http_get test verified | ✅ COMPLETE |
+| Test coverage | ✅ 80%+ | ✅ 90%+ (phases C–H + A–B–D: 24/24) | ✅ MET |
 | Architecture tests | ✅ 10/10 | ✅ 10/10 | ✅ MET |
 | Kernel LOC | ✅ < 10,000 | ✅ 8,700 | ✅ MET |
 
@@ -546,7 +550,8 @@ Phase 4 (Advanced Features)
 - ✅ HotSwap orchestrator (Phase 20)
 - ✅ FAT16 persistence stack: VFS RamFS + block I/O + hardening + type guards (Phases C–H)
 - ✅ Network TCP data-path: CONNECT/SEND/RECV/CLOSE + HTTP/1.0 GET (Phases A–B)
-- ✅ Integration test suite (90%+ coverage, 23/23 tests passing)
+- ✅ IPC buffer hardening + Lua TCP bindings (Phase D)
+- ✅ Integration test suite (90%+ coverage, 24/24 tests passing)
 
 ### v0.3.0 (Target: 2026-09-30)
 - FAT16 feature parity (permissions, extended attrs, sparse files)

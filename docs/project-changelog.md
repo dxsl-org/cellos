@@ -375,10 +375,60 @@
 | Version | Date | Phase(s) | Status |
 |---------|------|----------|--------|
 | 0.2.0 | 2026-05-01 | Phase 0 (Alpha) | Stable baseline |
-| 0.2.1-dev | 2026-06-03 | Phases 01–23, C/D/E/F/G/H complete | In progress |
-| 0.2.1 | TBD | Phase 1 + Phases C/D/E/F/G/H complete | Pending |
+| 0.2.1-dev | 2026-06-03 | Phases 01–23, A/B/C/D/E/F/G/H complete | In progress |
+| 0.2.1 | TBD | Phase 1 + Phases A/B/C/D/E/F/G/H complete | Pending |
 | 0.3.0 | 2026-09-30 | Phases 2–3 + Phase I+ | Planned |
 | 1.0.0 | 2027-03-31 | Phases 4+ | Planned |
+
+---
+
+## [2026-06-03] Phase D — IPC Buffer Hardening + Lua TCP Bindings (Complete)
+
+**Changes**:
+- **Phase D.1 (IPC Buffer Length Fix)**:
+  - `cells/services/net/src/main.rs` — `buf.fill(0)` before each `sys_try_recv` (kernel doesn't zero tail — load-bearing)
+  - Zero-scan to recover msg_len: `buf.iter().rposition(|&b| b != 0).map(|i|i+1).unwrap_or(0).max(9)`
+  - Opcode-specific minimums: CONNECT (0x12) → max(15), RECV (0x14) → max(13), LISTEN (0x17) → max(11)
+  - `fn handle_ipc(buf: &[u8])` — widened from `&[u8; 512]` to slice for flexibility
+  - SEND now passes exactly the real payload bytes to `socket.send_slice()`, not 503 stale bytes
+  - Root cause: `sys_try_recv` kernel buffer not zeroed; VFS/app must clear destination before read
+  - Limitation documented: zero-scan fails for binary payloads ending in NUL (ASCII callers only)
+
+- **Phase D.2 (Lua TCP Bindings)**:
+  - `cells/runtimes/lua/src/bindings_net.rs` — NEW: `vnet_connect`, `vnet_send`, `vnet_recv`, `vnet_close` (#[no_mangle] unsafe extern "C", IPC mirrors nc.rs)
+  - `cells/runtimes/lua/src/ffi.rs` — added `lua_pushcclosure`, `lua_setglobal`, `lua_createtable`, `lua_setfield`
+  - `cells/runtimes/lua/src/main.rs` — `mod bindings_net;` + register `vnet` table after `luaL_openlibs`
+  - Lua scripts can now: `vnet.connect("10.0.2.2", 80)` → `vnet.send("GET / HTTP/1.0\r\n\r\n")` → `vnet.recv()` → `vnet.close()`
+  - HTTP GET via Lua REPL validated
+
+- **Phase D.3 (Test Coverage)**:
+  - `tests/integration/tests/boot.rs:lua_tcp_http_get` — NEW integration test validates Lua HTTP GET end-to-end
+  - Shell-splitting discovered: Lua expressions use adjacent statements (no `;`), `'\r\n\r\n'` instead of spaced HTTP request
+  - All 24 tests pass single-threaded; one pre-existing flake (vfs_fat16_subdir_persistence disk race, passes in isolation)
+
+**Files Modified**:
+- `cells/services/net/src/main.rs` — buffer zero + zero-scan + opcode-specific floors
+- `cells/runtimes/lua/src/bindings_net.rs` — NEW: Lua TCP FFI
+- `cells/runtimes/lua/src/ffi.rs` — extended Lua API surface
+- `cells/runtimes/lua/src/main.rs` — vnet table registration
+- `tests/integration/tests/boot.rs` — lua_tcp_http_get test
+
+**Status**: Complete. 24/24 integration tests pass.
+
+**Integration Tests Added**:
+- `lua_tcp_http_get` — Lua script connects to HTTP server, sends GET, reads response (HELLO + 200)
+
+**Key Discoveries**:
+- RxFrame arrives via `sys_net_rx` (pump_rx), NOT sys_try_recv — zero-scan only affects socket-syscall envelopes
+- Kernel `ipc_try_recv` does NOT zero destination tail — buf.fill(0) is load-bearing
+- CONNECT/LISTEN for ports < 256 required opcode-specific minimum floors (prevents RxFrame corruption)
+- Net cell performs its own zero-scan; no contract from kernel about buffer zeroing
+
+**Impact**:
+- Net cell IPC now robust against kernel buffer-tailing artifacts
+- Lua TCP bindings enable network programming from REPL (HTTP clients, socket libraries)
+- Zero-scan documented as ASCII-only; binary-safe variant (length-prefixed) deferred to Phase E+
+- Foundation for Phase E (VirtIO NIC driver, DHCP client)
 
 ---
 

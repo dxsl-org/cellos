@@ -131,10 +131,42 @@ pub fn main() {
         }
 
         // ── Receive one IPC message (non-blocking) ────────────────────────────
+        // Pre-zero the reused buffer so stale bytes from the previous message
+        // cannot bleed into this one. sys_try_recv returns sender_id, not a
+        // byte count, so the true payload length is recovered by scanning for
+        // the last non-zero byte after the receive.
+        buf.fill(0);
         match sys_try_recv(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
+                // LIMITATION: zero-scan truncates a payload whose final byte is
+                // 0x00. All current senders (nc/curl/lua vnet) transmit ASCII
+                // text that never ends in NUL. A length-prefixed IPC frame is
+                // the proper long-term fix.
+                //
+                // The scan is followed by opcode-specific minimum-length floors
+                // that protect fixed-format messages from under-counting:
+                // - `.max(9)` — any envelope (9-byte header is mandatory)
+                // - CONNECT (0x12) needs ≥15 (9 + addr:4 + port:2); without the
+                //   floor a port whose high byte is 0 (e.g. :80) causes the
+                //   6-byte payload guard to fire and return a spurious error.
+                // - LISTEN  (0x17) needs ≥11 (9 + port:2) for the same reason.
+                // - RECV    (0x14) needs ≥13 (9 + buf_len:4) so the 4-byte
+                //   buf_len is always present and the default-512 fallback is
+                //   not triggered spuriously.
+                let scan_len = buf
+                    .iter()
+                    .rposition(|&b| b != 0)
+                    .map(|i| i + 1)
+                    .unwrap_or(0)
+                    .max(9);
+                let msg_len = match buf[0] {
+                    0x12 => scan_len.max(15), // CONNECT: needs addr:4 + port:2
+                    0x14 => scan_len.max(13), // RECV:    needs buf_len:4
+                    0x17 => scan_len.max(11), // LISTEN:  needs port:2
+                    _    => scan_len,
+                };
                 handle_ipc(
-                    &buf,
+                    &buf[..msg_len],
                     sender,
                     &mut device,
                     &mut iface,
@@ -152,7 +184,7 @@ pub fn main() {
 
 /// Dispatch one IPC message.
 fn handle_ipc(
-    buf: &[u8; 512],
+    buf: &[u8],
     sender: usize,
     device: &mut VirtioNetDevice,
     iface: &mut Interface,
