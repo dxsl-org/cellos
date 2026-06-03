@@ -890,6 +890,31 @@ fn python_vnet_tcp_http_get() {
         .unwrap_or_else(|e| panic!("no HTTP 200 from Python: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
+// ── Phase J: Shell script files ───────────────────────────────────────────────
+
+/// Phase J: `source /data/script.sh` reads and executes a shell script from VFS.
+///
+/// `vwrite` creates a one-liner script; `source` runs it; the script's `echo`
+/// output must appear.  Also tests the POSIX `.` alias.
+#[test]
+fn shell_source_script() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
+    std::thread::sleep(Duration::from_millis(500));
+
+    // Write a one-line shell script (8.3-compatible filename).
+    qemu.send_line("vwrite /data/run.sh echo SCRIPT_SOURCED");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("source /data/run.sh");
+    qemu.wait_for("SCRIPT_SOURCED", 15)
+        .unwrap_or_else(|e| panic!("source did not run script: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
 /// Phase I: Python `vnet.resolve('google.com')` must return a dotted-decimal IP
 /// via a real DNS A-record query to the QEMU SLIRP DNS server at 10.0.2.3:53.
 ///

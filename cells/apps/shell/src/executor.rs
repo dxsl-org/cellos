@@ -12,6 +12,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use crate::parser::{Ast, Cmd, Redirect};
 use crate::jobs::{Jobs, JobState};
+use ostd::prelude::*;
 use ostd::syscall;
 
 /// Execute an `Ast` and return the last command's exit code.
@@ -167,6 +168,9 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         "exec"   => crate::commands::cmd_exec(make_parts(args)),
         // ── Jobs ────────────────────────────────────────────────────────
         "jobs" => { print_jobs(jobs); Ok(()) }
+        // ── Scripting ───────────────────────────────────────────────────
+        // `.` is the POSIX short form of `source`.
+        "source" | "." => cmd_source(args, jobs),
         // ── External ────────────────────────────────────────────────────
         _ => return spawn_external(prog, args),
     };
@@ -186,6 +190,39 @@ fn print_jobs(jobs: &Jobs) {
         ostd::io::print("  ");
         ostd::io::println(name);
     }
+}
+
+/// `source <path>` — read a shell script from VFS and execute each line.
+///
+/// Lines starting with `#` and blank lines are skipped. The script runs in the
+/// current shell's Jobs context, so spawns from the script are tracked normally.
+/// Maximum script size is 4096 bytes (same limit as VFS OP_READ reply).
+fn cmd_source(args: &[&str], jobs: &mut Jobs) -> ViResult<()> {
+    let path = match args.first() {
+        Some(p) => *p,
+        None => {
+            ostd::io::println("Usage: source <path>");
+            return Ok(());
+        }
+    };
+    let mut buf = alloc::vec![0u8; 4096];
+    let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
+    if n == 0 {
+        ostd::io::print("source: cannot open '");
+        ostd::io::print(path);
+        ostd::io::println("'");
+        return Ok(());
+    }
+    let content = core::str::from_utf8(&buf[..n]).unwrap_or("");
+    for line in content.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let ast = crate::parser::parse(line);
+        execute(&ast, jobs);
+    }
+    Ok(())
 }
 
 /// Attempt to spawn an external binary from `/bin/<prog>`.
