@@ -199,24 +199,25 @@ All milestones complete when:
 ---
 
 ### Milestone 2.3: Complete Network Service
-**Status**: ✅ PARTIAL (TCP data-path + HTTP/1.0 GET working)  
+**Status**: ✅ PARTIAL (TCP data-path + HTTP/1.0 GET + server LISTEN/ACCEPT working)  
 **Priority**: P1
 
-**Phase A+B Complete**:
+**Phases A+B+C Complete**:
 - [x] TCP client (CONNECT, SEND, RECV, CLOSE)
 - [x] HTTP/1.0 GET client (curl)
-- [x] nc utility (TCP echo client)
+- [x] nc utility (TCP echo client + server mode with LISTEN/ACCEPT)
 - [x] Socket state introspection (SOCKET_STATE opcode)
-- [x] Integration tests (network_tcp_send_recv, network_curl_http_get)
+- [x] TCP server (LISTEN opcode 0x17, ACCEPT opcode 0x18)
+- [x] Static hostname resolution table (resolve_host)
+- [x] Integration tests (network_tcp_send_recv, network_curl_http_get, network_tcp_listen_accept)
 
 **Remaining**:
-- TCP server (LISTEN, ACCEPT)
 - DHCP client
 - UDP support
 - Full socket API (bind, listen, etc.)
 - VirtIO NIC kernel driver
 
-**Effort**: 200 hours (100 hours Phase A+B complete, 100 hours remaining)
+**Effort**: 200 hours (150 hours Phases A+B+C complete, 50 hours remaining)
 
 ---
 
@@ -469,7 +470,8 @@ Phase 4 (Advanced Features)
 ✅ **Phase G**: FAT16 completion (can_block_io capability, rmdir, persistence)  
 ✅ **Phase H**: Kernel permissions + FAT16 type guards (KernelPerms, rmdir type-safe, recursive rm, append)  
 ✅ **Phase A**: Network TCP Data-Path (CONNECT, SEND, RECV, CLOSE, socket state)  
-✅ **Phase B**: HTTP/1.0 GET via curl (nc binary, curl binary, state introspection)
+✅ **Phase B**: HTTP/1.0 GET via curl (nc binary, curl binary, state introspection)  
+✅ **Phase C**: TCP Server (LISTEN, ACCEPT, hostname resolution, nc -l server mode)
 
 ---
 

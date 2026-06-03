@@ -56,9 +56,9 @@ pub fn main() {
             return;
         }
     };
-    let addr = match parse_ipv4(host) {
+    let addr = match resolve_host(host) {
         Some(a) => a,
-        None => { println("curl: invalid IPv4 host"); return; }
+        None => { println("curl: invalid host"); return; }
     };
 
     // ── Guard: HTTP request must fit in the IPC payload budget ───────────────
@@ -249,6 +249,18 @@ fn parse_url(s: &str) -> Option<(&str, u16, &str)> {
     };
     if host.is_empty() { return None; }
     Some((host, port, path))
+}
+
+/// Resolve a hostname to an IPv4 address, falling back to literal parsing.
+///
+/// Static table only — no DNS. Aliases for the QEMU SLIRP environment.
+fn resolve_host(s: &str) -> Option<[u8; 4]> {
+    match s {
+        "gateway" | "host" => Some([10, 0, 2, 2]),
+        "dns"              => Some([10, 0, 2, 3]),
+        "localhost"        => Some([127, 0, 0, 1]),
+        _                  => parse_ipv4(s),
+    }
 }
 
 fn parse_ipv4(s: &str) -> Option<[u8; 4]> {

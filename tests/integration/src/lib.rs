@@ -59,10 +59,29 @@ pub struct QemuRunner {
 impl QemuRunner {
     /// Spawn QEMU booting `kernel` with `disk` attached as the VirtIO block
     /// device, with the guest serial bridged to a localhost TCP socket.
-    ///
-    /// `kernel` and `disk` are paths relative to the current working directory
-    /// (typically the repo root).
     pub fn boot(kernel: &str, disk: &str) -> Self {
+        Self::boot_with_netdev(kernel, disk, "user,id=net0")
+    }
+
+    /// Boot QEMU with a SLIRP hostfwd: `127.0.0.1:<host_port>` → guest `guest_port`.
+    ///
+    /// Returns `(runner, host_port)`. Host port is discovered by binding `:0` then
+    /// dropping the listener so QEMU/SLIRP can bind it — a benign TOCTOU race
+    /// acceptable in test environments.
+    pub fn boot_with_hostfwd(kernel: &str, disk: &str, guest_port: u16) -> (Self, u16) {
+        let probe = TcpListener::bind("127.0.0.1:0").expect("probe bind");
+        let host_port = probe.local_addr().unwrap().port();
+        drop(probe); // release so QEMU/SLIRP can bind it momentarily
+
+        let netdev = format!("user,id=net0,hostfwd=tcp:127.0.0.1:{host_port}-:{guest_port}");
+        (Self::boot_with_netdev(kernel, disk, &netdev), host_port)
+    }
+
+    /// Internal: boot QEMU with a caller-specified `-netdev` value.
+    ///
+    /// All other QEMU args are fixed to match `run.ps1`; only the netdev string
+    /// changes between `boot` (plain SLIRP) and `boot_with_hostfwd`.
+    fn boot_with_netdev(kernel: &str, disk: &str, netdev: &str) -> Self {
         // Bind an ephemeral port on the host; QEMU connects to it as a serial
         // backend (server=off,nowait → QEMU is the client and connects on start).
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
@@ -77,7 +96,7 @@ impl QemuRunner {
                 "-kernel", kernel,
                 "-drive", &format!("file={disk},format=raw,id=hd0,if=none"),
                 "-device", "virtio-blk-device,drive=hd0",
-                "-netdev", "user,id=net0",
+                "-netdev", netdev,
                 "-device", "virtio-net-device,netdev=net0",
                 "-device", "virtio-keyboard-device",
                 "-device", "virtio-gpu-device",

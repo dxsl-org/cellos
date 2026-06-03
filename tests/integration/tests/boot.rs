@@ -7,7 +7,10 @@
 //! Paths are relative to the repo root (two levels up from this crate). The
 //! tests resolve them from CARGO_MANIFEST_DIR so they run regardless of cwd.
 
+use std::io::Write;
+use std::net::TcpStream;
 use std::path::PathBuf;
+use std::time::Duration;
 use vios_integration_tests::{qemu_binary, spawn_echo_server, spawn_http_server, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 40;
@@ -292,6 +295,46 @@ fn network_curl_http_get() {
 
     qemu.wait_for("HELLO", 10)
         .unwrap_or_else(|e| panic!("no response body: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Phase C (network): guest as TCP server — `nc -l 9090` listens; the host
+/// connects through QEMU SLIRP hostfwd, sends "PING_VIOS\n", and nc echoes
+/// the bytes to serial — proving LISTEN/ACCEPT and the inbound data-path.
+#[test]
+fn network_tcp_listen_accept() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let (mut qemu, host_port) =
+        QemuRunner::boot_with_hostfwd(&kernel_path(), &disk_path(), 9090);
+
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP failed: {e}\n--- output ---\n{}", qemu.dump()));
+
+    std::thread::sleep(Duration::from_millis(500));
+
+    qemu.send_line("nc -l 9090");
+    qemu.wait_for("listening", 10)
+        .unwrap_or_else(|e| panic!("nc did not listen: {e}\n--- output ---\n{}", qemu.dump()));
+
+    // Give nc a moment to enter the ACCEPT poll loop (it does so immediately
+    // after printing "listening"), then connect from the host.
+    std::thread::sleep(Duration::from_millis(200));
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{host_port}"))
+        .unwrap_or_else(|e| panic!("host connect to guest failed: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.wait_for("connected", 15)
+        .unwrap_or_else(|e| panic!("nc did not accept: {e}\n--- output ---\n{}", qemu.dump()));
+
+    stream.write_all(b"PING_VIOS\n").expect("write to guest failed");
+    let _ = stream.flush();
+
+    qemu.wait_for("PING_VIOS", 20)
+        .unwrap_or_else(|e| panic!("guest did not receive probe: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
 /// Phase C: VFS write — echo redirected to /tmp, then vcat reads it back via VFS.

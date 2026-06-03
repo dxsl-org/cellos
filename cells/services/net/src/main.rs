@@ -336,8 +336,82 @@ fn handle_socket_syscall(
             };
             sys_send(sender, &[byte]);
         }
-        cell_opcodes::BIND | cell_opcodes::LISTEN | cell_opcodes::ACCEPT
-        | cell_opcodes::SOCKET_UDP => {
+        cell_opcodes::LISTEN => {
+            // [0x17][cap:8][port:2 LE] → [0x00] ok / [0x01] err.
+            // Only a freshly-created socket (smoltcp Closed state) may listen.
+            if payload.len() < 2 {
+                sys_send(sender, &[0x01]);
+                return;
+            }
+            if table.get_state(cap) != Some(SocketState::Created) {
+                sys_send(sender, &[0x01]);
+                return;
+            }
+            let port = u16::from_le_bytes([payload[0], payload[1]]);
+            if let Some(handle) = table.get(cap) {
+                let socket = sockets.get_mut::<tcp::Socket>(handle);
+                match socket.listen(port) {
+                    Ok(()) => {
+                        table.set_state(cap, SocketState::Listening);
+                        table.set_listen_port(cap, port);
+                        sys_send(sender, &[0x00]);
+                    }
+                    Err(_) => { sys_send(sender, &[0x01]); }
+                }
+            } else {
+                sys_send(sender, &[0x01]);
+            }
+        }
+        cell_opcodes::ACCEPT => {
+            // [0x18][cap:8] → [stream_cap:8 LE] or [0xFF;8] if not connected yet.
+            // handle_ipc already polled smoltcp before this call (main.rs:171),
+            // so socket.state() reflects the current handshake progress.
+            if table.get_state(cap) != Some(SocketState::Listening) {
+                sys_send(sender, &[0xFF_u8; 8]);
+                return;
+            }
+            let handle = match table.get(cap) {
+                Some(h) => h,
+                None => { sys_send(sender, &[0xFF_u8; 8]); return; }
+            };
+            // Scope the borrow of sockets so sockets.add() below doesn't conflict.
+            {
+                let s = sockets.get_mut::<tcp::Socket>(handle);
+                if s.state() != tcp::State::Established {
+                    sys_send(sender, &[0xFF_u8; 8]);
+                    return;
+                }
+            }
+            // Handshake done — the listener socket IS the connection.
+            // Mint a stream cap pointing at the established handle, then
+            // renew the listener with a fresh socket on the same port.
+            let listen_port = match table.get_listen_port(cap) {
+                Some(p) => p,
+                // Invariant: LISTEN always calls set_listen_port; this arm is
+                // unreachable in correct usage but guarded to avoid port-0 bind.
+                None => { sys_send(sender, &[0xFF_u8; 8]); return; }
+            };
+            match table.insert_with_state(handle, SocketState::Connected) {
+                Ok(stream_cap) => {
+                    let rx = tcp::SocketBuffer::new(alloc::vec![0u8; 4096]);
+                    let tx = tcp::SocketBuffer::new(alloc::vec![0u8; 4096]);
+                    let mut new_sock = tcp::Socket::new(rx, tx);
+                    // listen() on a fresh Closed socket only fails on invalid
+                    // state — impossible here; ignore the (unreachable) error.
+                    let _ = new_sock.listen(listen_port);
+                    let new_handle = sockets.add(new_sock);
+                    table.update_handle(cap, new_handle);
+                    table.set_state(cap, SocketState::Listening);
+                    table.set_listen_port(cap, listen_port);
+                    sys_send(sender, &stream_cap.to_le_bytes());
+                }
+                Err(_) => {
+                    // Table full — cannot mint stream cap; listener unchanged.
+                    sys_send(sender, &[0xFF_u8; 8]);
+                }
+            }
+        }
+        cell_opcodes::BIND | cell_opcodes::SOCKET_UDP => {
             let _ = (cap, payload);
             sys_send(sender, &[0xFF]); // not-yet-implemented
         }
