@@ -288,6 +288,22 @@ Device can fire next interrupt (if new data arrives)
 
 **Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, leaving `InterruptStatus` register set. PLIC would immediately re-fire the same interrupt after `plic_complete()`, creating an infinite interrupt storm. This caused kernel to hang on first keystroke. Fix: Added `pub static INPUT_DEVICE_IRQ` and `pub fn ack_irq()` to `kernel/src/task/drivers/virtio_input.rs`; expanded `vi_handle_virtio_irq()` to dispatch to input device handler.
 
+### FAT16 Persistence & Graceful Shutdown (Phase E)
+
+**Hardening** (safety fixes, no behavior change):
+- `cells/services/vfs/src/block_stream.rs` — SeekFrom::Current now validates result ≥ 0 before u64 cast (prevents underflow→seek to arbitrary LBA)
+- `kernel/src/task/syscall.rs` — BlkRead/BlkWrite now reject sectors ≥ CELL_TABLE_BASE_LBA (82,000) to prevent cell from corrupting kernel bootstrap table
+
+**Clean Shutdown Path**:
+- Syscall 502 (raw, no `ViSyscall` enum entry) — kernel SBI SRST handler calls OpenSBI to power off
+- `cells/apps/shell/src/cmd_sys.rs` — `shutdown` built-in command triggers graceful QEMU exit
+- Test harness `wait_for_natural_exit()` allows disk image to flush before reboot
+
+**Integration Test** (`vfs_fat16_reboot_persistence`):
+- Writes marker to FAT16 `/data/`, issues shutdown, waits for QEMU clean exit
+- Reboots against same disk image, reads marker back to prove write durability across power cycle
+- **Critical bug fixed during this phase**: `shell.rs` had pre-parser echo handler that split by whitespace, completely bypassing redirect parser. Removed handler; echo now correctly goes through parser and supports OP_WRITE redirects.
+
 ---
 
 ## Public API (Kernel-Cell Boundary)

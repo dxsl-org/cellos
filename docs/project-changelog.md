@@ -69,6 +69,45 @@
 
 ---
 
+## [2026-06-03] Phase E — Hardening + Reboot Persistence (Complete)
+
+**Changes**:
+- **Hardening (Safety Fixes)**:
+  - `cells/services/vfs/src/block_stream.rs:87` — SeekFrom::Current now validates result ≥ 0 before u64 cast to prevent underflow→arbitrary sector seek
+  - `kernel/src/task/syscall.rs:1072, 1084` — BlkRead/BlkWrite handlers reject sectors ≥ CELL_TABLE_BASE_LBA (82,000) to prevent cell-corrupted kernel bootstrap table
+- **Clean Shutdown Path**:
+  - `kernel/src/task/syscall.rs:256` — Added `Shutdown` variant to internal `Syscall` enum
+  - `kernel/src/task/syscall.rs:1109–1121` — SBI SRST handler (M-mode shutdown via OpenSBI)
+  - `kernel/src/task/syscall.rs:1203` — Numeric map 502 → Shutdown
+  - `libs/ostd/src/syscall.rs:80–98` — `sys_shutdown()` -> ! wrapper
+  - `cells/apps/shell/src/cmd_sys.rs:69–72` — `cmd_shutdown()` built-in
+  - `cells/apps/shell/src/executor.rs:160` — "shutdown" command arm registered
+- **Test Harness Improvements**:
+  - `tests/integration/src/lib.rs:145–165` — `wait_for_natural_exit(timeout_secs)` method allows graceful QEMU exit (disk flush) before reboot
+- **Integration Test**:
+  - `tests/integration/tests/boot.rs:362–409` — `vfs_fat16_reboot_persistence` test (write marker → shutdown → reboot → read-back)
+- **Critical Bug Fix**:
+  - Removed pre-parser echo handler from `cells/apps/shell/src/shell.rs::dispatch()` that was splitting by whitespace and bypassing redirect parser
+  - Root cause of echo-redirect failures (`echo X > /path` printed to console instead of writing file)
+  - Fix verified by Phase E integration test
+
+**Files Modified**:
+- `cells/services/vfs/src/block_stream.rs`
+- `kernel/src/task/syscall.rs`
+- `libs/ostd/src/syscall.rs`
+- `cells/apps/shell/src/cmd_sys.rs`, `executor.rs`, `shell.rs`
+- `tests/integration/src/lib.rs`, `tests/integration/tests/boot.rs`
+
+**Status**: Complete. All 14 integration tests pass; FAT16 write durability across reboot proven.
+
+**Impact**: 
+- Closes two Phase D code-review findings (safety)
+- Proves FileSystem persistence across power cycle (critical for real OS)
+- Fixes shell echo-redirect bug (enables `>` redirection in scripts)
+- Unblocks Phase F features dependent on clean shutdown (ACPI/PSCI, power loss recovery)
+
+---
+
 ## [2026-05-28] Phase 05 — Keyboard Input Fix (Complete)
 
 **Changes**:
