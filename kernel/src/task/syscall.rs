@@ -255,6 +255,10 @@ pub enum Syscall {
     BlkRead { sector: u64, buf_ptr: usize },
     /// 501: BlkWrite — write one 512-byte sector to the VirtIO block device.
     BlkWrite { sector: u64, buf_ptr: usize },
+    /// 502: Shutdown — trigger SBI SRST system shutdown (S-mode → OpenSBI). No return.
+    Shutdown,
+    /// 503: BlkFlush — flush the VirtIO block device write cache to the backing image.
+    BlkFlush,
 }
 
 /// Dispatches a system call to the appropriate handler.
@@ -1065,7 +1069,35 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
             Ok(crate::cell::state_stash::restore(key as u64, buf))
         }
+        Syscall::BlkFlush => {
+            use crate::task::drivers::virtio_blk::viVirtIOBlk;
+            use api::block::ViBlockDevice;
+            match viVirtIOBlk.flush() {
+                Ok(()) => Ok(1),
+                Err(_)  => Ok(0),
+            }
+        }
+        Syscall::Shutdown => {
+            // SAFETY: SBI System Reset (ext 0x53525354, fid 0, type Shutdown) from
+            // S-mode. The ecall traps to OpenSBI (M-mode), which powers off QEMU.
+            // Control never returns, so the unreachable `Ok` value is irrelevant.
+            unsafe {
+                core::arch::asm!(
+                    "li a7, 0x53525354",  // SBI_EXT_SRST
+                    "li a6, 0",           // fid = SYSTEM_RESET
+                    "li a0, 0",           // reset_type = Shutdown
+                    "li a1, 0",           // reset_reason = NoReason
+                    "ecall",
+                    options(noreturn)
+                );
+            }
+        }
         Syscall::BlkRead { sector, buf_ptr } => {
+            // Reject any sector at/after the cell bootstrap table; a runaway FAT
+            // offset must never read kernel-owned LBAs. Returns 0 = failure.
+            if sector >= crate::loader::disk_layout::CELL_TABLE_BASE_LBA {
+                return Ok(0);
+            }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
             use crate::task::drivers::virtio_blk::viVirtIOBlk;
             use api::block::ViBlockDevice;
@@ -1078,6 +1110,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::BlkWrite { sector, buf_ptr } => {
+            // Reject any sector at/after the cell bootstrap table; prevents a
+            // cell from corrupting the loader's table. Returns 0 = failure.
+            if sector >= crate::loader::disk_layout::CELL_TABLE_BASE_LBA {
+                return Ok(0);
+            }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
             use crate::task::drivers::virtio_blk::viVirtIOBlk;
             use api::block::ViBlockDevice;
@@ -1199,6 +1236,8 @@ pub extern "Rust" fn vios_syscall_dispatch(frame: &mut ViTrapFrame) {
             // Block I/O — intentionally absent from ViSyscall/libs/api (avoids ABI 2x-confirm).
             500 => Syscall::BlkRead  { sector: a0 as u64, buf_ptr: a1 },
             501 => Syscall::BlkWrite { sector: a0 as u64, buf_ptr: a1 },
+            502 => Syscall::Shutdown,
+            503 => Syscall::BlkFlush,
 
              _ => {
                  frame.regs[10] = usize::MAX; // -1

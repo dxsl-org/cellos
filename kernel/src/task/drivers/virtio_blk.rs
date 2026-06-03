@@ -165,14 +165,17 @@ impl ViBlockDevice for viVirtIOBlk {
     }
 
     fn flush(&self) -> ViResult<()> {
-        // VirtIO block has no explicit flush command in the spec; a write_blocks call
-        // is already synchronous (waits for the device to complete the request).
-        // Return NotFound if the device was never probed, so callers don't mistake
-        // an absent device for successful durability.
-        if BLOCK_DEVICE.lock().is_some() {
-            Ok(())
-        } else {
-            Err(ViError::NotFound)
-        }
+        let mut dev_lock = BLOCK_DEVICE.lock();
+        let Some(dev) = dev_lock.as_mut() else {
+            return Err(ViError::NotFound);
+        };
+        // Send a VirtIO FLUSH request (VIRTIO_BLK_T_FLUSH) so the device
+        // commits all pending writes to the backing storage. Required for
+        // reboot persistence: without a flush, QEMU may still hold dirty
+        // data in its write-back buffer when the guest powers off.
+        dev.0.flush().map_err(|e| {
+            log::error!("[virtio-blk] flush: {:?}", e);
+            ViError::NotFound
+        })
     }
 }

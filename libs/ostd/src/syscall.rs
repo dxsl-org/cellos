@@ -67,6 +67,29 @@ pub fn sys_blk_read(sector: u64, buf: &mut [u8; 512]) -> bool {
     ret == 1
 }
 
+/// Flush the VirtIO block device write cache, ensuring all prior writes reach the disk image.
+///
+/// Raw syscall 503 — not in `ViSyscall` (same pattern as 500/501/502).
+/// Must be called after writes to `/data/` to guarantee reboot persistence.
+pub fn sys_blk_flush() -> bool {
+    // SAFETY: raw syscall 503 triggers viVirtIOBlk.flush() in the kernel,
+    // which sends a VirtIO FLUSH command to QEMU. Returns 1 on success, 0 on failure.
+    let ret = unsafe { syscall_raw(503, 0, 0, 0, 0) };
+    ret == 1
+}
+
+/// Trigger a clean system shutdown via the kernel's SBI SRST path. Never returns.
+///
+/// Raw syscall 502 — intentionally absent from `ViSyscall`/`libs/api` to avoid the
+/// ABI 2x-confirm gate (same pattern as `sys_blk_read`/`sys_blk_write` above).
+pub fn sys_shutdown() -> ! {
+    // SAFETY: raw syscall 502 invokes the kernel SBI SRST shutdown; the kernel's
+    // ecall to OpenSBI terminates QEMU and never returns to us.
+    unsafe { syscall_raw(502, 0, 0, 0, 0); }
+    // Unreachable: the kernel never returns from shutdown. Spin to satisfy `-> !`.
+    loop { sys_yield(); }
+}
+
 /// Write one 512-byte sector to the VirtIO block device. Returns `true` on success.
 ///
 /// Raw syscall 501. The write is synchronous (VirtIO polling) — durable on return.

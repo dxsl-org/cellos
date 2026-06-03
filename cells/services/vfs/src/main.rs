@@ -256,7 +256,7 @@ fn write_fat16(fs: Option<&DataFs>, path: &str, content: &[u8]) -> bool {
     let _ = root.remove(name); // ignore "not found"
     let mut file = match root.create_file(name) { Ok(f) => f, Err(_) => return false };
     file.write_all(content).is_ok()
-    // file drops here → directory entry + FAT chain flushed
+    // file drops here → directory entry + FAT chain flushed via BlockStream::flush
 }
 
 /// Read up to 480 bytes of `/data/NAME` from the FAT16 volume and send them to `sender`.

@@ -144,6 +144,32 @@ impl QemuRunner {
         }
     }
 
+    /// Wait for QEMU to exit on its own (e.g. after a guest `shutdown` command).
+    ///
+    /// Returns `true` if the process exited within `timeout_secs`. On timeout the
+    /// process is left running and `Drop` will SIGKILL it. Used by reboot-persistence
+    /// tests so the VirtIO block backend can flush `disk_v3.img` before re-booting.
+    ///
+    /// Closes our serial writer first so QEMU's exit is not held open by a live
+    /// TCP client; the background reader thread will then see EOF and stop.
+    pub fn wait_for_natural_exit(&mut self, timeout_secs: u64) -> bool {
+        // Release our half of the serial socket so QEMU can fully tear down.
+        self.writer.take();
+
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_)) => return true, // exited naturally — disk flushed
+                Ok(None) => {}              // still running
+                Err(_) => return false,     // wait failed — let Drop handle it
+            }
+            if Instant::now() > deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
     /// True if the captured serial output contains `needle`.
     pub fn output_contains(&self, needle: &str) -> bool {
         self.output.lock().unwrap().contains(needle)

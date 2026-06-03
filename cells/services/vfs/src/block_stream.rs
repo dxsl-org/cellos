@@ -4,7 +4,7 @@
 //! stream. All I/O is sector-granular: reads/writes do read-modify-write on
 //! 512-byte sectors. No unsafe code: all I/O goes through the ostd wrappers.
 
-use ostd::syscall::{sys_blk_read, sys_blk_write};
+use ostd::syscall::{sys_blk_flush, sys_blk_read, sys_blk_write};
 
 const SECTOR_SIZE: u64 = 512;
 
@@ -74,9 +74,14 @@ impl fatfs::Write for BlockStream {
         Ok(written)
     }
 
-    /// VirtIO writes are synchronous (polling) — durable on return; no-op flush.
+    /// Issue a VirtIO FLUSH command so prior writes reach the backing disk image.
+    ///
+    /// Required for reboot persistence: fatfs calls `flush()` when a `File` is
+    /// dropped, which is the signal to commit metadata to durable storage. Without
+    /// a real flush here, a SBI SRST shutdown may discard writes still in QEMU's
+    /// write-back buffer before they reach `disk_v3.img`.
     fn flush(&mut self) -> Result<(), ()> {
-        Ok(())
+        if sys_blk_flush() { Ok(()) } else { Err(()) }
     }
 }
 
@@ -84,9 +89,11 @@ impl fatfs::Seek for BlockStream {
     fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
         self.pos = match pos {
             fatfs::SeekFrom::Start(n)   => n,
-            fatfs::SeekFrom::Current(n) => (self.pos as i64 + n) as u64,
-            // SeekFrom::End is not used by the Phase D write path (remove+create
-            // semantics avoid append/truncate). Return Err if fatfs calls it.
+            fatfs::SeekFrom::Current(n) => {
+                let result = self.pos as i64 + n;
+                if result < 0 { return Err(()); }
+                result as u64
+            }
             fatfs::SeekFrom::End(_)     => return Err(()),
         };
         Ok(self.pos)

@@ -352,3 +352,65 @@ fn vfs_fat16_write_read() {
     qemu.wait_for("PHASE_D_PERSIST", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("FAT16 read-back failed: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+/// Phase E: a FAT16 write survives a full reboot (persistence across power cycle).
+///
+/// Boots QEMU, writes a marker to `/data/`, issues the `shutdown` built-in, waits
+/// for QEMU to exit cleanly (flushing the VirtIO-backed disk image), then boots a
+/// SECOND QEMU instance against the same `disk_v3.img` to verify the marker persisted.
+///
+/// Note: the same `disk_v3.img` is shared between both boots. The FAT16 write is
+/// create-or-overwrite (idempotent), so re-runs are safe.
+#[test]
+fn vfs_fat16_reboot_persistence() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    // ── First boot: write the marker then shut down ───────────────────────────
+    // NOTE: `wait_for("ViOS >")` matches the earliest occurrence in accumulated
+    // output, so it may return before the command actually completes. This is
+    // fine because the shell processes commands in FIFO order from its readline
+    // buffer. Sending "shutdown" immediately after the write means the shell will
+    // execute them in sequence: write first, then shutdown. Phase C demonstrates
+    // this works for echo-redirect + vcat — the same mechanism applies here.
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("first boot prompt failed: {e}\n{}", qemu.dump()));
+    assert!(
+        qemu.output_contains("FAT16 /data volume mounted"),
+        "FAT16 not mounted on first boot\n{}", qemu.dump()
+    );
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    qemu.send_line("echo REBOOT_OK > /data/persist.txt");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("write did not return to prompt: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("shutdown");
+    qemu.wait_for("System shutting down", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shutdown did not run: {e}\n{}", qemu.dump()));
+
+    assert!(
+        qemu.wait_for_natural_exit(15),
+        "QEMU did not exit after shutdown command\n{}", qemu.dump()
+    );
+    let first_boot_dump = qemu.dump();
+    drop(qemu); // safe: process already exited; Drop's kill is a harmless no-op
+
+    // ── Second boot: verify persistence ──────────────────────────────────────
+    let mut qemu2 = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu2.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("second boot prompt failed: {e}\n{}", qemu2.dump()));
+    assert!(
+        qemu2.output_contains("FAT16 /data volume mounted"),
+        "FAT16 not mounted on second boot\n{}", qemu2.dump()
+    );
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    qemu2.send_line("vcat /data/persist.txt");
+    // Use a larger timeout than CMD_TIMEOUT: with cache=none (O_DIRECT) reads
+    // are slower and the FAT16 mount adds latency in the second boot.
+    qemu2.wait_for("REBOOT_OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("persistence failed: {e}\n--- first boot ---\n{}\n--- second boot ---\n{}", first_boot_dump, qemu2.dump()));
+}

@@ -54,3 +54,12 @@ pub fn cmd_uptime<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     ostd::io::println(" seconds");
     Ok(())
 }
+
+/// `shutdown` — cleanly power off the system via SBI SRST. Does not return.
+///
+/// Routes through raw kernel syscall 502 (SBI System Reset Extension) which
+/// calls OpenSBI from S-mode, powering off the machine.
+pub fn cmd_shutdown<'a>() -> ViResult<()> {
+    ostd::io::println("System shutting down...");
+    syscall::sys_shutdown()
+}

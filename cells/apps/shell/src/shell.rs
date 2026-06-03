@@ -116,21 +116,6 @@ impl<'a> ViShell<'a> {
                 }
                 return Ok(());
             }
-            "echo" => {
-                for arg in parts {
-                    if arg.starts_with('$') {
-                        let key = &arg[1..];
-                        if let Ok(val) = self.config.get(key) {
-                            ostd::io::print(val);
-                        }
-                    } else {
-                        ostd::io::print(arg);
-                    }
-                    ostd::io::print(" ");
-                }
-                ostd::io::println("");
-                return Ok(());
-            }
             _ => {}
         }
 
