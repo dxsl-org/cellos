@@ -161,6 +161,7 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         "env"    => crate::cmd_sys::cmd_env(make_parts(args)),
         "uptime"   => crate::cmd_sys::cmd_uptime(make_parts(args)),
         "shutdown" => crate::cmd_sys::cmd_shutdown(),
+        "sleep"    => crate::cmd_sys::cmd_sleep(make_parts(args)),
         "blktest"  => crate::cmd_sys::cmd_blkio_test(make_parts(args)),
         "echo"   => crate::commands::cmd_echo(make_parts(args)),
         "clear"  => crate::commands::cmd_clear(),

@@ -5,7 +5,7 @@ use ostd::syscall;
 pub fn cmd_help() -> ViResult<()> {
     ostd::io::println("ViOS Shell v0.2.1 — built-in commands:");
     ostd::io::println("  Files:   ls  cat  wc  head  tail  grep  sort  sed  mkdir  rmdir  rm");
-    ostd::io::println("  System:  ps  pwd  uname  free  env  uptime  clear  exec");
+    ostd::io::println("  System:  ps  pwd  uname  free  env  uptime  sleep  clear  exec");
     ostd::io::println("  Shell:   help  echo  export  alias  unalias  jobs  source  .");
     ostd::io::println("");
     ostd::io::println("Syntax:  cmd | cmd2      (pipe)");

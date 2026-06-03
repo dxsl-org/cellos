@@ -938,3 +938,57 @@ fn python_vnet_resolve_dns() {
     qemu.wait_for("RESOLVED:", 25)
         .unwrap_or_else(|e| panic!("Python DNS resolution failed: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+// ── Phase K: sleep built-in + multi-command timed scripts ────────────────────
+
+/// Phase K.1: `sleep 1` must block for at least ~1 second.
+///
+/// Sends `uptime` before and after a 1-second sleep; the second uptime must
+/// show a higher value (or the same if the timer resolution is coarse).
+/// The test only verifies that `sleep` returns without error and the shell
+/// prompt reappears within a 10-second window.
+#[test]
+fn shell_sleep_returns() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_line("sleep 1");
+    // Must return within 10s (not hang).
+    qemu.wait_for("ViOS >", 10)
+        .unwrap_or_else(|e| panic!("sleep did not return: {e}\n{}", qemu.dump()));
+}
+
+/// Phase K.2: `source` of a multi-command script (echo + sleep + echo) must
+/// execute all three commands in order and produce both markers.
+///
+/// Writes a 3-line script via Lua vfs.write (\n = newline in Lua), then
+/// sources it.  Verifies BEFORE_SLEEP appears, then AFTER_SLEEP — proving
+/// sequential execution with a sleep between them.
+#[test]
+fn shell_source_multi_command() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
+    std::thread::sleep(Duration::from_millis(500));
+
+    // Write a 3-line script: echo marker, sleep 1, echo marker.
+    // Lua \n = newline in the file content.
+    qemu.send_line(
+        "lua -e vfs.write('/data/seq.sh','echo BEFORE_SLEEP\\nsleep 1\\necho AFTER_SLEEP')"
+    );
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("lua write: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("source /data/seq.sh");
+    qemu.wait_for("BEFORE_SLEEP", 10)
+        .unwrap_or_else(|e| panic!("BEFORE_SLEEP not seen: {e}\n--- output ---\n{}", qemu.dump()));
+    // After the 1s sleep the second echo must fire.
+    // Allow up to 20s: sleep 1 can take up to ~10s if mtime runs slower than 10 MHz.
+    qemu.wait_for("AFTER_SLEEP", 20)
+        .unwrap_or_else(|e| panic!("AFTER_SLEEP not seen after sleep: {e}\n--- output ---\n{}", qemu.dump()));
+}

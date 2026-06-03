@@ -64,6 +64,33 @@ pub fn cmd_shutdown<'a>() -> ViResult<()> {
     syscall::sys_shutdown()
 }
 
+/// `sleep <seconds>` — pause execution for the given number of seconds.
+///
+/// Uses the kernel monotonic timer (mtime at 10 MHz on QEMU RV64).
+/// Yields on each iteration so other tasks keep running during the delay.
+pub fn cmd_sleep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    const TIMER_HZ: u64 = 10_000_000; // 10 MHz mtime
+    let secs: u64 = match args.next().and_then(|s| {
+        let mut n = 0u64;
+        for ch in s.bytes() {
+            if ch < b'0' || ch > b'9' { return None; }
+            n = n.saturating_mul(10).saturating_add((ch - b'0') as u64);
+        }
+        Some(n)
+    }) {
+        Some(n) => n,
+        None => {
+            ostd::io::println("Usage: sleep <seconds>");
+            return Ok(());
+        }
+    };
+    let deadline = syscall::sys_get_time().saturating_add(secs.saturating_mul(TIMER_HZ));
+    while syscall::sys_get_time() < deadline {
+        ostd::task::yield_now();
+    }
+    Ok(())
+}
+
 /// `blktest` — attempt a raw block read from the shell cell (a non-VFS cell).
 ///
 /// Prints `"blkio: denied"` when Phase G's capability gate correctly rejects the

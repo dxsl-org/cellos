@@ -1015,11 +1015,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         
         Syscall::GetTime { op } => {
-            let ticks = super::system_ticks();
+            // Read the hardware mtime register via the HAL (time CSR, 10 MHz on QEMU RV64).
+            // system_ticks() is a software counter that is never incremented; using it
+            // caused sys_get_time() to always return 0, making sleep loops infinite.
+            let mtime = hal::common::timer::read_mtime() as usize;
             if op == 0 {
-                Ok(ticks / 1000)
+                Ok(mtime)
             } else {
-                Ok(ticks)
+                Ok(mtime / 1_000_000) // op=1 → milliseconds
             }
         }
         Syscall::GpuFlush { data_ptr, data_len, xy, wh } => {
