@@ -109,6 +109,13 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             }
             last
         }
+        Ast::While { cond, body } => {
+            loop {
+                if execute(cond, jobs) != 0 { break; }
+                execute(body, jobs);
+            }
+            0
+        }
         Ast::If { cond, then_b, else_b } => {
             let code = execute(cond, jobs);
             if code == 0 {

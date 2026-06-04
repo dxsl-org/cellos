@@ -946,6 +946,96 @@ fn network_httpd_serves_file() {
     );
 }
 
+// ── Phase O: Dynamic httpd + while loop ───────────────────────────────────────
+
+/// Phase O-1: httpd re-reads the file on every request — a second GET after a
+/// `vwrite` overwrite must return the new content without restarting httpd.
+#[test]
+fn network_httpd_dynamic_content() {
+    if !prerequisites_ok() { return; }
+
+    let (mut qemu, host_port) =
+        QemuRunner::boot_with_hostfwd(&kernel_path(), &disk_path(), 9092);
+
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(500));
+
+    qemu.send_line("vwrite /tmp/v1.txt CONTENT_V1");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("vwrite v1: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("httpd 9092 /tmp/v1.txt &");
+    qemu.wait_for("httpd: listening", 10)
+        .unwrap_or_else(|e| panic!("httpd did not listen: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(200));
+
+    // First GET — expect initial content.
+    let get_response = |host_port: u16| {
+        use std::io::Read;
+        let mut stream = TcpStream::connect(format!("127.0.0.1:{host_port}"))
+            .expect("connect failed");
+        stream.write_all(b"GET / HTTP/1.0\r\n\r\n").expect("write");
+        stream.set_read_timeout(Some(Duration::from_secs(10))).ok();
+        let mut buf = Vec::new();
+        let _ = stream.read_to_end(&mut buf);
+        String::from_utf8_lossy(&buf).into_owned()
+    };
+
+    let r1 = get_response(host_port);
+    assert!(r1.contains("CONTENT_V1"),
+        "first GET missing CONTENT_V1\n--- response ---\n{r1}\n--- QEMU ---\n{}", qemu.dump());
+
+    // Overwrite the file — httpd must serve the new content without restart.
+    qemu.send_line("vwrite /tmp/v1.txt CONTENT_V2");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("vwrite v2: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(200));
+
+    let r2 = get_response(host_port);
+    assert!(r2.contains("CONTENT_V2"),
+        "second GET missing CONTENT_V2\n--- response ---\n{r2}\n--- QEMU ---\n{}", qemu.dump());
+    assert!(!r2.contains("CONTENT_V1"),
+        "second GET still contains stale CONTENT_V1\n--- response ---\n{r2}");
+}
+
+/// Phase O-2: `while COND; do BODY; done` — body runs while condition exits 0.
+///
+/// Two assertions:
+///  (a) False condition → body never runs.
+///  (b) True-once: flag file exists → body runs once → `rm` deletes flag →
+///      loop exits; no infinite hang.
+#[test]
+fn shell_while_loop() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
+    std::thread::sleep(Duration::from_millis(300));
+
+    // (a) False condition: body must NOT execute.
+    qemu.send_line("while vcat /no/such/file; do echo SHOULD_NOT_APPEAR; done");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("while false hung: {e}\n{}", qemu.dump()));
+    assert!(!qemu.output_contains("SHOULD_NOT_APPEAR"),
+        "while false ran its body\n{}", qemu.dump());
+
+    // (b) True-once: write flag, run body (echo + rm), verify body ran, loop exits.
+    qemu.send_line("vwrite /data/wflag.txt X");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("vwrite flag: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("while vcat /data/wflag.txt; do echo WHILE_BODY; rm /data/wflag.txt; done");
+    qemu.wait_for("WHILE_BODY", 15)
+        .unwrap_or_else(|e| panic!("while body did not run: {e}\n--- output ---\n{}", qemu.dump()));
+    // Loop must exit after rm deletes the flag (not hang).
+    qemu.wait_for("ViOS >", 15)
+        .unwrap_or_else(|e| panic!("while loop did not exit after rm: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
 // ── Phase N: Shell if/then/else/fi ───────────────────────────────────────────
 
 /// Phase N: `if CMD; then CMD; fi` — true branch executes when condition exits 0.

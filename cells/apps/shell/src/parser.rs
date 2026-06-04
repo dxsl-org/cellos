@@ -58,6 +58,11 @@ pub enum Ast {
     Background(Cmd),
     /// `cmd1 ; cmd2` — sequential execution.
     Sequence(Vec<Ast>),
+    /// `while COND; do BODY; done` — loop while COND exits 0.
+    While {
+        cond: alloc::boxed::Box<Ast>,
+        body: alloc::boxed::Box<Ast>,
+    },
     /// `if COND; then BODY; fi` — conditional execution.
     ///
     /// `cond` exit-code 0 → run `then_b`; non-zero → run `else_b` if present.
@@ -173,6 +178,9 @@ pub fn parse(line: &str) -> Ast {
     if tokens.first() == Some(&Tok::Word("if".into())) {
         return parse_if_stmt(&tokens);
     }
+    if tokens.first() == Some(&Tok::Word("while".into())) {
+        return parse_while_stmt(&tokens);
+    }
 
     // Split on `;` into sub-sequences first.
     let segments: Vec<&[Tok]> = split_on(&tokens, |t| t == &Tok::Semicolon);
@@ -211,6 +219,27 @@ fn parse_tokens(tokens: &[Tok]) -> Ast {
 /// Helper: returns true when a token is the keyword word `w`.
 fn is_kw(tok: &Tok, w: &str) -> bool {
     tok == &Tok::Word(w.into())
+}
+
+/// Parse `while COND; do BODY; done`.
+///
+/// Keywords stay as `Word` tokens (no Tok variants) so `while`/`do`/`done`
+/// survive intact when used as external command arguments.  Malformed input
+/// (missing `do` or `done`) calls `parse_tokens` — NOT `parse()` — to avoid
+/// re-dispatching on the leading `while` and recursing infinitely.
+fn parse_while_stmt(tokens: &[Tok]) -> Ast {
+    let do_pos   = tokens.iter().position(|t| is_kw(t, "do"));
+    let done_pos = tokens.iter().rposition(|t| is_kw(t, "done"));
+    let (dp, np) = match (do_pos, done_pos) {
+        (Some(d), Some(n)) if n > d => (d, n),
+        _ => return parse_tokens(tokens),   // malformed: fall back without infinite recursion
+    };
+    let cond = parse_tokens(&tokens[1..dp]);
+    let body = parse_tokens(&tokens[dp + 1..np]);
+    Ast::While {
+        cond: alloc::boxed::Box::new(cond),
+        body: alloc::boxed::Box::new(body),
+    }
 }
 
 fn parse_if_stmt(tokens: &[Tok]) -> Ast {

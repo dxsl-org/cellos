@@ -3,9 +3,10 @@
 //! Usage: httpd <port> <vfs_path>
 //!
 //! Listens for TCP connections on <port>.  For each connection, reads the
-//! HTTP request (discards it), reads <vfs_path> from the VFS cell via OP_READ
-//! IPC, and responds with HTTP/1.0 200 OK + the file content.  Loops forever,
-//! serving one connection at a time.
+//! HTTP request (discards it), reads <vfs_path> **fresh from VFS on every
+//! request** (no caching), and responds with HTTP/1.0 200 OK + current file
+//! content.  Returns HTTP 404 when the file is absent or empty.  Loops
+//! forever, serving one connection at a time.
 
 #![no_std]
 #![no_main]
@@ -183,16 +184,6 @@ pub fn main() {
         None => { println("Usage: httpd <port> <vfs_path>"); return; }
     };
 
-    // Read the file content from VFS once (cache it for subsequent requests).
-    let mut file_buf = [0u8; 4096];
-    let file_len = vfs_read(path, &mut file_buf);
-    if file_len == 0 {
-        print("httpd: cannot read '");
-        print(path);
-        println("'");
-        return;
-    }
-
     // Open the listening socket.
     let sock_msg = [SOCKET_TCP, 0, 0, 0, 0, 0, 0, 0, 0];
     sys_send(NET_ENDPOINT, &sock_msg);
@@ -238,21 +229,30 @@ pub fn main() {
             }
         };
 
-        // Drain HTTP request (ignore content — we always serve the same file).
+        // Drain HTTP request (ignore method/path — we always serve the same file).
         drain_request(stream_cap);
 
-        // Build and send HTTP/1.0 200 OK response.
-        let mut header = [0u8; 128];
-        let mut hlen = 0usize;
-        let status = b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n";
-        header[..status.len()].copy_from_slice(status);
-        hlen += status.len();
-        hlen += write_content_length(file_len, &mut header[hlen..]);
-        header[hlen..hlen + 2].copy_from_slice(b"\r\n");
-        hlen += 2;
+        // Read the file fresh on every request so clients always see the latest content.
+        let mut file_buf = [0u8; 4096];
+        let file_len = vfs_read(path, &mut file_buf);
 
-        tcp_send(stream_cap, &header[..hlen]);
-        tcp_send(stream_cap, &file_buf[..file_len]);
+        if file_len == 0 {
+            // File absent or empty → 404.
+            let not_found = b"HTTP/1.0 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n";
+            tcp_send(stream_cap, not_found);
+        } else {
+            // Build and send HTTP/1.0 200 OK with current file content.
+            let mut header = [0u8; 128];
+            let mut hlen = 0usize;
+            let status = b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n";
+            header[..status.len()].copy_from_slice(status);
+            hlen += status.len();
+            hlen += write_content_length(file_len, &mut header[hlen..]);
+            header[hlen..hlen + 2].copy_from_slice(b"\r\n");
+            hlen += 2;
+            tcp_send(stream_cap, &header[..hlen]);
+            tcp_send(stream_cap, &file_buf[..file_len]);
+        }
 
         // Yield to let smoltcp flush the TX buffer before sending FIN.
         // Without this, close_cap() may trigger a FIN before the data
