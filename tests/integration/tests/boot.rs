@@ -65,7 +65,7 @@ fn boots_to_shell_prompt() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
@@ -86,7 +86,7 @@ fn fat_filesystem_mounts() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("mounted successfully", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("FAT mount not confirmed: {e}\n--- output ---\n{}", qemu.dump())
     });
@@ -104,7 +104,7 @@ fn shell_executes_echo() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}"));
     // Give the async readline a moment to start consuming serial input.
@@ -127,7 +127,7 @@ fn lua_runtime_executes() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}"));
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -147,7 +147,7 @@ fn lua_eval_executes_code() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}"));
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -166,7 +166,7 @@ fn hot_migration_state_transfer_works() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("state-stash: round-trip OK", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("state-stash round-trip failed: {e}\n--- output ---\n{}", qemu.dump())
     });
@@ -180,7 +180,7 @@ fn gpu_framebuffer_initialises() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("Framebuffer setup success", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("GPU framebuffer setup did not complete: {e}\n--- output ---\n{}", qemu.dump())
     });
@@ -198,7 +198,7 @@ fn network_dhcp_acquires_ip() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("DHCP acquired", 40).unwrap_or_else(|e| {
         panic!("DHCP did not complete: {e}\n--- output ---\n{}", qemu.dump())
     });
@@ -215,7 +215,7 @@ fn micropython_runtime_executes() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}"));
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -240,7 +240,7 @@ fn network_tcp_send_recv() {
     // Start the echo server before QEMU so it is ready when nc connects.
     let echo_port = spawn_echo_server();
 
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
@@ -277,7 +277,7 @@ fn network_curl_http_get() {
     // the server thread's accept() and cause the test to flake.
     let (port, _server) = spawn_http_server();
 
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
@@ -306,7 +306,7 @@ fn lua_vnet_resolve() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(500));
@@ -325,7 +325,7 @@ fn lua_vnet_resolve_dns() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
@@ -344,7 +344,7 @@ fn lua_script_file() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -363,7 +363,7 @@ fn lua_vfs_write_read() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -389,7 +389,7 @@ fn lua_tcp_http_get() {
     // Keep `_server` alive — dropping early can race with the accept thread.
     let (port, _server) = spawn_http_server();
 
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
@@ -465,7 +465,7 @@ fn vfs_write_echo_redirect() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
@@ -491,7 +491,7 @@ fn vfs_fat16_write_read() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
@@ -535,7 +535,7 @@ fn vfs_fat16_reboot_persistence() {
     // buffer. Sending "shutdown" immediately after the write means the shell will
     // execute them in sequence: write first, then shutdown. Phase C demonstrates
     // this works for echo-redirect + vcat — the same mechanism applies here.
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("first boot prompt failed: {e}\n{}", qemu.dump()));
     assert!(
@@ -560,7 +560,7 @@ fn vfs_fat16_reboot_persistence() {
     drop(qemu); // safe: process already exited; Drop's kill is a harmless no-op
 
     // ── Second boot: verify persistence ──────────────────────────────────────
-    let mut qemu2 = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu2 = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu2.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("second boot prompt failed: {e}\n{}", qemu2.dump()));
     assert!(
@@ -580,7 +580,7 @@ fn vfs_fat16_reboot_persistence() {
 #[test]
 fn vfs_write_large_content() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -598,7 +598,7 @@ fn vfs_write_large_content() {
 #[test]
 fn vfs_fat16_unlink() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -623,7 +623,7 @@ fn vfs_fat16_unlink() {
 #[test]
 fn vfs_fat16_subdir() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -648,7 +648,7 @@ fn block_io_denied_non_vfs() {
     if !prerequisites_ok() {
         return;
     }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -676,7 +676,7 @@ fn vfs_fat16_subdir_persistence() {
     }
 
     // ── First boot: mkdir + write into the subdir, then shut down ────────────
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("first boot prompt failed: {e}\n{}", qemu.dump()));
     assert!(
@@ -704,7 +704,7 @@ fn vfs_fat16_subdir_persistence() {
     drop(qemu);
 
     // ── Second boot: verify the subdir file persisted ─────────────────────────
-    let mut qemu2 = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu2 = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu2.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("second boot prompt failed: {e}\n{}", qemu2.dump()));
     assert!(
@@ -725,7 +725,7 @@ fn vfs_fat16_subdir_persistence() {
 #[test]
 fn vfs_fat16_recursive_rmdir() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -746,7 +746,7 @@ fn vfs_fat16_recursive_rmdir() {
 #[test]
 fn vfs_fat16_append() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -770,7 +770,7 @@ fn vfs_fat16_append() {
 #[test]
 fn python_exec_code() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(500));
@@ -788,7 +788,7 @@ fn python_exec_code() {
 #[test]
 fn python_script_file() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -812,7 +812,7 @@ fn python_script_file() {
 #[test]
 fn python_vnet_resolve() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(500));
@@ -836,7 +836,7 @@ fn python_vnet_resolve() {
 #[test]
 fn python_vfs_write_read() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -864,7 +864,7 @@ fn python_vnet_tcp_http_get() {
 
     let (port, _server) = spawn_http_server();
 
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -1010,7 +1010,7 @@ fn network_httpd_dynamic_content() {
 #[test]
 fn shell_while_loop() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -1042,7 +1042,7 @@ fn shell_while_loop() {
 #[test]
 fn shell_redirect_append() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1074,7 +1074,7 @@ fn shell_redirect_append() {
 #[test]
 fn shell_argv_race_fixed() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1106,7 +1106,7 @@ fn network_wget_downloads_to_vfs() {
 
     let (port, _server) = spawn_http_server();
 
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
@@ -1130,7 +1130,7 @@ fn network_wget_downloads_to_vfs() {
 #[test]
 fn shell_test_builtin() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -1166,7 +1166,7 @@ fn shell_test_builtin() {
 #[test]
 fn shell_function_define_and_call() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1194,7 +1194,7 @@ fn shell_function_define_and_call() {
 #[test]
 fn shell_midtoken_var_expansion() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1214,7 +1214,7 @@ fn shell_midtoken_var_expansion() {
 #[test]
 fn shell_unset_var() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1247,7 +1247,7 @@ fn shell_unset_var() {
 #[test]
 fn shell_exit_code_var() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1278,7 +1278,7 @@ fn shell_exit_code_var() {
 #[test]
 fn shell_break_loop() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1301,7 +1301,7 @@ fn shell_break_loop() {
 #[test]
 fn shell_and_operator() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1325,7 +1325,7 @@ fn shell_and_operator() {
 #[test]
 fn shell_or_operator() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1356,7 +1356,7 @@ fn shell_or_operator() {
 #[test]
 fn shell_for_loop() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1382,7 +1382,7 @@ fn shell_for_loop() {
 #[test]
 fn shell_if_true_branch() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1404,7 +1404,7 @@ fn shell_if_true_branch() {
 #[test]
 fn shell_if_else_branch() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1435,7 +1435,7 @@ fn shell_if_else_branch() {
 #[test]
 fn shell_variable_assignment() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1459,7 +1459,7 @@ fn shell_variable_assignment() {
 #[test]
 fn shell_variable_persists() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1487,7 +1487,7 @@ fn shell_variable_persists() {
 #[test]
 fn shell_source_script() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT16 /data volume mounted"), "FAT16 not mounted\n{}", qemu.dump());
@@ -1513,7 +1513,7 @@ fn shell_source_script() {
 #[test]
 fn python_vnet_resolve_dns() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
@@ -1538,7 +1538,7 @@ fn python_vnet_resolve_dns() {
 #[test]
 fn shell_sleep_returns() {
     if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViOS >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
@@ -1549,8 +1549,35 @@ fn shell_sleep_returns() {
         .unwrap_or_else(|e| panic!("sleep did not return: {e}\n{}", qemu.dump()));
 }
 
-// shell_source_multi_command was removed: it relied on Lua vfs.write() to
-// create a multi-line script, but under full parallel QEMU load the Lua cell
-// raced with the ARGV_STASH_KEY and the file was never written.  The features
-// it tested (sleep in scripts, sequential execution) are fully covered by
-// shell_sleep_returns (sleep) + shell_source_script (single-command source).
+/// Re-added after Phase V: ARGV_STASH_KEY race is fixed + `>>` append redirect works.
+///
+/// Builds a 3-line script using `echo >` and `echo >>` (no Lua, no ARGV race),
+/// then sources it.  BEFORE_SLEEP appears, sleep runs, AFTER_SLEEP follows.
+/// Uses `/tmp/` (VFS RamFS, in-memory) — no FAT16 disk contention.
+#[test]
+fn shell_source_multi_command() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Build the script using echo > / >> so no Lua cell is involved.
+    // `echo CMD >> file` appends "CMD\n" via Phase V append-redirect.
+    qemu.send_line("echo echo BEFORE_SLEEP > /tmp/seq.sh");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
+    qemu.send_line("echo sleep 1 >> /tmp/seq.sh");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("append sleep: {e}\n{}", qemu.dump()));
+    qemu.send_line("echo echo AFTER_SLEEP >> /tmp/seq.sh");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("append after: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("source /tmp/seq.sh");
+    qemu.wait_for("BEFORE_SLEEP", 10)
+        .unwrap_or_else(|e| panic!("BEFORE_SLEEP not seen: {e}\n--- output ---\n{}", qemu.dump()));
+    // Allow up to 20s for sleep 1 to complete.
+    qemu.wait_for("AFTER_SLEEP", 20)
+        .unwrap_or_else(|e| panic!("AFTER_SLEEP not seen: {e}\n--- output ---\n{}", qemu.dump()));
+}

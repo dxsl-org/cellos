@@ -54,6 +54,8 @@ pub struct QemuRunner {
     writer: Option<TcpStream>,
     /// Raw bytes captured from the guest serial output so far.
     output: Arc<Mutex<String>>,
+    /// Temporary disk image path to delete on drop (None when using the shared disk).
+    temp_disk: Option<std::path::PathBuf>,
 }
 
 impl QemuRunner {
@@ -61,6 +63,33 @@ impl QemuRunner {
     /// device, with the guest serial bridged to a localhost TCP socket.
     pub fn boot(kernel: &str, disk: &str) -> Self {
         Self::boot_with_netdev(kernel, disk, "user,id=net0")
+    }
+
+    /// Boot QEMU with a **private copy** of the disk image.
+    ///
+    /// Each call creates a unique temporary copy of `disk` so concurrent tests
+    /// that write to the FAT16 partition cannot corrupt each other's data.  The
+    /// copy is deleted when this `QemuRunner` is dropped.
+    ///
+    /// Use for any test that writes to `/data/` (FAT16).  Tests that only write
+    /// to `/tmp/` (VFS RamFS, in-memory) can use the shared `boot` instead.
+    pub fn boot_with_fresh_disk(kernel: &str, disk: &str) -> Self {
+        let tmp = std::env::temp_dir().join(format!(
+            "vios_disk_{}_{}.img",
+            std::process::id(),
+            // Use a combination of PID + a monotonic discriminator so that
+            // multiple tests in the same process get distinct names.
+            {
+                use std::sync::atomic::{AtomicU64, Ordering};
+                static CTR: AtomicU64 = AtomicU64::new(0);
+                CTR.fetch_add(1, Ordering::Relaxed)
+            }
+        ));
+        std::fs::copy(disk, &tmp)
+            .unwrap_or_else(|e| panic!("failed to copy disk image for test isolation: {e}"));
+        let mut runner = Self::boot_with_netdev(kernel, &tmp.to_string_lossy(), "user,id=net0");
+        runner.temp_disk = Some(tmp);
+        runner
     }
 
     /// Boot QEMU with a SLIRP hostfwd: `127.0.0.1:<host_port>` → guest `guest_port`.
@@ -133,7 +162,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output }
+        Self { child, writer: Some(writer), output, temp_disk: None }
     }
 
     /// Block until any captured line contains `pattern`, or `timeout_secs`
@@ -204,6 +233,10 @@ impl Drop for QemuRunner {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // Remove the temporary disk copy created by `boot_with_fresh_disk`, if any.
+        if let Some(ref p) = self.temp_disk {
+            let _ = std::fs::remove_file(p);
+        }
     }
 }
 
