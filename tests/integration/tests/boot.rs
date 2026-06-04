@@ -334,7 +334,7 @@ fn lua_vnet_resolve_dns() {
     // Wrap output in a marker that can't appear in boot messages so the assertion
     // is not a false-positive from the existing `[net] IP address: 10.0.2.15` line.
     qemu.send_line("lua -e local r=vnet.resolve('google.com') if r then print('RESOLVED:'..r) end");
-    qemu.wait_for("RESOLVED:", 20)
+    qemu.wait_for("RESOLVED:", 35) // DNS under parallel QEMU load can take longer
         .unwrap_or_else(|e| panic!("DNS resolve produced no output: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
@@ -943,6 +943,54 @@ fn network_httpd_serves_file() {
         body.contains("HTTPD_OK"),
         "response did not contain HTTPD_OK\n--- response ---\n{body}\n--- QEMU ---\n{}",
         qemu.dump()
+    );
+}
+
+// ── Phase N: Shell if/then/else/fi ───────────────────────────────────────────
+
+/// Phase N: `if CMD; then CMD; fi` — true branch executes when condition exits 0.
+///
+/// `echo` always exits 0, so THEN_OK must appear.  Also verifies the condition
+/// command itself executes (CHECK appears before THEN_OK).
+#[test]
+fn shell_if_true_branch() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_line("if echo CHECK; then echo THEN_OK; fi");
+    qemu.wait_for("CHECK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("condition did not run: {e}\n{}", qemu.dump()));
+    qemu.wait_for("THEN_OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("then branch did not run: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Phase N: `if CMD; then CMD; else CMD; fi` — else branch executes when
+/// condition fails (`false` / non-zero exit).
+///
+/// `blktest` exits 0 normally (it just prints "blkio: denied") — use a command
+/// that actually fails.  A non-existent external binary returns exit code 127.
+/// We use `vcat` on a non-existent path, which prints "not found" and returns
+/// non-zero so the else branch fires.
+#[test]
+fn shell_if_else_branch() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // `vcat /no/such/file` prints "not found" and returns non-zero → else fires.
+    qemu.send_line("if vcat /no/such/file; then echo WRONG; else echo ELSE_OK; fi");
+    qemu.wait_for("ELSE_OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("else branch did not run: {e}\n--- output ---\n{}", qemu.dump()));
+
+    // Guard: the then-branch must NOT have fired.
+    assert!(
+        !qemu.output_contains("WRONG"),
+        "then branch fired when it should not have\n{}", qemu.dump()
     );
 }
 

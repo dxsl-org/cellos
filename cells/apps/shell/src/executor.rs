@@ -109,6 +109,16 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             }
             last
         }
+        Ast::If { cond, then_b, else_b } => {
+            let code = execute(cond, jobs);
+            if code == 0 {
+                execute(then_b, jobs)
+            } else if let Some(eb) = else_b {
+                execute(eb, jobs)
+            } else {
+                0
+            }
+        }
     }
 }
 

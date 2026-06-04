@@ -58,6 +58,14 @@ pub enum Ast {
     Background(Cmd),
     /// `cmd1 ; cmd2` — sequential execution.
     Sequence(Vec<Ast>),
+    /// `if COND; then BODY; fi` — conditional execution.
+    ///
+    /// `cond` exit-code 0 → run `then_b`; non-zero → run `else_b` if present.
+    If {
+        cond:   alloc::boxed::Box<Ast>,
+        then_b: alloc::boxed::Box<Ast>,
+        else_b: Option<alloc::boxed::Box<Ast>>,
+    },
 }
 
 // ─── Tokenizer ────────────────────────────────────────────────────────────────
@@ -73,6 +81,15 @@ enum Tok {
     RedirectErr,    // 2>
     Ampersand,      // &
     Semicolon,      // ;
+    // ── Conditional keywords ─────────────────────────────────────────────────
+    // These variants are NEVER emitted by the tokenizer — `if`/`then`/`else`/`fi`
+    // always remain as Word tokens.  parse_if_stmt detects them by string
+    // comparison so they never silently disappear from external command arguments
+    // (e.g. `lua -e "if x then ... end"` must reach Lua intact).
+    If,   // reserved — kept for exhaustive match arms in parse_cmd
+    Then, // reserved
+    Else, // reserved
+    Fi,   // reserved
 }
 
 /// Tokenize a shell input line.
@@ -134,6 +151,9 @@ fn tokenize(line: &str) -> Vec<Tok> {
         }
     }
     flush!();
+    // All tokens remain as their natural type — no keyword conversion.
+    // The if-statement parser detects `if`/`then`/`else`/`fi` by string
+    // comparison on Word tokens so they are never eaten from command arguments.
     tokens
 }
 
@@ -146,6 +166,14 @@ pub fn parse(line: &str) -> Ast {
     let tokens = tokenize(line.trim());
     if tokens.is_empty() { return Ast::Empty; }
 
+    // `if...then...fi` must be parsed BEFORE semicolon splitting, because the
+    // semicolons inside an if-statement are structural (not sequence separators).
+    // Keywords remain as Word tokens (not converted) so they survive in external
+    // command argument strings (e.g. `lua -e "if x then ... end"`).
+    if tokens.first() == Some(&Tok::Word("if".into())) {
+        return parse_if_stmt(&tokens);
+    }
+
     // Split on `;` into sub-sequences first.
     let segments: Vec<&[Tok]> = split_on(&tokens, |t| t == &Tok::Semicolon);
     if segments.len() > 1 {
@@ -156,6 +184,63 @@ pub fn parse(line: &str) -> Ast {
     }
 
     parse_pipeline(&tokens)
+}
+
+/// Parse a token sub-slice that may contain `;`-separated commands.
+///
+/// Equivalent to the main `parse()` body but operating on a pre-tokenized
+/// slice — used by `parse_if_stmt` to parse condition and body sections.
+fn parse_tokens(tokens: &[Tok]) -> Ast {
+    // Strip leading/trailing semicolons that linger from the structural split.
+    let start = tokens.iter().position(|t| t != &Tok::Semicolon).unwrap_or(tokens.len());
+    let end   = tokens.iter().rposition(|t| t != &Tok::Semicolon).map(|i| i + 1).unwrap_or(0);
+    let tokens = &tokens[start..end];
+    if tokens.is_empty() { return Ast::Empty; }
+    let segments: Vec<&[Tok]> = split_on(tokens, |t| t == &Tok::Semicolon);
+    if segments.len() > 1 {
+        let seq: Vec<Ast> = segments.iter().map(|seg| parse_pipeline(seg)).collect();
+        return Ast::Sequence(seq);
+    }
+    parse_pipeline(tokens)
+}
+
+/// Parse `if COND; then BODY; fi` or `if COND; then BODY; else BODY; fi`.
+///
+/// Handles any number of semicolons around the keywords — the structure is
+/// determined by the `Then`, `Else`, and `Fi` token positions.
+/// Helper: returns true when a token is the keyword word `w`.
+fn is_kw(tok: &Tok, w: &str) -> bool {
+    tok == &Tok::Word(w.into())
+}
+
+fn parse_if_stmt(tokens: &[Tok]) -> Ast {
+    // Locate structural keywords after the leading `if` Word.
+    // Keywords are plain Word tokens — never converted — so they survive intact
+    // in external command argument strings.
+    let then_pos = tokens.iter().position(|t| is_kw(t, "then")).unwrap_or(tokens.len());
+    let else_pos = tokens.iter().position(|t| is_kw(t, "else"));
+    let fi_pos   = tokens.iter().rposition(|t| is_kw(t, "fi")).unwrap_or(tokens.len());
+
+    // Condition: tokens[1..then_pos]   (skip leading `If`)
+    let cond_slice = &tokens[1..then_pos];
+    let cond = parse_tokens(cond_slice);
+
+    // Then body: tokens[then_pos+1..else_or_fi]
+    let then_end = else_pos.unwrap_or(fi_pos);
+    let then_slice = &tokens[then_pos + 1..then_end];
+    let then_b = parse_tokens(then_slice);
+
+    // Else body (optional): tokens[else_pos+1..fi_pos]
+    let else_b = else_pos.map(|ep| {
+        let slice = &tokens[ep + 1..fi_pos];
+        alloc::boxed::Box::new(parse_tokens(slice))
+    });
+
+    Ast::If {
+        cond:   alloc::boxed::Box::new(cond),
+        then_b: alloc::boxed::Box::new(then_b),
+        else_b,
+    }
 }
 
 fn parse_pipeline(tokens: &[Tok]) -> Ast {

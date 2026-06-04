@@ -378,7 +378,9 @@ pub fn cmd_vcat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     if n == 0 {
         ostd::io::print("vcat: not found: ");
         ostd::io::println(path);
-    } else if let Ok(s) = core::str::from_utf8(&buf[..n]) {
+        return Err(ViError::NotFound); // non-zero exit so `if vcat ...; then` works correctly
+    }
+    if let Ok(s) = core::str::from_utf8(&buf[..n]) {
         ostd::io::print(s);
     }
     Ok(())
