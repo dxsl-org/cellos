@@ -1036,6 +1036,60 @@ fn shell_while_loop() {
         .unwrap_or_else(|e| panic!("while loop did not exit after rm: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
+// ── Phase R: $? exit code + break/continue ────────────────────────────────────
+
+/// Phase R: `$?` expands to the exit code of the last command.
+///
+/// After `echo` (exits 0), `$?` must be "0".
+/// After `vcat /no/such/file` (exits 1), `$?` must be "1".
+#[test]
+fn shell_exit_code_var() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Successful command → $? == 0.
+    // Use $? as a standalone token (whole-token expansion); prefix with EXITCODE_
+    // via a separate echo argument so the marker is unambiguous in the log.
+    qemu.send_line("echo OK_CMD");
+    qemu.wait_for("OK_CMD", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("echo: {e}\n{}", qemu.dump()));
+    qemu.send_line("echo EXITCODE $?");
+    qemu.wait_for("EXITCODE 0", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("$? not 0 after success: {e}\n{}", qemu.dump()));
+
+    // Failing command → $? == 1.
+    qemu.send_line("vcat /no/such/file");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("vcat: {e}\n{}", qemu.dump()));
+    qemu.send_line("echo EXITCODE $?");
+    qemu.wait_for("EXITCODE 1", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("$? not 1 after failure: {e}\n{}", qemu.dump()));
+}
+
+/// Phase R: `break` exits the nearest enclosing while loop.
+///
+/// `while true` (always-true condition) runs BODY; `break` inside BODY causes
+/// the loop to exit after one iteration rather than looping forever.
+#[test]
+fn shell_break_loop() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // while with always-true condition; break exits after first iteration.
+    qemu.send_line("while echo TICK; do echo BODY; break; done");
+    qemu.wait_for("BODY", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("body did not run: {e}\n{}", qemu.dump()));
+    // Must return to prompt (break exits the loop, not hang).
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("loop did not exit after break: {e}\n{}", qemu.dump()));
+}
+
 // ── Phase Q: Shell && / || short-circuit chaining ────────────────────────────
 
 /// Phase Q: `cmd1 && cmd2` — cmd2 runs only when cmd1 exits 0.

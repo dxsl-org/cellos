@@ -15,6 +15,31 @@ use crate::jobs::{Jobs, JobState};
 use ostd::prelude::*;
 use ostd::syscall;
 
+// ── Loop control signal ───────────────────────────────────────────────────────
+//
+// `break` and `continue` built-ins set a static signal that the nearest
+// enclosing while/for executor arm consumes.  The shell is single-threaded
+// (one task, cooperative scheduling) so a static flag is safe.
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LoopSignal { None, Break, Continue }
+
+static mut LOOP_SIGNAL: LoopSignal = LoopSignal::None;
+
+pub fn set_loop_signal(s: LoopSignal) {
+    // SAFETY: single shell task; no concurrent writes.
+    unsafe { LOOP_SIGNAL = s; }
+}
+
+fn take_loop_signal() -> LoopSignal {
+    // SAFETY: single shell task; no concurrent access.
+    unsafe {
+        let s = LOOP_SIGNAL;
+        LOOP_SIGNAL = LoopSignal::None;
+        s
+    }
+}
+
 // ── Shell variable store ──────────────────────────────────────────────────────
 //
 // Up to 16 named variables, keyed as fixed-width byte arrays.
@@ -74,6 +99,10 @@ fn get_var(key: &str) -> Option<&'static str> {
 /// Expand a single token: `$NAME` (whole-token only) → variable value.
 /// Non-`$` tokens are returned unchanged (as an owned String clone).
 fn expand_token(s: &str) -> String {
+    // Special variable $? — exit code of the last command.
+    if s == "$?" {
+        return get_var("?").map(String::from).unwrap_or_else(|| String::from("0"));
+    }
     if let Some(name) = s.strip_prefix('$') {
         if !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
             return get_var(name).map(String::from).unwrap_or_default();
@@ -121,14 +150,23 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             loop {
                 if execute(cond, jobs) != 0 { break; }
                 execute(body, jobs);
+                match take_loop_signal() {
+                    LoopSignal::Break    => break,
+                    LoopSignal::Continue => continue,
+                    LoopSignal::None     => {}
+                }
             }
             0
         }
         Ast::For { var, words, body } => {
-            for word in words {
-                // Set $VAR to the current word before each body execution.
+            'for_loop: for word in words {
                 set_var(var, word);
                 execute(body, jobs);
+                match take_loop_signal() {
+                    LoopSignal::Break    => break 'for_loop,
+                    LoopSignal::Continue => continue 'for_loop,
+                    LoopSignal::None     => {}
+                }
             }
             0
         }
@@ -237,7 +275,24 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     }
 
     // Dispatch to shell built-ins first, then try to spawn from /bin/.
-    dispatch_builtin(prog, &args, jobs)
+    let code = dispatch_builtin(prog, &args, jobs);
+    // Set $? to the exit code so scripts can inspect it.
+    set_var("?", i32_to_str(code));
+    code
+}
+
+/// Convert a small non-negative integer to a &str backed by a fixed buffer.
+///
+/// Returns "0" for 0, the decimal string for 1-127, and "1" for anything else.
+/// This avoids heap allocation for the `$?` variable.
+fn i32_to_str(n: i32) -> &'static str {
+    // Use a 'static lookup table for the most common exit codes (0–9).
+    match n {
+        0 => "0", 1 => "1", 2 => "2", 3 => "3", 4 => "4",
+        5 => "5", 6 => "6", 7 => "7", 8 => "8", 9 => "9",
+        127 => "127",
+        _ => "1",
+    }
 }
 
 /// Dispatch to the matching shell built-in.
@@ -285,6 +340,8 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         // ── Scripting ───────────────────────────────────────────────────
         // `.` is the POSIX short form of `source`.
         "source" | "." => cmd_source(args, jobs),
+        "break"    => { set_loop_signal(LoopSignal::Break);    Ok(()) }
+        "continue" => { set_loop_signal(LoopSignal::Continue); Ok(()) }
         // ── External ────────────────────────────────────────────────────
         _ => return spawn_external(prog, args),
     };
