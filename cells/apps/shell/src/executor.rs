@@ -15,6 +15,73 @@ use crate::jobs::{Jobs, JobState};
 use ostd::prelude::*;
 use ostd::syscall;
 
+// ── Shell variable store ──────────────────────────────────────────────────────
+//
+// Up to 16 named variables, keyed as fixed-width byte arrays.
+// The shell runs as a single task with no concurrent access, so a static
+// array is safe here.  Lifetimes of values returned by get_var are bounded
+// to the next set_var call — callers must not keep references across mutations.
+
+const MAX_VARS: usize = 16;
+
+// Slot layout: (occupied, key[32], value[128]).  NUL-terminated on set.
+static mut VARS: [(bool, [u8; 32], [u8; 128]); MAX_VARS] =
+    [(false, [0u8; 32], [0u8; 128]); MAX_VARS];
+
+fn set_var(key: &str, value: &str) {
+    let kb = key.as_bytes();
+    let vb = value.as_bytes();
+    // SAFETY: single shell task; no concurrent writes to VARS.
+    let store = unsafe { &mut VARS };
+    let klen = kb.len().min(31);
+    let vlen = vb.len().min(127);
+    // Update existing slot first.
+    for slot in store.iter_mut() {
+        if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
+            slot.2[..vlen].copy_from_slice(&vb[..vlen]);
+            slot.2[vlen] = 0;
+            return;
+        }
+    }
+    // Use first empty slot.
+    for slot in store.iter_mut() {
+        if !slot.0 {
+            slot.0 = true;
+            slot.1[..klen].copy_from_slice(&kb[..klen]);
+            slot.1[klen] = 0;
+            slot.2[..vlen].copy_from_slice(&vb[..vlen]);
+            slot.2[vlen] = 0;
+            return;
+        }
+    }
+    // Store full — silently drop. 16 variables is sufficient for scripts.
+}
+
+fn get_var(key: &str) -> Option<&'static str> {
+    let kb = key.as_bytes();
+    let klen = kb.len().min(31);
+    // SAFETY: single shell task; no concurrent reads.
+    let store = unsafe { &VARS };
+    for slot in store.iter() {
+        if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
+            let vlen = slot.2.iter().position(|&b| b == 0).unwrap_or(128);
+            return core::str::from_utf8(&slot.2[..vlen]).ok();
+        }
+    }
+    None
+}
+
+/// Expand a single token: `$NAME` (whole-token only) → variable value.
+/// Non-`$` tokens are returned unchanged (as an owned String clone).
+fn expand_token(s: &str) -> String {
+    if let Some(name) = s.strip_prefix('$') {
+        if !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            return get_var(name).map(String::from).unwrap_or_default();
+        }
+    }
+    String::from(s)
+}
+
 /// Execute an `Ast` and return the last command's exit code.
 ///
 /// `stdin_data` is the bytes available on stdin for the first command in a pipeline.
@@ -81,8 +148,21 @@ fn capture_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> Vec<u8> {
 fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     if cmd.is_empty() { return 0; }
 
-    let prog = &cmd.argv[0];
-    let args: Vec<&str> = cmd.argv[1..].iter().map(String::as_str).collect();
+    // Expand $VAR tokens in every argument before dispatch.
+    let expanded: Vec<String> = cmd.argv.iter().map(|s| expand_token(s)).collect();
+    let prog: &str = &expanded[0];
+    let args: Vec<&str> = expanded[1..].iter().map(String::as_str).collect();
+
+    // Detect `KEY=VALUE` assignment (key is non-empty alphanumeric+underscore).
+    if args.is_empty() {
+        if let Some(eq) = prog.find('=') {
+            let key = &prog[..eq];
+            if !key.is_empty() && key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                set_var(key, &prog[eq + 1..]);
+                return 0;
+            }
+        }
+    }
 
     // Phase C: capture `echo` output when a StdoutTo redirect is present.
     // Only `echo` is supported — external-process capture requires pipe caps (Phase 17a).

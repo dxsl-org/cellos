@@ -890,6 +890,63 @@ fn python_vnet_tcp_http_get() {
         .unwrap_or_else(|e| panic!("no HTTP 200 from Python: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
+// ── Phase L: Shell variables ──────────────────────────────────────────────────
+
+/// Phase L: `VAR=VALUE` sets a shell variable; `echo $VAR` expands it.
+///
+/// Tests two assertions:
+///  1. `VAR=HELLO_VAR` is treated as an assignment (not a command) — no error.
+///  2. `echo $VAR` expands `$VAR` to `HELLO_VAR` before dispatch.
+///
+/// Variables persist within the same shell session, so the assignment in one
+/// command is visible in the next. No script file or Lua write needed — no
+/// ARGV_STASH_KEY race.
+#[test]
+fn shell_variable_assignment() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Set variable — shell must return to prompt without printing an error.
+    qemu.send_line("VAR=HELLO_VAR");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("assignment did not return: {e}\n{}", qemu.dump()));
+
+    // Echo — $VAR must expand to HELLO_VAR.
+    qemu.send_line("echo $VAR");
+    qemu.wait_for("HELLO_VAR", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("$VAR not expanded: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Phase L: a variable set in one command persists to the next in the same session.
+///
+/// Sets GREETING, then uses it as an argument to echo — proves the static var store
+/// survives across consecutive shell commands (the shell session loop).  No script
+/// file needed; no ARGV_STASH_KEY race (both commands are built-ins).
+#[test]
+fn shell_variable_persists() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_line("GREETING=HI_VIOS");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+
+    // Override with a new value — last-write wins.
+    qemu.send_line("GREETING=HELLO_VIOS");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("override: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("echo $GREETING");
+    qemu.wait_for("HELLO_VIOS", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("override not visible: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
 // ── Phase J: Shell script files ───────────────────────────────────────────────
 
 /// Phase J: `source /data/script.sh` reads and executes a shell script from VFS.
