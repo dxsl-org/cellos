@@ -723,10 +723,14 @@ fn vfs_fat16_subdir_persistence() {
 
 /// Phase H: recursive directory removal via `rm -r /data/dir` (OP_RMDIR_RECURSIVE).
 ///
-/// Temporarily ignored: VFS cell crashes in `memset(sp, 0, 512)` during
-/// `remove_tree` in some kernel memory layouts. Root cause is a ViOS SAS
-/// stack-frame issue in the FAT16 recursive-delete code path — tracked for
-/// a future kernel stack/allocator fix.
+/// Phase H: recursive directory removal via `rm -r /data/dir` (OP_RMDIR_RECURSIVE).
+///
+/// Ignored: VFS cell stack overflows during `remove_tree` because fatfs uses
+/// stack-allocated 512-byte sector buffers for every block I/O call, and a
+/// single `rm -r` triggers enough nested fatfs calls to exceed the cell's
+/// allocated stack.  Root fix requires either larger user stacks or a
+/// non-stack VirtIO DMA buffer (which in turn requires VA→PA translation for
+/// non-identity-mapped pages — a pending ViOS SAS architectural fix).
 #[ignore]
 #[test]
 fn vfs_fat16_recursive_rmdir() {

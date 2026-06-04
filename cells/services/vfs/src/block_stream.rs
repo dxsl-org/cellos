@@ -30,6 +30,11 @@ impl fatfs::Read for BlockStream {
         }
         let sector = self.pos / SECTOR_SIZE;
         let off    = (self.pos % SECTOR_SIZE) as usize;
+        // Stack-allocated sector buffer: VirtIO DMA uses the buffer address as a
+        // physical address.  Stack pages are identity-mapped (physical == virtual)
+        // in ViOS SAS, so the DMA lands at the correct physical location.
+        // BSS/static pages are NOT identity-mapped and therefore MUST NOT be used
+        // as VirtIO DMA targets — the DMA would write to the wrong physical memory.
         let mut sec = [0u8; 512];
         if !sys_blk_read(sector, &mut sec) {
             return Err(());
@@ -51,14 +56,14 @@ impl fatfs::Write for BlockStream {
 
             if off == 0 && chunk == SECTOR_SIZE as usize {
                 // Full-sector write — no need to read first.
-                let mut full = [0u8; 512];
+                let mut full = [0u8; 512]; // must be stack-allocated (VirtIO DMA constraint)
                 full.copy_from_slice(&buf[written..written + 512]);
                 if !sys_blk_write(sector, &full) {
                     return Err(());
                 }
             } else {
                 // Partial sector — read-modify-write.
-                let mut sec = [0u8; 512];
+                let mut sec = [0u8; 512]; // must be stack-allocated (VirtIO DMA constraint)
                 if !sys_blk_read(sector, &mut sec) {
                     return Err(());
                 }
