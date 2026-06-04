@@ -723,10 +723,16 @@ fn vfs_fat16_subdir_persistence() {
 
 /// Phase H: recursive directory removal via `rm -r /data/dir` (OP_RMDIR_RECURSIVE).
 ///
-/// X-1 progress: VFS stack overflow fixed (STACK_PAGES=64 + static sector buffers).
-/// VirtIO DMA now uses virt_to_phys() for correct physical addressing (Phase X-1).
-/// Remaining issue: vcat after rm-r hangs — possibly fatfs directory-iterator
-/// state after deletion; under investigation.
+/// Phase H: recursive directory removal via `rm -r /data/dir` (OP_RMDIR_RECURSIVE).
+///
+/// Phase X-1 fixed the VFS stack overflow (STACK_PAGES=64, static sector buffers,
+/// VirtIO VA→PA translation). Remaining issue: after removing a directory that
+/// contains a file, subsequent FAT16 operations hang — the multi-sector write
+/// sequence (file deletion + dir deletion) leaves the FAT or root-dir sector in a
+/// corrupt state that causes fatfs to loop on freed cluster chains (FAT16 0x0000).
+/// Root fix: investigate why the second BlockStream::write in remove_tree produces
+/// a corrupt sector (likely WR_SEC is overwritten between writes, or the sector
+/// number is wrong for one of the writes).
 #[ignore]
 #[test]
 fn vfs_fat16_recursive_rmdir() {

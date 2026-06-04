@@ -436,7 +436,7 @@ pub fn main() {
     // attached, bad BPB) fall back to RamFS-only — /data writes will fail with
     // 0x01 but /tmp and /bin still work.
     let opts = fatfs::FsOptions::new().update_accessed_date(false);
-    let fat_fs: Option<DataFs> = match fatfs::FileSystem::new(BlockStream::new(), opts) {
+    let mut fat_fs: Option<DataFs> = match fatfs::FileSystem::new(BlockStream::new(), opts) {
         Ok(fs) => {
             println("[vfs] FAT16 /data volume mounted");
             Some(fs)
