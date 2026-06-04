@@ -444,6 +444,38 @@
 
 ---
 
+## v0.3.0 — IoT Networking & Shell Scripting (2026-06-03/04)
+
+### Network Stack (Phases A–I)
+- **TCP data-path** (A): SOCKET_TCP, CONNECT, SEND, RECV, CLOSE opcodes; ephemeral port allocator; smoltcp 0.11
+- **HTTP/1.0 client** (B): `curl http://IP[:PORT]/path` — GET to stdout
+- **TCP server** (C): LISTEN/ACCEPT opcodes; `nc -l <port>` server mode; QemuRunner hostfwd
+- **IPC buffer fix** (D): buf.fill(0) + zero-scan + opcode-specific minimums for all net opcodes
+- **UDP + DNS** (E): SOCKET_UDP, BIND, SENDTO, RECVFROM; Lua `vnet.resolve()` with DNS A-record query to 10.0.2.3:53
+- **Lua script files + vfs.*** (F): `lua /data/s.lua` via VFS OP_READ; `vfs.read/write/append/mkdir` Lua bindings
+- **MicroPython argv + vnet** (G): `python -c code`, `python script.py`; `import vnet` TCP module (C module, MP_REGISTER_MODULE)
+- **MicroPython vfs + spawn-args race fix** (H): `import vfs` Python module; both Lua and Python read spawn_args as first operation (before heavy init) to eliminate ARGV_STASH_KEY race
+- **Python UDP + DNS** (I): vnet.udp_socket/bind/udp_send/udp_recv/resolve (parity with Lua); modvnet_udp.c, modvnet_dns.c
+
+### Shell Scripting (Phases J–U)
+- **source / .** (J): Execute shell scripts from VFS line-by-line; skip blank lines and # comments
+- **sleep N + mtime fix** (K): `sleep N` built-in; kernel GetTime syscall fixed to use hardware `time` CSR (was returning 0 from broken software counter)
+- **Shell variables** (L): `VAR=value`, `$VAR` whole-token expansion; 16-slot static store
+- **httpd + background fix** (M): `httpd <port> <vfs_path>` HTTP/1.0 file server; shell background job parser fix (cmd & was parsed as Ast::Empty)
+- **if/then/else/fi** (N): Conditional execution; keywords as Word tokens (not Tok variants) so they survive in external command args like `lua -e "if x then..."`; vcat returns Err(NotFound) for missing files
+- **Dynamic httpd + while/do/done** (O): httpd reads file per-request (live data); `while COND; do BODY; done` loop
+- **for/in/do/done** (P): `for VAR in word1 word2; do BODY; done` — iterates word list, sets $VAR each iteration
+- **&& and ||** (Q): Short-circuit chaining; detected in parse_pipeline before pipe-splitting
+- **$? + break/continue** (R): exit code of last command; loop control with static LoopSignal flag
+- **Mid-token $VAR + exit + unset** (S): $VAR anywhere in token (byte-scan); `exit N`; `unset VAR`
+- **Shell functions** (T): `name() { body; }` — parse, store in 8-slot function table, call by name
+- **wget + test/[** (U): `wget URL path` downloads HTTP body to VFS; `test`/`[` with -f, -z, -n, =, !=
+
+### Integration Tests
+41 → 53 tests passing; tests cover full IoT stack end-to-end in QEMU.
+
+---
+
 ## See Also
 
 - **project-roadmap.md** — Live phase tracking and milestone definitions

@@ -183,10 +183,25 @@ disk.img
 | Feature | Status |
 |---------|--------|
 | **Lua** `io.open` read | ✅ Works (VFS IPC) |
-| **Lua** `io.open` write | 🚧 Phase 13 FAT32 |
+| **Lua** `io.open` write | ✅ Works via vfs.write() IPC |
 | **Lua** `os.execute` | Calls `sys_spawn_from_path` (verified) |
 | **MicroPython** `open` read | ✅ Works (VFS IPC) |
-| **MicroPython** `open` write | 🚧 Phase 13 FAT32 |
-| **Both** arg passing to scripts | 🚧 Phase 17a |
+| **MicroPython** `open` write | ✅ Works via vfs.write() IPC |
+| **Both** arg passing to scripts | ✅ Works (spawn_args early-read pattern) |
 | **Both** history persistence | 🚧 Phase 17a (VFS write) |
 | **Lua** `require` / `package.path` | Stub (no VFS directory scan yet) |
+
+---
+
+## Shell Built-ins
+
+| Built-in | Usage | Added |
+|---|---|---|
+| sleep N | Pause N seconds | Phase K |
+| source / . | Execute script from VFS | Phase J |
+| break / continue | Loop control | Phase R |
+| exit N | Exit with code | Phase S |
+| unset VAR | Remove variable | Phase S |
+| test / [ | Condition testing (-f, -z, -n, =, !=) | Phase U |
+| wget URL path | Download URL body to VFS | Phase U |
+| httpd port path | HTTP/1.0 file server | Phase M |
