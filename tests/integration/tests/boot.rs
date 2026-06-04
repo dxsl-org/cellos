@@ -1036,6 +1036,34 @@ fn shell_while_loop() {
         .unwrap_or_else(|e| panic!("while loop did not exit after rm: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
+// ── Phase P: Shell for loop ───────────────────────────────────────────────────
+
+/// Phase P: `for VAR in word1 word2 …; do BODY; done` — iterates over a literal
+/// word list, setting `$VAR` before each body execution via the static var store.
+///
+/// Verifies: all three words appear in order; loop exits (prompt returns).
+/// Keywords stay as `Word` tokens — `for`/`in`/`do`/`done` survive in external
+/// command args (same Phase N/O design rule).
+#[test]
+fn shell_for_loop() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_line("for X in ALPHA BETA GAMMA; do echo $X; done");
+    qemu.wait_for("ALPHA", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("ALPHA not seen: {e}\n{}", qemu.dump()));
+    qemu.wait_for("BETA", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("BETA not seen: {e}\n{}", qemu.dump()));
+    qemu.wait_for("GAMMA", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("GAMMA not seen: {e}\n{}", qemu.dump()));
+    // Loop must exit (not hang).
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("for loop did not exit: {e}\n{}", qemu.dump()));
+}
+
 // ── Phase N: Shell if/then/else/fi ───────────────────────────────────────────
 
 /// Phase N: `if CMD; then CMD; fi` — true branch executes when condition exits 0.

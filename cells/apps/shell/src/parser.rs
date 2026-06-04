@@ -63,6 +63,15 @@ pub enum Ast {
         cond: alloc::boxed::Box<Ast>,
         body: alloc::boxed::Box<Ast>,
     },
+    /// `for VAR in word1 word2 …; do BODY; done` — iterate over a word list.
+    ///
+    /// Sets `$VAR` to each word in order, runs BODY, then advances. `$VAR`
+    /// expansion in BODY uses the same static var store as `VAR=value`.
+    For {
+        var:   alloc::string::String,
+        words: alloc::vec::Vec<alloc::string::String>,
+        body:  alloc::boxed::Box<Ast>,
+    },
     /// `if COND; then BODY; fi` — conditional execution.
     ///
     /// `cond` exit-code 0 → run `then_b`; non-zero → run `else_b` if present.
@@ -181,6 +190,9 @@ pub fn parse(line: &str) -> Ast {
     if tokens.first() == Some(&Tok::Word("while".into())) {
         return parse_while_stmt(&tokens);
     }
+    if tokens.first() == Some(&Tok::Word("for".into())) {
+        return parse_for_stmt(&tokens);
+    }
 
     // Split on `;` into sub-sequences first.
     let segments: Vec<&[Tok]> = split_on(&tokens, |t| t == &Tok::Semicolon);
@@ -227,6 +239,40 @@ fn is_kw(tok: &Tok, w: &str) -> bool {
 /// survive intact when used as external command arguments.  Malformed input
 /// (missing `do` or `done`) calls `parse_tokens` — NOT `parse()` — to avoid
 /// re-dispatching on the leading `while` and recursing infinitely.
+/// Parse `for VAR in word1 word2 …; do BODY; done`.
+///
+/// Keywords stay as `Word` tokens (same Phase N/O rule) so `for`/`in`/`do`/`done`
+/// survive as external command arguments.  Malformed input falls back to
+/// `parse_tokens` (not `parse()`) to prevent infinite recursion.
+fn parse_for_stmt(tokens: &[Tok]) -> Ast {
+    // tokens[1] = variable name; tokens[2] should be Word("in").
+    let var = match tokens.get(1) {
+        Some(Tok::Word(w)) if w != "in" => w.clone(),
+        _ => return parse_tokens(tokens),
+    };
+    let in_pos = match tokens.iter().position(|t| is_kw(t, "in")) {
+        Some(p) => p,
+        None => return parse_tokens(tokens),
+    };
+    let do_pos   = tokens.iter().position(|t| is_kw(t, "do"));
+    let done_pos = tokens.iter().rposition(|t| is_kw(t, "done"));
+    let (dp, np) = match (do_pos, done_pos) {
+        (Some(d), Some(n)) if n > d => (d, n),
+        _ => return parse_tokens(tokens),
+    };
+    // Word list: tokens between `in` and `do`, stripping Semicolons.
+    let words: alloc::vec::Vec<alloc::string::String> = tokens[in_pos + 1..dp]
+        .iter()
+        .filter_map(|t| if let Tok::Word(w) = t { Some(w.clone()) } else { None })
+        .collect();
+    let body = parse_tokens(&tokens[dp + 1..np]);
+    Ast::For {
+        var,
+        words,
+        body: alloc::boxed::Box::new(body),
+    }
+}
+
 fn parse_while_stmt(tokens: &[Tok]) -> Ast {
     let do_pos   = tokens.iter().position(|t| is_kw(t, "do"));
     let done_pos = tokens.iter().rposition(|t| is_kw(t, "done"));

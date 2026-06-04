@@ -116,6 +116,14 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             }
             0
         }
+        Ast::For { var, words, body } => {
+            for word in words {
+                // Set $VAR to the current word before each body execution.
+                set_var(var, word);
+                execute(body, jobs);
+            }
+            0
+        }
         Ast::If { cond, then_b, else_b } => {
             let code = execute(cond, jobs);
             if code == 0 {
