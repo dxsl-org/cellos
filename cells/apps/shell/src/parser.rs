@@ -67,6 +67,14 @@ pub enum Ast {
         cond: alloc::boxed::Box<Ast>,
         body: alloc::boxed::Box<Ast>,
     },
+    /// `name() { body; }` — define a shell function.
+    ///
+    /// The body is stored as a reconstructed string; the executor registers it
+    /// in the function table so later invocations of `name` run the body.
+    FuncDef {
+        name: alloc::string::String,
+        body: alloc::string::String,
+    },
     /// `for VAR in word1 word2 …; do BODY; done` — iterate over a word list.
     ///
     /// Sets `$VAR` to each word in order, runs BODY, then advances. `$VAR`
@@ -101,6 +109,8 @@ enum Tok {
     And,            // &&  (short-circuit AND)
     Or,             // ||  (short-circuit OR)
     Semicolon,      // ;
+    LBrace,         // {  (function body open)
+    RBrace,         // }  (function body close)
     // ── Conditional keywords ─────────────────────────────────────────────────
     // These variants are NEVER emitted by the tokenizer — `if`/`then`/`else`/`fi`
     // always remain as Word tokens.  parse_if_stmt detects them by string
@@ -156,6 +166,8 @@ fn tokenize(line: &str) -> Vec<Tok> {
                 else { tokens.push(Tok::Ampersand); }
             }
             ';' => { flush!(); tokens.push(Tok::Semicolon); }
+            '{' => { flush!(); tokens.push(Tok::LBrace); }
+            '}' => { flush!(); tokens.push(Tok::RBrace); }
             '<' => { flush!(); tokens.push(Tok::RedirectIn); }
             '>' => {
                 flush!();
@@ -198,6 +210,16 @@ pub fn parse(line: &str) -> Ast {
     // semicolons inside an if-statement are structural (not sequence separators).
     // Keywords remain as Word tokens (not converted) so they survive in external
     // command argument strings (e.g. `lua -e "if x then ... end"`).
+    // `name() { body; }` — function definition.
+    // name() is a single Word token ending with "()" (no spaces inside).
+    if let Some(Tok::Word(w)) = tokens.first() {
+        if w.ends_with("()") && tokens.get(1) == Some(&Tok::LBrace) && tokens.last() == Some(&Tok::RBrace) {
+            let name = String::from(&w[..w.len() - 2]);
+            let body = tokens_to_string(&tokens[2..tokens.len() - 1]);
+            return Ast::FuncDef { name, body };
+        }
+    }
+
     if tokens.first() == Some(&Tok::Word("if".into())) {
         return parse_if_stmt(&tokens);
     }
@@ -242,6 +264,28 @@ fn parse_tokens(tokens: &[Tok]) -> Ast {
 ///
 /// Handles any number of semicolons around the keywords — the structure is
 /// determined by the `Then`, `Else`, and `Fi` token positions.
+/// Serialize a token slice back to a space-separated shell line.
+///
+/// Used by function definition to store the body as a re-parseable string.
+fn tokens_to_string(tokens: &[Tok]) -> String {
+    let parts: alloc::vec::Vec<&str> = tokens.iter().map(|t| match t {
+        Tok::Word(w)      => w.as_str(),
+        Tok::Pipe         => "|",
+        Tok::And          => "&&",
+        Tok::Or           => "||",
+        Tok::Semicolon    => ";",
+        Tok::Ampersand    => "&",
+        Tok::RedirectOut  => ">",
+        Tok::RedirectAppend => ">>",
+        Tok::RedirectIn   => "<",
+        Tok::RedirectErr  => "2>",
+        Tok::LBrace       => "{",
+        Tok::RBrace       => "}",
+        _ => "",
+    }).collect();
+    parts.join(" ")
+}
+
 /// Helper: returns true when a token is the keyword word `w`.
 fn is_kw(tok: &Tok, w: &str) -> bool {
     tok == &Tok::Word(w.into())

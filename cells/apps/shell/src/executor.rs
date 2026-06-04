@@ -15,6 +15,59 @@ use crate::jobs::{Jobs, JobState};
 use ostd::prelude::*;
 use ostd::syscall;
 
+// ── Shell function store ──────────────────────────────────────────────────────
+//
+// Functions are stored as (name, body_text) pairs.  When a command name matches
+// a stored function, its body text is re-parsed and executed in the current
+// shell context (same Jobs, same VARS store).
+
+const MAX_FUNS: usize = 8;
+
+static mut FUNS: [(bool, [u8; 32], [u8; 480]); MAX_FUNS] =
+    [(false, [0u8; 32], [0u8; 480]); MAX_FUNS];
+
+pub fn define_function(name: &str, body: &str) {
+    let nb = name.as_bytes();
+    let bb = body.as_bytes();
+    let nlen = nb.len().min(31);
+    let blen = bb.len().min(479);
+    // SAFETY: single shell task; no concurrent writes.
+    let store = unsafe { &mut FUNS };
+    // Update existing.
+    for slot in store.iter_mut() {
+        if slot.0 && &slot.1[..nlen] == &nb[..nlen] && slot.1[nlen] == 0 {
+            slot.2[..blen].copy_from_slice(&bb[..blen]);
+            slot.2[blen] = 0;
+            return;
+        }
+    }
+    // First empty slot.
+    for slot in store.iter_mut() {
+        if !slot.0 {
+            slot.0 = true;
+            slot.1[..nlen].copy_from_slice(&nb[..nlen]);
+            slot.1[nlen] = 0;
+            slot.2[..blen].copy_from_slice(&bb[..blen]);
+            slot.2[blen] = 0;
+            return;
+        }
+    }
+}
+
+fn get_function(name: &str) -> Option<&'static str> {
+    let nb = name.as_bytes();
+    let nlen = nb.len().min(31);
+    // SAFETY: single shell task; no concurrent reads.
+    let store = unsafe { &FUNS };
+    for slot in store.iter() {
+        if slot.0 && &slot.1[..nlen] == &nb[..nlen] && slot.1[nlen] == 0 {
+            let blen = slot.2.iter().position(|&b| b == 0).unwrap_or(480);
+            return core::str::from_utf8(&slot.2[..blen]).ok();
+        }
+    }
+    None
+}
+
 // ── Shell exit signal ─────────────────────────────────────────────────────────
 //
 // `exit [N]` sets this flag; the shell's main run() loop checks it after each
@@ -202,6 +255,10 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
                 last = execute(s, jobs);
             }
             last
+        }
+        Ast::FuncDef { name, body } => {
+            define_function(name, body);
+            0
         }
         Ast::And(left, right) => {
             let code = execute(left, jobs);
@@ -423,8 +480,23 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
             for name in args { unset_var(name); }
             Ok(())
         }
-        // ── External ────────────────────────────────────────────────────
-        _ => return spawn_external(prog, args),
+        // ── External / user-defined functions ───────────────────────────
+        _ => {
+            // Check the function table before trying to spawn an external binary.
+            if let Some(body) = get_function(prog) {
+                // Copy to a local stack buffer so the 'static reference is
+                // not held across the re-entrant parse+execute call.
+                let mut buf = [0u8; 480];
+                let bb = body.as_bytes();
+                let blen = bb.len().min(479);
+                buf[..blen].copy_from_slice(&bb[..blen]);
+                if let Ok(s) = core::str::from_utf8(&buf[..blen]) {
+                    let ast = crate::parser::parse(s);
+                    return execute(&ast, jobs);
+                }
+            }
+            return spawn_external(prog, args);
+        }
     };
     match result { Ok(()) => 0, Err(_) => 1 }
 }

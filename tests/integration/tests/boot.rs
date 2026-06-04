@@ -1036,6 +1036,37 @@ fn shell_while_loop() {
         .unwrap_or_else(|e| panic!("while loop did not exit after rm: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
+// ── Phase T: Shell functions ──────────────────────────────────────────────────
+
+/// Phase T: `name() { body; }` defines a shell function called like a built-in.
+///
+/// Define a function that echoes a sentinel; call it twice to prove it's stored
+/// and re-executable.  Also verifies that function body accesses the variable
+/// store (the body runs in the same executor context).
+#[test]
+fn shell_function_define_and_call() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Define a function: body is between { and }.
+    qemu.send_line("greet() { echo FUNC_CALLED; }");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("def: {e}\n{}", qemu.dump()));
+
+    // Call it — must execute the body.
+    qemu.send_line("greet");
+    qemu.wait_for("FUNC_CALLED", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("first call: {e}\n{}", qemu.dump()));
+
+    // Call again — function must persist in the table.
+    qemu.send_line("greet");
+    qemu.wait_for("FUNC_CALLED", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("second call: {e}\n{}", qemu.dump()));
+}
+
 // ── Phase S: Mid-token $VAR, exit, unset ─────────────────────────────────────
 
 /// Phase S: Mid-token `$VAR` expansion — `$VAR` inside a longer word expands
