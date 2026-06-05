@@ -198,6 +198,27 @@ fn tokenize(line: &str) -> Vec<Tok> {
                     current.push(c);
                 }
             }
+            // `$(...)` — command substitution.  Consume everything up to the
+            // matching `)` into the current word so spaces inside don't split
+            // the token.  Nested `$( $() )` increments depth correctly.
+            '$' if chars.peek() == Some(&'(') => {
+                chars.next(); // consume '('
+                current.push('$');
+                current.push('(');
+                let mut depth = 1usize;
+                loop {
+                    match chars.next() {
+                        None => break, // unclosed: pass through
+                        Some('(') => { depth += 1; current.push('('); }
+                        Some(')') => {
+                            depth -= 1;
+                            current.push(')');
+                            if depth == 0 { break; }
+                        }
+                        Some(ch) => { current.push(ch); }
+                    }
+                }
+            }
             other => { current.push(other); }
         }
     }

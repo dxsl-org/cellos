@@ -1674,3 +1674,29 @@ fn shell_source_multi_command() {
     qemu.wait_for("AFTER_SLEEP", 20)
         .unwrap_or_else(|e| panic!("AFTER_SLEEP not seen: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+/// Phase X-3: `$(cmd)` command substitution for built-ins.
+///
+/// Captures stdout of `echo`, `vcat`, and `pwd` into a variable via `$(...)`.
+/// External binaries and unsupported built-ins return empty string (documented).
+#[test]
+fn shell_cmd_substitution() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // Basic: whole-token substitution with echo.
+    qemu.send_line("OUT=$(echo CAPTURED_VALUE)");
+    qemu.wait_for("ViOS >", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("assign: {e}\n{}", qemu.dump()));
+    qemu.send_line("echo $OUT");
+    qemu.wait_for("CAPTURED_VALUE", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("echo $OUT: {e}\n{}", qemu.dump()));
+
+    // Mid-token: prefix + substitution concatenated.
+    qemu.send_line("echo v=$(echo hi)");
+    qemu.wait_for("v=hi", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("mid-token: {e}\n{}", qemu.dump()));
+}

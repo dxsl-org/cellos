@@ -196,6 +196,34 @@ fn get_var(key: &str) -> Option<&'static str> {
 /// Scans for `$` followed by an identifier (`[A-Za-z_][A-Za-z0-9_]*`) or `?`.
 /// Any `$` that is not followed by a valid name is passed through unchanged.
 /// Fast path: tokens with no `$` are returned as-is (no allocation).
+/// Capture the output of a built-in command without printing it.
+///
+/// Only a small capturable set is supported: `echo`, `vcat`/`cat`, `pwd`.
+/// External binaries and unsupported built-ins return an empty String.
+/// Nested `$(...)` is the caller's responsibility to reject before calling.
+fn run_capture(inner: &str) -> String {
+    let mut words = inner.split_whitespace();
+    let cmd = match words.next() { Some(c) => c, None => return String::new() };
+    let args: alloc::vec::Vec<&str> = words.collect();
+    match cmd {
+        "echo" => {
+            let bytes = crate::commands::cmd_echo_to_vec(&args);
+            String::from(core::str::from_utf8(&bytes).unwrap_or(""))
+        }
+        "vcat" | "cat" => {
+            if let Some(path) = args.first() {
+                let mut buf = [0u8; 480];
+                let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
+                if n > 0 {
+                    String::from(core::str::from_utf8(&buf[..n]).unwrap_or(""))
+                } else { String::new() }
+            } else { String::new() }
+        }
+        "pwd" => String::from("/\n"),
+        _ => String::new(),
+    }
+}
+
 fn expand_token(s: &str) -> String {
     if !s.contains('$') { return String::from(s); }
     let mut result = String::new();
@@ -204,6 +232,36 @@ fn expand_token(s: &str) -> String {
     while i < bytes.len() {
         if bytes[i] == b'$' && i + 1 < bytes.len() {
             let next = bytes[i + 1];
+            if next == b'(' {
+                // Command substitution: $(...). Scan to matching ')'.
+                // Single-level only — nested $( $() ) passes through as literal.
+                let inner_start = i + 2;
+                let mut depth = 1usize;
+                let mut j = inner_start;
+                while j < bytes.len() {
+                    if bytes[j] == b'(' { depth += 1; }
+                    else if bytes[j] == b')' {
+                        depth -= 1;
+                        if depth == 0 { break; }
+                    }
+                    j += 1;
+                }
+                if depth == 0 {
+                    // SAFETY: bytes[inner_start..j] is ASCII shell token chars.
+                    let inner = unsafe { core::str::from_utf8_unchecked(&bytes[inner_start..j]) };
+                    // Reject nested $(...) — pass $(  literally so the user can see the issue.
+                    if !inner.contains("$(") {
+                        let captured = run_capture(inner.trim());
+                        result.push_str(captured.trim_end_matches('\n'));
+                        i = j + 1;
+                        continue;
+                    }
+                }
+                // Unmatched paren or nested: emit '$(' literally and continue.
+                result.push('$');
+                i += 1;
+                continue;
+            }
             if next == b'?' {
                 // $? — exit code of the last command.
                 if let Some(v) = get_var("?") { result.push_str(v); }
