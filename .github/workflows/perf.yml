@@ -39,6 +39,14 @@ jobs:
       - name: Download Limine RISC-V bootloader
         run: bash scripts/download-limine.sh tools/limine-riscv64
 
+      - name: Restore perf history
+        uses: actions/cache/restore@v4
+        with:
+          path: perf-results/
+          # Unique key per run so save always writes; restore-keys picks the newest match.
+          key: perf-results-${{ github.run_id }}
+          restore-keys: perf-results-
+
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
@@ -140,6 +148,13 @@ jobs:
           name: bench-results-${{ github.run_id }}
           path: perf-results/
           retention-days: 90
+
+      - name: Save perf history
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: perf-results/
+          key: perf-results-${{ github.run_id }}
 
       - name: Compare against historical baseline
         run: |
