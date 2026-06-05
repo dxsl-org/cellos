@@ -24,7 +24,7 @@ use quota::QuotaTracker;
 use ostd::io::println;
 use ostd::prelude::*;
 
-// Phase 30: declare block-I/O capability so the kernel grants BlockIoCap at spawn.
+// Declares block-I/O capability; the kernel grants BlockIoCap at spawn.
 api::declare_manifest!(block_io = true, network = false, spawn = false);
 
 // Embedded binaries served from /bin/ until VirtIO-FAT integration lands.

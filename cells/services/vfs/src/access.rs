@@ -3,12 +3,12 @@
 //! Uses path-prefix rules rather than POSIX mode bits.  In a Single Address
 //! Space OS, `CellId` is the only meaningful identity — no uid/gid needed.
 //!
-//! Phase 30 (ELF capability manifests) is complete: the kernel reads the
-//! `__ViCell_manifest` ELF section at spawn time and grants `BlockIoCap`,
-//! `NetworkCap`, and `SpawnCap` tokens from it.  This module's prefix rules are
-//! VFS-internal authorization and are intentionally NOT driven by the manifest —
-//! per-cell VFS path injection is a future concern.  Rules remain hardcoded:
-//! all authenticated cells may read all paths; writes follow the prefix table below.
+//! The kernel reads the `__ViCell_manifest` ELF section at spawn time and grants
+//! `BlockIoCap`, `NetworkCap`, and `SpawnCap` tokens from it.  This module's
+//! prefix rules are VFS-internal authorization and are intentionally NOT driven
+//! by the manifest — per-cell VFS path injection is a future concern.  Rules
+//! remain hardcoded: all authenticated cells may read all paths; writes follow
+//! the prefix table below.
 
 use types::CellId;
 

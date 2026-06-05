@@ -54,8 +54,16 @@ pub struct ElfHeader {
 /// - `ViError::InvalidInput` — malformed ELF or unsupported relocation.
 /// - `ViError::OutOfMemory` — cannot allocate frames for segments.
 pub fn spawn_from_path(path: &str) -> ViResult<usize> {
-    // Validate path: must be non-empty, start with '/', length bounded.
-    if path.is_empty() || !path.starts_with('/') || path.len() > disk_layout::MAX_CELL_PATH {
+    // Validate path: non-empty, leading slash, bounded length, no traversal sequences.
+    // Reject '..' and '//' to prevent a future VFS-backed spawn from escaping /bin/
+    // via a /bin/-prefixed traversal path (defense-in-depth; currently harmless since
+    // the early loader uses exact-match, but cheap to enforce here unconditionally).
+    if path.is_empty()
+        || !path.starts_with('/')
+        || path.len() > disk_layout::MAX_CELL_PATH
+        || path.contains("..")
+        || path.contains("//")
+    {
         log::error!("[loader] invalid path {:?}", path);
         return Err(ViError::InvalidInput);
     }
@@ -73,8 +81,8 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
         reloc::apply_relocations(base, rela_section)?;
     }
 
-    // Phase 30: read capability manifest from `__ViCell_manifest` ELF section.
-    // Absent or malformed → None (triggers legacy path-based grants for backward compat).
+    // Read capability manifest from `__ViCell_manifest` ELF section.
+    // Absent or malformed → None (falls back to legacy hardcoded path grants).
     let manifest_opt: Option<api::manifest::CellManifest> =
         match elf_loader.get_section(&elf_bytes, "__ViCell_manifest") {
             Ok(bytes) => api::manifest::CellManifest::from_bytes(bytes),
@@ -142,8 +150,7 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
     crate::memory::cell_quota::register(cell_id, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES);
 
     // Grant ZST capability tokens.
-    // If the ELF embedded a manifest (Phase 30) → grant from declared flags.
-    // If no manifest → legacy hardcoded path grants (backward compatible).
+    // Manifest present → grant from declared flags; absent → legacy hardcoded path grants.
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             match manifest_opt {
@@ -167,21 +174,25 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                     }
                 }
                 None => {
-                    // Legacy: hardcoded path grants — unchanged pre-Phase-30 behavior.
-                    if path.ends_with("/bin/vfs") {
-                        task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
-                        let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
-                        if already {
-                            log::warn!("[loader] block_io re-registration (legacy path) — VFS hot-swap");
+                    // Legacy hardcoded path grants for cells without a manifest.
+                    // Outer starts_with guard prevents suffix-only matches from
+                    // non-/bin/ paths (e.g., /data/bin/vfs) gaining privileged caps.
+                    if path.starts_with("/bin/") {
+                        if path.ends_with("/bin/vfs") {
+                            task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
+                            let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
+                            if already {
+                                log::warn!("[loader] block_io re-registration (legacy) — VFS hot-swap");
+                            }
+                            // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
+                            unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
                         }
-                        // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
-                        unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
-                    }
-                    if path.ends_with("/bin/net") {
-                        task.network_cap = Some(crate::task::cap::NetworkCap::new());
-                    }
-                    if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
-                        task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
+                        if path.ends_with("/bin/net") {
+                            task.network_cap = Some(crate::task::cap::NetworkCap::new());
+                        }
+                        if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
+                            task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
+                        }
                     }
                 }
             }

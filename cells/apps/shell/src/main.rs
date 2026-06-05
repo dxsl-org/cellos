@@ -4,7 +4,7 @@
 extern crate alloc;
 extern crate ostd;
 
-// Phase 30: declare spawn capability so the kernel grants SpawnCap at spawn.
+// Declares spawn capability; the kernel grants SpawnCap at spawn.
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 
 mod aliases;

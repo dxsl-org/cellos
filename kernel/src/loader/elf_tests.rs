@@ -6,8 +6,8 @@
 //! which is intentional (hard failure = detected early).
 
 use api::manifest::{
-    CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK, MANIFEST_MAGIC,
-    MANIFEST_VERSION,
+    CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK, MANIFEST_FLAGS_MASK,
+    MANIFEST_MAGIC, MANIFEST_VERSION,
 };
 use types::{ViError, ViResult};
 
@@ -24,12 +24,12 @@ pub fn run_all() {
     test_reloc_unsupported_type_rejected();
     test_reloc_none_type_noop();
     test_reloc_relative_patches_memory();
-    // Phase 30: CellManifest parsing tests.
     test_manifest_size_is_8();
     test_manifest_parsing_valid();
     test_manifest_parsing_bad_magic();
     test_manifest_parsing_short();
     test_manifest_parsing_bad_version();
+    test_manifest_reserved_flags_rejected();
     test_manifest_network_false_grants_no_network_cap();
     log::info!("=== ELF Loader Tests PASSED ===");
 }
@@ -149,7 +149,7 @@ fn test_reloc_relative_patches_memory() {
     log::info!("  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}", base, expected);
 }
 
-// ─── CellManifest parsing (Phase 30) ─────────────────────────────────────────
+// ─── CellManifest parsing ────────────────────────────────────────────────────
 
 fn manifest_bytes(magic: u32, version: u8, flags: u8) -> [u8; 8] {
     let m = magic.to_le_bytes();
@@ -201,6 +201,24 @@ fn test_manifest_parsing_bad_version() {
         "unsupported version must return None"
     );
     log::info!("  [ok] bad version rejected");
+}
+
+fn test_manifest_reserved_flags_rejected() {
+    // Any bit above the defined mask must be rejected — prevents stale v1 binaries
+    // from silently gaining a future-version capability via a reserved bit.
+    let reserved = !MANIFEST_FLAGS_MASK; // e.g., 0xF8
+    let bytes = manifest_bytes(MANIFEST_MAGIC, MANIFEST_VERSION, reserved | 0x01);
+    assert!(
+        CellManifest::from_bytes(&bytes).is_none(),
+        "reserved flags must return None"
+    );
+    // Pure reserved (no defined flags): also rejected.
+    let bytes2 = manifest_bytes(MANIFEST_MAGIC, MANIFEST_VERSION, 0x08);
+    assert!(
+        CellManifest::from_bytes(&bytes2).is_none(),
+        "reserved-only flags must return None"
+    );
+    log::info!("  [ok] reserved flag bits rejected");
 }
 
 fn test_manifest_network_false_grants_no_network_cap() {

@@ -28,6 +28,15 @@ pub const MANIFEST_FLAG_NETWORK: u8 = 1 << 1;
 /// Cell spawning and hot-swap (SpawnFromPath/SpawnPinned/HotSwap).  Grants `SpawnCap`.
 pub const MANIFEST_FLAG_SPAWN: u8 = 1 << 2;
 
+/// Bitmask of all defined flags for version 1.  Bits 3-7 are reserved.
+///
+/// `from_bytes` rejects manifests where `flags & !MANIFEST_FLAGS_MASK != 0` —
+/// a stale v1 binary accidentally setting a reserved bit (e.g., from a future
+/// v2 SDK) is rejected and falls back to legacy path grants, preventing a
+/// capability it never intended from silently activating on an older kernel.
+pub const MANIFEST_FLAGS_MASK: u8 =
+    MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK | MANIFEST_FLAG_SPAWN;
+
 /// Fixed-layout capability manifest.  ABI-stable — see Law 1.
 ///
 /// Always 8 bytes due to `#[repr(C)]` and explicit padding.  Version the struct
@@ -79,10 +88,16 @@ impl CellManifest {
         if bytes[4] != MANIFEST_VERSION {
             return None;
         }
+        let flags = bytes[5];
+        // Reject reserved flag bits — a stale binary setting a future flag is
+        // treated as malformed rather than silently gaining an unintended cap.
+        if flags & !MANIFEST_FLAGS_MASK != 0 {
+            return None;
+        }
         Some(Self {
             magic,
             version: bytes[4],
-            flags:   bytes[5],
+            flags,
             _pad:    [bytes[6], bytes[7]],
         })
     }
