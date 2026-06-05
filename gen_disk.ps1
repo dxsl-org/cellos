@@ -54,6 +54,7 @@ $nc_bin     = "$rel_dir\nc"               # Phase A: TCP netcat tool
 $curl_bin   = "$rel_dir\curl"             # Phase B: HTTP GET client
 $wget_bin   = "$rel_dir\wget"             # Phase U: HTTP wget tool
 $httpd_bin  = "$rel_dir\httpd"            # Phase U: HTTP server
+$mqtt_bin   = "$rel_dir\mqtt"             # Phase X-5: MQTT client
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -138,6 +139,7 @@ if (Test-Path $nc_bin)    { $table_args += "/bin/nc=$nc_bin" }
 if (Test-Path $curl_bin)  { $table_args += "/bin/curl=$curl_bin" }
 if (Test-Path $wget_bin)  { $table_args += "/bin/wget=$wget_bin" }
 if (Test-Path $httpd_bin) { $table_args += "/bin/httpd=$httpd_bin" }
+if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
 python "$tools_dir\write-cell-table.py" @table_args
 
 Write-Host "Done. disk_v3.img is ready."

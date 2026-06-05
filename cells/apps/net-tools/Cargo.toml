@@ -27,3 +27,7 @@ path = "src/bin/wget.rs"
 [[bin]]
 name = "httpd"
 path = "src/bin/httpd.rs"
+
+[[bin]]
+name = "mqtt"
+path = "src/bin/mqtt.rs"

@@ -302,3 +302,118 @@ pub fn spawn_echo_server() -> u16 {
     });
     port
 }
+
+/// Spawn a minimal MQTT 3.1.1 mock broker on an ephemeral port.
+///
+/// Protocol:
+/// - Waits for a CONNECT packet (first byte 0x10), replies CONNACK `[20 02 00 00]`.
+/// - If next packet is SUBSCRIBE (0x82): replies SUBACK then injects one PUBLISH
+///   carrying `inject_payload` on a single-byte topic `"t"`.
+/// - If next packet is PUBLISH (0x30): captures the payload and sends it on the
+///   returned `Receiver`; useful for asserting what the client published.
+///
+/// Returns `(port, Receiver<Vec<u8>>)`. The receiver yields at most one item
+/// (the PUBLISH payload) — or times out if no PUBLISH was sent.
+/// The caller must keep the returned `JoinHandle` (inside `Receiver`) alive.
+pub fn spawn_mqtt_broker(
+    inject_payload: &'static [u8],
+) -> (u16, std::sync::mpsc::Receiver<Vec<u8>>) {
+    use std::sync::mpsc;
+    let listener = TcpListener::bind("127.0.0.1:0").expect("mqtt broker bind");
+    let port = listener.local_addr().expect("mqtt local addr").port();
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    thread::spawn(move || {
+        let Ok((mut stream, _)) = listener.accept() else { return };
+        // Use a single buffer for all reads so CONNECT + SUBSCRIBE bytes
+        // arriving in the same TCP segment are handled correctly.
+        // `pos` tracks where the next packet starts after CONNECT is consumed.
+        let mut buf = [0u8; 512];
+        let mut filled = 0usize; // bytes in buf
+
+        // Phase 1: accumulate until we have the full CONNECT packet.
+        loop {
+            match stream.read(&mut buf[filled..]) {
+                Ok(0) | Err(_) => return,
+                Ok(k) => {
+                    filled += k;
+                    if filled >= 2 && buf[0] == 0x10 {
+                        // CONNECT remaining_len is always < 128 for our client.
+                        if filled >= 2 + buf[1] as usize { break; }
+                    }
+                    if filled >= 512 { return; }
+                }
+            }
+        }
+        if buf[0] != 0x10 { return; }
+        let _ = stream.write_all(&[0x20, 0x02, 0x00, 0x00]); // CONNACK
+
+        // For subscribe tests: inject_payload is non-empty.  Send SUBACK + PUBLISH
+        // proactively — we don't need to parse the client's SUBSCRIBE in a mock.
+        // Small delay gives the client time to finish processing CONNACK and call
+        // its recv loop before we send SUBACK, so both packets arrive in distinct
+        // TCP segments (avoiding mqtt_recv truncation at the SUBACK boundary).
+        if !inject_payload.is_empty() {
+            // 50 ms lets the client finish processing CONNACK and enter its
+            // SUBACK poll loop before SUBACK arrives — avoids a race where
+            // mqtt_recv drains all 500 polls in ~50 ms before we send SUBACK.
+            thread::sleep(std::time::Duration::from_millis(50));
+            let _ = stream.write_all(&[0x90, 0x03, 0x00, 0x01, 0x00]); // SUBACK
+            // 500 ms gives the client time to consume the SUBACK via RECV_OP and
+            // start its PUBLISH poll loop before PUBLISH arrives.  Without this
+            // gap, the net service may deliver SUBACK + PUBLISH in one RECV
+            // response; mqtt_recv extracts only the first packet and discards the
+            // trailing PUBLISH bytes, which are then lost from smoltcp's buffer.
+            thread::sleep(std::time::Duration::from_millis(500));
+            // PUBLISH: topic "t" (1 byte), payload = inject_payload.
+            let topic = b"t";
+            let remaining = 2 + topic.len() + inject_payload.len();
+            let mut pkt = Vec::with_capacity(4 + remaining);
+            pkt.push(0x30u8);
+            pkt.push(remaining as u8);
+            pkt.push(0x00);
+            pkt.push(topic.len() as u8);
+            pkt.extend_from_slice(topic);
+            pkt.extend_from_slice(inject_payload);
+            let _ = stream.write_all(&pkt);
+            // Keep the connection alive so PUBLISH is fully delivered before
+            // the socket closes.  Closing immediately (TcpStream drop) sends FIN
+            // in the same TCP segment as PUBLISH on some OSes, which can cause
+            // smoltcp to process FIN before the PUBLISH payload.
+            thread::sleep(std::time::Duration::from_millis(1000));
+            return; // subscribe-mode broker done
+        }
+
+        // For publish tests: read the client's PUBLISH packet and capture its payload.
+        // Drain the rest of the CONNECT body first (it may or may not already be in buf).
+        let connect_end = 2 + buf[1] as usize;
+        // Keep reading until we have a full packet after connect_end.
+        while filled < connect_end {
+            match stream.read(&mut buf[filled..]) {
+                Ok(0) | Err(_) => return,
+                Ok(k) => { filled += k; }
+            }
+        }
+        let pos = connect_end;
+        loop {
+            let have = filled.saturating_sub(pos);
+            if have >= 2 && have >= 2 + buf[pos + 1] as usize { break; }
+            match stream.read(&mut buf[filled..]) {
+                Ok(0) | Err(_) => break,
+                Ok(k) => { filled += k; }
+            }
+        }
+        let next = &buf[pos..filled];
+        let n    = next.len();
+        if n > 0 && next[0] == 0x30 {
+            // PUBLISH: extract payload after fixed-header(2) + topic_len(2) + topic.
+            let remaining     = next[1] as usize;
+            let topic_len     = (next[2] as usize) << 8 | next[3] as usize;
+            let payload_start = 4 + topic_len;
+            let payload_end   = (2 + remaining).min(n);
+            if payload_end > payload_start {
+                let _ = tx.send(next[payload_start..payload_end].to_vec());
+            }
+        }
+    });
+    (port, rx)
+}

@@ -11,7 +11,7 @@ use std::io::Write;
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::time::Duration;
-use vios_integration_tests::{qemu_binary, spawn_echo_server, spawn_http_server, QemuRunner};
+use vios_integration_tests::{qemu_binary, spawn_echo_server, spawn_http_server, spawn_mqtt_broker, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 40;
 /// Timeout for individual shell command round-trips after boot.
@@ -1216,6 +1216,56 @@ fn network_wget_downloads_to_vfs() {
     qemu.send_line("vcat /tmp/wget_out.txt");
     qemu.wait_for("HELLO", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vcat after wget: {e}\n{}", qemu.dump()));
+}
+
+/// Phase X-5: `mqtt publish` sends CONNECT + PUBLISH to a mock broker.
+///
+/// The mock broker sends CONNACK and captures the PUBLISH payload so the test
+/// can assert the client sent the right data; the client prints "published".
+#[test]
+fn mqtt_publish() {
+    if !prerequisites_ok() { return; }
+    let (port, payload_rx) = spawn_mqtt_broker(b"");
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_line(&format!("mqtt publish 10.0.2.2:{port} test/topic hello"));
+    qemu.wait_for("published", 20)
+        .unwrap_or_else(|e| panic!("mqtt publish: {e}\n{}", qemu.dump()));
+
+    // Verify the broker received "hello" in the PUBLISH payload.
+    let payload = payload_rx.recv_timeout(Duration::from_secs(5)).unwrap_or_default();
+    assert!(
+        payload.windows(5).any(|w| w == b"hello"),
+        "broker did not receive 'hello'; payload={payload:?}\n{}",
+        qemu.dump()
+    );
+}
+
+/// Phase X-5: `mqtt subscribe` receives an injected PUBLISH from the mock broker.
+///
+/// The mock broker responds to SUBSCRIBE with SUBACK, then immediately injects
+/// a PUBLISH carrying "BROKER_MSG"; the client must print that payload.
+#[test]
+fn mqtt_subscribe() {
+    if !prerequisites_ok() { return; }
+    let (port, _rx) = spawn_mqtt_broker(b"BROKER_MSG");
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViOS >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_line(&format!("mqtt subscribe 10.0.2.2:{port} test/topic"));
+    qemu.wait_for("subscribed", 20)
+        .unwrap_or_else(|e| panic!("mqtt subscribe: {e}\n{}", qemu.dump()));
+    qemu.wait_for("BROKER_MSG", 15)
+        .unwrap_or_else(|e| panic!("mqtt payload not received: {e}\n{}", qemu.dump()));
 }
 
 /// Phase U: `test -f path` returns 0 when file exists, 1 when absent.
