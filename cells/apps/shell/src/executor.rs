@@ -1,19 +1,106 @@
 //! Shell AST executor — runs parsed commands, handles pipes and redirects.
 //!
-//! Pipes between cells in ViCell v1.0 are simulated via IPC-based streaming:
-//! the first command's output is buffered in a `Vec<u8>`, then fed as stdin
-//! to the next command.  Full zero-copy IPC pipes are deferred to Phase 17a
-//! when the capability pipe primitive lands.
+//! Pipes between built-in commands are implemented via an in-memory `OutputSink`:
+//! each pipeline stage's output is captured into a `Vec<u8>`, then passed as
+//! stdin to the next stage.  `SinkGuard` (RAII, Law 8) ensures the sink is
+//! restored on every exit path, including early returns.
 
 extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::UnsafeCell;
 use crate::parser::{Ast, Cmd, Redirect};
 use crate::jobs::{Jobs, JobState};
 use ostd::prelude::*;
 use ostd::syscall;
+
+// ── Output sink (pipeline capture) ───────────────────────────────────────────
+//
+// All shell command output MUST go through `shell_print` / `shell_println`
+// rather than `ostd::io::print` directly.  When the sink is set to `Buffer`,
+// output is captured into the pointed-to Vec instead of the serial console.
+//
+// Only the single shell task reads or writes `CURRENT_SINK`.  External cells
+// never call `shell_print`, so there is no concurrent-access hazard.
+// `CURRENT_STDIN` follows the same pattern for pipe-fed stdin data.
+
+enum OutputSink { Console, Buffer(*mut Vec<u8>) }
+
+/// Newtype that asserts `Sync` for an `UnsafeCell` in a single-task context.
+///
+/// Only valid when ALL accesses are guaranteed to come from one task (the shell).
+/// External cells never call `shell_print` or `shell_stdin`, so the invariant holds.
+struct SingleTaskCell<T>(UnsafeCell<T>);
+
+// SAFETY: the shell is a single-task executor; no other task accesses these statics.
+unsafe impl<T> Sync for SingleTaskCell<T> {}
+
+impl<T> SingleTaskCell<T> {
+    const fn new(val: T) -> Self { Self(UnsafeCell::new(val)) }
+    fn get(&self) -> *mut T { self.0.get() }
+}
+
+static CURRENT_SINK: SingleTaskCell<OutputSink> = SingleTaskCell::new(OutputSink::Console);
+
+/// Points to the current stdin buffer for pipe-aware built-ins.
+/// Null when no pipe is active (reads from real serial stdin).
+static CURRENT_STDIN: SingleTaskCell<*const [u8]> =
+    SingleTaskCell::new(core::ptr::null::<[u8; 0]>() as *const [u8]);
+
+/// RAII guard that restores the previous `OutputSink` on all exit paths (Law 8).
+struct SinkGuard(OutputSink);
+
+impl SinkGuard {
+    fn new(new_sink: OutputSink) -> Self {
+        // SAFETY: single shell task; exclusive access guaranteed.
+        let prev = unsafe { core::mem::replace(&mut *CURRENT_SINK.get(), new_sink) };
+        SinkGuard(prev)
+    }
+}
+
+impl Drop for SinkGuard {
+    fn drop(&mut self) {
+        // SAFETY: single shell task; restoring saved sink on any exit path.
+        unsafe { *CURRENT_SINK.get() = core::mem::replace(&mut self.0, OutputSink::Console); }
+    }
+}
+
+/// Route command output through the current sink.
+///
+/// All built-in output calls this instead of `ostd::io::print` so pipeline
+/// capture works.  The prompt and internal error diagnostics call
+/// `ostd::io::print` directly to always reach the console regardless of sink.
+pub fn shell_print(s: &str) {
+    // SAFETY: only the shell task reads/writes CURRENT_SINK.
+    match unsafe { &*CURRENT_SINK.get() } {
+        OutputSink::Console   => ostd::io::print(s),
+        OutputSink::Buffer(v) => unsafe { (**v).extend_from_slice(s.as_bytes()) },
+    }
+}
+
+/// `shell_print(s)` followed by a newline.
+pub fn shell_println(s: &str) { shell_print(s); shell_print("\n"); }
+
+/// Return the current pipe-fed stdin bytes, or an empty slice.
+///
+/// Commands that accept either a file argument or stdin (e.g., `grep`, `wc`)
+/// call this when no file path is given.
+pub fn shell_stdin() -> &'static [u8] {
+    // SAFETY: CURRENT_STDIN is set and live for the duration of dispatch_builtin.
+    let ptr = unsafe { *CURRENT_STDIN.get() };
+    if ptr.is_null() { &[] } else { unsafe { &*ptr } }
+}
+
+/// All recognized shell built-in names, used by tab completion.
+pub const BUILTINS: &[&str] = &[
+    "alias", "blktest", "break", "cat", "clear", "continue", "echo", "env",
+    "exec", "exit", "export", "find", "free", "grep", "head", "help", "jobs",
+    "kill", "ls", "mkdir", "ps", "pwd", "read", "rm", "rmdir", "shutdown",
+    "sleep", "snapshot", "sort", "source", "tail", "test", "top", "unalias",
+    "uniq", "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
+];
 
 // ── Shell function store ──────────────────────────────────────────────────────
 //
@@ -315,13 +402,10 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
         Ast::Simple(cmd) => exec_cmd(cmd, &[], jobs),
         Ast::Pipeline(cmds) => exec_pipeline(cmds, jobs),
         Ast::Background(cmd) => {
-            // Spawn the command as a background job without waiting.
             let name = cmd.argv.first().map(String::as_str).unwrap_or("?");
             let jid = jobs.add(name);
-            ostd::io::print("[");
-            ostd::io::print_usize(jid);
-            ostd::io::println("] spawning background job");
-            // For v1.0: spawn and don't wait (background support is basic).
+            // Background job notification always goes to console, not the sink.
+            ostd::io::print("["); ostd::io::print_usize(jid); ostd::io::println("] running");
             exec_cmd(cmd, &[], jobs);
             jobs.set_state(jid, JobState::Done);
             0
@@ -393,33 +477,43 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
 }
 
 /// Execute a pipeline: run each command in order, piping stdout→stdin.
+///
+/// Intermediate stages are captured into `Vec<u8>` buffers; the final stage
+/// runs directly through the current sink so its exit code is preserved and
+/// any outer capture (nested pipeline or `$(...)`) captures it correctly.
 fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
+    if cmds.is_empty() { return 0; }
+    let last_idx = cmds.len() - 1;
     let mut stdin_data: Vec<u8> = Vec::new();
-    let mut exit = 0;
-    for cmd in cmds {
-        let out = capture_cmd(cmd, &stdin_data, jobs);
-        // Print the last stage's output (unless it will be piped further).
-        let is_last = core::ptr::eq(cmd, cmds.last().unwrap());
-        if is_last {
-            if let Ok(s) = core::str::from_utf8(&out) {
-                ostd::io::print(s);
-            }
+
+    for (i, cmd) in cmds.iter().enumerate() {
+        if i == last_idx {
+            // Last stage: run directly (no intermediate capture).
+            // Wire pipe stdin so built-ins without a file path read from it.
+            // SAFETY: stdin_data is alive for the duration of exec_cmd.
+            unsafe { *CURRENT_STDIN.get() = stdin_data.as_slice() as *const [u8]; }
+            let code = exec_cmd(cmd, &stdin_data, jobs);
+            unsafe { *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8]; }
+            return code;
         }
-        exit = 0;
-        stdin_data = out;
+        stdin_data = capture_cmd(cmd, &stdin_data, jobs);
     }
-    exit
+    0
 }
 
-/// Run a command, capturing its output into a `Vec<u8>`.
+/// Run a command and capture its output into a `Vec<u8>`.
 ///
-/// For built-in commands this is approximate — v1.0 captures via in-memory
-/// buffer; external binaries would need pipe caps (Phase 17a).
-fn capture_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> Vec<u8> {
-    // For now, run as a simple command and return empty bytes.
-    // Full capture requires spawning + pipe caps.
-    exec_cmd(cmd, _stdin, jobs);
-    Vec::new()
+/// Uses `OutputSink::Buffer` so that any built-in calling `shell_print` writes
+/// into `out` instead of the serial console.  The `SinkGuard` ensures the
+/// previous sink (Console or an outer Buffer for nested pipelines) is restored
+/// on every exit path.
+fn capture_cmd(cmd: &Cmd, stdin: &[u8], jobs: &mut Jobs) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    let _guard = SinkGuard::new(OutputSink::Buffer(&mut out as *mut _));
+    exec_cmd(cmd, stdin, jobs);
+    // _guard.drop() restores the previous sink before `out` is returned.
+    drop(_guard);
+    out
 }
 
 /// Execute one simple command.
@@ -444,17 +538,14 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         }
     }
 
-    // Capture `echo` output for `>` (overwrite) and `>>` (append) redirects.
-    // External-process capture requires pipe caps (Phase 17a) and is out of scope.
+    // echo with stdout redirect: fast path using cmd_echo_to_vec (no OutputSink needed).
     if prog == "echo" {
         if let Some(Redirect::StdoutTo(path)) =
             cmd.redirects.iter().find(|r| matches!(r, Redirect::StdoutTo(_)))
         {
             let bytes = crate::commands::cmd_echo_to_vec(&args);
             if !crate::cmd_fs::write_file(path, &bytes) {
-                ostd::io::print("echo: cannot write '");
-                ostd::io::print(path);
-                ostd::io::println("'");
+                ostd::io::print("echo: cannot write '"); ostd::io::print(path); ostd::io::println("'");
             }
             return 0;
         }
@@ -463,54 +554,58 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         {
             let bytes = crate::commands::cmd_echo_to_vec(&args);
             if !crate::cmd_fs::append_file(path, &bytes) {
-                ostd::io::print("echo: cannot append '");
-                ostd::io::print(path);
-                ostd::io::println("'");
+                ostd::io::print("echo: cannot append '"); ostd::io::print(path); ostd::io::println("'");
             }
             return 0;
         }
     }
 
-    // Handle remaining redirects.  `StdinFrom` prints file content inline
-    // (Phase V scope — full stdin plumbing deferred to Phase 17a pipe caps).
-    for r in &cmd.redirects {
-        match r {
-            Redirect::StdinFrom(path) => {
-                let mut buf = alloc::vec![0u8; 4096];
-                let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
-                if n > 0 {
-                    if let Ok(s) = core::str::from_utf8(&buf[..n]) {
-                        ostd::io::print(s);
-                    }
-                } else {
-                    ostd::io::print("shell: cannot open '");
-                    ostd::io::print(path);
-                    ostd::io::println("'");
-                }
+    // StdinFrom redirect: preload the file into a buffer and expose it via
+    // shell_stdin() so built-ins (grep, wc, …) can read from it.
+    let stdin_file_buf: Vec<u8>;
+    let effective_stdin: &[u8] = if let Some(Redirect::StdinFrom(path)) =
+        cmd.redirects.iter().find(|r| matches!(r, Redirect::StdinFrom(_)))
+    {
+        stdin_file_buf = {
+            let mut buf = alloc::vec![0u8; 4096];
+            let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
+            if n == 0 {
+                ostd::io::print("shell: cannot open '"); ostd::io::print(path); ostd::io::println("'");
             }
-            Redirect::StdoutTo(path) => {
-                // Non-echo stdout redirect: external capture deferred to Phase 17a.
-                ostd::io::print("[redir > ");
-                ostd::io::print(path);
-                ostd::io::println("]");
-            }
-            Redirect::StdoutAppend(path) => {
-                // Non-echo append redirect: same Phase 17a limitation.
-                ostd::io::print("[redir >> ");
-                ostd::io::print(path);
-                ostd::io::println("]");
-            }
-            Redirect::StderrTo(path) => {
-                ostd::io::print("[redir 2> ");
-                ostd::io::print(path);
-                ostd::io::println("]");
-            }
-        }
-    }
+            buf[..n].to_vec()
+        };
+        &stdin_file_buf
+    } else {
+        _stdin
+    };
 
-    // Dispatch to shell built-ins first, then try to spawn from /bin/.
-    let code = dispatch_builtin(prog, &args, jobs);
-    // Set $? to the exit code so scripts can inspect it.
+    // Detect stdout redirect for non-echo commands.
+    let stdout_redir = cmd.redirects.iter().find_map(|r| match r {
+        Redirect::StdoutTo(path)     => Some((path.clone(), false)),
+        Redirect::StdoutAppend(path) => Some((path.clone(), true)),
+        _ => None,
+    });
+
+    // Wire the pipe-fed stdin so pipe-aware built-ins can read it.
+    // SAFETY: effective_stdin is alive for the duration of dispatch_builtin.
+    unsafe { *CURRENT_STDIN.get() = effective_stdin as *const [u8]; }
+
+    let code = if let Some((path, append)) = stdout_redir {
+        // Capture this command's output into a buffer, then write to VFS.
+        let mut captured: Vec<u8> = Vec::new();
+        {
+            let _guard = SinkGuard::new(OutputSink::Buffer(&mut captured as *mut _));
+            dispatch_builtin(prog, &args, jobs);
+        } // _guard drops here, restoring sink before the VFS write
+        crate::cmd_fs::vfs_write_chunked(&path, &captured, append);
+        0
+    } else {
+        dispatch_builtin(prog, &args, jobs)
+    };
+
+    // Clear stdin pointer; keep CURRENT_SINK unmodified (exec_cmd doesn't own it).
+    unsafe { *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8]; }
+
     set_var("?", i32_to_str(code));
     code
 }
@@ -566,26 +661,26 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         "head"  => crate::cmd_fs::cmd_head(make_parts(args)),
         "tail"  => crate::cmd_fs::cmd_tail(make_parts(args)),
         "grep"  => crate::cmd_fs::cmd_grep(make_parts(args)),
+        "find"  => crate::cmd_fs::cmd_find(make_parts(args)),
+        "uniq"  => crate::cmd_fs::cmd_uniq(make_parts(args)),
+        "sort"  => crate::cmd_fs::cmd_sort(make_parts(args)),
         "mkdir" => crate::cmd_fs::cmd_mkdir(make_parts(args)),
         "rmdir" => crate::cmd_fs::cmd_rmdir(make_parts(args)),
         "rm"    => crate::cmd_fs::cmd_rm(make_parts(args)),
         "vcat"    => crate::cmd_fs::cmd_vcat(make_parts(args)),
         "vwrite"  => crate::cmd_fs::cmd_vwrite(make_parts(args)),
         "vappend" => crate::cmd_fs::cmd_vappend(make_parts(args)),
+        "top"  => crate::commands::cmd_top(),
+        "kill" => crate::commands::cmd_kill(make_parts(args)),
         // ── Snapshot ────────────────────────────────────────────────────
         "snapshot" => {
-            ostd::io::println("[shell] writing warm-boot snapshot...");
+            shell_println("[shell] writing warm-boot snapshot...");
             match ostd::syscall::sys_snapshot() {
                 ostd::syscall::SyscallResult::Ok(n) if n > 0 => {
-                    ostd::io::print("[shell] snapshot: wrote ");
-                    ostd::io::print_usize(n);
-                    ostd::io::println(" frames. Reboot for warm boot.");
+                    shell_print(&alloc::format!("[shell] snapshot: wrote {} frames. Reboot for warm boot.\n", n));
                     Ok(())
                 }
-                _ => {
-                    ostd::io::println("[shell] snapshot: failed");
-                    Err(ViError::Unknown)
-                }
+                _ => { shell_println("[shell] snapshot: failed"); Err(ViError::Unknown) }
             }
         }
         // ── System ──────────────────────────────────────────────────────
@@ -688,15 +783,9 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
 /// Print all active jobs.
 fn print_jobs(jobs: &Jobs) {
     for (id, state, name) in jobs.list() {
-        ostd::io::print("[");
-        ostd::io::print_usize(id);
-        ostd::io::print("] ");
-        ostd::io::print(match state {
-            JobState::Running => "Running",
-            JobState::Done    => "Done   ",
-        });
-        ostd::io::print("  ");
-        ostd::io::println(name);
+        shell_print(&alloc::format!("[{}] {}  {}\n", id,
+            match state { JobState::Running => "Running", JobState::Done => "Done   " },
+            name));
     }
 }
 

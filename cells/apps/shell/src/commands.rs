@@ -3,22 +3,21 @@ use ostd::prelude::*;
 use ostd::syscall;
 
 pub fn cmd_help() -> ViResult<()> {
-    ostd::io::println("ViOS Shell v0.2.1 — built-in commands:");
-    ostd::io::println("  Files:   ls  cat  wc  head  tail  grep  sort  sed  mkdir  rmdir  rm");
-    ostd::io::println("  System:  ps  pwd  uname  free  env  uptime  sleep  clear  exec");
-    ostd::io::println("  Shell:   help  echo  export  alias  unalias  jobs  source  .");
-    ostd::io::println("");
-    ostd::io::println("Syntax:  cmd | cmd2      (pipe)");
-    ostd::io::println("         cmd > file      (redirect stdout)");
-    ostd::io::println("         cmd < file      (redirect stdin)");
-    ostd::io::println("         cmd &           (background)");
-    ostd::io::println("         cmd ; cmd2      (sequence)");
+    crate::executor::shell_println("ViCell Shell v0.2.1 — built-in commands:");
+    crate::executor::shell_println("  Files:   ls  cat  wc  head  tail  grep  find  uniq  sort  sed  mkdir  rmdir  rm");
+    crate::executor::shell_println("  System:  ps  top  kill  pwd  uname  free  env  uptime  sleep  clear  exec");
+    crate::executor::shell_println("  Shell:   help  echo  export  alias  unalias  jobs  source  .");
+    crate::executor::shell_println("");
+    crate::executor::shell_println("Syntax:  cmd | cmd2      (pipe)");
+    crate::executor::shell_println("         cmd > file      (redirect stdout)");
+    crate::executor::shell_println("         cmd < file      (redirect stdin)");
+    crate::executor::shell_println("         cmd &           (background)");
+    crate::executor::shell_println("         cmd ; cmd2      (sequence)");
     Ok(())
 }
 
 pub fn cmd_clear() -> ViResult<()> {
-    // ANSI escape code for clear screen
-    ostd::io::print("\x1b[2J\x1b[1;1H");
+    ostd::io::print("\x1b[2J\x1b[1;1H"); // bypass sink — clear screen always goes to console
     Ok(())
 }
 
@@ -120,30 +119,21 @@ let vfs_cell_id = 3;
 
 pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let path = args.next().unwrap_or("/");
-
-    // Using ostd::fs::read_dir
     match fs::read_dir(path) {
         Ok(iter) => {
             for entry in iter {
-                // entry is DirEntry
-                let name = core::str::from_utf8(&entry.name).unwrap_or("???");
-                // trimming null bytes
-                let name = name.trim_matches('\0');
-                ostd::io::println(name);
+                let name = core::str::from_utf8(&entry.name).unwrap_or("???").trim_matches('\0');
+                crate::executor::shell_println(name);
             }
             Ok(())
         }
         Err(e) => {
-            // Use e to avoid unused variable warning
-            ostd::io::print("ls: cannot access '");
-            ostd::io::print(path);
-            ostd::io::print("': ");
+            ostd::io::print("ls: cannot access '"); ostd::io::print(path); ostd::io::print("': ");
             match e {
                 ViError::NotFound => ostd::io::println("No such file or directory"),
                 ViError::PermissionDenied => ostd::io::println("Permission denied"),
                 _ => ostd::io::println("Error"),
             }
-            // Return Ok so shell doesn't crash on user error
             Ok(())
         }
     }
@@ -169,7 +159,7 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 
                         match core::str::from_utf8(&buffer[..total]) {
                             Ok(s) => {
-                                ostd::io::print(s);
+                                crate::executor::shell_print(s);
                                 pending = 0;
                             }
                             Err(e) => {
@@ -178,11 +168,11 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                                     let s = unsafe {
                                         core::str::from_utf8_unchecked(&buffer[..valid_len])
                                     };
-                                    ostd::io::print(s);
+                                    crate::executor::shell_print(s);
                                 }
 
                                 if let Some(error_len) = e.error_len() {
-                                    ostd::io::print("\u{FFFD}"); // Replacement char
+                                    crate::executor::shell_print("\u{FFFD}"); // Replacement char
                                     let start = valid_len + error_len;
                                     let remaining = total - start;
                                     for i in 0..remaining {
@@ -200,27 +190,22 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                         }
                     }
                     Ok(0) => {
-                        if pending > 0 {
-                            ostd::io::print("\u{FFFD}");
-                        }
+                        if pending > 0 { crate::executor::shell_print("\u{FFFD}"); }
                         break;
                     }
                     Err(_) => {
-                        ostd::io::println("cat: read error");
+                        ostd::io::println("cat: read error"); // error → bypass sink
                         break;
                     }
                     _ => break,
                 }
             }
             syscall::sys_close(fd);
-            ostd::io::println(""); // Newline at end
+            crate::executor::shell_print("\n");
             Ok(())
         }
         Err(_) => {
-            ostd::io::print("cat: ");
-            ostd::io::print(path);
-            ostd::io::println(": No such file or directory");
-            // Return Ok to keep shell running
+            ostd::io::print("cat: "); ostd::io::print(path); ostd::io::println(": No such file or directory");
             Ok(())
         }
     }
@@ -230,25 +215,13 @@ pub fn cmd_ps<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let mut buffer = [api::syscall::ProcessInfo::default(); 16];
     match syscall::sys_get_procs(&mut buffer) {
         Ok(count) => {
-            ostd::io::println("PID   STATE     NAME");
-            ostd::io::println("------------------------");
+            crate::executor::shell_println("PID   STATE     NAME");
+            crate::executor::shell_println("------------------------");
             for i in 0..count {
                 let info = &buffer[i];
                 let name = core::str::from_utf8(&info.name).unwrap_or("???").trim_matches('\0');
-                let state_str = match info.state {
-                    0 => "Ready",
-                    1 => "Running",
-                    2 => "Waiting",
-                    3 => "Dead",
-                    _ => "???",
-                };
-                
-                // Format manually since we don't have fancy formatting
-                ostd::io::print_usize(info.id);
-                ostd::io::print("     ");
-                ostd::io::print(state_str);
-                ostd::io::print("   ");
-                ostd::io::println(name);
+                let state_str = match info.state { 0 => "Ready", 1 => "Running", 2 => "Waiting", 3 => "Dead", _ => "???" };
+                crate::executor::shell_print(&alloc::format!("{}     {}   {}\n", info.id, state_str, name));
             }
             Ok(())
         }
@@ -312,10 +285,82 @@ pub fn cmd_echo<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     }
     let text = parts[word_start..].join(" ");
     if escape {
-        ostd::io::print(&expand_echo_escapes(&text));
+        crate::executor::shell_print(&expand_echo_escapes(&text));
     } else {
-        ostd::io::print(&text);
+        crate::executor::shell_print(&text);
     }
-    if !no_newline { ostd::io::println(""); }
+    if !no_newline { crate::executor::shell_print("\n"); }
+    Ok(())
+}
+
+// ─── top ──────────────────────────────────────────────────────────────────────
+
+/// `top` — live process table, refreshed every second.
+///
+/// Shows PID/state/name only; CPU% is not available without per-task tick counters.
+/// Press any key to exit.
+pub fn cmd_top() -> ViResult<()> {
+    loop {
+        // Clear screen and home — always bypasses OutputSink (console control).
+        ostd::io::print("\x1b[2J\x1b[1;1H");
+        crate::executor::shell_println("PID   STATE     NAME");
+        crate::executor::shell_println("---   --------  ----------------");
+        let mut buf = [api::syscall::ProcessInfo::default(); 16];
+        if let Ok(n) = syscall::sys_get_procs(&mut buf) {
+            for info in &buf[..n] {
+                let name = core::str::from_utf8(&info.name).unwrap_or("???").trim_matches('\0');
+                let state = match info.state { 0 => "Ready", 1 => "Running", 2 => "Waiting", 3 => "Dead", _ => "???" };
+                crate::executor::shell_print(&alloc::format!("{:<5} {:<9} {}\n", info.id, state, name));
+            }
+        }
+        ostd::io::print("\n(press any key to exit)");
+
+        // Poll for a keypress during the 1-second sleep; break on any byte.
+        const HZ: u64 = 10_000_000;
+        let deadline = syscall::sys_get_time().saturating_add(HZ);
+        let mut got_key = false;
+        while syscall::sys_get_time() < deadline {
+            let mut c = [0u8; 1];
+            if let Ok(n) = ostd::syscall::sys_read(0, &mut c) {
+                if n > 0 { got_key = true; break; }
+            }
+            ostd::task::yield_now();
+        }
+        if got_key {
+            // Drain any remaining buffered bytes (key-repeat, escape sequences)
+            // so they don't leak into the next shell prompt.
+            let mut drain = [0u8; 1];
+            while let Ok(n) = ostd::syscall::sys_read(0, &mut drain) { if n == 0 { break; } }
+            break;
+        }
+    }
+    ostd::io::print("\x1b[2J\x1b[1;1H");
+    Ok(())
+}
+
+// ─── kill ─────────────────────────────────────────────────────────────────────
+
+/// `kill <tid>` — send a cooperative shutdown request to the target task.
+///
+/// The target receives an IPC message with opcode `0xFF`.  It will exit only
+/// if it is currently in a recv-any (`sys_recv(0, ..)`) state.  Tasks blocked
+/// on a specific sender (e.g., VFS) will not receive the message.
+/// Use `ps` after kill to verify the task has stopped.
+pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let tid_str = match args.next() {
+        Some(s) => s,
+        None => { crate::executor::shell_println("Usage: kill <tid>"); return Ok(()); }
+    };
+    let mut tid: usize = 0;
+    for ch in tid_str.bytes() {
+        if !(b'0'..=b'9').contains(&ch) { crate::executor::shell_println("kill: invalid tid"); return Ok(()); }
+        tid = tid.saturating_mul(10).saturating_add((ch - b'0') as usize);
+    }
+    if tid == 0 { crate::executor::shell_println("kill: invalid tid (0)"); return Ok(()); }
+
+    // Cooperative shutdown IPC: single byte 0xFF = "please exit".
+    let msg = [0xFFu8];
+    syscall::sys_send(tid, &msg);
+    crate::executor::shell_print(&alloc::format!("kill: signal sent to task {}\n", tid));
     Ok(())
 }

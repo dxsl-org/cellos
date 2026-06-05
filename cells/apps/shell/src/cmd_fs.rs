@@ -53,32 +53,29 @@ fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
 // ─── wc ───────────────────────────────────────────────────────────────────────
 
 /// `wc [file]` — print line, word, and byte counts.
+///
+/// When called without a file (in a pipeline), reads from `shell_stdin()`.
 pub fn cmd_wc<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
-    let path = match args.next() {
-        Some(p) => p,
-        None => { ostd::io::println("Usage: wc <file>"); return Ok(()); }
-    };
-    let data = match read_file_bytes(path) {
-        Ok(d) => d,
-        Err(_) => {
-            ostd::io::print("wc: cannot open '");
-            ostd::io::print(path);
-            ostd::io::println("'");
-            return Ok(());
-        }
+    let path = args.next().unwrap_or("");
+    let owned;
+    let data: &[u8] = if path.is_empty() {
+        let s = crate::executor::shell_stdin();
+        if s.is_empty() { crate::executor::shell_println("Usage: wc [file]"); return Ok(()); }
+        s
+    } else {
+        owned = read_file_bytes(path).map_err(|_| {
+            ostd::io::print("wc: cannot open '"); ostd::io::print(path); ostd::io::println("'");
+            ViError::NotFound
+        })?;
+        &owned
     };
     let bytes = data.len();
     let lines = data.iter().filter(|&&b| b == b'\n').count();
     let words = data.split(|b| b == &b' ' || b == &b'\n' || b == &b'\t')
         .filter(|w| !w.is_empty())
         .count();
-    ostd::io::print_usize(lines);
-    ostd::io::print(" ");
-    ostd::io::print_usize(words);
-    ostd::io::print(" ");
-    ostd::io::print_usize(bytes);
-    ostd::io::print(" ");
-    ostd::io::println(path);
+    let label = if path.is_empty() { "" } else { path };
+    crate::executor::shell_print(&alloc::format!("{} {} {} {}\n", lines, words, bytes, label));
     Ok(())
 }
 
@@ -100,10 +97,10 @@ pub fn cmd_head<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             None => break,
         }
     }
-    if path.is_empty() { ostd::io::println("Usage: head [-n N] <file>"); return Ok(()); }
+    if path.is_empty() { crate::executor::shell_println("Usage: head [-n N] <file>"); return Ok(()); }
     let data = read_file_bytes(path).map_err(|_| { ostd::io::print("head: cannot open '"); ostd::io::print(path); ostd::io::println("'"); ViError::NotFound })?;
     for line in collect_lines(&data).into_iter().take(n) {
-        ostd::io::println(line);
+        crate::executor::shell_println(line);
     }
     Ok(())
 }
@@ -123,12 +120,12 @@ pub fn cmd_tail<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             None => break,
         }
     }
-    if path.is_empty() { ostd::io::println("Usage: tail [-n N] <file>"); return Ok(()); }
+    if path.is_empty() { crate::executor::shell_println("Usage: tail [-n N] <file>"); return Ok(()); }
     let data = read_file_bytes(path).map_err(|_| { ostd::io::print("tail: cannot open '"); ostd::io::print(path); ostd::io::println("'"); ViError::NotFound })?;
     let lines = collect_lines(&data);
     let start = lines.len().saturating_sub(n);
     for line in &lines[start..] {
-        ostd::io::println(line);
+        crate::executor::shell_println(line);
     }
     Ok(())
 }
@@ -151,29 +148,28 @@ pub fn cmd_grep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             None => break,
         }
     }
-    if pattern.is_empty() || path.is_empty() {
-        ostd::io::println("Usage: grep [-i] <pattern> <file>");
+    if pattern.is_empty() {
+        crate::executor::shell_println("Usage: grep [-i] <pattern> [file]");
         return Ok(());
     }
-    let data = read_file_bytes(path).map_err(|_| {
-        ostd::io::print("grep: cannot open '"); ostd::io::print(path); ostd::io::println("'");
-        ViError::NotFound
-    })?;
-    let mut found = false;
-    for line in collect_lines(&data) {
-        let matches = if case_insensitive {
-            // Byte-wise ASCII case-insensitive contains.
-            contains_insensitive(line, pattern)
-        } else {
-            line.contains(pattern)
-        };
-        if matches {
-            ostd::io::println(line);
-            found = true;
-        }
-    }
-    if !found {
-        // Exit 1 semantics: no output.  Shell exit-code tracking in Phase 17a.
+
+    // Read from file or from pipe-fed stdin (shell_stdin()) when no path given.
+    let owned;
+    let data: &[u8] = if path.is_empty() {
+        let s = crate::executor::shell_stdin();
+        if s.is_empty() { crate::executor::shell_println("Usage: grep [-i] <pattern> [file]"); return Ok(()); }
+        s
+    } else {
+        owned = read_file_bytes(path).map_err(|_| {
+            ostd::io::print("grep: cannot open '"); ostd::io::print(path); ostd::io::println("'");
+            ViError::NotFound
+        })?;
+        &owned
+    };
+    for line in collect_lines(data) {
+        let matches = if case_insensitive { contains_insensitive(line, pattern) }
+                      else { line.contains(pattern) };
+        if matches { crate::executor::shell_println(line); }
     }
     Ok(())
 }
@@ -199,9 +195,7 @@ pub fn cmd_mkdir<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         Some(p) => p,
         None => { ostd::io::println("Usage: mkdir <path>"); return Ok(()); }
     };
-    if vfs_req_ok(&api::ipc::VfsRequest::Mkdir(path)) {
-        // Success — silent like POSIX mkdir.
-    } else {
+    if !vfs_req_ok(&api::ipc::VfsRequest::Mkdir(path)) {
         ostd::io::print("mkdir: cannot create directory '");
         ostd::io::print(path);
         ostd::io::println("'");
@@ -265,6 +259,23 @@ pub fn write_file(path: &str, content: &[u8]) -> bool {
 /// Caller must chunk if content exceeds the 512-byte IPC buffer capacity.
 pub fn append_file(path: &str, content: &[u8]) -> bool {
     vfs_req_ok(&api::ipc::VfsRequest::Append { path, content })
+}
+
+/// Write `data` to `path`, splitting into ≤400-byte chunks to stay within the
+/// 512-byte IPC frame limit.  First chunk uses `Write` (create/overwrite);
+/// subsequent chunks use `Append` to extend.  When `append` is true, every
+/// chunk uses `Append`.
+pub fn vfs_write_chunked(path: &str, data: &[u8], append: bool) -> bool {
+    const CHUNK: usize = 400;
+    if data.is_empty() {
+        return if append { true } else { write_file(path, &[]) };
+    }
+    let mut first = !append;
+    let mut ok = true;
+    for chunk in data.chunks(CHUNK) {
+        ok &= if first { first = false; write_file(path, chunk) } else { append_file(path, chunk) };
+    }
+    ok
 }
 
 
@@ -352,7 +363,119 @@ pub fn cmd_vcat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         return Err(ViError::NotFound); // non-zero exit so `if vcat ...; then` works correctly
     }
     if let Ok(s) = core::str::from_utf8(&buf[..n]) {
-        ostd::io::print(s);
+        crate::executor::shell_print(s);
+    }
+    Ok(())
+}
+
+// ─── find ─────────────────────────────────────────────────────────────────────
+
+/// `find <dir> [-name pattern]` — recursively list files under `dir`.
+///
+/// Uses VFS `ListDir` IPC.  Directories with more than ~30 entries are silently
+/// truncated by the 512-byte `ListDir` reply limit — a known v1.0 limitation.
+pub fn cmd_find<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let dir = args.next().unwrap_or(".");
+    let pattern = if args.next() == Some("-name") { args.next() } else { None };
+    find_recursive(dir, pattern, 0);
+    Ok(())
+}
+
+/// Maximum directory recursion depth for `find`.  Prevents stack overflow on
+/// pathological trees; each level holds ~1 KB of stack for IPC buffers.
+const FIND_MAX_DEPTH: usize = 16;
+
+fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize) {
+    if depth >= FIND_MAX_DEPTH { return; }
+    use api::ipc::{VfsRequest, VfsResponse};
+    let mut send = [0u8; 512];
+    let n = match api::ipc::encode(&VfsRequest::ListDir(dir), &mut send) {
+        Ok(s) => s.len(),
+        Err(_) => return,
+    };
+    ostd::syscall::sys_send(3, &send[..n]); // VFS_ENDPOINT = 3
+    let mut reply = [0u8; 512];
+    let raw = match ostd::syscall::sys_recv(0, &mut reply) {
+        ostd::syscall::SyscallResult::Ok(_) => &reply,
+        _ => return,
+    };
+    match api::ipc::decode::<VfsResponse>(raw) {
+        Ok(VfsResponse::Data(entries)) => {
+            let text = core::str::from_utf8(entries).unwrap_or("");
+            for entry in text.lines() {
+                let (kind, name) = if entry.starts_with("d:") { ("d", &entry[2..]) }
+                                   else if entry.starts_with("f:") { ("f", &entry[2..]) }
+                                   else { continue };
+                // Build the full path without heap format for depth-zero dirs.
+                let mut full = alloc::string::String::from(dir);
+                if !full.ends_with('/') { full.push('/'); }
+                full.push_str(name);
+
+                if kind == "f" {
+                    let matches = pattern.map(|p| name.contains(p)).unwrap_or(true);
+                    if matches { crate::executor::shell_println(&full); }
+                } else {
+                    find_recursive(&full, pattern, depth + 1);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ─── uniq ─────────────────────────────────────────────────────────────────────
+
+/// `uniq [file]` — filter adjacent duplicate lines.
+///
+/// When called without a file (in a pipeline), reads from `shell_stdin()`.
+pub fn cmd_uniq<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let path = args.next().unwrap_or("");
+    let owned;
+    let data: &[u8] = if path.is_empty() {
+        let s = crate::executor::shell_stdin();
+        if s.is_empty() { crate::executor::shell_println("Usage: uniq [file]"); return Ok(()); }
+        s
+    } else {
+        owned = read_file_bytes(path).map_err(|_| {
+            ostd::io::print("uniq: cannot open '"); ostd::io::print(path); ostd::io::println("'");
+            ViError::NotFound
+        })?;
+        &owned
+    };
+    let text = core::str::from_utf8(data).unwrap_or("");
+    let mut prev = "";
+    for line in text.lines() {
+        if line != prev {
+            crate::executor::shell_println(line);
+            prev = line;
+        }
+    }
+    Ok(())
+}
+
+// ─── sort (stdin-aware) ───────────────────────────────────────────────────────
+
+/// `sort [file]` — sort lines lexicographically.
+///
+/// When called without a file (in a pipeline), reads from `shell_stdin()`.
+pub fn cmd_sort<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    let path = args.next().unwrap_or("");
+    let owned;
+    let data: &[u8] = if path.is_empty() {
+        let s = crate::executor::shell_stdin();
+        if s.is_empty() { crate::executor::shell_println("Usage: sort [file]"); return Ok(()); }
+        s
+    } else {
+        owned = read_file_bytes(path).map_err(|_| {
+            ostd::io::print("sort: cannot open '"); ostd::io::print(path); ostd::io::println("'");
+            ViError::NotFound
+        })?;
+        &owned
+    };
+    let mut lines = collect_lines(data);
+    lines.sort_unstable();
+    for line in lines {
+        crate::executor::shell_println(line);
     }
     Ok(())
 }
