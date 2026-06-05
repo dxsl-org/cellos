@@ -346,21 +346,38 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] Static kernel R-X / data R-W protection at boot (if M-mode accessible)
 
 ### Phase 29 — Heap Snapshotting / Instant On (P2)
-**Target**: 2026-10-06 | **Effort**: ~3 weeks
-**Spec**: [`docs/specs/03-runtime.md §4`](specs/03-runtime.md) (full implementation spec with snapshot format, constraints, prerequisites)
+**Target**: 2026-10-06 | **Effort**: ~3 weeks  
+**Status**: 📋 PLANNED — see `.agents/260605-1452-phase29-heap-snapshot-instant-on/`
 
-> Killer feature: sub-100 ms warm boot. Không OS nào khác có.
+> Killer feature: sub-100 ms warm boot on real hardware (eMMC 100+ MB/s). QEMU TCG: ~270ms.
 
-**Prerequisites**: Phase 26 (Metadata Registry), Phase 27 (Direct IPC vtable), FAT16 write stable.
+**Research findings (2026-06-05):**
+- Snapshot scope: ALLOCATED frames only (~4-8 MB, not full 32 MB heap) — enables 100ms target
+- QEMU TCG disk speed ~30 MB/s → 4MB = 133ms, 8MB = 266ms. Sub-100ms requires `/dev/shm`-backed disk or real hardware
+- Storage: raw LBA sectors at LBA 200000 (no FAT overhead). Need disk image extended to 300000 sectors
+- `crc32fast` crate (`default-features=false`) for integrity; kernel hash via build.rs env var
+- Cell quiescence protocol: all cells must be at yield point before snapshot
+- VirtIO reinit: call `init_driver()` again (hardware resets, heap struct survives)
+- Insert `try_restore()` between `task::drivers::init()` (step 10) and `EarlyLoader::probe()` (step 12)
 
-- [ ] Read `docs/specs/03-runtime.md §4` fully before starting — constraints documented there
-- [ ] Implement `serialize_snapshot()` — dump page frames (exclude MMIO) → `system.img`
-- [ ] Snapshot format: magic + CRC32 + kernel build hash + cell table hash + PA-relative reloc table
-- [ ] Implement `load_snapshot()` in early kernel boot — map image → physical RAM
-- [ ] Invalidation logic: cold boot if kernel hash or cell table hash changes
-- [ ] VirtIO reinit after snapshot load (MMIO not snapshottable — hardware state reset)
-- [ ] Benchmark: warm boot time target < 100 ms on QEMU
-- [ ] Integration test: `snapshot_warm_boot_restores_state`
+**Phase 29-1 — Serialization:**
+- [ ] Add `crc32fast` + build.rs KERNEL_ELF_HASH; create `kernel/src/snapshot/mod.rs`
+- [ ] `serialize_snapshot()`: walk frame bitmap → write allocated frames to LBA 200000+
+- [ ] Add `sys_snapshot()` syscall + shell `snapshot` command
+
+**Phase 29-2 — Warm boot restore:**
+- [ ] `try_restore()`: read header → validate magic/version/hash/crc32 → memcpy frames
+- [ ] VirtIO reinit + PLIC reinit + timer re-arm after restore
+- [ ] Insert into main.rs boot sequence
+
+**Phase 29-3 — Invalidation + tests:**
+- [ ] Auto-invalidate on kernel hash mismatch (zero magic byte)
+- [ ] Extend disk_v3.img to 300000 sectors
+- [ ] Unit tests: header round-trip, invalidation logic
+
+**Phase 29-4 — Benchmark:**
+- [ ] Timing instrumentation in try_restore() and serialize_snapshot()
+- [ ] Warm boot time target < 100 ms on real hardware (QEMU: ~270ms documented)
 
 ### Phase 30 — Cell Capability Manifests in ELF (P2)
 **Target**: 2026-10-27 | **Effort**: ~2 weeks
