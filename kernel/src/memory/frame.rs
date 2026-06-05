@@ -1,4 +1,4 @@
-//! Physical frame allocator for ViOS kernel.
+//! Physical frame allocator for ViCell kernel.
 //!
 //! Manages physical memory frames (4KB pages) using a Bitmap Allocator.
 //! This allows for O(1) allocation and deallocation (amortized) and frame reuse.
@@ -188,6 +188,33 @@ impl FrameAllocator {
         // For now, let's just return 0 or implement counting later.
         // This is mainly for stats.
         0
+    }
+
+    // ── Snapshot serialization accessors ──────────────────────────────────────
+
+    /// Physical start address of the allocator's managed region.
+    pub fn memory_start(&self) -> PhysAddr { self.memory_start }
+
+    /// Physical end address (exclusive) of the allocator's managed region.
+    pub fn memory_end(&self) -> PhysAddr { self.memory_end }
+
+    /// Total number of 4096-byte frames managed by this allocator.
+    pub fn total_frames(&self) -> usize { self.total_frames }
+
+    /// Returns `true` if frame `idx` is currently allocated (in use).
+    ///
+    /// Used by the snapshot serializer to enumerate only the allocated frames,
+    /// avoiding snapshotting free memory and reducing snapshot size.
+    pub fn is_frame_allocated(&self, idx: usize) -> bool {
+        if idx >= self.total_frames { return false; }
+        let u64_idx = idx / 64;
+        let bit_offset = idx % 64;
+        (self.bitmap[u64_idx] >> bit_offset) & 1 != 0
+    }
+
+    /// Physical address of frame `idx`.
+    pub fn frame_addr(&self, idx: usize) -> PhysAddr {
+        self.frame_index_to_addr(idx)
     }
 }
 

@@ -195,6 +195,19 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
     }
 }
 
+/// Serialize all allocated physical frames to the warm-boot snapshot sector range.
+///
+/// The kernel quiesces hardware and writes a snapshot image at a fixed LBA on
+/// the VirtIO block device.  On next boot, the snapshot is detected and the
+/// kernel heap is restored instead of running a cold boot sequence.
+///
+/// Returns `Ok(frame_count)` on success.
+pub fn sys_snapshot() -> SyscallResult {
+    // SAFETY: sys_snapshot triggers a kernel write; no user-memory pointers involved.
+    let ret = unsafe { syscall(ViSyscall::Snapshot, 0, 0, 0, 0) };
+    SyscallResult::Ok(ret as usize)
+}
+
 /// Spawn a cell pinned to a specific hardware core.
 ///
 /// On single-core systems `core_id` must be 0; any other value returns

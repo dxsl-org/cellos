@@ -16,6 +16,7 @@ pub mod cell;
 pub mod fs; // Filesystem
 pub mod loader;
 pub mod memory;
+pub mod snapshot;
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
@@ -202,6 +203,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     puts("TRACE: init drivers\n");
     task::drivers::init();
     puts("TRACE: drivers done\n");
+
+    // Attempt warm boot from snapshot before any cell initialization.
+    // try_restore() replays allocated physical frames (including kernel .bss/.data
+    // globals like SCHEDULER) from disk, then yields into the restored task set.
+    // Returns false (continues cold boot) if no valid snapshot is found.
+    if snapshot::try_restore() {
+        // try_restore() called yield_cpu() and should not return in a successful
+        // warm boot.  If we reach here, fall through to cold boot as a safety net.
+        log::warn!("[boot] snapshot restore returned unexpectedly → cold boot");
+    }
 
     // Probe the cell bootstrap table so SpawnFromPath works during init.
     // Failure is non-fatal: init will log warnings if it cannot spawn cells.

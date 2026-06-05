@@ -36,6 +36,9 @@ pub enum ViSyscall {
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
     SpawnPinned = 16,
+    /// Serialize all allocated physical frames to the snapshot sector range.
+    /// Triggers a warm-boot-capable snapshot.  Returns frame count on success.
+    Snapshot = 420,
     Wait = 8,          // Wait for task
     Yield = 104,       // Linux sched_yield is 24, but we use 104 in current code
     SetTimer = 35,     // Added SetTimer
@@ -149,6 +152,8 @@ impl ViSyscall {
             Self::StateStash    => Some(33),
             Self::StateRestore  => Some(34),
             Self::Exec          => Some(35),
+            // Snapshot: privileged warm-boot operation; reuses HotSwap bit (SpawnCap required).
+            Self::Snapshot      => Some(32),
             // Yield and Exit are always permitted — a Cell must be able to
             // yield the CPU and exit cleanly regardless of its allowlist.
             Self::Yield | Self::Exit | Self::Unknown => None,
@@ -172,7 +177,8 @@ impl From<usize> for ViSyscall {
             13 => ViSyscall::OpenCap,
             14 => ViSyscall::ReadCap,
             15 => ViSyscall::CloseCap,
-            16 => ViSyscall::SpawnPinned,
+            16  => ViSyscall::SpawnPinned,
+            420 => ViSyscall::Snapshot,
             8 => ViSyscall::Wait,
             104 => ViSyscall::Yield,
             35 => ViSyscall::SetTimer,

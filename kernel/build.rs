@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    // Emit the Git short SHA as the snapshot invalidation key.
+    // Any git commit changes this value, causing warm-boot snapshots taken before
+    // that commit to be rejected (stale snapshot → cold boot).
+    emit_git_sha();
     // Choose linker script based on target architecture.
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let (ld_script, rerun_path) = match target_arch.as_str() {
@@ -66,6 +70,25 @@ fn main() {
         "cargo:rustc-env=EMBEDDED_OUT_DIR={}",
         embedded_out.display()
     );
+}
+
+/// Emit the git short SHA via cargo:rustc-env for snapshot invalidation.
+/// Falls back to a placeholder ("00000000") when not in a git repository.
+fn emit_git_sha() {
+    // Use vergen-gitcl to read the git SHA; ignore errors gracefully.
+    let git = vergen_gitcl::GitclBuilder::default()
+        .sha(true)
+        .build()
+        .ok();
+    let mut emitter = vergen_gitcl::Emitter::default();
+    if let Some(g) = git {
+        let _ = emitter.add_instructions(&g);
+    }
+    if emitter.emit().is_err() || std::env::var("VERGEN_GIT_SHA").is_err() {
+        // Not a git repo or vergen failed — emit a stable placeholder.
+        // Any non-zero placeholder is fine; it will match itself on rebuild.
+        println!("cargo:rustc-env=VERGEN_GIT_SHA=00000000");
+    }
 }
 
 fn try_strip(tool: &str, path: &PathBuf) -> bool {

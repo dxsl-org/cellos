@@ -1,6 +1,6 @@
 //! Shell AST executor — runs parsed commands, handles pipes and redirects.
 //!
-//! Pipes between cells in ViOS v1.0 are simulated via IPC-based streaming:
+//! Pipes between cells in ViCell v1.0 are simulated via IPC-based streaming:
 //! the first command's output is buffered in a `Vec<u8>`, then fed as stdin
 //! to the next command.  Full zero-copy IPC pipes are deferred to Phase 17a
 //! when the capability pipe primitive lands.
@@ -572,6 +572,22 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         "vcat"    => crate::cmd_fs::cmd_vcat(make_parts(args)),
         "vwrite"  => crate::cmd_fs::cmd_vwrite(make_parts(args)),
         "vappend" => crate::cmd_fs::cmd_vappend(make_parts(args)),
+        // ── Snapshot ────────────────────────────────────────────────────
+        "snapshot" => {
+            ostd::io::println("[shell] writing warm-boot snapshot...");
+            match ostd::syscall::sys_snapshot() {
+                ostd::syscall::SyscallResult::Ok(n) if n > 0 => {
+                    ostd::io::print("[shell] snapshot: wrote ");
+                    ostd::io::print_usize(n);
+                    ostd::io::println(" frames. Reboot for warm boot.");
+                    Ok(())
+                }
+                _ => {
+                    ostd::io::println("[shell] snapshot: failed");
+                    Err(ViError::Unknown)
+                }
+            }
+        }
         // ── System ──────────────────────────────────────────────────────
         "ps"     => crate::commands::cmd_ps(make_parts(args)),
         "pwd"    => crate::cmd_sys::cmd_pwd(make_parts(args)),

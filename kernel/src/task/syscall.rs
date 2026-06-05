@@ -277,6 +277,8 @@ pub enum Syscall {
     StateRestore { key: usize, buf_ptr: usize, buf_len: usize },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
+    /// 420: Snapshot — serialize all allocated physical frames to disk for warm boot.
+    Snapshot,
     /// 500: BlkRead — read one 512-byte sector from the VirtIO block device.
     /// Not in `ViSyscall` enum to preserve `libs/api` stability (raw dispatch).
     BlkRead { sector: u64, buf_ptr: usize },
@@ -1288,6 +1290,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::cell::hotswap::hotswap(target, path)
                 .map_err(|_| SyscallError::Unknown)
         }
+
+        Syscall::Snapshot => {
+            // Cells must be quiesced before calling this (all at yield points).
+            // For MVP: the shell is the only active task while the snapshot runs.
+            match crate::snapshot::serialize_snapshot() {
+                Ok(frame_count) => Ok(frame_count as usize),
+                Err(_) => Err(SyscallError::Unknown),
+            }
+        }
     }
 }
 
@@ -1366,7 +1377,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::StateStash   => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::StateRestore => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::HotSwap   => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
-        
+        ViSyscall::Snapshot  => Syscall::Snapshot,
+
         // Handle non-matching/legacy manually
         _ => match syscall_id {
             // SetTimer (3 in old, ? in ViSyscall)
