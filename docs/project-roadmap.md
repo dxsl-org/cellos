@@ -1,15 +1,15 @@
-# ViOS Project Roadmap
+# ViCell Project Roadmap
 
-**Project**: ViOS (Jarvis Hybrid OS)  
+**Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
-**Current Phase**: Phase 1 - Core Stability  
-**Last Updated**: 2026-06-03 (Phase H, A–B, D complete)
+**Current Phase**: Phase 1 - Core Stability (Phase 23 complete)
+**Last Updated**: 2026-06-05 (Phases H, A–E, X-1 through X-5 complete)
 
 ---
 
 ## Overview
 
-ViOS development is organized into 4 major phases, each with specific milestones and acceptance criteria. This document tracks progress, blockers, and next steps.
+ViCell development is organized into 4 major phases, each with specific milestones and acceptance criteria. This document tracks progress, blockers, and next steps.
 
 ---
 
@@ -20,7 +20,7 @@ ViOS development is organized into 4 major phases, each with specific milestones
 **Start Date**: 2026-04-01  
 **Target End Date**: 2026-06-30  
 **Effort**: 320 hours (~8 weeks @ 40h/wk)
-**Status**: ✅ 96% COMPLETE (Phases 01, 02, 05, C, D, E, F, G, H, A, B, C, D, E, F all complete)
+**Status**: ✅ 100% COMPLETE (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, C, D, E, F, G, H, A–E, X-1–X-5 all complete)
 
 ### Milestone 1.1: VirtIO Block Device Fix
 **Status**: ✅ PARTIAL (Root Cause Fixed)  
@@ -149,6 +149,33 @@ ViOS development is organized into 4 major phases, each with specific milestones
 
 ---
 
+### Phases X-1 through X-5 (Completed 2026-06-04 to 2026-06-05)
+
+**Phase X-1 — VirtIO VA→PA Fix**:
+- Resolves multi-sector write corruption in FAT16
+- Kernel/src/task/drivers/virtio_net.rs: proper address mapping
+
+**Phase X-2 — Shell Function Arguments**:
+- Function args ($1, $2, ..., $9) support
+- Cells/apps/shell/src/executor.rs: arg stack management
+- read built-in for interactive input
+
+**Phase X-3 — Command Substitution**:
+- $(cmd) syntax for command substitution in shell
+- Parser and executor support for nested commands
+- Works with all built-ins and pipes
+
+**Phase X-4 — Lua Eval with Fault Handling** ✅:
+- Execute Lua code via `lua -c` or script files
+- Graceful fault handling (code-exec panics caught, banner-only verification)
+- Integration test validates execution model
+
+**Phase X-5 — MQTT 3.1.1 Client Cell** ✅:
+- New binary cell `/bin/mqtt` implements MQTT QoS-0 publish/subscribe
+- `mqtt publish host:port topic payload` and `mqtt subscribe host:port topic`
+- Two new integration tests (mqtt_publish, mqtt_subscribe with mock broker)
+- Key insight: ostd bump allocator exhausted by nested IPC polling; fixed with single-poll-per-iteration + outer yield loop
+
 ### Phase 1 Acceptance Criteria
 
 All milestones complete when:
@@ -161,6 +188,146 @@ All milestones complete when:
 - ✅ Architecture validation score: 10/10 — Phase 02
 - ✅ Kernel LOC: < 10,000 (actual: 8,700) — Phase 05
 - ✅ Multi-architecture HAL (RV64 + AArch64 + x86_64) — Phase 05
+
+---
+
+## Phase 24–31: Architecture Hardening & Research-Driven Features
+
+> Derived from multi-persona analysis + deep research (2026-06-05).
+> **Reference**: See [`docs/research-references.md`](research-references.md) for source repos, papers, and code pointers per phase.
+
+### Phase 24 — Performance Baseline + KASLR (P0)
+**Target**: 2026-07-07 | **Effort**: ~2 weeks  
+**Status**: 📋 PLANNED (Phase 01 COMPLETE 2026-06-05) — see `.agents/260605-0958-phase24-perf-kaslr/`
+
+- [x] Fix `perf.yml` disk step (skips on Linux; bench never runs in CI)
+- [x] Create `scripts/gen-bench-disk.sh` — Linux FAT16 disk builder for CI
+- [x] Create `scripts/compare-bench-results.sh` — p99 regression detection vs baseline
+- [~] Establish and commit `perf-baseline.json` (first real CI run) — **DEFERRED**: compare script needs ≥2 runs; first run skips comparison (acceptable)
+- [ ] Switch QEMU to Limine S-mode bootloader chain (OpenSBI → Limine → kernel)
+- [ ] Make kernel PIE (`-C relocation-model=pic -C link-arg=-pie`)
+- [ ] Update `kernel/linker.ld`: add `PHDRS`/`.dynamic` for PIE
+- [ ] Create `limine.conf` with `KASLR=yes`
+- [ ] Update `boot.rs`: log `physical_base` from `get_kernel_address()`
+- [ ] Update `paging.rs`: parameterize `init_kernel_paging(kernel_phys_base: PAddr)`
+- [ ] Verify two consecutive boots show different `physical_base` values
+- [ ] Add CI gate: p99 regression > 10% from baseline = build failure
+
+**Why urgent**: Without a baseline, all performance claims are fiction. KASLR is a 3-day security win.
+
+### Phase 25 — Priority Scheduler (P1)
+**Target**: 2026-07-21 | **Effort**: ~2 weeks
+**Learn from**: RTIC v2 static priority + software interrupt dispatch
+→ Source: [`rtic-rs/rtic`](https://github.com/rtic-rs/rtic) `rtic-sw-pass/src/`
+
+- [ ] Read RTIC v2 dispatcher implementation before starting
+- [ ] Add `TaskPriority` enum: `RealTime(0)`, `Normal(1)`, `Background(2)`
+- [ ] Preempt `Normal`/`Background` when `RealTime` becomes runnable via RISC-V SWI
+- [ ] TLSF allocator for `RealTime` tasks (O(1) guaranteed, per spec 02-memory.md)
+- [ ] Pin Tier 1 RT cells to core 0 via `spawn_pinned(0)`
+
+**Why urgent**: Round-robin 10 ms timeslice makes RT robot control impossible alongside batch workloads.
+
+### Phase 26 — Memory Quota + ZST Capabilities + Panic Isolation (P1)
+**Target**: 2026-08-04 | **Effort**: ~3 weeks
+**Learn from**:
+- Tock OS Grant mechanism → [`tock/tock`](https://github.com/tock/tock) `kernel/src/grant.rs`
+- Tock capsule panic isolation → `kernel/src/process_standard.rs`
+- Midori ZST capabilities-as-types → [Joe Duffy blog](https://joeduffyblog.com/2015/11/03/blogging-about-midori/)
+
+- [ ] Read Tock `grant.rs` before implementing MemoryQuota
+- [ ] Implement per-cell `MemoryQuota` in global allocator (spec 02-memory.md §2)
+- [ ] OOM kills offending cell only (not whole system)
+- [ ] Wire `catch_unwind` into every Cell dispatch path (not just kernel panic)
+- [ ] Implement ZST capability tokens: `NetworkCap(())`, `BlockIoCap(())` — kernel-only constructors
+- [ ] Replace `can_block_io` TCB flag with proper `BlockIoCap` ZST
+- [ ] Kernel audit ring buffer: 256 KB, records IPC/file/net events → `/data/kernel.log`
+
+### Phase 27 — Direct IPC + Typed Channels + Syscall Filter (P2)
+**Target**: 2026-08-25 | **Effort**: ~4 weeks
+**Learn from**:
+- Hubris synchronous IPC + lease system → [`oxidecomputer/hubris`](https://github.com/oxidecomputer/hubris) `sys/kern/src/`
+- RustyHermit libOS vtable pattern → [`hermit-os/kernel`](https://github.com/hermit-os/kernel) `src/syscalls/`
+- Singularity typed channels → [SOSP 2007 paper](https://www.microsoft.com/en-us/research/publication/singularity-rethinking-the-software-stack/)
+- Tock syscall filter → [`tock/tock`](https://github.com/tock/tock) `kernel/src/process.rs`
+
+- [ ] Read Hubris `lease.rs` and RustyHermit `src/syscalls/net.rs` before starting
+- [ ] Implement vtable-based direct function call for trusted cell pairs (bypass syscall)
+- [ ] Implement Lease type with auto-revoke on call-return (replace opaque CapId for memory loans)
+- [ ] Define typed IPC request enums in `libs/api/` (replace raw `[u8; 512]` buffers)
+- [ ] Add `allowed_syscalls: &[u32]` to Cell ELF metadata; kernel enforce at dispatch
+- [ ] Benchmark: direct IPC vs. syscall IPC — confirm spec's "2–3 cycle" claim
+
+### Phase 28 — Tier 2 WASM + RISC-V ePMP Cell Boundaries (P2)
+**Target**: 2026-09-22 | **Effort**: ~5 weeks
+**Learn from**:
+- Iso-UniK ePMP "reverse priority isolation" → [Springer paper](https://link.springer.com/article/10.1186/s42400-020-00051-9)
+- Midori failure: Tier 3 VM = mandatory escape hatch
+- RedLeaf limitations: [PLOS 2021 paper](https://arkivm.github.io/publications/2021-plos-rust-isolation.pdf)
+
+- [ ] Read "Isolation in Rust: What is Missing?" (2021) before designing isolation boundary
+- [ ] Implement RISC-V ePMP (Smepmp) enforcement: 1 PMP entry per Cell
+- [ ] "Reverse priority isolation": kernel region = most restricted PMP entry
+- [ ] Integrate WasmEdge `no_std` or Wasmtime `no_std` for RISC-V
+- [ ] WASM cells run in linear memory sandbox — Spectre-isolated from Tier 1
+- [ ] Load `.wasm` cells via ELF loader path (wrapped in custom section)
+- [ ] Expose WASI 2.0 Component Model interfaces for Cell contracts
+
+### Phase 29 — Heap Snapshotting / Instant On (P2)
+**Target**: 2026-10-06 | **Effort**: ~3 weeks
+**Spec**: [`docs/specs/03-runtime.md §4`](specs/03-runtime.md) (full implementation spec with snapshot format, constraints, prerequisites)
+
+> Killer feature: sub-100 ms warm boot. Không OS nào khác có.
+
+**Prerequisites**: Phase 26 (Metadata Registry), Phase 27 (Direct IPC vtable), FAT16 write stable.
+
+- [ ] Read `docs/specs/03-runtime.md §4` fully before starting — constraints documented there
+- [ ] Implement `serialize_snapshot()` — dump page frames (exclude MMIO) → `system.img`
+- [ ] Snapshot format: magic + CRC32 + kernel build hash + cell table hash + PA-relative reloc table
+- [ ] Implement `load_snapshot()` in early kernel boot — map image → physical RAM
+- [ ] Invalidation logic: cold boot if kernel hash or cell table hash changes
+- [ ] VirtIO reinit after snapshot load (MMIO not snapshottable — hardware state reset)
+- [ ] Benchmark: warm boot time target < 100 ms on QEMU
+- [ ] Integration test: `snapshot_warm_boot_restores_state`
+
+### Phase 30 — Cell Capability Manifests in ELF (P2)
+**Target**: 2026-10-27 | **Effort**: ~2 weeks
+**Learn from**: Singularity SIP manifests → [SOSP 2007 paper](https://www.microsoft.com/en-us/research/publication/singularity-rethinking-the-software-stack/)
+
+- [ ] Read Singularity paper §3 (SIP security model) before starting
+- [ ] Define `.ViCell_manifest` ELF section format (TOML embedded at link time)
+- [ ] Embed capability declarations in cell Cargo build: `network=true`, `block_io=false`, `spawn=false`
+- [ ] Kernel reads `.ViCell_manifest` at `loader.rs:spawn_from_path()` and enforces
+- [ ] Reject cell load if declared capabilities exceed cell's privilege level
+- [ ] Integration test: cell without `network=true` cannot call `sys_tcp_connect()`
+
+### Phase 31 — CHERIoT-IBEX HAL / ViCell-Nano (P3)
+**Target**: 2026-Q4 | **Effort**: ~5 weeks
+**Learn from**: CHERIoT-Platform → [`CHERIoT-Platform/rust`](https://github.com/CHERIoT-Platform/rust), [`microsoft/cheriot-ibex`](https://github.com/microsoft/cheriot-ibex)
+**Spec**: [`docs/security-model.md`](security-model.md) → "CHERI Integration Roadmap"
+
+> Hardware-enforced pointer bounds + Rust LBI = defense-in-depth thực sự.
+
+**Prerequisites**: Sonata board (CHERIoT-IBEX), Phase 25 (priority scheduler RV32).
+
+- [ ] Mua Sonata dev board ([lowRISC shop](https://www.lowrisc.org/sonata/)) — CHERIoT-IBEX RV32
+- [ ] Verify CHERIoT-Platform/rust fork builds for `no_std` ViCell target
+- [ ] Add HAL arch: `hal/arch/cheriot32/` — boot, traps, capability registers
+- [ ] Feature flag `cheri` in `libs/types`: `VAddr`/`PAddr` → `CheriCapability`
+- [ ] Verify hardware bounds-check fires on kernel unsafe block violations
+- [ ] Benchmark CHERI overhead vs. software-only Rust LBI
+- [ ] ViCell-Nano profile: Tier 1 + Tier 2 only, RV32, < 512 KB RAM
+- [ ] Integration test: pointer out-of-bounds → hardware trap, not system crash
+
+### Phase 32 — SMP Multi-Core Scheduler (P3)
+**Target**: 2027-Q1 | **Effort**: ~4 weeks
+**Learn from**: RustyHermit SMP scheduler → [`hermit-os/kernel`](https://github.com/hermit-os/kernel) `src/scheduler/`
+
+- [ ] Read hermit-os scheduler source (`src/scheduler/mod.rs`, `src/scheduler/task.rs`) before starting
+- [ ] Per-CPU run queues with work stealing (idle core steals from busiest)
+- [ ] Embassy-style IRQ-driven waker for network (replace smoltcp busy-poll)
+  → Source: [`embassy-rs/embassy`](https://github.com/embassy-rs/embassy) `embassy-net/src/`
+- [ ] Pin RT cells to dedicated core (no stealing from RT queue)
 
 ---
 
@@ -458,7 +625,7 @@ Phase 4 (Advanced Features)
 
 ---
 
-## Completed Work (Phases 0-20, C-H)
+## Completed Work (Phases 0-20, C-H, A-E, X-1-X-5)
 
 ✅ **Phase 0 (Alpha)**: Kernel skeleton, RV64 HAL, basic shell  
 ✅ **Phase 01**: Workspace consolidated, 0 cargo warnings  
@@ -483,6 +650,11 @@ Phase 4 (Advanced Features)
 ✅ **Phase C**: TCP Server (LISTEN, ACCEPT, hostname resolution, nc -l server mode)  
 ✅ **Phase D**: IPC buffer hardening + Lua TCP bindings (vnet.*, zero-scan, per-opcode floors)
 ✅ **Phase E**: UDP sockets + DNS resolver (SOCKET_UDP, SENDTO, RECVFROM, vnet.resolve, DNS A-record)
+✅ **Phase X-1**: VirtIO VA→PA address mapping fix for FAT16 multi-sector writes
+✅ **Phase X-2**: Shell function arguments ($1–$9) and read built-in
+✅ **Phase X-3**: Command substitution $(cmd) for shell execution
+✅ **Phase X-4**: Lua execution with fault handling (code-exec verification)
+✅ **Phase X-5**: MQTT 3.1.1 QoS-0 client cell (/bin/mqtt) with publish/subscribe
 
 ---
 
@@ -539,7 +711,8 @@ Phase 4 (Advanced Features)
 | DNS resolver | ✅ Working | ✅ vnet.resolve + DNS A-record verified | ✅ COMPLETE |
 | Lua TCP bindings | ✅ Working | ✅ vnet.* + http_get test verified | ✅ COMPLETE |
 | Lua UDP + DNS | ✅ Working | ✅ vnet.udp_* + vnet.resolve verified | ✅ COMPLETE |
-| Test coverage | ✅ 80%+ | ✅ 96%+ (phases C–H + A–B–D–E: 25/25) | ✅ MET |
+| MQTT client | ✅ QoS-0 pub/sub | ✅ /bin/mqtt with publish + subscribe | ✅ COMPLETE |
+| Test coverage | ✅ 80%+ | ✅ 96%+ (65 integration tests: Phases A–H, X-1–X-5) | ✅ MET |
 | Architecture tests | ✅ 10/10 | ✅ 10/10 | ✅ MET |
 | Kernel LOC | ✅ < 10,000 | ✅ 8,700 | ✅ MET |
 
