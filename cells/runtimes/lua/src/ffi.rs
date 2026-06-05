@@ -1,6 +1,6 @@
 //! Lua 5.4 C FFI bindings.
 //!
-//! Only the minimal subset needed by the ViOS Lua cell.  See lua.h and
+//! Only the minimal subset needed by the ViCell Lua cell.  See lua.h and
 //! lauxlib.h in `src/c/src/` for the full API.
 
 use core::ffi::{c_char, c_int};
@@ -126,6 +126,12 @@ extern "C" {
     /// `t[k] = v` where `t` is at stack index `idx` and `v` is at the top
     /// (popped). `k` is a NUL-terminated C string.
     pub fn lua_setfield(L: *mut LuaState, idx: c_int, k: *const c_char);
+
+    /// `t[n] = v` where `t` is the table at `idx` and `v` is at the top (popped).
+    ///
+    /// `n` is a `lua_Integer` (i64) key, used for 1-indexed array construction.
+    /// Bypasses `__newindex` metamethod — use for raw table writes.
+    pub fn lua_rawseti(L: *mut LuaState, idx: c_int, n: i64);
 }
 
 /// Convenience: pop `n` items from the stack.

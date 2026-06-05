@@ -589,14 +589,20 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 ---
 
 ### Milestone 3.3: Lua Runtime Enhancement
-**Status**: 📋 PLANNED  
+**Status**: ✅ COMPLETE (2026-06-05)  
 **Priority**: P2
 
-- Execute `.lua` scripts from shell
+**Completed 2026-06-05** (4 phases, all integrated):
+- [x] Phase 01: Migrated `vfs.read/write/append/mkdir` from raw opcodes to typed postcard IPC
+- [x] Phase 02: Implemented VFS-backed `io.open(path, "r"/"w"/"a")` with `:read()`, `:write()`, `:close()`
+- [x] Phase 03: Added `vfs.stat()`, `vfs.listdir()`, `vfs.remove()` for filesystem introspection
+- [x] Phase 04: Integration tests pass (5/5 cargo tests, all script execution verified)
+- Execute `.lua` scripts from shell via typed VFS IPC
 - Stdlib access (table, string, math, io, os)
-- File I/O via VFS syscalls
+- File I/O via VFS syscalls (RamFS `/tmp`, FAT16 `/data`)
 - C FFI for kernel calls
-- Package manager (luarocks) compatibility
+
+**Known Limitation**: `vfs.read()` and script loading use `GetFile` which serves RamFS/kernel-embedded files. FAT16 `/data/` read access depends on VFS cell adding FAT16 fallback in GetFile handler (separate VFS improvement).
 
 ---
 

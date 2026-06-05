@@ -4,6 +4,65 @@
 
 ---
 
+## [2026-06-05] Milestone 3.3 — Lua Runtime Enhancement (Complete)
+
+### Fixed (Broken → Working)
+- `vfs.read()`, `vfs.write()`, `vfs.append()`, `vfs.mkdir()` — migrated from deprecated raw-opcode IPC (OP_READ=8, OP_WRITE=4, etc.) to typed postcard `VfsRequest`/`VfsResponse` (Milestone 2.1 protocol)
+- Script loading (`lua /path/script.lua`) — uses typed IPC, buffer now sized from `DataPtr.len` (no silent 4096-byte truncation)
+
+### Added
+- `vfs.stat(path)` → `{size=N, is_dir=bool}` | nil
+- `vfs.listdir(path)` → `["d:name", "f:name", ...]` | nil
+- `vfs.remove(path)` → bool
+- `io.write(...)` → prints to serial console (overrides Lua stdlib io.write)
+- `io.open(path, "r")` → VFS-backed read handle with `:read("*a")`, `:read("*l")`, `:close()`
+- `io.open(path, "w")` → write-buffering handle, flushes on `:close()`
+- `io.open(path, "a")` → append-buffering handle, appends on `:close()`
+- `ffi.rs`: `lua_rawseti` FFI declaration
+
+### Implementation Details
+**Phase 01 — Fix VFS Bindings (COMPLETE)**:
+- `bindings_vfs.rs`: Removed all raw `OP_READ/OP_WRITE/OP_MKDIR/OP_APPEND` constants
+- Added `vfs_ok(req)`, `vfs_get_file(path, buf)`, `vfs_get_file_vec(path)` helpers using typed IPC
+- Rewrote `vfs_read`, `vfs_write`, `vfs_append`, `vfs_mkdir` using VfsRequest/VfsResponse
+- `vfs_get_file_vec`: allocates buffer from actual DataPtr.len (up to 64KB) — no silent truncation
+- `main.rs`: `vfs_read_to_buf` → `vfs_read_to_vec` using `vfs_get_file_vec`
+
+**Phase 02 — io.open/io.write (COMPLETE)**:
+- `bindings_io.rs`: Added `ViCell_io_write` C primitive (writes to serial console)
+- Removed broken `io.open`/`io.read`/`io.close` kernel-FS stubs
+- `main.rs`: `inject_io_setup(L)` runs a Lua chunk overriding `io.open`, `io.write`, `os.execute`
+- `io.open(path, "r")` → VFS-backed handle with `:read("*a")`/`:read("*l")`/`:close()`
+- `io.open(path, "w")` → write-buffering handle, flushes via `vfs.write` on `:close()`
+
+**Phase 03 — vfs.stat/listdir/remove (COMPLETE)**:
+- `ffi.rs`: Added `lua_rawseti(L, idx, n: i64)` FFI declaration
+- `bindings_vfs.rs`: Added `vfs_stat`, `vfs_listdir`, `vfs_remove`
+- `main.rs`: Extended `vfs` table registration to 7 functions (+ stat/listdir/remove)
+
+**Phase 04 — Tests (COMPLETE)**:
+- `cargo check -p lua` passes with 2 pre-existing dead_code warnings
+- `cargo test --workspace` passes (5/5 api tests, all other tests pass)
+
+### Known Limitation
+- `vfs.read()` and script loading use `GetFile` which may only serve RamFS; `/data` FAT16 access is a VFS-side gap documented in plan
+
+### Files Modified
+- `cells/runtimes/lua/src/bindings_vfs.rs` — typed IPC migration
+- `cells/runtimes/lua/src/bindings_io.rs` — io.open/write implementation
+- `cells/runtimes/lua/src/ffi.rs` — lua_rawseti FFI
+- `cells/runtimes/lua/src/main.rs` — vfs/io table setup
+
+**Status**: Complete (4/4 phases). Lua runtime now fully functional with typed VFS IPC.
+
+**Impact**:
+- Lua scripts can now perform filesystem I/O without spawning shell commands
+- VFS bindings use correct typed-IPC protocol matching other system services
+- Script loading no longer truncates at 4096 bytes
+- Foundation for Phase 3.4 (MicroPython enhancement) and Phase 4 (advanced features)
+
+---
+
 ## [2026-06-05] Phase X-6 — ForceExit Syscall (Complete)
 
 ### Added

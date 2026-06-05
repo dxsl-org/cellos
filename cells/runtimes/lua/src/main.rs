@@ -11,25 +11,95 @@ mod bindings_vfs;
 mod ffi;
 mod repl_session;
 
-/// Read up to 4096 bytes from a VFS path via OP_READ IPC.
+/// Read file content from VFS into an owned `Vec<u8>`.
 ///
-/// Returns byte count (zero-scan from reply; sys_recv returns sender_id not length).
-/// Matches `read_file_vfs` in cells/apps/shell/src/cmd_fs.rs.
-fn vfs_read_to_buf(path: &str, buf: &mut [u8]) -> usize {
-    const VFS_ENDPOINT: usize = 3;
-    const OP_READ: u8 = 8;
-    let pb = path.as_bytes();
-    let pl = pb.len().min(253) as u8;
-    let mut req = [0u8; 256];
-    req[0] = OP_READ;
-    req[1] = pl;
-    req[2..2 + pl as usize].copy_from_slice(&pb[..pl as usize]);
-    ostd::syscall::sys_send(VFS_ENDPOINT, &req[..2 + pl as usize]);
-    match ostd::syscall::sys_recv(0, buf) {
-        ostd::syscall::SyscallResult::Ok(_) => {
-            buf.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0)
-        }
-        _ => 0,
+/// Uses `vfs_get_file_vec` so the buffer is sized to the actual file length
+/// (up to 64 KB), avoiding silent truncation at a fixed 4096-byte cap.
+fn vfs_read_to_vec(path: &str) -> alloc::vec::Vec<u8> {
+    bindings_vfs::vfs_get_file_vec(path)
+}
+
+/// Inject Lua-level `io.open`, `io.write`, and `os.execute` wrappers.
+///
+/// These wrappers are written in Lua so they can use tables, closures, and method
+/// syntax without the complexity of Lua metatable registration from C.
+/// `ViCell_io_write` (C primitive) and `vfs.*` must already be registered.
+///
+/// # Safety
+/// `L` must be a valid, non-null Lua state with `vnet`, `vfs`, and
+/// `ViCell_io_write` already registered as globals.
+#[allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
+unsafe fn inject_io_setup(L: *mut ffi::LuaState) {
+    // Single-quoted strings throughout to avoid escaping double-quotes in Rust.
+    // string.char(10) produces the newline character for line-splitting.
+    const SETUP: &[u8] = b"
+io.write = function(...)
+  for _, v in ipairs({...}) do ViCell_io_write(tostring(v)) end
+end
+os.execute = function(cmd)
+  if cmd == nil then return true end
+  return ViCell_os_execute(cmd)
+end
+io.open = function(path, mode)
+  mode = mode or 'r'
+  if mode == 'r' or mode == 'rb' then
+    local d = vfs.read(path)
+    if d == nil then return nil, 'cannot open: ' .. tostring(path) end
+    local h = {_d = d, _p = 1}
+    local NL = string.char(10)
+    function h:read(f)
+      f = f or '*l'
+      if f == '*a' or f == '*all' then
+        self._p = #self._d + 1
+        return self._d
+      end
+      local s, e = string.find(self._d, NL, self._p, true)
+      if s then
+        local line = string.sub(self._d, self._p, s - 1)
+        self._p = e + 1
+        return line
+      elseif self._p <= #self._d then
+        local line = string.sub(self._d, self._p)
+        self._p = #self._d + 1
+        return line
+      end
+      return nil
+    end
+    function h:close() return true end
+    return h
+  elseif mode == 'w' or mode == 'wb' then
+    local h = {_path = path, _buf = ''}
+    function h:write(...)
+      for _, v in ipairs({...}) do self._buf = self._buf .. tostring(v) end
+      return self
+    end
+    function h:close() vfs.write(self._path, self._buf); return true end
+    return h
+  elseif mode == 'a' then
+    local h = {_path = path, _buf = ''}
+    function h:write(...)
+      for _, v in ipairs({...}) do self._buf = self._buf .. tostring(v) end
+      return self
+    end
+    function h:close() vfs.append(self._path, self._buf); return true end
+    return h
+  end
+  return nil, 'unsupported mode: ' .. tostring(mode)
+end
+\0";
+    // SAFETY: SETUP is a valid NUL-terminated Lua chunk; L is non-null.
+    let rc = unsafe {
+        ffi::luaL_loadbufferx(
+            L,
+            SETUP.as_ptr() as *const core::ffi::c_char,
+            SETUP.len() - 1, // exclude NUL
+            c"io_setup".as_ptr(),
+            core::ptr::null(),
+        )
+    };
+    if rc == ffi::LUA_OK {
+        // SAFETY: L is non-null; pcallk executes the loaded chunk.
+        unsafe { ffi::lua_pcallk(L, 0, 0, 0, 0, core::ptr::null_mut()) };
     }
 }
 
@@ -79,10 +149,11 @@ extern "C" fn main() -> usize {
         ffi::lua_setglobal(L, c"vnet".as_ptr());
     }
 
-    // Register the `vfs` table (read/write/append/mkdir). Net stack delta = 0.
+    // Register the `vfs` table (read/write/append/mkdir/stat/listdir/remove).
+    // Net stack delta = 0.
     // SAFETY: L is non-null; binding fns uphold the lua_CFunction contract.
     unsafe {
-        ffi::lua_createtable(L, 0, 4);
+        ffi::lua_createtable(L, 0, 7);
         ffi::lua_pushcclosure(L, bindings_vfs::vfs_read, 0);
         ffi::lua_setfield(L, -2, c"read".as_ptr());
         ffi::lua_pushcclosure(L, bindings_vfs::vfs_write, 0);
@@ -91,8 +162,26 @@ extern "C" fn main() -> usize {
         ffi::lua_setfield(L, -2, c"append".as_ptr());
         ffi::lua_pushcclosure(L, bindings_vfs::vfs_mkdir, 0);
         ffi::lua_setfield(L, -2, c"mkdir".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_vfs::vfs_stat, 0);
+        ffi::lua_setfield(L, -2, c"stat".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_vfs::vfs_listdir, 0);
+        ffi::lua_setfield(L, -2, c"listdir".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_vfs::vfs_remove, 0);
+        ffi::lua_setfield(L, -2, c"remove".as_ptr());
         ffi::lua_setglobal(L, c"vfs".as_ptr());
     }
+
+    // Register ViCell_io_write and ViCell_os_execute as Lua globals, then inject
+    // the Lua-level io.open/io.write/os.execute wrappers.
+    // SAFETY: L is non-null; binding fns uphold the lua_CFunction contract.
+    unsafe {
+        ffi::lua_pushcclosure(L, bindings_io::ViCell_io_write, 0);
+        ffi::lua_setglobal(L, c"ViCell_io_write".as_ptr());
+        ffi::lua_pushcclosure(L, bindings_io::ViCell_os_execute, 0);
+        ffi::lua_setglobal(L, c"ViCell_os_execute".as_ptr());
+    }
+    // SAFETY: L is non-null; vfs and ViCell_io_write are already registered.
+    unsafe { inject_io_setup(L) };
 
     // Use the args captured before initialisation (avoids the ARGV_STASH_KEY race).
     let args = core::str::from_utf8(&argbuf_early[..args_early_len]).unwrap_or("");
@@ -118,9 +207,8 @@ extern "C" fn main() -> usize {
     // parks before falling through). Empty args falls through to the REPL.
     if !args.is_empty() {
         let path = args.trim();
-        let mut file_buf = alloc::vec![0u8; 4096];
-        let n = vfs_read_to_buf(path, &mut file_buf);
-        if n == 0 {
+        let file_buf = vfs_read_to_vec(path);
+        if file_buf.is_empty() {
             ostd::io::print("lua: cannot open '");
             ostd::io::print(path);
             ostd::io::println("'");
@@ -129,15 +217,13 @@ extern "C" fn main() -> usize {
             let mut chunk_name = alloc::vec![b'@'; 1 + path.len() + 1];
             chunk_name[1..1 + path.len()].copy_from_slice(path.as_bytes());
             *chunk_name.last_mut().unwrap() = 0;
-            // SAFETY: L is valid; file_buf[..n] is valid Lua source bytes;
+            // SAFETY: L is valid; file_buf contains valid Lua source bytes;
             // chunk_name is NUL-terminated and outlives the pcall.
-            // luaL_loadbuffer in lua.h is the macro luaL_loadbufferx(L,s,sz,n,NULL);
-            // we bind the real symbol and pass null for the mode (text + binary).
             let rc = unsafe {
                 ffi::luaL_loadbufferx(
                     L,
                     file_buf.as_ptr() as *const core::ffi::c_char,
-                    n,
+                    file_buf.len(),
                     chunk_name.as_ptr() as *const core::ffi::c_char,
                     core::ptr::null(),
                 )
@@ -165,7 +251,7 @@ extern "C" fn main() -> usize {
     }
 
     // No `-e`: interactive REPL (multi-line, history, Ctrl+C/D).
-    ostd::io::println("Lua 5.4 on ViOS  (Ctrl+D to exit)");
+    ostd::io::println("Lua 5.4 on ViCell  (Ctrl+D to exit)");
     // SAFETY: L is non-null and valid; run_repl drives the full REPL loop.
     unsafe { repl_session::run_repl(L); }
 
