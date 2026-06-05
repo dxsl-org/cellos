@@ -41,6 +41,11 @@ pub enum VfsRequest<'a> {
     Unlink(&'a str),
     /// Remove a directory tree recursively.
     RmdirRecursive(&'a str),
+    /// Start a non-blocking file read.  Returns `PendingHandle(id)` immediately;
+    /// call `Poll { handle: id }` to retrieve data when ready.
+    ReadAsync { path: &'a str },
+    /// Poll a pending read for completion.
+    Poll { handle: u32 },
 }
 
 /// Responses from the VFS service.
@@ -57,6 +62,10 @@ pub enum VfsResponse<'a> {
     Ok,
     /// Error — opaque error code (`types::ViError` discriminant).
     Err(u8),
+    /// Async read accepted; poll this handle for completion.
+    PendingHandle(u32),
+    /// Read still in progress — call Poll again after yielding.
+    Pending,
 }
 
 // ── Network service ───────────────────────────────────────────────────────────

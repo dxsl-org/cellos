@@ -39,6 +39,7 @@ members = [
     "cells/apps/init",
     "cells/apps/shell",
     "cells/apps/bench",
+    "cells/apps/vfs-test",
     "cells/apps/wasm",
     "cells/apps/hello",
     "cells/apps/utils",

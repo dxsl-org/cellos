@@ -31,7 +31,7 @@ impl fatfs::Read for BlockStream {
         let sector = self.pos / SECTOR_SIZE;
         let off    = (self.pos % SECTOR_SIZE) as usize;
         // Stack-allocated sector buffer.  VirtIO DMA requires identity-mapped
-        // buffers; stack pages ARE identity-mapped in ViOS SAS.  Phase X-1
+        // buffers; stack pages ARE identity-mapped in ViCell SAS.  Phase X-1
         // increased STACK_PAGES to 64 (256 KB) so the deep fatfs nesting
         // during recursive directory removal no longer overflows the stack.
         let mut sec = [0u8; 512];

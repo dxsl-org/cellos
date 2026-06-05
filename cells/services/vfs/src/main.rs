@@ -6,16 +6,20 @@ extern crate driver_disk;
 
 use api::hotswap::ViStateTransfer;
 
+mod access;
 mod block_stream;
 mod handle_table;
 mod mount;
+mod pending;
 mod quota;
 
+use access::AccessTable;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use handle_table::HandleTable;
 use mount::MountTable;
+use pending::PendingTable;
 use quota::QuotaTracker;
 use ostd::io::println;
 use ostd::prelude::*;
@@ -49,12 +53,13 @@ impl RamFile {
     }
 }
 
-#[allow(dead_code)] // reason: handle/mount/quota fields used when write path is wired
 pub struct VfsManager {
     root:    Box<RamFile>,
     handles: HandleTable,
     mounts:  MountTable,
-    quota:   QuotaTracker,
+    pub quota:   QuotaTracker,
+    pub access:  AccessTable,
+    pub pending: PendingTable,
 }
 
 impl VfsManager {
@@ -78,6 +83,8 @@ impl VfsManager {
             handles: HandleTable::new(),
             mounts:  MountTable::new(),
             quota:   QuotaTracker::new(),
+            access:  AccessTable::new(),
+            pending: PendingTable::new(),
         }
     }
 
@@ -96,18 +103,27 @@ impl VfsManager {
         Some((n.data.as_ptr() as usize, n.data.len()))
     }
 
+    /// List directory entries into `out` as newline-separated lines.
+    ///
+    /// Each entry is prefixed with `d:` (directory) or `f:` (file) so callers
+    /// can distinguish type without a separate Stat call.  RamFS only — call
+    /// `list_fat16_dir` for `/data/` paths.
     fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
         let node = match self.find_node(path) {
             Some(n) if n.is_dir => n,
             _ => return 0,
         };
         let mut pos = 0;
-        for name in node.children.keys() {
-            let b = name.as_bytes();
-            if pos + b.len() + 1 > out.len() { break; }
-            out[pos..pos + b.len()].copy_from_slice(b);
-            out[pos + b.len()] = b'\n';
-            pos += b.len() + 1;
+        for (name, child) in node.children.iter() {
+            // Emit "d:name\n" for dirs, "f:name\n" for files.
+            let prefix: &[u8] = if child.is_dir { b"d:" } else { b"f:" };
+            let name_b = name.as_bytes();
+            let entry_len = prefix.len() + name_b.len() + 1; // +1 for '\n'
+            if pos + entry_len > out.len() { break; }
+            out[pos..pos + 2].copy_from_slice(prefix);
+            out[pos + 2..pos + 2 + name_b.len()].copy_from_slice(name_b);
+            out[pos + 2 + name_b.len()] = b'\n';
+            pos += entry_len;
         }
         pos
     }
@@ -329,9 +345,88 @@ fn read_fat16(fs: Option<&DataFs>, path: &str, sender: usize) {
     ostd::syscall::sys_send(sender, &resp[..total]);
 }
 
+/// Read a file into an owned Vec for async handle storage.
+fn read_file_to_vec(fat_fs: Option<&DataFs>, vfs: &VfsManager, path: &str) -> alloc::vec::Vec<u8> {
+    if path.starts_with("/data/") {
+        use fatfs::Read as _;
+        let fs = match fat_fs { Some(f) => f, None => return alloc::vec![] };
+        let rel = match path.strip_prefix("/data/") {
+            Some(n) if !n.is_empty() => n,
+            _ => return alloc::vec![],
+        };
+        let mut file = match fs.root_dir().open_file(rel) {
+            Ok(f) => f,
+            Err(_) => return alloc::vec![],
+        };
+        let mut buf = alloc::vec![0u8; 4096];
+        let mut result = alloc::vec::Vec::new();
+        loop {
+            match file.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => result.extend_from_slice(&buf[..n]),
+                Err(_) => break,
+            }
+        }
+        result
+    } else {
+        vfs.get_file_data(path).map(|d| d.to_vec()).unwrap_or_default()
+    }
+}
+
+/// List entries of a FAT16 directory at `path` into `out`.
+///
+/// Emits `d:name\n` for sub-directories and `f:name\n` for files.
+/// `.` and `..` are skipped.  Returns the number of bytes written.
+fn list_fat16_dir(fs: Option<&DataFs>, path: &str, out: &mut [u8]) -> usize {
+    let fs = match fs { Some(f) => f, None => return 0 };
+    // Strip "/data/" prefix; empty rel = root of FAT16 volume.
+    let rel = path.strip_prefix("/data/").unwrap_or("");
+    let dir = if rel.is_empty() {
+        fs.root_dir()
+    } else {
+        match fs.root_dir().open_dir(rel) {
+            Ok(d) => d,
+            Err(_) => return 0,
+        }
+    };
+
+    let mut pos = 0;
+    for entry in dir.iter() {
+        let e = match entry { Ok(e) => e, Err(_) => break };
+        let name = e.file_name();
+        if name == "." || name == ".." { continue; }
+        let prefix: &[u8] = if e.is_dir() { b"d:" } else { b"f:" };
+        let name_b = name.as_bytes();
+        let entry_len = 2 + name_b.len() + 1;
+        if pos + entry_len > out.len() { break; }
+        out[pos..pos + 2].copy_from_slice(prefix);
+        out[pos + 2..pos + 2 + name_b.len()].copy_from_slice(name_b);
+        out[pos + 2 + name_b.len()] = b'\n';
+        pos += entry_len;
+    }
+    pos
+}
+
+/// Return the size of a FAT16 file at `path` for quota accounting.
+/// Returns 0 if the file does not exist or the filesystem is unavailable.
+fn stat_fat16_size(fs: Option<&DataFs>, path: &str) -> u64 {
+    use fatfs::Seek as _;
+    let fs = match fs { Some(f) => f, None => return 0 };
+    let rel = match path.strip_prefix("/data/") {
+        Some(n) if !n.is_empty() => n,
+        _ => return 0,
+    };
+    let mut file = match fs.root_dir().open_file(rel) {
+        Ok(f) => f,
+        Err(_) => return 0,
+    };
+    // Seek to end to determine file size.
+    file.seek(fatfs::SeekFrom::End(0)).map(|pos| pos as u64).unwrap_or(0)
+}
+
 /// Remove `/data/[sub/]NAME` where NAME is a regular FILE. Returns false if the
 /// entry is a directory or does not exist (use `rmdir_fat16` for directories).
-/// Phase H: `open_file` succeeds only for files in fatfs — acts as the type guard.
+/// `open_file` succeeds only for files in fatfs — acts as the type guard.
 fn unlink_fat16(fs: Option<&DataFs>, path: &str) -> bool {
     let fs  = match fs { Some(f) => f, None => return false };
     let rel = match path.strip_prefix("/data/") {
@@ -500,12 +595,15 @@ pub fn main() {
                             }
                         }
                         api::ipc::VfsRequest::ListDir(p) => {
-                            let mut tmp = [0u8; 480];
-                            let n = vfs.list_dir(p, &mut tmp);
-                            resp_buf[..n].copy_from_slice(&tmp[..n]);
-                            // Encode raw bytes as VfsResponse::Data — borrows resp_buf.
-                            // The encode happens inside the lock; sys_send happens
-                            // outside (lock released at end of the enclosing block).
+                            // Route /data paths through FAT16 listing; others through RamFS.
+                            let n = if p == "/data" || p.starts_with("/data/") {
+                                list_fat16_dir(fat_fs.as_ref(), p, &mut resp_buf)
+                            } else {
+                                let mut tmp = [0u8; 480];
+                                let n = vfs.list_dir(p, &mut tmp);
+                                resp_buf[..n].copy_from_slice(&tmp[..n]);
+                                n
+                            };
                             api::ipc::VfsResponse::Data(&resp_buf[..n])
                         }
                         api::ipc::VfsRequest::Stat(p) => {
@@ -519,30 +617,78 @@ pub fn main() {
                             }
                         }
                         api::ipc::VfsRequest::Write { path, content } => {
-                            let ok = if path.starts_with("/data/") {
-                                write_fat16(fat_fs.as_ref(), path, content)
-                            } else if path.starts_with("/tmp/") {
-                                vfs.write_file(path, content)
-                            } else { false };
-                            if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+                            let owner = types::CellId(sender as u64);
+                            // Access check: only authorized cells may write to this path.
+                            if !vfs.access.can_write(owner, path) {
+                                api::ipc::VfsResponse::Err(3) // 3 = PermissionDenied
+                            } else {
+                                // Capture size of any existing file to release its quota share.
+                                // Overwriting an existing file should charge the delta, not the
+                                // full new size — otherwise repeated overwrites inflate usage.
+                                let old_size = if path.starts_with("/data/") {
+                                    stat_fat16_size(fat_fs.as_ref(), path)
+                                } else {
+                                    vfs.get_file_data(path).map(|d| d.len() as u64).unwrap_or(0)
+                                };
+                                let new_size = content.len() as u64;
+                                // Net quota delta: may be negative (file shrunk) or positive.
+                                let net_charge = new_size.saturating_sub(old_size);
+                                if net_charge > 0 && !vfs.quota.can_charge(owner, net_charge) {
+                                    api::ipc::VfsResponse::Err(2) // 2 = quota exceeded
+                                } else {
+                                    let ok = if path.starts_with("/data/") {
+                                        write_fat16(fat_fs.as_ref(), path, content)
+                                    } else if path.starts_with("/tmp/") {
+                                        vfs.write_file(path, content)
+                                    } else { false };
+                                    if ok {
+                                        // Release old bytes and charge new size.
+                                        vfs.quota.release(owner, old_size);
+                                        let _ = vfs.quota.charge(owner, new_size);
+                                        api::ipc::VfsResponse::Ok
+                                    } else {
+                                        api::ipc::VfsResponse::Err(1)
+                                    }
+                                }
+                            }
                         }
                         api::ipc::VfsRequest::Append { path, content } => {
-                            let ok = if path.starts_with("/data/") {
-                                append_fat16(fat_fs.as_ref(), path, content)
-                            } else if path.starts_with("/tmp/") {
-                                let mut data = vfs.get_file_data(path)
-                                    .map(|d| d.to_vec())
-                                    .unwrap_or_default();
-                                data.extend_from_slice(content);
-                                vfs.write_file(path, &data)
-                            } else { false };
-                            if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+                            let owner = types::CellId(sender as u64);
+                            if !vfs.access.can_write(owner, path) {
+                                api::ipc::VfsResponse::Err(3)
+                            } else {
+                            let append_len = content.len() as u64;
+                            if !vfs.quota.can_charge(owner, append_len) {
+                                api::ipc::VfsResponse::Err(2) // quota exceeded
+                            } else {
+                                let ok = if path.starts_with("/data/") {
+                                    append_fat16(fat_fs.as_ref(), path, content)
+                                } else if path.starts_with("/tmp/") {
+                                    let mut data = vfs.get_file_data(path)
+                                        .map(|d| d.to_vec())
+                                        .unwrap_or_default();
+                                    data.extend_from_slice(content);
+                                    vfs.write_file(path, &data)
+                                } else { false };
+                                if ok {
+                                    let _ = vfs.quota.charge(owner, append_len);
+                                    api::ipc::VfsResponse::Ok
+                                } else {
+                                    api::ipc::VfsResponse::Err(1)
+                                }
+                            }
+                            } // close access can_write else
                         }
                         api::ipc::VfsRequest::Mkdir(p) => {
-                            let ok = if p.starts_with("/data/") {
-                                fat16_mkdir(fat_fs.as_ref(), p)
-                            } else { vfs.mkdir(p) };
-                            if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+                            let owner = types::CellId(sender as u64);
+                            if !vfs.access.can_write(owner, p) {
+                                api::ipc::VfsResponse::Err(3)
+                            } else {
+                                let ok = if p.starts_with("/data/") {
+                                    fat16_mkdir(fat_fs.as_ref(), p)
+                                } else { vfs.mkdir(p) };
+                                if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+                            }
                         }
                         api::ipc::VfsRequest::Rmdir(p) => {
                             // Verifies the target IS a directory — POSIX ENOTDIR semantics.
@@ -552,15 +698,49 @@ pub fn main() {
                             if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
                         }
                         api::ipc::VfsRequest::Unlink(p) => {
+                            // Capture file size before deletion for quota release.
+                            let file_size = if p.starts_with("/data/") {
+                                stat_fat16_size(fat_fs.as_ref(), p)
+                            } else {
+                                vfs.get_file_data(p).map(|d| d.len() as u64).unwrap_or(0)
+                            };
                             let ok = if p.starts_with("/data/") {
                                 unlink_fat16(fat_fs.as_ref(), p)
                             } else { vfs.unlink(p) };
-                            if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+                            if ok {
+                                // Release the quota that was charged when the file was written.
+                                let owner = types::CellId(sender as u64);
+                                vfs.quota.release(owner, file_size);
+                                api::ipc::VfsResponse::Ok
+                            } else {
+                                api::ipc::VfsResponse::Err(1)
+                            }
                         }
                         api::ipc::VfsRequest::RmdirRecursive(p) => {
                             // Recursive delete only supported on the persistent FAT16 volume.
                             let ok = p.starts_with("/data/") && rmdir_recursive_fat16(fat_fs.as_ref(), p);
                             if ok { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+                        }
+
+                        api::ipc::VfsRequest::ReadAsync { path } => {
+                            // Read file data synchronously (disk is still blocking in this backend).
+                            // Store under a handle and return immediately — caller polls.
+                            let data = read_file_to_vec(fat_fs.as_ref(), vfs, path);
+                            let handle = vfs.pending.insert(data);
+                            api::ipc::VfsResponse::PendingHandle(handle)
+                        }
+
+                        api::ipc::VfsRequest::Poll { handle } => {
+                            // With a synchronous backend data is always ready on first poll.
+                            match vfs.pending.poll(handle) {
+                                Some(data) => {
+                                    // Copy into resp_buf (limited to buffer size).
+                                    let n = data.len().min(resp_buf.len());
+                                    resp_buf[..n].copy_from_slice(&data[..n]);
+                                    api::ipc::VfsResponse::Data(&resp_buf[..n])
+                                }
+                                None => api::ipc::VfsResponse::Err(4), // 4 = stale/unknown handle
+                            }
                         }
                     },
                     Err(_) => api::ipc::VfsResponse::Err(0xFF), // malformed request

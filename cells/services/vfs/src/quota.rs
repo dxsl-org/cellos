@@ -1,4 +1,3 @@
-#![allow(dead_code)] // reason: write path wired in full VirtIO-FAT phase
 //! Per-cell disk quota enforcement for the VFS service.
 //!
 //! Phase 13 tracks bytes-on-disk per `CellId` and rejects writes that would
@@ -20,6 +19,15 @@ pub struct QuotaTracker {
 impl QuotaTracker {
     pub fn new() -> Self {
         Self { used: BTreeMap::new(), limit: DEFAULT_QUOTA_BYTES }
+    }
+
+    /// Check whether `owner` can afford `bytes` without exceeding the quota.
+    ///
+    /// Does not mutate state — use before attempting the write, then call `charge`
+    /// only if the actual disk write succeeds.
+    pub fn can_charge(&self, owner: CellId, bytes: u64) -> bool {
+        let used = self.used.get(&owner.0).copied().unwrap_or(0);
+        used.saturating_add(bytes) <= self.limit
     }
 
     /// Charge `bytes` to `owner`.  Returns `Err(PermissionDenied)` if quota exceeded.

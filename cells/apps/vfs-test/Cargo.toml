@@ -1,0 +1,13 @@
+[package]
+name = "app-vfs-test"
+version = "0.2.0"
+edition = "2021"
+
+[[bin]]
+name = "vfs-test"
+path = "src/main.rs"
+
+[dependencies]
+types = { path = "../../../libs/types" }
+api   = { path = "../../../libs/api" }
+ostd  = { path = "../../../libs/ostd" }
