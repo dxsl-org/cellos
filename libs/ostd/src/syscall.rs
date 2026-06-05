@@ -122,6 +122,24 @@ pub fn sys_exit(code: usize) -> ! {
     }
 }
 
+/// Force-terminate another task by its TID.
+///
+/// Non-blocking: returns immediately to the caller.  The kernel removes the
+/// target from the scheduler, unblocks any tasks stuck sending to it, and
+/// releases its caps and quota.
+///
+/// Requires `SpawnCap` on the caller.  System service cells (`block_io_cap` /
+/// `network_cap` holders) are rejected — use hot-swap to replace them safely.
+///
+/// # Errors
+/// Returns `Err` when: caller lacks `SpawnCap`, target is a system cell,
+/// TID equals caller, or TID is not found.  If the target self-exited between
+/// the check and cleanup, returns `Ok(0)` (task is already gone).
+pub fn sys_force_exit(tid: usize) -> SyscallResult {
+    let ret = unsafe { syscall(ViSyscall::ForceExit, tid, 0, 0, 0) };
+    if ret == 0 { SyscallResult::Ok(0) } else { SyscallResult::Err(SyscallError::Unknown) }
+}
+
 pub fn sys_exec(path: &str) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::Exec, path.as_ptr() as usize, path.len(), 0, 0);

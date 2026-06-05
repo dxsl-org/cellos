@@ -17,6 +17,10 @@ pub enum ViSyscall {
 
     // === Process Management (10-49) ===
     Exit = 60, // Linux compat usually, but we define our own space
+    /// Force-terminate another task by TID.  Non-blocking: caller continues.
+    /// Requires `SpawnCap` on caller; rejected on system cells (block_io/network_cap).
+    /// ABI: a0 = target_tid → 0 on success, usize::MAX on error.
+    ForceExit = 61,
     Spawn = 5,
     Exec = 6,          // Deprecated/Legacy
     SpawnFromMem = 10, // New Spawn from Memory (Struct based)
@@ -154,9 +158,10 @@ impl ViSyscall {
             Self::Exec          => Some(35),
             // Snapshot: privileged warm-boot operation; reuses HotSwap bit (SpawnCap required).
             Self::Snapshot      => Some(32),
-            // Yield and Exit are always permitted — a Cell must be able to
-            // yield the CPU and exit cleanly regardless of its allowlist.
-            Self::Yield | Self::Exit | Self::Unknown => None,
+            // Yield, Exit, and ForceExit are always permitted — a Cell must be able
+            // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
+            // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
+            Self::Yield | Self::Exit | Self::ForceExit | Self::Unknown => None,
         }
     }
 }
@@ -170,6 +175,7 @@ impl From<usize> for ViSyscall {
             2 => ViSyscall::Call,
             3 => ViSyscall::Reply,
             60 => ViSyscall::Exit,
+            61 => ViSyscall::ForceExit,
             5 => ViSyscall::Spawn,
             6 => ViSyscall::Exec,
             10 => ViSyscall::SpawnFromMem,

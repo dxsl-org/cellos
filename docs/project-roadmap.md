@@ -3,7 +3,7 @@
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete)
-**Last Updated**: 2026-06-05 (Phases H, A–E, X-1 through X-5 complete)
+**Last Updated**: 2026-06-05 (Phases H, A–E, X-1 through X-6 complete)
 
 ---
 
@@ -20,7 +20,7 @@ ViCell development is organized into 4 major phases, each with specific mileston
 **Start Date**: 2026-04-01  
 **Target End Date**: 2026-06-30  
 **Effort**: 320 hours (~8 weeks @ 40h/wk)
-**Status**: ✅ 100% COMPLETE (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, C, D, E, F, G, H, A–E, X-1–X-5 all complete)
+**Status**: ✅ 100% COMPLETE (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, C, D, E, F, G, H, A–E, X-1–X-6 all complete)
 
 ### Milestone 1.1: VirtIO Block Device Fix
 **Status**: ✅ PARTIAL (Root Cause Fixed)  
@@ -149,7 +149,7 @@ ViCell development is organized into 4 major phases, each with specific mileston
 
 ---
 
-### Phases X-1 through X-5 (Completed 2026-06-04 to 2026-06-05)
+### Phases X-1 through X-6 (Completed 2026-06-04 to 2026-06-05)
 
 **Phase X-1 — VirtIO VA→PA Fix**:
 - Resolves multi-sector write corruption in FAT16
@@ -176,7 +176,7 @@ ViCell development is organized into 4 major phases, each with specific mileston
 - Two new integration tests (mqtt_publish, mqtt_subscribe with mock broker)
 - Key insight: ostd bump allocator exhausted by nested IPC polling; fixed with single-poll-per-iteration + outer yield loop
 
-**Phase X-6 — ForceExit Syscall (kernel kill -9 equivalent)** 📋 PLANNED:
+**Phase X-6 — ForceExit Syscall (kernel kill -9 equivalent)** ✅ COMPLETE (2026-06-05):
 
 > **Root cause documented (2026-06-05):** `cmd_kill` uses `sys_send(tid, [0xFF])`.
 > If the target is NOT in `TaskState::Recv`, `ipc_send` puts the **SHELL** into
@@ -771,7 +771,7 @@ Phase 4 (Advanced Features)
 
 ---
 
-## Completed Work (Phases 0-20, C-H, A-E, X-1-X-5)
+## Completed Work (Phases 0-20, C-H, A-E, X-1-X-6)
 
 ✅ **Phase 0 (Alpha)**: Kernel skeleton, RV64 HAL, basic shell  
 ✅ **Phase 01**: Workspace consolidated, 0 cargo warnings  
@@ -801,6 +801,7 @@ Phase 4 (Advanced Features)
 ✅ **Phase X-3**: Command substitution $(cmd) for shell execution
 ✅ **Phase X-4**: Lua execution with fault handling (code-exec verification)
 ✅ **Phase X-5**: MQTT 3.1.1 QoS-0 client cell (/bin/mqtt) with publish/subscribe
+✅ **Phase X-6**: ForceExit syscall (opcode 61, SpawnCap-gated, shell kill -9)
 
 ---
 
@@ -858,7 +859,7 @@ Phase 4 (Advanced Features)
 | Lua TCP bindings | ✅ Working | ✅ vnet.* + http_get test verified | ✅ COMPLETE |
 | Lua UDP + DNS | ✅ Working | ✅ vnet.udp_* + vnet.resolve verified | ✅ COMPLETE |
 | MQTT client | ✅ QoS-0 pub/sub | ✅ /bin/mqtt with publish + subscribe | ✅ COMPLETE |
-| Test coverage | ✅ 80%+ | ✅ 96%+ (65 integration tests: Phases A–H, X-1–X-5) | ✅ MET |
+| Test coverage | ✅ 80%+ | ✅ 96%+ (65 integration tests: Phases A–H, X-1–X-6) | ✅ MET |
 | Architecture tests | ✅ 10/10 | ✅ 10/10 | ✅ MET |
 | Kernel LOC | ✅ < 10,000 | ✅ 8,700 | ✅ MET |
 

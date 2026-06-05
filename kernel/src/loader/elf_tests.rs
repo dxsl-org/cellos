@@ -9,6 +9,7 @@ use api::manifest::{
     CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK, MANIFEST_FLAGS_MASK,
     MANIFEST_MAGIC, MANIFEST_VERSION,
 };
+use api::syscall::ViSyscall;
 use types::{ViError, ViResult};
 
 /// Run all ELF + relocation tests and log a summary.
@@ -31,6 +32,8 @@ pub fn run_all() {
     test_manifest_parsing_bad_version();
     test_manifest_reserved_flags_rejected();
     test_manifest_network_false_grants_no_network_cap();
+    test_force_exit_opcode_mapped();
+    test_force_exit_allowlist_bit_none();
     log::info!("=== ELF Loader Tests PASSED ===");
 }
 
@@ -219,6 +222,21 @@ fn test_manifest_reserved_flags_rejected() {
         "reserved-only flags must return None"
     );
     log::info!("  [ok] reserved flag bits rejected");
+}
+
+fn test_force_exit_opcode_mapped() {
+    // Opcode 61 must resolve to ForceExit; any other result means the dispatcher
+    // would silently ignore ForceExit calls.
+    assert!(matches!(ViSyscall::from(61), ViSyscall::ForceExit),
+        "opcode 61 must resolve to ViSyscall::ForceExit");
+    log::info!("  [ok] opcode 61 → ForceExit");
+}
+
+fn test_force_exit_allowlist_bit_none() {
+    // ForceExit must bypass the allowlist (like Exit/Yield); SpawnCap is the gate.
+    assert!(ViSyscall::ForceExit.allowlist_bit().is_none(),
+        "ForceExit must not have an allowlist bit — SpawnCap is the authority check");
+    log::info!("  [ok] ForceExit allowlist_bit = None");
 }
 
 fn test_manifest_network_false_grants_no_network_cap() {

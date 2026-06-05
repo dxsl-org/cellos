@@ -188,6 +188,8 @@ pub enum Syscall {
     Map { grant_id: usize },
     /// 14: Exit (Terminate Process)
     Exit { code: usize },
+    /// 61: ForceExit — terminate another task by TID; non-blocking return to caller.
+    ForceExit { tid: usize },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
     /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
@@ -654,6 +656,79 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::yield_cpu();
             Ok(0)
         }
+
+        Syscall::ForceExit { tid } => {
+            // Self-kill rejected before touching the scheduler (cheap early check).
+            if tid == caller_id {
+                return Err(SyscallError::InvalidCommand);
+            }
+
+            let target_cell_id;
+            let mut waiters = alloc::vec::Vec::new();
+
+            // Single SCHEDULER lock: SpawnCap gate + all cleanup in one scope.
+            // Two separate acquisitions would create a TOCTOU window where the target
+            // self-exits between them, causing a spurious InvalidCommand return.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                // Gate 1: only SpawnCap holders (init/shell) may force-terminate tasks.
+                let has_spawn = sched.tasks.get(&caller_id)
+                    .map(|t| t.spawn_cap.is_some())
+                    .unwrap_or(false);
+                if !has_spawn {
+                    return Err(SyscallError::PermissionDenied);
+                }
+
+                // Gate 2: protect system service cells (VFS=block_io_cap, net=network_cap).
+                // Killing them mid-I/O leaves driver state inconsistent; use hot-swap instead.
+                let target_is_system = sched.tasks.get(&tid)
+                    .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
+                    .unwrap_or(false);
+                if target_is_system {
+                    return Err(SyscallError::PermissionDenied);
+                }
+
+                // Capture cell_id and waiters BEFORE exit_task() removes the task from
+                // sched.tasks.  Querying after returns None — the Exit handler (syscall.rs:645)
+                // has this latent bug; we deliberately avoid replicating it here.
+                let task = match sched.tasks.get_mut(&tid) {
+                    Some(t) => t,
+                    // Target self-exited between the lock boundary — already dead; mission done.
+                    None => return Ok(0),
+                };
+                target_cell_id = task.cell_id;
+                task.exit_code = Some(usize::MAX); // sentinel: force-killed
+                waiters.append(&mut task.waiters);
+
+                // exit_task: zombie move + ready-queue purge + stuck-sender unblock
+                // (sets sender regs[10]=usize::MAX at scheduler.rs:258).
+                sched.exit_task(tid);
+
+                // Wake sys_wait(tid) waiters — copy exact pattern from Exit handler
+                // (syscall.rs:631-636) to avoid silently returning 0 from sys_wait.
+                for wid in &waiters {
+                    if let Some(w) = sched.tasks.get_mut(wid) {
+                        w.state = TaskState::Ready;
+                        w.reply_value = Some(usize::MAX); // force-killed sentinel
+                        sched.push_ready(*wid);
+                    }
+                }
+            } else {
+                return Err(SyscallError::InvalidCommand);
+            }
+
+            // Cap + quota cleanup — same as Exit handler (syscall.rs:650-653).
+            crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(target_cell_id);
+            crate::memory::cell_quota::deregister(target_cell_id);
+
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellExit,
+                &crate::audit::encode_u32x2(tid as u32, 0xFFFF_FFFFu32), // force-kill marker
+            );
+            log::info!("[kernel] ForceExit: task {} killed by task {}", tid, caller_id);
+
+            Ok(0) // non-blocking — caller keeps running; do NOT yield_cpu
+        }
+
         Syscall::Reply { caller: _, result } => {
             super::ipc_reply(caller_id, result).map_err(|_| SyscallError::InvalidCommand)
         }
@@ -1355,7 +1430,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::Wait => Syscall::Wait { pid: a0 },
         ViSyscall::ShmAlloc => Syscall::ShmAlloc { size: a0 },
         ViSyscall::ShmMap => Syscall::ShmMap { handle: a0, target_pid: a1 },
-        ViSyscall::Exit => Syscall::Exit { code: a0 },
+        ViSyscall::Exit      => Syscall::Exit { code: a0 },
+        ViSyscall::ForceExit => Syscall::ForceExit { tid: a0 },
         ViSyscall::Yield => Syscall::Yield,
         ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
         ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },

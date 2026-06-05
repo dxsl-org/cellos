@@ -380,13 +380,26 @@ pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                 "kill: signal sent to task {} — run 'ps' to verify termination\n", tid
             ));
         }
-        Some(state) => {
-            let state_name = match state { 0 => "Ready", 1 => "Running", 3 => "Dead", _ => "?" };
-            crate::executor::shell_print(&alloc::format!(
-                "kill: task {} is '{}' — not in a receivable state.\n\
-                 kill: forced termination requires ForceExit syscall (planned).\n",
-                tid, state_name
-            ));
+        Some(3) => {
+            crate::executor::shell_print(&alloc::format!("kill: task {} is already Dead\n", tid));
+        }
+        Some(_) => {
+            // Task is Ready/Running/Sleeping — cooperative signal won't reach it.
+            // Use ForceExit to terminate regardless of state.
+            // Kernel rejects system cells (VFS=block_io_cap, net=network_cap); use hotswap for those.
+            match syscall::sys_force_exit(tid) {
+                syscall::SyscallResult::Ok(_) => {
+                    crate::executor::shell_print(&alloc::format!(
+                        "kill: task {} force-terminated\n", tid
+                    ));
+                }
+                syscall::SyscallResult::Err(_) => {
+                    crate::executor::shell_print(&alloc::format!(
+                        "kill: task {} not terminated (system cell — use hotswap; or no SpawnCap)\n",
+                        tid
+                    ));
+                }
+            }
         }
     }
     Ok(())

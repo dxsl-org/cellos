@@ -30,6 +30,7 @@ mod tests {
         (30,   ViSyscall::GetProcs),
         (35,   ViSyscall::SetTimer),
         (60,   ViSyscall::Exit),
+        (61,   ViSyscall::ForceExit),
         (101,  ViSyscall::Open),
         (102,  ViSyscall::Read),
         (103,  ViSyscall::Close),
