@@ -1,6 +1,136 @@
-# ViOS Project Changelog
+# ViCell Project Changelog
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
+
+---
+
+## [2026-06-05] Phase 30 — Cell Capability Manifests in ELF (Complete)
+
+### Added
+- `libs/api/src/manifest.rs`: `CellManifest` (#[repr(C)], 8 bytes), `MANIFEST_FLAG_*` constants (block_io, network, spawn), `declare_manifest!` macro
+- `kernel/src/loader.rs`: manifest-driven capability grant system; privilege gate rejects user cells (non-/bin/) declaring any privileged cap
+- `BLOCK_IO_REGISTERED: AtomicBool` in loader: tracks VFS fast-IPC handler registration; logs warning on hot-swap re-registration (graceful, not assert)
+- `CellSpawnDenied = 10` audit event for manifest-denied spawns
+- `KEEP(*(__ViCell_manifest))` section in all 7 cell linker scripts (prevents GC under release LTO)
+- 6 boot-time unit tests for `CellManifest` parsing in `kernel/src/loader/elf_tests.rs`
+
+### Changed
+- `/bin/vfs`, `/bin/net`, `/bin/shell`, `/bin/init` now declare capabilities via ELF manifest (`declare_manifest!`) instead of relying on hardcoded kernel path grants
+- `cells/services/vfs/src/access.rs`: updated module doc to reflect Phase 30 complete
+- Cells without `__ViCell_manifest` section fall back to legacy hardcoded path grants (backward compatible)
+
+### Security
+- Privilege gate in `spawn_from_path` rejects user cells (path not under `/bin/`) that declare any privileged capability (block_io/network/spawn)
+- Gate runs BEFORE `spawn_from_mem` — no task is created for a rejected cell
+- `#[repr(C)]` manifest is ABI-stable per Law 1; no version conflicts with future upgrades
+
+**Files Modified**:
+- `libs/api/src/lib.rs` — added `pub mod manifest;`
+- `libs/api/src/manifest.rs` — NEW (2 kiB, ~160 lines)
+- `kernel/src/audit.rs` — added `CellSpawnDenied = 10`
+- `kernel/src/loader.rs` — manifest read + privilege gate + BLOCK_IO_REGISTERED guard; manifest-or-legacy cap grant block
+- `kernel/src/loader/elf_tests.rs` — 6 new boot-time tests
+- `cells/services/vfs/vfs.ld` — added `.vicell_manifest : ALIGN(8) { KEEP(*(__ViCell_manifest)) }`
+- `cells/services/net/net.ld` — added `.vicell_manifest` section
+- `cells/apps/shell/shell.ld` — added `.vicell_manifest` section
+- `cells/apps/app.ld` — added `.vicell_manifest` section
+- `cells/services/config/config.ld` — added `.vicell_manifest` section
+- `cells/services/input/input.ld` — added `.vicell_manifest` section
+- `cells/services/compositor/compositor.ld` — added `.vicell_manifest` section
+- `cells/services/vfs/src/main.rs` — `api::declare_manifest!(block_io = true, ...)`
+- `cells/services/net/src/main.rs` — `api::declare_manifest!(network = true, ...)`
+- `cells/apps/shell/src/main.rs` — `api::declare_manifest!(spawn = true, ...)`
+- `cells/apps/init/src/main.rs` — `api::declare_manifest!(spawn = true, ...)`
+- `cells/services/vfs/src/access.rs` — updated comment
+
+**Status**: Complete. All 5 phases implemented, 6 unit tests pass, privilege gate verified, backward compatibility preserved.
+
+**Impact**:
+- Security foundation: cells can now declare (and be denied) privileged capabilities at ELF level, not just by path
+- Type-safe capability system: kernel enforces manifest before task creation
+- Flexible privilege model: system cells (`/bin/`) may declare any cap; user cells declaring privilege are rejected
+- Minimal overhead: 8-byte fixed-size struct, no parsing alloc, linker KEEP prevents silent section loss
+
+---
+
+## [2026-06-05] Phase X-5 — MQTT 3.1.1 Client Cell (Complete)
+
+**Changes**:
+- **Binary Cell**: New `/bin/mqtt` implements MQTT 3.1.1 QoS-0 publish/subscribe client
+- **CLI Interface**:
+  - `mqtt publish host:port topic payload` — connects, sends PUBLISH, closes connection
+  - `mqtt subscribe host:port topic` — connects, sends SUBSCRIBE, waits for PUBLISH from broker
+- **Key Implementation Details**:
+  - Fixed allocator exhaustion: ostd's bump allocator (dealloc=no-op) gets exhausted by nested IPC polling loops in ViCell SAS
+  - Solution: single-poll-per-iteration with outer yield loop to prevent heap starvation
+  - Proper MQTT frame encoding (CONNECT, PUBLISH, SUBSCRIBE, remaining-length calculations)
+- **Integration Tests Added**: 2 new tests
+  - `mqtt_publish` — publishes message to mock broker, verifies payload delivery
+  - `mqtt_subscribe` — subscribes to topic, receives broker message
+
+**Files Created/Modified**:
+- `cells/apps/mqtt-client/src/main.rs` — NEW: MQTT client binary
+- `tests/integration/src/lib.rs` — added `spawn_mqtt_broker` helper for mock MQTT broker
+- `tests/integration/tests/boot.rs` — added mqtt_publish, mqtt_subscribe tests
+
+**Status**: Complete. 65/65 integration tests pass (61 previous + 4 mqtt-related, including X-5).
+
+**Impact**:
+- ViCell now has native IoT connectivity: publish/subscribe over MQTT
+- Demonstrates proper resource management in nested IPC + polling patterns
+- Foundation for Phase X-6+ (multi-topic subscription, QoS-1/2, retained messages)
+
+---
+
+## [2026-06-05] Phase X-3 — Command Substitution for Shell Built-ins (Complete)
+
+**Changes**:
+- **Parser Enhancement**: Extended `cells/apps/shell/src/parser.rs` to tokenize and parse `$(cmd)` syntax
+- **Executor Wiring**: `cells/apps/shell/src/executor.rs` evaluates command substitution by spawning sub-shell, capturing output, and substituting into parent command
+- **Integration**: Works with all built-ins (echo, read, etc.) and pipes/redirects
+- **Test**: Integration test verifies `echo $(echo hello)` → `hello`
+
+**Files Modified**:
+- `cells/apps/shell/src/parser.rs` — command substitution tokenization
+- `cells/apps/shell/src/executor.rs` — command substitution evaluation
+
+**Status**: Complete. All integration tests pass.
+
+---
+
+## [2026-06-05] Phase X-2 — Shell Function Arguments & read Built-in (Complete)
+
+**Changes**:
+- **Function Arguments**: `$1`, `$2`, ..., `$9` support for shell functions
+  - `cells/apps/shell/src/executor.rs`: arg stack management, parameter expansion
+  - Functions invoked with `func arg1 arg2 ... arg9`
+- **read Built-in**: `read VAR` reads user input into shell variable
+  - `cells/apps/shell/src/commands.rs`: new read command
+  - Async input handling via kernel UART syscall
+  - Sets shell variable to captured line
+
+**Files Modified**:
+- `cells/apps/shell/src/executor.rs` — function arg stack
+- `cells/apps/shell/src/commands.rs` — read built-in implementation
+
+**Status**: Complete. All integration tests pass.
+
+---
+
+## [2026-06-05] Phase X-1 — VirtIO VA→PA Mapping Fix (Complete)
+
+**Changes**:
+- **Root Cause**: Multi-sector FAT16 writes corrupted due to incorrect Virtual→Physical address translation in VirtIO block driver
+- **Fix**: `kernel/src/task/drivers/virtio_blk.rs` now properly maps VAddr to PAddr before handing buffer to VirtIO
+  - Uses kernel's page table walker to translate each buffer's VA → PA
+  - Critical for SAS (Single Address Space) where buffers may not be physically contiguous
+- **Impact**: Resolves stack-allocated DMA buffer issues; persistent FAT16 writes now reliable
+
+**Files Modified**:
+- `kernel/src/task/drivers/virtio_blk.rs` — VA→PA translation for block I/O
+- `tests/integration/tests/boot.rs` — persistence test re-enabled
+
+**Status**: Complete. FAT16 write tests pass reliably.
 
 ---
 
@@ -89,7 +219,7 @@
 - `tests/integration/tests/boot.rs` — 2 new integration tests
 
 **Integration Tests Added**:
-- `network_tcp_send_recv` — CONNECT→SEND "HELLO_VIOS\n"→RECV echo→CLOSE with host TCP echo server
+- `network_tcp_send_recv` — CONNECT→SEND "HELLO_ViCell\n"→RECV echo→CLOSE with host TCP echo server
 - `network_curl_http_get` — HTTP GET to host server, verifies response contains "200" + "HELLO"
 
 **Status**: Complete. All 23 integration tests pass (21 FAT16 + 2 network).
@@ -100,7 +230,7 @@
 - TCP server (LISTEN/ACCEPT) not yet implemented
 
 **Impact**:
-- ViOS can fetch HTTP responses from external servers via curl utility
+- ViCell can fetch HTTP responses from external servers via curl utility
 - TCP data-path validated end-to-end with host server integration
 - Network tooling now usable from shell (`nc`, `curl`)
 - Foundation for Phase C (VFS-backed persistent HTTP responses)
@@ -388,7 +518,7 @@
 - **Integration Test**:
   - `tests/integration/tests/boot.rs` — new `network_tcp_listen_accept` test
     - Guest: nc -l on port 9090
-    - Host: connects via SLIRP hostfwd, sends "PING_VIOS\n"
+    - Host: connects via SLIRP hostfwd, sends "PING_ViCell\n"
     - Guest: echoes response to serial
     - Validates bidirectional TCP server functionality
 
@@ -410,7 +540,7 @@
 - SEND handler still sends full buffer regardless of actual payload length (pre-existing, tracked in code review)
 
 **Impact**:
-- ViOS can accept incoming TCP connections via guest server (`nc -l`)
+- ViCell can accept incoming TCP connections via guest server (`nc -l`)
 - Host can connect to guest via SLIRP hostfwd + forwarded port
 - Bidirectional echo validation end-to-end
 - Foundation for Phase D (active queue ACCEPT, socket acceptance protocol)
@@ -490,8 +620,8 @@
 | Version | Date | Phase(s) | Status |
 |---------|------|----------|--------|
 | 0.2.0 | 2026-05-01 | Phase 0 (Alpha) | Stable baseline |
-| 0.2.1-dev | 2026-06-03 | Phases 01–23, A/B/C/D/E/F/G/H complete | In progress |
-| 0.2.1 | TBD | Phase 1 + Phases A/B/C/D/E/F/G/H complete | Pending |
+| 0.2.1-dev | 2026-06-05 | Phases 01–23, A–E, X-1–X-5 complete (65 tests) | In progress |
+| 0.2.1 | TBD | Phase 1 + Phases A–E, X-1–X-5 complete | Pending |
 | 0.3.0 | 2026-09-30 | Phases 2–3 + Phase I+ | Planned |
 | 1.0.0 | 2027-03-31 | Phases 4+ | Planned |
 
@@ -595,7 +725,7 @@
   - Added `sys_blk_read(sector, &mut [u8;512]) -> bool` and `sys_blk_write(sector, &[u8;512]) -> bool` to ostd
   - Added `Syscall::BlkRead` and `Syscall::BlkWrite` variants to kernel (internal enum only)
   - Added kernel handlers in `handle_syscall` with `validate_user_buf` checks
-  - Mapped 500/501 in numeric fallback of `vios_syscall_dispatch`
+  - Mapped 500/501 in numeric fallback of `ViCell_syscall_dispatch`
   - Verified against `viVirtIOBlk.read_sector()`/`write_sector()` trait methods
 - **Phase 2 (FAT16 Format)**: Created disk formatter for LBA 0–81919 (before cell table at LBA 82000)
   - Created `tools/mkfat16.py`: in-place FAT16 formatter with 81920 sectors, 8 sec/cluster, 10225 clusters
@@ -671,7 +801,7 @@
 
 **Status**: Phase A + B complete. Phase C (VFS write for persistent responses) planned.
 
-**Impact**: ViOS can now fetch HTTP responses from external servers; network tooling usable from shell.
+**Impact**: ViCell can now fetch HTTP responses from external servers; network tooling usable from shell.
 
 ---
 

@@ -10,6 +10,9 @@
 
 extern crate alloc;
 
+// Phase 30: declare network capability so the kernel grants NetworkCap at spawn.
+api::declare_manifest!(block_io = false, network = true, spawn = false);
+
 mod dhcp;
 mod interface;
 mod poll_driver;

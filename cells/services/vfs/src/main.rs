@@ -24,6 +24,9 @@ use quota::QuotaTracker;
 use ostd::io::println;
 use ostd::prelude::*;
 
+// Phase 30: declare block-I/O capability so the kernel grants BlockIoCap at spawn.
+api::declare_manifest!(block_io = true, network = false, spawn = false);
+
 // Embedded binaries served from /bin/ until VirtIO-FAT integration lands.
 static SHELL_ELF: &[u8] = include_bytes!("../../../../kernel/src/embedded/shell");
 static HELLO_ELF: &[u8] = include_bytes!("../../../../kernel/src/embedded/hello");

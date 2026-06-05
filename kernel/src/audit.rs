@@ -35,9 +35,10 @@ pub enum AuditEvent {
     FileWrite = 4,
     NetTx     = 5,
     NetRx     = 6,
-    CellSpawn = 7,
-    CellFault = 8,
-    CellExit  = 9,
+    CellSpawn      = 7,
+    CellFault      = 8,
+    CellExit       = 9,
+    CellSpawnDenied = 10,
 }
 
 struct AuditRing {

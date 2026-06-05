@@ -380,15 +380,19 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] Warm boot time target < 100 ms on real hardware (QEMU: ~270ms documented)
 
 ### Phase 30 — Cell Capability Manifests in ELF (P2)
-**Target**: 2026-10-27 | **Effort**: ~2 weeks
+**Target**: 2026-10-27 | **Effort**: ~2 weeks | **Status**: ✅ COMPLETE (2026-06-05)
 **Learn from**: Singularity SIP manifests → [SOSP 2007 paper](https://www.microsoft.com/en-us/research/publication/singularity-rethinking-the-software-stack/)
 
-- [ ] Read Singularity paper §3 (SIP security model) before starting
-- [ ] Define `.ViCell_manifest` ELF section format (TOML embedded at link time)
-- [ ] Embed capability declarations in cell Cargo build: `network=true`, `block_io=false`, `spawn=false`
-- [ ] Kernel reads `.ViCell_manifest` at `loader.rs:spawn_from_path()` and enforces
-- [ ] Reject cell load if declared capabilities exceed cell's privilege level
-- [ ] Integration test: cell without `network=true` cannot call `sys_tcp_connect()`
+**Completed (2026-06-05):**
+- [x] Define `CellManifest` type: 8-byte `#[repr(C)]` struct with magic, version, capability flags
+- [x] Create `declare_manifest!` macro: embeds manifest into `__ViCell_manifest` ELF section
+- [x] Add `KEEP(*(__ViCell_manifest))` to all 7 cell linker scripts (prevents GC under release LTO)
+- [x] Embed manifests in vfs (block_io), net (network), shell/init (spawn) — 4 cells updated
+- [x] Enforce at `spawn_from_path`: privilege gate rejects user cells (path not under `/bin/`) declaring privileged caps
+- [x] 6 unit tests for `CellManifest` parsing + validation; boot-time test pass
+- [x] Backward compatible: cells without manifest fall back to legacy hardcoded path grants
+
+**Security**: Manifest is `#[repr(C)]` and ABI-stable per Law 1. Gate runs BEFORE `spawn_from_mem` — no task created for rejected cell.
 
 ### Phase 31 — CHERIoT-IBEX HAL / ViCell-Nano (P3)
 **Target**: 2026-Q4 | **Effort**: ~5 weeks

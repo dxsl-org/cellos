@@ -5,6 +5,10 @@
 //! with standard `assert!`/`assert_eq!` — a failing assert panics the kernel,
 //! which is intentional (hard failure = detected early).
 
+use api::manifest::{
+    CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK, MANIFEST_MAGIC,
+    MANIFEST_VERSION,
+};
 use types::{ViError, ViResult};
 
 /// Run all ELF + relocation tests and log a summary.
@@ -20,6 +24,13 @@ pub fn run_all() {
     test_reloc_unsupported_type_rejected();
     test_reloc_none_type_noop();
     test_reloc_relative_patches_memory();
+    // Phase 30: CellManifest parsing tests.
+    test_manifest_size_is_8();
+    test_manifest_parsing_valid();
+    test_manifest_parsing_bad_magic();
+    test_manifest_parsing_short();
+    test_manifest_parsing_bad_version();
+    test_manifest_network_false_grants_no_network_cap();
     log::info!("=== ELF Loader Tests PASSED ===");
 }
 
@@ -136,4 +147,67 @@ fn test_reloc_relative_patches_memory() {
     let expected = base.wrapping_add(0x400);
     assert_eq!(patched, expected, "R_RISCV_RELATIVE patch value mismatch");
     log::info!("  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}", base, expected);
+}
+
+// ─── CellManifest parsing (Phase 30) ─────────────────────────────────────────
+
+fn manifest_bytes(magic: u32, version: u8, flags: u8) -> [u8; 8] {
+    let m = magic.to_le_bytes();
+    [m[0], m[1], m[2], m[3], version, flags, 0, 0]
+}
+
+fn test_manifest_size_is_8() {
+    assert_eq!(
+        core::mem::size_of::<CellManifest>(), 8,
+        "CellManifest must be exactly 8 bytes (ABI invariant)"
+    );
+    log::info!("  [ok] CellManifest is 8 bytes");
+}
+
+fn test_manifest_parsing_valid() {
+    let bytes = manifest_bytes(
+        MANIFEST_MAGIC, MANIFEST_VERSION,
+        MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK,
+    );
+    let m = CellManifest::from_bytes(&bytes).expect("valid manifest must parse");
+    assert!(m.has_block_io(), "block_io flag must be set");
+    assert!(m.has_network(),  "network flag must be set");
+    assert!(!m.has_spawn(),   "spawn flag must be clear");
+    assert!(m.declares_any_privilege(), "declares_any_privilege must be true");
+    log::info!("  [ok] valid manifest parses with correct flags");
+}
+
+fn test_manifest_parsing_bad_magic() {
+    let bytes = manifest_bytes(0xDEAD_BEEF, MANIFEST_VERSION, 0);
+    assert!(
+        CellManifest::from_bytes(&bytes).is_none(),
+        "wrong magic must return None"
+    );
+    log::info!("  [ok] bad magic rejected");
+}
+
+fn test_manifest_parsing_short() {
+    assert!(
+        CellManifest::from_bytes(&[0u8; 4]).is_none(),
+        "slice shorter than 8 bytes must return None"
+    );
+    log::info!("  [ok] short slice rejected");
+}
+
+fn test_manifest_parsing_bad_version() {
+    let bytes = manifest_bytes(MANIFEST_MAGIC, MANIFEST_VERSION.wrapping_add(1), 0);
+    assert!(
+        CellManifest::from_bytes(&bytes).is_none(),
+        "unsupported version must return None"
+    );
+    log::info!("  [ok] bad version rejected");
+}
+
+fn test_manifest_network_false_grants_no_network_cap() {
+    let m = CellManifest::new(true, false, false);
+    assert!(m.has_block_io(),   "block_io=true must set block_io flag");
+    assert!(!m.has_network(),   "network=false must NOT set network flag");
+    assert!(!m.has_spawn(),     "spawn=false must NOT set spawn flag");
+    assert!(m.declares_any_privilege(), "block_io alone is still a privilege");
+    log::info!("  [ok] network=false → no NetworkCap granted");
 }

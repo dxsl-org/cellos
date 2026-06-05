@@ -30,4 +30,8 @@ SECTIONS
         *(COMMON)
         __bss_end = .;
     }
+
+    .vicell_manifest : ALIGN(8) {
+        KEEP(*(__ViCell_manifest))
+    }
 }

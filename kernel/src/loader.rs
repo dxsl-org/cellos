@@ -1,6 +1,13 @@
 //! Cell loader — ELF parsing, relocation, and path-based spawning.
 
+use core::sync::atomic::{AtomicBool, Ordering};
 use types::*;
+
+/// Tracks whether a block-I/O cell has registered the VFS fast-IPC handler pointer.
+/// Set to `true` on first registration; subsequent registrations (hot-swap path) log
+/// a warning and re-point the handler.  Never reset — warm boot / snapshot restore
+/// skips `spawn_from_path`, so re-registration never fires spuriously.
+static BLOCK_IO_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 // Symbol defined in libs/ostd; called to record which cell owns the VFS fast-IPC handler.
 extern "Rust" {
@@ -66,6 +73,31 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
         reloc::apply_relocations(base, rela_section)?;
     }
 
+    // Phase 30: read capability manifest from `__ViCell_manifest` ELF section.
+    // Absent or malformed → None (triggers legacy path-based grants for backward compat).
+    let manifest_opt: Option<api::manifest::CellManifest> =
+        match elf_loader.get_section(&elf_bytes, "__ViCell_manifest") {
+            Ok(bytes) => api::manifest::CellManifest::from_bytes(bytes),
+            Err(_)    => None,
+        };
+
+    // Privilege gate: a user Cell (path NOT under /bin/) may NOT declare any
+    // privileged capability.  Runs BEFORE spawn_from_mem — no task is created
+    // for a rejected Cell.
+    if let Some(ref m) = manifest_opt {
+        if !path.starts_with("/bin/") && m.declares_any_privilege() {
+            log::error!(
+                "[loader] DENY spawn {:?}: user cell over-declares caps (flags={:#04x})",
+                path, m.flags
+            );
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellSpawnDenied,
+                &crate::audit::encode_u32x2(m.flags as u32, 0u32),
+            );
+            return Err(ViError::PermissionDenied);
+        }
+    }
+
     // Extract cell name from the last path component (e.g. "/bin/shell" → "shell").
     let name = path.rsplit('/').next().unwrap_or(path);
 
@@ -109,21 +141,49 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
     // Register per-cell memory quota (4 MiB default) using the real CellId.
     crate::memory::cell_quota::register(cell_id, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES);
 
-    // Grant ZST capability tokens based on the cell path.
-    // These are kernel-only types (pub(crate)) — Cell crates cannot forge them.
+    // Grant ZST capability tokens.
+    // If the ELF embedded a manifest (Phase 30) → grant from declared flags.
+    // If no manifest → legacy hardcoded path grants (backward compatible).
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
-            if path.ends_with("/bin/vfs") {
-                task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
-                // Track VFS cell so the fast-IPC handler pointer can be cleared on crash.
-                // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
-                unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
-            }
-            if path.ends_with("/bin/net") {
-                task.network_cap = Some(crate::task::cap::NetworkCap::new());
-            }
-            if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
-                task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
+            match manifest_opt {
+                Some(m) => {
+                    if m.has_block_io() {
+                        task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
+                        // Re-registration is valid on VFS hot-swap; just update the handler pointer.
+                        // Using swap to track whether this is a first-boot registration or a re-swap.
+                        let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
+                        if already {
+                            log::warn!("[loader] block_io re-registration — VFS hot-swap or second block_io cell");
+                        }
+                        // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
+                        unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
+                    }
+                    if m.has_network() {
+                        task.network_cap = Some(crate::task::cap::NetworkCap::new());
+                    }
+                    if m.has_spawn() {
+                        task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
+                    }
+                }
+                None => {
+                    // Legacy: hardcoded path grants — unchanged pre-Phase-30 behavior.
+                    if path.ends_with("/bin/vfs") {
+                        task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
+                        let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
+                        if already {
+                            log::warn!("[loader] block_io re-registration (legacy path) — VFS hot-swap");
+                        }
+                        // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
+                        unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
+                    }
+                    if path.ends_with("/bin/net") {
+                        task.network_cap = Some(crate::task::cap::NetworkCap::new());
+                    }
+                    if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
+                        task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
+                    }
+                }
             }
         }
     }

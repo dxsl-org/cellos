@@ -30,6 +30,7 @@ pub mod display;
 pub mod fs;
 pub mod hotswap;
 pub mod input;
+pub mod manifest;
 pub mod net;
 pub mod posix;
 pub mod serde_helpers;
