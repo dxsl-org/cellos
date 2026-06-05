@@ -2,9 +2,19 @@ use super::tcb::{FileHandle, SyscallFuture, Task, TaskState};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use core::task::{Context, Poll};
 use log::info;
 use types::*;
+
+/// Cell ID currently executing on this hart.  0 = kernel itself (no quota limit).
+/// Updated on every context switch so `QuotaAlloc` can attribute allocations correctly.
+pub static CURRENT_CELL_ID: AtomicUsize = AtomicUsize::new(0);
+
+/// Read the currently-executing cell ID (0 = kernel).
+pub fn current_cell_id() -> usize {
+    CURRENT_CELL_ID.load(Ordering::Relaxed)
+}
 
 // Dummy Waker
 // In a real executor, we'd have a way to wake specific tasks.
@@ -236,6 +246,26 @@ impl Scheduler {
         for queue in self.ready_queues.values_mut() {
             queue.retain(|&id| id != tid);
         }
+
+        // Best-effort IPC cleanup: unblock tasks stuck sending to the dead task,
+        // and clear stale current_caller references.  Does not handle multi-hop
+        // chains — those require a full state-machine audit (future work).
+        let mut to_wake = Vec::new();
+        for (id, task) in self.tasks.iter_mut() {
+            if let TaskState::Sending { target, .. } = task.state {
+                if target == tid {
+                    task.state = TaskState::Ready;
+                    task.trap_frame.regs[10] = usize::MAX; // error return: target gone
+                    to_wake.push(*id);
+                }
+            }
+            if task.current_caller == Some(tid) {
+                task.current_caller = None;
+            }
+        }
+        for id in to_wake {
+            self.push_ready(id);
+        }
     }
 
     /// Picks the next task to run and returns pointers for context switch.
@@ -325,6 +355,9 @@ impl Scheduler {
         if let Some(nid) = next_id {
             if let Some(next_task) = self.tasks.get_mut(&nid) {
                 next_task.state = TaskState::Running;
+                // Update CURRENT_CELL_ID so QuotaAlloc attributes allocations
+                // to the correct Cell during this task's execution.
+                CURRENT_CELL_ID.store(next_task.cell_id.0 as usize, Ordering::Relaxed);
             }
 
             if Some(nid) == current_id {

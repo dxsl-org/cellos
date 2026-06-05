@@ -1,4 +1,4 @@
-//! Capability types for ViOS.
+//! Capability types for ViCell.
 //!
 //! A capability is an opaque, unforgeable token assigned by the kernel.
 //! Holding a `CapId` grants the owner a bounded set of operations on a

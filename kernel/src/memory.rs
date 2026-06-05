@@ -2,6 +2,7 @@
 
 use crate::*;
 
+pub mod cell_quota;
 pub mod frame;
 pub mod heap;
 pub mod paging;

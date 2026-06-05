@@ -7,14 +7,14 @@
 // can link against the host `std`.  All production builds remain bare-metal.
 #![cfg_attr(not(test), no_std)]
 
-//! Core types for ViOS Cellular SAS architecture.
+//! Core types for ViCell Cellular SAS architecture.
 //!
 //! This crate defines fundamental types used across the entire system.
 
 /// Kernel Result Type
 pub type HalResult<T> = core::result::Result<T, HalError>;
 
-/// Standard Result type for ViOS APIs.
+/// Standard Result type for ViCell APIs.
 pub type Result<T, E = ViError> = core::result::Result<T, E>;
 
 /// Kernel/HAL Errors
@@ -74,7 +74,7 @@ pub type PhysAddr = usize;
 /// Virtual memory address (Renamed from VirtAddr for brevity & standardization).
 pub type VAddr = usize;
 
-/// Standard Result type for ViOS APIs.
+/// Standard Result type for ViCell APIs.
 pub type ViResult<T> = core::result::Result<T, ViError>;
 
 /// Common error types.

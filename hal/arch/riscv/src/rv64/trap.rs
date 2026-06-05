@@ -113,39 +113,24 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 // Environment call from S-mode (should not happen normally)
                 frame.sepc += 4;
             }
-            2 => {
-                // Illegal instruction
-                panic!(
-                    "ViCell: Illegal instruction at 0x{:X}, stval=0x{:X}",
-                    frame.sepc, frame.stval
-                );
-            }
-            12 => {
-                // Instruction page fault
-                panic!(
-                    "ViCell: Instruction page fault at 0x{:X}, addr=0x{:X}",
-                    frame.sepc, frame.stval
-                );
-            }
-            13 => {
-                // Load page fault
-                panic!(
-                    "ViCell: Load page fault at 0x{:X}, addr=0x{:X}",
-                    frame.sepc, frame.stval
-                );
-            }
-            15 => {
-                // Store page fault
-                panic!(
-                    "ViCell: Store page fault at 0x{:X}, addr=0x{:X}",
-                    frame.sepc, frame.stval
-                );
-            }
-            _ => {
-                panic!(
-                    "ViCell: Unhandled exception: scause={}, sepc=0x{:X}, stval=0x{:X}",
-                    code, frame.sepc, frame.stval
-                );
+            2 | 12 | 13 | 15 | _ => {
+                // Illegal instruction, page faults, or other unhandled exception.
+                // If a Cell is running, kill it instead of halting the kernel.
+                // SAFETY: vi_current_cell_id and vi_terminate_on_fault are defined
+                // in kernel::task and linked via extern "Rust".
+                let cell_id = unsafe { vi_current_cell_id() };
+                if cell_id != 0 {
+                    // Cell fault — terminate the Cell, let kernel continue.
+                    unsafe { vi_terminate_on_fault(code, frame.sepc); }
+                    // vi_terminate_on_fault calls yield_cpu() which switches away.
+                    // We should not reach here, but return safely if we do.
+                } else {
+                    // True kernel fault — halt.
+                    panic!(
+                        "ViCell: Kernel exception: scause={} sepc={:#x} stval={:#x}",
+                        code, frame.sepc, frame.stval
+                    );
+                }
             }
         }
     }
@@ -182,4 +167,8 @@ extern "Rust" {
     fn vi_handle_uart_irq();
     /// Called on every S-mode timer interrupt.  Defined in `kernel::task`.
     fn vi_timer_tick();
+    /// Terminate the currently-executing Cell on hardware fault.  Defined in `kernel::task`.
+    fn vi_terminate_on_fault(scause: usize, sepc: usize);
+    /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell).
+    fn vi_current_cell_id() -> usize;
 }

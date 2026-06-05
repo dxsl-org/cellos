@@ -1,3 +1,4 @@
+pub mod cap;
 pub mod syscall;
 pub mod tcb;
 pub use tcb::Task;
@@ -99,6 +100,19 @@ pub fn init() {
     }
 }
 
+/// Exposes `terminate_current_cell_on_fault` to the HAL trap handler via
+/// `extern "Rust"` linkage.
+#[no_mangle]
+pub extern "Rust" fn vi_terminate_on_fault(scause: usize, sepc: usize) {
+    terminate_current_cell_on_fault(scause, sepc);
+}
+
+/// Exposes `scheduler::current_cell_id` to the HAL trap handler.
+#[no_mangle]
+pub extern "Rust" fn vi_current_cell_id() -> usize {
+    scheduler::current_cell_id()
+}
+
 /// Called from the S-mode timer ISR via `extern "Rust"` linkage.
 ///
 /// Increments the global tick counter, rearmed the timer for the next
@@ -122,6 +136,52 @@ pub extern "Rust" fn vi_timer_tick() {
     //   (a) interrupts are disabled by hardware on trap entry (sstatus.SIE=0)
     //   (b) yield_cpu() releases SCHEDULER lock before calling Context::switch
     //   (c) trap.S restores the correct ViTrapFrame from the new task's stack
+    yield_cpu();
+}
+
+/// Terminate the currently-executing Cell due to a hardware fault.
+///
+/// Called from the trap handler when an unrecoverable exception fires in a
+/// Cell context (`scheduler::CURRENT_CELL_ID != 0`).  The Cell moves to the
+/// zombie list; the kernel continues running the next ready task.
+///
+/// # Safety
+/// Must be called from trap context with S-mode interrupts disabled.
+/// Calls `SCHEDULER.force_unlock()` first to guard against being called while
+/// `pick_next` holds the lock (e.g., OOM during a scheduler BTreeMap insert).
+pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
+    let cell_id_raw = scheduler::CURRENT_CELL_ID.load(core::sync::atomic::Ordering::Relaxed);
+    log::error!(
+        "[fault] Cell {} terminated: scause={:#x} sepc={:#x}",
+        cell_id_raw, scause, sepc
+    );
+    crate::audit::log_event(
+        crate::audit::AuditEvent::CellFault,
+        &crate::audit::encode_u32x2(cell_id_raw as u32, scause as u32),
+    );
+
+    // If the panic/fault fired mid-pick_next, SCHEDULER may be locked.
+    // Force-release it before we try to re-acquire.
+    // SAFETY: single-hart kernel; no other core holds this lock.
+    unsafe { SCHEDULER.force_unlock(); }
+
+    let task_id = SCHEDULER.lock().as_ref()
+        .and_then(|s| s.current_task_id);
+
+    if let Some(tid) = task_id {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.exit_task(tid);
+        }
+        // Deregister quota for the killed Cell.
+        let cell_id = types::CellId(cell_id_raw as u64);
+        crate::memory::cell_quota::deregister(cell_id);
+    }
+
+    // Reset cell ID to 0 (kernel context) so subsequent allocations are not
+    // charged to the now-dead Cell.
+    scheduler::CURRENT_CELL_ID.store(0, core::sync::atomic::Ordering::Relaxed);
+
+    // Switch to the next ready task.  Does not return to the faulting Cell.
     yield_cpu();
 }
 

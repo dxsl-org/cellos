@@ -68,13 +68,37 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
     let tid = crate::task::spawn_from_mem(&elf_bytes, name, CellId(0), alloc::vec::Vec::new())
         .map_err(|_| ViError::OutOfMemory)?;
 
-    // Grant raw block-I/O to the VFS service only (boot-order-independent).
-    // `KernelPerms::BLOCK_IO` is kernel-internal — no Law 1 ABI impact (Phase H).
-    if path.ends_with("/bin/vfs") {
-        use crate::task::tcb::KernelPerms;
-        if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            if let Some(task) = sched.tasks.get_mut(&tid) {
-                task.kernel_perms = task.kernel_perms.with(KernelPerms::BLOCK_IO);
+    // Assign a unique CellId based on the task ID so per-cell quota and
+    // capability checks are correctly scoped.  `spawn_from_mem` defaults to
+    // CellId(0) (kernel), which would make every path-spawned cell share the
+    // kernel's quota slot (charge() short-circuits for cell_id == 0).
+    let cell_id = CellId(tid as u64);
+    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&tid) {
+            task.cell_id = cell_id;
+        }
+    }
+
+    crate::audit::log_event(
+        crate::audit::AuditEvent::CellSpawn,
+        &crate::audit::encode_u32x2(tid as u32, 0u32),
+    );
+
+    // Register per-cell memory quota (4 MiB default) using the real CellId.
+    crate::memory::cell_quota::register(cell_id, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES);
+
+    // Grant ZST capability tokens based on the cell path.
+    // These are kernel-only types (pub(crate)) — Cell crates cannot forge them.
+    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&tid) {
+            if path.ends_with("/bin/vfs") {
+                task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
+            }
+            if path.ends_with("/bin/net") {
+                task.network_cap = Some(crate::task::cap::NetworkCap::new());
+            }
+            if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
+                task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
             }
         }
     }

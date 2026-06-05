@@ -10,6 +10,7 @@ extern crate alloc;
 use core::panic::PanicInfo;
 
 // Core kernel modules
+pub mod audit;
 pub mod boot;
 pub mod cell;
 pub mod fs; // Filesystem
@@ -234,7 +235,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
     let init_data = alloc::vec::Vec::from(INIT_ELF);
     match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
-        Ok(_tid) => log_info("Successfully spawned init"),
+        Ok(init_tid) => {
+            log_info("Successfully spawned init");
+            // Grant SpawnCap to init: it uses sys_spawn_from_path (a syscall) to
+            // boot vfs/config/shell. Without SpawnCap the syscall returns PermissionDenied.
+            if let Some(sched) = task::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&init_tid) {
+                    t.spawn_cap = Some(task::cap::SpawnCap::new());
+                }
+            }
+        }
         Err(_e) => log_info("Failed to spawn init"),
     }
 
@@ -280,22 +290,35 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 }
 
-/// Panic handler
+/// Panic handler.
+///
+/// If the panic occurs while a Cell is running (`CURRENT_CELL_ID != 0`),
+/// kills the Cell instead of halting the system (e.g. OOM after QuotaAlloc
+/// returns null → Cell's alloc panics → we kill it, kernel continues).
+/// True kernel panics (cell_id == 0) halt as before.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // Manually print panic info to avoid recursion if logger causes panic
+    let cell_id = task::scheduler::CURRENT_CELL_ID.load(
+        core::sync::atomic::Ordering::Relaxed
+    );
+
+    if cell_id != 0 {
+        // Cell OOM/panic — kill the Cell, kernel survives.
+        // SAFETY: panic context, interrupts disabled (abort mode), single-hart.
+        task::terminate_current_cell_on_fault(0, 0);
+        // terminate_current_cell_on_fault calls yield_cpu() which switches away.
+        // In abort mode we never return here, but placate the compiler:
+        loop { unsafe { core::arch::asm!("wfi"); } }
+    }
+
+    // True kernel panic: print diagnostics and halt.
     let puts = |s: &str| {
         for c in s.bytes() {
             let _ = crate::hal::sbi::console_putchar(c);
         }
     };
-    
     puts("\n[KERNEL PANIC] ");
-    // We can't easily format PanicInfo without alloc/fmt, so just signal it.
-    // But we can try to print a static message.
     puts("Critical failure.\n");
-    
-    // Attempt to format using basic fmt if possible (might recurse if fmt is broken)
     use core::fmt::Write;
     struct PanicWriter;
     impl core::fmt::Write for PanicWriter {
@@ -305,8 +328,5 @@ fn panic(info: &PanicInfo) -> ! {
         }
     }
     let _ = write!(PanicWriter, "{}\n", info);
-
-    loop {
-        hal::ARCH.wait_for_interrupt();
-    }
+    loop { hal::ARCH.wait_for_interrupt(); }
 }

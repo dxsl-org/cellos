@@ -86,29 +86,6 @@ pub enum SyscallFuture {
                                                             // Add other syscall futures here (FileWrite, Connect, etc.)
 }
 
-/// Kernel-internal capability bitflags for a task.
-///
-/// Replaces the single-purpose `can_block_io: bool` (Phase G) with a bitfield
-/// that accommodates future kernel-only capabilities without TCB struct changes.
-///
-/// NOTE: kernel-internal only — distinct from `libs/api` `CapPerms` (file I/O, Law 1).
-#[derive(Copy, Clone, Default)]
-pub struct KernelPerms(u32);
-
-impl KernelPerms {
-    /// Permits raw block-device syscalls (500/501/503). Granted to `/bin/vfs` at spawn.
-    pub const BLOCK_IO: Self = Self(1 << 0);
-
-    #[inline]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 != 0
-    }
-
-    #[inline]
-    pub const fn with(self, other: Self) -> Self {
-        Self(self.0 | other.0)
-    }
-}
 
 /// Task Control Block (TCB)
 #[allow(dead_code)]
@@ -149,9 +126,13 @@ pub struct Task {
     // Async Kernel Support
     pub pending_future: Option<SyscallFuture>,
 
-    /// Kernel capability bitfield. Granted at spawn (e.g. BLOCK_IO for `/bin/vfs`).
-    /// Empty for every other cell.
-    pub kernel_perms: KernelPerms,
+    /// Raw block-device access (BlkRead/BlkWrite/BlkFlush).  Granted at spawn for `/bin/vfs`.
+    pub block_io_cap: Option<super::cap::BlockIoCap>,
+    /// Network transmit/receive (NetTx/NetRx).  Granted at spawn for `/bin/net`.
+    pub network_cap:  Option<super::cap::NetworkCap>,
+    /// Cell spawning + hot-swap (SpawnFromPath/SpawnPinned/HotSwap).
+    /// Granted at spawn for `/bin/init` and `/bin/shell`.
+    pub spawn_cap:    Option<super::cap::SpawnCap>,
 
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
@@ -181,7 +162,9 @@ impl Task {
             waiters: Vec::new(),
             exit_code: None,
             pending_future: None,
-            kernel_perms: KernelPerms::default(),
+            block_io_cap: None,
+            network_cap:  None,
+            spawn_cap:    None,
             priority: api::TaskPriority::Normal as u8,
         }
     }

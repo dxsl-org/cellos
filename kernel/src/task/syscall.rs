@@ -64,21 +64,28 @@ const MAX_USER_BUF: usize = 64 * 1024 * 1024;
 /// Tighter cap for `Syscall::Log` since the kernel holds locks while printing.
 const MAX_LOG_MSG: usize = 4096;
 
-/// Returns `true` if the calling task holds raw block-device I/O permission.
+/// Returns `true` if the calling task satisfies the given capability check.
 ///
-/// Checks `KernelPerms::BLOCK_IO` in the per-TCB bitfield, set at spawn time
-/// for `/bin/vfs`. Boot-order-independent (Phase H replaces `can_block_io: bool`).
-///
-/// Lock-ordering: acquires SCHEDULER, drops before returning. No nested
-/// BLOCK_DEVICE lock inside this call — safe against the FS read ordering.
-fn caller_has_block_io(caller_id: usize) -> bool {
-    use super::tcb::KernelPerms;
+/// Lock-ordering: acquires SCHEDULER, drops before returning.
+fn caller_has_cap<F: Fn(&crate::task::tcb::Task) -> bool>(caller_id: usize, check: F) -> bool {
     super::SCHEDULER
         .lock()
         .as_ref()
         .and_then(|sched| sched.tasks.get(&caller_id))
-        .map(|t| t.kernel_perms.contains(KernelPerms::BLOCK_IO))
+        .map(|t| check(t))
         .unwrap_or(false)
+}
+
+fn caller_has_block_io(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.block_io_cap.is_some())
+}
+
+fn caller_has_network(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.network_cap.is_some())
+}
+
+fn caller_has_spawn(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
 }
 
 /// Validate a user-supplied (ptr, len) buffer descriptor.
@@ -295,6 +302,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             msg_ptr,
             msg_len,
         } => {
+            crate::audit::log_event(
+                crate::audit::AuditEvent::IpcSend,
+                &crate::audit::encode_u32x2(caller_id as u32, target as u32),
+            );
             let res = super::ipc_send(caller_id, target, msg_ptr, msg_len);
             match res {
                 Ok(0) => Ok(0),
@@ -597,6 +608,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
         }
         Syscall::Exit { code } => {
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellExit,
+                &crate::audit::encode_u32x2(caller_id as u32, code as u32),
+            );
             log::info!("Syscall::Exit: task {} exited with code {}", caller_id, code);
             let mut waiters = alloc::vec::Vec::new();
 
@@ -629,6 +644,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 types::CellId(0)
             };
             crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(cell_id);
+
+            // Release the Cell's memory quota entry.
+            crate::memory::cell_quota::deregister(cell_id);
 
             // yield_cpu switches away; this task is never rescheduled.
             super::yield_cpu();
@@ -796,6 +814,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::SpawnFromPath { path_ptr, path_len } => {
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
             // Reject empty or over-long paths at the trust boundary.
             if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
                 return Err(SyscallError::InvalidInput);
@@ -835,6 +856,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::SpawnPinned { path_ptr, path_len, priority, core_id } => {
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
             // On single-core builds only core 0 exists.  Return NotSupported for
             // any other core_id so callers can detect SMP unavailability.
             if core_id != 0 {
@@ -1115,6 +1139,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::NetTx { frame_ptr, frame_len } => {
+            if !caller_has_network(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::audit::log_event(
+                crate::audit::AuditEvent::NetTx,
+                &crate::audit::encode_u32x2(caller_id as u32, frame_len as u32),
+            );
             validate_user_buf(frame_ptr, frame_len, MAX_USER_BUF)?;
             // SAFETY: validated above — frame_ptr/frame_len is a readable user buffer
             // in the shared address space; we only read `frame_len` bytes from it.
@@ -1123,6 +1154,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(if ok { 1 } else { 0 })
         }
         Syscall::NetRx { buf_ptr, buf_len } => {
+            if !caller_has_network(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
             // SAFETY: validated above — buf_ptr/buf_len is a writable user buffer;
             // recv_frame writes at most `buf_len` bytes and returns the count.
@@ -1237,6 +1271,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::HotSwap { cell_id, path_ptr, path_len } => {
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
             // Validate and copy the path string from user space.
             let path_len = path_len.min(crate::loader::disk_layout::MAX_CELL_PATH);
             // SAFETY: path_ptr is a user-space string pointer passed via syscall registers;
