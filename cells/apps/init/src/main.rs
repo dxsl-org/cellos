@@ -14,7 +14,7 @@ use ostd::io::println;
 ///   3. Spawn Shell — interactive REPL.
 #[no_mangle]
 pub extern "C" fn main() {
-    println("Init: Starting ViOS Orchestrator...");
+    println("Init: Starting ViCell Orchestrator...");
 
     // 1. Spawn VFS Service (reads disk, serves /bin/*)
     println("Init: Spawning VFS Service...");
@@ -68,6 +68,15 @@ pub extern "C" fn main() {
     match ostd::syscall::sys_spawn_from_path("/bin/shell") {
         ostd::syscall::SyscallResult::Ok(_) => println("Init: Shell spawned successfully."),
         _ => println("Init: WARN — Shell spawn failed."),
+    }
+
+    ostd::task::yield_now();
+
+    // 7. Spawn benchmark suite if present (non-fatal — only in CI disk images).
+    // When /bin/bench is absent from the cell table, this silently skips.
+    match ostd::syscall::sys_spawn_from_path("/bin/bench") {
+        ostd::syscall::SyscallResult::Ok(_) => println("Init: Benchmark suite spawned."),
+        _ => {} // bench not in cell table — normal dev boot, skip silently
     }
 
     // Keep init alive as the process supervisor.

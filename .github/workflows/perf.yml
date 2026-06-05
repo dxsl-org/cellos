@@ -36,46 +36,86 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q qemu-system-misc
 
+      - name: Download Limine RISC-V bootloader
+        run: bash scripts/download-limine.sh tools/limine-riscv64
+
       - name: Cache Cargo registry
         uses: actions/cache@v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build kernel + bench cell
+      - name: Build init + bench cells
         run: |
           cargo build --release \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
-            -p vios-kernel \
+            -p app-init \
             -p app-bench
 
-      - name: Generate disk image with bench binary
+      - name: Rebuild kernel with bench-aware init
+        env:
+          # relocation-model=pic emits R_RISCV_RELATIVE entries for absolute
+          # pointers in .data so Limine can apply the KASLR slide correctly.
+          # -pie and --no-dynamic-linker come from kernel/build.rs (scoped to kernel).
+          RUSTFLAGS: "-C relocation-model=pic"
         run: |
-          # Create minimal disk with /bin/bench
-          if [ -f gen_disk.ps1 ]; then
-            echo "[perf] Skipping gen_disk.ps1 (PowerShell — run on Windows)"
-          fi
-          echo "[perf] Using ramdisk fallback for CI"
+          REL=target/riscv64gc-unknown-none-elf/release
+          # Update the embedded init binary so the kernel auto-spawns /bin/bench
+          cp "$REL/app-init" kernel/src/embedded/init
+          # Regenerate kernel_fs.img using committed embedded binaries (shell/vfs/config)
+          # plus the freshly-built init that tries to spawn bench
+          python3 tools/mkfat32.py kernel/src/embedded/kernel_fs.img \
+            kernel/src/embedded/init   /bin/init \
+            kernel/src/embedded/shell  /bin/shell \
+            kernel/src/embedded/vfs    /bin/vfs \
+            kernel/src/embedded/config /bin/config
+          # Rebuild kernel as PIE (ET_DYN) so Limine KASLR can relocate it
+          cargo build --release \
+            --target riscv64gc-unknown-none-elf \
+            -Z build-std=core,alloc \
+            -p vicell-kernel
+
+      - name: Generate bench disk image
+        run: |
+          # Disk contains: FAT16 with limine.conf + kernel ELF (for Limine boot),
+          # plus cell table at LBA 82000+ with /bin/bench (for EarlyLoader).
+          bash scripts/gen-bench-disk.sh \
+            target/riscv64gc-unknown-none-elf/release/app-bench \
+            target/riscv64gc-unknown-none-elf/release/vicell-kernel \
+            bench-disk.img
 
       - name: Boot QEMU and capture bench output
         id: bench_run
         timeout-minutes: 10
         run: |
-          KERNEL=target/riscv64gc-unknown-none-elf/release/vios-kernel
+          LIMINE=tools/limine-riscv64
+          # Limine is the -kernel (S-mode bootloader after OpenSBI).
+          # It reads limine.conf from the FAT16 partition, loads vicell-kernel
+          # at a randomized physical address (KASLR=yes in limine.conf), then
+          # jumps to _start. The kernel's EarlyLoader reads /bin/bench from the
+          # cell table at LBA 82000+ for auto-spawn via init.
+          #
+          # Capture both human-readable [bench] lines and bare JSON lines.
+          # print_report emits "[bench] ..." — used for PDR FAIL check.
+          # print_json  emits '{"name":...}' with no prefix — used for results JSON.
           OUTPUT=$(timeout 300 qemu-system-riscv64 \
             -machine virt \
             -nographic \
             -bios default \
-            -kernel "$KERNEL" \
-            -m 128M \
-            2>&1 | grep '^\[bench\]' || true)
+            -kernel "$LIMINE" \
+            -m 256M \
+            -drive file=bench-disk.img,format=raw,id=hd0,if=none \
+            -device virtio-blk-device,drive=hd0 \
+            2>&1 | grep -E '^\[bench\]|^\{"name":|^\[boot\] kernel_phys_base' || true)
 
+          # bench_output: only [bench]-prefixed lines (used by PDR FAIL check below)
+          BENCH_LINES=$(echo "$OUTPUT" | grep '^\[bench\]' || true)
           echo "bench_output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "$BENCH_LINES" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-          # Extract JSON lines (lines with {"name":...)
+          # Extract JSON lines from the combined output buffer.
           JSON_LINES=$(echo "$OUTPUT" | grep '^{"name":' || echo '[]')
           echo "bench_json<<EOF" >> "$GITHUB_OUTPUT"
           echo "$JSON_LINES" >> "$GITHUB_OUTPUT"
@@ -85,17 +125,14 @@ jobs:
         run: |
           DATE=$(date -u +%Y-%m-%d)
           mkdir -p perf-results
-          cat > "perf-results/perf-${DATE}.json" <<'JSONEOF'
-          {
-            "date": "${{ github.run_id }}",
-            "commit": "${{ github.sha }}",
-            "results": [
-          ${{ steps.bench_run.outputs.bench_json }}
-            ]
-          }
-          JSONEOF
-          echo "[perf] Result written to perf-results/perf-${DATE}.json"
-          cat "perf-results/perf-${DATE}.json"
+          RESULT_FILE="perf-results/perf-${DATE}.json"
+          JSON_LINES='${{ steps.bench_run.outputs.bench_json }}'
+          printf '{\n  "date": "%s",\n  "commit": "%s",\n  "results": [%s]\n}\n' \
+            "$DATE" \
+            "${{ github.sha }}" \
+            "$JSON_LINES" > "$RESULT_FILE"
+          echo "[perf] Result written to $RESULT_FILE"
+          cat "$RESULT_FILE"
 
       - name: Upload benchmark artifact
         uses: actions/upload-artifact@v4
@@ -106,11 +143,7 @@ jobs:
 
       - name: Compare against historical baseline
         run: |
-          if [ -f scripts/compare-bench-results.sh ]; then
-            bash scripts/compare-bench-results.sh perf-results/ || true
-          else
-            echo "[perf] compare-bench-results.sh not found — skipping regression check"
-          fi
+          bash scripts/compare-bench-results.sh perf-results/
 
       - name: Check PDR targets
         run: |

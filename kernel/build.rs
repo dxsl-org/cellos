@@ -14,6 +14,16 @@ fn main() {
     println!("cargo:rerun-if-changed={rerun_path}");
     println!("cargo:rerun-if-changed=kernel/linker-x86-64.ld");
 
+    // Produce a position-independent (ET_DYN) kernel binary so Limine can apply
+    // KASLR — randomizing the physical load address each boot. With ORIGIN=0x80200000
+    // in the linker script and slide=0, direct QEMU -kernel boot still works
+    // (all R_RISCV_RELATIVE addends are identity-transformed). Only apply to riscv64;
+    // aarch64/x86_64 use their own linker scripts and may need different flags.
+    if target_arch == "riscv64" {
+        println!("cargo:rustc-link-arg=-pie");
+        println!("cargo:rustc-link-arg=--no-dynamic-linker");
+    }
+
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let embedded_out = out_dir.join("embedded");
     fs::create_dir_all(&embedded_out).expect("create embedded OUT_DIR");

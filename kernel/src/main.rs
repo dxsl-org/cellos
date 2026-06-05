@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-//! ViOS Kernel - Entry point
+//! ViCell Kernel - Entry point
 
 #![no_std]
 #![no_main]
@@ -59,7 +59,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     };
 
     // Stable banner — CI greps for this exact string.
-    puts("[ViOS] kernel boot v");
+    puts("[ViCell] kernel boot v");
     puts(env!("CARGO_PKG_VERSION"));
     puts("\n");
     puts("Kernel started (Hart: 0, DTB: ...)\n");
@@ -77,13 +77,26 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             &boot::FALLBACK_BOOT_INFO
         }
     };
-    // Force type validity (we can't return reference to local without more work,
-    // so we assume FALLBACK_BOOT_INFO is static)
+    // Log physical base — non-default value confirms KASLR is active.
+    {
+        puts("[boot] kernel_phys_base=0x");
+        let mut base = boot_info.kernel_base();
+        let digits = b"0123456789abcdef";
+        let mut hex_buf = [b'0'; 16];
+        for i in (0..16).rev() {
+            hex_buf[i] = digits[base & 0xf];
+            base >>= 4;
+        }
+        if let Ok(s) = core::str::from_utf8(&hex_buf) {
+            puts(s);
+        }
+        puts("\n");
+    }
 
     // Initialize kernel subsystems
 
     // 1. Memory Management
-    // Get memory map from Boot Info (Converted to ViOS format)
+    // Get memory map from Boot Info (Converted to ViCell format)
     let mmap_entries = boot_info.memory_map();
 
     // Initialize frame allocator with the largest usable region

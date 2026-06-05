@@ -33,8 +33,11 @@ test_error*.txt
 *.zip
 
 # Reference materials
-reference/
+.references/
 
 # Disk Images
 *.img
+
+# Limine bootloader binary (downloaded at build/CI time via scripts/download-limine.sh)
+tools/limine-riscv64
 
