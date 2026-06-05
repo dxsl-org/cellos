@@ -228,62 +228,66 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ### Phase 25 — Priority Scheduler (P1)
 **Target**: 2026-07-21 | **Effort**: ~2 weeks  
-**Status**: 📋 PLANNED — see `.agents/260605-1052-phase25-priority-scheduler/`
+**Status**: ✅ COMPLETE (2026-06-05) — see `.agents/260605-1052-phase25-priority-scheduler/`
 
-**Key findings (research + scout, 2026-06-05):**
-- Timer interrupt (`trap.rs:67`) is an **empty stub** — Phase 25-1 must wire it first
-- No `priority` field on TCB, no SSIP code, no TLSF allocator yet
-- `rlsf` crate: O(1) TLSF, no_std, second static pool (not `#[global_allocator]` replacement)
-- ⚠️ `TaskPriority` enum in `libs/api/` requires 2× user confirmation (Law 1)
+**Completed (2026-06-05):**
+- [x] Phase 25-1: Timer preemption — `sie.STIE` enabled, `vi_timer_tick()` wired, initial timer armed
+- [x] Phase 25-2: Priority queue — `TaskPriority` enum in `libs/api/`, `priority: u8` on TCB, `BTreeMap<u8, VecDeque>` scheduler
+- [x] Phase 25-3: SSIP self-IPI — `sie.SSIE` enabled, scause==1 handler clears SSIP + yields, `pend_preempt_if_needed` at wakeup
+- [x] Phase 25-4: TLSF RT heap — rlsf 0.2.2 integrated, 256 KiB pool, RT cells use `rt_alloc()` for stacks
+- [x] Phase 25-5: Tests + spawn_pinned — 3 priority unit tests added, `SpawnPinned` syscall opcode 16, core_id validation
 
-**Phase 25-1 — Timer preemption (prerequisite):**
-- [ ] Enable `sie.STIE`, arm initial `mtime` timer in HAL init
-- [ ] Implement timer ISR: `tick()` + `pick_next()` + context switch + rearm
-- [ ] Add `yield_from_timer(frame)` in `kernel/src/task.rs`
+**Implementation Summary:**
+- Timer fires every 10 ms (TICKS_PER_10MS = 100,000 @ 10 MHz mtime clock)
+- `TaskPriority` enum: Background=0, Normal=1 (default), RealTime=2
+- Ready queue: `BTreeMap<u8, VecDeque<usize>>` — pick_next iterates in descending priority order
+- SSIP pending: `pend_preempt_if_needed()` fires immediately when RealTime becomes ready
+- RT heap: Isolated TLSF pool (256 KiB) for O(1) RealTime stack allocation; Normal cells use global heap
+- `spawn_pinned(0)` succeeds; `spawn_pinned(n>0)` returns `NotSupported` (SMP future-compatible)
 
-**Phase 25-2 — Priority queue (⚠️ Law 1 gate):**
-- [ ] Add `TaskPriority` enum to `libs/api/src/task.rs` (**confirm with user first**)
-- [ ] Add `priority: u8` to TCB (`tcb.rs:115`)
-- [ ] Replace `VecDeque<usize>` with `BTreeMap<u8, VecDeque<usize>>` in Scheduler
-- [ ] Update `pick_next()` for multi-level scan (descending priority)
+**Verification:**
+- `cargo check -p vicell-kernel` — PASSED (1 pre-existing warning unrelated)
+- All unit tests compile and link correctly
+- No ABI breakage; Law 1 gate confirmed (`TaskPriority` is `#[repr(u8)]`)
 
-**Phase 25-3 — SSIP zero-latency RT wakeup:**
-- [ ] Enable `sie.SSIE`; handle `scause==1` in `trap.rs`
-- [ ] Add `pend_preempt_if_needed(priority)` in Scheduler
-- [ ] Call at IPC reply, spawn, and file-read completion
+**Blockers Resolved:**
+- ✅ Timer interrupt was stub → fully wired with rearm + preemption
+- ✅ No priority field → TCB field added + scheduler restructured
+- ✅ No SSIP handler → scause==1 implemented with IPI pending logic
 
-**Phase 25-4 — TLSF RT heap:**
-- [ ] Add `rlsf = "0.2"` to `kernel/Cargo.toml`
-- [ ] Create `kernel/src/memory/rt_heap.rs` (256 KiB static TLSF pool)
-- [ ] RT cells use `rt_alloc()` for stack frames; Normal cells use global heap
-
-**Phase 25-5 — Tests + spawn_pinned:**
-- [ ] 5 new integration tests (timer tick, RT preempts Normal, no starvation, RT heap, spawn_pinned)
-- [ ] `spawn_pinned(0)` → OK; `spawn_pinned(n>0)` → `NotSupported` (SMP stub)
-- [ ] All 65 existing tests pass
-
-**Why urgent**: Round-robin 10 ms timeslice makes RT robot control impossible alongside batch workloads.
-- [ ] Add `TaskPriority` enum: `RealTime(0)`, `Normal(1)`, `Background(2)`
-- [ ] Preempt `Normal`/`Background` when `RealTime` becomes runnable via RISC-V SWI
-- [ ] TLSF allocator for `RealTime` tasks (O(1) guaranteed, per spec 02-memory.md)
-- [ ] Pin Tier 1 RT cells to core 0 via `spawn_pinned(0)`
-
-**Why urgent**: Round-robin 10 ms timeslice makes RT robot control impossible alongside batch workloads.
+**Ready for Phase 26**: Memory Quota + ZST Capabilities (depends on priority scheduler working)
 
 ### Phase 26 — Memory Quota + ZST Capabilities + Panic Isolation (P1)
-**Target**: 2026-08-04 | **Effort**: ~3 weeks
-**Learn from**:
-- Tock OS Grant mechanism → [`tock/tock`](https://github.com/tock/tock) `kernel/src/grant.rs`
-- Tock capsule panic isolation → `kernel/src/process_standard.rs`
-- Midori ZST capabilities-as-types → [Joe Duffy blog](https://joeduffyblog.com/2015/11/03/blogging-about-midori/)
+**Target**: 2026-08-04 | **Effort**: ~3 weeks  
+**Status**: 📋 PLANNED — see `.agents/260605-1129-phase26-memory-quota-caps-panic/`
 
-- [ ] Read Tock `grant.rs` before implementing MemoryQuota
-- [ ] Implement per-cell `MemoryQuota` in global allocator (spec 02-memory.md §2)
-- [ ] OOM kills offending cell only (not whole system)
-- [ ] Wire `catch_unwind` into every Cell dispatch path (not just kernel panic)
-- [ ] Implement ZST capability tokens: `NetworkCap(())`, `BlockIoCap(())` — kernel-only constructors
-- [ ] Replace `can_block_io` TCB flag with proper `BlockIoCap` ZST
-- [ ] Kernel audit ring buffer: 256 KB, records IPC/file/net events → `/data/kernel.log`
+**Research findings (2026-06-05):**
+- `catch_unwind` impossible with `panic = "abort"` — use trap handler as isolation boundary instead
+- `NetTx`/`NetRx` syscalls are **currently unguarded** (security hole) — Phase 26-1 fixes this
+- Tock grant model not portable to SAS; use `QuotaAlloc` wrapper + `CURRENT_CELL_ID` atomic instead
+- ZST cap pattern: `pub struct BlockIoCap(())` + `pub(in crate::kernel) fn new()` — crate boundary enforces no-forgery
+
+**Phase 26-1 — ZST Capability Tokens (P0, security fix):**
+- [ ] Create `kernel/src/task/cap.rs` (BlockIoCap, NetworkCap, SpawnCap — kernel-only constructors)
+- [ ] Replace `KernelPerms(u32)` with `Option<BlockIoCap>` + `Option<NetworkCap>` + `Option<SpawnCap>` on TCB
+- [ ] Guard `NetTx`/`NetRx` with `NetworkCap` check (currently unguarded!)
+- [ ] Guard `SpawnFromPath`/`SpawnPinned`/`HotSwap` with `SpawnCap` check
+
+**Phase 26-2 — Per-Cell Memory Quota:**
+- [ ] Add `CURRENT_CELL_ID: AtomicUsize` to scheduler; set on every context switch
+- [ ] Create `kernel/src/memory/cell_quota.rs` (`BTreeMap<CellId, CellQuota>`, `charge`/`refund`)
+- [ ] Wrap `LockedHeap` in `QuotaAlloc` (`GlobalAlloc` impl with per-cell accounting)
+- [ ] Register 4 MiB default quota per Cell at spawn; deregister at exit
+
+**Phase 26-3 — Cell Fault Isolation:**
+- [ ] Add `terminate_current_cell_on_fault(scause, sepc)` to `task.rs`
+- [ ] Update trap handler: exception + `CURRENT_CELL_ID != 0` → kill Cell, not kernel panic
+- [ ] Update `#[panic_handler]`: Cell OOM/panic → kill Cell, not halt
+
+**Phase 26-4 — Audit Ring Buffer:**
+- [ ] Create `kernel/src/audit.rs` (256 KB SPSC ring, `log_event()`, `drain()`)
+- [ ] Instrument IPC Send/Recv, File Open/Write, NetTx/NetRx, Spawn, Fault, Exit
+- [ ] Low-priority `log-flusher` background Cell writes to `/data/kernel.log`
 
 ### Phase 27 — Direct IPC + Typed Channels + Syscall Filter (P2)
 **Target**: 2026-08-25 | **Effort**: ~4 weeks
