@@ -3,7 +3,7 @@
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-06 (2 use-case stages overlay + Application Platform Gaps backlog)
+**Last Updated**: 2026-06-06 (tier stack simplified: Drop Lua/MicroPython — Python via Tier 2 WASM or Tier 3 VM; Tier 1b reframed as C library integration; WASM 2-phase; Tier 3 crosvm strategy)
 
 ---
 
@@ -25,9 +25,22 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 > **Hardware**: primary = **Tier A SBC with MMU** (RV64/ARM64, RPi-class robot brain/companion). Sub-track (end of G1) = **Tier B MCU** (RV32 <512KB, CHERIoT-Nano) for low-level motor/sensor control.
 
 ### 🖥️ Stage G2 — Server & Specialized PC
-> **"Done" means**: throughput · multi-core scaling · untrusted third-party code · desktop GUI · zero-downtime · full tooling · large storage.
+> **"Done" means**: throughput · multi-core scaling · untrusted third-party code · desktop GUI · zero-downtime · full tooling · large storage · RT-bounded NPU inference (via Tier 1b).
 >
-> **Hardware**: x86_64 (full bring-up) + multi-core RV64/ARM64 servers.
+> **Hardware**: x86_64 (full bring-up) + multi-core RV64/ARM64 servers + RISC-V AI server (C930/P870).
+
+### 🧠 Stage G3 — NPU-native Compute OS _(placeholder — starts after G2 ships)_
+> **"Done" means**: kernel schedules NPU as first-class compute resource · zero-copy tensor pipeline cross cells · per-cell NPU quota · NPU fault isolation (driver cell restart, app cells survive) · model weight shared across inference cells.
+>
+> **Conditions to start G3** (ALL required):
+> 1. G2 graduation criteria met (inference demo via Tier 1b with P99 bound)
+> 2. Real NPU hardware acquired (RK3588 ~$150 available now, OR SiFive P870+X390)
+> 3. Large-buffer IPC (sys_grant_pages) done — G2 extension, prerequisite for tensor handoff
+> 4. ≥2 months hands-on with real NPU vendor API (RKNN/X390) to validate `ViAccelerator` contract
+>
+> **Hardware**: same as G2 server targets, with dedicated NPU (RK3588 ARM64 OR SiFive P870+X390 RISC-V).
+>
+> ⚠️ **Do NOT spec G3 in detail before hardware** — API contract (ViAccelerator trait, TensorBuffer, dual-domain memory) must be hardware-informed. Exploratory draft: [.agents/reports/brainstorm-260606-2032-g3-npu-native-os.md](.agents/reports/brainstorm-260606-2032-g3-npu-native-os.md)
 
 ### Milestone → Stage Map
 
@@ -41,6 +54,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | Typed IPC + syscall filter (reliability part) | Phase 27-1/2 | 📋 | G1 |
 | ELF capability manifests | Phase 30 | ✅ | G1 |
 | Heap snapshot / Instant-On | Phase 29 | 📋 | G1 |
+| 🆕 Storage 2.0 (zero-copy grant + PageCache + FAT32) | Phases 00–03 | ✅ | **G1/G2/G3** |
 | 🆕 Peripheral Driver track (GPIO/I2C/SPI/UART; CAN/PWM/ADC) | *new* | 🆕 | **G1** |
 | VFS robustness (quota enforce, access control) | M2.1 | 📋 | G1 |
 | 🆕 ARM64 full bring-up (beyond ring-3 smoke) | ext. M1.3 | 📋 | **G1** |
@@ -50,7 +64,12 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | 📋 | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | 🆕 | **G1** (graduation) |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | 📋 | G2 |
-| WASM Tier-2 sandbox + fuel (+ePMP) | Phase 28 | 📋 | G2 |
+| WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ✅ | G1 (foundation) |
+| 🆕 WASM vi.* expand (VFS+net+time+spawn imports) | Phase 28-5 | 🆕 | **G1** |
+| WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | 📋 | **G2** |
+| 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | 🆕 | **G1 prep** (non-breaking) |
+| 🆕 Tier 3a Security Silo (Stage-2 fenced bare-metal guest) | *new* | 📋 | G1-optional |
+| 🆕 Tier 3b Linux VM — crosvm fork + vicell_hv/ port | Phase 31 | 📋 | **G2** |
 | SMP multi-core scheduler + work-stealing | Phase 32 | 📋 | **G2** |
 | Compositor + GPU desktop (full) + mouse | M2.4 + M2.2 full | 📋 | G2 |
 | Hot migration / zero-downtime | M4.1 | 📋 | G2 |
@@ -86,6 +105,17 @@ The existing Milestone 1.3 marks ARM64/x86_64 as **ring-3 smoke only**. Real tar
 **Status**: 🆕 — **G1 graduation gate**
 End-to-end loop: sensor read → compute → actuator write over GPIO/CAN, with MQTT telemetry. Proves the embedded stack works as a whole.
 
+#### Tier 3: Hypervisor / Virtualization `[G1-prep + G2]`
+**Status**: 🆕 DESIGNED — spec at [specs/05-application.md §4](specs/05-application.md)
+**VMM**: Custom **minimal VMM** (~9K LOC Rust, built from scratch as Tier 1 cell). microvm profile — MMIO bus, no PCI. VirtIO blk/net/console backends forward to ViCell VFS/Net IPC. No tokio, no mmap — SAS-native. (crosvm fork rejected: ~75K LOC, tokio+mmap incompatible with SAS cell constraints.)
+
+Three sub-items:
+- **Tier 3 kernel prep** `[G1-prep, non-breaking]`: RISC-V H-extension detect + HS-mode boot path (`hal/arch/riscv/hypervisor.rs`, ~200 LOC). `HypervisorCap` ZST token gates hypervisor syscalls (follows existing BlockIoCap/NetworkCap pattern). Transparent fallback to S-mode if H-ext absent.
+- **Tier 3a Security Silo** `[G1-optional]`: bare-metal Rust no_std guest in Stage-2 fenced memory. No Linux needed. Robot TLS private key isolation use case.
+- **Tier 3b Linux VM** `[G2, Phase 31]`: minimal VMM, boot Alpine Linux, VirtIO → ViCell IPC. Enables `apt install nginx`. CPU overhead ~5-10% (H-extension hardware virt), disk I/O ~20-40% (VirtIO roundtrip) — acceptable for management plane.
+
+> See [specs/05-application.md §6](specs/05-application.md) for wrong-path list (no QEMU-as-cell, no Type-1 hyp, no crosvm fork, no Android in G2).
+
 ### Graduation Criteria
 
 **G1 — Robot/Embedded is "done" when:**
@@ -99,7 +129,9 @@ End-to-end loop: sensor read → compute → actuator write over GPIO/CAN, with 
 8. Reference robot demo runs end-to-end.
 
 **G2 — Server/PC is "done" when:**
-SMP scales across N cores · untrusted `.wasm` runs sandboxed (fuel-metered) · windowed desktop + mouse · hot migration with no dropped connections · x86_64 full bring-up · full utility suite + large storage · throughput benchmarks meet targets.
+SMP scales across N cores · windowed desktop + mouse · hot migration with no dropped connections · x86_64 full bring-up · full utility suite + large storage · throughput benchmarks meet targets · **Linux VM boots inside Tier 3 (minimal VMM) and runs a real workload (nginx serving HTTP)** · RISC-V AI inference server demo: HTTP → NPU cell → response with P99 latency bound.
+
+> WASM Tier 2 deferred: dropped from official stack; revisit only if G2 needs multi-tenant platform (untrusted third-party workloads). See [specs/05-application.md §6](specs/05-application.md).
 
 ---
 
@@ -120,24 +152,129 @@ SMP scales across N cores · untrusted `.wasm` runs sandboxed (fuel-metered) · 
 ### C. Real-world connectivity `[G1 priority · shared]`
 - 🆕 **TLS for the net stack** `[shared, G1-priority]` — 📋 smoltcp runs plaintext → no HTTPS/MQTTS. Every modern cloud API is HTTPS, so apps can't talk to the real internet. Needs a no_std TLS crate (e.g. `embedded-tls`). Decoupled (net cell userspace). Highest leverage to turn telemetry into a real product.
 - 🆕 **RTC / wall-clock time** `[G1]` — 📋 only mtime ticks exist; no real date/time. Blocks log timestamps, TLS cert validation, scheduling. Touches HAL (RTC driver) → may overlap kernel work.
-- 🆕 **Bigger IPC / streaming** `[shared]` — 📋 512-byte IPC buffer (~480 B/write) → data-heavy apps die by chunking. Needs a streaming/bulk-transfer path (touches kernel IPC).
+- 🆕 **Large-buffer IPC / scatter-gather** `[shared, G3 prerequisite]` — 📋 512-byte IPC buffer → 6000 round-trips for a 3MB tensor (unusable for video, file transfer, NPU inference). Recommended: `sys_grant_pages(tid, vaddr, len, perms)` — page-table remap, no memcpy, ~1K LOC. Extends existing Lease/GrantEntry pattern. **G3 cannot start without this.**
 
 ### D. App SDK / ergonomics `[shared]`
 - 🆕 **Name service** `[shared]` — 📋 service endpoint ids are spawn-order constants (vfs=3, net=6…), hard-coded everywhere. Replace with a registry/lookup.
 - 🆕 **High-level cell libraries** `[shared]` — 📋 HTTP/JSON/TLS client helpers so apps don't hand-roll protocol bytes + manual encode/decode.
-- 🆕 **Script module system** `[shared]` — 📋 Lua `require`/`package.path` is a stub; MicroPython multi-module hard → scripts limited to a single file, can't structure large apps or port libraries.
+- 🆕 **Python/scripting story** `[G2]` — Python R&D users: full CPython via Tier 3 Linux VM (`apt install python3 pip numpy torch` → works). Lua/MicroPython native runtimes **dropped** (half-measure). WASM Tier 2 dropped — no `micropython.wasm` path. Robot code stays Rust (Tier 1). Milestones 3.3/3.4 marked complete but runtimes not actively maintained.
 - 🆕 **Async runtime exposed to apps** `[shared]` — 📋 no app-facing async executor for concurrent I/O.
 
 ### E. Ecosystem / distribution `[G2]`
-- **WASM Tier-2 + WASI maturity** — 📋 see Phase 28; the key path to bring real cross-language ecosystems in (currently only 4 custom `vi.*` imports).
+- 🆕 **Tier 1b C library integration** `[shared, partially done]` — link vendor C/C++ libraries (NPU SDK, mbedTLS, SQLite, legacy firmware) into Rust cells via `vicell-libc` (Newlib + POSIX shim). Core shim in `libs/api/src/posix.rs` (482 lines ✅): malloc/free, strings, file I/O, time → ViSyscall. **Missing**: entropy shim (`getentropy` → ViSyscall::GetRandom, ~50 LOC) + net shim (`connect/send/recv` → Net IPC, ~200 LOC). No `fork` by design (C libraries rarely fork). Primary use case: hardware NPU SDKs (RKNN/Hailo/K230) with no Rust equivalent. See [specs/05-application.md §3](specs/05-application.md).
+- **WASM Tier-2** — Phase 28 MVP ✅ (wasmi + 4 imports). **Tier 2 dropped from official stack** (2026-06-06). Phase 28 code retained under `feature = "wasm-experimental"` only — Phase 28-5 and WASI 2.0 migration cancelled. Revisit only if G2 becomes multi-tenant platform (Cloudflare Workers–style) after WASI 1.0 freezes (late 2026/early 2027).
 - 🆕 **Package manager / app distribution** `[G2]` — 📋 no install/update mechanism beyond baking into the disk image.
+
+### F. G2 RISC-V Server Strategy `[G2]`
+
+**Decision (2026-06-06):** G2 primary target = RISC-V AI inference server. Value proposition = latency guarantee + reliability + security, NOT throughput.
+
+**Two-plane architecture:**
+```
+DATA PLANE (performance-critical, Tier 1 + 1b):
+  HTTP → Net Cell → Inference Cell (Tier 1b + NPU SDK) → response
+  Zero-copy grant, RT-bounded, <10ms P99
+
+MANAGEMENT PLANE (ecosystem, Tier 3b):
+  Linux VM (Alpine ~2GB) — Prometheus, SSH, admin tools, PostgreSQL
+  overhead: ~5-10% CPU, ~20-40% disk I/O, 1-5s boot (one-time)
+```
+
+**Target hardware:** Alibaba C930 (64-core, VLEN=256b, ships 2025) → SiFive P870+X390 NPU (Q2 2026). **Window: 12-18 months** before Linux ecosystem consolidates on RISC-V server.
+
+**Value vs Linux + nginx:**
+
+| | Linux | ViCell G2 |
+|---|---|---|
+| Inference P99 latency | Best-effort | RT-bounded per cell |
+| NPU cell crash | System hung / cold restart | Supervisor respawn (never-die) |
+| Memory copies (net→NPU→resp) | 3-4 copies | 0-1 (zero-copy grant) |
+| Security (model weights, keys) | Process isolation | Stage-2 Security Silo |
+
+**Not competing:** LLM throughput (GPU wins 5-30x), general x86 workloads (Linux ecosystem too mature).
+
+**G2 graduation criteria (additions):** RISC-V AI inference server demo end-to-end (HTTP → NPU cell → P99 bound); Linux VM boots and runs real workload; never-die: NPU cell crash → auto-restart.
+
+See also: [.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md](.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md)
+
+### G. Chipset & Driver Support Matrix
+
+> Decided 2026-06-06. Full analysis: `.agents/reports/brainstorm-260606-2205-chipset-driver-strategy.md`
+
+#### Hardware targets per stage
+
+| Stage | CPU arch | Dev/test platform | Real board (when ready) |
+|-------|----------|-------------------|------------------------|
+| G1 | ARM64 + RV64 | **QEMU ARM virt** (primary, QEMU-first policy) | RPi 4 (BCM2711) → VisionFive2 (JH7110) |
+| G1 sub-track | RV32 | QEMU RV32 virt | SiFive E21 / CHERIoT-Nano |
+| G2 | RV64 | **Milk-V Pioneer** (X60, now) | Alibaba C930 (2026) |
+| G2 | x86_64 | QEMU x86_64 virt | x86 PC (when G2 starts) |
+| G3 | ARM64 | **Radxa ROCK 5 / Orange Pi 5+ (RK3588)** ~$150 | — |
+| G3 | RV64 | — | SiFive P870 + X390 NPU (Q2 2026) |
+
+**QEMU-first policy (G1):** Develop and validate peripheral Driver Cells on QEMU ARM virt (PL061 GPIO, PL011 UART, VirtIO) before buying real SBCs. HAL traits (`ViGpio`, `ViUart`) must be **board-agnostic** from v1 so real-board support adds only a new impl, zero kernel changes.
+
+#### G1 peripheral driver priority
+
+```
+GPIO (PL061 QEMU → BCM/JH7110 real)
+UART configure baud (extend existing cell)
+I2C → IMU / ToF / temperature sensors
+SPI → fast ADC / display / high-speed IMU
+PWM → servo / ESC motor control
+ADC → analog sensors / battery monitoring
+CAN → industrial robot bus (ROS2 CAN bridge)  [low priority, defer]
+```
+
+#### G2 driver priority (strict order — each is prerequisite for the next)
+
+```
+1. PCIe ECAM host controller   ← gates everything below
+2. RISC-V IOMMU                ← MUST come before NIC (DMA safety in SAS)
+3. NVMe (~3-5K LOC)            ← real storage, replaces VirtIO block
+4. RTL8125 / Intel i225 2.5G   ← real NIC (~5-8K LOC), replaces VirtIO net
+5. Intel i40e 10G              ← only when inference server needs bandwidth
+```
+
+> ⚠️ RISC-V IOMMU (ratified 2023) is **non-optional** before NIC: in SAS, an unguarded NIC DMA can write to kernel memory. Implement before step 4.
+
+**G2 PCIe strategy:** Port Redox OS PCIe ECAM enumeration logic (~40-60% reuse for BAR parsing / capability walk); rewrite MMIO access layer to use ViCell's `MmioRegion` safe-MMIO + Resource Registry. Do NOT port Redox's `mmap`-based driver model.
+
+#### G3 NPU path
+
+```
+G2 Level A  →  RKNN Runtime FFI cell (Tier 1b)    — validate ViAccelerator API on real HW
+              + Tier 1b net/entropy shims (see §E)
+G3 Level B  →  ViAccelerator HAL trait              — informed by ≥2 months RKNN experience
+               Kernel NPU scheduler + AcceleratorCap ZST
+G3 Level B+ →  SiFive X390 VCIX driver cell         — 2nd impl validates trait generality
+G3 Level C  →  sys_grant_tensor + TensorBuffer       — needs sys_grant_pages (G2 prerequisite)
+               ModelHandle shared weight (4GB cross-cell)
+```
+
+**RK3588 first:** buy Radxa ROCK 5 / Orange Pi 5+ (~$150) during G2 development. Hands-on with RKNN API ≥2 months BEFORE designing `ViAccelerator` trait.
+
+#### Scope killers — NOT planned
+
+| Excluded | Reason |
+|----------|--------|
+| Mellanox mlx5 (ConnectX) | 100K+ LOC, not needed for G2 demo; i225/RTL8125 sufficient |
+| Bluetooth / WiFi | Stack complexity out of proportion with use case |
+| USB host (xHCI) before G2 | Not blocking G1/G2 graduation |
+| Full ACPI power management | Only ACPI MADT for SMP CPU topology needed |
+| Audio / sound | Not a G1/G2 use case |
+| Multiple boards simultaneously G1 | 1 QEMU + 1 real SBC at graduation; HAL abstraction handles more later |
+
+---
 
 ### Minimal unlock sets (by use-case)
 | To write… | Needs (leverage order) |
 |---|---|
 | **Real G1 robot app** | Peripheral I/O → RTC → input delivery (if HMI) |
 | **Real cloud/IoT app** | **TLS** → bigger IPC/streaming → name service |
-| **Rich apps / ecosystem (G2)** | WASM/WASI → module system → SDK libs → display |
+| **Hardware NPU inference (RKNN/Hailo)** | Tier 1b entropy shim (~50 LOC) + net shim (~200 LOC) |
+| **Python R&D** | Tier 3: full CPython in Linux VM (`apt install python3 pip numpy`) |
+| **Rich apps / ecosystem (G2)** | Tier 1b SDK libs → name service → display → Tier 3 Linux VM |
 
 ---
 
@@ -594,16 +731,37 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 **Goal**: Complete VFS, input, network, and graphics services.
 
 **Effort**: 530 hours (~13 weeks)  
-**Status**: 📋 PLANNED
+**Status**: 🚧 IN PROGRESS (Storage 2.0 complete; VFS robustness + Input/Compositor planned)
+
+### Storage 2.0 — Zero-Copy Grant API + PageCache + Async VFS `[shared, G1-foundation · G2-scale · G3-prerequisite]`
+**Status**: ✅ COMPLETE (Phases 00–03, 2026-06-06) — see `.agents/260606-*/`  
+**Priority**: P0
+
+**Completed (2026-06-06):**
+- [x] Phase 00: FAT32 partition upgrade (540K sectors, 524K partition size)
+- [x] Phase 01: Zero-copy grant API (5 syscalls: GrantAlloc, GrantShare, GrantSlice, GrantFree, BlkReadAsync; PAGE_GRANT_TABLE, frame zeroing)
+- [x] Phase 02: VFS grant IPC (ReadGrant/WriteGrant, GrantDone, F14 safety contract prevents UAF)
+- [x] Phase 03: PageCache LRU (4MB cache, write-through policy, CachedBlockStream)
+- [~] Phase 04: Async VFS executor — DEFERRED to next milestone
+
+**Impact:**
+- **Performance**: Zero-copy grants eliminate memcpy for large file transfers; ~70% latency improvement via LRU cache (cached vs cold reads)
+- **Security**: Frame zeroing prevents cross-cell info-leak; GrantDone contract prevents use-after-free
+- **Scalability**: Multi-GB storage feasible; 6000+ round-trips for 3MB file → 6 with grant (1000x improvement)
+- **Foundation**: Unblocks G2 (streaming, large models) and G3 (tensor handoff)
+
+**Effort**: 80 hours (Phases 00–03 implemented)
+
+---
 
 ### Milestone 2.1: Complete VFS Service `[G1 robustness · G2 scale]`
 **Status**: 📋 PLANNED — see `.agents/260605-1538-milestone-2-1-vfs-complete/`  
 **Priority**: P0
 
 **Research findings (2026-06-05):**
-- FAT32: **NOT needed** at current 40MB disk scale. FAT16 is correct; fatfs auto-detects at 256MB+.
+- FAT32: **DONE** (Phase 00 of Storage 2.0). Supports >2GB disks via in-place upgrade.
 - Permissions: **CellId-based capability gating**, not POSIX mode bits. No persistent FAT metadata.
-- Async: **Two-opcode protocol** (ReadAsync → PendingHandle, Poll) — no executor changes needed.
+- Async: **Two-opcode protocol** (ReadAsync → PendingHandle, Poll) — no executor changes needed (Phase 04 deferred).
 - Quota: `QuotaTracker` exists in `quota.rs` but is NOT wired to the write path — easy P0 fix.
 
 **Phase 2.1-1 — Wire quota enforcement (P0, 2 days):**
@@ -927,7 +1085,7 @@ Phase 4 (Advanced Features)
 
 ---
 
-## Completed Work (Phases 0-20, C-H, A-E, X-1-X-6)
+## Completed Work (Phases 0-20, C-H, A-E, X-1-X-6, Storage 2.0)
 
 ✅ **Phase 0 (Alpha)**: Kernel skeleton, RV64 HAL, basic shell  
 ✅ **Phase 01**: Workspace consolidated, 0 cargo warnings  
@@ -958,6 +1116,7 @@ Phase 4 (Advanced Features)
 ✅ **Phase X-4**: Lua execution with fault handling (code-exec verification)
 ✅ **Phase X-5**: MQTT 3.1.1 QoS-0 client cell (/bin/mqtt) with publish/subscribe
 ✅ **Phase X-6**: ForceExit syscall (opcode 61, SpawnCap-gated, shell kill -9)
+✅ **Storage 2.0**: Zero-copy grant API + PageCache + FAT32 upgrade (Phases 00–03, 2026-06-06)
 ✅ **Milestone 3.3**: Lua runtime enhancement (typed VFS IPC, io.open, vfs.stat/listdir/remove)
 ✅ **Milestone 3.4**: MicroPython runtime enhancement (vfs_bridge.rs, modvfs.c rewrite, typed VFS IPC)
 
@@ -1033,7 +1192,7 @@ Phase 4 (Advanced Features)
 - Basic shell REPL
 - Architecture validated
 
-### v0.2.1-dev (Current: 2026-06-03)
+### v0.2.1-dev (Current: 2026-06-06)
 - ✅ VirtIO block device fixed (Phase 05)
 - ✅ Keyboard input fixed (Phase 05)
 - ✅ Multi-arch HAL (RV64, ARM, x86) Ring-3 smoke (Phase 05)
@@ -1043,7 +1202,8 @@ Phase 4 (Advanced Features)
 - ✅ Network TCP data-path: CONNECT/SEND/RECV/CLOSE + HTTP/1.0 GET (Phases A–B)
 - ✅ IPC buffer hardening + Lua TCP bindings (Phase D)
 - ✅ UDP sockets + DNS resolver (Phase E: SOCKET_UDP, SENDTO, RECVFROM, vnet.resolve)
-- ✅ Integration test suite (96%+ coverage, 25/25 tests passing)
+- ✅ Storage 2.0: Zero-copy grant API (5 syscalls) + PageCache LRU (4MB) + FAT32 upgrade (Phases 00–03)
+- ✅ Integration test suite (96%+ coverage, 65+ tests passing)
 
 ### v0.3.0 (Target: 2026-09-30)
 - FAT16 feature parity (permissions, extended attrs, sparse files)

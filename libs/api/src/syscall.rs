@@ -109,6 +109,27 @@ pub enum ViSyscall {
     /// = 0` disables the heartbeat. Open to all cells. ABI: a0 = interval_ticks → 0.
     Heartbeat = 207,
 
+    // === Zero-Copy Grant (Storage 2.0, Phase 01) ===
+    /// Allocate a kernel-managed Grant region of up to 16 pages (64 KB).
+    /// ABI: a0 = size (rounded up to pages, max 65536) → base_paddr (> 0) on success, 0 on OOM.
+    /// Requires GrantCap (allowlist bit 39).
+    GrantAlloc = 208,
+    /// Share Grant access with `target_task`.
+    /// ABI: a0 = grant_id, a1 = target_task_id, a2 = GrantPerm (0=RO, 1=WO, 2=RW) → 0 on success.
+    /// Requires GrantCap (bit 39).
+    GrantShare = 209,
+    /// Return the raw pointer to a Grant region the caller has access to.
+    /// ABI: a0 = grant_id → ptr (usize, same as grant_id for identity-mapped SAS) on success.
+    /// Returns usize::MAX on permission denied or not found.
+    GrantSlice = 210,
+    /// Release a Grant region: unmaps its pages and frees its frames.
+    /// ABI: a0 = grant_id → 0 on success.
+    GrantFree = 211,
+    /// Start an async sector read into a Grant buffer (poll-based stub; Phase 04 for true async).
+    /// ABI: a0 = sector, a1 = grant_id → async_id (1 = immediately complete) on success.
+    /// Requires BlockIoCap (bit 36) — same gate as raw block-I/O opcodes 500/501.
+    BlkReadAsync = 212,
+
     // === Hot-swap (Phase 20) ===
     /// Live-replace a running Cell without message loss.
     /// ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.
@@ -183,6 +204,10 @@ impl ViSyscall {
             Self::LookupService => Some(37),
             // Heartbeat is an open syscall (any cell asserts its own liveness).
             Self::Heartbeat     => Some(38),
+            // GrantCap (bit 39): cells that need zero-copy large-file I/O via Grant API.
+            Self::GrantAlloc | Self::GrantShare | Self::GrantSlice | Self::GrantFree => Some(39),
+            // BlkReadAsync reuses BlockIoCap (bit 36) — same authority as raw block I/O.
+            Self::BlkReadAsync  => Some(36),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -236,6 +261,11 @@ impl From<usize> for ViSyscall {
             205 => ViSyscall::RegisterService,
             206 => ViSyscall::LookupService,
             207 => ViSyscall::Heartbeat,
+            208 => ViSyscall::GrantAlloc,
+            209 => ViSyscall::GrantShare,
+            210 => ViSyscall::GrantSlice,
+            211 => ViSyscall::GrantFree,
+            212 => ViSyscall::BlkReadAsync,
             300 => ViSyscall::GpuFlush,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,

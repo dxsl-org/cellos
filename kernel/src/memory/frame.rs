@@ -216,6 +216,31 @@ impl FrameAllocator {
     pub fn frame_addr(&self, idx: usize) -> PhysAddr {
         self.frame_index_to_addr(idx)
     }
+
+    /// Find `n` consecutive free frames and mark them all allocated.
+    ///
+    /// Returns the physical address of the first frame, or `None` when no
+    /// contiguous run of `n` frames is available.  Linear O(frames × n) scan
+    /// — acceptable for startup-time Grant allocations with n ≤ 16.
+    pub fn allocate_contiguous(&mut self, n: usize) -> Option<PhysAddr> {
+        if n == 1 {
+            return self.allocate_frame();
+        }
+        let limit = self.total_frames.saturating_sub(n);
+        'outer: for start in 0..=limit {
+            for i in 0..n {
+                if self.is_frame_allocated(start + i) {
+                    continue 'outer;
+                }
+            }
+            // Found n consecutive free frames.
+            for i in 0..n {
+                self.mark_used(start + i);
+            }
+            return Some(self.frame_index_to_addr(start));
+        }
+        None
+    }
 }
 
 /// Global frame allocator

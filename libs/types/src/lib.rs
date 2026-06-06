@@ -35,6 +35,33 @@ pub enum HalError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CellId(pub u64);
 
+/// Opaque handle for a kernel-managed Grant region.
+/// The value is the physical base address of the grant's first page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct GrantId(pub usize);
+
+/// Access permission granted to a target cell for a Grant region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum GrantPerm {
+    ReadOnly  = 0,
+    WriteOnly = 1,
+    ReadWrite = 2,
+}
+
+impl core::convert::TryFrom<u8> for GrantPerm {
+    type Error = ();
+    fn try_from(v: u8) -> Result<Self, ()> {
+        match v {
+            0 => Ok(Self::ReadOnly),
+            1 => Ok(Self::WriteOnly),
+            2 => Ok(Self::ReadWrite),
+            _ => Err(()),
+        }
+    }
+}
+
 /// State of a Cell in its lifecycle.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

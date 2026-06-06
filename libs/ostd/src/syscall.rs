@@ -715,3 +715,65 @@ pub fn sys_get_time() -> u64 {
     let ret = unsafe { syscall(ViSyscall::GetTime, 0, 0, 0, 0) };
     if ret >= 0 { ret as u64 } else { 0 }
 }
+
+// ── Zero-Copy Grant API (Storage 2.0, Phase 01) ───────────────────────────────
+
+/// Allocate a contiguous kernel-managed Grant region of up to 16 pages (64 KB).
+///
+/// # Returns
+/// `Some(grant_id)` on success; `None` on OOM. `grant_id` is the physical base
+/// address of the region (identity-mapped vaddr == paddr in SAS).
+pub fn sys_grant_alloc(size: usize) -> Option<usize> {
+    // SAFETY: register-only + kernel allocates memory on our behalf.
+    let ret = unsafe { syscall(ViSyscall::GrantAlloc, size, 0, 0, 0) };
+    // Kernel returns 0 on OOM (F10); compare as usize to avoid signed-bit issues
+    // on targets where RAM could place a grant above the isize sign boundary.
+    if (ret as usize) != 0 { Some(ret as usize) } else { None }
+}
+
+/// Share a Grant region with another task under the given permission.
+///
+/// `perm`: 0 = ReadOnly, 1 = WriteOnly, 2 = ReadWrite.
+///
+/// # Returns
+/// `true` on success (caller must own the grant).
+pub fn sys_grant_share(grant_id: usize, target_tid: usize, perm: u8) -> bool {
+    // SAFETY: register-only; no memory pointers.
+    let ret = unsafe { syscall(ViSyscall::GrantShare, grant_id, target_tid, perm as usize, 0) };
+    ret == 0
+}
+
+/// Return the user-space pointer for a Grant the caller owns or holds.
+///
+/// In SAS the pointer equals the physical base (identity-map). Returns `None`
+/// when `grant_id` is not found or the caller lacks access.
+pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
+    // SAFETY: register-only; kernel validates ownership before returning a pointer.
+    let ret = unsafe { syscall(ViSyscall::GrantSlice, grant_id, 0, 0, 0) };
+    // Kernel returns usize::MAX on permission denied / not found. Cast through usize
+    // to avoid the signed isize ambiguity with usize::MAX == -1i64 on 64-bit targets.
+    if (ret as usize) != usize::MAX { Some(ret as usize as *mut u8) } else { None }
+}
+
+/// Release a Grant region (owner-only): unmaps its pages and frees the frames.
+///
+/// # Returns
+/// `true` on success.
+pub fn sys_grant_free(grant_id: usize) -> bool {
+    // SAFETY: register-only; kernel cleans up the physical mapping.
+    let ret = unsafe { syscall(ViSyscall::GrantFree, grant_id, 0, 0, 0) };
+    ret == 0
+}
+
+/// Synchronous-but-zero-copy sector read into a pre-allocated Grant buffer.
+///
+/// The grant must be owned by the caller and hold ≥ 512 bytes.
+/// Returns `true` when the read completes immediately (Phase 04 = true async).
+///
+/// Requires `BlockIoCap` (same authority gate as raw block I/O 500/501).
+pub fn sys_blk_read_async(sector: u64, grant_id: usize) -> bool {
+    // SAFETY: the grant buffer is already kernel-allocated and identity-mapped;
+    // no additional pointer validation needed.
+    let ret = unsafe { syscall(ViSyscall::BlkReadAsync, sector as usize, grant_id, 0, 0) };
+    ret == 1
+}

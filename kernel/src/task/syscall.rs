@@ -4,7 +4,7 @@
 //! See [docs/architecture/03-driver-strategy.md] for the full rationale.
 
 use super::tcb::TaskState;
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use api::syscall::ViSpawnArgs;
 use crate::sync::Spinlock;
 // use log::info;
@@ -37,6 +37,27 @@ fn shm_register(handle: usize) {
 fn shm_is_valid(handle: usize) -> bool {
     let guard = shm_handles_lock().lock();
     guard.as_ref().map_or(false, |set| set.contains(&handle))
+}
+
+// ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
+
+/// Kernel-managed zero-copy memory region.
+///
+/// Distinct from `tcb::GrantEntry` which tracks per-task grants from the kernel.
+/// Owner and grantee are tracked by raw task id (usize) — same as `caller_id`
+/// from `current_task_id()`. We intentionally avoid `CellId` wrappers here
+/// because `caller_id` IS a task id, not a Cell id (F7).
+struct PageGrant {
+    base:      usize,                        // physical address of the first allocated page
+    size:      usize,                        // total byte count (multiple of 4096)
+    owner:     usize,                        // task id of the GrantAlloc caller
+    shared_to: Option<(usize, GrantPerm)>,   // current grantee task id + permission
+}
+
+static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> = Spinlock::new(None);
+
+fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, PageGrant>>> {
+    &PAGE_GRANT_TABLE
 }
 
 /// Result of a System Call
@@ -300,6 +321,16 @@ pub enum Syscall {
     Shutdown,
     /// 503: BlkFlush — flush the VirtIO block device write cache to the backing image.
     BlkFlush,
+    /// 208: GrantAlloc — allocate n pages as a zero-copy Grant region.
+    GrantAlloc { size: usize },
+    /// 209: GrantShare — share a Grant region with `target_cell` under `perm`.
+    GrantShare { grant_id: usize, target_cell: usize, perm: usize },
+    /// 210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.
+    GrantSlice { grant_id: usize },
+    /// 211: GrantFree — unmap + deallocate a Grant region.
+    GrantFree { grant_id: usize },
+    /// 212: BlkReadAsync — synchronous-but-zero-copy sector read into a Grant buffer.
+    BlkReadAsync { sector: u64, grant_id: usize },
 }
 
 /// Dispatches a system call to the appropriate handler.
@@ -1452,6 +1483,161 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(_) => Err(SyscallError::Unknown),
             }
         }
+
+        // ── Zero-Copy Grant Syscalls (Phase 01, Storage 2.0) ─────────────────
+
+        Syscall::GrantAlloc { size } => {
+            const MAX_GRANT_PAGES: usize = 16;
+            const PAGE_SIZE: usize = 4096;
+            if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
+                return Ok(0); // OOM-style sentinel per F10
+            }
+            let n_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+            use crate::memory::frame::FRAME_ALLOCATOR;
+            use crate::memory::paging::Flags;
+            let user_flags = Flags::VALID | Flags::READ | Flags::WRITE
+                | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
+            // Allocate contiguous frames (marks them used in the bitmap immediately).
+            let paddr = {
+                let mut g = FRAME_ALLOCATOR.lock();
+                g.as_mut().and_then(|a| a.allocate_contiguous(n_pages))
+            };
+            let paddr = match paddr { Some(p) => p, None => return Ok(0) };
+            // Map each frame USER RW. Lock order: FRAME_ALLOCATOR → KERNEL_ROOT (via map_page).
+            // Identity map: vaddr == paddr so VirtIO DMA addresses remain correct in SAS.
+            let mut mapped = 0usize;
+            {
+                let mut guard = FRAME_ALLOCATOR.lock();
+                if let Some(alloc) = guard.as_mut() {
+                    for i in 0..n_pages {
+                        let v = paddr + i * PAGE_SIZE;
+                        if crate::memory::paging::map_page(
+                            alloc, v, v, Flags::from_bits(user_flags),
+                        ).is_ok() {
+                            mapped += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            if mapped < n_pages {
+                // Partial map: unmap what succeeded, then free all frames.
+                for i in 0..mapped {
+                    let _ = crate::memory::paging::unmap_page(paddr + i * PAGE_SIZE);
+                }
+                // SAFETY: RISC-V ISA requires sfence.vma after modifying PTEs.
+                unsafe { core::arch::asm!("sfence.vma", options(nostack)); }
+                let mut fa = FRAME_ALLOCATOR.lock();
+                if let Some(a) = fa.as_mut() {
+                    for k in 0..n_pages { a.deallocate_frame(paddr + k * PAGE_SIZE); }
+                }
+                return Ok(0);
+            }
+            // Zero every mapped page before handing to user: prevents stale data from a
+            // previously-freed grant leaking to a different cell (info-disclosure under G2).
+            // SAFETY: frames are identity-mapped USER RW, mapped above; SUM=1 allows S-mode writes.
+            unsafe {
+                core::ptr::write_bytes(paddr as *mut u8, 0, n_pages * PAGE_SIZE);
+            }
+            // Register in the grant table.
+            let mut tbl = grant_table_lock().lock();
+            if tbl.is_none() { *tbl = Some(BTreeMap::new()); }
+            if let Some(map) = tbl.as_mut() {
+                map.insert(paddr, PageGrant {
+                    base:      paddr,
+                    size:      n_pages * PAGE_SIZE,
+                    owner:     caller_id,
+                    shared_to: None,
+                });
+            }
+            Ok(paddr) // grant_id == physical base (identity-mapped vaddr in SAS)
+        }
+
+        Syscall::GrantShare { grant_id, target_cell, perm } => {
+            let perm = match GrantPerm::try_from(perm as u8) {
+                Ok(p) => p,
+                Err(_) => return Err(SyscallError::InvalidInput),
+            };
+            let mut tbl = grant_table_lock().lock();
+            if tbl.is_none() { *tbl = Some(BTreeMap::new()); }
+            match tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
+                None => Err(SyscallError::InvalidInput),
+                Some(grant) if grant.owner != caller_id => Err(SyscallError::PermissionDenied),
+                Some(grant) => {
+                    grant.shared_to = Some((target_cell, perm));
+                    Ok(0)
+                }
+            }
+        }
+
+        Syscall::GrantSlice { grant_id } => {
+            let tbl = grant_table_lock().lock();
+            match tbl.as_ref().and_then(|m| m.get(&grant_id)) {
+                None => Ok(usize::MAX),
+                Some(grant) => {
+                    let allowed = grant.owner == caller_id
+                        || grant.shared_to.map_or(false, |(tid, _)| tid == caller_id);
+                    if allowed { Ok(grant.base) } else { Ok(usize::MAX) }
+                }
+            }
+        }
+
+        Syscall::GrantFree { grant_id } => {
+            // Owner-only: remove from table before touching page tables.
+            let entry = {
+                let mut tbl = grant_table_lock().lock();
+                tbl.as_mut().and_then(|m| {
+                    if m.get(&grant_id).map_or(false, |g| g.owner == caller_id) {
+                        m.remove(&grant_id)
+                    } else {
+                        None
+                    }
+                })
+            };
+            let entry = match entry { Some(e) => e, None => return Err(SyscallError::PermissionDenied) };
+            let n_pages = entry.size / 4096;
+            // Unmap first (acquires KERNEL_ROOT internally — must NOT hold FRAME_ALLOCATOR).
+            for i in 0..n_pages {
+                let _ = crate::memory::paging::unmap_page(entry.base + i * 4096);
+            }
+            // SAFETY: RISC-V ISA requires sfence.vma after unmapping PTEs.
+            unsafe { core::arch::asm!("sfence.vma", options(nostack)); }
+            // Return frames to the allocator.
+            let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
+            if let Some(alloc) = fa.as_mut() {
+                for k in 0..n_pages { alloc.deallocate_frame(entry.base + k * 4096); }
+            }
+            Ok(0)
+        }
+
+        Syscall::BlkReadAsync { sector, grant_id } => {
+            if !caller_has_block_io(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if sector >= crate::loader::disk_layout::CELL_TABLE_BASE_LBA {
+                return Ok(0);
+            }
+            // Validate ownership and minimum size (must hold ≥ 512 bytes).
+            let buf_paddr = {
+                let tbl = grant_table_lock().lock();
+                tbl.as_ref()
+                    .and_then(|m| m.get(&grant_id))
+                    .filter(|g| g.owner == caller_id && g.size >= 512)
+                    .map(|g| g.base)
+            };
+            let buf_paddr = match buf_paddr { Some(p) => p, None => return Ok(0) };
+            // Grant pages are identity-mapped (vaddr == paddr), so DMA addresses are correct.
+            // SAFETY: buf_paddr is a physically contiguous, identity-mapped grant page; valid
+            // for 512 bytes of VirtIO DMA read.
+            use crate::task::drivers::virtio_blk::viVirtIOBlk;
+            use api::block::ViBlockDevice;
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf_paddr as *mut u8, 512) };
+            match viVirtIOBlk.read_sector(sector, buf) {
+                Ok(()) => Ok(1), // async_id = 1 means immediately complete (Phase 04 for real async)
+                Err(_)  => Ok(0),
+            }
+        }
     }
 }
 
@@ -1551,6 +1737,11 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::StateRestore => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::HotSwap   => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
         ViSyscall::Snapshot  => Syscall::Snapshot,
+        ViSyscall::GrantAlloc    => Syscall::GrantAlloc { size: a0 },
+        ViSyscall::GrantShare    => Syscall::GrantShare { grant_id: a0, target_cell: a1, perm: a2 },
+        ViSyscall::GrantSlice    => Syscall::GrantSlice { grant_id: a0 },
+        ViSyscall::GrantFree     => Syscall::GrantFree { grant_id: a0 },
+        ViSyscall::BlkReadAsync  => Syscall::BlkReadAsync { sector: a0 as u64, grant_id: a1 },
 
         // Handle non-matching/legacy manually
         _ => match syscall_id {
@@ -1588,7 +1779,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         let bit = sc.allowlist_bit();
         // Also check bit 36 for raw block-I/O opcodes (500/501/503) that have their
         // own match arms and bypass the ViSyscall::from() mapping.
-        let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503) { Some(36) } else { None };
+        // 212 = BlkReadAsync reuses BlockIoCap (bit 36) — same gate as raw opcodes 500/501/503.
+        let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) { Some(36) } else { None };
 
         // Read allowlist once; drop lock before handle_syscall re-acquires it.
         let allowlist = super::SCHEDULER.lock().as_ref()

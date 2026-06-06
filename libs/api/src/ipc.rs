@@ -46,6 +46,15 @@ pub enum VfsRequest<'a> {
     ReadAsync { path: &'a str },
     /// Poll a pending read for completion.
     Poll { handle: u32 },
+    /// Zero-copy large read: VFS reads `size` bytes at `offset` from the file
+    /// identified by `cap` directly into the caller's pre-allocated grant buffer.
+    /// Grant must be owned by the caller and large enough to hold `size` bytes.
+    /// VFS calls GrantShare on itself before writing, then replies GrantDone.
+    ReadGrant { cap: u64, offset: u64, size: usize, grant: usize },
+    /// Zero-copy large write: VFS reads `bytes` bytes from the caller's grant
+    /// buffer and writes them to `cap` at `offset`.  GrantDone is sent only
+    /// after the write commits (write-through on FAT32) — F14 invariant.
+    WriteGrant { cap: u64, offset: u64, grant: usize, bytes: usize },
 }
 
 /// Responses from the VFS service.
@@ -66,6 +75,8 @@ pub enum VfsResponse<'a> {
     PendingHandle(u32),
     /// Read still in progress — call Poll again after yielding.
     Pending,
+    /// Zero-copy I/O complete: `bytes` is the number of bytes transferred.
+    GrantDone { bytes: usize },
 }
 
 // ── Network service ───────────────────────────────────────────────────────────

@@ -17,9 +17,9 @@
 //! ```
 
 /// Sector offset (from LBA 0) where the cell bootstrap section begins.
-/// Chosen so the 40 MB FAT32 image (81_920 sectors) ends well before this.
-/// 40 MB ÷ 512 = 81_920 → we use 82_000 for a clean round number with slack.
-pub const CELL_TABLE_BASE_LBA: u64 = 82_000;
+/// FAT32 data volume occupies LBA 0-524287 (256 MB, 65525+ clusters).
+/// 256 sectors of padding follow (524288-524799) before the table at 524800.
+pub const CELL_TABLE_BASE_LBA: u64 = 524_800;
 
 /// Magic bytes at the start of `CellTableHeader`; identifies a valid table.
 pub const CELL_TABLE_MAGIC: u64 = 0x5649_4F53_5F43_454C; // "ViCell_CEL" in ASCII

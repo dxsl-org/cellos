@@ -1,4 +1,4 @@
-# Generate disk images for ViOS.
+# Generate disk images for ViCell.
 #
 # Two separate images are produced:
 #
@@ -7,9 +7,10 @@
 #       Contains release-built cell ELFs + /hostname + /readme.
 #       Served by the kernel's internal filesystem (sys_open / ReadDir).
 #
-#   disk_v3.img  (~40 MB, blank FAT32 area + cell bootstrap table)
+#   disk_v3.img  (~270 MB, FAT32 data area + cell bootstrap table)
 #       Passed to QEMU as a VirtIO block device (-drive file=disk_v3.img).
-#       LBA 82000+: Cell bootstrap table read by the early loader.
+#       LBA 0-524287:  FAT32 /data volume mounted by the VFS cell.
+#       LBA 524800+:   Cell bootstrap table read by the early loader.
 #       SpawnFromPath uses this table to load VFS, config, shell.
 
 $kernel_root = Get-Location
@@ -86,10 +87,10 @@ if (-not (Test-Path $bench_bin)) {
 # 3a. Generate kernel_fs.img (small embedded FAT32, ~8 MB, with release cells).
 #     This image is embedded in the kernel binary via ramdisk.rs.
 Write-Host "Generating kernel_fs.img (embedded FAT32, release cells)..."
-$tmpDir = "$env:TEMP\vios_kfs"
+$tmpDir = "$env:TEMP\ViCell_kfs"
 New-Item -ItemType Directory -Force $tmpDir | Out-Null
-Set-Content -Path "$tmpDir\hostname" -Value "vios" -NoNewline -Encoding ascii
-Set-Content -Path "$tmpDir\readme"   -Value "Welcome to ViOS!" -NoNewline -Encoding ascii
+Set-Content -Path "$tmpDir\hostname" -Value "ViCell" -NoNewline -Encoding ascii
+Set-Content -Path "$tmpDir\readme"   -Value "Welcome to ViCell!" -NoNewline -Encoding ascii
 $kfs_args = @(
     "kernel\src\embedded\kernel_fs.img",
     "$rel_dir\app-init",       "/bin/init",
@@ -106,18 +107,20 @@ Remove-Item -Recurse -Force $tmpDir
 $kfs_mb = [Math]::Round((Get-Item "kernel\src\embedded\kernel_fs.img").Length/1MB,1)
 Write-Host "  kernel_fs.img: ${kfs_mb} MB"
 
-# 3b. Create a blank disk image (40MB = 81920 sectors) for VirtIO block.
-Write-Host "Creating blank disk image (disk_v3.img)..."
-$diskSize = 81920 * 512     # 40 MB — matches CELL_TABLE_BASE_LBA = 82000
+# 3b. Create a blank disk image (270MB = 540000 sectors) for VirtIO block.
+#     Layout: FAT32 data (LBA 0-524287) + padding (524288-524799) + cell table (524800+)
+Write-Host "Creating blank disk image (disk_v3.img, 270 MB)..."
+$disk_sectors = 540000
+$diskSize = $disk_sectors * 512
 $blankImg = New-Object byte[] $diskSize
 [System.IO.File]::WriteAllBytes("disk_v3.img", $blankImg)
-Write-Host "  Blank 40 MB image created."
+Write-Host "  Blank 270 MB image created."
 
-# 3c. Format an empty FAT16 filesystem on LBA 0-81919 (before the cell table
-#     lands at LBA 82000). The VFS cell mounts this at startup as /data/.
-Write-Host "Formatting FAT16 partition (LBA 0-81919)..."
-python "$tools_dir\mkfat16.py" "disk_v3.img" 81920 2>&1
-if ($LASTEXITCODE -ne 0) { Write-Host "Warning: mkfat16.py failed; /data writes will not persist."; }
+# 3c. Format an empty FAT32 filesystem on LBA 0-524287.
+#     65525+ data clusters at 8 sec/clus satisfy the FAT32 minimum.
+Write-Host "Formatting FAT32 partition (LBA 0-524287, 256 MB)..."
+python "$tools_dir\mkfat32_inplace.py" "disk_v3.img" 524288 2>&1
+if ($LASTEXITCODE -ne 0) { throw "FAT32 format failed — disk_v3.img may be corrupt" }
 
 # 4. Append cell bootstrap table (for kernel early loader).
 # Only include the cells that the kernel early loader needs: VFS, config, shell.

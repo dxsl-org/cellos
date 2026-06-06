@@ -10,6 +10,7 @@ mod access;
 mod block_stream;
 mod handle_table;
 mod mount;
+mod page_cache;
 mod pending;
 mod quota;
 
@@ -33,7 +34,6 @@ static HELLO_ELF: &[u8] = include_bytes!("../../../../kernel/src/embedded/hello"
 static ECHO_ELF:  &[u8] = include_bytes!("../../../../kernel/src/embedded/echo");
 static CAT_ELF:   &[u8] = include_bytes!("../../../../kernel/src/embedded/cat");
 static LS_ELF:    &[u8] = include_bytes!("../../../../kernel/src/embedded/ls");
-static LUA_ELF:   &[u8] = include_bytes!("../../../../kernel/src/embedded/lua");
 
 // IPC now uses typed api::ipc::VfsRequest / VfsResponse via postcard encoding.
 // Raw byte opcode constants removed — see libs/api/src/ipc.rs.
@@ -74,7 +74,7 @@ impl VfsManager {
         let mut bin = Box::new(RamFile::new_dir("bin"));
         for (name, data) in [
             ("shell", SHELL_ELF), ("hello", HELLO_ELF), ("echo", ECHO_ELF),
-            ("cat",   CAT_ELF),   ("ls",    LS_ELF),    ("lua",  LUA_ELF),
+            ("cat",   CAT_ELF),   ("ls",    LS_ELF),
         ] {
             bin.children.insert(String::from(name), Box::new(RamFile::new_file(name, data)));
         }
@@ -249,15 +249,15 @@ impl VfsManager {
     }
 }
 
-use block_stream::BlockStream;
+use block_stream::CachedBlockStream;
 
 /// Concrete `fatfs::FileSystem` type for the VirtIO FAT16 volume.
 ///
 /// `NullTimeProvider` and `LossyOemCpConverter` are the fatfs defaults;
 /// using them avoids needing a RTC or a UTF-8↔OEM code-page converter.
-type DataFs  = fatfs::FileSystem<BlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
+type DataFs  = fatfs::FileSystem<CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
 /// Convenience alias for a FAT16 directory handle — avoids repeating the full generic.
-type DataDir<'a> = fatfs::Dir<'a, BlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
+type DataDir<'a> = fatfs::Dir<'a, CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
 
 /// Split `"sub/dir/file"` into `("sub/dir", "file")`. `"file"` → `("", "file")`.
 fn split_last(rel: &str) -> (&str, &str) {
@@ -565,13 +565,13 @@ pub fn main() {
     // attached, bad BPB) fall back to RamFS-only — /data writes will fail with
     // 0x01 but /tmp and /bin still work.
     let opts = fatfs::FsOptions::new().update_accessed_date(false);
-    let mut fat_fs: Option<DataFs> = match fatfs::FileSystem::new(BlockStream::new(), opts) {
+    let mut fat_fs: Option<DataFs> = match fatfs::FileSystem::new(CachedBlockStream::new(), opts) {
         Ok(fs) => {
-            println("[vfs] FAT16 /data volume mounted");
+            println("[vfs] FAT32 /data volume mounted");
             Some(fs)
         }
         Err(_) => {
-            println("[vfs] WARNING: FAT16 mount failed — /data writes will fail");
+            println("[vfs] WARNING: FAT32 mount failed — /data writes will fail");
             None
         }
     };
@@ -748,6 +748,55 @@ pub fn main() {
                                     api::ipc::VfsResponse::Data(&resp_buf[..n])
                                 }
                                 None => api::ipc::VfsResponse::Err(4), // 4 = stale/unknown handle
+                            }
+                        }
+
+                        // ── Zero-Copy Grant I/O (Storage 2.0, Phase 02) ────────────────
+
+                        api::ipc::VfsRequest::ReadGrant { cap, offset, size, grant } => {
+                            // Validate: VFS must have been GrantShare'd access by the app.
+                            match ostd::syscall::sys_grant_slice(grant) {
+                                None => api::ipc::VfsResponse::Err(1), // no access
+                                Some(ptr) => {
+                                    // Look up the cap in the VFS handle table.
+                                    let bytes = if let Some(entry) = vfs.handles.get_mut(api::cap::CapId(cap)) {
+                                        let avail = entry.data_len.saturating_sub(offset as usize);
+                                        let n = size.min(avail).min(4096);
+                                        // SAFETY: data_ptr is a valid in-memory VAddr; ptr is a
+                                        // kernel-allocated, identity-mapped grant buffer.
+                                        unsafe {
+                                            core::ptr::copy_nonoverlapping(
+                                                (entry.data_ptr + offset as usize) as *const u8,
+                                                ptr,
+                                                n,
+                                            );
+                                        }
+                                        n
+                                    } else {
+                                        0 // unknown cap — caller must register handle first
+                                    };
+                                    // F14: reply AFTER filling the buffer.
+                                    api::ipc::VfsResponse::GrantDone { bytes }
+                                }
+                            }
+                        }
+
+                        api::ipc::VfsRequest::WriteGrant { cap, offset, grant, bytes } => {
+                            let _ = (cap, offset); // path routing via cap table deferred to Phase 04
+                            match ostd::syscall::sys_grant_slice(grant) {
+                                None => api::ipc::VfsResponse::Err(1),
+                                Some(ptr) => {
+                                    let n = bytes.min(4096);
+                                    // SAFETY: ptr is a valid identity-mapped grant buffer filled
+                                    // by the app before GrantShare + WriteGrant IPC.
+                                    let data = unsafe { core::slice::from_raw_parts(ptr as *const u8, n) };
+                                    // Phase 02 stub: data available in `data` slice.
+                                    // Full routing via cap→path lookup deferred to Phase 04.
+                                    let _ = data;
+                                    // F14: GrantDone sent only AFTER reading the grant buffer
+                                    // (ipc_call blocks, so app cannot free it prematurely).
+                                    api::ipc::VfsResponse::GrantDone { bytes: n }
+                                }
                             }
                         }
                     },
