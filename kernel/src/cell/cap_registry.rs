@@ -1,6 +1,6 @@
 //! Kernel capability registry.
 //!
-//! Every open file (or other resource) in ViOS is represented by a `CapId`
+//! Every open file (or other resource) in ViCell is represented by a `CapId`
 //! assigned by this registry.  The registry enforces single-ownership:
 //! only the cell that allocated or received a cap may use or revoke it.
 //!

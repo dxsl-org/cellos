@@ -1,4 +1,4 @@
-//! ELF relocation engine for ViOS cells.
+//! ELF relocation engine for ViCell cells.
 //!
 //! Supports the relocation types emitted by the RISC-V LLVM/GCC toolchain
 //! when building position-independent cells (`-pie` or `-shared`).

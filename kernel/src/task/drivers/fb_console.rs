@@ -45,9 +45,9 @@ impl FramebufferConsole {
 
         // Welcome Message
         info!("Graphics Console: Online (Resolution probed)");
-        Self::write_str("\n ViOS Graphical Console initialized.\n");
-        Self::write_str(" Welcome to ViOS v0.2.0 (RISC-V 64)\n\n");
-        Self::write_str(" vios> ");
+        Self::write_str("\n ViCell Graphical Console initialized.\n");
+        Self::write_str(" Welcome to ViCell v0.2.0 (RISC-V 64)\n\n");
+        Self::write_str(" ViCell> ");
     }
 
     pub fn write_str(s: &str) {

@@ -22,7 +22,7 @@
 pub const CELL_TABLE_BASE_LBA: u64 = 82_000;
 
 /// Magic bytes at the start of `CellTableHeader`; identifies a valid table.
-pub const CELL_TABLE_MAGIC: u64 = 0x5649_4F53_5F43_454C; // "VIOS_CEL" in ASCII
+pub const CELL_TABLE_MAGIC: u64 = 0x5649_4F53_5F43_454C; // "ViCell_CEL" in ASCII
 
 /// Maximum number of cells that can appear in the bootstrap table.
 pub const MAX_CELL_ENTRIES: usize = 32;

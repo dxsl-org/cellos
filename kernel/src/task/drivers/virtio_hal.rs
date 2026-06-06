@@ -2,7 +2,7 @@ use core::alloc::Layout;
 use core::ptr::NonNull;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr};
 
-/// VirtIO HAL adapter for ViOS.
+/// VirtIO HAL adapter for ViCell.
 ///
 /// Assumes identity mapping (VAddr == PAddr) throughout, which holds for the
 /// kernel's current single-address-space model.  Revisit if an HHDM or IOMMU
@@ -60,7 +60,7 @@ unsafe impl Hal for VirtioHal {
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
         let vaddr = buffer.as_ptr() as *mut u8 as usize;
         // Translate virtual → physical using the kernel page table.
-        // ViOS SAS does not guarantee VA==PA for all mappings (ELF segments are
+        // ViCell SAS does not guarantee VA==PA for all mappings (ELF segments are
         // mapped at their load VA but allocated to arbitrary physical frames).
         // Heap-allocated buffers and kernel-stack frames happen to be identity-
         // mapped, but VFS BSS / static sector buffers are NOT — DMA must use the

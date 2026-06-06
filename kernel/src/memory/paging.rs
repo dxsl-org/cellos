@@ -1,4 +1,4 @@
-//! Paging management for ViOS kernel.
+//! Paging management for ViCell kernel.
 //!
 //! Delegates to HAL for architecture-specific page table management (SV39/SV32).
 
