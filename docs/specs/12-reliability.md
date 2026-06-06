@@ -97,11 +97,16 @@ defines never-die for robots — is largely absent.
 Ordered by ROI for never-die. Items are independent of the (dropped) SATP decision.
 
 ### 4.1 — Stop silent death (P0, cheap)
-- [ ] **Re-enable stack guard pages.** Unmap the guard frame so overflow traps instead of
-      silently corrupting neighbor memory. Requires a user-VA allocator so stack frames don't
-      alias kernel page-table physical addresses ([kernel/src/task/stack.rs](../../kernel/src/task/stack.rs)).
-- [ ] **Reboot-on-kernel-panic.** True kernel panic currently `wfi`-halts forever. A robot must
-      reboot and recover, not freeze. Trigger SBI `system_reset` (warm) from the panic handler.
+- [x] **Reboot-on-kernel-panic** — DONE 2026-06-06 (commit f7515e05). Kernel panic now requests an
+      SBI SRST **cold reboot** (`sbi::system_reset`) after printing diagnostics, falling back to the
+      halt loop only if firmware lacks SRST. Cell faults unaffected. Verified in QEMU (injected panic
+      reboots vs freezes; normal boot still reaches `ViCell >`).
+- [ ] **Re-enable stack guard pages** — BLOCKED (deeper than "cheap"; attempted 2026-06-06, reverted).
+      Unmapping the guard frame faults boot: the kernel writes to `base_addr` during task
+      stack/context setup → store page fault (scause=15) at `stval=base_addr`, `sepc≈0x80204eec`.
+      Prerequisite: find & relocate that write off the guard frame (context/trap-frame init must not
+      touch `base_addr`), OR give stacks user-VAs disjoint from the identity map. See the DEFERRED
+      note in [kernel/src/task/stack.rs](../../kernel/src/task/stack.rs).
 
 ### 4.2 — Detection (P0)
 - [ ] **Deadline enforcement in the scheduler.** Make `RecvTimeout`'s `deadline` real: on each
