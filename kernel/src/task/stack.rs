@@ -104,18 +104,10 @@ impl Stack {
 
         let usable_start_idx = if guard { 1 } else { 0 };
 
-        // For SAS Identity Map:
-        // Memory is already identity-mapped as kernel RWX by init_kernel_paging.
-        // Guard Page: unmap the bottom frame so any stack overflow causes a
-        // page fault immediately instead of silently corrupting adjacent memory.
-        // The physical frame is still allocated (owned by this Stack) but its
-        // PTE is cleared so the hardware traps on any access.
-        // Guard page: temporarily skip the unmap.
-        // Removing the kernel identity-map PTE causes memset (called during page-table
-        // setup) to fault when the kernel writes to what it thinks is a valid physical
-        // frame.  Re-enable once a separate user-VA allocator ensures stack frames have
-        // user VAs that never coincide with kernel page-table physical addresses.
-        let _ = guard; // suppress unused-variable warning
+        // SAS identity map: all RAM is already identity-mapped RWX by
+        // init_kernel_paging. The usable pages are re-mapped below. The guard
+        // frame (base_addr) is left mapped for now — see the GUARD PAGE DEFERRED
+        // note after the mapping loop.
 
         // Usable Pages
         let flags = if user_mode {
@@ -139,6 +131,16 @@ impl Stack {
             let addr = base_addr + (i * PAGE_SIZE);
             paging::map_page(allocator, addr, addr, flags).map_err(|_| ViError::OutOfMemory)?;
         }
+
+        // GUARD PAGE DEFERRED: unmapping base_addr here makes boot fault with a
+        // store page fault (scause=15) at stval=base_addr — the kernel WRITES to
+        // the guard frame during task stack/context setup (verified 2026-06-06,
+        // sepc≈0x80204eec). Re-enabling the guard requires first finding and
+        // relocating that write (the context/trap-frame init must not touch
+        // base_addr), or giving stacks user-VAs disjoint from the identity map.
+        // Until then the guard frame stays mapped (no overflow protection).
+        // Tracked in docs/specs/12-reliability.md §4.1.
+        let _ = guard;
 
         // Calculate Top (Stack grows down)
         // Top is at the END of the allocated range.
