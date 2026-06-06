@@ -313,6 +313,36 @@ impl Scheduler {
         }
     }
 
+    /// Remove and return zombies that have already been switched away from — every
+    /// zombie except the one still set as `current_task_id` (whose context is about
+    /// to be used for the outgoing half of the next switch, so it must stay valid).
+    ///
+    /// The caller MUST drop the returned tasks OUTSIDE the SCHEDULER lock: dropping
+    /// a `Box<Task>` runs `Stack::drop`, which locks `FRAME_ALLOCATOR` and unmaps
+    /// via `KERNEL_ROOT`; doing that while holding `SCHEDULER` would invert the lock
+    /// order. Returning the tasks (cheap pointer moves) keeps the lock window tiny.
+    ///
+    /// This is what actually frees a dead cell's kernel + user stack frames (the
+    /// largest per-cell allocation) — without it, zombies accumulate forever and
+    /// `Stack::drop` never runs (every cell death leaked its stacks).
+    pub fn take_reapable_zombies(&mut self) -> Vec<Box<super::tcb::Task>> {
+        if self.zombies.is_empty() {
+            return Vec::new();
+        }
+        let current = self.current_task_id;
+        let mut keep = Vec::new();
+        let mut reap = Vec::new();
+        for z in core::mem::take(&mut self.zombies) {
+            if Some(z.id) == current {
+                keep.push(z);
+            } else {
+                reap.push(z);
+            }
+        }
+        self.zombies = keep;
+        reap
+    }
+
     /// Picks the next task to run and returns pointers for context switch.
     /// Returns: Option<(current_context_ptr, next_context_ptr)>
     pub fn pick_next(

@@ -227,6 +227,20 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
 
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
 pub fn yield_cpu() {
+    // Reap zombies already switched away from. Take them under the lock (cheap
+    // pointer moves), then drop OUTSIDE it so Stack::drop's frame-free + unmap
+    // (FRAME_ALLOCATOR / KERNEL_ROOT) never run while SCHEDULER is held. This is
+    // what frees a dead cell's stacks — without it every cell death leaked them
+    // (e.g. the shell-supervisor restart loop would grow until OOM).
+    let reaped = {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.take_reapable_zombies()
+        } else {
+            alloc::vec::Vec::new()
+        }
+    };
+    drop(reaped);
+
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next()
     } else {
