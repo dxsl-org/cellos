@@ -208,6 +208,31 @@ impl CellSegments {
     pub fn new(pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>) -> Self {
         Self { pages }
     }
+
+    /// Unmap this cell's segment VAs immediately at death — WITHOUT freeing the
+    /// frames (those are freed lazily when the zombie is reaped, in `drop`).
+    ///
+    /// Frees the address space right away so (a) a respawn can reuse the fixed VA
+    /// and (b) the load-time overwrite guard (`load_segments`) only ever observes
+    /// LIVE cells' (and kernel MMIO) mappings, never a dead-but-unreaped cell's.
+    /// Locks only `KERNEL_ROOT` (a leaf), so it is safe under the SCHEDULER lock.
+    pub fn eager_unmap(&self) {
+        let mut unmapped_any = false;
+        for &(vaddr, frame) in &self.pages {
+            // Only unmap a VA that still resolves to OUR frame (it won't if a
+            // respawn already re-pointed it — leave the new mapping intact).
+            if paging::virt_to_phys(vaddr) == Some(frame) {
+                let _ = paging::unmap_page(vaddr);
+                unmapped_any = true;
+            }
+        }
+        if unmapped_any {
+            // SAFETY: sfence.vma flushes stale TLB entries for the just-unmapped
+            // VAs; a privileged S-mode fence, always safe to issue.
+            #[cfg(target_arch = "riscv64")]
+            unsafe { core::arch::asm!("sfence.vma") };
+        }
+    }
 }
 
 impl Drop for CellSegments {

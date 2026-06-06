@@ -290,6 +290,15 @@ impl Scheduler {
             .map(|t| core::mem::take(&mut t.waiters))
             .unwrap_or_default();
 
+        // Free the dying cell's address space NOW (unmap its segment VAs) so a
+        // respawn can reuse the fixed VA and the load-time overwrite guard only
+        // ever sees LIVE cells' mappings. Frames are freed lazily at reap.
+        if let Some(t) = self.tasks.get(&tid) {
+            if let Some(seg) = &t.segment_mem {
+                seg.eager_unmap();
+            }
+        }
+
         if let Some(task) = self.tasks.remove(&tid) {
             self.zombies.push(task);
         }

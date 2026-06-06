@@ -97,6 +97,30 @@ impl ElfLoader {
                 // Map pages
                 let mut current_page = start_page;
                 while current_page < end_page {
+                    // Overwrite guard (SAS silent-corruption defense): in the single
+                    // shared page table, mapping a VA that's ALREADY mapped silently
+                    // clobbers the existing PTE. Reject that — it means the cell's VA
+                    // window collides with a LIVE cell's segment OR a kernel MMIO
+                    // identity map (CLINT/PLIC/UART). This is exactly the class of bug
+                    // that (a) crashed init when bench's default layout hit 0x400000
+                    // and (b) had vfs/bench silently clobber CLINT/PLIC MMIO. A VA this
+                    // cell ALREADY mapped (in `mapped`) is just its own adjacent
+                    // PT_LOAD segments sharing a page boundary — allow that. Dead cells
+                    // unmap their VAs at death (CellSegments::eager_unmap), so a respawn
+                    // sees its VA free. Roll back this cell's partial mappings on reject.
+                    let already_ours = mapped.iter().any(|&(va, _)| va == current_page);
+                    if !already_ours && crate::memory::paging::virt_to_phys(current_page).is_some() {
+                        log::error!(
+                            "ELF: load VA 0x{:X} already mapped — rejecting spawn (VA collision with a live cell or kernel MMIO; fix the cell's linker script)",
+                            current_page
+                        );
+                        for &(va, fr) in &mapped {
+                            let _ = crate::memory::paging::unmap_page(va);
+                            frame_allocator.deallocate_frame(fr);
+                        }
+                        return Err(ViError::PermissionDenied);
+                    }
+
                     let buf_frame = frame_allocator
                         .allocate_frame()
                         .ok_or(ViError::OutOfMemory)?;
