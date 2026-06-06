@@ -169,6 +169,8 @@ pub fn main() {
                     0x17 => scan_len.max(11), // LISTEN:  needs port:2
                     0x21 => scan_len.max(15), // SENDTO:  needs addr:4 + port:2
                     0x22 => scan_len.max(13), // RECVFROM: needs buf_len:4
+                    0x23 => scan_len.max(13), // JOIN_MULTICAST:  needs group:4
+                    0x24 => scan_len.max(13), // LEAVE_MULTICAST: needs group:4
                     _    => scan_len,
                 };
                 handle_ipc(
@@ -547,6 +549,26 @@ fn handle_socket_syscall(
             } else {
                 sys_send(sender, &[]);
             }
+        }
+        cell_opcodes::JOIN_MULTICAST => {
+            // [0x23][cap:8][group:4] → [0x00] ok / [0x01] err.
+            // Iface-level IGMP join; `cap` is ignored. Requires a leased IPv4
+            // source address (DHCP) for the IGMP membership report to route.
+            if payload.len() < 4 { sys_send(sender, &[0x01]); return; }
+            let group = IpAddress::v4(payload[0], payload[1], payload[2], payload[3]);
+            match iface.join_multicast_group(device, group, now_instant()) {
+                Ok(_) => sys_send(sender, &[0x00]),
+                Err(_) => sys_send(sender, &[0x01]),
+            };
+        }
+        cell_opcodes::LEAVE_MULTICAST => {
+            // [0x24][cap:8][group:4] → [0x00] ok / [0x01] err.
+            if payload.len() < 4 { sys_send(sender, &[0x01]); return; }
+            let group = IpAddress::v4(payload[0], payload[1], payload[2], payload[3]);
+            match iface.leave_multicast_group(device, group, now_instant()) {
+                Ok(_) => sys_send(sender, &[0x00]),
+                Err(_) => sys_send(sender, &[0x01]),
+            };
         }
         _ => {
             sys_send(sender, &[]);
