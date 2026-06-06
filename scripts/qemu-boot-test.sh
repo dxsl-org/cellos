@@ -1,62 +1,76 @@
 #!/usr/bin/env bash
-# Boot ViOS kernel in QEMU and assert the system reaches the shell.
+# Boot the ViCell kernel in QEMU and assert the system reaches a known-good state.
 #
-# Without a disk image the system will fail to spawn VFS/config/shell from
-# /bin/ but it should still boot the kernel, mount FAT32 (embedded), and
-# attempt to spawn cells.  We assert on the FAT32 mount message which is
-# always present regardless of disk availability.
+# With a disk image: asserts the full boot reaches the shell prompt ("ViCell >").
+# Without a disk image: the system can't spawn cells from /bin/, but it should
+# still boot the kernel and mount the embedded FAT16 image — we assert on that.
+#
+# This is the REAL boot gate: a green `cargo build` does NOT prove the kernel
+# boots (see the PIE/relocation and cell_quota-deadlock bugs a build-only check
+# missed). Keep the patterns + kernel binary name in sync with the actual boot
+# output — a stale pattern silently turns this gate into a no-op (it did before).
 #
 # Usage: scripts/qemu-boot-test.sh [path/to/kernel-elf] [path/to/disk.img]
 
 set -euo pipefail
 
-KERNEL="${1:-target/riscv64gc-unknown-none-elf/release/vios-kernel}"
+KERNEL="${1:-target/riscv64gc-unknown-none-elf/release/vicell-kernel}"
 DISK="${2:-}"
 
-# Build QEMU args — disk is optional.
+if [[ ! -f "$KERNEL" ]]; then
+  echo "FAIL: kernel ELF not found: $KERNEL"
+  exit 1
+fi
+
 QEMU_ARGS=(
   -machine virt
-  -m 128M           # kernel(4.4MB) + heap(16MB) + cells fit in 128MB
+  -m 256M
   -nographic
   -bios default
   -kernel "$KERNEL"
 )
 
+# With a disk, attach the full VirtIO device set so init can spawn every service
+# (vfs/config/input/net/compositor/shell) and reach the prompt.
+WANT_SHELL=0
 if [[ -n "$DISK" && -f "$DISK" ]]; then
+  WANT_SHELL=1
   QEMU_ARGS+=(
     -drive "file=$DISK,format=raw,id=hd0,if=none"
     -device virtio-blk-device,drive=hd0
+    -netdev user,id=net0
+    -device virtio-net-device,netdev=net0
+    -device virtio-keyboard-device
+    -device virtio-gpu-device
   )
 fi
 
-echo "[qemu-test] Booting with args: ${QEMU_ARGS[*]}"
+echo "[qemu-test] Booting (want_shell=$WANT_SHELL): ${QEMU_ARGS[*]}"
 
-timeout 120 qemu-system-riscv64 "${QEMU_ARGS[@]}" 2>&1 | tee qemu.log &
-QEMU_PID=$!
+# Run for a fixed window, then evaluate the COMPLETE log. We do NOT poll a live
+# pipe: after the prompt the system idles (no more UART bytes), so a buffered
+# `tee`/`tr` pipe never flushes its last partial buffer and a polling grep would
+# miss the tail. Letting QEMU exit (timeout) flushes everything to the file.
+BOOT_WINDOW="${BOOT_WINDOW:-55}"
+timeout "$BOOT_WINDOW" qemu-system-riscv64 "${QEMU_ARGS[@]}" < /dev/null > qemu.raw.log 2>&1 || true
 
-# Wait up to 90 seconds for the FAT32 mount message which appears on every boot.
-for i in $(seq 1 90); do
-  sleep 1
-  if grep -q "FAT32 Mounted Successfully" qemu.log 2>/dev/null; then
-    echo "PASS: FAT32 mounted — kernel booted successfully (${i}s)"
-    kill $QEMU_PID 2>/dev/null || true
-    exit 0
-  fi
-  # Also accept full boot to shell prompt if disk is present.
-  if grep -q "ViOS >" qemu.log 2>/dev/null; then
-    echo "PASS: Shell prompt reached — full boot successful (${i}s)"
-    kill $QEMU_PID 2>/dev/null || true
-    exit 0
-  fi
-  if grep -q "PANIC" qemu.log 2>/dev/null; then
-    echo "FAIL: kernel panic detected"
-    cat qemu.log
-    kill $QEMU_PID 2>/dev/null || true
-    exit 1
-  fi
-done
+# Clean: drop NULs, strip ANSI color sequences, so patterns match the visible text.
+tr -d '\000' < qemu.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu.log
 
-echo "FAIL: FAT32 mount not seen within 90s"
-cat qemu.log
-kill $QEMU_PID 2>/dev/null || true
+if grep -qia "KERNEL PANIC\|\[fault\] Cell 1 \|\[fault\] Cell 3 " qemu.log; then
+  echo "FAIL: kernel panic / critical cell fault detected"; tail -40 qemu.log; exit 1
+fi
+if grep -qa "ViCell >" qemu.log; then
+  echo "PASS: shell prompt reached — full boot successful"; exit 0
+fi
+if [[ "$WANT_SHELL" -eq 0 ]] && grep -qia "FAT16 mounted successfully" qemu.log; then
+  echo "PASS: FAT16 mounted — kernel booted (no disk)"; exit 0
+fi
+
+if [[ "$WANT_SHELL" -eq 1 ]]; then
+  echo "FAIL: shell prompt 'ViCell >' not seen within ${BOOT_WINDOW}s"
+else
+  echo "FAIL: 'FAT16 mounted successfully' not seen within ${BOOT_WINDOW}s"
+fi
+tail -40 qemu.log
 exit 1

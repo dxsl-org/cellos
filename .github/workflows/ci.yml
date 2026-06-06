@@ -71,6 +71,12 @@ jobs:
 
       - name: Build (release)
         continue-on-error: ${{ matrix.continue-on-error || false }}
+        # The rv64 kernel links as -pie (build.rs, for Limine KASLR); rustc must
+        # emit position-independent code or the linker rejects absolute R_RISCV_64
+        # relocations. Scope pic to rv64 only — aarch64/x86 kernels are not -pie,
+        # and a workspace-wide pic would also miscompile Cells (GOT-indirect .data).
+        env:
+          RUSTFLAGS: ${{ matrix.short == 'rv64' && '-D warnings -C relocation-model=pic' || '-D warnings' }}
         run: >
           cargo build
           --release
@@ -82,7 +88,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kernel-rv64
-          path: target/riscv64gc-unknown-none-elf/release/vios-kernel
+          path: target/riscv64gc-unknown-none-elf/release/vicell-kernel
           if-no-files-found: error
 
   qemu-boot:
@@ -102,12 +108,12 @@ jobs:
           path: target/riscv64gc-unknown-none-elf/release/
 
       - name: Make kernel executable
-        run: chmod +x target/riscv64gc-unknown-none-elf/release/vios-kernel
+        run: chmod +x target/riscv64gc-unknown-none-elf/release/vicell-kernel
 
       - name: Run boot test
         # 256M: kernel is now 4.4 MB (kernel_fs.img embedded separately).
         # Checks for FAT32 mount (always present) or full shell prompt.
-        run: bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/vios-kernel
+        run: bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/vicell-kernel
 
   unit-tests:
     name: Host unit tests (types + api)
