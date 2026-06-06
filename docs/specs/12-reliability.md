@@ -125,17 +125,24 @@ Ordered by ROI for never-die. Items are independent of the (dropped) SATP decisi
       positive timeout-fires path is unexercised until a cell uses RecvTimeout (follow-up test).
 
 ### 4.3 — Recovery: Supervisor Tree (P0, highest ROI)
-~70% latent in the architecture today. Erlang/OTP-style "let it crash + restart". Needs 4
-kernel pieces (~200 LOC) + a root supervisor cell (~500 LOC userspace):
-- [ ] **Parent tracking** — add `parent_cell_id: Option<CellId>` to the TCB.
-- [ ] **ELF-path persistence** — store the spawn path (+ args) so a cell can be respawned.
-- [ ] **Stable service IDs** — name→reserved-ID registry so a respawned VFS/net keeps its
-      well-known endpoint; callers don't have to re-discover.
-- [ ] **Death-notification IPC** — `Syscall::NotifyOnExit { watcher, watched }` (push model)
-      instead of polling the audit ring.
-- [ ] **Root supervisor cell** (extend `init`, which already holds `SpawnCap`): restart policies
-      (permanent / transient / temporary), restart intensity/backoff, supervision strategy
-      (one-for-one / rest-for-one).
+Erlang/OTP-style "let it crash + restart".
+- [x] **Supervisor MVP — init auto-restarts the shell** — DONE 2026-06-06 (commit 8113503c).
+      init captures the shell tid and `sys_wait`s on it; on shell exit OR fault the kernel wakes
+      the waiter (Phase 00 made fault paths notify waiters), and init respawns the shell, with a
+      restart cap against crash-storms. Uses only `sys_wait` + `sys_spawn_from_path` — **no new
+      ABI / no Law 1**. Functionally verified end-to-end: `exit` kills the shell, init logs
+      "shell died — restarting" → "shell restarted", a 2nd `ViCell >` appears, init doesn't fault.
+      > Prereq bug fixed first: init had a pre-existing instruction-fault during boot — the bench
+      > cell lacked a linker script and clobbered init's `.text` PTE (commit e6798320). Also the
+      > boot gate's fault pattern was broken and hid it (fixed). Both were masking init's death.
+- [ ] **Full multi-child supervision** — needs **wait-any**: a `Syscall::NotifyOnExit { watched }`
+      push notification (a `libs/api` change → **Law 1, 2× confirm**) so one supervisor can watch
+      vfs/net/config/... simultaneously (sys_wait blocks on one child only). Plus: parent tracking
+      (`parent_cell_id` on Task, also gates who may watch whom), restart policies
+      (permanent/transient/temporary) + intensity/backoff, stable service-ID registry (so a
+      restarted vfs/net keeps its well-known endpoint), and a dedicated `cells/services/supervisor`.
+      Shell-side note: the shell's `exit` builtin currently FAULTS (scause=0xf) instead of clean
+      sys_exit — a separate shell bug; the supervisor restarts it correctly either way.
 
 ### 4.4 — Stop slow death (P1)
 - [ ] **Reclaim frames + page tables on cell exit** (today only heap quota is refunded).
