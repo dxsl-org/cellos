@@ -57,8 +57,11 @@ timeout "$BOOT_WINDOW" qemu-system-riscv64 "${QEMU_ARGS[@]}" < /dev/null > qemu.
 # Clean: drop NULs, strip ANSI color sequences, so patterns match the visible text.
 tr -d '\000' < qemu.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu.log
 
-if grep -qia "KERNEL PANIC\|\[fault\] Cell 1 \|\[fault\] Cell 3 " qemu.log; then
-  echo "FAIL: kernel panic / critical cell fault detected"; tail -40 qemu.log; exit 1
+# Any kernel panic or cell fault during boot is a failure. Match loosely on
+# "[fault] Cell" — the serial framing inserts stray bytes between "Cell" and the
+# id (e.g. "Cell .1."), so a number-specific pattern silently never matches.
+if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu.log; then
+  echo "FAIL: kernel panic / cell fault detected during boot"; grep -ai "fault\|PANIC" qemu.log | head; exit 1
 fi
 if grep -qa "ViCell >" qemu.log; then
   echo "PASS: shell prompt reached — full boot successful"; exit 0
