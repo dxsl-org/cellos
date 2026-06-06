@@ -66,12 +66,18 @@ pub extern "C" fn main() {
 
     ostd::task::yield_now();
 
-    // 6. Spawn Shell
+    // 6. Spawn Shell (capture its tid so the supervisor below can restart it).
     println("Init: Spawning Shell...");
-    match ostd::syscall::sys_spawn_from_path("/bin/shell") {
-        ostd::syscall::SyscallResult::Ok(_) => println("Init: Shell spawned successfully."),
-        _ => println("Init: WARN — Shell spawn failed."),
-    }
+    let mut shell_tid = match ostd::syscall::sys_spawn_from_path("/bin/shell") {
+        ostd::syscall::SyscallResult::Ok(tid) => {
+            println("Init: Shell spawned successfully.");
+            Some(tid)
+        }
+        _ => {
+            println("Init: WARN — Shell spawn failed.");
+            None
+        }
+    };
 
     ostd::task::yield_now();
 
@@ -82,8 +88,43 @@ pub extern "C" fn main() {
         _ => {} // bench not in cell table — normal dev boot, skip silently
     }
 
-    // Keep init alive as the process supervisor.
+    // Supervisor: keep the shell alive ("let it crash, restart it"). sys_wait
+    // blocks until the shell exits OR faults — the kernel wakes waiters on both
+    // (reliability Phase 00) — then we respawn it so the user always has a prompt.
+    //
+    // A restart cap stops a crash-storm (a shell that dies immediately on every
+    // spawn) from spin-respawning forever. A time-windowed intensity limit is the
+    // proper long-running behavior but needs a ticks syscall in ostd — follow-up.
+    // Multi-child supervision (vfs/net/...) needs wait-any (NotifyOnExit, a Law 1
+    // syscall) — the next Phase 03 step; this MVP supervises the single most
+    // user-visible service with existing primitives only.
+    let mut restarts: u32 = 0;
+    const MAX_RESTARTS: u32 = 100;
     loop {
-        ostd::task::yield_now();
+        match shell_tid {
+            Some(tid) => {
+                // Block until the shell dies; the return value is its exit/fault reason.
+                let _ = ostd::syscall::sys_wait(tid);
+                if restarts >= MAX_RESTARTS {
+                    println("Init: shell restart limit reached — supervision giving up.");
+                    shell_tid = None;
+                    continue;
+                }
+                restarts += 1;
+                println("Init: shell died — restarting...");
+                shell_tid = match ostd::syscall::sys_spawn_from_path("/bin/shell") {
+                    ostd::syscall::SyscallResult::Ok(tid) => {
+                        println("Init: shell restarted.");
+                        Some(tid)
+                    }
+                    _ => {
+                        println("Init: shell restart FAILED.");
+                        None
+                    }
+                };
+            }
+            // No shell to supervise (initial spawn failed or supervision gave up).
+            None => ostd::task::yield_now(),
+        }
     }
 }
