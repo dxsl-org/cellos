@@ -313,6 +313,12 @@ impl Scheduler {
             self.zombies.push(task);
         }
 
+        // Service-registry cleanup: drop any well-known service_id that pointed at this
+        // tid, so a client lookup in the death→respawn window returns "none" (and retries)
+        // rather than a dead provider. The supervisor re-registers the replacement's tid.
+        // Locks only REGISTRY (a leaf), safe under the SCHEDULER lock.
+        crate::cell::service_registry::clear_tid(tid);
+
         // Remove from ready queues if present
         for queue in self.ready_queues.values_mut() {
             queue.retain(|&id| id != tid);

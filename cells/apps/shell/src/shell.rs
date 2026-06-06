@@ -25,8 +25,8 @@ pub struct ViShell<'a> {
 impl<'a> ViShell<'a> {
     pub fn new() -> Self {
         Self {
-            prompt: "ViOS > ",
-            config: ConfigClient::new(2),
+            prompt: "ViCell > ",
+            config: ConfigClient::new(),
             history: VecDeque::with_capacity(32),
             hist: History::new(),
             jobs: Jobs::new(),
@@ -116,7 +116,7 @@ impl<'a> ViShell<'a> {
             "export" => {
                 if let Some(arg) = parts.next() {
                     if let Some((k, v)) = arg.split_once('=') {
-                        let mut client = ConfigClient::new(2);
+                        let mut client = ConfigClient::new();
                         let _ = client.set(k, v);
                     }
                 }

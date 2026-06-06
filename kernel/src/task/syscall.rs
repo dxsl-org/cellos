@@ -192,6 +192,11 @@ pub enum Syscall {
     ForceExit { tid: usize },
     /// 204: NotifyOnExit — register the caller to be notified when `watched` dies.
     NotifyOnExit { watched: usize },
+    /// 205: RegisterService — register `tid` as the current provider of `service_id`
+    /// (SpawnCap-gated; the supervisor owns the namespace).
+    RegisterService { service_id: u16, tid: usize },
+    /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
+    LookupService { service_id: u16 },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
     /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
@@ -739,6 +744,26 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             super::scheduler::subscribe_death(watched, caller_id);
             Ok(0)
+        }
+
+        Syscall::RegisterService { service_id, tid } => {
+            // Privileged: only SpawnCap holders (the supervisor) own the service
+            // namespace — same authority gate as NotifyOnExit/ForceExit. Prevents a
+            // cell from hijacking a well-known endpoint (e.g. the VFS service).
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if crate::cell::service_registry::register(service_id, tid) {
+                Ok(0)
+            } else {
+                Err(SyscallError::InvalidInput)
+            }
+        }
+        Syscall::LookupService { service_id } => {
+            // Open to all cells: resolve the live provider tid (0 = none registered),
+            // so a client reconnects transparently after the supervisor respawns a
+            // service. The dynamic replacement for the boot-order `ServiceLookup` hardcode.
+            Ok(crate::cell::service_registry::lookup(service_id).unwrap_or(0))
         }
 
         Syscall::Reply { caller: _, result } => {
@@ -1459,6 +1484,8 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::Exit      => Syscall::Exit { code: a0 },
         ViSyscall::ForceExit => Syscall::ForceExit { tid: a0 },
         ViSyscall::NotifyOnExit => Syscall::NotifyOnExit { watched: a0 },
+        ViSyscall::RegisterService => Syscall::RegisterService { service_id: a0 as u16, tid: a1 },
+        ViSyscall::LookupService => Syscall::LookupService { service_id: a0 as u16 },
         ViSyscall::Yield => Syscall::Yield,
         ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
         ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },

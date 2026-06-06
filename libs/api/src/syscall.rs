@@ -93,6 +93,15 @@ pub enum ViSyscall {
     /// supervisor can wait-any across many children with a single recv loop.
     /// Requires `SpawnCap`. ABI: a0 = watched_tid → 0 on success, usize::MAX on error.
     NotifyOnExit = 204,
+    /// Register `tid` as the current provider of well-known `service_id`. SpawnCap-gated:
+    /// the supervisor owns the service namespace (prevents a cell from hijacking, say, the
+    /// VFS endpoint). On respawn the supervisor re-registers the new tid, so clients
+    /// reconnect transparently. ABI: a0 = service_id (u16), a1 = tid → 0 / usize::MAX.
+    RegisterService = 205,
+    /// Resolve a well-known `service_id` to its current provider tid. Open to all cells so
+    /// any client can reconnect after a service restart. ABI: a0 = service_id (u16) →
+    /// provider tid (> 0), or 0 if no live provider is currently registered.
+    LookupService = 206,
 
     // === Hot-swap (Phase 20) ===
     /// Live-replace a running Cell without message loss.
@@ -114,7 +123,7 @@ pub enum ViSyscall {
 }
 
 impl ViSyscall {
-    /// Stable bit index (0-36) for the per-Cell syscall allowlist stored in
+    /// Stable bit index (0-37) for the per-Cell syscall allowlist stored in
     /// `Task::syscall_allowlist`.
     ///
     /// Bit indices are independent of raw opcode values so they remain stable
@@ -164,12 +173,16 @@ impl ViSyscall {
             Self::Exec          => Some(35),
             // Snapshot: privileged warm-boot operation; reuses HotSwap bit (SpawnCap required).
             Self::Snapshot      => Some(32),
+            // LookupService is an open syscall (any client resolves a service endpoint).
+            Self::LookupService => Some(37),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
-            // NotifyOnExit is privileged (SpawnCap-gated, like ForceExit), so it is
-            // always permitted past the allowlist — SpawnCap is the authority gate.
-            Self::Yield | Self::Exit | Self::ForceExit | Self::NotifyOnExit | Self::Unknown => None,
+            // NotifyOnExit and RegisterService are privileged (SpawnCap-gated, like
+            // ForceExit), so they are always permitted past the allowlist — SpawnCap is
+            // the authority gate enforced at dispatch.
+            Self::Yield | Self::Exit | Self::ForceExit | Self::NotifyOnExit
+            | Self::RegisterService | Self::Unknown => None,
         }
     }
 }
@@ -212,6 +225,8 @@ impl From<usize> for ViSyscall {
             202 => ViSyscall::SendGather,
             203 => ViSyscall::RecvScatter,
             204 => ViSyscall::NotifyOnExit,
+            205 => ViSyscall::RegisterService,
+            206 => ViSyscall::LookupService,
             300 => ViSyscall::GpuFlush,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,
@@ -221,6 +236,26 @@ impl From<usize> for ViSyscall {
             _ => ViSyscall::Unknown,
         }
     }
+}
+
+/// Well-known service IDs for the kernel Service Registry (`RegisterService` /
+/// `LookupService`). Stable ABI — values must not change once shipped. `0` is reserved
+/// to mean "no provider" (the value `LookupService` returns when nothing is registered).
+///
+/// A client resolves the live provider tid of a service by `LookupService(service::VFS)`
+/// instead of hard-coding a tid, so it transparently reconnects when the supervisor
+/// respawns that service under a new tid.
+pub mod service {
+    /// Virtual filesystem service (`/bin/vfs`).
+    pub const VFS: u16 = 1;
+    /// Network stack service (`/bin/net`).
+    pub const NET: u16 = 2;
+    /// Input/event service (`/bin/input`).
+    pub const INPUT: u16 = 3;
+    /// Configuration store service (`/bin/config`).
+    pub const CONFIG: u16 = 4;
+    /// Display compositor service (`/bin/compositor`).
+    pub const COMPOSITOR: u16 = 5;
 }
 
 /// Arguments for SpawnFromMem syscall.

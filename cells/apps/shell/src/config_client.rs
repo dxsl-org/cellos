@@ -1,31 +1,54 @@
 use api::config::ViConfig;
 use ostd::prelude::*;
 
-pub struct ConfigClient {
-    service_id: usize,
-}
+/// Client for the Config service.
+///
+/// Holds no fixed tid: it resolves the live Config provider via the kernel Service
+/// Registry on each operation, so it transparently reconnects when the supervisor
+/// respawns Config under a new tid. (Previously this hard-coded tid 2, which was also
+/// wrong — Config's actual tid is assigned at spawn.)
+pub struct ConfigClient;
 
 impl ConfigClient {
-    pub fn new(service_id: usize) -> Self {
-        Self { service_id }
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Resolve the live Config service tid, retrying briefly to ride out a boot race
+    /// or the death→respawn window (lookup returns None until the supervisor registers).
+    fn endpoint() -> Option<usize> {
+        for _ in 0..8 {
+            if let Some(tid) = ostd::syscall::sys_lookup_service(api::syscall::service::CONFIG) {
+                return Some(tid);
+            }
+            ostd::task::yield_now();
+        }
+        None
+    }
+}
+
+impl Default for ConfigClient {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl ViConfig for ConfigClient {
     fn get(&self, key: &str) -> ViResult<&str> {
+        let sid = Self::endpoint().ok_or(ViError::IO)?;
         // Send IPC to Config Service
         let mut msg = Vec::new();
         msg.push(1); // Get
         msg.push(key.len() as u8);
         msg.extend_from_slice(key.as_bytes());
 
-        if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_send(self.service_id, &msg)
+        if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_send(sid, &msg)
         {
             let mut resp = [0u8; 16];
             // Wait for reply (OpCode is implicit)
             // Note: In real system, use recv specific to this transid
             match ostd::syscall::sys_recv(0, &mut resp) {
-                ostd::syscall::SyscallResult::Ok(sender) if sender == self.service_id => {
+                ostd::syscall::SyscallResult::Ok(sender) if sender == sid => {
                     let ptr = u64::from_le_bytes(resp[0..8].try_into().unwrap()) as usize;
                     let len = u64::from_le_bytes(resp[8..16].try_into().unwrap()) as usize;
 
@@ -58,6 +81,7 @@ impl ViConfig for ConfigClient {
     }
 
     fn set(&mut self, key: &str, value: &str) -> ViResult<()> {
+        let sid = Self::endpoint().ok_or(ViError::IO)?;
         let mut msg = Vec::new();
         msg.push(2); // Set
         msg.push(key.len() as u8);
@@ -65,7 +89,7 @@ impl ViConfig for ConfigClient {
         msg.extend_from_slice(key.as_bytes());
         msg.extend_from_slice(value.as_bytes());
 
-        ostd::syscall::sys_send(self.service_id, &msg);
+        ostd::syscall::sys_send(sid, &msg);
 
         let mut buf = [0u8; 16];
         ostd::syscall::sys_recv(0, &mut buf); // Wait for OK

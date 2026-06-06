@@ -325,6 +325,32 @@ pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
     }
 }
 
+/// Register `tid` as the current provider of a well-known `service_id`
+/// (see [`api::syscall::service`]).
+///
+/// Requires `SpawnCap` — intended for the supervisor (init), which registers each
+/// service after spawning it and re-registers the new tid after a respawn so clients
+/// reconnect transparently. Returns `Ok(0)` on success, `Err` if the caller lacks
+/// `SpawnCap` or the registry is full.
+pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
+    unsafe {
+        let ret = syscall(ViSyscall::RegisterService, service_id as usize, tid, 0, 0);
+        if ret == 0 { SyscallResult::Ok(0) } else { SyscallResult::Err(SyscallError::Unknown) }
+    }
+}
+
+/// Resolve a well-known `service_id` to its current provider tid.
+///
+/// Returns `Some(tid)` for a live provider, or `None` when nothing is registered
+/// (e.g. during the death→respawn window — the caller should retry). Open to all cells.
+pub fn sys_lookup_service(service_id: u16) -> Option<usize> {
+    unsafe {
+        let ret = syscall(ViSyscall::LookupService, service_id as usize, 0, 0, 0);
+        // ABI: provider tid (> 0), or 0 when no live provider is registered.
+        if ret > 0 { Some(ret as usize) } else { None }
+    }
+}
+
 pub fn sys_shm_alloc(size: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::ShmAlloc, size, 0, 0, 0);

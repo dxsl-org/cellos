@@ -17,7 +17,11 @@ use ostd::io::println;
 ///   3. Spawn Shell — interactive REPL.
 #[no_mangle]
 pub extern "C" fn main() {
-    use ostd::syscall::{sys_notify_on_exit, sys_recv, sys_spawn_from_path, SyscallResult};
+    use ostd::syscall::{
+        sys_lookup_service, sys_notify_on_exit, sys_recv, sys_register_service,
+        sys_spawn_from_path, SyscallResult,
+    };
+    use api::syscall::service;
     println("Init: Starting ViCell Orchestrator...");
 
     // Supervised services in bring-up order — VFS first (it serves /bin/*).
@@ -33,9 +37,26 @@ pub extern "C" fn main() {
     ];
     let mut tids: [Option<usize>; NSVC] = [None; NSVC];
 
+    // Well-known service ID per path (None = not a looked-up service, e.g. shell).
+    // The supervisor registers each service's CURRENT tid here so clients resolve it
+    // via sys_lookup_service and reconnect transparently across a respawn.
+    let svc_ids: [Option<u16>; NSVC] = [
+        Some(service::VFS),
+        Some(service::CONFIG),
+        Some(service::INPUT),
+        Some(service::NET),
+        Some(service::COMPOSITOR),
+        None, // shell is not a registered service
+    ];
+
     for i in 0..NSVC {
         match sys_spawn_from_path(paths[i]) {
-            SyscallResult::Ok(tid) => tids[i] = Some(tid),
+            SyscallResult::Ok(tid) => {
+                tids[i] = Some(tid);
+                if let Some(sid) = svc_ids[i] {
+                    let _ = sys_register_service(sid, tid);
+                }
+            }
             // Non-fatal: input/net/compositor may be absent (no device/binary).
             _ => {}
         }
@@ -47,6 +68,22 @@ pub extern "C" fn main() {
         }
     }
     println("Init: services spawned.");
+
+    // Service-registry round-trip self-check (observable boot proof): every registered
+    // service must resolve via sys_lookup_service to the tid we recorded at spawn.
+    let mut ok = true;
+    for i in 0..NSVC {
+        if let (Some(sid), Some(tid)) = (svc_ids[i], tids[i]) {
+            if sys_lookup_service(sid) != Some(tid) {
+                ok = false;
+            }
+        }
+    }
+    if ok {
+        println("Init: service registry verified.");
+    } else {
+        println("Init: WARN service registry mismatch.");
+    }
 
     // Optional benchmark suite (CI disk images only) — not supervised.
     let _ = sys_spawn_from_path("/bin/bench");
@@ -96,6 +133,11 @@ pub extern "C" fn main() {
             SyscallResult::Ok(newt) => {
                 tids[i] = Some(newt);
                 let _ = sys_notify_on_exit(newt); // re-arm for the new instance
+                if let Some(sid) = svc_ids[i] {
+                    // Re-point the service registry at the new instance so clients that
+                    // resolve via sys_lookup_service reconnect to the restarted service.
+                    let _ = sys_register_service(sid, newt);
+                }
                 println("Init: service restarted.");
             }
             _ => {
