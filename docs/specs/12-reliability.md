@@ -73,7 +73,7 @@ embedded/robotics OS (QNX/seL4 class), not relative to zero.
 
 | Axis | Score | What exists | What's missing |
 |------|------:|-------------|----------------|
-| 1. Fault isolation | **~70%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)) | Depends entirely on zero-unsafe-bug; **guard-page unmapping disabled** (silent stack overflow); async-pinned buffer leak on crash |
+| 1. Fault isolation | **~85%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)); stack **guard pages active** ([stack.rs](../../kernel/src/task/stack.rs)); load-time VA-overwrite guard + build-time VA-layout CI check; async-pin/grant leak closed as moot (§4.4) | Depends entirely on zero-unsafe-bug in kernel/HAL; no per-cell SATP (by decision) |
 | 2. Fault detection | **~15%** | Audit ring logs `CellFault`/`CellExit` ([kernel/src/audit.rs](../../kernel/src/audit.rs)) — passive only | No watchdog, no heartbeat; `RecvTimeout` deadline stored but **scheduler never checks it** |
 | 3. Fault recovery | **~10%** | `spawn_from_path` re-loads ELF; hotswap + state-stash exist — all **manual** | No supervisor, no auto-respawn, no restart policy |
 | 4. Realtime guarantee | **~35%** | 3-level priority preempt + zero-latency SSIP ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | No EDF, no deadline enforcement, no CPU budget, WCET unmeasured |
@@ -168,8 +168,20 @@ Erlang/OTP-style "let it crash + restart".
       details: skips a cell's own intra-ELF overlaps (the load's `mapped` set); rolls back partials
       on reject; `CellSegments::eager_unmap` frees a dying cell's VAs at death so respawn (fixed VA)
       isn't blocked. Verified: 0 false-fires on boot, shell crash→respawn works, 0 panics.
-- [ ] **GC for async-pinned buffers** orphaned by a crashed owner (else 24/7 robots leak to OOM).
-      Needs owner→pin tracking (the metadata registry that does not yet exist).
+- [x] **GC for async-pinned buffers / grants — CLOSED as MOOT 2026-06-06** (scoping report:
+      `.agents/reports/scope-260606-1454-p05-async-pin-gc.md`). Verified leak-free **by
+      construction**, three independent reasons: (1) the async FileRead future is Task-owned
+      and pins no separate frame — it captures a raw pointer into the cell's OWN buffer
+      (task.rs:567-592); a cell killed while `Polling` is removed from `self.tasks` in
+      `exit_task` BEFORE its frames free, and the poll loop only polls `self.tasks`, so the
+      dangling write never executes. (2) The inner read is synchronous (fat.rs:415-425) — no
+      DMA descriptor outlives the future. (3) Grant/lease IPC cannot be created at runtime —
+      `ostd::sys_grant` is a stub (ostd/syscall.rs:538), so `grant_table`/`leases` are always
+      empty (and are Task-owned metadata, freed at reap, holding no frames). **Future-work
+      trigger:** a real async-DMA driver (the fat.rs TODO) or SMP makes this real — the
+      cancellation point is `exit_task` (descriptor-cancel / frame-unpin before reclaim),
+      documented inline there. With this closed, **P05 (stop slow death) is complete**: zombie
+      reaper + stack reclaim + segment reclaim + overwrite-guard + async/grant verified safe.
 
 ### 4.5 — Realtime hardening (P1–P2)
 - [ ] CPU budget / time-slice guarantees per priority; measure WCET of syscall + IPC paths.

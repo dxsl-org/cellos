@@ -299,6 +299,16 @@ impl Scheduler {
             }
         }
 
+        // Async-future safety: a task may die while Polling, holding a `pending_future`
+        // that captured a raw pointer into THIS cell's buffer (see fat.rs::read_async).
+        // Removing it from `self.tasks` here — BEFORE its frames are freed at reap — takes
+        // it out of the scheduler poll set (the loop iterates `self.tasks`, gated on
+        // `state == Polling`), so the dangling buffer write can never execute. The future
+        // itself is dropped at reap (outside the SCHEDULER lock) without touching the
+        // buffer, because the inner read is synchronous (no DMA outlives the future).
+        // INVARIANT for future work: if a real async-DMA driver lands (the fat.rs TODO) or
+        // the kernel goes SMP, hardware could write into freed frames — add a descriptor
+        // cancel / frame-unpin point HERE before the frames are reclaimed.
         if let Some(task) = self.tasks.remove(&tid) {
             self.zombies.push(task);
         }
