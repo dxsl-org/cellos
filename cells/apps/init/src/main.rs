@@ -78,7 +78,7 @@ pub extern "C" fn main() {
         Policy::Permanent, // input
         Policy::Permanent, // net
         Policy::Permanent, // compositor
-        Policy::Permanent, // shell
+        Policy::Transient, // shell: restart on crash, but a clean `exit` is final
     ];
     // Per-service restart-intensity state (sliding window).
     let mut restart_count: [u32; NSVC] = [0; NSVC];

@@ -19,6 +19,8 @@ SECTIONS
     .data : ALIGN(4096) {
         PROVIDE(__global_pointer$ = . + 0x800);
         *(.data .data.*)
+        *(.data.rel.ro .data.rel.ro.*)
+        *(.got .got.* .got.plt)
         *(.sdata .sdata.*)
     }
     
@@ -30,7 +32,7 @@ SECTIONS
         __bss_end = .;
     }
 
-    .vicell_manifest : ALIGN(8) {
+    .vicell_manifest : ALIGN(4096) {
         KEEP(*(__ViCell_manifest))
     }
 }

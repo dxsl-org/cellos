@@ -22,6 +22,8 @@ SECTIONS
     .data : ALIGN(4096) {
         PROVIDE(__global_pointer$ = . + 0x800);
         *(.data .data.*)
+        *(.data.rel.ro .data.rel.ro.*)
+        *(.got .got.* .got.plt)
         *(.sdata .sdata.*)
     }
 
@@ -32,4 +34,9 @@ SECTIONS
         *(COMMON)
         __bss_end = .;
     }
+
+    /* Page-align so trailing read-only orphan sections (.eh_frame, manifest) do not
+     * share .bss's last page. Otherwise the loader maps that page RW for .bss then
+     * remaps it read-only for the orphan, and a write to a .bss global there faults. */
+    . = ALIGN(4096);
 }

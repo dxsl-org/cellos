@@ -1,60 +1,76 @@
+//! Cell heap allocator — a real freeing allocator (linked-list free list).
+//!
+//! Replaces the former bump allocator whose `dealloc` was a no-op: that leaked
+//! EVERY allocation, so any long-running cell (shell, services) inexorably
+//! exhausted its 4 MiB arena and then store-faulted on the first failed
+//! allocation — a guaranteed slow death, the opposite of "never-die". This wraps
+//! `linked_list_allocator` (the same crate the kernel heap uses) so transient
+//! `String`/`Vec` allocations are actually reclaimed and a cell can run forever.
+//!
+//! ## Why `static mut Heap` and not `LockedHeap`
+//! Every ViCell cell is single-task / single-hart, so allocator entries never
+//! overlap and no lock is needed. Crucially, `LockedHeap` embeds a spinlock whose
+//! atomic write-back FAULTS in a cell: the const-initialised allocator static lands
+//! in the ELF's RELRO (read-only) segment, and an `amoor.w` to a read-only page
+//! traps (scause=0xf). A zero-sized `CellAllocator` plus mutable state in `.bss`
+//! (`static mut`) sidesteps that entirely — there is no writable allocator static
+//! to be placed read-only.
+
 use core::alloc::{GlobalAlloc, Layout};
+use core::ptr::{addr_of_mut, null_mut, NonNull};
+use linked_list_allocator::Heap;
 
-pub struct SimpleAllocator;
+/// Per-cell heap size. 4 MiB is ample now that memory is actually freed.
+const HEAP_SIZE: usize = 4 * 1024 * 1024;
 
-// Static heap memory (64KB)
-// Using 64KB for now. Should be large enough for basic shell commands.
-// Must be aligned to 16 bytes for safe allocation.
+/// Backing arena for the cell heap. 16-byte aligned so the allocator can satisfy
+/// the largest natural alignment without wasting the first bytes.
 #[repr(align(16))]
-#[allow(dead_code)]
-struct HeapMemory([u8; 4 * 1024 * 1024]); // 4MB
-static mut HEAP_MEM: HeapMemory = HeapMemory([0; 4 * 1024 * 1024]);
-static HEAP_OFFSET: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+struct HeapArena([u8; HEAP_SIZE]);
+static mut HEAP_MEM: HeapArena = HeapArena([0; HEAP_SIZE]);
 
-unsafe impl GlobalAlloc for SimpleAllocator {
+/// Free-list allocator state. `static mut` (writable `.bss`), serialized solely by
+/// the single-task execution model — see the module note on why no lock is used.
+static mut HEAP: Heap = Heap::empty();
+static mut HEAP_INIT: bool = false;
+
+/// Zero-sized handle; all real state lives in the `static mut`s above so this
+/// `#[global_allocator]` static carries no writable data that could land read-only.
+struct CellAllocator;
+
+// SAFETY: single-task cells never enter the allocator concurrently, so the
+// unsynchronised access to the `static mut` heap state is race-free. Allocation
+// correctness is delegated to the well-tested `linked_list_allocator::Heap`.
+unsafe impl GlobalAlloc for CellAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let size = layout.size();
-        let align = layout.align();
-
-        // Simple atomic bump allocation
-        loop {
-            let offset = HEAP_OFFSET.load(core::sync::atomic::Ordering::Relaxed);
-            let heap_start = core::ptr::addr_of!(HEAP_MEM) as usize;
-            let current_ptr = heap_start + offset;
-
-            let aligned_ptr = (current_ptr + align - 1) & !(align - 1);
-            let padding = aligned_ptr - current_ptr;
-            let new_offset = offset + padding + size;
-
-            if new_offset > 4 * 1024 * 1024 {
-                return core::ptr::null_mut();
-            }
-
-            if HEAP_OFFSET
-                .compare_exchange(
-                    offset,
-                    new_offset,
-                    core::sync::atomic::Ordering::Relaxed,
-                    core::sync::atomic::Ordering::Relaxed,
-                )
-                .is_ok()
-            {
-                return aligned_ptr as *mut u8;
-            }
+        let heap = &mut *addr_of_mut!(HEAP);
+        if !HEAP_INIT {
+            // SAFETY: HEAP_MEM is a 'static, 16-byte-aligned arena owned solely by the
+            // heap; init runs exactly once (single-task → no race on HEAP_INIT).
+            heap.init(addr_of_mut!(HEAP_MEM) as *mut u8, HEAP_SIZE);
+            HEAP_INIT = true;
         }
+        heap.allocate_first_fit(layout).map_or(null_mut(), |p| p.as_ptr())
     }
 
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {
-        // No-op: Leak memory (Bump allocator)
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if let Some(p) = NonNull::new(ptr) {
+            let heap = &mut *addr_of_mut!(HEAP);
+            heap.deallocate(p, layout);
+        }
     }
 }
 
 #[global_allocator]
-static ALLOCATOR: SimpleAllocator = SimpleAllocator;
+static ALLOCATOR: CellAllocator = CellAllocator;
 
+/// Allocation-failure handler. We are genuinely out of heap (4 MiB of LIVE
+/// objects), so in-process recovery is hopeless. Rather than hang — which would
+/// leave a paralyzed-but-alive cell the supervisor cannot detect — log via the
+/// raw syscall (no allocation) and exit abnormally so the supervisor restarts the
+/// cell with a fresh heap. That is the "never-die" response to OOM.
 #[alloc_error_handler]
 fn alloc_error(_layout: Layout) -> ! {
-    crate::io::println("OOM: Allocation failed!");
-    crate::syscall::sys_yield();
-    loop {}
+    let _ = crate::syscall::sys_log("OOM: cell heap exhausted — exiting for restart\n");
+    crate::syscall::sys_exit(0xEE); // non-zero = abnormal → supervisor restarts it
 }

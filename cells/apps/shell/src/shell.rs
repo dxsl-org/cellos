@@ -60,9 +60,14 @@ impl<'a> ViShell<'a> {
                     }
 
                     let _ = self.dispatch(line).await;
-                    // Check for `exit N` — built-in sets this flag.
-                    if crate::executor::take_exit_request().is_some() {
-                        return;
+                    // Check for `exit N` — built-in sets this flag. Terminate via an
+                    // explicit clean `sys_exit` rather than returning up through
+                    // `block_on`/the async stack: that unwind store-faults (scause=0xf)
+                    // and would be reported as an ABNORMAL exit. A direct sys_exit yields
+                    // a CLEAN exit (reason 0), which the supervisor's Transient policy
+                    // treats as final (no restart) — `exit` means the user wants out.
+                    if let Some(code) = crate::executor::take_exit_request() {
+                        ostd::syscall::sys_exit(code as usize);
                     }
                 }
             }
