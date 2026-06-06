@@ -145,8 +145,19 @@ Erlang/OTP-style "let it crash + restart".
       sys_exit — a separate shell bug; the supervisor restarts it correctly either way.
 
 ### 4.4 — Stop slow death (P1)
-- [ ] **Reclaim frames + page tables on cell exit** (today only heap quota is refunded).
+- [x] **Reap zombies → free dead-cell stacks** — DONE 2026-06-06 (commit 6bb1cc3a). Zombies were
+      never removed, so `Stack::drop` never ran and every cell death leaked its kernel+user stacks.
+      `Scheduler::take_reapable_zombies` (called from `yield_cpu`, dropped outside the SCHEDULER lock
+      for lock-order safety) now frees them. Verified: 3 forced shell crash→reap→restart cycles,
+      0 kernel panics, no reaper UAF/deadlock.
+- [ ] **Free ELF segment frames on cell death** — still leak (`Stack::drop` only covers stacks).
+      Track each cell's mapped segment frames on its `Task` at load (`load_segments`), free them in
+      the reaper. Then a **`load_segments` overwrite-guard** (reject a cell whose load VA is already
+      mapped) becomes safe — currently it would block respawn because a dead cell's VA mapping
+      persists; respawn works today only via `map_page` silently overwriting (same hazard that the
+      bench-VA collision exploited). Segment reclaim is the prerequisite for that guard.
 - [ ] **GC for async-pinned buffers** orphaned by a crashed owner (else 24/7 robots leak to OOM).
+      Needs owner→pin tracking (the metadata registry that does not yet exist).
 
 ### 4.5 — Realtime hardening (P1–P2)
 - [ ] CPU budget / time-slice guarantees per priority; measure WCET of syscall + IPC paths.
