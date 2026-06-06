@@ -26,8 +26,11 @@ impl ElfLoader {
         &self,
         data: &[u8],
         frame_allocator: &mut crate::memory::frame::FrameAllocator,
-    ) -> ViResult<()> {
+    ) -> ViResult<alloc::vec::Vec<(VAddr, PhysAddr)>> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
+        // Record each mapped (vaddr, frame) so the cell's segment frames can be
+        // reclaimed when it dies (see task::stack::CellSegments) — otherwise they leak.
+        let mut mapped: alloc::vec::Vec<(VAddr, PhysAddr)> = alloc::vec::Vec::new();
 
         for ph in elf.program_iter() {
             if let Ok(xmas_elf::program::Type::Load) = ph.get_type() {
@@ -106,6 +109,9 @@ impl ElfLoader {
                     )
                     .map_err(|_| ViError::OutOfMemory)?;
 
+                    // Track for reclamation on cell death.
+                    mapped.push((current_page, buf_frame));
+
                     // Zero the frame first (simplifies BSS and padding, and
                     // prevents info-leak from previous frame owner).
                     unsafe {
@@ -149,7 +155,7 @@ impl ElfLoader {
                 );
             }
         }
-        Ok(())
+        Ok(mapped)
     }
 }
 

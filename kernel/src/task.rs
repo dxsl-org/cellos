@@ -341,12 +341,13 @@ pub fn spawn_from_mem(
     let loader = ElfLoader;
     let header = loader.parse_header(elf_data)?;
 
-    // 3. Load Segments
-    {
+    // 3. Load Segments — capture the mapped (vaddr, frame) pairs so the cell's
+    // segment frames are reclaimed when it dies (see stack::CellSegments).
+    let seg_pages = {
         let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let frame_allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-        loader.load_segments(elf_data, frame_allocator)?;
-    }
+        loader.load_segments(elf_data, frame_allocator)?
+    };
 
     // 4. Spawn Task
     let tid = spawn(name, cell_id, allowed_drivers);
@@ -358,6 +359,8 @@ pub fn spawn_from_mem(
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             log::info!("Spawn: Setting up context for Task {}...", tid);
+            // Own the segment frames so they're freed when this Task is reaped.
+            task.segment_mem = Some(crate::task::stack::CellSegments::new(seg_pages));
             task.trap_frame.sepc = header.entry;
             task.trap_frame.sstatus = 0x20; // SPIE=1, SPP=0 (User)
 

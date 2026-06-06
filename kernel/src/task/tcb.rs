@@ -118,6 +118,9 @@ pub struct Task {
     // Stack management
     pub kernel_stack: Option<super::stack::Stack>,
     pub user_stack: Option<super::stack::Stack>,
+    /// Frames mapped for this cell's ELF segments, freed when the Task is dropped
+    /// (reaped). Without it, a cell's code/data frames leak on every death.
+    pub segment_mem: Option<super::stack::CellSegments>,
 
     // Lifecycle
     pub waiters: Vec<usize>,
@@ -171,6 +174,7 @@ impl Task {
             cwd: String::from("/"),
             kernel_stack: None,
             user_stack: None,
+            segment_mem: None,
             waiters: Vec::new(),
             exit_code: None,
             pending_future: None,

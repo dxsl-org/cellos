@@ -191,3 +191,40 @@ impl Drop for Stack {
         }
     }
 }
+
+/// Physical frames mapped for a cell's ELF segments, recorded as `(vaddr, frame)`
+/// at load time so they can be reclaimed when the cell dies.
+///
+/// `Stack::drop` only frees stacks; without this a cell's code/data frames leak
+/// on every death (a supervised service restarted repeatedly would grow to OOM).
+/// Segment frames are allocated exclusively for the cell by `load_segments`
+/// (IPC/shared buffers use separate frames), so freeing them on death is safe.
+#[derive(Debug)]
+pub struct CellSegments {
+    pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
+}
+
+impl CellSegments {
+    pub fn new(pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>) -> Self {
+        Self { pages }
+    }
+}
+
+impl Drop for CellSegments {
+    fn drop(&mut self) {
+        let mut frame_guard = FRAME_ALLOCATOR.lock();
+        if let Some(allocator) = frame_guard.as_mut() {
+            for &(vaddr, frame) in &self.pages {
+                // Only unmap if this VA still resolves to OUR frame. Cells load at
+                // fixed VAs, so a supervised cell respawned at the same VA before we
+                // are reaped will have re-pointed this VA at the NEW instance's frame
+                // — unmapping it then would crash the new cell. Skip the unmap in
+                // that case; the old frame is still ours to free either way.
+                if paging::virt_to_phys(vaddr) == Some(frame) {
+                    let _ = paging::unmap_page(vaddr);
+                }
+                allocator.deallocate_frame(frame);
+            }
+        }
+    }
+}
