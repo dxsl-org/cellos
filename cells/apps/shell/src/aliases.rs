@@ -1,7 +1,7 @@
 //! Shell alias table — maps short names to replacement strings.
 //!
 //! Usage: `alias ll='ls -l'`  then typing `ll /bin` expands to `ls -l /bin`.
-//! Aliases are session-local (persistence to `~/.viosrc` deferred to FAT32).
+//! Aliases are session-local (persistence to `~/.ViCellrc` deferred to FAT32).
 
 extern crate alloc;
 use alloc::{collections::BTreeMap, string::String};

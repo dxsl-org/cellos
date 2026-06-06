@@ -3,7 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Memory allocation interfaces for ViOS.
+//! Memory allocation interfaces for ViCell.
 //!
 //! Provides arena allocators and custom allocation strategies
 //! to reduce fragmentation and improve performance.

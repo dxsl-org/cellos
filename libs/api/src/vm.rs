@@ -91,7 +91,7 @@ pub enum DebugEvent {
 ///
 /// # Architecture
 /// - **Hypervisor Cell**: Acts as VMM implementing this trait
-/// - **Traps**: Guest syscalls trap to VMM, which translates them to ViOS API
+/// - **Traps**: Guest syscalls trap to VMM, which translates them to ViCell API
 /// - **Isolation**: Hardware Stage-2 paging (Guest Physical → Host Physical)
 ///
 /// # Performance

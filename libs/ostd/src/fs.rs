@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Filesystem utilities for ViOS cells.
+//! Filesystem utilities for ViCell cells.
 //!
 //! `File` is backed by a kernel capability (`CapId`) obtained via `OpenCap`.
 //! Single-owner: moving a `File` transfers the capability.  Dropping without

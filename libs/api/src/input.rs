@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Input event types for ViOS cells.
+//! Input event types for ViCell cells.
 //!
 //! `InputEvent` is the canonical event type exchanged between the kernel-side
 //! VirtIO input driver and any consumer cell (shell, compositor, …).  The input

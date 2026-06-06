@@ -6,7 +6,7 @@
 //! Benchmarking framework for performance validation.
 //!
 //! Provides interfaces for measuring and validating performance
-//! of critical operations in ViOS.
+//! of critical operations in ViCell.
 
 use crate::*;
 use alloc::boxed::Box;

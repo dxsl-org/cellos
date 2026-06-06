@@ -3,7 +3,7 @@
 // will be called by the readline repl; suppress dead-code lint until wired.
 #![allow(dead_code)] // reason: public methods used by state_transfer + future readline integration
 //!
-//! File persistence (`~/.vios_history`) is enabled once VFS write is stable
+//! File persistence (`~/.ViCell_history`) is enabled once VFS write is stable
 //! (Phase 13 FAT32).  Until then the history survives only within a session.
 
 extern crate alloc;
@@ -12,7 +12,7 @@ use alloc::{collections::VecDeque, string::String};
 /// Maximum entries kept in memory.
 const MAX_HISTORY: usize = 1000;
 /// Path for persistent history file (VFS write path required).
-const HISTORY_FILE: &str = "/tmp/.vios_history";
+const HISTORY_FILE: &str = "/tmp/.ViCell_history";
 
 /// Persistent-capable command history.
 pub struct History {
