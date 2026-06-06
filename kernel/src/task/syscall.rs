@@ -190,6 +190,8 @@ pub enum Syscall {
     Exit { code: usize },
     /// 61: ForceExit — terminate another task by TID; non-blocking return to caller.
     ForceExit { tid: usize },
+    /// 204: NotifyOnExit — register the caller to be notified when `watched` dies.
+    NotifyOnExit { watched: usize },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
     /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
@@ -333,6 +335,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
+            // A NotifyOnExit death that arrived while we were busy (not parked in
+            // Recv) was queued; deliver it now without blocking. The dead tid is
+            // returned as the "sender" so a supervisor never misses a child death.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    if !t.pending_deaths.is_empty() {
+                        return Ok(t.pending_deaths.remove(0));
+                    }
+                }
+            }
             let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
                 Ok(0) => {
@@ -710,6 +722,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             log::info!("[kernel] ForceExit: task {} killed by task {}", tid, caller_id);
 
             Ok(0) // non-blocking — caller keeps running; do NOT yield_cpu
+        }
+
+        Syscall::NotifyOnExit { watched } => {
+            // Privileged: only SpawnCap holders (supervisors like init) may watch
+            // arbitrary tasks — same authority gate as ForceExit. The watcher's
+            // next Recv returns `watched` when it dies (see exit_task delivery).
+            let has_spawn = super::SCHEDULER
+                .lock()
+                .as_ref()
+                .and_then(|s| s.tasks.get(&caller_id))
+                .map(|t| t.spawn_cap.is_some())
+                .unwrap_or(false);
+            if !has_spawn {
+                return Err(SyscallError::PermissionDenied);
+            }
+            super::scheduler::subscribe_death(watched, caller_id);
+            Ok(0)
         }
 
         Syscall::Reply { caller: _, result } => {
@@ -1429,6 +1458,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::ShmMap => Syscall::ShmMap { handle: a0, target_pid: a1 },
         ViSyscall::Exit      => Syscall::Exit { code: a0 },
         ViSyscall::ForceExit => Syscall::ForceExit { tid: a0 },
+        ViSyscall::NotifyOnExit => Syscall::NotifyOnExit { watched: a0 },
         ViSyscall::Yield => Syscall::Yield,
         ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
         ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },

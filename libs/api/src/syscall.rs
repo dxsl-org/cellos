@@ -87,6 +87,12 @@ pub enum ViSyscall {
     /// Scatter-receive: one IPC message written into up to 8 non-contiguous buffers.
     /// ABI: a0 = mask, a1 = iovec_ptr, a2 = iovec_count → sender_id.
     RecvScatter = 203,
+    /// Register the caller as a watcher of `watched_tid`. When that task exits OR
+    /// faults, the kernel delivers a death notification to the caller's pending
+    /// `Recv` (`sender_id` = the dead tid, payload = the exit/fault reason), so a
+    /// supervisor can wait-any across many children with a single recv loop.
+    /// Requires `SpawnCap`. ABI: a0 = watched_tid → 0 on success, usize::MAX on error.
+    NotifyOnExit = 204,
 
     // === Hot-swap (Phase 20) ===
     /// Live-replace a running Cell without message loss.
@@ -161,7 +167,9 @@ impl ViSyscall {
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
-            Self::Yield | Self::Exit | Self::ForceExit | Self::Unknown => None,
+            // NotifyOnExit is privileged (SpawnCap-gated, like ForceExit), so it is
+            // always permitted past the allowlist — SpawnCap is the authority gate.
+            Self::Yield | Self::Exit | Self::ForceExit | Self::NotifyOnExit | Self::Unknown => None,
         }
     }
 }
@@ -203,6 +211,7 @@ impl From<usize> for ViSyscall {
             201 => ViSyscall::RecvTimeout,
             202 => ViSyscall::SendGather,
             203 => ViSyscall::RecvScatter,
+            204 => ViSyscall::NotifyOnExit,
             300 => ViSyscall::GpuFlush,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,

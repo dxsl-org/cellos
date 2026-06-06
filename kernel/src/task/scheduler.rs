@@ -45,6 +45,24 @@ const WATCHDOG_BUDGET_TICKS: u32 = 500;
 /// kill, to distinguish it from a real hardware trap.
 const WATCHDOG_SCAUSE: u32 = 0x0000_DEAD;
 
+/// Death-notification subscriptions: `watched_tid → [watcher_tid, …]`.
+///
+/// A watcher (a `SpawnCap` holder, e.g. a supervisor) registers via the
+/// `NotifyOnExit` syscall; `exit_task` delivers to each watcher when the watched
+/// task dies (wakes a parked `Recv`, or queues onto `Task::pending_deaths` if the
+/// watcher is busy). One-shot: the subscription is removed on delivery, so a
+/// supervisor re-registers for the respawned child.
+///
+/// Lock order: only ever locked while already holding (or after releasing)
+/// SCHEDULER — never SUBSCRIBERS-then-SCHEDULER — to avoid deadlock.
+static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
+    crate::sync::Spinlock::new(BTreeMap::new());
+
+/// Register `watcher` to be notified when `watched` exits or faults.
+pub fn subscribe_death(watched: usize, watcher: usize) {
+    DEATH_SUBSCRIBERS.lock().entry(watched).or_default().push(watcher);
+}
+
 /// Priority-aware Scheduler with Central Task Table (Hubris-like).
 ///
 /// Three priority levels (Background=0, Normal=1, RealTime=2) are stored as
@@ -310,6 +328,27 @@ impl Scheduler {
                 w.reply_value = Some(exit_reason);
                 self.push_ready(wid);
             }
+        }
+
+        // Deliver NotifyOnExit death notifications. One-shot: the subscription is
+        // removed here. Wake a watcher parked in Recv (its Recv returns
+        // current_caller = this dead tid), else queue onto pending_deaths so the
+        // watcher gets it on its next Recv (covers a death during respawn).
+        let watchers = DEATH_SUBSCRIBERS.lock().remove(&tid).unwrap_or_default();
+        let mut woken_watchers = Vec::new();
+        for w in watchers {
+            if let Some(wt) = self.tasks.get_mut(&w) {
+                if matches!(wt.state, TaskState::Recv { .. }) {
+                    wt.current_caller = Some(tid);
+                    wt.state = TaskState::Ready;
+                    woken_watchers.push(w);
+                } else {
+                    wt.pending_deaths.push(tid);
+                }
+            }
+        }
+        for w in woken_watchers {
+            self.push_ready(w);
         }
     }
 

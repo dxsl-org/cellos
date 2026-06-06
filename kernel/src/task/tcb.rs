@@ -125,6 +125,10 @@ pub struct Task {
     // Lifecycle
     pub waiters: Vec<usize>,
     pub exit_code: Option<usize>,
+    /// Death-notification queue (NotifyOnExit): tids of watched tasks that died
+    /// while this watcher was NOT parked in Recv. Drained (highest-priority) by the
+    /// next `Recv` so a supervisor never misses a child death during a respawn.
+    pub pending_deaths: Vec<usize>,
 
     // Async Kernel Support
     pub pending_future: Option<SyscallFuture>,
@@ -177,6 +181,7 @@ impl Task {
             segment_mem: None,
             waiters: Vec::new(),
             exit_code: None,
+            pending_deaths: Vec::new(),
             pending_future: None,
             block_io_cap: None,
             network_cap:  None,

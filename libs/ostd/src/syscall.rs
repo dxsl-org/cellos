@@ -309,6 +309,22 @@ pub fn sys_wait(pid: usize) -> SyscallResult {
     }
 }
 
+/// Register the caller to be notified when task `tid` exits or faults.
+///
+/// Requires `SpawnCap`. After this, a `sys_recv` by the caller returns `tid`
+/// (as the "sender") when that task dies — enabling a supervisor to wait-any
+/// across many children with a single recv loop. Returns `Ok(0)` on success.
+pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
+    unsafe {
+        let ret = syscall(ViSyscall::NotifyOnExit, tid, 0, 0, 0);
+        if ret >= 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
 pub fn sys_shm_alloc(size: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::ShmAlloc, size, 0, 0, 0);
