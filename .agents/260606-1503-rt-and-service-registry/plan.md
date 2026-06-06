@@ -17,7 +17,10 @@ closes the recovery loop the supervisor opened). **Phase 02** is data-gated and 
   Full EDF/WCET is academic on QEMU TCG (no cycle-accurate timing) — so the tractable slice is
   deadline-miss *detection* + budget *accounting*, not a new scheduler.
 
-## Phase 01 — Stable Service-ID Registry  (status: PENDING Law-1 confirm)
+## Phase 01 — Stable Service-ID Registry  (status: ✅ DONE 2026-06-06, commit 5cda48d8)
+Boot-verified: 5 services register with correct tids (VFS→3, CONFIG→4, INPUT→5, NET→6,
+COMPOSITOR→7); init round-trip self-check passes ("service registry verified"); 0 faults.
+Bonus: fixed a real bug — shell ConfigClient hard-coded tid 2 but Config is tid 4.
 Detail: [phase-01-service-registry.md](phase-01-service-registry.md)
 
 Kernel-owned `service_id(u16) → current_tid` map, managed by the trusted supervisor.
@@ -31,7 +34,11 @@ Kernel-owned `service_id(u16) → current_tid` map, managed by the trusted super
 - **proof:** wire one client (shell→config or a vfs client) to resolve via lookup + survive a
   service restart. Build + boot-verify: kill a service, client reconnects to the new instance.
 
-## Phase 02 — P06 RT Hardening  (status: PENDING; data-gated)
+## Phase 02 — P06 RT Hardening  (status: ✅ observability slice DONE 2026-06-06, commit pending)
+Chose the observability slice (full EDF/WCET enforcement is hardware-data-gated; QEMU TCG has no
+cycle-accurate timing). Shipped: `RtDeadlineMiss` audit + per-task `deadline_misses` counter;
+`RtCpuOverrun` one-shot early-warning at 80% of the watchdog budget. No new ABI, no scheduler-policy
+change. Boot-verified clean. Enforcement (budget/EDF) deferred to real-board bring-up.
 Detail: [phase-02-rt-hardening.md](phase-02-rt-hardening.md)
 
 Build on existing primitives (run_ticks, deadline sweep, RT watchdog). NOT a new scheduler.

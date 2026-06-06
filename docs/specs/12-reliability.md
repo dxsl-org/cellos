@@ -74,9 +74,9 @@ embedded/robotics OS (QNX/seL4 class), not relative to zero.
 | Axis | Score | What exists | What's missing |
 |------|------:|-------------|----------------|
 | 1. Fault isolation | **~85%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)); stack **guard pages active** ([stack.rs](../../kernel/src/task/stack.rs)); load-time VA-overwrite guard + build-time VA-layout CI check; async-pin/grant leak closed as moot (§4.4) | Depends entirely on zero-unsafe-bug in kernel/HAL; no per-cell SATP (by decision) |
-| 2. Fault detection | **~15%** | Audit ring logs `CellFault`/`CellExit` ([kernel/src/audit.rs](../../kernel/src/audit.rs)) — passive only | No watchdog, no heartbeat; `RecvTimeout` deadline stored but **scheduler never checks it** |
-| 3. Fault recovery | **~10%** | `spawn_from_path` re-loads ELF; hotswap + state-stash exist — all **manual** | No supervisor, no auto-respawn, no restart policy |
-| 4. Realtime guarantee | **~35%** | 3-level priority preempt + zero-latency SSIP ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | No EDF, no deadline enforcement, no CPU budget, WCET unmeasured |
+| 2. Fault detection | **~60%** | Audit ring (`CellFault`/`CellExit`); CPU-monopoly watchdog (RT-only, reset-on-syscall); `RecvTimeout` deadline sweep **now checked** in `pick_next` (woken with timeout); RT `RtDeadlineMiss` + `RtCpuOverrun` audit events ([kernel/src/audit.rs](../../kernel/src/audit.rs)) | No app-level heartbeat/liveness ping; no external HW watchdog |
+| 3. Fault recovery | **~75%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); service-ID registry so clients reconnect across respawn; hotswap + state-stash | Restart policies (transient/permanent/temporary); time-windowed restart intensity |
+| 4. Realtime guarantee | **~45%** | 3-level priority preempt + zero-latency SSIP; RT watchdog; deadline-miss + CPU-overrun **observability** ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | EDF / deadline enforcement / CPU-budget — **hardware-data-gated** (QEMU TCG has no cycle-accurate timing); WCET unmeasured |
 | 5. Continuous operation | **~50%** | 5-step hotswap protocol ([kernel/src/cell/hotswap.rs](../../kernel/src/cell/hotswap.rs)); snapshot warm-boot | Partial rollback, message-queue preservation incomplete, manual trigger |
 | 6. HW fault tolerance | **~5%** | — | No HW watchdog, no ECC, no redundancy/failover |
 
@@ -184,8 +184,15 @@ Erlang/OTP-style "let it crash + restart".
       reaper + stack reclaim + segment reclaim + overwrite-guard + async/grant verified safe.
 
 ### 4.5 — Realtime hardening (P1–P2)
+- [x] **RT observability (P06 slice, DONE 2026-06-06).** `RtDeadlineMiss` audit event + per-task
+      `deadline_misses` counter (emitted when an RT cell's `RecvTimeout` deadline elapses — a missed
+      control-loop cycle); `RtCpuOverrun` one-shot audit at 80% of the watchdog budget (early warning
+      before the hard kill). Built on existing primitives, no new ABI, no scheduler-policy change —
+      makes RT failures *visible* so enforcement can be tuned once real-hardware bench data exists.
 - [ ] CPU budget / time-slice guarantees per priority; measure WCET of syscall + IPC paths.
-- [ ] Evaluate EDF or deadline-aware scheduling for hard-RT control cells.
+      **Hardware-data-gated:** QEMU TCG has no cycle-accurate timing, so WCET/EDF enforcement cannot
+      be meaningfully validated here — defer to real-board bring-up (the RT bench scenarios exist).
+- [ ] Evaluate EDF or deadline-aware scheduling for hard-RT control cells (after WCET data).
 
 ### Target trajectory
 Completing 4.1–4.3 lifts **Detection ~15%→~65%** and **Recovery ~10%→~70%**, raising aggregate
