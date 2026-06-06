@@ -85,6 +85,11 @@ impl VfsManager {
             root,
             handles: HandleTable::new(),
             mounts:  MountTable::new(),
+            // test-hooks: 2 KiB quota so vfs-test can hit the limit in a few
+            // small writes; production keeps the full 32 MB default.
+            #[cfg(feature = "test-hooks")]
+            quota:   QuotaTracker::with_limit(2048),
+            #[cfg(not(feature = "test-hooks"))]
             quota:   QuotaTracker::new(),
             access:  AccessTable::new(),
             pending: PendingTable::new(),

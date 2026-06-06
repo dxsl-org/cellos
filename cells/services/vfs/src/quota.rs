@@ -21,6 +21,16 @@ impl QuotaTracker {
         Self { used: BTreeMap::new(), limit: DEFAULT_QUOTA_BYTES }
     }
 
+    /// Create a tracker with a custom byte limit.
+    ///
+    /// Used by `test-hooks` builds to exercise quota enforcement with a tiny
+    /// limit — writing the full 32 MB production limit over the 512-byte IPC
+    /// path would take ~67k messages, far too slow for a QEMU integration test.
+    #[cfg(feature = "test-hooks")]
+    pub fn with_limit(limit: u64) -> Self {
+        Self { used: BTreeMap::new(), limit }
+    }
+
     /// Check whether `owner` can afford `bytes` without exceeding the quota.
     ///
     /// Does not mutate state — use before attempting the write, then call `charge`

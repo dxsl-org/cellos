@@ -10,6 +10,12 @@ ostd = { path = "../../../libs/ostd" }
 driver-disk = { path = "../../drivers/disk" }
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc"] }
 
+[features]
+# Shrinks the per-cell quota to a tiny limit so the vfs-test cell can exercise
+# quota enforcement (Err 2) without writing the full 32 MB production limit.
+# Enabled ONLY for the integration-test kernel build — never in production.
+test-hooks = []
+
 [[bin]]
 name = "service-vfs"
 path = "src/main.rs"

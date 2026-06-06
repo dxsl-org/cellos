@@ -9,7 +9,6 @@
 #![no_main]
 extern crate alloc;
 
-use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// VFS service task endpoint (task 3: init=1, user_hello=2, vfs=3).
@@ -202,6 +201,30 @@ fn test_edge_cases() {
     }
 }
 
+/// 8. Quota enforcement (Err 2). Only built with `test-hooks`, where the VFS
+/// uses a 2 KiB quota — writing past it returns `Err(2)`, and releasing a file
+/// frees the charge so a subsequent write fits again.
+#[cfg(feature = "test-hooks")]
+fn test_quota_limit() {
+    // VFS test-hooks quota = 2048 B. Charge 800 + 800 = 1600 (both fit).
+    let chunk = [b'q'; 800];
+    assert_ok!(api::ipc::VfsRequest::Write { path: "/data/q1.bin", content: &chunk },
+        "quota write 1 (800B) fits");
+    assert_ok!(api::ipc::VfsRequest::Write { path: "/data/q2.bin", content: &chunk },
+        "quota write 2 (1600B) fits");
+    // Third write → 2400 > 2048 → quota exceeded.
+    assert_err!(api::ipc::VfsRequest::Write { path: "/data/q3.bin", content: &chunk },
+        2, "quota write 3 exceeds 2KiB limit → Err(2)");
+    // Releasing q1 frees 800 B; q3 (800 B) now fits within 2048.
+    assert_ok!(api::ipc::VfsRequest::Unlink("/data/q1.bin"),
+        "unlink q1 releases quota");
+    assert_ok!(api::ipc::VfsRequest::Write { path: "/data/q3.bin", content: &chunk },
+        "quota write after release succeeds");
+    // Cleanup.
+    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/data/q2.bin"));
+    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/data/q3.bin"));
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -215,6 +238,8 @@ pub fn main() {
     test_ramfs();
     test_stat_dir();
     test_edge_cases();
+    #[cfg(feature = "test-hooks")]
+    test_quota_limit();
 
     let passed = PASSED.load(Ordering::Relaxed);
     let failed = FAILED.load(Ordering::Relaxed);
