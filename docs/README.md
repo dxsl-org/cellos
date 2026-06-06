@@ -1,4 +1,4 @@
-# ViOS Documentation Index
+# ViCell Documentation Index
 
 **Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-06-03
 
@@ -9,6 +9,7 @@
 | File | Purpose |
 |------|---------|
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |
+| [app-development-guide.md](app-development-guide.md) | Write/build/run/test a Cell application (worked examples) |
 | [codebase-summary.md](codebase-summary.md) | Quick reference: LOC, crates, features |
 | [faq.md](faq.md) | Common questions about architecture |
 
@@ -30,7 +31,7 @@
 |------|---------|
 | [system-architecture.md](system-architecture.md) | System layers, kernel, HAL, IPC |
 | [code-standards.md](code-standards.md) | The 8 Coding Laws + conventions |
-| [patterns.md](patterns.md) | Common Rust patterns for ViOS |
+| [patterns.md](patterns.md) | Common Rust patterns for ViCell |
 | [security-model.md](security-model.md) | STRIDE analysis, known limitations |
 
 ---
