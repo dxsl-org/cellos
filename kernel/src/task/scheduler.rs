@@ -478,6 +478,38 @@ impl Scheduler {
             self.push_ready(id);
         }
 
+        // 1b. Heartbeat liveness sweep: terminate any cell that opted into heartbeating
+        //     but missed its deadline — a SILENT hang (deadlock / stuck loop) that the
+        //     CPU-monopoly watchdog cannot see (that only fires on RT compute hogs). The
+        //     death flows through the normal path so the supervisor restarts it. Collect
+        //     first, then `exit_task` outside the iteration (it mutates self.tasks).
+        let mut hung: Vec<(usize, u64)> = Vec::new();
+        for (id, task) in self.tasks.iter() {
+            if let Some(d) = task.heartbeat_deadline {
+                if now as u64 >= d {
+                    hung.push((*id, task.cell_id.0));
+                }
+            }
+        }
+        for (tid, cell_raw) in hung {
+            log::error!(
+                "[heartbeat] task {} (cell {}) missed liveness deadline — terminating (hung)",
+                tid, cell_raw
+            );
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellHung,
+                &crate::audit::encode_u32x2(cell_raw as u32, tid as u32),
+            );
+            // Release resources the hung cell owned (each locks its own state, not
+            // SCHEDULER, so they are safe to call inline here — mirrors the watchdog kill).
+            crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
+            crate::memory::cell_quota::deregister(CellId(cell_raw));
+            self.exit_task(tid, usize::MAX);
+            if self.current_task_id == Some(tid) {
+                CURRENT_CELL_ID.store(0, Ordering::Relaxed);
+            }
+        }
+
         // 2. Poll Async Tasks
         let mut polled_tasks = Vec::new();
         let waker = dummy_waker();

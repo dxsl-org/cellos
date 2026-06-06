@@ -48,6 +48,10 @@ pub enum AuditEvent {
     /// of the watchdog budget) without yielding — an early signal BEFORE the hard
     /// watchdog kill. Payload: `encode_u32x2(cell_id, run_ticks)`. One-shot per episode.
     RtCpuOverrun = 12,
+    /// A cell that opted into liveness heartbeating missed its deadline — a silent hang
+    /// (deadlock / stuck loop) the CPU watchdog cannot detect. The kernel terminates it
+    /// for supervised restart. Payload: `encode_u32x2(cell_id, tid)`.
+    CellHung = 13,
 }
 
 struct AuditRing {

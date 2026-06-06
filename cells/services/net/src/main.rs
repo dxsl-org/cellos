@@ -91,6 +91,14 @@ pub fn main() {
     println("[net] Starting DHCP...");
 
     loop {
+        // ── Liveness heartbeat ────────────────────────────────────────────────
+        // Assert we are still pumping the network loop. If this service ever wedges
+        // (deadlock / stuck driver call) it stops beating and the kernel terminates
+        // it as hung so init restarts it — a silent hang the CPU watchdog can't catch.
+        // 500 ticks (~5 s) is far longer than one poll iteration, so a healthy loop
+        // never trips it.
+        ostd::syscall::sys_heartbeat(500);
+
         // ── Pull inbound frames from the kernel NIC ───────────────────────────
         // Without this the smoltcp stack never sees DHCP OFFER/ACK and stays
         // stuck in DISCOVER forever.

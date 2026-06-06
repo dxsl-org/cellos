@@ -197,6 +197,9 @@ pub enum Syscall {
     RegisterService { service_id: u16, tid: usize },
     /// 206: LookupService — resolve `service_id` to its live provider tid (open; 0 = none).
     LookupService { service_id: u16 },
+    /// 207: Heartbeat — caller asserts liveness; (re)arm the hung-detection deadline
+    /// `interval` ticks ahead (0 = disable).
+    Heartbeat { interval: usize },
     /// 6: Exec (Spawn from file)
     Exec { path_ptr: usize, path_len: usize },
     /// 10: SpawnFromMem (Spawn from Memory buffer via Struct)
@@ -787,6 +790,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // so a client reconnects transparently after the supervisor respawns a
             // service. The dynamic replacement for the boot-order `ServiceLookup` hardcode.
             Ok(crate::cell::service_registry::lookup(service_id).unwrap_or(0))
+        }
+        Syscall::Heartbeat { interval } => {
+            // Open: a cell asserts its own liveness. Arms a deadline `interval` ticks
+            // ahead; `pick_next` terminates the cell as HUNG if it lapses. interval=0
+            // disables. Self-targeted only — a cell can only (re)arm its OWN deadline.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    t.heartbeat_deadline = if interval == 0 {
+                        None
+                    } else {
+                        Some(super::system_ticks() as u64 + interval as u64)
+                    };
+                }
+            }
+            Ok(0)
         }
 
         Syscall::Reply { caller: _, result } => {
@@ -1510,6 +1528,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         ViSyscall::NotifyOnExit => Syscall::NotifyOnExit { watched: a0 },
         ViSyscall::RegisterService => Syscall::RegisterService { service_id: a0 as u16, tid: a1 },
         ViSyscall::LookupService => Syscall::LookupService { service_id: a0 as u16 },
+        ViSyscall::Heartbeat => Syscall::Heartbeat { interval: a0 },
         ViSyscall::Yield => Syscall::Yield,
         ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
         ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },

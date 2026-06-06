@@ -102,6 +102,12 @@ pub enum ViSyscall {
     /// any client can reconnect after a service restart. ABI: a0 = service_id (u16) →
     /// provider tid (> 0), or 0 if no live provider is currently registered.
     LookupService = 206,
+    /// Liveness heartbeat: the caller asserts it is alive and will call again within
+    /// `interval_ticks` 10 ms scheduler ticks. If it misses that deadline the kernel
+    /// terminates it as HUNG — catching a silent hang (deadlock / stuck loop) that the
+    /// CPU-monopoly watchdog cannot see — so the supervisor restarts it. `interval_ticks
+    /// = 0` disables the heartbeat. Open to all cells. ABI: a0 = interval_ticks → 0.
+    Heartbeat = 207,
 
     // === Hot-swap (Phase 20) ===
     /// Live-replace a running Cell without message loss.
@@ -123,7 +129,7 @@ pub enum ViSyscall {
 }
 
 impl ViSyscall {
-    /// Stable bit index (0-37) for the per-Cell syscall allowlist stored in
+    /// Stable bit index (0-38) for the per-Cell syscall allowlist stored in
     /// `Task::syscall_allowlist`.
     ///
     /// Bit indices are independent of raw opcode values so they remain stable
@@ -175,6 +181,8 @@ impl ViSyscall {
             Self::Snapshot      => Some(32),
             // LookupService is an open syscall (any client resolves a service endpoint).
             Self::LookupService => Some(37),
+            // Heartbeat is an open syscall (any cell asserts its own liveness).
+            Self::Heartbeat     => Some(38),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -227,6 +235,7 @@ impl From<usize> for ViSyscall {
             204 => ViSyscall::NotifyOnExit,
             205 => ViSyscall::RegisterService,
             206 => ViSyscall::LookupService,
+            207 => ViSyscall::Heartbeat,
             300 => ViSyscall::GpuFlush,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,

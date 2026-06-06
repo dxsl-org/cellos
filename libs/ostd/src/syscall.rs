@@ -697,6 +697,19 @@ pub fn sys_spawn_args(buf: &mut [u8]) -> usize {
 /// # Returns
 /// Tick count as a `u64`.  Returns 0 if the syscall is not yet wired in the
 /// running kernel build.
+/// Assert liveness to the kernel hung-detector.
+///
+/// The caller promises to call this again within `interval_ticks` (10 ms scheduler
+/// ticks); if it misses that deadline the kernel terminates it as HUNG so the
+/// supervisor restarts it — catching deadlocks / stuck loops the CPU watchdog can't
+/// see. Call it once per main-loop iteration with a generous interval. `0` disables.
+pub fn sys_heartbeat(interval_ticks: u64) {
+    // SAFETY: register-only syscall; reads/writes no memory.
+    unsafe {
+        syscall(ViSyscall::Heartbeat, interval_ticks as usize, 0, 0, 0);
+    }
+}
+
 pub fn sys_get_time() -> u64 {
     // SAFETY: no memory is read or written; the kernel returns a register-size integer.
     let ret = unsafe { syscall(ViSyscall::GetTime, 0, 0, 0, 0) };

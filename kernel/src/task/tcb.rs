@@ -178,6 +178,12 @@ pub struct Task {
     /// for the current non-yielding episode, so the early-warning audit fires once per
     /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
     pub rt_overrun_warned: bool,
+
+    /// Liveness-heartbeat deadline (absolute `system_ticks`). `Some(d)` means the cell
+    /// opted into heartbeating and must call `Heartbeat` again before tick `d`, else the
+    /// scheduler terminates it as HUNG (silent-hang detection — see `pick_next`). `None`
+    /// = heartbeat disabled (the default; most cells don't opt in).
+    pub heartbeat_deadline: Option<u64>,
 }
 
 impl Task {
@@ -214,6 +220,7 @@ impl Task {
             run_ticks: 0,
             deadline_misses: 0,
             rt_overrun_warned: false,
+            heartbeat_deadline: None,
         }
     }
 
