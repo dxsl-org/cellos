@@ -74,6 +74,69 @@ fn run_rt_preempt() {
     }
 }
 
+/// Spawn `LOAD_CELLS` Normal-priority load cells; returns their tids (0 = failed).
+fn spawn_load() -> [usize; LOAD_CELLS] {
+    use api::task::TaskPriority;
+    let mut tids = [0usize; LOAD_CELLS];
+    for slot in tids.iter_mut() {
+        if let Some(tid) = spawn_role("load", TaskPriority::Normal as u8) { *slot = tid; }
+    }
+    tids
+}
+
+/// Force-exit every non-zero tid in `tids`.
+fn kill_all(tids: &[usize]) {
+    for &tid in tids {
+        if tid != 0 { let _ = ostd::syscall::sys_force_exit(tid); }
+    }
+}
+
+/// Control-loop jitter scenario: a RealTime cell measures its own period
+/// adherence under load and prints the report itself; we just orchestrate.
+fn run_rt_control_loop() {
+    use api::task::TaskPriority;
+    let load_tids = spawn_load();
+    let Some(probe_tid) = spawn_role("ctl-loop", TaskPriority::RealTime as u8) else {
+        println("[rt] control_loop SKIP — probe spawn failed (bench not at /bin/bench yet)");
+        kill_all(&load_tids);
+        return;
+    };
+    for _ in 0..100 { ostd::task::yield_now(); }
+    let _ = ostd::syscall::sys_send(probe_tid, &[0u8]);      // start ping
+    let mut done = [0u8; 8];
+    let _ = ostd::syscall::sys_recv(0, &mut done);            // wait for completion
+    // The probe sys_exit's itself; only the load cells need teardown.
+    kill_all(&load_tids);
+}
+
+/// IPC/syscall latency under load: idle baseline vs with load cells spinning.
+fn run_rt_under_load() {
+    let ipc_idle = runner::run_default(&mut IpcSendRecvBench::new());
+    let sys_idle = runner::run_default(&mut SyscallYieldBench);
+
+    let load_tids = spawn_load();
+    if load_tids.iter().all(|&t| t == 0) {
+        println("[rt] under_load SKIP — load spawn failed (bench not at /bin/bench yet)");
+        return;
+    }
+    for _ in 0..100 { ostd::task::yield_now(); }
+
+    let ipc_load = runner::run_default(&mut IpcSendRecvBench::new());
+    let sys_load = runner::run_default(&mut SyscallYieldBench);
+    print_under_load("ipc_send_recv", ipc_idle.p99, ipc_load.p99);
+    print_under_load("syscall_yield", sys_idle.p99, sys_load.p99);
+    kill_all(&load_tids);
+}
+
+/// Print idle vs under-load p99 plus the integer ratio (×100 → fixed-point x.xx).
+fn print_under_load(name: &str, idle_p99: u64, load_p99: u64) {
+    let ratio = if idle_p99 > 0 { load_p99.saturating_mul(100) / idle_p99 } else { 0 };
+    println(&alloc::format!(
+        "[rt] {:14} idle_p99={}ns load_p99={}ns ratio={}.{:02}x",
+        name, idle_p99, load_p99, ratio / 100, ratio % 100
+    ));
+}
+
 #[no_mangle]
 pub fn main() {
     // Multi-role dispatch: load/rt-probe cells are re-spawns of this binary with
@@ -83,6 +146,7 @@ pub fn main() {
     match core::str::from_utf8(&argbuf[..an]).unwrap_or("") {
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
+        "ctl-loop" => scenarios::control_loop::run_control_loop(),
         _ => {} // orchestrator falls through
     }
 
@@ -155,6 +219,8 @@ pub fn main() {
     println("");
     println("[rt] Real-time latency suite (under load):");
     run_rt_preempt();
+    run_rt_control_loop();
+    run_rt_under_load();
 
     // ── Summary ───────────────────────────────────────────────────────────────
     println("");
