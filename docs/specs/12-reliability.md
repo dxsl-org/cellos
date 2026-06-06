@@ -75,7 +75,7 @@ embedded/robotics OS (QNX/seL4 class), not relative to zero.
 |------|------:|-------------|----------------|
 | 1. Fault isolation | **~85%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)); stack **guard pages active** ([stack.rs](../../kernel/src/task/stack.rs)); load-time VA-overwrite guard + build-time VA-layout CI check; async-pin/grant leak closed as moot (§4.4) | Depends entirely on zero-unsafe-bug in kernel/HAL; no per-cell SATP (by decision) |
 | 2. Fault detection | **~60%** | Audit ring (`CellFault`/`CellExit`); CPU-monopoly watchdog (RT-only, reset-on-syscall); `RecvTimeout` deadline sweep **now checked** in `pick_next` (woken with timeout); RT `RtDeadlineMiss` + `RtCpuOverrun` audit events ([kernel/src/audit.rs](../../kernel/src/audit.rs)) | No app-level heartbeat/liveness ping; no external HW watchdog |
-| 3. Fault recovery | **~75%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); service-ID registry so clients reconnect across respawn; hotswap + state-stash | Restart policies (transient/permanent/temporary); time-windowed restart intensity |
+| 3. Fault recovery | **~88%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); per-service restart **policies** (permanent/transient/temporary) + **time-windowed restart intensity** (crash-storm escalation); exit-reason delivered as recv payload; service-ID registry (clients reconnect across respawn); hotswap + state-stash | App-level liveness heartbeat; cross-node failover (out of scope for single device) |
 | 4. Realtime guarantee | **~45%** | 3-level priority preempt + zero-latency SSIP; RT watchdog; deadline-miss + CPU-overrun **observability** ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | EDF / deadline enforcement / CPU-budget — **hardware-data-gated** (QEMU TCG has no cycle-accurate timing); WCET unmeasured |
 | 5. Continuous operation | **~50%** | 5-step hotswap protocol ([kernel/src/cell/hotswap.rs](../../kernel/src/cell/hotswap.rs)); snapshot warm-boot | Partial rollback, message-queue preservation incomplete, manual trigger |
 | 6. HW fault tolerance | **~5%** | — | No HW watchdog, no ECC, no redundancy/failover |
@@ -142,10 +142,23 @@ Erlang/OTP-style "let it crash + restart".
       init now supervises ALL services (vfs/config/input/net/compositor/shell) with one `sys_recv`
       loop, restarting whichever dies + re-arming. Verified: boot reaches `ViCell >` "supervising
       services"; exiting the shell → "service died — restarting"/"service restarted", 2nd prompt, 0
-      panics. Remaining polish (not blocking): restart policies (permanent/transient/temporary) +
-      time-windowed intensity/backoff (needs a ticks syscall), stable service-ID registry (so a
-      restarted vfs/net keeps its endpoint for clients), `parent_cell_id` for finer watch-gating.
-      Separate shell bug: `exit` builtin FAULTS (scause=0xf) — supervisor restarts it regardless.
+      panics.
+- [x] **Stable service-ID registry** — DONE 2026-06-06 (commit 5cda48d8). Kernel `service_id→tid`
+      map so a restarted vfs/net keeps its endpoint for clients (`RegisterService`/`LookupService`,
+      Law 1; supervisor-owned namespace; `clear_tid` on death). See §4 Axis 1/3. → [[service registry]]
+- [x] **Restart policies + intensity** — DONE 2026-06-06 (commit 40ad2996). Per-service Policy
+      {Permanent, Transient (restart only on abnormal exit), Temporary (never)} + per-service
+      time-windowed restart **intensity** (≤5 / ~10 s via `sys_get_time`; a crash storm escalates —
+      give up on that one service — instead of spin-respawning or burning a shared global budget).
+      Needed the **exit reason** at the supervisor: the kernel now delivers it as the `Recv` payload
+      (the NotifyOnExit contract), stashed in `exit_task` and written to the watcher's buffer when
+      its `Recv` RESUMES (the watcher's own syscall context — writing it from the trap/fault context
+      faults: S-mode store to a USER page with SSTATUS.SUM unset; that bug was caught + fixed in
+      test). Live-verified: `exit` → shell faults (reason=MAX) → died/restarting/restarted, new tid +
+      prompt, exactly 1 fault, 0 panics.
+- [ ] Remaining polish (not blocking): `parent_cell_id` for finer watch-gating; app-level liveness
+      heartbeat. Separate shell bug: `exit` builtin FAULTS (scause=0xf) — supervisor restarts it
+      regardless (Transient/Permanent both restart on the abnormal exit).
 
 ### 4.4 — Stop slow death (P1)
 - [x] **Reap zombies → free dead-cell stacks** — DONE 2026-06-06 (commit 6bb1cc3a). Zombies were
