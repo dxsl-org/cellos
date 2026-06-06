@@ -236,8 +236,25 @@ impl Scheduler {
         id
     }
 
-    pub fn exit_task(&mut self, tid: usize) {
-        info!("Task {} exiting...", tid);
+    /// Reap a task: move it to the zombie list, purge ready queues, unblock
+    /// senders stuck on it, and wake any `Wait`-ers with `exit_reason`.
+    ///
+    /// `exit_reason` is delivered to waiters as their `reply_value` — the exit
+    /// code for a clean `Exit`, or `usize::MAX` for a fault / force-kill.
+    /// Centralizing the waiter-wake here is the contract that ALL death paths
+    /// (clean `Exit`, `ForceExit`, AND hardware faults) notify waiters uniformly;
+    /// the fault path previously skipped it, so `Wait(tid)` hung forever when the
+    /// target died by fault.
+    pub fn exit_task(&mut self, tid: usize, exit_reason: usize) {
+        info!("Task {} exiting (reason={:#x})...", tid, exit_reason);
+
+        // Capture waiters BEFORE the task is removed from the table.
+        let waiters: Vec<usize> = self
+            .tasks
+            .get_mut(&tid)
+            .map(|t| core::mem::take(&mut t.waiters))
+            .unwrap_or_default();
+
         if let Some(task) = self.tasks.remove(&tid) {
             self.zombies.push(task);
         }
@@ -265,6 +282,17 @@ impl Scheduler {
         }
         for id in to_wake {
             self.push_ready(id);
+        }
+
+        // Wake tasks blocked on Wait(tid).  Last use of `w` ends its borrow of
+        // self.tasks before push_ready re-borrows self (NLL) — mirrors the
+        // former in-handler pattern, now the single source of truth.
+        for wid in waiters {
+            if let Some(w) = self.tasks.get_mut(&wid) {
+                w.state = TaskState::Ready;
+                w.reply_value = Some(exit_reason);
+                self.push_ready(wid);
+            }
         }
     }
 

@@ -26,6 +26,14 @@ static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::
 const ZERO: AtomicUsize = AtomicUsize::new(0);
 static IN_USE: [AtomicUsize; MAX_CELLS] = [ZERO; MAX_CELLS];
 
+/// Force-release this module's locks during fault teardown.
+///
+/// # Safety
+/// Single-hart; called only from the fault/panic path with interrupts disabled.
+pub unsafe fn force_unlock_locks() {
+    QUOTA_LIMITS.force_unlock();
+}
+
 /// Register a new Cell with the given heap quota.
 ///
 /// Call this at spawn, OUTSIDE the allocator.  `BTreeMap::insert` may allocate

@@ -33,6 +33,14 @@ pub const OP_DESERIALIZE: u8 = 0xF1;
 static FROZEN: Spinlock<alloc::collections::BTreeSet<u64>> =
     Spinlock::new(alloc::collections::BTreeSet::new());
 
+/// Force-release this module's lock during fault teardown.
+///
+/// # Safety
+/// Single-hart; called only from the fault/panic path with interrupts disabled.
+pub unsafe fn force_unlock_locks() {
+    FROZEN.force_unlock();
+}
+
 /// Mark `cell_id` as frozen.  Subsequent `sys_send` calls to this cell will
 /// queue the message in the task's pending queue instead of delivering it.
 pub fn freeze(cell_id: CellId) {

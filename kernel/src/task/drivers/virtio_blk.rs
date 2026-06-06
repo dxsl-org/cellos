@@ -16,6 +16,15 @@ pub static BLOCK_DEVICE: Spinlock<Option<SafeVirtIOBlk>> = Spinlock::new(None);
 /// IRQ number assigned to the block device during probing (slot_index + 1 for QEMU VirtIO MMIO).
 static BLOCK_DEVICE_IRQ: Spinlock<u32> = Spinlock::new(0);
 
+/// Force-release this module's locks during fault teardown.
+///
+/// # Safety
+/// Single-hart; called only from the fault/panic path with interrupts disabled.
+pub unsafe fn force_unlock_locks() {
+    BLOCK_DEVICE.force_unlock();
+    BLOCK_DEVICE_IRQ.force_unlock();
+}
+
 pub fn init_driver() {
     log::debug!("VirtIO Block: probing MMIO slots...");
 

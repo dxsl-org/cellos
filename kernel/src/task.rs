@@ -92,19 +92,17 @@ pub fn init() {
     // Done after scheduler init so vi_timer_tick() sees a valid SCHEDULER.
     #[cfg(target_arch = "riscv64")]
     {
-        // SAFETY: csrsi on sie sets only the STIE bit (bit 5); safe from S-mode.
-        unsafe { core::arch::asm!("csrsi sie, 0x20"); }
+        // SAFETY: sets STIE (bit 5 = mask 0x20) in sie from S-mode. Must use the
+        // register form of csrs — csrsi's immediate is only 5 bits (0..=31), so a
+        // 0x20 mask cannot be encoded as an immediate (mirrors the sstatus.SUM
+        // register-form set in main.rs).
+        unsafe { core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize); }
         let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
         hal::common::sbi::set_timer(next);
         info!("Timer preemption enabled (10 ms timeslice)");
     }
 }
 
-// Extern symbols defined in libs/ostd (linked at final link step).
-extern "Rust" {
-    fn vi_set_fast_ipc_vfs_cell(cell_id: usize);
-    fn vi_clear_fast_ipc_vfs_cell(cell_id: usize);
-}
 
 /// Exposes `terminate_current_cell_on_fault` to the HAL trap handler via
 /// `extern "Rust"` linkage.
@@ -145,6 +143,33 @@ pub extern "Rust" fn vi_timer_tick() {
     yield_cpu();
 }
 
+/// Force-release every global kernel Spinlock during fault teardown.
+///
+/// A Cell holds no kernel lock legitimately, so on a genuine U-mode Cell fault
+/// these are all free.  The real hazard is a kernel `panic!`/`expect()` raised
+/// *while servicing a Cell's syscall* (`CURRENT_CELL_ID != 0`) that was holding
+/// one of these — without releasing it the lock stays held forever and the next
+/// acquirer deadlocks, hanging the whole kernel.
+///
+/// # Safety
+/// Single-hart kernel, called only from the fault/panic teardown path with
+/// interrupts disabled.  No other context can hold these; force-unlocking an
+/// already-free Spinlock is a no-op.
+///
+/// NOTE: the linked_list_allocator heap lock is intentionally not covered (no
+/// external force-unlock API); a panic *inside* the allocator implies heap
+/// corruption — a reboot-class fault, not a recoverable Cell kill.
+unsafe fn force_unlock_all_kernel_locks() {
+    SCHEDULER.force_unlock();
+    crate::memory::frame::FRAME_ALLOCATOR.force_unlock();
+    crate::cell::registry::CELL_REGISTRY.force_unlock();
+    crate::cell::cap_registry::CAP_TABLE.force_unlock();
+    crate::memory::cell_quota::force_unlock_locks();
+    crate::memory::rt_heap::force_unlock_locks();
+    crate::cell::hotswap::force_unlock_locks();
+    crate::task::drivers::virtio_blk::force_unlock_locks();
+}
+
 /// Terminate the currently-executing Cell due to a hardware fault.
 ///
 /// Called from the trap handler when an unrecoverable exception fires in a
@@ -153,8 +178,10 @@ pub extern "Rust" fn vi_timer_tick() {
 ///
 /// # Safety
 /// Must be called from trap context with S-mode interrupts disabled.
-/// Calls `SCHEDULER.force_unlock()` first to guard against being called while
-/// `pick_next` holds the lock (e.g., OOM during a scheduler BTreeMap insert).
+/// Force-unlocks ALL global kernel locks first (see
+/// [`force_unlock_all_kernel_locks`]) so a panic that fired while holding one
+/// (e.g. mid-syscall OOM during a scheduler/allocator insert) cannot deadlock
+/// the kernel after we resume the next task.
 pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
     let cell_id_raw = scheduler::CURRENT_CELL_ID.load(core::sync::atomic::Ordering::Relaxed);
     log::error!(
@@ -166,17 +193,20 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
         &crate::audit::encode_u32x2(cell_id_raw as u32, scause as u32),
     );
 
-    // If the panic/fault fired mid-pick_next, SCHEDULER may be locked.
-    // Force-release it before we try to re-acquire.
-    // SAFETY: single-hart kernel; no other core holds this lock.
-    unsafe { SCHEDULER.force_unlock(); }
+    // The panic/fault may have fired while kernel code (servicing this Cell's
+    // syscall) held one or more global locks.  Release ALL of them before we
+    // re-acquire anything, else the next acquirer deadlocks forever.
+    // SAFETY: single-hart kernel, interrupts disabled here; no other context
+    // holds these, and force-unlocking a free lock is a no-op.
+    unsafe { force_unlock_all_kernel_locks(); }
 
     let task_id = SCHEDULER.lock().as_ref()
         .and_then(|s| s.current_task_id);
 
     if let Some(tid) = task_id {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.exit_task(tid);
+            // usize::MAX = fault reason; also wakes any Wait(tid) waiters.
+            sched.exit_task(tid, usize::MAX);
         }
         // Deregister quota for the killed Cell.
         let cell_id = types::CellId(cell_id_raw as u64);
@@ -185,8 +215,7 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
 
     // If the faulting cell owned the fast-IPC VFS handler, null the pointer so
     // future call_vfs() invocations don't jump into dead/replaced cell state.
-    // SAFETY: vi_clear_fast_ipc_vfs_cell is defined in libs/ostd and linked.
-    unsafe { vi_clear_fast_ipc_vfs_cell(cell_id_raw); }
+    crate::fast_ipc::clear_vfs_if_cell(cell_id_raw);
 
     // Reset cell ID to 0 (kernel context) so subsequent allocations are not
     // charged to the now-dead Cell.

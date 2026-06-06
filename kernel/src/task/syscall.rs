@@ -617,36 +617,31 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 &crate::audit::encode_u32x2(caller_id as u32, code as u32),
             );
             log::info!("Syscall::Exit: task {} exited with code {}", caller_id, code);
-            let mut waiters = alloc::vec::Vec::new();
 
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                // Record exit code and collect waiters before reaping so their
-                // reply_value can carry the exit code.
+            // Capture cell_id BEFORE exit_task removes the task — querying after
+            // returns None, which would deregister quota for CellId(0) (a latent
+            // bug in the old code path; fixed here).  exit_task now also wakes
+            // Wait(caller_id) waiters with `code`, so no in-handler wake loop.
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                let cid = sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0));
                 if let Some(task) = sched.tasks.get_mut(&caller_id) {
                     task.exit_code = Some(code);
-                    waiters.append(&mut task.waiters);
                 }
                 // Move task to sched.zombies so its context pointer remains valid
                 // across the context switch in yield_cpu; pick_next checks zombies.
-                sched.exit_task(caller_id);
-                // Wake any tasks blocked on Wait(caller_id).
-                for wid in waiters {
-                    if let Some(w) = sched.tasks.get_mut(&wid) {
-                        w.state = TaskState::Ready;
-                        w.reply_value = Some(code);
-                        sched.push_ready(wid);
-                    }
-                }
-            }
+                sched.exit_task(caller_id, code);
+                cid
+            } else {
+                types::CellId(0)
+            };
 
             // Revoke all capabilities owned by this cell so the cap table doesn't
             // retain orphaned entries and so a future cell with the same ID cannot
             // inherit them.
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
-            } else {
-                types::CellId(0)
-            };
             crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(cell_id);
 
             // Release the Cell's memory quota entry.
@@ -664,7 +659,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
 
             let target_cell_id;
-            let mut waiters = alloc::vec::Vec::new();
 
             // Single SCHEDULER lock: SpawnCap gate + all cleanup in one scope.
             // Two separate acquisitions would create a TOCTOU window where the target
@@ -697,21 +691,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 };
                 target_cell_id = task.cell_id;
                 task.exit_code = Some(usize::MAX); // sentinel: force-killed
-                waiters.append(&mut task.waiters);
 
-                // exit_task: zombie move + ready-queue purge + stuck-sender unblock
-                // (sets sender regs[10]=usize::MAX at scheduler.rs:258).
-                sched.exit_task(tid);
-
-                // Wake sys_wait(tid) waiters — copy exact pattern from Exit handler
-                // (syscall.rs:631-636) to avoid silently returning 0 from sys_wait.
-                for wid in &waiters {
-                    if let Some(w) = sched.tasks.get_mut(wid) {
-                        w.state = TaskState::Ready;
-                        w.reply_value = Some(usize::MAX); // force-killed sentinel
-                        sched.push_ready(*wid);
-                    }
-                }
+                // exit_task: zombie move + ready-queue purge + stuck-sender unblock,
+                // and wakes sys_wait(tid) waiters with the force-kill sentinel.
+                sched.exit_task(tid, usize::MAX);
             } else {
                 return Err(SyscallError::InvalidCommand);
             }

@@ -24,6 +24,19 @@ SECTIONS
         *(.srodata .srodata.*)
     } >ram
 
+    /* Dynamic relocations for the PIE kernel.
+     * The kernel is linked -pie (ET_DYN) so Limine can apply KASLR. Under a
+     * direct QEMU `-bios default -kernel <elf>` boot there is no dynamic loader,
+     * so _start self-applies these R_RISCV_RELATIVE entries (see rv64/boot.rs).
+     * __rela_dyn_start/__rela_dyn_end bound the Elf64_Rela array (24 bytes each).
+     * SHF_ALLOC ensures it lands in a PT_LOAD segment so it is present at boot.
+     */
+    .rela.dyn : ALIGN(8) {
+        __rela_dyn_start = .;
+        *(.rela .rela.*)
+        __rela_dyn_end = .;
+    } >ram
+
     .data : ALIGN(4096) {
         . = ALIGN(16);
         __global_pointer$ = . + 0x800;

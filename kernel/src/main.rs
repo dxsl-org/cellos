@@ -13,6 +13,7 @@ use core::panic::PanicInfo;
 pub mod audit;
 pub mod boot;
 pub mod cell;
+pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
 pub mod loader;
 pub mod memory;

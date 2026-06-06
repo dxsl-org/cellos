@@ -9,11 +9,6 @@ use types::*;
 /// skips `spawn_from_path`, so re-registration never fires spuriously.
 static BLOCK_IO_REGISTERED: AtomicBool = AtomicBool::new(false);
 
-// Symbol defined in libs/ostd; called to record which cell owns the VFS fast-IPC handler.
-extern "Rust" {
-    fn vi_set_fast_ipc_vfs_cell(cell_id: usize);
-}
-
 pub mod disk_layout;
 pub mod early;
 pub mod elf;
@@ -163,8 +158,7 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                         if already {
                             log::warn!("[loader] block_io re-registration — VFS hot-swap or second block_io cell");
                         }
-                        // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
-                        unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
+                        crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
                     }
                     if m.has_network() {
                         task.network_cap = Some(crate::task::cap::NetworkCap::new());
@@ -184,8 +178,7 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                             if already {
                                 log::warn!("[loader] block_io re-registration (legacy) — VFS hot-swap");
                             }
-                            // SAFETY: vi_set_fast_ipc_vfs_cell is defined in libs/ostd and linked.
-                            unsafe { vi_set_fast_ipc_vfs_cell(cell_id.0 as usize); }
+                            crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
                         }
                         if path.ends_with("/bin/net") {
                             task.network_cap = Some(crate::task::cap::NetworkCap::new());
