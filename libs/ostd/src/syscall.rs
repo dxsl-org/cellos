@@ -486,8 +486,10 @@ pub fn sys_try_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
 
 /// Receive a message with a timeout deadline.
 ///
-/// `timeout_ticks` is the maximum number of kernel monotonic ticks to wait
-/// (10 MHz on QEMU RV64 → 100 ns per tick).  Pass `u64::MAX` for no timeout.
+/// `timeout_ticks` is the maximum number of **scheduler ticks** to wait (one tick
+/// = 10 ms, the preemption slice). The kernel computes an absolute deadline of
+/// `system_ticks() + timeout_ticks` and the scheduler wakes the task once it
+/// elapses. Pass `u64::MAX` for no timeout.
 ///
 /// # Returns
 /// - `Ok(sender_id)` on success.

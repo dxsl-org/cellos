@@ -323,16 +323,37 @@ impl Scheduler {
     )> {
         let now = crate::task::system_ticks();
 
-        // 1. Wake up sleeping tasks
+        // 1. Wake tasks whose deadline elapsed: Sleeping (timer) and RecvTimeout
+        //    (a Recv with a deadline). Without the RecvTimeout sweep a cell that
+        //    RecvTimeout's a peer that never replies would block forever — the
+        //    infinite-block-on-dead-peer hazard. Deadlines are absolute
+        //    `system_ticks` (the dispatch stores `system_ticks() + timeout`).
         let mut waking_tasks = VecDeque::new();
         for (id, task) in self.tasks.iter_mut() {
             let mut should_wake = false;
-            if let TaskState::Sleeping { until } = &task.state {
-                if now >= *until {
-                    should_wake = true;
+            let mut timed_out = false;
+            match &task.state {
+                TaskState::Sleeping { until } => {
+                    if now >= *until {
+                        should_wake = true;
+                    }
                 }
+                TaskState::Recv { deadline: Some(d), .. } => {
+                    // `deadline` is u64 (mtime-domain field); `now` is usize system
+                    // ticks. On rv64 usize == u64, so the cast is lossless.
+                    if now as u64 >= *d {
+                        should_wake = true;
+                        timed_out = true;
+                    }
+                }
+                _ => {}
             }
             if should_wake {
+                // ostd `sys_recv_timeout` returns Ok(0) on timeout; the syscall
+                // return register is regs[10], restored by sret when the task runs.
+                if timed_out {
+                    task.trap_frame.regs[10] = 0;
+                }
                 task.state = TaskState::Ready;
                 waking_tasks.push_back(*id);
             }
