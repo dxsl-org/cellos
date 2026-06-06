@@ -1,4 +1,4 @@
-# ViOS AI Agent Guidelines
+# ViCell AI Agent Guidelines
 
 > **Auto-loaded context for Claude Code CLI - Essential rules for every session**
 
@@ -6,7 +6,7 @@
 
 ## 🔴 PRIME DIRECTIVE
 
-**ViOS uses Cellular SAS (Single Address Space) + Language-Based Isolation (LBI)**
+**ViCell uses Cellular SAS (Single Address Space) + Language-Based Isolation (LBI)**
 
 - ❌ **NOT** traditional Linux/Unix process-based thinking
 - ✅ **YES** Cellular architecture with zero-copy IPC
@@ -43,7 +43,7 @@
 - ✅ **REQUIRED**: `foo.rs` parallel to `foo/` directory
 - Use snake_case for files/directories
 
-### Law 6: ViOS Naming Convention
+### Law 6: ViCell Naming Convention
 - **Public Traits**: `Vi` prefix → `ViFileSystem`, `ViDriver`, `ViBlockDevice`
 - **Core Types**: `Vi` prefix → `ViError`, `ViResult`, `ViConfig`
 - **Addresses**: `VAddr` (virtual), `PAddr` (physical)
@@ -77,6 +77,8 @@
 | **Filesystem (VFS)** | `docs/specs/09-vfs.md` |
 | **Testing strategy** | `docs/specs/10-testing.md` |
 | **Shell** | `docs/specs/11-shell.md` |
+| **Reliability & never-die** | `docs/specs/12-reliability.md` |
+| **Peripheral bus drivers (GPIO/I2C/SPI/UART/CAN)** | `docs/specs/13-peripherals.md` (placeholder) |
 
 ---
 
@@ -94,7 +96,7 @@
 ## 📁 Project Structure (Quick Reference)
 
 ```
-vios/
+ViCell/
 ├── kernel/src/
 │   ├── boot/        # Bootloader handoff
 │   ├── cell/        # Cell metadata & lifecycle
@@ -202,4 +204,4 @@ cargo build --release
 
 ---
 
-*This file is automatically loaded by Claude Code CLI at the start of each session to provide essential context about ViOS coding standards and architecture.*
+*This file is automatically loaded by Claude Code CLI at the start of each session to provide essential context about ViCell coding standards and architecture.*

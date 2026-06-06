@@ -1,19 +1,31 @@
-# ViOS Project Overview & PDR
+# ViCell Project Overview & PDR
 
-**Project Name**: ViOS (Jarvis Hybrid OS)  
+**Project Name**: ViCell (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-06-03
+**Last Updated**: 2026-06-06 (added 2 use-case stages G1/G2 overlay)
 
 ---
 
 ## Executive Summary
 
-ViOS is a next-generation operating system designed for the **Edge-to-Cloud era**. It combines innovations from Theseus (Live Evolution), Asterinas (FrameKernel Safety), and Tock (Embedded Efficiency) into a unified architecture.
+ViCell is a next-generation operating system designed for the **Edge-to-Cloud era**. It combines innovations from Theseus (Live Evolution), Asterinas (FrameKernel Safety), and Tock (Embedded Efficiency) into a unified architecture.
+
+**Product delivery is framed in two use-case stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) → "Two Use-Case Stages"):
+- **Stage G1 — Robot & Embedded** (now → ~2026 Q4): complete the OS for robots/embedded. Primary target = Tier A SBC with MMU (RV64/ARM64, RPi-class robot brain); sub-track = Tier B MCU (RV32 <512KB, CHERIoT-Nano) for low-level control. Defining traits: never-die, bounded real-time, fault isolation, peripheral I/O (GPIO/I2C/SPI/UART/CAN), instant-on boot.
+- **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, Tier-2 WASM for untrusted code, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage.
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
 **Current Focus**: Stabilize the nano-kernel, fix VirtIO hang issue, and achieve multi-architecture HAL with RV64/ARM/x86 support.
+
+---
+
+## Key Differentiator Opportunity
+
+The architecture spec (03-runtime.md) describes **Heap Snapshotting (Instant On)**: after first boot, serialize the full memory state to `system.img`. Subsequent boots load the snapshot directly, bypassing ELF parsing and re-linking — sub-100 ms cold boot for a full OS stack.
+
+No production OS offers this. If implemented, this becomes ViCell's primary competitive differentiator over Linux, Fuchsia, and unikernels. Planned for Phase 30.
 
 ---
 
@@ -27,7 +39,7 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
 - **Kernel Complexity**: 20+ million LOC to handle process management
 - **IPC Overhead**: Message passing across process boundaries requires syscalls + memory copies
 
-**ViOS Goal**: Redesign the OS from first principles for 2026+
+**ViCell Goal**: Redesign the OS from first principles for 2026+
 
 ### Architecture Principles
 
@@ -219,16 +231,21 @@ Cells
 
 **Requirement**: TCP/IP stack for Cells.
 
-**Current Status**: Stubs only.
+**Current Status**: ✅ COMPLETE (Phases A–B, E complete)
 
-**Acceptance Criteria**:
-- [ ] TCP/IPv4 stack (basic: no DCCP, SCTP, IPv6 yet)
-- [ ] DHCP client for automatic IP assignment
-- [ ] Socket API via syscalls (bind, listen, connect, send, recv)
-- [ ] Loopback + QEMU VirtIO network device support
+**Implemented**:
+- [x] TCP/IPv4 stack (smoltcp 0.11, no IPv6 yet)
+- [x] DHCP client for automatic IP assignment (verified: 10.0.2.15/24 on QEMU)
+- [x] Socket API via syscalls (SOCKET_TCP, SOCKET_UDP, BIND, LISTEN, ACCEPT, CONNECT, SEND, RECV, SENDTO, RECVFROM, CLOSE)
+- [x] TCP data-path (client + server with LISTEN/ACCEPT)
+- [x] UDP data-path with SENDTO/RECVFROM
+- [x] DNS resolver (static table + IPv4 literal + UDP A-record fallback)
+- [x] QEMU VirtIO network device support
+- [x] net-tools binaries: ping (stub), curl (HTTP/1.0), wget, nc (multi-conn relay), httpd, mqtt (skeleton)
+- [x] Lua + MicroPython network bindings (vnet module)
 
-**Effort**: 200 hours  
-**Owner**: TBD
+**Effort**: 200 hours (actual: phases A–B–E ~120 hours)  
+**Owner**: Completed Phases A–B–E (2026-06-03 to 2026-06-05)
 
 #### 2.4 Compositor & Display
 
@@ -457,17 +474,30 @@ None documented yet (Phase 1 still stabilizing).
 1. **Performance Regression** — SAS overhead vs. process isolation
 2. **Scheduler Fairness** — Round-robin may not suit all workloads
 3. **External ELF Loading** — Relocation complexity, security implications
+4. **Spectre v1/v2 in SAS** — Compromised Tier 1 cell reads entire kernel + other cells
+5. **Spec–Reality IPC Gap** — IPC is 100–1000× slower than architecture spec claims (syscall vs. direct call)
+6. **No Per-Cell Memory Quota** — Single cell OOM kills entire system
+7. **KASLR Absent** — Kernel address predictable from first bytecode execution
+8. **WASM Tier 2 Absent** — No safe third-party code path; all Cells must be first-party trusted
+9. **WASI 2.0 Competitive Threat** — Ecosystem increasingly adopts Component Model interfaces
 
 ### Mitigation Strategies
 
 - Weekly architecture review meetings
-- Early benchmarking (Phase 2)
+- Early benchmarking (Phase 24 immediate priority)
 - Community feedback on design decisions
 - Conservative feature additions (one major change per week)
+- Direct IPC fast path (Phase 27) to close spec gap
+- Priority scheduler (Phase 25) for real-time isolation
+- Tier 2 WASM runtime (Phase 28) for safe third-party execution
 
 ---
 
 ## Development Timeline
+
+> **Use-case stage overlay** (maps onto the technical phases below):
+> - **G1 Robot & Embedded** (now → ~2026 Q4): Core Stability ✅ + Phases 24–26, 29–30 + Peripheral Driver track 🆕 + ARM64 full bring-up 🆕 + VFS robustness + RV32-Nano sub-track (tail) + reference robot demo 🆕.
+> - **G2 Server & PC** (~2027): Phase 28 (WASM), Phase 32 (SMP), Phase 27-3 (direct IPC), full compositor/desktop, hot migration (M4.1), x86_64 full bring-up 🆕, full utilities, throughput benchmarks.
 
 ```
 Phase 1: Core Stability
@@ -512,7 +542,7 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 
 ## Stakeholders
 
-- **Core Team**: ViOS Team (tinyong@vigroup.ai)
+- **Core Team**: ViCell Team (tinyong@vigroup.ai)
 - **Advisors**: Theseus (UC Santa Cruz), Asterinas (TBD), Tock (Google)
 - **Community**: Open source contributors (GitHub)
 

@@ -2,14 +2,104 @@
 
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
-**Current Phase**: Phase 1 - Core Stability (Phase 23 complete)
-**Last Updated**: 2026-06-05 (Phases H, A–E, X-1 through X-6 complete)
+**Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
+**Last Updated**: 2026-06-06 (Restructured into 2 use-case stages G1/G2 — see "Two Use-Case Stages" overlay)
 
 ---
 
 ## Overview
 
-ViCell development is organized into 4 major phases, each with specific milestones and acceptance criteria. This document tracks progress, blockers, and next steps.
+ViCell development is organized into 4 major **technical phases** (Core Stability → System Services → Apps/Runtimes → Advanced) plus hardening Phases 24–32. This document tracks progress, blockers, and next steps.
+
+**On top of that technical numbering, work is now framed by 2 product stages by target hardware / use-case** (overlay — see next section). Technical phase IDs (Phase 24–32, M2.x–M4.x) and all `.agents/` cross-references are preserved; the `[G1]`/`[G2]` labels are a use-case overlay, NOT a renumbering.
+
+---
+
+## 🎯 Two Use-Case Stages (Overlay)
+
+ViCell ships in two product stages defined by target hardware. The mapping principle: **architecture maturity matches use-case** — ARM64/RV64 (with MMU) → robot SBC `[G1]`; x86_64 → server/PC `[G2]`; RV32 → MCU deeply-embedded (sub-track at end of G1).
+
+### 🤖 Stage G1 — Robot & Embedded
+> **"Done" means**: never-die · bounded real-time · bounded per-Cell memory · fault isolation · fast boot · peripheral I/O · small footprint.
+>
+> **Hardware**: primary = **Tier A SBC with MMU** (RV64/ARM64, RPi-class robot brain/companion). Sub-track (end of G1) = **Tier B MCU** (RV32 <512KB, CHERIoT-Nano) for low-level motor/sensor control.
+
+### 🖥️ Stage G2 — Server & Specialized PC
+> **"Done" means**: throughput · multi-core scaling · untrusted third-party code · desktop GUI · zero-downtime · full tooling · large storage.
+>
+> **Hardware**: x86_64 (full bring-up) + multi-core RV64/ARM64 servers.
+
+### Milestone → Stage Map
+
+| Item | Source phase | Status | Stage |
+|------|--------------|--------|-------|
+| Core Stability (VirtIO, kbd, ELF, hotswap) | Phase 1 | ✅ | G1 (foundation) |
+| Perf baseline + KASLR | Phase 24 | ✅ | G1 |
+| Priority scheduler + RT TLSF heap + spawn_pinned | Phase 25 | ✅ | G1 |
+| Memory quota + ZST caps + panic isolation | Phase 26 | 📋 | **G1** (never-die) |
+| Reliability / supervisor restart | specs/12 | 📋 | **G1** |
+| Typed IPC + syscall filter (reliability part) | Phase 27-1/2 | 📋 | G1 |
+| ELF capability manifests | Phase 30 | ✅ | G1 |
+| Heap snapshot / Instant-On | Phase 29 | 📋 | G1 |
+| 🆕 Peripheral Driver track (GPIO/I2C/SPI/UART; CAN/PWM/ADC) | *new* | 🆕 | **G1** |
+| VFS robustness (quota enforce, access control) | M2.1 | 📋 | G1 |
+| 🆕 ARM64 full bring-up (beyond ring-3 smoke) | ext. M1.3 | 📋 | **G1** |
+| HMI feature-gate (compositor/input, optional) | M2.2/M2.4 subset | 📋 | G1 (opt) |
+| Minimal utilities (embedded debug) | M3.2 subset | 📋 | G1 |
+| RT latency benchmark | M4.4 subset | 📋 | G1 |
+| 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | 📋 | **G1** (sub-track) |
+| 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | 🆕 | **G1** (graduation) |
+| Direct-IPC vtable (raw perf) | Phase 27-3 | 📋 | G2 |
+| WASM Tier-2 sandbox + fuel (+ePMP) | Phase 28 | 📋 | G2 |
+| SMP multi-core scheduler + work-stealing | Phase 32 | 📋 | **G2** |
+| Compositor + GPU desktop (full) + mouse | M2.4 + M2.2 full | 📋 | G2 |
+| Hot migration / zero-downtime | M4.1 | 📋 | G2 |
+| 🆕 x86_64 full bring-up | ext. M1.3 | 📋 | **G2** |
+| VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
+| Full utility suite (grep/sed/awk/top/ps…) | M3.2 full | 📋 | G2 |
+| Throughput benchmark | M4.4 full | 📋 | G2 |
+| Lua / MicroPython runtimes | M3.3/M3.4 | ✅ | shared |
+| Advanced IPC (SendGather/RecvScatter/Timeout) | M4.2 | ✅ | shared |
+| Network TCP/UDP/DNS/MQTT | Phases A–E | ✅ | shared |
+| Enhanced shell (pipes/redirects/tab) | M3.1 | ✅ | shared |
+
+### 🆕 New Work Items (not in original numbering)
+
+#### Peripheral Driver Track `[G1]`
+**Status**: 🆕 PLANNED — spec stub at [specs/13-peripherals.md](specs/13-peripherals.md)
+**Priority**: P1 (defining requirement for "complete for robots")
+
+HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via ELF manifests (Phase 30).
+- [ ] HAL traits `ViGpio`, `ViUart` (minimal first), then `ViI2c`, `ViSpi`
+- [ ] Extension: `ViCan`, `ViPwm`, `ViAdc`
+- [ ] Driver Cells under `cells/drivers/` with `#![forbid(unsafe_code)]` boundary
+- [ ] QEMU test rig + ≥1 real SBC validation
+
+> ⚠️ Largest new chunk of G1 — needs its own brainstorm → plan → cook cycle. Do not underestimate.
+
+#### Architecture Full Bring-Up (split from "Multi-Arch HAL ✅")
+The existing Milestone 1.3 marks ARM64/x86_64 as **ring-3 smoke only**. Real targets need full bring-up (interrupt controller, timer, real MMU, device drivers).
+- **ARM64 full bring-up `[G1]`** 📋 — GIC, generic timer, real MMU, VirtIO/peripheral drivers (RPi/Jetson robot SBC)
+- **x86_64 full bring-up `[G2]`** 📋 — APIC, HPET/TSC, real MMU, PCI/VirtIO (server/PC)
+
+#### Reference Robot Demo `[G1]`
+**Status**: 🆕 — **G1 graduation gate**
+End-to-end loop: sensor read → compute → actuator write over GPIO/CAN, with MQTT telemetry. Proves the embedded stack works as a whole.
+
+### Graduation Criteria
+
+**G1 — Robot/Embedded is "done" when:**
+1. Never-die: a single Cell fault/OOM → killed & restarted, kernel survives.
+2. Bounded memory enforced on EVERY write path (Write/Append/IPC).
+3. RT determinism: a control-loop Cell meets its deadline; IPC latency has a measured bound.
+4. Peripheral I/O: GPIO/I2C/SPI/UART work on QEMU + ≥1 real board.
+5. Instant-On boot under target threshold.
+6. Runs on real RV64 + ARM64 SBC (full bring-up).
+7. Sub-track: ViCell-Nano minimal profile boots on RV32 (QEMU at minimum).
+8. Reference robot demo runs end-to-end.
+
+**G2 — Server/PC is "done" when:**
+SMP scales across N cores · untrusted `.wasm` runs sandboxed (fuel-metered) · windowed desktop + mouse · hot migration with no dropped connections · x86_64 full bring-up · full utility suite + large storage · throughput benchmarks meet targets.
 
 ---
 
@@ -233,7 +323,7 @@ All milestones complete when:
 > Derived from multi-persona analysis + deep research (2026-06-05).
 > **Reference**: See [`docs/research-references.md`](research-references.md) for source repos, papers, and code pointers per phase.
 
-### Phase 24 — Performance Baseline + KASLR (P0)
+### Phase 24 — Performance Baseline + KASLR (P0) `[G1]`
 **Target**: 2026-07-07 | **Effort**: ~2 weeks | **Status**: ✅ COMPLETE (2026-06-05)
 See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
@@ -263,7 +353,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 **Why urgent**: Without a baseline, all performance claims are fiction. KASLR is fundamental security hygiene.
 
-### Phase 25 — Priority Scheduler (P1)
+### Phase 25 — Priority Scheduler (P1) `[G1]`
 **Target**: 2026-07-21 | **Effort**: ~2 weeks  
 **Status**: ✅ COMPLETE (2026-06-05) — see `.agents/260605-1052-phase25-priority-scheduler/`
 
@@ -294,7 +384,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 **Ready for Phase 26**: Memory Quota + ZST Capabilities (depends on priority scheduler working)
 
-### Phase 26 — Memory Quota + ZST Capabilities + Panic Isolation (P1)
+### Phase 26 — Memory Quota + ZST Capabilities + Panic Isolation (P1) `[G1]`
 **Target**: 2026-08-04 | **Effort**: ~3 weeks  
 **Status**: 📋 PLANNED — see `.agents/260605-1129-phase26-memory-quota-caps-panic/`
 
@@ -326,7 +416,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] Instrument IPC Send/Recv, File Open/Write, NetTx/NetRx, Spawn, Fault, Exit
 - [ ] Low-priority `log-flusher` background Cell writes to `/data/kernel.log`
 
-### Phase 27 — Direct IPC + Typed Channels + Syscall Filter (P2)
+### Phase 27 — Direct IPC + Typed Channels + Syscall Filter (P2) `[27-1/2 → G1 · 27-3 → G2]`
 **Target**: 2026-08-25 | **Effort**: ~4 weeks  
 **Status**: 📋 PLANNED — see `.agents/260605-1206-phase27-direct-ipc-typed-channels-syscall-filter/`
 
@@ -355,7 +445,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] VFS cell registers handler at init; shell uses fast path for `cat`/`ls`
 - [ ] Benchmark: direct vtable call vs ecall round-trip
 
-### Phase 28 — Tier 2 WASM + RISC-V ePMP Cell Boundaries (P2)
+### Phase 28 — Tier 2 WASM + RISC-V ePMP Cell Boundaries (P2) `[G2]`
 **Target**: 2026-09-22 | **Effort**: ~5 weeks  
 **Status**: 📋 PLANNED — see `.agents/260605-1406-phase28-wasm-cells-epmp/`
 
@@ -382,7 +472,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] `hal/arch/riscv/src/common/pmp.rs` with NAPOT helpers + `init_static_regions()`
 - [ ] Static kernel R-X / data R-W protection at boot (if M-mode accessible)
 
-### Phase 29 — Heap Snapshotting / Instant On (P2)
+### Phase 29 — Heap Snapshotting / Instant On (P2) `[G1]`
 **Target**: 2026-10-06 | **Effort**: ~3 weeks  
 **Status**: 📋 PLANNED — see `.agents/260605-1452-phase29-heap-snapshot-instant-on/`
 
@@ -416,7 +506,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] Timing instrumentation in try_restore() and serialize_snapshot()
 - [ ] Warm boot time target < 100 ms on real hardware (QEMU: ~270ms documented)
 
-### Phase 30 — Cell Capability Manifests in ELF (P2)
+### Phase 30 — Cell Capability Manifests in ELF (P2) `[G1]`
 **Target**: 2026-10-27 | **Effort**: ~2 weeks | **Status**: ✅ COMPLETE (2026-06-05)
 **Learn from**: Singularity SIP manifests → [SOSP 2007 paper](https://www.microsoft.com/en-us/research/publication/singularity-rethinking-the-software-stack/)
 
@@ -431,7 +521,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 **Security**: Manifest is `#[repr(C)]` and ABI-stable per Law 1. Gate runs BEFORE `spawn_from_mem` — no task created for rejected cell.
 
-### Phase 31 — CHERIoT-IBEX HAL / ViCell-Nano (P3)
+### Phase 31 — CHERIoT-IBEX HAL / ViCell-Nano (P3) `[G1 sub-track]`
 **Target**: 2026-Q4 | **Effort**: ~5 weeks
 **Learn from**: CHERIoT-Platform → [`CHERIoT-Platform/rust`](https://github.com/CHERIoT-Platform/rust), [`microsoft/cheriot-ibex`](https://github.com/microsoft/cheriot-ibex)
 **Spec**: [`docs/security-model.md`](security-model.md) → "CHERI Integration Roadmap"
@@ -449,7 +539,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [ ] ViCell-Nano profile: Tier 1 + Tier 2 only, RV32, < 512 KB RAM
 - [ ] Integration test: pointer out-of-bounds → hardware trap, not system crash
 
-### Phase 32 — SMP Multi-Core Scheduler (P3)
+### Phase 32 — SMP Multi-Core Scheduler (P3) `[G2]`
 **Target**: 2027-Q1 | **Effort**: ~4 weeks
 **Learn from**: RustyHermit SMP scheduler → [`hermit-os/kernel`](https://github.com/hermit-os/kernel) `src/scheduler/`
 
@@ -468,7 +558,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 **Effort**: 530 hours (~13 weeks)  
 **Status**: 📋 PLANNED
 
-### Milestone 2.1: Complete VFS Service
+### Milestone 2.1: Complete VFS Service `[G1 robustness · G2 scale]`
 **Status**: 📋 PLANNED — see `.agents/260605-1538-milestone-2-1-vfs-complete/`  
 **Priority**: P0
 
@@ -503,7 +593,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 2.2: Complete Input Service
+### Milestone 2.2: Complete Input Service `[G1 opt (feature-gate) · G2 full]`
 **Status**: 📋 PLANNED  
 **Priority**: P1
 
@@ -516,7 +606,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 2.3: Complete Network Service
+### Milestone 2.3: Complete Network Service `[shared]`
 **Status**: ✅ PARTIAL (TCP data-path + HTTP/1.0 GET + server LISTEN/ACCEPT + Lua bindings + UDP sockets + DNS working)  
 **Priority**: P1
 
@@ -547,7 +637,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 2.4: Complete Compositor & Display
+### Milestone 2.4: Complete Compositor & Display `[G1 HMI opt (feature-gate) · G2 desktop full]`
 **Status**: 📋 PLANNED  
 **Priority**: P2
 
@@ -567,7 +657,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 **Effort**: 500 hours (~12 weeks)  
 **Status**: 📋 PLANNED
 
-### Milestone 3.1: Enhanced Shell
+### Milestone 3.1: Enhanced Shell `[shared]`
 **Status**: 📋 PLANNED  
 **Priority**: P1
 
@@ -580,7 +670,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 3.2: Standard Utilities
+### Milestone 3.2: Standard Utilities `[G1 minimal subset · G2 full suite]`
 **Status**: 📋 PLANNED  
 **Priority**: P1
 
@@ -593,7 +683,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 3.3: Lua Runtime Enhancement
+### Milestone 3.3: Lua Runtime Enhancement `[shared]`
 **Status**: ✅ COMPLETE (2026-06-05)  
 **Priority**: P2
 
@@ -611,7 +701,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 3.4: MicroPython Runtime Enhancement
+### Milestone 3.4: MicroPython Runtime Enhancement `[shared]`
 **Status**: ✅ COMPLETE (2026-06-05)  
 **Priority**: P2
 
@@ -637,7 +727,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 **Effort**: 460 hours (~11 weeks)  
 **Status**: 📋 PLANNED
 
-### Milestone 4.1: Hot Migration (State Transfer)
+### Milestone 4.1: Hot Migration (State Transfer) `[G2]`
 **Status**: 📋 PLANNED  
 **Priority**: P2
 
@@ -650,7 +740,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 4.2: Advanced IPC
+### Milestone 4.2: Advanced IPC `[shared]`
 **Status**: 📋 PLANNED  
 **Priority**: P2
 
@@ -663,7 +753,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 4.3: Complete RV32 & ARM Support
+### Milestone 4.3: Complete RV32 & ARM Support `[G1 sub-track (RV32-Nano)]`
 **Status**: 📋 PLANNED  
 **Priority**: P2
 
@@ -676,7 +766,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ---
 
-### Milestone 4.4: Benchmarking & Optimization
+### Milestone 4.4: Benchmarking & Optimization `[G1 RT latency · G2 throughput]`
 **Status**: 📋 PLANNED  
 **Priority**: P3
 
@@ -698,6 +788,11 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 ## High-Level Timeline
 
 ```
+Use-case stages (overlay on technical phases below):
+  G1 Robot & Embedded  ─ now → ~2026 Q4 ─ Tier A SBC (RV64/ARM64) primary; Tier B RV32-Nano sub-track at tail
+  G2 Server & PC       ─ ~2027         ─ SMP + WASM + desktop + x86_64 + hot migration
+
+Technical phases:
 2026
 ├─ Q2 (Apr-Jun): Phase 1 - Core Stability
 │  ├─ W1:    Phase 01 Workspace Cleanup ✅ (2026-05-28)
