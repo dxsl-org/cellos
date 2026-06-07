@@ -49,6 +49,21 @@ pub mod executor;
 /// TLS 1.3 client helpers for app cells.
 pub mod tls;
 
+/// Platform mtime frequency: ticks per millisecond at the assumed 10 MHz mtime clock.
+///
+/// Matches `hal::arch::riscv::common::timer::TICKS_PER_10MS / 10`.
+/// Override at build time for boards with a different mtime frequency.
+pub const MTIME_TICKS_PER_MS: u64 = 10_000;
+
+/// App-side display helpers (ViSurface, wait_for_compositor).
+pub mod display;
+
+/// Bitmap font renderer — `draw_text` for ASCII output on any pixel buffer.
+pub mod font;
+
+/// Scalable glyph atlas backed by fontdue (no_std + hashbrown feature).
+pub mod font_atlas;
+
 /// Task spawning.
 pub mod task {
     use crate::*;

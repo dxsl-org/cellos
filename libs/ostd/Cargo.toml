@@ -5,9 +5,10 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-types = { path = "../types" }
-api = { path = "../api" }
-spin = { workspace = true }
+types   = { path = "../types" }
+api     = { path = "../api" }
+spin    = { workspace = true }
+fontdue = { workspace = true }
 linked_list_allocator = "0.10"
 
 [features]
