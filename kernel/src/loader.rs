@@ -166,6 +166,12 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                     if m.has_spawn() {
                         task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
                     }
+                    if m.has_gpio() || m.has_uart() {
+                        task.mmio_cap = true;
+                    }
+                    if m.has_hypervisor() && crate::cpu_features::has_h_ext() {
+                        task.hypervisor_cap = Some(crate::task::cap::HypervisorCap::new());
+                    }
                 }
                 None => {
                     // Legacy hardcoded path grants for cells without a manifest.
@@ -190,6 +196,10 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                 }
             }
         }
+    }
+    // Register input service endpoint regardless of manifest presence.
+    if path.ends_with("/bin/input") {
+        crate::task::drivers::virtio_input::set_input_cell(tid);
     }
     Ok(tid)
 }

@@ -240,7 +240,7 @@ fn test_force_exit_allowlist_bit_none() {
 }
 
 fn test_manifest_network_false_grants_no_network_cap() {
-    let m = CellManifest::new(true, false, false);
+    let m = CellManifest::new(true, false, false, false, false, false);
     assert!(m.has_block_io(),   "block_io=true must set block_io flag");
     assert!(!m.has_network(),   "network=false must NOT set network flag");
     assert!(!m.has_spawn(),     "spawn=false must NOT set spawn flag");

@@ -36,3 +36,16 @@ impl SpawnCap {
     /// Create a `SpawnCap` token.  Only callable within the kernel crate.
     pub(crate) fn new() -> Self { Self(()) }
 }
+
+/// Permits use of RISC-V H-extension CSRs (`hstatus`, `hgatp`, `vsatp`, etc.).
+///
+/// Granted only when BOTH the ELF manifest declares `hypervisor = true` AND
+/// `cpu_features::has_h_ext()` confirms the firmware reported H-ext at boot.
+/// Always absent on non-riscv64 targets.
+#[derive(Copy, Clone, Debug)]
+pub struct HypervisorCap(());
+
+impl HypervisorCap {
+    /// Create a `HypervisorCap` token.  Only callable within the kernel crate.
+    pub(crate) fn new() -> Self { Self(()) }
+}

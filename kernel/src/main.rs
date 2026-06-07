@@ -28,6 +28,7 @@ use hal::Arch;
 use api::posix::_putchar;
 
 // Internal utilities
+mod cpu_features;
 mod sync;
 
 // Re-export types for convenience
@@ -40,7 +41,7 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let _hartid = hartid;
-    let _dtb = dtb;
+    cpu_features::detect(dtb);
     // 0. Initialize UART immediately for early logging
     #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init();
@@ -72,6 +73,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     puts(env!("CARGO_PKG_VERSION"));
     puts("\n");
     puts("Kernel started (Hart: 0, DTB: ...)\n");
+    #[cfg(target_arch = "riscv64")]
+    if cpu_features::has_h_ext() {
+        puts("[cpu] H-extension: detected\n");
+    } else {
+        puts("[cpu] H-extension: not present\n");
+    }
 
     // Parse bootloader information
     let boot_info_result = boot::parse_bootloader_info();

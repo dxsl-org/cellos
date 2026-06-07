@@ -151,6 +151,13 @@ pub struct Task {
     /// Cell spawning + hot-swap (SpawnFromPath/SpawnPinned/HotSwap).
     /// Granted at spawn for `/bin/init` and `/bin/shell`.
     pub spawn_cap:    Option<super::cap::SpawnCap>,
+    /// RISC-V H-extension CSR access for VMM cells.
+    /// Granted when manifest declares `hypervisor = true` AND the firmware reported H-ext.
+    pub hypervisor_cap: Option<super::cap::HypervisorCap>,
+
+    /// MMIO peripheral access (GPIO or UART).  `true` if the ELF manifest
+    /// declared `gpio` or `uart` cap; grants access to `sys_request_mmio`.
+    pub mmio_cap: bool,
 
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
@@ -212,9 +219,11 @@ impl Task {
             pending_deaths: Vec::new(),
             pending_exit_reason: None,
             pending_future: None,
-            block_io_cap: None,
-            network_cap:  None,
-            spawn_cap:    None,
+            block_io_cap:   None,
+            network_cap:    None,
+            spawn_cap:      None,
+            hypervisor_cap: None,
+            mmio_cap:       false,
             priority: api::TaskPriority::Normal as u8,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             run_ticks: 0,

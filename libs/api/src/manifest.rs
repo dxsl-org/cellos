@@ -28,14 +28,27 @@ pub const MANIFEST_FLAG_NETWORK: u8 = 1 << 1;
 /// Cell spawning and hot-swap (SpawnFromPath/SpawnPinned/HotSwap).  Grants `SpawnCap`.
 pub const MANIFEST_FLAG_SPAWN: u8 = 1 << 2;
 
-/// Bitmask of all defined flags for version 1.  Bits 3-7 are reserved.
+/// GPIO pin control (ViGpio driver cell — PL061 on QEMU ARM virt).
+/// Grants access to the GPIO MMIO range via `sys_request_mmio`.
+pub const MANIFEST_FLAG_GPIO: u8 = 1 << 3;
+
+/// UART serial access (ViUart driver cell — PL011 on QEMU ARM virt).
+/// Grants access to the UART MMIO range via `sys_request_mmio`.
+pub const MANIFEST_FLAG_UART: u8 = 1 << 4;
+
+/// RISC-V H-extension (hypervisor) CSR access for VMM cells.
+/// Grants `HypervisorCap` only when the CPU also reports H-ext at boot.
+pub const MANIFEST_FLAG_HYPERVISOR: u8 = 1 << 5;
+
+/// Bitmask of all defined flags for version 1.  Bits 6-7 are reserved.
 ///
 /// `from_bytes` rejects manifests where `flags & !MANIFEST_FLAGS_MASK != 0` —
 /// a stale v1 binary accidentally setting a reserved bit (e.g., from a future
 /// v2 SDK) is rejected and falls back to legacy path grants, preventing a
 /// capability it never intended from silently activating on an older kernel.
 pub const MANIFEST_FLAGS_MASK: u8 =
-    MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK | MANIFEST_FLAG_SPAWN;
+    MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK | MANIFEST_FLAG_SPAWN
+    | MANIFEST_FLAG_GPIO | MANIFEST_FLAG_UART | MANIFEST_FLAG_HYPERVISOR;
 
 /// Fixed-layout capability manifest.  ABI-stable — see Law 1.
 ///
@@ -55,16 +68,22 @@ pub struct CellManifest {
 }
 
 impl CellManifest {
-    /// Construct a manifest from the three capability bits.
+    /// Construct a manifest from capability bits.
     ///
     /// Evaluates at compile time; safe to use as a `static` initializer.
-    pub const fn new(block_io: bool, network: bool, spawn: bool) -> Self {
+    pub const fn new(
+        block_io: bool, network: bool, spawn: bool,
+        gpio: bool, uart: bool, hypervisor: bool,
+    ) -> Self {
         Self {
             magic:   MANIFEST_MAGIC,
             version: MANIFEST_VERSION,
-            flags:   (block_io as u8 * MANIFEST_FLAG_BLOCK_IO)
-                   | (network  as u8 * MANIFEST_FLAG_NETWORK)
-                   | (spawn    as u8 * MANIFEST_FLAG_SPAWN),
+            flags:   (block_io   as u8 * MANIFEST_FLAG_BLOCK_IO)
+                   | (network    as u8 * MANIFEST_FLAG_NETWORK)
+                   | (spawn      as u8 * MANIFEST_FLAG_SPAWN)
+                   | (gpio       as u8 * MANIFEST_FLAG_GPIO)
+                   | (uart       as u8 * MANIFEST_FLAG_UART)
+                   | (hypervisor as u8 * MANIFEST_FLAG_HYPERVISOR),
             _pad:    [0; 2],
         }
     }
@@ -111,6 +130,15 @@ impl CellManifest {
     /// Returns `true` if the cell declared cell-spawning and hot-swap.
     pub fn has_spawn(&self) -> bool { self.flags & MANIFEST_FLAG_SPAWN != 0 }
 
+    /// Returns `true` if the cell declared GPIO pin-control access.
+    pub fn has_gpio(&self) -> bool { self.flags & MANIFEST_FLAG_GPIO != 0 }
+
+    /// Returns `true` if the cell declared UART serial access.
+    pub fn has_uart(&self) -> bool { self.flags & MANIFEST_FLAG_UART != 0 }
+
+    /// Returns `true` if the cell declared H-extension hypervisor CSR access.
+    pub fn has_hypervisor(&self) -> bool { self.flags & MANIFEST_FLAG_HYPERVISOR != 0 }
+
     /// Returns `true` if any privileged capability bit is set.
     ///
     /// Used by `spawn_from_path` to reject over-declaring user Cells (non-`/bin/`
@@ -127,14 +155,23 @@ impl CellManifest {
 /// # Usage
 /// ```ignore
 /// // At module scope, after `use` declarations:
-/// api::declare_manifest!(block_io = true, network = false, spawn = false);
+/// api::declare_manifest!(block_io = true, network = false, spawn = false, gpio = false, uart = false);
 /// ```
 #[macro_export]
 macro_rules! declare_manifest {
-    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal) => {
+    // 6-param form — includes hypervisor flag.
+    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal) => {
         #[used]
         #[link_section = "__ViCell_manifest"]
         pub static VICELL_MANIFEST: $crate::manifest::CellManifest =
-            $crate::manifest::CellManifest::new($bio, $net, $spawn);
+            $crate::manifest::CellManifest::new($bio, $net, $spawn, $gpio, $uart, $hv);
+    };
+    // 5-param form (no hypervisor) — hypervisor defaults to false.
+    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal) => {
+        $crate::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, gpio = $gpio, uart = $uart, hypervisor = false);
+    };
+    // 3-param back-compat form (no gpio/uart/hypervisor) — all default to false.
+    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal) => {
+        $crate::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, gpio = false, uart = false, hypervisor = false);
     };
 }
