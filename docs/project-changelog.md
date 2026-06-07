@@ -4,6 +4,47 @@
 
 ---
 
+## [2026-06-07] Peripheral I/O — Bit-bang I2C, SHT3x Sensor Demo, SiFive GPIO — Complete
+
+### Summary
+Peripheral Driver Track v2: added bit-bang I2C over GPIO, SHT3x sensor demo app, and SiFive GPIO driver for RISC-V `sifive_u` QEMU machine. Sensor demo reads SHT3x @ I2C addr 0x44 via 2 GPIO pins (SCL=pin0, SDA=pin1); falls back to animated synthetic data when no slave ACKs (QEMU). SiFive GPIO driver implements full ViGpio trait with direction enforcement in `write_pin`. Both compile cleanly for `aarch64-unknown-none` and `riscv64gc-unknown-none-elf`.
+
+### Changes
+- **`hal/traits/i2c/src/lib.rs`** — NEW: `ViI2c` trait + `I2cError` in `hal-i2c` crate
+- **`cells/drivers/i2c-gpio/src/lib.rs`** — NEW: `BitBangI2c<G: ViGpio>` — SDA open-drain emulation, START/STOP, byte-level I/O, full `ViI2c` impl
+- **`cells/apps/sensor-demo/`** — NEW: SHT3x polling demo
+  - `src/sht3x.rs` — parse 6-byte response (T/H formulas from datasheet), synthetic fallback
+  - `src/main.rs` — 1 s poll loop, `sys_recv_timeout` as sleep, ARM64 + RISC-V portable
+- **`cells/drivers/gpio-sifive/src/lib.rs`** — NEW: `SiFiveGpio` — FU540/FU740 GPIO0 (0x1001_2000), 32 pins, separate INPUT_EN/OUTPUT_EN registers, `write_pin` enforces OUTPUT_EN contract
+- **`cells/apps/gpio-test-rv/src/main.rs`** — NEW: SiFive GPIO self-test (output write, direction enforcement, SKIP on non-sifive_u targets)
+- **`cells/apps/periph-test/src/main.rs`** — Completed: GPIO AlreadyExists fix (single-open), UARTCR.LBE loopback scenario (0xA5 roundtrip), MMIO cap rejection test
+- **`cells/drivers/serial/src/lib.rs`** — Added `enable_loopback()` / `disable_loopback()` via UARTCR.LBE (bit 7)
+- **`kernel/src/resource_registry.rs`** — RISC-V ALLOWED now includes SiFive GPIO0 (0x1001_2000, 4 KiB)
+
+## [2026-06-07] Bootloader Handoff Test Suite — Complete
+
+### Summary
+Added dedicated bootloader-handoff integration tests for all active architectures (RV64, AArch64, RV32) plus host-side unit tests for boot.rs logic. Tests verify the early-init sequence — parse_bootloader_info → frame alloc → paging → heap → HAL — independently from the full boot chain (shell prompt). Each arch now has its own QemuRunner variant. All 13 integration tests + 9 unit tests pass.
+
+### Changes
+- **`tests/integration/src/lib.rs`** — Extended QemuRunner:
+  - `qemu_binary_aarch64()` / `qemu_binary_rv32()` — binary resolvers (env override → PATH → Windows default)
+  - `QemuRunner::boot_rv64(kernel)` — minimal RV64 (no disk/VirtIO), for handoff-only tests
+  - `QemuRunner::boot_aarch64(kernel)` — AArch64 virt + cortex-a57, PL011 serial via TCP
+  - `QemuRunner::boot_rv32(kernel)` — RV32 + OpenSBI, SATP=0 (Phase-31 Nano)
+- **`tests/integration/tests/handoff.rs`** — NEW: 13 handoff tests
+  - Phase 01 (RV64): kernel_starts, phys_base, frame_allocator, paging_activated, heap
+  - Phase 02 (AArch64): kernel_starts, phys_base (0x40…), frame_allocator, heap
+  - Phase 03 (RV32): kernel_starts, bare_paging (SATP=0 path distinct from RV64), heap
+  - Phase 04 (x86_64): build artifact exists + ELF magic check (no QEMU, build regression guard)
+  - All tests skip gracefully when QEMU or kernel not available
+- **`tests/boot-unit/`** — NEW: host-side unit test crate (9 tests, no QEMU)
+  - All 8 Limine memory type conversions + unknown→Reserved default
+  - Fallback kernel base addresses validated per arch (RV64/VF2/AArch64/RV32)
+  - MAX_MEMORY_MAP_ENTRIES=64 truncation contract
+  - HHDM=0 invariant for all non-x86 arches
+- **`tests/integration/Cargo.toml`** — Added `[[test]] name = "handoff"`
+
 ## [2026-06-07] G1 Robot Demo & Peripheral Driver Track — Complete
 
 ### Summary

@@ -55,7 +55,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | ELF capability manifests | Phase 30 | ✅ | G1 |
 | Heap snapshot / Instant-On | Phase 29 | ✅ | G1 |
 | 🆕 Storage 2.0 (zero-copy grant + PageCache + FAT32) | Phases 00–03 | ✅ | **G1/G2/G3** |
-| 🆕 Peripheral Driver track (GPIO/I2C/SPI/UART; CAN/PWM/ADC) | *new* | ✅ v1 COMPLETE (GPIO+UART on QEMU ARM virt; real SBC pending) | **G1** |
+| 🆕 Peripheral Driver track (GPIO/I2C/SPI/UART; CAN/PWM/ADC) | *new* | ✅ v2 COMPLETE (GPIO+UART+I2C+SiFive GPIO; SHT3x sensor demo; real SBC pending) | **G1** |
 | VFS robustness (quota enforce, access control) | M2.1 | ✅ | G1 |
 | 🆕 ARM64 full bring-up (beyond ring-3 smoke) | ext. M1.3 | 📋 | **G1** |
 | HMI feature-gate (compositor/input, optional) | M2.2/M2.4 subset | 📋 | G1 (opt) |
@@ -157,7 +157,7 @@ SMP scales across N cores · windowed desktop + mouse · hot migration with no d
 
 ### C. Real-world connectivity `[G1 priority · shared]`
 - 🆕 **TLS 1.3 for the net stack** `[shared, G1-priority]` — ✅ COMPLETE (Phase TLS-01). Network service now supports TLS 1.3 client handshake via sys_get_random(214) entropy + three TLS IPC opcodes (0x30/0x31/0x32). HTTPS demo cell connects to example.com:443, validates cert chain, issues HTTP GET. Foundation for MQTT over TLS, secure device communication, IoT protocols.
-- 🆕 **RTC / wall-clock time** `[G1]` — 📋 only mtime ticks exist; no real date/time. Blocks log timestamps, TLS cert validation, scheduling. Touches HAL (RTC driver) → may overlap kernel work.
+- 🆕 **RTC / wall-clock time** `[G1]` — ✅ COMPLETE (2026-06-07). Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time with fallback to uptime. See [.agents/260607-1719-rtc-wall-clock/plan.md](.agents/260607-1719-rtc-wall-clock/plan.md)
 - 🆕 **Large-buffer IPC / scatter-gather** `[shared, G3 prerequisite]` — 📋 512-byte IPC buffer → 6000 round-trips for a 3MB tensor (unusable for video, file transfer, NPU inference). Recommended: `sys_grant_pages(tid, vaddr, len, perms)` — page-table remap, no memcpy, ~1K LOC. Extends existing Lease/GrantEntry pattern. **G3 cannot start without this.**
 
 ### D. App SDK / ergonomics `[shared]`

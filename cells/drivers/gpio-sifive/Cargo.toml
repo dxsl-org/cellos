@@ -1,0 +1,12 @@
+[package]
+name = "driver-gpio-sifive"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+types    = { path = "../../../libs/types" }
+api      = { path = "../../../libs/api" }
+ostd     = { path = "../../../libs/ostd" }
+hal-gpio = { path = "../../../hal/traits/gpio" }
+
+[lib]
