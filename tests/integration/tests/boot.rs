@@ -1444,6 +1444,40 @@ fn shell_cmd_substitution() {
         .unwrap_or_else(|e| panic!("mid-token: {e}\n{}", qemu.dump()));
 }
 
+// ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────
+
+/// Input M2.2 (Phase 01): kernel must register the input service at spawn time.
+///
+/// Verifies that `loader.rs` calls `set_input_cell` for `/bin/input`, producing
+/// the "[input] registered input service TID" log line. Proves the kernel ↔
+/// input-service IPC wire is set up before any key events arrive.
+///
+/// QEMU verify is deferred until the kernel rebuild cycle stabilises (never-die
+/// phase). The test is gated by `prerequisites_ok()` so it skips gracefully.
+#[test]
+fn input_service_registered_at_boot() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("[input] registered input service TID", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("kernel did not register input service: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Input M2.2 (Phase 03): compositor must boot with the v0.2 input-routing banner.
+///
+/// Verifies that the new compositor code (with `connect_to_input`) is live.
+/// Does not inject any input events — purely observational.
+#[test]
+fn compositor_input_routing_active() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("[compositor] Compositor v0.2", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("compositor v0.2 banner not seen: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
 /// Milestone 4.4 (RT benchmark, G1 criterion #3): standard PDR benchmarks +
 /// 3 RT scenarios (preempt_latency, control_loop_jitter, ipc_under_load) all
 /// complete and print "ALL BENCHMARKS PASS".

@@ -24,14 +24,16 @@ pub struct SurfaceState {
     pub pixels: Box<[u8]>,
     /// Accumulated damage since last flush.  `None` = no damage.
     pub damage: Option<Rect>,
+    /// TID of the cell that created this surface (input routing target).
+    pub owner: usize,
 }
 
 impl SurfaceState {
-    /// Allocate a new zeroed (transparent black) surface.
-    pub fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
+    /// Allocate a new zeroed (transparent black) surface for `owner` (their TID).
+    pub fn new(x: i32, y: i32, w: u32, h: u32, owner: usize) -> Self {
         let len = (w * h * 4) as usize;
         let pixels = alloc::vec![0u8; len].into_boxed_slice();
-        Self { x, y, w, h, pixels, damage: None }
+        Self { x, y, w, h, pixels, damage: None, owner }
     }
 
     /// Write `data` (BGRA8888) into the sub-rect `(px, py, pw, ph)`.
@@ -77,13 +79,15 @@ impl SurfaceTable {
 
     /// Allocate a new surface and return its CapId.
     ///
+    /// `owner` is the TID of the creating cell (used for input focus routing).
+    ///
     /// # Errors
     /// Returns `OutOfMemory` if `MAX_SURFACES` is already reached.
-    pub fn create(&mut self, x: i32, y: i32, w: u32, h: u32) -> Result<u64, ViError> {
+    pub fn create(&mut self, x: i32, y: i32, w: u32, h: u32, owner: usize) -> Result<u64, ViError> {
         if self.entries.len() >= MAX_SURFACES { return Err(ViError::OutOfMemory); }
         let cap = self.next_cap;
         self.next_cap += 1;
-        self.entries.insert(cap, SurfaceState::new(x, y, w, h));
+        self.entries.insert(cap, SurfaceState::new(x, y, w, h, owner));
         Ok(cap)
     }
 

@@ -32,9 +32,14 @@ impl ZOrder {
         self.caps.push(cap);
     }
 
-    /// Iterate from bottom to top.
+    /// Iterate from bottom to top (paint order).
     pub fn iter_bottom_to_top(&self) -> impl Iterator<Item = u64> + '_ {
         self.caps.iter().copied()
+    }
+
+    /// Iterate from top to bottom (hit-test order: frontmost surface wins).
+    pub fn iter_top_to_bottom(&self) -> impl Iterator<Item = u64> + '_ {
+        self.caps.iter().rev().copied()
     }
 }
 
