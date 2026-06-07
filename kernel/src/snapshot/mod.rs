@@ -317,3 +317,81 @@ pub fn invalidate_snapshot() {
     let _ = viVirtIOBlk.write_sector(SNAPSHOT_BASE_LBA, &buf);
     log::info!("[snapshot] snapshot invalidated");
 }
+
+// ── Header validation (pure, no VirtIO) ──────────────────────────────────────
+
+/// Validate a snapshot header without I/O — checks magic, format version, and
+/// kernel git hash.  Does NOT verify the CRC32 (requires reading frame sectors).
+///
+/// Useful in unit tests and as the fast first gate in `try_restore()`.
+pub fn validate_header(h: &SnapshotHeader) -> bool {
+    h.magic == SNAPSHOT_MAGIC
+        && h.version == SNAPSHOT_FORMAT_VERSION
+        && h.kernel_hash == kernel_hash()
+}
+
+// ── Unit tests ────────────────────────────────────────────────────────────────
+//
+// These tests exercise pure header logic — no VirtIO, no physical memory I/O.
+// The kernel crate compiles with `#![no_std]` for bare-metal targets; on the
+// host target (used by `cargo test`) std is available and these tests run
+// normally (same as `service_registry.rs`, `state_stash.rs`, etc.).
+//
+// Note: `cargo test -p vicell-kernel` requires `--target x86_64-pc-windows-msvc`
+// (host target), which currently fails due to the `hal` crate's arch dependency.
+// These tests are structured to run once a host-compatible HAL stub exists.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_header() -> SnapshotHeader {
+        SnapshotHeader {
+            magic:        SNAPSHOT_MAGIC,
+            version:      SNAPSHOT_FORMAT_VERSION,
+            flags:        0,
+            kernel_hash:  kernel_hash(),
+            pa_base:      0x8020_0000,
+            pa_end:       0x8060_0000,
+            frame_count:  1024,
+            crc32:        0xDEAD_BEEF,
+        }
+    }
+
+    #[test]
+    fn snapshot_header_round_trips() {
+        let h = valid_header();
+        // Size must be exactly 40 bytes (fits in one sector with room to spare).
+        assert_eq!(core::mem::size_of::<SnapshotHeader>(), 40);
+        // Magic parses as "UCIV" on disk (LE encoding of "VICU").
+        let bytes = unsafe {
+            core::slice::from_raw_parts(
+                &h as *const SnapshotHeader as *const u8,
+                core::mem::size_of::<SnapshotHeader>(),
+            )
+        };
+        assert_eq!(&bytes[0..4], b"VICU");
+        assert!(validate_header(&h));
+    }
+
+    #[test]
+    fn snapshot_invalidation_on_hash_mismatch() {
+        let mut h = valid_header();
+        h.kernel_hash = h.kernel_hash.wrapping_add(1); // deliberately wrong
+        assert!(!validate_header(&h));
+    }
+
+    #[test]
+    fn snapshot_invalidation_on_magic_mismatch() {
+        let mut h = valid_header();
+        h.magic = 0xDEAD_BEEF;
+        assert!(!validate_header(&h));
+    }
+
+    #[test]
+    fn snapshot_invalidation_on_version_mismatch() {
+        let mut h = valid_header();
+        h.version = h.version.wrapping_add(1);
+        assert!(!validate_header(&h));
+    }
+}
