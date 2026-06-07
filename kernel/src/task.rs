@@ -19,7 +19,7 @@ use scheduler::Scheduler;
 /// Increased to 64 (256 KB): fatfs nests deep call frames during recursive
 /// directory removal; 16 pages (64 KB) overflows on complex FAT16 ops.
 pub const STACK_PAGES: usize = 64;
-const TRAP_FRAME_SIZE: usize = 288;
+const TRAP_FRAME_SIZE: usize = core::mem::size_of::<crate::hal::arch::ViTrapFrame>();
 extern "C" {
     fn __trap_exit();
 }
@@ -35,27 +35,27 @@ pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
 static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 // Helper context to save the initial boot/kernel state during first task switch
-// Helper context to save the initial boot/kernel state during first task switch
+#[cfg(target_arch = "riscv64")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    ra: 0,
-    sp: 0,
-    s0: 0,
-    s1: 0,
-    s2: 0,
-    s3: 0,
-    s4: 0,
-    s5: 0,
-    s6: 0,
-    s7: 0,
-    s8: 0,
-    s9: 0,
-    s10: 0,
-    s11: 0,
-    sepc: 0,
-    sstatus: 0x102,
-    gp: 0,
-    tp: 0,
-    sscratch: 0,
+    ra: 0, sp: 0, s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0,
+    s6: 0, s7: 0, s8: 0, s9: 0, s10: 0, s11: 0,
+    sepc: 0, sstatus: 0x102, gp: 0, tp: 0, sscratch: 0,
+};
+#[cfg(target_arch = "aarch64")]
+static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+    x19: 0, x20: 0, x21: 0, x22: 0, x23: 0, x24: 0, x25: 0,
+    x26: 0, x27: 0, x28: 0, x29: 0, x30: 0, sp: 0,
+    elr_el1: 0, spsr_el1: 0x305,
+};
+#[cfg(target_arch = "riscv32")]
+static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+    ra: 0, sp: 0, s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0,
+    s6: 0, s7: 0, s8: 0, s9: 0, s10: 0, s11: 0,
+    sepc: 0, sstatus: 0x102, gp: 0, tp: 0, sscratch: 0,
+};
+#[cfg(target_arch = "x86_64")]
+static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+    r15: 0, r14: 0, r13: 0, r12: 0, rbx: 0, rbp: 0, sp: 0, rip: 0,
 };
 
 // Trampoline for Thread Spawning
@@ -90,12 +90,11 @@ pub fn init() {
 
     // Enable S-mode timer interrupt and arm the first preemption tick.
     // Done after scheduler init so vi_timer_tick() sees a valid SCHEDULER.
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
         // SAFETY: sets STIE (bit 5 = mask 0x20) in sie from S-mode. Must use the
         // register form of csrs — csrsi's immediate is only 5 bits (0..=31), so a
-        // 0x20 mask cannot be encoded as an immediate (mirrors the sstatus.SUM
-        // register-form set in main.rs).
+        // 0x20 mask cannot be encoded as an immediate.
         unsafe { core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize); }
         let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
         hal::common::sbi::set_timer(next);
@@ -128,7 +127,7 @@ pub extern "Rust" fn vi_timer_tick() {
 
     // Rearm timer anchored to current mtime so the slice is constant
     // regardless of how long this ISR takes.
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     {
         let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
         hal::common::sbi::set_timer(next);
@@ -169,6 +168,7 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::cell::hotswap::force_unlock_locks();
     crate::cell::service_registry::force_unlock_locks();
     crate::task::drivers::virtio_blk::force_unlock_locks();
+    crate::resource_registry::force_unlock_locks();
 }
 
 /// Terminate the currently-executing Cell due to a hardware fault.
@@ -209,9 +209,10 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
             // usize::MAX = fault reason; also wakes any Wait(tid) waiters.
             sched.exit_task(tid, usize::MAX);
         }
-        // Deregister quota for the killed Cell.
+        // Deregister quota and MMIO regions for the killed Cell.
         let cell_id = types::CellId(cell_id_raw as u64);
         crate::memory::cell_quota::deregister(cell_id);
+        crate::resource_registry::release_for(cell_id);
     }
 
     // If the faulting cell owned the fast-IPC VFS handler, null the pointer so
@@ -266,9 +267,9 @@ pub fn yield_cpu() {
             };
 
             if !next.is_null() {
-                // Set sscratch for next task's kernel stack (needed for U-mode trap handling)
+                // Set sscratch / TPIDR_EL1 for next task's kernel stack.
                 let next_ref = &*next;
-                crate::hal::arch::set_kernel_stack(next_ref.sp);
+                crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
             }
             if next.is_null() {
                 // log::info!("yield_cpu: Switching to BOOT_CONTEXT");
@@ -362,7 +363,7 @@ pub fn spawn_from_mem(
             log::info!("Spawn: Setting up context for Task {}...", tid);
             // Own the segment frames so they're freed when this Task is reaped.
             task.segment_mem = Some(crate::task::stack::CellSegments::new(seg_pages));
-            task.trap_frame.sepc = header.entry;
+            task.trap_frame.sepc = header.entry as _;
             task.trap_frame.sstatus = 0x20; // SPIE=1, SPP=0 (User)
 
             // Allocate Kernel Stack
@@ -388,10 +389,13 @@ pub fn spawn_from_mem(
             let tf_ptr = kstack_top - TRAP_FRAME_SIZE;
 
             // Set User SP in TrapFrame
-            task.trap_frame.regs[2] = user_stack_top;
+            task.trap_frame.regs[2] = user_stack_top as _;
 
             // CRITICAL: Set User Mode Status in TrapFrame!
-            task.trap_frame.sstatus = 0x6020;
+            #[cfg(not(target_arch = "x86_64"))]
+            { task.trap_frame.sstatus = 0x6020; }
+            #[cfg(target_arch = "x86_64")]
+            { task.trap_frame.sstatus = 0x202; } // RFLAGS: IF=1, reserved=1
 
             // Copy TrapFrame to Kernel Stack
             unsafe {
@@ -399,12 +403,18 @@ pub fn spawn_from_mem(
                 *tf_dest = task.trap_frame;
             }
 
-            // Point Context to Kernel Stack
-            task.context.sp = tf_ptr;
-            task.context.ra = __trap_exit as *const () as usize;
-
-            // Enable SUM (Bit 18) so Kernel can access User Pointers (e.g. Syscalls)
-            task.context.sstatus = 0x42120; // SUM=1, FS=1 (Initial), SPP=1, SPIE=1
+            // Point Context to Kernel Stack (sp field exists on all Context types)
+            task.context.sp = tf_ptr as _;
+            #[cfg(target_arch = "riscv64")]
+            { task.context.ra = __trap_exit as *const () as usize;
+              task.context.sstatus = 0x42120; } // SUM=1, FS=1, SPP=1, SPIE=1
+            #[cfg(target_arch = "riscv32")]
+            { task.context.ra = __trap_exit as *const () as u32;
+              task.context.sstatus = 0x120_u32; } // SPP=1, SPIE=1
+            #[cfg(target_arch = "aarch64")]
+            { task.context.x30 = __trap_exit as *const () as u64; }
+            #[cfg(target_arch = "x86_64")]
+            { task.context.rip = __trap_exit as *const () as u64; }
 
             info!(
                 "Spawned ELF task '{}' (ID {}) from memory at entry 0x{:X}",
@@ -1166,7 +1176,7 @@ pub fn spawn_synthetic(
     // 3. Update Task Context (Copied from spawn_from_file)
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
-            task.trap_frame.sepc = entry;
+            task.trap_frame.sepc = entry as _;
             task.trap_frame.sstatus = 0x20; // User Mode (SPIE=1, SPP=0)
 
             // Allocate Kernel Stack
@@ -1189,16 +1199,24 @@ pub fn spawn_synthetic(
             task.user_stack = Some(ustack);
 
             let tf_ptr = kstack_top - TRAP_FRAME_SIZE;
-            task.trap_frame.regs[2] = user_stack_top; // User SP
+            task.trap_frame.regs[2] = user_stack_top as _; // User SP
 
             unsafe {
                 let tf_dest = &mut *(tf_ptr as *mut crate::hal::arch::ViTrapFrame);
                 *tf_dest = task.trap_frame;
             }
 
-            task.context.sp = tf_ptr;
-            task.context.ra = __trap_exit as *const () as usize;
-            task.context.sstatus = 0x40120; // SUM=1
+            task.context.sp = tf_ptr as _;
+            #[cfg(target_arch = "riscv64")]
+            { task.context.ra = __trap_exit as *const () as usize;
+              task.context.sstatus = 0x40120; } // SUM=1
+            #[cfg(target_arch = "riscv32")]
+            { task.context.ra = __trap_exit as *const () as u32;
+              task.context.sstatus = 0x120_u32; } // SPP=1, SPIE=1
+            #[cfg(target_arch = "aarch64")]
+            { task.context.x30 = __trap_exit as *const () as u64; }
+            #[cfg(target_arch = "x86_64")]
+            { task.context.rip = __trap_exit as *const () as u64; }
 
             info!(
                 "Spawned Synthetic task '{}' (ID {}) at entry 0x{:X}",

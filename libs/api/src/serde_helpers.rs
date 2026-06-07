@@ -86,13 +86,14 @@ impl ViSerializable for usize {
         8
     }
     fn serialize_into(&self, buffer: &mut [u8]) -> ViResult<usize> {
-        buffer[..8].copy_from_slice(&self.to_le_bytes());
+        // Always write 8 bytes (u64) so the wire format is arch-independent.
+        buffer[..8].copy_from_slice(&(*self as u64).to_le_bytes());
         Ok(8)
     }
     fn deserialize_from(buffer: &[u8]) -> ViResult<Self> {
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&buffer[..8]);
-        Ok(usize::from_le_bytes(bytes))
+        Ok(u64::from_le_bytes(bytes) as usize)
     }
 }
 
@@ -119,8 +120,9 @@ pub fn serialize_slice(slice: &[u8], buffer: &mut [u8]) -> ViResult<usize> {
         return Err(ViError::InvalidArgument);
     }
 
-    // Write length
-    buffer[..8].copy_from_slice(&len.to_le_bytes());
+    // Write length as a fixed 8-byte u64 so the wire format is arch-independent
+    // (usize::to_le_bytes() would be 4 bytes on 32-bit targets).
+    buffer[..8].copy_from_slice(&(len as u64).to_le_bytes());
     // Write data
     buffer[8..8 + len].copy_from_slice(slice);
 
@@ -135,7 +137,8 @@ pub fn deserialize_slice<'a>(buffer: &'a [u8]) -> ViResult<(&'a [u8], usize)> {
 
     let mut len_bytes = [0u8; 8];
     len_bytes.copy_from_slice(&buffer[..8]);
-    let len = usize::from_le_bytes(len_bytes);
+    // Fixed 8-byte u64 length field: arch-independent (usize is 4 bytes on 32-bit).
+    let len = u64::from_le_bytes(len_bytes) as usize;
 
     if buffer.len() < 8 + len {
         return Err(ViError::InvalidArgument);

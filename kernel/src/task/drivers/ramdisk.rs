@@ -9,7 +9,7 @@ use types::{ViError, ViResult};
 // Embed the small kernel-internal FAT32 image.
 //
 // This image contains only the files the kernel's own filesystem serves:
-//   /bin/{init,shell,vfs,config,lua}  — release-built cell ELFs
+//   /bin/{init,shell,vfs,config}  — release-built cell ELFs
 //   /hostname, /readme               — system metadata
 //
 // The VirtIO block device (disk_v3.img) is a SEPARATE disk that holds the
@@ -22,7 +22,11 @@ use types::{ViError, ViResult};
 //   python tools\mkfat32.py kernel\src\embedded\kernel_fs.img ...
 // Path is relative to this source file (kernel/src/task/drivers/ramdisk.rs).
 // kernel_fs.img lives in kernel/src/embedded/kernel_fs.img.
-static DISK_IMAGE: &[u8] = include_bytes!("../../embedded/kernel_fs.img");
+// RV32 Nano has no embedded FS image — no cells are spawned in Phase 31.
+#[cfg(not(target_arch = "riscv32"))]
+static DISK_IMAGE: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/kernel_fs.img"));
+#[cfg(target_arch = "riscv32")]
+static DISK_IMAGE: &[u8] = &[];
 
 const SECTOR_SIZE: usize = 512;
 

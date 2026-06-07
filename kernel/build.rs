@@ -10,19 +10,17 @@ fn main() {
     // Choose linker script based on target architecture.
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     let (ld_script, rerun_path) = match target_arch.as_str() {
-        "aarch64" => ("kernel/linker-aarch64.ld", "kernel/linker-aarch64.ld"),
-        "x86_64"  => ("kernel/linker-x86-64.ld",  "kernel/linker-x86-64.ld"),
-        _         => ("kernel/linker.ld",          "kernel/linker.ld"),
+        "aarch64"  => ("kernel/linker-aarch64.ld",  "kernel/linker-aarch64.ld"),
+        "x86_64"   => ("kernel/linker-x86-64.ld",   "kernel/linker-x86-64.ld"),
+        "riscv32"  => ("kernel/linker-riscv32.ld",  "kernel/linker-riscv32.ld"),
+        _          => ("kernel/linker.ld",           "kernel/linker.ld"),
     };
     println!("cargo:rustc-link-arg=-T{ld_script}");
     println!("cargo:rerun-if-changed={rerun_path}");
     println!("cargo:rerun-if-changed=kernel/linker-x86-64.ld");
 
-    // Produce a position-independent (ET_DYN) kernel binary so Limine can apply
-    // KASLR — randomizing the physical load address each boot. With ORIGIN=0x80200000
-    // in the linker script and slide=0, direct QEMU -kernel boot still works
-    // (all R_RISCV_RELATIVE addends are identity-transformed). Only apply to riscv64;
-    // aarch64/x86_64 use their own linker scripts and may need different flags.
+    // PIE: only riscv64 (Limine KASLR). riscv32 is non-PIE (direct -kernel boot,
+    // OpenSBI loads kernel at ORIGIN=0x80200000 with no relocation).
     if target_arch == "riscv64" {
         println!("cargo:rustc-link-arg=-pie");
         println!("cargo:rustc-link-arg=--no-dynamic-linker");
@@ -32,11 +30,17 @@ fn main() {
     let embedded_out = out_dir.join("embedded");
     fs::create_dir_all(&embedded_out).expect("create embedded OUT_DIR");
 
-    let embedded_src = PathBuf::from("src/embedded");
+    // Use arch-specific embedded directory when available, fall back to default.
+    let arch_embedded = PathBuf::from(format!("src/embedded-{}", target_arch));
+    let embedded_src = if arch_embedded.exists() {
+        arch_embedded
+    } else {
+        PathBuf::from("src/embedded")
+    };
     // kernel_fs.img is the embedded FAT32 image (~8 MB release cells).
     // The others are kept for reference but kernel_fs.img is what ramdisk.rs embeds.
     let cells = [
-        "init", "vfs", "shell", "lua", "config", "cat", "echo", "hello", "ls",
+        "init", "vfs", "shell", "config", "cat", "echo", "hello", "ls",
         "kernel_fs.img",
     ];
 

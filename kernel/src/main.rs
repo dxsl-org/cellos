@@ -34,7 +34,9 @@ mod sync;
 // Re-export types for convenience
 pub use types::*;
 
-// Embed Init Binary (stripped by build.rs, served from OUT_DIR)
+// Embed Init Binary (stripped by build.rs, served from OUT_DIR).
+// RV32 Nano (Phase 31) and x86_64 bring-up have no init ELF.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init"));
 
 /// Kernel entry point called from HAL boot code
@@ -43,10 +45,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let _hartid = hartid;
     cpu_features::detect(dtb);
     // 0. Initialize UART immediately for early logging
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     task::drivers::uart::init();
     #[cfg(target_arch = "aarch64")]
     crate::hal::uart_pl011::init();
+    #[cfg(target_arch = "x86_64")]
+    crate::hal::uart_16550::init();
 
     // 1. Initialize HAL (Architecture specific) - Early Trap Setup
     hal::ARCH.init();
@@ -54,10 +58,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Define puts helper — arch-specific character output.
     let puts = |s: &str| {
         for c in s.bytes() {
-            #[cfg(target_arch = "riscv64")]
-            unsafe { _putchar(c as u8); }
+            #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+            { let _ = crate::hal::sbi::console_putchar(c); }
             #[cfg(target_arch = "aarch64")]
-            crate::hal::uart_pl011::putchar(c);
+            { crate::hal::uart_pl011::putchar(c); }
+            #[cfg(target_arch = "x86_64")]
+            { crate::hal::uart_16550::putchar(c); }
         }
     };
 
@@ -131,27 +137,45 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 3. Paging (Virtual Memory) Setup
     log_info("Initializing paging...");
-    // Get a mutable reference to the global frame allocator for paging initialization.
-    let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
-    puts("TRACE: Calling init_kernel_paging\n");
-    let root_table_phys = memory::paging::init_kernel_paging(
-        locked_frame_allocator
-            .as_mut()
-            .expect("Frame allocator not initialized"),
-        mmap_entries,
-    )
-    .expect("Failed to initialize paging");
-    puts("TRACE: init_kernel_paging returned\n");
-    drop(locked_frame_allocator);
-    log_info("Paging initialized");
+    #[cfg(not(target_arch = "riscv32"))]
+    {
+        // Get a mutable reference to the global frame allocator for paging initialization.
+        let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
+        puts("TRACE: Calling init_kernel_paging\n");
+        let root_table_phys = memory::paging::init_kernel_paging(
+            locked_frame_allocator
+                .as_mut()
+                .expect("Frame allocator not initialized"),
+            mmap_entries,
+        )
+        .expect("Failed to initialize paging");
+        puts("TRACE: init_kernel_paging returned\n");
+        drop(locked_frame_allocator);
+        log_info("Paging initialized");
 
-    // Activate Paging (SV39)
-    log_info("Activating paging...");
-    unsafe {
-        memory::paging::activate_paging(root_table_phys);
+        // Activate paging — skip on x86_64 bring-up: Limine's PML4 covers all
+        // identity-mapped RAM and MMIO; activating our PML4 would require re-mapping
+        // the kernel at 0xFFFFFFFF80000000 (deferred to full x86_64 port).
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            log_info("Activating paging...");
+            unsafe { memory::paging::activate_paging(root_table_phys); }
+            puts("TRACE: Paging activated (satp set)\n");
+            log_info("Paging activated");
+        }
+        #[cfg(target_arch = "x86_64")]
+        {
+            log_info("Paging: table built, keeping Limine PML4 (x86_64 bring-up)");
+            // HPET at 0xFED0_0000 is accessible via Limine's identity map.
+            crate::hal::init_timers();
+        }
     }
-    puts("TRACE: Paging activated (satp set)\n");
-    log_info("Paging activated");
+    // RV32 Nano: bare physical addressing (SATP=0); no page tables needed.
+    #[cfg(target_arch = "riscv32")]
+    {
+        memory::paging::init_bare();
+        log_info("Paging: bare physical (SATP=0, Phase-31 Nano)");
+    }
 
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
     puts("TRACE: Allocating heap frames\n");
@@ -214,13 +238,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init_input(); // Initialize RX buffer
     puts("TRACE: init drivers\n");
+    // RV32 Nano / x86_64 bring-up: skip VirtIO probing (PCIe transport not yet ported).
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     task::drivers::init();
     puts("TRACE: drivers done\n");
 
     // Attempt warm boot from snapshot before any cell initialization.
-    // try_restore() replays allocated physical frames (including kernel .bss/.data
-    // globals like SCHEDULER) from disk, then yields into the restored task set.
-    // Returns false (continues cold boot) if no valid snapshot is found.
+    // RV32 Nano / x86_64 skip: no VirtIO block in bring-up.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     if snapshot::try_restore() {
         // try_restore() called yield_cpu() and should not return in a successful
         // warm boot.  If we reach here, fall through to cold boot as a safety net.
@@ -228,15 +253,19 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 
     // Probe the cell bootstrap table so SpawnFromPath works during init.
-    // Failure is non-fatal: init will log warnings if it cannot spawn cells.
+    // RV32 Nano / x86_64 bring-up: no disk.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     match crate::loader::early::EarlyLoader::probe() {
         Ok(()) => puts("[loader] cell bootstrap table loaded\n"),
         Err(_) => puts("[loader] WARN: cell table not found — disk image may lack bootstrap section\n"),
     }
 
-    fs::init(); // Re-enabled with RAM disk
+    // RV32 Nano / x86_64: no FAT32 FS in bring-up.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    fs::init();
 
-    // Phase 20: verify the hot-migration state-transfer primitive round-trips.
+    // Phase 20: hot-migration state-transfer self-test.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     crate::cell::state_stash::self_test();
 
     log_info("Kernel subsystems initialized successfully.");
@@ -247,29 +276,33 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("Scheduler initialized");
 
     // 8. Spawn Embedded Init
-    log_info("Spawning Embedded Init...");
-    
-    // Enable SUM (Supervisor User Memory access) bit in sstatus (RISC-V only).
-    // ARM64 EL1 can always access EL0 pages — no equivalent bit needed.
-    #[cfg(target_arch = "riscv64")]
-    unsafe {
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
-    }
-    
-    // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
-    let init_data = alloc::vec::Vec::from(INIT_ELF);
-    match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
-        Ok(init_tid) => {
-            log_info("Successfully spawned init");
-            // Grant SpawnCap to init: it uses sys_spawn_from_path (a syscall) to
-            // boot vfs/config/shell. Without SpawnCap the syscall returns PermissionDenied.
-            if let Some(sched) = task::SCHEDULER.lock().as_mut() {
-                if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                    t.spawn_cap = Some(task::cap::SpawnCap::new());
+    // RV32 Nano / x86_64 bring-up: no init binary — boot to idle loop.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    {
+        log_info("Spawning Embedded Init...");
+
+        // Enable SUM (Supervisor User Memory access) bit in sstatus (RISC-V only).
+        // ARM64 EL1 can always access EL0 pages — no equivalent bit needed.
+        #[cfg(target_arch = "riscv64")]
+        unsafe {
+            core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
+        }
+
+        // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
+        let init_data = alloc::vec::Vec::from(INIT_ELF);
+        match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
+            Ok(init_tid) => {
+                log_info("Successfully spawned init");
+                // Grant SpawnCap to init: it uses sys_spawn_from_path (a syscall) to
+                // boot vfs/config/shell. Without SpawnCap the syscall returns PermissionDenied.
+                if let Some(sched) = task::SCHEDULER.lock().as_mut() {
+                    if let Some(t) = sched.tasks.get_mut(&init_tid) {
+                        t.spawn_cap = Some(task::cap::SpawnCap::new());
+                    }
                 }
             }
+            Err(_e) => log_info("Failed to spawn init"),
         }
-        Err(_e) => log_info("Failed to spawn init"),
     }
 
     // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
@@ -301,14 +334,18 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Enable interrupts before entering the idle loop.
     // RISC-V: set SPP=1 and SIE=1 in sstatus (0x102).
     // AArch64: clear DAIF.I bit to unmask IRQs.
-    #[cfg(target_arch = "riscv64")]
+    // x86_64: STI via ARCH.enable_interrupts().
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     unsafe {
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x102);
+        // SAFETY: csrs sstatus SPP|SIE from S-mode — standard interrupt enable.
+        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x102usize);
     }
     #[cfg(target_arch = "aarch64")]
     unsafe {
         core::arch::asm!("msr daifclr, #2", options(nomem, nostack));
     }
+    #[cfg(target_arch = "x86_64")]
+    crate::hal::ARCH.enable_interrupts();
 
     loop {
         if !crate::task::has_ready_tasks() {
@@ -344,10 +381,12 @@ fn panic(info: &PanicInfo) -> ! {
     // True kernel panic: print diagnostics and halt.
     #[inline(always)]
     fn panic_putchar(c: u8) {
-        #[cfg(target_arch = "riscv64")]
+        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         { let _ = crate::hal::sbi::console_putchar(c); }
         #[cfg(target_arch = "aarch64")]
         { crate::hal::uart_pl011::putchar(c); }
+        #[cfg(target_arch = "x86_64")]
+        { crate::hal::uart_16550::putchar(c); }
     }
     let puts = |s: &str| { for c in s.bytes() { panic_putchar(c); } };
     puts("\n[KERNEL PANIC] ");
@@ -356,22 +395,18 @@ fn panic(info: &PanicInfo) -> ! {
     struct PanicWriter;
     impl core::fmt::Write for PanicWriter {
         fn write_str(&mut self, s: &str) -> core::fmt::Result {
-            #[inline(always)]
-            fn pw(c: u8) {
-                #[cfg(target_arch = "riscv64")]
-                { let _ = crate::hal::sbi::console_putchar(c); }
-                #[cfg(target_arch = "aarch64")]
-                { crate::hal::uart_pl011::putchar(c); }
-            }
-            for c in s.bytes() { pw(c); }
+            for c in s.bytes() { panic_putchar(c); }
             Ok(())
         }
     }
     let _ = write!(PanicWriter, "{}\n", info);
 
-    // Reboot or spin: RISC-V uses SBI SRST, ARM64 spins (PSCI stub).
+    // Reboot or spin: RISC-V uses SBI SRST; ARM64 / x86_64 spin.
     puts("[KERNEL PANIC] halting...\n");
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
+    #[cfg(target_arch = "x86_64")]
+    loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
+    #[cfg(not(target_arch = "x86_64"))]
     loop { unsafe { core::arch::asm!("wfi", options(nomem, nostack)); } }
 }

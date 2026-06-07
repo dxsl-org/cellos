@@ -91,10 +91,10 @@ pub fn spawn() -> Result<usize, ViError> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             // sepc = ENTRY; sret will jump here in U-mode.
-            task.trap_frame.sepc = ENTRY;
+            task.trap_frame.sepc = ENTRY as _;
             // sstatus: SPP=0 (U-mode), SPIE=1, FS=Initial (bits 13-14 = 01).
             // Matches spawn_from_mem convention so FP state is consistent.
-            task.trap_frame.sstatus = 0x6020;
+            task.trap_frame.sstatus = 0x6020_u64 as _;
 
             let kstack = Stack::new_kernel(STACK_PAGES)
                 .map_err(|_| ViError::OutOfMemory)?;
@@ -102,7 +102,7 @@ pub fn spawn() -> Result<usize, ViError> {
                 .map_err(|_| ViError::OutOfMemory)?;
 
             let kstack_top = kstack.top;
-            task.trap_frame.regs[2] = ustack.top; // sp = user stack top
+            task.trap_frame.regs[2] = ustack.top as _; // sp = user stack top
             task.kernel_stack = Some(kstack);
             task.user_stack = Some(ustack);
 
@@ -114,13 +114,13 @@ pub fn spawn() -> Result<usize, ViError> {
                 *tf_dst = task.trap_frame;
             }
 
-            // First context switch "returns" to __trap_exit, which reads the
-            // trap frame from sp and executes sret into U-mode at sepc=ENTRY.
-            task.context.sp = tf_ptr;
-            task.context.ra = __trap_exit as *const () as usize;
-            // Kernel context sstatus: SUM=1, FS=Initial, SPP=1, SPIE=1.
-            // Matches spawn_from_mem convention (0x42120 = SUM | FS=Initial | SPP | SPIE).
-            task.context.sstatus = 0x42120;
+            // First context switch "returns" to __trap_exit.
+            task.context.sp = tf_ptr as _;
+            #[cfg(target_arch = "riscv64")]
+            { task.context.ra = __trap_exit as *const () as usize;
+              task.context.sstatus = 0x42120; } // SUM=1, FS=Initial, SPP=1, SPIE=1
+            #[cfg(target_arch = "aarch64")]
+            { task.context.x30 = __trap_exit as *const () as u64; }
         }
     }
 

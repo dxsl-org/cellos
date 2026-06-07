@@ -200,13 +200,16 @@ impl Scheduler {
         let ustack = crate::task::stack::Stack::new_user(STACK_FRAMES).expect("OOM User Stack");
         let ustack_top = ustack.top;
 
-        task.context.sp = stack_top;
-        task.context.ra = entry;
-        task.trap_frame.sepc = entry;
-        task.trap_frame.sstatus = 0x20; // 0x20 = SPIE enabled, SPP = 0 (User Mode)
-        task.trap_frame.regs[2] = ustack_top; // sp = x2
-        task.context.gp = gp;
-        task.context.tp = tp;
+        task.context.sp = stack_top as _;
+        task.trap_frame.sepc = entry as _;
+        task.trap_frame.sstatus = 0x20_u64 as _;  // SPIE enabled, SPP=0 (User Mode)
+        task.trap_frame.regs[2] = ustack_top as _; // sp = x2
+        #[cfg(target_arch = "riscv64")]
+        { task.context.ra = entry; task.context.gp = gp; task.context.tp = tp; }
+        #[cfg(target_arch = "aarch64")]
+        { task.context.x30 = entry as u64; }
+        #[cfg(target_arch = "x86_64")]
+        { task.context.rip = entry as u64; }
         task.kernel_stack = Some(kstack);
         task.user_stack = Some(ustack);
 
@@ -255,14 +258,18 @@ impl Scheduler {
             let (gp, tp) = crate::task::get_kernel_gp_tp();
             let trampoline = crate::hal::arch::thread_trampoline as *const () as usize;
 
-            task.context.sp = stack_top;
-            task.context.ra = trampoline;
-            task.context.s0 = arg;
-            task.context.s1 = entry;
-            task.context.gp = gp;
-            task.context.tp = tp;
-            task.trap_frame.sepc = trampoline;
+            task.context.sp = stack_top as _;
+            task.trap_frame.sepc = trampoline as _;
             task.trap_frame.sstatus = 0x120;
+            #[cfg(target_arch = "riscv64")]
+            { task.context.ra = trampoline; task.context.s0 = arg; task.context.s1 = entry;
+              task.context.gp = gp; task.context.tp = tp; }
+            #[cfg(target_arch = "aarch64")]
+            { task.context.x30 = trampoline as u64;
+              task.context.x19 = arg as u64;
+              task.context.x20 = entry as u64; }
+            #[cfg(target_arch = "x86_64")]
+            { task.context.rip = trampoline as u64; }
             task.kernel_stack = Some(kstack);
 
             info!(
@@ -325,6 +332,10 @@ impl Scheduler {
         // Locks only REGISTRY (a leaf), safe under the SCHEDULER lock.
         crate::cell::service_registry::clear_tid(tid);
 
+        // Input-service registration cleanup: prevent the kernel poll path from pushing
+        // events to a dead/reused TID. Supervisor re-registers after respawn.
+        crate::task::drivers::virtio_input::clear_input_cell_if(tid);
+
         // Remove from ready queues if present
         for queue in self.ready_queues.values_mut() {
             queue.retain(|&id| id != tid);
@@ -338,7 +349,7 @@ impl Scheduler {
             if let TaskState::Sending { target, .. } = task.state {
                 if target == tid {
                     task.state = TaskState::Ready;
-                    task.trap_frame.regs[10] = usize::MAX; // error return: target gone
+                    task.trap_frame.regs[10] = usize::MAX as _; // error return: target gone
                     to_wake.push(*id);
                 }
             }
@@ -504,6 +515,7 @@ impl Scheduler {
             // SCHEDULER, so they are safe to call inline here — mirrors the watchdog kill).
             crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
             crate::memory::cell_quota::deregister(CellId(cell_raw));
+            crate::resource_registry::release_for(CellId(cell_raw));
             self.exit_task(tid, usize::MAX);
             if self.current_task_id == Some(tid) {
                 CURRENT_CELL_ID.store(0, Ordering::Relaxed);
@@ -531,7 +543,7 @@ impl Scheduler {
                                         task.open_files.insert(*fd, FileHandle::new(file));
 
                                         // Set return value (a0 / regs[10])
-                                        task.trap_frame.regs[10] = res.unwrap_or(0); // TODO: Handle Error Properly (negative?)
+                                        task.trap_frame.regs[10] = res.unwrap_or(0) as _; // TODO: Handle Error Properly (negative?)
 
                                         // Wake task
                                         task.state = TaskState::Ready;
@@ -625,6 +637,7 @@ impl Scheduler {
                     // state, not SCHEDULER, so they are safe to call inline here).
                     crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
                     crate::memory::cell_quota::deregister(CellId(cell_raw));
+                    crate::resource_registry::release_for(CellId(cell_raw));
                     // exit_task is a method on this already-locked Scheduler — no
                     // SCHEDULER re-lock. Moves the runaway to zombies + wakes its
                     // waiters; the pop_ready below then picks another ready task.

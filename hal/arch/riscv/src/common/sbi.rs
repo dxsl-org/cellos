@@ -61,10 +61,20 @@ pub fn console_getchar() -> isize {
 
 const SBI_FID_SET_TIMER: usize = 0;
 
-/// Set timer
+/// Set the next timer interrupt deadline.
+///
+/// On RV32 the SBI spec (v1.0 §5.1) requires passing `stime_value_lo` in
+/// `a0` and `stime_value_hi` in `a1` because `usize` is 32-bit — the 64-bit
+/// value cannot fit in a single argument register.
 pub fn set_timer(stime_value: u64) {
     #[cfg(target_arch = "riscv64")]
     sbi_call(SBI_EID_TIMER, SBI_FID_SET_TIMER, stime_value as usize, 0, 0);
+    #[cfg(target_arch = "riscv32")]
+    {
+        let lo = stime_value as usize;           // bits 31:0
+        let hi = (stime_value >> 32) as usize;   // bits 63:32
+        sbi_call(SBI_EID_TIMER, SBI_FID_SET_TIMER, lo, hi, 0);
+    }
 }
 
 // SBI System Reset (SRST) extension — used by the panic handler to reboot a

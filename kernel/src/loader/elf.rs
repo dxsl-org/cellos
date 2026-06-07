@@ -15,7 +15,13 @@ use xmas_elf::ElfFile;
 ///
 /// The real boundary is half the SV39 address space: 2^38 = 0x40_0000_0000.
 /// Cells compiled at 0x0040_0000 (4 MB) are safely within this range.
+// SV39 user-half upper bound (256 GB). On riscv32 the address space is 32-bit
+// so this value is clamped to usize::MAX (0xFFFF_FFFF), which is still correct
+// as a "no address may be >= 4 GB" guard for riscv32 cells.
+#[cfg(not(target_arch = "riscv32"))]
 const USER_VADDR_MAX: usize = 0x40_0000_0000; // 256 GB — SV39 user half
+#[cfg(target_arch = "riscv32")]
+const USER_VADDR_MAX: usize = 0xFFFF_FFFF; // 4 GB — full SV32 address space
 
 pub struct ElfLoader;
 

@@ -1792,8 +1792,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 }
 
 use api::syscall::ViSyscall;
+#[cfg(not(target_arch = "riscv32"))]
 use crate::hal::arch::ViTrapFrame;
 
+// On RV32 Nano (Phase 31), provide a minimal stub — full dispatch is Phase 32.
+#[cfg(target_arch = "riscv32")]
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "Rust" fn ViCell_syscall_dispatch(
+    _frame: &mut crate::hal::arch::ViTrapFrame,
+) {
+    // Stub: no cells are spawned in the Phase-31 Nano smoke boot.
+}
+
+#[cfg(not(target_arch = "riscv32"))]
 #[no_mangle]
 #[allow(non_snake_case)] // ABI name required by the HAL trap vector — cannot be snake_case
 pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {

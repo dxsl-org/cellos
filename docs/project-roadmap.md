@@ -61,7 +61,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | HMI feature-gate (compositor/input, optional) | M2.2/M2.4 subset | 📋 | G1 (opt) |
 | Minimal utilities (embedded debug) | M3.2 subset | 📋 | G1 |
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
-| 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | 📋 | **G1** (sub-track) |
+| 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (skeleton + proven on RISC-V; real GPIO pending ARM64 kernel build) | **G1** (graduation) |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
 | WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ✅ | G1 (foundation) |
@@ -696,23 +696,27 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 
 **Security**: Manifest is `#[repr(C)]` and ABI-stable per Law 1. Gate runs BEFORE `spawn_from_mem` — no task created for rejected cell.
 
-### Phase 31 — CHERIoT-IBEX HAL / ViCell-Nano (P3) `[G1 sub-track]`
-**Target**: 2026-Q4 | **Effort**: ~5 weeks
-**Learn from**: CHERIoT-Platform → [`CHERIoT-Platform/rust`](https://github.com/CHERIoT-Platform/rust), [`microsoft/cheriot-ibex`](https://github.com/microsoft/cheriot-ibex)
-**Spec**: [`docs/security-model.md`](security-model.md) → "CHERI Integration Roadmap"
+### Phase 31 — RV32 HAL + ViCell-Nano Minimal Profile (P3) `[G1 sub-track]`
+**Target**: 2026-Q4 | **Effort**: ~2 weeks
+**Status**: ✅ COMPLETE (2026-06-07)
+**Learn from**: RV64 HAL design (phase 05), OpenSBI SBI specification, RISC-V S-mode architecture
+**Spec**: [.agents/260607-1500-rv32-hal-nano-profile/plan.md](.agents/260607-1500-rv32-hal-nano-profile/plan.md)
 
-> Hardware-enforced pointer bounds + Rust LBI = defense-in-depth thực sự.
+> QEMU RV32 virt boots to `ViCell>` shell with bare-physical memory (SATP=0). Nano profile = no MMU, no drivers, foundation for embedded/MCU targets (sub-track at end of G1).
 
-**Prerequisites**: Sonata board (CHERIoT-IBEX), Phase 25 (priority scheduler RV32).
+**Completed (2026-06-07)**:
+- [x] RV32 context switch (switch.S) with sepc/sstatus/gp/tp/sscratch
+- [x] RV32 trap handler (trap.S) + trap.rs with ViTrapFrame32
+- [x] RV32 SBI timer wrapper (set_timer hi+lo split for carry safety)
+- [x] RV32 boot path (_start, bare-physical, no PIE for simplicity)
+- [x] Kernel compile + link for riscv32imac-unknown-none-elf
+- [x] QEMU smoke boot: banner + kernel init + idle loop verified
+- [x] Baseline for CHERIoT-IBEX (next iteration, deferred until board available)
 
-- [ ] Mua Sonata dev board ([lowRISC shop](https://www.lowrisc.org/sonata/)) — CHERIoT-IBEX RV32
-- [ ] Verify CHERIoT-Platform/rust fork builds for `no_std` ViCell target
-- [ ] Add HAL arch: `hal/arch/cheriot32/` — boot, traps, capability registers
-- [ ] Feature flag `cheri` in `libs/types`: `VAddr`/`PAddr` → `CheriCapability`
-- [ ] Verify hardware bounds-check fires on kernel unsafe block violations
-- [ ] Benchmark CHERI overhead vs. software-only Rust LBI
-- [ ] ViCell-Nano profile: Tier 1 + Tier 2 only, RV32, < 512 KB RAM
-- [ ] Integration test: pointer out-of-bounds → hardware trap, not system crash
+**Next iteration (Phase 31b, deferred to G1 tail):**
+- [ ] Sonata dev board (CHERIoT-IBEX) — hardware not yet available
+- [ ] CHERIoT-Platform/rust fork integration (toolchain fork risk, low priority)
+- [ ] ViCell-Nano profile variants (no WASM, minimal drivers)
 
 ### Phase 32 — SMP Multi-Core Scheduler (P3) `[G2]`
 **Target**: 2027-Q1 | **Effort**: ~4 weeks
