@@ -61,3 +61,11 @@ __switch32:
     lw  t0,  72(a1)
     csrw sscratch, t0
     ret
+
+.global thread_trampoline
+.align 2
+thread_trampoline:
+    # Enable S-mode interrupts (SIE = bit 1 of sstatus), same as rv64.
+    csrsi sstatus, 0x2
+    mv    a0, s0   # argument passed from scheduler
+    jr    s1       # jump to task entry point

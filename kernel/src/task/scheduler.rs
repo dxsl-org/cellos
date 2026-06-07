@@ -264,6 +264,10 @@ impl Scheduler {
             #[cfg(target_arch = "riscv64")]
             { task.context.ra = trampoline; task.context.s0 = arg; task.context.s1 = entry;
               task.context.gp = gp; task.context.tp = tp; }
+            #[cfg(target_arch = "riscv32")]
+            { task.context.ra = trampoline as u32; task.context.s0 = arg as u32;
+              task.context.s1 = entry as u32; task.context.gp = gp as u32;
+              task.context.tp = tp as u32; }
             #[cfg(target_arch = "aarch64")]
             { task.context.x30 = trampoline as u64;
               task.context.x19 = arg as u64;

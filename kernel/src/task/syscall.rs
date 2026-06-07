@@ -1495,9 +1495,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 log::warn!("BlkFlush denied: task {} lacks block-I/O capability", caller_id);
                 return Err(SyscallError::PermissionDenied);
             }
-            use crate::task::drivers::virtio_blk::viVirtIOBlk;
-            use api::block::ViBlockDevice;
-            match viVirtIOBlk.flush() {
+            
+            
+            match crate::task::drivers::block::flush() {
                 Ok(()) => Ok(1),
                 Err(_)  => Ok(0),
             }
@@ -1516,7 +1516,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     options(noreturn)
                 );
             }
-            #[cfg(not(target_arch = "riscv64"))]
+            #[cfg(target_arch = "x86_64")]
+            loop { unsafe { core::arch::asm!("hlt", options(nomem, nostack)); } }
+            #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
             loop { unsafe { core::arch::asm!("wfi", options(nomem, nostack)); } }
         }
         Syscall::BlkRead { sector, buf_ptr } => {
@@ -1530,15 +1532,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
-            use crate::task::drivers::virtio_blk::viVirtIOBlk;
-            use api::block::ViBlockDevice;
+            
+            
             // Bounce buffer: VirtioHal::share() treats the buffer's virtual address
             // as its physical address (identity-map assumption). Stack frames ARE
             // identity-mapped; ELF BSS/heap pages are NOT — DMA would land at the
             // wrong physical address without the bounce. Read into an on-stack buffer
             // (always identity-mapped), then copy to the user buffer under SUM=1.
             let mut bounce = [0u8; 512];
-            match viVirtIOBlk.read_sector(sector, &mut bounce) {
+            match crate::task::drivers::block::read_sector(sector, &mut bounce) {
                 Ok(()) => {
                     // SAFETY: buf_ptr is a validated 512-byte user buffer; SUM=1
                     // (set by ViCell_syscall_dispatch) allows S-mode to write it.
@@ -1560,15 +1562,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
-            use crate::task::drivers::virtio_blk::viVirtIOBlk;
-            use api::block::ViBlockDevice;
+            
+            
             // Bounce buffer for the same identity-map reason as BlkRead above.
             // SAFETY: buf_ptr is a validated 512-byte user buffer; SUM=1 allows
             // S-mode to read it.
             let user = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, 512) };
             let mut bounce = [0u8; 512];
             bounce.copy_from_slice(user);
-            match viVirtIOBlk.write_sector(sector, &bounce) {
+            match crate::task::drivers::block::write_sector(sector, &bounce) {
                 Ok(()) => Ok(1),
                 Err(_) => Ok(0),
             }
@@ -1780,10 +1782,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Grant pages are identity-mapped (vaddr == paddr), so DMA addresses are correct.
             // SAFETY: buf_paddr is a physically contiguous, identity-mapped grant page; valid
             // for 512 bytes of VirtIO DMA read.
-            use crate::task::drivers::virtio_blk::viVirtIOBlk;
-            use api::block::ViBlockDevice;
+            
+            
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_paddr as *mut u8, 512) };
-            match viVirtIOBlk.read_sector(sector, buf) {
+            match crate::task::drivers::block::read_sector(sector, buf) {
                 Ok(()) => Ok(1), // async_id = 1 means immediately complete (Phase 04 for real async)
                 Err(_)  => Ok(0),
             }
@@ -1795,14 +1797,124 @@ use api::syscall::ViSyscall;
 #[cfg(not(target_arch = "riscv32"))]
 use crate::hal::arch::ViTrapFrame;
 
-// On RV32 Nano (Phase 31), provide a minimal stub — full dispatch is Phase 32.
-#[cfg(target_arch = "riscv32")]
-#[no_mangle]
-#[allow(non_snake_case)]
-pub extern "Rust" fn ViCell_syscall_dispatch(
-    _frame: &mut crate::hal::arch::ViTrapFrame,
-) {
-    // Stub: no cells are spawned in the Phase-31 Nano smoke boot.
+/// Map a syscall ID + promoted register args to the internal [`Syscall`] enum.
+///
+/// All register values must already be promoted to `usize` by the caller.
+/// Returns `None` for unknown/unhandled opcodes; the caller writes the
+/// arch-appropriate sentinel (usize::MAX or u32::MAX) to the return register.
+fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> Option<Syscall> {
+    let sc = match ViSyscall::from(syscall_id) {
+        ViSyscall::Send          => Syscall::Send { target: a0, msg_ptr: a1, msg_len: a2 },
+        ViSyscall::Recv          => Syscall::Recv { mask: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::TryRecv       => Syscall::TryRecv { mask: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::SendGather    => Syscall::SendGather { target: a0, iovec_ptr: a1, iovec_count: a2 },
+        ViSyscall::RecvScatter   => Syscall::RecvScatter { mask: a0, iovec_ptr: a1, iovec_count: a2 },
+        ViSyscall::RecvTimeout   => Syscall::RecvTimeout {
+            mask: a0, buf_ptr: a1, buf_len: a2,
+            deadline: (super::system_ticks() as u64).wrapping_add(a3 as u64),
+        },
+        ViSyscall::Reply         => Syscall::Reply { caller: a0, result: a1 },
+        ViSyscall::Call          => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },
+        ViSyscall::Spawn         => Syscall::Spawn { entry: a0, arg: a1 },
+        ViSyscall::Exec          => Syscall::Exec { path_ptr: a0, path_len: a1 },
+        ViSyscall::SpawnFromMem  => Syscall::SpawnFromMem { args_ptr: a0 },
+        ViSyscall::SpawnFromPath => Syscall::SpawnFromPath { path_ptr: a0, path_len: a1 },
+        ViSyscall::SpawnPinned   => Syscall::SpawnPinned {
+            path_ptr: a0, path_len: a1, priority: a2 as u8, core_id: a3,
+        },
+        ViSyscall::OpenCap       => Syscall::OpenCap { path_ptr: a0, path_len: a1 },
+        ViSyscall::ReadCap       => Syscall::ReadCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::CloseCap      => Syscall::CloseCap { cap_id: a0 },
+        ViSyscall::Wait          => Syscall::Wait { pid: a0 },
+        ViSyscall::ShmAlloc      => Syscall::ShmAlloc { size: a0 },
+        ViSyscall::ShmMap        => Syscall::ShmMap { handle: a0, target_pid: a1 },
+        ViSyscall::Exit          => Syscall::Exit { code: a0 },
+        ViSyscall::ForceExit     => Syscall::ForceExit { tid: a0 },
+        ViSyscall::NotifyOnExit  => Syscall::NotifyOnExit { watched: a0 },
+        ViSyscall::RegisterService => Syscall::RegisterService { service_id: a0 as u16, tid: a1 },
+        ViSyscall::LookupService => Syscall::LookupService { service_id: a0 as u16 },
+        ViSyscall::Heartbeat     => Syscall::Heartbeat { interval: a0 },
+        ViSyscall::Yield         => Syscall::Yield,
+        ViSyscall::SetTimer      => Syscall::SetTimer { deadline: a0 },
+        ViSyscall::Log           => Syscall::Log { msg_ptr: a0, msg_len: a1 },
+        ViSyscall::GetProcs      => Syscall::GetProcs { buf_ptr: a0, buf_len: a1 },
+        ViSyscall::Open          => Syscall::Open { path_ptr: a0, path_len: a1 },
+        ViSyscall::Read          => Syscall::Read { fd: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::Close         => Syscall::Close { fd: a0 },
+        ViSyscall::ReadDir       => Syscall::ReadDir { fd: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::Write         => Syscall::Write { fd: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::Seek          => Syscall::Seek { fd: a0, offset: a1 as isize, whence: a2 },
+        ViSyscall::FileOp        => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
+        ViSyscall::GetTime       => Syscall::GetTime { op: a0 },
+        ViSyscall::GpuFlush      => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: a3 },
+        ViSyscall::NetTx         => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
+        ViSyscall::NetRx         => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
+        ViSyscall::StateStash    => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::StateRestore  => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::HotSwap       => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
+        ViSyscall::Snapshot      => Syscall::Snapshot,
+        ViSyscall::GrantAlloc    => Syscall::GrantAlloc { size: a0 },
+        ViSyscall::GrantShare    => Syscall::GrantShare { grant_id: a0, target_cell: a1, perm: a2 },
+        ViSyscall::GrantSlice    => Syscall::GrantSlice { grant_id: a0 },
+        ViSyscall::GrantFree     => Syscall::GrantFree { grant_id: a0 },
+        ViSyscall::BlkReadAsync  => Syscall::BlkReadAsync { sector: a0 as u64, grant_id: a1 },
+        ViSyscall::RequestMmio   => Syscall::RequestMmio { base: a0, len: a1 },
+        ViSyscall::GetRandom     => Syscall::GetRandom { buf_ptr: a0, len: a1 },
+        _ => match syscall_id {
+            3   => Syscall::SetTimer { deadline: a0 },
+            100 => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },
+            106 => Syscall::FStat { fd: a0, stat_ptr: a1 },
+            107 => Syscall::ChDir { path_ptr: a0, path_len: a1 },
+            108 => Syscall::GetCwd { buf_ptr: a0, buf_len: a1 },
+            110 => Syscall::MkDir { path_ptr: a0, path_len: a1 },
+            111 => Syscall::Create { path_ptr: a0, path_len: a1 },
+            // Block I/O — intentionally absent from ViSyscall/libs/api (avoids Law 1).
+            500 => Syscall::BlkRead  { sector: a0 as u64, buf_ptr: a1 },
+            501 => Syscall::BlkWrite { sector: a0 as u64, buf_ptr: a1 },
+            502 => Syscall::Shutdown,
+            503 => Syscall::BlkFlush,
+            _   => return None,
+        }
+    };
+    Some(sc)
+}
+
+/// Per-cell syscall allowlist gate.
+///
+/// Reads the caller's `syscall_allowlist` bitmask and returns
+/// `Err(SyscallError::PermissionDenied)` if the opcode's bit is not set.
+/// The SCHEDULER lock is acquired and released here — callers must NOT hold it.
+fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallError> {
+    let sc = ViSyscall::from(syscall_id);
+    let bit = sc.allowlist_bit();
+    // Bit 36 gates raw block-I/O opcodes (500/501/503) and BlkReadAsync (212).
+    let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) { Some(36) } else { None };
+
+    let allowlist = super::SCHEDULER.lock().as_ref()
+        .and_then(|s| s.tasks.get(&caller_id))
+        .map(|t| t.syscall_allowlist)
+        .unwrap_or(0); // task absent → deny-all for safety
+
+    // Deny unknown opcodes that land in the legacy inner-match fallback — their
+    // allowlist_bit() returns None, so without this guard they bypass the check.
+    // Exit (60) and Yield (104) are always permitted unconditionally.
+    if sc == ViSyscall::Unknown
+        && !matches!(syscall_id, 60 | 104)
+        && allowlist != u64::MAX
+    {
+        return Err(SyscallError::PermissionDenied);
+    }
+    if let Some(b) = bit {
+        if allowlist & (1u64 << b) == 0 {
+            return Err(SyscallError::PermissionDenied);
+        }
+    }
+    if let Some(b) = blk_io_bit {
+        if allowlist & (1u64 << b) == 0 {
+            return Err(SyscallError::PermissionDenied);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(not(target_arch = "riscv32"))]
@@ -1813,14 +1925,12 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
 
     // Watchdog progress signal: a syscall proves the caller is making progress
     // (ViCell cells are poll-based — try_recv/yield every loop iteration), so
-    // reset its CPU-monopoly counter. Only a PURE compute loop that makes NO
-    // syscalls climbs the counter to the watchdog budget; busy-polling cells
-    // (net/shell/bench) syscall constantly and must never be killed.
+    // reset its CPU-monopoly counter.
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(cid) = sched.current_task_id {
             if let Some(t) = sched.tasks.get_mut(&cid) {
                 t.run_ticks = 0;
-                t.rt_overrun_warned = false; // progress made — re-arm the overrun warning
+                t.rt_overrun_warned = false;
             }
         }
     }
@@ -1830,171 +1940,79 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     let a2 = frame.regs[12];
     let a3 = frame.regs[13];
 
-    // Helper to construct Syscall enum
-    // Note: This mapping manually unpacks registers to arguments based on the Syscall definition.
-    // This duplicates logic slightly but keeps the kernel side robust.
-    let syscall = match ViSyscall::from(syscall_id) {
-        ViSyscall::Send => Syscall::Send { target: a0, msg_ptr: a1, msg_len: a2 },
-        ViSyscall::Recv => Syscall::Recv { mask: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::TryRecv => Syscall::TryRecv { mask: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::SendGather  => Syscall::SendGather { target: a0, iovec_ptr: a1, iovec_count: a2 },
-        ViSyscall::RecvScatter => Syscall::RecvScatter { mask: a0, iovec_ptr: a1, iovec_count: a2 },
-        ViSyscall::RecvTimeout => Syscall::RecvTimeout {
-            mask: a0, buf_ptr: a1, buf_len: a2,
-            deadline: (super::system_ticks() as u64).wrapping_add(a3 as u64),
-        },
-        ViSyscall::Reply => Syscall::Reply { caller: a0, result: a1 },
-        // SetTimer? ID 3?
-        ViSyscall::Call =>     // Call is not in Syscall enum? Ah, Syscall enum has: Reply (3). Call (2).
-            // ViSyscall::Call (2).
-            // But Syscall enum has Reply as 2? 
-            // In Syscall enum: Reply { caller, result } is 2.
-            // Check ViSyscall: Call=2, Reply=3.
-            // Check handle_software_trap reference:
-            // 2 => Reply.
-            // 3 => SetTimer.
-            // There is a mismatch between ViSyscall (Contract) and Syscall (Internal Enum used here).
-            // I should adhere to ViSyscall for the DISPATCHER input, and map to internal Syscall.
-            // IMPORTANT: If ViSyscall says 3 is Reply, and Syscall enum says 2 is Reply, I map ViSyscall::Reply -> Syscall::Reply.
-            // I need to be careful with registers.
-            Syscall::ServiceLookup { name_ptr: a0, name_len: a1 }, // Placeholder for Call
-            
-        ViSyscall::Spawn => Syscall::Spawn { entry: a0, arg: a1 },
-        ViSyscall::Exec => Syscall::Exec { path_ptr: a0, path_len: a1 },
-        ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { args_ptr: a0 },
-        ViSyscall::SpawnFromPath => Syscall::SpawnFromPath { path_ptr: a0, path_len: a1 },
-        ViSyscall::SpawnPinned => Syscall::SpawnPinned {
-            path_ptr: a0, path_len: a1, priority: a2 as u8, core_id: a3,
-        },
-        ViSyscall::OpenCap   => Syscall::OpenCap { path_ptr: a0, path_len: a1 },
-        ViSyscall::ReadCap   => Syscall::ReadCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::CloseCap  => Syscall::CloseCap { cap_id: a0 },
-        ViSyscall::Wait => Syscall::Wait { pid: a0 },
-        ViSyscall::ShmAlloc => Syscall::ShmAlloc { size: a0 },
-        ViSyscall::ShmMap => Syscall::ShmMap { handle: a0, target_pid: a1 },
-        ViSyscall::Exit      => Syscall::Exit { code: a0 },
-        ViSyscall::ForceExit => Syscall::ForceExit { tid: a0 },
-        ViSyscall::NotifyOnExit => Syscall::NotifyOnExit { watched: a0 },
-        ViSyscall::RegisterService => Syscall::RegisterService { service_id: a0 as u16, tid: a1 },
-        ViSyscall::LookupService => Syscall::LookupService { service_id: a0 as u16 },
-        ViSyscall::Heartbeat => Syscall::Heartbeat { interval: a0 },
-        ViSyscall::Yield => Syscall::Yield,
-        ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
-        ViSyscall::Log => Syscall::Log { msg_ptr: a0, msg_len: a1 },
-        ViSyscall::GetProcs => Syscall::GetProcs { buf_ptr: a0, buf_len: a1 },
-        
-        ViSyscall::Open => Syscall::Open { path_ptr: a0, path_len: a1 },
-        ViSyscall::Read => Syscall::Read { fd: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::Close => Syscall::Close { fd: a0 },
-        ViSyscall::ReadDir => Syscall::ReadDir { fd: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::Write => Syscall::Write { fd: a0, buf_ptr: a1, buf_len: a2 },
-
-        // POSIX Support
-        ViSyscall::Seek => Syscall::Seek { fd: a0, offset: a1 as isize, whence: a2 },
-        ViSyscall::FileOp => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
-        ViSyscall::GetTime => Syscall::GetTime { op: a0 },
-        ViSyscall::GpuFlush  => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: a3 },
-        ViSyscall::NetTx     => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
-        ViSyscall::NetRx     => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
-        ViSyscall::StateStash   => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::StateRestore => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::HotSwap   => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
-        ViSyscall::Snapshot  => Syscall::Snapshot,
-        ViSyscall::GrantAlloc    => Syscall::GrantAlloc { size: a0 },
-        ViSyscall::GrantShare    => Syscall::GrantShare { grant_id: a0, target_cell: a1, perm: a2 },
-        ViSyscall::GrantSlice    => Syscall::GrantSlice { grant_id: a0 },
-        ViSyscall::GrantFree     => Syscall::GrantFree { grant_id: a0 },
-        ViSyscall::BlkReadAsync  => Syscall::BlkReadAsync { sector: a0 as u64, grant_id: a1 },
-        ViSyscall::RequestMmio   => Syscall::RequestMmio { base: a0, len: a1 },
-        ViSyscall::GetRandom     => Syscall::GetRandom { buf_ptr: a0, len: a1 },
-
-        // Handle non-matching/legacy manually
-        _ => match syscall_id {
-            // SetTimer (3 in old, ? in ViSyscall)
-            3 => Syscall::SetTimer { deadline: a0 },
-            
-            // Legacy 100-111 coverage if needed
-            100 => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },
-            106 => Syscall::FStat { fd: a0, stat_ptr: a1 },
-            107 => Syscall::ChDir { path_ptr: a0, path_len: a1 },
-            108 => Syscall::GetCwd { buf_ptr: a0, buf_len: a1 },
-            110 => Syscall::MkDir { path_ptr: a0, path_len: a1 },
-            111 => Syscall::Create { path_ptr: a0, path_len: a1 },
-
-            // Block I/O — intentionally absent from ViSyscall/libs/api (avoids ABI 2x-confirm).
-            500 => Syscall::BlkRead  { sector: a0 as u64, buf_ptr: a1 },
-            501 => Syscall::BlkWrite { sector: a0 as u64, buf_ptr: a1 },
-            502 => Syscall::Shutdown,
-            503 => Syscall::BlkFlush,
-
-             _ => {
-                 frame.regs[10] = usize::MAX; // -1
-                 return;
-             }
-        }
+    let Some(syscall) = map_syscall(syscall_id, a0, a1, a2, a3) else {
+        frame.regs[10] = usize::MAX;
+        return;
     };
 
     let caller_id = super::current_task_id();
 
-    // Per-Cell syscall allowlist check.
-    // Read the bitset and drop the SCHEDULER lock BEFORE calling handle_syscall,
-    // which acquires its own internal locks — avoids contention on the Spinlock.
-    {
-        let sc = ViSyscall::from(syscall_id);
-        let bit = sc.allowlist_bit();
-        // Also check bit 36 for raw block-I/O opcodes (500/501/503) that have their
-        // own match arms and bypass the ViSyscall::from() mapping.
-        // 212 = BlkReadAsync reuses BlockIoCap (bit 36) — same gate as raw opcodes 500/501/503.
-        let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) { Some(36) } else { None };
-
-        // Read allowlist once; drop lock before handle_syscall re-acquires it.
-        let allowlist = super::SCHEDULER.lock().as_ref()
-            .and_then(|s| s.tasks.get(&caller_id))
-            .map(|t| t.syscall_allowlist)
-            .unwrap_or(0); // task absent (impossible in practice) → deny-all for safety
-
-        // Deny unknown opcodes that may still reach real handlers via the legacy
-        // inner-match fallback — their `allowlist_bit()` returns None, so without this
-        // guard they bypass the allowlist check entirely.  Only Yield and Exit are
-        // safe to permit unconditionally.
-        if sc == ViSyscall::Unknown
-            && !matches!(syscall_id, 60 | 104) // Exit | Yield always permitted
-            && allowlist != u64::MAX            // permit-all bypasses (default for existing cells)
-        {
-            frame.regs[10] = SyscallError::PermissionDenied as usize;
-            return;
-        }
-
-        if let Some(b) = bit {
-            if allowlist & (1u64 << b) == 0 {
-                frame.regs[10] = SyscallError::PermissionDenied as usize;
-                return;
-            }
-        }
-        if let Some(b) = blk_io_bit {
-            if allowlist & (1u64 << b) == 0 {
-                frame.regs[10] = SyscallError::PermissionDenied as usize;
-                return;
-            }
-        }
+    if check_allowlist(syscall_id, caller_id).is_err() {
+        frame.regs[10] = usize::MAX;
+        return;
     }
 
-    // Enable Access to User Memory (SUM) on RISC-V
+    // SAFETY: csrs/csrc sstatus SUM (bit 18) enables S-mode access to user pages
+    // for the duration of handle_syscall. Disabled immediately after to prevent
+    // inadvertent user-page reads on subsequent kernel faults.
     #[cfg(target_arch = "riscv64")]
-    unsafe {
-        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
-    }
+    unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize); }
 
     let result = handle_syscall(caller_id, syscall);
 
-    // Disable Access to User Memory (SUM)
     #[cfg(target_arch = "riscv64")]
-    unsafe {
-        core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000);
-    }
+    unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize); }
 
     match result {
         Ok(val) => frame.regs[10] = val,
-        Err(_) => frame.regs[10] = usize::MAX, // -1
+        Err(_)  => frame.regs[10] = usize::MAX,
+    }
+}
+
+#[cfg(target_arch = "riscv32")]
+#[no_mangle]
+#[allow(non_snake_case)]
+pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTrapFrame) {
+    // Promote u32 register slots to usize (= u32 on rv32) for arch-agnostic helpers.
+    let syscall_id = frame.regs[17] as usize;
+
+    // Watchdog: syscall proves the cell is making forward progress.
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(cid) = sched.current_task_id {
+            if let Some(t) = sched.tasks.get_mut(&cid) {
+                t.run_ticks = 0;
+                t.rt_overrun_warned = false;
+            }
+        }
+    }
+
+    let a0 = frame.regs[10] as usize;
+    let a1 = frame.regs[11] as usize;
+    let a2 = frame.regs[12] as usize;
+    let a3 = frame.regs[13] as usize;
+
+    let Some(syscall) = map_syscall(syscall_id, a0, a1, a2, a3) else {
+        frame.regs[10] = u32::MAX;
+        return;
+    };
+
+    let caller_id = super::current_task_id();
+
+    if check_allowlist(syscall_id, caller_id).is_err() {
+        frame.regs[10] = u32::MAX;
+        return;
+    }
+
+    // SAFETY: csrs/csrc sstatus SUM (bit 18) — same bit position on RV32 and RV64
+    // per the RISC-V Privileged Spec §4.1.1. Disabled after handle_syscall.
+    unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize); }
+
+    let result = handle_syscall(caller_id, syscall);
+
+    unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize); }
+
+    match result {
+        Ok(val) => frame.regs[10] = val as u32,
+        Err(_)  => frame.regs[10] = u32::MAX,
     }
 }
