@@ -97,47 +97,51 @@ impl EarlyLoader {
 
     /// Read a cell ELF from the bootstrap table into a heap-allocated buffer.
     ///
-    /// `path` must match exactly what `gen_disk.ps1` wrote (e.g. `/bin/vfs`).
+    /// Falls back to the kernel's embedded FAT16 filesystem (VIFS1) when the
+    /// bootstrap table is absent — this allows ARM64 and diskless boots to spawn
+    /// cells whose ELFs live in kernel_fs.img rather than a VirtIO block device.
+    ///
+    /// `path` must match what `gen_disk.ps1` wrote (e.g. `/bin/vfs`).
     ///
     /// # Errors
-    /// Returns `ViError::NotFound` if the table is not probed or the path is absent.
+    /// Returns `ViError::NotFound` if neither the block table nor VIFS1 has the path.
     pub fn read_file(path: &str) -> ViResult<Box<[u8]>> {
         use crate::task::drivers::virtio_blk::viVirtIOBlk;
         use api::block::ViBlockDevice;
 
-        // Snapshot the entry metadata then **release the lock** before reading
-        // sectors.  Holding CELL_TABLE across BLOCK_DEVICE (acquired inside
-        // read_sector) with interrupts disabled would stall preemption for the
-        // entire ELF read and create a potential lock-order deadlock for any
-        // future caller that holds BLOCK_DEVICE and then wants CELL_TABLE.
-        let (data_lba, size) = {
-            let guard = CELL_TABLE.lock();
-            let table = guard.as_ref().ok_or(ViError::NotFound)?;
-            let entry = table.entries.iter().find(|e| {
-                let stored = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
-                    .unwrap_or("")
-                    .trim_end_matches('\0');
-                stored == path
-            }).ok_or(ViError::NotFound)?;
-            (entry.data_lba, entry.data_size as usize)
-        }; // CELL_TABLE lock released here
+        // Attempt block-device bootstrap table path first.
+        let block_result = (|| -> ViResult<Box<[u8]>> {
+            let (data_lba, size) = {
+                let guard = CELL_TABLE.lock();
+                let table = guard.as_ref().ok_or(ViError::NotFound)?;
+                let entry = table.entries.iter().find(|e| {
+                    let stored = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
+                        .unwrap_or("")
+                        .trim_end_matches('\0');
+                    stored == path
+                }).ok_or(ViError::NotFound)?;
+                (entry.data_lba, entry.data_size as usize)
+            };
+            if size == 0 { return Err(ViError::InvalidInput); }
+            let sector_count = (size + SECTOR_SIZE - 1) / SECTOR_SIZE;
+            let mut buf = alloc::vec![0u8; sector_count * SECTOR_SIZE];
+            for i in 0..sector_count {
+                let lba = data_lba + i as u64;
+                let offset = i * SECTOR_SIZE;
+                viVirtIOBlk.read_sector(lba, &mut buf[offset..offset + SECTOR_SIZE])?;
+            }
+            buf.truncate(size);
+            Ok(buf.into_boxed_slice())
+        })();
 
-        if size == 0 {
-            return Err(ViError::InvalidInput);
+        if block_result.is_ok() {
+            return block_result;
         }
 
-        // Round up to full sectors for reading.
-        let sector_count = (size + SECTOR_SIZE - 1) / SECTOR_SIZE;
-        let buf_size = sector_count * SECTOR_SIZE;
-        let mut buf = alloc::vec![0u8; buf_size];
-
-        for i in 0..sector_count {
-            let lba = data_lba + i as u64;
-            let offset = i * SECTOR_SIZE;
-            viVirtIOBlk.read_sector(lba, &mut buf[offset..offset + SECTOR_SIZE])?;
-        }
-
-        buf.truncate(size);
-        Ok(buf.into_boxed_slice())
+        // Fallback: read from the embedded FAT16 ramdisk (VIFS1).
+        // This path is used when no VirtIO block device is present (e.g. ARM64 QEMU
+        // without a separate disk image, or CI diskless boots).
+        log::debug!("[early] block table miss for {:?} — trying VIFS1", path);
+        crate::fs::read_file_from_vifs1(path)
     }
 }

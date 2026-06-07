@@ -29,7 +29,11 @@ pub static KERNEL_ROOT: Spinlock<Option<PhysAddr>> = Spinlock::new(None);
 // Helper for debugging
 fn puts(s: &str) {
     for c in s.bytes() {
-        let _ = crate::hal::sbi::console_putchar(c);
+        #[cfg(target_arch = "riscv64")]
+        { let _ = crate::hal::sbi::console_putchar(c); }
+        #[cfg(target_arch = "aarch64")]
+        { crate::hal::uart_pl011::putchar(c); }
+        let _ = c; // suppress unused warning on other arches
     }
 }
 
@@ -120,14 +124,7 @@ pub fn init_kernel_paging(
 
     // Explicitly identity-map QEMU virt machine MMIO regions.
     // Limine does NOT include these in its memory map, but the kernel needs
-    // them accessible after paging is activated (UART, VirtIO block/input/GPU/net).
-    //
-    // QEMU virt memory map (hard-coded for riscv64 virt machine):
-    //   0x0000_0000 - 0x0000_0FFF : internal ROM / debug
-    //   0x0200_0000 - 0x0200_FFFF : CLINT
-    //   0x0C00_0000 - 0x0FFF_FFFF : PLIC
-    //   0x1000_0000 - 0x1000_0FFF : UART 16550A
-    //   0x1000_1000 - 0x1000_8FFF : VirtIO MMIO (8 devices)
+    // them accessible after paging is activated.
     let mmio_flags = PageFlags::from_bits(
         PageFlags::VALID
             | PageFlags::READ
@@ -137,15 +134,39 @@ pub fn init_kernel_paging(
     );
     let mut alloc_fn = || allocator.allocate_frame();
 
-    // CLINT
-    root_table.identity_map(0x0200_0000, 0x0201_0000, mmio_flags, &mut alloc_fn)
-        .map_err(|_| PageTableError::OutOfMemory)?;
-    // PLIC (16MB range)
-    root_table.identity_map(0x0C00_0000, 0x1000_0000, mmio_flags, &mut alloc_fn)
-        .map_err(|_| PageTableError::OutOfMemory)?;
-    // UART + VirtIO MMIO (64KB covers all 8 VirtIO slots)
-    root_table.identity_map(0x1000_0000, 0x1001_0000, mmio_flags, &mut alloc_fn)
-        .map_err(|_| PageTableError::OutOfMemory)?;
+    #[cfg(target_arch = "riscv64")]
+    {
+        // QEMU riscv64 virt MMIO layout:
+        //   0x0200_0000: CLINT  0x0C00_0000: PLIC  0x1000_0000: UART/VirtIO
+        root_table.identity_map(0x0200_0000, 0x0201_0000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
+        root_table.identity_map(0x0C00_0000, 0x1000_0000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
+        root_table.identity_map(0x1000_0000, 0x1001_0000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        // QEMU aarch64 virt — map only the peripherals the kernel actually touches.
+        // Cell ELFs may load at any VA not covered by these identity maps.
+        //
+        // GIC (0x0800_0000..0x0900_0000) is intentionally NOT mapped here:
+        // the generic timer and external IRQs are disabled for the initial ARM64
+        // bring-up, so vi_aarch64_irq_handler is never entered and GIC registers
+        // are never accessed.  Omitting this range frees 0x0800_0000 for cell ELFs.
+        //
+        //   0x0900_0000–0x0900_1000 : PL011 UART (console output)
+        //   0x0900_3000–0x0900_4000 : PL061 GPIO (peripheral tests)
+        //   0x0A00_0000–0x0A00_4000 : VirtIO ARM64 (32 slots × 0x200)
+        //   0x1000_0000–0x1001_0000 : RISC-V VirtIO probe range (virtio_blk/net
+        //                             still probe 0x1000_1000 — map to avoid Data Abort)
+        root_table.identity_map(0x0900_0000, 0x0900_4000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
+        root_table.identity_map(0x0A00_0000, 0x0A00_4000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
+        root_table.identity_map(0x1000_0000, 0x1001_0000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
+    }
 
     puts("TRACE: MMIO regions mapped\n");
 
@@ -222,18 +243,35 @@ pub unsafe fn activate_paging(root_table_phys: PhysAddr) {
 /// changes after boot so reading satp without the KERNEL_ROOT lock is correct.
 pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
     use hal::traits::PageTableTrait;
-    // SAFETY: `satp` CSR holds the page-table root PPN (bits 43:0 in Sv39 mode).
-    // We only read it here; no write, so no ordering concern.
-    let satp: usize;
-    unsafe { core::arch::asm!("csrr {}, satp", out(reg) satp) };
-    // Sv39 PPN field is bits 43:0 of satp; shift left by 12 to get PA.
-    let root_ppn = satp & ((1 << 44) - 1);
-    let root_phys = root_ppn << 12;
-    if root_phys == 0 { return None; }
-    // SAFETY: root_phys is the physical address of the active root PageTable;
-    // valid and stable for the kernel's lifetime after `init_kernel_paging`.
-    let root_table = unsafe { &*(root_phys as *const hal::PageTable) };
-    root_table.translate(vaddr)
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        // SAFETY: `satp` CSR holds the page-table root PPN (bits 43:0 in Sv39 mode).
+        // We only read it here; no write, so no ordering concern.
+        let satp: usize;
+        unsafe { core::arch::asm!("csrr {}, satp", out(reg) satp) };
+        // Sv39 PPN field is bits 43:0 of satp; shift left by 12 to get PA.
+        let root_ppn = satp & ((1 << 44) - 1);
+        let root_phys = root_ppn << 12;
+        if root_phys == 0 { return None; }
+        // SAFETY: root_phys is the physical address of the active root PageTable;
+        // valid and stable for the kernel's lifetime after `init_kernel_paging`.
+        let root_table = unsafe { &*(root_phys as *const hal::PageTable) };
+        return root_table.translate(vaddr);
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: TTBR0_EL1 holds the root page table physical address written
+        // by activate_paging(). Valid and stable after boot.
+        let ttbr0: usize;
+        unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack)) };
+        let root_phys = ttbr0 & !0xFFF; // mask off ASID/flags in bits [63:48] and [11:0]
+        if root_phys == 0 { return None; }
+        let root_table = unsafe { &*(root_phys as *const hal::PageTable) };
+        return root_table.translate(vaddr);
+    }
+    #[allow(unreachable_code)]
+    None
 }
 
 /// Unmap a virtual page in the kernel address space (clears the PTE).

@@ -25,6 +25,7 @@ pub mod virtio_blk;
 pub mod virtio_gpu;
 pub mod virtio_input;
 pub mod virtio_net;
+pub mod virtio_rng;
 
 /// Initialize drivers subsystem
 ///
@@ -43,4 +44,7 @@ pub fn init() {
     virtio_blk::init_driver(); // VirtIO block — GPU probe hang fixed via mem::forget
     virtio_net::init_driver(); // VirtIO NIC — backs the net service cell
     virtio_gpu::init_driver();
+    // VirtIO RNG init deferred: full MMIO probe hangs on RISC-V when probing
+    // already-claimed slots (block/net). The no-op stub is sufficient until a
+    // safe probe strategy is implemented (skip slots claimed by other drivers).
 }

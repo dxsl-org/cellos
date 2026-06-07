@@ -66,17 +66,12 @@ struct DirectWriter;
 
 impl fmt::Write for DirectWriter {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        // 1. SBI Output
         for c in s.bytes() {
-            let _ = crate::hal::sbi::console_putchar(c);
+            #[cfg(target_arch = "riscv64")]
+            { let _ = crate::hal::sbi::console_putchar(c); }
+            #[cfg(target_arch = "aarch64")]
+            { crate::hal::uart_pl011::putchar(c); }
         }
-        
-        // 2. Framebuffer Output (Protected internally)
-        // if !s.is_empty() {
-        //      crate::task::drivers::fb_console::FramebufferConsole::write_str(s);
-        // }
-        // TRACE:
-        let _ = crate::hal::sbi::console_putchar(b'.' as u8);
         Ok(())
     }
 }
@@ -103,9 +98,13 @@ impl log::Log for SimpleLogger {
 static LOGGER: SimpleLogger = SimpleLogger;
 
 pub fn init() {
+    // 16550 hardware init only on RISC-V (the base address 0x10000000 is the
+    // RISC-V QEMU UART; on ARM64 the logger uses PL011 via DirectWriter instead).
+    #[cfg(target_arch = "riscv64")]
     SERIAL.lock().init();
 
-    // Initialize Logger
+    // Register the log backend (works on all architectures; DirectWriter routes
+    // to the correct UART per target_arch inside write_str).
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Info));
 }
 

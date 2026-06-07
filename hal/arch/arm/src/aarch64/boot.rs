@@ -40,6 +40,12 @@ _start:
     eret
 
 .el1_entry:
+    // Enable FP/SIMD in EL1 and EL0 (CPACR_EL1.FPEN = 0b11).
+    // Without this, any FP/SIMD instruction traps with EC=0x07.
+    mov x0, #(3 << 20)
+    msr cpacr_el1, x0
+    isb
+
     // Set up initial stack at __stack_top (defined in linker script).
     adrp x0, __stack_top
     add  x0, x0, :lo12:__stack_top

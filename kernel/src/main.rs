@@ -13,6 +13,7 @@ use core::panic::PanicInfo;
 pub mod audit;
 pub mod boot;
 pub mod cell;
+pub mod resource_registry;
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
 pub mod loader;
@@ -21,11 +22,10 @@ pub mod snapshot;
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
-// // use api::block::ViBlockDevice;
-use api::posix::_putchar;
-// use api::posix::puts;
 use boot::BootInfo;
 use hal::Arch;
+#[cfg(target_arch = "riscv64")]
+use api::posix::_putchar;
 
 // Internal utilities
 mod sync;
@@ -42,15 +42,21 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let _hartid = hartid;
     let _dtb = dtb;
     // 0. Initialize UART immediately for early logging
+    #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init();
+    #[cfg(target_arch = "aarch64")]
+    crate::hal::uart_pl011::init();
 
     // 1. Initialize HAL (Architecture specific) - Early Trap Setup
     hal::ARCH.init();
 
-    // Define puts helper using imported _putchar
+    // Define puts helper — arch-specific character output.
     let puts = |s: &str| {
         for c in s.bytes() {
+            #[cfg(target_arch = "riscv64")]
             unsafe { _putchar(c as u8); }
+            #[cfg(target_arch = "aarch64")]
+            crate::hal::uart_pl011::putchar(c);
         }
     };
 
@@ -147,11 +153,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 16 MB gives plenty of room for the RAM-disk copy + all kernel data structures
     // (BTreeMaps for tasks, capabilities, page table frames, etc.).
     // 32 MB = 8 192 frames of 4 KB each.  Sized to hold simultaneously:
-    //   - the embedded RAM disk copy (kernel_fs.img, ~8 MB with lua + python)
+    //   - the embedded RAM disk copy (kernel_fs.img, ~4 MB)
     //   - the VirtIO GPU framebuffer (1280×800×4 ≈ 4 MB)
     //   - cell ELFs loaded via SpawnFromPath + kernel structures
-    // 16 MB was too tight once lua + python entered kernel_fs.img (GPU
-    // framebuffer alloc OOM'd, hanging the boot at the GPU probe).
     // 128 MB QEMU instances have ample room for a 32 MB heap.
     const HEAP_FRAMES: usize = 8_192;
     let heap_start = {
@@ -199,7 +203,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 6. Logger & Drivers & FS
     puts("TRACE: init drivers::uart\n");
-    task::drivers::uart::init();
+    task::drivers::uart::init(); // registers log backend on all arches
+    #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init_input(); // Initialize RX buffer
     puts("TRACE: init drivers\n");
     task::drivers::init();
@@ -237,9 +242,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 8. Spawn Embedded Init
     log_info("Spawning Embedded Init...");
     
-    // Enable SUM (Supervisor User Memory access) bit in sstatus (bit 18 = 0x40000)
-    // This allows the Kernel (S-mode) to access User (U-mode) pages, which is required
-    // when writing the initial stack for the new process.
+    // Enable SUM (Supervisor User Memory access) bit in sstatus (RISC-V only).
+    // ARM64 EL1 can always access EL0 pages — no equivalent bit needed.
+    #[cfg(target_arch = "riscv64")]
     unsafe {
         core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
     }
@@ -261,7 +266,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 
     // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
+    // RISC-V only — task writes RISC-V machine code directly.
     // Expected serial output: "Hi from U-mode!\n" followed by task exit.
+    #[cfg(target_arch = "riscv64")]
     match task::user_hello::spawn() {
         Ok(tid) => {
             puts("[task] spawning user_hello at ");
@@ -284,12 +291,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 9. Start multitasking
     log_info("Starting scheduler...");
 
-    // Ensure SPP bit is set in sstatus so that context switch saves it as Supervisor Mode.
-    // ENABLE Interrupts (SIE=1) now that we are ready to handle them!
-    // We used to disable (0x100) but now we want to test PLIC.
-    // sstatus = 0x102 (SPP=1, SIE=1)
+    // Enable interrupts before entering the idle loop.
+    // RISC-V: set SPP=1 and SIE=1 in sstatus (0x102).
+    // AArch64: clear DAIF.I bit to unmask IRQs.
+    #[cfg(target_arch = "riscv64")]
     unsafe {
         core::arch::asm!("csrs sstatus, {0}", in(reg) 0x102);
+    }
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        core::arch::asm!("msr daifclr, #2", options(nomem, nostack));
     }
 
     loop {
@@ -324,27 +335,36 @@ fn panic(info: &PanicInfo) -> ! {
     }
 
     // True kernel panic: print diagnostics and halt.
-    let puts = |s: &str| {
-        for c in s.bytes() {
-            let _ = crate::hal::sbi::console_putchar(c);
-        }
-    };
+    #[inline(always)]
+    fn panic_putchar(c: u8) {
+        #[cfg(target_arch = "riscv64")]
+        { let _ = crate::hal::sbi::console_putchar(c); }
+        #[cfg(target_arch = "aarch64")]
+        { crate::hal::uart_pl011::putchar(c); }
+    }
+    let puts = |s: &str| { for c in s.bytes() { panic_putchar(c); } };
     puts("\n[KERNEL PANIC] ");
     puts("Critical failure.\n");
     use core::fmt::Write;
     struct PanicWriter;
     impl core::fmt::Write for PanicWriter {
         fn write_str(&mut self, s: &str) -> core::fmt::Result {
-            for c in s.bytes() { let _ = crate::hal::sbi::console_putchar(c); }
+            #[inline(always)]
+            fn pw(c: u8) {
+                #[cfg(target_arch = "riscv64")]
+                { let _ = crate::hal::sbi::console_putchar(c); }
+                #[cfg(target_arch = "aarch64")]
+                { crate::hal::uart_pl011::putchar(c); }
+            }
+            for c in s.bytes() { pw(c); }
             Ok(())
         }
     }
     let _ = write!(PanicWriter, "{}\n", info);
 
-    // A dead kernel must come back up, not freeze — a frozen robot is unrecoverable
-    // without physical intervention. Request a cold reboot via SBI SRST. If the
-    // firmware lacks SRST, system_reset returns and we fall back to halting.
-    puts("[KERNEL PANIC] rebooting...\n");
+    // Reboot or spin: RISC-V uses SBI SRST, ARM64 spins (PSCI stub).
+    puts("[KERNEL PANIC] halting...\n");
+    #[cfg(target_arch = "riscv64")]
     crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
-    loop { hal::ARCH.wait_for_interrupt(); }
+    loop { unsafe { core::arch::asm!("wfi", options(nomem, nostack)); } }
 }
