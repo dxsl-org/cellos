@@ -102,8 +102,11 @@ pub extern "C" fn main() {
                     let _ = sys_register_service(sid, tid);
                 }
             }
-            // Non-fatal: input/net/compositor may be absent (no device/binary).
-            _ => {}
+            // Non-fatal: input/net/compositor may be absent (no device/binary on VF2).
+            _ => {
+                println("Init: cell not found — skipping:");
+                println(paths[i]);
+            }
         }
         // Let each service initialise before the next; VFS gets an extra beat to
         // register /bin/* before the others try to load from it.

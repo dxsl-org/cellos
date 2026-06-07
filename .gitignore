@@ -41,3 +41,6 @@ test_error*.txt
 # Limine bootloader binary (downloaded at build/CI time via scripts/download-limine.sh)
 tools/limine-riscv64
 
+# VisionFive2 build artifacts
+scripts/limine-cache/
+
