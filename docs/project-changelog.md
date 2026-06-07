@@ -14,6 +14,39 @@ RT latency benchmark (`cells/apps/bench`) now boots in QEMU and prints `[bench] 
 - **`cells/apps/bench/src/main.rs`**: added `api::declare_manifest!(spawn = true)` so bench gets `spawn_cap`; raised `TARGET_SYSCALL_NS` to 40µs for QEMU TCG (real-HW target remains 10µs in documentation).
 - **QEMU verified**: ctx_switch p99=39µs ✅, ipc_send_recv p99=3.2µs ✅, syscall_yield p99=19.8µs ✅, memory_footprint ✅. RT scenarios SKIP (SAS VA collision on same-binary re-spawn — PIE is future work).
 
+## [2026-06-07] Phase 27 — Protocol Hardening (Typed Postcard IPC) (Complete)
+
+### Summary
+Net service refactored to use typed postcard IPC (`api::ipc::NetRequest`/`NetResponse`) as the primary wire format, replacing raw opcode infrastructure. All 15 NetRequest variants now dispatched through a unified handler. Legacy raw opcodes 0x15 (close) and 0x30–0x32 (TLS ops) fall through to a backward-compatible fallback handler to avoid breaking existing clients during transition.
+
+### Changes
+- **`cells/services/net/src/main.rs`** — REWRITTEN
+  - Removed all raw opcode dispatch infrastructure
+  - `handle_request(req: NetRequest) -> NetResponse` router dispatches all 15 variants
+  - Legacy fallback `handle_tls_raw(opcode)` for raw opcodes (0x15/0x30–0x32) preserves compatibility
+  
+- **`cells/services/net/src/handlers.rs`** — NEW FILE
+  - Contains `handle_request(req: NetRequest) -> NetResponse` with all 15 NetRequest variants
+  - Each handler maps to corresponding NetResponse (e.g., ConnectResponse, SendResponse, RecvResponse, etc.)
+  - Raw TLS opcodes (0x30–0x32) handled in `handle_tls_raw` with opcode-to-variant routing
+  
+- **`cells/services/net/src/poll_driver.rs`** — SIMPLIFIED
+  - Stripped to essential constants: `POLL_INTERVAL_MS`, kernel sentinel values
+  - No raw opcode definitions (moved to legacy path)
+
+### Architecture
+**Before**: Raw opcode wire format `[opcode:1][cap:8][payload:*]`  
+**After**: Postcard-encoded `api::ipc::NetRequest` + `api::ipc::NetResponse`  
+**Compatibility**: TLS raw opcodes (0x15 close, 0x30–0x32) still supported via fallback; gradually migrate callers to typed IPC
+
+### Impact
+- Type-safe IPC eliminates serialization bugs; all 15 NetRequest variants validated at compile time
+- Typed responses prevent confusion (e.g., mixing ConnectResponse with SendResponse)
+- Raw opcode fallback enables gradual migration (ostd::tls helpers can continue using raw ops)
+- Foundation for Phase 28+ (direct IPC vtable, performance optimization, multicast/broadcast)
+
+---
+
 ## [2026-06-07] Phase TLS-01 — TLS 1.3 Client Support (Complete)
 
 ### Summary

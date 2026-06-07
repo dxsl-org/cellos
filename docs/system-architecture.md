@@ -345,18 +345,29 @@ pub trait ViBlockDevice {
 }
 ```
 
-### Networking (`ViTcpStack`, `ViTcpStream`, TLS)
+### Networking (`ViTcpStack`, `ViTcpStream`, Typed IPC, TLS)
 ```rust
 pub trait ViTcpStack {
     async fn listen(&self, addr: &str, port: u16) -> ViResult<Box<dyn ViTcpListener>>;
     async fn connect(&self, addr: &str, port: u16) -> ViResult<Box<dyn ViTcpStream>>;
 }
 
-// TLS 1.3 Client (Phase TLS-01)
-// IPC Opcodes in net service:
-// - TLS_CONNECT (0x30): [addr:4 LE][port:2 LE][hostname:*] → [cap_id:8 LE]
-// - TLS_SEND (0x31): [data:*] → [bytes_written:4 LE]
-// - TLS_RECV (0x32): [max_len:4 LE] → [decrypted_data:*]
+// Primary IPC Format (Phase 27 — Protocol Hardening)
+// Net service now uses typed postcard IPC as primary wire format:
+// - NetRequest enum: CreateSocket, Connect, Bind, Send, Recv, Close, Listen, Accept, TlsConnect, TlsSend, TlsRecv, GetSocketState, etc. (15 variants)
+// - NetResponse enum: SocketCreated, Connected, Bound, DataSent, DataReceived, SocketClosed, etc.
+// - All variants type-checked at kernel dispatch; prevents serialization bugs and type confusion
+
+// TLS 1.3 Client (Phase TLS-01) — typed + raw-opcode fallback
+// Typed path (primary):
+//   - NetRequest::TlsConnect { host, port, hostname } → NetResponse::TlsConnected { cap_id }
+//   - NetRequest::TlsSend { cap_id, data } → NetResponse::TlsDataSent { bytes_written }
+//   - NetRequest::TlsRecv { cap_id, max_len } → NetResponse::TlsDataReceived { data }
+//
+// Raw fallback (legacy, for backward compatibility with ostd::tls helpers):
+//   - TLS_CONNECT (0x30): [addr:4 LE][port:2 LE][hostname:*] → [cap_id:8 LE]
+//   - TLS_SEND (0x31): [data:*] → [bytes_written:4 LE]
+//   - TLS_RECV (0x32): [max_len:4 LE] → [decrypted_data:*]
 ```
 
 ### Drivers (`ViDriver`)
