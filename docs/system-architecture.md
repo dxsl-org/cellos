@@ -509,15 +509,17 @@ Contrast with ViUI v1 (Elm): every button click → rebuild all 20 widgets → l
 ### Crate Layout
 
 ```
-tools/vi-compiler/  (std, build tool)     — .vi parser, Slint expr evaluator, codegen
-tools/viui-build/   (std, build-dep) ✅   — build.rs integration wrapper (P05 complete)
-viui-macros/        (proc_macro)          — vi_design!{} for inline prototype use
-viui-core/          (no_std + alloc)      — Signal<T>, LayoutNode, DirtyRect, ViRenderer trait
-viui-widgets/       (no_std + alloc)      — typed widget structs (Layer 2 API)
-viui/               (no_std, umbrella)    — re-exports all above
+tools/vi-compiler/     (std, build tool)     — .vi parser, Slint expr evaluator, codegen
+tools/viui-build/      (std, build-dep) ✅   — build.rs integration wrapper (P05 complete)
+libs/viui-macros/      (proc_macro) ✅       — vi_design!{} for inline prototype use (P06 complete)
+libs/viui-core/        (no_std + alloc)      — Signal<T>, LayoutNode, DirtyRect, ViRenderer trait
+libs/viui-widgets/     (no_std + alloc)      — typed widget structs (Layer 2 API)
+libs/viui/             (no_std, umbrella) ✅ — re-exports all above + viui_macros (P06 complete)
 ```
 
 **P05 Build Integration** (2026-06-08): `tools/viui-build/` wraps vi-compiler; cells use `build.rs` → `viui_build::compile(glob)` → `include!()` generated Rust. Demo Cell (`cells/apps/viui-demo/`) validated end-to-end. Workspace `exclude` separates compiler from kernel/cells for independent versioning.
+
+**P06 Proc Macro** (2026-06-08): `libs/viui-macros/` ships with `vi_design!` macro for inline component prototyping. `libs/viui` re-exports both paths (build.rs + macro); users import once, use both. Codegen redesigned to wrap each component in `mod __vi_generated_<Name>` to prevent symbol collisions.
 
 Design brief: [.agents/brainstorms/260608-viui-nextgen-architecture.md](.agents/brainstorms/260608-viui-nextgen-architecture.md)
 

@@ -4,6 +4,68 @@
 
 ---
 
+## [2026-06-08] ViUI v2 P06 — Proc Macro + Module Wrapping (viui-macros + Codegen Redesign)
+
+### Summary
+Completed ViUI v2 Phase 06: introduced `libs/viui-macros/` proc_macro crate with `vi_design!` macro for inline component prototyping, and redesigned `tools/vi-compiler/src/codegen.rs` to wrap each generated component in a dedicated module (`mod __vi_generated_<Name>`) to prevent duplicate import conflicts. Both build.rs (Phase 05) and proc_macro (Phase 06) paths now coexist: build.rs for hot-reload CLI workflows, proc_macro for rapid prototyping in Rust code.
+
+### Changes
+- **`libs/viui-macros/`** — NEW proc_macro crate
+  - `Cargo.toml`: `[lib] proc-macro = true`, dependencies: `proc_macro2`, `quote`, `syn`
+  - `src/lib.rs`: `vi_design!` macro parses `.vi` DSL input string, invokes vi-compiler internally, returns compiled Rust as `TokenStream`
+  - Macro signature: `vi_design!(r#"component Foo { ... }"#) -> impl ViComponent`
+  - Enables inline prototyping: `let app = vi_design!(r#"..."#);` compiles immediately without build.rs
+
+- **`libs/viui/Cargo.toml`** — updated
+  - Added `pub use viui_macros::vi_design;` re-export so users need only one dep (`api = { features = ["viui"] }`)
+  - New feature `macros` (default true) enables proc_macro re-export
+
+- **`tools/vi-compiler/src/codegen.rs`** — REDESIGNED module wrapping
+  - Each component now wrapped in `mod __vi_generated_<ComponentName> { ... }`
+  - Prevents duplicate symbol conflicts when same component is generated twice (build.rs + proc_macro, or multiple build.rs calls)
+  - Generated code structure:
+    ```rust
+    mod __vi_generated_Counter {
+        // Private implementation
+        struct Counter { count: Signal<i32> }
+        impl ViComponent for Counter { ... }
+    }
+    // Public re-export
+    pub use __vi_generated_Counter::Counter;
+    ```
+  - `viui-demo` Counter component still works: build.rs path unchanged, generated to `OUT_DIR`
+
+- **`cells/apps/viui-demo/`** — verified
+  - Counter.vi still compiles via build.rs → OUT_DIR → include!()
+  - Module wrapping is transparent to consumers
+
+### Architecture
+- **Dual compilation paths now fully functional**:
+  - **CLI (build.rs)**: `viui_build::compile("src/**/*.vi")` in build.rs → code-gen in OUT_DIR → include!() in main.rs (hot-reload workflow)
+  - **Macro (proc_macro)**: `vi_design!(r#"..."#)` inline in Rust source → immediate expansion (prototyping workflow)
+- **Module isolation**: Each generated component in its own `mod __vi_generated_*` prevents symbol collisions
+- **Single dependency**: `libs/viui` re-exports both paths; users import once, use both
+
+### Files Created
+- `libs/viui-macros/Cargo.toml` — proc_macro crate manifest
+- `libs/viui-macros/src/lib.rs` — vi_design! macro implementation
+
+### Files Modified
+- `libs/viui/Cargo.toml` — added viui-macros dep, re-export
+- `tools/vi-compiler/src/codegen.rs` — module wrapping logic
+- `cells/apps/viui-demo/src/main.rs` — no changes (transparent upgrade)
+
+### Impact
+- **P06 complete**: both build.rs and proc_macro paths shipping together
+- Developers can now choose: hot-reload CLI for iteration, or inline macros for rapid prototyping
+- No symbol conflicts: each generated component is namespace-isolated
+- Single import path: `use api::vi_design;` or `use viui::vi_design;` covers both
+- **Unblocks P07** (but P06 marks end of ViUI v2 core; P07 would be ecosystem/examples/docs)
+
+**Status**: Complete. Macro compiles cleanly; viui-macros + codegen redesign verified. ViUI v2 v1.0-ready for G2 applications.
+
+---
+
 ## [2026-06-08] ViUI v2 P05 — Build Integration (viui-build Crate + viui-demo Cell)
 
 ### Summary

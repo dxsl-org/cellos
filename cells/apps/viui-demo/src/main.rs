@@ -4,21 +4,34 @@
 extern crate alloc;
 extern crate ostd;
 
-// Include the Rust source generated from counter.vi by viui-build.
+// ── Path 1: build.rs  ────────────────────────────────────────────────────────
+// Counter component generated from counter.vi by viui-build → OUT_DIR/counter.rs
 include!(concat!(env!("OUT_DIR"), "/counter.rs"));
+
+// ── Path 2: inline proc macro ────────────────────────────────────────────────
+// Hello component declared directly; vi_design! runs vi-compiler at compile time.
+use viui::vi_design;
+vi_design!(r#"
+component Hello {
+    VerticalLayout {
+        padding: 8px;
+        Text { text: "Hello, ViUI!"; color: #aaffaa; }
+    }
+}
+"#);
 
 api::declare_syscalls![Log];
 
 #[no_mangle]
 pub fn main() {
-    ostd::io::println("[viui-demo] build.rs pipeline verified");
-
-    // Construct the reactive widget tree from the generated component.
-    let (state, _root) = Counter::build();
-
-    // Verify Signal reactivity — increment count.
+    // build.rs generated component
+    let (state, _counter_ui) = Counter::build();
     state.count.update(|n| *n += 1);
+    ostd::io::println("[viui-demo] Counter (build.rs) OK");
 
-    ostd::io::println("[viui-demo] Counter signal OK");
+    // inline proc macro component
+    let (_hello_state, _hello_ui) = Hello::build();
+    ostd::io::println("[viui-demo] Hello (vi_design!) OK");
+
     ostd::syscall::sys_exit(0);
 }

@@ -1,0 +1,12 @@
+[package]
+name = "viui-macros"
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+description = "vi_design! proc macro — inline .vi DSL for ViUI v2"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+vi-compiler = { path = "../../tools/vi-compiler" }
