@@ -57,19 +57,36 @@ impl GpuCmd {
     }
 }
 
+// ─── RecordedCmd ─────────────────────────────────────────────────────────────
+
+/// A `GpuCmd` with its bounding rect pre-computed at record time.
+///
+/// `bounds` mirrors `GpuCmd::bounding_rect()` but is evaluated once in
+/// `GpuCommandBuffer::push()` so the executor reads a stored field instead
+/// of recomputing it every frame.
+pub struct RecordedCmd {
+    pub cmd:    GpuCmd,
+    pub bounds: Option<Rect>,
+}
+
 // ─── GpuCommandBuffer ────────────────────────────────────────────────────────
 
 /// Ordered list of draw commands recorded during one paint pass.
 pub struct GpuCommandBuffer {
-    cmds: Vec<GpuCmd>,
+    cmds: Vec<RecordedCmd>,
 }
 
 impl GpuCommandBuffer {
     pub fn new() -> Self { Self { cmds: Vec::new() } }
 
-    pub fn push(&mut self, cmd: GpuCmd) { self.cmds.push(cmd); }
+    /// Append a command, pre-computing its bounding rect once at record time.
+    pub fn push(&mut self, cmd: GpuCmd) {
+        let bounds = cmd.bounding_rect();
+        self.cmds.push(RecordedCmd { cmd, bounds });
+    }
 
-    pub fn as_slice(&self) -> &[GpuCmd] { &self.cmds }
+    /// Iterate recorded commands with pre-computed bounds.
+    pub fn recorded_slice(&self) -> &[RecordedCmd] { &self.cmds }
 
     pub fn len(&self) -> usize { self.cmds.len() }
 

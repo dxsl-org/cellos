@@ -12,7 +12,7 @@
 //! missing pixels. `GpuCmd::bounding_rect()` always over-estimates.
 
 use crate::canvas::{FramebufferCanvas, ViCanvas};
-use crate::gpu_cmd::{GpuCmd, GpuCommandBuffer};
+use crate::gpu_cmd::{GpuCmd, GpuCommandBuffer, RecordedCmd};
 use crate::layout::Rect;
 use ostd::display::ViSurface;
 
@@ -48,11 +48,11 @@ impl CommandExecutor for CpuExecutor {
         let pixels = self.surf.pixels_mut();
         let mut canvas = FramebufferCanvas::new(pixels, stride, w, h);
 
-        for cmd in buf.as_slice() {
-            // Skip command if its bounding rect doesn't touch the damage area.
+        for RecordedCmd { cmd, bounds } in buf.recorded_slice() {
+            // Skip command if its pre-computed bounding rect misses the damage area.
             if let Some(damage_rect) = damage {
-                if let Some(bounds) = cmd.bounding_rect() {
-                    if !bounds.intersects(damage_rect) {
+                if let Some(b) = bounds {
+                    if !b.intersects(damage_rect) {
                         continue;
                     }
                 }
@@ -66,6 +66,10 @@ impl CommandExecutor for CpuExecutor {
                     canvas.draw_text(*pos, text, *style),
                 GpuCmd::DrawImage { dest, pixels, src_stride } =>
                     canvas.draw_image(*dest, pixels, *src_stride),
+                GpuCmd::DrawTextShort { pos, bytes, len, style } => {
+                    let text = core::str::from_utf8(&bytes[..*len as usize]).unwrap_or("");
+                    canvas.draw_text(*pos, text, *style);
+                }
             }
         }
 

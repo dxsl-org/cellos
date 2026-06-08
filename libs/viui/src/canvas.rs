@@ -138,12 +138,14 @@ const CLIP_STACK_DEPTH: usize = 16;
 /// `'fb` ties the canvas to the caller's borrow of the compositor surface buffer.
 /// `stride` must be `>= width * 4`; mismatches cause silent pixel corruption.
 pub struct FramebufferCanvas<'fb> {
-    pixels:     &'fb mut [u8],
-    stride:     u32,
-    width:      u32,
-    height:     u32,
-    clip_stack: [Rect; CLIP_STACK_DEPTH],
-    clip_depth: usize,
+    pixels:       &'fb mut [u8],
+    stride:       u32,
+    width:        u32,
+    height:       u32,
+    clip_stack:   [Rect; CLIP_STACK_DEPTH],
+    clip_depth:   usize,
+    // Integer (x0,y0,x1,y1) shadow of clip_stack — avoids f32 casts in put_pixel hot path.
+    clip_stack_i: [(i32, i32, i32, i32); CLIP_STACK_DEPTH],
 }
 
 impl<'fb> FramebufferCanvas<'fb> {
@@ -151,7 +153,9 @@ impl<'fb> FramebufferCanvas<'fb> {
         let full = Rect { x: 0.0, y: 0.0, w: width as f32, h: height as f32 };
         let mut clip_stack = [Rect::default(); CLIP_STACK_DEPTH];
         clip_stack[0] = full;
-        Self { pixels, stride, width, height, clip_stack, clip_depth: 0 }
+        let mut clip_stack_i = [(0i32, 0i32, 0i32, 0i32); CLIP_STACK_DEPTH];
+        clip_stack_i[0] = (0, 0, width as i32, height as i32);
+        Self { pixels, stride, width, height, clip_stack, clip_depth: 0, clip_stack_i }
     }
 
     #[inline]
@@ -163,9 +167,9 @@ impl<'fb> FramebufferCanvas<'fb> {
         if x < 0 || y < 0 { return; }
         let (px, py) = (x as u32, y as u32);
         if px >= self.width || py >= self.height { return; }
-        let clip = self.clip_stack[self.clip_depth];
-        if (px as f32) < clip.x || (px as f32) >= clip.x + clip.w { return; }
-        if (py as f32) < clip.y || (py as f32) >= clip.y + clip.h { return; }
+        let (cx0, cy0, cx1, cy1) = self.clip_stack_i[self.clip_depth];
+        if (px as i32) < cx0 || (px as i32) >= cx1 { return; }
+        if (py as i32) < cy0 || (py as i32) >= cy1 { return; }
         let off = (py * self.stride + px * 4) as usize;
         if off + 3 >= self.pixels.len() { return; }
         // u32 load: LLVM emits single LDR on aligned targets
@@ -365,6 +369,12 @@ impl<'fb> ViCanvas for FramebufferCanvas<'fb> {
         if self.clip_depth + 1 < CLIP_STACK_DEPTH {
             self.clip_depth += 1;
             self.clip_stack[self.clip_depth] = new_clip;
+            self.clip_stack_i[self.clip_depth] = (
+                new_clip.x as i32,
+                new_clip.y as i32,
+                (new_clip.x + new_clip.w) as i32,
+                (new_clip.y + new_clip.h) as i32,
+            );
         }
     }
 
