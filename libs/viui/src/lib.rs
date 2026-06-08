@@ -36,6 +36,8 @@ extern crate alloc;
 
 pub mod animation;
 pub mod app_runner;
+pub mod input_bridge;
+pub mod surface_renderer;
 pub mod canvas;
 pub mod dirty;
 pub mod elm;

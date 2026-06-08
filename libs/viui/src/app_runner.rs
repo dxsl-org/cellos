@@ -40,13 +40,53 @@ use core::cell::RefCell;
 
 use crate::animation::Animatable;
 use crate::dirty::{DirtyRect, DirtyRegion};
-use crate::event::Event;
+use crate::event::{Event, KeyCode, Modifiers};
 use crate::font_context::FontContext;
 use crate::layout::{Constraints, Size};
 use crate::node::ViNode;
 use crate::render_ctx::RenderCtx;
 use crate::renderer::ViRenderer;
 use crate::signal::SubscriptionHandle;
+
+// ─── Key repeat ──────────────────────────────────────────────────────────────
+
+/// Delay before the first software repeat fires (milliseconds).
+const KEY_REPEAT_DELAY_MS: u64 = 500;
+
+/// Interval between subsequent software repeat events (milliseconds).
+const KEY_REPEAT_INTERVAL_MS: u64 = 50;
+
+/// Tracks which key is currently held for software key-repeat injection.
+///
+/// # Hardware vs software repeat
+/// The input service already sends `state=Repeated` events for hardware
+/// auto-repeat (see `api::input::KeyState::Repeated`). `input_bridge::parse_input_message`
+/// treats those identically to `Pressed`, so hardware repeat already works without
+/// this struct. `KeyRepeatState` provides *software* repeat for platforms that do NOT
+/// forward hardware repeat (serial consoles, touch keyboards, synthetic input in tests).
+/// When hardware repeat arrives it naturally resets `held_ms` via the Pressed arm, so
+/// the two paths do not fight.
+struct KeyRepeatState {
+    /// The key currently held, or `None` when no key is pressed.
+    held_key:  Option<KeyCode>,
+    /// Modifier state captured at the moment the key was pressed.
+    held_mods: Modifiers,
+    /// Accumulated milliseconds since the key was first pressed (reset on new press).
+    held_ms:   u64,
+    /// Accumulated milliseconds since the last repeat event fired (reset on each fire).
+    since_last_ms: u64,
+}
+
+impl KeyRepeatState {
+    const fn new() -> Self {
+        Self {
+            held_key:      None,
+            held_mods:     Modifiers { shift: false, ctrl: false, alt: false },
+            held_ms:       0,
+            since_last_ms: 0,
+        }
+    }
+}
 
 /// Tick-based app runner.
 ///
@@ -61,6 +101,8 @@ pub struct ViApp {
     dirty_region:  DirtyRegion,
     dirty_handles: Vec<SubscriptionHandle>,
     layout_dirty:  bool,
+    /// Software key-repeat state. See `KeyRepeatState` for rationale.
+    key_repeat:    KeyRepeatState,
 }
 
 impl ViApp {
@@ -72,11 +114,12 @@ impl ViApp {
         Self {
             root,
             renderer,
-            font_ctx:     FontContext::no_font(),
-            animations:   Vec::new(),
+            font_ctx:      FontContext::no_font(),
+            animations:    Vec::new(),
             dirty_region,
             dirty_handles: Vec::new(),
             layout_dirty:  true,
+            key_repeat:    KeyRepeatState::new(),
         }
     }
 
@@ -124,7 +167,45 @@ impl ViApp {
 
         // ── Process input events ──────────────────────────────────────────────
         for e in events {
+            // Track held key for software repeat injection (see KeyRepeatState).
+            match e {
+                Event::KeyPress { key, modifiers } => {
+                    self.key_repeat.held_key      = Some(*key);
+                    self.key_repeat.held_mods     = *modifiers;
+                    self.key_repeat.held_ms       = 0;
+                    self.key_repeat.since_last_ms = 0;
+                }
+                Event::KeyRelease { .. } => {
+                    self.key_repeat.held_key = None;
+                }
+                _ => {}
+            }
             if self.root.event(e) { self.layout_dirty = true; }
+        }
+
+        // ── Software key-repeat injection ─────────────────────────────────────
+        // Only runs when time is advancing (dt_ms > 0) and a key is held.
+        // Platforms that send hardware repeat events (api::input::KeyState::Repeated)
+        // already inject repeats via input_bridge, so this path fires only when
+        // held_ms crosses the thresholds without hardware-repeat interruption.
+        if dt_ms > 0 {
+            if let Some(key) = self.key_repeat.held_key {
+                self.key_repeat.held_ms       += dt_ms as u64;
+                self.key_repeat.since_last_ms += dt_ms as u64;
+
+                if self.key_repeat.held_ms >= KEY_REPEAT_DELAY_MS
+                    && self.key_repeat.since_last_ms >= KEY_REPEAT_INTERVAL_MS
+                {
+                    self.key_repeat.since_last_ms = 0;
+                    let repeat_event = Event::KeyPress {
+                        key,
+                        modifiers: self.key_repeat.held_mods,
+                    };
+                    if self.root.event(&repeat_event) {
+                        self.layout_dirty = true;
+                    }
+                }
+            }
         }
 
         // ── Path A: structural change → full layout + re-subscribe ────────────

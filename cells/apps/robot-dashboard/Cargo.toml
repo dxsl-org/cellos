@@ -1,0 +1,13 @@
+[package]
+name    = "robot-dashboard"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "robot-dashboard"
+path = "src/main.rs"
+
+[dependencies]
+viui = { path = "../../../libs/viui" }
+ostd = { path = "../../../libs/ostd" }
+api  = { path = "../../../libs/api" }

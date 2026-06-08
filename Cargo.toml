@@ -67,6 +67,7 @@ members = [
     "cells/apps/https-demo",
     "cells/apps/test-isolation",
     "cells/apps/viui-demo",
+    "cells/apps/robot-dashboard",
 
 ]
 
