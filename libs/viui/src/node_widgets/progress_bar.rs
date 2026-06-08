@@ -106,8 +106,8 @@ impl ViNode for ProgressBar {
         if self.show_label {
             let pct = (v * 100.0) as u32;
             let label = format_pct(pct);
-            let lx = b.x + b.w * 0.5 - label.len() as f32 * 4.0;
-            let ly = b.y + b.h * 0.5 - 4.0;
+            let lx = b.x + b.w * 0.5 - label.len() as f32 * cx.char_width() * 0.5;
+            let ly = b.y + b.h * 0.5 - cx.line_height() * 0.5;
             cx.draw_text(Point::new(lx.max(b.x), ly.max(b.y)), &label, Color::WHITE);
         }
     }

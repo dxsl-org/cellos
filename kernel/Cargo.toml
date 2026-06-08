@@ -1,6 +1,6 @@
 [package]
 name = "vicell-kernel"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MPL-2.0"
 
@@ -31,6 +31,12 @@ hal = { path = "../hal/core", package = "hal-core", default-features = false, fe
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86_64"] }
+
+[target.'cfg(target_arch = "arm")'.dependencies]
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["arm"] }
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86"] }
 
 [build-dependencies]
 vergen-gitcl = { version = "1", default-features = false, features = ["build", "cargo"] }

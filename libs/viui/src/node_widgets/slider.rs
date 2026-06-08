@@ -2,7 +2,8 @@
 //! Slider — horizontal drag widget for parameter tuning (speed, gain, threshold).
 
 extern crate alloc;
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{boxed::Box, vec};
+use alloc::vec::Vec;
 use core::cell::Cell;
 
 use crate::canvas::Color;
@@ -28,7 +29,6 @@ pub struct Slider {
     dragging:      Cell<bool>,
     /// Bounds cached from the last `layout()` call, used in `event()`.
     bounds_cache:  Cell<Rect>,
-    _sub:          Option<SubscriptionHandle>,
 }
 
 impl Slider {
@@ -38,7 +38,6 @@ impl Slider {
             on_change:    None,
             dragging:     Cell::new(false),
             bounds_cache: Cell::new(Rect::ZERO),
-            _sub:         None,
         }
     }
 
@@ -133,8 +132,6 @@ impl ViNode for Slider {
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let bounds = self.bounds_cache.get();
         let h = self.value.subscribe(move || { region.borrow_mut().mark(bounds); });
-        // Store handle to keep subscription alive (replaces old handle on re-subscribe)
-        self._sub = Some(h);
-        Vec::new()   // handle ownership taken by self._sub
+        vec![h]
     }
 }

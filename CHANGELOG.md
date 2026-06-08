@@ -1,3 +1,29 @@
+## [0.2.1] - 2026-06-08
+
+### Added
+
+**ViUI v2 — Embedded/Robot Readiness (P01–P10)**
+- `RenderCtx<'a>` — bundles `&mut dyn ViCanvas` + `FontContext` into a single paint argument, replacing the bare canvas reference. All `ViNode::paint()` implementations updated.
+- `FontContext` — optional `GlyphAtlas` (fontdue 0.9, no_std) with 8×8 bitmap fallback. `ViApp::with_font()` builder for TTF loading.
+- Touch events — `TouchBegin`, `TouchMove`, `TouchEnd` added to `Event` enum; `is_global_release()` and `pointer_pos()` updated.
+- `ProgressBar` — horizontal/vertical fill bar driven by `Signal<f32>`, optional percentage label using `cx.char_width()` for font-aware centering.
+- `Slider` — drag widget for mouse and touch (finger_id: 0); `Cell<Rect>` bounds cache for layout→event communication on `&self`.
+- `TouchArea` — transparent gesture layer; tap detection uses squared distance (no `f32::sqrt()` — no_std safe); `on_tap` and `on_drag` callbacks.
+- `Animatable` trait — object-safe time-driven animation interface; `ViApp::add_animation()` + `tick_with_dt(events, dt_ms)`.
+- `Tween<f32>` — single-value interpolator with configurable easing; clamps overshoot correctly.
+- Easing module — `linear`, `ease_in`, `ease_out`, `ease_in_out`.
+- `AnimatedSignal` — wraps `Signal<f32>` with an active `Tween`; `animate_to()` starts smooth transitions.
+- GPU renderer: `GpuCommandBuffer` moved to struct field (allocation reuse across frames).
+
+### Fixed
+- `Slider::collect_dirty_handles` now returns the subscription handle in the result vec (consistent with `ProgressBar`), instead of stashing it in a `_sub` field and returning `Vec::new()`.
+- `ProgressBar` label position uses `cx.char_width()` / `cx.line_height()` instead of hardcoded 8px values.
+
+### Documentation
+- README rewritten: accurate build targets (RV64/RV32/AArch64/x86_64 all boot), ViUI v2/SMP/Network/Peripheral status, G1/G2/G3 product stages, correct GitHub URL (`dxsl-org/vicell`).
+
+---
+
 ## [Unreleased] - v0.2.2-dev (2026-05-30)
 
 ### Functional Audit & Verification
@@ -45,7 +71,7 @@ New kernel↔cell ABI (additive, backward-compatible): syscalls `TryRecv` (7),
 - dev-setup.sh: fixed Linux disk-gen command; marked executable
 - README: added CODE_OF_CONDUCT.md link in contributor section
 
-**Scripting Runtime (Phase 18)**: MicroPython v1.24.1 (547 KB release binary) compiled for RISC-V 64 bare-metal; deployable at VA 0x0E000000; `/bin/python` available in kernel_fs.img via `pyexec_friendly_repl`; custom `gen_genhdr.py` generator bypasses Makefile dependency; Picolibc linked for C runtime (setjmp, frexp, strchr). Complements Lua for lightweight scripting on ViOS cells.
+**Scripting Runtime (Phase 18)**: MicroPython v1.24.1 (547 KB release binary) compiled for RISC-V 64 bare-metal; deployable at VA 0x0E000000; `/bin/python` available in kernel_fs.img via `pyexec_friendly_repl`; custom `gen_genhdr.py` generator bypasses Makefile dependency; Picolibc linked for C runtime (setjmp, frexp, strchr). Complements Lua for lightweight scripting on ViCell cells.
 
 **v1.0 Release Candidate**: All P0/P1/P2 phases complete (23/23 done, Phase 23 ✅); project ready for 1.0 release.
 
@@ -57,7 +83,7 @@ All services wired and running in QEMU:
 - Task 5: Input Service (US QWERTY + focus dispatch) at 0x04000000 — Phase 14 ✅
 - Task 6: Network Service (smoltcp + VirtIO NIC + DHCP) at 0x06000000 — Phase 15 ✅  
 - Task 7: Compositor (software blending + VirtIO GPU) at 0x0A000000 — Phase 16 ✅
-- Task 8: Shell ("ViOS >") at 0x08000000 — Phase 17 ✅
+- Task 8: Shell ("ViCell >") at 0x08000000 — Phase 17 ✅
 
 **Performance**: All bootstrap table entries use release builds (10-100x smaller than debug).
   VFS: 5.7MB→3MB, Net: 4.2MB→~1MB, Shell: 3.2MB→98KB, Compositor: 38KB
@@ -75,9 +101,9 @@ All services wired and running in QEMU:
 - Boot log: keystroke events demoted to trace level (no per-key INFO spam)
 - gen_disk.ps1: auto-generates both kernel_fs.img and disk_v3.img in one run
 - mkfat32.py: full subdirectory support (/bin/, /etc/ in kernel_fs.img)
-# ViOS Changelog
+# ViCell Changelog
 
-All notable changes to ViOS are documented here.
+All notable changes to ViCell are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
