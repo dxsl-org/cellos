@@ -54,9 +54,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 0. Initialize UART immediately for early logging
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     task::drivers::uart::init();
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
     crate::hal::uart_pl011::init();
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     crate::hal::uart_16550::init();
 
     // Set HHDM base for LAPIC/IOAPIC MMIO access AND for phys_to_virt.
@@ -87,9 +87,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         for c in s.bytes() {
             #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
             { let _ = crate::hal::sbi::console_putchar(c); }
-            #[cfg(target_arch = "aarch64")]
+            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
             { crate::hal::uart_pl011::putchar(c); }
-            #[cfg(target_arch = "x86_64")]
+            #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
             { crate::hal::uart_16550::putchar(c); }
         }
     };
@@ -167,7 +167,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // at 0xFFFFFFFF80000000. We skip building + activating our own page tables
     // until the full x86_64 port (Phase 09). init_kernel_paging uses physical
     // addresses as virtual pointers, which would fault under Limine's paging.
-    #[cfg(not(any(target_arch = "riscv32", target_arch = "x86_64")))]
+    #[cfg(not(any(
+        target_arch = "riscv32",
+        target_arch = "x86_64",
+        target_arch = "x86",
+        target_arch = "arm",
+    )))]
     {
         log_info("Initializing paging...");
         let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
@@ -189,11 +194,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log_info("Paging: using Limine PML4 (x86_64 bring-up, own tables deferred)");
         // init_timers() needs HPET+LAPIC MMIO mapped via our own PML4 — deferred to Phase 09.
     }
-    // RV32 Nano: bare physical addressing (SATP=0); no page tables needed.
-    #[cfg(target_arch = "riscv32")]
+    // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).
+    #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
     {
         memory::paging::init_bare();
-        log_info("Paging: bare physical (SATP=0, Phase-31 Nano)");
+        log_info("Paging: bare physical");
     }
 
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
@@ -340,7 +345,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     unsafe {
         core::arch::asm!("msr daifclr, #2", options(nomem, nostack));
     }
-    #[cfg(target_arch = "x86_64")]
+    // x86_64, x86_32, AArch32: use the Arch trait's enable_interrupts().
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86", target_arch = "arm"))]
     crate::hal::ARCH.enable_interrupts();
 
     loop {
@@ -366,12 +372,12 @@ fn panic(info: &PanicInfo) -> ! {
     if cell_id != 0 {
         // Cell OOM/panic — kill the Cell, kernel survives.
         // SAFETY: panic context, interrupts disabled (abort mode), single-hart.
-        task::terminate_current_cell_on_fault(0, 0);
+        task::terminate_current_cell_on_fault(0, 0, 0);
         // terminate_current_cell_on_fault calls yield_cpu() which switches away.
         // In abort mode we never return here, but placate the compiler:
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
         loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
-        #[cfg(not(target_arch = "x86_64"))]
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
         loop { unsafe { core::arch::asm!("wfi"); } }
     }
 
@@ -380,9 +386,9 @@ fn panic(info: &PanicInfo) -> ! {
     fn panic_putchar(c: u8) {
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         { let _ = crate::hal::sbi::console_putchar(c); }
-        #[cfg(target_arch = "aarch64")]
+        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
         { crate::hal::uart_pl011::putchar(c); }
-        #[cfg(target_arch = "x86_64")]
+        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
         { crate::hal::uart_16550::putchar(c); }
     }
     let puts = |s: &str| { for c in s.bytes() { panic_putchar(c); } };
@@ -402,8 +408,9 @@ fn panic(info: &PanicInfo) -> ! {
     puts("[KERNEL PANIC] halting...\n");
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
-    #[cfg(not(target_arch = "x86_64"))]
+    // Fallback halt for all non-x86 arches (including riscv — unreachable after system_reset).
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
     loop { unsafe { core::arch::asm!("wfi", options(nomem, nostack)); } }
 }

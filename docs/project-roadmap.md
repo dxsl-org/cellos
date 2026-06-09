@@ -3,7 +3,7 @@
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-06 (tier stack simplified: Drop Lua/MicroPython — Python via Tier 2 WASM or Tier 3 VM; Tier 1b reframed as C library integration; WASM 2-phase; Tier 3 crosvm strategy)
+**Last Updated**: 2026-06-09 (Input kernel routing: dispatch_pending() fixes Gap 1; request_input_focus() + real event collection fixes Gap 2; robot-dashboard now receives keyboard events; SPP classification bug fixed in trap.rs)
 
 ---
 
@@ -64,16 +64,15 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (skeleton + proven on RISC-V; real GPIO pending ARM64 kernel build) | **G1** (graduation) |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
-| WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ✅ | G1 (foundation) |
-| 🆕 WASM vi.* expand (VFS+net+time+spawn imports) | Phase 28-5 | 🆕 | **G1** |
-| WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | 📋 | **G2** |
+| WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
+| WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |
 | 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | 🆕 | **G1 prep** (non-breaking) |
 | 🆕 Tier 3a Security Silo (Stage-2 fenced bare-metal guest) | *new* | 📋 | G1-optional |
 | 🆕 Tier 3b Linux VM — crosvm fork + vicell_hv/ port | Phase 31 | 📋 | **G2** |
 | SMP multi-core scheduler + work-stealing | Phase 32 | 📋 | **G2** |
 | Compositor + GPU desktop (full) + mouse | M2.4 + M2.2 full | 📋 | G2 |
 | 🆕 **ViUI v1** (Elm model, FramebufferCanvas, GlyphAtlas, P01–P07) | new | ✅ Done 2026-06-08 — foundation only, design superseded | **G2 prep** |
-| 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | ✅ P01–P07 COMPLETE (design + codegen + viui-build + viui-macros + GPU command buffer renderer) | **G2** |
+| 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | ✅ G1 P01–P06 + G2 Wave 1 COMPLETE 2026-06-09 (FlexBox, Virtual ListView, Typed DSL, Keyboard a11y, GLES2 skeleton; P05 GPU EGL-deferred) | **G2** |
 | Hot migration / zero-downtime | M4.1 | 📋 | G2 |
 | 🆕 x86_64 full bring-up | ext. M1.3 | 📋 | **G2** |
 | VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
@@ -796,13 +795,16 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 ---
 
 ### Milestone 2.2: Complete Input Service `[G1 opt (feature-gate) · G2 full]`
-**Status**: 📋 PLANNED  
+**Status**: 🚧 IN PROGRESS (kernel routing done; end-to-end pending VirtIO keyboard fault fix)  
 **Priority**: P1
 
-- AT keyboard driver (scancode → ASCII)
-- PS/2 mouse driver
-- Input event queue (with timestamp)
-- Compositor integration
+- [x] AT keyboard driver (scancode → ASCII) — VirtIO input driver
+- [x] Input event queue with IPC forwarding — `dispatch_pending()` drains to input service on IRQ
+- [x] App focus registration — `request_input_focus()` + sender-verified SetFocus
+- [x] ViUI event collection — `collect_input_events()` per frame
+- [ ] End-to-end test: Tab cycles focus ring in robot-dashboard (blocked on VirtIO keyboard QEMU fault)
+- [ ] PS/2 mouse driver
+- [ ] VirtIO keyboard fault root cause (stval needed — SPP fix lands diagnostic on next boot)
 
 **Dependency**: Phase 1 (basic shell)
 

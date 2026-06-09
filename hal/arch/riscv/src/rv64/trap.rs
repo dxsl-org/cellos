@@ -115,20 +115,28 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
             }
             2 | 12 | 13 | 15 | _ => {
                 // Illegal instruction, page faults, or other unhandled exception.
-                // If a Cell is running, kill it instead of halting the kernel.
+                //
+                // Distinguish U-mode Cell faults from S-mode kernel faults using SPP
+                // (sstatus bit 8): SPP=0 means the trap came from U-mode (a Cell).
+                // Checking only `cell_id != 0` is insufficient — if the kernel faults
+                // while servicing a Cell's syscall, CURRENT_CELL_ID is still non-zero
+                // but the CPU is in S-mode.  Misclassifying that as a Cell fault
+                // silently kills the Cell and hides the kernel bug.
+                //
                 // SAFETY: vi_current_cell_id and vi_terminate_on_fault are defined
                 // in kernel::task and linked via extern "Rust".
+                let from_user = (frame.sstatus & 0x100) == 0; // SPP bit: 0=U-mode
                 let cell_id = unsafe { vi_current_cell_id() };
-                if cell_id != 0 {
-                    // Cell fault — terminate the Cell, let kernel continue.
-                    unsafe { vi_terminate_on_fault(code, frame.sepc); }
+                if from_user && cell_id != 0 {
+                    // Genuine U-mode Cell fault — terminate the Cell, let kernel continue.
+                    unsafe { vi_terminate_on_fault(code, frame.sepc, frame.stval); }
                     // vi_terminate_on_fault calls yield_cpu() which switches away.
                     // We should not reach here, but return safely if we do.
                 } else {
-                    // True kernel fault — halt.
+                    // True kernel fault (S-mode) or U-mode fault without a registered Cell.
                     panic!(
-                        "ViCell: Kernel exception: scause={} sepc={:#x} stval={:#x}",
-                        code, frame.sepc, frame.stval
+                        "ViCell: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x}",
+                        code, frame.sepc, frame.stval, frame.sstatus
                     );
                 }
             }
@@ -168,7 +176,7 @@ extern "Rust" {
     /// Called on every S-mode timer interrupt.  Defined in `kernel::task`.
     fn vi_timer_tick();
     /// Terminate the currently-executing Cell on hardware fault.  Defined in `kernel::task`.
-    fn vi_terminate_on_fault(scause: usize, sepc: usize);
+    fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize);
     /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell).
     fn vi_current_cell_id() -> usize;
 }

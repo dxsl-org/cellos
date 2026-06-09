@@ -82,6 +82,7 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
     // they are ready when the shell next calls sys_read(0, ...).
     if crate::task::drivers::virtio_input::ack_irq(irq) {
         crate::task::drivers::virtio_input::poll_events();
+        crate::task::drivers::virtio_input::dispatch_pending();
         return;
     }
 

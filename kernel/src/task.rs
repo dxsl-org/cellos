@@ -59,6 +59,14 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     r15: 0, r14: 0, r13: 0, r12: 0, rbx: 0, rbp: 0, sp: 0, rip: 0,
 };
+#[cfg(target_arch = "arm")]
+static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+    r4: 0, r5: 0, r6: 0, r7: 0, r8: 0, r9: 0, r10: 0, r11: 0, sp: 0, lr: 0, cpsr: 0x13,
+};
+#[cfg(target_arch = "x86")]
+static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
+    ebx: 0, esi: 0, edi: 0, ebp: 0, sp: 0, eip: 0,
+};
 
 // Trampoline for Thread Spawning
 // Trampoline for Thread Spawning handled by HAL
@@ -112,8 +120,8 @@ pub fn init() {
 /// Exposes `terminate_current_cell_on_fault` to the HAL trap handler via
 /// `extern "Rust"` linkage.
 #[no_mangle]
-pub extern "Rust" fn vi_terminate_on_fault(scause: usize, sepc: usize) {
-    terminate_current_cell_on_fault(scause, sepc);
+pub extern "Rust" fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize) {
+    terminate_current_cell_on_fault(scause, sepc, stval);
 }
 
 /// Exposes `scheduler::current_cell_id` to the HAL trap handler.
@@ -174,6 +182,7 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::cell::hotswap::force_unlock_locks();
     crate::cell::service_registry::force_unlock_locks();
     crate::task::drivers::virtio_blk::force_unlock_locks();
+    crate::task::drivers::virtio_input::force_unlock_locks();
     crate::task::drivers::mmc::force_unlock_locks();
     crate::resource_registry::force_unlock_locks();
 }
@@ -190,11 +199,11 @@ unsafe fn force_unlock_all_kernel_locks() {
 /// [`force_unlock_all_kernel_locks`]) so a panic that fired while holding one
 /// (e.g. mid-syscall OOM during a scheduler/allocator insert) cannot deadlock
 /// the kernel after we resume the next task.
-pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize) {
+pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize) {
     let cell_id_raw = hart_local::current_cell_id();
     log::error!(
-        "[fault] Cell {} terminated: scause={:#x} sepc={:#x}",
-        cell_id_raw, scause, sepc
+        "[fault] Cell {} terminated: scause={:#x} sepc={:#x} stval={:#x}",
+        cell_id_raw, scause, sepc, stval
     );
     crate::audit::log_event(
         crate::audit::AuditEvent::CellFault,

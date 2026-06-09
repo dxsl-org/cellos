@@ -65,7 +65,6 @@ use viui::{
     node::ViNode,
     renderer::FramebufferRenderer,
     signal::{Signal, SubscriptionHandle},
-    event::Event,
 };
 
 use ostd::{
@@ -96,6 +95,9 @@ pub extern "C" fn main() {
         }
     };
     let renderer = FramebufferRenderer::new(surf);
+
+    // Register this cell to receive keyboard and mouse events.
+    viui::input_bridge::request_input_focus();
 
     // ── Subscription handle storage (keeps derived signals alive) ─────────────
     let mut subs: Vec<SubscriptionHandle> = Vec::new();
@@ -222,13 +224,14 @@ pub extern "C" fn main() {
             }
         }
 
+        // ── Input collection ─────────────────────────────────────────────────
+        let events = viui::input_bridge::collect_input_events(32);
+
         // ── Render tick ──────────────────────────────────────────────────────
         if now.wrapping_sub(last_frame) >= FRAME_INTERVAL {
             let dt_ms = (now.wrapping_sub(last_frame) / MTIME_TICKS_PER_MS) as u32;
             last_frame = now;
-
-            let empty_events: Vec<Event> = Vec::new();
-            app.tick_with_dt(&empty_events, dt_ms);
+            app.tick_with_dt(&events, dt_ms);
         }
 
         // Yield to avoid busy-spinning the CPU.

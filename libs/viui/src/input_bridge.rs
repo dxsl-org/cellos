@@ -114,6 +114,43 @@ pub fn parse_input_message(buf: &[u8]) -> Vec<Event> {
     }
 }
 
+/// Register this cell as the focused input receiver.
+///
+/// Sends `InputRequest::SetFocus { cell_tid: 0 }` to the input service.
+/// The input service ignores the `cell_tid` field and uses the IPC sender TID
+/// (kernel-verified) instead, preventing TID impersonation.
+///
+/// Returns `true` if focus was granted; `false` if the input service is not
+/// available or the response is not `InputResponse::Ok`.
+/// Call once at startup after the compositor surface is created.
+pub fn request_input_focus() -> bool {
+    use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
+    use api::syscall::service;
+    use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, SyscallResult};
+
+    let input_tid = match sys_lookup_service(service::INPUT) {
+        Some(tid) => tid,
+        None => return false,
+    };
+
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    // cell_tid=0 is ignored by the input service; it uses the IPC sender TID.
+    let req = InputRequest::SetFocus { cell_tid: 0 };
+    let encoded = match api::ipc::encode(&req, &mut req_buf) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    sys_send(input_tid, encoded);
+
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_sender) => {
+            matches!(api::ipc::decode::<InputResponse>(&resp_buf), Ok(InputResponse::Ok))
+        }
+        _ => false,
+    }
+}
+
 /// Drain pending input events from the input service (non-blocking).
 ///
 /// Calls `sys_try_recv` in a loop until the queue is empty or `max_events` is reached.

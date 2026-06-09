@@ -4,6 +4,48 @@
 
 ---
 
+## [2026-06-09] Input Kernel Routing — End-to-End Keyboard Events for ViUI
+
+### Summary
+Fixed two long-standing gaps that prevented keyboard input from ever reaching ViUI apps. VirtIO keyboard IRQs were acknowledged but events sat in the kernel's `event_queue` forever (Gap 1). Apps never registered for input focus and were passed `empty_events` every frame (Gap 2). Also fixed a silent kernel fault misclassification that masked a real S-mode panic when the VirtIO keyboard device was present.
+
+### Changes
+
+**Gap 1 — Kernel → Input service (IRQ path)**
+- **`kernel/src/task/drivers/virtio_input.rs`** — ADDED `dispatch_pending()`: drains `event_queue` under lock, releases lock, then fire-and-forgets 9-byte IPC (`[opcode:1][code:4LE][value:4LE]`) to the input service cell. Safe from IRQ context (no lock inversion with SCHEDULER).
+- **`kernel/src/task/drivers/virtio_input.rs`** — ADDED `force_unlock_locks()` for fault teardown (was missing from `force_unlock_all_kernel_locks`).
+- **`kernel/src/task/drivers/virtio_blk.rs`** — Added `dispatch_pending()` call after `poll_events()` in the VirtIO IRQ handler. Events now forwarded immediately on IRQ, not only when a cell reads stdin.
+
+**Gap 2 — Input service → App**
+- **`libs/viui/src/input_bridge.rs`** — ADDED `request_input_focus()`: sends `InputRequest::SetFocus { cell_tid: 0 }` to input service, waits for `InputResponse::Ok`. Input service uses kernel-verified sender TID.
+- **`cells/services/input/src/main.rs`** — `SetFocus` handler now uses `sender` (kernel-verified IPC sender TID) instead of the `cell_tid` field, preventing focus redirect attacks.
+- **`cells/apps/robot-dashboard/src/main.rs`** — Calls `request_input_focus()` at startup; collects real input events via `collect_input_events(32)` each loop iteration (was `empty_events`).
+
+**Bug fix — SPP classification in trap handler**
+- **`hal/arch/riscv/src/rv64/trap.rs`** — Fixed: exception handler now checks `sstatus.SPP` (bit 8) in addition to `CURRENT_CELL_ID`. An S-mode kernel fault with `CURRENT_CELL_ID≠0` (common during syscall processing) was silently misclassified as a "Cell fault" — killing the Cell and hiding the kernel bug. Now panics with full `scause/sepc/stval/sstatus`.
+- **`kernel/src/task.rs`** — `terminate_current_cell_on_fault` and `vi_terminate_on_fault` now receive and log `stval` (faulting data address).
+- **`kernel/src/task.rs`** — `force_unlock_all_kernel_locks` now includes `virtio_input` locks.
+
+### Architecture
+```
+VirtIO keyboard IRQ
+  └─▶ vi_handle_virtio_irq(irq)
+       ├─▶ ack_irq()     ← clears PLIC
+       ├─▶ poll_events() ← drains VirtIO ring → event_queue
+       └─▶ dispatch_pending()   ← NEW
+            └─▶ ipc_send(0, INPUT_CELL_ID, 9-byte raw event)
+
+Input service: sys_recv → handle_kernel_event → dispatch to focused cell
+
+robot-dashboard startup: request_input_focus() → focused TID set
+robot-dashboard loop: collect_input_events(32) → app.tick_with_dt(&events, dt)
+```
+
+### Next
+Boot with `-device virtio-keyboard-device` — SPP fix converts silent Cell kill into kernel panic with stval. stval reveals the actual fault address → can fix root cause → re-enable keyboard in `run-gui.ps1`.
+
+---
+
 ## [2026-06-08] ViUI v2 P07 — GPU Command Buffer Renderer
 
 ### Summary
