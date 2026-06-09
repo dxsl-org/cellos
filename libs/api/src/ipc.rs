@@ -95,6 +95,14 @@ pub enum NetRequest<'a> {
     UdpRecv     { cap_id: u32, buf_len: u32 },
     Resolve     { hostname: &'a str },
     SocketState { cap_id: u32 },
+    /// Bind a UDP socket to a local port.  Port 0 = auto-assign ephemeral.
+    UdpBind         { cap_id: u32, port: u16 },
+    /// Return the DHCP-assigned local IPv4 address.
+    GetLocalIp,
+    /// Join an IPv4 multicast group (IGMP); `cap_id` is unused (iface-level).
+    MulticastJoin   { cap_id: u32, group: [u8; 4] },
+    /// Leave a previously joined IPv4 multicast group.
+    MulticastLeave  { cap_id: u32, group: [u8; 4] },
 }
 
 /// Responses from the network service.
@@ -106,6 +114,55 @@ pub enum NetResponse<'a> {
     State  (u8),
     Ok,
     Err    (u8),
+}
+
+// ── Input service ─────────────────────────────────────────────────────────────
+
+/// Requests sent to the input service (`/bin/input`).
+#[derive(Debug, Serialize, Deserialize)]
+pub enum InputRequest {
+    /// Register the caller as the currently focused cell that receives key/mouse events.
+    SetFocus { cell_tid: u32 },
+    /// Query which cell currently has focus.  Returns `InputResponse::Focus`.
+    GetFocus,
+    /// Unregister `cell_tid` from receiving events.  No-op if not currently focused.
+    ClearFocus { cell_tid: u32 },
+}
+
+/// Responses from the input service.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum InputResponse {
+    /// Currently focused cell tid (0 = none).
+    Focus(u32),
+    Ok,
+    Err(u8),
+}
+
+// ── Config service ────────────────────────────────────────────────────────────
+
+/// Requests sent to the config service (`/bin/config`).
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ConfigRequest<'a> {
+    /// Read the value for `key`.  Returns `ConfigResponse::Value` or `NotFound`.
+    Get(&'a str),
+    /// Write `value` for `key` (insert or overwrite).  Returns `Ok`.
+    Set { key: &'a str, value: &'a str },
+    /// Remove `key`.  Returns `Ok` even if absent (idempotent).
+    Delete(&'a str),
+    /// List all registered keys as a newline-separated string.
+    List,
+}
+
+/// Responses from the config service.
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ConfigResponse<'a> {
+    /// Value associated with a key.
+    Value(&'a str),
+    /// Newline-separated list of all keys.
+    Keys(&'a str),
+    Ok,
+    NotFound,
+    Err(u8),
 }
 
 // ── Serialization helpers ─────────────────────────────────────────────────────

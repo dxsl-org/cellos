@@ -11,7 +11,9 @@ use crate::z_order::ZOrder;
 
 /// Screen framebuffer owned by the compositor (BGRA8888).
 pub struct ScreenFb {
-    pixels: alloc::vec::Vec<u8>,
+    pixels:  alloc::vec::Vec<u8>,
+    /// Reusable staging buffer for GPU flush — pre-allocated to avoid per-frame heap churn.
+    staging: alloc::vec::Vec<u8>,
     pub width:  u32,
     pub height: u32,
 }
@@ -19,8 +21,10 @@ pub struct ScreenFb {
 impl ScreenFb {
     /// Allocate a zeroed framebuffer of the given dimensions.
     pub fn new(width: u32, height: u32) -> Self {
+        let full = (width * height * 4) as usize;
         Self {
-            pixels: vec![0u8; (width * height * 4) as usize],
+            pixels:  vec![0u8; full],
+            staging: vec![0u8; full],
             width,
             height,
         }
@@ -41,53 +45,59 @@ impl ScreenFb {
 
         let screen_stride = self.width as usize * 4;
         let surf_stride   = s.w as usize * 4;
+        let surf_pixels   = s.pixels();
 
         for row in 0..h as usize {
             let dst_off = (sy as usize + row) * screen_stride + sx as usize * 4;
             let src_off = (clip_y as usize + row) * surf_stride + clip_x as usize * 4;
             let n = w as usize * 4;
-            if dst_off + n <= self.pixels.len() && src_off + n <= s.pixels.len() {
+            if dst_off + n <= self.pixels.len() && src_off + n <= surf_pixels.len() {
                 self.pixels[dst_off..dst_off + n]
-                    .copy_from_slice(&s.pixels[src_off..src_off + n]);
+                    .copy_from_slice(&surf_pixels[src_off..src_off + n]);
             }
         }
     }
 
     /// Flush `dirty_rect` from the screen FB to the GPU.
     ///
-    /// Clamps the dirty rect to the screen boundary before calling the kernel.
-    fn flush_rect(&self, dirty: Rect) {
+    /// Copies the dirty region into the pre-allocated staging buffer (no heap allocation)
+    /// then hands the sub-slice to the kernel. Clamps to screen boundary.
+    fn flush_rect(&mut self, dirty: Rect) {
         let x = dirty.x.max(0) as u32;
         let y = dirty.y.max(0) as u32;
         let w = dirty.w.min(self.width.saturating_sub(x));
         let h = dirty.h.min(self.height.saturating_sub(y));
         if w == 0 || h == 0 { return; }
 
-        // Build a sub-rect pixel buffer to send to the kernel.
-        let stride = self.width as usize * 4;
-        let mut sub = alloc::vec![0u8; (w * h * 4) as usize];
+        let stride  = self.width as usize * 4;
+        let sub_len = (w * h * 4) as usize;
         for row in 0..h as usize {
             let src = (y as usize + row) * stride + x as usize * 4;
             let dst = row * w as usize * 4;
             let n   = w as usize * 4;
-            if src + n <= self.pixels.len() {
-                sub[dst..dst + n].copy_from_slice(&self.pixels[src..src + n]);
+            if src + n <= self.pixels.len() && dst + n <= self.staging.len() {
+                self.staging[dst..dst + n].copy_from_slice(&self.pixels[src..src + n]);
             }
         }
-        let _ = sys_gpu_flush(&sub, x, y, w, h);
+        let _ = sys_gpu_flush(&self.staging[..sub_len], x, y, w, h);
     }
 }
 
 /// Render one frame: blit all damaged surfaces then flush the combined dirty rect.
 ///
+/// `extra_dirty` is a compositor-initiated repaint region (e.g. surface just
+/// destroyed or raised) that is unioned with per-surface damage before blitting.
+///
 /// Returns the dirty rect that was flushed, or `None` if nothing was dirty.
+/// `fb` requires `&mut` because `flush_rect` writes into the staging buffer.
 pub fn render_frame(
     fb: &mut ScreenFb,
     table: &mut SurfaceTable,
     z_order: &ZOrder,
+    extra_dirty: Option<Rect>,
 ) -> Option<Rect> {
-    // Collect the union of all surface dirty rects.
-    let mut dirty: Option<Rect> = None;
+    // Seed with compositor-initiated dirty region (destroyed/raised surface area).
+    let mut dirty: Option<Rect> = extra_dirty;
     for cap in z_order.iter_bottom_to_top() {
         if let Some(s) = table.get(cap) {
             if let Some(dmg) = s.damage {

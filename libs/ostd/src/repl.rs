@@ -1,7 +1,6 @@
 //! Shared readline / REPL state machine for interactive cells.
 //!
-//! Used by the Lua runtime, MicroPython runtime, and — once Phase 17a lands —
-//! the shell.  Provides line editing (Backspace, Ctrl+C/D, arrow history nav)
+//! Provides line editing (Backspace, Ctrl+C/D, arrow history nav)
 //! and a ring-buffer command history with configurable capacity.
 
 extern crate alloc;

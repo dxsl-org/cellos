@@ -5,18 +5,28 @@ use core::panic::PanicInfo;
 #[unsafe(naked)]
 #[link_section = ".text.boot"]
 pub unsafe extern "C" fn _start() -> ! {
-    // 1. Initialize BSS? (Already done by ELF Loader if zeroed)
-    // 2. Call main
+    #[cfg(target_arch = "riscv64")]
     core::arch::naked_asm!(
         ".option push",
         ".option norelax",
         "la gp, __global_pointer$",
         ".option pop",
-        "andi sp, sp, -16", // Align stack to 16 bytes
+        "andi sp, sp, -16",
         "call main",
-        "li a0, 0",
-        "li a7, 60", // ViSyscall::Exit (NOT Linux exit=93)
-        "ecall"
+        "li a7, 60",   // ViSyscall::Exit
+        "li a0, 0",    // exit code = 0 in a0 (ViCell ABI: syscall nr in a7, arg in a0)
+        "ecall",
+        "1: j 1b"
+    );
+    // ViCell ARM64 ABI: x0=syscall_nr, x1=a0 (exit code).
+    // Stack is kernel-aligned on entry; skip re-alignment to avoid clobbering sp.
+    #[cfg(target_arch = "aarch64")]
+    core::arch::naked_asm!(
+        "bl   main",
+        "mov  x0, #60",   // ViSyscall::Exit
+        "mov  x1, #0",    // exit code = 0
+        "svc  #0",
+        "1: b 1b"
     );
 }
 

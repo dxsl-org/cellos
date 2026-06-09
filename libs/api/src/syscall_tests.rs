@@ -121,3 +121,62 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod allowlist {
+    use crate::syscall::{SyscallSet, ViSyscall};
+
+    #[test]
+    fn syscall_set_empty_permits_nothing() {
+        assert!(!SyscallSet::EMPTY.permits(ViSyscall::Send));
+        assert!(!SyscallSet::EMPTY.permits(ViSyscall::Recv));
+        assert!(!SyscallSet::EMPTY.permits(ViSyscall::Log));
+    }
+
+    #[test]
+    fn syscall_set_all_permits_everything() {
+        assert!(SyscallSet::ALL.permits(ViSyscall::Send));
+        assert!(SyscallSet::ALL.permits(ViSyscall::Recv));
+        assert!(SyscallSet::ALL.permits(ViSyscall::Log));
+    }
+
+    #[test]
+    fn syscall_set_with_adds_bit() {
+        let set = SyscallSet::EMPTY.with(ViSyscall::Send);
+        assert!(set.permits(ViSyscall::Send));
+    }
+
+    #[test]
+    fn syscall_set_does_not_permit_unset() {
+        let set = SyscallSet::EMPTY.with(ViSyscall::Send);
+        assert!(!set.permits(ViSyscall::Recv));
+        assert!(!set.permits(ViSyscall::Log));
+    }
+
+    #[test]
+    fn syscall_set_always_permitted_syscalls() {
+        // Exit, Yield, and NotifyOnExit have no allowlist bit — permits() returns
+        // true regardless of the stored bitmask (they are always allowed).
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::Exit));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::Yield));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::NotifyOnExit));
+    }
+
+    #[test]
+    fn declare_syscalls_bits_are_stable() {
+        // Verifies the known bit assignments used by declare_syscalls!.
+        // Send=bit0, Recv=bit1, Log=bit10 → mask = 1|2|1024 = 0x403.
+        // If any of these asserts fail, cells with declare_syscalls![Send, Recv, Log]
+        // will produce a different allowlist mask — a breaking ABI change.
+        assert_eq!(ViSyscall::Send.allowlist_bit(), Some(0));
+        assert_eq!(ViSyscall::Recv.allowlist_bit(), Some(1));
+        assert_eq!(ViSyscall::Log.allowlist_bit(),  Some(10));
+
+        let mask = SyscallSet::EMPTY
+            .with(ViSyscall::Send)
+            .with(ViSyscall::Recv)
+            .with(ViSyscall::Log)
+            .0;
+        assert_eq!(mask, 0x403u64, "bit-packing mismatch: got {:#x}", mask);
+    }
+}
