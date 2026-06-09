@@ -161,6 +161,8 @@ impl ViNode for TextEdit {
         cx.canvas.clip_pop();
     }
 
+    fn is_focusable(&self) -> bool { true }
+
     fn event(&mut self, event: &Event) -> bool {
         match event {
             Event::Focus => { self.focused.set(true); true }

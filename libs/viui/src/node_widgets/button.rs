@@ -70,6 +70,13 @@ impl ViNode for Button {
         cx.draw_text(Point::new(b.x + PAD, b.y + PAD), &self.label, Color::WHITE);
     }
 
+    fn is_focusable(&self) -> bool { true }
+
+    fn activate(&mut self) -> bool {
+        (self.on_click)();
+        true
+    }
+
     fn event(&mut self, event: &Event) -> bool {
         match event {
             Event::MouseMove { pos } => {

@@ -29,9 +29,11 @@ fn counter_property_decl() {
     assert_eq!(prop.visibility, Some(Visibility::InOut));
     assert_eq!(prop.ty,   "int");
     assert_eq!(prop.name, "count");
-    // Default should be Raw("0")
+    // Default is now typed: int 0 parses as Literal::Int(0)
     match prop.default.as_ref().unwrap() {
         Expr::Raw(r) => assert_eq!(r.text.trim(), "0"),
+        Expr::Literal(Literal::Int(0)) => {}   // typed parser path
+        other => panic!("unexpected default expr: {:?}", other),
     }
 }
 
@@ -86,6 +88,8 @@ fn text_binding_has_interpolation() {
     let tb   = text.bindings.iter().find(|b| b.property == "text").expect("text binding missing");
     match &tb.value {
         Expr::Raw(r) => assert!(r.text.contains("\\{count}"), "interpolation must be in raw text"),
+        Expr::Interpolated(_) => {}  // typed parser path: interpolated string
+        other => panic!("unexpected text expr: {:?}", other),
     }
 }
 

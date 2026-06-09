@@ -17,7 +17,10 @@
 
 use std::prelude::v1::*;
 use crate::ast::{Binding, CallbackBinding, Child, Component, Element, Expr, ViFile};
-use crate::eval::{eval_binding, eval_callback, eval_property, AugOp, InterpolPart, TypedExpr};
+use crate::eval::{
+    compile_expr, eval_binding, eval_callback, eval_property,
+    AugOp, ExprCtx, InterpolPart, TypedExpr,
+};
 
 // ─── Element → Widget mapping ────────────────────────────────────────────────
 
@@ -29,6 +32,7 @@ fn map_element(name: &str) -> Option<(&'static str, &'static str)> {
         // Layout
         "VerticalLayout" | "VBox" | "Column" => Some(("Column",      "column")),
         "HorizontalLayout" | "HBox" | "Row"  => Some(("Row",         "row")),
+        "FlexBox" | "HFlex" | "VFlex"        => Some(("FlexBox",     "flex_box")),
         // Text
         "Text" | "Label"                     => Some(("Label",       "label")),
         // Interactive
@@ -49,6 +53,8 @@ fn map_element(name: &str) -> Option<(&'static str, &'static str)> {
 }
 
 /// Describes how a widget's Rust constructor is called.
+// Prepared for Phase-level refactor; not yet wired into gen_element dispatch.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum CtorStyle {
     /// `Container::new(children_vec)` — layout containers (Column, Row).
@@ -68,9 +74,10 @@ enum CtorStyle {
 }
 
 /// Returns the constructor style for a Rust widget type produced by `map_element`.
+#[allow(dead_code)]
 fn widget_ctor_style(rust_type: &str) -> CtorStyle {
     match rust_type {
-        "Column" | "Row"             => CtorStyle::Container,
+        "Column" | "Row" | "FlexBox" => CtorStyle::Container,
         "TouchArea" | "ScrollArea"   => CtorStyle::ChildBox,
         "Label"                      => CtorStyle::SignalFirst,
         "Button"                     => CtorStyle::SignalCallback,
@@ -232,10 +239,15 @@ impl CodeGen {
 
         // 1. Emit Signal declarations for in/out/in-out properties.
         for prop in &comp.properties {
-            let init = if let Some(Expr::Raw(r)) = &prop.default {
-                typed_expr_to_rust(&eval_property(&r.text, &prop.ty), &prop.ty)
-            } else {
-                default_signal_init(&prop.ty).to_string()
+            let init = match &prop.default {
+                Some(Expr::Raw(r)) => {
+                    typed_expr_to_rust(&eval_property(&r.text, &prop.ty), &prop.ty)
+                }
+                Some(other) => {
+                    // Typed AST node — convert to TypedExpr for consistent Signal::new wrapping.
+                    typed_expr_to_rust(&expr_to_typed(other, &prop.ty), &prop.ty)
+                }
+                None => default_signal_init(&prop.ty).to_string(),
             };
             build_stmts.push(format!("        let {} = {};", prop.name, init));
         }
@@ -362,9 +374,7 @@ impl CodeGen {
                         "Text" | "Label" => {
                             let text_val = e.bindings.iter()
                                 .find(|b| b.property == "text")
-                                .map(|b| match &b.value {
-                                    Expr::Raw(r) => r.text.clone(),
-                                })
+                                .map(|b| expr_as_raw_text(&b.value))
                                 .unwrap_or_else(|| loop_var.clone());
                             format!(
                                 "alloc::boxed::Box::new(Label::new(Signal::new(({}).to_string()))) \
@@ -457,6 +467,32 @@ impl CodeGen {
                 let text_expr = if let Some(b) = elem.bindings.iter().find(|b| b.property == "text") {
                     match &b.value {
                         Expr::Raw(r) => eval_binding(&r.text, "text", "Text"),
+                        Expr::Literal(crate::ast::Literal::Str(s)) => {
+                            // Plain string literal — re-use eval's string parsing.
+                            eval_binding(&format!("{:?}", s), "text", "Text")
+                        }
+                        Expr::Interpolated(parts) => {
+                            // Convert ast::InterpPart → eval::InterpolPart for the
+                            // existing .into_parts() codegen path.
+                            let eval_parts: Vec<InterpolPart> = parts.iter().map(|p| {
+                                match p {
+                                    crate::ast::InterpPart::Lit(s) => InterpolPart::Literal(s.clone()),
+                                    crate::ast::InterpPart::Expr(e) => {
+                                        // Extract the variable name from the expression.
+                                        let var = match e.as_ref() {
+                                            Expr::Ident(n) | Expr::SelfProp(n) => n.clone(),
+                                            other_e => compile_expr(other_e, ExprCtx::BuildFn),
+                                        };
+                                        InterpolPart::Var(var)
+                                    }
+                                }
+                            }).collect();
+                            TypedExpr::Interpolated(eval_parts)
+                        }
+                        other => {
+                            let rs = compile_expr(other, ExprCtx::BuildFn);
+                            TypedExpr::Ident(rs)
+                        }
                     }
                 } else {
                     TypedExpr::StringLit(String::new())
@@ -503,6 +539,7 @@ impl CodeGen {
                     .find(|b| b.property == "color")
                     .map(|b| match &b.value {
                         Expr::Raw(r) => color_typed_to_rust(&eval_binding(&r.text, "color", "Text")),
+                        other => compile_expr(other, ExprCtx::BuildFn),
                     });
 
                 let mut init = format!("Label::new({})", text_sig_var);
@@ -525,6 +562,8 @@ impl CodeGen {
                             TypedExpr::StringLit(s) => s,
                             other => typed_expr_raw(&other),
                         },
+                        Expr::Literal(crate::ast::Literal::Str(s)) => s.clone(),
+                        other => compile_expr(other, ExprCtx::BuildFn),
                     })
                     .unwrap_or_default();
 
@@ -561,9 +600,7 @@ impl CodeGen {
                 let mut init = format!("{}::new({})", rust_ty, sig_var);
                 for b in &elem.bindings {
                     if b.property == signal_prop { continue; }
-                    let expr_str = match &b.value {
-                        Expr::Raw(r) => r.text.clone(),
-                    };
+                    let expr_str = expr_as_raw_text(&b.value);
                     if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
                         init.push_str(&chain);
                     }
@@ -586,7 +623,7 @@ impl CodeGen {
                 let mut init = format!("ListView::new({})", sig_var);
                 for b in &elem.bindings {
                     if b.property == "items" { continue; }
-                    let expr_str = match &b.value { Expr::Raw(r) => r.text.clone() };
+                    let expr_str = expr_as_raw_text(&b.value);
                     if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
                         init.push_str(&chain);
                     }
@@ -762,23 +799,37 @@ fn find_signal_binding(
     st.sub_counter += 1;
 
     if let Some(b) = bindings.iter().find(|b| b.property == prop_name) {
-        let Expr::Raw(r) = &b.value;
-        // If the raw text is a bare `self.X` reference, emit a `.clone()` of
-        // the local variable rather than wrapping it in Signal::new again.
-        let desugared = desugar_prop_refs(&r.text);
-        // A desugared prop ref looks like `*foo.get()` — detect by `*` prefix.
-        if desugared.starts_with('*') && desugared.ends_with(".get()") {
-            // Strip leading `*` and trailing `.get()` to get the signal variable name.
-            let signal_name = &desugared[1..desugared.len() - 6];
-            stmts.push(format!(
-                "        let {} = {}.clone();",
-                sig_var, signal_name
-            ));
-        } else {
-            stmts.push(format!(
-                "        let {} = Signal::new({});",
-                sig_var, desugared
-            ));
+        match &b.value {
+            Expr::Raw(r) => {
+                // If the raw text is a bare `self.X` reference, emit a `.clone()` of
+                // the local variable rather than wrapping it in Signal::new again.
+                let desugared = desugar_prop_refs(&r.text);
+                // A desugared prop ref looks like `*foo.get()` — detect by `*` prefix.
+                if desugared.starts_with('*') && desugared.ends_with(".get()") {
+                    // Strip leading `*` and trailing `.get()` to get the signal variable name.
+                    let signal_name = &desugared[1..desugared.len() - 6];
+                    stmts.push(format!(
+                        "        let {} = {}.clone();",
+                        sig_var, signal_name
+                    ));
+                } else {
+                    stmts.push(format!(
+                        "        let {} = Signal::new({});",
+                        sig_var, desugared
+                    ));
+                }
+            }
+            Expr::SelfProp(prop) => {
+                // Typed `self.prop` — clone the local Signal variable.
+                stmts.push(format!("        let {} = {}.clone();", sig_var, prop));
+            }
+            other => {
+                let rs_expr = compile_expr(other, ExprCtx::BuildFn);
+                stmts.push(format!(
+                    "        let {} = Signal::new({});",
+                    sig_var, rs_expr
+                ));
+            }
         }
     } else {
         // No binding found — determine a sensible zero-value default for the widget.
@@ -799,10 +850,14 @@ fn find_signal_binding(
 
 fn find_binding_f32(bindings: &[Binding], prop: &str) -> Option<f32> {
     bindings.iter().find(|b| b.property == prop).and_then(|b| {
-        let Expr::Raw(r) = &b.value;
-        match eval_binding(&r.text, prop, "") {
-            TypedExpr::LengthLit(f) => Some(f),
-            TypedExpr::IntLit(n)    => Some(n as f32),
+        match &b.value {
+            Expr::Raw(r) => match eval_binding(&r.text, prop, "") {
+                TypedExpr::LengthLit(f) => Some(f),
+                TypedExpr::IntLit(n)    => Some(n as f32),
+                _ => None,
+            },
+            Expr::Literal(crate::ast::Literal::Int(n))   => Some(*n as f32),
+            Expr::Literal(crate::ast::Literal::Float(f)) => Some(*f as f32),
             _ => None,
         }
     })
@@ -810,6 +865,36 @@ fn find_binding_f32(bindings: &[Binding], prop: &str) -> Option<f32> {
 
 fn escape_str(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Convert an `Expr` to a raw text string for use in legacy helpers that take `&str`.
+///
+/// For `Raw`, returns the stored text directly. For typed variants, uses `compile_expr`
+/// in `BuildFn` context to produce equivalent Rust source.
+fn expr_as_raw_text(expr: &Expr) -> String {
+    match expr {
+        Expr::Raw(r) => r.text.clone(),
+        other => compile_expr(other, ExprCtx::BuildFn),
+    }
+}
+
+/// Convert a typed `Expr` to a `TypedExpr` for use in `typed_expr_to_rust`.
+///
+/// Bridges new typed AST nodes into the existing `TypedExpr` → Signal::new(...) path
+/// so property-type suffixes (`i32`, `f32`) are emitted consistently.
+fn expr_to_typed(expr: &Expr, ty_hint: &str) -> TypedExpr {
+    use crate::ast::Literal;
+    match expr {
+        Expr::Literal(Literal::Int(n)) => TypedExpr::IntLit(*n),
+        Expr::Literal(Literal::Float(f)) => TypedExpr::LengthLit(*f as f32),
+        Expr::Literal(Literal::Bool(b)) => TypedExpr::Ident(b.to_string()),
+        Expr::Literal(Literal::Str(s)) => {
+            // Re-use eval's string parsing so interpolated strings get the right type.
+            eval_binding(&format!("{:?}", s), ty_hint, "")
+        }
+        Expr::Ident(s) => TypedExpr::Ident(s.clone()),
+        other => TypedExpr::Ident(compile_expr(other, ExprCtx::BuildFn)),
+    }
 }
 
 /// G1 heuristic: replace `self . ident` with `*self.ident.get()` in raw expressions.

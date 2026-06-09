@@ -1,10 +1,93 @@
-//! Expression evaluator — converts `Expr::Raw` text into `TypedExpr` variants.
-//!
-//! Scope: the 7 expression forms used in counter.vi. No full Slint expression language.
+//! Expression evaluator — converts `Expr::Raw` text into `TypedExpr` variants,
+//! and `compile_expr()` for typed `Expr` → Rust source code.
 
 use std::prelude::v1::*;
+use crate::ast::{Expr, InterpPart, Literal, UnaryOp};
 use crate::lexer::tokenize;
 use crate::token::TokenKind;
+
+// ─── ExprCtx + compile_expr ──────────────────────────────────────────────────
+
+/// Context in which a typed `Expr` is compiled to Rust source.
+///
+/// This controls how `SelfProp` references are rendered:
+/// - `BuildFn`: inside `static build()` where properties are local `Signal<T>` variables.
+///   A `SelfProp("x")` dereferences the local signal with `*x.get()`.
+/// - `Reactive`: inside a `Signal::map()` closure where the closure arg shadows the
+///   local variable — `SelfProp("x")` renders as the plain identifier `x`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ExprCtx {
+    /// Inside `static build()` — properties are local `Signal<T>` vars; dereference with `.get()`.
+    BuildFn,
+    /// Inside a reactive `map()` closure — closure arg is already the dereferenced value.
+    Reactive,
+}
+
+/// Convert a typed `Expr` to Rust source code.
+///
+/// # Parameters
+/// - `expr` — the expression to compile
+/// - `ctx`  — which context the expression appears in (see `ExprCtx`)
+///
+/// # Returns
+/// A Rust expression string suitable for embedding in generated code.
+pub fn compile_expr(expr: &Expr, ctx: ExprCtx) -> String {
+    match expr {
+        Expr::Raw(r) => r.text.clone(),
+
+        Expr::Literal(Literal::Bool(b))  => b.to_string(),
+        Expr::Literal(Literal::Int(n))   => n.to_string(),
+        Expr::Literal(Literal::Float(f)) => format!("{}_f32", f),
+        Expr::Literal(Literal::Str(s))   => format!("{:?}", s),
+
+        Expr::Ident(name) => name.clone(),
+
+        Expr::SelfProp(name) => match ctx {
+            // In build(): properties are local Signal<T> vars — deref to get the value.
+            ExprCtx::BuildFn  => format!("*{}.get()", name),
+            // In a map closure: the closure argument already holds the dereferenced value.
+            ExprCtx::Reactive => name.clone(),
+        },
+
+        Expr::BinOp(l, op, r) => format!(
+            "({} {} {})",
+            compile_expr(l, ctx),
+            op.as_str(),
+            compile_expr(r, ctx)
+        ),
+
+        Expr::Unary(UnaryOp::Not, e) => format!("(!{})", compile_expr(e, ctx)),
+        Expr::Unary(UnaryOp::Neg, e) => format!("(-{})", compile_expr(e, ctx)),
+
+        Expr::Ternary(cond, then_e, else_e) => format!(
+            "(if {} {{ {} }} else {{ {} }})",
+            compile_expr(cond, ctx),
+            compile_expr(then_e, ctx),
+            compile_expr(else_e, ctx)
+        ),
+
+        Expr::Interpolated(parts) => {
+            // Build a format! string from the parts.
+            let fmt: String = parts.iter().map(|p| match p {
+                InterpPart::Lit(s) => s.replace('{', "{{").replace('}', "}}"),
+                InterpPart::Expr(_) => "{}".to_string(),
+            }).collect();
+            let args: Vec<String> = parts.iter().filter_map(|p| {
+                if let InterpPart::Expr(e) = p { Some(compile_expr(e, ctx)) } else { None }
+            }).collect();
+            if args.is_empty() {
+                format!("alloc::string::String::from({:?})", fmt)
+            } else {
+                format!("alloc::format!({:?}, {})", fmt, args.join(", "))
+            }
+        }
+
+        Expr::FnCall(name, args) => {
+            let args_str: Vec<String> = args.iter().map(|a| compile_expr(a, ctx)).collect();
+            format!("{}({})", name, args_str.join(", "))
+        }
+    }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

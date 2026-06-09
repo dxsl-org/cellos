@@ -99,16 +99,79 @@ pub struct CallbackBinding {
 
 // ─── Expressions ─────────────────────────────────────────────────────────────
 
-/// P03: all expressions are raw source text.
-/// P04 will extend this with typed variants.
+/// Raw source text fallback — used when the expression is too complex for typed parsing.
 #[derive(Debug)]
 pub struct RawExpr {
     pub text: String,
     pub span: Span,
 }
 
+/// Typed boolean / integer / float / string literal.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Literal {
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    Str(String),
+}
+
+/// Binary operator kinds.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BinOpKind {
+    Add, Sub, Mul, Div, Rem,
+    Eq, Ne, Lt, Le, Gt, Ge,
+    And, Or,
+}
+
+impl BinOpKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            BinOpKind::Add => "+",  BinOpKind::Sub => "-",
+            BinOpKind::Mul => "*",  BinOpKind::Div => "/",
+            BinOpKind::Rem => "%",  BinOpKind::Eq  => "==",
+            BinOpKind::Ne  => "!=", BinOpKind::Lt  => "<",
+            BinOpKind::Le  => "<=", BinOpKind::Gt  => ">",
+            BinOpKind::Ge  => ">=", BinOpKind::And => "&&",
+            BinOpKind::Or  => "||",
+        }
+    }
+}
+
+/// Unary operator kinds.
+#[derive(Debug, Clone, PartialEq)]
+pub enum UnaryOp { Not, Neg }
+
+/// Part of a string interpolation like `"Speed: \{speed} rpm"`.
+#[derive(Debug)]
+pub enum InterpPart {
+    /// Plain text segment.
+    Lit(String),
+    /// Interpolated expression `\{expr}`.
+    Expr(Box<Expr>),
+}
+
+/// Typed expression AST node.
+///
+/// `Raw` is kept as a fallback for complex expressions the parser does not fully
+/// model. All new patterns produce typed variants so codegen can reason about them.
 #[derive(Debug)]
 pub enum Expr {
+    /// Untyped fallback — raw source tokens joined by spaces.
     Raw(RawExpr),
-    // P04: Literal(Literal), Ident(String), BinOp(...), Ternary(...), Interpolated(...)
+    /// A literal value: `true`, `42`, `3.14`, `"text"`.
+    Literal(Literal),
+    /// Bare identifier: `count`, `items`.
+    Ident(String),
+    /// Property reference on `self`: `self.count` → `SelfProp("count")`.
+    SelfProp(String),
+    /// Binary expression: `a + b`, `x == y`.
+    BinOp(Box<Expr>, BinOpKind, Box<Expr>),
+    /// Unary expression: `!flag`, `-n`.
+    Unary(UnaryOp, Box<Expr>),
+    /// Ternary expression: `cond ? then : else`.
+    Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
+    /// String with `\{...}` interpolation segments: `"Count: \{count}"`.
+    Interpolated(Vec<InterpPart>),
+    /// Function call: `min(a, b)`.
+    FnCall(String, Vec<Expr>),
 }

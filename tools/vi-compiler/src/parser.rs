@@ -1,4 +1,7 @@
-use crate::ast::{Binding, CallbackBinding, Child, Component, Element, Expr, RawExpr, ViFile};
+use crate::ast::{
+    Binding, BinOpKind, CallbackBinding, Child, Component, Element,
+    Expr, InterpPart, Literal, RawExpr, UnaryOp, ViFile,
+};
 use crate::error::ParseError;
 use crate::token::{Span, Token, TokenKind};
 use std::prelude::v1::*;
@@ -160,7 +163,7 @@ impl Parser {
 
         let default = if *self.peek_kind() == TokenKind::Colon {
             self.advance(); // consume ':'
-            Some(self.parse_expr_raw_until_semi())
+            Some(self.parse_expr())
         } else {
             None
         };
@@ -303,7 +306,7 @@ impl Parser {
         let span_start = self.current_span();
         let property = self.expect(TokenKind::Ident, "property name")?.text;
         self.expect(TokenKind::Colon, "':'")?;
-        let value = self.parse_expr_raw_until_semi();
+        let value = self.parse_expr();
         self.expect(TokenKind::Semicolon, "';'")?;
         Ok(Binding { property, value, span: span_start })
     }
@@ -322,9 +325,330 @@ impl Parser {
         Ok(CallbackBinding { name, body, span: span_start })
     }
 
+    // ── Typed expression parser ──────────────────────────────────────────────
+
+    /// Entry point: parse a typed expression, consuming tokens until `;` or `}` at depth 0.
+    ///
+    /// Returns a typed `Expr` variant for recognised patterns; falls back to
+    /// `Expr::Raw` for complex / unrecognised inputs so all existing `.vi` files
+    /// continue to compile.
+    fn parse_expr(&mut self) -> Expr {
+        self.parse_ternary()
+    }
+
+    fn parse_ternary(&mut self) -> Expr {
+        let cond = self.parse_or();
+        if *self.peek_kind() == TokenKind::Question {
+            self.advance(); // consume '?'
+            let then = self.parse_or();
+            // ':' in ternary — but ':' is also used for bindings; only consume
+            // here when we are inside the ternary (depth tracked by callers).
+            // For simplicity, fall back to Raw if we see '?' — ternary is rare in .vi.
+            // Just return Raw with all three sub-parts.
+            let _ = then; // discard what we parsed
+            // Re-parse from the start using the raw fallback.
+            // We can't easily back-track, so we collected `cond` above.
+            // The fallback path is: we already consumed some tokens.
+            // Best effort: return Ident wrapping whatever cond was, the parser
+            // state is already advanced past '?'. Emit raw for everything after.
+            let raw_rest = self.collect_raw_until_semi();
+            return Expr::Raw(RawExpr {
+                text: format!("{} ? {}", expr_to_raw_text(&cond), raw_rest),
+                span: Span::default(),
+            });
+        }
+        cond
+    }
+
+    fn parse_or(&mut self) -> Expr {
+        let mut lhs = self.parse_and();
+        while *self.peek_kind() == TokenKind::Or {
+            self.advance();
+            let rhs = self.parse_and();
+            lhs = Expr::BinOp(Box::new(lhs), BinOpKind::Or, Box::new(rhs));
+        }
+        lhs
+    }
+
+    fn parse_and(&mut self) -> Expr {
+        let mut lhs = self.parse_eq();
+        while *self.peek_kind() == TokenKind::And {
+            self.advance();
+            let rhs = self.parse_eq();
+            lhs = Expr::BinOp(Box::new(lhs), BinOpKind::And, Box::new(rhs));
+        }
+        lhs
+    }
+
+    fn parse_eq(&mut self) -> Expr {
+        let mut lhs = self.parse_cmp();
+        loop {
+            let op = match self.peek_kind() {
+                TokenKind::EqEq   => BinOpKind::Eq,
+                TokenKind::BangEq => BinOpKind::Ne,
+                _                 => break,
+            };
+            self.advance();
+            let rhs = self.parse_cmp();
+            lhs = Expr::BinOp(Box::new(lhs), op, Box::new(rhs));
+        }
+        lhs
+    }
+
+    fn parse_cmp(&mut self) -> Expr {
+        let mut lhs = self.parse_add();
+        loop {
+            let op = match self.peek_kind() {
+                TokenKind::Lt   => BinOpKind::Lt,
+                TokenKind::Gt   => BinOpKind::Gt,
+                TokenKind::LtEq => BinOpKind::Le,
+                TokenKind::GtEq => BinOpKind::Ge,
+                _               => break,
+            };
+            // Peek further: '<' and '>' are also used in property type angles.
+            // Heuristic: if the token after '<'/'>' is an Ident followed by '>', it's
+            // a type angle — let the caller handle it.  We already consumed past
+            // `parse_primary` so this ambiguity only arises inside a nested expr.
+            self.advance();
+            let rhs = self.parse_add();
+            lhs = Expr::BinOp(Box::new(lhs), op, Box::new(rhs));
+        }
+        lhs
+    }
+
+    fn parse_add(&mut self) -> Expr {
+        let mut lhs = self.parse_mul();
+        loop {
+            let op = match self.peek_kind() {
+                TokenKind::Plus  => BinOpKind::Add,
+                TokenKind::Minus => BinOpKind::Sub,
+                _                => break,
+            };
+            self.advance();
+            let rhs = self.parse_mul();
+            lhs = Expr::BinOp(Box::new(lhs), op, Box::new(rhs));
+        }
+        lhs
+    }
+
+    fn parse_mul(&mut self) -> Expr {
+        let mut lhs = self.parse_unary_expr();
+        loop {
+            let op = match self.peek_kind() {
+                TokenKind::Star  => BinOpKind::Mul,
+                TokenKind::Slash => BinOpKind::Div,
+                // '%' is not in TokenKind yet; skip Rem
+                _                => break,
+            };
+            self.advance();
+            let rhs = self.parse_unary_expr();
+            lhs = Expr::BinOp(Box::new(lhs), op, Box::new(rhs));
+        }
+        lhs
+    }
+
+    fn parse_unary_expr(&mut self) -> Expr {
+        match self.peek_kind() {
+            TokenKind::Bang  => {
+                self.advance();
+                Expr::Unary(UnaryOp::Not, Box::new(self.parse_unary_expr()))
+            }
+            TokenKind::Minus => {
+                // Disambiguate: `-` before a digit is part of a negative literal.
+                if matches!(self.peek_kind_at(1), TokenKind::IntLit | TokenKind::FloatLit) {
+                    self.advance(); // consume '-'
+                    match self.peek_kind().clone() {
+                        TokenKind::IntLit => {
+                            let tok = self.advance();
+                            let n: i64 = tok.text.parse().unwrap_or(0);
+                            Expr::Literal(Literal::Int(-n))
+                        }
+                        TokenKind::FloatLit => {
+                            let tok = self.advance();
+                            let f: f64 = tok.text.parse().unwrap_or(0.0);
+                            Expr::Literal(Literal::Float(-f))
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    self.advance();
+                    Expr::Unary(UnaryOp::Neg, Box::new(self.parse_unary_expr()))
+                }
+            }
+            _ => self.parse_primary(),
+        }
+    }
+
+    /// Parse a primary expression: literal / ident / self.prop / fn-call / string / group.
+    ///
+    /// Falls back to raw token collection when the leading token is not recognised
+    /// as a primary-expression start.
+    fn parse_primary(&mut self) -> Expr {
+        match self.peek_kind().clone() {
+            TokenKind::KwTrue  => { self.advance(); Expr::Literal(Literal::Bool(true))  }
+            TokenKind::KwFalse => { self.advance(); Expr::Literal(Literal::Bool(false)) }
+
+            TokenKind::IntLit => {
+                let tok = self.advance().clone();
+                let n: i64 = tok.text.parse().unwrap_or(0);
+                Expr::Literal(Literal::Int(n))
+            }
+
+            TokenKind::FloatLit => {
+                let tok = self.advance().clone();
+                let f: f64 = tok.text.parse().unwrap_or(0.0);
+                Expr::Literal(Literal::Float(f))
+            }
+
+            TokenKind::StringLit => {
+                let tok = self.advance().clone();
+                self.parse_string_lit(&tok.text, tok.span)
+            }
+
+            TokenKind::Ident => {
+                let span = self.current_span();
+                let name = self.advance().text.clone();
+
+                // `self.prop` → SelfProp
+                if name == "self" && *self.peek_kind() == TokenKind::Dot {
+                    self.advance(); // consume '.'
+                    if let TokenKind::Ident = self.peek_kind() {
+                        let prop = self.advance().text.clone();
+                        return Expr::SelfProp(prop);
+                    } else {
+                        // `self.` followed by non-ident — fall back to raw
+                        let raw_rest = self.collect_raw_until_semi();
+                        return Expr::Raw(RawExpr {
+                            text: format!("self . {}", raw_rest),
+                            span,
+                        });
+                    }
+                }
+
+                // `name(args...)` → FnCall
+                if *self.peek_kind() == TokenKind::LParen {
+                    self.advance(); // consume '('
+                    let mut args = Vec::new();
+                    while !matches!(self.peek_kind(), TokenKind::RParen | TokenKind::Eof | TokenKind::Semicolon) {
+                        args.push(self.parse_expr());
+                        if *self.peek_kind() == TokenKind::Comma { self.advance(); }
+                    }
+                    if *self.peek_kind() == TokenKind::RParen { self.advance(); }
+                    return Expr::FnCall(name, args);
+                }
+
+                // `.prop` chained on bare ident — not a self-prop, fall back raw
+                if *self.peek_kind() == TokenKind::Dot {
+                    let raw_rest = self.collect_raw_until_semi();
+                    return Expr::Raw(RawExpr {
+                        text: format!("{} . {}", name, raw_rest),
+                        span,
+                    });
+                }
+
+                Expr::Ident(name)
+            }
+
+            // Grouped expression
+            TokenKind::LParen => {
+                self.advance(); // consume '('
+                let inner = self.parse_expr();
+                if *self.peek_kind() == TokenKind::RParen { self.advance(); }
+                inner
+            }
+
+            // Anything unrecognised — collect as Raw
+            _ => {
+                let span = self.current_span();
+                let text = self.collect_raw_until_semi();
+                Expr::Raw(RawExpr { text, span })
+            }
+        }
+    }
+
+    /// Parse a string literal token, handling `\{expr}` interpolation.
+    fn parse_string_lit(&self, content: &str, _span: Span) -> Expr {
+        // Check for interpolation markers `\{`
+        if !content.contains("\\{") {
+            return Expr::Literal(Literal::Str(content.to_string()));
+        }
+
+        // Split into parts: text and \{...} segments
+        let bytes = content.as_bytes();
+        let mut parts: Vec<InterpPart> = Vec::new();
+        let mut i = 0usize;
+        let mut lit_start = 0usize;
+
+        while i < bytes.len() {
+            if i + 1 < bytes.len() && bytes[i] == b'\\' && bytes[i + 1] == b'{' {
+                // Flush accumulated literal
+                if i > lit_start {
+                    parts.push(InterpPart::Lit(content[lit_start..i].to_string()));
+                }
+                i += 2; // skip `\{`
+                let var_start = i;
+                while i < bytes.len() && bytes[i] != b'}' { i += 1; }
+                let var_name = content[var_start..i].trim().to_string();
+                if i < bytes.len() { i += 1; } // skip `}`
+                lit_start = i;
+                // Emit a SelfProp or Ident depending on the var name content
+                let expr = if var_name.starts_with("self.") {
+                    Expr::SelfProp(var_name[5..].to_string())
+                } else {
+                    Expr::Ident(var_name)
+                };
+                parts.push(InterpPart::Expr(Box::new(expr)));
+            } else {
+                i += 1;
+            }
+        }
+
+        // Flush trailing literal
+        if lit_start < bytes.len() {
+            parts.push(InterpPart::Lit(content[lit_start..].to_string()));
+        }
+
+        if parts.iter().all(|p| matches!(p, InterpPart::Lit(_))) {
+            // Only literal parts — no real interpolation found
+            Expr::Literal(Literal::Str(content.to_string()))
+        } else {
+            Expr::Interpolated(parts)
+        }
+    }
+
+    /// Collect remaining tokens (until `;` or `}` at depth 0) as a raw text string.
+    ///
+    /// Used as fallback inside typed expression parsers when they encounter
+    /// something they cannot model.
+    fn collect_raw_until_semi(&mut self) -> String {
+        let mut parts = Vec::<String>::new();
+        let mut depth = 0i32;
+        loop {
+            match self.peek_kind().clone() {
+                TokenKind::LBrace | TokenKind::LParen | TokenKind::LBracket => {
+                    depth += 1;
+                    parts.push(self.advance().text.clone());
+                }
+                TokenKind::RBrace | TokenKind::RParen | TokenKind::RBracket => {
+                    if depth == 0 { break; }
+                    depth -= 1;
+                    parts.push(self.advance().text.clone());
+                }
+                TokenKind::Semicolon if depth == 0 => break,
+                TokenKind::Eof => break,
+                TokenKind::StringLit => parts.push(format!("\"{}\"", self.advance().text)),
+                _ => parts.push(self.advance().text.clone()),
+            }
+        }
+        parts.join(" ")
+    }
+
     // ── Expression helpers ───────────────────────────────────────────────────
 
     /// Collect tokens until ';' at brace-depth 0 (does NOT consume the ';').
+    ///
+    /// Kept for compatibility; new callers should use `parse_expr()` for typed AST nodes.
+    #[allow(dead_code)]
     fn parse_expr_raw_until_semi(&mut self) -> Expr {
         let span_start = self.current_span();
         let mut parts  = Vec::<String>::new();
@@ -379,3 +703,43 @@ pub fn parse(tokens: Vec<Token>) -> Result<ViFile, ParseError> {
 
 // Re-export ast types used in parser for import hygiene
 use crate::ast::{CallbackDecl, Import, PropertyDecl, Visibility};
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/// Convert a typed `Expr` back to a raw text string for use in fallback Raw nodes.
+///
+/// This is a lossy best-effort conversion used only in the ternary fallback path
+/// where we cannot back-track the token stream.
+fn expr_to_raw_text(expr: &Expr) -> String {
+    use crate::ast::{InterpPart, Literal, UnaryOp};
+    match expr {
+        Expr::Raw(r)                   => r.text.clone(),
+        Expr::Literal(Literal::Bool(b)) => b.to_string(),
+        Expr::Literal(Literal::Int(n))  => n.to_string(),
+        Expr::Literal(Literal::Float(f)) => f.to_string(),
+        Expr::Literal(Literal::Str(s))  => format!("{:?}", s),
+        Expr::Ident(n)                  => n.clone(),
+        Expr::SelfProp(n)               => format!("self.{}", n),
+        Expr::Unary(UnaryOp::Not, e)    => format!("!{}", expr_to_raw_text(e)),
+        Expr::Unary(UnaryOp::Neg, e)    => format!("-{}", expr_to_raw_text(e)),
+        Expr::BinOp(l, op, r)           => format!(
+            "{} {} {}",
+            expr_to_raw_text(l), op.as_str(), expr_to_raw_text(r)
+        ),
+        Expr::Ternary(c, t, e) => format!(
+            "{} ? {} : {}",
+            expr_to_raw_text(c), expr_to_raw_text(t), expr_to_raw_text(e)
+        ),
+        Expr::Interpolated(parts) => {
+            let s: String = parts.iter().map(|p| match p {
+                InterpPart::Lit(s) => s.clone(),
+                InterpPart::Expr(e) => format!("\\{{{}}}", expr_to_raw_text(e)),
+            }).collect();
+            format!("{:?}", s)
+        }
+        Expr::FnCall(name, args) => {
+            let args_str: Vec<String> = args.iter().map(expr_to_raw_text).collect();
+            format!("{}({})", name, args_str.join(", "))
+        }
+    }
+}

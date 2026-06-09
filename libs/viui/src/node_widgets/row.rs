@@ -75,6 +75,16 @@ impl ViNode for Row {
         false
     }
 
+    fn collect_focusable_bounds(&mut self) -> alloc::vec::Vec<crate::layout::Rect> {
+        self.children.iter_mut()
+            .flat_map(|c| c.collect_focusable_bounds())
+            .collect()
+    }
+
+    fn activate_at(&mut self, target: crate::layout::Rect) -> bool {
+        self.children.iter_mut().any(|c| c.activate_at(target))
+    }
+
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let mut handles = Vec::new();
         for child in &mut self.children {

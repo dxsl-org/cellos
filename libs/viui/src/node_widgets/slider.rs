@@ -90,6 +90,8 @@ impl ViNode for Slider {
         }
     }
 
+    fn is_focusable(&self) -> bool { true }
+
     fn event(&mut self, event: &Event) -> bool {
         let b = self.bounds_cache.get();
         let track_x   = b.x + THUMB_R;

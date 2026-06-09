@@ -52,4 +52,41 @@ pub trait ViNode: 'static {
     fn collect_dirty_handles(&mut self, _region: DirtyRegion) -> Vec<SubscriptionHandle> {
         Vec::new()
     }
+
+    /// Returns true if this widget can receive keyboard focus.
+    ///
+    /// Leaf interactive widgets (Button, CheckBox, Slider, TextEdit) override
+    /// this to return `true`. Containers and decorative widgets leave the default.
+    fn is_focusable(&self) -> bool { false }
+
+    /// Collect screen rects of all focusable descendants (and self, if focusable).
+    ///
+    /// Called by `ViApp` after each layout pass to build the Tab-order list.
+    /// Containers must override to recurse into children. Default: returns `self.bounds()`
+    /// when `is_focusable()` is true, otherwise empty.
+    fn collect_focusable_bounds(&mut self) -> alloc::vec::Vec<crate::layout::Rect> {
+        if self.is_focusable() {
+            alloc::vec![self.bounds()]
+        } else {
+            alloc::vec::Vec::new()
+        }
+    }
+
+    /// Activate the widget (called when Enter is pressed while this widget is focused).
+    ///
+    /// Returns `true` if the activation was consumed (triggers layout re-check).
+    /// Button: fires `on_click`. CheckBox: toggles state. Default: no-op → false.
+    fn activate(&mut self) -> bool { false }
+
+    /// Walk the tree and activate the widget whose bounds exactly match `target`.
+    ///
+    /// Default impl handles leaf widgets: if focusable and bounds match, calls
+    /// `activate()`. Containers must override to recurse into children.
+    fn activate_at(&mut self, target: crate::layout::Rect) -> bool {
+        if self.is_focusable() && self.bounds() == target {
+            self.activate()
+        } else {
+            false
+        }
+    }
 }

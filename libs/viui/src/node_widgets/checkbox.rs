@@ -109,6 +109,15 @@ impl ViNode for CheckBox {
         }
     }
 
+    fn is_focusable(&self) -> bool { true }
+
+    fn activate(&mut self) -> bool {
+        let new_val = !*self.checked.get();
+        self.checked.set(new_val);
+        if let Some(cb) = &self.on_toggle { cb(new_val); }
+        true
+    }
+
     fn event(&mut self, event: &Event) -> bool {
         let b = self.bounds_cache.get();
 

@@ -242,3 +242,169 @@ component Cond {
         &rust[..rust.len().min(500)]
     );
 }
+
+// ─── Phase 01: typed Expr + compile_expr tests ──────────────────────────────
+
+/// Bool property default `true` parses as Literal::Bool → Signal::new(true).
+#[test]
+fn test_bool_property_typed_default() {
+    let src = r#"
+component Flags {
+    in property <bool> flag: true;
+    VBox { }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = CodeGen::new().generate(&file);
+    assert!(
+        rust.contains("Signal::new(true)"),
+        "bool default 'true' should emit Signal::new(true), not String wrapping: {}",
+        &rust[..rust.len().min(600)]
+    );
+    // Must NOT emit Signal::new(String::from("true"))
+    assert!(
+        !rust.contains("Signal::new(String::from(\"true\"))"),
+        "bool should not be wrapped in String::from: {}",
+        &rust[..rust.len().min(600)]
+    );
+}
+
+/// Binding `value: self.speed` produces a `.clone()` of the local signal var.
+#[test]
+fn test_self_prop_binding_clones_signal() {
+    let src = r#"
+component Controls {
+    in property <float> speed: 0.5;
+    VBox {
+        Slider { value: self.speed; }
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = CodeGen::new().generate(&file);
+    // self.speed parsed as SelfProp("speed") → find_signal_binding emits speed.clone()
+    assert!(
+        rust.contains("speed.clone()"),
+        "self.speed binding should emit speed.clone(): {}",
+        &rust[..rust.len().min(600)]
+    );
+}
+
+/// String interpolation `"Count: \{count}"` produces `.into_parts()` map chain.
+#[test]
+fn test_interpolated_text_into_parts() {
+    let out = gen_counter();
+    assert!(
+        out.contains(".into_parts()"),
+        "interpolated text must use .into_parts(): {}",
+        &out[..out.len().min(600)]
+    );
+    assert!(
+        out.contains(".map("),
+        "interpolated text must use .map(): {}",
+        &out[..out.len().min(600)]
+    );
+}
+
+/// compile_expr unit tests — typed AST nodes → Rust source strings.
+#[cfg(test)]
+mod compile_expr_tests {
+    use vi_compiler::ast::{BinOpKind, Expr, InterpPart, Literal, RawExpr, UnaryOp};
+    use vi_compiler::eval::{compile_expr, ExprCtx};
+    use vi_compiler::token::Span;
+
+    fn build_fn() -> ExprCtx { ExprCtx::BuildFn }
+    fn reactive() -> ExprCtx { ExprCtx::Reactive }
+
+    #[test]
+    fn bool_literal_true() {
+        let e = Expr::Literal(Literal::Bool(true));
+        assert_eq!(compile_expr(&e, build_fn()), "true");
+    }
+
+    #[test]
+    fn bool_literal_false() {
+        let e = Expr::Literal(Literal::Bool(false));
+        assert_eq!(compile_expr(&e, build_fn()), "false");
+    }
+
+    #[test]
+    fn int_literal() {
+        let e = Expr::Literal(Literal::Int(42));
+        assert_eq!(compile_expr(&e, build_fn()), "42");
+    }
+
+    #[test]
+    fn float_literal() {
+        let e = Expr::Literal(Literal::Float(3.14));
+        assert_eq!(compile_expr(&e, build_fn()), "3.14_f32");
+    }
+
+    #[test]
+    fn str_literal() {
+        let e = Expr::Literal(Literal::Str("hello".to_string()));
+        assert_eq!(compile_expr(&e, build_fn()), "\"hello\"");
+    }
+
+    #[test]
+    fn self_prop_build_fn_context() {
+        // In build() context: SelfProp("speed") → "*speed.get()"
+        let e = Expr::SelfProp("speed".to_string());
+        assert_eq!(compile_expr(&e, build_fn()), "*speed.get()");
+    }
+
+    #[test]
+    fn self_prop_reactive_context() {
+        // In reactive (map) context: SelfProp("speed") → "speed"
+        let e = Expr::SelfProp("speed".to_string());
+        assert_eq!(compile_expr(&e, reactive()), "speed");
+    }
+
+    #[test]
+    fn binop_add() {
+        let e = Expr::BinOp(
+            Box::new(Expr::Literal(Literal::Int(1))),
+            BinOpKind::Add,
+            Box::new(Expr::Literal(Literal::Int(2))),
+        );
+        assert_eq!(compile_expr(&e, build_fn()), "(1 + 2)");
+    }
+
+    #[test]
+    fn binop_selfprop_plus_int() {
+        let e = Expr::BinOp(
+            Box::new(Expr::SelfProp("count".to_string())),
+            BinOpKind::Add,
+            Box::new(Expr::Literal(Literal::Int(1))),
+        );
+        // In build() context, SelfProp dereferences.
+        assert_eq!(compile_expr(&e, build_fn()), "(*count.get() + 1)");
+    }
+
+    #[test]
+    fn interpolated_single_var() {
+        let e = Expr::Interpolated(vec![
+            InterpPart::Lit("Count: ".to_string()),
+            InterpPart::Expr(Box::new(Expr::Ident("count".to_string()))),
+        ]);
+        let out = compile_expr(&e, build_fn());
+        assert!(out.contains("alloc::format!"), "should use alloc::format!: {}", out);
+        assert!(out.contains("Count: {}"), "format string should contain 'Count: {{}}': {}", out);
+        assert!(out.contains("count"), "format args should include 'count': {}", out);
+    }
+
+    #[test]
+    fn raw_expr_passthrough() {
+        let e = Expr::Raw(RawExpr {
+            text: "*foo.get()".to_string(),
+            span: Span::default(),
+        });
+        assert_eq!(compile_expr(&e, build_fn()), "*foo.get()");
+    }
+
+    #[test]
+    fn unary_not() {
+        let e = Expr::Unary(UnaryOp::Not, Box::new(Expr::Literal(Literal::Bool(true))));
+        assert_eq!(compile_expr(&e, build_fn()), "(!true)");
+    }
+}

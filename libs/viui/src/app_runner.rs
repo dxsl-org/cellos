@@ -49,6 +49,41 @@ use crate::renderer::ViRenderer;
 use crate::signal::SubscriptionHandle;
 use crate::theme::{DarkTheme, ViTheme};
 
+// ─── Focus state ─────────────────────────────────────────────────────────────
+
+/// Tracks Tab-order focus across all focusable widgets in the tree.
+///
+/// `list` is rebuilt after every layout pass (bounds are stale until then).
+/// `idx` is clamped or cleared whenever the list shrinks.
+struct FocusState {
+    /// Screen rects of all focusable widgets, in tree (tab) order.
+    list: alloc::vec::Vec<crate::layout::Rect>,
+    /// Currently focused index into `list`, or `None` when no widget is focused.
+    idx:  Option<usize>,
+}
+
+impl FocusState {
+    fn new() -> Self { Self { list: alloc::vec::Vec::new(), idx: None } }
+
+    /// Advance or reverse focus by one step, wrapping around.
+    fn advance(&mut self, reverse: bool) {
+        if self.list.is_empty() { self.idx = None; return; }
+        self.idx = Some(match self.idx {
+            None => if reverse { self.list.len() - 1 } else { 0 },
+            Some(i) => if reverse {
+                if i == 0 { self.list.len() - 1 } else { i - 1 }
+            } else {
+                (i + 1) % self.list.len()
+            },
+        });
+    }
+
+    /// Returns the screen rect of the currently focused widget, if any.
+    fn current_bounds(&self) -> Option<crate::layout::Rect> {
+        self.idx.and_then(|i| self.list.get(i).copied())
+    }
+}
+
 // ─── Key repeat ──────────────────────────────────────────────────────────────
 
 /// Delay before the first software repeat fires (milliseconds).
@@ -106,6 +141,8 @@ pub struct ViApp {
     theme:         Box<dyn ViTheme>,
     /// Software key-repeat state. See `KeyRepeatState` for rationale.
     key_repeat:    KeyRepeatState,
+    /// Tab-order focus state. Rebuilt after every layout pass.
+    focus:         FocusState,
 }
 
 impl ViApp {
@@ -124,6 +161,7 @@ impl ViApp {
             layout_dirty:  true,
             theme:         Box::new(DarkTheme),
             key_repeat:    KeyRepeatState::new(),
+            focus:         FocusState::new(),
         }
     }
 
@@ -176,6 +214,21 @@ impl ViApp {
 
         // ── Process input events ──────────────────────────────────────────────
         for e in events {
+            // Tab focus cycling — consumed by the focus system, not dispatched to root.
+            if let Event::KeyPress { key: KeyCode::Tab, modifiers } = e {
+                self.focus.advance(modifiers.shift);
+                self.layout_dirty = true;
+                continue;
+            }
+
+            // Enter activation — route directly to the focused widget via activate_at().
+            if let Event::KeyPress { key: KeyCode::Enter, .. } = e {
+                if let Some(b) = self.focus.current_bounds() {
+                    if self.root.activate_at(b) { self.layout_dirty = true; }
+                }
+                continue;
+            }
+
             // Track held key for software repeat injection (see KeyRepeatState).
             match e {
                 Event::KeyPress { key, modifiers } => {
@@ -222,6 +275,12 @@ impl ViApp {
             self.layout_dirty = false;
             let (w, h) = self.renderer.size();
             self.root.layout(Constraints::root(Size::new(w as f32, h as f32)));
+            // Rebuild focusable-widget list with fresh post-layout bounds.
+            self.focus.list = self.root.collect_focusable_bounds();
+            // Clamp idx if the list shrank (e.g. widget removed).
+            if let Some(i) = self.focus.idx {
+                if i >= self.focus.list.len() { self.focus.idx = None; }
+            }
             self.dirty_handles = self.root.collect_dirty_handles(
                 Rc::clone(&self.dirty_region)
             );
@@ -232,6 +291,9 @@ impl ViApp {
         let damage = self.dirty_region.borrow_mut().take();
         if damage.is_none() { return false; }
 
+        // Snapshot focus bounds before the borrow split — Option<Rect> is Copy.
+        let focus_bounds = self.focus.current_bounds();
+
         // Split borrows: renderer, font_ctx, theme, and root are disjoint fields.
         let renderer  = &mut self.renderer;
         let font_ctx  = &mut self.font_ctx;
@@ -241,6 +303,10 @@ impl ViApp {
         renderer.render(damage, &mut |canvas| {
             let mut cx = RenderCtx { canvas, font: font_ctx, theme };
             root.paint(&mut cx);
+            // Post-paint focus ring — drawn on top of all widget content.
+            if let Some(b) = focus_bounds {
+                cx.canvas.draw_rect_border(b, cx.theme.accent(), 2.0);
+            }
         });
         true
     }

@@ -127,6 +127,22 @@ pub trait ViCanvas {
 
     fn width(&self) -> u32;
     fn height(&self) -> u32;
+
+    /// Draw a rectangular border using 4 `fill_rect` calls.
+    ///
+    /// Draws `thickness`-wide edges on all four sides of `rect`.
+    /// The default implementation works for all `ViCanvas` implementors.
+    fn draw_rect_border(&mut self, rect: Rect, color: Color, thickness: f32) {
+        let t = thickness;
+        // top edge
+        self.fill_rect(Rect { x: rect.x, y: rect.y, w: rect.w, h: t }, color);
+        // bottom edge
+        self.fill_rect(Rect { x: rect.x, y: rect.y + rect.h - t, w: rect.w, h: t }, color);
+        // left edge
+        self.fill_rect(Rect { x: rect.x, y: rect.y, w: t, h: rect.h }, color);
+        // right edge
+        self.fill_rect(Rect { x: rect.x + rect.w - t, y: rect.y, w: t, h: rect.h }, color);
+    }
 }
 
 // ─── FramebufferCanvas ───────────────────────────────────────────────────────
