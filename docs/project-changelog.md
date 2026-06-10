@@ -4,6 +4,39 @@
 
 ---
 
+## [2026-06-11] fix(hal): nested-safe trap sscratch protocol (bug #7 resolved)
+
+### Summary
+Fixed a long-standing boot-time death where init occasionally faulted with a zeroed trap frame
+(`scause=0x0 sepc=0x0`) — reboot-on-panic then masked it as a flaky double-boot. Root cause was
+the RISC-V trap entry's sscratch protocol: while a hart ran in S-mode, `sscratch` still held the
+user stack pointer for the whole handler. A nested trap (timer IRQ fired once a context with
+SIE=1 was restored, or a fault inside a syscall) took the S-mode entry path, swapped that user sp
+back into `sp`, the `bnez` mis-classified it as "from U-mode", and the trap-frame store sprayed
+over live memory.
+
+### Fix
+- **New invariant: `sscratch == 0` for the entire time a hart is in S-mode.** `trap.S` parks the
+  user sp into the frame's x2 slot and `csrw sscratch, zero` immediately after the early register
+  saves (before any nested trap can fire — hardware clears SIE on trap). The trap-exit path loads
+  the task's kernel-stack top (`frame base + frame size`) into sscratch right before `sret`.
+- `switch.S` no longer saves/restores sscratch (it stayed 0 across the S-mode-only context
+  switch; restoring a stale per-task value re-armed the spray). Context field 18 kept for layout.
+- `rv64::trap::set_kernel_stack` is now a no-op (the scheduler used to call it mid-S-mode with the
+  next task's *saved* mid-stack sp — the exact pointer that got sprayed). x86 (TSS RSP0) and ARM
+  (TPIDR) keep their implementations; the shared call site in `task::yield_cpu` stays.
+- The cell-kill panic path now prints `[panic-in-cell N] <info>` (it had swallowed the message,
+  leaving only the meaningless `scause=0x0` fault line — this is what hid the real trap-entry fault).
+
+### Verify
+10/10 consecutive boots: 0 faults, 0 double-boots (previously every boot faulted + rebooted);
+`echo` round-trips through the shell prompt; full integration suite **48/51 = baseline** (the 3
+remaining failures are the documented independent pre-existing issues). Note: the `-serial file:`
+boot probe under-reports on Windows (kill -Force doesn't flush QEMU's last buffer) — use the
+TCP-serial interactive probe or the integration suite to observe reach-prompt.
+
+---
+
 ## [2026-06-10] VFS Phase 2.5-4 — littlefs /data: power-loss survives 20/20 kills
 
 ### Summary

@@ -37,13 +37,18 @@ pub fn init() {
     }
 }
 
-/// Set sscratch to kernel stack top before switching to userspace
-/// Call this before context switch to user mode
-pub fn set_kernel_stack(kernel_stack_top: usize) {
-    unsafe {
-        vi_set_sscratch(kernel_stack_top);
-    }
-}
+/// No-op on RISC-V since the nested-safe sscratch protocol (bug #7 fix).
+///
+/// INVARIANT: sscratch == 0 for the entire time a hart runs in S-mode; the
+/// trap-exit path loads the task's kernel-stack top (frame base + frame size)
+/// right before `sret`. The scheduler used to call this mid-S-mode with the
+/// next task's SAVED sp — a mid-stack pointer — so any nested trap (timer IRQ
+/// after a context with SIE=1 was restored) swapped that pointer in as "the
+/// kernel stack" and sprayed a trap frame over live memory.
+///
+/// x86 (TSS RSP0 / syscall MSR) and ARM (TPIDR) still need their versions —
+/// the multi-arch call site in `task::yield_cpu` stays.
+pub fn set_kernel_stack(_kernel_stack_top: usize) {}
 
 pub fn enable_interrupts() {
     unsafe {

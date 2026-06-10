@@ -35,13 +35,13 @@ __trap_entry:
     j .continue_save
     
 .from_user_mode:
-    # sp now contains kernel stack, sscratch contains user sp
-    # Continue with kernel stack
-    
+    # sp now contains kernel stack; sscratch still holds the user sp — it is
+    # parked into the frame and ZEROED right after the early saves below.
+
 .continue_save:
     # === STEP 2: Allocate trap frame on stack ===
     addi sp, sp, -TRAP_FRAME_SIZE
-    
+
     # === STEP 3: Save all general purpose registers ===
     # x0 is always 0, skip it but keep slot for alignment
     sd x1,   1*8(sp)    # ra
@@ -49,6 +49,19 @@ __trap_entry:
     sd x3,   3*8(sp)    # gp
     sd x4,   4*8(sp)    # tp  (cell's tp saved here; kernel tp restored below)
     sd x5,   5*8(sp)    # t0  (save early so t0 is free for the tp restore below)
+
+    # === NESTED-SAFE sscratch protocol (bug #7 fix) ===
+    # INVARIANT: while the hart runs in S-mode, sscratch == 0 — always.
+    # A nested trap (timer IRQ once a context with SIE=1 is restored, or a
+    # fault inside a syscall path) then takes the S-mode branch above and
+    # keeps the CURRENT sp. Previously sscratch kept the USER sp for the
+    # whole handler: a nested trap swapped it into sp, the bnez mis-took it
+    # for "from user", and the frame store sprayed user/kernel memory —
+    # boot-time init deaths with zeroed frames (scause=0).
+    # Interrupts cannot fire before this point: hardware clears SIE on trap.
+    csrr t0, sscratch   # from-U: user sp · from-S: 0 (already swapped back)
+    sd   t0, 2*8(sp)    # park the x2 slot (S-mode path overwrites it in STEP 5)
+    csrw sscratch, zero
 
     # === Phase 02: restore kernel tp from per-hart slot ===
     # HART_LOCAL_TP_ADDR holds &HART_LOCALS[hart_id] (set by hart_local::install).
@@ -96,23 +109,18 @@ __trap_entry:
     csrr t0, scause
     sd t0, 35*8(sp)     # scause
     
-    # === STEP 5: Save user sp ===
-    # If from U-mode, user sp is in sscratch
-    # If from S-mode, user sp is current sp + TRAP_FRAME_SIZE
+    # === STEP 5: Save interrupted sp ===
+    # From U-mode the user sp was already parked into the x2 slot (and
+    # sscratch zeroed) right after the early saves. From S-mode the
+    # interrupted sp is simply frame base + frame size.
     csrr t0, sstatus
     andi t0, t0, 0x100          # Check SPP bit (bit 8)
-    bnez t0, .save_smode_sp
-    
-    # From U-mode: user sp is in sscratch
-    csrr t0, sscratch
-    sd t0, 2*8(sp)
-    j .call_handler
-    
-.save_smode_sp:
+    beqz t0, .call_handler      # from U-mode: x2 slot already correct
+
     # From S-mode: calculate original sp
     addi t0, sp, TRAP_FRAME_SIZE
     sd t0, 2*8(sp)
-    
+
 .call_handler:
     # === STEP 6: Call Rust trap handler ===
     mv a0, sp               # a0 = &ViTrapFrame (borrowed, not owned)

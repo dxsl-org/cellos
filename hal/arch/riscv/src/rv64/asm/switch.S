@@ -56,8 +56,12 @@ __switch:
     sd t0, 15*8(a0)
     sd gp, 16*8(a0)
     sd tp, 17*8(a0)
-    csrr t0, sscratch
-    sd t0, 18*8(a0)
+    # sscratch is intentionally NOT saved/restored (bug #7 fix): the nested-safe
+    # protocol keeps sscratch == 0 for the entire time a hart is in S-mode, and
+    # context switches only ever happen in S-mode. The trap-exit path loads the
+    # task's kernel-stack top into sscratch right before `sret`. Restoring a
+    # stale per-task value here re-armed the nested-trap stack-spray.
+    # Context field 18 (sscratch) stays in the struct for ABI layout but is unused.
 
     # Load new context
     ld ra,  0*8(a1)
@@ -80,9 +84,8 @@ __switch:
     csrw sstatus, t0
     ld gp, 16*8(a1)
     ld tp, 17*8(a1)
-    ld t0, 18*8(a1)
-    csrw sscratch, t0
-    
+    # (sscratch deliberately untouched — see the invariant note above.)
+
     # Always return to caller (kernel scheduler or previous task loop)
     # The caller will handle eventual return to user mode via trap.S
     ret 
