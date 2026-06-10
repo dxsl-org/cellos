@@ -109,19 +109,24 @@ Remove-Item -Recurse -Force $tmpDir
 $kfs_mb = [Math]::Round((Get-Item "kernel\src\embedded\kernel_fs.img").Length/1MB,1)
 Write-Host "  kernel_fs.img: ${kfs_mb} MB"
 
-# 3b. Create a blank disk image (270MB = 540000 sectors) for VirtIO block.
-#     Layout: FAT32 data (LBA 0-525823) + padding (525824-526335) + cell table (526336+)
-Write-Host "Creating blank disk image (disk_v3.img, 270 MB)..."
-$disk_sectors = 540000
+# 3b. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
+#     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4 littlefs @800000
+#     Must match tools/write-mbr.py and kernel/src/loader/disk_layout.rs.
+Write-Host "Creating blank disk image (disk_v3.img, MBR, ~455 MB)..."
+$disk_sectors = 931072
 $diskSize = $disk_sectors * 512
 $blankImg = New-Object byte[] $diskSize
 [System.IO.File]::WriteAllBytes("disk_v3.img", $blankImg)
-Write-Host "  Blank 270 MB image created."
+Write-Host "  Blank image created ($disk_sectors sectors)."
 
-# 3c. Format an empty FAT32 filesystem on LBA 0-525823.
-#     65595+ data clusters at 8 sec/clus satisfy the FAT32 minimum.
-Write-Host "Formatting FAT32 partition (LBA 0-525823, 257 MB)..."
-python "$tools_dir\mkfat32_inplace.py" "disk_v3.img" 525824 2>&1
+# 3c. Write the MBR partition table at LBA 0.
+python "$tools_dir\write-mbr.py" "disk_v3.img" 2>&1
+if ($LASTEXITCODE -ne 0) { throw "MBR write failed" }
+
+# 3d. Format an empty FAT32 filesystem inside P1 (base LBA 2048).
+#     65525+ data clusters at 8 sec/clus satisfy the FAT32 minimum.
+Write-Host "Formatting FAT32 partition P1 (LBA 2048 + 524288 sectors)..."
+python "$tools_dir\mkfat32_inplace.py" "disk_v3.img" 524288 2048 2>&1
 if ($LASTEXITCODE -ne 0) { throw "FAT32 format failed — disk_v3.img may be corrupt" }
 
 # 4. Append cell bootstrap table (for kernel early loader).

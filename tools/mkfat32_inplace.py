@@ -17,7 +17,11 @@ import struct
 import sys
 
 SECTOR_SIZE       = 512
-SEC_PER_CLUS      = 8           # 4096-byte clusters
+# Preferred cluster sizes, largest first. The formatter picks the first one
+# that yields ≥ 65,525 data clusters (the FAT32 minimum) for the given volume
+# size — e.g. the 524,288-sector P1 partition needs 4 sec/clus (2 KiB clusters)
+# because at 8 sec/clus the FAT overhead leaves only ~65,404 clusters.
+SEC_PER_CLUS_CANDIDATES = (8, 4, 2, 1)
 RESERVED_SECTORS  = 32          # FAT32 requires ≥ 32 (boot + FSInfo + backup)
 NUM_FATS          = 2
 ROOT_CLUSTER      = 2           # root directory starts at cluster 2
@@ -29,46 +33,55 @@ CELL_TABLE_BASE_LBA = 526_336
 
 
 def fat32_geometry(total_sectors: int):
-    """Return (fat_size_32, data_start_lba, data_clusters).
+    """Return (sec_per_clus, fat_size_32, data_start_lba, data_clusters).
 
-    Iterates until fat_size_32 converges; FAT32 entries are 4 bytes each.
+    Tries each candidate cluster size (largest first) and keeps the first one
+    that satisfies the FAT32 65,525-cluster minimum. For each candidate the
+    FAT size is iterated until it converges; FAT32 entries are 4 bytes each.
     """
-    fat_size = 1
-    for _ in range(32):
-        data_region = total_sectors - RESERVED_SECTORS - NUM_FATS * fat_size
-        clusters = data_region // SEC_PER_CLUS
-        # +2: cluster indices start at 2; entry 0 and 1 are reserved.
-        new_fat = ((clusters + 2) * 4 + SECTOR_SIZE - 1) // SECTOR_SIZE
-        if new_fat == fat_size:
-            break
-        fat_size = new_fat
+    for spc in SEC_PER_CLUS_CANDIDATES:
+        fat_size = 1
+        for _ in range(32):
+            data_region = total_sectors - RESERVED_SECTORS - NUM_FATS * fat_size
+            clusters = data_region // spc
+            # +2: cluster indices start at 2; entry 0 and 1 are reserved.
+            new_fat = ((clusters + 2) * 4 + SECTOR_SIZE - 1) // SECTOR_SIZE
+            if new_fat == fat_size:
+                break
+            fat_size = new_fat
 
-    data_start = RESERVED_SECTORS + NUM_FATS * fat_size
-    clusters = (total_sectors - data_start) // SEC_PER_CLUS
+        data_start = RESERVED_SECTORS + NUM_FATS * fat_size
+        clusters = (total_sectors - data_start) // spc
+        if clusters >= 65_525:
+            return spc, fat_size, data_start, clusters
 
-    if clusters < 65_525:
-        raise SystemExit(
-            f"[mkfat32] ERROR: only {clusters} data clusters; FAT32 requires ≥ 65525. "
-            f"Increase total_sectors (need ≥ 524288 at 8 sec/clus)."
-        )
-    return fat_size, data_start, clusters
+    raise SystemExit(
+        f"[mkfat32] ERROR: no cluster size yields ≥ 65525 data clusters for "
+        f"{total_sectors} sectors; volume too small for FAT32."
+    )
 
 
 def main():
-    if len(sys.argv) != 3:
-        raise SystemExit("Usage: python mkfat32_inplace.py <image_path> <total_sectors>")
+    if len(sys.argv) not in (3, 4):
+        raise SystemExit(
+            "Usage: python mkfat32_inplace.py <image_path> <total_sectors> [base_lba]"
+        )
 
     img_path      = sys.argv[1]
     total_sectors = int(sys.argv[2])
+    # MBR layout (write-mbr.py): the FAT32 volume lives inside partition P1,
+    # so all structures are offset by the partition start. Default 0 keeps the
+    # legacy whole-disk behavior for kernel_fs.img-style images.
+    base_lba      = int(sys.argv[3]) if len(sys.argv) == 4 else 0
 
     # Guard: stay clear of the cell bootstrap table.
-    if total_sectors > CELL_TABLE_BASE_LBA - 1:
+    if base_lba + total_sectors > CELL_TABLE_BASE_LBA:
         raise SystemExit(
-            f"[mkfat32] ERROR: total_sectors {total_sectors} would overlap "
+            f"[mkfat32] ERROR: base {base_lba} + total_sectors {total_sectors} would overlap "
             f"CELL_TABLE_BASE_LBA {CELL_TABLE_BASE_LBA}"
         )
 
-    fat_size, data_start, clusters = fat32_geometry(total_sectors)
+    sec_per_clus, fat_size, data_start, clusters = fat32_geometry(total_sectors)
 
     # ── Boot sector (BPB at LBA 0) ─────────────────────────────────────────────
     boot = bytearray(SECTOR_SIZE)
@@ -76,7 +89,7 @@ def main():
     boot[3:11]  = b'MSWIN4.1'
     # Core BPB (offset 11-35)
     struct.pack_into('<H', boot, 11, SECTOR_SIZE)       # BytesPerSector
-    boot[13]    = SEC_PER_CLUS                           # SectorsPerCluster
+    boot[13]    = sec_per_clus                           # SectorsPerCluster
     struct.pack_into('<H', boot, 14, RESERVED_SECTORS)  # ReservedSectors
     boot[16]    = NUM_FATS                               # NumFATs
     struct.pack_into('<H', boot, 17, 0)                 # RootEntCnt = 0 (FAT32)
@@ -85,7 +98,7 @@ def main():
     struct.pack_into('<H', boot, 22, 0)                 # FATSz16 = 0 (FAT32 uses FATSz32)
     struct.pack_into('<H', boot, 24, 63)                # SecPerTrk (irrelevant)
     struct.pack_into('<H', boot, 26, 255)               # NumHeads (irrelevant)
-    struct.pack_into('<I', boot, 28, 0)                 # HiddSec
+    struct.pack_into('<I', boot, 28, base_lba)          # HiddSec = partition start
     struct.pack_into('<I', boot, 32, total_sectors)     # TotSec32
     # FAT32 Extended BPB (offset 36-89)
     struct.pack_into('<I', boot, 36, fat_size)          # FATSz32
@@ -126,34 +139,35 @@ def main():
     struct.pack_into('<I', fat, 8,  0x0FFFFFFF)
 
     # ── Root directory cluster (zeroed = empty) ────────────────────────────────
-    root_dir = bytearray(SEC_PER_CLUS * SECTOR_SIZE)
+    root_dir = bytearray(sec_per_clus * SECTOR_SIZE)
 
     # ── Write IN-PLACE (r+b — never extends the file) ─────────────────────────
+    # All LBAs below are relative to the partition start (base_lba).
     with open(img_path, 'r+b') as f:
-        # Boot sector at LBA 0
-        f.seek(0)
+        # Boot sector at partition LBA 0
+        f.seek(base_lba * SECTOR_SIZE)
         f.write(boot)
-        # FSInfo at LBA 1
-        f.seek(FS_INFO_SECTOR * SECTOR_SIZE)
+        # FSInfo at partition LBA 1
+        f.seek((base_lba + FS_INFO_SECTOR) * SECTOR_SIZE)
         f.write(fsinfo)
-        # Backup boot sector at LBA BACKUP_BOOT
-        f.seek(BACKUP_BOOT * SECTOR_SIZE)
+        # Backup boot sector at partition LBA BACKUP_BOOT
+        f.seek((base_lba + BACKUP_BOOT) * SECTOR_SIZE)
         f.write(boot_backup)
-        # FAT1 at LBA RESERVED_SECTORS
-        f.seek(RESERVED_SECTORS * SECTOR_SIZE)
+        # FAT1 at partition LBA RESERVED_SECTORS
+        f.seek((base_lba + RESERVED_SECTORS) * SECTOR_SIZE)
         f.write(fat)
-        # FAT2 at LBA RESERVED_SECTORS + fat_size
-        f.seek((RESERVED_SECTORS + fat_size) * SECTOR_SIZE)
+        # FAT2 at partition LBA RESERVED_SECTORS + fat_size
+        f.seek((base_lba + RESERVED_SECTORS + fat_size) * SECTOR_SIZE)
         f.write(fat)
         # Root directory at cluster 2 data area
-        root_lba = data_start + (ROOT_CLUSTER - 2) * SEC_PER_CLUS
+        root_lba = base_lba + data_start + (ROOT_CLUSTER - 2) * sec_per_clus
         f.seek(root_lba * SECTOR_SIZE)
         f.write(root_dir)
 
     print(
-        f"[mkfat32] {img_path}: {total_sectors} sectors, "
+        f"[mkfat32] {img_path}: base=LBA {base_lba}, {total_sectors} sectors, "
         f"{clusters} data clusters (FAT32), FATsz32={fat_size}, "
-        f"data start=LBA {data_start}"
+        f"data start=LBA {base_lba + data_start}"
     )
 
 
