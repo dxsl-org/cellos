@@ -4,6 +4,68 @@
 
 ---
 
+## [2026-06-10] VFS Phase 2.5-3 — real MBR partition table + per-cell block region grants
+
+### Summary
+`disk_v3.img` now carries a real MBR (P1 FAT32 @2048 · P2 cell-table @526336 · P3 snapshot
+@560000 · P4 littlefs @800000; ~455 MB). The kernel cross-checks the on-disk MBR at boot
+(`verify_mbr`, warn-only) and the three hardcoded `sector >= CELL_TABLE_BASE_LBA` gates were
+replaced by `check_block_access()`: each cell's manifest now scopes WHICH partition its raw
+block syscalls may address (deny-by-default, every denial logged). P2/P3 have no grantable bit —
+kernel-only by construction. Moving the snapshot region into P3 also fixes a latent hazard:
+`SNAPSHOT_BASE_LBA = 200_000` sat INSIDE the FAT32 data area and would have corrupted /data
+files past ~100 MB.
+
+### Law 1 (confirmed ×2)
+- NEW `libs/api/src/disk.rs` — canonical partition layout contract (kernel re-exports it;
+  Python image tools carry a must-match copy).
+- `libs/api/src/manifest.rs` — bits 6-7 (`MANIFEST_FLAG_PART_DATA`/`PART_LFS`),
+  `CellManifest::with_parts`, new `declare_manifest!` form. Layout stays 8 bytes, version 1;
+  older kernels reject the new bits → legacy path grants (fail-safe direction).
+
+### Changes
+- `tools/write-mbr.py` (new), `mkfat32_inplace.py` (+base_lba, auto cluster size 8→4→2→1 —
+  P1's 524,288 sectors need 2 KiB clusters to reach the FAT32 65,525-cluster minimum),
+  `gen_disk.ps1` (931,072-sector MBR image).
+- Kernel: `disk_layout::verify_mbr()`; TCB `block_regions: u8`; loader grants regions from
+  manifest (legacy `/bin/vfs` keeps P1+P4); `snapshot::SNAPSHOT_BASE_LBA` → P3.
+- VFS: manifest declares `part_data + part_lfs`; `block_stream.rs` offsets all five block
+  syscalls by `PART_FAT32_BASE_LBA` (fatfs and the page cache stay partition-relative).
+
+### Verify
+MBR verify 4/4 ok at boot · vfs suite 11/11 · `block_io_denied_non_vfs` ✓ · full suite
+**48/51 = baseline**. Known flaky noted for follow-up: init occasionally dies with a zeroed
+trap frame (scause=0) during boot — pre-existing race around task exit, seen on old baselines too.
+
+---
+
+## [2026-06-10] VFS Phase 2.5-2 — /bin BootFS proxy, VFS binary −50%
+
+### Summary
+Removed the VFS service's five `include_bytes!` copies of the /bin ELFs (they duplicated every
+binary already inside the kernel's embedded `kernel_fs.img`). `/bin` is now a `BootFsProxy`
+mount that reads through the kernel initramfs (VIFS1): directory listing via the synchronous
+Open+ReadDir FD syscalls, file reads via the synchronous OpenCap/ReadCap path with FAT16
+uppercase normalization. VFS binary: **405 KB → 202 KB**. The /bin catalog now reflects the real
+initramfs contents (INIT/SHELL/VFS/CONFIG/LUA/PYTHON) instead of a hardcoded fiction.
+
+### Hard-won constraints (documented in code)
+- **FD `Read` (fd>2) must never be called from a service dispatch loop**: it is an async
+  transformation (task parked as `Polling`, the scheduler sweep writes the result into the saved
+  trap frame later). A busy read loop kept running, the sweep clobbered a live trap frame, and
+  the VFS cell died with a zeroed-frame fault. Cap path (`ReadCap`) is fully synchronous.
+- **VfsResponse::Data payload cap is 480 bytes**: a 512-byte payload + postcard envelope no
+  longer fits the 512-byte IPC frame — encode failed and clients saw empty replies (dispatch
+  Poll arm fixed).
+- Shell allowlist: added `ReadDir` (the `ls` built-in reads the kernel FS directly and was being
+  silently denied). ostd gained a `sys_readdir` wrapper.
+
+### Verify
+vfs suite 11/11 · httpd 2/2 · shell echo ✓ · full suite **48/51 = Phase 01 baseline** (3 remaining
+failures are the documented independent pre-existing issues).
+
+---
+
 ## [2026-06-10] VFS MountTable Phase 01 + 6 pre-existing bugs fixed (integration suite 0→48/51)
 
 ### Summary

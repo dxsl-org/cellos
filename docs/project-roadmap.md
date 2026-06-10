@@ -874,15 +874,17 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 - [x] Tách `main.rs` (875→107 LOC): `backend.rs`, `backend_ramfs.rs`, `backend_fat.rs`, `manager.rs`, `dispatch.rs`
 - Verify: vfs suite 11/11; full suite 48/51 — kèm fix 6 bug pre-existing (xem changelog 2026-06-10 + incident report trong plan folder)
 
-**Phase 2.5-2 — Khử nhúng trùng lặp /bin (P1, 2 days):**
-- [ ] Bỏ `include_bytes!` shell/hello/echo/cat/ls trong VFS service (main.rs:39-44) — đang nhúng 2 lần (kernel_fs.img + VFS binary)
-- [ ] `/bin` backend = proxy qua syscall kernel có sẵn (GetFile/ListDir backed by VIFS1)
+**Phase 2.5-2 — Khử nhúng trùng lặp /bin (P1): ✅ COMPLETE 2026-06-10**
+- [x] Bỏ 5 `include_bytes!` ELF trong VFS service — **binary 405KB→202KB (−50%)**
+- [x] `/bin` = BootFsProxy: list qua Open+ReadDir, đọc file qua OpenCap/ReadCap (đồng bộ; FD Read là async-transformation, cấm dùng từ service loop — xem plan Build Log)
+- Verify: vfs 11/11, httpd 2/2, full suite 48/51 (= baseline); catalog /bin giờ phản ánh kernel_fs.img thật
 
-**Phase 2.5-3 — MBR partition table + per-cell block region grants (P1, ~1 week, kernel-side):** *(validate 2026-06-10)*
-- [ ] Disk image → MBR thật: P1=FAT32, P2=cell-table (CELL_TABLE_BASE_LBA=526336, giữ offset), P3=littlefs
-- [ ] Kernel parse MBR + loader/early.rs đọc cell table qua partition (fallback hằng số)
-- [ ] Per-cell block region grant: BlockIoCap kèm dải LBA qua manifest — ⚠️ **Law 1 2x confirm** nếu sửa libs/api
-- [ ] `check_block_access()` thay 3 gate hardcode (syscall.rs:1748/1778/2015), deny-by-default
+**Phase 2.5-3 — MBR partition table + per-cell block region grants: ✅ COMPLETE 2026-06-10** *(Law 1 confirmed ×2)*
+- [x] Disk image MBR thật: P1=FAT32 @2048 · P2=cell-table @526336 (giữ offset) · **P3=snapshot @560000 (mới — sửa hazard snapshot nằm trong FAT data)** · P4=littlefs @800000
+- [x] Kernel `verify_mbr()` warn-only lúc boot (P1-P4 cross-check, fallback hằng số)
+- [x] Law 1: `api::disk` contract + manifest bits PART_DATA/PART_LFS (8 byte, version 1, fail-safe với kernel cũ)
+- [x] `check_block_access()` thay 3 gate hardcode — deny-by-default + log; P2/P3 kernel-only by construction
+- Verify: vfs 11/11, block_io_denied_non_vfs ✓, full suite 48/51 (= baseline)
 
 **Phase 2.5-4 — littlefs backend cho /data (P1, ~1 week):**
 - [ ] littlefs2 C FFI trong VFS cell (chốt validate — pattern picolibc; KHÔNG route qua PageCache)
