@@ -4,31 +4,17 @@ extern crate ostd;
 
 use ostd::io::{print, println};
 use ostd::syscall::{sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
+use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
 
-/// Net service cell task ID.
-///
-/// The kernel spawns `init` (ID 1) and a `user_hello` smoke-test task (ID 2)
-/// before the init binary runs. Init then spawns: vfs=3, config=4, input=5,
-/// net=6, compositor=7, shell=8. Verified from QEMU serial log.
+/// Net service task ID (init spawn order is deterministic).
 const NET_ENDPOINT: usize = 6;
 
-/// IPC opcodes for the net service (mirrors poll_driver::cell_opcodes).
-const SOCKET_TCP: u8 = 0x10;
-const CONNECT:    u8 = 0x12;
-const SEND_OP:    u8 = 0x13;
-const RECV_OP:    u8 = 0x14;
-const CLOSE:      u8 = 0x15;
-const LISTEN_OP:  u8 = 0x17;
-const ACCEPT_OP:  u8 = 0x18;
-const STATE_OP:   u8 = 0x19;
-
 /// Payload sent and expected back from the echo server.
-const HELLO: &[u8] = b"HELLO_VIOS\n";
+const HELLO: &[u8] = b"HELLO_ViCell\n";
+
+api::declare_syscalls![Send, Recv, Log, StateRestore];
 
 /// nc <host_ip> <port>  |  nc -l <port>
-///
-/// Arguments are read from the state-stash argv slot published by the shell
-/// via sys_set_spawn_args before spawning.
 #[no_mangle]
 pub fn main() {
     // ── Parse argv ───────────────────────────────────────────────────────────
@@ -49,7 +35,6 @@ pub fn main() {
     };
 
     if first == "-l" {
-        // Server mode: nc -l <port>
         let port = match parts.next().and_then(parse_u16) {
             Some(p) => p,
             None => { println("Usage: nc -l <port>"); return; }
@@ -58,7 +43,6 @@ pub fn main() {
         return;
     }
 
-    // Client mode: first token is the host.
     let host = first;
     let port_str = match parts.next() {
         Some(p) => p,
@@ -73,79 +57,73 @@ pub fn main() {
         None => { println("nc: invalid port"); return; }
     };
 
-    // ── SOCKET_TCP → cap_id ──────────────────────────────────────────────────
-    let socket_msg = [SOCKET_TCP, 0, 0, 0, 0, 0, 0, 0, 0];
-    sys_send(NET_ENDPOINT, &socket_msg);
-    let mut cap_reply = [0u8; 8];
-    let cap_id = match sys_recv(0, &mut cap_reply) {
-        SyscallResult::Ok(_) => u64::from_le_bytes(cap_reply),
-        _ => { println("nc: SOCKET_TCP failed"); return; }
+    // ── TcpConnect (atomic create + connect) ─────────────────────────────────
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(
+        &NetRequest::TcpConnect { addr, port },
+        &mut req_buf,
+    ).map(|b| b.len()).unwrap_or(0);
+    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    let cap_id = match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+            Ok(NetResponse::CapId(c)) => c,
+            _ => { println("nc: connect failed"); return; }
+        },
+        _ => { println("nc: TcpConnect syscall failed"); return; }
     };
-    if cap_id == 0 {
-        println("nc: no socket cap returned");
-        return;
-    }
-
-    // ── CONNECT [0x12][cap:8][addr:4][port:2] ────────────────────────────────
-    let mut conn_msg = [0u8; 15];
-    conn_msg[0] = CONNECT;
-    conn_msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
-    conn_msg[9..13].copy_from_slice(&addr);
-    conn_msg[13..15].copy_from_slice(&port.to_le_bytes());
-    sys_send(NET_ENDPOINT, &conn_msg);
-    let mut ack = [0u8; 1];
-    match sys_recv(0, &mut ack) {
-        SyscallResult::Ok(_) if ack[0] == 0x00 => {}
-        _ => {
-            println("nc: connect failed");
-            close_socket(cap_id);
-            return;
-        }
-    }
-
     println("connected");
 
-    // ── SEND "HELLO_VIOS\n" — retry until all bytes buffered ─────────────────
-    // Track sent_bytes so each retry forwards only the unsent suffix, preventing
-    // prefix duplication if smoltcp accepts a partial write (n < HELLO.len()).
+    // ── Send "HELLO_ViCell\n" via TcpSend with retry ──────────────────────────
     let mut sent_bytes = 0usize;
     for _ in 0..500 {
         if sent_bytes >= HELLO.len() { break; }
         let rem = &HELLO[sent_bytes..];
-        let mut send_msg = [0u8; 9 + 11];
-        send_msg[0] = SEND_OP;
-        send_msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
-        send_msg[9..9 + rem.len()].copy_from_slice(rem);
-        sys_send(NET_ENDPOINT, &send_msg[..9 + rem.len()]);
-        let mut cnt = [0u8; 4];
-        match sys_recv(0, &mut cnt) {
+        let mut send_buf = [0u8; IPC_BUF_SIZE];
+        let send_len = api::ipc::encode(
+            &NetRequest::TcpSend { cap_id, data: rem },
+            &mut send_buf,
+        ).map(|b| b.len()).unwrap_or(0);
+        sys_send(NET_ENDPOINT, &send_buf[..send_len]);
+        let mut cnt_buf = [0u8; IPC_BUF_SIZE];
+        match sys_recv(0, &mut cnt_buf) {
             SyscallResult::Ok(_) => {
-                let n = u32::from_le_bytes(cnt) as usize;
-                sent_bytes += n;
-                if n == 0 { sys_yield(); }
+                match api::ipc::decode::<NetResponse>(&cnt_buf) {
+                    Ok(NetResponse::Data(b)) if b.len() >= 4 => {
+                        let mut arr = [0u8; 4];
+                        arr.copy_from_slice(&b[0..4]);
+                        let n = u32::from_le_bytes(arr) as usize;
+                        sent_bytes += n;
+                        if n == 0 { sys_yield(); }
+                    }
+                    _ => break,
+                }
             }
             _ => break,
         }
     }
 
-    // ── RECV echo — poll until data arrives ───────────────────────────────────
-    let mut recv_msg = [0u8; 13];
-    recv_msg[0] = RECV_OP;
-    recv_msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
-    recv_msg[9..13].copy_from_slice(&256u32.to_le_bytes());
+    // ── Recv echo — poll until data arrives ───────────────────────────────────
+    let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
+    let recv_req_len = api::ipc::encode(
+        &NetRequest::TcpRecv { cap_id, buf_len: 256 },
+        &mut recv_req_buf,
+    ).map(|b| b.len()).unwrap_or(0);
 
     for _ in 0..500 {
-        let mut data = [0u8; 256];
-        sys_send(NET_ENDPOINT, &recv_msg);
-        match sys_recv(0, &mut data) {
-            SyscallResult::Ok(_) if data[0] != 0 => {
-                let end = data.iter().position(|&b| b == 0).unwrap_or(256);
-                if let Ok(s) = core::str::from_utf8(&data[..end]) {
-                    print(s);
+        sys_send(NET_ENDPOINT, &recv_req_buf[..recv_req_len]);
+        let mut data_buf = [0u8; IPC_BUF_SIZE];
+        match sys_recv(0, &mut data_buf) {
+            SyscallResult::Ok(_) => {
+                match api::ipc::decode::<NetResponse>(&data_buf) {
+                    Ok(NetResponse::Data(b)) if !b.is_empty() => {
+                        if let Ok(s) = core::str::from_utf8(b) { print(s); }
+                        break;
+                    }
+                    _ => { sys_yield(); }
                 }
-                break;
             }
-            _ => { sys_yield(); }
+            _ => break,
         }
     }
 
@@ -155,166 +133,131 @@ pub fn main() {
 /// nc -l <port> — listen, accept one connection, echo bytes to serial and
 /// back to the peer, then close when the peer closes.
 fn server_mode(port: u16) {
-    // SOCKET_TCP → cap
-    let socket_msg = [SOCKET_TCP, 0, 0, 0, 0, 0, 0, 0, 0];
-    sys_send(NET_ENDPOINT, &socket_msg);
-    let mut cap_reply = [0u8; 8];
-    let cap = match sys_recv(0, &mut cap_reply) {
-        SyscallResult::Ok(_) => u64::from_le_bytes(cap_reply),
-        _ => { println("nc: SOCKET_TCP failed"); return; }
+    // TcpListen (atomic create + listen)
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(
+        &NetRequest::TcpListen { port },
+        &mut req_buf,
+    ).map(|b| b.len()).unwrap_or(0);
+    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    let listen_cap = match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+            Ok(NetResponse::CapId(c)) => c,
+            _ => { println("nc: listen failed"); return; }
+        },
+        _ => { println("nc: TcpListen syscall failed"); return; }
     };
-    if cap == 0 { println("nc: no socket cap"); return; }
-
-    // LISTEN [0x17][cap:8][port:2 LE] → [0x00] ok
-    let mut listen_msg = [0u8; 11];
-    listen_msg[0] = LISTEN_OP;
-    listen_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    listen_msg[9..11].copy_from_slice(&port.to_le_bytes());
-    sys_send(NET_ENDPOINT, &listen_msg);
-    let mut ack = [0u8; 1];
-    match sys_recv(0, &mut ack) {
-        SyscallResult::Ok(_) if ack[0] == 0x00 => {}
-        _ => { println("nc: listen failed"); close_socket(cap); return; }
-    }
     print("listening on ");
     ostd::io::print_usize(port as usize);
     println("");
 
-    // ACCEPT [0x18][cap:8] → stream_cap, or u64::MAX = not ready yet.
-    // Loop indefinitely — nc -l naturally blocks until a connection arrives.
-    // The test harness enforces its own deadline via wait_for("connected", N).
-    let mut accept_msg = [0u8; 9];
-    accept_msg[0] = ACCEPT_OP;
-    accept_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    let stream_cap: u64 = loop {
-        sys_send(NET_ENDPOINT, &accept_msg);
-        let mut r = [0u8; 8];
+    // Pre-encode TcpAccept for the listen cap (reused across accept polls).
+    let mut accept_req_buf = [0u8; IPC_BUF_SIZE];
+    let accept_req_len = api::ipc::encode(
+        &NetRequest::TcpAccept { cap_id: listen_cap },
+        &mut accept_req_buf,
+    ).map(|b| b.len()).unwrap_or(0);
+
+    let stream_cap: u32 = loop {
+        sys_send(NET_ENDPOINT, &accept_req_buf[..accept_req_len]);
+        let mut r = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut r) {
-            SyscallResult::Ok(_) => {
-                let c = u64::from_le_bytes(r);
-                if c != u64::MAX && c != 0 { break c; }
-                sys_yield();
-            }
+            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
+                Ok(NetResponse::CapId(c)) => break c,
+                _ => { sys_yield(); }
+            },
             _ => { sys_yield(); }
         }
     };
     println("connected");
 
-    // RECV loop: print to serial AND echo back. Exit when peer closes.
-    let mut recv_msg = [0u8; 13];
-    recv_msg[0] = RECV_OP;
-    recv_msg[1..9].copy_from_slice(&stream_cap.to_le_bytes());
-    recv_msg[9..13].copy_from_slice(&256u32.to_le_bytes());
+    serve_connection(stream_cap);
 
-    'recv: for _ in 0..500_000 {
-        let mut data = [0u8; 256];
-        sys_send(NET_ENDPOINT, &recv_msg);
-        match sys_recv(0, &mut data) {
-            SyscallResult::Ok(_) if data[0] != 0 => {
-                let end = data.iter().position(|&b| b == 0).unwrap_or(256);
-                if let Ok(s) = core::str::from_utf8(&data[..end]) {
-                    print(s);
-                }
-                // Echo back to peer.
-                let mut send_msg = [0u8; 9 + 256];
-                send_msg[0] = SEND_OP;
-                send_msg[1..9].copy_from_slice(&stream_cap.to_le_bytes());
-                send_msg[9..9 + end].copy_from_slice(&data[..end]);
-                sys_send(NET_ENDPOINT, &send_msg[..9 + end]);
-                let mut cnt = [0u8; 4];
-                let _ = sys_recv(0, &mut cnt);
-            }
-            SyscallResult::Ok(_) => {
-                let st = query_state(stream_cap);
-                if st == 0x06 || st == 0x00 { break 'recv; }
-                sys_yield();
-            }
-            _ => break,
-        }
-    }
-    close_socket(stream_cap);
-
-    // Loop back: accept the next connection on the same listener.
-    // Update accept_msg for the (unchanged) listen cap.
-    accept_msg[1..9].copy_from_slice(&cap.to_le_bytes());
-
-    // Re-enter the accept loop — use goto-style tail call by recursing
-    // into the outer accept state. Rather than recursion, update stream_cap
-    // inline by falling through to the top of the accept poll at the caller.
-    // Simplest approach: loop the whole accept+recv block.
+    // Accept loop — keep accepting connections on the same listener.
     loop {
         println("waiting for next connection");
-        let next_cap: u64 = loop {
-            sys_send(NET_ENDPOINT, &accept_msg);
-            let mut r = [0u8; 8];
+        let next_cap: u32 = loop {
+            sys_send(NET_ENDPOINT, &accept_req_buf[..accept_req_len]);
+            let mut r = [0u8; IPC_BUF_SIZE];
             match sys_recv(0, &mut r) {
-                SyscallResult::Ok(_) => {
-                    let c = u64::from_le_bytes(r);
-                    if c != u64::MAX && c != 0 { break c; }
-                    sys_yield();
-                }
+                SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
+                    Ok(NetResponse::CapId(c)) => break c,
+                    _ => { sys_yield(); }
+                },
                 _ => { sys_yield(); }
             }
         };
         println("connected");
-
-        let mut rmsg = [0u8; 13];
-        rmsg[0] = RECV_OP;
-        rmsg[1..9].copy_from_slice(&next_cap.to_le_bytes());
-        rmsg[9..13].copy_from_slice(&256u32.to_le_bytes());
-
-        'r2: for _ in 0..500_000 {
-            let mut data = [0u8; 256];
-            sys_send(NET_ENDPOINT, &rmsg);
-            match sys_recv(0, &mut data) {
-                SyscallResult::Ok(_) if data[0] != 0 => {
-                    let end = data.iter().position(|&b| b == 0).unwrap_or(256);
-                    if let Ok(s) = core::str::from_utf8(&data[..end]) { print(s); }
-                    let mut smsg = [0u8; 9 + 256];
-                    smsg[0] = SEND_OP;
-                    smsg[1..9].copy_from_slice(&next_cap.to_le_bytes());
-                    smsg[9..9 + end].copy_from_slice(&data[..end]);
-                    sys_send(NET_ENDPOINT, &smsg[..9 + end]);
-                    let mut cnt = [0u8; 4]; let _ = sys_recv(0, &mut cnt);
-                }
-                SyscallResult::Ok(_) => {
-                    let st = query_state(next_cap);
-                    if st == 0x06 || st == 0x00 { break 'r2; }
-                    sys_yield();
-                }
-                _ => break,
-            }
-        }
-        close_socket(next_cap);
+        serve_connection(next_cap);
     }
 }
 
-/// Query SOCKET_STATE (0x19) → 1-byte smoltcp state code.
-fn query_state(cap: u64) -> u8 {
-    let mut msg = [0u8; 9];
-    msg[0] = STATE_OP;
-    msg[1..9].copy_from_slice(&cap.to_le_bytes());
-    sys_send(NET_ENDPOINT, &msg);
-    let mut st = [0u8; 1];
-    match sys_recv(0, &mut st) {
-        SyscallResult::Ok(_) => st[0],
+/// Recv loop: print received bytes to serial and echo back to peer.
+/// Exits when the peer closes the connection.
+fn serve_connection(cap: u32) {
+    let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
+    let recv_req_len = api::ipc::encode(
+        &NetRequest::TcpRecv { cap_id: cap, buf_len: 256 },
+        &mut recv_req_buf,
+    ).map(|b| b.len()).unwrap_or(0);
+
+    'recv: for _ in 0..500_000 {
+        sys_send(NET_ENDPOINT, &recv_req_buf[..recv_req_len]);
+        let mut data_buf = [0u8; IPC_BUF_SIZE];
+        match sys_recv(0, &mut data_buf) {
+            SyscallResult::Ok(_) => {
+                match api::ipc::decode::<NetResponse>(&data_buf) {
+                    Ok(NetResponse::Data(b)) if !b.is_empty() => {
+                        if let Ok(s) = core::str::from_utf8(b) { print(s); }
+                        // Echo back to peer.
+                        let mut echo_buf = [0u8; IPC_BUF_SIZE];
+                        let echo_len = api::ipc::encode(
+                            &NetRequest::TcpSend { cap_id: cap, data: b },
+                            &mut echo_buf,
+                        ).map(|e| e.len()).unwrap_or(0);
+                        sys_send(NET_ENDPOINT, &echo_buf[..echo_len]);
+                        let mut cnt_buf = [0u8; IPC_BUF_SIZE];
+                        let _ = sys_recv(0, &mut cnt_buf);
+                    }
+                    Ok(NetResponse::Data(_)) => {
+                        let st = query_state(cap);
+                        if st == 0x06 || st == 0x00 { break 'recv; }
+                        sys_yield();
+                    }
+                    _ => break,
+                }
+            }
+            _ => break,
+        }
+    }
+    close_socket(cap);
+}
+
+fn query_state(cap_id: u32) -> u8 {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(&NetRequest::SocketState { cap_id }, &mut req_buf)
+        .map(|b| b.len()).unwrap_or(0);
+    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    match sys_recv(0, &mut resp_buf) {
+        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
+            Ok(NetResponse::State(s)) => s,
+            _ => 0x00,
+        },
         _ => 0x00,
     }
 }
 
-/// Send CLOSE [0x15][cap:8] and drain the 1-byte reply.
-fn close_socket(cap_id: u64) {
-    let mut msg = [0u8; 9];
-    msg[0] = CLOSE;
-    msg[1..9].copy_from_slice(&cap_id.to_le_bytes());
-    sys_send(NET_ENDPOINT, &msg);
-    let mut r = [0u8; 1];
-    let _ = sys_recv(0, &mut r);
+fn close_socket(cap_id: u32) {
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let len = api::ipc::encode(&NetRequest::TcpClose { cap_id }, &mut req_buf)
+        .map(|b| b.len()).unwrap_or(0);
+    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    let _ = sys_recv(0, &mut resp_buf);
 }
 
-/// Resolve a hostname to an IPv4 address, falling back to literal parsing.
-///
-/// Static table only — no DNS. Aliases for the QEMU SLIRP environment.
 fn resolve_host(s: &str) -> Option<[u8; 4]> {
     match s {
         "gateway" | "host" => Some([10, 0, 2, 2]),
@@ -324,7 +267,6 @@ fn resolve_host(s: &str) -> Option<[u8; 4]> {
     }
 }
 
-/// Parse "a.b.c.d" into `[a, b, c, d]`.
 fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
     let mut it = s.splitn(5, '.');
     let a = parse_octet(it.next()?)?;

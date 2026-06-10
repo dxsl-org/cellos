@@ -2,7 +2,7 @@
 name = "app-net-tools"
 version = "0.1.0"
 edition = "2021"
-description = "ViOS network utilities: ping, curl, nc, wget"
+description = "ViCell network utilities: ping, curl, nc, wget"
 
 [dependencies]
 ostd = { path = "../../../libs/ostd" }
