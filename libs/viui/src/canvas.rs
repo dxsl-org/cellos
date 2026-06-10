@@ -310,7 +310,8 @@ impl<'fb> ViCanvas for FramebufferCanvas<'fb> {
                     // B — row byte offset computed once per row
                     let row_off = (cy as usize + row) * self.stride as usize;
                     for col in 0..8usize {
-                        if bits & (0x80u8 >> col) != 0 {
+                        // FONT8X8 is LSB-first: bit 0 = leftmost pixel, bit 7 = rightmost
+                        if bits & (1u8 << col) != 0 {
                             let off = row_off + (cx as usize + col) * 4;
                             self.pixels[off..off + 4].copy_from_slice(&pixel);
                         }
@@ -322,7 +323,7 @@ impl<'fb> ViCanvas for FramebufferCanvas<'fb> {
                     let bits = glyph[row as usize];
                     if bits == 0 { continue; }  // C — empty row skip even in slow path
                     for col in 0..8i32 {
-                        if bits & (0x80u8 >> col) != 0 {
+                        if bits & (1u8 << col) != 0 {
                             self.put_pixel(cx + col, cy + row, style.color);
                         }
                     }

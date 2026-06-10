@@ -20,8 +20,10 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::{addr_of_mut, null_mut, NonNull};
 use linked_list_allocator::Heap;
 
-/// Per-cell heap size. 4 MiB is ample now that memory is actually freed.
-const HEAP_SIZE: usize = 4 * 1024 * 1024;
+/// Per-cell heap size. 8 MiB gives the compositor room for its two full-screen
+/// framebuffer Vecs (pixels + staging, ~3 MiB each at 1024×768) while leaving
+/// headroom for all other cells' dynamic allocations.
+const HEAP_SIZE: usize = 8 * 1024 * 1024;
 
 /// Backing arena for the cell heap. 16-byte aligned so the allocator can satisfy
 /// the largest natural alignment without wasting the first bytes.

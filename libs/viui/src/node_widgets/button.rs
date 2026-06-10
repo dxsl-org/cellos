@@ -80,8 +80,9 @@ impl ViNode for Button {
     fn event(&mut self, event: &Event) -> bool {
         match event {
             Event::MouseMove { pos } => {
+                let was = self.hovered;
                 self.hovered = self.bounds.contains(*pos);
-                false
+                was != self.hovered
             }
             Event::MousePress { pos, button: MouseButton::Left } => {
                 if self.bounds.contains(*pos) {

@@ -1,7 +1,7 @@
 //! Minimal bitmap font renderer for ViCell G1.
 //!
 //! Uses an 8×8 CP437-compatible bitmap font (public domain).
-//! Each glyph = 8 bytes, one byte per row, MSB = leftmost pixel.
+//! Each glyph = 8 bytes, one byte per row, LSB = leftmost pixel (bit 0 = col 0).
 //! Covers ASCII 0x20–0x7E (printable range).
 //!
 //! ## Usage
@@ -12,7 +12,7 @@
 
 /// 8×8 CP437 bitmap font: ASCII 0x20 (space) to 0x7E (~).
 /// 95 glyphs × 8 row-bytes = 760 bytes total.
-/// Row byte: bit 7 = leftmost pixel, bit 0 = rightmost.
+/// Row byte: bit 0 = leftmost pixel, bit 7 = rightmost (LSB-first).
 #[rustfmt::skip]
 pub static FONT8X8: [[u8; 8]; 95] = [
     // 0x20 ' '

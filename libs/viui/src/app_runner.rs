@@ -143,6 +143,10 @@ pub struct ViApp {
     key_repeat:    KeyRepeatState,
     /// Tab-order focus state. Rebuilt after every layout pass.
     focus:         FocusState,
+    /// Last known mouse position, updated on every MouseMove.
+    /// Injected into MousePress/MouseRelease events whose pos is (0,0) because
+    /// the input service encodes button events without position (caller must track).
+    mouse_pos:     crate::layout::Point,
 }
 
 impl ViApp {
@@ -162,6 +166,7 @@ impl ViApp {
             theme:         Box::new(DarkTheme),
             key_repeat:    KeyRepeatState::new(),
             focus:         FocusState::new(),
+            mouse_pos:     crate::layout::Point::new(0.0, 0.0),
         }
     }
 
@@ -229,8 +234,37 @@ impl ViApp {
                 continue;
             }
 
+            // Track mouse position for button-event injection.
+            // parse_mouse_button in input_bridge sets pos=(0,0) because the input
+            // service encodes button events without coordinates — we inject the last
+            // known position here so hit-testing in Button/Slider works correctly.
+            if let Event::MouseMove { pos } = e {
+                self.mouse_pos = *pos;
+            }
+
+            // Patch mouse events that arrive with pos=(0,0) — substitute the last
+            // tracked position so widget hit-testing is correct.
+            // parse_mouse_button and parse_mouse_scroll in input_bridge set pos=(0,0)
+            // because the input service encodes those events without coordinates.
+            let patched;
+            let ev: &Event = match e {
+                Event::MousePress { pos, button } if pos.x == 0.0 && pos.y == 0.0 => {
+                    patched = Event::MousePress { pos: self.mouse_pos, button: *button };
+                    &patched
+                }
+                Event::MouseRelease { pos, button } if pos.x == 0.0 && pos.y == 0.0 => {
+                    patched = Event::MouseRelease { pos: self.mouse_pos, button: *button };
+                    &patched
+                }
+                Event::Scroll { pos, delta_y } if pos.x == 0.0 && pos.y == 0.0 => {
+                    patched = Event::Scroll { pos: self.mouse_pos, delta_y: *delta_y };
+                    &patched
+                }
+                other => other,
+            };
+
             // Track held key for software repeat injection (see KeyRepeatState).
-            match e {
+            match ev {
                 Event::KeyPress { key, modifiers } => {
                     self.key_repeat.held_key      = Some(*key);
                     self.key_repeat.held_mods     = *modifiers;
@@ -242,7 +276,7 @@ impl ViApp {
                 }
                 _ => {}
             }
-            if self.root.event(e) { self.layout_dirty = true; }
+            if self.root.event(ev) { self.layout_dirty = true; }
         }
 
         // ── Software key-repeat injection ─────────────────────────────────────
