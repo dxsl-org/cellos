@@ -261,6 +261,40 @@ fn caller_has_block_io(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.block_io_cap.is_some())
 }
 
+/// Per-cell block-I/O range gate (Milestone 2.5 P03).
+///
+/// Replaces the old global `sector >= CELL_TABLE_BASE_LBA` check: the caller's
+/// `block_regions` bitmask (from its manifest PART_* bits, or the legacy VFS
+/// grant) defines which MBR partitions its raw block syscalls may address.
+/// Deny-by-default: a sector outside every granted partition is rejected —
+/// which structurally protects P2 (cell table) and P3 (snapshot), since no
+/// bit exists for them. Logs every denial (silent denials cost us a day once).
+fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
+    use crate::loader::disk_layout as dl;
+    let regions = super::SCHEDULER.lock().as_ref()
+        .and_then(|s| s.tasks.get(&caller_id))
+        .map(|t| t.block_regions)
+        .unwrap_or(0);
+    let end = match sector.checked_add(count) {
+        Some(e) => e,
+        None => return false,
+    };
+    const GRANTABLE: [(u8, u64, u64); 2] = [
+        (0b01, dl::PART_FAT32_BASE_LBA, dl::PART_FAT32_SECTORS), // P1 (PART_DATA)
+        (0b10, dl::PART_LFS_BASE_LBA,   dl::PART_LFS_SECTORS),   // P4 (PART_LFS)
+    ];
+    for (bit, base, size) in GRANTABLE {
+        if regions & bit != 0 && sector >= base && end <= base + size {
+            return true;
+        }
+    }
+    log::warn!(
+        "[blk] sector {}..{} denied for tid {} (regions={:#04b})",
+        sector, end, caller_id, regions
+    );
+    false
+}
+
 fn caller_has_network(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.network_cap.is_some())
 }
@@ -1743,14 +1777,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 log::warn!("BlkRead denied: task {} lacks block-I/O capability", caller_id);
                 return Err(SyscallError::PermissionDenied);
             }
-            // Reject any sector at/after the cell bootstrap table; a runaway FAT
-            // offset must never read kernel-owned LBAs. Returns 0 = failure.
-            if sector >= crate::loader::disk_layout::CELL_TABLE_BASE_LBA {
+            // Per-cell partition range gate — a runaway FAT offset must never
+            // reach kernel-owned LBAs (P2 cell table, P3 snapshot). Returns 0 = failure.
+            if !check_block_access(caller_id, sector, 1) {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
-            
-            
+
+
             // Bounce buffer: VirtioHal::share() treats the buffer's virtual address
             // as its physical address (identity-map assumption). Stack frames ARE
             // identity-mapped; ELF BSS/heap pages are NOT — DMA would land at the
@@ -1773,9 +1807,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 log::warn!("BlkWrite denied: task {} lacks block-I/O capability", caller_id);
                 return Err(SyscallError::PermissionDenied);
             }
-            // Reject any sector at/after the cell bootstrap table; prevents a
-            // cell from corrupting the loader's table. Returns 0 = failure.
-            if sector >= crate::loader::disk_layout::CELL_TABLE_BASE_LBA {
+            // Per-cell partition range gate — prevents a cell from corrupting
+            // the loader's table or the snapshot region. Returns 0 = failure.
+            if !check_block_access(caller_id, sector, 1) {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
@@ -2012,7 +2046,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !caller_has_block_io(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            if sector >= crate::loader::disk_layout::CELL_TABLE_BASE_LBA {
+            if !check_block_access(caller_id, sector, 1) {
                 return Ok(0);
             }
             // Validate ownership and minimum size (must hold ≥ 512 bytes).

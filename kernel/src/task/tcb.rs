@@ -166,6 +166,13 @@ pub struct Task {
     /// declared `gpio` or `uart` cap; grants access to `sys_request_mmio`.
     pub mmio_cap: bool,
 
+    /// Block-I/O partition range grants (Milestone 2.5 P03) — bitmask:
+    /// bit 0 = P1 FAT32 (`MANIFEST_FLAG_PART_DATA`), bit 1 = P4 littlefs
+    /// (`MANIFEST_FLAG_PART_LFS`). Checked by `check_block_access` for every
+    /// raw block syscall, on top of `block_io_cap`. P2 (cell table) and P3
+    /// (snapshot) have no bit — those ranges are kernel-only by construction.
+    pub block_regions: u8,
+
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
     pub priority: u8,
@@ -231,6 +238,7 @@ impl Task {
             spawn_cap:      None,
             hypervisor_cap: None,
             mmio_cap:       false,
+            block_regions:  0,
             priority: api::TaskPriority::Normal as u8,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             run_ticks: 0,

@@ -27,10 +27,11 @@
 use crate::task::drivers::block;
 use crate::memory::frame::FRAME_ALLOCATOR;
 
-/// Reserved LBA range for snapshot storage in `disk_v3.img`.
+/// Reserved LBA range for snapshot storage in `disk_v3.img` — MBR partition P3.
 /// Sector 0 = 48-byte header; sectors 1+ = allocated frame data (8 sectors/frame).
-/// Chosen to be well beyond the cell bootstrap table at LBA 82000.
-pub const SNAPSHOT_BASE_LBA: u64 = 200_000;
+/// The old hardcoded 200_000 sat INSIDE the FAT32 data area and would corrupt
+/// /data files past ~100 MB; P3 is a dedicated raw region (disk_layout.rs).
+pub const SNAPSHOT_BASE_LBA: u64 = crate::loader::disk_layout::PART_SNAPSHOT_BASE_LBA;
 
 /// Snapshot format version — increment on breaking header layout changes.
 pub const SNAPSHOT_FORMAT_VERSION: u16 = 1;

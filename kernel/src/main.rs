@@ -247,6 +247,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log::warn!("[boot] snapshot restore returned unexpectedly → cold boot");
     }
 
+    // Cross-check the on-disk MBR against the compiled-in partition layout
+    // (warn-only — surfaces image/kernel drift at boot instead of as silent
+    // corruption later).
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    crate::loader::disk_layout::verify_mbr();
+
     // Probe the cell bootstrap table so SpawnFromPath works during init.
     // RV32 Nano / x86_64 bring-up: no disk.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]

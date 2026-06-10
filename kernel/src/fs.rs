@@ -8,7 +8,13 @@ use alloc::vec::Vec;
 use api::fs::{OpenMode, ViFileSystem};
 use types::{ViError, ViResult};
 
-/// Global Filesystem Instance (viFS1)
+/// Global BootFS / initramfs instance — the FAT16 `kernel_fs.img` baked into
+/// the kernel binary. Solves the chicken-and-egg of loading the VFS service
+/// binary before the VFS service exists; the VFS cell also proxies `/bin`
+/// reads here via the FD syscalls (specs/09-vfs.md v0.5 §2).
+///
+/// Naming note: the spec term "viFS1" (a planned RedoxFS fork) was dropped
+/// 2026-06-10 — this static is unrelated to it despite the shared name.
 pub static VIFS1: Spinlock<Option<Box<dyn ViFileSystem>>> = Spinlock::new(None);
 
 /// Read a complete file from the embedded FAT filesystem into a heap buffer.

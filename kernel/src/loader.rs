@@ -152,6 +152,12 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                 Some(m) => {
                     if m.has_block_io() {
                         task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
+                        // Partition range grants (P03): the manifest scopes WHICH
+                        // LBA ranges the raw block syscalls may touch. A manifest
+                        // cell that declares block_io but no PART_* bit gets cap
+                        // without ranges — every access denied (deny-by-default).
+                        task.block_regions = (m.has_part_data() as u8)
+                                           | ((m.has_part_lfs() as u8) << 1);
                         // Re-registration is valid on VFS hot-swap; just update the handler pointer.
                         // Using swap to track whether this is a first-boot registration or a re-swap.
                         let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
@@ -180,6 +186,9 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                     if path.starts_with("/bin/") {
                         if path.ends_with("/bin/vfs") {
                             task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
+                            // Legacy grant matches the pre-P03 behavior: VFS may
+                            // address both grantable partitions (P1 + P4).
+                            task.block_regions = 0b11;
                             let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
                             if already {
                                 log::warn!("[loader] block_io re-registration (legacy) — VFS hot-swap");
