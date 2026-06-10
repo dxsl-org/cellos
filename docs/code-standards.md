@@ -1,4 +1,4 @@
-# ViOS Code Standards
+# ViCell Code Standards
 
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
@@ -101,7 +101,7 @@ foo/
 
 **Why**: Clearer file tree, easier IDE navigation, prevents accidental circular imports.
 
-### Law 6: ViOS Naming Convention
+### Law 6: ViCell Naming Convention
 
 | Category | Rule | Examples |
 |----------|------|----------|

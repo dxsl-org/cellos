@@ -1,12 +1,12 @@
-# Getting Started with ViOS
+# Getting Started with ViCell
 
-> Your complete guide to building and contributing to ViOS
+> Your complete guide to building and contributing to ViCell
 >
 > **Version**: 0.2.1-dev | **Last Updated**: 2026-06-03
 
 ## Quick Start
 
-Get ViOS running in 5 steps. Expect 30–45 minutes on your first setup.
+Get ViCell running in 5 steps. Expect 30–45 minutes on your first setup.
 
 ### Prerequisites Table
 
@@ -32,8 +32,8 @@ rustup target add riscv64gc-unknown-none-elf
 # MSYS2: pacman -S mingw-w64-x86_64-qemu
 
 # 3. Clone and enter repository
-git clone https://github.com/your-org/vios.git
-cd vios
+git clone https://github.com/your-org/ViCell.git
+cd ViCell
 
 # 4. Build kernel
 cargo build --release
@@ -47,27 +47,27 @@ python3 create_ramdisk.py
 
 You'll see:
 ```
-VIOS K MAIN ENTRY
+ViCell K MAIN ENTRY
 [INFO] Kernel started (Hart: 0, DTB: 0x87000000)
 [INFO] Frame allocator initialized
 [INFO] Paging initialized
 [INFO] Heap initialized
 [INFO] Scheduler initialized
-ViOS Shell v0.2.0
-vios>
+ViCell Shell v0.2.0
+ViCell>
 ```
 
 Type `help` to see available commands. Type `exit` to quit QEMU.
 
 ---
 
-## Understanding ViOS
+## Understanding ViCell
 
-### What Makes ViOS Different?
+### What Makes ViCell Different?
 
-ViOS is a **Cellular Single Address Space (SAS) Operating System** — revolutionary compared to traditional designs.
+ViCell is a **Cellular Single Address Space (SAS) Operating System** — revolutionary compared to traditional designs.
 
-| Aspect | Traditional OS | ViOS |
+| Aspect | Traditional OS | ViCell |
 |--------|---|---|
 | **Isolation** | Hardware MMU + processes | Rust type system + Cells |
 | **Address Space** | Separate per process | Single shared address space |
@@ -193,7 +193,7 @@ mkfs.vfat disk.img
 qemu-system-riscv64 \
   -machine virt -cpu rv64 -smp 1 -m 128M \
   -nographic -bios default \
-  -kernel target/riscv64gc-unknown-none-elf/release/vios-kernel \
+  -kernel target/riscv64gc-unknown-none-elf/release/ViCell-kernel \
   -drive file=disk.img,format=raw,if=none,id=hd0 \
   -device virtio-blk-device,drive=hd0
 ```
@@ -222,13 +222,13 @@ qemu-system-riscv64 \
 # Terminal 1: Start QEMU in debug mode (pauses at boot)
 qemu-system-riscv64 -machine virt -cpu rv64 -m 128M \
   -nographic -bios default \
-  -kernel target/riscv64gc-unknown-none-elf/debug/vios-kernel \
+  -kernel target/riscv64gc-unknown-none-elf/debug/ViCell-kernel \
   -drive file=disk.img,format=raw,if=none,id=hd0 \
   -device virtio-blk-device,drive=hd0 \
   -s -S
 
 # Terminal 2: Connect GDB
-riscv64-unknown-elf-gdb target/riscv64gc-unknown-none-elf/debug/vios-kernel
+riscv64-unknown-elf-gdb target/riscv64gc-unknown-none-elf/debug/ViCell-kernel
 (gdb) target remote localhost:1234
 (gdb) break kmain
 (gdb) continue
@@ -274,7 +274,7 @@ git checkout -b feature/shell-uptime
 
 # 3. Build and test
 cargo build --release && python3 create_ramdisk.py && ./run.ps1
-# In ViOS: uptime
+# In ViCell: uptime
 
 # 4. Commit (conventional format)
 git commit -m "feat(shell): add uptime command
@@ -319,7 +319,7 @@ Add a new syscall for CPU frequency.
 How do I get CPU frequency from HAL?
 
 ## Environment
-ViOS: main (commit abc123) | Target: RISC-V 64 | Host: Linux
+ViCell: main (commit abc123) | Target: RISC-V 64 | Host: Linux
 ```
 
 ### Debug Tips
@@ -375,7 +375,7 @@ DOCS
 
 ### This Week
 
-- [ ] Build and run ViOS successfully
+- [ ] Build and run ViCell successfully
 - [ ] Read CLAUDE.md + system-architecture.md overview
 - [ ] Trace one syscall through the code
 - [ ] Join GitHub Discussions
@@ -395,4 +395,4 @@ DOCS
 
 ---
 
-**Welcome to ViOS! Start small, ask questions, have fun. See you in the PRs.**
+**Welcome to ViCell! Start small, ask questions, have fun. See you in the PRs.**

@@ -65,12 +65,23 @@ bytes[9..16]= reserved (zeroed)
 
 ---
 
-### OP_WRITE (0x04) — stub
+### OP_WRITE (0x04)
 
-Write data to a file.  Currently returns `0xff` (error) until VirtIO-FAT backing
-is wired in Phase 13 (FAT32 integration).
+Write data to a file. Routes to RamFS (/tmp/*) or FAT16 (/data/*).
 
-**Response:** `[0xff]`
+**Request:** `[0x04, path_len, content_len_lo, content_len_hi, path…, content…]`
+- `content_len` is u16 little-endian (max 65535 bytes per write)
+- Effective message cap: min(512, 4 + path_len + content_len) bytes
+
+**Response:** 1 byte
+```
+0x00 = success
+0x01 = error (parent not found, insufficient disk space, quota exceeded)
+```
+
+**Mount Points**:
+- `/tmp/*` → RamFS (volatile, cleared on reboot)
+- `/data/*` → FAT16 (persistent, survives reboot)
 
 ---
 
@@ -107,7 +118,7 @@ directory is non-empty.
 ### OP_UNLINK (0x07)
 
 Remove a regular file.  Fails if the path does not exist or is a directory (use
-`OP_RMDIR` for directories).
+`OP_RMDIR` or `OP_RMDIR_RECURSIVE` for directories).
 
 **Request:** `[0x07, path_len, path…]`
 
@@ -119,14 +130,56 @@ Remove a regular file.  Fails if the path does not exist or is a directory (use
 
 ---
 
+### OP_READ (0x08)
+
+Read file bytes from a path. Limited to 480 bytes per request (fits in single IPC message).
+
+**Request:** `[0x08, path_len, path…]`
+
+**Response:** up to 480 bytes
+```
+Raw file bytes, truncated to 480.  Zero-length response means file not found or is a directory.
+```
+
+---
+
+### OP_RMDIR_RECURSIVE (0x09)
+
+Recursively delete a directory and all its contents. **Restricted to `/data/*` paths for safety.**
+
+**Request:** `[0x09, path_len, path…]`
+
+**Response:** 1 byte
+```
+0x00 = success
+0x01 = error (not found, not a directory, path not under /data/, or I/O error)
+```
+
+---
+
+### OP_APPEND (0x0A)
+
+Seek to end of file and append data. Semantically equivalent to OP_WRITE but ensures append semantics.
+
+**Request:** `[0x0A, path_len, content_len_lo, content_len_hi, path…, content…]`
+- Same format as OP_WRITE
+- Always seeks to end before writing
+
+**Response:** 1 byte
+```
+0x00 = success
+0x01 = error (parent not found, insufficient disk space)
+```
+
+---
+
 ## Mount Points
 
 | Mount point | Backing  | Writable | Notes                                  |
 |-------------|----------|----------|----------------------------------------|
-| `/`         | RamFS    | No       | Embedded binaries at `/bin/`           |
+| `/bin`      | RamFS    | No       | Embedded binaries (shell, lua, cat, etc.) |
 | `/tmp`      | RamFS    | Yes      | Volatile scratch; cleared on reboot    |
-
-FAT32 backing for `/` from VirtIO block device is planned for the Phase 13 FAT32 milestone.
+| `/data`     | FAT16    | Yes      | Persistent storage on VirtIO disk (LBA 0–81919) |
 
 ---
 

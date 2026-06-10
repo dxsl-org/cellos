@@ -1,4 +1,4 @@
-# ViOS Performance Baseline Report
+# ViCell Performance Baseline Report
 
 > **Status:** Initial baseline — QEMU measurements pending first CI run.
 > Updated weekly by `.github/workflows/perf.yml`.
@@ -67,19 +67,40 @@ Expected rough order-of-magnitude for QEMU (10 MHz `mtime`):
 | `syscall_yield` | ~5 µs | ~10 µs | < 10 µs |
 | `memory_footprint` | ~3.5 MB | — | < 10 MB |
 
+## Performance Baseline — Status
+
+**Current status: UNMEASURED.** No baseline run has been completed. All values in this document are estimates.
+
+> **Action required (Phase 24)**: Run `/bin/bench` on QEMU, commit results to `.agents/reports/perf-baseline-{date}.txt`, and pin them in CI as regression reference. PDR targets cannot be validated until this is done.
+
+## Spec vs. Implementation Gap
+
+The architecture spec (03-runtime.md) claims IPC at "2–3 CPU cycles via direct function call." The current syscall-based implementation is estimated at 100–1000 cycles per round-trip. The table below tracks the gap:
+
+| Metric | Spec Target | PDR Target (p99) | Estimated Current | Measured |
+|--------|------------|-----------------|-------------------|---------|
+| IPC round-trip | 2–3 cycles (direct call) | < 50 µs | ~200–500 µs (syscall) | ❌ Not yet |
+| Context switch | — | < 100 µs | ~40 µs (estimated) | ❌ Not yet |
+| Syscall yield | — | < 10 µs | ~10 µs (estimated) | ❌ Not yet |
+| Memory footprint | — | < 10 MB | ~3.5 MB (estimated) | ❌ Not yet |
+
+## Scheduler Impact on Latency
+
+Round-robin 10 ms timeslice means a network packet arriving just after a timeslice boundary waits up to 10 ms before processing. PDR network latency targets (< 10 ms loopback RTT) cannot be met until a preemptive scheduler with priority levels is implemented (Phase 25).
+
 ---
 
 ## How to Run Locally
 
 ```bash
 # 1. Build kernel + bench cell
-cargo build --release -p vios-kernel -p app-bench
+cargo build --release -p ViCell-kernel -p app-bench
 
 # 2. Boot with disk image containing /bin/bench
 ./run.ps1   # or: bash scripts/run-aarch64.sh for AArch64
 
 # 3. At the shell prompt, spawn bench
-ViOS> /bin/bench
+ViCell> /bin/bench
 
 # 4. Read serial output for [bench] lines
 # JSON lines (parseable by compare-bench-results.sh):

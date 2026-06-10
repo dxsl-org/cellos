@@ -1,6 +1,6 @@
-# ViOS Scripting Guide
+# ViCell Scripting Guide
 
-ViOS supports two embedded scripting runtimes: **Lua 5.4** (verified) and **MicroPython 1.24.1** (verified).
+ViCell supports two embedded scripting runtimes: **Lua 5.4** (verified) and **MicroPython 1.24.1** (verified).
 Both run as native Cells with direct access to the VFS and IPC APIs.
 
 ---
@@ -11,8 +11,8 @@ Both run as native Cells with direct access to the VFS and IPC APIs.
 
 At the shell prompt:
 ```
-ViOS> lua
-Lua 5.4 on ViOS  (Ctrl+D to exit)
+ViCell> lua
+Lua 5.4 on ViCell  (Ctrl+D to exit)
 > 
 ```
 
@@ -22,7 +22,7 @@ Arrow-up/down navigates command history (session-local; persistence added in Pha
 ### Running a Script
 
 ```
-ViOS> exec /bin/lua /scripts/hello.lua
+ViCell> exec /bin/lua /scripts/hello.lua
 ```
 
 (Phase 17a will make `lua script.lua` work directly once arg-passing is wired.)
@@ -34,8 +34,8 @@ All standard Lua 5.4 libraries are available: `string`, `table`, `math`,
 
 ```lua
 -- String operations
-local s = "Hello, ViOS!"
-print(s:upper())          -- HELLO, VIOS!
+local s = "Hello, ViCell!"
+print(s:upper())          -- HELLO, ViCell!
 print(#s)                 -- 12
 
 -- Math
@@ -85,8 +85,8 @@ The Lua REPL handles incomplete chunks automatically — just keep typing:
 > function greet(name)
 >>   print("Hello, " .. name .. "!")
 >> end
-> greet("ViOS")
-Hello, ViOS!
+> greet("ViCell")
+Hello, ViCell!
 ```
 
 ### Example Scripts
@@ -124,8 +124,8 @@ The runtime includes a 256 KB heap and FFI bindings to the VFS and IPC APIs.
 ### Starting the REPL
 
 ```
-ViOS> python
-MicroPython v1.24.1 on ViOS  (Ctrl+D to exit)
+ViCell> python
+MicroPython v1.24.1 on ViCell  (Ctrl+D to exit)
 >>> 
 ```
 
@@ -137,18 +137,31 @@ MicroPython v1.24.1 on ViOS  (Ctrl+D to exit)
 ['shell', 'lua', 'python', 'cat', 'ls', ...]
 >>> f = open("/readme.txt")
 >>> print(f.read())
-Welcome to ViOS!
+Welcome to ViCell!
 ```
 
 ### Supported Modules
 
 Standard library modules: `sys`, `os`, `math`, `random`, `json`, `struct`, `hashlib`.
-File I/O works via VFS syscalls (read-only for now).
+File I/O works via VFS syscalls (read and write).
+
+**Network Module (`vnet`)**:
+
+```python
+>>> import vnet
+>>> vnet.resolve("gateway")      # Static table: returns "10.0.2.2"
+>>> vnet.resolve("google.com")   # DNS query via UDP: returns resolved IP
+>>> cap = vnet.socket_tcp()      # Create TCP socket
+>>> vnet.connect(cap, "10.0.2.2", 80)
+>>> vnet.send(cap, b"GET / HTTP/1.0\r\n\r\n")
+>>> vnet.recv(cap, 4096)         # Read up to 4096 bytes
+>>> vnet.close(cap)
+```
 
 ### Running Python Scripts
 
 ```
-ViOS> exec /bin/python /scripts/hello.py
+ViCell> exec /bin/python /scripts/hello.py
 ```
 
 ---
@@ -170,9 +183,9 @@ disk.img
 
 ## Adding New Lua C Bindings
 
-1. Declare the Rust `extern "C" fn vios_xxx(L: *mut LuaState) -> c_int` in
+1. Declare the Rust `extern "C" fn ViCell_xxx(L: *mut LuaState) -> c_int` in
    `cells/runtimes/lua/src/bindings_io.rs`.
-2. Register it in `cells/runtimes/lua/glue/lua_vios_glue.c` via `lua_register(L, "xxx", vios_xxx)`.
+2. Register it in `cells/runtimes/lua/glue/lua_ViCell_glue.c` via `lua_register(L, "xxx", ViCell_xxx)`.
 3. Call any VFS/IPC operations using `ostd::syscall::sys_*` helpers.
 4. Add the binding to the table in this document.
 
@@ -197,11 +210,34 @@ disk.img
 
 | Built-in | Usage | Added |
 |---|---|---|
+| echo | Print text, supports $VAR expansion | Phase A |
+| cat | Read file (via VFS) | Phase A |
+| ls | List directory (via VFS) | Phase A |
 | sleep N | Pause N seconds | Phase K |
 | source / . | Execute script from VFS | Phase J |
 | break / continue | Loop control | Phase R |
 | exit N | Exit with code | Phase S |
 | unset VAR | Remove variable | Phase S |
 | test / [ | Condition testing (-f, -z, -n, =, !=) | Phase U |
+| read | Read user input (Phase X-2) | Phase X-2 |
 | wget URL path | Download URL body to VFS | Phase U |
 | httpd port path | HTTP/1.0 file server | Phase M |
+
+## Shell Advanced Features
+
+| Feature | Usage | Added |
+|---|---|---|
+| `for var in list; do ... done` | Loop over items | Phase J |
+| `while cond; do ... done` | While loop | Phase R |
+| `if cond; then ... fi` | Conditional | Phase S |
+| `case var in pattern) ... esac` | Case switch | Phase T |
+| `name() { ... }` | Define shell function | Phase X-1 |
+| `func $1 $2 $9` | Function arguments | Phase X-2 |
+| `$(cmd)` | Command substitution | Phase X-3 |
+| `\| grep` | Pipe commands | Phase E |
+| `> file` | Redirect stdout to file | Phase E |
+| `>> file` | Append stdout to file | Phase E |
+| `& bg` | Background job | Phase F |
+| `$VAR` | Variable expansion | Phase G |
+| `$?` | Last exit code | Phase H |
+| `||` and `&&` | Command chaining | Phase I |

@@ -4,6 +4,63 @@
 
 ---
 
+## [2026-06-10] VFS MountTable Phase 01 + 6 pre-existing bugs fixed (integration suite 0→48/51)
+
+### Summary
+Implemented Milestone 2.5 Phase 2.5-1: the VFS service now routes every operation through a
+MountTable backend dispatch (`FsBackend` trait) instead of hardcoded `starts_with("/data/")`
+branches. Verification surfaced **six pre-existing bugs** (none caused by the refactor) that had
+silently turned the entire interactive integration suite red since ~2026-06-06; all root-caused
+and fixed. Full incident report:
+`.agents/260610-1202-vfs-mount-table-backends/reports/incident-260610-prexisting-bugs-found-during-phase01-verify.md`
+
+### Refactor (cells/services/vfs)
+- NEW `backend.rs` (FsBackend trait), `backend_ramfs.rs`, `backend_fat.rs`, `manager.rs`,
+  `dispatch.rs`; `mount.rs` rewritten (boundary-aware longest-prefix, backends by index);
+  `main.rs` 875→107 lines. Both the ecall loop and the fast-IPC handler route via MountTable.
+- Intentional behavior additions: `Stat /data/*` now returns real size/is_dir (was Err(1));
+  `vcat /data/*` works again via shell-side ReadAsync+Poll fallback (broken since Phase 27).
+
+### Pre-existing fixes
+1. **kernel** `check_allowlist`: deny-Unknown guard (Phase 31b) blocked raw opcodes
+   (500/501/503…) for every allowlist-declaring cell → VFS FAT32 mount failed at every boot.
+   Added explicit `known_raw` set; bit-36 + ZST cap gates preserved; **every deny now logs**.
+2. **net**: `sys_wait_for_event` timeout passed in mtime ticks (10 MHz) instead of scheduler
+   ticks (10 ms) → ~2.8 h park → 5 s heartbeat killed net in a restart loop. Now 10 ticks.
+3. **shell**: allowlist lacked `Read` → serial stdin silently dead. Added Read/Open/Close/Snapshot.
+4. **net-tools**: no linker script → lld default base 0x10000 → overwrite-guard rejected every
+   spawn ("command not found"). Added `net-tools.ld` @ 0x2600_0000 + build.rs.
+5. **wget**: still spoke the raw OP_WRITE byte protocol dropped in Phase 27 → typed VfsRequest::Write.
+6. **httpd**: same for raw OP_READ → typed ReadAsync+Poll.
+- Test hygiene: 12 stale asserts "FAT16 /data volume mounted" → "FAT32 …" (tests/integration/boot.rs).
+- Process finding: the per-boot kernel panic (scause=15 @ trap entry) was **build skew** between
+  stale cell binaries in disk/kernel_fs and a fresh kernel — fixed by full `gen_disk.ps1` + kernel
+  rebuild; reboot-on-panic had been masking it from CI's prompt check.
+
+### Results
+- vfs suite 11/11, httpd 2/2, full suite **48/51** (remaining 3 are independent pre-existing:
+  bench TCG targets + bench/python VA self-collision — python links at 0x20000000, same as robot-demo).
+
+---
+
+## [2026-06-10] Architecture Decision — VFS Mount-Table Layered Backends (Dual-VFS dropped)
+
+### Summary
+Re-analyzed the filesystem strategy. The spec'd Dual-VFS (viFS1 = RedoxFS fork, viFS2 = TFS B-tree) is dropped: TFS upstream has been dead since ~2018, and a RedoxFS port (~10K+ LOC) exceeds G1 needs. Replaced with a single VFS service + MountTable (longest-prefix match) where backends plug in side-by-side. Also resolved the naming collision between spec "viFS1" (RedoxFS fork) and kernel `VIFS1` (embedded FAT16 initramfs, `kernel/src/fs.rs:12`) — the kernel one is now formally the BootFS/initramfs role.
+
+### Decisions
+- **Keep**: `VIFS1` initramfs (chicken-and-egg: kernel must load the VFS service binary before VFS exists, `kernel/src/loader/early.rs:141`); RamFS `/tmp` (standard tmpfs); FAT32 via `fatfs` crate (LFN included) for SD-card/PC interop.
+- **Add (G1 tail)**: littlefs backend for `/data` — FAT32 has no journaling, so power-loss mid-write corrupts the volume; unacceptable for robots. FAT32 moves to `/mnt/sd`.
+- **Defer to G2**: native FS (CoW/checksum) decision alongside NVMe; exFAT only if raw SDXC (>32GB) reading is actually needed.
+- **Tech debt identified**: VFS service double-embeds `/bin` ELFs via `include_bytes!` (`cells/services/vfs/src/main.rs:39-44`) duplicating `kernel_fs.img` content — to be replaced by a kernel-syscall proxy backend.
+
+### Docs
+- `docs/specs/09-vfs.md` → v0.5 (section 2 rewritten: Mount-Table Layered Backends; TFS/RedoxFS references removed from §4/§6)
+- `docs/project-roadmap.md` → new Milestone 2.5 (phases 2.5-1 … 2.5-4)
+- Detailed plan: `.agents/260610-1202-vfs-mount-table-backends/`
+
+---
+
 ## [2026-06-09] Input Kernel Routing — End-to-End Keyboard Events for ViUI
 
 ### Summary

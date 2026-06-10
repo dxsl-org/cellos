@@ -858,6 +858,47 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 
 ---
 
+### Milestone 2.5: VFS Mount-Table Layered Backends `[G1 tail · G2 scale]`
+**Status**: 📋 PLANNED — see `.agents/260610-1202-vfs-mount-table-backends/`  
+**Priority**: P1 (Phase 2.5-3 littlefs là gate trước robot demo trên board thật)
+
+**Architecture decision (2026-06-10, specs/09-vfs.md v0.5):**
+- ❌ Dual-VFS viFS1/viFS2 DROPPED — TFS upstream chết từ ~2018; RedoxFS port quá lớn cho G1 (YAGNI)
+- ✅ Mô hình chốt: 1 VFS service + MountTable (longest-prefix) + backend cắm song song:
+  BootFS (`/bin` initramfs) · RamFS (`/tmp`) · FAT32 (interop SD, → `/mnt/sd`) · littlefs (`/data` power-safe, G1 tail) · Native FS (`/srv`, G2 cùng NVMe)
+- ⚠️ FAT32 không journaling → không dùng làm persistent store chính cho robot (mất điện = hỏng volume)
+
+**Phase 2.5-1 — MountTable v2 backend dispatch (P1): ✅ COMPLETE 2026-06-10**
+- [x] Trait `FsBackend` nội bộ VFS cell (KHÔNG đụng libs/api — tránh Law 1)
+- [x] Migrate các nhánh `starts_with("/data/")` hardcode trong `main.rs` về MountTable dispatch (cả fast_ipc path)
+- [x] Tách `main.rs` (875→107 LOC): `backend.rs`, `backend_ramfs.rs`, `backend_fat.rs`, `manager.rs`, `dispatch.rs`
+- Verify: vfs suite 11/11; full suite 48/51 — kèm fix 6 bug pre-existing (xem changelog 2026-06-10 + incident report trong plan folder)
+
+**Phase 2.5-2 — Khử nhúng trùng lặp /bin (P1, 2 days):**
+- [ ] Bỏ `include_bytes!` shell/hello/echo/cat/ls trong VFS service (main.rs:39-44) — đang nhúng 2 lần (kernel_fs.img + VFS binary)
+- [ ] `/bin` backend = proxy qua syscall kernel có sẵn (GetFile/ListDir backed by VIFS1)
+
+**Phase 2.5-3 — MBR partition table + per-cell block region grants (P1, ~1 week, kernel-side):** *(validate 2026-06-10)*
+- [ ] Disk image → MBR thật: P1=FAT32, P2=cell-table (CELL_TABLE_BASE_LBA=526336, giữ offset), P3=littlefs
+- [ ] Kernel parse MBR + loader/early.rs đọc cell table qua partition (fallback hằng số)
+- [ ] Per-cell block region grant: BlockIoCap kèm dải LBA qua manifest — ⚠️ **Law 1 2x confirm** nếu sửa libs/api
+- [ ] `check_block_access()` thay 3 gate hardcode (syscall.rs:1748/1778/2015), deny-by-default
+
+**Phase 2.5-4 — littlefs backend cho /data (P1, ~1 week):**
+- [ ] littlefs2 C FFI trong VFS cell (chốt validate — pattern picolibc; KHÔNG route qua PageCache)
+- [ ] Remount FAT32 → `/mnt/sd`; `/data` → littlefs trên P3 (path giữ nguyên, test hiện có không đổi)
+- [ ] Power-loss harness: kill QEMU giữa write loop ≥20 lần → remount → verify, 0 corruption
+
+**Phase 2.5-5 — exFAT + Native FS (DEFERRED, decision-only):**
+- [ ] exFAT: chỉ khi cần đọc SDXC >32GB nguyên bản (`fatfs` không hỗ trợ)
+- [ ] Native FS (CoW/checksum): quyết RedoxFS port hay tự viết tại G2 cùng NVMe
+
+**Validated 2026-06-10** (`/hc-plan validate`): 6 claims checked, 1 failed đã sửa (LBA 524800→526336); 4 quyết định chốt: littlefs FFI · MBR thật · per-cell block grant · toàn bộ phases làm ngay không chờ ARM64.
+
+**Dependency**: Milestone 2.1 (VFS robustness); 01→02, 03 song song, 04 cần 01+03; 2.5-4 gates robot demo on real board
+
+---
+
 ## Phase 3: Applications & Runtimes (2026-09 — 2026-11-30)
 
 **Goal**: Feature-rich shell, standard utilities, runtime integration.

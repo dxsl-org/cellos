@@ -1,10 +1,10 @@
-# ViOS Codebase Summary
+# ViCell Codebase Summary
 
-**Project**: ViOS (Jarvis Hybrid OS)
+**Project**: ViCell (Jarvis Hybrid OS)
 **Version**: 0.2.1-dev (Mycelium Era)
 **Language**: Rust (nightly, `no_std`)
-**Crates**: ~40 active workspace members
-**Last Updated**: 2026-06-03
+**Crates**: ~52 active workspace members
+**Last Updated**: 2026-06-05 (Phase 23 complete)
 
 ---
 
@@ -12,20 +12,20 @@
 
 | Area | Crates | Key Highlights |
 |------|--------|---------------|
-| Kernel | 1 | ~8,700 LOC; HotSwap, scatter/gather IPC, lease caps |
+| Kernel | 1 | ~8,700 LOC; HotSwap, scatter/gather IPC, lease caps, VirtIO VA→PA fix |
 | HAL | 10 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs |
 | Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
-| Apps | 8 | shell (parser+executor+aliases+jobs), bench, sys-tools, net-tools, utils |
+| Apps | 8+ | shell (parser+executor+45+ built-ins+$(cmd)+args), bench, sys-tools, net-tools (6 bins), utils |
 | Drivers | 6 | disk, gpu, input, net (VirtIO NIC), serial, wasm |
-| Services | 6 | vfs (RamFS+IPC), compositor (30 FPS), net (smoltcp+DHCP), input, config, power |
-| Runtimes | 2 | Lua 5.4 (verified), MicroPython 1.24.1 (verified) |
+| Services | 6 | vfs (RamFS+FAT16+10 opcodes), compositor (30 FPS), net (TCP/UDP/DNS), input, config, power |
+| Runtimes | 2 | Lua 5.4 (verified, network bindings), MicroPython 1.24.1 (verified, vnet module) |
 
 ---
 
 ## Directory Structure
 
 ```
-vios/
+ViCell/
 ├── kernel/src/
 │   ├── main.rs             Boot orchestration
 │   ├── cell/
@@ -95,7 +95,7 @@ vios/
 │   ├── bench/              4-scenario benchmark (ctx-switch, IPC, syscall, footprint)
 │   ├── utils/              wc, head, tail, grep, sort, sed, cat, ls, cp, mv, rm, mkdir, touch, echo
 │   ├── sys-tools/          ps, env, uname, date, free, kill, shutdown, hotswap
-│   ├── net-tools/          ping, curl, nc, wget (stubs for Phase 15 data-path)
+│   ├── net-tools/          ping, curl (HTTP GET), nc (TCP relay), wget (downloader), httpd (file server), mqtt (skeleton)
 │   ├── hello/              Minimal ELF smoke test
 │   └── test-isolation/     Capability isolation test cell
 │
@@ -108,35 +108,33 @@ vios/
 │   └── wasm/               WebAssembly runtime stub
 │
 ├── cells/services/ (6 crates)
-│   ├── vfs/                RamFS + OP_MKDIR/RMDIR/UNLINK/STAT IPC + ViStateTransfer
-│   │   └── src/            mount.rs, quota.rs, handle_table.rs
+│   ├── vfs/                RamFS + FAT16 + 10 IPC opcodes (GET_FILE/LIST_DIR/STAT/WRITE/READ/MKDIR/RMDIR/UNLINK/RMDIR_RECURSIVE/APPEND) + ViStateTransfer
+│   │   └── src/            mount.rs, quota.rs, handle_table.rs, block_stream.rs
 │   ├── compositor/         Software blending, z-order, damage tracking, GPU flush
 │   │   └── src/            surface_table.rs, z_order.rs, render.rs
-│   ├── net/                smoltcp TCP/IP + DHCP + socket IPC
-│   │   └── src/            interface.rs, socket_table.rs, dhcp.rs, poll_driver.rs
+│   ├── net/                smoltcp TCP/IP + UDP + DNS resolver + DHCP + socket IPC (11 opcodes)
+│   │   └── src/            interface.rs, socket_table.rs, socket_state.rs, dhcp.rs, poll_driver.rs
 │   ├── input/              US QWERTY translator, modifier state, focus dispatcher + ViStateTransfer
 │   │   └── src/            layout_us_qwerty.rs, modifier_state.rs, dispatcher.rs
 │   ├── config/             KV store + ViStateTransfer (schema v1)
 │   └── power/              Power management stub
 │
 ├── cells/runtimes/ (2 crates)
-│   ├── lua/                Lua 5.4 REPL (multi-line, history, VFS I/O FFI, ViStateTransfer)
+│   ├── lua/                Lua 5.4 REPL (multi-line, history, VFS I/O FFI, network bindings, ViStateTransfer)
 │   │   ├── src/ffi.rs      Lua C API bindings
-│   │   ├── src/bindings_io.rs  vios_io_open/read/close, vios_os_execute
+│   │   ├── src/bindings_io.rs  ViCell_io_open/read/close, ViCell_os_execute
+│   │   ├── src/bindings_net.rs  vnet.udp_send/recv, vnet.resolve, DNS FFI
 │   │   └── src/repl_session.rs Multi-line REPL + <eof> continuation detection
-│   └── micropython/        MicroPython 1.24.1 REPL (256KB heap, VFS I/O, ViStateTransfer)
+│   └── micropython/        MicroPython 1.24.1 REPL (256KB heap, VFS I/O, vnet module, ViStateTransfer)
 │       ├── src/ffi.rs      MicroPython C API bindings
-│       ├── src/builtins.rs sys, os, math, json modules
+│       ├── src/builtins.rs sys, os, math, json, vnet modules
+│       ├── src/modvnet.c   TCP/UDP socket API, vnet_dns.c DNS resolution, modvnet_udp.c UDP sockets
 │       └── src/repl.rs     Interactive REPL session
 │
-├── tests/integration/      QEMU-driven test stubs (QemuRunner harness)
-│   ├── harness.rs          Boot QEMU, inject input, grep serial output
-│   ├── ring3_smoke.rs      Banner + Ring-3 hello + shell prompt
-│   ├── multi_cell.rs       init→config→vfs→shell chain
-│   ├── input_dispatch.rs   Key injection + shell echo
-│   ├── network_loopback.rs DHCP + TCP loopback
-│   ├── compositor_basic.rs GPU init + surface no-panic
-│   └── hotswap_shell.rs    Live shell upgrade + history preservation
+├── tests/integration/      QEMU-driven test suite (QemuRunner harness, 30/30 tests)
+│   ├── lib.rs              QemuRunner, spawn_echo_server, spawn_http_server, spawn_mqtt_broker, wait_for
+│   ├── boot.rs             9 named tests: boots_to_shell_prompt, shell_run_echo, shell_read_file, shell_run_utils, lua_repl_runs, lua_code_executes, micropython_repl_runs, network_dhcp_lease, gpu_framebuffer_renders
+│   └── (additional scenarios): FAT16 persistence, HotSwap, network TCP/UDP/DNS, Lua/MicroPython module tests
 │
 ├── scripts/
 │   ├── dev-setup.sh / .ps1 One-command setup (Linux/macOS/Windows)
