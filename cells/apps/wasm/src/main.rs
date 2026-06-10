@@ -11,6 +11,8 @@ use alloc::vec::Vec;
 use driver_wasm::{WasmConfig, WasmRuntime, HostState};
 use driver_wasm::imports::register_vi_imports;
 
+api::declare_syscalls![Send, Recv, Log, Heartbeat];
+
 /// VFS service task ID — boot order: init=1, user_hello=2, vfs=3.
 const VFS_ENDPOINT: usize = 3;
 

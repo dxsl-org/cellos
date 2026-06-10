@@ -2,7 +2,7 @@
 name = "app-sys-tools"
 version = "0.1.0"
 edition = "2021"
-description = "ViOS system administration utilities: ps, kill, env, uname, date, free, shutdown"
+description = "ViCell system administration utilities: ps, kill, env, uname, date, free, shutdown"
 
 [dependencies]
 ostd = { path = "../../../libs/ostd" }

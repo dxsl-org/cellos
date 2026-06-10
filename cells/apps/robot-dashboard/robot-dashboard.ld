@@ -3,20 +3,21 @@ ENTRY(_start)
 
 SECTIONS
 {
-    /* User-space base address for RISC-V SV39.
-     * User VA range: 0x0000_0000 – 0x7FFF_FFFF (lower half of 39-bit VA).
-     * 4 MB base keeps cells well below the kernel at 0x80200000. */
-    . = 0x00400000;
-    
+    /* robot-dashboard user-space base address: 0x22000000 (544 MB virtual).
+     * Avoids: robot-demo (0x20000000-0x20900000) and all other live cells.
+     * robot-dashboard has an 8 MiB heap BSS; total footprint ≈ 9 MB → ends
+     * at ~0x22900000, well below RAM at 0x80000000. */
+    . = 0x22000000;
+
     .text : {
         *(.text.boot)
         *(.text .text.*)
     }
-    
+
     .rodata : ALIGN(4096) {
         *(.rodata .rodata.*)
     }
-    
+
     .data : ALIGN(4096) {
         PROVIDE(__global_pointer$ = . + 0x800);
         *(.data .data.*)
@@ -24,7 +25,7 @@ SECTIONS
         *(.got .got.* .got.plt)
         *(.sdata .sdata.*)
     }
-    
+
     .bss : ALIGN(4096) {
         __bss_start = .;
         *(.bss .bss.*)

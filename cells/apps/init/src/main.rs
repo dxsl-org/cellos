@@ -53,7 +53,7 @@ pub extern "C" fn main() {
 
     // Supervised services in bring-up order — VFS first (it serves /bin/*).
     // tids[i] is the current live tid of paths[i] (None when down).
-    const NSVC: usize = 7;
+    const NSVC: usize = 8;
     let paths: [&str; NSVC] = [
         "/bin/vfs",
         "/bin/config",
@@ -61,7 +61,8 @@ pub extern "C" fn main() {
         "/bin/net",
         "/bin/compositor",
         "/bin/shell",
-        "/bin/robot-demo", // G1 sensor→actuator→MQTT reference demo
+        "/bin/robot-demo",       // G1 sensor→actuator→MQTT reference demo
+        "/bin/robot-dashboard",  // G1 ViUI v2 dashboard demo (FramebufferRenderer)
     ];
     let mut tids: [Option<usize>; NSVC] = [None; NSVC];
 
@@ -76,6 +77,7 @@ pub extern "C" fn main() {
         Some(service::COMPOSITOR),
         None, // shell is not a registered service
         None, // robot-demo is not a registered service
+        None, // robot-dashboard is not a registered service
     ];
 
     // Restart policy per service. All current services are Permanent (a robot must keep
@@ -89,6 +91,7 @@ pub extern "C" fn main() {
         Policy::Permanent, // compositor
         Policy::Transient, // shell: restart on crash, but a clean `exit` is final
         Policy::Temporary, // robot-demo: run once then stop
+        Policy::Temporary, // robot-dashboard: ViUI demo, run once
     ];
     // Per-service restart-intensity state (sliding window).
     let mut restart_count: [u32; NSVC] = [0; NSVC];

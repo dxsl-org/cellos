@@ -3,6 +3,7 @@
 
 extern crate ostd;
 
+api::declare_syscalls![Log];
 
 #[no_mangle]
 pub fn main() {

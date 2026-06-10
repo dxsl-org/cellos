@@ -53,6 +53,7 @@ use api::display::PixelFormat;
 use viui::{
     animation::AnimatedSignal,
     app_runner::ViApp,
+    event::Event,
     node_widgets::{
         button::Button,
         column::Column,
@@ -97,7 +98,12 @@ pub extern "C" fn main() {
     let renderer = FramebufferRenderer::new(surf);
 
     // Register this cell to receive keyboard and mouse events.
-    viui::input_bridge::request_input_focus();
+    // Retry until the input service grants focus — it may not be registered yet
+    // at the instant we spawn (boot race between init spawning input and dashboard).
+    while !viui::input_bridge::request_input_focus() {
+        ostd::task::yield_now();
+    }
+    ostd::io::println("[robot-dashboard] input focus granted");
 
     // ── Subscription handle storage (keeps derived signals alive) ─────────────
     let mut subs: Vec<SubscriptionHandle> = Vec::new();
@@ -196,6 +202,10 @@ pub extern "C" fn main() {
     // Render at ~30 fps (33 ms between frames).
     const FRAME_INTERVAL: u64 = 33 * MTIME_TICKS_PER_MS;
 
+    // Accumulate input events across loop iterations so events collected in a
+    // non-frame iteration are not lost before tick_with_dt processes them.
+    let mut pending_events: Vec<Event> = Vec::new();
+
     loop {
         // Heartbeat: disable hung-detector (0 = no deadline).
         sys_heartbeat(0);
@@ -225,13 +235,19 @@ pub extern "C" fn main() {
         }
 
         // ── Input collection ─────────────────────────────────────────────────
-        let events = viui::input_bridge::collect_input_events(32);
+        // Drain the IPC queue every iteration and accumulate into pending_events.
+        // Events must not be discarded in non-frame iterations — a Tab or button
+        // press arriving between frame ticks would otherwise be silently lost.
+        {
+            pending_events.extend(viui::input_bridge::collect_input_events(32));
+        }
 
         // ── Render tick ──────────────────────────────────────────────────────
         if now.wrapping_sub(last_frame) >= FRAME_INTERVAL {
             let dt_ms = (now.wrapping_sub(last_frame) / MTIME_TICKS_PER_MS) as u32;
             last_frame = now;
-            app.tick_with_dt(&events, dt_ms);
+            app.tick_with_dt(&pending_events, dt_ms);
+            pending_events.clear();
         }
 
         // Yield to avoid busy-spinning the CPU.
