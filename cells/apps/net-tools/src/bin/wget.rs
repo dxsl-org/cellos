@@ -9,15 +9,13 @@
 extern crate ostd;
 
 use ostd::io::println;
-use ostd::syscall::{sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
 use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
-
-const NET_ENDPOINT: usize = 6;
-const VFS_ENDPOINT: usize = 3;
+use api::syscall::service;
 
 const RESP_BUF: usize = 4096;
 
-api::declare_syscalls![Send, Recv, Log, StateRestore];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
 #[no_mangle]
 pub fn main() {
@@ -44,13 +42,23 @@ pub fn main() {
         None => { println("wget: invalid host"); return; }
     };
 
+    // ── Resolve service endpoints ─────────────────────────────────────────────
+    let net_ep = match sys_lookup_service(service::NET) {
+        Some(ep) => ep,
+        None => { println("wget: no net service"); return; }
+    };
+    let vfs_ep = match sys_lookup_service(service::VFS) {
+        Some(ep) => ep,
+        None => { println("wget: no vfs service"); return; }
+    };
+
     // ── TcpConnect (atomic create + connect) ─────────────────────────────────
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(
         &NetRequest::TcpConnect { addr, port },
         &mut req_buf,
     ).map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let cap_id = match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
@@ -65,7 +73,7 @@ pub fn main() {
         + b"\r\nConnection: close\r\n\r\n".len();
     if overhead + path.len() + host.len() > 500 {
         println("wget: URL too long");
-        close_socket(cap_id);
+        close_socket(cap_id, net_ep);
         return;
     }
     let mut request_data = [0u8; 512];
@@ -87,7 +95,7 @@ pub fn main() {
             &NetRequest::TcpSend { cap_id, data: &rem[..chunk] },
             &mut send_buf,
         ).map(|b| b.len()).unwrap_or(0);
-        sys_send(NET_ENDPOINT, &send_buf[..send_len]);
+        sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut cnt_buf) {
             SyscallResult::Ok(_) => {
@@ -117,7 +125,7 @@ pub fn main() {
     ).map(|b| b.len()).unwrap_or(0);
 
     'recv: for _ in 0..500 {
-        sys_send(NET_ENDPOINT, &recv_req_buf[..recv_req_len]);
+        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut data_buf) {
             SyscallResult::Ok(_) => {
@@ -129,9 +137,9 @@ pub fn main() {
                         if resp_len >= RESP_BUF { break 'recv; }
                     }
                     Ok(NetResponse::Data(_)) => {
-                        let st = query_state(cap_id);
+                        let st = query_state(cap_id, net_ep);
                         if st == 0x06 || st == 0x00 {
-                            sys_send(NET_ENDPOINT, &recv_req_buf[..recv_req_len]);
+                            sys_send(net_ep, &recv_req_buf[..recv_req_len]);
                             let mut fb = [0u8; IPC_BUF_SIZE];
                             if let SyscallResult::Ok(_) = sys_recv(0, &mut fb) {
                                 if let Ok(NetResponse::Data(b)) = api::ipc::decode::<NetResponse>(&fb) {
@@ -150,7 +158,7 @@ pub fn main() {
             _ => break,
         }
     }
-    close_socket(cap_id);
+    close_socket(cap_id, net_ep);
 
     // ── Extract body and write to VFS ─────────────────────────────────────────
     let resp = &response[..resp_len];
@@ -173,7 +181,7 @@ pub fn main() {
         Ok(s) => s.len(),
         Err(_) => { println("wget: request too large"); return; }
     };
-    sys_send(VFS_ENDPOINT, &vfs_req[..n]);
+    sys_send(vfs_ep, &vfs_req[..n]);
     let mut r = [0u8; 64];
     match sys_recv(0, &mut r) {
         SyscallResult::Ok(_) => match api::ipc::decode::<api::ipc::VfsResponse>(&r) {
@@ -189,11 +197,11 @@ pub fn main() {
     }
 }
 
-fn query_state(cap_id: u32) -> u8 {
+fn query_state(cap_id: u32, net_ep: usize) -> u8 {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::SocketState { cap_id }, &mut req_buf)
         .map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
@@ -204,11 +212,11 @@ fn query_state(cap_id: u32) -> u8 {
     }
 }
 
-fn close_socket(cap_id: u32) {
+fn close_socket(cap_id: u32, net_ep: usize) {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::TcpClose { cap_id }, &mut req_buf)
         .map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let _ = sys_recv(0, &mut resp_buf);
 }

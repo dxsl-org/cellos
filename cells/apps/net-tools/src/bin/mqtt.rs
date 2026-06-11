@@ -10,12 +10,11 @@
 extern crate ostd;
 
 use ostd::io::{print, println};
-use ostd::syscall::{sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
 use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
+use api::syscall::service;
 
-const NET_ENDPOINT: usize = 6;
-
-api::declare_syscalls![Send, Recv, Log, StateRestore];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
 #[no_mangle]
 pub fn main() {
@@ -44,13 +43,19 @@ pub fn main() {
         None => { println("mqtt: invalid host"); return; }
     };
 
+    // ── Resolve net service endpoint ──────────────────────────────────────────
+    let net_ep = match sys_lookup_service(service::NET) {
+        Some(ep) => ep,
+        None => { println("mqtt: no net service"); return; }
+    };
+
     // ── TcpConnect (atomic create + connect) ─────────────────────────────────
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(
         &NetRequest::TcpConnect { addr, port },
         &mut req_buf,
     ).map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let cap_id = match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
@@ -61,25 +66,25 @@ pub fn main() {
     };
     println("connected");
 
-    if !mqtt_handshake(cap_id) {
+    if !mqtt_handshake(cap_id, net_ep) {
         println("mqtt: CONNACK rejected");
-        close_socket(cap_id);
+        close_socket(cap_id, net_ep);
         return;
     }
 
     match subcmd {
         "publish"   => {
             let payload = parts.next().unwrap_or("");
-            do_publish(cap_id, topic, payload);
+            do_publish(cap_id, topic, payload, net_ep);
         }
-        "subscribe" => { do_subscribe(cap_id, topic); }
+        "subscribe" => { do_subscribe(cap_id, topic, net_ep); }
         _ => { println("mqtt: unknown subcommand"); }
     }
-    close_socket(cap_id);
+    close_socket(cap_id, net_ep);
 }
 
 /// Send MQTT CONNECT and verify CONNACK `[0x20 0x02 0x00 0x00]`.
-fn mqtt_handshake(cap: u32) -> bool {
+fn mqtt_handshake(cap: u32, net_ep: usize) -> bool {
     tcp_send(cap, &[
         0x10, 0x10,
         0x00, 0x04, b'M', b'Q', b'T', b'T',
@@ -87,14 +92,14 @@ fn mqtt_handshake(cap: u32) -> bool {
         0x02,
         0x00, 0x3C,
         0x00, 0x04, b'v', b'i', b'o', b's',
-    ]);
+    ], net_ep);
     let mut buf = [0u8; 256];
-    let n = mqtt_recv(cap, &mut buf, 500);
+    let n = mqtt_recv(cap, &mut buf, 500, net_ep);
     n >= 4 && buf[0] == 0x20 && buf[3] == 0x00
 }
 
 /// Build and send a PUBLISH packet (QoS 0).
-fn do_publish(cap: u32, topic: &str, payload: &str) {
+fn do_publish(cap: u32, topic: &str, payload: &str, net_ep: usize) {
     let tb = topic.as_bytes();
     let pb = payload.as_bytes();
     if tb.len() > 64  { println("mqtt: topic too long (max 64 bytes)"); return; }
@@ -111,12 +116,12 @@ fn do_publish(cap: u32, topic: &str, payload: &str) {
     p += 2;
     pkt[p..p + tb.len()].copy_from_slice(tb); p += tb.len();
     pkt[p..p + pb.len()].copy_from_slice(pb); p += pb.len();
-    tcp_send(cap, &pkt[..p]);
+    tcp_send(cap, &pkt[..p], net_ep);
     println("published");
 }
 
 /// Send SUBSCRIBE, verify SUBACK, then poll and print incoming PUBLISH payloads.
-fn do_subscribe(cap: u32, topic: &str) {
+fn do_subscribe(cap: u32, topic: &str, net_ep: usize) {
     let tb = topic.as_bytes();
     let remaining = 5 + tb.len();
     let mut pkt = [0u8; 96];
@@ -129,16 +134,16 @@ fn do_subscribe(cap: u32, topic: &str) {
     pkt[p] = (tb.len() >> 8) as u8; pkt[p + 1] = tb.len() as u8; p += 2;
     pkt[p..p + tb.len()].copy_from_slice(tb); p += tb.len();
     pkt[p] = 0x00; p += 1;
-    tcp_send(cap, &pkt[..p]);
+    tcp_send(cap, &pkt[..p], net_ep);
 
     let mut buf = [0u8; 256];
-    let n = mqtt_recv(cap, &mut buf, 500);
+    let n = mqtt_recv(cap, &mut buf, 500, net_ep);
     if n == 0 || buf[0] != 0x90 { println("mqtt: SUBACK not received"); return; }
     println("subscribed");
 
     for _ in 0..10_000usize {
         let mut data = [0u8; 256];
-        let n = mqtt_recv_once(cap, &mut data);
+        let n = mqtt_recv_once(cap, &mut data, net_ep);
         if n < 4 || data[0] != 0x30 { sys_yield(); continue; }
         let topic_len     = (data[2] as usize) << 8 | data[3] as usize;
         let payload_start = 4 + topic_len;
@@ -152,7 +157,7 @@ fn do_subscribe(cap: u32, topic: &str) {
 }
 
 /// Send bytes over TCP via TcpSend; retries until all sent.
-fn tcp_send(cap: u32, data: &[u8]) {
+fn tcp_send(cap: u32, data: &[u8], net_ep: usize) {
     let mut sent = 0usize;
     for _ in 0..500 {
         if sent >= data.len() { break; }
@@ -162,7 +167,7 @@ fn tcp_send(cap: u32, data: &[u8]) {
             &NetRequest::TcpSend { cap_id: cap, data: &data[sent..sent + chunk] },
             &mut send_buf,
         ).map(|b| b.len()).unwrap_or(0);
-        sys_send(NET_ENDPOINT, &send_buf[..send_len]);
+        sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut cnt_buf) {
             SyscallResult::Ok(_) => {
@@ -183,13 +188,13 @@ fn tcp_send(cap: u32, data: &[u8]) {
 }
 
 /// Send ONE TcpRecv; return bytes copied into `buf` (0 = nothing available yet).
-fn mqtt_recv_once(cap: u32, buf: &mut [u8; 256]) -> usize {
+fn mqtt_recv_once(cap: u32, buf: &mut [u8; 256], net_ep: usize) -> usize {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(
         &NetRequest::TcpRecv { cap_id: cap, buf_len: 256 },
         &mut req_buf,
     ).map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => {
@@ -212,20 +217,20 @@ fn mqtt_recv_once(cap: u32, buf: &mut [u8; 256]) -> usize {
 }
 
 /// Poll until an MQTT packet arrives; yield between each poll.
-fn mqtt_recv(cap: u32, buf: &mut [u8; 256], max_polls: usize) -> usize {
+fn mqtt_recv(cap: u32, buf: &mut [u8; 256], max_polls: usize, net_ep: usize) -> usize {
     for _ in 0..max_polls {
-        let n = mqtt_recv_once(cap, buf);
+        let n = mqtt_recv_once(cap, buf, net_ep);
         if n > 0 { return n; }
         sys_yield();
     }
     0
 }
 
-fn close_socket(cap: u32) {
+fn close_socket(cap: u32, net_ep: usize) {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::TcpClose { cap_id: cap }, &mut req_buf)
         .map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut r = [0u8; IPC_BUF_SIZE];
     let _ = sys_recv(0, &mut r);
 }

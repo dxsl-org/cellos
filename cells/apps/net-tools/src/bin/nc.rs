@@ -3,16 +3,14 @@
 extern crate ostd;
 
 use ostd::io::{print, println};
-use ostd::syscall::{sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult};
 use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
-
-/// Net service task ID (init spawn order is deterministic).
-const NET_ENDPOINT: usize = 6;
+use api::syscall::service;
 
 /// Payload sent and expected back from the echo server.
 const HELLO: &[u8] = b"HELLO_ViCell\n";
 
-api::declare_syscalls![Send, Recv, Log, StateRestore];
+api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
 /// nc <host_ip> <port>  |  nc -l <port>
 #[no_mangle]
@@ -34,12 +32,18 @@ pub fn main() {
         None => { println("Usage: nc <host> <port>  |  nc -l <port>"); return; }
     };
 
+    // ── Resolve net service endpoint ──────────────────────────────────────────
+    let net_ep = match sys_lookup_service(service::NET) {
+        Some(ep) => ep,
+        None => { println("nc: no net service"); return; }
+    };
+
     if first == "-l" {
         let port = match parts.next().and_then(parse_u16) {
             Some(p) => p,
             None => { println("Usage: nc -l <port>"); return; }
         };
-        server_mode(port);
+        server_mode(port, net_ep);
         return;
     }
 
@@ -63,7 +67,7 @@ pub fn main() {
         &NetRequest::TcpConnect { addr, port },
         &mut req_buf,
     ).map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let cap_id = match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
@@ -84,7 +88,7 @@ pub fn main() {
             &NetRequest::TcpSend { cap_id, data: rem },
             &mut send_buf,
         ).map(|b| b.len()).unwrap_or(0);
-        sys_send(NET_ENDPOINT, &send_buf[..send_len]);
+        sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut cnt_buf) {
             SyscallResult::Ok(_) => {
@@ -111,7 +115,7 @@ pub fn main() {
     ).map(|b| b.len()).unwrap_or(0);
 
     for _ in 0..500 {
-        sys_send(NET_ENDPOINT, &recv_req_buf[..recv_req_len]);
+        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut data_buf) {
             SyscallResult::Ok(_) => {
@@ -127,19 +131,19 @@ pub fn main() {
         }
     }
 
-    close_socket(cap_id);
+    close_socket(cap_id, net_ep);
 }
 
 /// nc -l <port> — listen, accept one connection, echo bytes to serial and
 /// back to the peer, then close when the peer closes.
-fn server_mode(port: u16) {
+fn server_mode(port: u16, net_ep: usize) {
     // TcpListen (atomic create + listen)
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(
         &NetRequest::TcpListen { port },
         &mut req_buf,
     ).map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let listen_cap = match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
@@ -160,7 +164,7 @@ fn server_mode(port: u16) {
     ).map(|b| b.len()).unwrap_or(0);
 
     let stream_cap: u32 = loop {
-        sys_send(NET_ENDPOINT, &accept_req_buf[..accept_req_len]);
+        sys_send(net_ep, &accept_req_buf[..accept_req_len]);
         let mut r = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut r) {
             SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
@@ -172,13 +176,13 @@ fn server_mode(port: u16) {
     };
     println("connected");
 
-    serve_connection(stream_cap);
+    serve_connection(stream_cap, net_ep);
 
     // Accept loop — keep accepting connections on the same listener.
     loop {
         println("waiting for next connection");
         let next_cap: u32 = loop {
-            sys_send(NET_ENDPOINT, &accept_req_buf[..accept_req_len]);
+            sys_send(net_ep, &accept_req_buf[..accept_req_len]);
             let mut r = [0u8; IPC_BUF_SIZE];
             match sys_recv(0, &mut r) {
                 SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
@@ -189,13 +193,13 @@ fn server_mode(port: u16) {
             }
         };
         println("connected");
-        serve_connection(next_cap);
+        serve_connection(next_cap, net_ep);
     }
 }
 
 /// Recv loop: print received bytes to serial and echo back to peer.
 /// Exits when the peer closes the connection.
-fn serve_connection(cap: u32) {
+fn serve_connection(cap: u32, net_ep: usize) {
     let mut recv_req_buf = [0u8; IPC_BUF_SIZE];
     let recv_req_len = api::ipc::encode(
         &NetRequest::TcpRecv { cap_id: cap, buf_len: 256 },
@@ -203,7 +207,7 @@ fn serve_connection(cap: u32) {
     ).map(|b| b.len()).unwrap_or(0);
 
     'recv: for _ in 0..500_000 {
-        sys_send(NET_ENDPOINT, &recv_req_buf[..recv_req_len]);
+        sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
         match sys_recv(0, &mut data_buf) {
             SyscallResult::Ok(_) => {
@@ -216,12 +220,12 @@ fn serve_connection(cap: u32) {
                             &NetRequest::TcpSend { cap_id: cap, data: b },
                             &mut echo_buf,
                         ).map(|e| e.len()).unwrap_or(0);
-                        sys_send(NET_ENDPOINT, &echo_buf[..echo_len]);
+                        sys_send(net_ep, &echo_buf[..echo_len]);
                         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
                         let _ = sys_recv(0, &mut cnt_buf);
                     }
                     Ok(NetResponse::Data(_)) => {
-                        let st = query_state(cap);
+                        let st = query_state(cap, net_ep);
                         if st == 0x06 || st == 0x00 { break 'recv; }
                         sys_yield();
                     }
@@ -231,14 +235,14 @@ fn serve_connection(cap: u32) {
             _ => break,
         }
     }
-    close_socket(cap);
+    close_socket(cap, net_ep);
 }
 
-fn query_state(cap_id: u32) -> u8 {
+fn query_state(cap_id: u32, net_ep: usize) -> u8 {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::SocketState { cap_id }, &mut req_buf)
         .map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     match sys_recv(0, &mut resp_buf) {
         SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
@@ -249,11 +253,11 @@ fn query_state(cap_id: u32) -> u8 {
     }
 }
 
-fn close_socket(cap_id: u32) {
+fn close_socket(cap_id: u32, net_ep: usize) {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::TcpClose { cap_id }, &mut req_buf)
         .map(|b| b.len()).unwrap_or(0);
-    sys_send(NET_ENDPOINT, &req_buf[..len]);
+    sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
     let _ = sys_recv(0, &mut resp_buf);
 }
