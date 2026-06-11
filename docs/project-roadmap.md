@@ -172,22 +172,32 @@ SMP scales across N cores · windowed desktop + mouse · hot migration with no d
 - **WASM Tier-2** — Phase 28 MVP ✅ (wasmi + 4 imports). **Tier 2 dropped from official stack** (2026-06-06). Phase 28 code retained under `feature = "wasm-experimental"` only — Phase 28-5 and WASI 2.0 migration cancelled. Revisit only if G2 becomes multi-tenant platform (Cloudflare Workers–style) after WASI 1.0 freezes (late 2026/early 2027).
 - 🆕 **Package manager / app distribution** `[G2]` — 📋 no install/update mechanism beyond baking into the disk image.
 
-### F. G2 RISC-V Server Strategy `[G2]`
+### F. G2 Server Strategy — ARM64 Graduation Demo + RISC-V Latency Demo `[G2]`
 
-**Decision (2026-06-06):** G2 primary target = RISC-V AI inference server. Value proposition = latency guarantee + reliability + security, NOT throughput.
+**Decision (2026-06-06, updated 2026-06-11):** G2 value proposition = **latency guarantee + reliability + security**, NOT throughput. Not competing with LLM GPU throughput (5-30× gap) or general x86 workloads.
+
+**⚠️ Hardware correction (2026-06-11 research):** C930 = Alibaba IP core (RTL delivery to licensees March 2025, no SoC/board before 2027). P870 = SiFive IP licensed by Sophgo — no standalone P870 chip purchasable. H-ext (hypervisor extension) absent from ALL shipping RISC-V chips — blocks Tier 3b VM plane on RISC-V. See `docs/research/research-riscv-ai-ecosystem.md`.
+
+**G2 graduation demo: ARM64 RK3588 first (not RISC-V)**
+
+Primary graduation target: **Radxa ROCK 5B+ 16GB (~$149)** — Rockchip RK3588.
+- NPU: 6 TOPS INT8, RKNN SDK v2.3.2 (mature, C API `rknn_init`/`rknn_run`/`rknn_query` → Tier 1b FFI)
+- Tier 3b: Alpine Linux VM via KVM EL2 (confirmed, 4 vCPU limit) — ARM64 EL2 works NOW; RISC-V H-ext does NOT exist yet
+- ViCell = first custom OS with deterministic NPU inference on RK3588 (Zephyr = UART-only; Redox = no port)
+
+Parallel track: Milk-V Pioneer (SG2042, ~$600) for RISC-V P99 latency story — no NPU needed there.
 
 **Two-plane architecture:**
 ```
 DATA PLANE (performance-critical, Tier 1 + 1b):
-  HTTP → Net Cell → Inference Cell (Tier 1b + NPU SDK) → response
+  HTTP → Net Cell → Inference Cell (Tier 1b + RKNN/nncase SDK) → response
   Zero-copy grant, RT-bounded, <10ms P99
 
 MANAGEMENT PLANE (ecosystem, Tier 3b):
-  Linux VM (Alpine ~2GB) — Prometheus, SSH, admin tools, PostgreSQL
+  Alpine Linux VM — Prometheus, SSH, admin tools, PostgreSQL
+  ARM64: KVM EL2 (works today) | RISC-V: H-ext absent → separate mgmt node or deferred
   overhead: ~5-10% CPU, ~20-40% disk I/O, 1-5s boot (one-time)
 ```
-
-**Target hardware:** Alibaba C930 (64-core, VLEN=256b, ships 2025) → SiFive P870+X390 NPU (Q2 2026). **Window: 12-18 months** before Linux ecosystem consolidates on RISC-V server.
 
 **Value vs Linux + nginx:**
 
@@ -198,11 +208,24 @@ MANAGEMENT PLANE (ecosystem, Tier 3b):
 | Memory copies (net→NPU→resp) | 3-4 copies | 0-1 (zero-copy grant) |
 | Security (model weights, keys) | Process isolation | Stage-2 Security Silo |
 
-**Not competing:** LLM throughput (GPU wins 5-30x), general x86 workloads (Linux ecosystem too mature).
+**G2 graduation criteria (updated):**
+- ARM64 bring-up on RK3588: U-Boot → ViCell EL1 → Cell ecosystem running
+- RKNN inference Cell: HTTP request → NPU → response, P99 latency bounded
+- Tier 3b Alpine VM: KVM, boots, runs real workload (Prometheus/SSH)
+- Never-die: NPU cell crash → supervisor auto-restart, inference continues
+- RISC-V parallel: P99 latency demo on Pioneer (SG2042, no NPU required)
 
-**G2 graduation criteria (additions):** RISC-V AI inference server demo end-to-end (HTTP → NPU cell → P99 bound); Linux VM boots and runs real workload; never-die: NPU cell crash → auto-restart.
+**Real RISC-V hardware path (no vaporware):**
 
-See also: [.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md](.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md)
+| Phase | Board | Price | Purpose |
+|---|---|---|---|
+| Now (RISC-V dev) | Milk-V Pioneer (SG2042) | ~$600 | 64-core RISC-V, mature Linux BSP |
+| Now (RISC-V RVV bench) | BPI-F3 (SpacemiT K1) | ~$100 | RVV 1.0 measured, llama.cpp 8.6 t/s |
+| G2 demo | Radxa ROCK 5B+ (RK3588) | ~$149 | ARM64 NPU graduation demo |
+| G2 future | SG2044 SRA3-40 | TBD | RVV 1.0 + DDR5, IF H-ext ships |
+| Long-term | C930 SoC (unknown) | TBD | 2027+ IF H-ext confirmed |
+
+See also: [.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md](.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md) · [docs/research/research-arm64-g2-hardware.md](research/research-arm64-g2-hardware.md) · [docs/research/research-riscv-ai-ecosystem.md](research/research-riscv-ai-ecosystem.md)
 
 ### G. Chipset & Driver Support Matrix
 
@@ -214,10 +237,11 @@ See also: [.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md](.
 |-------|----------|-------------------|------------------------|
 | G1 | ARM64 + RV64 | **QEMU ARM virt** (primary, QEMU-first policy) | RPi 4 (BCM2711) → VisionFive2 (JH7110) |
 | G1 sub-track | RV32 | QEMU RV32 virt | SiFive E21 / CHERIoT-Nano |
-| G2 | RV64 | **Milk-V Pioneer** (X60, now) | Alibaba C930 (2026) |
+| G2 graduation demo | ARM64 | **Radxa ROCK 5B+ 16GB (~$149, RK3588)** | — (this IS the graduation board) |
+| G2 parallel | RV64 | **Milk-V Pioneer (SG2042, now)** | SG2044 SRA3-40 (IF H-ext ships, 2026+) |
 | G2 | x86_64 | QEMU x86_64 virt | x86 PC (when G2 starts) |
-| G3 | ARM64 | **Radxa ROCK 5 / Orange Pi 5+ (RK3588)** ~$150 | — |
-| G3 | RV64 | — | SiFive P870 + X390 NPU (Q2 2026) |
+| G3 | ARM64 | Same as G2 demo board (RK3588) | — |
+| G3 | RV64 | — | C930 SoC (2027+, IF H-ext confirmed) |
 
 **QEMU-first policy (G1):** Develop and validate peripheral Driver Cells on QEMU ARM virt (PL061 GPIO, PL011 UART, VirtIO) before buying real SBCs. HAL traits (`ViGpio`, `ViUart`) must be **board-agnostic** from v1 so real-board support adds only a new impl, zero kernel changes.
 

@@ -24,6 +24,8 @@ pub use alloc::vec;
 pub type Result<T, E = ViError> = core::result::Result<T, E>;
 
 pub mod fast_ipc;
+/// Typed linear Grant handles for zero-copy shared memory (Singularity exchange-heap pattern).
+pub mod grant;
 pub mod mmio;
 pub mod startup;
 pub mod sync;
