@@ -39,12 +39,13 @@ static FAILED: AtomicU32 = AtomicU32::new(0);
 // ── Test harness ─────────────────────────────────────────────────────────────
 
 fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
-    let mut send_buf = [0u8; 512];
+    let mut send_buf = [0u8; api::ipc::IPC_BUF_SIZE];
     let n = api::ipc::encode(req, &mut send_buf).map(|s| s.len()).unwrap_or(0);
     ostd::syscall::sys_send(vfs_tid(), &send_buf[..n]);
     // Leak the recv buffer so VfsResponse::Data borrows from it safely.
     // This is fine in a test cell that runs and exits.
-    let buf: &'static mut [u8; 512] = alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; 512]));
+    let buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
+        alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; api::ipc::IPC_BUF_SIZE]));
     match ostd::syscall::sys_recv(0, buf) {
         ostd::syscall::SyscallResult::Ok(_) => {
             api::ipc::decode::<api::ipc::VfsResponse>(buf)

@@ -11,9 +11,9 @@ use crate::manager::VfsManager;
 /// so the response borrows it; callers encode before reusing the buffer.
 pub fn handle_request<'a>(
     vfs: &mut VfsManager,
-    buf: &[u8; 512],
+    buf: &[u8; api::ipc::IPC_BUF_SIZE],
     sender: usize,
-    resp_buf: &'a mut [u8; 512],
+    resp_buf: &'a mut [u8; api::ipc::IPC_BUF_SIZE],
 ) -> api::ipc::VfsResponse<'a> {
     // Decode typed request; `take_from_bytes` tolerates trailing zeros in the
     // 512-byte receive buffer left over from previous messages.
@@ -116,7 +116,17 @@ pub fn handle_request<'a>(
         }
 
         api::ipc::VfsRequest::RmdirRecursive(p) => {
-            if vfs.rmdir_recursive(p) { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+            let owner = types::CellId(sender as u64);
+            // Compute bytes to release BEFORE deletion: rmdir_recursive returns
+            // only bool (adding a bytes-freed value to FsBackend would be a Law 1
+            // ABI change).  Walk the subtree via list+file_size while it still exists.
+            let freed = collect_dir_bytes(vfs, p, 32);
+            if vfs.rmdir_recursive(p) {
+                vfs.quota.release(owner, freed);
+                api::ipc::VfsResponse::Ok
+            } else {
+                api::ipc::VfsResponse::Err(1)
+            }
         }
 
         api::ipc::VfsRequest::ReadAsync { path } => {
@@ -174,6 +184,8 @@ pub fn handle_request<'a>(
         }
 
         api::ipc::VfsRequest::WriteGrant { cap, offset, grant, bytes } => {
+            // TODO(Phase 04): wire quota check here (can_charge → charge) using the
+            // same net-delta pattern as the Write arm before routing cap→path.
             let _ = (cap, offset); // path routing via cap table deferred to Phase 04
             match ostd::syscall::sys_grant_slice(grant) {
                 None => api::ipc::VfsResponse::Err(1),
@@ -192,4 +204,36 @@ pub fn handle_request<'a>(
             }
         }
     }
+}
+
+/// Walk the subtree rooted at `path` and return the total bytes occupied by all
+/// regular files inside it, bounded to `depth` recursion levels.
+///
+/// Called by `RmdirRecursive` BEFORE the delete so quota can be released after.
+/// Uses 512-byte stack buffers per level (adequate for embedded directory sizes).
+fn collect_dir_bytes(vfs: &VfsManager, path: &str, depth: u8) -> u64 {
+    if depth == 0 {
+        return 0;
+    }
+    let mut scratch = [0u8; 512];
+    let n = vfs.list_dir(path, &mut scratch);
+    let listing = core::str::from_utf8(&scratch[..n]).unwrap_or("");
+    let base = path.trim_end_matches('/');
+    let mut total = 0u64;
+    for line in listing.split('\n') {
+        if let Some(name) = line.strip_prefix("f:") {
+            let mut child = alloc::string::String::with_capacity(base.len() + 1 + name.len());
+            child.push_str(base);
+            child.push('/');
+            child.push_str(name);
+            total += vfs.file_size(&child);
+        } else if let Some(name) = line.strip_prefix("d:") {
+            let mut child = alloc::string::String::with_capacity(base.len() + 1 + name.len());
+            child.push_str(base);
+            child.push('/');
+            child.push_str(name);
+            total += collect_dir_bytes(vfs, &child, depth - 1);
+        }
+    }
+    total
 }

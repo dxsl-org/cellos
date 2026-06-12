@@ -15,8 +15,10 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Fixed IPC payload size matching the existing kernel IPC convention.
-pub const IPC_BUF_SIZE: usize = 512;
+/// IPC payload buffer size.  Must be large enough for the largest serialized
+/// message in the system — currently a VFS Write with ~900-byte content
+/// (~916 bytes encoded).  4 KiB gives comfortable headroom.
+pub const IPC_BUF_SIZE: usize = 4096;
 
 // ── VFS service ───────────────────────────────────────────────────────────────
 

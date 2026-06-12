@@ -86,7 +86,7 @@ pub fn main() {
     // The kernel records the VFS cell's ID at spawn time so it can clear this
     // pointer if VFS crashes — see loader.rs fast_ipc::set_vfs_handler_cell call.
     ostd::fast_ipc::register_vfs(vfs_fast_handler);
-    let mut buf = [0u8; 512];
+    let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
 
     loop {
         match ostd::syscall::sys_recv(0, &mut buf) {
@@ -96,10 +96,10 @@ pub fn main() {
                 // yet in Recv), yield_cpu switches to another cell.  That cell may call
                 // call_vfs which also acquires GLOBAL_VFS — a deadlock if we still hold
                 // the lock during the send.
-                let mut encoded = [0u8; 512];
+                let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
                 let encoded_len: usize;
                 {
-                    let mut resp_buf = [0u8; 512];
+                    let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
                     // Acquire VFS state; released at end of this block, before sys_send.
                     let mut gvfs = GLOBAL_VFS.lock();
                     let vfs = gvfs.as_mut().expect("VFS initialized before serving requests");
@@ -111,7 +111,7 @@ pub fn main() {
                 // Send after releasing the lock so a blocked ipc_send + yield_cpu
                 // cannot switch to a cell that deadlocks on GLOBAL_VFS.
                 ostd::syscall::sys_send(sender, &encoded[..encoded_len]);
-                buf = [0u8; 512];
+                buf = [0u8; api::ipc::IPC_BUF_SIZE];
             }
             _ => {
                 ostd::task::yield_now();
