@@ -110,8 +110,8 @@ pub enum ViSyscall {
     Heartbeat = 207,
 
     // === Zero-Copy Grant (Storage 2.0, Phase 01) ===
-    /// Allocate a kernel-managed Grant region of up to 16 pages (64 KB).
-    /// ABI: a0 = size (rounded up to pages, max 65536) → base_paddr (> 0) on success, 0 on OOM.
+    /// Allocate a kernel-managed Grant region of up to 4096 pages (16 MB).
+    /// ABI: a0 = size (rounded up to pages, max 16777216) → base_paddr (> 0) on success, 0 on OOM.
     /// Requires GrantCap (allowlist bit 39).
     GrantAlloc = 208,
     /// Share Grant access with `target_task`.

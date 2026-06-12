@@ -160,7 +160,7 @@ fn free_grant_pages(base: usize, n_pages: usize) {
 
 /// Reclaim all grant pages owned or held by a dying task.
 ///
-/// Called from every task-exit code path (Exit syscall, ForceExit, scheduler watchdog).
+/// Called from every task-exit code path (Exit syscall, ForceExit, scheduler watchdog, fault handler).
 /// Two effects:
 ///   1. Owner death  — remove entry, unmap pages, return frames to allocator.
 ///   2. Grantee death — clear `shared_to` so the owner's grant becomes unshared.

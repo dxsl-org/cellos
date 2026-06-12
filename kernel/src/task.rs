@@ -239,6 +239,10 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize)
         let cell_id = types::CellId(cell_id_raw as u64);
         crate::memory::cell_quota::deregister(cell_id);
         crate::resource_registry::release_for(cell_id);
+        // Reap grant/registered-grant pages for this cell. SCHEDULER lock is
+        // already released (the block above exited), so the
+        // KERNEL_ROOT → FRAME_ALLOCATOR path inside reap_grants_for_task is safe.
+        crate::task::syscall::reap_grants_for_task(tid);
     }
 
     // If the faulting cell owned the fast-IPC VFS handler, null the pointer so
