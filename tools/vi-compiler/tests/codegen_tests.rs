@@ -472,6 +472,56 @@ component Scroll {
     assert!(rust.contains("ScrollArea::"), "ScrollArea ctor missing: {}", &rust[..rust.len().min(600)]);
 }
 
+/// `text: self.name` on a Label must produce a reactive .map().into_parts() chain,
+/// not a static Signal::new(format!(...)).
+#[test]
+fn test_label_text_self_prop_is_reactive() {
+    let src = r#"
+component Display {
+    in property <string> name: "hello";
+    VBox {
+        Text { text: self.name; }
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
+    assert!(
+        rust.contains(".map("),
+        "text: self.X must use .map() reactive path: {}",
+        &rust[..rust.len().min(800)]
+    );
+    assert!(
+        rust.contains(".into_parts()"),
+        "text: self.X must use .into_parts(): {}",
+        &rust[..rust.len().min(800)]
+    );
+}
+
+/// String literals with "self.x" text must NOT be desugared — no false positives.
+#[test]
+fn test_string_literal_no_desugar_false_positive() {
+    let src = r#"
+component Static {
+    VBox {
+        Text { text: "self.value is a constant"; }
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
+    assert!(
+        rust.contains("self.value is a constant"),
+        "string literal content should appear unchanged in generated code: {}",
+        &rust[..rust.len().min(800)]
+    );
+    assert!(
+        !rust.contains(".get()"),
+        "string literal must not be desugared to .get(): {}",
+        &rust[..rust.len().min(800)]
+    );
+}
+
 /// compile_expr unit tests — typed AST nodes → Rust source strings.
 #[cfg(test)]
 mod compile_expr_tests {

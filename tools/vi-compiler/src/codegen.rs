@@ -493,6 +493,16 @@ impl CodeGen {
                             }).collect();
                             TypedExpr::Interpolated(eval_parts)
                         }
+                        Expr::SelfProp(prop) => {
+                            // Reactive text binding: `text: self.X` → reactive map over the
+                            // source signal.  Route through the Interpolated path so the
+                            // existing `.map().into_parts()` codegen fires.
+                            TypedExpr::Interpolated(vec![InterpolPart::Var(prop.clone())])
+                        }
+                        Expr::Ident(name) => {
+                            // Bare identifier — reactive map over the local signal variable.
+                            TypedExpr::Interpolated(vec![InterpolPart::Var(name.clone())])
+                        }
                         other => {
                             let rs = compile_expr(other, ExprCtx::BuildFn);
                             TypedExpr::Ident(rs)
