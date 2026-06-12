@@ -3,7 +3,7 @@
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-09 (Input kernel routing: dispatch_pending() fixes Gap 1; request_input_focus() + real event collection fixes Gap 2; robot-dashboard now receives keyboard events; SPP classification bug fixed in trap.rs)
+**Last Updated**: 2026-06-12 (Tier 3 kernel prep H-extension detection complete: cpu_features.rs DTB detection + HypervisorCap ZST + TCB field)
 
 ---
 
@@ -57,16 +57,16 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | 🆕 Storage 2.0 (zero-copy grant + PageCache + FAT32) | Phases 00–03 | ✅ | **G1/G2/G3** |
 | 🆕 Peripheral Driver track (GPIO/I2C/SPI/UART; CAN/PWM/ADC) | *new* | ✅ v2 COMPLETE (GPIO+UART+I2C+SiFive GPIO; SHT3x sensor demo; real SBC pending) | **G1** |
 | VFS robustness (quota enforce, access control) | M2.1 | ✅ | G1 |
-| 🆕 ARM64 full bring-up (beyond ring-3 smoke) | ext. M1.3 | 📋 | **G1** |
+| 🆕 ARM64 full bring-up (beyond ring-3 smoke) | ext. M1.3 | ✅ COMPLETE (2026-06-12) — 6/6 QEMU integration tests pass (GIC, timer, MMU, VirtIO, PL011 RX, GPIO periph-demo); fatfs LFN fix | **G1** |
 | HMI feature-gate (compositor/input, optional) | M2.2/M2.4 subset | 📋 | G1 (opt) |
 | Minimal utilities (embedded debug) | M3.2 subset | 📋 | G1 |
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
-| 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (skeleton + proven on RISC-V; real GPIO pending ARM64 kernel build) | **G1** (graduation) |
+| 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (skeleton + proven on RISC-V; ARM64 kernel build complete — GPIO periph-demo verified on QEMU virt) | **G1** (graduation) |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
 | WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
 | WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |
-| 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | 🆕 | **G1 prep** (non-breaking) |
+| 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | ✅ COMPLETE (2026-06-07) — cpu_features.rs DTB detection + HypervisorCap ZST + TCB field; see .agents/260607-1420-h-ext-hypervisor-cap/ | **G1 prep** (non-breaking) |
 | 🆕 Tier 3a Security Silo (Stage-2 fenced bare-metal guest) | *new* | 📋 | G1-optional |
 | 🆕 Tier 3b Linux VM — crosvm fork + vicell_hv/ port | Phase 31 | 📋 | **G2** |
 | SMP multi-core scheduler + work-stealing | Phase 32 | 📋 | **G2** |
@@ -97,7 +97,7 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 - [x] `driver-gpio` (PL061 impl) + `driver-serial` (PL011 impl)
 - [x] `periph-demo`, `periph-test` (4 scenarios), `robot-demo` skeleton
 - [x] `run-arm-virt.ps1` — QEMU ARM virt boot script
-- [ ] **Pending**: aarch64 kernel build (ARM64 bring-up track) to run periph-test on real QEMU
+- [x] **Done (2026-06-12)**: aarch64 kernel build — 6/6 integration tests pass on QEMU virt; periph-demo GPIO verified
 - [ ] Extension: `ViI2c`, `ViSpi`, `ViCan`, `ViPwm`, `ViAdc` (G1 ext / G2)
 - [ ] QEMU test rig + ≥1 real SBC validation
 
@@ -105,7 +105,7 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 
 #### Architecture Full Bring-Up (split from "Multi-Arch HAL ✅")
 The existing Milestone 1.3 marks ARM64/x86_64 as **ring-3 smoke only**. Real targets need full bring-up (interrupt controller, timer, real MMU, device drivers).
-- **ARM64 full bring-up `[G1]`** 📋 — GIC, generic timer, real MMU, VirtIO/peripheral drivers (RPi/Jetson robot SBC)
+- **ARM64 full bring-up `[G1]`** ✅ COMPLETE (2026-06-12) — GIC, generic timer, 3-level MMU, VirtIO, PL011, PL061 on QEMU virt; 6/6 integration tests pass
 - **x86_64 full bring-up `[G2]`** 📋 — APIC, HPET/TSC, real MMU, PCI/VirtIO (server/PC)
 
 #### Reference Robot Demo `[G1]`
@@ -819,16 +819,16 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 ---
 
 ### Milestone 2.2: Complete Input Service `[G1 opt (feature-gate) · G2 full]`
-**Status**: 🚧 IN PROGRESS (kernel routing done; end-to-end pending VirtIO keyboard fault fix)  
+**Status**: ✅ COMPLETE (2026-06-12)  
 **Priority**: P1
 
 - [x] AT keyboard driver (scancode → ASCII) — VirtIO input driver
 - [x] Input event queue with IPC forwarding — `dispatch_pending()` drains to input service on IRQ
 - [x] App focus registration — `request_input_focus()` + sender-verified SetFocus
 - [x] ViUI event collection — `collect_input_events()` per frame
-- [ ] End-to-end test: Tab cycles focus ring in robot-dashboard (blocked on VirtIO keyboard QEMU fault)
-- [ ] PS/2 mouse driver
-- [ ] VirtIO keyboard fault root cause (stval needed — SPP fix lands diagnostic on next boot)
+- [x] End-to-end CI test: `input_keyboard_e2e` — QMP Tab injection → kernel event + dispatch probes verified
+- [x] VirtIO keyboard fault fixed — SumGuard sets sstatus.SUM in timer ISR path
+- [ ] PS/2 mouse driver (deferred to G2 — VirtIO mouse/touchpad supported)
 
 **Dependency**: Phase 1 (basic shell)
 
