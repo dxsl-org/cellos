@@ -46,9 +46,12 @@ impl Dispatcher {
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
     pub fn dispatch(&self, event: &InputEvent) {
-        ostd::io::print("[input-svc] dispatch to TID ");
-        ostd::io::print_usize(self.focused);
-        ostd::io::print("\n");
+        // Single atomic log so the test probe "[input-svc] dispatch to TID X" is one line.
+        {
+            use alloc::format;
+            let msg = format!("[input-svc] dispatch to TID {}", self.focused);
+            ostd::io::println(&msg);
+        }
         let mut buf = [0u8; INPUT_EVENT_IPC_SIZE + 1];
         buf[0] = INPUT_EVENT_OPCODE;
         let mut payload = [0u8; INPUT_EVENT_IPC_SIZE];

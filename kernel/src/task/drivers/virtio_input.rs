@@ -67,6 +67,11 @@ pub fn init_driver() {
                         }
                         Err(e) => log::warn!("VirtIO Input init failed at {:#x}: {:?}", slot.base, e),
                     }
+                } else {
+                    // MmioTransport::drop() resets the device (writes status=0).
+                    // Forget the transport to avoid resetting a foreign slot that
+                    // another driver (e.g. virtio_blk) will initialise.
+                    core::mem::forget(transport);
                 }
             }
             Err(_) => {}
@@ -94,7 +99,7 @@ pub fn poll_events() {
     if let Some(driver) = KEYBOARD_DRIVER.lock().as_mut() {
         while let Some(event) = driver.input.pop_pending_event() {
             log::debug!(
-                "VirtIO Input Event: type={}, code={}, value={}",
+                "[virt-kbd] event type={} code={} value={}",
                 event.event_type,
                 event.code,
                 event.value
@@ -154,8 +159,25 @@ pub fn dispatch_pending() {
         msg[0] = opcode;
         msg[1..5].copy_from_slice(&(code as u32).to_le_bytes());
         msg[5..9].copy_from_slice(&value.to_le_bytes());
-        // SAFETY: ipc_send copies msg bytes synchronously before returning.
-        // msg lives for the duration of this loop iteration.
+        // ipc_send copies msg into the target cell's Recv buffer (a U-mode stack page).
+        // Called from the timer ISR where SUM (Supervisor User Memory, sstatus bit 18)
+        // is NOT set; set it here so the S-mode copy_nonoverlapping to the U-mode page
+        // does not fault with scause=15.  The syscall path (handle_syscall) already
+        // sets SUM for its own duration; we restore the previous SUM state after.
+        //
+        // SAFETY: SUM=1 allows S-mode to access U-mode pages; cleared immediately
+        // after ipc_send returns so no wider kernel code runs with SUM elevated.
+        #[cfg(target_arch = "riscv64")]
+        let _sum_guard = {
+            unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize); }
+            struct SumGuard;
+            impl Drop for SumGuard {
+                fn drop(&mut self) {
+                    unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize); }
+                }
+            }
+            SumGuard
+        };
         let _ = crate::task::ipc_send(0, input_tid, msg.as_ptr() as usize, 9);
     }
 }

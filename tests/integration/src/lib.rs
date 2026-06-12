@@ -171,6 +171,9 @@ pub struct QemuRunner {
     output: Arc<Mutex<String>>,
     /// Temporary disk image path to delete on drop (None when using the shared disk).
     temp_disk: Option<std::path::PathBuf>,
+    /// QEMU monitor TCP connection for sending monitor commands (e.g. `sendkey`).
+    /// Only populated by `boot_with_netdev`; all other constructors set this to None.
+    monitor: Option<TcpStream>,
 }
 
 impl QemuRunner {
@@ -270,7 +273,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Boot QEMU with an AArch64 kernel (no disk, no netdev — bring-up mode).
@@ -315,7 +318,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Boot QEMU with an AArch64 kernel AND a VirtIO block disk (full boot mode).
@@ -367,7 +370,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Boot QEMU with an x86_64 Limine BIOS ISO.
@@ -415,7 +418,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Boot QEMU with a RISC-V 32-bit kernel (Phase-31 Nano, no disk, no VirtIO).
@@ -459,7 +462,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Boot QEMU with an AArch32 (ARMv7-A) bare-metal kernel (Nano profile).
@@ -503,7 +506,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Boot QEMU with an x86_32 (IA-32) bare-metal kernel via Multiboot1.
@@ -548,24 +551,39 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
     /// Internal: boot QEMU with a caller-specified `-netdev` value.
     ///
     /// All other QEMU args are fixed to match `run.ps1`; only the netdev string
     /// changes between `boot` (plain SLIRP) and `boot_with_hostfwd`.
+    ///
+    /// Binds both a serial socket and a QEMU monitor socket so that callers can
+    /// inject keystrokes via `send_qemu_key` (e.g. for the keyboard E2E test).
+    /// QEMU connects to both as a client on start (server=off / no `server` flag).
     fn boot_with_netdev(kernel: &str, disk: &str, netdev: &str) -> Self {
         // Bind an ephemeral port on the host; QEMU connects to it as a serial
         // backend (server=off,nowait → QEMU is the client and connects on start).
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
+        // Bind a second ephemeral port for the QEMU monitor.
+        // QEMU will connect to it as a client at startup (same pattern as serial).
+        let monitor_listener = TcpListener::bind("127.0.0.1:0").expect("bind monitor socket");
+        let monitor_port = monitor_listener.local_addr().unwrap().port();
+
         let child = Command::new(qemu_binary())
             .args([
                 "-machine", "virt",
                 "-m", "256M",
-                "-nographic",
+                // Use `-display none` instead of `-nographic` so that QEMU
+                // creates a proper graphical console for virtio-gpu + virtio-keyboard,
+                // enabling input-send-event to route keyboard events to the guest.
+                // `-nographic` routes serial to stdio but prevents graphical console
+                // creation, making input-send-event a no-op for VirtIO keyboard.
+                // Serial output is still captured via the TCP socket below.
+                "-display", "none",
                 "-bios", "default",
                 "-kernel", kernel,
                 "-drive", &format!("file={disk},format=raw,id=hd0,if=none"),
@@ -574,7 +592,9 @@ impl QemuRunner {
                 "-device", "virtio-net-device,netdev=net0",
                 "-device", "virtio-keyboard-device",
                 "-device", "virtio-gpu-device",
-                "-monitor", "none",
+                // QMP for keyboard injection via input-send-event.
+                "-qmp", &format!("tcp:127.0.0.1:{monitor_port}"),
+                // Serial 0 → TCP socket (bidirectional, replaces -nographic stdio mux).
                 "-serial", &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
@@ -593,6 +613,24 @@ impl QemuRunner {
             .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
+        // Accept QEMU's connection to our monitor socket.
+        // QEMU connects to both sockets (serial + monitor) asynchronously on start.
+        // Both listeners already have their ports bound before QEMU spawns, so
+        // QEMU's connection requests are queued in the OS backlog.  We accept
+        // them sequentially (serial first).  Accept in a thread with a 10-s
+        // deadline so callers that don't use the monitor are unaffected if QEMU
+        // for some reason never connects (graceful degradation).
+        let monitor_stream = {
+            let (tx, rx) = std::sync::mpsc::channel::<TcpStream>();
+            thread::spawn(move || {
+                monitor_listener.set_nonblocking(false).ok();
+                if let Ok((s, _)) = monitor_listener.accept() {
+                    let _ = tx.send(s);
+                }
+            });
+            rx.recv_timeout(std::time::Duration::from_secs(10)).ok()
+        };
+
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
         // Background reader: append all serial bytes to the shared buffer.
@@ -607,7 +645,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: monitor_stream }
     }
 
     /// Block until any captured line contains `pattern`, or `timeout_secs`
@@ -635,6 +673,70 @@ impl QemuRunner {
             let _ = w.write_all(b"\n");
             let _ = w.flush();
         }
+    }
+
+    /// Inject a keypress into the guest VirtIO keyboard via the QEMU monitor.
+    ///
+    /// `key` uses QEMU's `sendkey` syntax, e.g. `"tab"`, `"ret"`, `"a"`.
+    /// The keypress is a single press+release event pair as generated by QEMU.
+    ///
+    /// Only functional when called on a runner created by `boot` / `boot_with_netdev`
+    /// (the only constructors that wire up the monitor TCP socket). All other
+    /// constructors have `monitor: None` and this method is a no-op.
+    pub fn send_qemu_key(&mut self, key: &str) {
+        let Some(m) = self.monitor.as_mut() else {
+            eprintln!("[test] WARNING: QMP socket is None — sendkey {:?} dropped", key);
+            return;
+        };
+
+        // QMP handshake: read the server greeting, then negotiate capabilities.
+        // The greeting is sent immediately on connect.  Drain it now if we
+        // haven't already (the timeout makes this idempotent on repeat calls).
+        m.set_read_timeout(Some(std::time::Duration::from_millis(200))).ok();
+        let mut buf = vec![0u8; 4096];
+        loop {
+            match m.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+
+        // Capabilities negotiation — required before any QMP command.
+        // Idempotent: QEMU silently ignores duplicate negotiation.
+        m.set_read_timeout(None).ok();
+        let _ = m.write_all(b"{\"execute\":\"qmp_capabilities\"}\n");
+        let _ = m.flush();
+        // Drain the {"return": {}} ack.
+        m.set_read_timeout(Some(std::time::Duration::from_millis(300))).ok();
+        loop {
+            match m.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+
+        let cmd = format!(
+            concat!(
+                r#"{{"execute":"input-send-event","arguments":{{"events":["#,
+                r#"{{"type":"key","data":{{"down":true,"key":{{"type":"qcode","data":"{key}"}}}}}}"#,
+                r#",{{"type":"key","data":{{"down":false,"key":{{"type":"qcode","data":"{key}"}}}}}}"#,
+                r#"]}}}}"#,
+            ),
+            key = key,
+        );
+        eprintln!("[test] QMP input-send-event key={key:?}");
+        let _ = m.write_all(cmd.as_bytes());
+        let _ = m.write_all(b"\n");
+        let _ = m.flush();
+        // Read response for diagnostics.
+        m.set_read_timeout(Some(std::time::Duration::from_millis(500))).ok();
+        let mut resp = vec![0u8; 1024];
+        match m.read(&mut resp) {
+            Ok(n) if n > 0 => eprintln!("[test] QMP response: {:?}", String::from_utf8_lossy(&resp[..n])),
+            Ok(_) => eprintln!("[test] QMP response: empty"),
+            Err(e) => eprintln!("[test] QMP read error: {e}"),
+        }
+        m.set_read_timeout(None).ok();
     }
 
     /// Wait for QEMU to exit on its own (e.g. after a guest `shutdown` command).

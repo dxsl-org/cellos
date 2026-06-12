@@ -1527,3 +1527,64 @@ fn bench_all_pass() {
         )
     });
 }
+
+/// M2.2 end-to-end: kernel VirtIO keyboard → input service → focused app.
+///
+/// Injects a Tab keypress via the QEMU monitor (`sendkey tab`) and asserts that
+/// serial output shows both legs of the event path:
+///   1. `[input-svc] kernel event type=0`  — kernel → input service (EV_KEY)
+///   2. `[input-svc] dispatch to TID `     — input service → focused app
+///
+/// The QEMU monitor socket is only wired up in `boot` / `boot_with_netdev`.
+/// Prerequisites: kernel built, disk_v3.img present, qemu-system-riscv64 on PATH.
+#[test]
+fn input_keyboard_e2e() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+
+    // Wait for the shell prompt — full userspace stack (vfs, input, compositor,
+    // robot-dashboard) is guaranteed to be running by this point.
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    // Wait for robot-dashboard to claim input focus.
+    // robot-dashboard logs "[robot-dashboard] input focus granted" after its
+    // request_input_focus() loop succeeds.
+    qemu.wait_for("[robot-dashboard] input focus granted", 15)
+        .unwrap_or_else(|e| {
+            panic!(
+                "robot-dashboard did not claim input focus: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // Give robot-dashboard a moment to settle into its event-poll loop so the
+    // focus registration is fully processed by the input service before we inject.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    // Inject Tab via the QEMU monitor (sendkey tab → VirtIO keyboard HID event).
+    qemu.send_qemu_key("tab");
+
+    // Leg 1: kernel VirtIO input driver → input service (EV_KEY = opcode 0).
+    // The probe is a single formatted string so it fits on one UART log line.
+    // Allow up to 15 s — the guest's 10 ms timer tick polls the VirtIO input
+    // ring; under QEMU TCG, the first poll after injection may be delayed.
+    qemu.wait_for("[input-svc] key event 0", 15)
+        .unwrap_or_else(|e| {
+            panic!(
+                "kernel event not received by input service: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // Leg 2: input service → focused app (robot-dashboard).
+    qemu.wait_for("[input-svc] dispatch to TID ", 5)
+        .unwrap_or_else(|e| {
+            panic!(
+                "input service did not dispatch to app: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
