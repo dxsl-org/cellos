@@ -132,3 +132,22 @@ fn aarch64_echo_command() {
     qemu.wait_for("aarch64-ok", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("aarch64 echo did not respond: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+/// The periph-demo cell must open GPIO PL061 and UART PL011 on AArch64.
+///
+/// periph-demo is spawned by init (best-effort, after bench). It exercises the
+/// PL061 GPIO controller at 0x0903_0000 and the PL011 UART at 0x0900_0000 on
+/// the QEMU ARM virt machine. The test only verifies that GPIO was opened
+/// successfully — UART TX also runs but its output merges with the serial
+/// console stream.
+#[test]
+fn aarch64_periph_demo_gpio() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    // periph-demo is spawned after all supervised services have started —
+    // use the full BOOT_TIMEOUT to allow init to progress past shell spawn.
+    qemu.wait_for("[periph-demo] GPIO PL061 opened", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("periph-demo GPIO not seen: {e}\n--- output ---\n{}", qemu.dump()));
+}
