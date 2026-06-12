@@ -1588,3 +1588,68 @@ fn input_keyboard_e2e() {
             )
         });
 }
+
+// ── Tier 1b: POSIX C shim integration tests ───────────────────────────────────
+
+/// Tier 1b: `getentropy(2)` shim via sys_get_random (opcode 214).
+///
+/// Boots QEMU, runs `posix-shim-test` binary, expects "[posix-shim] POSIX-ENTROPY: OK".
+/// No echo server needed — getentropy is pure kernel RNG.
+#[test]
+fn posix_shim_getentropy() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+    qemu.send_line("posix-shim-test");
+    qemu.wait_for("POSIX-ENTROPY: OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("getentropy shim failed: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// Tier 1b: BSD socket shims (socket / connect / send / recv / close) via Net IPC.
+///
+/// Starts a TCP echo server on host port 10009 (matches `ECHO_PORT` hardcoded in
+/// `cells/apps/posix-shim-test/src/main.rs`). QEMU SLIRP routes guest→10.0.2.2:10009
+/// to host→127.0.0.1:10009. Expects "[posix-shim] POSIX-NET: OK".
+#[test]
+fn posix_shim_net() {
+    use std::io::Read;
+    use std::net::TcpListener;
+
+    if !prerequisites_ok() { return; }
+
+    // Bind the fixed port the cell expects. Skip if already in use (another test
+    // run or CI parallel shard occupying the port).
+    const POSIX_SHIM_ECHO_PORT: u16 = 10009;
+    let listener = match TcpListener::bind(("127.0.0.1", POSIX_SHIM_ECHO_PORT)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("SKIP posix_shim_net: port {POSIX_SHIM_ECHO_PORT} unavailable: {e}");
+            return;
+        }
+    };
+    std::thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 256];
+            loop {
+                match stream.read(&mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => { let _ = stream.write_all(&buf[..n]); }
+                }
+            }
+        }
+    });
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
+    // Gate on DHCP before running the shim — avoids a race where the TCP SYN
+    // leaves the guest before an IP is assigned (source = 0.0.0.0).
+    qemu.wait_for("DHCP acquired", 40)
+        .unwrap_or_else(|e| panic!("DHCP failed: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(500));
+    qemu.send_line("posix-shim-test");
+    qemu.wait_for("POSIX-NET: OK", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("posix net shim failed: {e}\n--- output ---\n{}", qemu.dump()));
+}

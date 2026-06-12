@@ -8,7 +8,7 @@
 #![allow(unsafe_code)]
 #![allow(unused_variables)]
 #![allow(non_upper_case_globals)]
-#![cfg(any(target_arch = "riscv64", target_arch = "wasm32", doc))]
+#![cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "wasm32", doc))]
 
 extern crate alloc;
 
@@ -349,7 +349,26 @@ unsafe fn raw_syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize)
     ret
 }
 
-#[cfg(not(target_arch = "riscv64"))]
+// ARM64 ViCell ABI: x0=syscall_nr, x1=a0, x2=a1, x3=a2, x4=a3; ret in x0.
+// Mirrors libs/ostd/src/syscall.rs exactly.
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+unsafe fn raw_syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
+    let mut ret: isize;
+    core::arch::asm!(
+        "svc #0",
+        inlateout("x0") id as usize => ret,
+        in("x1") a0,
+        in("x2") a1,
+        in("x3") a2,
+        in("x4") a3,
+        options(nostack, preserves_flags)
+    );
+    ret
+}
+
+// Fallback for wasm32 / doc builds — returns 0 (no real syscall mechanism).
+#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
 unsafe fn raw_syscall(_id: ViSyscall, _a0: usize, _a1: usize, _a2: usize, _a3: usize) -> isize {
     0
 }
@@ -456,7 +475,7 @@ pub unsafe extern "C" fn _exit(status: c_int) -> ! {
 #[no_mangle]
 pub unsafe extern "C" fn _time(tloc: *mut c_long) -> c_long {
     let mut now: usize = 0;
-    let ret = raw_syscall(ViSyscall::GetTime, 0, 0, 0, 0);
+    let ret = raw_syscall(ViSyscall::GetTime, 3, 0, 0, 0); // op=3: epoch seconds (UTC)
     if ret >= 0 {
         now = ret as usize;
     }
@@ -469,10 +488,7 @@ pub unsafe extern "C" fn _time(tloc: *mut c_long) -> c_long {
 #[no_mangle]
 pub unsafe extern "C" fn _gettimeofday(tv: *mut timeval, tz: *mut c_void) -> c_int {
     if !tv.is_null() {
-        // ViSyscall::GetTime returns timestamp (likely ms since boot or something)
-        // Assume milliseconds for now? Or seconds?
-        // Let's assume GetTime returns seconds for this shim or simple tick.
-        let ret = raw_syscall(ViSyscall::GetTime, 0, 0, 0, 0);
+        let ret = raw_syscall(ViSyscall::GetTime, 3, 0, 0, 0); // op=3: epoch seconds (UTC)
         if ret >= 0 {
             (*tv).tv_sec = ret as c_long;
             (*tv).tv_usec = 0;
@@ -661,16 +677,28 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, flags: 
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = NetRequest::TcpSend { cap_id: cap, data };
     let Ok(encoded) = encode(&req, &mut req_buf) else { return -1; };
-    raw_syscall(ViSyscall::Send, net, encoded.as_ptr() as usize, encoded.len(), 0);
 
-    let mut resp_buf = [0u8; 8];
-    let n = raw_syscall(ViSyscall::Recv, 0, resp_buf.as_mut_ptr() as usize, resp_buf.len(), 0);
-    if n <= 0 { return -1; }
-    if (n as usize) < 4 { return -1; }
-    // Net service replies with bytes accepted as a little-endian i32.
-    // Cap at capped so callers never believe more bytes were sent than we forwarded.
-    let accepted = i32::from_le_bytes([resp_buf[0], resp_buf[1], resp_buf[2], resp_buf[3]]);
-    accepted.min(capped as i32)
+    // Net service replies with postcard-encoded NetResponse::Data(&u32_le_count).
+    // If the socket is mid-handshake (state=Connecting), the handler returns n=0.
+    // Retry up to 20 times with a yield to let smoltcp advance the TCP state machine.
+    for _attempt in 0..20 {
+        raw_syscall(ViSyscall::Send, net, encoded.as_ptr() as usize, encoded.len(), 0);
+        let mut resp_buf = [0u8; IPC_BUF_SIZE];
+        let n = raw_syscall(ViSyscall::Recv, 0, resp_buf.as_mut_ptr() as usize, resp_buf.len(), 0);
+        if n <= 0 { return -1; }
+        match decode::<NetResponse>(&resp_buf[..n as usize]) {
+            Ok(NetResponse::Data(bytes)) if bytes.len() >= 4 => {
+                let accepted = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                if accepted > 0 || capped == 0 {
+                    return (accepted as i32).min(capped as i32);
+                }
+                // accepted==0 with non-empty payload → socket still connecting; yield and retry.
+                raw_syscall(ViSyscall::Yield, 0, 0, 0, 0);
+            }
+            _ => return -1,
+        }
+    }
+    -1
 }
 
 /// Receive up to `len` bytes from socket `fd` into `buf`.

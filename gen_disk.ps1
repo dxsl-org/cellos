@@ -40,7 +40,7 @@ cargo build --release `
     -p app-init -p app-shell `
     -p service-vfs -p service-config `
     -p service-input -p service-net -p service-compositor 2>&1 | Select-Object -Last 5
-cargo build --release -p app-bench 2>&1 | Select-Object -Last 3
+cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench + bench-probe
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Last 3
 
@@ -61,7 +61,8 @@ $vfs_bin    = "$rel_dir\service-vfs"
 $config_bin = "$rel_dir\service-config"
 $lua_bin    = "$rel_dir\lua"
 $upy_bin    = "$rel_dir\micropython"       # Phase 18: MicroPython runtime cell
-$bench_bin  = "$rel_dir\bench"             # Phase 22 benchmark cell
+$bench_bin       = "$rel_dir\bench"             # Phase 22 benchmark cell
+$bench_probe_bin = "$rel_dir\bench-probe"      # bench probe/load child (VA 0x19000000)
 $input_bin  = "$rel_dir\service-input"     # Phase 14: input service cell
 $net_bin    = "$rel_dir\service-net"       # Phase 15: network service cell
 $comp_bin      = "$rel_dir\service-compositor" # Phase 16: compositor + GPU
@@ -72,6 +73,7 @@ $curl_bin   = "$rel_dir\curl"             # Phase B: HTTP GET client
 $wget_bin   = "$rel_dir\wget"             # Phase U: HTTP wget tool
 $httpd_bin  = "$rel_dir\httpd"            # Phase U: HTTP server
 $mqtt_bin   = "$rel_dir\mqtt"             # Phase X-5: MQTT client
+$posix_shim_test_bin = "$rel_dir\posix-shim-test"  # Tier 1b POSIX shim test cell
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -155,7 +157,8 @@ $table_args = @(
 )
 if ($lua_bin)   { $table_args += "/bin/lua=$lua_bin" }
 if ($upy_bin)   { $table_args += "/bin/python=$upy_bin" }
-if ($bench_bin) { $table_args += "/bin/bench=$bench_bin" }
+if ($bench_bin)       { $table_args += "/bin/bench=$bench_bin" }
+if (Test-Path "$rel_dir\bench-probe") { $table_args += "/bin/bench-probe=$bench_probe_bin" }
 if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
 if (Test-Path $net_bin)   { $table_args += "/bin/net=$net_bin" }
 if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
@@ -166,6 +169,7 @@ if (Test-Path $curl_bin)  { $table_args += "/bin/curl=$curl_bin" }
 if (Test-Path $wget_bin)  { $table_args += "/bin/wget=$wget_bin" }
 if (Test-Path $httpd_bin) { $table_args += "/bin/httpd=$httpd_bin" }
 if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
+if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posix_shim_test_bin" }
 python "$tools_dir\write-cell-table.py" @table_args
 
 Write-Host "Done. disk_v3.img is ready."

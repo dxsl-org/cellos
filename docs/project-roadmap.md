@@ -168,7 +168,7 @@ SMP scales across N cores · windowed desktop + mouse · hot migration with no d
 - 🆕 **Async runtime exposed to apps** `[shared]` — 📋 no app-facing async executor for concurrent I/O.
 
 ### E. Ecosystem / distribution `[G2]`
-- 🆕 **Tier 1b C library integration** `[shared, partially done]` — link vendor C/C++ libraries (NPU SDK, mbedTLS, SQLite, legacy firmware) into Rust cells via `vicell-libc` (Newlib + POSIX shim). Core shim in `libs/api/src/posix.rs` (482 lines ✅): malloc/free, strings, file I/O, time → ViSyscall. **Missing**: entropy shim (`getentropy` → ViSyscall::GetRandom, ~50 LOC) + net shim (`connect/send/recv` → Net IPC, ~200 LOC). No `fork` by design (C libraries rarely fork). Primary use case: hardware NPU SDKs (RKNN/Hailo/K230) with no Rust equivalent. See [specs/05-application.md §3](specs/05-application.md).
+- ✅ **Tier 1b C library integration** `[shared, COMPLETE 2026-06-13]` — link vendor C/C++ libraries (NPU SDK, mbedTLS, SQLite, legacy firmware) into Rust cells via `vicell-libc` (Newlib + POSIX shim). Shim in `libs/api/src/posix.rs`: malloc/free, strings, file I/O, time → ViSyscall, getentropy → `ViSyscall::GetRandom` (op 214), socket/connect/send/recv/close → typed Net IPC (postcard). ARM64 `svc #0` ABI added; send() postcard decode bug fixed; `_time()` op code fixed (op=3 = epoch seconds). Integration tests: `posix_shim_getentropy` + `posix_shim_net` in `tests/integration/tests/boot.rs`. No `fork` by design. Primary use case: hardware NPU SDKs (RKNN/Hailo/K230). Plan: `.agents/260613-0520-tier1b-posix-shims/`. See [specs/05-application.md §3](specs/05-application.md).
 - **WASM Tier-2** — Phase 28 MVP ✅ (wasmi + 4 imports). **Tier 2 dropped from official stack** (2026-06-06). Phase 28 code retained under `feature = "wasm-experimental"` only — Phase 28-5 and WASI 2.0 migration cancelled. Revisit only if G2 becomes multi-tenant platform (Cloudflare Workers–style) after WASI 1.0 freezes (late 2026/early 2027).
 - 🆕 **Package manager / app distribution** `[G2]` — 📋 no install/update mechanism beyond baking into the disk image.
 
@@ -303,7 +303,7 @@ G3 Level C  →  sys_grant_tensor + TensorBuffer       — needs sys_grant_pages
 |---|---|
 | **Real G1 robot app** | Peripheral I/O → RTC → input delivery (if HMI) |
 | **Real cloud/IoT app** | **TLS** → bigger IPC/streaming → name service |
-| **Hardware NPU inference (RKNN/Hailo)** | Tier 1b entropy shim (~50 LOC) + net shim (~200 LOC) |
+| **Hardware NPU inference (RKNN/Hailo)** | ✅ Tier 1b entropy + net shims DONE — next: RKNN runtime FFI cell |
 | **Python R&D** | Tier 3: full CPython in Linux VM (`apt install python3 pip numpy`) |
 | **Rich apps / ecosystem (G2)** | Tier 1b SDK libs → name service → display → Tier 3 Linux VM |
 

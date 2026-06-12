@@ -65,6 +65,7 @@ members = [
     "cells/apps/sys-tools",
     "cells/apps/net-tools",
     "cells/apps/https-demo",
+    "cells/apps/posix-shim-test",
     "cells/apps/test-isolation",
     "cells/apps/viui-demo",
     "cells/apps/robot-dashboard",
