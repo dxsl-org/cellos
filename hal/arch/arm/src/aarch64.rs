@@ -45,6 +45,9 @@ impl Arch for AArch64Arch {
     type Context = context::CpuContext;
 
     fn init(&self) {
+        // GIC must precede timer: timer::init() enables SPI 30 in the distributor.
+        gic::init();
+        timer::init();
         trap::init();
     }
 

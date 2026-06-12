@@ -122,9 +122,7 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         for i in 0..mapped {
             let _ = crate::memory::paging::unmap_page(paddr + i * PAGE_SIZE);
         }
-        #[cfg(target_arch = "riscv64")]
-        // SAFETY: RISC-V ISA requires sfence.vma after modifying PTEs.
-        unsafe { core::arch::asm!("sfence.vma", options(nostack)); }
+        crate::memory::paging::tlb_flush_all();
         let mut fa = FRAME_ALLOCATOR.lock();
         if let Some(a) = fa.as_mut() {
             for k in 0..n_pages { a.deallocate_frame(paddr + k * PAGE_SIZE); }
@@ -151,9 +149,7 @@ fn free_grant_pages(base: usize, n_pages: usize) {
     for i in 0..n_pages {
         let _ = crate::memory::paging::unmap_page(base + i * PAGE_SIZE);
     }
-    #[cfg(target_arch = "riscv64")]
-    // SAFETY: RISC-V ISA requires sfence.vma after unmapping PTEs.
-    unsafe { core::arch::asm!("sfence.vma", options(nostack)); }
+    crate::memory::paging::tlb_flush_all();
     let mut fa = FRAME_ALLOCATOR.lock();
     if let Some(alloc) = fa.as_mut() {
         for k in 0..n_pages { alloc.deallocate_frame(base + k * PAGE_SIZE); }

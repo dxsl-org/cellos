@@ -29,9 +29,11 @@ impl viConsole {
         }
         let mut received = false;
 
-        // 1a. Directly poll the 16550 RHR. This is the primary, most reliable
-        //     path on QEMU virt: independent of PLIC IRQ delegation and the SBI
-        //     DBCN read extension (both of which may be unavailable here).
+        // 1a. Directly poll the 16550 RHR — RISC-V QEMU virt only.
+        // The 16550 lives at 0x10_000_000 on RISC-V; that address is not a
+        // 16550 on AArch64 (UART is PL011 at 0x0900_0000). Reading it there
+        // returns garbage (0xFF), causing continuous `?` spam.
+        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         while self.buffer.len() < Self::MAX_BUFFERED {
             let Some(c) = crate::task::drivers::uart::poll_rhr() else { break };
             self.buffer.push_back(c);
@@ -39,8 +41,21 @@ impl viConsole {
         }
 
         // 1b. Drain any chars the UART IRQ handler buffered (when IRQs reach S-mode).
+        // This path is also only relevant for RISC-V; on AArch64 IRQ-buffered
+        // chars come through the PL011 path below.
+        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         while self.buffer.len() < Self::MAX_BUFFERED {
             let Some(c) = crate::task::drivers::uart::getchar() else { break };
+            self.buffer.push_back(c);
+            received = true;
+        }
+
+        // 1c. Poll PL011 UART RX on AArch64.
+        // QEMU virt maps PL011 at 0x0900_0000; `-serial tcp:...` connects its
+        // TX/RX to the TCP socket used by the integration-test harness.
+        #[cfg(target_arch = "aarch64")]
+        while self.buffer.len() < Self::MAX_BUFFERED {
+            let Some(c) = crate::hal::uart_pl011::poll_rx() else { break };
             self.buffer.push_back(c);
             received = true;
         }

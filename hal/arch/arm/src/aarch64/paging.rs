@@ -100,7 +100,7 @@ impl PageTableTrait for PageTable {
 
     unsafe fn activate(&self) {
         let ttbr0 = self as *const _ as u64;
-        let mair: u64 = 0x00FF_0000_0000_0000; // index1=Normal; index0=Device-nGnRnE
+        let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
         let tcr: u64 = 25      // T0SZ=25 (39-bit VA)
                      | (1 << 8)  // IRGN0=WB-WA
                      | (1 << 10) // ORGN0=WB-WA

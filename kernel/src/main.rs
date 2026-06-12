@@ -46,7 +46,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let _hartid = hartid;
     cpu_features::detect(dtb);
     // Parse DTB for MMIO bases before any driver or paging init.
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     crate::platform::init(dtb);
     // Set runtime PLIC base before hal::ARCH.init() calls plic::init() internally.
     #[cfg(target_arch = "riscv64")]

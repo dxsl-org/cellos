@@ -1,4 +1,12 @@
+use std::env;
+
 fn main() {
-    println!("cargo:rustc-link-arg=-Tcells/services/compositor/compositor.ld");
-    println!("cargo:rerun-if-changed=cells/services/compositor/compositor.ld");
+    let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let ld = if arch == "aarch64" {
+        "cells/services/compositor/compositor-arm64.ld"
+    } else {
+        "cells/services/compositor/compositor.ld"
+    };
+    println!("cargo:rustc-link-arg=-T{ld}");
+    println!("cargo:rerun-if-changed={ld}");
 }

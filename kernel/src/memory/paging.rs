@@ -35,6 +35,24 @@ pub static KERNEL_ROOT: Spinlock<Option<PhysAddr>> = Spinlock::new(None);
 /// Call in place of `init_kernel_paging` + `activate_paging` on riscv32.
 pub fn init_bare() {}
 
+/// Flush all TLB entries. Call after unmapping PTEs to prevent stale entries.
+///
+/// RISC-V: sfence.vma — full TLB shootdown from S-mode.
+/// AArch64: tlbi vmalle1is + dsb sy + isb — broadcast flush, all ASIDs, EL1.
+/// Other arches (bare physical / x86_64 bring-up): no-op; no paging active.
+#[inline(always)]
+pub fn tlb_flush_all() {
+    #[cfg(target_arch = "riscv64")]
+    // SAFETY: sfence.vma is a privileged S-mode fence; always safe from EL1/S-mode.
+    unsafe { core::arch::asm!("sfence.vma", options(nostack)); }
+
+    #[cfg(target_arch = "aarch64")]
+    // SAFETY: tlbi vmalle1is invalidates all EL1 TLB entries across CPUs.
+    // dsb sy ensures the invalidation completes before subsequent accesses.
+    // isb serializes the instruction stream so the next fetch sees the clean TLB.
+    unsafe { core::arch::asm!("tlbi vmalle1is", "dsb sy", "isb", options(nostack, nomem)); }
+}
+
 
 /// Initialize the kernel page table (not used on bare-physical arches — call init_bare() instead)
 #[cfg(not(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")))]
@@ -133,19 +151,17 @@ pub fn init_kernel_paging(
     }
     #[cfg(target_arch = "aarch64")]
     {
-        // QEMU aarch64 virt — map only the peripherals the kernel actually touches.
-        // Cell ELFs may load at any VA not covered by these identity maps.
+        // QEMU aarch64 virt — identity-map every MMIO range the kernel touches.
         //
-        // GIC (0x0800_0000..0x0900_0000) is intentionally NOT mapped here:
-        // the generic timer and external IRQs are disabled for the initial ARM64
-        // bring-up, so vi_aarch64_irq_handler is never entered and GIC registers
-        // are never accessed.  Omitting this range frees 0x0800_0000 for cell ELFs.
-        //
-        //   0x0900_0000–0x0900_1000 : PL011 UART (console output)
-        //   0x0900_3000–0x0900_4000 : PL061 GPIO (peripheral tests)
+        //   0x0800_0000–0x0900_0000 : GICv2 (GICD @ 0x0800_0000, GICC @ 0x0801_0000)
+        //                             Required: HAL Phase 01 added gic::init() and
+        //                             vi_aarch64_irq_handler which access GIC registers.
+        //   0x0900_0000–0x0900_4000 : PL011 UART + PL061 GPIO
         //   0x0A00_0000–0x0A00_4000 : VirtIO ARM64 (32 slots × 0x200)
         //   0x1000_0000–0x1001_0000 : RISC-V VirtIO probe range (virtio_blk/net
         //                             still probe 0x1000_1000 — map to avoid Data Abort)
+        root_table.identity_map(0x0800_0000, 0x0900_0000, mmio_flags, &mut alloc_fn)
+            .map_err(|_| PageTableError::OutOfMemory)?;
         root_table.identity_map(0x0900_0000, 0x0900_4000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         root_table.identity_map(0x0A00_0000, 0x0A00_4000, mmio_flags, &mut alloc_fn)

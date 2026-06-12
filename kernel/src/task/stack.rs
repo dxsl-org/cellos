@@ -144,10 +144,7 @@ impl Stack {
                 // silently-unprotected stack is never mistaken for a guarded one.
                 error!("Stack guard NOT active: unmap of guard frame 0x{:X} failed", base_addr);
             } else {
-                // Flush the stale identity TLB entry so the unmap takes effect now.
-                // SAFETY: sfence.vma is a privileged S-mode fence; always safe to issue.
-                #[cfg(target_arch = "riscv64")]
-                unsafe { core::arch::asm!("sfence.vma") };
+                paging::tlb_flush_all();
             }
         }
 
@@ -227,10 +224,7 @@ impl CellSegments {
             }
         }
         if unmapped_any {
-            // SAFETY: sfence.vma flushes stale TLB entries for the just-unmapped
-            // VAs; a privileged S-mode fence, always safe to issue.
-            #[cfg(target_arch = "riscv64")]
-            unsafe { core::arch::asm!("sfence.vma") };
+            paging::tlb_flush_all();
         }
     }
 }

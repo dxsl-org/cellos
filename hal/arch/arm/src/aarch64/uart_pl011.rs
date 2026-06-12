@@ -16,6 +16,7 @@ const UARTLCR:  usize = 0x02C; // Line Control Register
 const UARTCR:   usize = 0x030; // Control Register
 
 const FR_TXFF: u32 = 1 << 5; // TX FIFO full
+const FR_RXFE: u32 = 1 << 4; // RX FIFO empty
 
 #[inline(always)]
 fn mmio_read(offset: usize) -> u32 {
@@ -42,6 +43,15 @@ pub fn init() {
     mmio_write(UARTLCR, (3 << 5) | (1 << 4));
     // Enable UART, TX, RX.
     mmio_write(UARTCR, (1 << 0) | (1 << 8) | (1 << 9));
+}
+
+/// Read one byte from the PL011 RX FIFO, returns `None` when the FIFO is empty.
+pub fn poll_rx() -> Option<u8> {
+    if mmio_read(UARTFR) & FR_RXFE != 0 {
+        return None; // RX FIFO empty
+    }
+    // Lower 8 bits are the data byte; upper bits carry error flags.
+    Some((mmio_read(UARTDR) & 0xFF) as u8)
 }
 
 /// Write one byte to the UART, blocking until the TX FIFO has space.
