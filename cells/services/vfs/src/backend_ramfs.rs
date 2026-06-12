@@ -198,7 +198,15 @@ impl FsBackend for RamFsBackend {
         false
     }
 
-    fn rmdir_recursive(&mut self, _path: &str) -> bool {
-        false // recursive delete is only supported on the persistent volume
+    fn rmdir_recursive(&mut self, path: &str) -> bool {
+        if let Some((parent_path, name)) = Self::split_parent_name(path) {
+            if let Some(parent) = self.find_node_mut(&parent_path) {
+                if parent.children.get(&name).map(|c| c.is_dir).unwrap_or(false) {
+                    parent.children.remove(&name);
+                    return true;
+                }
+            }
+        }
+        false
     }
 }

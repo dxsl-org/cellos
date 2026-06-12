@@ -138,6 +138,13 @@ pub extern "C" fn main() {
 
     // Optional benchmark suite (CI disk images only) — not supervised.
     let _ = sys_spawn_from_path("/bin/bench");
+    // Optional peripheral demo (GPIO/UART) — AArch64 only, no-op on RISC-V.
+    let _ = sys_spawn_from_path("/bin/periph-demo");
+    // VFS integration test suite: only present in test-hooks kernel images.
+    // Returns SpawnErr(NotFound) and is silently ignored in production images
+    // that do not include the binary.  No feature flag needed — the binary's
+    // absence is the gate.
+    let _ = sys_spawn_from_path("/bin/vfs-test");
 
     // Register a death notification for every live service. A single recv loop
     // below now supervises ALL of them (wait-any): when any service exits or
