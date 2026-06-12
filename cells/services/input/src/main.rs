@@ -107,6 +107,9 @@ fn handle_kernel_event(
     let code  = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
     let value = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
 
+    ostd::io::print("[input-svc] kernel event type=");
+    ostd::io::print_usize(buf[0] as usize);
+    ostd::io::print("\n");
     match buf[0] {
         EV_KEY => {
             let state = key_state_from_evdev(value);
