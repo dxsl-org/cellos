@@ -77,6 +77,13 @@ pub struct Scheduler {
     pub tasks: BTreeMap<usize, Box<Task>>,
     pub zombies: Vec<Box<Task>>,
     pub next_task_id: usize,
+    /// Task IDs whose grant pages must be reaped outside the SCHEDULER lock.
+    ///
+    /// Watchdog kill paths push here instead of calling reap_grants_for_task directly,
+    /// because free_grant_pages acquires KERNEL_ROOT and FRAME_ALLOCATOR while the
+    /// watchdog runs inside SCHEDULER — inverting the documented lock order.
+    /// yield_cpu() drains this list after dropping SCHEDULER, matching the zombie-reaper pattern.
+    pub(super) pending_grant_reap: Vec<usize>,
 }
 
 impl Default for Scheduler {
@@ -91,6 +98,7 @@ impl Scheduler {
             tasks: BTreeMap::new(),
             zombies: Vec::new(),
             next_task_id: 1,
+            pending_grant_reap: Vec::new(),
         }
     }
 
@@ -425,6 +433,14 @@ impl Scheduler {
         reap
     }
 
+    /// Take task IDs whose grant pages must be freed outside the SCHEDULER lock.
+    ///
+    /// The caller MUST call reap_grants_for_task for each returned ID OUTSIDE the lock —
+    /// free_grant_pages locks KERNEL_ROOT and FRAME_ALLOCATOR; holding SCHEDULER inverts order.
+    pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
+        core::mem::take(&mut self.pending_grant_reap)
+    }
+
     /// Picks the next task to run on `hart_id` and returns pointers for context switch.
     ///
     /// Hart 0 also runs the global sweep (timer wakes, heartbeat, async-poll, watchdog).
@@ -532,7 +548,9 @@ impl Scheduler {
             crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
             crate::memory::cell_quota::deregister(CellId(cell_raw));
             crate::resource_registry::release_for(CellId(cell_raw));
-            crate::task::syscall::reap_grants_for_task(cell_raw as usize);
+            // Grant reap deferred: free_grant_pages acquires KERNEL_ROOT + FRAME_ALLOCATOR,
+            // which must not be held under SCHEDULER. yield_cpu() drains this list after unlock.
+            self.pending_grant_reap.push(tid);
             self.exit_task(tid, usize::MAX);
             // If this hart was running the hung task, clear its attribution.
             let hart_id = super::hart_local::current_hart_id();
@@ -648,7 +666,9 @@ impl Scheduler {
                     crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
                     crate::memory::cell_quota::deregister(CellId(cell_raw));
                     crate::resource_registry::release_for(CellId(cell_raw));
-                    crate::task::syscall::reap_grants_for_task(cell_raw as usize);
+                    // Grant reap deferred: free_grant_pages acquires KERNEL_ROOT + FRAME_ALLOCATOR,
+                    // which must not be held under SCHEDULER. yield_cpu() drains this list after unlock.
+                    self.pending_grant_reap.push(cid);
                     self.exit_task(cid, usize::MAX);
                     super::hart_local::set_current_cell_id(0);
                     rl::set_current_task_id(hart_id, 0);

@@ -47,7 +47,7 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     x19: 0, x20: 0, x21: 0, x22: 0, x23: 0, x24: 0, x25: 0,
     x26: 0, x27: 0, x28: 0, x29: 0, x30: 0, sp: 0,
-    elr_el1: 0, spsr_el1: 0x305,
+    elr_el1: 0, spsr_el1: 0x305, sp_el0: 0,
 };
 #[cfg(target_arch = "riscv32")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
@@ -269,6 +269,20 @@ pub fn yield_cpu() {
     };
     drop(reaped);
 
+    // Reap grant pages for watchdog-killed tasks. The watchdog enqueues task IDs
+    // here because free_grant_pages (KERNEL_ROOT → FRAME_ALLOCATOR) must not run
+    // while SCHEDULER is held — same pattern as take_reapable_zombies above.
+    let grant_tids = {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.take_pending_grant_reap()
+        } else {
+            alloc::vec::Vec::new()
+        }
+    };
+    for tid in grant_tids {
+        crate::task::syscall::reap_grants_for_task(tid);
+    }
+
     let hart_id = hart_local::current_hart_id();
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next(hart_id)
@@ -439,7 +453,13 @@ pub fn spawn_from_mem(
             { task.context.ra = __trap_exit as *const () as u32;
               task.context.sstatus = 0x120_u32; } // SPP=1, SPIE=1
             #[cfg(target_arch = "aarch64")]
-            { task.context.x30 = __trap_exit as *const () as u64; }
+            {
+                task.context.x30   = __trap_exit as *const () as u64;
+                // SP_EL0 is banked and not auto-saved by hardware on exception entry.
+                // __switch saves/restores it explicitly; seed it here so the first
+                // context switch loads the correct user SP before __trap_exit also sets it.
+                task.context.sp_el0 = user_stack_top as u64;
+            }
             #[cfg(target_arch = "x86_64")]
             { task.context.rip = __trap_exit as *const () as u64; }
 
@@ -1230,7 +1250,10 @@ pub fn spawn_synthetic(
             { task.context.ra = __trap_exit as *const () as u32;
               task.context.sstatus = 0x120_u32; } // SPP=1, SPIE=1
             #[cfg(target_arch = "aarch64")]
-            { task.context.x30 = __trap_exit as *const () as u64; }
+            {
+                task.context.x30   = __trap_exit as *const () as u64;
+                task.context.sp_el0 = user_stack_top as u64;
+            }
             #[cfg(target_arch = "x86_64")]
             { task.context.rip = __trap_exit as *const () as u64; }
 
