@@ -51,6 +51,10 @@ path = "tests/nvme-x86.rs"
 name = "compositor-cursor"
 path = "tests/compositor-cursor.rs"
 
+[[test]]
+name = "periph-i2c-spi"
+path = "tests/periph-i2c-spi.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -140,10 +140,11 @@ pub extern "C" fn main() {
     let _ = sys_spawn_from_path("/bin/bench");
     // Optional peripheral demo (GPIO/UART) — AArch64 only, no-op on RISC-V.
     let _ = sys_spawn_from_path("/bin/periph-demo");
+    // Optional I2C sensor demo (SHT3x, bit-bang over GPIO pins 0/1) — AArch64 only.
+    let _ = sys_spawn_from_path("/bin/sensor-demo");
+    // Optional SPI demo (bit-bang over GPIO pins 2/3/4/5) — AArch64 only.
+    let _ = sys_spawn_from_path("/bin/spi-demo");
     // VFS integration test suite: only present in test-hooks kernel images.
-    // Returns SpawnErr(NotFound) and is silently ignored in production images
-    // that do not include the binary.  No feature flag needed — the binary's
-    // absence is the gate.
     let _ = sys_spawn_from_path("/bin/vfs-test");
 
     // Register a death notification for every live service. A single recv loop

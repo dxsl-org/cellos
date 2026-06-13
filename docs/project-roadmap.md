@@ -91,7 +91,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 ### 🆕 New Work Items (not in original numbering)
 
 #### Peripheral Driver Track `[G1]`
-**Status**: ✅ v1 COMPLETE (2026-06-07) — see [.agents/260606-0730-peripheral-driver-track/plan.md](.agents/260606-0730-peripheral-driver-track/plan.md)
+**Status**: ✅ v2 COMPLETE (2026-06-13) — GPIO+UART+I2C+SPI bit-bang all done on QEMU ARM virt
 **Priority**: P1 (defining requirement for "complete for robots")
 
 HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via ELF manifests (Phase 30).
@@ -103,8 +103,10 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 - [x] `periph-demo`, `periph-test` (4 scenarios), `robot-demo` skeleton
 - [x] `run-arm-virt.ps1` — QEMU ARM virt boot script
 - [x] **Done (2026-06-12)**: aarch64 kernel build — 6/6 integration tests pass on QEMU virt; periph-demo GPIO verified
-- [ ] Extension: `ViI2c`, `ViSpi`, `ViCan`, `ViPwm`, `ViAdc` (G1 ext / G2)
-- [ ] QEMU test rig + ≥1 real SBC validation
+- [x] **Track C (2026-06-13)**: `ViI2c` + `BitBangI2c<G>` + `sensor-demo` (SHT3x) + linker scripts
+- [x] **Track C (2026-06-13)**: `ViSpi` (`hal/traits/spi`) + `BitBangSpi<G>` (pins 2-5, Mode 0) + `spi-demo` + integration test `periph-i2c-spi`
+- [ ] Extension: `ViCan`, `ViPwm`, `ViAdc` (G1 ext / G2)
+- [ ] Real SBC validation (RPi4 / VisionFive2)
 
 > ⚠️ Largest new chunk of G1 — needs its own brainstorm → plan → cook cycle. Do not underestimate.
 
