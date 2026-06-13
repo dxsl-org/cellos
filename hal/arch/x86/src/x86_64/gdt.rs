@@ -1,5 +1,24 @@
 //! x86_64 GDT + TSS. Selectors: null=0 kCS=0x08 kDS=0x10 uDS=0x18 uCS=0x20 TSS=0x28.
+//!
+//! GDT index → selector → RPL3 variant:
+//!   [1] code(0)  → 0x08 (kernel CS)
+//!   [2] data(0)  → 0x10 (kernel SS/DS)
+//!   [3] data(3)  → 0x18, RPL3 = 0x1B (user DS/SS for iretq)
+//!   [4] code(3)  → 0x20, RPL3 = 0x23 (user CS for iretq / SYSRET)
+//!   [5] tss_low  → 0x28 (TSS — ltr)
 use core::arch::asm;
+
+// ── Canonical GDT selector constants ────────────────────────────────────────
+/// Kernel code segment selector (CPL 0).
+pub const SEL_KERNEL_CODE: u16 = 0x08;
+/// Kernel data/stack segment selector (CPL 0).
+pub const SEL_KERNEL_DATA: u16 = 0x10;
+/// User data/stack segment selector (CPL 3, RPL=3) — used in `iretq` frame as SS.
+pub const SEL_USER_DATA:   u16 = 0x1B;   // 0x18 | RPL3
+/// User code segment selector (CPL 3, RPL=3) — used in `iretq` frame as CS.
+pub const SEL_USER_CODE:   u16 = 0x23;   // 0x20 | RPL3
+/// TSS selector (loaded via `ltr`).
+pub const SEL_TSS:         u16 = 0x28;
 
 /// Minimal TSS storing only the kernel-stack pointer (RSP0).
 #[repr(C, packed)]

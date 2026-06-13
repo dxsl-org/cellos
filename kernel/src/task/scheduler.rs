@@ -275,7 +275,14 @@ impl Scheduler {
               task.context.x19 = arg as u64;
               task.context.x20 = entry as u64; }
             #[cfg(target_arch = "x86_64")]
-            { task.context.rip = trampoline as u64; }
+            {
+                // thread_trampoline reads entry from RBX and arg from R12.
+                // CpuContext::switch restores all callee-saved fields before
+                // jumping to context.rip, so store entry/arg there.
+                task.context.rip = trampoline as u64;
+                task.context.rbx = entry as u64;    // thread body fn ptr
+                task.context.r12 = arg as u64;      // argument
+            }
             task.kernel_stack = Some(kstack);
 
             info!(

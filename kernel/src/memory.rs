@@ -5,9 +5,11 @@ use crate::*;
 pub mod cell_quota;
 pub mod frame;
 pub mod heap;
+pub mod kaslr;
 pub mod paging;
 pub mod rt_heap;
 pub mod tests;
+pub mod vma;
 
 /// Ownership registry entry.
 pub struct AllocationInfo {

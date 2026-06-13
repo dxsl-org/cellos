@@ -67,6 +67,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         let hhdm = crate::boot::limine::get_hhdm_offset().unwrap_or(0);
         crate::hal::apic::set_hhdm_base(hhdm);
         crate::memory::frame::set_phys_offset(hhdm as usize);
+        // Propagate the HHDM offset to the HAL PML4 walker so walk_create /
+        // walk_read can dereference physical PTE addresses via HHDM virtual ptrs.
+        crate::hal::paging::set_hhdm_offset(hhdm as usize);
+        // Initialise KASLR seed from HHDM entropy + RDTSC.
+        crate::memory::kaslr::init_kaslr(hhdm);
     }
 
     // 1. Initialize HAL (Architecture specific) - Early Trap Setup
@@ -191,8 +196,26 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        log_info("Paging: using Limine PML4 (x86_64 bring-up, own tables deferred)");
-        // init_timers() needs HPET+LAPIC MMIO mapped via our own PML4 — deferred to Phase 09.
+        log_info("Initializing x86_64 paging (kernel PML4)...");
+        let root_table_phys = {
+            let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
+            memory::paging::init_kernel_paging_x86(
+                locked_frame_allocator
+                    .as_mut()
+                    .expect("Frame allocator not initialized"),
+            )
+            .expect("Failed to initialize x86_64 kernel PML4")
+        };
+        log_info("x86_64 paging initialized");
+        log_info("Activating x86_64 paging (mov cr3)...");
+        // SAFETY: init_kernel_paging_x86 copied higher-half entries from Limine's PML4
+        // (preserving kernel text/data/HHDM) and identity-mapped MMIO, so the kernel
+        // continues executing after this CR3 switch without a triple-fault.
+        unsafe { memory::paging::activate_paging(root_table_phys); }
+        // HPET + calibrated LAPIC periodic timer: now safe because HPET (0xFED0_0000)
+        // and LAPIC (0xFEE0_0000) are identity-mapped in our new PML4.
+        crate::hal::init_timers();
+        log_info("x86_64 timers initialized (HPET + LAPIC)");
     }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).
     #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]

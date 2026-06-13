@@ -205,6 +205,15 @@ pub struct Task {
     /// scheduler terminates it as HUNG (silent-hang detection — see `pick_next`). `None`
     /// = heartbeat disabled (the default; most cells don't opt in).
     pub heartbeat_deadline: Option<u64>,
+
+    /// Per-cell virtual memory area list for demand-paging.
+    ///
+    /// Populated by the ELF loader (Phase 04) with one entry per ELF segment.
+    /// The #PF handler consults this list when a user-mode page fault occurs to
+    /// decide whether to map the page on demand or kill the cell.
+    /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
+    /// (those arches use identity-mapped segments today).
+    pub vma: crate::memory::vma::VmaList,
 }
 
 impl Task {
@@ -245,6 +254,7 @@ impl Task {
             deadline_misses: 0,
             rt_overrun_warned: false,
             heartbeat_deadline: None,
+            vma: crate::memory::vma::VmaList::new(),
         }
     }
 

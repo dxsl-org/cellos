@@ -84,14 +84,40 @@ extern "x86-interrupt" fn x86_64_irq_handler(frame: InterruptFrame) {
     let _ = frame;
 }
 
+// Kernel-provided page-fault handler. Defined in `kernel::memory::paging`
+// with `#[no_mangle]`.  The HAL declares it here as an extern so the IDT
+// handler can call it without creating a crate dependency cycle.
+//
+// Contract: `va` = faulting virtual address (from CR2), `error_code` = CPU
+// error code pushed onto the exception stack. The implementation decides
+// whether to map a demand page or panic.
+extern "Rust" {
+    fn vi_handle_page_fault(va: usize, error_code: u64);
+}
+
 /// Handler for exceptions WITH a CPU-pushed error code (#GP, #PF, etc.).
+///
+/// Forwards #PF (vector 14) to the kernel page-fault handler via the
+/// `vi_handle_page_fault` extern hook so demand-paging can map user pages.
+/// All other error-code exceptions still end in a kernel panic.
+///
+/// Phase 02 will add per-vector stubs that push the vector index so this
+/// handler can distinguish #PF from #GP cleanly without the CR2 heuristic.
 #[no_mangle]
 extern "x86-interrupt" fn x86_64_ec_handler(frame: InterruptFrame, error_code: u64) {
     let cr2: u64;
     // SAFETY: reading CR2 does not modify any state.
     unsafe { asm!("mov {}, cr2", out(reg) cr2, options(nomem, nostack)); }
-    panic!(
-        "[x86_64] exception rip=0x{:X} ec=0x{:X} cr2=0x{:X}",
-        frame.rip, error_code, cr2
-    );
+
+    // Heuristic: attempt page-fault handling for every error-code exception.
+    // For true #PF (vector 14) the kernel handler maps the page or panics.
+    // For #GP and others the kernel handler will panic immediately because
+    // error_code bit 2 (U/S) will be 0 for a kernel-mode fault (kernel CS=8).
+    //
+    // SAFETY: vi_handle_page_fault is defined in kernel::memory::paging; it
+    // acquires scheduler and frame-allocator spinlocks which the IDT entry
+    // path does not hold.
+    unsafe { vi_handle_page_fault(cr2 as usize, error_code); }
+
+    let _ = frame; // frame rip/cs available for future per-vector dispatch
 }
