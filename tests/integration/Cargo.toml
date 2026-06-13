@@ -22,5 +22,9 @@ path = "src/lib.rs"
 name = "boot"
 path = "tests/boot.rs"
 
+[[test]]
+name = "nvme-x86"
+path = "tests/nvme-x86.rs"
+
 # Detach from the parent workspace so the riscv64 default target is not inherited.
 [workspace]
