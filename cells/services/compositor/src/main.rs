@@ -15,12 +15,13 @@
 
 extern crate alloc;
 
+mod cursor_sprite;
 mod input_handler;
 mod render;
 mod surface_table;
 mod z_order;
 
-use api::display::compositor_ops;
+use api::display::{compositor_ops, Rect};
 use input_handler::{InputState, connect_to_input, handle_input_event};
 use ostd::io::println;
 use ostd::syscall::{sys_recv, sys_send, SyscallResult};
@@ -44,8 +45,11 @@ pub fn main() {
     let mut fb      = ScreenFb::new(w, h);
     let mut table   = SurfaceTable::new();
     let mut z_order = ZOrder::new();
-    let mut input   = InputState::new();
-    let mut last_render = ostd::syscall::sys_get_time();
+    let mut input        = InputState::new();
+    let mut last_render  = ostd::syscall::sys_get_time();
+    // Compositor-initiated repaint region: set by cursor moves, surface destroy/raise.
+    // Consumed (taken) on each render_frame call.
+    let mut pending_dirty: Option<Rect> = None;
 
     // Register as input focus so keyboard + mouse events flow to us.
     connect_to_input(&mut input);
@@ -58,7 +62,11 @@ pub fn main() {
                 if input.input_tid != 0 && sender == input.input_tid
                     && buf[0] == INPUT_EVENT_OPCODE
                 {
-                    handle_input_event(&buf, &mut input, &table, &z_order);
+                    // On MouseMove, update_cursor sets pending_dirty = union(old, new)
+                    // so the frame is repainted at the interval tick.
+                    handle_input_event(
+                        &buf, &mut input, &table, &z_order, &mut pending_dirty,
+                    );
                 } else {
                     handle_message(&buf, sender, &mut table, &mut z_order);
                 }
@@ -70,7 +78,12 @@ pub fn main() {
 
         let now = ostd::syscall::sys_get_time();
         if now.wrapping_sub(last_render) >= RENDER_INTERVAL_TICKS {
-            let _ = render_frame(&mut fb, &mut table, &z_order);
+            let extra = pending_dirty.take();
+            let _ = render_frame(
+                &mut fb, &mut table, &z_order,
+                extra,
+                input.mouse_x, input.mouse_y,
+            );
             last_render = now;
         }
     }
