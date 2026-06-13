@@ -317,7 +317,7 @@ pub struct NvmeController {
 impl NvmeController {
     /// Initialise the NVMe controller mapped at `bar0`.
     ///
-    /// Returns `Err(ViError::Io)` if the controller fails to reach RDY state or
+    /// Returns `Err(ViError::IO)` if the controller fails to reach RDY state or
     /// Identify fails. Does NOT panic — the caller falls through to VirtIO on error.
     ///
     /// # Safety
@@ -340,7 +340,7 @@ impl NvmeController {
             spin += 1;
             if spin > POLL_WARN_ITERS {
                 log::warn!("[nvme] reset: CSTS.RDY stuck high after {} iters", spin);
-                return Err(ViError::Io);
+                return Err(ViError::IO);
             }
             // SAFETY: sfence.vma / memory barrier to prevent reordering.
             fence(Ordering::SeqCst);
@@ -369,13 +369,13 @@ impl NvmeController {
             let csts = unsafe { read_reg32(bar0, REG_CSTS) };
             if csts & CSTS_CFS != 0 {
                 log::error!("[nvme] controller fatal status (CFS) during enable");
-                return Err(ViError::Io);
+                return Err(ViError::IO);
             }
             if csts & CSTS_RDY != 0 { break; }
             spin += 1;
             if spin > POLL_WARN_ITERS {
                 log::warn!("[nvme] enable: CSTS.RDY never set after {} iters", spin);
-                return Err(ViError::Io);
+                return Err(ViError::IO);
             }
             fence(Ordering::SeqCst);
         }
@@ -398,7 +398,7 @@ impl NvmeController {
         if res.is_err() {
             // SAFETY: id_buf was allocated with dma_alloc_pages(1).
             unsafe { dma_free_pages(id_buf, 1); }
-            return Err(ViError::Io);
+            return Err(ViError::IO);
         }
         // VWC flag at byte 525 of Identify Controller data structure.
         // SAFETY: id_buf points to a 4 KiB zeroed DMA page (index 525 is in range).
@@ -415,7 +415,7 @@ impl NvmeController {
         if res.is_err() {
             // SAFETY: ns_buf was allocated with dma_alloc_pages(1).
             unsafe { dma_free_pages(ns_buf, 1); }
-            return Err(ViError::Io);
+            return Err(ViError::IO);
         }
         // NSZE (namespace size in LBAs) at bytes [7:0] of Identify Namespace.
         // SAFETY: ns_buf is a valid 4 KiB page; offset 0 is [7:0].
@@ -438,7 +438,7 @@ impl NvmeController {
                  4K LBA support is a documented follow-up; aborting NVMe init.",
                 lba_size
             );
-            return Err(ViError::Io);
+            return Err(ViError::IO);
         }
 
         ctrl.n_sectors = nsze;
@@ -516,7 +516,7 @@ impl NvmeController {
 
     /// Submit one command to the admin queue (QID=0) and poll for completion.
     ///
-    /// Returns `Err(ViError::Io)` on timeout or non-zero NVMe status.
+    /// Returns `Err(ViError::IO)` on timeout or non-zero NVMe status.
     #[allow(clippy::too_many_arguments)]
     fn submit_admin(
         &mut self,
@@ -588,14 +588,14 @@ impl NvmeController {
                 unsafe { self.ring_cq_head(0, self.admin.cq_head); }
                 if status != 0 {
                     log::error!("[nvme] admin cmd opc={:#x} status={:#x}", opc, status);
-                    return Err(ViError::Io);
+                    return Err(ViError::IO);
                 }
                 return Ok(());
             }
             iters += 1;
             if iters == POLL_WARN_ITERS {
                 log::warn!("[nvme] admin poll timeout after {} iters (opc={:#x})", iters, opc);
-                return Err(ViError::Io);
+                return Err(ViError::IO);
             }
             fence(Ordering::Acquire);
         }
@@ -657,14 +657,14 @@ impl NvmeController {
                 unsafe { self.ring_cq_head(1, self.io.cq_head); }
                 if status != 0 {
                     log::error!("[nvme] I/O cmd opc={:#x} lba={} status={:#x}", opc, lba, status);
-                    return Err(ViError::Io);
+                    return Err(ViError::IO);
                 }
                 return Ok(());
             }
             iters += 1;
             if iters == POLL_WARN_ITERS {
                 log::warn!("[nvme] I/O poll timeout after {} iters", iters);
-                return Err(ViError::Io);
+                return Err(ViError::IO);
             }
             fence(Ordering::Acquire);
         }
@@ -778,7 +778,7 @@ pub struct NvmeBlk;
 impl ViBlockDevice for NvmeBlk {
     fn read_sector(&self, sector: u64, buf: &mut [u8]) -> ViResult<()> {
         if buf.len() < 512 {
-            return Err(ViError::InvalidArg);
+            return Err(ViError::InvalidArgument);
         }
 
         // Allocate a 4 KiB-aligned DMA bounce buffer for this sector read.
@@ -810,7 +810,7 @@ impl ViBlockDevice for NvmeBlk {
 
     fn write_sector(&self, sector: u64, buf: &[u8]) -> ViResult<()> {
         if buf.len() < 512 {
-            return Err(ViError::InvalidArg);
+            return Err(ViError::InvalidArgument);
         }
 
         let (dma, phys) = dma_alloc_pages(1);
