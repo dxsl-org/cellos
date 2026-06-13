@@ -133,7 +133,7 @@ fn update_cursor(buf: &[u8; 512], state: &mut InputState, pending_dirty: &mut Op
     });
 
     // One-line probe consumed by the Phase 04 integration test.
-    ostd::println!("[compositor] cursor at {},{}", state.mouse_x, state.mouse_y);
+    ostd::io::println(&alloc::format!("[compositor] cursor at {},{}", state.mouse_x, state.mouse_y));
 }
 
 /// On left-button press, find the topmost surface under the cursor and update focus.
