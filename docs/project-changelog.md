@@ -4,6 +4,38 @@
 
 ---
 
+## [2026-06-13] Track C — SPI HAL trait + bit-bang driver + demos + integration test
+
+### Summary
+Implemented the full SPI peripheral stack (Track C): `ViSpi` HAL trait, `BitBangSpi<G: ViGpio>` driver cell, `spi-demo` app, and an `aarch64` integration test asserting both SPI TX and I2C sensor-demo probe strings. Also added linker scripts + build.rs wiring for `sensor-demo` (I2C, previously unspawnable) so it is now embedded in the ARM disk image and spawned by init.
+
+### Changes
+- **`hal/traits/spi/`** — NEW — `ViSpi` trait (`cs_select`/`cs_deselect`/`transfer`/`write`) + `SpiError` enum; `#![no_std]`, no deps, mirrors `hal-i2c` shape
+- **`cells/drivers/spi-gpio/`** — NEW — `BitBangSpi<G: ViGpio>` rlib; SPI Mode 0 MSB-first; MOSI=2/MISO=3/SCK=4/CS=5 (no overlap with I2C pins 0/1); CS deasserted on every error path; `#![forbid(unsafe_code)]`
+- **`cells/apps/spi-demo/`** — NEW — runnable cell (VA base 0x30000000); gated by `MANIFEST_FLAG_GPIO`; prints `[spi-demo] SPI TX OK` on success; documents MISO=0x00 QEMU expectation for `transfer()`
+- **`cells/apps/sensor-demo/build.rs`** — NEW — linker script selector (arm64 vs riscv)
+- **`cells/apps/sensor-demo/sensor-demo-arm64.ld`** — NEW — VA base 0x2E000000
+- **`cells/apps/sensor-demo/sensor-demo.ld`** — NEW — VA base 0x2E000000 (RISC-V)
+- **`tests/integration/tests/periph-i2c-spi.rs`** — NEW — `aarch64_spi_demo_tx` + `aarch64_i2c_sensor_demo_banner` integration tests; skip-on-missing-prereq pattern
+- **`Cargo.toml`** — add `hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo` to workspace members
+- **`cells/apps/init/src/main.rs`** — spawn `/bin/sensor-demo` + `/bin/spi-demo` (best-effort, after bench)
+- **`scripts/format-disk-arm.ps1`** — build + embed `sensor-demo` and `spi-demo` to `/bin/`
+- **`tests/integration/Cargo.toml`** — add `[[test]] periph-i2c-spi`
+- **`tests/integration/src/lib.rs`** — add `qemu_binary_aarch64()` + `QemuRunner::boot_aarch64_with_disk()`
+- **`docs/specs/13-peripherals.md`** — §3/§7/§9 updated: I2C+SPI bit-bang v1-done; rlib pattern note; hardware controllers remain deferred
+
+### Architecture
+`BitBangSpi<G>` is an rlib generic over `ViGpio` — the demo app owns the PL061 GPIO MMIO directly and calls `ViSpi` in-process. No IPC broker, no `libs/api` change (Option A: SPI gated by existing `MANIFEST_FLAG_GPIO`). Pattern mirrors `BitBangI2c<G>` exactly. QEMU MISO floats → `transfer()` rx is 0x00 (documented and expected).
+
+### Impact
+- **Peripheral track v2 complete**: GPIO+UART+I2C+SPI all available for QEMU ARM virt G1 demos
+- **Zero Law 1 impact**: no `libs/api` or `libs/types` changes
+- **CI-ready**: new integration test skips gracefully when ARM QEMU absent
+
+**Status**: Complete. All new crates compile clean (aarch64 + riscv64 targets). Integration test registered.
+
+---
+
 ## [2026-06-08] ViUI v2 P07 — GPU Command Buffer Renderer
 
 ### Summary

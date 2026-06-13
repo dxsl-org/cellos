@@ -135,6 +135,10 @@ pub extern "C" fn main() {
 
     // Optional benchmark suite (CI disk images only) — not supervised.
     let _ = sys_spawn_from_path("/bin/bench");
+    // Optional I2C sensor demo (SHT3x, bit-bang over GPIO pins 0/1) — AArch64 only.
+    let _ = sys_spawn_from_path("/bin/sensor-demo");
+    // Optional SPI demo (bit-bang over GPIO pins 2/3/4/5) — AArch64 only.
+    let _ = sys_spawn_from_path("/bin/spi-demo");
 
     // Register a death notification for every live service. A single recv loop
     // below now supervises ALL of them (wait-any): when any service exits or

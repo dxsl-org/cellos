@@ -1,7 +1,7 @@
 # 13 — Peripheral Driver Bus (HAL + Driver Cells)
 
-**Version**: 1.0 (Design — approved 2026-06-06)
-**Status**: 📋 PLANNED — design complete, implementation pending (G1)
+**Version**: 1.1 (Updated 2026-06-13 — I2C + SPI bit-bang implemented)
+**Status**: 🚧 PARTIAL — GPIO+UART+I2C+SPI bit-bang done (QEMU ARM virt); hardware controllers deferred
 **Stage**: G1 (Robot & Embedded) — defining requirement for "complete for robots"
 **Design source**: `.agents/reports/brainstorm-260606-0730-peripheral-driver-track.md`
 **Roadmap**: [project-roadmap.md](../project-roadmap.md) → "Peripheral Driver Track `[G1]`"
@@ -67,8 +67,10 @@ pub trait ViUart: SerialPort {
     fn configure(&mut self, baud: u32, cfg: UartConfig) -> ViResult<()>;
 }
 ```
-- Mở rộng dần: `ViI2c`, `ViSpi`, `ViCan`, `ViPwm`, `ViAdc` (v2+).
-- ⚠️ Nếu đặt trait vào `libs/api` → **Law 1** (2x confirm). Cân nhắc đặt `hal/traits/gpio` như `uart`.
+- ✅ **`ViI2c`** (`hal/traits/i2c/src/lib.rs`) — synchronous master, `write`/`read`/`write_read`. Implemented 2026-06.
+- ✅ **`ViSpi`** (`hal/traits/spi/src/lib.rs`) — synchronous master Mode 0, `cs_select`/`cs_deselect`/`transfer`/`write`. Implemented 2026-06-13.
+- 📋 Defer: `ViCan`, `ViPwm`, `ViAdc` (v2+).
+- ⚠️ Traits live in `hal/traits/` (NOT `libs/api`) → no Law 1 change. Driver Cells dep on the trait crate directly.
 
 ---
 
@@ -120,6 +122,13 @@ mà KHÔNG cần direct-IPC vtable (Phase 27-3, vốn là G2).
 
 ## 7. IPC Contract (ngoại vi dùng chung)
 
+> **Implementation note (v1):** I2C and SPI v1 use the **rlib-consumed-by-app** pattern:
+> `BitBangI2c<G>` and `BitBangSpi<G>` are rlib crates (`driver-i2c-gpio`, `driver-spi-gpio`)
+> generic over `ViGpio`. The demo/test app owns the GPIO MMIO directly and calls the trait
+> in-process — **no IPC broker, no `libs/api` change**. This is the correct pattern for
+> single-app bus ownership (KISS/YAGNI). The IPC broker below applies only to
+> **multi-Cell shared-bus** scenarios (future: I2C sensor hub serving multiple Cells).
+
 Chỉ áp dụng khi nhiều Cell chia sẻ 1 ngoại vi qua **driver Cell môi giới** (vd bus I2C chung nhiều sensor):
 
 ```rust
@@ -145,15 +154,19 @@ pub enum PeriphResponse { Ok, Level(bool), Data(Box<[u8]>), Err(ViError) }
 
 ## 9. Scope v1 (verify-functionally)
 
-**v1 = GPIO + UART trên QEMU ARM virt** (có sẵn PL061 GPIO + PL011 UART → verify không cần board thật):
-1. `ostd::mmio::MmioRegion` + bounds-check.
-2. Resource Registry tối thiểu (hardcode ARM virt ranges) + release-on-exit hook.
-3. Trait `ViGpio` + `ViUart`; driver Cell `cells/drivers/gpio` (PL061), mở rộng `cells/drivers/serial` (PL011).
-4. Async Waker cho UART RX; pinned-poll demo cho GPIO.
-5. ELF-manifest cap gating (gpio/uart).
-6. Integration test trên ARM virt: set pin → read pin; UART loopback.
+**v1 = GPIO + UART + I2C + SPI bit-bang trên QEMU ARM virt** (PL061 GPIO + PL011 UART → verify không cần board thật):
+1. ✅ `ostd::mmio::MmioRegion` + bounds-check.
+2. ✅ Resource Registry tối thiểu (hardcode ARM virt ranges) + release-on-exit hook.
+3. ✅ Trait `ViGpio` + `ViUart`; driver Cell `cells/drivers/gpio` (PL061), `cells/drivers/serial` (PL011).
+4. ✅ Async Waker cho UART RX; pinned-poll demo cho GPIO.
+5. ✅ ELF-manifest cap gating (gpio/uart).
+6. ✅ Integration test trên ARM virt: set pin → read pin; UART loopback.
+7. ✅ **I2C bit-bang** (`hal/traits/i2c`, `cells/drivers/i2c-gpio`, `cells/apps/sensor-demo`) — gated by `gpio` manifest cap; pins 0=SCL/1=SDA.
+8. ✅ **SPI bit-bang** (`hal/traits/spi`, `cells/drivers/spi-gpio`, `cells/apps/spi-demo`) — gated by `gpio` manifest cap; pins 2=MOSI/3=MISO/4=SCK/5=CS; Mode 0 MSB-first.
+   - QEMU note: MISO floats → `transfer()` reads 0x00 (expected); `write()` fully validates TX path.
+9. ✅ Integration test `tests/integration/tests/periph-i2c-spi.rs` — asserts SPI TX probe + I2C banner.
 
-**Defer (v2+)**: I2C/SPI (QEMU thiếu controller → cần board thật), CAN/PWM/ADC, SSIP-preempt, ZST cap, DTB discovery, per-pin granularity.
+**Defer (v2+, real board)**: hardware SPI controller (PL022), hardware I2C controller (DW I2C); CAN/PWM/ADC; SSIP-preempt; ZST cap; DTB discovery; per-pin granularity; multi-Cell shared-bus IPC broker.
 
 ---
 

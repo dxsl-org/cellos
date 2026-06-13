@@ -43,6 +43,29 @@ pub fn qemu_binary() -> String {
     "qemu-system-riscv64".to_string()
 }
 
+/// Resolve the qemu-system-aarch64 binary.
+///
+/// Order: `$VIOS_QEMU_AARCH64` env override → bare name on PATH → Windows default.
+pub fn qemu_binary_aarch64() -> String {
+    if let Ok(p) = std::env::var("VIOS_QEMU_AARCH64") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    if Command::new("qemu-system-aarch64")
+        .arg("--version")
+        .output()
+        .is_ok()
+    {
+        return "qemu-system-aarch64".to_string();
+    }
+    let win = r"C:\Program Files\qemu\qemu-system-aarch64.exe";
+    if Path::new(win).exists() {
+        return win.to_string();
+    }
+    "qemu-system-aarch64".to_string()
+}
+
 /// QEMU-driven ViOS integration test runner.
 ///
 /// The guest serial port is exposed over a TCP socket (QEMU
@@ -111,6 +134,56 @@ impl QemuRunner {
 
         let netdev = format!("user,id=net0,hostfwd=tcp:127.0.0.1:{host_port}-:{guest_port}");
         (Self::boot_with_netdev(kernel, disk, &netdev), host_port)
+    }
+
+    /// Boot QEMU on an AArch64 ARM virt machine with `kernel` and FAT32 `disk`.
+    ///
+    /// Command-line mirrors `run-arm-virt.ps1`: cortex-a57, 256 MB RAM, VirtIO block
+    /// + net, no GPU or RNG (avoids platform availability issues in CI).
+    /// The guest serial is bridged to a TCP socket for bidirectional I/O as usual.
+    pub fn boot_aarch64_with_disk(kernel: &str, disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_binary_aarch64())
+            .args([
+                "-machine", "virt",
+                "-cpu", "cortex-a57",
+                "-m", "256M",
+                "-nographic",
+                "-kernel", kernel,
+                "-drive", &format!("if=none,file={disk},format=raw,id=hd0"),
+                "-device", "virtio-blk-device,drive=hd0",
+                "-netdev", "user,id=net0",
+                "-device", "virtio-net-device,netdev=net0",
+                "-no-reboot",
+                "-monitor", "none",
+                "-serial", &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-aarch64 must be on PATH");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+
+        Self { child, writer: Some(writer), output, temp_disk: None }
     }
 
     /// Internal: boot QEMU with a caller-specified `-netdev` value.
