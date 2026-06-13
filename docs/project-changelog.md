@@ -4,6 +4,73 @@
 
 ---
 
+## [2026-06-13] x86_64 Full Bring-Up — 5/5 integration tests pass + syscall exit path fixes + CI gate landed
+
+### Summary
+Completed x86_64 full bring-up end-to-end on QEMU q35. All 5 x86_64 integration tests now pass.
+Fixed two critical bugs in the syscall exit path that were silently breaking x86_64 user code:
+1. CVE-2012-0217 canonical check was using `movq %rcx, %rax; sarq $47, %rax` which clobbered the
+   syscall return value in RAX, returning 0 to all user code.
+2. User RSP restoration was reading from `%gs:8` (CPU_LOCAL.user_rsp) which could be overwritten
+   when blocking syscalls yielded via `yield_cpu()`, causing the wrong stack to be restored on sret.
+
+### Tests Passing
+- x86_kernel_banner: kernel boots and prints banner
+- x86_scheduler_initializes: scheduler task setup
+- x86_init_spawns: init cell spawns VFS + shell
+- x86_boots_to_shell_prompt: interactive shell reachable
+- x86_echo_command: echo roundtrip through shell
+
+### Files Changed
+- `hal/arch/x86/src/x86_64/syscall.rs` — syscall_entry exit path: fixed RCX clobbering, fixed RSP restore
+- `tests/integration/tests/x86_64-boot.rs` — 5 x86_64 integration tests (new)
+- `.github/workflows/ci.yml` — added x86_64 build + qemu-x86_64-boot gate; removed continue-on-error
+- `Cargo.toml` — x86_64-unknown-none target support
+
+### CI Changes
+- x86_64 build job now required (not skipped)
+- QEMU x86_64 boot job verifies shell prompt
+- Kernel artifact uploaded for analysis
+
+---
+
+## [2026-06-12] ARM64 Full Bring-Up — 6/6 integration tests pass + fatfs LFN fix
+
+### Summary
+Completed ARM64/QEMU-virt bring-up end-to-end. All 6 AArch64 integration tests now pass in
+~1.4 seconds. The work encompassed full HAL bring-up (GICv2, generic timer, 3-level MMU,
+PL011 UART RX, PL061 GPIO), cell stack (init/vfs/shell), and a root-cause fix that had blocked
+AArch64 cell loading from the start.
+
+1. **fatfs LFN fix (root cause)**: The `fatfs` crate was compiled with `default-features = false`
+   and only `features = ["alloc"]`. AArch64 `kernel_fs.img` stores all cell filenames using
+   LFN + `~N`-style SFN pairs (e.g., LFN "vfs" + SFN "VFS~1"). Without the `lfn` feature,
+   `eq_name_lfn()` is a no-op, the SFN "VFS~1" ≠ "VFS" match fails, and every cell spawn
+   returns `NotFound`. Fix: added `"lfn"` to fatfs features in `kernel/Cargo.toml`.
+
+2. **AArch64 HAL**: Full bring-up with GICv2 interrupt controller, ARM generic timer,
+   3-level page table MMU, PL011 UART RX, PL061 GPIO driver Cell, and VirtIO block/entropy.
+
+3. **Integration tests**: 6 AArch64 integration tests in `tests/integration/tests/aarch64-boot.rs`
+   — `aarch64_kernel_banner`, `aarch64_scheduler_initializes`, `aarch64_init_spawns`,
+   `aarch64_boots_to_shell_prompt`, `aarch64_echo_command`, `aarch64_periph_demo_gpio`.
+   All pass in ~1.4s using `--manifest-path tests/integration/Cargo.toml --target x86_64-pc-windows-msvc`.
+
+### Files Changed
+- `kernel/Cargo.toml` — added `"lfn"` to fatfs features (root cause fix)
+- `hal/arch/aarch64/` — GICv2, generic timer, MMU paging, context, boot, trap vector table
+- `tests/integration/tests/aarch64-boot.rs` — 6 AArch64 integration tests
+- `cells/drivers/driver-gpio/` — PL061 GPIO driver Cell
+- `kernel/src/embedded-aarch64/` — AArch64 cell binaries (init, vfs, shell, periph-demo, …)
+
+### Verify
+```
+cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-pc-windows-msvc aarch64
+# All 6 pass in ~1.4s
+```
+
+---
+
 ## [2026-06-11] VFS Phase 2.5-5 — exFAT detection + native FS ADR + /srv stub
 
 ### Summary

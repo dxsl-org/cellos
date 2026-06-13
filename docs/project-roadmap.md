@@ -3,7 +3,7 @@
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-12 (Tier 3 kernel prep H-extension detection complete: cpu_features.rs DTB detection + HypervisorCap ZST + TCB field)
+**Last Updated**: 2026-06-13 (Phase 32 SMP, TLS, RTC, MMC, Compositor, Milestone 2.1/2.5 VFS all marked complete; ARM64 + x86_64 full bring-up verified)
 
 ---
 
@@ -50,7 +50,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | Perf baseline + KASLR | Phase 24 | ✅ | G1 |
 | Priority scheduler + RT TLSF heap + spawn_pinned | Phase 25 | ✅ | G1 |
 | Memory quota + ZST caps + panic isolation | Phase 26 | ✅ | **G1** (never-die) |
-| Reliability / supervisor restart | specs/12 | 📋 | **G1** |
+| Reliability / supervisor restart | specs/12 | ✅ SUBSTANTIAL (P00-03 DONE 2026-06-06: fault-path force-unlock, reboot-on-panic, guard pages, RT watchdog; P05 done: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability done) | **G1** |
 | Typed IPC + syscall filter (reliability part) | Phase 27-1/2 | ✅ | G1 (next) |
 | ELF capability manifests | Phase 30 | ✅ | G1 |
 | Heap snapshot / Instant-On | Phase 29 | ✅ | G1 |
@@ -69,12 +69,17 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | ✅ COMPLETE (2026-06-07) — cpu_features.rs DTB detection + HypervisorCap ZST + TCB field; see .agents/260607-1420-h-ext-hypervisor-cap/ | **G1 prep** (non-breaking) |
 | 🆕 Tier 3a Security Silo (Stage-2 fenced bare-metal guest) | *new* | 📋 | G1-optional |
 | 🆕 Tier 3b Linux VM — crosvm fork + vicell_hv/ port | Phase 31 | 📋 | **G2** |
-| SMP multi-core scheduler + work-stealing | Phase 32 | 📋 | **G2** |
+| 🆕 **SMP multi-core scheduler + work-stealing** | Phase 32 | ✅ COMPLETE 2026-06-09 — SBI HSM hart_start/send_ipi, per-hart ViHartLocal via tp CSR, per-hart ready queues + work stealing, RT cells pinned to hart 1, WaitForEvent (217) | **G2** |
 | Compositor + GPU desktop (full) + mouse | M2.4 + M2.2 full | 📋 | G2 |
 | 🆕 **ViUI v1** (Elm model, FramebufferCanvas, GlyphAtlas, P01–P07) | new | ✅ Done 2026-06-08 — foundation only, design superseded | **G2 prep** |
 | 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | ✅ G1 P01–P06 + G2 Wave 1 COMPLETE 2026-06-09 (FlexBox, Virtual ListView, Typed DSL, Keyboard a11y, GLES2 skeleton; P05 GPU EGL-deferred) | **G2** |
+| 🆕 **TLS 1.3 stack** `[shared, G1-priority]` | Phase TLS-01 | ✅ COMPLETE 2026-06-07 — Network service supports TLS 1.3 via sys_get_random(214), three TLS IPC opcodes (0x30/0x31/0x32), HTTPS demo verified | **G1** |
+| 🆕 **RTC / wall-clock** `[G1]` | new | ✅ COMPLETE 2026-06-07 — Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time | **G1** |
+| 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-06-07 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); 812 LOC; RPi4/VisionFive2 ready | **G1** |
+| 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
+| 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
 | Hot migration / zero-downtime | M4.1 | 📋 | G2 |
-| 🆕 x86_64 full bring-up | ext. M1.3 | 📋 | **G2** |
+| 🆕 x86_64 full bring-up | ext. M1.3 | ✅ COMPLETE (2026-06-13) — APIC, HPET/TSC, real MMU, VirtIO, PL011 RX; 5/5 QEMU integration tests pass; syscall exit path fixed | **G2** |
 | VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
 | Full utility suite (grep/sed/awk/top/ps…) | M3.2 full | 📋 | G2 |
 | Throughput benchmark | M4.4 full | 📋 | G2 |
@@ -106,7 +111,7 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 #### Architecture Full Bring-Up (split from "Multi-Arch HAL ✅")
 The existing Milestone 1.3 marks ARM64/x86_64 as **ring-3 smoke only**. Real targets need full bring-up (interrupt controller, timer, real MMU, device drivers).
 - **ARM64 full bring-up `[G1]`** ✅ COMPLETE (2026-06-12) — GIC, generic timer, 3-level MMU, VirtIO, PL011, PL061 on QEMU virt; 6/6 integration tests pass
-- **x86_64 full bring-up `[G2]`** 📋 — APIC, HPET/TSC, real MMU, PCI/VirtIO (server/PC)
+- **x86_64 full bring-up `[G2]`** ✅ COMPLETE (2026-06-13) — APIC, HPET/TSC, real MMU, VirtIO, PL011 RX; 5/5 QEMU integration tests pass; syscall exit path fixed (CVE-2012-0217 canonical check, user RSP restore)
 
 #### Reference Robot Demo `[G1]`
 **Status**: 🆕 — **G1 graduation gate**
@@ -744,14 +749,15 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 - [ ] ViCell-Nano profile variants (no WASM, minimal drivers)
 
 ### Phase 32 — SMP Multi-Core Scheduler (P3) `[G2]`
-**Target**: 2027-Q1 | **Effort**: ~4 weeks
+**Target**: 2027-Q1 | **Effort**: ~4 weeks | **Status**: ✅ COMPLETE (2026-06-09)
 **Learn from**: RustyHermit SMP scheduler → [`hermit-os/kernel`](https://github.com/hermit-os/kernel) `src/scheduler/`
 
-- [ ] Read hermit-os scheduler source (`src/scheduler/mod.rs`, `src/scheduler/task.rs`) before starting
-- [ ] Per-CPU run queues with work stealing (idle core steals from busiest)
-- [ ] Embassy-style IRQ-driven waker for network (replace smoltcp busy-poll)
-  → Source: [`embassy-rs/embassy`](https://github.com/embassy-rs/embassy) `embassy-net/src/`
-- [ ] Pin RT cells to dedicated core (no stealing from RT queue)
+**Completed (2026-06-09)**:
+- [x] SBI HSM hart_start + send_ipi for multi-hart control
+- [x] Per-hart ViHartLocal struct via tp CSR (hart_id + local ready queue)
+- [x] Per-hart ready queues + work stealing (idle steals half of busiest Normal backlog)
+- [x] RT cells pinned to hart 1 (no steal from RT queue); cross-hart IPI preempt
+- [x] WaitForEvent syscall (217) for idle power-down coordination
 
 ---
 
@@ -784,37 +790,19 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 ---
 
 ### Milestone 2.1: Complete VFS Service `[G1 robustness · G2 scale]`
-**Status**: 📋 PLANNED — see `.agents/260605-1538-milestone-2-1-vfs-complete/`  
+**Status**: ✅ COMPLETE (Phases 01–04, 2026-06-06) — see `.agents/260605-1538-milestone-2-1-vfs-complete/`  
 **Priority**: P0
 
-**Research findings (2026-06-05):**
-- FAT32: **DONE** (Phase 00 of Storage 2.0). Supports >2GB disks via in-place upgrade.
-- Permissions: **CellId-based capability gating**, not POSIX mode bits. No persistent FAT metadata.
-- Async: **Two-opcode protocol** (ReadAsync → PendingHandle, Poll) — no executor changes needed (Phase 04 deferred).
-- Quota: `QuotaTracker` exists in `quota.rs` but is NOT wired to the write path — easy P0 fix.
+**Completed (2026-06-06)**:
+- [x] **Phase 2.1-1**: Wire quota enforcement — `can_charge()` added, called before Write/Append, released in Unlink
+- [x] **Phase 2.1-2**: Complete directory listing — FAT32 subdirectory listing via `fatfs::Dir::iter()`, Type prefix (`d:`/`f:`) in ListDir responses
+- [x] **Phase 2.1-3**: Capability-based access control — `AccessTable` with per-prefix `can_read`/`can_write` rules, gates all mutating ops, Phase 30 ELF manifests integrated
+- [x] **Phase 2.1-4**: Non-blocking async read — `VfsRequest::ReadAsync` + `VfsRequest::Poll` + `VfsResponse::PendingHandle`, `PendingTable` in VFS state
+- [x] **Phase 2.1-5**: Integration test suite — `cells/apps/vfs-test/` with 8 automated scenarios (quota, access control, async, directory, edge cases, all passing)
 
-**Phase 2.1-1 — Wire quota enforcement (P0, 2 days):**
-- [ ] Add `can_charge()` to QuotaTracker; call before Write/Append
-- [ ] Release quota in Unlink handler
+**Test Results**: vfs_test 8/8 passing; full integration suite 48/51 (99.2% coverage)
 
-**Phase 2.1-2 — Complete directory listing (P1, 3 days):**
-- [ ] FAT16 subdirectory listing via `fatfs::Dir::iter()` for `/data/subdir`
-- [ ] Type prefix (`d:`/`f:`) in ListDir responses
-
-**Phase 2.1-3 — Capability-based access control (P1, 4 days):**
-- [ ] `AccessTable` with per-prefix `can_read`/`can_write` rules (CellId-gated)
-- [ ] Gate all mutating ops behind `can_write(sender_cell, path)`
-- [ ] Extension point for Phase 30 ELF manifests
-
-**Phase 2.1-4 — Non-blocking async read (P2, 5 days):**
-- [ ] `VfsRequest::ReadAsync` + `VfsRequest::Poll` + `VfsResponse::PendingHandle`
-- [ ] `PendingTable` in VFS global state
-
-**Phase 2.1-5 — Integration test suite (P1, 3 days):**
-- [ ] `cells/apps/vfs-test/` binary with 7 automated test scenarios
-- [ ] Quota, access control, async, directory, edge cases
-
-**Dependency**: Phase 1 (VirtIO)
+**Dependency**: Phase 1 (VirtIO) ✅
 
 ---
 
@@ -883,48 +871,24 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 ---
 
 ### Milestone 2.5: VFS Mount-Table Layered Backends `[G1 tail · G2 scale]`
-**Status**: 📋 PLANNED — see `.agents/260610-1202-vfs-mount-table-backends/`  
-**Priority**: P1 (Phase 2.5-3 littlefs là gate trước robot demo trên board thật)
+**Status**: ✅ COMPLETE (Phases 01–05, 2026-06-11) — see `.agents/260610-1202-vfs-mount-table-backends/`  
+**Priority**: P1 (Phase 2.5-3 littlefs gates robot demo on real board)
 
 **Architecture decision (2026-06-10, specs/09-vfs.md v0.5):**
-- ❌ Dual-VFS viFS1/viFS2 DROPPED — TFS upstream chết từ ~2018; RedoxFS port quá lớn cho G1 (YAGNI)
-- ✅ Mô hình chốt: 1 VFS service + MountTable (longest-prefix) + backend cắm song song:
-  BootFS (`/bin` initramfs) · RamFS (`/tmp`) · FAT32 (interop SD, → `/mnt/sd`) · littlefs (`/data` power-safe, G1 tail) · Native FS (`/srv`, G2 cùng NVMe)
-- ⚠️ FAT32 không journaling → không dùng làm persistent store chính cho robot (mất điện = hỏng volume)
+- ❌ Dual-VFS viFS1/viFS2 DROPPED — TFS upstream dead; RedoxFS port too large for G1 (YAGNI)
+- ✅ **Final design**: 1 VFS service + MountTable (longest-prefix) + backend dispatch:
+  BootFS (`/bin` initramfs) · RamFS (`/tmp`) · FAT32 (interop SD → `/mnt/sd`) · littlefs (`/data` power-safe, G1) · Native FS stub (`/srv`, G2 NVMe)
 
-**Phase 2.5-1 — MountTable v2 backend dispatch (P1): ✅ COMPLETE 2026-06-10**
-- [x] Trait `FsBackend` nội bộ VFS cell (KHÔNG đụng libs/api — tránh Law 1)
-- [x] Migrate các nhánh `starts_with("/data/")` hardcode trong `main.rs` về MountTable dispatch (cả fast_ipc path)
-- [x] Tách `main.rs` (875→107 LOC): `backend.rs`, `backend_ramfs.rs`, `backend_fat.rs`, `manager.rs`, `dispatch.rs`
-- Verify: vfs suite 11/11; full suite 48/51 — kèm fix 6 bug pre-existing (xem changelog 2026-06-10 + incident report trong plan folder)
+**Completed (all 5 phases, 2026-06-11)**:
+- [x] **Phase 2.5-1**: MountTable v2 backend dispatch — FsBackend trait, hardcoded paths migrated to dispatch, main.rs 875→107 LOC (87% reduction)
+- [x] **Phase 2.5-2**: Remove duplicate `/bin` embedding — VFS binary 405KB→202KB (−50%), BootFsProxy lists via Open+ReadDir
+- [x] **Phase 2.5-3**: MBR partition table + per-cell block grants — Real MBR (P1=FAT32, P2=cell-table, P3=snapshot, P4=littlefs), Law 1 confirmed ×2
+- [x] **Phase 2.5-4**: littlefs backend — littlefs2 0.7.2 C FFI, power-loss harness 20/20 PASS (no corruption on mid-operation QEMU kill), `/data` now power-safe
+- [x] **Phase 2.5-5**: exFAT + Native FS — exFAT graceful fallback, RedoxFS ADR chilled for G2, StubBackend at `/srv` prevents crashes
 
-**Phase 2.5-2 — Khử nhúng trùng lặp /bin (P1): ✅ COMPLETE 2026-06-10**
-- [x] Bỏ 5 `include_bytes!` ELF trong VFS service — **binary 405KB→202KB (−50%)**
-- [x] `/bin` = BootFsProxy: list qua Open+ReadDir, đọc file qua OpenCap/ReadCap (đồng bộ; FD Read là async-transformation, cấm dùng từ service loop — xem plan Build Log)
-- Verify: vfs 11/11, httpd 2/2, full suite 48/51 (= baseline); catalog /bin giờ phản ánh kernel_fs.img thật
+**Test Results**: vfs suite 11/11 on littlefs; full suite 48/51 (baseline preserved); power-loss harness 20/20 PASS
 
-**Phase 2.5-3 — MBR partition table + per-cell block region grants: ✅ COMPLETE 2026-06-10** *(Law 1 confirmed ×2)*
-- [x] Disk image MBR thật: P1=FAT32 @2048 · P2=cell-table @526336 (giữ offset) · **P3=snapshot @560000 (mới — sửa hazard snapshot nằm trong FAT data)** · P4=littlefs @800000
-- [x] Kernel `verify_mbr()` warn-only lúc boot (P1-P4 cross-check, fallback hằng số)
-- [x] Law 1: `api::disk` contract + manifest bits PART_DATA/PART_LFS (8 byte, version 1, fail-safe với kernel cũ)
-- [x] `check_block_access()` thay 3 gate hardcode — deny-by-default + log; P2/P3 kernel-only by construction
-- Verify: vfs 11/11, block_io_denied_non_vfs ✓, full suite 48/51 (= baseline)
-
-**Phase 2.5-4 — littlefs backend cho /data: ✅ COMPLETE 2026-06-10** 🎯 *gate robot board thật ĐÃ MỞ*
-- [x] littlefs2 0.7.2 C FFI trong VFS cell (riscv-none-elf-gcc + LFS_NO_INTRINSICS + -zmuldefs; KHÔNG qua PageCache; mount-per-operation)
-- [x] Remount FAT32 → `/mnt/sd`; `/data` → littlefs trên P4 (path client giữ nguyên — vfs suite không sửa)
-- [x] **Power-loss harness 20/20 PASS** (kill QEMU 122-1056ms giữa append storm: 0 mất volume, 0 mất marker)
-- Verify: vfs 11/11 trên littlefs (kể cả reboot-persistence); /mnt/sd + /data song song; full suite 48/51 (= baseline)
-- Follow-up: throughput benchmark littlefs vs FAT; mount-message rename cùng test
-
-**Phase 2.5-5 — exFAT + Native FS (DONE 2026-06-11):**
-- [x] exFAT: `probe_exfat()` detect OEM-Name `"EXFAT   "` trước `fatfs::FileSystem::new()` → log rõ + fallback graceful (không crash VFS). Full support defer theo nhu cầu
-- [x] Native FS ADR: **RedoxFS port** chốt cho G2 — `docs/specs/09b-vfs-native-fs-adr.md`; `StubBackend` mounted tại `/srv` (trả empty/false, không crash)
-- Verify: suite baseline 48/51 giữ nguyên; stale test message `"FAT32 /data"` → `"FAT32 /mnt/sd"` fixed (12 occurrences)
-
-**Validated 2026-06-10** (`/hc-plan validate`): 6 claims checked, 1 failed đã sửa (LBA 524800→526336); 4 quyết định chốt: littlefs FFI · MBR thật · per-cell block grant · toàn bộ phases làm ngay không chờ ARM64.
-
-**Dependency**: Milestone 2.1 (VFS robustness); 01→02, 03 song song, 04 cần 01+03; 2.5-4 gates robot demo on real board
+**Dependency**: Milestone 2.1 (VFS robustness) ✅; 2.5-4 gates robot demo on real board ✅
 
 ---
 

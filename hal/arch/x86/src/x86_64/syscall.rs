@@ -75,9 +75,12 @@ fn wrmsr(msr: u32, val: u64) {
 ///   entry stub can load the kernel stack without touching user memory
 pub fn init() {
     wrmsr(IA32_EFER, rdmsr(IA32_EFER)|1); // SCE=1
-    // STAR: user CS=0x20 (sysret CS=0x23, SS=0x2B=uDS),
-    //       kernel CS=0x08 (syscall CS=0x08, SS=0x10=kDS)
-    wrmsr(IA32_STAR, (0x0020_u64<<48)|(0x0008_u64<<32));
+    // STAR[47:32] = kernel CS (syscall: CS=0x08, SS=0x10).
+    // STAR[63:48] = user_CS_base for sysretq: CS = (base+16)|3, SS = (base+8)|3.
+    // Our GDT: uCS=0x20 (GDT[4]), uDS=0x18 (GDT[3]).
+    // To get sysretq CS=0x23, SS=0x1B: base = 0x20-16 = 0x10.
+    // NOTE: using 0x0020 here gives CS=0x0033 (TSS high!), breaking iretq from ISR.
+    wrmsr(IA32_STAR, (0x0010_u64<<48)|(0x0008_u64<<32));
     extern "C" { fn syscall_entry(); }
     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
     wrmsr(IA32_FMASK, 0x0300); // clear IF + DF on syscall entry
@@ -95,9 +98,22 @@ pub fn init() {
 ///
 /// Called by the scheduler before every Ring-3 entry so that `swapgs` +
 /// `movq %gs:0, %rsp` in `syscall_entry` loads the correct kernel stack.
+///
+/// Also reinitialises IA32_KERNEL_GS_BASE to `&CPU_LOCAL` on every call.
+/// When Task A enters a syscall, the entry `swapgs` stores Task A's user GS
+/// (= 0 for ViCell cells) into KERNEL_GS_BASE and puts &CPU_LOCAL in GS_BASE.
+/// If Task A blocks before its exit `swapgs`, KERNEL_GS_BASE remains 0.
+/// The next task's syscall entry `swapgs` would then load GS_BASE = 0 and
+/// fault at `%gs:8` (va = 0x8).  Resetting KERNEL_GS_BASE here is safe
+/// because ViCell cells do not use the GS segment (user GS is always 0).
 pub fn set_kernel_stack(sp: u64) {
     // SAFETY: CPU_LOCAL is a static with no aliased Rust references here.
-    unsafe { CPU_LOCAL.kernel_rsp = sp; }
+    // wrmsr from Ring 0 is safe; we only touch the GS MSRs.
+    unsafe {
+        CPU_LOCAL.kernel_rsp = sp;
+        let cpu_local_addr = core::ptr::addr_of!(CPU_LOCAL) as u64;
+        wrmsr(IA32_KERNEL_GSBASE, cpu_local_addr);
+    }
 }
 
 extern "Rust" {
@@ -239,15 +255,23 @@ syscall_entry:
     movq 264(%rsp), %rcx     # sepc    → RCX
     movq 256(%rsp), %r11     # sstatus → R11
 
-    # Tear down frame; restore user RSP.
+    # Load user RSP from frame.regs[2] (+16) BEFORE tearing down the frame.
+    # Reading from %gs:8 instead would be wrong when this task blocked inside
+    # file_read(fd=0) via yield_cpu(): any task that ran a syscall while we were
+    # parked will have overwritten CPU_LOCAL.user_rsp with its own user RSP.
+    # frame.regs[2] holds the value we saved from %gs:8 at entry, before any
+    # other task could touch it.
+    movq  16(%rsp), %rdi     # user RSP saved at entry → %rdi (caller-saved, ok to clobber)
+
+    # Tear down frame; set user RSP.
     addq $288, %rsp
-    movq %gs:8, %rsp         # restore user RSP from per-CPU slot
+    movq %rdi, %rsp          # user RSP from frame (not from potentially-stale %gs:8)
     swapgs
 
     # CVE-2012-0217: Intel #GP if SYSRET executes with non-canonical RCX.
-    # Check bits [63:47] of RCX are all equal (canonical user address).
-    movq  %rcx, %rax
-    sarq  $47,  %rax         # canonical user → 0; kernel/non-canonical → non-zero
+    # Use %rdi (already clobbered above) to avoid overwriting the return value in %rax.
+    movq  %rcx, %rdi
+    sarq  $47,  %rdi         # canonical user → 0; kernel/non-canonical → non-zero
     jnz   1f                 # non-canonical: skip sysretq
     sysretq
 1:  # Non-canonical RCX: trap — caller has a bug or is malicious.

@@ -60,7 +60,6 @@ jobs:
             short: aarch64
           - target: x86_64-unknown-none
             short: x86_64
-            continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -76,7 +75,6 @@ jobs:
           key: ${{ matrix.short }}
 
       - name: Build (release)
-        continue-on-error: ${{ matrix.continue-on-error || false }}
         # The rv64 kernel links as -pie (build.rs, for Limine KASLR); rustc must
         # emit position-independent code or the linker rejects absolute R_RISCV_64
         # relocations. Scope pic to rv64 only — aarch64/x86 kernels are not -pie,
@@ -103,6 +101,14 @@ jobs:
         with:
           name: kernel-aarch64
           path: target/aarch64-unknown-none-softfloat/release/vicell-kernel
+          if-no-files-found: error
+
+      - name: Upload x86_64 kernel ELF
+        if: matrix.short == 'x86_64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-x86_64
+          path: target/x86_64-unknown-none/release/vicell-kernel
           if-no-files-found: error
 
   qemu-boot:
@@ -199,6 +205,97 @@ jobs:
         run: |
           chmod +x scripts/qemu-aarch64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-aarch64-test.sh
+
+  x86_64-lint:
+    name: Clippy (x86_64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src,clippy
+          targets: x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: x86_64-lint
+
+      - name: Clippy (x86_64)
+        run: >
+          cargo clippy
+          -p vicell-kernel
+          --target x86_64-unknown-none
+          -Z build-std=core,alloc
+          -- -D warnings
+
+  qemu-x86_64-boot:
+    name: QEMU Boot Test (x86_64)
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: x86_64-boot
+
+      - name: Install QEMU and xorriso
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+
+      - name: Build x86_64 kernel
+        run: >
+          cargo build --release
+          -p vicell-kernel
+          --target x86_64-unknown-none
+          -Z build-std=core,alloc
+
+      - name: Build Limine ISO
+        run: bash scripts/x86/make-iso-ci.sh build/vicell-x86.iso
+
+      - name: Boot test (x86_64)
+        run: |
+          chmod +x scripts/qemu-x86_64-test.sh
+          BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
+
+  vfs-quota:
+    name: VFS Quota Integration Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: vfs-quota
+
+      - name: Install dependencies
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+
+      - name: Build test-hooks kernel
+        run: |
+          chmod +x scripts/build-test-hooks-ci.sh
+          bash scripts/build-test-hooks-ci.sh
+
+      - name: Run VFS quota integration test
+        run: cargo test --manifest-path tests/integration/Cargo.toml --test vfs-quota
 
   unit-tests:
     name: Host unit tests (types + api)

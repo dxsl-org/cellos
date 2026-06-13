@@ -34,5 +34,9 @@ path = "tests/aarch64-boot.rs"
 name = "vfs-quota"
 path = "tests/vfs-quota.rs"
 
+[[test]]
+name = "x86_64-boot"
+path = "tests/x86_64-boot.rs"
+
 # Detach from the parent workspace so the riscv64 default target is not inherited.
 [workspace]
