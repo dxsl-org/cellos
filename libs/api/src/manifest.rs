@@ -50,6 +50,11 @@ pub const MANIFEST_FLAG_PART_DATA: u8 = 1 << 6;
 /// Block-I/O sector range grant: MBR partition P4 (littlefs, `api::disk`).
 pub const MANIFEST_FLAG_PART_LFS: u8 = 1 << 7;
 
+// TODO: Add MANIFEST_FLAG_PART_SRV (P5 RedoxFS) once `flags: u8` expands to
+// u16 (Law 1 bump required — all 8 bits of v1 are occupied).  Until then, P5
+// access is co-granted with PART_LFS by `kernel/src/loader.rs` (VFS service is
+// the exclusive owner of both partitions).  See `docs/specs/09b-vfs-native-fs-adr.md`.
+
 /// Bitmask of all defined flags for version 1.
 ///
 /// `from_bytes` rejects manifests where `flags & !MANIFEST_FLAGS_MASK != 0` —

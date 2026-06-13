@@ -156,8 +156,12 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                         // LBA ranges the raw block syscalls may touch. A manifest
                         // cell that declares block_io but no PART_* bit gets cap
                         // without ranges — every access denied (deny-by-default).
+                        // Bit 2 (SRV/P5) co-granted with bit 1 (LFS/P4): both belong
+                        // exclusively to the VFS service.  When manifest flags expand
+                        // to u16, split into a dedicated MANIFEST_FLAG_PART_SRV bit.
                         task.block_regions = (m.has_part_data() as u8)
-                                           | ((m.has_part_lfs() as u8) << 1);
+                                           | ((m.has_part_lfs() as u8) << 1)
+                                           | ((m.has_part_lfs() as u8) << 2);
                         // Re-registration is valid on VFS hot-swap; just update the handler pointer.
                         // Using swap to track whether this is a first-boot registration or a re-swap.
                         let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);

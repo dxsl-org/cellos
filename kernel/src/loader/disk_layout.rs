@@ -34,6 +34,7 @@ pub use api::disk::{
     PART_CELLTBL_SECTORS,
     PART_SNAPSHOT_BASE_LBA, PART_SNAPSHOT_SECTORS,
     PART_LFS_BASE_LBA, PART_LFS_SECTORS,
+    PART_SRV_BASE_LBA, PART_SRV_SECTORS,
 };
 
 /// Sector offset (from LBA 0) where the cell bootstrap section (P2) begins.
@@ -89,6 +90,8 @@ const _: () = assert!(core::mem::size_of::<CellTableHeader>() == SECTOR_SIZE);
 const _: () = assert!(core::mem::size_of::<CellEntry>() == SECTOR_SIZE);
 
 /// Expected MBR partition map: `(slot, type, start_lba, sectors)`.
+/// P5 (SRV/RedoxFS) is outside the legacy 4-partition MBR limit — verified
+/// separately by the VFS service's partition constants.
 const EXPECTED_PARTS: [(usize, u8, u64, u64); 4] = [
     (0, 0x0C, PART_FAT32_BASE_LBA,    PART_FAT32_SECTORS),
     (1, 0x7F, CELL_TABLE_BASE_LBA,    PART_CELLTBL_SECTORS),

@@ -33,3 +33,14 @@ pub const PART_SNAPSHOT_SECTORS: u64 = 240_000;
 pub const PART_LFS_BASE_LBA: u64 = 800_000;
 /// P4 size in sectors (64 MB).
 pub const PART_LFS_SECTORS: u64 = 131_072;
+
+/// P5: RedoxFS native filesystem — VFS `/srv` (G1+, spec §09b).
+///
+/// Follows immediately after P4.  Pre-formatted offline with `redoxfs-mkfs`;
+/// opened at runtime with `FileSystem::open()` (no_std, read-write).
+/// Partition-capability gating (`MANIFEST_FLAG_PART_SRV`) requires expanding
+/// `flags` to `u16` in a future manifest version; until then, `/srv` access is
+/// controlled exclusively by the VFS `AccessTable`.
+pub const PART_SRV_BASE_LBA: u64 = 931_072; // LBA 800_000 + 131_072
+/// P5 size in sectors (64 MB RedoxFS volume).
+pub const PART_SRV_SECTORS: u64 = 131_072;

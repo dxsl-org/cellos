@@ -297,6 +297,49 @@ jobs:
       - name: Run VFS quota integration test
         run: cargo test --manifest-path tests/integration/Cargo.toml --test vfs-quota
 
+  redoxfs-srv:
+    name: RedoxFS /srv Integration Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: redoxfs-srv
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+
+      - name: Build test-hooks kernel (needed by degrade test)
+        run: |
+          chmod +x scripts/build-test-hooks-ci.sh
+          bash scripts/build-test-hooks-ci.sh
+
+      - name: Build srv-test kernel
+        run: |
+          chmod +x scripts/build-srv-test-ci.sh
+          bash scripts/build-srv-test-ci.sh
+
+      - name: Build disk_srv.img
+        run: |
+          chmod +x scripts/mksrv-img.sh
+          bash scripts/mksrv-img.sh build/disk_srv.img
+
+      - name: Run RedoxFS /srv integration tests
+        run: |
+          cargo test --manifest-path tests/integration/Cargo.toml \
+            --test redoxfs-srv
+
   unit-tests:
     name: Host unit tests (types + api)
     runs-on: ubuntu-24.04
