@@ -38,5 +38,12 @@ path = "tests/vfs-quota.rs"
 name = "x86_64-boot"
 path = "tests/x86_64-boot.rs"
 
+[[test]]
+name = "redoxfs-srv"
+path = "tests/redoxfs-srv.rs"
+
+[dev-dependencies]
+tempfile = "3"
+
 # Detach from the parent workspace so the riscv64 default target is not inherited.
 [workspace]

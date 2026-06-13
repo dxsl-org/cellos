@@ -276,6 +276,54 @@ impl QemuRunner {
         Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 
+    /// Boot QEMU RISC-V with a single VirtIO-BLK disk attached.
+    ///
+    /// The disk is used **directly** (no temp copy) — callers that need test
+    /// isolation must copy the image themselves before passing the path.  This
+    /// intentional design allows the persistence test to share one `NamedTempFile`
+    /// across two sequential `QemuRunner` instances without extra infrastructure.
+    pub fn boot_rv64_with_disk(kernel: &str, disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_binary())
+            .args([
+                "-machine", "virt",
+                "-m", "256M",
+                "-nographic",
+                "-bios", "default",
+                "-kernel", kernel,
+                "-drive", &format!("file={disk},format=raw,if=none,id=hd0"),
+                "-device", "virtio-blk-device,drive=hd0",
+                "-monitor", "none",
+                "-serial", &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-riscv64 must be on PATH");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+    }
+
     /// Boot QEMU with an AArch64 kernel (no disk, no netdev — bring-up mode).
     ///
     /// Uses the `virt` machine with `cortex-a57`. The kernel is expected to
