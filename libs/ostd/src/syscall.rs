@@ -44,6 +44,23 @@ unsafe fn syscall(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> 
         in("x4") a3,
         options(nostack, preserves_flags)
     );
+    // ViCell x86_64 ABI: RAX=syscall_nr (a7 slot), RDI=a0, RSI=a1, RDX=a2, R10=a3
+    // (R10, not RCX — SYSCALL clobbers RCX to save user RIP).  Return value in RAX.
+    // SAFETY: SYSCALL transitions to kernel via LSTAR; the kernel validates all
+    // pointer arguments before use.  RCX and R11 are clobbered by the hardware
+    // (RCX ← user RIP, R11 ← user RFLAGS) and must be declared as outputs.
+    #[cfg(target_arch = "x86_64")]
+    asm!(
+        "syscall",
+        inlateout("rax") id as usize => ret,
+        in("rdi") a0,
+        in("rsi") a1,
+        in("rdx") a2,
+        in("r10") a3,
+        lateout("rcx") _,   // clobbered by SYSCALL (saves user RIP)
+        lateout("r11") _,   // clobbered by SYSCALL (saves user RFLAGS)
+        options(nostack)
+    );
     ret
 }
 
@@ -75,6 +92,20 @@ unsafe fn syscall_raw(id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> 
         in("x3") a2,
         in("x4") a3,
         options(nostack, preserves_flags)
+    );
+    // SAFETY: same contract as the typed `syscall` variant above.
+    // `id` is a raw numeric syscall number (e.g. 500/501/502/503 for block I/O).
+    #[cfg(target_arch = "x86_64")]
+    asm!(
+        "syscall",
+        inlateout("rax") id => ret,
+        in("rdi") a0,
+        in("rsi") a1,
+        in("rdx") a2,
+        in("r10") a3,
+        lateout("rcx") _,
+        lateout("r11") _,
+        options(nostack)
     );
     ret
 }

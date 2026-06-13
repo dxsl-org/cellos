@@ -28,6 +28,19 @@ pub unsafe extern "C" fn _start() -> ! {
         "svc  #0",
         "1: b 1b"
     );
+    // ViCell x86_64 ABI: RAX=syscall_nr, RDI=a0.
+    // The kernel-supplied stack is 16-byte-aligned at entry; AND to guarantee it
+    // before the CALL so the SysV AMD64 ABI requirement is always satisfied.
+    // sys_exit(0): ViSyscall::Exit = 60, exit code in RDI = 0.
+    #[cfg(target_arch = "x86_64")]
+    core::arch::naked_asm!(
+        "and rsp, -16",
+        "call main",
+        "mov rax, 60",    // ViSyscall::Exit
+        "xor rdi, rdi",   // exit code = 0
+        "syscall",
+        "2: jmp 2b",
+    );
 }
 
 // User applications must define `fn main() -> !` or `fn main()`.

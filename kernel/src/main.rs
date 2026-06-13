@@ -35,9 +35,9 @@ pub mod platform;
 // Re-export types for convenience
 pub use types::*;
 
-// Embed Init Binary (stripped by build.rs, served from OUT_DIR).
-// RV32 Nano (Phase 31) and x86_64 bring-up have no init ELF.
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+// Embed Init Binary (stripped by build.rs, served from EMBEDDED_OUT_DIR).
+// RV32 Nano (Phase 31) has no init ELF; x86_64 is now included (Phase 04).
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
 static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init"));
 
 /// Kernel entry point called from HAL boot code
@@ -306,8 +306,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     task::smp::start_secondaries();
 
     // 8. Spawn Embedded Init
-    // RV32 Nano / x86_64 bring-up: no init binary — boot to idle loop.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+    // RV32 Nano bring-up: no init binary — boot to idle loop.
+    // x86_64 now included (Phase 04): embedded init ELF at embedded-x86_64/init.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
     {
         log_info("Spawning Embedded Init...");
 
