@@ -61,7 +61,6 @@ members = [
     "cells/apps/sensor-demo",
     "cells/apps/gpio-test-rv",
     "cells/apps/robot-demo",
-    "cells/apps/utils",
     "cells/apps/sys-tools",
     "cells/apps/net-tools",
     "cells/apps/https-demo",

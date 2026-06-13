@@ -113,6 +113,58 @@ impl QemuRunner {
         (Self::boot_with_netdev(kernel, disk, &netdev), host_port)
     }
 
+    /// Boot a **diskless** riscv64 kernel for the shell-test CI job (Phase E).
+    ///
+    /// The shell-test kernel embeds init + vfs + app-shell (with `shell_test`
+    /// feature) directly in its `kernel_fs.img` blob at compile time — no VirtIO
+    /// block device or external disk image is required.  This method omits the
+    /// `-drive`/`-device virtio-blk` args entirely and uses a minimal machine
+    /// config (BIOS + virt machine, 256 MB RAM, serial over TCP).
+    pub fn boot_rv64(kernel: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_binary())
+            .args([
+                "-machine", "virt",
+                "-m", "256M",
+                "-nographic",
+                "-bios", "default",
+                "-kernel", kernel,
+                "-monitor", "none",
+                "-serial", &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-riscv64 must be on PATH");
+
+        listener
+            .set_nonblocking(false)
+            .expect("blocking listener");
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+
+        Self { child, writer: Some(writer), output, temp_disk: None }
+    }
+
     /// Internal: boot QEMU with a caller-specified `-netdev` value.
     ///
     /// All other QEMU args are fixed to match `run.ps1`; only the netdev string
