@@ -491,6 +491,8 @@ pub enum Syscall {
     GetTime { op: usize },
     /// 300: GpuFlush — copy cell pixel buffer to VirtIO GPU framebuffer.
     GpuFlush { data_ptr: usize, data_len: usize, xy: usize, wh: usize },
+    /// 301: GpuCursor — set sprite (op=0) or move (op=1) the VirtIO GPU hardware cursor.
+    GpuCursor { op: usize, data_ptr: usize, xy: usize, hot: usize },
     /// 310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.
     NetTx { frame_ptr: usize, frame_len: usize },
     /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
@@ -587,6 +589,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::FileOp { .. }        => V::FileOp,
         Syscall::GetTime { .. }       => V::GetTime,
         Syscall::GpuFlush { .. }      => V::GpuFlush,
+        Syscall::GpuCursor { .. }     => V::GpuCursor,
         Syscall::NetTx { .. }         => V::NetTx,
         Syscall::NetRx { .. }         => V::NetRx,
         Syscall::HotSwap { .. }       => V::HotSwap,
@@ -1687,6 +1690,34 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(SyscallError::Unknown) // GPU not initialised
             }
         }
+        Syscall::GpuCursor { op, data_ptr, xy, hot } => {
+            let x     = ((xy  >> 16) & 0xFFFF) as u32;
+            let y     = ( xy         & 0xFFFF) as u32;
+            let hot_x = ((hot >> 16) & 0xFFFF) as u32;
+            let hot_y = ( hot        & 0xFFFF) as u32;
+            match op {
+                0 => {
+                    // op=0: set sprite — data_ptr → 64×64 BGRA8888 (exactly 16384 bytes).
+                    const SPRITE_LEN: usize = 64 * 64 * 4;
+                    // SAFETY: data_ptr is a user-space address in the SAS; the cursor module
+                    // validates that the slice length equals SPRITE_LEN before passing it to
+                    // the virtio-drivers layer.
+                    let image = unsafe {
+                        core::slice::from_raw_parts(data_ptr as *const u8, SPRITE_LEN)
+                    };
+                    crate::task::drivers::virtio_gpu::cursor::set_sprite(image, x, y, hot_x, hot_y)
+                        .map(|_| 0usize)
+                        .map_err(|_| SyscallError::Unknown)
+                }
+                1 => {
+                    // op=1: move — data_ptr and hot unused.
+                    crate::task::drivers::virtio_gpu::cursor::move_to(x, y)
+                        .map(|_| 0usize)
+                        .map_err(|_| SyscallError::Unknown)
+                }
+                _ => Err(SyscallError::InvalidInput),
+            }
+        }
         Syscall::NetTx { frame_ptr, frame_len } => {
             if !caller_has_network(caller_id) {
                 return Err(SyscallError::PermissionDenied);
@@ -2123,6 +2154,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::FileOp        => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
         ViSyscall::GetTime       => Syscall::GetTime { op: a0 },
         ViSyscall::GpuFlush      => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: a3 },
+        ViSyscall::GpuCursor     => Syscall::GpuCursor { op: a0, data_ptr: a1, xy: a2, hot: a3 },
         ViSyscall::NetTx         => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
         ViSyscall::NetRx         => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
         ViSyscall::StateStash    => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },

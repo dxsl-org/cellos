@@ -24,7 +24,7 @@ mod z_order;
 use api::display::{AttachGrant, DamageNotify, PixelFormat, compositor_ops, Rect};
 use input_handler::{InputState, connect_to_input, handle_input_event};
 use ostd::io::println;
-use ostd::syscall::{sys_grant_slice, sys_recv, sys_send, SyscallResult};
+use ostd::syscall::{sys_gpu_cursor, sys_grant_slice, sys_recv, sys_send, SyscallResult};
 use render::{render_frame, ScreenFb};
 use surface_table::SurfaceTable;
 use z_order::ZOrder;
@@ -32,6 +32,24 @@ use z_order::ZOrder;
 /// IPC opcode prefix byte identifying an input event from the input service.
 /// Must match `input_handler::INPUT_EVENT_OPCODE` (0x10).
 const INPUT_EVENT_OPCODE: u8 = 0x10;
+
+/// Build a 64×64 BGRA8888 sprite for the VirtIO GPU hardware cursor.
+///
+/// Stamps the 16×16 software cursor into the top-left corner; all other pixels
+/// are transparent (0x00_00_00_00).  The 64×64 size is fixed by the VirtIO GPU
+/// spec (`CURSOR_RECT` in virtio-drivers `gpu.rs:145-148`).
+fn build_hw_cursor_sprite() -> [u8; 64 * 64 * 4] {
+    let mut buf = [0u8; 64 * 64 * 4];
+    for row in 0..cursor_sprite::CURSOR_H as usize {
+        for col in 0..cursor_sprite::CURSOR_W as usize {
+            if let Some(px) = cursor_sprite::cursor_pixel(row as u32, col as u32) {
+                let off = (row * 64 + col) * 4;
+                buf[off..off + 4].copy_from_slice(&px);
+            }
+        }
+    }
+    buf
+}
 
 #[no_mangle]
 pub fn main() {
@@ -48,6 +66,27 @@ pub fn main() {
 
     // Register as input focus so keyboard + mouse events flow to us.
     connect_to_input(&mut input);
+
+    // Attempt to upload the hardware cursor sprite (64×64 BGRA8888).
+    // The 16×16 software sprite is placed in the top-left; the rest is transparent.
+    // If the GPU cursor is unavailable (setup_cursor returns error), we fall back to
+    // the Phase 01 software cursor path for the session.
+    {
+        let (hot_x, hot_y) = cursor_sprite::hotspot();
+        let sprite = build_hw_cursor_sprite();
+        let ok = sys_gpu_cursor(
+            0,
+            sprite.as_ptr(),
+            0, 0,
+            hot_x as u32, hot_y as u32,
+        ).is_ok();
+        input.hw_cursor = ok;
+        if ok {
+            println("[compositor] hardware cursor active");
+        } else {
+            println("[compositor] hardware cursor unavailable — using software cursor");
+        }
+    }
 
     let mut buf = [0u8; 512];
 

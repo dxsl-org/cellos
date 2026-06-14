@@ -696,6 +696,37 @@ pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<()
     if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
 }
 
+/// Set or move the VirtIO GPU hardware cursor.
+///
+/// **op = 0 (set sprite):** uploads a 64×64 BGRA8888 sprite and positions the
+/// cursor at `(x, y)` with the hotspot at `(hot_x, hot_y)`. `sprite` must be
+/// exactly `64 * 64 * 4 = 16384` bytes.
+///
+/// **op = 1 (move):** repositions the existing cursor to `(x, y)`. The `sprite`
+/// pointer and hotspot values are ignored; pass a zero-length slice and `(0,0)`.
+///
+/// # Errors
+/// Returns `Err` when the GPU cursor hardware is unavailable or the sprite size
+/// is wrong.
+pub fn sys_gpu_cursor(
+    op: usize,
+    sprite: *const u8,
+    x: u32,
+    y: u32,
+    hot_x: u32,
+    hot_y: u32,
+) -> Result<(), SyscallError> {
+    let xy  = (((x as usize)     & 0xFFFF) << 16) | ((y     as usize) & 0xFFFF);
+    let hot = (((hot_x as usize) & 0xFFFF) << 16) | ((hot_y as usize) & 0xFFFF);
+    // SAFETY: for op=0 sprite must point to a 64*64*4-byte BGRA buffer owned by the
+    // caller; the kernel validates the length and reads exactly that many bytes.
+    // For op=1 sprite is ignored; passing null or a valid pointer are both safe.
+    let ret = unsafe {
+        syscall(ViSyscall::GpuCursor, op, sprite as usize, xy, hot)
+    };
+    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+}
+
 /// Transmit one Ethernet frame through the kernel VirtIO NIC.
 ///
 /// `frame` must contain a complete Ethernet frame (the kernel prepends the

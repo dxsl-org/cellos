@@ -68,6 +68,10 @@ pub enum ViSyscall {
     /// Flush a pixel rectangle from a cell-provided buffer to the GPU framebuffer.
     /// ABI: a0 = data_ptr, a1 = data_len, a2 = x, a3 = y (w+h embedded in len)
     GpuFlush = 300,
+    /// Set or move the VirtIO GPU hardware cursor.
+    /// ABI: a0 = op (0=set sprite, 1=move), a1 = data_ptr (op=0: 64×64 BGRA sprite),
+    ///      a2 = xy ((x<<16)|y), a3 = hot ((hot_x<<16)|hot_y, op=0 only).
+    GpuCursor = 301,
 
     // === Network ===
     /// Transmit one Ethernet frame through the kernel VirtIO NIC.
@@ -293,6 +297,7 @@ impl ViSyscall {
             Self::FileOp        => Some(24),
             Self::GetTime       => Some(25),
             Self::GpuFlush      => Some(26),
+            Self::GpuCursor     => Some(43),
             Self::NetTx         => Some(27),
             Self::NetRx         => Some(28),
             Self::RecvTimeout   => Some(29),
@@ -388,6 +393,7 @@ impl From<usize> for ViSyscall {
             216 => ViSyscall::GrantUnregister,
             217 => ViSyscall::WaitForEvent,
             300 => ViSyscall::GpuFlush,
+            301 => ViSyscall::GpuCursor,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,
             400 => ViSyscall::HotSwap,

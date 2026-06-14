@@ -1,3 +1,5 @@
+pub mod cursor;
+
 use crate::sync::Spinlock;
 use crate::task::drivers::virtio_hal::VirtioHal as VirtIOHal;
 use core::ptr::NonNull;
