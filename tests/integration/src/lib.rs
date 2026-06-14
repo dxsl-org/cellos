@@ -1136,7 +1136,7 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None }
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
 }
 
