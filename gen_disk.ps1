@@ -42,6 +42,7 @@ cargo build --release `
     -p service-input -p service-net -p service-compositor 2>&1 | Select-Object -Last 5
 cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench + bench-probe
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
+cargo build --release -p app-sys-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Last 3
 cargo build --release -p input-test 2>&1 | Select-Object -Last 3
 
@@ -76,6 +77,11 @@ $httpd_bin  = "$rel_dir\httpd"            # Phase U: HTTP server
 $mqtt_bin   = "$rel_dir\mqtt"             # Phase X-5: MQTT client
 $posix_shim_test_bin = "$rel_dir\posix-shim-test"  # Tier 1b POSIX shim test cell
 $input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input delivery test
+$ls_bin   = "$rel_dir\ls"    # M3.2 embedded debug utils
+$cat_bin  = "$rel_dir\cat"
+$echo_bin = "$rel_dir\echo"
+$ps_bin   = "$rel_dir\ps"
+$kill_bin = "$rel_dir\kill"
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -122,6 +128,11 @@ $kfs_args = @(
 )
 if ($lua_bin)  { $kfs_args += @($lua_bin,  "/bin/lua") }
 if ($upy_bin)  { $kfs_args += @($upy_bin,  "/bin/python") }
+if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
+if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
+if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
+if (Test-Path $ps_bin)   { $kfs_args += @($ps_bin,   "/bin/ps") }
+if (Test-Path $kill_bin) { $kfs_args += @($kill_bin, "/bin/kill") }
 python "$tools_dir\mkfat32.py" @kfs_args 2>&1
 Remove-Item -Recurse -Force $tmpDir
 $kfs_mb = [Math]::Round((Get-Item "kernel\src\embedded\kernel_fs.img").Length/1MB,1)
@@ -182,6 +193,11 @@ if (Test-Path $httpd_bin) { $table_args += "/bin/httpd=$httpd_bin" }
 if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
 if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posix_shim_test_bin" }
 if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
+if (Test-Path $ls_bin)   { $table_args += "/bin/ls=$ls_bin" }
+if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
+if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }
+if (Test-Path $ps_bin)   { $table_args += "/bin/ps=$ps_bin" }
+if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
 python "$tools_dir\write-cell-table.py" @table_args
 
 Write-Host "Done. disk_v3.img is ready."

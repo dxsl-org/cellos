@@ -59,7 +59,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | VFS robustness (quota enforce, access control) | M2.1 | ✅ | G1 |
 | 🆕 ARM64 full bring-up (beyond ring-3 smoke) | ext. M1.3 | ✅ COMPLETE (2026-06-12) — 6/6 QEMU integration tests pass (GIC, timer, MMU, VirtIO, PL011 RX, GPIO periph-demo); fatfs LFN fix | **G1** |
 | HMI feature-gate (compositor/input, optional) | M2.2/M2.4 subset | 📋 | G1 (opt) |
-| Minimal utilities (embedded debug) | M3.2 subset | 📋 | G1 |
+| Minimal utilities (embedded debug) | M3.2 subset | ✅ DONE 2026-06-16 — standalone /bin/{ls,cat,echo,ps,kill} in sys-tools; embedded in kernel_fs.img + disk | G1 |
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (skeleton + proven on RISC-V; ARM64 kernel build complete — GPIO periph-demo verified on QEMU virt) | **G1** (graduation) |

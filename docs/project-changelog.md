@@ -4,6 +4,27 @@
 
 ---
 
+## [2026-06-16] M3.2 — Minimal embedded debug utilities (/bin/ls, cat, echo, ps, kill)
+
+### Added
+- **5 standalone Cell binaries** in `cells/apps/sys-tools/src/bin/`: `ls.rs`, `cat.rs`, `echo.rs` (new), `kill.rs` (replaced stub with real impl)
+- **Linker scripts**: `sys-tools.ld` (RISC-V/x86_64, VA 0x2A000000) + `sys-tools-arm64.ld` (arm64, VA 0x30000000) — transient cells share one VA base since they run sequentially
+- **gen_disk.ps1**: build step + 5 kfs_args entries + 5 table_args entries (ls/cat/echo/ps/kill in both kernel_fs.img and disk_v3.img)
+- **scripts/build-x86_64-cells.ps1**: build step + 5 cells array entries
+- Roadmap M3.2 marked ✅ DONE
+
+### Details
+- `ls [path]`: lists directory entries via `ostd::fs::read_dir`; defaults to `/`
+- `cat <path>`: streams file via `sys_open`/`sys_read`/`sys_close`
+- `echo [text]`: prints spawn-args stash + newline
+- `kill <tid>`: cooperative shutdown (0xFF sentinel if waiting) or force-exit; replaced empty stub
+- Binary sizes (RISC-V release): ls=17KB, cat=17KB, echo=16KB, ps=18KB, kill=19KB
+
+### Root cause / context
+G1 milestone M3.2 — debug-critical utilities needed for embedded workflows. Shell built-ins exist but standalone `/bin/*` Cells are required for `exec` dispatch and disk-based deployment.
+
+---
+
 ## [2026-06-16] Track B — RISC-V IOMMU + Intel VT-d + PCIe e1000 NIC driver
 
 ### Summary

@@ -38,11 +38,24 @@ if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LAS
 
 $env:RUSTFLAGS = ""
 
+# Build sys-tools (ls/cat/echo/ps/kill — M3.2)
+Write-Host "Building app-sys-tools (ls/cat/echo/ps/kill)..."
+$env:RUSTFLAGS = $rustflags
+$cmd = "cargo build --release -p app-sys-tools --target $target $buildStd 2>&1"
+Invoke-Expression $cmd | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "app-sys-tools build failed" }
+$env:RUSTFLAGS = ""
+
 # Collect available binaries
 $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"  },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
-    @{ Bin = "service-config"; Dst = "/bin/config" }
+    @{ Bin = "service-config"; Dst = "/bin/config" },
+    @{ Bin = "ls";             Dst = "/bin/ls"     },
+    @{ Bin = "cat";            Dst = "/bin/cat"    },
+    @{ Bin = "echo";           Dst = "/bin/echo"   },
+    @{ Bin = "ps";             Dst = "/bin/ps"     },
+    @{ Bin = "kill";           Dst = "/bin/kill"   }
 )
 
 $imgArgs = @("kernel\src\embedded-x86_64\kernel_fs.img")
