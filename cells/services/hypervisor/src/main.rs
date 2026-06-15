@@ -38,6 +38,7 @@ mod pl011;
 mod psci;
 mod run_loop;
 mod timer;
+mod virtio_blk;
 mod virtio_console;
 mod virtio_mmio;
 mod virtqueue;
