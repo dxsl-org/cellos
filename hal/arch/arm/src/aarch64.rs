@@ -8,12 +8,16 @@ use hal_arch_trait::Arch;
 // Sub-modules only compile when targeting AArch64.
 #[cfg(target_arch = "aarch64")] pub mod boot;
 #[cfg(target_arch = "aarch64")] pub mod context;
+#[cfg(target_arch = "aarch64")] pub mod el2;
 #[cfg(target_arch = "aarch64")] pub mod gic;
 #[cfg(target_arch = "aarch64")] pub mod paging;
 #[cfg(target_arch = "aarch64")] pub mod rtc;
+pub mod stage2_regs; // non-AArch64 builds get ENOSYS stubs; no cfg gate needed
 #[cfg(target_arch = "aarch64")] pub mod timer;
 #[cfg(target_arch = "aarch64")] pub mod trap;
+#[cfg(target_arch = "aarch64")] pub mod trap_el2;
 #[cfg(target_arch = "aarch64")] pub mod uart_pl011;
+#[cfg(target_arch = "aarch64")] pub mod vcpu;
 
 #[cfg(target_arch = "aarch64")] pub use context::CpuContext as Context;
 #[cfg(target_arch = "aarch64")] pub use paging::PageTable;
@@ -84,6 +88,31 @@ impl Arch for AArch64Arch {
 pub fn set_kernel_stack(sp: usize) {
     // SAFETY: TPIDR_EL1 is EL1-private; writing from EL1 is safe.
     unsafe { core::arch::asm!("msr tpidr_el1, {}", in(reg) sp, options(nomem, nostack)); }
+}
+
+// ── Hypervisor skeleton (P01) ─────────────────────────────────────────────────
+
+use hal_hypervisor::{ViHypervisor, ViVmExit, ViVmStub, ViVcpuStub, ViStage2TableStub};
+use types::{ViResult, ViError};
+
+/// AArch64 hypervisor trait skeleton (ViHypervisor wiring deferred to P04).
+///
+/// Real Stage-2 + vcpu world-switch lives in `vcpu.rs` (`run_vcpu_impl`) and is
+/// called directly by `kernel::hypervisor::smoke_guest` in P03.  The trait
+/// methods are wired to concrete types once P04 adds the VMM syscalls.
+pub struct AArch64Hypervisor;
+
+#[cfg(target_arch = "aarch64")]
+impl ViHypervisor for AArch64Hypervisor {
+    type Vm = ViVmStub;
+    type Vcpu = ViVcpuStub;
+    type Stage2Table = ViStage2TableStub;
+
+    fn create_vm(&self) -> ViResult<Self::Vm> { Err(ViError::NotSupported) }
+    fn create_vcpu(&self, _vm: &mut Self::Vm) -> ViResult<Self::Vcpu> { Err(ViError::NotSupported) }
+    fn map_guest(&self, _t: &mut Self::Stage2Table, _ipa: u64, _hpa: u64, _pages: usize, _w: bool) -> ViResult<()> { Err(ViError::NotSupported) }
+    fn run_vcpu(&self, _v: &mut Self::Vcpu) -> ViResult<ViVmExit> { Err(ViError::NotSupported) }
+    fn inject_irq(&self, _v: &mut Self::Vcpu, _intid: u32) -> ViResult<()> { Err(ViError::NotSupported) }
 }
 
 /// `hal::arch` shim — exposes a RISC-V-compatible API surface so the ViCell

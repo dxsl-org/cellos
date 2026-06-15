@@ -52,3 +52,5 @@ default = []
 board-vf2 = []
 # Raspberry Pi 4 (BCM2711): enables SDHCI probe at 0xFE340000 (Arasan eMMC2).
 board-rpi4 = []
+# Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
+test-hooks = []

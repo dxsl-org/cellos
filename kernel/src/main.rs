@@ -13,6 +13,7 @@ use core::panic::PanicInfo;
 pub mod audit;
 pub mod boot;
 pub mod cell;
+pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod resource_registry;
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
@@ -291,11 +292,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log_info("x86_64: ramdisk + UART RX IRQ initialised");
     }
 
-    // PCIe ECAM scan + NVMe init — runs on all PCIe-capable arches after paging.
-    // On riscv64/aarch64 the ECAM window is identity-mapped in init_kernel_paging.
-    // On x86_64 the ECAM window (0xB000_0000, 1 MiB) sits below 4 GiB and is
-    // accessible under Limine's PML4 which identity-maps MMIO below 4 GiB.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    // PCIe ECAM scan + NVMe init — runs on arches where NVMe is the primary disk.
+    // ARM64 virt uses VirtIO block (not PCIe NVMe); accessing 0x3F000000 on QEMU
+    // virt 7+ triggers a Synchronous External Abort (bus error) — skip on aarch64.
+    #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         task::drivers::pcie_ecam::init();
         task::drivers::blk_nvme::init_driver();
