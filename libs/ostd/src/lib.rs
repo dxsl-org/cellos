@@ -8,10 +8,7 @@
 
 extern crate alloc;
 
-// ostd - ViCell Standard Library
-//
-// Replacement for Rust's std library for ViCell Cells.
-// INTERFACE ONLY - NO IMPLEMENTATION YET.
+// ostd - ViCell Standard Library for Cells
 
 pub use api::*;
 
@@ -23,6 +20,10 @@ pub use alloc::vec;
 /// Result type used throughout ViCell.
 pub type Result<T, E = ViError> = core::result::Result<T, E>;
 
+/// `no_std` hash collections (HashMap, HashSet via hashbrown).
+pub mod collections;
+/// Re-export `embedded-io` so cells can implement ecosystem traits without a direct dep.
+pub use embedded_io;
 pub mod fast_ipc;
 /// Typed linear Grant handles for zero-copy shared memory (Singularity exchange-heap pattern).
 pub mod grant;
@@ -66,6 +67,18 @@ pub mod font;
 /// Scalable glyph atlas backed by fontdue (no_std + hashbrown feature).
 pub mod font_atlas;
 
+/// Service discovery helpers (lookup / register well-known services).
+pub mod service;
+
+/// Generic input event client — focus registration and event polling for any Cell.
+pub mod input;
+
+/// App SDK — structured IPC event loop for Cell applications.
+pub mod app;
+
+/// Service-side message dispatch: [`MessageHandler`] trait + [`dispatch::run_service`] loop.
+pub mod dispatch;
+
 /// Task spawning.
 pub mod task {
     use crate::*;
@@ -74,4 +87,30 @@ pub mod task {
     pub fn yield_now() {
         syscall::sys_yield();
     }
+}
+
+/// Convenience entry-point macro for App SDK cells.
+///
+/// Wraps a handler function in a `main()` body that creates an [`app::AppContext`]
+/// and calls `run()`. Eliminates boilerplate for cells that only need the typed
+/// event loop.
+///
+/// # Usage
+/// ```no_run
+/// use ostd::app::{AppContext, AppEvent};
+///
+/// fn my_handler(_ctx: &mut AppContext, ev: AppEvent) {
+///     if let AppEvent::RawMessage { .. } = ev { /* ... */ }
+/// }
+///
+/// ostd::run_app!(my_handler);
+/// ```
+#[macro_export]
+macro_rules! run_app {
+    ($handler:expr) => {
+        #[no_mangle]
+        pub fn main() {
+            $crate::app::AppContext::new().run($handler);
+        }
+    };
 }

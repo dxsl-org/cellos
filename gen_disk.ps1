@@ -43,6 +43,7 @@ cargo build --release `
 cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench + bench-probe
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Last 3
+cargo build --release -p input-test 2>&1 | Select-Object -Last 3
 
 # 1b. Update kernel embedded cells (init, shell, vfs, config) from release builds.
 # These 4 cells are embedded in kernel_fs.img via include_bytes!.
@@ -74,6 +75,7 @@ $wget_bin   = "$rel_dir\wget"             # Phase U: HTTP wget tool
 $httpd_bin  = "$rel_dir\httpd"            # Phase U: HTTP server
 $mqtt_bin   = "$rel_dir\mqtt"             # Phase X-5: MQTT client
 $posix_shim_test_bin = "$rel_dir\posix-shim-test"  # Tier 1b POSIX shim test cell
+$input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input delivery test
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -170,6 +172,7 @@ if (Test-Path $wget_bin)  { $table_args += "/bin/wget=$wget_bin" }
 if (Test-Path $httpd_bin) { $table_args += "/bin/httpd=$httpd_bin" }
 if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
 if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posix_shim_test_bin" }
+if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
 python "$tools_dir\write-cell-table.py" @table_args
 
 Write-Host "Done. disk_v3.img is ready."

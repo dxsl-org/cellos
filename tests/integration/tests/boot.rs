@@ -1589,6 +1589,52 @@ fn input_keyboard_e2e() {
         });
 }
 
+/// P05: bare-cell input delivery — a cell with NO viui dependency claims focus
+/// and receives a key event through `ostd::input` + `AppContext::Input`.
+///
+/// Flow:
+///   1. Boot → `ViCell >` (full userspace running).
+///   2. input-test starts (optional spawn in init), retries `request_input_focus()`
+///      until it steals focus from robot-dashboard.
+///   3. Inject "a" via QMP → VirtIO keyboard → input service → input-test.
+///   4. input-test logs `[input-test] key received`.
+///
+/// Prerequisites: kernel + `disk_v3.img` (must include `/bin/input-test`).
+#[test]
+fn input_bare_cell() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+
+    // Wait for input-test to acquire focus (it retries until it steals from
+    // robot-dashboard, which gets it first).
+    qemu.wait_for("[input-test] focus granted", 20)
+        .unwrap_or_else(|e| {
+            panic!(
+                "input-test did not claim focus: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // Settle: let the AppContext event loop enter sys_recv before we inject.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    // Inject "a" key via QMP (press + release pair).
+    qemu.send_qemu_key("a");
+
+    // Verify the bare cell received the key with no viui dependency.
+    qemu.wait_for("[input-test] key received", 15)
+        .unwrap_or_else(|e| {
+            panic!(
+                "input-test did not receive key: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
 // ── Tier 1b: POSIX C shim integration tests ───────────────────────────────────
 
 /// Tier 1b: `getentropy(2)` shim via sys_get_random (opcode 214).

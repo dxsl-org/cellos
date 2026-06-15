@@ -144,8 +144,17 @@ pub extern "C" fn main() {
     let _ = sys_spawn_from_path("/bin/sensor-demo");
     // Optional SPI demo (bit-bang over GPIO pins 2/3/4/5) — AArch64 only.
     let _ = sys_spawn_from_path("/bin/spi-demo");
+    // Optional PWM bit-bang demo (50 Hz servo sweep over GPIO) — AArch64 only.
+    let _ = sys_spawn_from_path("/bin/pwm-demo");
+    // Optional ADC simulation demo (triangle-wave ramp channels) — all arches.
+    let _ = sys_spawn_from_path("/bin/adc-demo");
+    // Optional CAN loopback demo (in-memory loopback, no hardware) — all arches.
+    let _ = sys_spawn_from_path("/bin/can-demo");
     // VFS integration test suite: only present in test-hooks kernel images.
     let _ = sys_spawn_from_path("/bin/vfs-test");
+    // Bare-cell input delivery test — ostd::input focus + event loop, no viui.
+    // Only present in test disk images; silently skipped in production.
+    let _ = sys_spawn_from_path("/bin/input-test");
 
     // Register a death notification for every live service. A single recv loop
     // below now supervises ALL of them (wait-any): when any service exits or

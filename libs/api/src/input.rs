@@ -156,6 +156,114 @@ pub enum InputEvent {
 /// Maximum serialised size of an `InputEvent` over IPC (64 bytes reserved).
 pub const INPUT_EVENT_IPC_SIZE: usize = 64;
 
+/// Opcode byte that prefixes every input-service → app IPC message.
+///
+/// Layout: `[INPUT_EVENT_OPCODE: u8][encode_event output: 64 bytes]`
+pub const INPUT_EVENT_OPCODE: u8 = 0x10;
+
+/// Deserialise a 64-byte `encode_event` buffer back into an `InputEvent`.
+///
+/// Returns `None` for unknown discriminants or truncated payloads.
+pub fn decode_event(buf: &[u8]) -> Option<InputEvent> {
+    if buf.is_empty() { return None; }
+    match buf[0] {
+        0 => { // Key
+            let p = buf.get(1..)?;
+            if p.len() < 22 { return None; }
+            let ts  = u64::from_le_bytes([p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]]);
+            let sc  = u32::from_le_bytes([p[8],p[9],p[10],p[11]]);
+            let ksv = u32::from_le_bytes([p[12],p[13],p[14],p[15]]);
+            let ch  = u32::from_le_bytes([p[16],p[17],p[18],p[19]]);
+            let mods = Modifiers(p[20]);
+            let state = match p[21] {
+                0 => KeyState::Released,
+                1 => KeyState::Pressed,
+                2 => KeyState::Repeated,
+                _ => return None,
+            };
+            let keysym = keysym_from_u32(ksv);
+            Some(InputEvent::Key(KeyEvent {
+                timestamp_ticks: ts,
+                scancode: sc,
+                keysym,
+                character: ch,
+                modifiers: mods,
+                state,
+                _pad: [0; 2],
+            }))
+        }
+        1 => { // MouseMove
+            let p = buf.get(1..)?;
+            if p.len() < 16 { return None; }
+            let x  = i32::from_le_bytes([p[0],p[1],p[2],p[3]]);
+            let y  = i32::from_le_bytes([p[4],p[5],p[6],p[7]]);
+            let dx = i32::from_le_bytes([p[8],p[9],p[10],p[11]]);
+            let dy = i32::from_le_bytes([p[12],p[13],p[14],p[15]]);
+            Some(InputEvent::MouseMove { x, y, dx, dy })
+        }
+        2 => { // MouseButton
+            let p = buf.get(1..)?;
+            if p.len() < 2 { return None; }
+            let button = match p[0] {
+                0 => MouseButton::Left,
+                1 => MouseButton::Right,
+                2 => MouseButton::Middle,
+                3 => MouseButton::Back,
+                4 => MouseButton::Forward,
+                _ => return None,
+            };
+            let state = match p[1] {
+                0 => KeyState::Released,
+                1 => KeyState::Pressed,
+                _ => return None,
+            };
+            Some(InputEvent::MouseButton { button, state })
+        }
+        3 => { // MouseScroll
+            let p = buf.get(1..)?;
+            if p.len() < 8 { return None; }
+            let dx = i32::from_le_bytes([p[0],p[1],p[2],p[3]]);
+            let dy = i32::from_le_bytes([p[4],p[5],p[6],p[7]]);
+            Some(InputEvent::MouseScroll { dx, dy })
+        }
+        _ => None,
+    }
+}
+
+/// Map a `repr(u32)` KeySym discriminant back to the enum variant.
+fn keysym_from_u32(v: u32) -> KeySym {
+    match v {
+        0x0001 => KeySym::Escape,
+        0x0002 => KeySym::Return,
+        0x0003 => KeySym::Backspace,
+        0x0004 => KeySym::Tab,
+        0x0005 => KeySym::Delete,
+        0x0006 => KeySym::Insert,
+        0x0010 => KeySym::Up,
+        0x0011 => KeySym::Down,
+        0x0012 => KeySym::Left,
+        0x0013 => KeySym::Right,
+        0x0020 => KeySym::Home,
+        0x0021 => KeySym::End,
+        0x0022 => KeySym::PageUp,
+        0x0023 => KeySym::PageDown,
+        0x0101 => KeySym::F1,
+        0x0102 => KeySym::F2,
+        0x0103 => KeySym::F3,
+        0x0104 => KeySym::F4,
+        0x0105 => KeySym::F5,
+        0x0106 => KeySym::F6,
+        0x0107 => KeySym::F7,
+        0x0108 => KeySym::F8,
+        0x0109 => KeySym::F9,
+        0x010A => KeySym::F10,
+        0x010B => KeySym::F11,
+        0x010C => KeySym::F12,
+        0x8000 => KeySym::Printable,
+        _      => KeySym::Unknown,
+    }
+}
+
 /// Serialise an `InputEvent` into a fixed 64-byte IPC buffer.
 ///
 /// Format: byte[0] = discriminant, byte[1..] = variant payload.
