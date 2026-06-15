@@ -58,6 +58,7 @@ members = [
     "cells/services/input",
     "cells/services/power",
     "cells/services/config",
+    "cells/services/hypervisor",
     
     # Cells - Apps
     "cells/apps/init",
@@ -97,6 +98,7 @@ authors = ["ViCell Team"]
 [workspace.dependencies]
 spin     = { version = "0.9",  default-features = false, features = ["spin_mutex"] }
 fontdue  = { version = "0.9",  default-features = false, features = ["hashbrown"] }
+vm-fdt   = { version = "0.3",  default-features = false, features = ["alloc"] }
 
 [profile.dev]
 panic = "abort"

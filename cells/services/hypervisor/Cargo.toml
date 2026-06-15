@@ -1,0 +1,14 @@
+[package]
+name = "service-hypervisor"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "hypervisor"
+path = "src/main.rs"
+
+[dependencies]
+types  = { path = "../../../libs/types" }
+api    = { path = "../../../libs/api" }
+ostd   = { path = "../../../libs/ostd" }
+vm-fdt = { workspace = true }
