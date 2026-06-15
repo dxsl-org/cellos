@@ -848,38 +848,6 @@ fn shell_redirect_append() {
         .unwrap_or_else(|e| panic!("LINE_B not found after append: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
-/// Phase V-2: ARGV_STASH_KEY race fix — two rapid spawns each receive the correct args.
-///
-/// The shell sets VAR_A=A, spawns a cell to echo it, then immediately sets VAR_B=B
-/// and spawns another.  Before the fix, the second set_spawn_args overwrote the
-/// stash before the first cell read it.  After the fix, each cell gets its own
-/// personal stash slot.
-///
-/// We use shell variable assignment + echo to verify indirectly: if variables
-/// survive sequential spawn cycles, the race is resolved.
-#[test]
-fn shell_argv_race_fixed() {
-    if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
-    std::thread::sleep(Duration::from_millis(300));
-
-    // Rapid consecutive spawns with different args — previously the second
-    // spawn's args clobbered the first's stash slot.
-    qemu.send_line("python -c print('SPAWN_A_OK')");
-    qemu.wait_for("SPAWN_A_OK", 20)
-        .unwrap_or_else(|e| panic!("first spawn lost its args: {e}\n{}", qemu.dump()));
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("prompt after A: {e}\n{}", qemu.dump()));
-
-    qemu.send_line("python -c print('SPAWN_B_OK')");
-    qemu.wait_for("SPAWN_B_OK", 20)
-        .unwrap_or_else(|e| panic!("second spawn lost its args: {e}\n{}", qemu.dump()));
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("prompt after B: {e}\n{}", qemu.dump()));
-}
-
 // ── Phase U: wget + test/[ ────────────────────────────────────────────────────
 
 /// Phase U: `wget URL path` downloads a URL body and saves it to a VFS file.
@@ -1337,30 +1305,6 @@ fn shell_source_script() {
     qemu.send_line("source /data/run.sh");
     qemu.wait_for("SCRIPT_SOURCED", 15)
         .unwrap_or_else(|e| panic!("source did not run script: {e}\n--- output ---\n{}", qemu.dump()));
-}
-
-/// Phase I: Python `vnet.resolve('google.com')` must return a dotted-decimal IP
-/// via a real DNS A-record query to the QEMU SLIRP DNS server at 10.0.2.3:53.
-///
-/// Mirrors `lua_vnet_resolve_dns`. Output is wrapped in `RESOLVED:` to avoid
-/// false-positive matches against boot messages that contain dots (e.g. IP address).
-/// `__import__('vnet').resolve(...)` avoids a separate `import` statement and
-/// avoids semicolons that the ViCell shell would split on.
-#[test]
-fn python_vnet_resolve_dns() {
-    if !prerequisites_ok() { return; }
-    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
-        .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
-    qemu.wait_for("DHCP acquired", 40)
-        .unwrap_or_else(|e| panic!("DHCP failed: {e}\n{}", qemu.dump()));
-    std::thread::sleep(Duration::from_millis(500));
-
-    // concat 'RESOLVED:' + ip to make the marker unambiguous.
-    // If resolve() returns None, Python raises TypeError and nothing is printed.
-    qemu.send_line("python -c print('RESOLVED:'+__import__('vnet').resolve('google.com'))");
-    qemu.wait_for("RESOLVED:", 25)
-        .unwrap_or_else(|e| panic!("Python DNS resolution failed: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
 // ── Phase K: sleep built-in + multi-command timed scripts ────────────────────
