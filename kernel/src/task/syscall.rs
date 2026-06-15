@@ -296,6 +296,10 @@ fn caller_has_network(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.network_cap.is_some())
 }
 
+fn caller_has_hypervisor(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.hypervisor_cap.is_some())
+}
+
 fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
 }
@@ -535,6 +539,20 @@ pub enum Syscall {
     /// 217: WaitForEvent — block until `mask` bits fire or `deadline` ticks pass.
     /// `deadline = None` means block indefinitely.
     WaitForEvent { mask: u32, deadline: Option<u64> },
+
+    // === Hypervisor (220-225) — HypervisorCap ZST-gated ===
+    /// 220: CreateVm — allocate guest RAM + Stage-2 table → vm_id.
+    CreateVm        { guest_pages: usize },
+    /// 221: CreateVcpu — create a vCPU with `entry_pc` in `vm_id` → vcpu_id.
+    CreateVcpu      { vm_id: usize, entry_pc: u64 },
+    /// 222: MapGuestMemory — map guest IPA range in `vm_id` Stage-2 table.
+    MapGuestMemory  { vm_id: usize, ipa: u64, size: usize, writable: bool },
+    /// 223: RunVcpu — world-switch into vCPU; write `ViVmExit` to `out_ptr`.
+    RunVcpu         { vm_id: usize, vcpu_id: usize, budget_ns: u64, out_ptr: usize },
+    /// 224: VcpuRegs — read (write=false) or write (write=true) GP registers.
+    VcpuRegs        { vm_id: usize, vcpu_id: usize, buf_ptr: usize, write: bool },
+    /// 225: InjectIrq — inject GICv2 virtual interrupt (0 ≤ intid ≤ 1019).
+    InjectIrq       { vm_id: usize, vcpu_id: usize, intid: u32 },
 }
 
 /// Read the per-Cell syscall allowlist from the TCB.
@@ -609,6 +627,12 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::GrantRegister { .. }  => V::GrantRegister,
         Syscall::GrantUnregister { .. }=> V::GrantUnregister,
         Syscall::WaitForEvent { .. }   => V::WaitForEvent,
+        Syscall::CreateVm { .. }       => V::CreateVm,
+        Syscall::CreateVcpu { .. }     => V::CreateVcpu,
+        Syscall::MapGuestMemory { .. } => V::MapGuestMemory,
+        Syscall::RunVcpu { .. }        => V::RunVcpu,
+        Syscall::VcpuRegs { .. }       => V::VcpuRegs,
+        Syscall::InjectIrq { .. }      => V::InjectIrq,
         // Always-permitted; allowlist_bit() returns None → filter is a no-op.
         Syscall::Yield
         | Syscall::Exit { .. }
@@ -821,19 +845,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(sender)
         }
         Syscall::RecvTimeout { mask, buf_ptr, buf_len, deadline } => {
-            // Set the Recv state with deadline so the scheduler can time it out.
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.state = super::tcb::TaskState::Recv {
-                        mask, buf_ptr, buf_len, deadline: Some(deadline),
-                    };
-                }
-            }
-            // Immediately check for a pending message (non-blocking fast path).
+            // Fast path: check for a pending message immediately.
             let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
                 Ok(0) => {
-                    // Blocked — yield and let the scheduler handle the timeout.
+                    // Blocked with deadline:None — install the absolute deadline.
+                    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                        if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                            if let super::tcb::TaskState::Recv { deadline: ref mut d, .. } = task.state {
+                                *d = Some(deadline);
+                            }
+                        }
+                    }
+                    // Yield so the scheduler runs other tasks and can fire the timeout.
                     super::yield_cpu();
                     if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                         return Ok(sched
@@ -2016,7 +2040,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
         Syscall::WaitForEvent { mask, deadline } => {
             // Lost-wakeup guard: check pending events BEFORE parking.
-            // If the NIC RX IRQ already fired, consume and return immediately.
             let already = super::waker::consume_pending(mask);
             if already != 0 {
                 return Ok(already as usize);
@@ -2070,7 +2093,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if written > 0 { return Ok(written); }
             // VirtIO-RNG unavailable — fill with xorshift32 seeded from mtime + caller_id.
             // Not cryptographically secure, but satisfies getentropy(2) correctness contract.
-            let seed = hal::common::timer::read_mtime() as u32 ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
+            let seed = super::system_ticks() as u32 ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
             let mut state = if seed == 0 { 1 } else { seed };
             for byte in buf.iter_mut() {
                 state ^= state << 13;
@@ -2107,6 +2130,68 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Ok(()) => Ok(1), // async_id = 1 means immediately complete (Phase 04 for real async)
                 Err(_)  => Ok(0),
             }
+        }
+
+        // ── Hypervisor syscalls 220-225 (HypervisorCap ZST-gated) ────────────────
+
+        Syscall::CreateVm { guest_pages } => {
+            if !caller_has_hypervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::hypervisor::registry::create_vm(caller_id, guest_pages)
+                .map_err(|_| SyscallError::NotSupported)
+        }
+
+        Syscall::CreateVcpu { vm_id, entry_pc } => {
+            if !caller_has_hypervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::hypervisor::registry::create_vcpu(caller_id, vm_id, entry_pc)
+                .map_err(|_| SyscallError::NotSupported)
+        }
+
+        Syscall::MapGuestMemory { vm_id, ipa, size, writable } => {
+            if !caller_has_hypervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // C3: overflow guard on IPA + size.
+            ipa.checked_add(size as u64).ok_or(SyscallError::InvalidInput)?;
+            crate::hypervisor::registry::map_guest_memory(caller_id, vm_id, ipa, size, writable)
+                .map(|_| 0usize)
+                .map_err(|_| SyscallError::NotSupported)
+        }
+
+        Syscall::RunVcpu { vm_id, vcpu_id, budget_ns, out_ptr } => {
+            if !caller_has_hypervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            validate_user_buf(out_ptr, core::mem::size_of::<api::hypervisor::ViVmExit>(), MAX_USER_BUF)?;
+            // SAFETY: pointer validated above; SAS means it's also valid in kernel.
+            let exit_out = out_ptr as *mut api::hypervisor::ViVmExit;
+            crate::hypervisor::registry::run_vcpu(caller_id, vm_id, vcpu_id, budget_ns, exit_out)
+                .map_err(|_| SyscallError::NotSupported)
+        }
+
+        Syscall::VcpuRegs { vm_id, vcpu_id, buf_ptr, write } => {
+            if !caller_has_hypervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // 32 registers × 8 bytes = 256 bytes.
+            validate_user_buf(buf_ptr, 256, MAX_USER_BUF)?;
+            crate::hypervisor::registry::vcpu_regs(caller_id, vm_id, vcpu_id, buf_ptr, write)
+                .map_err(|_| SyscallError::NotSupported)
+        }
+
+        Syscall::InjectIrq { vm_id, vcpu_id, intid } => {
+            if !caller_has_hypervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // m3: GICv2 has SPIs/PPIs/SGIs up to intid 1019.
+            if intid > 1019 {
+                return Err(SyscallError::InvalidInput);
+            }
+            crate::hypervisor::registry::inject_irq(caller_id, vm_id, vcpu_id, intid)
+                .map_err(|_| SyscallError::NotSupported)
         }
     }
 }
@@ -2190,6 +2275,21 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             };
             Syscall::WaitForEvent { mask, deadline }
         }
+        // Hypervisor syscalls 220-225.
+        ViSyscall::CreateVm       => Syscall::CreateVm { guest_pages: a0 },
+        ViSyscall::CreateVcpu     => Syscall::CreateVcpu { vm_id: a0, entry_pc: a1 as u64 },
+        ViSyscall::MapGuestMemory => Syscall::MapGuestMemory {
+            vm_id: a0, ipa: a1 as u64, size: a2, writable: a3 != 0,
+        },
+        ViSyscall::RunVcpu        => Syscall::RunVcpu {
+            vm_id: a0, vcpu_id: a1, budget_ns: a2 as u64, out_ptr: a3,
+        },
+        ViSyscall::VcpuRegs       => Syscall::VcpuRegs {
+            vm_id: a0, vcpu_id: a1, buf_ptr: a2, write: a3 != 0,
+        },
+        ViSyscall::InjectIrq      => Syscall::InjectIrq {
+            vm_id: a0, vcpu_id: a1, intid: a2 as u32,
+        },
         _ => match syscall_id {
             3   => Syscall::SetTimer { deadline: a0 },
             100 => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },

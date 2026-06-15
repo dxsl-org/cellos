@@ -30,6 +30,7 @@ pub mod display;
 pub mod fs;
 pub mod disk;
 pub mod hotswap;
+pub mod hypervisor;
 pub mod input;
 pub mod manifest;
 pub mod net;

@@ -7,6 +7,10 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
 
+/// Latched at boot by `detect()` if the kernel entered at EL2 (ARM64,
+/// QEMU `virtualization=on`).  Always `false` on non-aarch64 targets.
+static HAS_EL2: AtomicBool = AtomicBool::new(false);
+
 /// Probe the device tree for CPU feature flags.
 ///
 /// Must be called once at kernel boot before any Cell is spawned.
@@ -16,6 +20,18 @@ pub(crate) fn detect(dtb: usize) {
     detect_riscv(dtb);
     #[cfg(not(target_arch = "riscv64"))]
     let _ = dtb;
+    // Latch EL2 boot status (ARM64 only); no-op on other arches.
+    #[cfg(target_arch = "aarch64")]
+    if hal::aarch64::el2::is_el2() {
+        HAS_EL2.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Returns `true` if the kernel booted at EL2 (ARM64, QEMU `virtualization=on`).
+///
+/// Always `false` on non-aarch64 targets.
+pub(crate) fn has_el2() -> bool {
+    HAS_EL2.load(Ordering::Relaxed)
 }
 
 /// Returns `true` if the RISC-V H-extension (hypervisor) is present.

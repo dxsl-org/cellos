@@ -179,7 +179,9 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
                     if m.has_gpio() || m.has_uart() {
                         task.mmio_cap = true;
                     }
-                    if m.has_hypervisor() && crate::cpu_features::has_h_ext() {
+                    if m.has_hypervisor()
+                        && (crate::cpu_features::has_h_ext()
+                            || crate::cpu_features::has_el2()) {
                         task.hypervisor_cap = Some(crate::task::cap::HypervisorCap::new());
                     }
                 }

@@ -48,6 +48,7 @@ static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     x19: 0, x20: 0, x21: 0, x22: 0, x23: 0, x24: 0, x25: 0,
     x26: 0, x27: 0, x28: 0, x29: 0, x30: 0, sp: 0,
     elr_el1: 0, spsr_el1: 0x305, sp_el0: 0,
+    daif: 0, // saved/restored by __switch_el1; 0 = no DAIF masking (IRQs enabled)
 };
 #[cfg(target_arch = "riscv32")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
@@ -244,6 +245,8 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize)
         // already released (the block above exited), so the
         // KERNEL_ROOT → FRAME_ALLOCATOR path inside reap_grants_for_task is safe.
         crate::task::syscall::reap_grants_for_task(tid);
+        // Reap any VMs (guest RAM + Stage-2 tables) owned by this cell.
+        crate::hypervisor::registry::reap_vms_for_task(tid);
     }
 
     // If the faulting cell owned the fast-IPC VFS handler, null the pointer so
@@ -294,6 +297,7 @@ pub fn yield_cpu() {
     };
     for tid in grant_tids {
         crate::task::syscall::reap_grants_for_task(tid);
+        crate::hypervisor::registry::reap_vms_for_task(tid);
     }
 
     let hart_id = hart_local::current_hart_id();
@@ -841,13 +845,12 @@ pub fn ipc_send(
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
 
-            if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.state = TaskState::Sending {
-                    target: target_id,
-                    msg_ptr,
-                    msg_len,
-                };
-            }
+            // Message was immediately delivered — caller stays runnable.
+            // Do NOT set Sending here: the Send handler returns Ok(0) without
+            // calling yield_cpu(), so the task goes back to userspace still in
+            // Running state.  Setting Sending here causes the scheduler's
+            // pick_next to skip the task on the next timer tick (it only
+            // requeues Running tasks), permanently deadlocking the caller.
             return Ok(0);
         } else {
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {

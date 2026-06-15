@@ -160,6 +160,29 @@ pub enum ViSyscall {
     /// Allowlist-gated (bit 42). Requires `WaitForEvent` in `declare_syscalls!`.
     WaitForEvent = 217,
 
+    // === Hypervisor (220-225) — HypervisorCap gated (allowlist bit 44) ===
+    // All six syscalls require `hypervisor = true` in the cell manifest AND the
+    // kernel to have booted at EL2 (ARM64) or with H-ext (RISC-V).  A cell
+    // without HypervisorCap calling any of these receives `PermissionDenied`.
+    /// Allocate guest RAM and a Stage-2 table; returns opaque `vm_id`.
+    /// ABI: a0 = guest_pages → vm_id (>0) on success, 0 on OOM / unsupported.
+    CreateVm       = 220,
+    /// Create a vCPU in `vm_id` with initial PC `entry_pc`; returns `vcpu_id`.
+    /// ABI: a0 = vm_id, a1 = entry_pc → vcpu_id (>0).
+    CreateVcpu     = 221,
+    /// Map guest IPA range `[ipa, ipa+size)` to kernel-managed frames in `vm_id`.
+    /// ABI: a0 = vm_id, a1 = ipa, a2 = size (bytes), a3 = writable:bool → 0.
+    MapGuestMemory = 222,
+    /// World-switch into vCPU until exit or `budget_ns` ns expire; write `ViVmExit`.
+    /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = budget_ns, a3 = out_ptr (*mut ViVmExit) → 0.
+    RunVcpu        = 223,
+    /// Read (write=0) or write (write=1) vCPU registers x0-x30 + sp + pc (32×u64).
+    /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = buf_ptr, a3 = write:bool → 0.
+    VcpuRegs       = 224,
+    /// Inject a GICv2 virtual interrupt into vCPU (0 ≤ intid ≤ 1019).
+    /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = intid → 0.
+    InjectIrq      = 225,
+
     // === Hot-swap (Phase 20) ===
     /// Live-replace a running Cell without message loss.
     /// ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.
@@ -329,6 +352,10 @@ impl ViSyscall {
             Self::GetRandom     => Some(41),
             // WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
             Self::WaitForEvent  => Some(42),
+            // HypervisorCap (bit 44): all 6 VMM syscalls share one bit.
+            // Bit 43 is already assigned to GpuCursor; 44 is the next free slot.
+            Self::CreateVm | Self::CreateVcpu | Self::MapGuestMemory
+            | Self::RunVcpu | Self::VcpuRegs | Self::InjectIrq => Some(44),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -392,6 +419,12 @@ impl From<usize> for ViSyscall {
             215 => ViSyscall::GrantRegister,
             216 => ViSyscall::GrantUnregister,
             217 => ViSyscall::WaitForEvent,
+            220 => ViSyscall::CreateVm,
+            221 => ViSyscall::CreateVcpu,
+            222 => ViSyscall::MapGuestMemory,
+            223 => ViSyscall::RunVcpu,
+            224 => ViSyscall::VcpuRegs,
+            225 => ViSyscall::InjectIrq,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             310 => ViSyscall::NetTx,
