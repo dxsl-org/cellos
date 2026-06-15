@@ -4,6 +4,33 @@
 
 ---
 
+## [2026-06-15] P0 UART Input Delivery — EV_ASCII relay to input service + ARM64 integration test green
+
+### Summary
+Shipped the P0 input delivery feature: UART bytes are now relayed to the input service via a new `EV_ASCII` opcode (0x04) on all architectures. This enables apps to receive keyboard input from the input service focus system, completing a critical gap that prevented interactive/HMI applications on embedded platforms without VirtIO keyboard.
+
+### Changes
+- **`kernel/src/console.rs`** — Added `relay_ascii_to_input()` with RISC-V SUM guard to safely read user buffers within kernel context
+- **`kernel/src/task/drivers/virtio_input.rs`** — Timer-driven `viConsole::poll()` in `vi_timer_tick` (reader-independent polling, no new IRQ handler)
+- **`cells/services/input/src/main.rs`** — Added EV_ASCII handler (opcode 0x04) to relay bytes to focused cell via `InputRequest::KeyEvent`
+- **Dispatcher focus logic** — Changed default focus from TID 3 → TID 0 (drop events when no cell has focus, instead of defaulting to shell)
+- **`kernel/src/embedded-aarch64/kernel_fs.img`** — Rebuilt with new input service binary + input-test cell
+
+### Integration Test
+- `aarch64_uart_input_delivery` — New ARM64 integration test verifies UART → input service delivery on PL011 UART; passes in 5.84s
+
+### Impact
+- **ARM64 platforms** (RPi 4, VisionFive2, QEMU virt with PL011 UART): Apps can now register for input focus and receive keyboard events without VirtIO keyboard
+- **Completes input pipeline** — kernel event capture → input service → app (previously stuck at kernel buffer)
+- **Foundation for HMI** — interactive apps on embedded platforms now unlocked
+
+### Backward Compatibility
+- Shell UART path (`sys_read(0)` on serial) unchanged
+- VirtIO keyboard continues to work (separate dispatch path)
+- Input service API stable
+
+---
+
 ## [2026-06-13] x86_64 Full Bring-Up — 5/5 integration tests pass + syscall exit path fixes + CI gate landed
 
 ### Summary

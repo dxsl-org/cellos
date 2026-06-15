@@ -29,6 +29,10 @@ impl viConsole {
         }
         let mut received = false;
 
+        // Hoist input_tid once; used for both UART relay (below) and VirtIO dispatch (§2).
+        let input_tid = crate::task::drivers::virtio_input::INPUT_CELL_ID
+            .load(Ordering::Relaxed);
+
         // 1a. Directly poll the 16550 RHR — RISC-V QEMU virt only.
         // The 16550 lives at 0x10_000_000 on RISC-V; that address is not a
         // 16550 on AArch64 (UART is PL011 at 0x0900_0000). Reading it there
@@ -37,6 +41,7 @@ impl viConsole {
         while self.buffer.len() < Self::MAX_BUFFERED {
             let Some(c) = crate::task::drivers::uart::poll_rhr() else { break };
             self.buffer.push_back(c);
+            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
             received = true;
         }
 
@@ -47,6 +52,7 @@ impl viConsole {
         while self.buffer.len() < Self::MAX_BUFFERED {
             let Some(c) = crate::task::drivers::uart::getchar() else { break };
             self.buffer.push_back(c);
+            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
             received = true;
         }
 
@@ -57,6 +63,7 @@ impl viConsole {
         while self.buffer.len() < Self::MAX_BUFFERED {
             let Some(c) = crate::hal::uart_pl011::poll_rx() else { break };
             self.buffer.push_back(c);
+            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
             received = true;
         }
 
@@ -68,6 +75,7 @@ impl viConsole {
         while self.buffer.len() < Self::MAX_BUFFERED {
             let Some(c) = crate::task::drivers::uart::getchar() else { break };
             self.buffer.push_back(c);
+            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
             received = true;
         }
 
@@ -78,8 +86,7 @@ impl viConsole {
 
         // 2. Poll VirtIO Keyboard — used when a graphical display is attached.
         crate::task::drivers::virtio_input::poll_events();
-        let input_tid = crate::task::drivers::virtio_input::INPUT_CELL_ID
-            .load(Ordering::Relaxed);
+        // input_tid already loaded above; reuse it for VirtIO dispatch below.
         if let Some(drv) = crate::task::drivers::virtio_input::KEYBOARD_DRIVER
             .lock()
             .as_mut()
@@ -125,6 +132,50 @@ impl viConsole {
     /// Read a byte from buffer (Non-blocking)
     pub fn read_byte(&mut self) -> Option<u8> {
         self.buffer.pop_front()
+    }
+}
+
+/// Relay a UART byte to the input service as an EV_ASCII press+release pair.
+///
+/// Called both from the syscall path (SUM already set on RISC-V) and from the
+/// timer ISR path (SUM NOT set). The RISC-V guard reads the current SUM bit and
+/// only toggles it if not already set, so neither caller corrupts their SUM state.
+///
+/// Fire-and-forget: if the input service is not in Recv state the frames drop.
+///
+/// # Safety (kernel-only, Law 4)
+/// Reads/writes sstatus.SUM (bit 18) on RISC-V to allow S-mode copy into the
+/// U-mode IPC buffer. Safe because SUM is scoped to this function's lifetime.
+fn relay_ascii_to_input(input_tid: usize, byte: u8) {
+    use crate::task::drivers::input_map::WIRE_ASCII;
+
+    // RISC-V only: SUM (sstatus bit 18) must be set for ipc_send to write into
+    // the U-mode receive buffer.  Preserve the current SUM state so we do not
+    // clear it mid-syscall when this is called from the file_read path.
+    #[cfg(target_arch = "riscv64")]
+    let sum_was_set = unsafe {
+        let s: usize;
+        core::arch::asm!("csrr {}, sstatus", out(reg) s);
+        s & 0x4_0000 != 0
+    };
+    #[cfg(target_arch = "riscv64")]
+    if !sum_was_set {
+        // SAFETY: SUM allows S-mode access to U-mode pages; cleared on function return.
+        unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x4_0000usize); }
+    }
+
+    let mut msg = [0u8; 9];
+    msg[0] = WIRE_ASCII;
+    msg[1..5].copy_from_slice(&(byte as u32).to_le_bytes());
+    msg[5..9].copy_from_slice(&1u32.to_le_bytes()); // press
+    let _ = crate::task::ipc_send(0, input_tid, msg.as_ptr() as usize, 9);
+    msg[5..9].copy_from_slice(&0u32.to_le_bytes()); // release
+    let _ = crate::task::ipc_send(0, input_tid, msg.as_ptr() as usize, 9);
+
+    #[cfg(target_arch = "riscv64")]
+    if !sum_was_set {
+        // SAFETY: restore SUM to its pre-call value.
+        unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x4_0000usize); }
     }
 }
 

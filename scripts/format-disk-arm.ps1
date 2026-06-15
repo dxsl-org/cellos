@@ -32,14 +32,17 @@ $buildArgs = @(
     "-p", "service-vfs",
     "-p", "service-config",
     "-p", "service-net",
-    "-p", "app-robot-demo",
+    "-p", "robot-demo",
     "-p", "periph-demo",
     "-p", "sensor-demo",
-    "-p", "spi-demo"
+    "-p", "spi-demo",
+    "-p", "pwm-demo",
+    "-p", "adc-demo",
+    "-p", "can-demo"
 )
 # Optional cells — skip if crate not present
 $optionalArgs = @()
-foreach ($pkg in @("service-input", "service-compositor")) {
+foreach ($pkg in @("service-input", "service-compositor", "input-test")) {
     $found = cargo metadata --no-deps --format-version 1 2>$null |
              Select-String -Pattern "`"name`":`"$pkg`"" -Quiet
     if ($found) { $optionalArgs += "-p"; $optionalArgs += $pkg }
@@ -55,21 +58,24 @@ $fs = [System.IO.File]::Create($OutFile)
 $fs.SetLength($bytes)
 $fs.Close()
 
-# ----- Step 3: Partition + format (requires mtools) -----
-Write-Host "[format-disk-arm] Partitioning and formatting as FAT32..."
-& mpartition -I -B -T 0x0b -b 2048 "$OutFile"
-& mformat -i "${OutFile}@@1M" -F -v ViCellARM ::
+# ----- Step 3: Format as flat FAT32 (no partition table) -----
+# Note: ARM kernel loads cells from the embedded ramdisk (kernel_fs.img); the
+# external disk is supplemental (VFS /data). A flat FAT32 (no MBR) is simpler
+# and avoids mtools mpartition -B template requirement on Windows.
+Write-Host "[format-disk-arm] Formatting as flat FAT32 (no partition table)..."
+$totalSectors = [int]($SizeMiB * 1024 * 1024 / 512)
+& mformat -i $OutFile -F -v ViCellARM -C -T $totalSectors ::
 
 # ----- Step 4: Create directory structure -----
 Write-Host "[format-disk-arm] Creating /bin, /etc, /tmp..."
-& mmd -i "${OutFile}@@1M" ::/bin
-& mmd -i "${OutFile}@@1M" ::/etc
-& mmd -i "${OutFile}@@1M" ::/tmp
+& mmd -i $OutFile ::/bin
+& mmd -i $OutFile ::/etc
+& mmd -i $OutFile ::/tmp
 
 # ----- Step 5: Populate /etc -----
 New-Item -ItemType Directory -Force $StagingDir | Out-Null
 Set-Content -Path "$StagingDir\hostname" -Value "ViCell-ARM" -NoNewline -Encoding ascii
-& mcopy -i "${OutFile}@@1M" "$StagingDir\hostname" ::/etc/hostname
+& mcopy -i $OutFile "$StagingDir\hostname" ::/etc/hostname
 
 # ----- Step 6: Populate /bin/ -----
 Write-Host "[format-disk-arm] Copying aarch64 cell binaries to /bin/..."
@@ -81,12 +87,16 @@ $cells = @(
     @{ Bin = "service-vfs";       Dst = "vfs"         },
     @{ Bin = "service-config";    Dst = "config"      },
     @{ Bin = "service-net";       Dst = "net"         },
-    @{ Bin = "app-robot-demo";    Dst = "robot-demo"   },
+    @{ Bin = "robot-demo";         Dst = "robot-demo"   },
     @{ Bin = "periph-demo";       Dst = "periph-demo"  },
     @{ Bin = "sensor-demo";       Dst = "sensor-demo"  },
     @{ Bin = "spi-demo";          Dst = "spi-demo"     },
+    @{ Bin = "pwm-demo";          Dst = "pwm-demo"     },
+    @{ Bin = "adc-demo";          Dst = "adc-demo"     },
+    @{ Bin = "can-demo";          Dst = "can-demo"     },
     @{ Bin = "service-input";     Dst = "input"       },
-    @{ Bin = "service-compositor";Dst = "compositor"  }
+    @{ Bin = "service-compositor";Dst = "compositor"  },
+    @{ Bin = "input-test";        Dst = "input-test"  }
 )
 
 foreach ($c in $cells) {
@@ -94,7 +104,7 @@ foreach ($c in $cells) {
     if (Test-Path $src) {
         $kb = [Math]::Round((Get-Item $src).Length / 1KB, 0)
         Write-Host "  /bin/$($c.Dst) <- $src (${kb} KB)"
-        & mcopy -i "${OutFile}@@1M" $src "::/bin/$($c.Dst)"
+        & mcopy -i $OutFile $src "::/bin/$($c.Dst)"
     } else {
         Write-Warning "  [skip] $($c.Dst): $src not found"
     }

@@ -3,18 +3,18 @@
 //! Maintains a "focused cell" ID and routes translated `InputEvent`s to it
 //! via IPC Send.  Focus changes clear transient modifiers to avoid stuck keys.
 //!
-//! ## Focus fallback (boot default)
+//! ## Focus default
 //!
-//! `fallback_tid` is set to `DEFAULT_FOCUS_ENDPOINT` at construction time.
-//! This is fragile (assumes shell is task 3) and will be replaced with
-//! `sys_lookup_service(service::SHELL)` once the shell registers itself as a
-//! named service (requires a `service::SHELL` constant — future track).
+//! `focused` starts at 0 (no focus).  The first cell to call `SetFocus` owns
+//! the keyboard.  Events before any focus claim are silently dropped — this is
+//! preferable to the previous TID-3 shell fallback which consumed events without
+//! the shell ever reading them (shell uses sys_read(0), not the input service).
 //!
 //! ## Death reversion
 //!
 //! `dispatch()` checks the `sys_send` return value.  When the focused cell has
-//! exited, `sys_send` returns `Err(_)` and focus reverts to `fallback_tid`.
-//! This avoids permanently dropping all key events after a UI cell exits.
+//! exited, `sys_send` returns `Err(_)` and focus reverts to 0.  The next app
+//! that calls `SetFocus` resumes delivery.
 
 use api::input::{InputEvent, INPUT_EVENT_IPC_SIZE, encode_event};
 use ostd::syscall::{sys_send, SyscallResult};
@@ -22,30 +22,18 @@ use ostd::syscall::{sys_send, SyscallResult};
 /// Opcode prefix byte sent to the focused cell's IPC endpoint.
 pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 
-/// Boot-default focus task ID.
-///
-/// Shell is spawned as the third task after init and VFS in the standard boot
-/// order, making it TID 3.  This constant will be removed when the shell
-/// registers itself via `sys_register_service(service::SHELL)`.
-const DEFAULT_FOCUS_ENDPOINT: usize = 3;
-
 /// Routes translated events to the currently focused cell.
 pub struct Dispatcher {
-    /// Task ID of the currently focused cell.
+    /// Task ID of the currently focused cell (0 = no focus, events dropped).
     focused: usize,
-    /// Fallback TID used when the focused cell exits.  Initialised to the boot
-    /// default (shell).  The first cell to explicitly call `SetFocus` does NOT
-    /// update this — only `new()` sets it, so the shell always remains the fallback.
+    /// Fallback TID on focus-cell death (0 = park until next SetFocus).
     fallback_tid: usize,
 }
 
 impl Dispatcher {
-    /// Create a dispatcher with the boot-default focus (shell cell).
+    /// Create a dispatcher with no initial focus (events dropped until SetFocus).
     pub fn new() -> Self {
-        Self {
-            focused: DEFAULT_FOCUS_ENDPOINT,
-            fallback_tid: DEFAULT_FOCUS_ENDPOINT,
-        }
+        Self { focused: 0, fallback_tid: 0 }
     }
 
     /// Change which cell receives input events.
@@ -73,6 +61,9 @@ impl Dispatcher {
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
     pub fn dispatch(&mut self, event: &InputEvent) {
+        if self.focused == 0 {
+            return; // no focus — drop silently
+        }
         {
             use alloc::format;
             let msg = format!("[input-svc] dispatch to TID {}", self.focused);
@@ -85,11 +76,9 @@ impl Dispatcher {
         buf[1..INPUT_EVENT_IPC_SIZE + 1].copy_from_slice(&payload);
 
         if let SyscallResult::Err(_) = sys_send(self.focused, &buf) {
-            // Focused cell has exited — revert to fallback so keys reach the shell.
-            if self.focused != self.fallback_tid {
-                ostd::io::println("[input-svc] focused cell dead — reverting to fallback");
-                self.focused = self.fallback_tid;
-            }
+            // Focused cell has exited — park (focused=0) until next SetFocus.
+            ostd::io::println("[input-svc] focused cell dead — clearing focus");
+            self.focused = self.fallback_tid; // fallback_tid is 0
         }
     }
 }

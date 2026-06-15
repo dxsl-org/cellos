@@ -158,6 +158,12 @@ pub extern "Rust" fn vi_timer_tick() {
     crate::task::drivers::virtio_input::poll_events();
     crate::task::drivers::virtio_input::dispatch_pending();
 
+    // Poll UART hardware and relay any new bytes to the input service.
+    // Makes UART delivery reader-independent: events arrive even when no cell
+    // is currently blocked in sys_read(0).  VirtIO events were already drained
+    // above, so the VirtIO section of poll() is a no-op here.
+    crate::task::drivers::console_drv::CONSOLE.lock().poll();
+
     // Run the scheduler.  If a higher-priority (or simply next round-robin)
     // task is ready, this performs a context switch.  Safe to call from the
     // timer ISR because:

@@ -33,7 +33,7 @@ mod layout_us_qwerty;
 mod modifier_state;
 mod mouse_state;
 
-use api::input::{InputEvent, KeyEvent};
+use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers};
 use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
 use dispatcher::Dispatcher;
 use layout_us_qwerty::{translate, key_state_from_evdev};
@@ -47,6 +47,9 @@ api::declare_syscalls![Send, Recv, Log, Heartbeat, GetTime];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
 const EV_KEY: u8 = 0;
+/// Raw event type for UART ASCII relay from the kernel console driver.
+/// The code field carries the raw ASCII byte; no scancode translation needed.
+const EV_ASCII: u8 = 0x04;
 
 /// Input Cell entry point.
 ///
@@ -144,6 +147,20 @@ fn handle_kernel_event(
             if let Some(ev) = mouse.apply_abs(code, value) {
                 dispatcher.dispatch(&ev);
             }
+        }
+        EV_ASCII => {
+            // UART byte relayed by the kernel console driver.
+            // `code` carries the raw ASCII code point; skip scancode translation.
+            let state = if value > 0 { KeyState::Pressed } else { KeyState::Released };
+            dispatcher.dispatch(&InputEvent::Key(KeyEvent {
+                timestamp_ticks: sys_get_time(),
+                scancode: 0,
+                keysym: KeySym::Printable,
+                character: code,
+                modifiers: modifiers.snapshot(),
+                state,
+                _pad: [0; 2],
+            }));
         }
         _ => {} // unknown opcode — drop silently
     }

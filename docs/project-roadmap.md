@@ -160,7 +160,7 @@ SMP scales across N cores · windowed desktop + mouse · hot migration with no d
 - **Peripheral bus** (GPIO/I2C/SPI/CAN/PWM/ADC) — 📋 already designed → see "Peripheral Driver Track" + [specs/13-peripherals.md](specs/13-peripherals.md). #1 gap: no app reads sensors / drives actuators without it.
 
 ### B. Interaction `[G1 input · G1-opt/G2 display]`
-- **Input delivery to apps** — 📋 see Milestone 2.2; kernel currently keeps key events in a UART buffer and never forwards them to the input service. Blocks any interactive/HMI app.
+- 🆕 **P0 UART input delivery to apps** `[G1]` — ✅ COMPLETE (2026-06-15). UART bytes now relayed to input service via EV_ASCII opcode (0x04) on all arches; ARM64 integration test green. Apps can register for input focus and receive keyboard events. See [.agents/260615-p0-uart-input-delivery/](../agents/) for details.
 - **Display / GUI** — 📋 see Milestone 2.4 (compositor/GPU, HMI feature-gate). Blocks user-facing graphical apps.
 
 ### C. Real-world connectivity `[G1 priority · shared]`

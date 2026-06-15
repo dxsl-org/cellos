@@ -151,3 +151,55 @@ fn aarch64_periph_demo_gpio() {
     qemu.wait_for("[periph-demo] GPIO PL061 opened", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("periph-demo GPIO not seen: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+/// UART → input-service → app delivery on AArch64.
+///
+/// ARM64 QEMU virt has no virtio-keyboard-device — the only keyboard path is
+/// the PL011 serial line.  This test exercises the full chain:
+///
+///   TCP socket → QEMU PL011 RX → viConsole::poll() →
+///   relay_ascii_to_input() → input service (EV_ASCII) → dispatcher →
+///   input-test AppContext
+///
+/// Verifies both the kernel relay (via `[input-svc] key event 4`) and the
+/// app delivery (via `[input-test] input ok`).
+///
+/// Prerequisites: kernel must embed `/bin/input-test` in `kernel_fs.img`
+/// (added to `kernel/src/embedded-aarch64/kernel_fs.img`).
+#[test]
+fn aarch64_uart_input_delivery() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+
+    // Wait for input-test to acquire focus (retries in a yield loop until the
+    // input service is registered and grants focus).
+    qemu.wait_for("[input-test] focus granted", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!(
+            "input-test did not claim focus: {e}\n--- output ---\n{}",
+            qemu.dump()
+        ));
+
+    // Settle: let input-test's AppContext event loop park in sys_recv before
+    // we inject.  Mirrors the 300ms pause used in `input_bare_cell`.
+    std::thread::sleep(std::time::Duration::from_millis(300));
+
+    // Inject a single printable byte — no trailing newline to avoid a
+    // spurious second key event from the Enter character.
+    qemu.send_bytes(b"a");
+
+    // Assert the kernel relay fired (EV_ASCII opcode = 4).
+    qemu.wait_for("[input-svc] key event 4", 15)
+        .unwrap_or_else(|e| panic!(
+            "EV_ASCII relay not seen: {e}\n--- output ---\n{}",
+            qemu.dump()
+        ));
+
+    // Assert the app received the event.
+    qemu.wait_for("[input-test] input ok", 15)
+        .unwrap_or_else(|e| panic!(
+            "input-test did not receive key: {e}\n--- output ---\n{}",
+            qemu.dump()
+        ));
+}

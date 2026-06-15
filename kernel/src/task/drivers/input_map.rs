@@ -4,6 +4,11 @@ pub const EV_KEY: u16 = 1;
 pub const EV_REL: u16 = 2;
 pub const EV_ABS: u16 = 3;
 
+/// Wire opcode used by the kernel UART relay to the input service.
+/// Distinct from EV_KEY/REL/ABS (which map to opcodes 0/1/2) so the input
+/// service can skip the scancode-translation path and use the raw character.
+pub const WIRE_ASCII: u8 = 0x04;
+
 pub struct InputState {
     pub shift_pressed: bool,
     pub ctrl_pressed: bool,

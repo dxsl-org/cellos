@@ -336,7 +336,9 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_aarch64())
             .args([
-                "-machine", "virt",
+                // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
+                // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
+                "-machine", "virt,gic-version=2",
                 "-cpu", "cortex-a57",
                 "-m", "256M",
                 "-nographic",
@@ -381,7 +383,9 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_aarch64())
             .args([
-                "-machine", "virt",
+                // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
+                // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
+                "-machine", "virt,gic-version=2",
                 "-cpu", "cortex-a57",
                 "-m", "256M",
                 "-nographic",
@@ -888,6 +892,17 @@ impl QemuRunner {
         if let Some(w) = self.writer.as_mut() {
             let _ = w.write_all(line.as_bytes());
             let _ = w.write_all(b"\n");
+            let _ = w.flush();
+        }
+    }
+
+    /// Send raw bytes to the guest serial console with no trailing newline.
+    ///
+    /// Use when injecting a single printable character as a UART input byte —
+    /// `send_line` appends `\n` which would deliver two key events.
+    pub fn send_bytes(&mut self, data: &[u8]) {
+        if let Some(w) = self.writer.as_mut() {
+            let _ = w.write_all(data);
             let _ = w.flush();
         }
     }
