@@ -10,10 +10,10 @@ api     = { path = "../api" }
 spin    = { workspace = true }
 fontdue = { workspace = true }
 linked_list_allocator = "0.10"
-hashbrown    = { version = "0.14", default-features = false, features = ["ahash"] }
-# Pin once_cell to avoid nightly breakage in 1.21.x (race.rs prelude regression
-# with Rust nightly 1.97+). ahash 0.8.x pulls once_cell for its no_std path.
-once_cell    = { version = "=1.19.0", default-features = false }
+# hashbrown 0.15 uses foldhash as the default hasher — no ahash, no once_cell.
+# hashbrown 0.14 (ahash) pulled in once_cell 1.21.x which fails to compile for
+# riscv64gc-unknown-none-elf with Rust nightly 1.97+ (race.rs prelude regression).
+hashbrown    = { version = "0.15", default-features = false, features = ["default-hasher"] }
 embedded-io  = { version = "0.7",  default-features = false }
 serde        = { version = "1",    default-features = false }
 
