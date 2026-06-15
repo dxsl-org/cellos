@@ -298,7 +298,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         task::drivers::pcie_ecam::init();
+        task::drivers::iommu::init();          // bare passthrough (noop when absent)
         task::drivers::blk_nvme::init_driver();
+        task::drivers::nic_e1000::init_driver();
     }
 
     // Attempt warm boot from snapshot before any cell initialization.

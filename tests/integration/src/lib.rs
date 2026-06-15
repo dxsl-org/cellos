@@ -1153,6 +1153,156 @@ impl QemuRunner {
 
         Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
     }
+
+    /// Boot QEMU x86_64 q35 with an NVMe disk AND an e1000 NIC.
+    ///
+    /// Same as `boot_x86_nvme` plus `-device e1000,netdev=net0
+    /// -netdev user,id=net0,restrict=on`. `restrict=on` prevents outbound
+    /// traffic in CI so the test is deterministic and firewall-safe.
+    ///
+    /// Asserts: `[e1000] NIC initialized` in serial output.
+    pub fn boot_x86_with_nic(kernel: &str, nvme_disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_x86_binary())
+            .args([
+                "-machine", "q35",
+                "-cpu",     "qemu64",
+                "-m",       "256M",
+                "-nographic",
+                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
+                "-netdev",  "user,id=net0,restrict=on",
+                "-device",  "e1000,netdev=net0",
+                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",  kernel,
+                "-monitor", "none",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener.accept()
+            .expect("QEMU did not connect to the serial socket").0;
+        let writer = stream.try_clone().expect("clone serial stream");
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+    }
+
+    /// Boot QEMU x86_64 q35 with an NVMe disk, an e1000 NIC, **and** Intel VT-d.
+    ///
+    /// Adds `-device intel-iommu` (before the NIC, required for QEMU to bind the
+    /// IOMMU before PCIe endpoint devices). Asserts both `[vtd] Intel VT-d passthrough
+    /// enabled` and `[e1000] NIC initialized` in serial output.
+    pub fn boot_x86_with_vtd(kernel: &str, nvme_disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_x86_binary())
+            .args([
+                "-machine", "q35",
+                "-cpu",     "qemu64",
+                "-m",       "256M",
+                "-nographic",
+                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
+                // intel-iommu must precede endpoint devices so QEMU wires it up first.
+                "-device",  "intel-iommu",
+                "-netdev",  "user,id=net0,restrict=on",
+                "-device",  "e1000,netdev=net0",
+                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",  kernel,
+                "-monitor", "none",
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener.accept()
+            .expect("QEMU did not connect to the serial socket").0;
+        let writer = stream.try_clone().expect("clone serial stream");
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+    }
+
+    /// Boot QEMU RISC-V virt with a RISC-V IOMMU PCIe device attached.
+    ///
+    /// Requires QEMU ≥ 8.2 (earlier versions do not have `riscv-iommu-pci`).
+    /// The RISC-V virt machine already has a gpex PCIe host bridge; this adds
+    /// the IOMMU endpoint on it. Asserts `[iommu] RISC-V IOMMU: bare passthrough
+    /// enabled` in serial output.
+    pub fn boot_riscv_with_iommu(kernel: &str, disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_binary())
+            .args([
+                "-machine", "virt",
+                "-m",       "256M",
+                "-nographic",
+                "-bios",    "default",
+                "-kernel",  kernel,
+                "-drive",   &format!("file={disk},format=raw,id=hd0,if=none"),
+                "-device",  "virtio-blk-device,drive=hd0",
+                "-netdev",  "user,id=net0",
+                "-device",  "virtio-net-device,netdev=net0",
+                "-device",  "riscv-iommu-pci,bus=pcie.0",
+                "-monitor", "none",
+                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-riscv64 must be on PATH");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener.accept()
+            .expect("QEMU did not connect to the serial socket").0;
+        let writer = stream.try_clone().expect("clone serial stream");
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+    }
 }
 
 /// Spawn a minimal MQTT 3.1.1 mock broker on an ephemeral port.

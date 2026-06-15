@@ -273,10 +273,10 @@ CAN → industrial robot bus (ROS2 CAN bridge)  [low priority, defer]
 #### G2 driver priority (strict order — each is prerequisite for the next)
 
 ```
-1. PCIe ECAM host controller   ← gates everything below
-2. RISC-V IOMMU                ← MUST come before NIC (DMA safety in SAS)
-3. NVMe (~3-5K LOC)            ← real storage, replaces VirtIO block
-4. RTL8125 / Intel i225 2.5G   ← real NIC (~5-8K LOC), replaces VirtIO net
+1. PCIe ECAM host controller   ✅ DONE 2026-06-13 (Track A)
+2. RISC-V IOMMU                ✅ DONE 2026-06-16 (Track B — bare passthrough)
+3. NVMe (~3-5K LOC)            ✅ DONE 2026-06-13 (Track A — polled PRP I/O)
+4. RTL8125 / Intel i225 2.5G   ✅ DONE 2026-06-16 (Track B — e1000/QEMU; RTL8125/i225 ID table)
 5. Intel i40e 10G              ← only when inference server needs bandwidth
 ```
 

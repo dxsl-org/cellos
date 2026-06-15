@@ -1760,7 +1760,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // SAFETY: validated above — frame_ptr/frame_len is a readable user buffer
             // in the shared address space; we only read `frame_len` bytes from it.
             let frame = unsafe { core::slice::from_raw_parts(frame_ptr as *const u8, frame_len) };
-            let ok = crate::task::drivers::virtio_net::send_frame(frame);
+            let ok = crate::task::drivers::nic::send_frame(frame);
             Ok(if ok { 1 } else { 0 })
         }
         Syscall::NetRx { buf_ptr, buf_len } => {
@@ -1771,7 +1771,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // SAFETY: validated above — buf_ptr/buf_len is a writable user buffer;
             // recv_frame writes at most `buf_len` bytes and returns the count.
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
-            let n = crate::task::drivers::virtio_net::recv_frame(buf);
+            let n = crate::task::drivers::nic::recv_frame(buf);
             Ok(n)
         }
         Syscall::StateStash { key, buf_ptr, buf_len } => {

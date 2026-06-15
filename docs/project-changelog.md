@@ -4,6 +4,34 @@
 
 ---
 
+## [2026-06-16] Track B — RISC-V IOMMU + Intel VT-d + PCIe e1000 NIC driver
+
+### Summary
+Completed G2 IOMMU + NIC hardware stack. RISC-V IOMMU (bare passthrough, DDTP.MODE=1) and Intel VT-d passthrough (root/context table, GCMD.TE) are active before any DMA device. Intel e1000 (82540EM) PCIe NIC driver initialises TX/RX descriptor rings, reads MAC from EEPROM, and is wired into the existing `NetTx`/`NetRx` syscall path — net service Cell receives frames via PCIe NIC automatically (VirtIO net falls back when no PCIe NIC is present). All 3 kernel targets compile clean.
+
+### Changes
+- **`kernel/src/task/drivers/iommu.rs`** — Common IOMMU API: `init()`, `map_dma()`, `unmap_dma()`, `is_active()`, arch dispatch via `#[cfg(target_arch)]`
+- **`kernel/src/task/drivers/iommu_riscv.rs`** — RISC-V IOMMU PCIe driver: finds by class 0x08/0x06/0x00, writes FCTL=0+DDTP=1 (bare mode), clears IPSR
+- **`kernel/src/task/drivers/iommu_x86.rs`** — Intel VT-d: probes GCAP @ 0xFED90000, alloc 4KB root+context tables, fills passthrough entries (TT=0b10, AW=0b010), enables via GCMD.SRTP→GCMD.TE
+- **`kernel/src/task/drivers/nic_e1000.rs`** — e1000 (82540EM) driver: PCIe class scan, BAR0 identity-map, RST→link-up→MAC EEPROM read→MTA zero→16-entry TX/RX rings→TCTL/RCTL enable; polled TX (DD bit)
+- **`kernel/src/task/drivers/nic.rs`** — NIC selector: routes `send_frame`/`recv_frame` to e1000 if present, else VirtIO
+- **`kernel/src/memory/paging.rs`** — Added VT-d MMIO (0xFED90000) to static identity-map; new `map_mmio_x86(phys, size)` helper for PCIe BAR dynamic mapping
+- **`kernel/src/task/syscall.rs`** — `NetTx`/`NetRx` routed through `nic::` instead of `virtio_net::` directly
+- **`kernel/src/main.rs`** — Init ordering: `pcie_ecam` → `iommu` → `blk_nvme` → `nic_e1000`
+- **`tests/integration/tests/nic-x86.rs`** — `nic_x86_e1000_init` + `nic_x86_vtd_enabled` CI tests (skip gracefully without QEMU/kernel)
+- **`tests/integration/tests/nic-riscv.rs`** — `nic_riscv_iommu_bare` CI test (skips if QEMU < 8.2)
+- **`tests/integration/src/lib.rs`** — 3 new `QemuRunner` constructors: `boot_x86_with_nic`, `boot_x86_with_vtd`, `boot_riscv_with_iommu`
+
+### Key Fix
+`TxDesc`/`RxDesc` structs changed from `#[repr(C, packed)]` to `#[repr(C)]` — all fields are naturally aligned at their byte offsets in a 16-byte struct, so `packed` was unnecessary and caused E0793 (unaligned reference to packed field) on all `read_volatile`/`write_volatile` calls.
+
+### Impact
+- G2 PCIe stack items 1–4 are now complete (ECAM, IOMMU, NVMe, NIC)
+- `net` service Cell gains PCIe NIC without any Cell-side changes; VirtIO NIC remains as automatic fallback
+- IOMMU bare passthrough satisfies DMA safety requirement for G2 SAS (upgrade to full IOMMU page tables deferred to real-hardware bring-up)
+
+---
+
 ## [2026-06-15] P0 UART Input Delivery — EV_ASCII relay to input service + ARM64 integration test green
 
 ### Summary

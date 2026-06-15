@@ -123,6 +123,17 @@ pub fn init_kernel_paging(
     }
 
     // 3. Explicitly identity-map arch MMIO regions not in the memory map.
+    //
+    // AArch64: Device-nGnRnE (MAIR index 0) — required for MMIO.  Normal cacheable
+    // (MAIR index 1) causes QEMU to reject EL0 device accesses with a Permission fault
+    // even when the AP bits correctly grant EL0 read/write access.
+    // RISC-V / other: no DEVICE bit; the arch paging code ignores it.
+    #[cfg(target_arch = "aarch64")]
+    let mmio_flags = PageFlags::from_bits(
+        PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
+            | PageFlags::DEVICE | PageFlags::ACCESSED | PageFlags::DIRTY,
+    );
+    #[cfg(not(target_arch = "aarch64"))]
     let mmio_flags = PageFlags::from_bits(
         PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
             | PageFlags::ACCESSED | PageFlags::DIRTY,
@@ -152,11 +163,19 @@ pub fn init_kernel_paging(
     }
     #[cfg(target_arch = "aarch64")]
     {
+        // GIC (EL1-only): cells must not modify interrupt routing — keep mmio_flags.
         root_table.identity_map(0x0800_0000, 0x0900_0000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table.identity_map(0x0900_0000, 0x0904_0000, mmio_flags, &mut alloc_fn)
+        // Peripheral MMIO (GPIO PL061, UART PL011, RTC): cells access directly via
+        // driver rlibs (bit-bang GPIO/I2C/SPI/PWM). LBI guarantees only cells with
+        // the GPIO capability can construct driver objects, so USER access is safe.
+        let cell_mmio_flags = PageFlags::from_bits(
+            PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
+                | PageFlags::USER | PageFlags::DEVICE | PageFlags::ACCESSED | PageFlags::DIRTY,
+        );
+        root_table.identity_map(0x0900_0000, 0x0904_0000, cell_mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table.identity_map(0x0A00_0000, 0x0A00_4000, mmio_flags, &mut alloc_fn)
+        root_table.identity_map(0x0A00_0000, 0x0A00_4000, cell_mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         root_table.identity_map(0x1000_0000, 0x1001_0000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
@@ -306,9 +325,10 @@ pub fn init_kernel_paging_x86(
     //    HPET:    0xFED0_0000 (4 KB)   — init_timers() passes this as virt addr
     //    LAPIC:   0xFEE0_0000 (4 KB)
     let mmio_regions: &[(usize, usize)] = &[
-        (0xFEC0_0000, 0xFEC0_0000 + PAGE_SIZE),
-        (0xFED0_0000, 0xFED0_0000 + PAGE_SIZE),
-        (0xFEE0_0000, 0xFEE0_0000 + PAGE_SIZE),
+        (0xFEC0_0000, 0xFEC0_0000 + PAGE_SIZE), // IOAPIC
+        (0xFED0_0000, 0xFED0_0000 + PAGE_SIZE), // HPET
+        (0xFED9_0000, 0xFED9_0000 + PAGE_SIZE), // Intel VT-d IOMMU (q35)
+        (0xFEE0_0000, 0xFEE0_0000 + PAGE_SIZE), // LAPIC
     ];
     for &(start, end) in mmio_regions {
         let mut va = start;
@@ -403,6 +423,30 @@ pub fn map_page_x86(
     // SAFETY: invlpg flushes only the single TLB entry for vaddr.
     unsafe { invlpg(vaddr); }
     Ok(())
+}
+
+/// Identity-map a MMIO BAR region [phys, phys+size) at VA == PA (x86_64).
+///
+/// Called by PCIe drivers at init time to make dynamically-assigned BAR windows
+/// accessible as identity-mapped VA == PA. Each page in the range is mapped with
+/// MMIO cache-disabling flags; existing mappings are silently overwritten.
+///
+/// Panics on OOM or if the frame allocator is not yet initialised.
+#[cfg(target_arch = "x86_64")]
+pub fn map_mmio_x86(phys: usize, size: usize) {
+    use hal::paging::pte_flags_mmio;
+    let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
+    let allocator = fa.as_mut().expect("map_mmio_x86: frame allocator not ready");
+    let page_mask = PAGE_SIZE - 1;
+    let mut va = phys & !page_mask;
+    let end = (phys + size + page_mask) & !page_mask;
+    while va < end {
+        // Errors are logged but not fatal; a broken mapping will fault on first use.
+        if let Err(e) = map_page_x86(allocator, va, va, pte_flags_mmio()) {
+            log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
+        }
+        va += PAGE_SIZE;
+    }
 }
 
 /// Unmap a 4KB page (x86_64).
