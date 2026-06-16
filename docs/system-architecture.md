@@ -399,6 +399,33 @@ A **Cell** is an isolated execution context (like a process) but:
 - Communicates via syscalls (IPC, filesystem, logging)
 - Has its own task control block, page table, and message queue
 
+### ViCell App SDK (L1 Platform Layer)
+
+**Purpose**: Eliminate boilerplate and unlock real native applications without kernel expertise.
+
+**Components** (`libs/ostd/`):
+- **`CellRuntime` builder**: Unified app initialization — handles manifest generation, permission sets, lifecycle
+- **`app_entry!` / `service_entry!` macros**: Declarative entry points (10–30 lines replaces 200+ lines of manual boilerplate)
+- **Typed client facades**:
+  - `VfsClient` — read_file, write_file, append_file, stat, list_dir, mkdir, unlink
+  - `NetClient` — tcp_connect, tcp_send, tcp_recv, tcp_close, dns_lookup, local_ip
+  - `InputClient` — request_focus, get_focus, clear_focus
+- **Lifecycle support**: `ShutdownReason` enum, `ShutdownWith` event, `arm_heartbeat()`, `run_with_lifecycle()` for graceful shutdown
+- **Lazy service accessors**: `app.vfs()`, `app.net()` resolve on first use
+
+**Reference app** (`cells/apps/hello-cell/`):
+```rust
+use api::{app_entry, CellRuntime};
+
+app_entry!(handler = run);
+
+async fn run() {
+    println!("Hello from ViCell App SDK!");
+}
+```
+
+**Impact**: Apps no longer need to understand manifests, syscall allowlists, or raw IPC — all abstracted by the SDK. Foundation for L2 middleware (HTTP servers, databases, pub-sub), unblocking G2 real application development.
+
 ### Cell Types
 
 **Applications**: Shell, hello world, Lua/MicroPython runtimes, reference robot demo

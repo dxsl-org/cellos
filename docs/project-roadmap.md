@@ -320,7 +320,7 @@ G3 Level C  →  sys_grant_tensor + TensorBuffer       — needs sys_grant_pages
 | Layer | Cần xây | Tương đương Linux | Phụ thuộc | Status |
 |-------|---------|-------------------|-----------|--------|
 | **L0 — Mental model** | Docs dạy Cell/Actor thinking; migration patterns từ Linux (`thread→cell`, `blocking→async/IPC`) | Unix philosophy, man pages | — | 📋 |
-| **L1 — App Framework** | `AppContext` (service discovery, lifecycle, typed events), ergonomic IPC patterns, ViCell App SDK | glibc + POSIX | Name service (205/206 done), embedded-io traits | 📋 |
+| **L1 — App Framework** | `CellRuntime` (builder), `app_entry!`/`service_entry!` macros, typed clients (VfsClient/NetClient/InputClient), lifecycle hooks | glibc + POSIX | Name service (205/206 done), embedded-io traits (✅ both done) | ✅ COMPLETE (2026-06-16) |
 | **L2 — Middleware** | HTTP server native ViCell (zero-copy từ đầu), auth/JWT, pub-sub, DB access (SQLite via Tier 1b) | Express, Django, Spring | L1 |📋 |
 | **L3 — Tooling** | Package manager, cell image format, cell-aware debugger, `cargo-vicell` | apt/cargo, gdb, strace | L1 | 📋 |
 | **L4 — Observability** | Cell metrics, distributed tracing cross-cells, kernel audit ring integration, Prometheus-compatible export | Prometheus, OpenTelemetry | L1 + L3 | 📋 |
@@ -346,7 +346,7 @@ G3 Level C  →  sys_grant_tensor + TensorBuffer       — needs sys_grant_pages
 | **Hardware NPU inference (RKNN/Hailo)** | ✅ Tier 1b entropy + net shims DONE — next: RKNN runtime FFI cell |
 | **Python R&D** | Tier 3: full CPython in Linux VM (`apt install python3 pip numpy`) |
 | **Rich apps / ecosystem (G2)** | Tier 1b SDK libs → name service → display → Tier 3 Linux VM |
-| **Real native Rust apps (non-toy)** | ✅ `embedded-io` traits → ✅ `HashMap` in prelude → ViCell App SDK |
+| **Real native Rust apps (non-toy)** | ✅ `embedded-io` traits → ✅ `HashMap` in prelude → ✅ App SDK (L1: CellRuntime + app_entry! + typed clients) |
 
 ---
 

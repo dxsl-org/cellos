@@ -4,6 +4,29 @@
 
 ---
 
+## [2026-06-16] ViCell App SDK L1 — CellRuntime, app_entry!, typed clients (VfsClient/NetClient/InputClient)
+
+### Summary
+Shipped the ViCell App SDK (L1 platform layer) — the foundational framework unlocking real native applications without boilerplate. `libs/ostd/` now provides: `CellRuntime` builder pattern for unified app startup, declarative `app_entry!` and `service_entry!` macros eliminating manifest/dispatch boilerplate, typed client facades (`VfsClient`, `NetClient`, `InputClient`) for ergonomic service access, lifecycle event support (`ShutdownReason`, `ShutdownWith` event), lazy service accessors, and `arm_heartbeat()` with `run_with_lifecycle()` for graceful shutdown coordination. Reference app: `cells/apps/hello-cell/` (17 lines, zero boilerplate).
+
+### Changes
+- **`libs/ostd/src/runtime.rs`** — NEW: `CellRuntime` builder, `app_syscall_set()`, `service_syscall_set()` const fns enabling minimal permission sets per app type
+- **`libs/ostd/src/clients/mod.rs`** — NEW: Client module root with vfs/net/input facades
+- **`libs/ostd/src/clients/vfs.rs`** — NEW: `VfsClient` with read_file, write_file, append_file, stat, list_dir, mkdir, unlink, exists methods
+- **`libs/ostd/src/clients/net.rs`** — NEW: `NetClient` with tcp_connect, tcp_send, tcp_recv, tcp_close, dns_lookup, local_ip methods
+- **`libs/ostd/src/clients/input.rs`** — NEW: `InputClient` with request_focus, get_focus, clear_focus methods
+- **`libs/ostd/src/app.rs`** — EXTENDED: `ShutdownReason`, `ShutdownWith` event variant, `arm_heartbeat()`, `run_with_lifecycle()`, lazy vfs/net/input accessors
+- **`cells/apps/hello-cell/`** — NEW: 17-line reference app demonstrating zero-boilerplate `app_entry!(handler = fn)` macro
+- **`cells/apps/sdk-demo/`** — REWRITTEN: Updated to use new SDK patterns (clients, lifecycle, CellRuntime)
+
+### Impact
+- **Eliminates boilerplate**: was 200+ lines (declare_manifest, manual sys_recv loop, hardcoded TID lookup), now 10–30 lines with `app_entry!`
+- **Enables real apps**: client facades + lifecycle hooks unlock interactive apps, services, daemons without framework knowledge
+- **Foundation for L2**: Middleware libraries (HTTP server, pub-sub, DB access) can now assume CellRuntime + clients available
+- **G2 graduation unlock**: Full stack complete (kernel + App SDK + typed clients) unblocks real application development
+
+---
+
 ## [2026-06-16] Tier 3a Security Silo — 4/4 phases complete (G1-optional key isolation)
 
 ### Summary

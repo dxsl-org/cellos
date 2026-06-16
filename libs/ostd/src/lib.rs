@@ -82,6 +82,12 @@ pub mod app;
 /// Service-side message dispatch: [`MessageHandler`] trait + [`dispatch::run_service`] loop.
 pub mod dispatch;
 
+/// Ergonomic service client facades — `VfsClient`, `NetClient`, `InputClient`.
+pub mod clients;
+
+/// Cell runtime — `CellRuntime` builder, `app_entry!` / `service_entry!` macros.
+pub mod runtime;
+
 /// Task spawning.
 pub mod task {
     use crate::*;

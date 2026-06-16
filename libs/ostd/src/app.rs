@@ -41,12 +41,31 @@ pub const APP_MSG_MAGIC: u8 = 0xAC;
 
 const RECV_BUF_SIZE: usize = 4096;
 
+/// Reason delivered with a structured [`AppEvent::ShutdownWith`] event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownReason {
+    /// Graceful shutdown requested by init / power management.
+    Requested,
+    /// Heartbeat deadline missed — kernel terminated the cell; supervisor will restart.
+    Watchdog,
+    /// A parent cell the cell subscribed to via `NotifyOnExit` has died.
+    ParentDied,
+}
+
 /// Typed event delivered to an [`AppContext`] handler.
 ///
 /// AppEvent owns its payload data so the handler can store or forward it without
 /// lifetime constraints tied to the receive buffer.
+///
+/// New variants may be added in future SDK releases.  Always add a wildcard arm
+/// `_ => {}` to future-proof your match.
+#[non_exhaustive]
 #[derive(Debug)]
 pub enum AppEvent {
+    /// Fires exactly once before the first `sys_recv` when using
+    /// [`AppContext::run_with_lifecycle`] or [`CellRuntime::run`].
+    /// Use for startup work: config read, service registration, UI init.
+    Init,
     /// An App SDK message (envelope magic verified).
     Message {
         /// TID of the sending cell.
@@ -68,22 +87,38 @@ pub enum AppEvent {
     Input(api::input::InputEvent),
     /// The receive deadline elapsed (only from [`AppContext::run_with_timeout`]).
     Timeout,
-    /// Kernel-requested graceful shutdown signal (future: power management).
+    /// Kernel-requested graceful shutdown (legacy form — no reason byte in envelope).
     Shutdown,
+    /// Structured shutdown with reason (emitted when the envelope carries a reason byte).
+    ShutdownWith {
+        /// Why the shutdown is happening.
+        reason: ShutdownReason,
+    },
 }
 
 /// Execution context for a Cell application.
 ///
 /// Owns the receive buffer and drives the IPC loop.  Create once in `main()` and
 /// call [`run`][AppContext::run] — it never returns unless the handler panics.
+///
+/// Lazy service client accessors (`.vfs()`, `.net()`, `.input()`) initialize on
+/// first use and are re-used across handler invocations.
 pub struct AppContext {
     recv_buf: [u8; RECV_BUF_SIZE],
+    vfs_client: Option<crate::clients::VfsClient>,
+    net_client: Option<crate::clients::NetClient>,
+    input_client: Option<crate::clients::InputClient>,
 }
 
 impl AppContext {
     /// Create a new context with a stack-allocated receive buffer.
     pub fn new() -> Self {
-        Self { recv_buf: [0u8; RECV_BUF_SIZE] }
+        Self {
+            recv_buf: [0u8; RECV_BUF_SIZE],
+            vfs_client: None,
+            net_client: None,
+            input_client: None,
+        }
     }
 
     /// Run the IPC event loop, calling `handler` for every incoming event.
@@ -171,6 +206,45 @@ impl AppContext {
         crate::input::request_focus()
     }
 
+    /// Arm (or re-arm) the kernel watchdog heartbeat for this cell.
+    ///
+    /// The cell must call a syscall (any syscall) within `ticks` scheduler ticks
+    /// (1 tick ≈ 10 ms) or the kernel terminates and restarts it.  Pass `0` to
+    /// disable the heartbeat.  Called automatically by [`CellRuntime::run`].
+    pub fn arm_heartbeat(&self, ticks: u64) {
+        syscall::sys_heartbeat(ticks);
+    }
+
+    /// Run the IPC event loop, firing [`AppEvent::Init`] exactly once before
+    /// the first `sys_recv`, then calling `handler` for every subsequent event.
+    ///
+    /// Prefer this over [`run`][Self::run] for cells that need startup work.
+    pub fn run_with_lifecycle(&mut self, mut handler: impl FnMut(&mut AppContext, AppEvent)) -> ! {
+        handler(self, AppEvent::Init);
+        self.run(handler)
+    }
+
+    // ── Service client accessors ──────────────────────────────────────────────
+
+    /// Lazy accessor for the VFS service client.
+    ///
+    /// Initializes on first call; reuses the cached `VfsRef` on subsequent calls.
+    /// Note: returns `&mut VfsClient` which borrows `self` — store the result in a
+    /// local to call other accessors in the same handler invocation.
+    pub fn vfs(&mut self) -> &mut crate::clients::VfsClient {
+        self.vfs_client.get_or_insert_with(crate::clients::VfsClient::new)
+    }
+
+    /// Lazy accessor for the network service client.
+    pub fn net(&mut self) -> &mut crate::clients::NetClient {
+        self.net_client.get_or_insert_with(crate::clients::NetClient::new)
+    }
+
+    /// Lazy accessor for the input service client.
+    pub fn input(&mut self) -> &mut crate::clients::InputClient {
+        self.input_client.get_or_insert_with(crate::clients::InputClient::new)
+    }
+
     // ── Private ──────────────────────────────────────────────────────────────
 
     /// Parse `buf` into an owned `AppEvent`, copying the payload into a `Vec`.
@@ -179,10 +253,17 @@ impl AppContext {
     /// receive buffer, so the caller can pass `&mut self` to the handler freely.
     fn parse_event_owned(sender_tid: usize, buf: &[u8]) -> AppEvent {
         if buf.len() >= 2 && buf[0] == APP_MSG_MAGIC {
-            let data = buf[2..].to_vec();
             match buf[1] {
-                0xFF => AppEvent::Shutdown,
-                _ => AppEvent::Message { sender_tid, data },
+                0xFF => {
+                    // Structured shutdown: byte 2 carries the reason (if present).
+                    if buf.len() >= 3 {
+                        let reason = Self::parse_shutdown_reason(buf);
+                        AppEvent::ShutdownWith { reason }
+                    } else {
+                        AppEvent::Shutdown
+                    }
+                }
+                _ => AppEvent::Message { sender_tid, data: buf[2..].to_vec() },
             }
         } else if buf.len() >= 2 && buf[0] == api::input::INPUT_EVENT_OPCODE {
             if let Some(ev) = crate::input::parse_frame(buf) {
@@ -193,7 +274,21 @@ impl AppContext {
             AppEvent::RawMessage { sender_tid, data: buf.to_vec() }
         }
     }
+
+    /// Decode shutdown reason byte from a `[0xAC, 0xFF, reason]` envelope.
+    ///
+    /// Missing or unknown reason bytes default to [`ShutdownReason::Requested`].
+    pub(crate) fn parse_shutdown_reason(buf: &[u8]) -> ShutdownReason {
+        match buf.get(2) {
+            Some(1) => ShutdownReason::Watchdog,
+            Some(2) => ShutdownReason::ParentDied,
+            _       => ShutdownReason::Requested,
+        }
+    }
 }
+
+/// Re-export `CellRuntime` into the `app` module namespace for convenience.
+pub use crate::runtime::CellRuntime;
 
 impl Default for AppContext {
     fn default() -> Self {

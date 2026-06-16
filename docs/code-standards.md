@@ -442,6 +442,50 @@ pub async fn read_with_timeout(path: &str, timeout_ms: u64) -> ViResult<Vec<u8>>
 }
 ```
 
+### App Development (Cell Writing)
+
+Use the ViCell App SDK (`libs/ostd/`) to eliminate boilerplate:
+
+**Before (manual dispatch)**:
+```rust
+#![no_std]
+extern crate alloc;
+
+use api::{declare_manifest, sys_recv, sys_send, MessageBuf};
+
+declare_manifest!(spawn = true);
+
+#[no_mangle]
+pub extern "C" fn main() {
+    let mut buf = MessageBuf::new();
+    loop {
+        if sys_recv(&mut buf, Some(100)).is_ok() {
+            // Handle message...
+            sys_send(buf.sender, &[0x00]).ok();
+        }
+    }
+}
+```
+
+**After (app_entry! macro)**:
+```rust
+use api::{app_entry, CellRuntime, VfsClient};
+
+app_entry!(handler = run);
+
+async fn run() {
+    let vfs = VfsClient::new();
+    let data = vfs.read_file("/data/config.txt").await.ok();
+    println!("Config loaded");
+}
+```
+
+**Pattern summary**:
+- Use `app_entry!` or `service_entry!` macros to declare entry point
+- Access services via typed client facades (`VfsClient`, `NetClient`, `InputClient`)
+- `CellRuntime` handles manifest generation, permission sets, lifecycle
+- Apps declare minimal syscall set; kernel enforces via allowlist
+
 ---
 
 ## Deprecations & Breaking Changes
