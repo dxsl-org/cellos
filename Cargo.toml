@@ -60,6 +60,7 @@ members = [
     "cells/services/config",
     "cells/services/hypervisor",
     "cells/services/silo",
+    "cells/services/httpd",
 
     # Cells - Apps
     "cells/apps/init",
