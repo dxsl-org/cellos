@@ -143,7 +143,7 @@ impl ViNode for Dialog {
         let n = self.buttons.len() as f32;
         for (i, btn) in self.buttons.iter_mut().enumerate() {
             // Stack right-to-left: primary button is rightmost.
-            let slot = (n - 1.0 - i as f32);
+            let slot = n - 1.0 - i as f32;
             let btn_x = x + w - 12.0 - (slot + 1.0) * (btn_w + 8.0) + 8.0;
             btn.bounds.set(Rect { x: btn_x, y: btn_y, w: btn_w, h: btn_h });
         }

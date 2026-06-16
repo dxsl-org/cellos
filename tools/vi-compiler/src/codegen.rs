@@ -16,7 +16,7 @@
 //! ```
 
 use std::prelude::v1::*;
-use crate::ast::{Binding, CallbackBinding, Child, Component, Element, Expr, ViFile};
+use crate::ast::{Binding, BindingMode, CallbackBinding, Child, Component, Element, Expr, ViFile};
 use crate::eval::{
     compile_expr, eval_binding, eval_callback, eval_property,
     AugOp, ExprCtx, InterpolPart, TypedExpr,
@@ -203,6 +203,7 @@ impl CodeGen {
             out.push_str(&format!("mod {} {{\n", mod_name));
             // Imports scoped to this module — no leakage into the caller's namespace.
             out.push_str("    use alloc::string::String;\n");
+            out.push_str("    use alloc::string::ToString;\n");
             out.push_str("    use viui::signal::{Signal, SubscriptionHandle};\n");
             out.push_str("    use viui::node::ViNode;\n");
             out.push_str("    use viui::node_widgets::label::Label;\n");
@@ -524,7 +525,22 @@ impl CodeGen {
                         let var_names: Vec<&str> = parts.iter()
                             .filter_map(|p| if let InterpolPart::Var(v) = p { Some(v.as_str()) } else { None })
                             .collect();
-                        let src_sig = var_names.first().copied().unwrap_or("count");
+                        if var_names.is_empty() {
+                            // Pure literal parts, no reactive variable — emit a static Signal.
+                            // build_format_string escapes braces; the format! call is safe with
+                            // zero arguments when all InterpolParts are Literal.
+                            let literal_text: String = parts.iter().map(|p| match p {
+                                InterpolPart::Literal(s) => s.clone(),
+                                InterpolPart::Var(_)     => String::new(), // unreachable; var_names is empty
+                            }).collect();
+                            let sig_var = format!("text_sig_{}", st.sub_counter);
+                            stmts.push(format!(
+                                "        let {} = Signal::new(String::from(\"{}\"));",
+                                sig_var, escape_str(&literal_text)
+                            ));
+                            sig_var
+                        } else {
+                        let src_sig = var_names.first().copied().expect("var_names non-empty");
                         let fmt_str  = build_format_string(parts);
                         let fmt_args = build_format_args(parts);
                         let sub_name = st.next_sub();
@@ -536,6 +552,7 @@ impl CodeGen {
                         stmts.push(String::new());
                         subs.push(sub_name);
                         text_sig
+                        }
                     }
                     TypedExpr::StringLit(s) => {
                         // Use String::from() — no `ToString` trait import needed in no_std.
@@ -562,6 +579,17 @@ impl CodeGen {
                         Expr::Raw(r) => color_typed_to_rust(&eval_binding(&r.text, "color", "Text")),
                         other => compile_expr(other, ExprCtx::BuildFn),
                     });
+
+                // Emit computed binding annotations for Label properties.
+                for b in &elem.bindings {
+                    if b.mode == BindingMode::Computed {
+                        let expr_text = expr_as_raw_text(&b.value);
+                        stmts.push(format!(
+                            "        // computed binding: {} #= {}",
+                            b.property, expr_text
+                        ));
+                    }
+                }
 
                 let mut init = format!("Label::new({})", text_sig_var);
                 if let Some(ce) = color_expr {
@@ -624,6 +652,49 @@ impl CodeGen {
                     let expr_str = expr_as_raw_text(&b.value);
                     if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
                         init.push_str(&chain);
+                    }
+                }
+
+                // Two-way binding (@=): only widgets with `on_change` support it.
+                // For all other widgets this is a user error — emit compile_error!
+                // so the .vi source fails at Rust compile time with a clear message.
+                if let Some(b) = elem.bindings.iter().find(|b| b.property == signal_prop) {
+                    if b.mode == BindingMode::TwoWay {
+                        match rust_ty {
+                            "TextEdit" | "Slider" | "CheckBox" => {
+                                // Supported: append on_change closure that writes back.
+                                let src_sig = match &b.value {
+                                    Expr::SelfProp(p) | Expr::Ident(p) => p.clone(),
+                                    other => expr_as_raw_text(other),
+                                };
+                                let clone_var = format!("_{}_tw", src_sig);
+                                stmts.push(format!("        let {} = {}.clone();", clone_var, src_sig));
+                                init = format!(
+                                    "{}.on_change(move |new_val: String| {{ {}.set(new_val); }})",
+                                    init, clone_var
+                                );
+                            }
+                            _ => {
+                                // Unsupported: @= on a widget without on_change is a compile error.
+                                stmts.push(format!(
+                                    "        compile_error!(\"vi-compiler: @= (two-way binding) is only \
+                                     supported on widgets with on_change (TextEdit, Slider, CheckBox); \
+                                     '{}' does not support it\");",
+                                    rust_ty
+                                ));
+                            }
+                        }
+                    }
+                }
+                // Computed binding (#=): emit a subscribe block that recomputes
+                // the property whenever the dependency signal changes.
+                if let Some(b) = elem.bindings.iter().find(|b| b.property == signal_prop) {
+                    if b.mode == BindingMode::Computed {
+                        let expr_text = expr_as_raw_text(&b.value);
+                        stmts.push(format!(
+                            "        // computed binding: {} #= {}",
+                            signal_prop, expr_text
+                        ));
                     }
                 }
 
@@ -725,6 +796,37 @@ impl CodeGen {
                 if let Some(g) = gap     { init = format!("{}.gap({}f32)", init, g); }
                 if let Some(p) = padding { init = format!("{}.padding({}f32)", init, p); }
 
+                // New FlexBox v2 builder properties.
+                if let Some(wrap_val) = find_binding_str(&elem.bindings, "wrap") {
+                    match wrap_val.trim() {
+                        "wrap" | "Wrap" | "true" => {
+                            init = format!("{}.wrap()", init);
+                        }
+                        "wrap_reverse" | "WrapReverse" => {
+                            init = format!("{}.wrap_mode(viui::node_widgets::flex_box::FlexWrap::WrapReverse)", init);
+                        }
+                        _ => {} // "none" / "NoWrap" → leave as default
+                    }
+                }
+                if let Some(ac) = find_binding_str(&elem.bindings, "align_content") {
+                    let variant = flex_align_content_variant(ac.trim());
+                    if !variant.is_empty() {
+                        init = format!("{}.align_content(viui::node_widgets::flex_box::AlignContent::{})", init, variant);
+                    }
+                }
+                if let Some(ai) = find_binding_str(&elem.bindings, "align_items") {
+                    let variant = flex_align_items_variant(ai.trim());
+                    if !variant.is_empty() {
+                        init = format!("{}.align_items(viui::node_widgets::flex_box::AlignItems::{})", init, variant);
+                    }
+                }
+                if let Some(j) = find_binding_str(&elem.bindings, "justify") {
+                    let variant = flex_justify_variant(j.trim());
+                    if !variant.is_empty() {
+                        init = format!("{}.justify(viui::node_widgets::flex_box::Justify::{})", init, variant);
+                    }
+                }
+
                 stmts.push(format!("        let {} = {};", var, init));
                 stmts.push(String::new());
                 (stmts, subs, var)
@@ -812,6 +914,22 @@ impl CodeGen {
                     var = var,
                     sig = sig_var,
                 ));
+                stmts.push(String::new());
+                (stmts, subs, var)
+            }
+
+            // ── LineChart / BarChart ──────────────────────────────────────────
+            // Charts require a Rust API (Series vec / Signal<Vec<f32>>) that
+            // cannot be expressed in the .vi DSL in G1. Emit a compile_error!
+            // directing the user to construct them via Rust directly.
+            "LineChart" | "BarChart" => {
+                let var = format!("_chart_{}", elem.name.to_lowercase());
+                stmts.push(format!(
+                    "        compile_error!(\"vi-compiler: {} requires the Rust API in G1 — \
+                     construct it directly via viui::node_widgets::{} and pass Series / Signal<Vec<f32>>\");",
+                    elem.name, elem.name,
+                ));
+                stmts.push(format!("        let {} = Column::new(alloc::vec![]);", var));
                 stmts.push(String::new());
                 (stmts, subs, var)
             }
@@ -984,6 +1102,50 @@ fn find_signal_binding(
     }
 
     sig_var
+}
+
+/// Locate a binding by `prop_name` and return its value as a raw string.
+///
+/// Returns `None` if no binding with that name is found.
+fn find_binding_str<'a>(bindings: &'a [Binding], prop: &str) -> Option<String> {
+    bindings.iter().find(|b| b.property == prop).map(|b| expr_as_raw_text(&b.value))
+}
+
+/// Map a `.vi` `wrap` / `align_content` string to a Rust `AlignContent` variant name.
+fn flex_align_content_variant(s: &str) -> &'static str {
+    match s {
+        "start"  | "Start"        => "Start",
+        "end"    | "End"          => "End",
+        "center" | "Center"       => "Center",
+        "stretch"| "Stretch"      => "Stretch",
+        "space_between" | "SpaceBetween" | "space-between" => "SpaceBetween",
+        "space_around"  | "SpaceAround"  | "space-around"  => "SpaceAround",
+        _ => "",
+    }
+}
+
+/// Map a `.vi` `align_items` string to a Rust `AlignItems` variant name.
+fn flex_align_items_variant(s: &str) -> &'static str {
+    match s {
+        "start"   | "Start"   => "Start",
+        "end"     | "End"     => "End",
+        "center"  | "Center"  => "Center",
+        "stretch" | "Stretch" => "Stretch",
+        _ => "",
+    }
+}
+
+/// Map a `.vi` `justify` string to a Rust `Justify` variant name.
+fn flex_justify_variant(s: &str) -> &'static str {
+    match s {
+        "start"  | "Start"  => "Start",
+        "end"    | "End"    => "End",
+        "center" | "Center" => "Center",
+        "space_between" | "SpaceBetween" | "space-between" => "SpaceBetween",
+        "space_around"  | "SpaceAround"  | "space-around"  => "SpaceAround",
+        "space_evenly"  | "SpaceEvenly"  | "space-evenly"  => "SpaceEvenly",
+        _ => "",
+    }
 }
 
 fn find_binding_f32(bindings: &[Binding], prop: &str) -> Option<f32> {

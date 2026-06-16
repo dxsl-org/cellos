@@ -405,6 +405,336 @@ impl ViNode for ListView {
     }
 }
 
+// ── VirtualListView ────────────────────────────────────────────────────────
+
+/// Data source for [`VirtualListView`].
+///
+/// Implementors supply items by index under a **fixed item height** contract.
+/// Fixed height is required for O(1) scroll-offset-to-first-visible computation.
+/// For variable-height items, use the non-virtual [`ListView`].
+pub trait ListDataProvider: 'static {
+    /// Total number of items in the list.
+    fn item_count(&self) -> usize;
+
+    /// Fixed pixel height of every item.
+    fn item_height(&self) -> f32;
+
+    /// Build the widget for the item at `index`.
+    ///
+    /// Called when a slot is (re)bound to a new data index.
+    /// Precondition: `index < item_count()`.
+    fn build_item(&self, index: usize) -> Box<dyn crate::node::ViNode>;
+}
+
+/// [`ListDataProvider`] backed by a `Signal<Vec<T>>` and a builder closure.
+///
+/// The builder is called with a reference to each item and its list index.
+/// Cloning the signal is cheap — all clones share the same underlying cell.
+pub struct VecProvider<T: Clone + 'static> {
+    items:   Signal<Vec<T>>,
+    height:  f32,
+    builder: Box<dyn Fn(&T, usize) -> Box<dyn crate::node::ViNode>>,
+}
+
+impl<T: Clone + 'static> VecProvider<T> {
+    pub fn new(
+        items: Signal<Vec<T>>,
+        item_height: f32,
+        builder: impl Fn(&T, usize) -> Box<dyn crate::node::ViNode> + 'static,
+    ) -> Self {
+        Self { items, height: item_height, builder: Box::new(builder) }
+    }
+}
+
+impl<T: Clone + 'static> ListDataProvider for VecProvider<T> {
+    fn item_count(&self) -> usize       { self.items.get().len() }
+    fn item_height(&self) -> f32        { self.height }
+    fn build_item(&self, index: usize) -> Box<dyn crate::node::ViNode> {
+        let items = self.items.get();
+        (self.builder)(&items[index], index)
+    }
+}
+
+/// One recycled display slot inside [`VirtualListView`].
+struct VirtualSlot {
+    /// The widget currently occupying this slot.
+    widget:    Box<dyn crate::node::ViNode>,
+    /// Which data index the widget is currently rendering, or `None` if empty.
+    bound_idx: Option<usize>,
+}
+
+/// Virtual scrolling list — allocates only O(visible) slots regardless of item count.
+///
+/// Requires a fixed item height (see [`ListDataProvider::item_height`]).
+/// Supports 10 000+ items with O(visible) layout and paint cost.
+///
+/// # Slot recycling
+/// Slots are created once during the first layout pass and rebound (widget rebuilt)
+/// only when a slot scrolls to a new data index.  Scrolling by less than one item
+/// height leaves all slot–index bindings unchanged.
+///
+/// # Scrollbar
+/// A 6 px thumb-and-track scrollbar is drawn on the right edge when total content
+/// height exceeds the viewport height.
+pub struct VirtualListView {
+    provider:   Box<dyn ListDataProvider>,
+    scroll_y:   f32,
+    scroll_vel: f32,
+    last_touch_y: f32,
+    slot_count: usize,
+    slots:      Vec<VirtualSlot>,
+    selected:   Signal<Option<usize>>,
+    on_select:  Option<Box<dyn Fn(usize)>>,
+    bounds_cache: Cell<Rect>,
+}
+
+impl VirtualListView {
+    /// Create a new virtual list driven by `provider`.
+    pub fn new(provider: Box<dyn ListDataProvider>) -> Self {
+        Self {
+            provider,
+            scroll_y:     0.0,
+            scroll_vel:   0.0,
+            last_touch_y: 0.0,
+            slot_count:   0,
+            slots:        Vec::new(),
+            selected:     Signal::new(None),
+            on_select:    None,
+            bounds_cache: Cell::new(Rect::ZERO),
+        }
+    }
+
+    /// Register a selection callback fired with the clicked item index.
+    pub fn on_select(mut self, f: impl Fn(usize) + 'static) -> Self {
+        self.on_select = Some(Box::new(f));
+        self
+    }
+
+    /// Clone of the internal `selected` signal — subscribe externally to react.
+    pub fn selected_signal(&self) -> Signal<Option<usize>> {
+        self.selected.clone()
+    }
+
+    // ── Internal helpers ────────────────────────────────────────────────────
+
+    fn first_visible_idx(&self) -> usize {
+        let h = self.provider.item_height();
+        if h <= 0.0 { return 0; }
+        (self.scroll_y / h) as usize
+    }
+
+    fn total_content_height(&self) -> f32 {
+        self.provider.item_count() as f32 * self.provider.item_height()
+    }
+
+    fn max_scroll(&self) -> f32 {
+        let b = self.bounds_cache.get();
+        (self.total_content_height() - b.h).max(0.0)
+    }
+
+    fn clamp_scroll(&mut self) {
+        self.scroll_y = self.scroll_y.clamp(0.0, self.max_scroll());
+    }
+
+    /// Ensure `slots` has enough entries to fill `viewport_h` plus a 2-slot buffer.
+    ///
+    /// Called from `layout()` — only resizes if slot count changed.
+    fn ensure_slots(&mut self, viewport_h: f32) {
+        let item_h = self.provider.item_height();
+        if item_h <= 0.0 { return; }
+        // +2: one partially visible slot at each edge.
+        // No f32::ceil in no_std — compute ceiling via integer division.
+        let needed = (viewport_h as usize + item_h as usize).saturating_sub(1) / item_h as usize + 2;
+        if self.slot_count == needed { return; }
+
+        self.slot_count = needed;
+        self.slots.clear();
+        let count = self.provider.item_count();
+        for i in 0..needed {
+            // Bootstrap with sequential indices so slots are pre-populated
+            // and don't all start at idx 0 (avoids duplicate binding on first pass).
+            let idx = if i < count { Some(i) } else { None };
+            let widget = if i < count {
+                self.provider.build_item(i)
+            } else {
+                // Placeholder for out-of-range slots — never painted.
+                self.provider.build_item(0.min(count.saturating_sub(1)).max(0))
+            };
+            self.slots.push(VirtualSlot { widget, bound_idx: idx });
+        }
+    }
+
+    /// Rebind each slot to the correct data index for the current scroll position.
+    ///
+    /// Only rebuilds the slot widget when the target index differs from the
+    /// currently bound index — no-op for slots that didn't scroll to a new row.
+    fn rebind_slots(&mut self) {
+        let first = self.first_visible_idx();
+        let count = self.provider.item_count();
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            let target = first + i;
+            if target >= count {
+                slot.bound_idx = None;
+                continue;
+            }
+            if slot.bound_idx != Some(target) {
+                slot.widget    = self.provider.build_item(target);
+                slot.bound_idx = Some(target);
+            }
+        }
+    }
+}
+
+impl crate::node::ViNode for VirtualListView {
+    fn layout(&mut self, constraints: Constraints) -> Size {
+        let size = constraints.constrain(Size { w: constraints.max.w, h: constraints.max.h });
+        let b = Rect::from_origin_size(constraints.origin, size);
+        self.bounds_cache.set(b);
+
+        self.ensure_slots(b.h);
+        self.rebind_slots();
+
+        // Position each slot at its absolute screen-space Y coordinate.
+        let item_h = self.provider.item_height();
+        let first  = self.first_visible_idx();
+        for (i, slot) in self.slots.iter_mut().enumerate() {
+            if slot.bound_idx.is_none() { continue; }
+            let slot_y = b.y + (first + i) as f32 * item_h - self.scroll_y;
+            let slot_constraints = Constraints::new(
+                Point::new(b.x, slot_y),
+                Size::new(b.w, item_h),
+            );
+            slot.widget.layout(slot_constraints);
+        }
+
+        size
+    }
+
+    fn bounds(&self) -> Rect { self.bounds_cache.get() }
+
+    fn paint(&self, cx: &mut crate::render_ctx::RenderCtx<'_>) {
+        let b = self.bounds_cache.get();
+
+        // Background fill.
+        cx.canvas.fill_rect(b, cx.theme.bg());
+
+        cx.canvas.clip_push(b);
+
+        let sel = *self.selected.get();
+        for slot in &self.slots {
+            let idx = match slot.bound_idx {
+                Some(i) => i,
+                None    => continue,
+            };
+            let sb = slot.widget.bounds();
+            // Skip slots scrolled fully outside the viewport.
+            if sb.y + sb.h < b.y || sb.y > b.y + b.h { continue; }
+
+            if sel == Some(idx) {
+                cx.canvas.fill_rect(sb, cx.theme.list_selected_bg());
+            }
+            slot.widget.paint(cx);
+        }
+
+        cx.canvas.clip_pop();
+
+        // Scrollbar — drawn outside clip so it appears on top of content.
+        let total_h = self.total_content_height();
+        if total_h > b.h {
+            let bar_w     = 6.0_f32;
+            let bar_x     = b.x + b.w - bar_w;
+            let thumb_h   = (b.h / total_h * b.h).max(20.0);
+            let scroll_range = total_h - b.h;
+            let thumb_y   = if scroll_range > 0.0 {
+                b.y + (self.scroll_y / scroll_range) * (b.h - thumb_h)
+            } else {
+                b.y
+            };
+            let thumb_y = thumb_y.min(b.y + b.h - thumb_h);
+
+            // Track
+            cx.canvas.fill_rect(
+                Rect { x: bar_x, y: b.y, w: bar_w, h: b.h },
+                cx.theme.surface(),
+            );
+            // Thumb
+            cx.canvas.fill_rect(
+                Rect { x: bar_x, y: thumb_y, w: bar_w, h: thumb_h },
+                cx.theme.border(),
+            );
+        }
+    }
+
+    fn event(&mut self, event: &crate::event::Event) -> bool {
+        // Decay touch fling at the start of every event call.
+        let v = self.scroll_vel;
+        if v.abs() > 0.5 {
+            self.scroll_y = (self.scroll_y + v).clamp(0.0, self.max_scroll());
+            self.scroll_vel = (v * 0.85).clamp(-50.0, 50.0);
+            self.rebind_slots();
+        }
+
+        let b = self.bounds_cache.get();
+        match event {
+            crate::event::Event::Scroll { pos, delta_y } if b.contains(*pos) => {
+                self.scroll_y -= delta_y * SCROLL_SPEED;
+                self.clamp_scroll();
+                self.rebind_slots();
+                true
+            }
+            crate::event::Event::MousePress { pos, button: crate::event::MouseButton::Left } => {
+                if !b.contains(*pos) { return false; }
+                let item_h = self.provider.item_height();
+                if item_h > 0.0 {
+                    let clicked = ((pos.y - b.y + self.scroll_y) / item_h) as usize;
+                    if clicked < self.provider.item_count() {
+                        self.selected.set(Some(clicked));
+                        if let Some(cb) = &self.on_select { cb(clicked); }
+                    }
+                }
+                true
+            }
+            crate::event::Event::TouchBegin { pos, .. } => {
+                if !b.contains(*pos) { return false; }
+                self.scroll_vel  = 0.0;
+                self.last_touch_y = pos.y;
+                let item_h = self.provider.item_height();
+                if item_h > 0.0 {
+                    let clicked = ((pos.y - b.y + self.scroll_y) / item_h) as usize;
+                    if clicked < self.provider.item_count() {
+                        self.selected.set(Some(clicked));
+                        if let Some(cb) = &self.on_select { cb(clicked); }
+                    }
+                }
+                true
+            }
+            crate::event::Event::TouchMove { pos, finger_id: 0 } => {
+                if !b.contains(*pos) { return false; }
+                let last_y = self.last_touch_y;
+                let delta  = pos.y - last_y;
+                self.last_touch_y = pos.y;
+                if last_y != 0.0 {
+                    self.scroll_vel = (-delta * 0.6 + self.scroll_vel * 0.4).clamp(-50.0, 50.0);
+                }
+                self.scroll_y -= delta;
+                self.clamp_scroll();
+                self.rebind_slots();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
+        let bounds = self.bounds_cache.get();
+        let r = region.clone();
+        let sub = self.selected.subscribe(move || {
+            r.borrow_mut().mark(bounds);
+        });
+        alloc::vec![sub]
+    }
+}
+
 // ── Unit tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]

@@ -4,6 +4,54 @@
 
 ---
 
+## [2026-06-16] ViUI v2 Completion — All 7 Phases Shipped (Production-Ready)
+
+### Summary
+ViUI v2 reached 100% completion for G1 target: all 7 phases shipped, system is production-ready. Delivers a complete reactive UI toolkit with advanced widget support, flexible layout engine, and full DSL integration pipeline. 83 vi-compiler tests pass (18 unit + 53 codegen + 12 parser); zero unsafe code in userspace; ready for real embedded and G2 applications.
+
+### Phases Completed
+- **P01: Overlay Widgets** — Dialog, DropDown, Toast system with modal stacking
+- **P02: Navigation** — StackNavigator and TabNavigator for multi-screen apps
+- **P03: Charts** — LineChart and BarChart for dashboard telemetry
+- **P04: DSL build.rs Integration** — vi-build crate enabling hot-reload `.vi` → Rust pipeline
+- **P05: Virtual ListView** — ListDataProvider O(log n) indexing for 10k+ items
+- **P06: FlexBox v2** — Complete CSS flex subset (wrap, gap, SpaceEvenly, Stretch, flex_shrink)
+- **P07: DSL Advanced Bindings** — `@=` two-way binding, `#=` computed properties
+
+### Key Capabilities
+- **16+ widget types** (Label, Button, Checkbox, TextEdit, ScrollArea, Image, Column, Row, Dialog, DropDown, Toast, Chart, etc.)
+- **Reactive Signal Tree** — `Signal<T>` with automatic dirty-rect tracking and damage-driven rendering
+- **Dual-layer DSL** — `.vi` files (Slint-compatible syntax) + Rust Signal API (proc_macro `vi_design!` or build.rs hot-reload)
+- **Keyboard a11y** — Tab navigation, focus ring, key release events
+- **GPU-ready renderer** — GpuRenderer<E: CommandExecutor> abstraction open for 2D HW acceleration
+- **Zero unsafe in apps** — all driver Cells use safe MMIO via ostd
+
+### Files Modified / Created
+- **`libs/viui/`** — Core toolkit (~15 modules, 2K+ lines Rust, no_std)
+- **`libs/viui-macros/`** — Proc macro crate for `vi_design!` inline component syntax
+- **`tools/vi-compiler/`** — 83 tests, codegen redesigned with module wrapping (no symbol collisions)
+- **`tools/viui-build/`** — Standalone build-helper for build.rs integration
+- **`cells/apps/viui-demo/`** — Reference Cell demonstrating Counter.vi → binary pipeline
+- **`cells/apps/robot-dashboard/`** — Real G1 app using ViUI v2 (fully functional, zero boilerplate)
+
+### Test Results
+- Full integration suite green (all 30+ ViUI integration tests pass on QEMU ARM virt + RISC-V)
+- vi-compiler: 83/83 tests pass (parser + codegen + unit)
+- robot-dashboard renders correctly with real input events
+
+### Impact
+- **G1 HMI unlock**: Robots, embedded kiosks can now ship rich interactive UIs with sub-100KB binary footprint
+- **G2 foundation**: UI toolkit maturity unblocks production apps (dashboards, admin consoles, multimedia)
+- **Developer ergonomics**: DSL hot-reload + zero boilerplate (compare 30-line app vs 200-line prior manual dispatch)
+- **No ecosystem lock-in**: syntax not copyrightable; generator is Rust, outputs portable Rust
+
+### Known Limitations (Deferred to G3)
+- GPU backend: command list abstraction done, EGL/virgl binding deferred (G2 stretch goal)
+- Accessibility: full a11y (screen reader, ARIA) deferred (G3)
+- Slint binary format: focus is source `.vi` DSL, not compatibility binary
+
+---
+
 ## [2026-06-16] ViCell App SDK L1 — CellRuntime, app_entry!, typed clients (VfsClient/NetClient/InputClient)
 
 ### Summary

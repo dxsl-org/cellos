@@ -104,3 +104,88 @@ fn empty_file_ok() {
     let file = compile_str("// just a comment").expect("empty file should parse");
     assert!(file.components.is_empty());
 }
+
+// ─── Phase 07: DSL Advanced Binding operator tests ───────────────────────────
+
+#[test]
+fn two_way_binding_parse() {
+    let src = r#"
+component Login {
+    property<string> name: "";
+    TextEdit {
+        text @= self.name;
+    }
+}
+"#;
+    let file = compile_str(src).expect("two-way binding should parse");
+    let comp = &file.components[0];
+    // Navigate to the TextEdit's text binding.
+    let text_elem = match &comp.children[0] {
+        Child::Element(e) => e,
+        other => panic!("expected Element, got {:?}", other),
+    };
+    let tb = text_elem.bindings.iter()
+        .find(|b| b.property == "text")
+        .expect("text binding missing");
+    assert_eq!(
+        tb.mode,
+        BindingMode::TwoWay,
+        "Expected TwoWay binding mode for @= operator, got {:?}",
+        tb.mode
+    );
+}
+
+#[test]
+fn computed_binding_parse() {
+    let src = r#"
+component Display {
+    property<float> value: 0.0;
+    Label {
+        text #= "computed_val";
+    }
+}
+"#;
+    let file = compile_str(src).expect("computed binding should parse");
+    let comp = &file.components[0];
+    let label_elem = match &comp.children[0] {
+        Child::Element(e) => e,
+        other => panic!("expected Element, got {:?}", other),
+    };
+    let tb = label_elem.bindings.iter()
+        .find(|b| b.property == "text")
+        .expect("text binding missing");
+    assert_eq!(
+        tb.mode,
+        BindingMode::Computed,
+        "Expected Computed binding mode for #= operator, got {:?}",
+        tb.mode
+    );
+}
+
+#[test]
+fn one_way_binding_still_works() {
+    // Regression: existing one-way `:` bindings must still parse as OneWay.
+    let src = r#"
+component Simple {
+    property<string> label: "";
+    Label {
+        text: "hello";
+    }
+}
+"#;
+    let file = compile_str(src).expect("one-way binding should parse");
+    let comp = &file.components[0];
+    let elem = match &comp.children[0] {
+        Child::Element(e) => e,
+        other => panic!("expected Element, got {:?}", other),
+    };
+    let tb = elem.bindings.iter()
+        .find(|b| b.property == "text")
+        .expect("text binding missing");
+    assert_eq!(
+        tb.mode,
+        BindingMode::OneWay,
+        "Expected OneWay binding mode for ':' operator, got {:?}",
+        tb.mode
+    );
+}

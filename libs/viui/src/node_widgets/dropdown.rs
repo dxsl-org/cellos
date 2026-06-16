@@ -133,7 +133,7 @@ impl ViNode for DropDown {
 
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let b = self.bounds.get();
-        alloc::vec![self.selected.subscribe(move |_| {
+        alloc::vec![self.selected.subscribe(move || {
             region.borrow_mut().mark(b);
         })]
     }

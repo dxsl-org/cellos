@@ -346,6 +346,9 @@ impl ViApp {
             }
 
             // Route event: topmost overlay wins, then falls through if non-blocking.
+            // Snapshot overlay metadata before the mutable borrow for event().
+            let overlay_meta = self.overlays.last().map(|t| (t.blocking, t.dismiss_outside, t.widget.bounds()));
+
             let consumed = if let Some(top) = self.overlays.last_mut() {
                 let top_blocking = top.blocking;
                 let overlay_consumed = top.widget.event(ev);
@@ -362,9 +365,23 @@ impl ViApp {
                 self.root.event(ev)
             };
 
-            // Check dismiss_outside: if a non-blocking overlay's popup should dismiss
-            // when clicked outside its bounds, the popup's own event() handles Pop.
-            // No additional check needed here.
+            // Enforce dismiss_outside: if the topmost non-blocking overlay has
+            // dismiss_outside=true and a press/touch landed outside its bounds,
+            // pop it now. The popup's own event() intentionally returns false for
+            // outside clicks (it cannot pop itself during the borrow), so this is
+            // the only place the dismiss is enforced.
+            if let Some((blocking, dismiss_outside, overlay_bounds)) = overlay_meta {
+                if !blocking && dismiss_outside {
+                    let outside_press = match ev {
+                        Event::MousePress { pos, .. }  => !overlay_bounds.contains(*pos),
+                        Event::TouchBegin { pos, .. }  => !overlay_bounds.contains(*pos),
+                        _ => false,
+                    };
+                    if outside_press {
+                        self.action_queue.borrow_mut().push(OverlayAction::Pop);
+                    }
+                }
+            }
 
             if consumed { self.layout_dirty = true; }
         }

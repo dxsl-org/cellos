@@ -1,0 +1,12 @@
+# Standalone smoke-test for the vi-build pipeline.
+# Run: cargo build  (inside this directory)
+# Verifies: build.rs successfully compiles counter.vi → vi_generated/counter.rs
+[workspace]
+
+[package]
+name    = "vi-build-test"
+version = "0.1.0"
+edition = "2021"
+
+[build-dependencies]
+vi-build = { path = "../vi-build" }

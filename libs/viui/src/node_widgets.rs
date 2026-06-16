@@ -4,6 +4,7 @@
 //! These widgets use `Signal<T>` properties and `Box<dyn Fn()>` callbacks
 //! instead of the Elm rebuild model in `crate::widgets` (v1).
 
+pub mod bar_chart;
 pub mod button;
 pub mod card;
 pub mod checkbox;
@@ -14,6 +15,7 @@ pub mod dropdown;
 pub mod flex_box;
 pub mod image;
 pub mod label;
+pub mod line_chart;
 pub mod list_view;
 pub mod progress_bar;
 pub mod row;
@@ -24,14 +26,18 @@ pub mod text_edit;
 pub mod toast;
 pub mod touch_area;
 
+pub use bar_chart::BarChart;
 pub use card::Card;
 pub use checkbox::CheckBox;
 pub use dialog::Dialog;
 pub use divider::Divider;
 pub use dropdown::DropDown;
-pub use flex_box::{FlexBox, FlexDirection, FlexItem};
+pub use flex_box::{
+    AlignContent, AlignItems, FlexBox, FlexDirection, FlexItem, FlexWrap, Justify,
+};
 pub use image::Image;
-pub use list_view::ListView;
+pub use line_chart::{LineChart, Series};
+pub use list_view::{ListView, ListDataProvider, VecProvider, VirtualListView};
 pub use scroll_area::ScrollArea;
 pub use space::Space;
 pub use text_edit::TextEdit;

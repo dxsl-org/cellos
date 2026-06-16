@@ -170,8 +170,17 @@ impl<'src> Lexer<'src> {
                 return Ok(Some(self.lex_string(start, sl, sc)?));
             }
 
-            // Color literal
+            // `#=` — computed binding operator; `#hex` — color literal.
             if ch == b'#' {
+                if self.peek2() == b'=' {
+                    self.advance(); // consume '#'
+                    self.advance(); // consume '='
+                    return Ok(Some(Token::new(
+                        TokenKind::ComputedBind,
+                        "#=",
+                        self.span_from(start, sl, sc),
+                    )));
+                }
                 self.advance(); // consume '#'
                 return Ok(Some(self.lex_color(start, sl, sc)));
             }
@@ -198,8 +207,10 @@ impl<'src> Lexer<'src> {
                 b'>' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::GtEq,    ">=", self.span_from(start, sl, sc)) }
                 b'&' if self.peek() == b'&' => { self.advance(); Token::new(TokenKind::And,     "&&", self.span_from(start, sl, sc)) }
                 b'|' if self.peek() == b'|' => { self.advance(); Token::new(TokenKind::Or,      "||", self.span_from(start, sl, sc)) }
-                b'+' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::PlusEq,  "+=", self.span_from(start, sl, sc)) }
-                b'-' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::MinusEq, "-=", self.span_from(start, sl, sc)) }
+                b'+' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::PlusEq,      "+=", self.span_from(start, sl, sc)) }
+                b'-' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::MinusEq,     "-=", self.span_from(start, sl, sc)) }
+                b'@' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::TwoWayBind,  "@=", self.span_from(start, sl, sc)) }
+                b'@'                        =>                   Token::new(TokenKind::At,           "@",  self.span_from(start, sl, sc)),
                 // Single-char
                 b'+' => Token::new(TokenKind::Plus,      "+", self.span_from(start, sl, sc)),
                 b'-' => Token::new(TokenKind::Minus,     "-", self.span_from(start, sl, sc)),

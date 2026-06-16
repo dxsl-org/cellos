@@ -1,0 +1,13 @@
+# Standalone crate — NOT part of the ViCell embedded workspace.
+# This is a build-script helper library for host tooling only.
+# Usage: add as a [build-dependencies] entry in app Cargo.toml files.
+[workspace]
+
+[package]
+name        = "vi-build"
+version     = "0.1.0"
+edition     = "2021"
+description = "Build script helper — compile .vi DSL files to Rust during cargo build"
+
+[dependencies]
+vi-compiler = { path = "../vi-compiler" }

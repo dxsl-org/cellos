@@ -1,0 +1,15 @@
+component Counter {
+    property<int> count: 0;
+
+    Column {
+        Label {
+            text: "Counter: \{self.count}";
+        }
+        Button {
+            text: "Increment";
+            clicked => {
+                self.count = self.count + 1
+            }
+        }
+    }
+}

@@ -57,6 +57,8 @@ pub enum TokenKind {
     Or,             // ||
     PlusEq,         // +=
     MinusEq,        // -=
+    TwoWayBind,     // @=  (two-way data binding)
+    ComputedBind,   // #=  (computed/derived property binding)
 
     // ── Single-char operators/punctuation ────────────────────────────────
     Plus,           // +
@@ -74,6 +76,7 @@ pub enum TokenKind {
     Pipe,           // |
     Lt,             // <
     Gt,             // >
+    At,             // @  (bare @ — not valid in G1 DSL alone, reserved)
 
     // ── Brackets ─────────────────────────────────────────────────────────
     LBrace,         // {

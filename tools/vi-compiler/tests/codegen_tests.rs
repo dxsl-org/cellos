@@ -522,6 +522,123 @@ component Static {
     );
 }
 
+// ─── Overlay widget codegen tests ────────────────────────────────────────────
+
+/// `Dialog` in a .vi file should emit `Dialog::alert(...)` with title and message
+/// extracted from the element bindings, plus a comment directing the caller to
+/// wire the real action queue.
+#[test]
+fn dialog_codegen() {
+    let src = r#"
+component ConfirmPanel {
+    VBox {
+        Dialog {
+            title: "Are you sure?";
+            message: "This cannot be undone.";
+        }
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
+    assert!(
+        rust.contains("Dialog::alert("),
+        "Dialog::alert(...) missing in generated code: {}",
+        &rust[..rust.len().min(800)]
+    );
+    assert!(
+        rust.contains("Are you sure?"),
+        "dialog title not in generated code: {}",
+        &rust[..rust.len().min(800)]
+    );
+    assert!(
+        rust.contains("action_queue"),
+        "action_queue comment/placeholder missing: {}",
+        &rust[..rust.len().min(800)]
+    );
+}
+
+/// `DropDown` in a .vi file should emit `DropDown::new(signal, vec![], queue)`
+/// with the `selected` binding wired to a Signal<String>.
+#[test]
+fn dropdown_codegen() {
+    let src = r#"
+component ModeSelector {
+    in property <string> mode: "Auto";
+    VBox {
+        DropDown { selected: self.mode; }
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
+    assert!(
+        rust.contains("DropDown::new("),
+        "DropDown::new(...) missing in generated code: {}",
+        &rust[..rust.len().min(800)]
+    );
+    assert!(
+        rust.contains("mode"),
+        "mode signal ref missing in generated code: {}",
+        &rust[..rust.len().min(800)]
+    );
+    assert!(
+        rust.contains("action_queue"),
+        "action_queue comment/placeholder missing: {}",
+        &rust[..rust.len().min(800)]
+    );
+}
+
+// ─── Chart widget codegen tests ──────────────────────────────────────────────
+
+/// LineChart in a .vi file emits `compile_error!` directing to the Rust API.
+#[test]
+fn line_chart_compile_error_in_dsl() {
+    let src = r#"
+component MyChart {
+    VBox {
+        LineChart {}
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
+    assert!(
+        rust.contains("LineChart"),
+        "LineChart name not in generated code: {}",
+        &rust[..rust.len().min(600)]
+    );
+    assert!(
+        rust.contains("compile_error!"),
+        "compile_error! not emitted for LineChart DSL usage: {}",
+        &rust[..rust.len().min(600)]
+    );
+}
+
+/// BarChart in a .vi file emits `compile_error!` directing to the Rust API.
+#[test]
+fn bar_chart_compile_error_in_dsl() {
+    let src = r#"
+component MyChart {
+    VBox {
+        BarChart {}
+    }
+}
+"#;
+    let file = vi_compiler::compile_str(src).expect("parse failed");
+    let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
+    assert!(
+        rust.contains("BarChart"),
+        "BarChart name not in generated code: {}",
+        &rust[..rust.len().min(600)]
+    );
+    assert!(
+        rust.contains("compile_error!"),
+        "compile_error! not emitted for BarChart DSL usage: {}",
+        &rust[..rust.len().min(600)]
+    );
+}
+
 /// compile_expr unit tests — typed AST nodes → Rust source strings.
 #[cfg(test)]
 mod compile_expr_tests {
@@ -623,4 +740,131 @@ mod compile_expr_tests {
         let e = Expr::Unary(UnaryOp::Not, Box::new(Expr::Literal(Literal::Bool(true))));
         assert_eq!(compile_expr(&e, build_fn()), "(!true)");
     }
+}
+
+// ─── Phase 07: DSL Advanced Binding codegen tests ────────────────────────────
+
+/// Two-way binding (@=) on TextEdit.text must generate an on_change closure
+/// that writes the new value back to the source signal.
+#[test]
+fn two_way_binding_codegen() {
+    let src = r#"
+component Login {
+    property<string> name: "";
+    TextEdit {
+        text @= self.name;
+    }
+}
+"#;
+    let output = vi_compiler::compile(src).expect("compile failed");
+    // on_change closure should be emitted for two-way binding.
+    assert!(
+        output.contains("on_change"),
+        "Expected on_change in two-way binding output: {}",
+        &output[..output.len().min(800)]
+    );
+    // The source signal name must appear in the output (referenced in the closure).
+    assert!(
+        output.contains("name"),
+        "Expected signal name 'name' in two-way binding output: {}",
+        &output[..output.len().min(800)]
+    );
+    // Two-way must still wire the forward (display) direction.
+    assert!(
+        output.contains("TextEdit::new("),
+        "Expected TextEdit::new in two-way binding output: {}",
+        &output[..output.len().min(800)]
+    );
+}
+
+/// Computed binding (#=) on a Label.text must compile successfully and
+/// emit code that differs from a plain one-way binding (contains a comment
+/// marker or subscribe pattern).
+#[test]
+fn computed_binding_codegen() {
+    let src = r#"
+component Display {
+    property<float> value: 0.0;
+    Label {
+        text #= "computed_val";
+    }
+}
+"#;
+    let output = vi_compiler::compile(src).expect("compile failed");
+    // Computed bindings emit a comment annotation.
+    assert!(
+        output.contains("computed binding"),
+        "Expected 'computed binding' comment in computed binding output: {}",
+        &output[..output.len().min(800)]
+    );
+    assert!(
+        !output.is_empty(),
+        "Expected non-empty output for computed binding"
+    );
+}
+
+/// Lexer correctly tokenises @= as TwoWayBind.
+#[test]
+fn lexer_two_way_bind_token() {
+    use vi_compiler::lexer::tokenize;
+    use vi_compiler::token::TokenKind;
+    let tokens = tokenize("text @= foo").expect("lex failed");
+    let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
+    assert!(
+        kinds.contains(&&TokenKind::TwoWayBind),
+        "Expected TwoWayBind token for '@=': {:?}", kinds
+    );
+}
+
+/// Lexer correctly tokenises #= as ComputedBind (not as a color literal).
+#[test]
+fn lexer_computed_bind_token() {
+    use vi_compiler::lexer::tokenize;
+    use vi_compiler::token::TokenKind;
+    let tokens = tokenize("text #= foo").expect("lex failed");
+    let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
+    assert!(
+        kinds.contains(&&TokenKind::ComputedBind),
+        "Expected ComputedBind token for '#=': {:?}", kinds
+    );
+    // Must NOT be parsed as a ColorLit.
+    assert!(
+        !kinds.contains(&&TokenKind::ColorLit),
+        "ColorLit must not be emitted for '#=': {:?}", kinds
+    );
+}
+
+/// Ternary expression `cond ? then : else` must preserve the then branch
+/// and generate valid `if/else` Rust syntax. Regression for the bug where
+/// parse_ternary discarded `then` via `let _ = then` and reconstructed from
+/// raw tokens, producing broken `cond ? : else_tokens` output.
+#[test]
+fn ternary_expression_codegen() {
+    let src = r#"
+component Cond {
+    property<bool> active: false;
+    Label {
+        text: active ? "yes" : "no";
+    }
+}
+"#;
+    let output = vi_compiler::compile(src).expect("compile");
+    // The then branch ("yes") must appear in output
+    assert!(output.contains("\"yes\""), "then branch missing from ternary output:\n{}", &output[..output.len().min(800)]);
+    assert!(output.contains("\"no\""),  "else branch missing from ternary output:\n{}", &output[..output.len().min(800)]);
+    // Must not contain the broken form `? :` with nothing between
+    assert!(!output.contains("? :"), "ternary produced broken '? :' — then branch still dropped:\n{}", &output[..output.len().min(800)]);
+}
+
+/// Color literals like #fff still lex as ColorLit (not ComputedBind).
+#[test]
+fn lexer_color_lit_still_works() {
+    use vi_compiler::lexer::tokenize;
+    use vi_compiler::token::TokenKind;
+    let tokens = tokenize("#fff").expect("lex failed");
+    let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
+    assert!(
+        kinds.contains(&&TokenKind::ColorLit),
+        "Expected ColorLit for '#fff': {:?}", kinds
+    );
 }

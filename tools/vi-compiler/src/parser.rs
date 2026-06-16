@@ -1,5 +1,5 @@
 use crate::ast::{
-    Binding, BinOpKind, CallbackBinding, Child, Component, Element,
+    Binding, BindingMode, BinOpKind, CallbackBinding, Child, Component, Element,
     Expr, InterpPart, Literal, RawExpr, UnaryOp, ViFile,
 };
 use crate::error::ParseError;
@@ -283,8 +283,16 @@ impl Parser {
                 (TokenKind::Ident, TokenKind::Arrow) => {
                     callbacks.push(self.parse_callback_binding()?);
                 }
-                // binding: IDENT :
+                // one-way binding: IDENT :
                 (TokenKind::Ident, TokenKind::Colon) => {
+                    bindings.push(self.parse_binding()?);
+                }
+                // two-way binding: IDENT @=
+                (TokenKind::Ident, TokenKind::TwoWayBind) => {
+                    bindings.push(self.parse_binding()?);
+                }
+                // computed binding: IDENT #=
+                (TokenKind::Ident, TokenKind::ComputedBind) => {
                     bindings.push(self.parse_binding()?);
                 }
                 // child element or control-flow node
@@ -305,10 +313,18 @@ impl Parser {
     fn parse_binding(&mut self) -> Result<Binding, ParseError> {
         let span_start = self.current_span();
         let property = self.expect(TokenKind::Ident, "property name")?.text;
-        self.expect(TokenKind::Colon, "':'")?;
+
+        // Determine binding mode from the operator token.
+        let mode = match self.peek_kind() {
+            TokenKind::Colon       => { self.advance(); BindingMode::OneWay  }
+            TokenKind::TwoWayBind  => { self.advance(); BindingMode::TwoWay  }
+            TokenKind::ComputedBind => { self.advance(); BindingMode::Computed }
+            _ => return Err(self.unexpected("':', '@=', or '#='")),
+        };
+
         let value = self.parse_expr();
         self.expect(TokenKind::Semicolon, "';'")?;
-        Ok(Binding { property, value, span: span_start })
+        Ok(Binding { property, mode, value, span: span_start })
     }
 
     // ── parse_callback_binding ───────────────────────────────────────────────
@@ -340,22 +356,20 @@ impl Parser {
         let cond = self.parse_or();
         if *self.peek_kind() == TokenKind::Question {
             self.advance(); // consume '?'
-            let then = self.parse_or();
-            // ':' in ternary — but ':' is also used for bindings; only consume
-            // here when we are inside the ternary (depth tracked by callers).
-            // For simplicity, fall back to Raw if we see '?' — ternary is rare in .vi.
-            // Just return Raw with all three sub-parts.
-            let _ = then; // discard what we parsed
-            // Re-parse from the start using the raw fallback.
-            // We can't easily back-track, so we collected `cond` above.
-            // The fallback path is: we already consumed some tokens.
-            // Best effort: return Ident wrapping whatever cond was, the parser
-            // state is already advanced past '?'. Emit raw for everything after.
-            let raw_rest = self.collect_raw_until_semi();
-            return Expr::Raw(RawExpr {
-                text: format!("{} ? {}", expr_to_raw_text(&cond), raw_rest),
-                span: Span::default(),
-            });
+            let then_expr = self.parse_or();
+            // Consume ':' separating then/else branches.
+            // ':' is also used as a binding operator, but at this point we are
+            // inside an expression already (past the property name + ':' consumed
+            // by parse_binding), so the next ':' unambiguously belongs to ternary.
+            if *self.peek_kind() == TokenKind::Colon {
+                self.advance(); // consume ':'
+            }
+            let else_expr = self.parse_or();
+            return Expr::Ternary(
+                Box::new(cond),
+                Box::new(then_expr),
+                Box::new(else_expr),
+            );
         }
         cond
     }
@@ -704,42 +718,3 @@ pub fn parse(tokens: Vec<Token>) -> Result<ViFile, ParseError> {
 // Re-export ast types used in parser for import hygiene
 use crate::ast::{CallbackDecl, Import, PropertyDecl, Visibility};
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
-
-/// Convert a typed `Expr` back to a raw text string for use in fallback Raw nodes.
-///
-/// This is a lossy best-effort conversion used only in the ternary fallback path
-/// where we cannot back-track the token stream.
-fn expr_to_raw_text(expr: &Expr) -> String {
-    use crate::ast::{InterpPart, Literal, UnaryOp};
-    match expr {
-        Expr::Raw(r)                   => r.text.clone(),
-        Expr::Literal(Literal::Bool(b)) => b.to_string(),
-        Expr::Literal(Literal::Int(n))  => n.to_string(),
-        Expr::Literal(Literal::Float(f)) => f.to_string(),
-        Expr::Literal(Literal::Str(s))  => format!("{:?}", s),
-        Expr::Ident(n)                  => n.clone(),
-        Expr::SelfProp(n)               => format!("self.{}", n),
-        Expr::Unary(UnaryOp::Not, e)    => format!("!{}", expr_to_raw_text(e)),
-        Expr::Unary(UnaryOp::Neg, e)    => format!("-{}", expr_to_raw_text(e)),
-        Expr::BinOp(l, op, r)           => format!(
-            "{} {} {}",
-            expr_to_raw_text(l), op.as_str(), expr_to_raw_text(r)
-        ),
-        Expr::Ternary(c, t, e) => format!(
-            "{} ? {} : {}",
-            expr_to_raw_text(c), expr_to_raw_text(t), expr_to_raw_text(e)
-        ),
-        Expr::Interpolated(parts) => {
-            let s: String = parts.iter().map(|p| match p {
-                InterpPart::Lit(s) => s.clone(),
-                InterpPart::Expr(e) => format!("\\{{{}}}", expr_to_raw_text(e)),
-            }).collect();
-            format!("{:?}", s)
-        }
-        Expr::FnCall(name, args) => {
-            let args_str: Vec<String> = args.iter().map(expr_to_raw_text).collect();
-            format!("{}({})", name, args_str.join(", "))
-        }
-    }
-}

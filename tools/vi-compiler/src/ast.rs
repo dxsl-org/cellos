@@ -83,9 +83,21 @@ pub enum Child {
     },
 }
 
+/// Binding operator mode — controls how a widget property is wired to a value.
+#[derive(Debug, Clone, PartialEq)]
+pub enum BindingMode {
+    /// `property: expr` — one-way read (default).
+    OneWay,
+    /// `property @= expr` — two-way: widget writes back to the source signal.
+    TwoWay,
+    /// `property #= expr` — computed/derived: auto-recomputes when dependencies change.
+    Computed,
+}
+
 #[derive(Debug)]
 pub struct Binding {
     pub property: String,
+    pub mode:     BindingMode,
     pub value:    Expr,
     pub span:     Span,
 }
