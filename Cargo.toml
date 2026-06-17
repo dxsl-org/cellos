@@ -8,12 +8,14 @@ exclude = [
     "tools/vi-compiler",
     "tools/viui-build",
     "third_party/redoxfs",   # vendored fork — own resolver; consumed via path dep
+    "third_party/mlibc",     # mlibc vendored copy — built with Meson, not Cargo
 ]
 members = [
     "kernel",
     "libs/types",
     "libs/api",
     "libs/ostd",
+    "libs/mlibc-shim",
     "libs/viui",
     "libs/viui-macros",
     
@@ -84,6 +86,8 @@ members = [
     "cells/apps/net-tools",
     "cells/apps/https-demo",
     "cells/apps/posix-shim-test",
+    "cells/apps/c-math-smoke",
+    "cells/apps/mlibc-smoke",
     "cells/apps/test-isolation",
     "cells/apps/viui-demo",
     "cells/apps/robot-dashboard",

@@ -29,3 +29,10 @@ aarch64 = ["dep:hal-arm"]
 arm    = ["dep:hal-arm"]
 x86_64 = ["dep:hal-x86"]
 x86    = ["dep:hal-x86"]
+# Enable the per-arch critical-section::Impl registration.
+# Must be enabled exactly once per binary (in the kernel); never in Cells.
+critical-section-impl = [
+    "hal-riscv?/critical-section-impl",
+    "hal-arm?/critical-section-impl",
+    "hal-x86?/critical-section-impl",
+]

@@ -488,6 +488,44 @@ async fn run() {
 
 ---
 
+## I/O Trait Layers (embedded-io Integration)
+
+ViCell integrates [`embedded-io`](https://docs.rs/embedded-io) for byte-stream I/O. The two systems serve distinct purposes and must not be conflated:
+
+### Which trait system to use
+
+| Layer | Use | Avoid |
+|---|---|---|
+| **Stream I/O** (byte streams) | `embedded_io::Read + Write + Seek` | Custom `ViRead`/`ViWrite` |
+| **Hardware peripherals** (GPIO, I2C, SPI, ADC, PWM) | `Vi*` HAL traits | `embedded_io` (no coverage) |
+| **Async IPC wire format** | `Box<[u8]>` owned buffers (Law 2) | `embedded_io_async` at Cell boundary |
+| **Intra-cell async I/O** | `embedded_io_async::Read + Write` | (safe — borrow stays on Cell stack) |
+
+### Rules for App Cell developers
+
+- **Only import from `ostd::*`** — never import `embedded_io` directly in app code.
+- `ostd::fs::File`, `ostd::io::Stdin`/`Stdout`, and `ostd::clients::TcpStream` already implement `embedded_io::Read + Write`. Pass them directly to ecosystem crates that accept `impl embedded_io::Read`.
+- `embedded_io` is re-exported as `ostd::embedded_io` if explicit trait bounds are needed.
+
+### Rules for Driver Cell developers
+
+- Hardware device cells implement `Vi*` HAL traits (`ViGpio`, `ViI2c`, `ViSpi`, `ViAdc`, `ViPwm`, `ViCan`).
+- Byte-stream devices (UART/serial, TCP, file) additionally implement `embedded_io::Read + Write` via the `OstdError` newtype bridge in `ostd::io`.
+- A driver may implement both a `Vi*` trait and `embedded_io` traits if appropriate.
+
+### ostd stream handles
+
+| Handle | Traits implemented | Backed by |
+|---|---|---|
+| `ostd::io::Stdin` | `Read` | `sys_read` |
+| `ostd::io::Stdout` | `Write` | `sys_log` |
+| `ostd::fs::File` | `Read`, `Write` | `sys_read_cap`, VFS IPC |
+| `ostd::clients::TcpStream` | `Read`, `Write` | IPC → net service |
+
+> **Note — File Seek:** `embedded_io::Seek` on `File` requires a `SeekCap` syscall (not yet implemented). Adding it is a Law 1 change — two confirmations required. Until then, use `ReadGrant` IPC for offset-based reads.
+
+---
+
 ## Deprecations & Breaking Changes
 
 When changing public API in `libs/api/`:

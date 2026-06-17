@@ -9,6 +9,11 @@ SECTIONS {
     .text : {
         KEEP(*(.text.boot))
         *(.text .text.*)
+        /* Pad to a page boundary so LLD does not place the R-only LOAD
+         * segment (.dynsym, .rodata, …) on the same page as .text.
+         * Limine 8.x panics when two PHDRs with different flags (R E vs R)
+         * share the same 4 KiB page. */
+        . = ALIGN(4096);
     }
 
     /* R — read-only data, isolated on its own page(s) from .text (R E). */

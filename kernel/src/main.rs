@@ -94,6 +94,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Propagate the HHDM offset to the HAL PML4 walker so walk_create /
         // walk_read can dereference physical PTE addresses via HHDM virtual ptrs.
         crate::hal::paging::set_hhdm_offset(hhdm as usize);
+        // Limine maps only usable e820 RAM in the HHDM. The BIOS ROM area
+        // [0x9F000–0x100000) is reserved in e820 and absent from Limine's HHDM
+        // page table. ACPI RSDP is typically there (~0xf52e0 on q35).
+        // Map it now so phys_to_virt(rsdp) doesn't triple-fault before IDT is up.
+        // SAFETY: called after set_hhdm_offset; PML4 walker uses HHDM-mapped RAM.
+        unsafe { crate::hal::paging::map_bios_area(); }
         // Initialise KASLR seed from HHDM entropy + RDTSC.
         crate::memory::kaslr::init_kaslr(hhdm);
     }
@@ -107,18 +113,27 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "x86_64")]
     let acpi_info = {
         use crate::memory::frame::phys_to_virt;
-        // UART is already initialised above; use it directly for early boot log.
-        // `log_info` closure is not yet defined at this point in kmain.
         let early_puts = |s: &str| {
             for c in s.bytes() { crate::hal::uart_16550::putchar(c); }
         };
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
-        if rsdp != 0 {
+        // Limine 8.x maps only usable e820 RAM in its HHDM.  The BIOS ROM area
+        // [0x0000–0x100000) and ACPI-reserved regions near top-of-RAM are absent.
+        // Accessing those regions via HHDM before the IDT is live triple-faults.
+        // On QEMU q35 the RSDP is always in the BIOS area (< 1 MiB), and the XSDT
+        // lives in the ACPI-reserved window — neither is reachable this early.
+        // Use hardcoded q35 defaults here; TODO: re-parse after init_kernel_paging
+        // creates a full physical window that covers all e820 regions.
+        if rsdp != 0 && rsdp >= 0x10_0000 {
             let info = crate::acpi::parse(rsdp, |p| phys_to_virt(p));
             early_puts("[INFO] ACPI tables parsed\n");
             info
         } else {
-            early_puts("[INFO] ACPI RSDP not found — using QEMU q35 defaults\n");
+            if rsdp == 0 {
+                early_puts("[INFO] ACPI RSDP absent — using q35 defaults\n");
+            } else {
+                early_puts("[INFO] ACPI RSDP in BIOS area — using q35 defaults\n");
+            }
             crate::acpi::AcpiInfo::default()
         }
     };
@@ -262,6 +277,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 acpi_info.ioapic_base,
                 acpi_info.hpet_base,
                 acpi_info.lapic_base,
+                acpi_info.ecam_base,
             )
             .expect("Failed to initialize x86_64 kernel PML4")
         };
@@ -357,18 +373,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
     // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
     // virt 7+ triggers a Synchronous External Abort — skip on aarch64.
+    // x86_64 q35: ECAM base 0xB000_0000 is identity-mapped by init_kernel_paging_x86;
+    // virtio_pci::init() probes vendor 0x1AF4 PCIe devices for BLK/NET.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         task::drivers::pcie_ecam::init();
-        task::drivers::iommu::init();          // bare passthrough (noop when absent)
-        task::drivers::blk_nvme::init_driver();
-        task::drivers::nic_e1000::init_driver();
-        // VirtIO PCI: probe vendor 0x1AF4 devices on PCIe bus 0.
-        // On RISC-V virt, VirtIO appears as MMIO (not PCIe), so this is a no-op
-        // there (no vendor 0x1AF4 on the PCIe bus).
-        // On x86_64 q35, this initialises VirtIO BLK and NET from BAR1 MMIO.
+        // RISC-V virt only: IOMMU passthrough + NVMe + e1000 (PCIe endpoints).
+        #[cfg(target_arch = "riscv64")]
+        {
+            task::drivers::iommu::init();
+            task::drivers::blk_nvme::init_driver();
+            task::drivers::nic_e1000::init_driver();
+        }
+        // VirtIO PCI: probe vendor 0x1AF4 on PCIe bus 0.
+        // On x86_64 q35, VirtIO BLK/NET are PCIe devices; on RISC-V virt,
+        // VirtIO is MMIO — virtio_pci::init() is a no-op there.
         task::drivers::virtio_pci::init();
-        log_info("x86_64: VirtIO PCI probe done");
     }
 
     // Attempt warm boot from snapshot before any cell initialization.

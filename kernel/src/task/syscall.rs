@@ -432,6 +432,17 @@ pub enum Syscall {
     ReadCap { cap_id: usize, buf_ptr: usize, buf_len: usize },
     /// 15: CloseCap — revoke a capability.
     CloseCap { cap_id: usize },
+    /// 228: SeekCap — seek a cap-backed file cursor.
+    /// offset is transmitted as a raw i64 bit-pattern via usize (reinterpret_cast).
+    SeekCap { cap_id: usize, offset: usize, whence: usize },
+    /// 229: WriteCap — write bytes into a cap-backed file at the current cursor.
+    WriteCap { cap_id: usize, buf_ptr: usize, buf_len: usize },
+    /// 230: StatCap — query file size via cap (cursor unchanged).
+    StatCap { cap_id: usize },
+    /// 231: TruncateCap — truncate file to len bytes via cap.
+    TruncateCap { cap_id: usize, len: usize },
+    /// 232: SyncCap — flush dirty pages to block device via cap.
+    SyncCap { cap_id: usize },
     /// 8: Wait (Wait for task)
     Wait { pid: usize },
     /// 20: ShmAlloc
@@ -602,6 +613,11 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::OpenCap { .. }       => V::OpenCap,
         Syscall::ReadCap { .. }       => V::ReadCap,
         Syscall::CloseCap { .. }      => V::CloseCap,
+        Syscall::SeekCap { .. }       => V::SeekCap,
+        Syscall::WriteCap { .. }      => V::WriteCap,
+        Syscall::StatCap { .. }       => V::StatCap,
+        Syscall::TruncateCap { .. }   => V::TruncateCap,
+        Syscall::SyncCap { .. }       => V::SyncCap,
         Syscall::Open { .. }          => V::Open,
         Syscall::Read { .. }          => V::Read,
         Syscall::Write { .. }         => V::Write,
@@ -1439,12 +1455,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 core::str::from_utf8(s).map_err(|_| SyscallError::InvalidInput)?
             };
 
-            // Open via kernel-internal FS.
+            // Open via kernel-internal FS in read-write mode so that both
+            // ReadCap and WriteCap syscalls work on the same capability.
+            // Read-only filesystems (BootFS) return Err from ViFile::write() naturally.
             use crate::fs::VIFS1;
             let file = {
                 let mut guard = VIFS1.lock();
                 guard.as_mut().ok_or(SyscallError::FileNotFound)?
-                    .open(path_str, api::fs::OpenMode::Read)
+                    .open(path_str, api::fs::OpenMode::ReadWrite)
                     .map_err(|_| SyscallError::FileNotFound)?
             };
 
@@ -1455,11 +1473,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 types::CellId(0)
             };
 
-            // Allocate capability; file starts as Some (unparked).
+            // Allocate capability with full read-write-seek permissions.
             let cap_id = crate::cell::cap_registry::CAP_TABLE.lock().alloc(
                 cell_id,
                 crate::cell::cap_registry::CapResource::File { file: Some(file) },
-                api::cap::CapPerms::FILE_READ.0,
+                api::cap::CapPerms::FILE_RW.0,
             );
             Ok(cap_id.0 as usize)
         }
@@ -1498,6 +1516,112 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Ok(n) => Ok(n),
                 Err(_) => Err(SyscallError::Unknown), // maps to usize::MAX at ABI level
             }
+        }
+
+        Syscall::SeekCap { cap_id, offset, whence } => {
+            let pos = match whence {
+                0 => api::fs::SeekFrom::Start(offset as u64),
+                1 => api::fs::SeekFrom::Current(offset as isize as i64),
+                2 => api::fs::SeekFrom::End(offset as isize as i64),
+                _ => return Err(SyscallError::InvalidInput),
+            };
+
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+
+            // Park → seek outside lock → unpark (same pattern as ReadCap).
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+
+            let seek_result = boxed_file.seek(pos);
+
+            crate::cell::cap_registry::CAP_TABLE.lock()
+                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+
+            match seek_result {
+                Ok(new_pos) => Ok(new_pos as usize),
+                Err(_) => Err(SyscallError::Unknown),
+            }
+        }
+
+        Syscall::WriteCap { cap_id, buf_ptr, buf_len } => {
+            if buf_len == 0 {
+                return Ok(0);
+            }
+            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
+
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+
+            // SAFETY: buf_ptr validated; SUM=1 allows S-mode reads from U-mode pages.
+            let write_result = unsafe {
+                let buf = core::slice::from_raw_parts(buf_ptr as *const u8, buf_len);
+                boxed_file.write(buf)
+            };
+
+            crate::cell::cap_registry::CAP_TABLE.lock()
+                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+
+            match write_result {
+                Ok(n) => Ok(n),
+                Err(_) => Err(SyscallError::Unknown),
+            }
+        }
+
+        Syscall::StatCap { cap_id } => {
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+            let result = boxed_file.size();
+            crate::cell::cap_registry::CAP_TABLE.lock()
+                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            result.map(|s| s as usize).map_err(|_| SyscallError::Unknown)
+        }
+
+        Syscall::TruncateCap { cap_id, len } => {
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+            let result = boxed_file.truncate(len as u64);
+            crate::cell::cap_registry::CAP_TABLE.lock()
+                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
+        }
+
+        Syscall::SyncCap { cap_id } => {
+            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+            } else {
+                types::CellId(0)
+            };
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+                .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+                .map_err(|_| SyscallError::PermissionDenied)?;
+            let result = boxed_file.sync();
+            crate::cell::cap_registry::CAP_TABLE.lock()
+                .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
+            result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
         }
 
         Syscall::CloseCap { cap_id } => {
@@ -2255,6 +2379,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::OpenCap       => Syscall::OpenCap { path_ptr: a0, path_len: a1 },
         ViSyscall::ReadCap       => Syscall::ReadCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::CloseCap      => Syscall::CloseCap { cap_id: a0 },
+        ViSyscall::SeekCap       => Syscall::SeekCap { cap_id: a0, offset: a1, whence: a2 },
+        ViSyscall::WriteCap      => Syscall::WriteCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::StatCap       => Syscall::StatCap { cap_id: a0 },
+        ViSyscall::TruncateCap   => Syscall::TruncateCap { cap_id: a0, len: a1 },
+        ViSyscall::SyncCap       => Syscall::SyncCap { cap_id: a0 },
         ViSyscall::Wait          => Syscall::Wait { pid: a0 },
         ViSyscall::ShmAlloc      => Syscall::ShmAlloc { size: a0 },
         ViSyscall::ShmMap        => Syscall::ShmMap { handle: a0, target_pid: a1 },

@@ -28,7 +28,7 @@ pub mod net;
 pub mod vfs;
 
 pub use input::InputClient;
-pub use net::NetClient;
+pub use net::{NetClient, TcpStream};
 pub use vfs::VfsClient;
 
 // ── Shared helper ─────────────────────────────────────────────────────────────

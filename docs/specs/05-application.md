@@ -40,17 +40,36 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 - Camera ISP library từ silicon vendor
 - Validated/certified C codebase (DO-178, IEC 62443) — rewrite phá cert
 - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
+- Complex C apps: DOOM, FFmpeg, SQLite, mbedTLS (yêu cầu mlibc Tier B)
+
+### 3.1 Two-tier C library strategy (G2)
+
+**Tier A — posix.rs shim** (default, embedded/simple cells, no build overhead):
+
+| | Tier A: posix.rs | Tier B: mlibc |
+|---|---|---|
+| Binary size | Small | Larger (Grisu3, slab alloc) |
+| printf float | Limited | Grisu3 (correct %.15g) |
+| malloc | Bump arena | frg::slab_allocator |
+| Build | Rust only | WSL2 Meson build first |
+| Default | Yes | Opt-in via feature |
+
+**CRITICAL mutual exclusion:** `api = { features = ["mlibc"] }` suppresses posix.rs. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
+
+See `docs/mlibc-build.md` for the full Tier B build guide.
 
 **Cách hoạt động:** Rust cell link statically với C library. Các lời gọi POSIX bên trong C code (`malloc`, `open`, `read`...) được resolve sang `vicell-libc` (Newlib + POSIX shim) tại link time — chạy native trong SAS, 0ms overhead.
 
 ```
-[Tier 1b link flow:]
+[Tier 1b link flow — Tier B mlibc:]
   cell.rs (Rust, owns the cell)
+    └── api = { features = ["mlibc"] }  ← posix.rs suppressed
+    └── mlibc-shim                      ← links third_party/mlibc/build/libc.a
     └── extern "C" { fn rknn_init(...); }   ← FFI bindings
          ↓ links statically
         librknn_api.a  (vendor SDK, C/C++)
          ↓ malloc/open/read → resolve to
-        vicell-libc  (libs/api posix feature, Newlib shim)
+        libc.a  (mlibc Tier B — sysdeps/vicell → vicell_syscall)
          ↓ → ViSyscall (VFS IPC, Net IPC, GetTime, GetRandom)
 ```
 

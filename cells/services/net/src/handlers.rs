@@ -162,11 +162,20 @@ fn handle_typed(
             try_promote(table, sockets, cap);
             let buf_len = (buf_len as usize).min(4096);
             let mut data = alloc::vec![0u8; buf_len];
-            let n = if let Some(h) = table.get(cap) {
+            if let Some(h) = table.get(cap) {
                 let s = sockets.get_mut::<tcp::Socket>(h);
-                if s.can_recv() { s.recv_slice(&mut data).unwrap_or(0) } else { 0 }
-            } else { 0 };
-            send_typed(sender, R::Data(&data[..n]));
+                if s.can_recv() {
+                    let n = s.recv_slice(&mut data).unwrap_or(0);
+                    send_typed(sender, R::Data(&data[..n]));
+                } else if !s.may_recv() {
+                    // Receive half closed (FIN/RST received) — signal EOF to caller.
+                    send_typed(sender, R::Err(0xFF));
+                } else {
+                    send_typed(sender, R::Data(&[]));
+                }
+            } else {
+                send_typed(sender, R::Data(&[]));
+            }
         }
 
         NetRequest::TcpClose { cap_id } => {

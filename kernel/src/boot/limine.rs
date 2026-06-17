@@ -290,6 +290,75 @@ pub fn get_dtb_ptr() -> Option<usize> {
     }
 }
 
+/// RSDP (Root System Description Pointer) request — x86_64 only.
+///
+/// Limine provides the RSDP physical address via this request.
+/// On x86_64 UEFI boots, the RSDP lives in EFI memory; Limine locates it
+/// from the UEFI System Table or by scanning the legacy BIOS ROM range.
+///
+/// Request GUID (after LIMINE_COMMON_MAGIC):
+///   0xc5e77b6b397e7b43, 0x27637845accdcf3c
+/// Verify against: https://github.com/limine-bootloader/limine/blob/v8.x-binary/limine.h
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct LimineRsdpRequest {
+    pub id: [u64; 4],
+    pub revision: u64,
+    pub response: *const LimineRsdpResponse,
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe impl Send for LimineRsdpRequest {}
+#[cfg(target_arch = "x86_64")]
+unsafe impl Sync for LimineRsdpRequest {}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct LimineRsdpResponse {
+    pub revision: u64,
+    /// Physical address of the RSDP structure.
+    pub address: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[used]
+#[link_section = ".requests"]
+static mut RSDP_REQUEST: LimineRsdpRequest = LimineRsdpRequest {
+    id: [
+        LIMINE_COMMON_MAGIC[0],
+        LIMINE_COMMON_MAGIC[1],
+        0xc5e77b6b397e7b43,
+        0x27637845accdcf3c,
+    ],
+    revision: 0,
+    response: core::ptr::null(),
+};
+
+/// Get the RSDP physical address from the Limine RSDP response.
+///
+/// Returns `None` when:
+/// - not x86_64 (compile-time), or
+/// - Limine did not populate an RSDP response (UEFI firmware has no ACPI),
+/// - the response address is null/zero.
+///
+/// The kernel's x86_64 boot block calls this before `init_kernel_paging_x86`
+/// to parse ACPI tables for MMIO base addresses.
+#[cfg(target_arch = "x86_64")]
+pub fn get_rsdp_ptr() -> Option<usize> {
+    // SAFETY: RSDP_REQUEST is a Limine protocol request static. The response
+    // pointer is written by Limine before the kernel entry point is called,
+    // so no data race exists at the point this function is invoked (single
+    // CPU, no other code running). Null check guards against absent response.
+    unsafe {
+        let response = RSDP_REQUEST.response;
+        if response.is_null() {
+            return None;
+        }
+        let addr = (*response).address as usize;
+        if addr == 0 { None } else { Some(addr) }
+    }
+}
+
 /// Limine memory map entry types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u64)]

@@ -274,6 +274,14 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
 /// `memory::frame` and after the HAL paging walker has the HHDM offset
 /// set via `hal::paging::set_hhdm_offset`.
 ///
+/// Parameters:
+/// - `ioapic_base`: I/O APIC physical address (from ACPI MADT or default 0xFEC0_0000)
+/// - `hpet_base`:   HPET physical address (from ACPI HPET table or default 0xFED0_0000)
+/// - `lapic_base`:  Local APIC physical address (from ACPI MADT or default 0xFEE0_0000)
+///
+/// All three MMIO regions are identity-mapped (VA == PA) so `init_timers()` can
+/// access them directly after the CR3 switch.
+///
 /// Preconditions:
 /// - The frame allocator is initialised.
 /// - `hal::paging::set_hhdm_offset(hhdm)` has been called.
@@ -283,10 +291,14 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
 #[cfg(target_arch = "x86_64")]
 pub fn init_kernel_paging_x86(
     allocator: &mut FrameAllocator,
+    ioapic_base: u64,
+    hpet_base: u64,
+    lapic_base: u64,
+    ecam_base: u64,
 ) -> PagingResult<PhysAddr> {
     use hal::paging::{
         read_cr3, walk_create, walk_read,
-        pte_flags_kernel_rw, pte_flags_mmio,
+        pte_flags_mmio,
         PTE_PRESENT,
     };
     use crate::memory::frame::phys_to_virt;
@@ -318,17 +330,29 @@ pub fn init_kernel_paging_x86(
     }
 
     // 3. Identity-map MMIO regions so the CPU can reach them at VA == PA after
-    //    the CR3 switch.  These physical addresses are in the 0xFEC0_0000..0xFEE1_0000
-    //    range which is below the 4GB boundary and NOT in the HHDM window.
+    //    the CR3 switch.  Physical addresses are below the 4GB boundary and NOT
+    //    in the Limine HHDM window, so they must be explicitly identity-mapped.
     //
-    //    IOAPIC:  0xFEC0_0000 (4 KB)
-    //    HPET:    0xFED0_0000 (4 KB)   — init_timers() passes this as virt addr
-    //    LAPIC:   0xFEE0_0000 (4 KB)
+    //    The bases come from ACPI parse (ioapic_base, hpet_base, lapic_base params)
+    //    with QEMU q35 defaults as fallback so boot works without ACPI.
+    //    VT-d IOMMU (0xFED9_0000) is always q35-specific; keep hardcoded.
+    //
+    //    IOAPIC:  ioapic_base (default 0xFEC0_0000) — 4 KB
+    //    HPET:    hpet_base   (default 0xFED0_0000) — 4 KB
+    //    VT-d:    0xFED9_0000 (q35 Intel IOMMU)     — 4 KB
+    //    LAPIC:   lapic_base  (default 0xFEE0_0000) — 4 KB
+    let ioapic_base_usize = ioapic_base as usize;
+    let hpet_base_usize   = hpet_base   as usize;
+    let lapic_base_usize  = lapic_base  as usize;
+    let ecam_base_usize   = ecam_base   as usize;
+    // PCIe ECAM bus-0 window = 1 MiB (256 devices × 8 fns × 4 KiB config space).
+    const ECAM_BUS0_SIZE: usize = 0x10_0000;
     let mmio_regions: &[(usize, usize)] = &[
-        (0xFEC0_0000, 0xFEC0_0000 + PAGE_SIZE), // IOAPIC
-        (0xFED0_0000, 0xFED0_0000 + PAGE_SIZE), // HPET
-        (0xFED9_0000, 0xFED9_0000 + PAGE_SIZE), // Intel VT-d IOMMU (q35)
-        (0xFEE0_0000, 0xFEE0_0000 + PAGE_SIZE), // LAPIC
+        (ioapic_base_usize, ioapic_base_usize + PAGE_SIZE), // IOAPIC (from ACPI)
+        (hpet_base_usize,   hpet_base_usize   + PAGE_SIZE), // HPET   (from ACPI)
+        (0xFED9_0000,       0xFED9_0000       + PAGE_SIZE), // VT-d IOMMU (q35)
+        (lapic_base_usize,  lapic_base_usize  + PAGE_SIZE), // LAPIC  (from ACPI)
+        (ecam_base_usize,   ecam_base_usize   + ECAM_BUS0_SIZE), // PCIe ECAM bus 0
     ];
     for &(start, end) in mmio_regions {
         let mut va = start;
@@ -344,10 +368,11 @@ pub fn init_kernel_paging_x86(
         }
     }
 
-    // Sanity: verify one entry was written correctly (first MMIO page).
+    // Sanity: verify the IOAPIC PTE was written correctly.
+    // Uses the runtime ioapic_base (parsed from ACPI or default 0xFEC0_0000).
     // SAFETY: pml4_virt is our valid new PML4.
     debug_assert!(
-        unsafe { walk_read(pml4_virt as *const u64, 0xFEC0_0000) }
+        unsafe { walk_read(pml4_virt as *const u64, ioapic_base_usize) }
             .map(|e| e & PTE_PRESENT != 0)
             .unwrap_or(false),
         "IOAPIC identity-map sanity check failed"
@@ -370,28 +395,6 @@ pub unsafe fn activate_paging(root_phys: PhysAddr) {
     // SAFETY: caller guarantees root_phys is a valid, fully populated PML4 that
     // keeps the kernel alive after the CR3 switch.
     unsafe { hal::paging::write_cr3(root_phys as u64); }
-    // Debug: write 'P' to COM1 via port I/O immediately after CR3 switch.
-    // If this appears in serial output, the CR3 switch succeeded.
-    // SAFETY: port I/O to COM1 (0x3F8) does not affect memory safety.
-    unsafe {
-        let _: () = {
-            let v: u8;
-            // Wait for TX holding register empty (LSR bit 5), then send 'P'.
-            core::arch::asm!(
-                "99: in al, dx",
-                "test al, 0x20",
-                "jz 99b",
-                "mov dx, {thr}",
-                "mov al, 0x50",
-                "out dx, al",
-                thr = const 0x3F8u16,
-                in("dx") 0x3FDu16,
-                out("al") v,
-                options(nomem, nostack)
-            );
-            v;
-        };
-    }
     log::info!("[kernel] paging activated");
 }
 

@@ -407,6 +407,42 @@ impl ViFile for FatFile {
         Ok(None) // EOF
     }
 
+    fn size(&mut self) -> ViResult<u64> {
+        if self.is_dir {
+            return Err(ViError::IsADirectory);
+        }
+        let fs_lock = self.fs.lock();
+        let root = fs_lock.root_dir();
+        let rel_path = self.path.trim_start_matches('/');
+        // Re-open fresh so self.pos is not modified (FatFile is stateless per-op).
+        let mut f = root.open_file(rel_path).map_err(|_| ViError::NotFound)?;
+        f.seek(SeekFrom::End(0)).map_err(|_| ViError::IO)
+    }
+
+    fn truncate(&mut self, len: u64) -> ViResult<()> {
+        if self.is_dir {
+            return Err(ViError::IsADirectory);
+        }
+        // NOTE: FatFile is stateless (re-opens per operation). If multiple FatFile
+        // handles point to the same path, each tracks its own `pos` independently.
+        // After truncation the caller's `pos` is clamped; other handles are unaffected
+        // and may hold a stale cursor past the new EOF — reads on them will return 0.
+        let fs_lock = self.fs.lock();
+        let root = fs_lock.root_dir();
+        let rel_path = self.path.trim_start_matches('/');
+        let mut file = root.open_file(rel_path).map_err(|_| ViError::NotFound)?;
+        let current_size = file.seek(SeekFrom::End(0)).map_err(|_| ViError::IO)?;
+        if len > current_size {
+            return Err(ViError::InvalidArgument);
+        }
+        file.seek(SeekFrom::Start(len)).map_err(|_| ViError::IO)?;
+        file.truncate().map_err(|_| ViError::IO)?;
+        if self.pos > len {
+            self.pos = len;
+        }
+        Ok(())
+    }
+
     fn read_async(
         self: Box<Self>,
         buf_ptr: usize,

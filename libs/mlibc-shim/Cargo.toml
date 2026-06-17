@@ -1,0 +1,10 @@
+[package]
+name    = "mlibc-shim"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+description = "Link-only shim: injects libc.a (mlibc) from third_party/mlibc/build/ into the linker invocation."
+
+# No Rust dependencies — this crate exists solely to emit cargo:rustc-link-* directives.
+
+[dependencies]

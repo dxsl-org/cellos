@@ -72,8 +72,7 @@ impl Arch for AArch64Arch {
     }
 
     fn wait_for_interrupt(&self) {
-        // SAFETY: wfi has no side-effects on memory.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)); }
+        aarch64_cpu::asm::wfi();
     }
 
     fn interrupts_enabled(&self) -> bool {

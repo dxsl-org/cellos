@@ -52,7 +52,12 @@ function Find-LimineBin {
 # ── Step 1: Build kernel ───────────────────────────────────────────────────────
 if (-not $NoBuild) {
     Write-Host "[1/4] Building x86_64 kernel..."
+    # relocation-model=pic produces a DYN (PIE) ELF that Limine 8.x can load
+    # into the higher half.  Keep -red-zone disabled (required for x86_64 kernels
+    # so interrupt handlers do not corrupt the System V ABI red zone).
+    $env:RUSTFLAGS = "-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone"
     cargo build --release -p vicell-kernel --target x86_64-unknown-none
+    $env:RUSTFLAGS = $null
     if ($LASTEXITCODE -ne 0) { Write-Error "Cargo build failed"; exit 1 }
 }
 if (-not (Test-Path $KERNEL_ELF)) { Write-Error "Kernel ELF not found: $KERNEL_ELF"; exit 1 }
@@ -146,7 +151,7 @@ Write-Host ""
 
 Write-Host "    Boot mode: BIOS"
 & $QEMU `
-    -machine q35 -cpu qemu64 -m 256M `
+    -machine q35 -cpu qemu64,+pdpe1gb -m 256M `
     -cdrom $ISO_OUT -boot d `
     -serial stdio `
     -no-reboot -no-shutdown `

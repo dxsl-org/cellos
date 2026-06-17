@@ -155,6 +155,22 @@ impl File {
         Ok(())
     }
 
+    /// Return the file's size in bytes without moving the cursor.
+    ///
+    /// # Errors
+    /// Returns `ViError::IO` if the cap is invalid or the query fails.
+    pub fn size(&self) -> ViResult<u64> {
+        syscall::sys_stat_cap(self.cap_id).map_err(|_| ViError::IO)
+    }
+
+    /// Truncate the file to exactly `len` bytes.
+    ///
+    /// Returns `ViError::IO` if `len > current_size` or the backend does not
+    /// support truncation.  Use `write` / `embedded_io::Write` to extend a file.
+    pub fn truncate(&self, len: u64) -> ViResult<()> {
+        syscall::sys_truncate_cap(self.cap_id, len).map_err(|_| ViError::IO)
+    }
+
     /// Return the raw capability ID (for passing to kernel APIs).
     pub fn cap_id(&self) -> u64 {
         self.cap_id
@@ -195,20 +211,31 @@ impl embedded_io::Read for File {
     }
 }
 
+impl embedded_io::Seek for File {
+    fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, crate::io::OstdError> {
+        let (offset, whence) = match pos {
+            embedded_io::SeekFrom::Start(n)   => (n as i64,  0u8),
+            embedded_io::SeekFrom::Current(n) => (n,         1u8),
+            embedded_io::SeekFrom::End(n)     => (n,         2u8),
+        };
+        crate::syscall::sys_seek_cap(self.cap_id, offset, whence)
+            .map_err(|_| crate::io::OstdError(ViError::IO))
+    }
+}
+
 impl embedded_io::Write for File {
-    /// Write `buf` by appending it to the file (see `File::write_all` semantics).
+    /// Write `buf` into the file at the current cursor position via `WriteCap` syscall.
     ///
-    /// Returns `Ok(buf.len())` on success.  Not atomic across IPC chunks —
-    /// if a quota failure occurs mid-write, bytes already flushed to VFS are
-    /// committed and `Err` is returned; partial writes are observable.
+    /// Uses the kernel cap path (symmetric with `ReadCap`) rather than VFS IPC.
+    /// Read-only filesystems (BootFS) will return `Err(IO)` from the kernel.
     fn write(&mut self, buf: &[u8]) -> Result<usize, crate::io::OstdError> {
-        self.write_all(buf)
-            .map(|_| buf.len())
-            .map_err(crate::io::OstdError)
+        crate::syscall::sys_write_cap(self.cap_id, buf)
+            .map_err(|_| crate::io::OstdError(ViError::IO))
     }
 
     fn flush(&mut self) -> Result<(), crate::io::OstdError> {
-        Ok(()) // VFS writes are synchronous; no client-side buffer to flush
+        crate::syscall::sys_sync_cap(self.cap_id)
+            .map_err(|_| crate::io::OstdError(ViError::IO))
     }
 }
 

@@ -21,7 +21,12 @@ const NET_QUEUE_SIZE: usize = 16;
 /// `InvalidParam`. Round up to 2048 for headroom.
 const RX_BUFFER_LEN: usize = 2048;
 
-type SafeNet = VirtIONet<VirtioHal, MmioTransport, NET_QUEUE_SIZE>;
+/// `VirtIONet` instantiation shared between the MMIO and PCI init paths.
+///
+/// Exported so `virtio_pci::init_net` can call `store_pci_device` without
+/// re-specifying the const-generic queue size.  The type alias keeps the
+/// queue size in a single place.
+pub type SafeNet = VirtIONet<VirtioHal, MmioTransport, NET_QUEUE_SIZE>;
 struct SafeVirtIONet(SafeNet);
 
 // SAFETY: SafeVirtIONet is only ever accessed under the Spinlock which
@@ -141,4 +146,23 @@ pub fn mac_address() -> [u8; 6] {
     } else {
         [0u8; 6]
     }
+}
+
+/// Returns `true` when a VirtIO net device is registered (MMIO or PCI path).
+pub fn is_present() -> bool {
+    NET_DEVICE.lock().is_some()
+}
+
+/// Store a VirtIO net device initialised via the PCI BAR path.
+///
+/// Called by `virtio_pci::init_net()` after constructing `VirtIONet` from a
+/// PCI BAR-mapped `MmioTransport`.  No IRQ number is stored because the PCI
+/// path runs in polled mode (MSI-X not wired; deferred follow-up).
+///
+/// Precondition: `NET_DEVICE` must be `None`; callers guard this via
+/// `is_present()` before calling.
+pub fn store_pci_device(net: SafeNet) {
+    *NET_DEVICE.lock() = Some(SafeVirtIONet(net));
+    // IRQ is 0 (polled mode); `ack_irq` will no-op for irq==0.
+    log::info!("[virtio_net] NET_DEVICE registered via PCI BAR (polled mode, no IRQ)");
 }

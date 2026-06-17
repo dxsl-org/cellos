@@ -293,6 +293,98 @@ impl PageTableTrait for PageTable {
     }
 }
 
+/// Patch Limine's HHDM to cover the BIOS area and ACPI-reserved RAM regions.
+///
+/// Limine 8.x maps only usable e820 RAM in the HHDM.  Two categories of
+/// physical addresses within the first 256 MiB are intentionally absent:
+///
+/// 1. **BIOS area** [0x9F000–0x100000) — EBDA, VGA option ROM, BIOS ROM.
+///    The ACPI RSDP is typically here (~0xF52E0 on q35).
+///    Fixed with fine-grained 4 KiB PTEs in PD[0]'s existing PT.
+///
+/// 2. **ACPI-reserved RAM** (e.g. [0xFE00000–0x10000000) on q35 256 MB) —
+///    marked type 3/4 in the e820 map; Limine leaves PD entries absent.
+///    Fixed with 2 MiB huge-page PTEs for each absent PD slot.
+///
+/// Both fixes use only HHDM-accessible frames (PML4, PDPT, PD, PT are all
+/// allocated by Limine from usable RAM, so they are reachable via HHDM).
+///
+/// Must be called after `set_hhdm_offset`.  Absent/huge-page levels above
+/// the PD are treated as "nothing to do" (the HHDM simply isn't present).
+///
+/// # Safety
+/// Must run in kernel mode (CPL 0) after `set_hhdm_offset` has been stored.
+pub unsafe fn map_bios_area() {
+    let hhdm = HHDM_OFFSET.load(Ordering::Relaxed);
+    if hhdm == 0 { return; }
+
+    // Active PML4 physical address (flags in low 12 bits stripped below).
+    // SAFETY: reading CR3 is always valid in kernel mode.
+    let cr3 = unsafe { read_cr3() } as usize & !0xFFF;
+
+    // Macro: physical frame address → dereferenceable virtual pointer via HHDM.
+    macro_rules! p2v {
+        ($p:expr) => { ($p + hhdm) as *mut u64 };
+    }
+
+    // Walk PML4[256] → PDPT[0] → PD (all covering HHDM virtual base).
+    // Index 256 corresponds to virtual 0xffff800000000000.
+    let pml4 = p2v!(cr3);
+    // SAFETY: cr3 is the live PML4 in usable RAM → accessible via HHDM.
+    let e3 = unsafe { core::ptr::read_volatile(pml4.add(256)) };
+    if e3 & PTE_PRESENT == 0 { return; }   // HHDM entirely absent
+    if e3 & (1 << 7) != 0    { return; }   // 1 GiB leaf — everything mapped
+
+    let pdpt = p2v!((e3 & !0xFFF) as usize);
+    // SAFETY: PDPT is in usable RAM → accessible via HHDM.
+    let e2 = unsafe { core::ptr::read_volatile(pdpt.add(0)) };
+    if e2 & PTE_PRESENT == 0 { return; }   // First 1 GiB absent
+    if e2 & (1 << 7) != 0    { return; }   // 1 GiB leaf — everything mapped
+
+    let pd = p2v!((e2 & !0xFFF) as usize);
+
+    // ── Part 1: BIOS area — fine-grained 4 KiB fix in PD[0]'s PT ────────────
+    // SAFETY: PD is in usable RAM → accessible via HHDM.
+    let e1 = unsafe { core::ptr::read_volatile(pd.add(0)) };
+    if e1 & PTE_PRESENT != 0 && e1 & (1 << 7) == 0 {
+        // PD[0] is a PT pointer; fill missing entries for [0x9F000, 0x100000).
+        // PT covers [0, 2 MiB); entries 0x9F–0xFF are the BIOS/ROM area.
+        let pt = p2v!((e1 & !0xFFF) as usize);
+        for page in 0x9F_usize..=0xFF {
+            // SAFETY: PT is in usable RAM → accessible via HHDM.
+            let pte_ptr = unsafe { pt.add(page) };
+            if unsafe { core::ptr::read_volatile(pte_ptr) } & PTE_PRESENT == 0 {
+                let pte = (page as u64 * 0x1000) | PTE_PRESENT | PTE_WRITABLE | PTE_NX;
+                // SAFETY: writing to a valid PT slot in usable-RAM-backed frame.
+                unsafe { core::ptr::write_volatile(pte_ptr, pte) };
+            }
+        }
+    }
+
+    // ── Part 2: absent 2 MiB regions in physical [2 MiB, 256 MiB) ───────────
+    // PD[0] was handled above (fine-grained).  PD[1..=127] covers [2MiB, 256MiB).
+    // Any absent PD entry is an ACPI-reserved or bootloader-reserved hole;
+    // map it as a 2 MiB huge page (PS=1 in the PD entry) so ACPI tables
+    // at e.g. [0xFE00000, 0x10000000) (PD[127]) become reachable via HHDM.
+    for i in 1_usize..128 {
+        // SAFETY: pd is in usable RAM; i < 512.
+        let pde = unsafe { pd.add(i) };
+        if unsafe { core::ptr::read_volatile(pde) } & PTE_PRESENT != 0 {
+            continue; // already mapped by Limine
+        }
+        // 2 MiB huge page: PS bit (7), physical base = i * 2 MiB.
+        let huge = (i as u64 * 0x200000) | PTE_PRESENT | PTE_WRITABLE | PTE_NX | (1 << 7);
+        // SAFETY: writing to a valid PD slot.
+        unsafe { core::ptr::write_volatile(pde, huge) };
+    }
+
+    // Flush the entire TLB by reloading CR3 with the same physical value.
+    // This is cheaper than 96 + 127 individual invlpg calls and is correct
+    // because we are not changing the kernel's own mappings, only patching HHDM.
+    // SAFETY: same PML4, no mapping removed — kernel code path stays valid.
+    unsafe { write_cr3(cr3 as u64) };
+}
+
 impl PageTable {
     fn get_or_alloc(&mut self, idx: usize, alloc_fn: &mut dyn FnMut()->Option<PhysAddr>)
         -> ViResult<&mut PageTable> {

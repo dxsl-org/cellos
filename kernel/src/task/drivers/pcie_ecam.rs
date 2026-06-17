@@ -15,14 +15,41 @@
 //! Call ordering: `platform::init()` → `init_kernel_paging*()` → `pcie_ecam::init()`.
 
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use crate::sync::Spinlock;
 
 // ── ECAM base addresses (QEMU machine defaults) ───────────────────────────────
 
 /// PCIe ECAM config-space base for x86_64 q35.
-/// Source: QEMU q35 machine (pcie.0 bus at 0xB000_0000).
-/// Follow-up: parse ACPI MCFG table to support non-q35 x86 boards.
+///
+/// This is the compile-time fallback / QEMU q35 default.
+/// The runtime value (parsed from ACPI MCFG at boot) is stored in
+/// `X86_ECAM_BASE` and takes precedence when non-zero.
 pub const ECAM_BASE_X86: usize = 0xB000_0000;
+
+/// Runtime ECAM base for x86_64, set from ACPI MCFG parse before `init()`.
+///
+/// Zero means "not set"; `ecam_base_x86()` falls back to `ECAM_BASE_X86`.
+#[cfg(target_arch = "x86_64")]
+static X86_ECAM_BASE: AtomicUsize = AtomicUsize::new(0);
+
+/// Store the ECAM base parsed from ACPI MCFG.
+///
+/// Must be called before `pcie_ecam::init()` for the value to take effect.
+/// No-op on non-x86_64 targets (they use compile-time constants).
+#[cfg(target_arch = "x86_64")]
+pub fn set_ecam_base_x86(base: usize) {
+    X86_ECAM_BASE.store(base, Ordering::Relaxed);
+}
+
+/// Return the effective x86_64 ECAM base: runtime value (from ACPI) if set,
+/// otherwise the QEMU q35 compile-time default.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn ecam_base_x86() -> usize {
+    let b = X86_ECAM_BASE.load(Ordering::Relaxed);
+    if b != 0 { b } else { ECAM_BASE_X86 }
+}
 
 /// PCIe ECAM config-space base for RISC-V virt gpex.
 /// Source: QEMU virt machine DTS — `pci@30000000`.
@@ -470,8 +497,10 @@ unsafe fn scan(ecam_base: usize) {
 /// calls are no-ops if the list is already populated).
 pub fn init() {
     // Determine ECAM base for the current architecture.
+    // x86_64: use runtime value from ACPI MCFG (set_ecam_base_x86), falling
+    //         back to the QEMU q35 default if ACPI was not parsed.
     #[cfg(target_arch = "x86_64")]
-    let ecam_base = ECAM_BASE_X86;
+    let ecam_base = ecam_base_x86();
     #[cfg(target_arch = "riscv64")]
     let ecam_base = ECAM_BASE_RISCV;
     #[cfg(target_arch = "aarch64")]

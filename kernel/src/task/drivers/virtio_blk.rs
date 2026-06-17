@@ -22,6 +22,18 @@ pub unsafe fn force_unlock_locks() {
     BLOCK_DEVICE_IRQ.force_unlock();
 }
 
+/// Store a VirtIO block device initialised via the PCI BAR path.
+///
+/// Called by `virtio_pci::init_blk` after constructing `VirtIOBlk` from a PCI
+/// BAR-mapped `MmioTransport`.  No IRQ number is stored: the PCI path runs in
+/// polled mode (MSI-X not wired; deferred follow-up).
+///
+/// Precondition: `BLOCK_DEVICE` must be `None`; callers guard this.
+pub fn store_pci_device(blk: VirtIOBlk<VirtioHal, MmioTransport>) {
+    *BLOCK_DEVICE.lock() = Some(SafeVirtIOBlk(blk));
+    log::info!("[virtio_blk] BLOCK_DEVICE registered via PCI BAR (polled mode, no IRQ)");
+}
+
 pub fn init_driver() {
     use crate::task::drivers::virtio_common::virtio_slots;
     log::info!("VirtIO Block: probing MMIO slots...");

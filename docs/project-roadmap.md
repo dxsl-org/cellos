@@ -62,7 +62,7 @@ ViCell ships in two product stages defined by target hardware. The mapping princ
 | Minimal utilities (embedded debug) | M3.2 subset | ✅ DONE 2026-06-16 — standalone /bin/{ls,cat,echo,ps,kill} in sys-tools; embedded in kernel_fs.img + disk | G1 |
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + ViCell-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
-| 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (skeleton + proven on RISC-V; ARM64 kernel build complete — GPIO periph-demo verified on QEMU virt) | **G1** (graduation) |
+| 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (2026-06-16) — full SHT3x I2C + GPIO actuator + MQTT pipeline; `robot-demo-e2e` integration test passes on QEMU ARM64 in 9.83s | **G1** (graduation) |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
 | WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
 | WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |
@@ -133,14 +133,14 @@ Three sub-items:
 ### Graduation Criteria
 
 **G1 — Robot/Embedded is "done" when:**
-1. Never-die: a single Cell fault/OOM → killed & restarted, kernel survives.
-2. Bounded memory enforced on EVERY write path (Write/Append/IPC).
-3. RT determinism: a control-loop Cell meets its deadline; IPC latency has a measured bound.
-4. Peripheral I/O: GPIO/I2C/SPI/UART work on QEMU + ≥1 real board.
-5. Instant-On boot under target threshold.
-6. Runs on real RV64 + ARM64 SBC (full bring-up).
-7. Sub-track: ViCell-Nano minimal profile boots on RV32 (QEMU at minimum).
-8. Reference robot demo runs end-to-end.
+1. ✅ Never-die: a single Cell fault/OOM → killed & restarted, kernel survives.
+2. ✅ Bounded memory enforced on EVERY write path (Write/Append/IPC).
+3. ✅ RT determinism: a control-loop Cell meets its deadline; IPC latency has a measured bound.
+4. ⚠️ Peripheral I/O: GPIO/I2C/SPI/UART work on QEMU ✅ + ≥1 real board (pending hardware acquisition).
+5. ✅ Instant-On boot under target threshold.
+6. ⚠️ Runs on real RV64 + ARM64 SBC: QEMU full bring-up ✅, real SBC pending hardware acquisition.
+7. ✅ Sub-track: ViCell-Nano minimal profile boots on RV32 (QEMU verified).
+8. ✅ Reference robot demo runs end-to-end (`robot-demo-e2e` passes on QEMU ARM64, 2026-06-16).
 
 **G2 — Server/PC is "done" when:**
 SMP scales across N cores · windowed desktop + mouse · hot migration with no dropped connections · x86_64 full bring-up · full utility suite + large storage · throughput benchmarks meet targets · **Linux VM boots inside Tier 3 (minimal VMM) and runs a real workload (nginx serving HTTP)** · RISC-V AI inference server demo: HTTP → NPU cell → response with P99 latency bound.
@@ -182,6 +182,8 @@ SMP scales across N cores · windowed desktop + mouse · hot migration with no d
 
 ### E. Ecosystem / distribution `[G2]`
 - ✅ **Tier 1b C library integration** `[shared, COMPLETE 2026-06-13]` — link vendor C/C++ libraries (NPU SDK, mbedTLS, SQLite, legacy firmware) into Rust cells via `vicell-libc` (Newlib + POSIX shim). Shim in `libs/api/src/posix.rs`: malloc/free, strings, file I/O, time → ViSyscall, getentropy → `ViSyscall::GetRandom` (op 214), socket/connect/send/recv/close → typed Net IPC (postcard). ARM64 `svc #0` ABI added; send() postcard decode bug fixed; `_time()` op code fixed (op=3 = epoch seconds). Integration tests: `posix_shim_getentropy` + `posix_shim_net` in `tests/integration/tests/boot.rs`. No `fork` by design. Primary use case: hardware NPU SDKs (RKNN/Hailo/K230). Plan: `.agents/260613-0520-tier1b-posix-shims/`. See [specs/05-application.md §3](specs/05-application.md).
+- ✅ **C Runtime: picolibc libm cherry-pick** `[G1, COMPLETE 2026-06-17]` — 9-module split of posix.rs (alloc/strings/sysio/entropy/net/math/stdio_fmt/stdio/setjmp), 96+ C99 math symbols via libm crate, full stdio family (FILE/fopen/fclose/fread/fwrite), naked-asm setjmp/longjmp for RV64/ARM64 (wasm32 stub). Zero picolibc dependency. Enables: DOOM, codec libs (zlib/libpng), MicroPython/Lua math. c-math-smoke cell (12 scenarios) verifies all three stacks end-to-end.
+- 🆕 **C Runtime: mlibc migration** `[G2]` — 📋 Replace `posix.rs` surface with [mlibc](https://github.com/managarm/mlibc) (MIT, purpose-built for new OSes). Implement ~20 mlibc `sysdeps/` functions mapping ViCell primitives (`vm_map` → frame allocator, `open/read/write` → VFS IPC, `clock_get` → sys_get_time, `socket` → Net IPC). posix.rs code is reused as sysdeps — not a rewrite. mlibc provides: correct printf/scanf (Grisu3 float), full stdio, pthread stubs, locale. **Does NOT unlock fork-based software** — nginx/PostgreSQL/CPython full → always Tier 3 VM (fork is architecturally incompatible with SAS). Unlocks: broader single-process C apps, C-native ViCell app development. Effort: ~1–2 weeks.
 - **WASM Tier-2** — Phase 28 MVP ✅ (wasmi + 4 imports). **Tier 2 dropped from official stack** (2026-06-06). Phase 28 code retained under `feature = "wasm-experimental"` only — Phase 28-5 and WASI 2.0 migration cancelled. Revisit only if G2 becomes multi-tenant platform (Cloudflare Workers–style) after WASI 1.0 freezes (late 2026/early 2027).
 - 🆕 **Package manager / app distribution** `[G2]` — 📋 no install/update mechanism beyond baking into the disk image.
 
@@ -347,6 +349,9 @@ G3 Level C  →  sys_grant_tensor + TensorBuffer       — needs sys_grant_pages
 | **Python R&D** | Tier 3: full CPython in Linux VM (`apt install python3 pip numpy`) |
 | **Rich apps / ecosystem (G2)** | Tier 1b SDK libs → name service → display → Tier 3 Linux VM |
 | **Real native Rust apps (non-toy)** | ✅ `embedded-io` traits → ✅ `HashMap` in prelude → ✅ App SDK (L1: CellRuntime + app_entry! + typed clients) |
+| **DOOM (proof-of-concept, G1 QEMU)** | verify VirtIO keyboard dispatch → enable `posix` feature flag → link picolibc libm.a → doomgeneric 6-hook port (~1 week) |
+| **nginx / PostgreSQL / CPython full** | Tier 3: Linux VM only (fork/dlopen incompatible with SAS — no libc can fix this) |
+| **Single-process C apps (SQLite, curl, codecs)** | Tier 1b + picolibc libm (G1) or mlibc sysdeps (G2) |
 
 ---
 

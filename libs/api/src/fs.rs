@@ -90,6 +90,34 @@ pub trait ViFile: Send + Sync {
         Err(ViError::NotSupported)
     }
 
+    /// Return the file's current size in bytes without changing the cursor position.
+    ///
+    /// The default saves the current position, seeks to EOF, then restores.
+    /// Override in stateless implementations (e.g. `FatFile`) to avoid the extra seek.
+    /// Returns `ViError::IsADirectory` for directories.
+    fn size(&mut self) -> ViResult<u64> {
+        let cur = self.seek(SeekFrom::Current(0))?;
+        let end = self.seek(SeekFrom::End(0))?;
+        self.seek(SeekFrom::Start(cur))?;
+        Ok(end)
+    }
+
+    /// Truncate the file to exactly `len` bytes.
+    ///
+    /// Returns `ViError::InvalidArgument` if `len > current_size`; use `write` to
+    /// extend.  Returns `ViError::NotSupported` if the backend does not implement
+    /// truncation.
+    fn truncate(&mut self, _len: u64) -> ViResult<()> {
+        Err(ViError::NotSupported)
+    }
+
+    /// Flush all dirty pages to the underlying block device (fsync).
+    ///
+    /// No-op on write-through implementations; wires into device flush on NVMe (G2).
+    fn sync(&mut self) -> ViResult<()> {
+        Ok(())
+    }
+
     // --- Async Methods (Rule 7 & 8) ---
 
     /// Async Read: Takes ownership of the file handle and returns a Future.

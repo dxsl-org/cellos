@@ -36,6 +36,29 @@ pub enum ViSyscall {
     /// Revoke a capability (close).
     /// ABI: a0 = cap_id → 0 on success.
     CloseCap = 15,
+    /// Seek a cap-backed file cursor.
+    /// ABI: a0 = cap_id, a1 = offset (i64 bits), a2 = whence (0=Start,1=Current,2=End)
+    ///      → new absolute position on success.
+    /// Requires the same allowlist bit as ReadCap (bit 16).
+    SeekCap = 228,
+    /// Write bytes into a cap-backed file at the current cursor position.
+    /// ABI: a0 = cap_id, a1 = buf_ptr, a2 = buf_len → bytes_written.
+    /// Requires WriteCap allowlist bit (bit 45).
+    WriteCap = 229,
+    /// Query the size of a cap-backed file in bytes.
+    /// ABI: a0 = cap_id → file_size on success. Does NOT move the cursor.
+    /// Shares the ReadCap allowlist bit (bit 16).
+    StatCap = 230,
+    /// Truncate a cap-backed file to exactly `len` bytes.
+    /// ABI: a0 = cap_id, a1 = len → 0 on success.
+    /// Returns an error if `len > current_size`; use `WriteCap` to extend.
+    /// Requires TruncateCap allowlist bit (bit 46).
+    TruncateCap = 231,
+    /// Flush all dirty pages for a cap-backed file to the underlying block device (fsync).
+    /// ABI: a0 = cap_id → 0 on success.
+    /// No-op on write-through filesystems (RamDisk). Hooks into device flush on NVMe (G2).
+    /// Shares the WriteCap allowlist bit (bit 45).
+    SyncCap = 232,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -319,8 +342,10 @@ impl ViSyscall {
             Self::ShmMap        => Some(13),
             Self::GetProcs      => Some(14),
             Self::OpenCap       => Some(15),
-            Self::ReadCap       => Some(16),
+            Self::ReadCap | Self::SeekCap | Self::StatCap => Some(16),
             Self::CloseCap      => Some(17),
+            Self::WriteCap | Self::SyncCap => Some(45),
+            Self::TruncateCap   => Some(46),
             Self::Open          => Some(18),
             Self::Read          => Some(19),
             Self::Write         => Some(20),
@@ -438,6 +463,11 @@ impl From<usize> for ViSyscall {
             225 => ViSyscall::InjectIrq,
             226 => ViSyscall::WriteGuestMemory,
             227 => ViSyscall::ReadGuestMemory,
+            228 => ViSyscall::SeekCap,
+            229 => ViSyscall::WriteCap,
+            230 => ViSyscall::StatCap,
+            231 => ViSyscall::TruncateCap,
+            232 => ViSyscall::SyncCap,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             310 => ViSyscall::NetTx,

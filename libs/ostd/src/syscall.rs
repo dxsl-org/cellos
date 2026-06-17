@@ -352,6 +352,99 @@ pub fn sys_close_cap(cap_id: u64) {
     unsafe { syscall(ViSyscall::CloseCap, cap_id as usize, 0, 0, 0) };
 }
 
+/// Write `buf` into a cap-backed file at the current cursor position.
+///
+/// Returns the number of bytes written, or `SyscallError::Unknown` on failure.
+pub fn sys_write_cap(cap_id: u64, buf: &[u8]) -> Result<usize, SyscallError> {
+    if buf.is_empty() {
+        return Ok(0);
+    }
+    // SAFETY: buf is a valid immutable slice; kernel reads from it.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::WriteCap,
+            cap_id as usize,
+            buf.as_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    if ret >= 0 {
+        Ok(ret as usize)
+    } else {
+        Err(SyscallError::Unknown)
+    }
+}
+
+/// Query the size of a cap-backed file in bytes.
+///
+/// Does not modify the file cursor — the kernel opens the file independently
+/// to measure its size and restores state before returning.
+///
+/// # Errors
+/// Returns `SyscallError::Unknown` if the cap is invalid or the file does not exist.
+pub fn sys_stat_cap(cap_id: u64) -> Result<u64, SyscallError> {
+    // SAFETY: no memory access; integers only.
+    let ret = unsafe { syscall(ViSyscall::StatCap, cap_id as usize, 0, 0, 0) };
+    if ret >= 0 {
+        Ok(ret as u64)
+    } else {
+        Err(SyscallError::Unknown)
+    }
+}
+
+/// Truncate a cap-backed file to exactly `len` bytes.
+///
+/// Returns `Err` if `len > current_size` (no zero-fill extension; use `WriteCap` to grow).
+///
+/// # Errors
+/// Returns `SyscallError::Unknown` on permission denied, invalid cap, or unsupported backend.
+pub fn sys_truncate_cap(cap_id: u64, len: u64) -> Result<(), SyscallError> {
+    // SAFETY: no memory access; integers only.
+    let ret = unsafe {
+        syscall(ViSyscall::TruncateCap, cap_id as usize, len as usize, 0, 0)
+    };
+    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+}
+
+/// Flush all dirty pages for a cap-backed file to the underlying block device.
+///
+/// No-op on write-through filesystems (RamDisk, G1). Wires into device flush on
+/// NVMe (G2) for durability guarantees after write sequences.
+///
+/// # Errors
+/// Returns `SyscallError::Unknown` on permission denied or invalid cap.
+pub fn sys_sync_cap(cap_id: u64) -> Result<(), SyscallError> {
+    // SAFETY: no memory access; integers only.
+    let ret = unsafe { syscall(ViSyscall::SyncCap, cap_id as usize, 0, 0, 0) };
+    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+}
+
+/// Seek a cap-backed file to `offset` from `whence` (0=Start, 1=Current, 2=End).
+///
+/// Returns the new absolute byte position, or `SyscallError::Unknown` on failure.
+///
+/// # ABI note
+/// `offset` is an `i64` transmitted as a `usize` bit-pattern (reinterpret). The
+/// kernel sign-extends it back to `isize` / `i64` for negative values (Current/End).
+pub fn sys_seek_cap(cap_id: u64, offset: i64, whence: u8) -> Result<u64, SyscallError> {
+    // SAFETY: no memory access; integers only.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::SeekCap,
+            cap_id as usize,
+            offset as usize,  // bit-pattern reinterpret; kernel casts back via `as isize`
+            whence as usize,
+            0,
+        )
+    };
+    if ret >= 0 {
+        Ok(ret as u64)
+    } else {
+        Err(SyscallError::Unknown)
+    }
+}
+
 pub fn sys_wait(pid: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::Wait, pid, 0, 0, 0);
