@@ -91,6 +91,10 @@ members = [
     "cells/apps/test-isolation",
     "cells/apps/viui-demo",
     "cells/apps/robot-dashboard",
+    "cells/apps/doom",
+
+    # Cells - Runtimes
+    "cells/runtimes/lua",
     "cells/apps/sdk-demo",
     "cells/apps/hello-cell",
     "cells/apps/input-test",

@@ -14,8 +14,12 @@ use types::CellId;
 /// Maximum CellId tracked (index into IN_USE array).
 pub const MAX_CELLS: usize = 64;
 
-/// Default heap quota per Cell: 4 MiB.
-pub const DEFAULT_QUOTA_BYTES: usize = 4 * 1024 * 1024;
+/// Default heap quota per Cell: 16 MiB.
+///
+/// Raised from 4 MiB to support heavier cells (DOOM needs ~10 MiB for WAD +
+/// zone heap; compositor and VFS also benefit from the headroom).  The quota
+/// is a runtime charge limit — no physical pages are pre-allocated.
+pub const DEFAULT_QUOTA_BYTES: usize = 16 * 1024 * 1024;
 
 /// Limit store — BTreeMap keyed by CellId raw value, stores the byte limit.
 /// Locked only in `register`/`deregister` — NOT inside the allocator hot path.
