@@ -13,7 +13,10 @@
 use std::path::Path;
 use std::fs;
 
-const DOOMGENERIC_DIR: &str = "src/c/doomgeneric";
+// The ozkl/doomgeneric repo nests the C sources one level deeper:
+// cells/apps/doom/src/c/doomgeneric/  ← git repo root (has README, .sln)
+//                                doomgeneric/  ← actual C source
+const DOOMGENERIC_DIR: &str = "src/c/doomgeneric/doomgeneric";
 
 fn main() {
     let dg_path = Path::new(DOOMGENERIC_DIR);
@@ -33,20 +36,24 @@ fn main() {
 
     let target = std::env::var("TARGET").unwrap_or_default();
 
-    // Collect all .c files from doomgeneric/, excluding example platform impls
-    // (doomgeneric_sdl.c, doomgeneric_xlib.c etc.) — we provide DG_* in Rust.
-    // Keep doomgeneric.c itself (it owns DG_ScreenBuffer + doomgeneric_Create).
+    // Collect all .c files from doomgeneric/, excluding:
+    //  - doomgeneric_*.c  : example platform impls (SDL/Xlib/etc.) — we provide DG_* in Rust
+    //  - i_allegromusic.c / i_allegrosound.c : Allegro sound backends (require allegro headers)
+    //  - i_sdlmusic.c / i_sdlsound.c         : SDL sound backends (require SDL headers)
+    // Keep doomgeneric.c itself (owns DG_ScreenBuffer + doomgeneric_Create).
+    const EXCLUDED: &[&str] = &[
+        "i_allegromusic", "i_allegrosound",
+        "i_sdlmusic",     "i_sdlsound",
+    ];
     let c_files: Vec<_> = fs::read_dir(dg_path)
         .expect("read doomgeneric dir")
         .filter_map(|e| {
             let e = e.ok()?;
             let name = e.file_name().into_string().ok()?;
             if !name.ends_with(".c") { return None; }
-            // Exclude example platform implementations (doomgeneric_XXX.c)
-            // but keep doomgeneric.c itself (no underscore after "doomgeneric").
             let stem = name.trim_end_matches(".c");
-            let is_platform_impl = stem.starts_with("doomgeneric_");
-            if is_platform_impl { return None; }
+            if stem.starts_with("doomgeneric_") { return None; }
+            if EXCLUDED.contains(&stem) { return None; }
             Some(e.path())
         })
         .collect();
@@ -59,6 +66,22 @@ fn main() {
             build.compiler("riscv-none-elf-gcc");
         }
         build.flag("-mabi=lp64d");
+        // cc-rs auto-detects `ar` from PATH but on Windows it may find the
+        // MinGW archiver which cannot process RISC-V ELF objects. Force the
+        // cross-archiver explicitly, matching the compiler.
+        if std::env::var("AR_riscv64gc_unknown_none_elf").is_err()
+            && std::env::var("AR_riscv64gc-unknown-none-elf").is_err()
+            && std::env::var("TARGET_AR").is_err()
+            && std::env::var("AR").is_err()
+        {
+            build.archiver("riscv-none-elf-ar");
+        }
+        // DOOM uses strdup, snprintf, etc. — point the compiler at picolibc
+        // headers so the full POSIX subset is visible (not just freestanding).
+        let sysroot = run_gcc(&["--print-sysroot"]);
+        if !sysroot.is_empty() && sysroot != "." {
+            build.flag(&format!("-I{}/include", sysroot));
+        }
     }
 
     // Override code-model for cells (well below 2GB)
@@ -67,10 +90,12 @@ fn main() {
     }
 
     build.warnings(false);
-    build.flag_if_supported("-std=c99");
+    // gnu99 instead of c99 so __STRICT_ANSI__ is off → picolibc exposes
+    // strdup, snprintf, and other POSIX-visible functions in its headers.
+    build.flag_if_supported("-std=gnu99");
 
-    // Redirect doomgeneric.c's main() so our Rust entry point can own _start.
-    build.define("main", Some("__doom_c_entry"));
+    // doomgeneric exposes doomgeneric_Create + doomgeneric_Tick; we call
+    // them from Rust main() directly, so no main()-rename trick needed.
 
     // Standard DOOM defines for doomgeneric
     build.define("DOOMGENERIC_RESX", Some("320"));
@@ -120,7 +145,8 @@ fn link_picolibc() {
     println!("cargo:rustc-link-lib=static=m");
     println!("cargo:rustc-link-lib=static=gcc");
     println!("cargo:rustc-link-arg=--allow-multiple-definition");
-    println!("cargo:rustc-link-arg=--wrap=_sbrk");
+    // No --wrap=_sbrk: _sbrk is already provided by libs/api/src/posix/sysio.rs
+    // (returns NULL — Rust GlobalAlloc owns the heap in SAS).
 }
 
 fn run_gcc(args: &[&str]) -> String {

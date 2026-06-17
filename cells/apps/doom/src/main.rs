@@ -31,10 +31,13 @@ const DOOM_H: u32 = 200;
 
 declare_manifest!(block_io = false, network = false, spawn = false);
 
-// ─── doomgeneric C entry point (main() renamed by -Dmain=__doom_c_entry) ──────
+// ─── doomgeneric public API ────────────────────────────────────────────────────
 
 extern "C" {
-    fn __doom_c_entry(argc: i32, argv: *const *const u8) -> i32;
+    // Initialize DOOM engine (parses WAD, sets up renderer, calls DG_Init).
+    fn doomgeneric_Create(argc: i32, argv: *const *const u8);
+    // Run one game tick: input → game logic → DG_DrawFrame + DG_GetKey.
+    fn doomgeneric_Tick();
 }
 
 // ─── Global state (set once in DG_Init, read in DG_DrawFrame / DG_GetKey) ────
@@ -65,9 +68,11 @@ pub extern "C" fn main() {
         wpath.as_ptr(),
     ];
 
-    // __doom_c_entry → doomgeneric_Create → D_DoomMain (never returns)
-    unsafe { __doom_c_entry(3, argv.as_ptr()); }
-    sys_exit(0);
+    // Initialize engine + start game loop (doomgeneric_Tick never returns).
+    unsafe {
+        doomgeneric_Create(3, argv.as_ptr());
+        loop { doomgeneric_Tick(); }
+    }
 }
 
 // ─── DG_Init ──────────────────────────────────────────────────────────────────
@@ -169,6 +174,22 @@ pub unsafe extern "C" fn DG_SleepMs(ms: u32) {
 #[no_mangle]
 pub unsafe extern "C" fn DG_Quit() {
     sys_exit(0);
+}
+
+// ─── DG_SetWindowTitle ────────────────────────────────────────────────────────
+
+/// No-op: ViCell surfaces don't have a title bar.
+#[no_mangle]
+pub unsafe extern "C" fn DG_SetWindowTitle(_title: *const u8) {}
+
+// ─── mkdir stub ───────────────────────────────────────────────────────────────
+
+/// DOOM calls mkdir() to create save-game directories. We have no real FS
+/// directory creation yet — return 0 (success) so DOOM continues; actual
+/// save files will fail gracefully when opened.
+#[no_mangle]
+pub unsafe extern "C" fn mkdir(_path: *const u8, _mode: u32) -> i32 {
+    0
 }
 
 // ─── Key translation ─────────────────────────────────────────────────────────

@@ -62,6 +62,8 @@ $shell_bin  = "$rel_dir\app-shell"
 $vfs_bin    = "$rel_dir\service-vfs"
 $config_bin = "$rel_dir\service-config"
 $lua_bin    = "$rel_dir\lua"
+$doom_bin   = "$rel_dir\doom"              # DOOM cell (needs doomgeneric clone first)
+$doom_wad   = "doom1.wad"                  # shareware WAD — place at d:/ViCell/doom1.wad
 $upy_bin    = "$rel_dir\micropython"       # Phase 18: MicroPython runtime cell
 $bench_bin       = "$rel_dir\bench"             # Phase 22 benchmark cell
 $bench_probe_bin = "$rel_dir\bench-probe"      # bench probe/load child (VA 0x19000000)
@@ -100,6 +102,15 @@ if (-not (Test-Path $lua_bin)) {
     $lua_bin = $null
 }
 
+if (-not (Test-Path $doom_bin)) {
+    Write-Host "Warning: DOOM binary not found — skipping DOOM in FAT32 image."
+    $doom_bin = $null
+}
+if (-not (Test-Path $doom_wad)) {
+    Write-Host "Warning: doom1.wad not found at $doom_wad — skipping WAD in FAT32 image."
+    $doom_wad = $null
+}
+
 if (-not (Test-Path $upy_bin)) {
     Write-Host "Warning: MicroPython binary not found — skipping python in FAT32 image."
     $upy_bin = $null
@@ -126,8 +137,10 @@ $kfs_args = @(
     "$tmpDir\hostname",        "/etc/hostname",
     "$tmpDir\readme",          "/readme.txt"
 )
-if ($lua_bin)  { $kfs_args += @($lua_bin,  "/bin/lua") }
-if ($upy_bin)  { $kfs_args += @($upy_bin,  "/bin/python") }
+if ($lua_bin)   { $kfs_args += @($lua_bin,  "/bin/lua") }
+if ($upy_bin)   { $kfs_args += @($upy_bin,  "/bin/python") }
+if ($doom_bin)  { $kfs_args += @($doom_bin, "/bin/doom") }
+if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
 if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
 if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
 if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
