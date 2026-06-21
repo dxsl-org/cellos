@@ -4,6 +4,45 @@
 
 ---
 
+## [2026-06-21] Security: bake signed /POLICY.BIN into VIFS1 — operator policy end-to-end (P5 deploy)
+
+### Summary
+Closes the last deferred P5 item: a FAT16 file-insert tool now bakes a dev-signed
+`/POLICY.BIN` into the VIFS1 images, and the kernel loads + verifies it from disk
+at boot (`PolicyLoaded`). The full operator-policy chain — sign → bake → read →
+verify → parse → `manifest ∩ spawner ∩ policy` — is now proven end-to-end on both
+arches, not just via self-test.
+
+### Changes
+- `tools/fat16_insert.py` (new) — inserts/overwrites a small file into an existing
+  FAT16 image in-place (reads BPB, allocates free clusters, updates all FATs +
+  root dir; idempotent; preserves existing files). Fills the gap that
+  `mkfat16.py`/`mkfat32_inplace.py` (formatters) left.
+- `kernel/Cargo.toml` — `dev-policy-key` added to `default` (G1 dev posture: trust
+  the dev fleet key so a dev-signed blob verifies). ⚠️ production drops it +
+  provisions the real key.
+
+### Deploy step (reproducible — images are gitignored generated artifacts)
+The `kernel_fs.img` VIFS1 images are generated/local artifacts (gitignored), so
+the blob is NOT committed as a 40 MB binary. The signer is deterministic (fixed
+dev seed), so the bake reproduces from committed tooling:
+```
+python scripts/sign-policy.py --out POLICY.BIN
+python tools/fat16_insert.py kernel/src/embedded/kernel_fs.img        POLICY.BIN POLICY.BIN
+python tools/fat16_insert.py kernel/src/embedded-aarch64/kernel_fs.img POLICY.BIN POLICY.BIN
+```
+Without the bake, the kernel finds no `/POLICY.BIN` → `PolicyAbsent` → dev-permissive
+(safe default; boot unaffected).
+
+### Verification (local, with the bake applied)
+- Both arches: boot logs `[policy] loaded + verified (4 entries)` (vs "absent"),
+  reach `ViCell >`, services up, no faults — the loaded dev policy (vfs=block_io,
+  net=network, shell=spawn; unlisted → dev-permissive) is non-breaking.
+- Integration boot tests green both arches (`boots_to_shell_prompt`,
+  `aarch64_boots_to_shell_prompt`) with policy active.
+
+---
+
 ## [2026-06-21] Security: operator-policy intersection + recovery hatch (P5c / Phase 04)
 
 ### Summary

@@ -51,7 +51,10 @@ vergen-gitcl = { version = "1", default-features = false, features = ["build", "
 
 
 [features]
-default = []
+# G1 DEV posture: trust the dev fleet key so the dev-signed /POLICY.BIN baked into
+# VIFS1 verifies + loads. ⚠️ PRODUCTION must drop `dev-policy-key` from default and
+# provision the real fleet root key (see kernel/src/policy.rs FLEET_ROOT_PUBKEY).
+default = ["dev-policy-key"]
 # Trust the dev fleet key (scripts/sign-policy.py) as the policy root — dev/test
 # only, NEVER a release build. Without it the prod placeholder key is used.
 dev-policy-key = []
