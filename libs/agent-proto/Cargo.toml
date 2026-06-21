@@ -1,0 +1,15 @@
+[package]
+name = "agent-proto"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# Shared IPC contract types for the Hypha agent (core ↔ llm-gateway ↔ tool Cells).
+# Serialized with postcard at the call sites (same as libs/api ipc types); this
+# crate only defines the types + their serde derives.
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }

@@ -949,7 +949,18 @@ fn spawn_external(prog: &str, args: &[&str]) -> i32 {
     let mut path = alloc::string::String::from("/bin/");
     path.push_str(prog);
     match syscall::sys_spawn_from_path(&path) {
-        syscall::SyscallResult::Ok(_) => 0,
+        syscall::SyscallResult::Ok(tid) => {
+            // Foreground: block until the child exits so it owns the console
+            // (stdin/UART). Without this the shell loops back to read the next
+            // line and races interactive children (e.g. `hypha`) for keystrokes.
+            // Fast commands return immediately (kernel Wait short-circuits when
+            // the child is already Terminated). Background (`&`) already runs
+            // synchronously in G1, so this does not regress it.
+            match syscall::sys_wait(tid) {
+                syscall::SyscallResult::Ok(code) => code as i32,
+                syscall::SyscallResult::Err(_) => 0,
+            }
+        }
         syscall::SyscallResult::Err(_) => {
             ostd::io::print("shell: command not found: ");
             ostd::io::println(prog);

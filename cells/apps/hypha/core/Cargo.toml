@@ -1,0 +1,19 @@
+[package]
+name = "hypha-core"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# Hypha core — the agent brain. P1: an interactive chat loop. Reads a line from
+# stdin (UART), keeps the conversation in heap, asks the llm-gateway over IPC,
+# prints the reply. Spawns the gateway itself and talks to it by tid (needs the
+# `spawn` capability; no service registry in P1).
+
+[dependencies]
+ostd        = { path = "../../../../libs/ostd" }
+api         = { path = "../../../../libs/api" }
+agent-proto = { path = "../../../../libs/agent-proto" }
+postcard    = { version = "1", default-features = false, features = ["alloc"] }
+
+[build-dependencies]
+cell-build = { path = "../../../../libs/cell-build" }

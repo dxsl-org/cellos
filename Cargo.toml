@@ -19,7 +19,9 @@ members = [
     "libs/types",
     "libs/api",
     "libs/ostd",
+    "libs/http-core",
     "libs/mlibc-shim",
+    "libs/agent-proto",
     "libs/viui",
     "libs/viui-macros",
     
@@ -75,6 +77,8 @@ members = [
 
     # Cells - Apps (user applications)
     "cells/apps/robot-dashboard",
+    "cells/apps/hypha/llm-gateway",   # Hypha P0 — LLM network gateway
+    "cells/apps/hypha/core",          # Hypha P1 — agent brain (chat loop)
 
     # Cells - Demos (hardware/feature demos + games)
     "cells/demos/doom",
@@ -91,6 +95,7 @@ members = [
     "cells/demos/can-demo",
     "cells/demos/robot-demo",
     "cells/demos/https-demo",
+    "cells/demos/http-smoke",
     "cells/demos/viui-demo",
     "cells/demos/sdk-demo",
     "cells/demos/audio-demo",

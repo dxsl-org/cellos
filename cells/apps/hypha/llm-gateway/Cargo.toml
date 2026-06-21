@@ -1,0 +1,19 @@
+[package]
+name = "hypha-llm-gateway"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# Hypha LLM gateway. A Tier-1 service cell that receives `LlmRequest` over IPC,
+# opens TLS to an OpenAI-compatible endpoint (a host-side proxy via QEMU NAT in
+# P0/P1), POSTs a chat-completion, and replies `LlmReply`. TLS runs in the net
+# service, so this cell needs NO network capability — only IPC to the net cell.
+
+[dependencies]
+ostd        = { path = "../../../../libs/ostd" }
+api         = { path = "../../../../libs/api" }
+agent-proto = { path = "../../../../libs/agent-proto" }
+postcard    = { version = "1", default-features = false, features = ["alloc"] }
+
+[build-dependencies]
+cell-build = { path = "../../../../libs/cell-build" }
