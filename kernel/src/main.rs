@@ -14,6 +14,7 @@ pub mod acpi;
 pub mod audit;
 pub mod boot;
 pub mod cell;
+pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod resource_registry;
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
@@ -448,6 +449,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         #[cfg(target_arch = "riscv64")]
         unsafe {
             core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
+        }
+
+        // Power-on self-test of the Ed25519 verify primitive (RFC 8032 TEST 1 +
+        // tamper-negative) before it is trusted to authenticate the signed
+        // operator policy (P5). Cheap (~one verify); a FAIL means the crypto path
+        // is broken and signed policy must not be trusted.
+        if crate::ed25519::self_test() {
+            log_info("ed25519 verify self-test PASS (RFC 8032 + tamper)");
+        } else {
+            log_info("ed25519 verify self-test FAIL — signed policy unsafe");
         }
 
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)

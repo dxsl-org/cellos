@@ -4,6 +4,37 @@
 
 ---
 
+## [2026-06-21] Security: in-kernel Ed25519 verify (P5 crypto foundation)
+
+### Summary
+Phase 02 crypto spike for signed operator policy (roadmap §G.2 P5). The plan's
+risk was that an in-kernel signature-verify might not build under the finicky
+PIC bare-metal kernel — with a fallback to shipping *unsigned* policy in G1.
+**Spike result: signed policy is viable.** `ed25519-compact` (pure-Rust, no_std,
+verify-capable, no RNG dependency for verify) compiles cleanly under
+`-C relocation-model=pic` on both riscv64 and aarch64, and the verify path
+codegens, links, and runs correctly on both targets (RFC 8032 §7.1 TEST 1
+verifies; a tampered signature is rejected — confirmed at boot on real QEMU).
+Chosen over `ed25519-dalek` (heavier curve25519-dalek graph) to minimise PIC
+build risk; jedisct1/libsodium-authored, enforces canonical encodings.
+
+### Changes
+- `kernel/Cargo.toml` — add `ed25519-compact` (no_std, default-features off).
+- `kernel/src/ed25519.rs` (new) — `verify(pubkey, msg, sig) -> bool` (panic-free)
+  + `self_test()` (RFC 8032 vector + tamper-negative).
+- `kernel/src/main.rs` — register module; **power-on self-test** of the verify
+  primitive at boot (logs PASS/FAIL) before it is trusted for policy.
+
+### Verification
+- Both arches: `cargo build --release` clean under PIC; boot reaches `ViCell >`
+  and logs "ed25519 verify self-test PASS (RFC 8032 + tamper)".
+
+### Decision unblocked
+P5 (operator policy) proceeds with **signed** policy (Phase 03/04). The
+unsigned-G1 fallback is not needed.
+
+---
+
 ## [2026-06-21] Fix: aarch64 kernel build broken by setjmp FP register saves
 
 ### Summary
