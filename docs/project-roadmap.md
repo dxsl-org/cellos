@@ -173,9 +173,9 @@ Tier-1 Rust **AI agent Cell**. Unlike the demos (which each prove one primitive)
 
 **Strategic role:** Hypha is the **forcing function** for this whole section. Building it surfaces
 the missing modules below and prioritizes them by real need; gaps are tracked in the plan's
-`os-gaps.md` and filled incrementally (top ones logged: no HTTP lib, public-DNS-over-NAT unverified,
-no_std JSON, fixed-only service IDs). Design inversion vs a Unix agent: it orchestrates **Cells via
-IPC + spawn**, not processes via fork/exec.
+`os-gaps.md` and filled incrementally. **Closed 2026-06-21:** no HTTP lib ✅, no_std JSON ✅.
+**Remaining top gaps:** public-DNS-over-NAT unverified, fixed-only service IDs. Design inversion
+vs a Unix agent: it orchestrates **Cells via IPC + spawn**, not processes via fork/exec.
 
 **Repo layout:** a cluster of normal workspace-member crates (`llm-gateway`/`core`/`tools/*` +
 shared `libs/agent-proto`) — **not** a git submodule (each os-gap fill is an atomic commit spanning
@@ -222,7 +222,7 @@ showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
 > **Decision (2026-06-14):** `ostd` IS ViCell's std — do NOT build a `std` facade (std assumes Unix process model, contradicts SAS/LBI). The three gaps below are what unlock real native apps without false familiarity. See brainstorm `.agents/brainstorms/260614-native-app-std.md` (to be written).
 
 - 🆕 **Name service** `[shared]` — 📋 service endpoint ids are spawn-order constants (vfs=3, net=6…), hard-coded everywhere. Replace with a registry/lookup.
-- 🆕 **High-level cell libraries** `[shared]` — 📋 HTTP/JSON/TLS client helpers so apps don't hand-roll protocol bytes + manual encode/decode.
+- ✅ **High-level cell libraries** `[shared, COMPLETE 2026-06-21]` — HTTP/1.1 + no_std JSON shipped. `libs/http-core` (pure, host-testable protocol) + `ostd::http`/`ostd::json` (feature-gated). `HttpClient<T>` generic over `embedded_io::Read+Write` (TcpStream/TlsStream); serde_json optional (zero link cost if unused). 51 host tests, `cells/demos/http-smoke` reference Cell. Known: HTTPS binary bodies unreliable (net-cell frame-length gap); cert verification deferred. Hypha P0 unblocked.
 - 🆕 **Python/scripting story** `[G2]` — Python R&D users: full CPython via Tier 3 Linux VM (`apt install python3 pip numpy torch` → works). Lua/MicroPython native runtimes **dropped** (half-measure). WASM Tier 2 dropped — no `micropython.wasm` path. Robot code stays Rust (Tier 1). Milestones 3.3/3.4 marked complete but runtimes not actively maintained.
 - 🆕 **Async runtime exposed to apps** `[shared]` — 📋 no app-facing async executor for concurrent I/O.
 - ✅ **`embedded-io` traits for ostd** `[shared, COMPLETE 2026-06-15]` — `embedded_io::Read` impl'd for `ostd::fs::File` + `Stdin`; `embedded_io::Write` impl'd for `Stdout` + `File` (via `VfsRequest::Append` IPC, chunked at 400B). Opens the no_std embedded-crate ecosystem. **Gate for high-level cell libraries: cleared.**

@@ -4,6 +4,41 @@
 
 ---
 
+## [2026-06-21] Platform: HTTP/1.1 + JSON libraries close app SDK gaps (no_std + feature-gated)
+
+### Summary
+Shipped two no_std platform libraries via `ostd`, closing G1 adoption gaps identified in the
+Hypha AI agent gap analysis: HTTP/1.1 client support and no_std JSON, both feature-gated to
+keep cells link-time zero-cost if unused.
+
+### Changes
+- **`libs/http-core/` (new crate)** — Pure, no_std HTTP/1.1 protocol library (`#![cfg_attr(not(test), no_std)]`), host-testable.
+  Includes: `RequestBuilder`, `parse_response_headers` (httparse, adversarially-fragmented test coverage), `BodyReader`
+  (Content-Length + chunked transfer encoding), 51 host tests. Decouples protocol logic from transport.
+- **`ostd::http` / `ostd::json` (new feature-gated exports)** — Cargo features `http` and `json` (default off).
+  `HttpClient<T: embedded_io::Read+Write>` works over `TcpStream` (HTTP) or `TlsStream` (HTTPS).
+  `serde_json` (alloc) optional; zero link cost if cell doesn't opt in.
+- **`ostd::clients::TlsStream`** — embedded_io adapter for net-cell TLS IPC (sys_tls_recv/send opcodes).
+  Works as a transport for HttpClient; HTTPS smoke-tested end-to-end.
+- **`cells/demos/http-smoke/` (new cell)** — Reference Cell demonstrating HTTP + JSON roundtrip over both HTTP and HTTPS.
+  Generalizes code previously hand-rolled in hypha's llm-gateway (hypha migration is follow-up work, P1).
+
+### Known Limitation (Follow-up)
+- **HTTPS binary bodies unreliable** — net-cell `TlsStream` has no explicit frame length in the IPC protocol,
+  so zero-scan truncation affects binary/non-UTF-8 response bodies. Text-only (JSON/UTF-8 protocols) safe.
+  Binary body handling deferred as a net-cell protocol refinement.
+- **No certificate verification** — `TlsStream` uses the net cell's current `UnsecureProvider` (peer certs
+  not validated). Cert chain verification is a separate TLS workstream; intended for controlled environments.
+  External internet use requires cert validation (separate gap, tracked separately).
+
+### Impact
+- **Hypha P0 (llm-gateway) unblocked** — HTTP/HTTPS client now available; no more hand-rolled socket manipulation.
+- **No_std ecosystem access** — cells can now link serde_json + popular embedded HTTP crates (http-body, etc.)
+  without pulling in full std.
+- **App SDK L2 (Middleware)** — foundation for HTTP server native ViCell (L2 middleware layer in roadmap).
+
+---
+
 ## [2026-06-21] Security: bake signed /POLICY.BIN into VIFS1 — operator policy end-to-end (P5 deploy)
 
 ### Summary

@@ -1,0 +1,23 @@
+[package]
+name = "http-core"
+version = "0.1.0"
+edition = "2021"
+
+# HOST TESTS: the workspace pins a bare-metal default target, so run them with an
+# explicit host triple, e.g. `cargo test -p http-core --target x86_64-pc-windows-msvc`.
+#
+# This crate intentionally defines NO #[global_allocator] and NO #[panic_handler]
+# so that `cargo test -p http-core` compiles and runs on the host (std test harness).
+# ostd cannot be host-tested because it owns those lang items and forces the
+# riscv64gc-unknown-none-elf target via .cargo/config.toml. That is the sole reason
+# this crate exists as a sibling rather than a module of ostd.
+
+[dependencies]
+# Versions and flags must match cells/services/httpd/Cargo.toml exactly (scout L14-16)
+# so cargo does not pull two copies of these crates into the workspace graph.
+serde_json  = { version = "1", default-features = false, features = ["alloc"] }
+serde       = { version = "1", default-features = false }
+httparse    = { version = "1", default-features = false }
+# embedded-io 0.7: ostd's current version (ostd/Cargo.toml); Read + Write traits
+# that Phase 02 BodyReader will be generic over.
+embedded-io = { version = "0.7", default-features = false }

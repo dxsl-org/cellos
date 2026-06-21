@@ -92,6 +92,21 @@ pub mod clients;
 /// Cell runtime — `CellRuntime` builder, `app_entry!` / `service_entry!` macros.
 pub mod runtime;
 
+/// JSON codec (`feature = "json"`) — re-export of `http_core::json`
+/// (`from_slice`, `to_vec`, `Value`, `get_str`, …). Opt-in: non-networked cells
+/// pay zero binary cost because `serde_json` is only linked under this feature.
+#[cfg(feature = "json")]
+pub mod json {
+    pub use http_core::json::*;
+}
+
+/// HTTP/1.1 client (`feature = "http"`) — `HttpClient`, `TlsStream`, plus the
+/// re-exported `http_core` protocol items (`RequestBuilder`, `BodyReader`,
+/// `parse_response_headers`, `ParsedHeaders`, `Framing`, `HttpError`).
+/// Opt-in: `httparse`/`serde_json` are only linked under this feature.
+#[cfg(feature = "http")]
+pub mod http;
+
 /// Task spawning.
 pub mod task {
     use crate::*;

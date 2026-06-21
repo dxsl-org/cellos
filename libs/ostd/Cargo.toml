@@ -17,6 +17,16 @@ hashbrown    = { version = "0.15", default-features = false, features = ["defaul
 embedded-io  = { version = "0.7",  default-features = false }
 heapless     = { version = "0.8",  default-features = false }
 serde        = { version = "1",    default-features = false }
+# Optional: pure HTTP/1.1 + JSON protocol logic. Gated behind the `http`/`json`
+# features so non-networked Cells (the vast majority) pay ZERO binary cost — no
+# serde_json, no httparse linked unless a Cell opts in. Default features below
+# enable NEITHER, so adding this dep is purely additive for existing cells.
+http-core   = { path = "../http-core", optional = true }
 
 [features]
 default = []
+# `json` exposes `ostd::json` (serde_json codec + `get_str`).
+json = ["dep:http-core"]
+# `http` exposes `ostd::http` (RequestBuilder, header parse, BodyReader,
+# HttpClient, TlsStream). Pulls http-core; works over TcpStream or TlsStream.
+http = ["dep:http-core"]

@@ -27,8 +27,23 @@ pub mod input;
 pub mod net;
 pub mod vfs;
 
+/// TLS embedded_io stream adapter (only when `http`/`json` features pull it in).
+///
+/// NOTE on the "shared write-all helper" plan ask: `TcpStream::write` (net.rs)
+/// deliberately does a SINGLE chunked send and returns the chunk length, leaving
+/// write-all to `embedded_io::Write::write_all`. `TlsStream::write` instead
+/// loops internally (write-all semantics) because the raw `tls_write` cap is
+/// 503 B and partial. Pushing that loop into `TcpStream::write` would change its
+/// public return contract (callers expect a single-chunk count), a behavior
+/// regression — so the loop stays local to `TlsStream`. They share the *pattern*
+/// (chunk-cap + yield), not a function, by design.
+#[cfg(any(feature = "http", feature = "json"))]
+pub mod tls_stream;
+
 pub use input::InputClient;
 pub use net::{NetClient, TcpStream};
+#[cfg(any(feature = "http", feature = "json"))]
+pub use tls_stream::TlsStream;
 pub use vfs::VfsClient;
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
