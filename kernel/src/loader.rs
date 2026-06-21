@@ -193,7 +193,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     };
     // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
     // before the child-mutation lock below (the Spinlock is non-reentrant).
-    let granted: CapSet = match spawner {
+    let after_spawner: CapSet = match spawner {
         Spawner::Root          => requested,
         Spawner::Ceiling(ceil) => requested.intersect(ceil),
         Spawner::User(stid)    => {
@@ -203,6 +203,14 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
                 .unwrap_or(CapSet::EMPTY); // unknown spawner → no caps (fail-safe)
             requested.intersect(ceil)
         }
+    };
+    // 3. Operator policy (P5/Phase 04): `granted = after_spawner ∩ policy(path)`,
+    //    with trusted-core recovery + fail-safe. `policy::apply` takes the POLICY
+    //    lock internally — called OUTSIDE the SCHEDULER guard above to avoid lock
+    //    nesting. `init` (Root) is exempt (it is the loader OF the policy).
+    let granted: CapSet = match spawner {
+        Spawner::Root => after_spawner,
+        _ => crate::policy::apply(path, tid, after_spawner),
     };
 
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {

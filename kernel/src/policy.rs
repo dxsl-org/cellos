@@ -219,6 +219,27 @@ pub fn self_test() -> bool {
     if crate::ed25519::verify(&DEV_FLEET_PUBKEY, bad_body, &s) {
         return false;
     }
+
+    // 3. Phase 04 narrowing rule (decision_to_caps) — default (dev-permissive) posture.
+    let full = CapSet { block_io: true, network: true, spawn: true,
+        hypervisor: false, mmio_devices: 0, block_regions: 0 };
+    let net_only = CapSet { network: true, ..CapSet::EMPTY };
+    // Permit narrows: full ∩ {network} = {network}.
+    if decision_to_caps("/bin/app", full, PolicyDecision::Permit(net_only)) != net_only {
+        return false;
+    }
+    // DenyAll on a non-core path → EMPTY.
+    if decision_to_caps("/bin/app", full, PolicyDecision::DenyAll) != CapSet::EMPTY {
+        return false;
+    }
+    // DenyAll on a trusted-core path → keeps caps (headless recovery hatch).
+    if decision_to_caps("/bin/vfs", full, PolicyDecision::DenyAll) != full {
+        return false;
+    }
+    // NoEntry (dev-permissive default) → keeps caps.
+    if decision_to_caps("/bin/app", full, PolicyDecision::NoEntry) != full {
+        return false;
+    }
     true
 }
 
@@ -240,5 +261,58 @@ pub fn lookup(path: &str) -> PolicyDecision {
         // Absent / not-yet-loaded → NoEntry; the caller's fail-safe rule decides
         // (dev-permissive keeps caps; `policy-required` denies).
         Some(PolicyState::Absent) | None => PolicyDecision::NoEntry,
+    }
+}
+
+/// The minimal trusted core that is NEVER reduced to no-caps by policy — so a
+/// fail-closed mis-fire (bad/absent policy under `policy-required`) cannot brick
+/// a headless robot by stripping the filesystem/shell/network it needs to recover.
+fn is_trusted_core(path: &str) -> bool {
+    matches!(path, "/bin/vfs" | "/bin/shell" | "/bin/net")
+}
+
+/// Pure narrowing rule: combine spawner-intersected `caps` with a policy
+/// `decision`. Recovery: trusted-core cells keep their caps even under DenyAll /
+/// fail-closed. NoEntry is dev-permissive unless the `policy-required` feature.
+fn decision_to_caps(path: &str, caps: CapSet, decision: PolicyDecision) -> CapSet {
+    match decision {
+        PolicyDecision::Permit(p) => caps.intersect(p),
+        PolicyDecision::DenyAll => {
+            if is_trusted_core(path) { caps } else { CapSet::EMPTY }
+        }
+        PolicyDecision::NoEntry => {
+            #[cfg(feature = "policy-required")]
+            { if is_trusted_core(path) { caps } else { CapSet::EMPTY } }
+            #[cfg(not(feature = "policy-required"))]
+            { caps }
+        }
+    }
+}
+
+/// Apply operator policy to a cell's spawn-time caps (Phase 04): the final grant
+/// is `caps ∩ policy(path)` with trusted-core recovery + fail-safe. Audits when
+/// policy actually narrows the grant. `init` (Spawner::Root) is exempt and must
+/// NOT call this (subjecting the policy loader to the loaded policy is circular).
+pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
+    // Maintenance image: bypass policy narrowing entirely (field recovery).
+    #[cfg(feature = "maintenance-mode")]
+    {
+        let _ = (path, tid);
+        caps
+    }
+    #[cfg(not(feature = "maintenance-mode"))]
+    {
+        let narrowed = decision_to_caps(path, caps, lookup(path));
+        if narrowed != caps {
+            let dropped = (caps.block_io && !narrowed.block_io) as u32
+                | (((caps.network && !narrowed.network) as u32) << 1)
+                | (((caps.spawn && !narrowed.spawn) as u32) << 2)
+                | (((caps.hypervisor && !narrowed.hypervisor) as u32) << 3);
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CapNarrowedByPolicy,
+                &crate::audit::encode_u32x2(tid as u32, dropped),
+            );
+        }
+        narrowed
     }
 }

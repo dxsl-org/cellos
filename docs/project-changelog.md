@@ -4,6 +4,47 @@
 
 ---
 
+## [2026-06-21] Security: operator-policy intersection + recovery hatch (P5c / Phase 04)
+
+### Summary
+Folds the operator policy into the spawn-time capability grant (roadmap §G.2
+Phase 04): the effective grant is now `manifest ∩ spawner ∩ policy`, computed at
+the single loader choke point. Completes the P5 operator-control story for
+headless G1 (consent = signed policy, enforced kernel-side at the spawn boundary).
+
+Recovery + fail-safe (red-team-driven): a **trusted core** (`/bin/vfs`,
+`/bin/shell`, `/bin/net`) is never reduced to no-caps by policy, so a fail-closed
+mis-fire cannot brick a headless robot; a `maintenance-mode` build flag bypasses
+narrowing entirely for field recovery; `init` (Spawner::Root) is exempt (it is the
+loader OF the policy — subjecting it to the loaded policy is circular). NoEntry is
+dev-permissive in G1; `policy-required` flips it fail-closed for a real fleet.
+
+### Changes
+- `kernel/src/policy.rs` — `apply(path, tid, caps)` = `caps ∩ policy` with
+  trusted-core recovery + fail-safe + `CapNarrowedByPolicy` audit; pure
+  `decision_to_caps` + `is_trusted_core`; `self_test` extended to verify the
+  narrowing rule (Permit narrows / DenyAll non-core → EMPTY / DenyAll trusted-core
+  → keeps / NoEntry dev-permissive → keeps).
+- `kernel/src/loader.rs` — spawn grant now `requested ∩ spawner` then
+  `policy::apply` (outside the SCHEDULER guard; Root exempt).
+- `kernel/Cargo.toml` — features `dev-policy-key`, `policy-required`, `maintenance-mode`.
+- `kernel/src/audit.rs` — `CapNarrowedByPolicy = 19`.
+
+### Verification
+- Both arches build clean under PIC; boot reaches `ViCell >`, services up, no
+  faults; boot logs "policy verify+parse self-test PASS" — now covering the
+  narrowing + recovery rule end-to-end (policy absent at boot → dev-permissive →
+  caps unchanged, as expected).
+
+### Deferred (deployment only)
+- Baking a real signed `/POLICY.BIN` into the committed FAT16 VIFS1 images
+  requires a proper FAT16 file-insert tool (current `mkfat16.py`/`mkfat32_inplace.py`
+  are formatters that would wipe the image; no pyfatfs available). The narrowing
+  LOGIC is fully proven via the self-test; only the on-disk-blob → `PolicyLoaded`
+  integration awaits the tooling. Tracked as a deployment task.
+
+---
+
 ## [2026-06-21] Security: signed operator policy — host signer + signed-path verify (P5b, part 2)
 
 ### Summary

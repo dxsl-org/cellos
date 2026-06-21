@@ -67,6 +67,10 @@ pub enum AuditEvent {
     PolicyInvalid = 17,
     /// No operator policy present in VIFS1. Payload: `encode_u32x2(0, 0)`.
     PolicyAbsent = 18,
+    /// Operator policy narrowed a cell's spawn-time caps. Payload:
+    /// `encode_u32x2(tid, dropped_flags)` (dropped_flags: bit0 block_io, bit1
+    /// network, bit2 spawn, bit3 hypervisor).
+    CapNarrowedByPolicy = 19,
 }
 
 struct AuditRing {

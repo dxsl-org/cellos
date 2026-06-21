@@ -52,6 +52,15 @@ vergen-gitcl = { version = "1", default-features = false, features = ["build", "
 
 [features]
 default = []
+# Trust the dev fleet key (scripts/sign-policy.py) as the policy root — dev/test
+# only, NEVER a release build. Without it the prod placeholder key is used.
+dev-policy-key = []
+# Fleet-secure posture: an ABSENT or unlisted policy is fail-closed (deny all
+# grantable caps) instead of dev-permissive. Off in G1 (dev-permissive default).
+policy-required = []
+# Field-recovery: bypass policy narrowing entirely (trusted core always boots).
+# Gated build flag for a headless maintenance image.
+maintenance-mode = []
 # Real VisionFive2 JH7110 board — adjusts fallback DRAM map to 0x4000_0000.
 # Build: RUSTFLAGS="-C relocation-model=pic" cargo build --release --features board-vf2
 board-vf2 = []
