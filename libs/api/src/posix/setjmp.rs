@@ -94,7 +94,17 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
 // AArch64
 // ---------------------------------------------------------------------------
 
-#[cfg(target_arch = "aarch64")]
+// Two variants gated on whether the target has FP/NEON. The AArch64 PCS makes
+// d8–d15 callee-saved, so a hardfloat build must save/restore them. But a
+// softfloat target (`aarch64-unknown-none-softfloat`, NEON disabled) has no FP
+// registers live across the call, AND `d`-register instructions fail to assemble
+// (`instruction requires: fp-armv8`). Critically, libs/api is linked into the
+// SOFTFLOAT kernel (which never calls setjmp, but `#[no_mangle]` keeps the
+// symbol and forces codegen) — so the softfloat variant is required for the
+// kernel to build at all on aarch64. Omitting the FP saves is correct there:
+// softfloat code never touches d8–d15.
+
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 #[unsafe(naked)]
 #[no_mangle]
 pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
@@ -117,7 +127,7 @@ pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
     )
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
 #[unsafe(naked)]
 #[no_mangle]
 pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
@@ -135,6 +145,47 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
         "ldp d10, d11, [x0, #15*8]",
         "ldp d12, d13, [x0, #17*8]",
         "ldp d14, d15, [x0, #19*8]",
+        // w0 = (w1 == 0) ? 1 : w1
+        "cmp w1, #0",
+        "csinc w0, w1, wzr, ne",
+        "ret",
+    )
+}
+
+// Softfloat aarch64 (NEON disabled): no FP callee-saved registers to preserve.
+#[cfg(all(target_arch = "aarch64", not(target_feature = "neon")))]
+#[unsafe(naked)]
+#[no_mangle]
+pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
+    // x0 = env; saves x19–x30, sp (no d8–d15 — softfloat); returns 0 in w0
+    core::arch::naked_asm!(
+        "stp x19, x20, [x0,  #0*8]",
+        "stp x21, x22, [x0,  #2*8]",
+        "stp x23, x24, [x0,  #4*8]",
+        "stp x25, x26, [x0,  #6*8]",
+        "stp x27, x28, [x0,  #8*8]",
+        "stp x29, x30, [x0, #10*8]",
+        "mov x2,  sp",
+        "str x2,  [x0, #12*8]",
+        "mov w0,  #0",
+        "ret",
+    )
+}
+
+#[cfg(all(target_arch = "aarch64", not(target_feature = "neon")))]
+#[unsafe(naked)]
+#[no_mangle]
+pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
+    // x0 = env, w1 = val. Restores state (no d8–d15 — softfloat).
+    core::arch::naked_asm!(
+        "ldp x19, x20, [x0,  #0*8]",
+        "ldp x21, x22, [x0,  #2*8]",
+        "ldp x23, x24, [x0,  #4*8]",
+        "ldp x25, x26, [x0,  #6*8]",
+        "ldp x27, x28, [x0,  #8*8]",
+        "ldp x29, x30, [x0, #10*8]",
+        "ldr x2,       [x0, #12*8]",
+        "mov sp,  x2",
         // w0 = (w1 == 0) ? 1 : w1
         "cmp w1, #0",
         "csinc w0, w1, wzr, ne",

@@ -4,6 +4,33 @@
 
 ---
 
+## [2026-06-21] Fix: aarch64 kernel build broken by setjmp FP register saves
+
+### Summary
+The `aarch64-unknown-none-softfloat` kernel build failed with 8× `instruction requires: fp-armv8`.
+Root cause: `libs/api/src/posix/setjmp.rs` saves/restores the AArch64 callee-saved FP registers
+d8–d15 (correct per the AArch64 PCS for a hardfloat C runtime). `libs/api` is linked into the
+kernel, and although the kernel never *calls* setjmp, the `#[no_mangle]` symbol forces codegen — so
+the `stp d8, d9, …` instructions hit the softfloat target (NEON disabled) and fail to assemble.
+(riscv64 already handled its analogue via `.option arch, +d`; only aarch64 was affected.)
+
+### Fix
+Split the aarch64 setjmp/longjmp into two `#[cfg(target_feature = "neon")]` variants: the hardfloat
+variant keeps the d8–d15 save/restore; the **softfloat variant omits them** (correct — softfloat code
+has no FP registers live across the call). Per-build `target_feature` selects the right one, so
+hardfloat cells still get full setjmp and the softfloat kernel builds.
+
+### Changes
+- `libs/api/src/posix/setjmp.rs` — aarch64 setjmp/longjmp gated into neon / non-neon variants.
+
+### Verification
+- aarch64: `cargo build --release` now clean (was 8 fp-armv8 errors); `aarch64_boots_to_shell_prompt`
+  integration test green; direct QEMU boot reaches `ViCell >` with VFS/shell up, no faults — this is
+  also the first functional verification of **P2 on aarch64** (init root authority logged).
+- riscv64: build + boot smoke still green (riscv64 setjmp path unchanged).
+
+---
+
 ## [2026-06-21] Security: spawn-time capability intersection / delegation (P2)
 
 ### Summary
