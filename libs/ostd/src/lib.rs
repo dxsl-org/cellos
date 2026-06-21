@@ -24,6 +24,10 @@ pub type Result<T, E = ViError> = core::result::Result<T, E>;
 pub mod collections;
 /// Re-export `embedded-io` so cells can implement ecosystem traits without a direct dep.
 pub use embedded_io;
+/// Re-export `heapless` for stack-allocated, fixed-capacity collections in Cells.
+/// Use `ostd::heapless::Vec<T, N>`, `heapless::String<N>`, etc.
+/// `heapless::mpmc::Queue` requires the `critical-section-impl` feature enabled in the kernel.
+pub use heapless;
 pub mod fast_ipc;
 /// Typed linear Grant handles for zero-copy shared memory (Singularity exchange-heap pattern).
 pub mod grant;

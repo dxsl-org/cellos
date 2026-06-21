@@ -79,6 +79,14 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str) -> ViResult<usize> {
 
     log::info!("[hotswap] starting swap: cell {} → {}", old_cell_id.0, new_elf_path);
 
+    // Snapshot the replaced cell's capabilities BEFORE freeze — this is the
+    // ceiling for the replacement (P2): a hot-swap must not re-grant caps the
+    // replaced cell did not hold. Unknown cell → EMPTY (fail-safe).
+    let ceiling = crate::task::SCHEDULER.lock().as_ref()
+        .and_then(|s| s.tasks.get(&(old_cell_id.0 as usize)))
+        .map(|t| crate::task::cap::CapSet::of_task(t))
+        .unwrap_or(crate::task::cap::CapSet::EMPTY);
+
     // ── Step 1: Freeze ────────────────────────────────────────────────────
     freeze(old_cell_id);
 
@@ -97,7 +105,7 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str) -> ViResult<usize> {
 
     // ── Step 3: Load new ELF ─────────────────────────────────────────────
     // `spawn_from_path` creates a new task; we note its task_id for step 4.
-    let new_task_id = match crate::loader::spawn_from_path(new_elf_path) {
+    let new_task_id = match crate::loader::spawn_from_path(new_elf_path, crate::task::cap::Spawner::Ceiling(ceiling)) {
         Ok(id) => id,
         Err(e) => {
             unfreeze(old_cell_id);

@@ -8,6 +8,8 @@ hal-arch-trait  = { path = "../../traits/arch" }
 hal-paging      = { path = "../../traits/paging" }
 hal-hypervisor  = { path = "../../traits/hypervisor" }
 types = { path = "../../../libs/types" }
+critical-section = { version = "1", optional = true, features = ["restore-state-usize"] }
 
 [features]
 default = []
+critical-section-impl = ["dep:critical-section"]

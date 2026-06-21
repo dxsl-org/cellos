@@ -1,5 +1,5 @@
 pub use crate::app::{AppContext, AppEvent, ShutdownReason};
-pub use crate::clients::{InputClient, NetClient, VfsClient};
+pub use crate::clients::{InputClient, NetClient, TcpStream, VfsClient};
 pub use crate::collections::{HashMap, HashSet};
 pub use crate::io::{print, println};
 pub use crate::runtime::CellRuntime;

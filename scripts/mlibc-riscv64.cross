@@ -1,0 +1,25 @@
+# Meson cross file for mlibc targeting ViCell riscv64.
+# Used in WSL2 — the xpack riscv-none-elf-gcc toolchain lives under /mnt/c/RISCV.
+# Update the binary paths below if you installed the toolchain elsewhere.
+#
+# Usage: bash scripts/build-mlibc.sh (handles clone + patch automatically)
+
+[binaries]
+c       = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-gcc'
+cpp     = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-g++'
+ar      = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-ar'
+ld      = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-ld'
+strip   = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-strip'
+objcopy = '/mnt/c/RISCV/riscv-none-elf-gcc-15.2.0-1/bin/riscv-none-elf-objcopy'
+
+[host_machine]
+# 'vicell' triggers the vicell branch in third_party/mlibc/meson.build.
+# This is NOT a Linux host — do not use Linux syscall numbers.
+system     = 'vicell'
+cpu_family = 'riscv64'
+cpu        = 'riscv64'
+endian     = 'little'
+
+[built-in options]
+c_args   = ['-march=rv64imac_zicsr', '-mabi=lp64']
+cpp_args = ['-march=rv64imac_zicsr', '-mabi=lp64']

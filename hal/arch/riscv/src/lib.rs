@@ -2,6 +2,9 @@
 
 pub mod common;
 
+#[cfg(feature = "critical-section-impl")]
+mod critical_section;
+
 // Architecture-specific modules are gated by target_arch so that, e.g.,
 // rv64's 64-bit shifts and literals are never compiled for a riscv32 target
 // (they would overflow usize). Each arch module is both declared and

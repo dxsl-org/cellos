@@ -7,6 +7,7 @@ license = "MPL-2.0"
 [dependencies]
 types = { path = "../libs/types" }
 api = { path = "../libs/api" }
+qemu-exit = { version = "4", optional = true }
 hal-traits-mmc = { path = "../hal/traits/mmc" }
 log = { version = "0.4", default-features = false }
 virtio-drivers = "0.7.0"
@@ -16,27 +17,31 @@ async-trait = "0.1.89"
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc", "lfn"] }
 xmas-elf = "0.9"
 crc32fast = { version = "1", default-features = false }
+# Ed25519 signature VERIFY (no_std, verify-only) for signed operator policy (P5).
+# Spike: pure-Rust embedded-oriented impl chosen over ed25519-dalek to maximise
+# the chance of building under the PIC bare-metal kernel; no RNG needed for verify.
+ed25519-compact = { version = "2", default-features = false }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv32"] }
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv32", "critical-section-impl"] }
 riscv = "0.16.0"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv64"] }
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv64", "critical-section-impl"] }
 riscv = "0.16.0"
 fdt = "0.1"
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["aarch64"] }
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["aarch64", "critical-section-impl"] }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86_64"] }
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86_64", "critical-section-impl"] }
 
 [target.'cfg(target_arch = "arm")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["arm"] }
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["arm", "critical-section-impl"] }
 
 [target.'cfg(target_arch = "x86")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86"] }
+hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86", "critical-section-impl"] }
 
 [build-dependencies]
 vergen-gitcl = { version = "1", default-features = false, features = ["build", "cargo"] }
@@ -46,11 +51,23 @@ vergen-gitcl = { version = "1", default-features = false, features = ["build", "
 
 
 [features]
-default = []
+# G1 DEV posture: trust the dev fleet key so the dev-signed /POLICY.BIN baked into
+# VIFS1 verifies + loads. ⚠️ PRODUCTION must drop `dev-policy-key` from default and
+# provision the real fleet root key (see kernel/src/policy.rs FLEET_ROOT_PUBKEY).
+default = ["dev-policy-key"]
+# Trust the dev fleet key (scripts/sign-policy.py) as the policy root — dev/test
+# only, NEVER a release build. Without it the prod placeholder key is used.
+dev-policy-key = []
+# Fleet-secure posture: an ABSENT or unlisted policy is fail-closed (deny all
+# grantable caps) instead of dev-permissive. Off in G1 (dev-permissive default).
+policy-required = []
+# Field-recovery: bypass policy narrowing entirely (trusted core always boots).
+# Gated build flag for a headless maintenance image.
+maintenance-mode = []
 # Real VisionFive2 JH7110 board — adjusts fallback DRAM map to 0x4000_0000.
 # Build: RUSTFLAGS="-C relocation-model=pic" cargo build --release --features board-vf2
 board-vf2 = []
 # Raspberry Pi 4 (BCM2711): enables SDHCI probe at 0xFE340000 (Arasan eMMC2).
 board-rpi4 = []
 # Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
-test-hooks = []
+test-hooks = ["dep:qemu-exit"]

@@ -1,4 +1,3 @@
 fn main() {
-    println!("cargo:rustc-link-arg=-Tcells/services/config/config.ld");
-    println!("cargo:rerun-if-changed=cells/services/config/config.ld");
+    cell_build::emit_linker_script();
 }

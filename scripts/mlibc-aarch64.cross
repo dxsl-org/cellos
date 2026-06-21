@@ -1,0 +1,26 @@
+# Meson cross file for mlibc targeting ViCell aarch64.
+# Uses the WSL2 aarch64-linux-gnu toolchain (available on Ubuntu via apt).
+# If you prefer xpack aarch64-none-elf-gcc, update the binary paths.
+#
+# Install (WSL2): sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+#
+# Usage: bash scripts/build-mlibc.sh (handles clone + patch automatically)
+
+[binaries]
+c       = 'aarch64-linux-gnu-gcc'
+cpp     = 'aarch64-linux-gnu-g++'
+ar      = 'aarch64-linux-gnu-ar'
+ld      = 'aarch64-linux-gnu-ld'
+strip   = 'aarch64-linux-gnu-strip'
+objcopy = 'aarch64-linux-gnu-objcopy'
+
+[host_machine]
+system     = 'vicell'
+cpu_family = 'aarch64'
+cpu        = 'cortex-a57'
+endian     = 'little'
+
+[built-in options]
+# -mgeneral-regs-only: no NEON/FP in the C library kernel-interface layer
+c_args   = ['-mgeneral-regs-only']
+cpp_args = ['-mgeneral-regs-only']

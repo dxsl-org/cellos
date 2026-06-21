@@ -10,6 +10,12 @@ use crate::{ViError, ViResult};
 use crate::service::NetRef;
 use super::vierr_from_code;
 
+/// Max bytes sent per [`TcpStream::write`] call.
+///
+/// Conservative margin below `IPC_BUF_SIZE` to leave room for postcard framing
+/// (`TcpSend` discriminant + cap_id varint + data length varint ≈ 10 bytes).
+const MAX_TCP_WRITE: usize = IPC_BUF_SIZE - 256;
+
 /// A TCP/UDP socket handle returned by [`NetClient::tcp_connect`].
 pub type SocketId = u32;
 
@@ -99,4 +105,87 @@ impl NetClient {
 
 impl Default for NetClient {
     fn default() -> Self { Self::new() }
+}
+
+// ─── TcpStream ────────────────────────────────────────────────────────────────
+
+/// A TCP connection handle implementing [`embedded_io::Read`] and [`embedded_io::Write`].
+///
+/// Obtained via [`TcpStream::connect`]. The underlying socket is closed when
+/// `TcpStream` is dropped (RAII — Law 8).
+///
+/// # Blocking contract
+/// [`Read::read`] blocks (with cooperative yields) until at least one byte is
+/// available, matching the [`embedded_io`] blocking contract.  The net service
+/// returns data non-blockingly per call; the loop in `read` handles the wait.
+///
+/// # Write chunking
+/// [`Write::write`] sends at most [`MAX_TCP_WRITE`] bytes per call due to the
+/// IPC buffer limit.  Use [`write_all`][embedded_io::WriteExt::write_all] when
+/// all bytes must be delivered.
+pub struct TcpStream {
+    client: NetClient,
+    id: SocketId,
+}
+
+impl TcpStream {
+    /// Open a TCP connection to `addr:port`.
+    ///
+    /// Resolves the net service lazily on the first call.
+    pub fn connect(addr: [u8; 4], port: u16) -> ViResult<Self> {
+        let mut client = NetClient::new();
+        let id = client.tcp_connect(addr, port)?;
+        Ok(Self { client, id })
+    }
+}
+
+impl Drop for TcpStream {
+    fn drop(&mut self) {
+        let _ = self.client.tcp_close(self.id);
+    }
+}
+
+impl embedded_io::ErrorType for TcpStream {
+    type Error = crate::io::OstdError;
+}
+
+impl embedded_io::Read for TcpStream {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, crate::io::OstdError> {
+        loop {
+            let recv_len = buf.len().min(u32::MAX as usize) as u32;
+            match self.client.tcp_recv(self.id, recv_len) {
+                Ok(data) if !data.is_empty() => {
+                    let n = data.len().min(buf.len());
+                    buf[..n].copy_from_slice(&data[..n]);
+                    return Ok(n);
+                }
+                Ok(_) => {
+                    // No data yet — yield and retry.
+                    crate::task::yield_now();
+                }
+                Err(ViError::Unknown) => {
+                    // EOF: net service sent Err(0xFF) signalling FIN/RST.
+                    return Ok(0);
+                }
+                Err(e) => return Err(crate::io::OstdError(e)),
+            }
+        }
+    }
+}
+
+impl embedded_io::Write for TcpStream {
+    fn write(&mut self, buf: &[u8]) -> Result<usize, crate::io::OstdError> {
+        if buf.is_empty() {
+            return Ok(0);
+        }
+        let chunk = buf.len().min(MAX_TCP_WRITE);
+        self.client
+            .tcp_send(self.id, &buf[..chunk])
+            .map_err(crate::io::OstdError)?;
+        Ok(chunk)
+    }
+
+    fn flush(&mut self) -> Result<(), crate::io::OstdError> {
+        Ok(()) // tcp_send commits synchronously through the net service
+    }
 }

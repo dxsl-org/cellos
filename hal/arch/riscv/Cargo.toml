@@ -11,13 +11,15 @@ hal-interrupt   = { path = "../../traits/interrupt" }
 hal-paging      = { path = "../../traits/paging" }
 hal-hypervisor  = { path = "../../traits/hypervisor" }
 types = { path = "../../../libs/types" }
-riscv = "0.10.1" # Standard RISC-V crate
+riscv = "0.16.0"
+critical-section = { version = "1", optional = true, features = ["restore-state-usize"] }
 
 [build-dependencies]
 cc = "1.0"
 
 [features]
 default = []
+critical-section-impl = ["dep:critical-section"]
 
 [lib]
 crate-type = ["rlib"]

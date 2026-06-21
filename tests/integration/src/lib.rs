@@ -439,13 +439,72 @@ impl QemuRunner {
         let child = Command::new(qemu_binary_x86())
             .args([
                 "-machine", "q35",
-                "-cpu", "qemu64",
+                // pdpe1gb: Limine 8.x uses 1 GiB pages for the HHDM and
+                // panics if the CPU CPUID doesn't advertise PDPE1GB.
+                // The qemu64 model omits it by default; enable explicitly.
+                "-cpu", "qemu64,+pdpe1gb",
                 "-m", "256M",
                 "-nographic",
                 "-cdrom", iso,
                 "-boot", "d",
                 "-no-reboot",
                 "-monitor", "none",
+                "-serial", &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("qemu-system-x86_64 must be on PATH");
+
+        listener.set_nonblocking(false).expect("blocking listener");
+        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let writer = stream.try_clone().expect("clone serial stream");
+
+        let output = Arc::new(Mutex::new(String::new()));
+        let buf = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            loop {
+                match reader.read(&mut byte) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => buf.lock().unwrap().push(byte[0] as char),
+                }
+            }
+        });
+
+        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+    }
+
+    /// Boot x86_64 q35 from a Limine ISO with a VirtIO BLK PCI device attached.
+    ///
+    /// Same boot path as `boot_x86_bios` (SeaBIOS + ISO) but adds a
+    /// `virtio-blk-pci` device backed by `virtio_disk`. This exercises the
+    /// VirtIO PCI discovery path in `kernel/src/task/drivers/virtio_pci.rs`
+    /// which scans the ECAM bus for vendor 0x1AF4 and initialises the block
+    /// device from BAR MMIO.
+    ///
+    /// Prerequisites: ISO at `iso`, a raw disk image at `virtio_disk`, and
+    /// `qemu-system-x86_64` ≥ 6.0 on PATH (older versions lack `virtio-blk-pci`
+    /// on q35 without additional machine opts).
+    pub fn boot_x86_virtio_blk(iso: &str, virtio_disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+
+        let child = Command::new(qemu_binary_x86())
+            .args([
+                "-machine", "q35",
+                "-cpu", "qemu64,+pdpe1gb",
+                "-m", "256M",
+                "-nographic",
+                "-cdrom", iso,
+                "-boot", "d",
+                "-no-reboot",
+                "-monitor", "none",
+                // VirtIO BLK PCI device — kernel should log "VirtIO Block: initialized".
+                "-drive",  &format!("file={virtio_disk},format=raw,if=none,id=hd0"),
+                "-device", "virtio-blk-pci,drive=hd0",
                 "-serial", &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
@@ -485,7 +544,7 @@ impl QemuRunner {
         let child = Command::new(qemu_binary_rv32())
             .args([
                 "-machine", "virt",
-                "-m", "128M",
+                "-m", "256M",
                 "-nographic",
                 "-bios", "default",
                 "-kernel", kernel,
@@ -530,7 +589,7 @@ impl QemuRunner {
             .args([
                 "-machine", "virt",
                 "-cpu", "cortex-a15",
-                "-m", "128M",
+                "-m", "256M",
                 "-nographic",
                 "-kernel", kernel,
                 "-monitor", "none",
@@ -575,7 +634,7 @@ impl QemuRunner {
             .args([
                 "-machine", "pc",
                 "-cpu", "base",
-                "-m", "128M",
+                "-m", "256M",
                 "-nographic",
                 "-kernel", kernel,
                 "-monitor", "none",

@@ -125,3 +125,42 @@ fn x86_echo_command() {
     qemu.wait_for("x86-ok", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("x86_64 echo did not respond: {e}\n--- output ---\n{}", qemu.dump()));
 }
+
+/// The `ls /bin` command must return at least one entry over COM1.
+///
+/// Proves the VFS service cell is running under ring-3 on x86_64, and the
+/// IPC path (shell → VFS cell → OP_READDIR → shell) round-trips correctly.
+#[test]
+fn x86_ls_command() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("ls /bin");
+    // Any one of the expected binaries appearing proves readdir is working.
+    qemu.wait_for("shell", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("x86_64 ls /bin did not respond: {e}\n--- output ---\n{}", qemu.dump()));
+}
+
+/// The `ps` command must list at least the init and shell tasks.
+///
+/// Proves the task-enumeration syscall (SysGetTaskInfo or equivalent) works
+/// under ring-3 on x86_64. The scheduler and hart-local table must be
+/// populated correctly for ps output to appear.
+#[test]
+fn x86_ps_command() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    qemu.send_line("ps");
+    // ps prints a task table; any numeric PID appearing proves the syscall worked.
+    qemu.wait_for("init", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("x86_64 ps did not respond: {e}\n--- output ---\n{}", qemu.dump()));
+}

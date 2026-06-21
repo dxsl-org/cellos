@@ -14,20 +14,22 @@ pub mod acpi;
 pub mod audit;
 pub mod boot;
 pub mod cell;
+pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod resource_registry;
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
 pub mod loader;
+pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
 pub mod memory;
+pub mod policy; // Signed operator policy (P5b) — headless consent
+pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod snapshot;
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
 use boot::BootInfo;
 use hal::Arch;
-#[cfg(target_arch = "riscv64")]
-use api::posix::_putchar;
 
 // Internal utilities
 mod cpu_features;
@@ -94,6 +96,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Propagate the HHDM offset to the HAL PML4 walker so walk_create /
         // walk_read can dereference physical PTE addresses via HHDM virtual ptrs.
         crate::hal::paging::set_hhdm_offset(hhdm as usize);
+        // Limine maps only usable e820 RAM in the HHDM. The BIOS ROM area
+        // [0x9F000–0x100000) is reserved in e820 and absent from Limine's HHDM
+        // page table. ACPI RSDP is typically there (~0xf52e0 on q35).
+        // Map it now so phys_to_virt(rsdp) doesn't triple-fault before IDT is up.
+        // SAFETY: called after set_hhdm_offset; PML4 walker uses HHDM-mapped RAM.
+        unsafe { crate::hal::paging::map_bios_area(); }
         // Initialise KASLR seed from HHDM entropy + RDTSC.
         crate::memory::kaslr::init_kaslr(hhdm);
     }
@@ -107,18 +115,27 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "x86_64")]
     let acpi_info = {
         use crate::memory::frame::phys_to_virt;
-        // UART is already initialised above; use it directly for early boot log.
-        // `log_info` closure is not yet defined at this point in kmain.
         let early_puts = |s: &str| {
             for c in s.bytes() { crate::hal::uart_16550::putchar(c); }
         };
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
-        if rsdp != 0 {
+        // Limine 8.x maps only usable e820 RAM in its HHDM.  The BIOS ROM area
+        // [0x0000–0x100000) and ACPI-reserved regions near top-of-RAM are absent.
+        // Accessing those regions via HHDM before the IDT is live triple-faults.
+        // On QEMU q35 the RSDP is always in the BIOS area (< 1 MiB), and the XSDT
+        // lives in the ACPI-reserved window — neither is reachable this early.
+        // Use hardcoded q35 defaults here; TODO: re-parse after init_kernel_paging
+        // creates a full physical window that covers all e820 regions.
+        if rsdp != 0 && rsdp >= 0x10_0000 {
             let info = crate::acpi::parse(rsdp, |p| phys_to_virt(p));
             early_puts("[INFO] ACPI tables parsed\n");
             info
         } else {
-            early_puts("[INFO] ACPI RSDP not found — using QEMU q35 defaults\n");
+            if rsdp == 0 {
+                early_puts("[INFO] ACPI RSDP absent — using q35 defaults\n");
+            } else {
+                early_puts("[INFO] ACPI RSDP in BIOS area — using q35 defaults\n");
+            }
             crate::acpi::AcpiInfo::default()
         }
     };
@@ -262,6 +279,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 acpi_info.ioapic_base,
                 acpi_info.hpet_base,
                 acpi_info.lapic_base,
+                acpi_info.ecam_base,
             )
             .expect("Failed to initialize x86_64 kernel PML4")
         };
@@ -307,7 +325,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 4. Heap Allocator (Global) - MUST be after paging but before any allocations
     // 32 MiB = 8192 frames. Sized to hold:
     //   - embedded RAM disk copy (~4 MiB), VirtIO GPU framebuffer (~4 MiB), cell ELFs + kernel structures
-    const HEAP_FRAMES: usize = 8_192;
+    const HEAP_FRAMES: usize = 4_096;
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
         let allocator = allocator_guard.as_mut().expect("Frame allocator not initialized");
@@ -357,18 +375,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
     // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
     // virt 7+ triggers a Synchronous External Abort — skip on aarch64.
+    // x86_64 q35: ECAM base 0xB000_0000 is identity-mapped by init_kernel_paging_x86;
+    // virtio_pci::init() probes vendor 0x1AF4 PCIe devices for BLK/NET.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         task::drivers::pcie_ecam::init();
-        task::drivers::iommu::init();          // bare passthrough (noop when absent)
-        task::drivers::blk_nvme::init_driver();
-        task::drivers::nic_e1000::init_driver();
-        // VirtIO PCI: probe vendor 0x1AF4 devices on PCIe bus 0.
-        // On RISC-V virt, VirtIO appears as MMIO (not PCIe), so this is a no-op
-        // there (no vendor 0x1AF4 on the PCIe bus).
-        // On x86_64 q35, this initialises VirtIO BLK and NET from BAR1 MMIO.
+        // RISC-V virt only: IOMMU passthrough + NVMe + e1000 (PCIe endpoints).
+        #[cfg(target_arch = "riscv64")]
+        {
+            task::drivers::iommu::init();
+            task::drivers::blk_nvme::init_driver();
+            task::drivers::nic_e1000::init_driver();
+        }
+        // VirtIO PCI: probe vendor 0x1AF4 on PCIe bus 0.
+        // On x86_64 q35, VirtIO BLK/NET are PCIe devices; on RISC-V virt,
+        // VirtIO is MMIO — virtio_pci::init() is a no-op there.
         task::drivers::virtio_pci::init();
-        log_info("x86_64: VirtIO PCI probe done");
     }
 
     // Attempt warm boot from snapshot before any cell initialization.
@@ -398,6 +420,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // x86_64 uses the ramdisk-backed embedded FS to serve cell ELFs via VIFS1.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
     fs::init();
+
+    // Load + verify the signed operator policy (P5b) NOW: after VIFS1 is mounted,
+    // before any cap-bearing cell spawns. Absent → dev-permissive (this G1 build);
+    // invalid → fail-closed. Phase 04 folds policy::lookup into the spawn grant.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    policy::load_from_vifs1();
 
     // Phase 20: hot-migration state-transfer self-test.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
@@ -430,18 +458,42 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000);
         }
 
+        // Power-on self-test of the Ed25519 verify primitive (RFC 8032 TEST 1 +
+        // tamper-negative) before it is trusted to authenticate the signed
+        // operator policy (P5). Cheap (~one verify); a FAIL means the crypto path
+        // is broken and signed policy must not be trusted.
+        if crate::ed25519::self_test() {
+            log_info("ed25519 verify self-test PASS (RFC 8032 + tamper)");
+        } else {
+            log_info("ed25519 verify self-test FAIL — signed policy unsafe");
+        }
+        // Power-on self-test of the signed-policy path: verify + parse a known
+        // dev-signed blob, and confirm a tampered blob is rejected.
+        if crate::policy::self_test() {
+            log_info("policy verify+parse self-test PASS (signed blob + tamper)");
+        } else {
+            log_info("policy verify+parse self-test FAIL");
+        }
+
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
         let init_data = alloc::vec::Vec::from(INIT_ELF);
         match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
-            Ok(init_tid) => {
+            Ok((init_tid, _load_base)) => {
                 log_info("Successfully spawned init");
-                // Grant SpawnCap to init: it uses sys_spawn_from_path (a syscall) to
-                // boot vfs/config/shell. Without SpawnCap the syscall returns PermissionDenied.
+                // init is the ROOT AUTHORITY (P2 monotonic-downgrade): grant the
+                // FULL capability set directly here. init is spawned via
+                // spawn_from_mem (NOT spawn_from_path), so its manifest is never
+                // read — this direct TCB write is the only place its caps come
+                // from. init then delegates subsets to vfs/net/shell/... via the
+                // SpawnFromPath syscall, where each child is intersected against
+                // init's caps. Escalation-oracle bound: init's spawn targets MUST
+                // remain compile-time constants (no data-derived paths).
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                        t.spawn_cap = Some(task::cap::SpawnCap::new());
+                        task::cap::CapSet::ALL.apply_to(t);
                     }
                 }
+                log_info("init granted root authority (CapSet::ALL)");
             }
             Err(_e) => log_info("Failed to spawn init"),
         }
@@ -472,6 +524,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 9. Start multitasking
     log_info("Starting scheduler...");
+
+    // Quiet the shared console for interactive use. Kernel bring-up is done; the
+    // remaining Info chatter is per-spawn noise ([loader] SpawnFromPath, Spawn:,
+    // ELF LOAD) that floods the UART and buries the shell prompt. WARN/ERROR still
+    // surface real problems. Raise back to Info when debugging the spawn path.
+    log::set_max_level(log::LevelFilter::Warn);
 
     // Enable interrupts before entering the idle loop.
     // RISC-V: set SPP=1 and SIE=1 in sstatus (0x102).

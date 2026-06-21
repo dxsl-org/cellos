@@ -2,3 +2,6 @@
 name = "hal-i2c"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+embedded-hal = { version = "1", default-features = false }

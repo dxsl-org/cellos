@@ -345,11 +345,37 @@ pub use crate::types::{ViError, ViResult};
 
 **Order**: System → External → Internal → Re-exports.
 
-### File Size
+### File Size & Directory Organization
 
 - **Limit**: 200-300 LOC per file
 - **Exceeding**: Split into submodules
 - **Example**: `task.rs` (1000 LOC) → `task/scheduler.rs`, `task/syscall.rs`, `task/ipc.rs`
+
+### Cells Directory Structure
+
+ViCell organizes cells into 8 semantic groups (parallel to code, not functionality):
+
+```
+cells/
+├─ tools/        — System utilities (shell, init, sys-tools, net-tools, wasm)
+├─ apps/         — User applications (robot-dashboard)
+├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, audio-demo, etc.)
+├─ drivers/      — Hardware device drivers (gpio, i2c, spi, uart, etc.)
+├─ services/     — System services (vfs, net, input, compositor, silo, hypervisor, etc.)
+├─ runtimes/     — Scripting VMs (lua)
+├─ tests/        — Integration & stress test cells (bench, vfs-test, etc.)
+└─ guests/       — Hypervisor guests (silo-guest, aarch64-unknown-none)
+```
+
+**Classification rules:**
+- **tools/** — Always-running infrastructure (shell, init, system daemons)
+- **apps/** — Interactive/rich user applications with persistent UI (dashboards, productivity tools)
+- **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
+- **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
+- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
+- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython, WASM)
+- **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
+- **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
 
 ### Visibility
 
@@ -485,6 +511,44 @@ async fn run() {
 - Access services via typed client facades (`VfsClient`, `NetClient`, `InputClient`)
 - `CellRuntime` handles manifest generation, permission sets, lifecycle
 - Apps declare minimal syscall set; kernel enforces via allowlist
+
+---
+
+## I/O Trait Layers (embedded-io Integration)
+
+ViCell integrates [`embedded-io`](https://docs.rs/embedded-io) for byte-stream I/O. The two systems serve distinct purposes and must not be conflated:
+
+### Which trait system to use
+
+| Layer | Use | Avoid |
+|---|---|---|
+| **Stream I/O** (byte streams) | `embedded_io::Read + Write + Seek` | Custom `ViRead`/`ViWrite` |
+| **Hardware peripherals** (GPIO, I2C, SPI, ADC, PWM) | `Vi*` HAL traits | `embedded_io` (no coverage) |
+| **Async IPC wire format** | `Box<[u8]>` owned buffers (Law 2) | `embedded_io_async` at Cell boundary |
+| **Intra-cell async I/O** | `embedded_io_async::Read + Write` | (safe — borrow stays on Cell stack) |
+
+### Rules for App Cell developers
+
+- **Only import from `ostd::*`** — never import `embedded_io` directly in app code.
+- `ostd::fs::File`, `ostd::io::Stdin`/`Stdout`, and `ostd::clients::TcpStream` already implement `embedded_io::Read + Write`. Pass them directly to ecosystem crates that accept `impl embedded_io::Read`.
+- `embedded_io` is re-exported as `ostd::embedded_io` if explicit trait bounds are needed.
+
+### Rules for Driver Cell developers
+
+- Hardware device cells implement `Vi*` HAL traits (`ViGpio`, `ViI2c`, `ViSpi`, `ViAdc`, `ViPwm`, `ViCan`).
+- Byte-stream devices (UART/serial, TCP, file) additionally implement `embedded_io::Read + Write` via the `OstdError` newtype bridge in `ostd::io`.
+- A driver may implement both a `Vi*` trait and `embedded_io` traits if appropriate.
+
+### ostd stream handles
+
+| Handle | Traits implemented | Backed by |
+|---|---|---|
+| `ostd::io::Stdin` | `Read` | `sys_read` |
+| `ostd::io::Stdout` | `Write` | `sys_log` |
+| `ostd::fs::File` | `Read`, `Write` | `sys_read_cap`, VFS IPC |
+| `ostd::clients::TcpStream` | `Read`, `Write` | IPC → net service |
+
+> **Note — File Seek:** `embedded_io::Seek` on `File` requires a `SeekCap` syscall (not yet implemented). Adding it is a Law 1 change — two confirmations required. Until then, use `ReadGrant` IPC for offset-based reads.
 
 ---
 
