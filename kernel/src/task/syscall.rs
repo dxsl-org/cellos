@@ -1427,7 +1427,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
-            let task_id = crate::loader::spawn_from_path(path_str).map_err(|e| match e {
+            let task_id = crate::loader::spawn_from_path(path_str, crate::task::cap::Spawner::User(caller_id)).map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,
@@ -1473,7 +1473,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidInput);
             }
             // Spawn at requested priority; future SMP can use core_id for affinity.
-            let task_id = crate::loader::spawn_from_path(path_str).map_err(|e| match e {
+            let task_id = crate::loader::spawn_from_path(path_str, crate::task::cap::Spawner::User(caller_id)).map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,

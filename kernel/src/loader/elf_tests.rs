@@ -47,20 +47,20 @@ fn expect_invalid(res: ViResult<usize>, label: &str) {
 }
 
 fn test_spawn_path_empty_rejected() {
-    let res = crate::loader::spawn_from_path("");
+    let res = crate::loader::spawn_from_path("", crate::task::cap::Spawner::Root);
     expect_invalid(res, "empty path");
     log::info!("  [ok] empty path rejected");
 }
 
 fn test_spawn_path_no_leading_slash_rejected() {
-    let res = crate::loader::spawn_from_path("bin/shell");
+    let res = crate::loader::spawn_from_path("bin/shell", crate::task::cap::Spawner::Root);
     expect_invalid(res, "no leading slash");
     log::info!("  [ok] path without leading '/' rejected");
 }
 
 fn test_spawn_path_too_long_rejected() {
     let long: alloc::string::String = "/".repeat(300);
-    let res = crate::loader::spawn_from_path(&long);
+    let res = crate::loader::spawn_from_path(&long, crate::task::cap::Spawner::Root);
     expect_invalid(res, "path too long");
     log::info!("  [ok] path longer than MAX_CELL_PATH rejected");
 }
@@ -68,7 +68,7 @@ fn test_spawn_path_too_long_rejected() {
 fn test_spawn_path_valid_format_accepted() {
     // A well-formatted path may still fail with NotFound (disk not ready) —
     // that is acceptable; only InvalidInput counts as a format rejection.
-    let res = crate::loader::spawn_from_path("/bin/nonexistent-elf-for-test");
+    let res = crate::loader::spawn_from_path("/bin/nonexistent-elf-for-test", crate::task::cap::Spawner::Root);
     match res {
         Err(ViError::NotFound) | Ok(_) => {}
         Err(ViError::InvalidInput) => panic!("well-formed path should not be rejected as InvalidInput"),

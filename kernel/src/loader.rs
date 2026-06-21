@@ -49,7 +49,26 @@ pub struct ElfHeader {
 /// - `ViError::NotFound` — path absent from the bootstrap table.
 /// - `ViError::InvalidInput` — malformed ELF or unsupported relocation.
 /// - `ViError::OutOfMemory` — cannot allocate frames for segments.
-pub fn spawn_from_path(path: &str) -> ViResult<usize> {
+/// Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
+/// Mirrors the pre-manifest behavior; only `/bin/` paths gain privilege. The
+/// returned set is still subject to spawner intersection in `spawn_from_path`.
+fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
+    let mut c = crate::task::cap::CapSet::EMPTY;
+    if path.starts_with("/bin/") {
+        if path.ends_with("/bin/vfs") {
+            c.block_io = true;
+            c.block_regions = 0b11; // legacy: P1 + P4 (pre-P03, no SRV bit)
+        }
+        if path.ends_with("/bin/net") { c.network = true; }
+        if path.ends_with("/bin/shell") || path.ends_with("/bin/init") { c.spawn = true; }
+    }
+    c
+}
+
+/// Spawn a cell from a filesystem path. `spawner` sets the capability ceiling:
+/// `Root` (boot/init) grants the full manifest; `User(tid)`/`Ceiling(caps)`
+/// intersect the manifest with the spawner's caps (P2 monotonic downgrade).
+pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResult<usize> {
     // Validate path: non-empty, leading slash, bounded length, no traversal sequences.
     // Reject '..' and '//' to prevent a future VFS-backed spawn from escaping /bin/
     // via a /bin/-prefixed traversal path (defense-in-depth; currently harmless since
@@ -162,78 +181,45 @@ pub fn spawn_from_path(path: &str) -> ViResult<usize> {
     // Register per-cell memory quota (4 MiB default) using the real CellId.
     crate::memory::cell_quota::register(cell_id, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES);
 
-    // Grant ZST capability tokens.
-    // Manifest present → grant from declared flags; absent → legacy hardcoded path grants.
+    // ── Capability grant (P2 — spawn-time monotonic downgrade) ───────────────
+    // 1. `requested` = caps the manifest declares (absent → legacy path grants).
+    // 2. `granted`   = requested ∩ spawner-ceiling — a cell cannot hand a child a
+    //    cap it does not itself hold. `init` (Spawner::Root) is the root authority
+    //    and is exempt; HotSwap passes the replaced cell's caps as the ceiling.
+    use crate::task::cap::{CapSet, Spawner};
+    let requested: CapSet = match manifest_opt {
+        Some(ref m) => CapSet::from_manifest(m),
+        None        => legacy_path_caps(path),
+    };
+    // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
+    // before the child-mutation lock below (the Spinlock is non-reentrant).
+    let granted: CapSet = match spawner {
+        Spawner::Root          => requested,
+        Spawner::Ceiling(ceil) => requested.intersect(ceil),
+        Spawner::User(stid)    => {
+            let ceil = crate::task::SCHEDULER.lock().as_ref()
+                .and_then(|s| s.tasks.get(&stid))
+                .map(|t| CapSet::of_task(t))
+                .unwrap_or(CapSet::EMPTY); // unknown spawner → no caps (fail-safe)
+            requested.intersect(ceil)
+        }
+    };
+
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
-            match manifest_opt {
-                Some(m) => {
-                    if m.has_block_io() {
-                        task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
-                        // Partition range grants (P03): the manifest scopes WHICH
-                        // LBA ranges the raw block syscalls may touch. A manifest
-                        // cell that declares block_io but no PART_* bit gets cap
-                        // without ranges — every access denied (deny-by-default).
-                        // Bit 2 (SRV/P5) co-granted with bit 1 (LFS/P4): both belong
-                        // exclusively to the VFS service.  When manifest flags expand
-                        // to u16, split into a dedicated MANIFEST_FLAG_PART_SRV bit.
-                        task.block_regions = (m.has_part_data() as u8)
-                                           | ((m.has_part_lfs() as u8) << 1)
-                                           | ((m.has_part_lfs() as u8) << 2);
-                        // Re-registration is valid on VFS hot-swap; just update the handler pointer.
-                        // Using swap to track whether this is a first-boot registration or a re-swap.
-                        let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
-                        if already {
-                            log::warn!("[loader] block_io re-registration — VFS hot-swap or second block_io cell");
-                        }
-                        crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
-                    }
-                    if m.has_network() {
-                        task.network_cap = Some(crate::task::cap::NetworkCap::new());
-                    }
-                    if m.has_spawn() {
-                        task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
-                    }
-                    // Parameterized MMIO cap: record WHICH device classes the
-                    // cell declared, not just a yes/no. Enforced at request_mmio.
-                    if m.has_gpio() {
-                        task.mmio_devices |= crate::resource_registry::DEV_GPIO;
-                    }
-                    if m.has_uart() {
-                        task.mmio_devices |= crate::resource_registry::DEV_UART;
-                    }
-                    if m.has_hypervisor()
-                        && (crate::cpu_features::has_h_ext()
-                            || crate::cpu_features::has_el2()) {
-                        task.hypervisor_cap = Some(crate::task::cap::HypervisorCap::new());
-                    }
-                }
-                None => {
-                    // Legacy hardcoded path grants for cells without a manifest.
-                    // Outer starts_with guard prevents suffix-only matches from
-                    // non-/bin/ paths (e.g., /data/bin/vfs) gaining privileged caps.
-                    if path.starts_with("/bin/") {
-                        if path.ends_with("/bin/vfs") {
-                            task.block_io_cap = Some(crate::task::cap::BlockIoCap::new());
-                            // Legacy grant matches the pre-P03 behavior: VFS may
-                            // address both grantable partitions (P1 + P4).
-                            task.block_regions = 0b11;
-                            let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
-                            if already {
-                                log::warn!("[loader] block_io re-registration (legacy) — VFS hot-swap");
-                            }
-                            crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
-                        }
-                        if path.ends_with("/bin/net") {
-                            task.network_cap = Some(crate::task::cap::NetworkCap::new());
-                        }
-                        if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
-                            task.spawn_cap = Some(crate::task::cap::SpawnCap::new());
-                        }
-                    }
-                }
-            }
+            granted.apply_to(task);
         }
+    }
+
+    // Side effect keyed off the GRANTED (not requested) block-io bit: the VFS
+    // fast-IPC handler must point at whoever actually received block_io.
+    if granted.block_io {
+        // Re-registration is valid on VFS hot-swap; just re-point the handler.
+        let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
+        if already {
+            log::warn!("[loader] block_io re-registration — VFS hot-swap or second block_io cell");
+        }
+        crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
     }
     // Register input service endpoint regardless of manifest presence.
     if path.ends_with("/bin/input") {

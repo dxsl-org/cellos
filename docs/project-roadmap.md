@@ -3,7 +3,7 @@
 **Project**: ViCell (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-21 (§G Security Platform expanded with TWO deep dives: hardware-isolation — CFI/MPK-PKS/WorldGuard-Smmtt/IOMMU-IOPMP/confidential-computing + 🔴 IOMMU-passthrough DMA gap; and §G.2 permission-model + attestation — parameterized caps/delegation/revocation/operator-policy/DICE/OpenTitan. See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-06-21 (Added §First Real App = **Hypha** — native Tier-1 AI agent Cell chosen as the first real app + forcing function for the Application Platform Gaps; P0 `llm-gateway` started. Plan: .agents/260621-1433-hypha-ai-agent/. · Earlier 2026-06-21: §G Security Platform expanded with TWO deep dives: hardware-isolation — CFI/MPK-PKS/WorldGuard-Smmtt/IOMMU-IOPMP/confidential-computing + 🔴 IOMMU-passthrough DMA gap; and §G.2 permission-model + attestation — parameterized caps/delegation/revocation/operator-policy/DICE/OpenTitan. See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
 
 ---
 
@@ -156,6 +156,36 @@ SMP scales across N cores · windowed desktop + mouse · hot migration with no d
 > **Finding:** ViCell today is a solid kernel + thin userspace; the *application-platform* layer is missing,
 > so candidate apps come out as toys or narrow plumbing. The gaps below are what unlocks **real** apps.
 > Each is a backlog item to be brainstormed + planned individually. Status 📋 = not yet planned.
+
+### 🌱 First Real App: **Hypha** — the gap-closure driver `[G1]`
+
+> Decided 2026-06-21. Plan: [.agents/260621-1433-hypha-ai-agent/](../.agents/260621-1433-hypha-ai-agent/) (plan.md · architecture.md · **os-gaps.md** · phase-00). App home: `cells/apps/hypha/`.
+
+**Hypha** (sợi nấm — one thread of the *Mycelium*) is ViCell's first **real** application: a native
+Tier-1 Rust **AI agent Cell**. Unlike the demos (which each prove one primitive), Hypha is useful
+*and* showcases what is unique to ViCell:
+- **Capability-isolated tools** — each tool is a separate Cell; manifest declares its exact authority,
+  kernel-enforced. The agent core holds no dangerous capability and delegates all side-effects.
+- **Never-die** — kill the LLM gateway mid-conversation → supervisor respawns → agent reconnects via
+  service lookup → conversation continues.
+- **Zero-copy IPC at scale** — multi-KB prompts/responses move via Grant, not message-copy.
+- **Natural-language robot control** — ties into the G1 robot demo (sensor → reason → actuator).
+
+**Strategic role:** Hypha is the **forcing function** for this whole section. Building it surfaces
+the missing modules below and prioritizes them by real need; gaps are tracked in the plan's
+`os-gaps.md` and filled incrementally (top ones logged: no HTTP lib, public-DNS-over-NAT unverified,
+no_std JSON, fixed-only service IDs). Design inversion vs a Unix agent: it orchestrates **Cells via
+IPC + spawn**, not processes via fork/exec.
+
+**Repo layout:** a cluster of normal workspace-member crates (`llm-gateway`/`core`/`tools/*` +
+shared `libs/agent-proto`) — **not** a git submodule (each os-gap fill is an atomic commit spanning
+Hypha + `ostd`/`api`/kernel). Revisit extraction only after P4.
+
+**Phases:** P0 `llm-gateway` (HTTPS LLM client, extends `https-demo`) → P1 core chat → P2 tool
+protocol + `tool-fs` → P3 `tool-sys`/`tool-spawn` → **P4 `tool-peripheral` = robot NL-control (G1
+showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
+
+**Status:** 🔨 P0 in progress (started 2026-06-21).
 
 ### A. Hardware I/O `[G1]`
 - **Peripheral bus** (GPIO/I2C/SPI/CAN/PWM/ADC) — 📋 already designed → see "Peripheral Driver Track" + [specs/13-peripherals.md](specs/13-peripherals.md). #1 gap: no app reads sensors / drives actuators without it.
@@ -314,7 +344,7 @@ Layer 3 — Silo / VM (Stage-2 hw)    → Key/VM isolation from kernel    [DONE,
   - 📋 NETWORK `proto_mask + host/port allowlist` — enforced in the net **service** cell (not kernel — net is a service), so it ships with net-cell work, not here.
   - ⚠️ **GPIO per-pin is NOT kernel-enforceable** — cells own the GPIO MMIO directly (app-owns-MMIO, no broker), so the kernel cannot gate individual pins without a GPIO broker cell (deliberately rejected). Device-class is the enforceable granularity.
   - 📋 General `__ViCell_cap_args` ELF section — only needed for params the kernel can't derive from existing flags; deferred until a concrete case appears.
-- 📋 **Spawn-time cap intersection (delegation)** `[G1]` — `sys_spawn(path, granted)` → kernel grants `min(granted, spawner_caps)`; a Cell cannot hand a child a cap it lacks → chain-of-custody, kills confused-deputy (Fuchsia/Genode monotonic downgrade). `init` holds the routing table (`.cml`/`init.xml` analog).
+- ✅ **Spawn-time cap intersection (delegation) (2026-06-21)** `[G1]` — `spawn_from_path(path, Spawner)` grants `manifest ∩ spawner_caps`; a Cell cannot hand a child a cap it lacks (Fuchsia/Genode monotonic downgrade; kills confused-deputy). New `CapSet`/`Spawner` in `kernel/src/task/cap.rs` (intersect unit-tested). **init = root authority `CapSet::ALL`** via direct main.rs TCB write (NOT manifest — init spawns via `spawn_from_mem`, manifest never read); HotSwap passes the replaced cell's caps as ceiling (not the Root exemption). Red-teamed + validated (plan `.agents/260621-0830-cell-perms-p2-p5/`). riscv64 boots to `ViCell >`, "init granted root authority" logged, vfs/net/shell receive full caps, no faults/denials. (Phases P5 — Ed25519 + operator policy — deferred pending the Phase 02 crypto spike.)
 - 📋 **Runtime revocation** `[G1/G2]` — `CapHandle` kernel object; `sys_cap_revoke(handle)` clears `task.cap`; next syscall → `ViError::CapRevoked`; Cell gets `AppEvent::CapRevoked`. Simpler than seL4 CDT (no cap-to-cap derivation yet).
 - 📋 **Operator-policy consent (G1)** `[G1]` — Operator signs a policy file (TOML+Ed25519) at fleet provision; kernel verifies vs fleet root CA (VIFS1) and spawns with `manifest ∩ policy`. Revoke = push new policy + hot-revoke. SROS2 semantics at the kernel level. No dialog.
 - 📋 **Consent-broker Cell (G2 HMI)** `[G2]` — Trusted Cell renders TCC-style dialog for *sensitive caps only* (camera/mic/storage), purpose-string required, signed consent-db; anti-fatigue (first-use only, one-time option, auto-revoke after N days). After ViUI HMI stable.

@@ -4,6 +4,43 @@
 
 ---
 
+## [2026-06-21] Security: spawn-time capability intersection / delegation (P2)
+
+### Summary
+Capabilities now obey **monotonic downgrade** (roadmap §G.2 P2): when a cell spawns a child, the
+kernel grants `manifest ∩ spawner_caps` — a cell can no longer hand a child a capability it does not
+itself hold (Fuchsia/Genode model; closes the confused-deputy where any SpawnCap holder could spawn
+`/bin/vfs` and have it gain block_io regardless of the spawner). Plan was red-teamed (4 hostile-lens
+reviewers, all code-grounded) + validated before implementation; the red-team caught that the
+original "expand init's manifest" approach was a no-op (init is spawned via `spawn_from_mem`, not
+`spawn_from_path`, so its manifest is never read) — corrected to a direct grant.
+
+### Changes
+- `kernel/src/task/cap.rs` — new `CapSet` (plain-data cap snapshot) + `Spawner` enum
+  (`Root`/`User(tid)`/`Ceiling(CapSet)`); `from_manifest` (replicates the block_regions SRV-bit
+  co-grant + bakes in the H-ext gate), `of_task`, `intersect` (field-wise AND), `apply_to`, `ALL`,
+  `EMPTY`; `#[cfg(test)]` monotonicity + `ALL∩child==child` unit tests.
+- `kernel/src/loader.rs` — `spawn_from_path(path, Spawner)`; grant block rebuilt as
+  `granted = requested ∩ ceiling`; spawner caps snapshotted in a dropped-guard lock scope (non-reentrant
+  Spinlock); block-io VFS-handler side effect now keyed off the *granted* bit; `legacy_path_caps` helper.
+- `kernel/src/main.rs` — init granted `CapSet::ALL` (root authority) by direct TCB write + boot-log line.
+- `kernel/src/task/syscall.rs` — `SpawnFromPath`/`SpawnPinned` pass `Spawner::User(caller_id)`.
+- `kernel/src/cell/hotswap.rs` — snapshots the replaced cell's `CapSet` and passes `Spawner::Ceiling`
+  (a hot-swap cannot re-grant beyond the replaced cell).
+- `kernel/src/loader/elf_tests.rs` — path-validation tests updated for the new signature.
+
+### Verification
+- riscv64: full `cargo build --release` clean (codegen); boot smoke `boots_to_shell_prompt` green —
+  boot log shows "init granted root authority", VFS Service + Shell Started present (intersection did
+  not strip core-service caps), no faults / PermissionDenied.
+- aarch64: `cargo check` clean. (aarch64 full *build* currently fails with `fp-armv8` from unrelated
+  in-tree audio WIP — softfloat target — NOT from P2, which is pure bool/u8. Pre-existing; flagged.)
+
+### Docs Updated
+- `docs/project-roadmap.md` §G.2 P2 — marked complete; plan `.agents/260621-0830-cell-perms-p2-p5/`.
+
+---
+
 ## [2026-06-21] Security: per-Cell integrity measurement (IMA-style, P3)
 
 ### Summary

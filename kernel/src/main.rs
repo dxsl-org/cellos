@@ -455,13 +455,20 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
             Ok((init_tid, _load_base)) => {
                 log_info("Successfully spawned init");
-                // Grant SpawnCap to init: it uses sys_spawn_from_path (a syscall) to
-                // boot vfs/config/shell. Without SpawnCap the syscall returns PermissionDenied.
+                // init is the ROOT AUTHORITY (P2 monotonic-downgrade): grant the
+                // FULL capability set directly here. init is spawned via
+                // spawn_from_mem (NOT spawn_from_path), so its manifest is never
+                // read — this direct TCB write is the only place its caps come
+                // from. init then delegates subsets to vfs/net/shell/... via the
+                // SpawnFromPath syscall, where each child is intersected against
+                // init's caps. Escalation-oracle bound: init's spawn targets MUST
+                // remain compile-time constants (no data-derived paths).
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                        t.spawn_cap = Some(task::cap::SpawnCap::new());
+                        task::cap::CapSet::ALL.apply_to(t);
                     }
                 }
+                log_info("init granted root authority (CapSet::ALL)");
             }
             Err(_e) => log_info("Failed to spawn init"),
         }
