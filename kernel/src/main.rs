@@ -22,6 +22,7 @@ pub mod fs; // Filesystem
 pub mod loader;
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
 pub mod memory;
+pub mod policy; // Signed operator policy (P5b) — headless consent
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod snapshot;
 pub mod task; // Renamed from 'process'
@@ -419,6 +420,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // x86_64 uses the ramdisk-backed embedded FS to serve cell ELFs via VIFS1.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
     fs::init();
+
+    // Load + verify the signed operator policy (P5b) NOW: after VIFS1 is mounted,
+    // before any cap-bearing cell spawns. Absent → dev-permissive (this G1 build);
+    // invalid → fail-closed. Phase 04 folds policy::lookup into the spawn grant.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    policy::load_from_vifs1();
 
     // Phase 20: hot-migration state-transfer self-test.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]

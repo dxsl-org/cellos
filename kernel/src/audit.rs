@@ -59,6 +59,14 @@ pub enum AuditEvent {
     /// Payload: `encode_u32x2(tid, sha256_prefix_le_u32)`. The full digest and the
     /// rolling aggregate live in [`crate::measurement_log`].
     CellMeasure = 15,
+    /// The signed operator policy was loaded + verified at boot (P5).
+    /// Payload: `encode_u32x2(entry_count, 0)`.
+    PolicyLoaded = 16,
+    /// The operator policy failed signature verification or parsing — fail-closed.
+    /// Payload: `encode_u32x2(reason_code, 0)`.
+    PolicyInvalid = 17,
+    /// No operator policy present in VIFS1. Payload: `encode_u32x2(0, 0)`.
+    PolicyAbsent = 18,
 }
 
 struct AuditRing {

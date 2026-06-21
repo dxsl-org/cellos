@@ -204,6 +204,7 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::task::drivers::blk_nvme::force_unlock_locks();
     crate::resource_registry::force_unlock_locks();
     crate::measurement_log::force_unlock_locks();
+    crate::policy::force_unlock_locks();
 }
 
 /// Terminate the currently-executing Cell due to a hardware fault.

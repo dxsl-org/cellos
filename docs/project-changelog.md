@@ -4,6 +4,40 @@
 
 ---
 
+## [2026-06-21] Security: signed operator policy — kernel load/verify machinery (P5b, part 1)
+
+### Summary
+Kernel-side machinery for the signed operator policy (roadmap §G.2 P5b). At boot,
+after VIFS1 mounts and before any cap-bearing cell spawns, the kernel loads
+`/POLICY.BIN`, verifies its Ed25519 signature (verify-then-parse), and parses it
+into a `path → CapSet` table exposed via `policy::lookup()` (Phase 04 folds this
+into the spawn grant). This commit lands the machinery + the **absent** fail-safe
+path; the host signer + baked dev blob (exercising the signed/invalid paths) follow.
+
+Security invariants implemented: **verify-then-parse** (signature over `blob[..len-64]`
+checked before the parser runs on any byte); **panic-free parser** (every field
+bounds-checked → `Invalid`, never a boot-path panic); **domain validation** (parsed
+`mmio_devices`/`block_regions` masked to known bits, unknown → `Invalid`);
+**fail-safe** (invalid sig/parse → fail-closed always; absent → dev-permissive in
+this G1 build, fail-closed only under the `policy-required` feature).
+
+### Changes
+- `kernel/src/policy.rs` (new) — blob format (`VPOL` magic), `load_from_vifs1`
+  (verify-then-parse), `parse` (panic-free + domain-validate), `lookup` →
+  `PolicyDecision`, fail-safe rule, `force_unlock_locks`. Fleet root pubkey is a
+  cfg-split placeholder (TODO: signer wires the dev key).
+- `kernel/src/main.rs` — register module; `policy::load_from_vifs1()` after
+  `fs::init()`, before init spawn.
+- `kernel/src/audit.rs` — `PolicyLoaded=16 / PolicyInvalid=17 / PolicyAbsent=18`.
+- `kernel/src/task.rs` — POLICY lock added to fault-path force-unlock list.
+
+### Verification
+- Both arches build clean under PIC; boot reaches `ViCell >` logging policy
+  "absent" (no blob baked yet), VFS/services up, no faults — confirms the load
+  path + fail-safe + boot ordering without breaking boot.
+
+---
+
 ## [2026-06-21] Security: in-kernel Ed25519 verify (P5 crypto foundation)
 
 ### Summary
