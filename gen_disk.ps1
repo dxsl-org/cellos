@@ -47,6 +47,7 @@ cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Las
 cargo build --release -p hypha-llm-gateway -p hypha-core 2>&1 | Select-Object -Last 3   # Hypha P0/P1 — gateway + core
 cargo build --release -p input-test 2>&1 | Select-Object -Last 3
 cargo build --release -p audio-demo 2>&1 | Select-Object -Last 3   # VirtIO sound test tone
+cargo build --release -p app-https-demo 2>&1 | Select-Object -Last 3   # G14 TLS server-auth e2e gate
 
 # DOOM — only if doomgeneric sources have been cloned
 $doom_src = "cells\demos\doom\src\c\doomgeneric\doomgeneric"
@@ -113,6 +114,7 @@ $mqtt_bin   = "$rel_dir\mqtt"             # Phase X-5: MQTT client
 $posix_shim_test_bin = "$rel_dir\posix-shim-test"  # Tier 1b POSIX shim test cell
 $input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input delivery test
 $audio_bin = "$rel_dir\audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
+$https_demo_bin = "$rel_dir\app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
 $ls_bin   = "$rel_dir\ls"    # M3.2 embedded debug utils
 $cat_bin  = "$rel_dir\cat"
 $echo_bin = "$rel_dir\echo"
@@ -179,6 +181,7 @@ if (Test-Path $tetris_bin)     { $kfs_args += @($tetris_bin,     "/bin/tetris") 
 if (Test-Path $tetris_c_bin)   { $kfs_args += @($tetris_c_bin,   "/bin/tetris-c") }
 if (Test-Path $tetris_lua_bin) { $kfs_args += @($tetris_lua_bin, "/bin/tetris-lua") }
 if (Test-Path $audio_bin) { $kfs_args += @($audio_bin, "/bin/audio-demo") }
+if (Test-Path $https_demo_bin) { $kfs_args += @($https_demo_bin, "/bin/https-demo") }
 if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
 if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
 if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
@@ -247,6 +250,7 @@ if (Test-Path $mqtt_bin)  { $table_args += "/bin/mqtt=$mqtt_bin" }
 if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posix_shim_test_bin" }
 if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
 if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
+if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $ls_bin)   { $table_args += "/bin/ls=$ls_bin" }
 if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
 if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }
