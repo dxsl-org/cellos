@@ -59,6 +59,10 @@ pub enum ViSyscall {
     /// No-op on write-through filesystems (RamDisk). Hooks into device flush on NVMe (G2).
     /// Shares the WriteCap allowlist bit (bit 45).
     SyncCap = 232,
+    /// Map a PCIe device's DMA range into the IOMMU for the calling Cell.
+    /// ABI: a0 = bdf: u32, a1 = phys: u64, a2 = size: usize → IOVA (== phys for SAS) on success.
+    /// Caller must own the BDF via Resource Registry; range must be within Cell memory quota.
+    GrantDma = 233,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -446,6 +450,9 @@ impl ViSyscall {
             Self::CreateVm | Self::CreateVcpu | Self::MapGuestMemory
             | Self::RunVcpu | Self::VcpuRegs | Self::InjectIrq
             | Self::WriteGuestMemory | Self::ReadGuestMemory => Some(44),
+            // GrantDma (bit 48): PCIe DMA authorization. Cells that need to drive
+            // hardware DMA (Driver Cells) declare this capability in their manifest.
+            Self::GrantDma => Some(48),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -523,6 +530,7 @@ impl From<usize> for ViSyscall {
             230 => ViSyscall::StatCap,
             231 => ViSyscall::TruncateCap,
             232 => ViSyscall::SyncCap,
+            233 => ViSyscall::GrantDma,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             310 => ViSyscall::NetTx,

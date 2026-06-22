@@ -162,7 +162,7 @@ fn dma_phys(virt: usize) -> u64 {
 ///
 /// # Panics
 /// Panics on OOM (mirrors `VirtioHal::dma_alloc` panic contract).
-fn dma_alloc_pages(n: usize) -> (*mut u8, u64) {
+fn dma_alloc_pages(bdf: u32, n: usize) -> (*mut u8, u64) {
     let size = n * 4096;
     let layout = Layout::from_size_align(size, 4096)
         .expect("NVMe DMA layout: pages>0 and 4096 is power-of-two");
@@ -174,7 +174,7 @@ fn dma_alloc_pages(n: usize) -> (*mut u8, u64) {
     // SAFETY: ptr is non-null and points to `size` bytes.
     unsafe { core::ptr::write_bytes(ptr, 0, size); }
     let phys = dma_phys(ptr as usize);
-    super::iommu::map_dma(phys, size);
+    super::iommu::map_dma_for_cell(0, bdf, phys, size);
     (ptr, phys)
 }
 
@@ -257,12 +257,12 @@ struct Queue {
 }
 
 impl Queue {
-    /// Allocate a new queue pair of `depth` entries.
-    fn new(depth: u16) -> Self {
+    /// Allocate a new queue pair of `depth` entries. `bdf` is the PCIe Requester ID of the NVMe device.
+    fn new(bdf: u32, depth: u16) -> Self {
         let sq_pages = (depth as usize * core::mem::size_of::<SqEntry>()).div_ceil(4096);
         let cq_pages = (depth as usize * core::mem::size_of::<CqEntry>()).div_ceil(4096);
-        let (sq, sq_phys) = dma_alloc_pages(sq_pages);
-        let (cq, cq_phys) = dma_alloc_pages(cq_pages);
+        let (sq, sq_phys) = dma_alloc_pages(bdf, sq_pages);
+        let (cq, cq_phys) = dma_alloc_pages(bdf, cq_pages);
         Self {
             sq:       sq as *mut SqEntry,
             sq_phys,
@@ -313,6 +313,8 @@ pub struct NvmeController {
     pub lba_bytes: u32,
     /// VWC (volatile write cache) supported → Flush command is meaningful.
     pub vwc: bool,
+    /// PCIe BDF (bus<<8 | dev<<3 | func) for IOMMU bounce-buffer mapping.
+    bdf: u32,
 }
 
 impl NvmeController {
@@ -323,7 +325,7 @@ impl NvmeController {
     ///
     /// # Safety
     /// `bar0` must be the identity-mapped virtual base of the NVMe BAR0 MMIO window.
-    unsafe fn new(bar0: usize) -> ViResult<Self> {
+    unsafe fn new(bar0: usize, bdf: u32) -> ViResult<Self> {
         // 1. Read capabilities.
         // SAFETY: bar0 is identity-mapped BAR0.
         let cap = unsafe { read_reg64(bar0, REG_CAP) };
@@ -348,7 +350,7 @@ impl NvmeController {
         }
 
         // 3. Allocate admin queues.
-        let admin = Queue::new(ADMIN_QUEUE_DEPTH as u16);
+        let admin = Queue::new(bdf, ADMIN_QUEUE_DEPTH as u16);
 
         // 4. Program AQA, ASQ, ACQ.
         // AQA: ACQS[27:16] = depth-1, ASQS[11:0] = depth-1.
@@ -384,15 +386,16 @@ impl NvmeController {
         let mut ctrl = NvmeController {
             bar0,
             admin,
-            io: Queue::new(IO_QUEUE_DEPTH),
+            io: Queue::new(bdf, IO_QUEUE_DEPTH),
             db_stride,
             n_sectors: 0,
             lba_bytes: 0,
             vwc: false,
+            bdf,
         };
 
         // 7. Identify Controller.
-        let (id_buf, _) = dma_alloc_pages(1);
+        let (id_buf, _) = dma_alloc_pages(bdf, 1);
         let id_phys = dma_phys(id_buf as usize);
         let res = ctrl.submit_admin(ADMIN_OPC_IDENTIFY, 0, 0, id_phys, 0,
                                     CNS_IDENTIFY_CTRL, 0, 0, 0, 0, 0);
@@ -409,7 +412,7 @@ impl NvmeController {
         unsafe { dma_free_pages(id_buf, 1); }
 
         // 8. Identify Namespace 1.
-        let (ns_buf, _) = dma_alloc_pages(1);
+        let (ns_buf, _) = dma_alloc_pages(bdf, 1);
         let ns_phys = dma_phys(ns_buf as usize);
         let res = ctrl.submit_admin(ADMIN_OPC_IDENTIFY, 1, 0, ns_phys, 0,
                                     CNS_IDENTIFY_NS, 0, 0, 0, 0, 0);
@@ -753,10 +756,11 @@ pub fn init_driver() {
     // On riscv64/aarch64 the MMIO is also identity-mapped by init_kernel_paging.
     // bar0_virt == bar0_phys in both cases for MMIO regions.
     let bar0_virt = bar0_phys;
+    let bdf: u32 = (dev.bdf.0 as u32) << 8 | (dev.bdf.1 as u32) << 3 | (dev.bdf.2 as u32);
 
     // SAFETY: bar0_virt is the identity-mapped BAR0 of the discovered NVMe device.
     // The MMIO window is mapped in `init_kernel_paging*` before this function.
-    match unsafe { NvmeController::new(bar0_virt) } {
+    match unsafe { NvmeController::new(bar0_virt, bdf) } {
         Ok(ctrl) => {
             *NVME.lock() = Some(ctrl);
             log::info!("[nvme] driver ready — NVMe block device active");
@@ -782,19 +786,13 @@ impl ViBlockDevice for NvmeBlk {
             return Err(ViError::InvalidArgument);
         }
 
-        // Allocate a 4 KiB-aligned DMA bounce buffer for this sector read.
-        // Using a bounce buffer avoids alignment constraints on the caller's `buf`
-        // and is safe across the polled completion because the buffer outlives
-        // the command (no async handoff, no lifetime issue).
-        let (dma, phys) = dma_alloc_pages(1);
-
         let mut guard = NVME.lock();
         let Some(ctrl) = guard.as_mut() else {
-            // SAFETY: dma was allocated with dma_alloc_pages(1).
-            unsafe { dma_free_pages(dma, 1); }
             return Err(ViError::NotFound);
         };
 
+        // Allocate bounce buffer after locking so we have ctrl.bdf available.
+        let (dma, phys) = dma_alloc_pages(ctrl.bdf, 1);
         let result = ctrl.submit_io(NVM_OPC_READ, 1, sector, 0, phys);
 
         if result.is_ok() {
@@ -804,7 +802,7 @@ impl ViBlockDevice for NvmeBlk {
             buf[..512].copy_from_slice(src);
         }
 
-        // SAFETY: dma was allocated with dma_alloc_pages(1).
+        // SAFETY: dma was allocated with dma_alloc_pages.
         unsafe { dma_free_pages(dma, 1); }
         result
     }
@@ -814,20 +812,18 @@ impl ViBlockDevice for NvmeBlk {
             return Err(ViError::InvalidArgument);
         }
 
-        let (dma, phys) = dma_alloc_pages(1);
+        let mut guard = NVME.lock();
+        let Some(ctrl) = guard.as_mut() else {
+            return Err(ViError::NotFound);
+        };
+
+        let (dma, phys) = dma_alloc_pages(ctrl.bdf, 1);
         // Copy caller's data into the DMA bounce buffer.
         // SAFETY: dma points to a valid 4 KiB page; we write only 512 bytes.
         unsafe { core::ptr::copy_nonoverlapping(buf.as_ptr(), dma, 512); }
 
-        let mut guard = NVME.lock();
-        let Some(ctrl) = guard.as_mut() else {
-            // SAFETY: dma was allocated with dma_alloc_pages(1).
-            unsafe { dma_free_pages(dma, 1); }
-            return Err(ViError::NotFound);
-        };
-
         let result = ctrl.submit_io(NVM_OPC_WRITE, 1, sector, 0, phys);
-        // SAFETY: dma was allocated with dma_alloc_pages(1).
+        // SAFETY: dma was allocated with dma_alloc_pages.
         unsafe { dma_free_pages(dma, 1); }
         result
     }

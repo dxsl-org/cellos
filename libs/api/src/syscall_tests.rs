@@ -30,6 +30,7 @@ mod tests {
         (230,  ViSyscall::StatCap),
         (231,  ViSyscall::TruncateCap),
         (232,  ViSyscall::SyncCap),
+        (233,  ViSyscall::GrantDma),
         (20,   ViSyscall::ShmAlloc),
         (21,   ViSyscall::ShmMap),
         (30,   ViSyscall::GetProcs),

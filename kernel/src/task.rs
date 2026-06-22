@@ -304,6 +304,9 @@ pub fn yield_cpu() {
         }
     };
     for tid in grant_tids {
+        crate::resource_registry::release_bdfs_for(tid);
+        // IOFENCE/IOTLB flush must complete before frames are returned to the allocator.
+        crate::task::drivers::iommu::cleanup_cell(tid as u64);
         crate::task::syscall::reap_grants_for_task(tid);
         crate::hypervisor::registry::reap_vms_for_task(tid);
     }

@@ -420,6 +420,21 @@ pub fn sys_sync_cap(cap_id: u64) -> Result<(), SyscallError> {
     if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
 }
 
+/// Map `[phys, phys+size)` into the IOMMU for the calling Cell, authorising DMA for device `bdf`.
+///
+/// Caller must own the PCIe BDF via Resource Registry and the range must be within its
+/// memory quota. Returns the IOVA (== `phys` in SAS identity mapping) on success.
+///
+/// # Errors
+/// Returns `SyscallError::PermissionDenied` if the BDF is not owned by the caller,
+/// `SyscallError::InvalidArgument` if `phys`/`size` are misaligned or out-of-quota,
+/// or `SyscallError::Unknown` on other failure.
+pub fn sys_grant_dma(bdf: u32, phys: u64, size: usize) -> Result<u64, SyscallError> {
+    // SAFETY: no memory access; all arguments are plain integers.
+    let ret = unsafe { syscall(ViSyscall::GrantDma, bdf as usize, phys as usize, size, 0) };
+    if ret >= 0 { Ok(ret as u64) } else { Err(SyscallError::Unknown) }
+}
+
 /// Seek a cap-backed file to `offset` from `whence` (0=Start, 1=Current, 2=End).
 ///
 /// Returns the new absolute byte position, or `SyscallError::Unknown` on failure.

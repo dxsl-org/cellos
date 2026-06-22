@@ -465,6 +465,9 @@ pub enum Syscall {
     TruncateCap { cap_id: usize, len: usize },
     /// 232: SyncCap — flush dirty pages to block device via cap.
     SyncCap { cap_id: usize },
+    /// 233: GrantDma — map PCIe DMA range into IOMMU for calling Cell.
+    /// a0 = bdf: u32, a1 = phys: u64, a2 = size: usize.
+    GrantDma { bdf: u32, phys: u64, size: usize },
     /// 8: Wait (Wait for task)
     Wait { pid: usize },
     /// 20: ShmAlloc
@@ -644,6 +647,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::StatCap { .. }       => V::StatCap,
         Syscall::TruncateCap { .. }   => V::TruncateCap,
         Syscall::SyncCap { .. }       => V::SyncCap,
+        Syscall::GrantDma { .. }      => V::GrantDma,
         Syscall::Open { .. }          => V::Open,
         Syscall::Read { .. }          => V::Read,
         Syscall::Write { .. }         => V::Write,
@@ -1113,6 +1117,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // (fault/watchdog paths already call this; voluntary Exit did not.)
             crate::fast_ipc::clear_vfs_if_cell(cell_id.0 as usize);
 
+            // Release any PCIe BDF ownerships (for sys_grant_dma authorization).
+            crate::resource_registry::release_bdfs_for(caller_id);
+
+            // Flush IOTLB for any DMA domains this Cell held; zero DC/context entries.
+            // Must run BEFORE yield_cpu returns frames to the allocator (frame quarantine).
+            super::drivers::iommu::cleanup_cell(caller_id as u64);
+
             // yield_cpu switches away; this task is never rescheduled.
             super::yield_cpu();
             Ok(0)
@@ -1175,6 +1186,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::audit::AuditEvent::CellExit,
                 &crate::audit::encode_u32x2(tid as u32, 0xFFFF_FFFFu32), // force-kill marker
             );
+
+            // Release any PCIe BDF ownerships the target Cell held.
+            crate::resource_registry::release_bdfs_for(tid);
+
+            // Flush IOTLB for any DMA domains the target Cell held.
+            super::drivers::iommu::cleanup_cell(tid as u64);
+
             log::info!("[kernel] ForceExit: task {} killed by task {}", tid, caller_id);
 
             Ok(0) // non-blocking — caller keeps running; do NOT yield_cpu
@@ -1735,6 +1753,41 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::cell::cap_registry::CAP_TABLE.lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
+        }
+
+        Syscall::GrantDma { bdf, phys, size } => {
+            // Alignment check: both phys and size must be page-aligned.
+            if phys & 0xFFF != 0 || size & 0xFFF != 0 || size == 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            // Overflow check: prevents u64 wraparound exploitation.
+            if phys.checked_add(size as u64).is_none() {
+                return Err(SyscallError::InvalidInput);
+            }
+            // BDF ownership check: caller must own this PCIe device.
+            let bdf_owner = crate::resource_registry::owner_of_bdf(bdf);
+            let cell_id_raw = {
+                super::SCHEDULER.lock()
+                    .as_ref()
+                    .and_then(|s| s.tasks.get(&caller_id).map(|t| t.cell_id.0 as usize))
+                    .unwrap_or(0)
+            };
+            if bdf_owner != Some(caller_id) {
+                log::warn!("[iommu] Cell {} (cell_raw={}) DMA grant denied: BDF {:08x} not owned (owner={:?})",
+                           caller_id, cell_id_raw, bdf, bdf_owner);
+                return Err(SyscallError::PermissionDenied);
+            }
+            // DMA quota: total DMA mapped must not exceed 1× memory quota.
+            if !crate::memory::cell_quota::can_map_dma(cell_id_raw, size) {
+                log::warn!("[iommu] Cell {} DMA quota exceeded (size={})", caller_id, size);
+                return Err(SyscallError::PermissionDenied);
+            }
+            // Map into IOMMU.
+            super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size);
+            crate::memory::cell_quota::record_dma_mapped(cell_id_raw, size);
+            log::info!("[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
+                       caller_id, (bdf >> 8) & 0xFF, (bdf >> 3) & 0x1F, bdf & 0x7, phys, size);
+            Ok(phys as usize) // IOVA == phys in SAS identity mapping
         }
 
         Syscall::CloseCap { cap_id } => {
@@ -2513,6 +2566,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::StatCap       => Syscall::StatCap { cap_id: a0 },
         ViSyscall::TruncateCap   => Syscall::TruncateCap { cap_id: a0, len: a1 },
         ViSyscall::SyncCap       => Syscall::SyncCap { cap_id: a0 },
+        ViSyscall::GrantDma      => Syscall::GrantDma { bdf: a0 as u32, phys: a1 as u64, size: a2 },
         ViSyscall::Wait          => Syscall::Wait { pid: a0 },
         ViSyscall::ShmAlloc      => Syscall::ShmAlloc { size: a0 },
         ViSyscall::ShmMap        => Syscall::ShmMap { handle: a0, target_pid: a1 },

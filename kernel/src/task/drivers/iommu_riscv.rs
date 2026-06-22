@@ -1,11 +1,15 @@
-//! RISC-V IOMMU driver — per-Cell DMA isolation via 1-level DDT + Sv39 first-stage.
+//! RISC-V IOMMU driver — per-Cell DMA isolation via 3-level DDT + Sv39 first-stage.
 //!
-//! Phase 1 `init_hw()`:             probe PCIe IOMMU device, allocate DDT + CQ. Stays BARE.
+//! Phase 1 `init_hw()`:             probe PCIe IOMMU device, allocate L1 DDT + CQ. Stays BARE.
 //! Phase 2 `map_range_for_cell()`:  register DMA range in a per-Cell Sv39 domain.
-//! Phase 3 `activate()`:            fill kernel-domain DCs, switch DDTP to 1LVL enforcement.
+//! Phase 3 `activate()`:            fill kernel-domain DCs, switch DDTP to 3LVL enforcement.
 //!
 //! Each Cell gets its own `Sv39IommuPt` and a unique PSCID. Devices are isolated at the
 //! Device Context (DC) level — a device can only DMA within its owning Cell's page table.
+//!
+//! 3LVL DDT: device_id[23:15]=DDI[2], [14:6]=DDI[1], [5:0]=DDI[0].
+//! For PCIe BDF (16-bit), DDI[2]=bit15, DDI[1]=bits[14:6], DDI[0]=bits[5:0].
+//! Eliminates bus-collision bug of 1LVL DDT (which indexed by device_id[5:0] only).
 
 use alloc::{
     alloc::{alloc_zeroed, Layout},
@@ -31,7 +35,7 @@ const REG_CQT:  usize = 0x28; // Command Queue Tail (SW-owned)
 const REG_IPSR: usize = 0x38;
 
 const DDTP_MODE_BARE: u64 = 1;
-const DDTP_MODE_1LVL: u64 = 2;
+const DDTP_MODE_3LVL: u64 = 4; // RISC-V IOMMU spec §2.2: Off=0 Bare=1 1LVL=2 2LVL=3 3LVL=4
 
 const CQ_DEPTH: usize = 64;
 const CQ_LOG2:  u64   = 6;  // log2(64)
@@ -45,8 +49,8 @@ const POLL_MAX: u64 = 1_000_000;
 // ── Module-level state ────────────────────────────────────────────────────────
 
 static BAR0:     AtomicUsize = AtomicUsize::new(0);
-static DDT_VIRT: AtomicUsize = AtomicUsize::new(0);
-static DDT_PHYS: AtomicU64   = AtomicU64::new(0);
+static DDT_VIRT: AtomicUsize = AtomicUsize::new(0); // L1 table virtual address
+static DDT_PHYS: AtomicU64   = AtomicU64::new(0);   // L1 table physical address (identity)
 static CQ_VIRT:  AtomicUsize = AtomicUsize::new(0);
 
 struct RiscvDomain {
@@ -153,16 +157,60 @@ fn invalidate_dc(bar0: usize, cq_virt: usize, device_id: u64) {
     enqueue_cmd(bar0, cq_virt, w0, 0);
 }
 
-// ── Device Context helpers ────────────────────────────────────────────────────
+// ── 3LVL DDT tree management ──────────────────────────────────────────────────
 
-/// Write a Device Context into the 1LVL DDT for `device_id`.
+/// Allocate a zeroed 4 KiB page for a DDT non-leaf or leaf table.
+fn alloc_ddt_page() -> usize {
+    let layout = Layout::from_size_align(4096, 4096).expect("iommu: ddt page");
+    // SAFETY: layout is non-zero and 4096-aligned.
+    let ptr = unsafe { alloc_zeroed(layout) } as usize;
+    assert!(ptr != 0, "[iommu_riscv] OOM: DDT child page");
+    ptr
+}
+
+/// Return the virtual address of the child table at `table_virt[idx]`.
+///
+/// Non-leaf entry format: bits[63:10] = PPN, bit[0] = V.
+/// Allocates a new child page if the entry is not yet valid (V=0).
+/// Identity-mapped: VA == PA for kernel-heap pages.
+fn ensure_child_table(table_virt: usize, idx: usize) -> usize {
+    let slot = table_virt + idx * 8;
+    // SAFETY: slot is within a 4096-B DDT table page.
+    let entry = unsafe { core::ptr::read_volatile(slot as *const u64) };
+    if entry & 1 != 0 {
+        // V=1 — child already exists; return its virtual address.
+        let ppn = (entry >> 10) & 0x000F_FFFF_FFFF_FFFF;
+        (ppn << 12) as usize // identity-mapped: VA == PA
+    } else {
+        // V=0 — allocate and link a new child table.
+        let child_virt = alloc_ddt_page();
+        let child_phys = child_virt as u64; // identity-mapped
+        let non_leaf   = ((child_phys >> 12) << 10) | 1u64; // PPN | V
+        // SAFETY: slot is within the parent DDT table.
+        unsafe { core::ptr::write_volatile(slot as *mut u64, non_leaf); }
+        child_virt
+    }
+}
+
+/// Navigate or allocate the 3-level DDT tree for `bdf` and return the DC slot address.
+///
+/// Allocates intermediate pages on demand. Never modifies the DC itself.
+fn get_dc_slot(l1_virt: usize, bdf: u32) -> usize {
+    let ddi2 = ((bdf >> 15) & 0x1FF) as usize; // bits[23:15] of device_id (=bdf for PCIe)
+    let ddi1 = ((bdf >>  6) & 0x1FF) as usize; // bits[14:6]
+    let ddi0 = ( bdf        & 0x03F) as usize; // bits[5:0]
+
+    let l2_virt = ensure_child_table(l1_virt, ddi2);
+    let l3_virt = ensure_child_table(l2_virt, ddi1);
+    l3_virt + ddi0 * 64 // each leaf DC is 64 bytes
+}
+
+/// Write a Device Context at `dc` with the given `fsc` (first-stage config) and `pscid`.
 ///
 /// TC.V is written LAST after a Release fence so the IOMMU sees a consistent DC.
-fn write_dc(ddt_virt: usize, device_id: u64, fsc: u64, pscid: u16) {
-    let idx = (device_id & 0x3F) as usize; // 1LVL DDT: indexed by DeviceID[5:0]
-    let dc = ddt_virt + idx * 64;
+fn write_dc_fields(dc: usize, fsc: u64, pscid: u16) {
     let ta = (pscid as u64) << 12; // ta.PSCID in bits[31:12]
-    // SAFETY: dc is within the 4096-byte DDT allocation (idx < 64; DC size = 64 bytes).
+    // SAFETY: dc is the start of a 64-byte leaf DC; caller ensures valid alignment.
     unsafe {
         core::ptr::write_volatile((dc +  8) as *mut u64, 0u64); // iohgatp: G-stage bare
         core::ptr::write_volatile((dc + 16) as *mut u64, ta);   // ta: PSCID
@@ -171,14 +219,29 @@ fn write_dc(ddt_virt: usize, device_id: u64, fsc: u64, pscid: u16) {
         core::ptr::write_volatile((dc + 40) as *mut u64, 0u64);
         core::ptr::write_volatile((dc + 48) as *mut u64, 0u64);
         core::ptr::write_volatile((dc + 56) as *mut u64, 0u64);
-        core::sync::atomic::fence(Ordering::Release); // all other fields visible before TC.V
-        core::ptr::write_volatile(dc as *mut u64, DC_TC_V); // TC.V last — makes DC live
+        core::sync::atomic::fence(Ordering::Release); // all fields visible before TC.V
+        core::ptr::write_volatile(dc as *mut u64, DC_TC_V);     // TC.V last — makes DC live
+    }
+}
+
+/// Write a valid Device Context for `bdf` in the 3LVL DDT.
+fn write_dc_3lvl(l1_virt: usize, bdf: u32, fsc: u64, pscid: u16) {
+    let dc = get_dc_slot(l1_virt, bdf);
+    write_dc_fields(dc, fsc, pscid);
+}
+
+/// Zero the Device Context for `bdf` (TC.V=0 → IOMMU treats device as not present).
+fn zero_dc_3lvl(l1_virt: usize, bdf: u32) {
+    let dc = get_dc_slot(l1_virt, bdf);
+    // SAFETY: dc is the start of a 64-byte leaf DC.
+    for i in 0usize..8 {
+        unsafe { core::ptr::write_volatile((dc + i * 8) as *mut u64, 0); }
     }
 }
 
 // ── Phase 1: probe + allocate ─────────────────────────────────────────────────
 
-/// Probe RISC-V IOMMU hardware, allocate 1LVL DDT and command queue.
+/// Probe RISC-V IOMMU hardware, allocate L1 DDT and command queue.
 /// Stays in BARE (passthrough) mode until `activate()` is called.
 pub(super) fn init_hw() {
     let dev = match pcie_ecam::find_class(CLASS, SUB, PROGIF) {
@@ -200,10 +263,11 @@ pub(super) fn init_hw() {
         if ipsr != 0 { write32(bar0, REG_IPSR, ipsr); }
     }
 
-    // Allocate 1-level DDT: 64 DCs × 64B = 4096B.
-    let layout = Layout::from_size_align(4096, 4096).expect("iommu: DDT");
+    // Allocate L1 DDT: 512 × 8-byte non-leaf entries = 4096 bytes.
+    // (Same size as 1LVL DDT; different internal structure.)
+    let layout = Layout::from_size_align(4096, 4096).expect("iommu: DDT L1");
     let ddt_virt = unsafe { alloc_zeroed(layout) } as usize;
-    assert!(ddt_virt != 0, "[iommu_riscv] OOM: DDT");
+    assert!(ddt_virt != 0, "[iommu_riscv] OOM: DDT L1");
 
     // Allocate CQ: 64 entries × 16B = 1024B (use full page for alignment).
     let layout = Layout::from_size_align(4096, 4096).expect("iommu: CQ");
@@ -250,7 +314,7 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
     if bdf != 0 {
         let fsc   = SATP_MODE_SV39 | (domain.pt.root_phys() >> 12);
         let pscid = domain.pscid;
-        write_dc(ddt_virt, bdf as u64, fsc, pscid);
+        write_dc_3lvl(ddt_virt, bdf, fsc, pscid);
         if !domain.bdfs.contains(&bdf) { domain.bdfs.push(bdf); }
 
         log::info!("[iommu] Cell {} BDF {:02x}:{:02x}.{} → PSCID={}",
@@ -291,13 +355,8 @@ pub(super) fn unmap_cell(tid: u64) {
 
     // Zero DDT entries for each BDF this Cell owned.
     if ddt_virt != 0 {
-        for bdf in &domain.bdfs {
-            let idx = (*bdf as usize) & 0x3F;
-            let dc = ddt_virt + idx * 64;
-            for i in 0usize..8 {
-                // SAFETY: dc within DDT allocation; zeroing all 8 qwords clears TC.V.
-                unsafe { core::ptr::write_volatile((dc + i * 8) as *mut u64, 0); }
-            }
+        for &bdf in &domain.bdfs {
+            zero_dc_3lvl(ddt_virt, bdf);
         }
     }
 
@@ -307,7 +366,7 @@ pub(super) fn unmap_cell(tid: u64) {
 
 // ── Phase 3: activate enforcement ────────────────────────────────────────────
 
-/// Switch DDTP from BARE to 1LVL. Eagerly fills DCs for all registered kernel-domain BDFs.
+/// Switch DDTP from BARE to 3LVL. Eagerly fills DCs for all registered kernel-domain BDFs.
 ///
 /// After this call, DMA from any unregistered device triggers an IOMMU fault.
 pub(super) fn activate() {
@@ -323,14 +382,15 @@ pub(super) fn activate() {
         for domain in domains.values() {
             let fsc = SATP_MODE_SV39 | (domain.pt.root_phys() >> 12);
             for &bdf in &domain.bdfs {
-                write_dc(ddt_virt, bdf as u64, fsc, domain.pscid);
+                write_dc_3lvl(ddt_virt, bdf, fsc, domain.pscid);
             }
         }
     }
 
-    let ddtp = ((ddt_phys >> 12) << 10) | DDTP_MODE_1LVL;
+    // DDTP: PPN of L1 table | MODE=3LVL.
+    let ddtp = ((ddt_phys >> 12) << 10) | DDTP_MODE_3LVL;
     unsafe { write64(bar0, REG_DDTP, ddtp); }
 
     super::iommu::set_active();
-    log::info!("[iommu] RISC-V IOMMU: DMA isolation ACTIVE (Sv39 first-stage, 1LVL DDT)");
+    log::info!("[iommu] RISC-V IOMMU: DMA isolation ACTIVE (Sv39 first-stage, 3LVL DDT)");
 }

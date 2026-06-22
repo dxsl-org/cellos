@@ -140,3 +140,41 @@ pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
 pub fn region_count() -> usize {
     REGISTRY.lock().len()
 }
+
+// ---------------------------------------------------------------------------
+// PCIe BDF ownership (for sys_grant_dma authorization)
+// ---------------------------------------------------------------------------
+
+/// Maps PCIe BDF → owning task ID.
+///
+/// Kernel drivers (NIC, NVMe) are not registered here — they bypass `sys_grant_dma`
+/// and call `iommu::map_dma_for_cell(0, bdf, ...)` directly during init.
+/// Only userspace Driver Cells that receive PCIe device ownership via capability
+/// delegation need to register here.
+static BDF_OWNERS: Spinlock<alloc::collections::BTreeMap<u32, usize>> =
+    Spinlock::new(alloc::collections::BTreeMap::new());
+
+/// Register a PCIe BDF as owned by task `tid`.
+///
+/// Called when a Driver Cell is granted ownership of a PCIe device.
+pub fn register_bdf_owner(bdf: u32, tid: usize) {
+    BDF_OWNERS.lock().insert(bdf, tid);
+}
+
+/// Return the task ID that currently owns `bdf`, or `None` if unowned.
+pub fn owner_of_bdf(bdf: u32) -> Option<usize> {
+    BDF_OWNERS.lock().get(&bdf).copied()
+}
+
+/// Release all BDF ownerships held by task `tid` (called on Cell exit).
+pub fn release_bdfs_for(tid: usize) {
+    BDF_OWNERS.lock().retain(|_bdf, &mut owner| owner != tid);
+}
+
+/// Force-unlock BDF_OWNERS during fault teardown.
+///
+/// # Safety
+/// See `force_unlock_locks` above — same contract.
+pub unsafe fn force_unlock_bdf_locks() {
+    BDF_OWNERS.force_unlock();
+}
