@@ -1226,6 +1226,10 @@ pub fn print_user_log(msg: &str) {
             }
         }
     }
+    // Mirror raw output to the framebuffer console (best-effort; no-op when GPU
+    // is absent or not yet initialised).  Written without the "USER: " serial
+    // prefix so the framebuffer looks like a real terminal, not a log stream.
+    crate::task::drivers::fb_console::FramebufferConsole::write_str(msg);
 }
 
 /// Spawns a synthetic task for testing User Mode without filesystem

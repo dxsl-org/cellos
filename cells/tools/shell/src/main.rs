@@ -49,6 +49,12 @@ pub fn main() {
     #[cfg(not(feature = "shell_test"))]
     {
         let _ = ostd::syscall::sys_log("DEBUG: Shell Started (Async Mode)\n");
+        // Claim keyboard focus so VirtIO keyboard events are routed here via
+        // the input service (fb_console keyboard relay).  Spin-wait for the
+        // input service to come online — it races with shell at boot.
+        while !ostd::input::request_focus() {
+            ostd::task::yield_now();
+        }
         let mut shell = ViShell::new();
         ostd::executor::block_on(shell.run());
     }
