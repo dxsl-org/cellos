@@ -1,0 +1,77 @@
+ViCell OS — Third-Party Notices
+=================================
+
+This project contains code derived from or originally based on work by
+third parties. Their copyright notices and license terms are reproduced
+below as required.
+
+──────────────────────────────────────────────────────────────────────
+Original project skeleton
+──────────────────────────────────────────────────────────────────────
+
+  Copyright (C) 2025 Matthew Leach
+  Licensed under the MIT License
+
+  Permission is hereby granted, free of charge, to any person obtaining
+  a copy of this software and associated documentation files (the
+  "Software"), to deal in the Software without restriction, including
+  without limitation the rights to use, copy, modify, merge, publish,
+  distribute, sublicense, and/or sell copies of the Software, and to
+  permit persons to whom the Software is furnished to do so, subject to
+  the following conditions:
+
+  The above copyright notice and this permission notice shall be
+  included in all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+──────────────────────────────────────────────────────────────────────
+RedoxFS (third_party/redoxfs/)
+──────────────────────────────────────────────────────────────────────
+
+  Copyright (C) Redox OS Contributors
+  Licensed under the MIT License
+  Source: https://gitlab.redox-os.org/redox-os/redoxfs
+
+──────────────────────────────────────────────────────────────────────
+mlibc (third_party/mlibc-src/)
+──────────────────────────────────────────────────────────────────────
+
+  Copyright (C) mlibc Contributors
+  Licensed under the MIT License
+  Source: https://github.com/managarm/mlibc
+
+──────────────────────────────────────────────────────────────────────
+Frigg (third_party/mlibc-src/subprojects/frigg/)
+──────────────────────────────────────────────────────────────────────
+
+  Copyright (C) 2014-2025 Frigg Contributors
+  Licensed under the MIT License
+
+──────────────────────────────────────────────────────────────────────
+libsmarter (third_party/mlibc-src/subprojects/libsmarter/)
+──────────────────────────────────────────────────────────────────────
+
+  Copyright (C) 2018-2020 libsmarter Contributors
+  Licensed under the MIT License
+
+──────────────────────────────────────────────────────────────────────
+doomgeneric (cells/demos/doom/src/c/doomgeneric/)
+──────────────────────────────────────────────────────────────────────
+
+  Licensed under the GNU General Public License, Version 2.0
+  See: cells/demos/doom/src/c/doomgeneric/LICENSE
+
+  NOTE: This component is a standalone demo cell. It is GPL-2.0 and
+  is distributed separately from the ViCell OS core. It does not
+  affect the license of the kernel, HAL, ostd, or any other ViCell
+  component. MPL-2.0 §3.3 permits combination with GPL-2.0.
+
+──────────────────────────────────────────────────────────────────────
