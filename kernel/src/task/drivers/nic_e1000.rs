@@ -156,13 +156,13 @@ fn dma_phys(virt: usize) -> u64 {
     { virt as u64 }
 }
 
-fn dma_alloc(size: usize) -> *mut u8 {
+fn dma_alloc(bdf: u32, size: usize) -> *mut u8 {
     let layout = Layout::from_size_align(size, 4096)
         .expect("e1000 DMA layout");
     // SAFETY: layout is valid and non-zero.
     let ptr = unsafe { alloc_zeroed(layout) };
     assert!(!ptr.is_null(), "[e1000] OOM: failed to allocate DMA buffer");
-    super::iommu::map_dma(dma_phys(ptr as usize), size);
+    super::iommu::map_dma_for_cell(0, bdf, dma_phys(ptr as usize), size);
     ptr
 }
 
@@ -206,6 +206,9 @@ pub fn init_driver() {
         }
     };
 
+    // PCIe Requester ID (BDF): (bus << 8) | (device << 3) | func — used for IOMMU DC entry.
+    let bdf: u32 = (dev.bdf.0 as u32) << 8 | (dev.bdf.1 as u32) << 3 | (dev.bdf.2 as u32);
+
     let bar0_phys = dev.bars[0].base_addr() as usize;
     if bar0_phys == 0 {
         log::warn!("[e1000] BAR0 == 0 (firmware did not configure MMIO)");
@@ -213,8 +216,8 @@ pub fn init_driver() {
     }
 
     log::info!(
-        "[e1000] found {:04x}:{:04x} bar0={:#x}",
-        dev.vendor_id, dev.device_id, bar0_phys
+        "[e1000] found {:04x}:{:04x} bdf={:02x}:{:02x}.{} bar0={:#x}",
+        dev.vendor_id, dev.device_id, dev.bdf.0, dev.bdf.1, dev.bdf.2, bar0_phys
     );
 
     // 2. On x86_64, identity-map the BAR0 MMIO window (128 KiB).
@@ -279,18 +282,18 @@ pub fn init_driver() {
 
     // 8. Allocate TX ring + buffers.
     let tx_ring_size = N_TX * core::mem::size_of::<TxDesc>();
-    let tx_ring = dma_alloc(tx_ring_size) as *mut TxDesc;
+    let tx_ring = dma_alloc(bdf, tx_ring_size) as *mut TxDesc;
     let mut tx_bufs = [core::ptr::null_mut::<u8>(); N_TX];
     for slot in &mut tx_bufs {
-        *slot = dma_alloc(BUF_SIZE);
+        *slot = dma_alloc(bdf, BUF_SIZE);
     }
 
     // 9. Allocate RX ring + buffers.
     let rx_ring_size = N_RX * core::mem::size_of::<RxDesc>();
-    let rx_ring = dma_alloc(rx_ring_size) as *mut RxDesc;
+    let rx_ring = dma_alloc(bdf, rx_ring_size) as *mut RxDesc;
     let mut rx_bufs = [core::ptr::null_mut::<u8>(); N_RX];
     for slot in &mut rx_bufs {
-        *slot = dma_alloc(BUF_SIZE);
+        *slot = dma_alloc(bdf, BUF_SIZE);
     }
 
     // 10. Program TX descriptor ring.
