@@ -2,6 +2,7 @@
 name = "tetris-c"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Tetris-C port via Banaxi-Tech/Tetris-OS — runs on ViCell compositor with keyboard input"
 
 [[bin]]

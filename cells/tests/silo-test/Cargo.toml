@@ -2,6 +2,7 @@
 name = "app-silo-test"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Phase 04 Tier 3a Security Silo integration test — T1–T6 via SiloHandle IPC"
 
 [[bin]]

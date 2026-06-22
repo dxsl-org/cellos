@@ -2,6 +2,7 @@
 name = "app-bench"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "ViCell performance benchmark cell — measures context-switch, IPC, syscall, and memory targets"
 
 [dependencies]

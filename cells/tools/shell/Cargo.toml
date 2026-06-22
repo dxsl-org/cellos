@@ -2,6 +2,7 @@
 name = "app-shell"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 [features]
 # shell_test: replaces the interactive REPL with a deterministic scenario harness.

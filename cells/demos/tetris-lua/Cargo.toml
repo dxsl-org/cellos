@@ -2,6 +2,7 @@
 name = "tetris-lua"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Tetris-Lua — game logic in Lua 5.4, platform hooks (surface/input/time) in Rust"
 
 [[bin]]

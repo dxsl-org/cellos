@@ -2,6 +2,7 @@
 name = "app-vfs-test"
 version = "0.2.0"
 edition = "2021"
+license.workspace = true
 
 [features]
 # Enables the quota-limit scenario, which only passes against a service-vfs

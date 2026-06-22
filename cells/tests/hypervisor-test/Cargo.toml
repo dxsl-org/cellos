@@ -2,6 +2,7 @@
 name = "hypervisor-test"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Phase 04 hypervisor ABI smoke test — exercises sys_create_vm/create_vcpu/run_vcpu from userspace"
 
 [dependencies]

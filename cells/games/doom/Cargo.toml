@@ -2,6 +2,7 @@
 name = "doom"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "DOOM port via doomgeneric — runs on ViCell compositor with VirtIO keyboard input"
 
 [[bin]]

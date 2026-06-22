@@ -2,6 +2,7 @@
 name = "tetris"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Tetris — canonical native Rust implementation for ViCell"
 
 [[bin]]

@@ -2,6 +2,7 @@
 name = "test-isolation"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 [dependencies]
 # Apps should ONLY depend on ostd/api, NOT kernel

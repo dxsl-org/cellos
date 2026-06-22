@@ -6,9 +6,10 @@ targets = [
 ]
 
 [advisories]
-yanked = "deny"
-unsound = "deny"
-unmaintained = "warn"
+version = 2
+# yanked crates are denied by default in 0.15+
+# unmaintained/unsound: "all" = check all deps, "workspace" = workspace only
+unmaintained = "all"
 
 [licenses]
 confidence-threshold = 0.93
@@ -20,8 +21,19 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
-  "Unicode-DFS-2016",
+  "Unicode-3.0",
+  "0BSD",
+  "Zlib",
 ]
+
+[[licenses.exceptions]]
+allow = ["GPL-2.0-only"]
+name = "doom"
+
+[[licenses.exceptions]]
+# redoxfs uses license-file; vendored in third_party/ under MIT
+allow = ["MIT"]
+name = "redoxfs"
 
 [bans]
 multiple-versions = "warn"

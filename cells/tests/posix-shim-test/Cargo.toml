@@ -2,6 +2,7 @@
 name = "app-posix-shim-test"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "POSIX shim integration test cell (getentropy + BSD sockets)"
 
 [[bin]]

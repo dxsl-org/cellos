@@ -2,6 +2,7 @@
 name = "service-net"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 # ── TLS build flavors (mutually exclusive) ────────────────────────────────────
 # tls-roots-embedded : single pinned CA via pki::CertVerifier (G1 default, small)

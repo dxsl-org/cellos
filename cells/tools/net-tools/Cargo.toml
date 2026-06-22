@@ -2,6 +2,7 @@
 name = "app-net-tools"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "ViCell network utilities: ping, curl, nc, wget"
 
 [dependencies]

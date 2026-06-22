@@ -2,6 +2,7 @@
 name    = "app-mlibc-smoke"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 description = "Smoke test for mlibc Tier B C library integration (verify-only, not shipped to disk image)"
 
 [[bin]]
