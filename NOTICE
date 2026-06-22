@@ -1,5 +1,5 @@
-ViCell OS — Third-Party Notices
-=================================
+Cellos — Third-Party Notices
+==============================
 
 This project contains code derived from or originally based on work by
 third parties. Their copyright notices and license terms are reproduced
@@ -70,8 +70,8 @@ doomgeneric (cells/demos/doom/src/c/doomgeneric/)
   See: cells/demos/doom/src/c/doomgeneric/LICENSE
 
   NOTE: This component is a standalone demo cell. It is GPL-2.0 and
-  is distributed separately from the ViCell OS core. It does not
-  affect the license of the kernel, HAL, ostd, or any other ViCell
+  is distributed separately from the Cellos core. It does not
+  affect the license of the kernel, HAL, ostd, or any other
   component. MPL-2.0 §3.3 permits combination with GPL-2.0.
 
 ──────────────────────────────────────────────────────────────────────

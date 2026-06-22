@@ -52,5 +52,5 @@ pub use hal_x86::*;
     feature = "x86",
 )))]
 compile_error!(
-    "Mày phải chọn 'riscv64', 'riscv32', 'aarch64', 'arm', 'x86_64', hoặc 'x86' thì ViCell mới chạy được!"
+    "Mày phải chọn 'riscv64', 'riscv32', 'aarch64', 'arm', 'x86_64', hoặc 'x86' thì Cellos mới chạy được!"
 );

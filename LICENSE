@@ -1,7 +1,7 @@
-ViCell OS — License Overview
-=============================
+Cellos — License Overview
+==========================
 
-ViCell OS uses a layered licensing model. Different components carry
+Cellos uses a layered licensing model. Different components carry
 different licenses as described below.
 
 KERNEL AND HARDWARE ABSTRACTION LAYER
@@ -11,7 +11,7 @@ KERNEL AND HARDWARE ABSTRACTION LAYER
 
 CELL RUNTIME AND STANDARD LIBRARY
   libs/ostd/  — Mozilla Public License 2.0 (MPL-2.0)
-              + ViCell Cell Linking Exception
+              + Cellos Cell Linking Exception
               (see libs/ostd/LICENSE-EXCEPTION)
   Full text: https://mozilla.org/MPL/2.0/
 
@@ -37,7 +37,7 @@ CELL APPLICATIONS AND DRIVERS
 DOOM DEMO (GPL-2.0, separate)
   cells/demos/doom/ — GNU General Public License, Version 2.0
   See: cells/demos/doom/LICENSE
-  Note: This demo is NOT part of the ViCell OS core. Its GPL-2.0
+  Note: This demo is NOT part of the Cellos core. Its GPL-2.0
   license does not affect any other component.
 
 DOCUMENTATION
@@ -53,8 +53,8 @@ PATENT GRANT
 
 SUMMARY FOR COMMERCIAL USERS
   You may build and distribute proprietary applications ("Cells") on
-  ViCell without license fees, provided you:
-  1. Do not modify the ViCell kernel or ostd without sharing those
+  Cellos without license fees, provided you:
+  1. Do not modify the Cellos kernel or ostd without sharing those
      modifications back under MPL-2.0 (file-level copyleft only), AND
   2. Interact with the OS only through the public ABI in libs/api/.
   See libs/ostd/LICENSE-EXCEPTION for the full legal statement.

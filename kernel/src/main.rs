@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
-//! ViCell Kernel - Entry point
+//! Cellos Kernel - Entry point
 
 #![no_std]
 #![no_main]
@@ -177,7 +177,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     };
 
     // Stable banner — CI greps for this exact string.
-    puts("[ViCell] kernel boot v");
+    puts("[Cellos] kernel boot v");
     puts(env!("CARGO_PKG_VERSION"));
     puts("\n");
     puts("Kernel started (Hart: 0, DTB: ...)\n");
@@ -220,7 +220,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Initialize kernel subsystems
 
     // 1. Memory Management
-    // Get memory map from Boot Info (Converted to ViCell format)
+    // Get memory map from Boot Info (Converted to Cellos format)
     let mmap_entries = boot_info.memory_map();
 
     // Initialize frame allocator with the largest usable region

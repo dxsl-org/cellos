@@ -7,11 +7,11 @@ This demo cell contains GPL-2.0 licensed code (doomgeneric).
   GNU General Public License, Version 2.0 (SPDX: GPL-2.0-only)
   See: src/c/doomgeneric/LICENSE
 
-The ViCell-specific Rust wrapper code in this directory (main.rs, Cargo.toml,
+The Cellos-specific Rust wrapper code in this directory (main.rs, Cargo.toml,
 build.rs, etc.) is original work licensed under MIT OR Apache-2.0, but when
 distributed as a combined work with doomgeneric, the whole is subject to
 GPL-2.0 per the terms of that license.
 
-NOTE: This demo is NOT part of the ViCell OS core. Its GPL-2.0 license does
-not affect the kernel, HAL, ostd, or any other ViCell component.
+NOTE: This demo is NOT part of the Cellos core. Its GPL-2.0 license does
+not affect the kernel, HAL, ostd, or any other Cellos component.
 GPL-2.0 is compatible with MPL-2.0 per MPL-2.0 §3.3 (Secondary License).

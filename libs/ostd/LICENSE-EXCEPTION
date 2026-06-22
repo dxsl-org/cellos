@@ -1,23 +1,23 @@
-ViCell Cell Linking Exception
+Cellos Cell Linking Exception
 Version 1.0, June 2026
 
 This Exception is an additional permission under the Mozilla Public License
-2.0 (MPL-2.0) as applied to the ViCell Standard Runtime ("ostd") located
-at libs/ostd/ in the ViCell repository.
+2.0 (MPL-2.0) as applied to the Cellos Standard Runtime ("ostd") located
+at libs/ostd/ in the Cellos repository.
 
 DEFINITIONS
 -----------
 
-"ViCell Standard Runtime" refers to the software in libs/ostd/.
+"Cellos Standard Runtime" refers to the software in libs/ostd/.
 
 "Cell" means a self-contained software unit compiled independently from
-the ViCell Standard Runtime that interacts with ViCell ONLY through the
+the Cellos Standard Runtime that interacts with Cellos ONLY through the
 public interfaces declared in libs/api/ (ABI traits) and the public API
-of the ViCell Standard Runtime, and does not incorporate source code
+of the Cellos Standard Runtime, and does not incorporate source code
 copied from MPL-2.0 covered files.
 
 "Single Address Space (SAS)" means the runtime model in which one or more
-Cells and the ViCell kernel share a single virtual address space, with
+Cells and the Cellos kernel share a single virtual address space, with
 isolation provided by the Rust type system (Language-Based Isolation, LBI)
 rather than hardware memory management unit (MMU) boundaries.
 
@@ -27,9 +27,9 @@ GRANT OF EXCEPTION
 Subject to the terms and conditions of the MPL-2.0, you are granted a
 special permission to convey a Cell that:
 
-  (a) links statically or dynamically against the ViCell Standard Runtime,
-  (b) is loaded into the same virtual address space as the ViCell kernel,
-  (c) communicates with the ViCell kernel and Standard Runtime ONLY through
+  (a) links statically or dynamically against the Cellos Standard Runtime,
+  (b) is loaded into the same virtual address space as the Cellos kernel,
+  (c) communicates with the Cellos kernel and Standard Runtime ONLY through
       the public interfaces in libs/api/ and the public API of ostd/,
 
 under terms of your choosing, without such linking, loading, or address-space
@@ -40,10 +40,10 @@ incorporate any source code copied from MPL-2.0 covered files.
 CLARIFICATION ON SAS AND DERIVED WORKS
 ---------------------------------------
 
-The fact that a Cell and the ViCell kernel share a virtual address space,
-or that the ViCell loader performs relocation placing Cell code in memory
+The fact that a Cell and the Cellos kernel share a virtual address space,
+or that the Cellos loader performs relocation placing Cell code in memory
 adjacent to kernel code, does NOT, by itself, make a Cell a derivative work
-of the ViCell Standard Runtime or the ViCell kernel under any applicable
+of the Cellos Standard Runtime or the Cellos kernel under any applicable
 copyright law.
 
 The isolation of Cells via the Rust type system (Language-Based Isolation)
@@ -61,7 +61,7 @@ This Exception does NOT apply if:
      covered files (e.g., copy-pasting ostd internals into a Cell). In
      that case, the copied portions remain MPL-2.0 covered.
 
-  2. The Cell is a modification of the ViCell Standard Runtime itself.
+  2. The Cell is a modification of the Cellos Standard Runtime itself.
      Such modifications remain MPL-2.0 covered.
 
   3. The Cell communicates with the kernel through mechanisms other than
@@ -74,15 +74,15 @@ INTENT
 
 The intent of this Exception is to ensure that:
 
-  1. The ViCell Standard Runtime (ostd) remains open — modifications to
+  1. The Cellos Standard Runtime (ostd) remains open — modifications to
      ostd must be shared back under MPL-2.0.
 
-  2. Applications built on top of ViCell using the public ABI can be
+  2. Applications built on top of Cellos using the public ABI can be
      distributed under any license the author chooses, including
      proprietary licenses, without legal ambiguity arising from the SAS
      architecture.
 
-  3. ViCell can build a diverse ecosystem of applications including
+  3. Cellos can build a diverse ecosystem of applications including
      commercial software, matching the practical freedoms available to
      application developers on conventional operating systems.
 

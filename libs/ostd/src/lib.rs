@@ -10,7 +10,7 @@
 
 extern crate alloc;
 
-// ostd - ViCell Standard Library for Cells
+// ostd - Cellos Standard Library for Cells
 
 pub use api::*;
 
@@ -19,7 +19,7 @@ pub use alloc::boxed;
 pub use alloc::string;
 pub use alloc::vec;
 
-/// Result type used throughout ViCell.
+/// Result type used throughout Cellos.
 pub type Result<T, E = ViError> = core::result::Result<T, E>;
 
 /// `no_std` hash collections (HashMap, HashSet via hashbrown).

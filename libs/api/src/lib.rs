@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // https://www.apache.org/licenses/LICENSE-2.0>.
 
-//! Public API for ViCell.
+//! Public API for Cellos.
 
 // Disable `no_std` when running the test harness so `#[test]` can link
 // against the host libstd.  All production builds remain bare-metal.
