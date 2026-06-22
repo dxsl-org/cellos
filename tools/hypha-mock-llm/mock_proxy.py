@@ -81,24 +81,39 @@ def ensure_cert():
 
 # ── P2 tool simulation ────────────────────────────────────────────────────────
 
+def _user_message(prompt: str) -> str:
+    """Extract the last `user: ...` line from a role-tagged Cellos prompt.
+    Falls back to the whole prompt so the mock still works for P1 plain echo."""
+    for line in reversed(prompt.splitlines()):
+        if line.startswith("user: "):
+            return line[6:]
+    return prompt
+
+
+def _has_tool_result_line(prompt: str) -> bool:
+    """True only when the prompt contains an actual `tool_result:` protocol line
+    (starts at column 0). Ignores the SYSTEM_PREAMBLE text that mentions
+    TOOL_RESULT: in prose."""
+    for line in prompt.splitlines():
+        if line.startswith("tool_result:"):
+            return True
+    return False
+
+
 def _tool_call_for(prompt: str) -> str | None:
-    """Return a TOOL_CALL: string if the prompt implies a file tool is needed,
-    or None to give a plain text reply."""
-    low = prompt.lower()
+    """Return a TOOL_CALL: string when the USER'S MESSAGE implies a file tool.
+    Checks only the last `user:` line — ignores the system preamble keywords."""
+    if _has_tool_result_line(prompt):
+        return None  # post-tool turn: synthesize text (handled by caller)
 
-    # Already has a TOOL_RESULT — synthesize a final text answer.
-    if "tool_result:" in low:
-        return None  # fall through to text synthesis below (handled by caller)
+    user = _user_message(prompt).lower()
 
-    # User is asking about directory contents.
-    if any(w in low for w in ("list", "files", "ls ", "what's in", "what is in",
-                               "dir ", "folder", "directory")):
+    if any(w in user for w in ("list", "files", "ls ", "what's in", "what is in",
+                                "dir ", "folder", "directory")):
         return 'TOOL_CALL: {"name":"list_dir","args":{"path":"/data"}}'
 
-    # User is asking to read a file.
-    if re.search(r'read|contents? of|show me', low):
-        # Try to extract a path hint from the prompt.
-        m = re.search(r'(/\S+)', prompt)
+    if re.search(r'read|contents? of|show me', user):
+        m = re.search(r'(/\S+)', _user_message(prompt))
         path = m.group(1) if m else "/data/notes.txt"
         return f'TOOL_CALL: {{"name":"read_file","args":{{"path":"{path}"}}}}'
 
@@ -106,13 +121,15 @@ def _tool_call_for(prompt: str) -> str | None:
 
 
 def _text_reply(prompt: str) -> str:
-    """Synthesise a plain text reply — either post-tool synthesis or a plain echo."""
-    low = prompt.lower()
-
-    # Incorporate tool result if present.
-    if "tool_result:" in low:
-        m = re.search(r'tool_result:\s*(\S.*?)(?:\n|$)', prompt)
-        snippet = m.group(1)[:120] if m else "(see above)"
+    """Synthesise a plain text reply — either post-tool or a plain echo."""
+    if _has_tool_result_line(prompt):
+        # Find the first tool_result: line value.
+        for line in prompt.splitlines():
+            if line.startswith("tool_result:"):
+                snippet = line[len("tool_result:"):].strip()[:120]
+                break
+        else:
+            snippet = "(no result)"
         return (
             "Based on the file system query, here is what I found: "
             + snippet
@@ -121,7 +138,7 @@ def _text_reply(prompt: str) -> str:
 
     return (
         "Mock LLM here — the Cellos TLS+HTTP+JSON path works. "
-        "You sent: " + prompt[-160:].replace("\n", " ")
+        "You sent: " + _user_message(prompt)[-160:].replace("\n", " ")
     )
 
 
