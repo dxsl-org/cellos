@@ -88,16 +88,26 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
             let mut vfs = VfsClient::new();
             match vfs.list_dir(path) {
                 Ok(raw) => {
+                    // VFS list format: "d:name\n" or "f:name\n" per entry.
+                    // Strip the two-byte type prefix before building the JSON array.
                     let text = core::str::from_utf8(&raw).unwrap_or("");
                     let entries_json: String = text
                         .split('\n')
-                        .filter(|e| !e.is_empty())
+                        .filter(|e| e.len() > 2)
                         .fold(String::new(), |mut acc, entry| {
+                            // strip leading "d:" / "f:" type prefix
+                            let name = if entry.starts_with("d:")
+                                || entry.starts_with("f:")
+                            {
+                                &entry[2..]
+                            } else {
+                                entry
+                            };
                             if !acc.is_empty() {
                                 acc.push(',');
                             }
                             acc.push('"');
-                            acc.push_str(&json_escape(entry));
+                            acc.push_str(&json_escape(name));
                             acc.push('"');
                             acc
                         });

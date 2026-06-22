@@ -110,7 +110,10 @@ def _tool_call_for(prompt: str) -> str | None:
 
     if any(w in user for w in ("list", "files", "ls ", "what's in", "what is in",
                                 "dir ", "folder", "directory")):
-        return 'TOOL_CALL: {"name":"list_dir","args":{"path":"/data"}}'
+        # Extract an explicit path hint (e.g. "files in /bin") or default to /data.
+        m = re.search(r'(/\w+)', _user_message(prompt))
+        path = m.group(1) if m else "/data"
+        return f'TOOL_CALL: {{"name":"list_dir","args":{{"path":"{path}"}}}}'
 
     if re.search(r'read|contents? of|show me', user):
         m = re.search(r'(/\S+)', _user_message(prompt))
