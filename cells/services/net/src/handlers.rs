@@ -7,7 +7,7 @@ extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use api::ipc::{self, IPC_BUF_SIZE, NetRequest, NetResponse};
-use ostd::syscall::{sys_send, sys_heartbeat, sys_net_tx};
+use ostd::syscall::{sys_send, sys_heartbeat, sys_get_time, sys_net_tx};
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::{tcp, udp},
@@ -398,21 +398,37 @@ fn handle_tls_raw(
             }
             table.set_state(cap_id, SocketState::Connecting);
 
-            // Blocking spin-wait for TCP ESTABLISHED; pump NIC and send heartbeats.
-            let mut spin: u32 = 0;
+            // Blocking spin-wait for TCP ESTABLISHED; wall-clock deadline (15 s real time).
+            // sys_get_time() is the 10 MHz monotonic counter — real host time even on QEMU TCG.
+            // A spin-count limit was removed because on QEMU software emulation each iteration
+            // takes ~1–10 µs of real time (unpredictably), making count-based timeouts behave
+            // like anywhere from 20 s to 200 s. The TLS transport uses the same pattern.
+            let tcp_deadline = sys_get_time() + 150_000_000; // 15 s × 10_000_000 ticks/s
+            let mut next_hb  = sys_get_time() + 5_000_000;   // heartbeat every 500 ms
             loop {
                 device.pump_rx();
                 iface.poll(now_instant(), device, sockets);
-                if spin % 200 == 0 { sys_heartbeat(500); }
                 match sockets.get_mut::<tcp::Socket>(handle).state() {
                     tcp::State::Established => break,
                     tcp::State::Closed | tcp::State::CloseWait => {
+                        let _ = ostd::syscall::sys_log(
+                            "[net/tls] connect failed — transport I/O (timeout or connection drop)"
+                        );
                         table.remove(cap_id); sockets.remove(handle); sys_send(sender, &[0u8; 8]); return;
                     }
                     _ => {}
                 }
-                spin += 1;
-                if spin > 20_000_000 { table.remove(cap_id); sockets.remove(handle); sys_send(sender, &[0u8; 8]); return; }
+                let now = sys_get_time();
+                if now >= tcp_deadline {
+                    let _ = ostd::syscall::sys_log(
+                        "[net/tls] connect failed — transport I/O (timeout or connection drop)"
+                    );
+                    table.remove(cap_id); sockets.remove(handle); sys_send(sender, &[0u8; 8]); return;
+                }
+                if now >= next_hb {
+                    sys_heartbeat(500);
+                    next_hb = now + 5_000_000;
+                }
                 core::hint::spin_loop();
             }
             table.set_state(cap_id, SocketState::Connected);
