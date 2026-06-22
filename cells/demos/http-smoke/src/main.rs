@@ -1,19 +1,21 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate alloc;
 extern crate ostd;
 
 use alloc::vec::Vec;
+use ostd::app::{AppContext, AppEvent};
 use ostd::clients::TcpStream;
 use ostd::http::{HttpClient, TlsStream};
 use ostd::io::println;
 use ostd::json;
+use ostd::syscall::sys_exit;
 
 // `network = false` is correct: this cell never makes a direct network syscall.
 // All net access is via IPC (Send/Recv) to the net service, which holds the
 // network capability. The cap lives on the service, not on this client cell.
-api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService];
+ostd::app_entry!(block_io = false, network = false, spawn = false, handler = smoke_handler);
 
 // Host-side mock LLM, reachable from the QEMU guest via SLIRP (host = 10.0.2.2).
 // Run `python tools/hypha-mock-llm/mock_proxy.py --plain` (port 8080) for HTTP
@@ -69,8 +71,15 @@ where
     Ok(alloc::string::String::from(content))
 }
 
-#[no_mangle]
-pub fn main() {
+fn smoke_handler(_ctx: &mut AppContext, event: AppEvent) {
+    match event {
+        AppEvent::Init => run_smoke(),
+        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => sys_exit(0),
+        _ => {}
+    }
+}
+
+fn run_smoke() {
     println("[http-smoke] HTTP/JSON e2e smoke starting");
 
     // ── HTTP over TcpStream ────────────────────────────────────────────────
@@ -110,4 +119,5 @@ pub fn main() {
     }
 
     println("[http-smoke] done");
+    sys_exit(0);
 }

@@ -16,6 +16,10 @@ use super::vierr_from_code;
 /// (`TcpSend` discriminant + cap_id varint + data length varint ≈ 10 bytes).
 const MAX_TCP_WRITE: usize = IPC_BUF_SIZE - 256;
 
+/// Yield-retry budget for [`TcpStream::write`] while the socket is in SynSent
+/// (TCP handshake not yet complete). Mirrors `tls_stream::READ_RETRY_BUDGET`.
+const WRITE_STALL_BUDGET: u32 = 100_000;
+
 /// A TCP/UDP socket handle returned by [`NetClient::tcp_connect`].
 pub type SocketId = u32;
 
@@ -192,15 +196,30 @@ impl embedded_io::Read for TcpStream {
 }
 
 impl embedded_io::Write for TcpStream {
+    /// Write up to `MAX_TCP_WRITE` bytes.
+    ///
+    /// Retries on `WouldBlock` up to `WRITE_STALL_BUDGET` times (yielding each
+    /// time) so that writes issued immediately after `connect` succeed even when
+    /// the TCP handshake is still completing (SynSent → Established).
     fn write(&mut self, buf: &[u8]) -> Result<usize, crate::io::OstdError> {
         if buf.is_empty() {
             return Ok(0);
         }
         let chunk = buf.len().min(MAX_TCP_WRITE);
-        self.client
-            .tcp_send(self.id, &buf[..chunk])
-            .map_err(crate::io::OstdError)?;
-        Ok(chunk)
+        let mut stalls: u32 = 0;
+        loop {
+            match self.client.tcp_send(self.id, &buf[..chunk]) {
+                Ok(()) => return Ok(chunk),
+                Err(ViError::WouldBlock) => {
+                    stalls += 1;
+                    if stalls >= WRITE_STALL_BUDGET {
+                        return Err(crate::io::OstdError(ViError::WouldBlock));
+                    }
+                    crate::task::yield_now();
+                }
+                Err(e) => return Err(crate::io::OstdError(e)),
+            }
+        }
     }
 
     fn flush(&mut self) -> Result<(), crate::io::OstdError> {
