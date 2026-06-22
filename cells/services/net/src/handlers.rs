@@ -456,8 +456,27 @@ fn handle_tls_raw(
                             "[net/tls] connect REJECTED — certificate verification failed \
                              (untrusted CA / expired / hostname mismatch / tampered)"
                         }
-                        embedded_tls::TlsError::Io(_) | embedded_tls::TlsError::IoError => {
-                            "[net/tls] connect failed — transport I/O (timeout or connection drop)"
+                        embedded_tls::TlsError::Io(_) | embedded_tls::TlsError::IoError
+                        | embedded_tls::TlsError::ConnectionClosed => {
+                            "[net/tls] connect failed — transport I/O (closed or timed out)"
+                        }
+                        embedded_tls::TlsError::HandshakeAborted(_, a) => {
+                            let _ = ostd::syscall::sys_log(
+                                "[net/tls] connect failed — TLS alert from server"
+                            );
+                            let _ = ostd::syscall::sys_log(match a {
+                                embedded_tls::alert::AlertDescription::HandshakeFailure =>
+                                    "  alert: HandshakeFailure (cipher/group/cert mismatch)",
+                                embedded_tls::alert::AlertDescription::CertificateUnknown =>
+                                    "  alert: CertificateUnknown",
+                                embedded_tls::alert::AlertDescription::UnknownCa =>
+                                    "  alert: UnknownCa (server rejected our CA)",
+                                _ => "  alert: (other TLS alert)",
+                            });
+                            table.remove(cap_id);
+                            sockets.remove(handle);
+                            sys_send(sender, &[0u8; 8]);
+                            return;
                         }
                         _ => "[net/tls] connect failed — TLS handshake error (other)",
                     };

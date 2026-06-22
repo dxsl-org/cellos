@@ -114,11 +114,16 @@ impl Read for SmoltcpTlsTransport {
         loop {
             // SAFETY: set_tls_context was called before open()/read().
             unsafe { Self::poll(); }
-            let n = unsafe {
+            let (n, eof) = unsafe {
                 let socket = Self::sockets().get_mut::<tcp::Socket>(self.handle);
-                if socket.can_recv() { socket.recv_slice(buf).unwrap_or(0) } else { 0 }
+                let n = if socket.can_recv() { socket.recv_slice(buf).unwrap_or(0) } else { 0 };
+                // EOF: remote sent FIN and RX buffer is drained — no more data will arrive.
+                (n, !socket.may_recv() && !socket.can_recv())
             };
             if n > 0 { return Ok(n); }
+            // Signal connection close so embedded-tls returns an error immediately
+            // instead of spinning all the way to the 30-second deadline.
+            if eof { return Err(ErrorKind::ConnectionReset); }
 
             let now = sys_get_time();
             if now >= deadline {
@@ -153,6 +158,12 @@ impl Write for SmoltcpTlsTransport {
                 // progress. Handshake writes are small, so this is ample; revisit only
                 // if bulk TLS writes ever need a progress-reset deadline.
             } else {
+                // Detect connection close before spinning: if the remote sent FIN/RST
+                // may_send() returns false and we'd spin to the 30-second deadline.
+                let gone = unsafe {
+                    !Self::sockets().get_mut::<tcp::Socket>(self.handle).may_send()
+                };
+                if gone { return Err(ErrorKind::BrokenPipe); }
                 unsafe { Self::poll(); }
 
                 let now = sys_get_time();
