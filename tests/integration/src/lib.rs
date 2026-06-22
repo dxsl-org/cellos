@@ -704,6 +704,10 @@ impl QemuRunner {
                 "-device", "virtio-net-device,netdev=net0",
                 "-device", "virtio-keyboard-device",
                 "-device", "virtio-gpu-device",
+                // VirtIO RNG: required for TLS handshakes (ViRng panics without it).
+                // Mirrors run.ps1 — the standard G1 hardware set includes entropy.
+                "-object", "rng-random,id=rng0",
+                "-device", "virtio-rng-device,rng=rng0",
                 // QMP for keyboard injection via input-send-event.
                 "-qmp", &format!("tcp:127.0.0.1:{monitor_port}"),
                 // Serial 0 → TCP socket (bidirectional, replaces -nographic stdio mux).

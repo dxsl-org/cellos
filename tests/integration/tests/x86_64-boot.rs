@@ -62,7 +62,7 @@ fn x86_kernel_banner() {
         return;
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("[ViCell] kernel boot v", 15)
+    qemu.wait_for("[Cellos] kernel boot v", 15)
         .unwrap_or_else(|e| panic!("x86_64 kernel banner missing: {e}\n--- output ---\n{}", qemu.dump()));
 }
 

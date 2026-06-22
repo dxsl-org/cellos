@@ -67,6 +67,14 @@ path = "tests/periph-can-pwm-adc.rs"
 name = "robot-demo-e2e"
 path = "tests/robot-demo-e2e.rs"
 
+[[test]]
+name = "tls-gate"
+path = "tests/tls-gate.rs"
+
+[[test]]
+name = "hypha-boot"
+path = "tests/hypha-boot.rs"
+
 [dev-dependencies]
 tempfile = "3"
 
