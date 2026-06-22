@@ -394,8 +394,8 @@ impl QemuRunner {
                 "-device", "virtio-blk-device,drive=hd0",
                 "-netdev", "user,id=net0",
                 "-device", "virtio-net-device,netdev=net0",
-                // rng-random is not available on Windows QEMU; omit the VirtIO
-                // RNG device — it is not required for kernel boot or shell tests.
+                // rng-builtin is the cross-platform RNG (rng-random dropped in QEMU 9.x on Windows);
+                // omit here — not required for kernel boot or shell tests.
                 "-no-reboot",
                 "-monitor", "none",
                 "-serial", &format!("tcp:127.0.0.1:{port}"),
@@ -706,7 +706,7 @@ impl QemuRunner {
                 "-device", "virtio-gpu-device",
                 // VirtIO RNG: required for TLS handshakes (ViRng panics without it).
                 // Mirrors run.ps1 — the standard G1 hardware set includes entropy.
-                "-object", "rng-random,id=rng0",
+                "-object", "rng-builtin,id=rng0",
                 "-device", "virtio-rng-device,rng=rng0",
                 // QMP for keyboard injection via input-send-event.
                 "-qmp", &format!("tcp:127.0.0.1:{monitor_port}"),

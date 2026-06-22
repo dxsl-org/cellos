@@ -68,7 +68,7 @@ Write-Host ""
     -device virtio-blk-device,drive=hd0 `
     -netdev user,id=net0,hostfwd=tcp::11883-:1883 `
     -device virtio-net-device,netdev=net0 `
-    -object rng-random,id=rng0 `
+    -object rng-builtin,id=rng0 `
     -device virtio-rng-device,rng=rng0 `
     -serial stdio `
     -no-reboot
