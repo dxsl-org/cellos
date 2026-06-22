@@ -6,7 +6,7 @@
 A next-generation OS for the Edge-to-Cloud era. Software is organized as **Cells** (not processes) sharing one address space, isolated by the Rust type system rather than hardware MMU.
 
 **Architecture**: Cellular Single Address Space (SAS) + Language-Based Isolation (LBI).  
-**Status**: v1.x Mycelium · Active Stage: **G1 — Robot & Embedded**
+**Status**: v0.2.1-dev (Mycelium) · Active Stage: **G1 — Robot & Embedded**
 
 ---
 
