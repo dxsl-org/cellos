@@ -75,6 +75,10 @@ path = "tests/tls-gate.rs"
 name = "hypha-boot"
 path = "tests/hypha-boot.rs"
 
+[[test]]
+name = "http-smoke"
+path = "tests/http-smoke.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

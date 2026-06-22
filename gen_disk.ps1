@@ -44,10 +44,11 @@ cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p app-sys-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Last 3
-cargo build --release -p hypha-llm-gateway -p hypha-core -p hypha-tool-fs 2>&1 | Select-Object -Last 3   # Hypha P0/P1/P2
+cargo build --release -p hypha-llm-gateway -p hypha-core -p hypha-tool-fs -p hypha-tool-sys -p hypha-tool-spawn 2>&1 | Select-Object -Last 3   # Hypha P0-P3
 cargo build --release -p input-test 2>&1 | Select-Object -Last 3
 cargo build --release -p audio-demo 2>&1 | Select-Object -Last 3   # VirtIO sound test tone
 cargo build --release -p app-https-demo 2>&1 | Select-Object -Last 3   # G14 TLS server-auth e2e gate
+cargo build --release -p app-http-smoke 2>&1 | Select-Object -Last 3  # ostd::http + ostd::json e2e gate
 
 # DOOM — only if doomgeneric sources have been cloned
 $doom_src = "cells\demos\doom\src\c\doomgeneric\doomgeneric"
@@ -106,7 +107,9 @@ $robot_demo_bin = "$rel_dir\robot-demo"       # G1 sensor→actuator reference d
 $dashboard_bin = "$rel_dir\robot-dashboard"  # G1 ViUI v2 dashboard demo
 $hypha_llm_bin = "$rel_dir\hypha-llm-gateway" # Hypha P0 — LLM network gateway
 $hypha_core_bin = "$rel_dir\hypha-core"       # Hypha P1 — agent brain (chat)
-$hypha_tool_fs_bin = "$rel_dir\hypha-tool-fs" # Hypha P2 — filesystem tool cell
+$hypha_tool_fs_bin    = "$rel_dir\hypha-tool-fs"    # Hypha P2 — filesystem tool cell
+$hypha_tool_sys_bin   = "$rel_dir\hypha-tool-sys"   # Hypha P3 — system introspection tool cell
+$hypha_tool_spawn_bin = "$rel_dir\hypha-tool-spawn" # Hypha P3 — cell lifecycle tool cell
 $nc_bin     = "$rel_dir\nc"               # Phase A: TCP netcat tool
 $curl_bin   = "$rel_dir\curl"             # Phase B: HTTP GET client
 $wget_bin   = "$rel_dir\wget"             # Phase U: HTTP wget tool
@@ -116,6 +119,7 @@ $posix_shim_test_bin = "$rel_dir\posix-shim-test"  # Tier 1b POSIX shim test cel
 $input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input delivery test
 $audio_bin = "$rel_dir\audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
 $https_demo_bin = "$rel_dir\app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
+$http_smoke_bin = "$rel_dir\http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
 $ls_bin   = "$rel_dir\ls"    # M3.2 embedded debug utils
 $cat_bin  = "$rel_dir\cat"
 $echo_bin = "$rel_dir\echo"
@@ -183,6 +187,7 @@ if (Test-Path $tetris_c_bin)   { $kfs_args += @($tetris_c_bin,   "/bin/tetris-c"
 if (Test-Path $tetris_lua_bin) { $kfs_args += @($tetris_lua_bin, "/bin/tetris-lua") }
 if (Test-Path $audio_bin) { $kfs_args += @($audio_bin, "/bin/audio-demo") }
 if (Test-Path $https_demo_bin) { $kfs_args += @($https_demo_bin, "/bin/https-demo") }
+if (Test-Path $http_smoke_bin) { $kfs_args += @($http_smoke_bin, "/bin/http-smoke") }
 if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
 if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
 if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
@@ -243,7 +248,9 @@ if (Test-Path $robot_demo_bin)  { $table_args += "/bin/robot-demo=$robot_demo_bi
 if (Test-Path $dashboard_bin)   { $table_args += "/bin/robot-dashboard=$dashboard_bin" }
 if (Test-Path $hypha_llm_bin)      { $table_args += "/bin/llm-gateway=$hypha_llm_bin" }
 if (Test-Path $hypha_core_bin)     { $table_args += "/bin/hypha=$hypha_core_bin" }
-if (Test-Path $hypha_tool_fs_bin)  { $table_args += "/bin/tool-fs=$hypha_tool_fs_bin" }
+if (Test-Path $hypha_tool_fs_bin)    { $table_args += "/bin/tool-fs=$hypha_tool_fs_bin" }
+if (Test-Path $hypha_tool_sys_bin)   { $table_args += "/bin/tool-sys=$hypha_tool_sys_bin" }
+if (Test-Path $hypha_tool_spawn_bin) { $table_args += "/bin/tool-spawn=$hypha_tool_spawn_bin" }
 if (Test-Path $nc_bin)    { $table_args += "/bin/nc=$nc_bin" }
 if (Test-Path $curl_bin)  { $table_args += "/bin/curl=$curl_bin" }
 if (Test-Path $wget_bin)  { $table_args += "/bin/wget=$wget_bin" }
@@ -253,6 +260,7 @@ if (Test-Path $posix_shim_test_bin) { $table_args += "/bin/posix-shim-test=$posi
 if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_test_bin" }
 if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
+if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
 if (Test-Path $ls_bin)   { $table_args += "/bin/ls=$ls_bin" }
 if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
 if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }
