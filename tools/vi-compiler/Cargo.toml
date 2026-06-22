@@ -7,6 +7,7 @@
 name        = "vi-compiler"
 version     = "0.1.0"
 edition     = "2021"
+license     = "Apache-2.0 OR MIT"
 description = "ViUI .vi DSL compiler — lexer + parser → AST (Slint-compatible syntax)"
 
 [[bin]]

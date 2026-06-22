@@ -3,6 +3,7 @@ name = "ostd"
 version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
+# Cells may link against ostd under any license — see LICENSE-EXCEPTION.
 
 [dependencies]
 types   = { path = "../types" }

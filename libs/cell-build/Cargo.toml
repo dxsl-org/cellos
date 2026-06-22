@@ -2,4 +2,5 @@
 name        = "cell-build"
 version     = "0.2.0"
 edition     = "2021"
+license     = "Apache-2.0 OR MIT"
 description = "Build helper for ViCell Cells — generates per-arch PIE linker scripts"
