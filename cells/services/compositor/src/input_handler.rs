@@ -25,10 +25,6 @@ const INPUT_EVENT_OPCODE: u8 = 0x10;
 /// Total IPC frame size for one input event (opcode byte + 64-byte payload).
 const INPUT_FRAME_LEN: usize = 65;
 
-/// Conventional TID of the shell cell — used as the default keyboard focus
-/// before any surface claims it. Matches `dispatcher::DEFAULT_FOCUS_ENDPOINT`.
-const DEFAULT_SHELL_TID: usize = 3;
-
 /// Input routing and mouse position state owned by the compositor.
 pub struct InputState {
     /// TID of the input service cell (0 = not yet connected).
@@ -36,7 +32,10 @@ pub struct InputState {
     /// Logical mouse cursor position (updated from MouseMove events).
     pub mouse_x: i32,
     pub mouse_y: i32,
-    /// TID of the cell currently receiving keyboard events.
+    /// TID of the cell currently receiving keyboard events (0 = no focus, events dropped).
+    ///
+    /// Starts at 0 — events are silently dropped until a surface calls `request_input_focus`.
+    /// This matches the input service Dispatcher's own initial state.
     focused_owner: usize,
     /// True when the VirtIO GPU hardware cursor was successfully uploaded at
     /// startup.  When true, MouseMove issues `GpuCursor(move)` instead of
@@ -50,7 +49,7 @@ impl InputState {
             input_tid: 0,
             mouse_x: 0,
             mouse_y: 0,
-            focused_owner: DEFAULT_SHELL_TID,
+            focused_owner: 0,
             hw_cursor: false,
         }
     }

@@ -1,13 +1,23 @@
 //! Filesystem-oriented shell built-ins: wc, head, tail, grep, mkdir, rm, rmdir, touch.
 //!
-//! VFS-write operations (mkdir, rm, rmdir) send IPC to the VFS service cell at
-//! `VFS_ENDPOINT`.  Read operations use the kernel's `sys_open`/`sys_read` path.
+//! VFS-write operations (mkdir, rm, rmdir) send IPC to the VFS service cell
+//! resolved via `sys_lookup_service`.  Read operations use the kernel's `sys_open`/`sys_read` path.
 
 use ostd::prelude::*;
 use ostd::syscall;
 
-/// VFS service cell endpoint (task ID 3: init=1, user_hello=2, vfs=3).
-const VFS_ENDPOINT: usize = 3;
+/// Resolve the live VFS service tid via the service registry.
+/// Spins (yield-looping) until init has registered vfs — safe at startup
+/// because init spawns vfs before shell and vfs registers before yielding.
+fn vfs_endpoint() -> usize {
+    use api::syscall::service;
+    loop {
+        if let Some(tid) = syscall::sys_lookup_service(service::VFS) {
+            return tid;
+        }
+        ostd::task::yield_now();
+    }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,7 +50,7 @@ fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
         Ok(s) => s.len(),
         Err(_) => return false,
     };
-    syscall::sys_send(VFS_ENDPOINT, &send_buf[..n]);
+    syscall::sys_send(vfs_endpoint(), &send_buf[..n]);
     let mut reply = [0u8; 64];
     match syscall::sys_recv(0, &mut reply) {
         syscall::SyscallResult::Ok(_) => {
@@ -327,7 +337,7 @@ pub fn read_file_vfs(path: &str, out: &mut [u8]) -> usize {
             Ok(s) => s.len(),
             Err(_) => return 0,
         };
-        syscall::sys_send(VFS_ENDPOINT, &send_buf[..n]);
+        syscall::sys_send(vfs_endpoint(), &send_buf[..n]);
         match syscall::sys_recv(0, &mut fast_buf) {
             syscall::SyscallResult::Ok(_) => &fast_buf,
             _ => return 0,
@@ -359,7 +369,7 @@ fn read_file_vfs_async(path: &str, out: &mut [u8]) -> usize {
         Ok(s) => s.len(),
         Err(_) => return 0,
     };
-    syscall::sys_send(VFS_ENDPOINT, &buf[..n]);
+    syscall::sys_send(vfs_endpoint(), &buf[..n]);
     let handle = match syscall::sys_recv(0, &mut buf) {
         syscall::SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&buf) {
             Ok(VfsResponse::PendingHandle(h)) => h,
@@ -372,7 +382,7 @@ fn read_file_vfs_async(path: &str, out: &mut [u8]) -> usize {
         Ok(s) => s.len(),
         Err(_) => return 0,
     };
-    syscall::sys_send(VFS_ENDPOINT, &buf[..n]);
+    syscall::sys_send(vfs_endpoint(), &buf[..n]);
     match syscall::sys_recv(0, &mut buf) {
         syscall::SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&buf) {
             Ok(VfsResponse::Data(data)) => {
@@ -417,7 +427,9 @@ pub fn cmd_vcat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 pub fn cmd_find<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let dir = args.next().unwrap_or(".");
     let pattern = if args.next() == Some("-name") { args.next() } else { None };
-    find_recursive(dir, pattern, 0);
+    // Resolve once; pass TID through recursion to avoid a syscall per directory level.
+    let vfs_tid = vfs_endpoint();
+    find_recursive(dir, pattern, 0, vfs_tid);
     Ok(())
 }
 
@@ -425,7 +437,7 @@ pub fn cmd_find<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 /// pathological trees; each level holds ~1 KB of stack for IPC buffers.
 const FIND_MAX_DEPTH: usize = 16;
 
-fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize) {
+fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize) {
     if depth >= FIND_MAX_DEPTH { return; }
     use api::ipc::{VfsRequest, VfsResponse};
     let mut send = [0u8; 512];
@@ -433,7 +445,7 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize) {
         Ok(s) => s.len(),
         Err(_) => return,
     };
-    ostd::syscall::sys_send(3, &send[..n]); // VFS_ENDPOINT = 3
+    ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
     let raw = match ostd::syscall::sys_recv(0, &mut reply) {
         ostd::syscall::SyscallResult::Ok(_) => &reply,
@@ -455,7 +467,7 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize) {
                     let matches = pattern.map(|p| name.contains(p)).unwrap_or(true);
                     if matches { crate::executor::shell_println(&full); }
                 } else {
-                    find_recursive(&full, pattern, depth + 1);
+                    find_recursive(&full, pattern, depth + 1, vfs_tid);
                 }
             }
         }

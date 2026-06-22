@@ -1,0 +1,18 @@
+[package]
+name = "hypha-tool-sys"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# Hypha tool-sys — system introspection tool cell (P3).
+# Provides list_cells (sys_get_procs), sys_info, lookup_service.
+# No SpawnCap; read-only OS inspection.
+
+[dependencies]
+ostd        = { path = "../../../../../libs/ostd" }
+api         = { path = "../../../../../libs/api" }
+agent-proto = { path = "../../../../../libs/agent-proto" }
+postcard    = { version = "1", default-features = false, features = ["alloc"] }
+
+[build-dependencies]
+cell-build = { path = "../../../../../libs/cell-build" }

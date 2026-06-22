@@ -1,0 +1,18 @@
+[package]
+name = "hypha-tool-spawn"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# Hypha tool-spawn — cell lifecycle tool (P3).
+# Provides spawn_cell (sys_spawn_from_path) and kill_cell (sys_force_exit).
+# Requires SpawnCap (manifest spawn=true).
+
+[dependencies]
+ostd        = { path = "../../../../../libs/ostd" }
+api         = { path = "../../../../../libs/api" }
+agent-proto = { path = "../../../../../libs/agent-proto" }
+postcard    = { version = "1", default-features = false, features = ["alloc"] }
+
+[build-dependencies]
+cell-build = { path = "../../../../../libs/cell-build" }

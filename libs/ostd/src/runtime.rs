@@ -110,17 +110,19 @@ pub const fn service_syscall_set(block_io: bool, network: bool, spawn: bool) -> 
 /// # Usage
 /// ```no_run
 /// CellRuntime::new()
-///     .heartbeat(500)   // 5-second watchdog (500 × 10 ms ticks)
+///     .heartbeat(500)             // 5-second watchdog (500 × 10 ms ticks)
+///     .help("Usage: foo <file>")  // auto-handle -h / --help
 ///     .run(my_handler);
 /// ```
 pub struct CellRuntime {
     heartbeat_ticks: u64,
+    help_text: Option<&'static str>,
 }
 
 impl CellRuntime {
     /// Create a builder with a 5-second heartbeat default (500 ticks × 10 ms).
     pub const fn new() -> Self {
-        Self { heartbeat_ticks: 500 }
+        Self { heartbeat_ticks: 500, help_text: None }
     }
 
     /// Override the watchdog interval.  `ticks` × 10 ms before the kernel kills
@@ -136,12 +138,27 @@ impl CellRuntime {
         self
     }
 
-    /// Arm the heartbeat, fire [`AppEvent::Init`] once, then run the event loop.
+    /// Register a usage string for automatic `-h` / `--help` handling.
+    ///
+    /// If the cell is spawned with `-h` or `--help` in its args, `usage` is
+    /// printed to the console and the cell exits before entering the event loop.
+    /// Convenience alternative to calling [`ostd::args::check_help`] manually in
+    /// the `AppEvent::Init` arm.
+    pub const fn help(mut self, usage: &'static str) -> Self {
+        self.help_text = Some(usage);
+        self
+    }
+
+    /// Arm the heartbeat, check for `--help`, fire [`AppEvent::Init`] once, then
+    /// run the event loop.
     ///
     /// Never returns.
     pub fn run(self, handler: impl FnMut(&mut AppContext, AppEvent)) -> ! {
         if self.heartbeat_ticks > 0 {
             crate::syscall::sys_heartbeat(self.heartbeat_ticks);
+        }
+        if let Some(usage) = self.help_text {
+            crate::args::check_help(usage);
         }
         let mut ctx = AppContext::new();
         ctx.run_with_lifecycle(handler)
@@ -162,17 +179,28 @@ impl Default for CellRuntime {
 /// // No caps (minimal app)
 /// ostd::app_entry!(handler = my_fn);
 ///
+/// // With automatic --help handling
+/// ostd::app_entry!(help = "Usage: foo <file>", handler = my_fn);
+///
 /// // Single cap shorthands
 /// ostd::app_entry!(spawn = true, handler = my_fn);
 /// ostd::app_entry!(network = true, handler = my_fn);
 /// ostd::app_entry!(block_io = true, handler = my_fn);
 ///
+/// // Cap + help
+/// ostd::app_entry!(block_io = true, help = "Usage: cat <file>", handler = my_fn);
+///
 /// // Full explicit form
 /// ostd::app_entry!(block_io = false, network = false, spawn = true, handler = my_fn);
+///
+/// // Full form with help
+/// ostd::app_entry!(block_io = false, network = false, spawn = true,
+///                  help = "Usage: ...", handler = my_fn);
 /// ```
 ///
-/// The generated `main()` arms the heartbeat watchdog and fires
-/// [`AppEvent::Init`] once before entering the message loop.
+/// The generated `main()` arms the heartbeat watchdog, checks for `-h`/`--help`
+/// when a `help` string is provided, and fires [`AppEvent::Init`] once before
+/// entering the message loop.
 #[macro_export]
 macro_rules! app_entry {
     // Full explicit 3-cap form
@@ -194,17 +222,53 @@ macro_rules! app_entry {
             $crate::runtime::CellRuntime::new().run($handler);
         }
     };
+    // Full explicit 3-cap form with help
+    (
+        block_io = $bio:literal,
+        network  = $net:literal,
+        spawn    = $spawn:literal,
+        help     = $help:literal,
+        handler  = $handler:expr $(,)?
+    ) => {
+        api::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn);
+
+        #[used]
+        #[link_section = "__ViCell_syscalls"]
+        pub static VICELL_SYSCALLS: u64 =
+            $crate::runtime::app_syscall_set($bio, $net, $spawn);
+
+        #[no_mangle]
+        pub fn main() {
+            $crate::runtime::CellRuntime::new().help($help).run($handler);
+        }
+    };
     // Shorthand — only spawn
     (spawn = $spawn:literal, handler = $handler:expr $(,)?) => {
         $crate::app_entry!(block_io = false, network = false, spawn = $spawn, handler = $handler);
+    };
+    // Shorthand — only spawn with help
+    (spawn = $spawn:literal, help = $help:literal, handler = $handler:expr $(,)?) => {
+        $crate::app_entry!(block_io = false, network = false, spawn = $spawn, help = $help, handler = $handler);
     };
     // Shorthand — only network
     (network = $net:literal, handler = $handler:expr $(,)?) => {
         $crate::app_entry!(block_io = false, network = $net, spawn = false, handler = $handler);
     };
+    // Shorthand — only network with help
+    (network = $net:literal, help = $help:literal, handler = $handler:expr $(,)?) => {
+        $crate::app_entry!(block_io = false, network = $net, spawn = false, help = $help, handler = $handler);
+    };
     // Shorthand — only block_io
     (block_io = $bio:literal, handler = $handler:expr $(,)?) => {
         $crate::app_entry!(block_io = $bio, network = false, spawn = false, handler = $handler);
+    };
+    // Shorthand — only block_io with help
+    (block_io = $bio:literal, help = $help:literal, handler = $handler:expr $(,)?) => {
+        $crate::app_entry!(block_io = $bio, network = false, spawn = false, help = $help, handler = $handler);
+    };
+    // No caps with help
+    (help = $help:literal, handler = $handler:expr $(,)?) => {
+        $crate::app_entry!(block_io = false, network = false, spawn = false, help = $help, handler = $handler);
     };
     // No caps
     (handler = $handler:expr $(,)?) => {
