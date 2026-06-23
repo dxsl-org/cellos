@@ -1,24 +1,19 @@
 use api::block::ViBlockDevice;
-use super::blk_nvme::NvmeBlk;
 use super::mmc::MmcBlock;
 use super::virtio_blk::viVirtIOBlk;
 use types::ViResult;
 
-static NVME_ZST:   NvmeBlk     = NvmeBlk;
 static VIRTIO_ZST: viVirtIOBlk = viVirtIOBlk;
 static MMC_ZST:    MmcBlock    = MmcBlock;
 
-/// Return the active block device.
+/// Return the active kernel block device.
 ///
-/// Priority: NVMe (PCIe, highest — real G2 storage) → VirtIO (QEMU) → MMC (real board).
-/// Falls back to the VirtIO ZST (returns `Err(NotFound)` gracefully) when nothing probed.
+/// Priority: VirtIO (QEMU para-virtual) → MMC (real board).
 ///
-/// NVMe is checked first so that an x86_64 q35 guest with `-device nvme` boots from
-/// the NVMe disk rather than a secondary VirtIO disk. Both can coexist; first match wins.
+/// Note: PCIe NVMe is now a Driver Cell (`cells/drivers/nvme/`), not a
+/// kernel driver. VFS acquires it via `sys_lookup_service(service::BLOCK_DRIVER)`.
 pub fn block_device() -> &'static dyn ViBlockDevice {
-    if super::blk_nvme::is_present() {
-        &NVME_ZST
-    } else if super::virtio_blk::is_present() {
+    if super::virtio_blk::is_present() {
         &VIRTIO_ZST
     } else if super::mmc::is_present() {
         &MMC_ZST

@@ -288,6 +288,21 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
                 task.pku_key   = key;
                 task.pku_value = crate::hal::pku::pkru_for_key(key);
             }
+
+            // Path-based non-manifest caps — granted here because all 8 manifest flag
+            // bits are occupied (v1 manifest is full; v2 requires a Law-1 bump).
+            //
+            // PcieDriverCap: Driver Cells that own PCIe BAR MMIO + DMA grants.
+            // SupervisorCap: single Supervisor Cell that orchestrates live hotswap.
+            //   Mirrored in the init grant path (kernel/src/main.rs) so that if the
+            //   Supervisor Cell crashes and init needs to unfreeze its frozen targets,
+            //   init retains the authority to do so.
+            if path == "/bin/nvme" || path == "/bin/e1000" {
+                task.pcie_driver_cap = Some(crate::task::cap::PcieDriverCap::new());
+            }
+            if path == "/bin/supervisor" {
+                task.supervisor_cap = Some(crate::task::cap::SupervisorCap::new());
+            }
         }
     }
 

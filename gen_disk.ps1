@@ -39,7 +39,8 @@ Write-Host "Building release cells..."
 cargo build --release `
     -p app-init -p app-shell `
     -p service-vfs -p service-config `
-    -p service-input -p service-net -p service-compositor -p service-net-broker 2>&1 | Select-Object -Last 5
+    -p service-input -p service-net -p service-compositor -p service-net-broker `
+    -p supervisor -p driver-nvme -p driver-e1000 2>&1 | Select-Object -Last 5
 cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench + bench-probe
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p app-sys-tools 2>&1 | Select-Object -Last 3
@@ -124,6 +125,9 @@ Invoke-SignCell "$rel_dir\service-config"
 Invoke-SignCell "$rel_dir\service-net"
 Invoke-SignCell "$rel_dir\service-net-broker"
 Invoke-SignCell "$rel_dir\service-compositor"
+Invoke-SignCell "$rel_dir\supervisor"
+Invoke-SignCell "$rel_dir\driver-nvme"
+Invoke-SignCell "$rel_dir\driver-e1000"
 Invoke-SignCell "$rel_dir\service-input"
 Invoke-SignCell "$rel_dir\app-bench"
 Invoke-SignCell "$rel_dir\bench-probe"
@@ -189,7 +193,10 @@ $bench_bin       = "$rel_dir\bench"             # Phase 22 benchmark cell
 $bench_probe_bin = "$rel_dir\bench-probe"      # bench probe/load child (VA 0x19000000)
 $input_bin  = "$rel_dir\service-input"     # Phase 14: input service cell
 $net_bin    = "$rel_dir\service-net"       # Phase 15: network service cell
-$net_broker_bin = "$rel_dir\service-net-broker" # L.0: cluster net-broker cell
+$net_broker_bin   = "$rel_dir\service-net-broker" # L.0: cluster net-broker cell
+$supervisor_bin   = "$rel_dir\supervisor"         # Kernel Boundary Law: hotswap orchestration
+$nvme_bin         = "$rel_dir\driver-nvme"        # Kernel Boundary Law: NVMe PCIe Driver Cell
+$e1000_bin        = "$rel_dir\driver-e1000"       # Kernel Boundary Law: e1000 PCIe Driver Cell
 $comp_bin      = "$rel_dir\service-compositor" # Phase 16: compositor + GPU
 $robot_demo_bin = "$rel_dir\robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir\robot-dashboard"  # G1 ViUI v2 dashboard demo
@@ -339,6 +346,9 @@ if (Test-Path "$rel_dir\bench-probe") { $table_args += "/bin/bench-probe=$bench_
 if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
 if (Test-Path $net_bin)   { $table_args += "/bin/net=$net_bin" }
 if (Test-Path $net_broker_bin) { $table_args += "/bin/net-broker=$net_broker_bin" }
+if (Test-Path $supervisor_bin) { $table_args += "/bin/supervisor=$supervisor_bin" }
+if (Test-Path $nvme_bin)       { $table_args += "/bin/nvme=$nvme_bin" }
+if (Test-Path $e1000_bin)      { $table_args += "/bin/e1000=$e1000_bin" }
 if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
 if (Test-Path $robot_demo_bin)  { $table_args += "/bin/robot-demo=$robot_demo_bin" }
 if (Test-Path $dashboard_bin)   { $table_args += "/bin/robot-dashboard=$dashboard_bin" }

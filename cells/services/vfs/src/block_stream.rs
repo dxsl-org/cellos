@@ -4,9 +4,20 @@
 //!  - `BlockStream`: raw sector I/O, no caching. Used internally by `PageCache`.
 //!  - `CachedBlockStream`: wraps `BlockStream + PageCache`; implement all fatfs
 //!    traits. VFS mounts FAT32 through this type.
+//!
+//! Data-plane routing: on first access, the stream probes the service registry for
+//! a registered NVMe Driver Cell (`service::BLOCK_DRIVER`). If one is present,
+//! sector I/O goes through IPC (DrvRequest protocol). Otherwise the kernel VirtIO
+//! path (`sys_blk_read`/`sys_blk_write`) is used as the fallback.  On QEMU/VirtIO
+//! builds the NVMe Driver Cell exits early (no PCIe NVMe device), so `nvme_tid()`
+//! always returns `None` there and the VirtIO path is unchanged.
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use crate::page_cache::PageCache;
-use ostd::syscall::{sys_blk_flush, sys_blk_read, sys_blk_write};
+use ostd::syscall::{
+    sys_blk_flush, sys_blk_read, sys_blk_write,
+    sys_lookup_service, sys_recv, sys_send, SyscallResult,
+};
 
 const SECTOR_SIZE: u64 = 512;
 
@@ -17,6 +28,80 @@ const SECTOR_SIZE: u64 = 512;
 /// TODO(P03 step B): replace with the shared `api::disk` constant once the
 /// Law-1 change lands.
 const FAT_PART_BASE_LBA: u64 = 2_048;
+
+/// Sentinel: not yet probed.
+const NOT_PROBED: usize = 0;
+/// Sentinel: probed and absent (no PCIe NVMe registered).
+const ABSENT: usize = usize::MAX;
+
+/// Cached NVMe Driver Cell TID. NOT_PROBED (0) on first access.
+static NVME_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
+
+/// Returns the NVMe Driver Cell TID if one has registered, else `None`.
+/// Caches the result so only the first call performs the syscall.
+fn nvme_tid() -> Option<usize> {
+    let cached = NVME_TID.load(Ordering::Relaxed);
+    if cached == ABSENT    { return None; }
+    if cached != NOT_PROBED { return Some(cached); }
+
+    match sys_lookup_service(api::syscall::service::BLOCK_DRIVER) {
+        Some(tid) if tid != 0 => {
+            NVME_TID.store(tid, Ordering::Relaxed);
+            Some(tid)
+        }
+        _ => {
+            NVME_TID.store(ABSENT, Ordering::Relaxed);
+            None
+        }
+    }
+}
+
+/// Read one 512-byte sector from the active block device.
+///
+/// Routes to the NVMe Driver Cell (DrvRequest IPC) when registered,
+/// falls back to the kernel VirtIO path via `sys_blk_read`.
+fn blk_read(abs_lba: u64, buf: &mut [u8; 512]) -> bool {
+    if let Some(tid) = nvme_tid() {
+        // Read request: [op=0 (2B)] [sector (8B)] — 10 bytes total.
+        let mut req = [0u8; 10];
+        req[0..2].copy_from_slice(&0u16.to_le_bytes());
+        req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
+        match sys_send(tid, &req) {
+            SyscallResult::Err(_) => return false,
+            SyscallResult::Ok(_)  => {}
+        }
+        // Reply: [status (1B)] [data (512B)] = 513 bytes.
+        // mask=tid ensures we only accept the NVMe cell's reply even if
+        // another cell sends to VFS while we are blocked here.
+        let mut reply = [0u8; 513];
+        sys_recv(tid, &mut reply);
+        if reply[0] != 0 { return false; }
+        buf.copy_from_slice(&reply[1..513]);
+        true
+    } else {
+        sys_blk_read(abs_lba, buf)
+    }
+}
+
+/// Write one 512-byte sector to the active block device.
+fn blk_write(abs_lba: u64, data: &[u8; 512]) -> bool {
+    if let Some(tid) = nvme_tid() {
+        // Write request: [op=1 (2B)] [sector (8B)] [data (512B)] = 522 bytes.
+        let mut req = [0u8; 522];
+        req[0..2].copy_from_slice(&1u16.to_le_bytes());
+        req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
+        req[10..522].copy_from_slice(data);
+        match sys_send(tid, &req) {
+            SyscallResult::Err(_) => return false,
+            SyscallResult::Ok(_)  => {}
+        }
+        let mut reply = [0u8; 1];
+        sys_recv(tid, &mut reply);
+        reply[0] == 0
+    } else {
+        sys_blk_write(abs_lba, data)
+    }
+}
 
 pub struct BlockStream {
     /// Byte position within the FAT32 volume (LBA 0 = byte 0).
@@ -40,12 +125,8 @@ impl fatfs::Read for BlockStream {
         }
         let sector = self.pos / SECTOR_SIZE;
         let off    = (self.pos % SECTOR_SIZE) as usize;
-        // Stack-allocated sector buffer.  VirtIO DMA requires identity-mapped
-        // buffers; stack pages ARE identity-mapped in ViCell SAS.  Phase X-1
-        // increased STACK_PAGES to 64 (256 KB) so the deep fatfs nesting
-        // during recursive directory removal no longer overflows the stack.
         let mut sec = [0u8; 512];
-        if !sys_blk_read(FAT_PART_BASE_LBA + sector, &mut sec) {
+        if !blk_read(FAT_PART_BASE_LBA + sector, &mut sec) {
             return Err(());
         }
         let n = core::cmp::min(SECTOR_SIZE as usize - off, buf.len());
@@ -65,19 +146,19 @@ impl fatfs::Write for BlockStream {
 
             if off == 0 && chunk == SECTOR_SIZE as usize {
                 // Full-sector write — no need to read first.
-                let mut full = [0u8; 512]; // stack-allocated (VirtIO DMA constraint)
+                let mut full = [0u8; 512];
                 full.copy_from_slice(&buf[written..written + 512]);
-                if !sys_blk_write(FAT_PART_BASE_LBA + sector, &full) {
+                if !blk_write(FAT_PART_BASE_LBA + sector, &full) {
                     return Err(());
                 }
             } else {
                 // Partial sector — read-modify-write.
-                let mut sec = [0u8; 512]; // stack-allocated (VirtIO DMA constraint)
-                if !sys_blk_read(FAT_PART_BASE_LBA + sector, &mut sec) {
+                let mut sec = [0u8; 512];
+                if !blk_read(FAT_PART_BASE_LBA + sector, &mut sec) {
                     return Err(());
                 }
                 sec[off..off + chunk].copy_from_slice(&buf[written..written + chunk]);
-                if !sys_blk_write(FAT_PART_BASE_LBA + sector, &sec) {
+                if !blk_write(FAT_PART_BASE_LBA + sector, &sec) {
                     return Err(());
                 }
             }
@@ -88,12 +169,7 @@ impl fatfs::Write for BlockStream {
         Ok(written)
     }
 
-    /// Issue a VirtIO FLUSH command so prior writes reach the backing disk image.
-    ///
-    /// Required for reboot persistence: fatfs calls `flush()` when a `File` is
-    /// dropped, which is the signal to commit metadata to durable storage. Without
-    /// a real flush here, a SBI SRST shutdown may discard writes still in QEMU's
-    /// write-back buffer before they reach `disk_v3.img`.
+    /// Issue a flush command so prior writes reach the backing disk image.
     fn flush(&mut self) -> Result<(), ()> {
         if sys_blk_flush() { Ok(()) } else { Err(()) }
     }
@@ -118,13 +194,13 @@ impl BlockStream {
     /// Read one 512-byte sector directly from disk, bypassing the page cache.
     /// Called by `PageCache` on a cache miss. `sector` is partition-relative.
     pub fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
-        sys_blk_read(FAT_PART_BASE_LBA + sector, buf)
+        blk_read(FAT_PART_BASE_LBA + sector, buf)
     }
 
     /// Write one 512-byte sector directly to disk, bypassing the page cache.
     /// Called by `PageCache::flush_dirty`. `sector` is partition-relative.
     pub fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
-        sys_blk_write(FAT_PART_BASE_LBA + sector, data)
+        blk_write(FAT_PART_BASE_LBA + sector, data)
     }
 }
 
@@ -204,10 +280,6 @@ impl fatfs::Write for CachedBlockStream {
         Ok(written)
     }
 
-    /// Issue a VirtIO FLUSH after write-through cache has already synced sectors.
-    ///
-    /// fatfs calls `flush()` when a `File` is dropped; this ensures any queued
-    /// VirtIO writes reach `disk_v3.img` before QEMU shuts down.
     fn flush(&mut self) -> Result<(), ()> {
         if sys_blk_flush() { Ok(()) } else { Err(()) }
     }
@@ -215,7 +287,6 @@ impl fatfs::Write for CachedBlockStream {
 
 impl fatfs::Seek for CachedBlockStream {
     fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
-        // Delegate entirely to the inner stream's position tracking.
         self.inner.seek(pos)
     }
 }

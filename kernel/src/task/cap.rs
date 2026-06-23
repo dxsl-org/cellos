@@ -50,6 +50,32 @@ impl HypervisorCap {
     pub(crate) fn new() -> Self { Self(()) }
 }
 
+/// Permits `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell`.
+///
+/// Granted ONLY by kernel init via direct TCB write — NOT propagated through
+/// `CapSet` or the manifest path. A supervisor cell can orchestrate hot-swap
+/// and targeted cell kill without being able to forge this cap into children.
+#[derive(Copy, Clone, Debug)]
+pub struct SupervisorCap(());
+
+impl SupervisorCap {
+    /// Create a `SupervisorCap` token.  Only callable within the kernel crate.
+    pub(crate) fn new() -> Self { Self(()) }
+}
+
+/// Permits claiming PCIe BAR MMIO ranges and authorising DMA via `GrantDma`.
+///
+/// Granted by exact path match in `loader.rs` (`/bin/nvme`, `/bin/e1000`).
+/// The v1 manifest has no free flag bits for this cap — it is NOT manifest-based.
+/// Required before `RequestMmio` can claim a PCIe BAR range.
+#[derive(Copy, Clone, Debug)]
+pub struct PcieDriverCap(());
+
+impl PcieDriverCap {
+    /// Create a `PcieDriverCap` token.  Only callable within the kernel crate.
+    pub(crate) fn new() -> Self { Self(()) }
+}
+
 // ─── Capability set + spawn-delegation (P2 — monotonic downgrade) ────────────
 
 /// A plain-data snapshot of a Task's capabilities, used to enforce spawn-time

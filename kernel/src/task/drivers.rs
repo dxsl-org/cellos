@@ -32,14 +32,16 @@ pub mod virtio_sound; // VirtIO sound (virtio-snd) output — backs the AudioPla
 pub mod gpio_irq;     // GPIO edge IRQ → MMIO-owner IPC dispatch (AArch64 PL061)
 pub mod virtio_rng;
 pub mod pcie_ecam;    // PCIe ECAM config-space walker (bus 0)
-pub mod blk_nvme;     // NVMe kernel block driver (ViBlockDevice impl)
 pub mod iommu_pt;     // IOMMU identity-mapping page tables (Sv39 / VT-d SLPT)
 pub mod iommu;        // IOMMU common API — three-phase DMA isolation
 pub mod iommu_riscv;  // RISC-V IOMMU — 1-level DDT + Sv39 second-stage
 pub mod iommu_x86;    // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
-pub mod nic;          // NIC selector (e1000 > VirtIO)
-pub mod nic_e1000;    // Intel e1000 (82540EM) PCIe NIC driver
+pub mod nic;          // NIC selector (VirtIO; PCIe NICs are Driver Cells)
 pub mod virtio_pci;   // VirtIO PCI transport for x86_64 q35 (transitional BLK/NET)
+pub mod driver_cell;  // Driver Cell registration statics (BLOCK_DRIVER_CELL / NIC_DRIVER_CELL)
+// blk_nvme and nic_e1000 have been migrated to Driver Cells:
+//   cells/drivers/nvme/   ← NVMe PCIe block driver
+//   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
 
 /// Initialize drivers subsystem
 ///
@@ -64,7 +66,7 @@ pub fn init() {
     // already-claimed slots (block/net). The no-op stub is sufficient until a
     // safe probe strategy is implemented (skip slots claimed by other drivers).
 
-    // PCIe ECAM scan (after paging is active — called from main.rs separately
-    // on riscv/arm/x86 via pcie_ecam::init() + blk_nvme::init_driver()).
-    // NVMe init is called from main.rs after drivers::init() on PCIe arches.
+    // PCIe ECAM scan (pcie_ecam::init() + IOMMU init) is called from main.rs
+    // separately on PCIe arches. NVMe and e1000 are now Driver Cells — no
+    // kernel-side init_driver() calls needed for those devices.
 }

@@ -1151,3 +1151,133 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
     };
     ret as u32
 }
+
+// ── Supervisor Primitives (P03) ───────────────────────────────────────────────
+
+/// Freeze a running Cell (stop it from being scheduled).
+///
+/// The cell still exists; its queued IPC is preserved and delivered after a
+/// [`sys_resume_cell`] call. Requires `SupervisorCap` (granted only to init and
+/// the Supervisor Cell by kernel init).
+///
+/// Returns `Ok(())` on success; `Err` if the caller lacks `SupervisorCap` or the
+/// target does not exist / is already frozen.
+pub fn sys_freeze_cell(target_tid: usize) -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall.
+    let ret = unsafe { syscall(ViSyscall::FreezeCell, target_tid, 0, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// Resume a frozen Cell so it can be scheduled again.
+///
+/// Requires `SupervisorCap`. Idempotent on an already-running cell.
+pub fn sys_resume_cell(target_tid: usize) -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall.
+    let ret = unsafe { syscall(ViSyscall::ResumeCell, target_tid, 0, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// Forcibly terminate a Cell and reclaim all its resources.
+///
+/// Requires `SupervisorCap`. The `exit_code` is recorded in the audit log and
+/// delivered via `NotifyOnExit` to any watchers. Cannot kill tid 0 (kernel) or
+/// the calling cell itself.
+pub fn sys_kill_cell(target_tid: usize, exit_code: u32) -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall.
+    let ret = unsafe { syscall(ViSyscall::KillCell, target_tid, exit_code as usize, 0, 0) };
+    if ret as usize == exit_code as usize { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+// ── Driver Cell Registration (P00) ───────────────────────────────────────────
+
+/// Register the calling cell as the active block device driver.
+///
+/// After this call, `sys_lookup_service(service::BLOCK_DRIVER)` returns this
+/// cell's TID. VFS cells send block-I/O IPC here instead of using the kernel
+/// NVMe driver.  Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
+pub fn sys_register_block_driver() -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
+    let ret = unsafe { syscall(ViSyscall::RegisterBlockDriver, 0, 0, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// Register the calling cell as the active NIC driver.
+///
+/// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
+pub fn sys_register_nic_driver() -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
+    let ret = unsafe { syscall(ViSyscall::RegisterNicDriver, 0, 0, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// PCIe device descriptor written by `sys_find_pcie_device`.
+///
+/// Layout is `#[repr(C)]` to match the kernel's `write_volatile` sequence:
+/// `bdf(u32) + found(u32) + bar0_base(u64) + bar0_len(u64)` = 24 bytes.
+#[repr(C)]
+pub struct PcieDeviceInfo {
+    /// PCIe Requester ID: `bus<<8 | dev<<3 | fn`. Zero means not populated.
+    pub bdf:       u32,
+    /// 1 if the device was found, 0 otherwise.
+    pub found:     u32,
+    /// BAR0 physical base address (= virtual address in SAS).
+    pub bar0_base: u64,
+    /// BAR0 size in bytes.  At least 0x4000 (16 KiB) for NVMe controllers.
+    pub bar0_len:  u64,
+}
+
+impl PcieDeviceInfo {
+    /// Returns a zeroed-out placeholder; pass `&mut info` to `sys_find_pcie_device`.
+    pub const fn zeroed() -> Self {
+        Self { bdf: 0, found: 0, bar0_base: 0, bar0_len: 0 }
+    }
+}
+
+/// Find the first PCIe device matching `(class, subclass, prog_if)`.
+///
+/// On success (`Ok(true)`), `info` is populated with the BDF and BAR0 address.
+/// The kernel also records BDF → caller ownership in the Resource Registry for
+/// subsequent IOMMU authorization.
+///
+/// Requires `PcieDriverCap` (kernel-granted ZST — init grants it to Driver Cells
+/// at spawn via direct TCB write, not via manifest).
+///
+/// Returns `Ok(false)` if no matching device is present (VirtIO fallback case).
+pub fn sys_find_pcie_device(
+    class: u8, subclass: u8, prog_if: u8,
+    info: &mut PcieDeviceInfo,
+) -> Result<bool, SyscallError> {
+    // SAFETY: `info` is a valid mutable reference; kernel writes exactly 24 bytes.
+    // In SAS the kernel's VA == the cell's VA, so the pointer is directly usable.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::FindPcieDevice,
+            class    as usize,
+            subclass as usize,
+            prog_if  as usize,
+            info as *mut PcieDeviceInfo as usize,
+        )
+    };
+    match ret {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(SyscallError::PermissionDenied),
+    }
+}
+
+/// Non-blocking check: has `target_tid` already called `sys_hotswap_ready()`?
+///
+/// Returns `Ok(true)` when the cell is ready, `Ok(false)` when not yet,
+/// `Err(PermissionDenied)` when the caller lacks `SupervisorCap`, and
+/// `Err(Unknown)` when `target_tid` is not a live task.
+///
+/// Requires `SupervisorCap` (kernel-granted — same gate as FreezeCell/ResumeCell/KillCell).
+pub fn sys_query_hotswap_ready(target_tid: usize) -> Result<bool, SyscallError> {
+    // SAFETY: pure register syscall; kernel reads task.hotswap_ready under the SCHEDULER lock.
+    let ret = unsafe { syscall(ViSyscall::QueryHotswapReady, target_tid, 0, 0, 0) };
+    match ret {
+        1 => Ok(true),
+        0 => Ok(false),
+        _ => Err(SyscallError::PermissionDenied), // PermissionDenied or unknown tid (FileNotFound)
+    }
+}

@@ -127,7 +127,7 @@ fn find_tid_for_cell(cell_id: CellId) -> ViResult<usize> {
 ///
 /// The task is removed from the scheduler ready queues so it cannot be selected
 /// for execution while the swap is in progress.
-fn set_task_frozen(tid: usize, swap_id: u64) -> ViResult<()> {
+pub(crate) fn set_task_frozen(tid: usize, swap_id: u64) -> ViResult<()> {
     use crate::task::tcb::TaskState;
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
@@ -143,7 +143,7 @@ fn set_task_frozen(tid: usize, swap_id: u64) -> ViResult<()> {
 /// Roll back a Frozen task to `TaskState::Ready` and re-queue it.
 ///
 /// Called on swap abort so the old cell resumes from where it left off.
-fn unfreeze_task(tid: usize) {
+pub(crate) fn unfreeze_task(tid: usize) {
     use crate::task::tcb::TaskState;
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
@@ -162,7 +162,7 @@ fn unfreeze_task(tid: usize) {
 /// request with `PermissionDenied`.
 ///
 /// Mirrors the cleanup sequence from the `ForceExit` handler — must remain in sync.
-fn exit_task_internal(tid: usize, cell_id: CellId) {
+pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
     // Resource cleanup (same order as ForceExit handler).
     crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(cell_id);
     crate::memory::cell_quota::deregister(cell_id);

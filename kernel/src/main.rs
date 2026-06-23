@@ -392,12 +392,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Phase 1: probe IOMMU hardware on both PCIe arches, allocate page tables.
         // Stays passthrough until activate_isolation() — drivers register DMA ranges first.
         task::drivers::iommu::init();
-        // RISC-V virt: NVMe + e1000 PCIe endpoints (allocate DMA → map_dma auto-called).
-        #[cfg(target_arch = "riscv64")]
-        {
-            task::drivers::blk_nvme::init_driver();
-            task::drivers::nic_e1000::init_driver();
-        }
+        // NVMe and e1000 are now Driver Cells (cells/drivers/nvme, cells/drivers/e1000).
+        // They claim their PCIe BARs via sys_find_pcie_device + sys_request_mmio after
+        // spawn, using PcieDriverCap. No kernel-side init_driver() calls needed here.
         // VirtIO PCI: probe vendor 0x1AF4 on PCIe bus 0.
         // On x86_64 q35, VirtIO BLK/NET are PCIe devices; on RISC-V virt,
         // VirtIO is MMIO — virtio_pci::init() is a no-op there.
@@ -523,9 +520,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
                         task::cap::CapSet::ALL.apply_to(t);
+                        // SupervisorCap is NOT in CapSet (not delegatable via intersection).
+                        // Init holds it so it can unfreeze cells if the Supervisor Cell crashes.
+                        t.supervisor_cap = Some(task::cap::SupervisorCap::new());
+                        // init is the restart-tree root — freeze/kill must be refused
+                        // even by the Supervisor Cell (which also holds SupervisorCap).
+                        t.is_critical = true;
                     }
                 }
-                log_info("init granted root authority (CapSet::ALL)");
+                log_info("init granted root authority (CapSet::ALL + SupervisorCap)");
             }
             Err(_e) => log_info("Failed to spawn init"),
         }

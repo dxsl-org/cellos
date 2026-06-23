@@ -194,6 +194,12 @@ pub struct Task {
     /// RISC-V H-extension CSR access for VMM cells.
     /// Granted when manifest declares `hypervisor = true` AND the firmware reported H-ext.
     pub hypervisor_cap: Option<super::cap::HypervisorCap>,
+    /// Supervisor authority: sys_freeze_cell / sys_resume_cell / sys_kill_cell.
+    /// Set ONLY by kernel init (direct TCB write). Never propagated through CapSet.
+    pub supervisor_cap: Option<super::cap::SupervisorCap>,
+    /// PCIe Driver Cell: claim BAR MMIO + authorise DMA via GrantDma.
+    /// Granted when manifest declares `pcie_driver = true`.
+    pub pcie_driver_cap: Option<super::cap::PcieDriverCap>,
 
     /// MMIO device-class capability bitmask (`DEV_GPIO` / `DEV_UART` from
     /// [`crate::resource_registry`]). Set from the ELF manifest's `gpio`/`uart`
@@ -280,6 +286,11 @@ pub struct Task {
     /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
     pub hotswap_ready: bool,
 
+    /// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
+    /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
+    /// Prevents a compromised Supervisor Cell from disabling the restart tree.
+    pub is_critical: bool,
+
     /// IPC messages buffered while this task is in `TaskState::Frozen` (hot-swap).
     ///
     /// Callers that `sys_send` to a Frozen task have their message copied here
@@ -319,7 +330,9 @@ impl Task {
             block_io_cap:   None,
             network_cap:    None,
             spawn_cap:      None,
-            hypervisor_cap: None,
+            hypervisor_cap:  None,
+            supervisor_cap:  None,
+            pcie_driver_cap: None,
             mmio_devices:   0,
             block_regions:  0,
             pku_key:        0,
@@ -334,6 +347,7 @@ impl Task {
             heartbeat_deadline: None,
             vma: crate::memory::vma::VmaList::new(),
             hotswap_ready: false,
+            is_critical: false,
             pending_msgs: Vec::new(),
         }
     }

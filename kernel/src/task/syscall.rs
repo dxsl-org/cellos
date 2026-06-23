@@ -326,6 +326,14 @@ fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
 }
 
+fn caller_has_supervisor(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.supervisor_cap.is_some())
+}
+
+fn caller_has_pcie_driver(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.pcie_driver_cap.is_some())
+}
+
 /// Validate a user-supplied (ptr, len) buffer descriptor.
 ///
 /// Rejects: NULL pointer, zero-length when expected non-empty, lengths above
@@ -549,6 +557,21 @@ pub enum Syscall {
     StateRestore { key: usize, buf_ptr: usize, buf_len: usize },
     /// 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
     StateStashClear { key: usize },
+    /// 413: FreezeCell — freeze a running Cell. Requires SupervisorCap.
+    FreezeCell { target_tid: usize },
+    /// 414: ResumeCell — resume a frozen Cell. Requires SupervisorCap.
+    ResumeCell { target_tid: usize },
+    /// 415: KillCell — forcibly terminate a Cell. Requires SupervisorCap.
+    KillCell { target_tid: usize, exit_code: u32 },
+    /// 416: RegisterBlockDriver — announce caller as the active block driver.
+    RegisterBlockDriver,
+    /// 417: RegisterNicDriver — announce caller as the active NIC driver.
+    RegisterNicDriver,
+    /// 418: FindPcieDevice — locate a PCIe device by class/subclass/prog_if.
+    FindPcieDevice { class: u8, subclass: u8, prog_if: u8, out_ptr: usize },
+    /// 419: QueryHotswapReady — check whether `target_tid` has called sys_hotswap_ready().
+    /// Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.
+    QueryHotswapReady { target_tid: usize },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
     /// 401: HotSwapReady — signal that the new cell has finished deserializing
@@ -674,7 +697,14 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::Snapshot             => V::Snapshot,
         Syscall::StateStash { .. }      => V::StateStash,
         Syscall::StateRestore { .. }   => V::StateRestore,
-        Syscall::StateStashClear { .. } => V::StateStashClear,
+        Syscall::StateStashClear { .. }   => V::StateStashClear,
+        Syscall::FreezeCell { .. }        => V::FreezeCell,
+        Syscall::ResumeCell { .. }        => V::ResumeCell,
+        Syscall::KillCell { .. }          => V::KillCell,
+        Syscall::QueryHotswapReady { .. } => V::QueryHotswapReady,
+        Syscall::RegisterBlockDriver      => V::RegisterBlockDriver,
+        Syscall::RegisterNicDriver        => V::RegisterNicDriver,
+        Syscall::FindPcieDevice { .. }    => V::FindPcieDevice,
         Syscall::Exec { .. }          => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
         Syscall::Heartbeat { .. }     => V::Heartbeat,
@@ -2199,6 +2229,159 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::cell::state_stash::remove(key as u64);
             Ok(0)
         }
+
+        // ── Supervisor Primitives (P03) ───────────────────────────────────────
+
+        // 413: FreezeCell — stop a running Cell from being scheduled.
+        // The frozen cell still exists; its queued IPC is preserved.
+        Syscall::FreezeCell { target_tid } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // Refuse to freeze the kernel (tid 0) or the caller itself.
+            if target_tid == 0 || target_tid == caller_id {
+                return Err(SyscallError::InvalidInput);
+            }
+            // Refuse to freeze critical cells (init, kernel threads).
+            let is_crit = super::SCHEDULER.lock()
+                .as_ref()
+                .and_then(|s| s.tasks.get(&target_tid).map(|t| t.is_critical))
+                .unwrap_or(false);
+            if is_crit {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // swap_id u64::MAX = admin freeze (not a hotswap sequence).
+            crate::cell::hotswap::set_task_frozen(target_tid, u64::MAX)
+                .map(|_| 0)
+                .map_err(|_| SyscallError::FileNotFound)
+        }
+
+        // 414: ResumeCell — re-queue a frozen Cell so it can be scheduled.
+        Syscall::ResumeCell { target_tid } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if target_tid == 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            crate::cell::hotswap::unfreeze_task(target_tid);
+            Ok(0)
+        }
+
+        // 415: KillCell — terminate a Cell and reclaim its resources.
+        Syscall::KillCell { target_tid, exit_code } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // Never kill kernel (tid 0) or the caller itself.
+            if target_tid == 0 || target_tid == caller_id {
+                return Err(SyscallError::InvalidInput);
+            }
+            // Never kill critical cells (init) — would collapse the restart tree.
+            // Single lock acquisition to get both is_critical and cell_id.
+            let (is_crit, cell_id) = {
+                let guard = super::SCHEDULER.lock();
+                match guard.as_ref().and_then(|s| s.tasks.get(&target_tid)) {
+                    None    => return Err(SyscallError::FileNotFound),
+                    Some(t) => (t.is_critical, t.cell_id),
+                }
+            };
+            if is_crit {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // Deregister driver statics if this cell is a registered driver.
+            crate::task::drivers::driver_cell::deregister_block_driver(target_tid);
+            crate::task::drivers::driver_cell::deregister_nic_driver(target_tid);
+            crate::cell::hotswap::exit_task_internal(target_tid, cell_id);
+            Ok(exit_code as usize)
+        }
+
+        // 419: QueryHotswapReady — non-blocking check of a cell's hotswap_ready flag.
+        // Returns 1 if the cell has called sys_hotswap_ready(), 0 if not yet,
+        // usize::MAX if the tid is not found.
+        Syscall::QueryHotswapReady { target_tid } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            let ready = super::SCHEDULER.lock()
+                .as_ref()
+                .and_then(|s| s.tasks.get(&target_tid).map(|t| t.hotswap_ready));
+            match ready {
+                Some(true)  => Ok(1),
+                Some(false) => Ok(0),
+                None        => Err(SyscallError::FileNotFound), // tid does not exist
+            }
+        }
+
+        // ── Driver Cell Registration (P00) ───────────────────────────────────
+
+        // 416: RegisterBlockDriver — announce caller as the active block device driver.
+        // Stores tid in BLOCK_DRIVER_CELL and registers under service::BLOCK_DRIVER
+        // so VFS can resolve it via LookupService.
+        Syscall::RegisterBlockDriver => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::task::drivers::driver_cell::register_block_driver(caller_id);
+            // Bypass the SpawnCap gate — PcieDriverCap is the authority for driver
+            // namespace registration. Direct write into service registry.
+            crate::cell::service_registry::register(
+                api::syscall::service::BLOCK_DRIVER,
+                caller_id,
+            );
+            Ok(0)
+        }
+
+        // 417: RegisterNicDriver — announce caller as the active NIC driver.
+        Syscall::RegisterNicDriver => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::task::drivers::driver_cell::register_nic_driver(caller_id);
+            crate::cell::service_registry::register(
+                api::syscall::service::NIC_DRIVER,
+                caller_id,
+            );
+            Ok(0)
+        }
+
+        // 418: FindPcieDevice — query ECAM table for a device by class triple.
+        // Writes a `PcieDeviceInfo` record to `out_ptr` and returns 1 if found.
+        // Requires PcieDriverCap; also records BDF ownership in resource_registry.
+        Syscall::FindPcieDevice { class, subclass, prog_if, out_ptr } => {
+            if !caller_has_pcie_driver(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            match crate::task::drivers::pcie_ecam::find_class(class, subclass, prog_if) {
+                None => Ok(0), // device not present → VirtIO fallback
+                Some(dev) => {
+                    let bdf: u32 = (dev.bdf.0 as u32) << 8
+                                 | (dev.bdf.1 as u32) << 3
+                                 | (dev.bdf.2 as u32);
+                    let bar0_base = dev.bars[0].base_addr();
+                    let bar0_len: u64 = match dev.bars[0] {
+                        crate::task::drivers::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
+                        crate::task::drivers::pcie_ecam::Bar::Memory64 { size, .. } => size,
+                        _ => 0x4000, // fallback 16 KiB
+                    };
+                    // Record BDF → caller ownership for IOMMU gate.
+                    crate::resource_registry::register_bdf_owner(bdf, caller_id);
+                    // Write the 20-byte PcieDeviceInfo to the cell's out_ptr.
+                    // SAFETY: SAS — caller's virtual address == kernel's virtual address.
+                    // The cell is responsible for passing a valid, writeable pointer.
+                    if out_ptr != 0 {
+                        unsafe {
+                            core::ptr::write_volatile(out_ptr as *mut u32, bdf);
+                            core::ptr::write_volatile((out_ptr + 4) as *mut u32, 1u32); // found
+                            core::ptr::write_volatile((out_ptr + 8) as *mut u64, bar0_base);
+                            core::ptr::write_volatile((out_ptr + 16) as *mut u64, bar0_len);
+                        }
+                    }
+                    Ok(1)
+                }
+            }
+        }
+
         Syscall::BlkFlush => {
             if !caller_has_block_io(caller_id) {
                 log::warn!("BlkFlush denied: task {} lacks block-I/O capability", caller_id);
@@ -2478,9 +2661,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::RequestMmio { base, len } => {
-            // Gate: caller's ELF manifest must declare gpio or uart cap. The
-            // declared device classes (mmio_devices) also scope WHICH ranges the
-            // cell may claim — a GPIO-only cell cannot grab the UART window.
+            // PCIe BAR path: cells with PcieDriverCap may claim any BAR
+            // discovered during ECAM scan (registered in resource_registry::PCIE_BARS).
+            if caller_has_pcie_driver(caller_id)
+                && crate::resource_registry::is_pcie_bar(base, len)
+            {
+                return match crate::resource_registry::request_mmio(
+                    types::CellId(caller_id as u64), base, len,
+                    crate::resource_registry::DEV_PCIE,
+                ) {
+                    Ok(()) => Ok(0),
+                    Err(types::ViError::PermissionDenied) => Ok(1),
+                    Err(types::ViError::AlreadyExists)    => Ok(2),
+                    Err(_)                                => Ok(3),
+                };
+            }
+            // GPIO/UART path: gate on manifest-declared device classes.
             let allowed_devices = {
                 let sched = super::SCHEDULER.lock();
                 sched.as_ref()
@@ -2704,7 +2900,19 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::NetRx         => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
         ViSyscall::StateStash      => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::StateRestore    => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::StateStashClear => Syscall::StateStashClear { key: a0 },
+        ViSyscall::StateStashClear    => Syscall::StateStashClear { key: a0 },
+        ViSyscall::FreezeCell         => Syscall::FreezeCell { target_tid: a0 },
+        ViSyscall::ResumeCell         => Syscall::ResumeCell { target_tid: a0 },
+        ViSyscall::KillCell           => Syscall::KillCell { target_tid: a0, exit_code: a1 as u32 },
+        ViSyscall::RegisterBlockDriver => Syscall::RegisterBlockDriver,
+        ViSyscall::RegisterNicDriver   => Syscall::RegisterNicDriver,
+        ViSyscall::FindPcieDevice => Syscall::FindPcieDevice {
+            class:    a0 as u8,
+            subclass: a1 as u8,
+            prog_if:  a2 as u8,
+            out_ptr:  a3,
+        },
+        ViSyscall::QueryHotswapReady => Syscall::QueryHotswapReady { target_tid: a0 },
         ViSyscall::HotSwap       => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
         ViSyscall::HotSwapReady  => Syscall::HotSwapReady,
         ViSyscall::Snapshot      => Syscall::Snapshot,

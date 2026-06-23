@@ -493,8 +493,8 @@ unsafe fn scan(ecam_base: usize) {
 /// Initialise the ECAM scanner.
 ///
 /// Must be called after paging is active (ECAM window mapped) and before
-/// `blk_nvme::init_driver()`. Idempotent; safe to call more than once (later
-/// calls are no-ops if the list is already populated).
+/// Driver Cells are spawned (they call sys_find_pcie_device to discover their
+/// endpoint). Idempotent; safe to call more than once (later calls are no-ops).
 pub fn init() {
     // Determine ECAM base for the current architecture.
     // x86_64: use runtime value from ACPI MCFG (set_ecam_base_x86), falling
@@ -532,6 +532,23 @@ pub fn init() {
         log::warn!("[pcie] ECAM scan found no devices on bus 0 — check ECAM base and MMIO mapping");
     } else {
         log::info!("[pcie] ECAM scan complete: {} device(s) found", count);
+    }
+
+    // Register all discovered BAR windows in the Resource Registry so Driver
+    // Cells with PcieDriverCap can call sys_request_mmio on them.
+    for dev in PCI_DEVICES.lock().iter() {
+        for bar in &dev.bars {
+            let base = bar.base_addr() as usize;
+            if base == 0 { continue; }
+            // Probe size is stored in Bar::Memory32/Memory64; use a safe default
+            // of 16 KiB if the probed size is 0 (identity entry).
+            let len = match bar {
+                Bar::Memory32 { size, .. } => if *size == 0 { 0x4000 } else { *size as usize },
+                Bar::Memory64 { size, .. } => if *size == 0 { 0x4000 } else { *size as usize },
+                _ => continue,
+            };
+            crate::resource_registry::register_pcie_bar(base, len);
+        }
     }
 }
 

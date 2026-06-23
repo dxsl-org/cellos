@@ -47,7 +47,9 @@ members = [
     
     # Cells - Drivers
     "cells/drivers/disk",
+    "cells/drivers/e1000",
     "cells/drivers/gpio",
+    "cells/drivers/nvme",
     "cells/drivers/gpu",
     "cells/drivers/i2c-gpio",
     "cells/drivers/spi-gpio",
@@ -68,6 +70,7 @@ members = [
     "cells/services/config",
     "cells/services/hypervisor",
     "cells/services/silo",
+    "cells/services/supervisor",
     "cells/services/httpd",
 
     # Cells - Tools (system + CLI)

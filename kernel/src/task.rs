@@ -201,7 +201,6 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::task::drivers::virtio_blk::force_unlock_locks();
     crate::task::drivers::virtio_input::force_unlock_locks();
     crate::task::drivers::mmc::force_unlock_locks();
-    crate::task::drivers::blk_nvme::force_unlock_locks();
     crate::resource_registry::force_unlock_locks();
     crate::measurement_log::force_unlock_locks();
     crate::policy::force_unlock_locks();

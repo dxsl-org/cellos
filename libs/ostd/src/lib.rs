@@ -104,6 +104,9 @@ pub mod cluster;
 /// Service-side message dispatch: [`MessageHandler`] trait + [`dispatch::run_service`] loop.
 pub mod dispatch;
 
+/// DMA buffer helpers for Tier-1 Driver Cells (contiguous allocation + IOMMU authorisation).
+pub mod dma;
+
 /// Ergonomic service client facades — `VfsClient`, `NetClient`, `InputClient`.
 pub mod clients;
 

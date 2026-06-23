@@ -16,7 +16,7 @@
 //! - **Domain validation:** parsed cap bytes are masked to known bits; unknown
 //!   bits → `Invalid` (a signed-but-malformed policy is still rejected).
 
-use crate::resource_registry::{DEV_GPIO, DEV_UART};
+use crate::resource_registry::{DEV_GPIO, DEV_PCIE, DEV_UART};
 use crate::sync::Spinlock;
 use crate::task::cap::CapSet;
 use alloc::string::String;
@@ -32,7 +32,7 @@ const CAP_BYTES: usize = 6; // block_io, network, spawn, hyp, mmio_devices, bloc
 const POLICY_PATH: &str = "/POLICY.BIN";
 
 /// Valid `mmio_devices` bits and `block_regions` bits (domain-validation masks).
-const MMIO_MASK: u8 = DEV_GPIO | DEV_UART;
+const MMIO_MASK: u8 = DEV_GPIO | DEV_UART | DEV_PCIE;
 const REGION_MASK: u8 = 0b111;
 
 /// Dev fleet Ed25519 **public** key — derived from the fixed dev seed in

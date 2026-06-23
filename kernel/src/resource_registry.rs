@@ -36,6 +36,9 @@ use types::{CellId, ViError, ViResult};
 pub const DEV_UART: u8 = 1 << 0;
 /// GPIO controller window. Set when the manifest declares `gpio = true`.
 pub const DEV_GPIO: u8 = 1 << 1;
+/// PCIe device BAR window. Set on tasks with `PcieDriverCap` — not a manifest flag
+/// (all 8 manifest bits are occupied); gated by the ZST cap instead.
+pub const DEV_PCIE: u8 = 1 << 2;
 
 // ---------------------------------------------------------------------------
 // Allowlist (per QEMU machine, v1 hardcoded)
@@ -72,6 +75,12 @@ const ALLOWED: &[(usize, usize, u8)] = &[];
 static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> =
     Spinlock::new(BTreeMap::new());
 
+/// Dynamically discovered PCIe BAR windows (base → len).
+/// Populated by `pcie_ecam::init()` after the ECAM scan; consumed by
+/// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
+static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> =
+    Spinlock::new(BTreeMap::new());
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -83,6 +92,27 @@ static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> =
 /// disabled.  Force-unlocking an already-free Spinlock is a no-op.
 pub unsafe fn force_unlock_locks() {
     REGISTRY.force_unlock();
+    // SAFETY: same contract as REGISTRY above.
+    unsafe { PCIE_BARS.force_unlock(); }
+}
+
+/// Register a PCIe BAR window discovered during ECAM scan.
+///
+/// Called by `pcie_ecam::init()` for every non-zero BAR on every device.
+/// Driver Cells may subsequently call `sys_request_mmio` on these ranges
+/// if they hold `PcieDriverCap`.
+pub fn register_pcie_bar(base: usize, len: usize) {
+    if base != 0 && len != 0 {
+        PCIE_BARS.lock().insert(base, len);
+    }
+}
+
+/// Return `true` if `[base, base+len)` is a known PCIe BAR window.
+///
+/// Used by the `RequestMmio` handler to decide whether to take the PCIe path.
+pub fn is_pcie_bar(base: usize, len: usize) -> bool {
+    let guard = PCIE_BARS.lock();
+    guard.get(&base).map_or(false, |&bar_len| len <= bar_len)
 }
 
 /// Request exclusive ownership of `[base, base+len)` for `cell_id`.
@@ -98,10 +128,18 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
     // 1. Allowlist check — the range must fall inside a known device window
     //    AND that window's device class must be one the cell declared.
     let end = base.checked_add(len).ok_or(ViError::InvalidInput)?;
-    let in_allowlist = ALLOWED.iter().any(|&(ab, al, class)| {
-        let ae = ab + al; // allowlist range end (no overflow — hardcoded values)
-        base >= ab && end <= ae && (class & allowed_devices != 0)
-    });
+
+    // PCIe path: validate against the dynamic BAR table populated by pcie_ecam.
+    let in_allowlist = if allowed_devices & DEV_PCIE != 0 {
+        let bars = PCIE_BARS.lock();
+        bars.get(&base).map_or(false, |&bar_len| len <= bar_len)
+    } else {
+        // GPIO/UART path: static per-arch allowlist.
+        ALLOWED.iter().any(|&(ab, al, class)| {
+            let ae = ab + al;
+            base >= ab && end <= ae && (class & allowed_devices != 0)
+        })
+    };
     if !in_allowlist {
         return Err(ViError::PermissionDenied);
     }

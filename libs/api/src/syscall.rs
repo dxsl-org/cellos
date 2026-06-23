@@ -267,6 +267,32 @@ pub enum ViSyscall {
     /// ABI: a0 = key → 0 on success (no-op when key is absent).
     StateStashClear = 412,
 
+    // === Supervisor Primitives (P03) — SupervisorCap-gated (bit 49) ===
+    /// 413: Freeze a Cell. Requires SupervisorCap.
+    /// ABI: a0 = target_tid → 0 on success.
+    FreezeCell = 413,
+    /// 414: Resume a frozen Cell. Requires SupervisorCap.
+    /// ABI: a0 = target_tid → 0 on success.
+    ResumeCell = 414,
+    /// 415: Forcibly terminate a Cell. Requires SupervisorCap.
+    /// ABI: a0 = target_tid, a1 = exit_code: u32 → exit_code on success.
+    KillCell = 415,
+
+    // === Driver Cell Registration (P00) — DriverRegistration-gated (bit 50) ===
+    /// 416: Register caller as the active block device driver.
+    /// ABI: (no args) → 0 on success. Requires PcieDriverCap.
+    RegisterBlockDriver = 416,
+    /// 417: Register caller as the active NIC driver.
+    /// ABI: (no args) → 0 on success. Requires PcieDriverCap.
+    RegisterNicDriver = 417,
+    /// 418: Find the first PCIe device matching (class, subclass, prog_if).
+    /// ABI: a0=class(u8), a1=subclass(u8), a2=prog_if(u8), a3=out_ptr(*mut PcieDeviceInfo)
+    /// → 1 if found (out_ptr written), 0 if not found. Requires PcieDriverCap.
+    FindPcieDevice = 418,
+    /// 419: Query whether a cell has called sys_hotswap_ready(). Requires SupervisorCap.
+    /// ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.
+    QueryHotswapReady = 419,
+
     // === Unknown ===
     Unknown = 9999,
 
@@ -468,6 +494,14 @@ impl ViSyscall {
             // GrantDma (bit 48): PCIe DMA authorization. Cells that need to drive
             // hardware DMA (Driver Cells) declare this capability in their manifest.
             Self::GrantDma => Some(48),
+            // SupervisorOp (bit 49): freeze/resume/kill/query a live Cell.
+            // Gated by SupervisorCap which is ONLY granted via direct kernel TCB write.
+            Self::FreezeCell | Self::ResumeCell | Self::KillCell
+            | Self::QueryHotswapReady => Some(49),
+            // DriverRegistration (bit 50): announce as the active block/NIC driver,
+            // and discover PCIe device BARs. All gated by PcieDriverCap.
+            Self::RegisterBlockDriver | Self::RegisterNicDriver
+            | Self::FindPcieDevice => Some(50),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -556,6 +590,13 @@ impl From<usize> for ViSyscall {
             410 => ViSyscall::StateStash,
             411 => ViSyscall::StateRestore,
             412 => ViSyscall::StateStashClear,
+            413 => ViSyscall::FreezeCell,
+            414 => ViSyscall::ResumeCell,
+            415 => ViSyscall::KillCell,
+            416 => ViSyscall::RegisterBlockDriver,
+            417 => ViSyscall::RegisterNicDriver,
+            418 => ViSyscall::FindPcieDevice,
+            419 => ViSyscall::QueryHotswapReady,
             _ => ViSyscall::Unknown,
         }
     }
@@ -593,6 +634,15 @@ pub mod service {
     /// Supervised by init; respawning re-registers under a new tid, so clients
     /// must resolve via `sys_lookup_service(service::NET_BROKER)`.
     pub const NET_BROKER: u16 = 8;
+    /// NVMe / block device driver cell. Clients (VFS) call `LookupService(BLOCK_DRIVER)`
+    /// to find the provider tid and send IPC directly instead of using `BlkReadAsync`.
+    pub const BLOCK_DRIVER: u16 = 9;
+    /// NIC driver cell. The net cell resolves this instead of using kernel `NetTx`/`NetRx`
+    /// once a Driver Cell has registered.
+    pub const NIC_DRIVER: u16 = 10;
+    /// Supervisor Cell — hotswap/snapshot orchestration. Trusted by init; holds SupervisorCap.
+    /// Send `HotswapRequest` / `SnapshotRequest` IPC to trigger live cell replacement.
+    pub const SUPERVISOR: u16 = 11;
 }
 
 /// Arguments for SpawnFromMem syscall.
