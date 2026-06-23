@@ -11,9 +11,10 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use crate::sync::Spinlock;
 
-/// Upper bound on a single stashed blob (64 KB) — bounds kernel memory held on
-/// a cell's behalf for one slot.
-pub const MAX_STASH_LEN: usize = 64 * 1024;
+/// Upper bound on a single stashed blob (1 MB) — bounds kernel memory held on
+/// a cell's behalf for one slot. Raised from 64 KB to accommodate full cell
+/// state serialization for hot-migration (Phase 03).
+pub const MAX_STASH_LEN: usize = 1024 * 1024;
 
 /// Upper bound on the number of distinct stash slots. Caps total kernel memory
 /// the stash can hold (≤ MAX_ENTRIES × MAX_STASH_LEN) so a misbehaving cell

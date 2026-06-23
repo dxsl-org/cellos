@@ -848,6 +848,49 @@ pub fn ipc_send(
             return Err(());
         }
 
+        // ── Hot-swap queue: buffer messages to Frozen cells ─────────────────
+        // Check the target's state directly under the existing SCHEDULER lock —
+        // this avoids acquiring FROZEN separately (which would risk a double-lock
+        // if the caller context already holds FROZEN).
+        //
+        // Postcondition: if we queue the message here we return Ok(0) so the
+        // caller is NOT put into `Sending` state — it continues as if delivered.
+        // The new cell drains this queue in Step 5 (UNFREEZE).
+        if let Some(target) = sched.tasks.get_mut(&target_id) {
+            if matches!(target.state, TaskState::Frozen { .. }) {
+                if target.pending_msgs.len() >= tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+                    // Queue saturated — tell caller to back off and retry.
+                    log::warn!(
+                        "[hotswap] pending_msgs full for frozen tid={} (caller={}); dropping",
+                        target_id, caller_id
+                    );
+                    // Return Err(()) so the syscall layer maps this to TryAgain.
+                    return Err(());
+                }
+                // SAFETY: msg_ptr is a user-space pointer valid for this syscall's
+                // duration (SAS: single address space, caller is in mid-syscall so
+                // its stack is alive).  We copy immediately to an owned buffer so
+                // the bytes survive after this stack frame and the caller's
+                // execution resumes.
+                let bytes: alloc::vec::Vec<u8> = unsafe {
+                    core::slice::from_raw_parts(msg_ptr as *const u8, msg_len).to_vec()
+                };
+                let tick = crate::task::system_ticks() as u64;
+                target.pending_msgs.push(tcb::PendingMsg {
+                    sender_tid: caller_id,
+                    data: bytes.into_boxed_slice(),
+                    enqueued_tick: tick,
+                });
+                log::debug!(
+                    "[hotswap] queued msg ({} bytes) from tid={} to frozen tid={}",
+                    msg_len, caller_id, target_id
+                );
+                // Return Ok(0): immediate "delivery" from caller's perspective;
+                // do NOT put caller in Sending state.
+                return Ok(0);
+            }
+        }
+
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
             match target.state {
                 TaskState::Recv {

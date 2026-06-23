@@ -99,6 +99,10 @@ pub enum ViSyscall {
     /// ABI: a0 = op (0=set sprite, 1=move), a1 = data_ptr (op=0: 64×64 BGRA sprite),
     ///      a2 = xy ((x<<16)|y), a3 = hot ((hot_x<<16)|hot_y, op=0 only).
     GpuCursor = 301,
+    /// Query the VirtIO GPU's current scanout resolution.
+    /// ABI: no args → returns (width as u32) << 32 | (height as u32).
+    /// Falls back to (1280, 800) if GPU not yet initialized.
+    GpuGetResolution = 302,
 
     // === Network ===
     /// Transmit one Ethernet frame through the kernel VirtIO NIC.
@@ -247,6 +251,10 @@ pub enum ViSyscall {
     /// Live-replace a running Cell without message loss.
     /// ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.
     HotSwap = 400,
+    /// Signal to the kernel that this cell has finished deserializing state and
+    /// is ready to receive IPC. Called by the new cell during hot-swap Step 4.
+    /// ABI: (no args) → 0 on success.
+    HotSwapReady = 401,
     /// Stash a Cell's serialized state in the kernel under `key`, so a
     /// replacement instance can recover it across a hot-swap / respawn.
     /// ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes stored.
@@ -254,6 +262,10 @@ pub enum ViSyscall {
     /// Restore previously stashed state for `key` into the caller's buffer.
     /// ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes written (0 if none).
     StateRestore = 411,
+    /// Delete the stash entry for `key`, freeing its slot.
+    /// Call after a successful `StateRestore` to release kernel memory.
+    /// ABI: a0 = key → 0 on success (no-op when key is absent).
+    StateStashClear = 412,
 
     // === Unknown ===
     Unknown = 9999,
@@ -410,16 +422,19 @@ impl ViSyscall {
             Self::Seek          => Some(23),
             Self::FileOp        => Some(24),
             Self::GetTime       => Some(25),
-            Self::GpuFlush      => Some(26),
-            Self::GpuCursor     => Some(43),
+            Self::GpuFlush         => Some(26),
+            Self::GpuCursor        => Some(43),
+            Self::GpuGetResolution => Some(44),
             Self::NetTx         => Some(27),
             Self::NetRx         => Some(28),
             Self::RecvTimeout   => Some(29),
             Self::SendGather    => Some(30),
             Self::RecvScatter   => Some(31),
-            Self::HotSwap       => Some(32),
-            Self::StateStash    => Some(33),
-            Self::StateRestore  => Some(34),
+            Self::HotSwap | Self::HotSwapReady => Some(32),
+            Self::StateStash      => Some(33),
+            Self::StateRestore    => Some(34),
+            // StateStashClear: same allowlist bit as StateRestore (both are stash housekeeping).
+            Self::StateStashClear => Some(34),
             Self::Exec          => Some(35),
             // Snapshot: privileged warm-boot operation; reuses HotSwap bit (SpawnCap required).
             Self::Snapshot      => Some(32),
@@ -533,11 +548,14 @@ impl From<usize> for ViSyscall {
             233 => ViSyscall::GrantDma,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
+            302 => ViSyscall::GpuGetResolution,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,
             400 => ViSyscall::HotSwap,
+            401 => ViSyscall::HotSwapReady,
             410 => ViSyscall::StateStash,
             411 => ViSyscall::StateRestore,
+            412 => ViSyscall::StateStashClear,
             _ => ViSyscall::Unknown,
         }
     }
@@ -567,6 +585,9 @@ pub mod service {
     pub const CONFIG: u16 = 4;
     /// Display compositor service (`/bin/compositor`).
     pub const COMPOSITOR: u16 = 5;
+    /// Hot-swap demo cell — used by the hotswap integration demo only.
+    /// Not a production service; registered at demo spawn time.
+    pub const HOTSWAP_DEMO: u16 = 7;
 }
 
 /// Arguments for SpawnFromMem syscall.

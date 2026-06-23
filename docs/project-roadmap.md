@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-21 (Added §First Real App = **Hypha** — native Tier-1 AI agent Cell chosen as the first real app + forcing function for the Application Platform Gaps; P0 `llm-gateway` started. Plan: .agents/260621-1433-hypha-ai-agent/. · Earlier 2026-06-21: §G Security Platform expanded with TWO deep dives: hardware-isolation — CFI/MPK-PKS/WorldGuard-Smmtt/IOMMU-IOPMP/confidential-computing + 🔴 IOMMU-passthrough DMA gap; and §G.2 permission-model + attestation — parameterized caps/delegation/revocation/operator-policy/DICE/OpenTitan. See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-06-22 (Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). · Earlier 2026-06-21: §G Security Platform expanded with TWO deep dives: hardware-isolation — CFI/MPK-PKS/WorldGuard-Smmtt/IOMMU-IOPMP/confidential-computing + 🔴 IOMMU-passthrough DMA gap [NOW FIXED]; and §G.2 permission-model + attestation — parameterized caps/delegation/revocation/operator-policy/DICE/OpenTitan. See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
 
 ---
 
@@ -80,7 +80,7 @@ Cellos ships in two product stages defined by target hardware. The mapping princ
 | 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-06-07 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); 812 LOC; RPi4/VisionFive2 ready | **G1** |
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
 | 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
-| Hot migration / zero-downtime | M4.1 | 📋 | G2 |
+| Hot migration / zero-downtime | M4.1 | ✅ COMPLETE 2026-06-23 — 5-step hotswap protocol with TaskState::Frozen, ViStateTransfer trait, IPC queue preservation, HotSwapReady(401)/StateStashClear(412) syscalls, 9 unit tests, hotswap-demo v1/v2 cells | G2 |
 | 🆕 x86_64 full bring-up | ext. M1.3 | ✅ COMPLETE (2026-06-13) — APIC, HPET/TSC, real MMU, VirtIO, PL011 RX; 5/5 QEMU integration tests pass; syscall exit path fixed | **G2** |
 | VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
 | Full utility suite (grep/sed/awk/top/ps…) | M3.2 full | 📋 | G2 |
@@ -311,13 +311,8 @@ Layer 3 — Silo / VM (Stage-2 hw)    → Key/VM isolation from kernel    [DONE,
 > **Memory-safety needs 3 axes, not 1.** The original list (MTE/MPK/PMP) is all *spatial*. Forward-edge **CFI**
 > and **DMA isolation** are equally load-bearing — and CFI is a *prerequisite* for MPK (see CFI item below).
 
-**🔴 CRITICAL gap (already in code):**
-- 📋 **DMA isolation — IOMMU is in passthrough mode** `[G1-hw / G2]` — Track B shipped IOMMU/VT-d as `DDTP MODE=1`
-  bare passthrough (IOVA==PA) = **zero DMA isolation**. In SAS the Cell *is* the driver: a Cell holding a
-  DMA-capable peripheral can read/write all physical memory with no `unsafe`. **MMIO ownership ≠ DMA
-  authorization** — track DMA capability separately. Work: IOMMU → translate mode + per-device IOVA→PA tables;
-  `sys_grant_dma(device, phys, size)`; RISC-V **IOPMP** for on-chip DMA engines that bypass the SMMU. Must land
-  before any Cell gets a real DMA peripheral on hardware. (Thunderclap NDSS'19 bypassed *enabled* IOMMUs.)
+**🟢 IOMMU DMA isolation (previously 🔴 CRITICAL gap — NOW FIXED):**
+- ✅ **Per-Cell DMA isolation (2026-06-22)** `[G1-hw / G2]` — IOMMU upgraded from bare passthrough (`DDTP MODE=1`, IOVA==PA, zero DMA isolation) to per-Cell translate mode. **RISC-V**: 3-level DDT (MODE=3LVL), per-Cell Sv39 domains, unique PSCIDs, PSCID free-list, IOTINVAL.VMA/IOFENCE.C/IODIR.INVAL_DDT. **x86**: per-Cell VtdSlpt + DID, ECAP.IRO-computed IOTLB offsets, PSI/DSI IOTLB flush, context-cache DSI invalidation. **Cell exit**: `cleanup_cell()` in Exit/ForceExit/watchdog paths, IOFENCE/IVT flush before frame reclaim. **Capability**: new `sys_grant_dma(233)` syscall (BDF ownership, DMA quota = 1× memory quota, page alignment). Kernel enforces DMA quota via `can_map_dma()` + `record_dma_mapped/unmapped()`. Zero DMA attack surface — peripherals pinned to kernel domain; user Driver Cells request authorization via syscall. See docs/research/research-hardware-isolation.md for closure of the Thunderclap gap. NIC/NVMe still kernel-local; userspace Driver Cells (future) use syscall. Both arches boots clean; syscall ABI tests pass. **Hardware isolation research gap CLOSED.**
 
 **Backlog items:**
 

@@ -94,6 +94,37 @@ pub enum AppEvent {
         /// Why the shutdown is happening.
         reason: ShutdownReason,
     },
+
+    // ── Hot-swap lifecycle events (Phase 20) ─────────────────────────────────
+
+    /// Kernel-sent signal to the OLD cell during Step 2 of a hot-swap sequence.
+    ///
+    /// The cell must serialize its state, stash it under `swap_id` as the key
+    /// via [`ostd::syscall::sys_state_stash`], then yield or exit.  The kernel
+    /// polls the stash; once the bytes appear the swap proceeds to Step 3.
+    ///
+    /// Default arm: cells that do not implement hot-swap state transfer may
+    /// ignore this event — the swap continues with an empty stash (no state restored).
+    Snapshot {
+        /// Monotonically increasing swap identifier assigned by the kernel orchestrator.
+        /// Must be used as the stash key so the replacement instance can recover it.
+        swap_id: u64,
+    },
+
+    /// Kernel-sent signal to the NEW cell during Step 4 of a hot-swap sequence.
+    ///
+    /// The cell must restore its state from the stash under `key` via
+    /// [`ostd::syscall::sys_state_restore`], then call
+    /// [`ostd::syscall::sys_hotswap_ready`] to signal completion.
+    ///
+    /// `key` is a null-terminated UTF-8 string encoding the decimal `swap_id`,
+    /// held in a fixed 64-byte buffer.  Parse with
+    /// `core::str::from_utf8(&key[..key.iter().position(|&b| b==0).unwrap_or(64)])`
+    /// and convert via `str::parse::<u64>()`.
+    Restore {
+        /// Fixed-size stash key (null-terminated, decimal swap_id).
+        key: [u8; 64],
+    },
 }
 
 /// Execution context for a Cell application.
@@ -262,6 +293,21 @@ impl AppContext {
                     } else {
                         AppEvent::Shutdown
                     }
+                }
+                // Hot-swap Step 2: kernel asks this (old) cell to serialize state.
+                // Envelope: [0xAC, 0xF0, swap_id_le8 (8 bytes)]
+                0xF0 if buf.len() >= 10 => {
+                    let mut id_bytes = [0u8; 8];
+                    id_bytes.copy_from_slice(&buf[2..10]);
+                    let swap_id = u64::from_le_bytes(id_bytes);
+                    AppEvent::Snapshot { swap_id }
+                }
+                // Hot-swap Step 4: kernel asks this (new) cell to restore state.
+                // Envelope: [0xAC, 0xF1, key (64 bytes)]
+                0xF1 if buf.len() >= 66 => {
+                    let mut key = [0u8; 64];
+                    key.copy_from_slice(&buf[2..66]);
+                    AppEvent::Restore { key }
                 }
                 _ => AppEvent::Message { sender_tid, data: buf[2..].to_vec() },
             }

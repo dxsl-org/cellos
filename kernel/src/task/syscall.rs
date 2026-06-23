@@ -537,6 +537,8 @@ pub enum Syscall {
     CapRevoke { target_tid: usize, cap_mask: u32 },
     /// 301: GpuCursor — set sprite (op=0) or move (op=1) the VirtIO GPU hardware cursor.
     GpuCursor { op: usize, data_ptr: usize, xy: usize, hot: usize },
+    /// 302: GpuGetResolution — return current GPU scanout (width, height) packed as (w<<32)|h.
+    GpuGetResolution,
     /// 310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.
     NetTx { frame_ptr: usize, frame_len: usize },
     /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
@@ -545,8 +547,13 @@ pub enum Syscall {
     StateStash { key: usize, buf_ptr: usize, buf_len: usize },
     /// 411: StateRestore — recover stashed state for `key` into the buffer.
     StateRestore { key: usize, buf_ptr: usize, buf_len: usize },
+    /// 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
+    StateStashClear { key: usize },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
+    /// 401: HotSwapReady — signal that the new cell has finished deserializing
+    /// state and is ready to receive IPC.  No arguments.
+    HotSwapReady,
     /// 420: Snapshot — serialize all allocated physical frames to disk for warm boot.
     Snapshot,
     /// 500: BlkRead — read one 512-byte sector from the VirtIO block device.
@@ -656,15 +663,18 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::Seek { .. }          => V::Seek,
         Syscall::FileOp { .. }        => V::FileOp,
         Syscall::GetTime { .. }       => V::GetTime,
-        Syscall::GpuFlush { .. }      => V::GpuFlush,
-        Syscall::AudioPlay { .. }     => V::AudioPlay,
-        Syscall::GpuCursor { .. }     => V::GpuCursor,
+        Syscall::GpuFlush { .. }         => V::GpuFlush,
+        Syscall::AudioPlay { .. }        => V::AudioPlay,
+        Syscall::GpuCursor { .. }        => V::GpuCursor,
+        Syscall::GpuGetResolution        => V::GpuGetResolution,
         Syscall::NetTx { .. }         => V::NetTx,
         Syscall::NetRx { .. }         => V::NetRx,
         Syscall::HotSwap { .. }       => V::HotSwap,
+        Syscall::HotSwapReady         => V::HotSwapReady,
         Syscall::Snapshot             => V::Snapshot,
-        Syscall::StateStash { .. }    => V::StateStash,
-        Syscall::StateRestore { .. }  => V::StateRestore,
+        Syscall::StateStash { .. }      => V::StateStash,
+        Syscall::StateRestore { .. }   => V::StateRestore,
+        Syscall::StateStashClear { .. } => V::StateStashClear,
         Syscall::Exec { .. }          => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
         Syscall::Heartbeat { .. }     => V::Heartbeat,
@@ -781,6 +791,51 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     }
                 }
             }
+
+            // Hot-swap pending-message drain — guaranteed delivery path.
+            //
+            // The Step 5 drain in hotswap.rs tries to deliver buffered messages via
+            // ipc_send, which only succeeds when the new cell is already in TaskState::Recv.
+            // But the new cell calls sys_hotswap_ready from inside its Restore handler and
+            // hasn't re-entered sys_recv yet at that moment, so the Step 5 drain races.
+            //
+            // This path is the guaranteed fallback: when the new cell finally calls
+            // sys_recv for the first time (returning from the Restore handler through its
+            // app_entry loop), any messages that slipped through Step 5 are delivered here
+            // before blocking.  FIFO order matches the original sender queue order.
+            //
+            // Invariants:
+            // - Lock is held for the entire drain + delivery so no concurrent send can
+            //   observe a partially-drained queue.
+            // - We copy from msg.data (an owned Box<[u8]>) before releasing the lock,
+            //   avoiding any lifetime dependency on the task struct.
+            // - current_caller is set so the cell sees the original sender's TID, not
+            //   the hotswap orchestrator's TID, preserving the IPC identity contract.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    if !t.pending_msgs.is_empty() {
+                        let msg = t.pending_msgs.remove(0);
+                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        if copy_len > 0
+                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
+                        {
+                            // SAFETY: buf_ptr is the caller's recv buffer, validated above;
+                            // msg.data is an owned heap allocation from the Frozen intercept;
+                            // both are exclusive at this point (cell is mid-syscall).
+                            unsafe {
+                                core::ptr::copy_nonoverlapping(
+                                    msg.data.as_ptr(),
+                                    buf_ptr as *mut u8,
+                                    copy_len,
+                                );
+                            }
+                        }
+                        t.current_caller = Some(msg.sender_tid);
+                        return Ok(msg.sender_tid);
+                    }
+                }
+            }
+
             let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
                 Ok(0) => {
@@ -1155,6 +1210,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
                     .unwrap_or(false);
                 if target_is_system {
+                    return Err(SyscallError::PermissionDenied);
+                }
+
+                // Gate 3: protect Frozen cells — they are mid-swap and cannot be killed
+                // by external actors; only the hotswap orchestrator may terminate them via
+                // the internal exit_task path after a successful swap (or rollback on failure).
+                let target_is_frozen = sched.tasks.get(&tid)
+                    .map(|t| matches!(t.state, TaskState::Frozen { .. }))
+                    .unwrap_or(false);
+                if target_is_frozen {
                     return Err(SyscallError::PermissionDenied);
                 }
 
@@ -2016,7 +2081,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             .copy_from_slice(&src[src_off..src_off + row_bytes]);
                     }
                 }
-                let _ = ctx.gpu.flush();
+                ctx.flush_rect(x as u32, y as u32, w, h);
                 Ok(0)
             } else {
                 Err(SyscallError::Unknown) // GPU not initialised
@@ -2049,6 +2114,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 _ => Err(SyscallError::InvalidInput),
             }
+        }
+        Syscall::GpuGetResolution => {
+            use crate::task::drivers::virtio_gpu::GPU_CONTEXT;
+            let (w, h) = GPU_CONTEXT.lock().as_ref()
+                .map(|c| (c.width, c.height))
+                .unwrap_or((1280, 800));
+            // Pack both dimensions into one usize: width in high 32 bits, height in low 32 bits.
+            Ok(((w as usize) << 32) | (h as usize))
         }
         Syscall::NetTx { frame_ptr, frame_len } => {
             if !caller_has_network(caller_id) {
@@ -2100,6 +2173,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             }
             Ok(crate::cell::state_stash::restore(key as u64, buf))
+        }
+        // 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
+        // No-op when the key is absent (idempotent). Returns 0 always.
+        Syscall::StateStashClear { key } => {
+            crate::cell::state_stash::remove(key as u64);
+            Ok(0)
         }
         Syscall::BlkFlush => {
             if !caller_has_block_io(caller_id) {
@@ -2201,8 +2280,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let path = core::str::from_utf8(path_bytes)
                 .map_err(|_| SyscallError::InvalidInput)?;
             let target = types::CellId(cell_id as u64);
-            crate::cell::hotswap::hotswap(target, path)
+            crate::cell::hotswap::hotswap(target, path, caller_id)
                 .map_err(|_| SyscallError::Unknown)
+        }
+
+        Syscall::HotSwapReady => {
+            // The new cell signals that it has finished deserializing state.
+            // Set the per-task flag; the hotswap orchestrator polls this.
+            // No SpawnCap required — only the new cell itself calls this,
+            // and only after receiving AppEvent::Restore from the kernel.
+            crate::cell::hotswap::set_task_hotswap_ready(caller_id);
+            Ok(0)
         }
 
         Syscall::Snapshot => {
@@ -2588,15 +2676,18 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::Seek          => Syscall::Seek { fd: a0, offset: a1 as isize, whence: a2 },
         ViSyscall::FileOp        => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
         ViSyscall::GetTime       => Syscall::GetTime { op: a0 },
-        ViSyscall::GpuFlush      => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: a3 },
-        ViSyscall::AudioPlay     => Syscall::AudioPlay { buf_ptr: a0, buf_len: a1 },
-        ViSyscall::CapRevoke     => Syscall::CapRevoke { target_tid: a0, cap_mask: a1 as u32 },
-        ViSyscall::GpuCursor     => Syscall::GpuCursor { op: a0, data_ptr: a1, xy: a2, hot: a3 },
+        ViSyscall::GpuFlush         => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: a3 },
+        ViSyscall::AudioPlay        => Syscall::AudioPlay { buf_ptr: a0, buf_len: a1 },
+        ViSyscall::CapRevoke        => Syscall::CapRevoke { target_tid: a0, cap_mask: a1 as u32 },
+        ViSyscall::GpuCursor        => Syscall::GpuCursor { op: a0, data_ptr: a1, xy: a2, hot: a3 },
+        ViSyscall::GpuGetResolution => Syscall::GpuGetResolution,
         ViSyscall::NetTx         => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
         ViSyscall::NetRx         => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
-        ViSyscall::StateStash    => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::StateRestore  => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::StateStash      => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::StateRestore    => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
+        ViSyscall::StateStashClear => Syscall::StateStashClear { key: a0 },
         ViSyscall::HotSwap       => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
+        ViSyscall::HotSwapReady  => Syscall::HotSwapReady,
         ViSyscall::Snapshot      => Syscall::Snapshot,
         ViSyscall::GrantAlloc    => Syscall::GrantAlloc { size: a0 },
         ViSyscall::GrantShare    => Syscall::GrantShare { grant_id: a0, target_cell: a1, perm: a2 },

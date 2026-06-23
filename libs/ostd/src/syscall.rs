@@ -791,6 +791,17 @@ pub fn sys_hotswap(cell_id: usize, new_elf_path: &str) -> SyscallResult {
     if ret > 0 { SyscallResult::Ok(ret as usize) } else { SyscallResult::Err(SyscallError::Unknown) }
 }
 
+/// Signal to the kernel that this cell has finished deserializing hot-swap state
+/// and is ready to receive IPC from the service registry.
+///
+/// Call this at the end of an [`AppEvent::Restore`] handler, after
+/// [`sys_state_restore`] completes successfully.  The hotswap orchestrator is
+/// blocked waiting for this signal; calling it unblocks Step 5 (unfreeze).
+pub fn sys_hotswap_ready() {
+    // SAFETY: no arguments; kernel sets hotswap_ready flag on the calling task.
+    unsafe { syscall(ViSyscall::HotSwapReady, 0, 0, 0, 0) };
+}
+
 /// Flush a rectangular region of pixels to the VirtIO GPU framebuffer.
 ///
 /// `pixels` must be `w * h * 4` bytes in BGRA8888 format.
@@ -854,6 +865,18 @@ pub fn sys_gpu_cursor(
     if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
 }
 
+/// Query the VirtIO GPU's current scanout resolution.
+///
+/// Returns `(width, height)` as reported by the GPU via `GET_DISPLAY_INFO`.
+/// Falls back to `(1280, 800)` if the GPU driver is not yet initialized.
+pub fn sys_get_resolution() -> (u32, u32) {
+    // SAFETY: no pointers or memory involved; pure register read from kernel GPU state.
+    let ret = unsafe { syscall(ViSyscall::GpuGetResolution, 0, 0, 0, 0) } as usize;
+    let w = (ret >> 32) as u32;
+    let h = (ret & 0xFFFF_FFFF) as u32;
+    if w == 0 || h == 0 { (1280, 800) } else { (w, h) }
+}
+
 /// Transmit one Ethernet frame through the kernel VirtIO NIC.
 ///
 /// `frame` must contain a complete Ethernet frame (the kernel prepends the
@@ -905,6 +928,16 @@ pub fn sys_state_restore(key: u64, buf: &mut [u8]) -> usize {
         syscall(ViSyscall::StateRestore, key as usize, buf.as_mut_ptr() as usize, buf.len(), 0)
     };
     if ret > 0 { ret as usize } else { 0 }
+}
+
+/// Delete the kernel stash entry for `key`, freeing its slot toward the MAX_ENTRIES cap.
+///
+/// Call this after a successful [`sys_state_restore`] to avoid accumulating stale entries.
+/// No-op when the key is absent — always safe to call.
+pub fn sys_state_stash_clear(key: u64) {
+    // SAFETY: pure register syscall — no memory pointers; the kernel removes the entry
+    // from its BTreeMap and drops the Vec<u8> (or no-ops when key is absent).
+    unsafe { syscall(ViSyscall::StateStashClear, key as usize, 0, 0, 0) };
 }
 
 /// Reserved state-stash slot used to hand a command line to a freshly spawned

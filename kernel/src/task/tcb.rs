@@ -1,12 +1,33 @@
 use crate::hal::arch::Context;
 use crate::hal::arch::ViTrapFrame;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-// use alloc::boxed::Box;
 // use alloc::sync::Arc;
 use types::*;
 
 use api::fs::{BoxFuture, FileResult};
+
+/// Maximum number of IPC messages buffered for a Frozen cell during hot-swap.
+///
+/// When a cell is mid-swap (state `Frozen`), incoming `sys_send` calls enqueue
+/// here instead of blocking the caller or returning an error.  If the buffer
+/// fills, additional senders receive `SyscallError::TryAgain` so they can
+/// back off.  Messages are drained to the new cell in Step 5 (UNFREEZE).
+pub const HOTSWAP_MSG_QUEUE_DEPTH: usize = 64;
+
+/// A message buffered for a `Frozen` cell during a hot-swap sequence.
+///
+/// Invariants:
+/// - `data` holds an owned copy of the original message bytes (Law 2).
+/// - `sender_tid` identifies the originating task; the new cell sees it as
+///   `current_caller` when it next calls `sys_recv`.
+/// - `enqueued_tick` is for diagnostics; not used for ordering.
+pub struct PendingMsg {
+    pub sender_tid: usize,
+    pub data: Box<[u8]>,
+    pub enqueued_tick: u64,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskState {
@@ -53,6 +74,18 @@ pub enum TaskState {
     WaitEvent {
         mask: u32,
         deadline: Option<u64>,
+    },
+    /// Cell is suspended during a hot-swap sequence identified by `swap_id`.
+    ///
+    /// Invariants while Frozen:
+    /// - NOT in any scheduler ready queue.
+    /// - Cannot be killed by external signal (returns `ViError::PermissionDenied`).
+    /// - Can only be terminated by the hotswap orchestrator via `exit_task` after a
+    ///   successful swap, or rolled back to `Ready` on failure.
+    /// - Incoming IPC is queued in `crate::cell::hotswap::FROZEN` registry instead
+    ///   of being delivered (Phase 02 will drain the queue; P01 stubs this).
+    Frozen {
+        swap_id: u64,
     },
 }
 
@@ -217,6 +250,20 @@ pub struct Task {
     /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
     /// (those arches use identity-mapped segments today).
     pub vma: crate::memory::vma::VmaList,
+
+    /// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
+    /// finished deserializing state and is ready to receive IPC.
+    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
+    pub hotswap_ready: bool,
+
+    /// IPC messages buffered while this task is in `TaskState::Frozen` (hot-swap).
+    ///
+    /// Callers that `sys_send` to a Frozen task have their message copied here
+    /// (owned buffer; Law 2) and return immediately with `Ok(0)` — they are NOT
+    /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
+    /// this queue to the new cell before the old cell is terminated.
+    /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
+    pub pending_msgs: Vec<PendingMsg>,
 }
 
 impl Task {
@@ -258,6 +305,8 @@ impl Task {
             rt_overrun_warned: false,
             heartbeat_deadline: None,
             vma: crate::memory::vma::VmaList::new(),
+            hotswap_ready: false,
+            pending_msgs: Vec::new(),
         }
     }
 

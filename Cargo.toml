@@ -102,6 +102,8 @@ members = [
     "cells/demos/viui-demo",
     "cells/demos/sdk-demo",
     "cells/demos/audio-demo",
+    "cells/demos/hotswap-demo-v1",
+    "cells/demos/hotswap-demo-v2",
 
     # Cells - Tests
     "cells/tests/bench",
@@ -132,6 +134,13 @@ authors = ["DXSL"]
 spin     = { version = "0.9",  default-features = false, features = ["spin_mutex"] }
 fontdue  = { version = "0.9",  default-features = false, features = ["hashbrown"] }
 vm-fdt   = { version = "0.3",  default-features = false, features = ["alloc"] }
+
+[patch.crates-io]
+# Vendored fork of virtio-drivers 0.7.5 with Cellos-local extensions:
+# - VirtIOGpu::flush_rect() — partial-rect DMA flush
+# - VirtIOGpu::read_events() / clear_events() — display hotplug event handling
+# Keep in sync with kernel/third_party/virtio_drivers/ on any upstream bump.
+virtio-drivers = { path = "kernel/third_party/virtio_drivers" }
 
 [profile.dev]
 panic = "abort"
