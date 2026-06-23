@@ -54,13 +54,19 @@ vergen-gitcl = { version = "1", default-features = false, features = ["build", "
 # G1 DEV posture: trust the dev fleet key so the dev-signed /POLICY.BIN baked into
 # VIFS1 verifies + loads. ⚠️ PRODUCTION must drop `dev-policy-key` from default and
 # provision the real fleet root key (see kernel/src/policy.rs FLEET_ROOT_PUBKEY).
-default = ["dev-policy-key"]
+default = ["dev-policy-key", "dev-signing-key"]
 # Trust the dev fleet key (scripts/sign-policy.py) as the policy root — dev/test
 # only, NEVER a release build. Without it the prod placeholder key is used.
 dev-policy-key = []
+# Trust the dev cell-signing key (scripts/sign-cell.py, seed 0x43*32) — dev/test only.
+# Without it the prod placeholder key (all-zero) is used, which fails every verify.
+dev-signing-key = []
 # Fleet-secure posture: an ABSENT or unlisted policy is fail-closed (deny all
 # grantable caps) instead of dev-permissive. Off in G1 (dev-permissive default).
 policy-required = []
+# Fleet-secure posture for cell signing: a cell with NO __ViCell_sig section is
+# denied at spawn (same as a tampered signature). Off in G1 (dev-permissive default).
+signing-required = []
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
 # Gated build flag for a headless maintenance image.
 maintenance-mode = []

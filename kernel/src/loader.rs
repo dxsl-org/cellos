@@ -88,6 +88,39 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     // Read ELF bytes from the early bootstrap table.
     let elf_bytes = early::EarlyLoader::read_file(path)?;
 
+    // ── Binary signature gate ─────────────────────────────────────────────────
+    // Verify the Ed25519 signature in __ViCell_sig before any ELF parsing or
+    // task creation. With `signing-required`, an absent signature is treated
+    // the same as an invalid one (fail-closed). In dev mode (default), an
+    // absent signature is permitted so unsigned dev cells keep working.
+    match crate::signing::extract_sig(&elf_bytes) {
+        Some(sig) => {
+            if !crate::signing::verify_cell(&elf_bytes, &sig) {
+                log::warn!("[loader] DENY {:?}: cell signature INVALID", path);
+                crate::audit::log_event(
+                    crate::audit::AuditEvent::CellSignatureFailed,
+                    &crate::audit::encode_u32x2(0, 0),
+                );
+                return Err(ViError::PermissionDenied);
+            }
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellSignatureVerified,
+                &crate::audit::encode_u32x2(0, 0),
+            );
+        }
+        None if crate::signing::signing_required() => {
+            log::warn!("[loader] DENY {:?}: no __ViCell_sig (signing-required)", path);
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellSignatureFailed,
+                &crate::audit::encode_u32x2(0, 0),
+            );
+            return Err(ViError::PermissionDenied);
+        }
+        None => {
+            // Dev mode: unsigned cell permitted.
+        }
+    }
+
     let elf_loader = ElfLoader;
 
     // Read capability manifest from `__ViCell_manifest` ELF section.

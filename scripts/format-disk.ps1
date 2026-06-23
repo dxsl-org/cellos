@@ -49,7 +49,7 @@ Set-Content -Path "$StagingDir\hostname" -Value "ViCell" -NoNewline -Encoding as
 
 # ----- Step 5: Populate /bin/ from build output -----
 Write-Host "[format-disk] Copying cell binaries to /bin/..."
-$cells = @("init", "config", "shell", "vfs", "hello", "echo", "cat", "ls", "lua")
+$cells = @("init", "config", "shell", "vfs", "hello", "echo", "cat", "ls", "lua", "hotswap-demo-v1", "hotswap-demo-v2")
 foreach ($name in $cells) {
     $src = "$BinDir\$name"
     if (Test-Path $src) {

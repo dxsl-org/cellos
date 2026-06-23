@@ -76,6 +76,12 @@ pub enum AuditEvent {
     /// `api::syscall::cap_mask` constants (bit0=block_io, bit1=network, bit2=spawn,
     /// bit3=hypervisor, bits8-15=mmio_devices, bits16-23=block_regions).
     CapRevoked = 20,
+    /// Cell binary signature verified at spawn (binary integrity gate).
+    /// Payload: `encode_u32x2(tid, 0)`.
+    CellSignatureVerified = 21,
+    /// Cell binary signature absent or invalid — spawn denied.
+    /// Payload: `encode_u32x2(tid, 0)`. Path is logged separately via `log::warn!`.
+    CellSignatureFailed = 22,
 }
 
 struct AuditRing {

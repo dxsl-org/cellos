@@ -15,6 +15,7 @@ pub mod audit;
 pub mod boot;
 pub mod cell;
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
+pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
 pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
 pub mod resource_registry;
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
@@ -483,6 +484,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("policy verify+parse self-test PASS (signed blob + tamper)");
         } else {
             log_info("policy verify+parse self-test FAIL");
+        }
+        // Cell binary signing self-test: known-good vector verifies + flipped
+        // payload is rejected. Runs before any spawn_from_path is called.
+        if crate::signing::self_test() {
+            log_info("cell signing self-test PASS");
+        } else {
+            log_info("cell signing self-test FAIL — cell signature gate unsafe");
         }
 
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
