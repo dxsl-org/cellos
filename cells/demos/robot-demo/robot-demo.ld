@@ -36,4 +36,8 @@ SECTIONS
     __ViCell_manifest : ALIGN(4096) {
         KEEP(*(__ViCell_manifest))
     }
+
+    __ViCell_cluster : ALIGN(8) {
+        KEEP(*(__ViCell_cluster))
+    }
 }

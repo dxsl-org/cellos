@@ -132,13 +132,14 @@ pub enum AppEvent {
 /// Owns the receive buffer and drives the IPC loop.  Create once in `main()` and
 /// call [`run`][AppContext::run] — it never returns unless the handler panics.
 ///
-/// Lazy service client accessors (`.vfs()`, `.net()`, `.input()`) initialize on
-/// first use and are re-used across handler invocations.
+/// Lazy service client accessors (`.vfs()`, `.net()`, `.input()`, `.cluster()`)
+/// initialize on first use and are re-used across handler invocations.
 pub struct AppContext {
     recv_buf: [u8; RECV_BUF_SIZE],
     vfs_client: Option<crate::clients::VfsClient>,
     net_client: Option<crate::clients::NetClient>,
     input_client: Option<crate::clients::InputClient>,
+    cluster_client: Option<crate::cluster::ClusterRef>,
 }
 
 impl AppContext {
@@ -149,6 +150,7 @@ impl AppContext {
             vfs_client: None,
             net_client: None,
             input_client: None,
+            cluster_client: None,
         }
     }
 
@@ -274,6 +276,14 @@ impl AppContext {
     /// Lazy accessor for the input service client.
     pub fn input(&mut self) -> &mut crate::clients::InputClient {
         self.input_client.get_or_insert_with(crate::clients::InputClient::new)
+    }
+
+    /// Lazy accessor for the cluster net-broker client.
+    ///
+    /// Returns `None` if no net-broker is running (single-node deployment).
+    /// Use [`cluster::ClusterRef::is_available`] to probe before sending.
+    pub fn cluster(&mut self) -> &mut crate::cluster::ClusterRef {
+        self.cluster_client.get_or_insert_with(crate::cluster::ClusterRef::new)
     }
 
     // ── Private ──────────────────────────────────────────────────────────────

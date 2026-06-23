@@ -61,4 +61,10 @@ SECTIONS
     __ViCell_manifest : ALIGN(4096) {
         KEEP(*(__ViCell_manifest))
     }
+
+    /* Cluster membership declaration (optional, 16 bytes).
+     * Absent in cells that do not call declare_cluster! — they default to Isolated. */
+    __ViCell_cluster : ALIGN(8) {
+        KEEP(*(__ViCell_cluster))
+    }
 }

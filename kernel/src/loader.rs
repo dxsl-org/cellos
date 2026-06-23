@@ -211,6 +211,27 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
         }
     }
 
+    // Read cluster membership from ELF section __ViCell_cluster.
+    // Layout: u8 mode, u8 pad[7], u64 cluster_id (LE) = 16 bytes.
+    // Absent section → Isolated mode (mode=0, cluster_id=0); backwards compatible.
+    {
+        let (mode, cid) = match ElfLoader.get_section(&elf_bytes, "__ViCell_cluster") {
+            Ok(bytes) if bytes.len() >= 16 => {
+                // SAFETY: bytes slice is valid data from the loaded ELF.
+                let mode = bytes[0];
+                let cid  = u64::from_le_bytes(bytes[8..16].try_into().expect("8-byte cluster_id"));
+                (mode, cid)
+            }
+            _ => (0u8, 0u64), // no section → Isolated, no cluster
+        };
+        if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+            if let Some(task) = sched.tasks.get_mut(&tid) {
+                task.cluster_mode = mode;
+                task.cluster_id   = cid;
+            }
+        }
+    }
+
     // Register per-cell memory quota (4 MiB default) using the real CellId.
     crate::memory::cell_quota::register(cell_id, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES);
 

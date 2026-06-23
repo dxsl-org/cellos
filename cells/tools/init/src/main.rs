@@ -57,14 +57,15 @@ pub extern "C" fn main() {
     // They are spawned after periph-demo in the unsupervised section below so
     // that periph-demo can complete its GPIO IRQ self-test before robot-demo
     // claims the PL061 MMIO region.
-    const NSVC: usize = 7;
+    const NSVC: usize = 8;
     let paths: [&str; NSVC] = [
         "/bin/vfs",
         "/bin/config",
         "/bin/input",
         "/bin/net",
         "/bin/compositor",
-        "/bin/silo",   // Security Silo — P-256 key isolation (Tier 3a)
+        "/bin/silo",       // Security Silo — P-256 key isolation (Tier 3a)
+        "/bin/net-broker", // Cluster net-broker — cross-machine p2p (spawned AFTER net)
         "/bin/shell",
     ];
     let mut tids: [Option<usize>; NSVC] = [None; NSVC];
@@ -79,6 +80,7 @@ pub extern "C" fn main() {
         Some(service::NET),
         Some(service::COMPOSITOR),
         Some(types::silo::SILO_SERVICE_ID), // SILO = 6
+        Some(service::NET_BROKER),          // NET_BROKER = 8
         None, // shell is not a registered service
     ];
 
@@ -92,6 +94,7 @@ pub extern "C" fn main() {
         Policy::Permanent, // net
         Policy::Permanent, // compositor
         Policy::Permanent, // silo — key service, must stay up
+        Policy::Permanent, // net-broker — cluster trust anchor, must stay up
         Policy::Transient, // shell: restart on crash, but a clean `exit` is final
     ];
     // Per-service restart-intensity state (sliding window).

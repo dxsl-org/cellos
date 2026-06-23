@@ -39,4 +39,8 @@ SECTIONS
     __ViCell_syscalls : ALIGN(8) {
         KEEP(*(__ViCell_syscalls))
     }
+
+    __ViCell_cluster : ALIGN(8) {
+        KEEP(*(__ViCell_cluster))
+    }
 }

@@ -588,6 +588,11 @@ pub mod service {
     /// Hot-swap demo cell — used by the hotswap integration demo only.
     /// Not a production service; registered at demo spawn time.
     pub const HOTSWAP_DEMO: u16 = 7;
+    /// Cluster net-broker — the userspace trust anchor for all cross-machine
+    /// communication (Noise KKpsk0 p2p, XChaCha20-Poly1305 gossip, RemoteServiceProxy).
+    /// Supervised by init; respawning re-registers under a new tid, so clients
+    /// must resolve via `sys_lookup_service(service::NET_BROKER)`.
+    pub const NET_BROKER: u16 = 8;
 }
 
 /// Arguments for SpawnFromMem syscall.

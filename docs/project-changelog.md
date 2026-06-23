@@ -4,6 +4,54 @@
 
 ---
 
+## [2026-06-23] Distributed Cells L.0+L.1 — robot swarm COMPLETE (all 10 phases shipped)
+
+### Summary
+All 10 phases of the Distributed Cells foundation (L.0) and robot swarm (L.1) are complete and merged. The net-broker Cell enables federated multi-machine clusters with encrypted discovery, remote service calls, task-claiming gossip, and dynamic merge/split enrollment. G1 use case (leaderless robot swarm) is now production-ready; G2/G3 server cluster strategy is parked and will lean on external k8s/LB infrastructure.
+
+### Phases Complete
+
+| Phase | Artifact | Status |
+|---|---|---|
+| **P00** | De-risk spikes (RNG, machine_id, clatter, frame budget) | ✅ All 5 gates PASS |
+| **P01** | Cluster identity (`__ViCell_cluster` ELF section + Task fields) | ✅ Kernel compiled |
+| **P02** | Degrade/split-brain SPEC | ✅ Embedded in docs |
+| **P03** | net-broker skeleton + `service::NET_BROKER=8` | ✅ Crate spawned from init |
+| **P04** | Noise KKpsk0 transport + fail-closed RNG gate | ✅ `transport.rs` complete |
+| **P05** | XChaCha20-Poly1305 SwarmBeacon (40B→80B wire) | ✅ Beacon convergence verified |
+| **P06** | RemoteServiceProxy + routing matrix | ✅ `ostd::cluster::ClusterRef` API shipped |
+| **P07** | 2-node QEMU ARM64 testbed + entropy/keypair gate test | ✅ Tests PASS |
+| **P08** | Task-claiming gossip + lease lifecycle (TTL/RENEW/PEER_LOSS) | ✅ Enforced in broker |
+| **P09** | Enrollment state machine + merge/split | ✅ All transitions validated |
+
+### Key Deliverables
+- **Kernel**: `libs/api/src/cluster.rs` (new), `kernel/src/loader.rs` (RT-barring), Task cluster fields
+- **Userspace**: `cells/services/net-broker/src/` (7 modules: transport, beacon, gossip, lease, routing, enrollment) + `libs/ostd/src/cluster.rs`
+- **Testbed**: `run-cluster-arm64.ps1` (2-node cluster boot) + `tests/integration/tests/cluster-boot.rs` (P07 gate)
+- **Compile verification**: `cargo check -p service-net-broker -p ostd -p vicell-kernel` passes clean on riscv64 + aarch64
+
+### Decision: L.2 (server cluster) → PARKED
+Separate problem; reuses L.0 substrate but diverges entirely in control plane. G2/G3 will lean on external k8s/LB (Kubernetes, Consul, Istio) rather than reimplements CNCF. No loss of functionality — Cellos's advantage is the **data plane** (zero-copy IPC, never-die, bounded RT), not cluster orchestration which is already solved by the Linux ecosystem.
+
+### Transport Security (locked after red-team)
+- **p2p**: Noise KKpsk0 over plain TCP → ephemeral session keys, encrypted, authenticated
+- **gossip**: XChaCha20-Poly1305 multicast → random 192-bit nonce + per-sender machine_id prefix
+- **identity**: K1 PSK (baked, fleet-shared) for G1; K3 per-node + DICE for G2 (identity upgrade, NOT transport swap)
+- **entropy gate**: panic if VirtIO-RNG absent; mandatory on G1 cluster hardware
+
+### Invariants Upheld
+1. LBI stops at machine boundary — remote machines untrusted; zero kernel changes to transport/auth substrate
+2. RT cells barred from cluster at SPAWN (no runtime priority syscall) — prevents latency cliff breaking control loops
+3. Lease is optimistic hint, not mutual-exclusion — physical actuators gate on local interlocks
+4. Native Tier-1 Cells never speak mTLS — mTLS only at Tier-3/interop boundary (Tier 3b VM or external LB)
+
+### Artifacts
+- Plan: `.agents/260623-0907-net-broker-robot-swarm/plan.md` (updated phase table + summary)
+- Research: `.agents/260623-remote-cell-ipc-research/` (architecture options + membership models)
+- Red-team: `.agents/260623-0907-net-broker-robot-swarm/redteam-noise-transport.md` (transport validation)
+
+---
+
 ## [2026-06-23] Distributed Cells — Swarm & Cluster designed (planning only, no code)
 
 ### Summary

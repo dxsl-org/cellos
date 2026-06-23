@@ -1,0 +1,21 @@
+[package]
+name = "service-net-broker"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+ostd = { path = "../../../libs/ostd" }
+api  = { path = "../../../libs/api" }
+
+# P04: Noise KKpsk0 p2p transport (clatter) — CELL-LEVEL DEPS, NOT Law 1
+# use-25519 pulls x25519-dalek; use-chacha20poly1305 + use-sha configure cipher/hash suite.
+# getrandom feature OFF: we supply a caller-provided BrokerRng (fail-closed entropy gate).
+clatter          = { version = "2.2", default-features = false, features = ["alloc", "use-25519", "use-chacha20poly1305", "use-sha"] }
+# chacha20poly1305 also used standalone for P05 XChaCha20-Poly1305 gossip beacon.
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+rand_core        = { version = "0.6",  default-features = false }
+rand_chacha      = { version = "0.3",  default-features = false }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }

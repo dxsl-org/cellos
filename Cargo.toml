@@ -62,6 +62,7 @@ members = [
     "cells/services/vfs",
     "cells/services/compositor",
     "cells/services/net",
+    "cells/services/net-broker",
     "cells/services/input",
     "cells/services/power",
     "cells/services/config",

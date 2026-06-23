@@ -63,8 +63,8 @@ Cellos ships in two product stages defined by target hardware. The mapping princ
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + Cellos-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (2026-06-16) — full SHT3x I2C + GPIO actuator + MQTT pipeline; `robot-demo-e2e` integration test passes on QEMU ARM64 in 9.83s | **G1** (graduation) |
-| 🆕 Distributed Cells — robot swarm (net-broker + merge/split + gossip) | *new* | 📋 DESIGNED (2026-06-23) — shared foundation + leaderless swarm; brainstorm GO; needs `/hc-plan`. See §L | **G1** |
-| 🆕 Distributed Cells — server cluster (control plane) | *new* | 📋 DESIGNED (2026-06-23) — separate problem, reuses foundation; defer; lean on external k8s/LB. See §L.2 | **G2/G3** |
+| 🆕 Distributed Cells L.0+L.1 — robot swarm (net-broker + merge/split + gossip) | *new* | ✅ COMPLETE (2026-06-23) — all 10 phases shipped; net-broker Cell, Noise KKpsk0 p2p, XChaCha20 gossip, remote service proxy, task-claiming lease, enrollment/merge/split; runs on 2-node QEMU ARM64 cluster. See §L.0 | **G1** |
+| Distributed Cells L.2 — server cluster control plane | *new* | 📋 PARKED (2026-06-23) — separate problem; reuses L.0 foundation; lean on external k8s/LB. See §L.2 | **G2/G3** |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
 | WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
 | WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |

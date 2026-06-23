@@ -1630,6 +1630,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     crate::cell::state_stash::stash(personal_key, &argv_buf[..n]);
                 }
             }
+            // Enforce the RT-barring invariant: a cell that declares cluster membership
+            // (cluster_mode != Isolated) MUST NOT run at RealTime priority.
+            // `cluster_mode` was written by the loader's __ViCell_cluster read;
+            // `priority` comes from the syscall arg.  This is the ONLY enforcement
+            // point — ProcessInfo has no priority field so runtime self-declaration
+            // is impossible/forgeable.
+            const RT_PRIORITY: u8 = api::TaskPriority::RealTime as u8;
+            if priority == RT_PRIORITY {
+                let cluster_mode = crate::task::SCHEDULER.lock().as_ref()
+                    .and_then(|s| s.tasks.get(&task_id))
+                    .map(|t| t.cluster_mode)
+                    .unwrap_or(0);
+                if cluster_mode != 0 {
+                    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+                        sched.exit_task(task_id, 0xff);
+                    }
+                    return Err(SyscallError::PermissionDenied);
+                }
+            }
             // Set priority on the spawned task.
             if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
                 if let Some(task) = sched.tasks.get_mut(&task_id) {

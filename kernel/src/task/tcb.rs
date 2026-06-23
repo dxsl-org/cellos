@@ -226,6 +226,17 @@ pub struct Task {
     /// See `api::TaskPriority` for the three defined levels.
     pub priority: u8,
 
+    /// Cluster participation mode parsed from `__ViCell_cluster` ELF section.
+    /// `0` = Isolated (default, no section present).  See `api::cluster::ClusterMode`.
+    ///
+    /// Invariant: a task with `cluster_mode != 0` MUST have `priority != RealTime (2)`.
+    /// The `SpawnPinned` handler enforces this at spawn time.
+    pub cluster_mode: u8,
+
+    /// FNV-1a-64 cluster routing identifier from `__ViCell_cluster`.
+    /// `0` when `cluster_mode == Isolated`.  NOT a credential — routing only.
+    pub cluster_id: u64,
+
     /// Per-Cell syscall allowlist.  Each bit corresponds to a syscall via
     /// `api::ViSyscall::allowlist_bit()`.  `u64::MAX` = permit all (default,
     /// used when the Cell ELF does not embed a `__ViCell_syscalls` section).
@@ -314,6 +325,8 @@ impl Task {
             pku_key:        0,
             pku_value:      0,
             priority: api::TaskPriority::Normal as u8,
+            cluster_mode: 0,
+            cluster_id: 0,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             run_ticks: 0,
             deadline_misses: 0,
