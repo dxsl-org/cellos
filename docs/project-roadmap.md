@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-23 (Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-remote-cell-ipc-research/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-06-23 (§L "Transport security by tier" locked after Noise red-team: native Cell↔Cell uses Noise at EVERY stage (KKpsk0 p2p + XChaCha20 gossip + fail-closed RNG gate); G1→G2 is an IDENTITY upgrade (K1 PSK → K3 per-node + DICE via KMS Cell), NOT a transport swap — native Tier-1 Cells never speak mTLS; mTLS ONLY at the Tier-3/interop boundary, sourced from the Tier 3b Linux VM or external LB, never X.509 PKI in kernel. 10-phase plan (P00 spikes GATE) at .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Robot swarm transport switched to Noise_KKpsk/NNpsk — net-broker + ClusterAuth updated accordingly; TLS server G2/parked plan added at §C. · Earlier: Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-remote-cell-ipc-research/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
 
 ---
 
@@ -78,6 +78,7 @@ Cellos ships in two product stages defined by target hardware. The mapping princ
 | 🆕 **ViUI v1** (Elm model, FramebufferCanvas, GlyphAtlas, P01–P07) | new | ✅ Done 2026-06-08 — foundation only, design superseded | **G2 prep** |
 | 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | ✅ ALL 7 PHASES COMPLETE 2026-06-16 — Production-ready (P01: Overlay Widgets Dialog/DropDown/Toast; P02: Navigation StackNavigator/TabNavigator; P03: Charts LineChart/BarChart; P04: DSL build.rs vi-build crate; P05: Virtual ListView ListDataProvider; P06: FlexBox v2 wrap/gap/SpaceEvenly/Stretch/flex_shrink; P07: DSL Advanced Bindings @= two-way #= computed) | **G2** |
 | 🆕 **TLS 1.3 stack** `[shared, G1-priority]` | Phase TLS-01 | ✅ COMPLETE 2026-06-07 — Network service supports TLS 1.3 via sys_get_random(214), three TLS IPC opcodes (0x30/0x31/0x32), HTTPS demo verified | **G1** |
+| 📋 **TLS server-side accept** `[G2, optional]` | .agents/260623-1500-tls-server-accept | PARKED — plan complete, implement G2 when httpd needs to serve external HTTPS (curl/browser). Swarm uses Noise_KKpsk/NNpsk (separate plan). `tls-server` optional Cargo feature. | **G2** |
 | 🆕 **RTC / wall-clock** `[G1]` | new | ✅ COMPLETE 2026-06-07 — Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time | **G1** |
 | 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-06-07 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); 812 LOC; RPi4/VisionFive2 ready | **G1** |
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
@@ -216,6 +217,7 @@ showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
 
 ### C. Real-world connectivity `[G1 priority · shared]`
 - 🆕 **TLS 1.3 for the net stack** `[shared, G1-priority]` — ✅ COMPLETE (Phase TLS-01). Network service now supports TLS 1.3 client handshake via sys_get_random(214) entropy + three TLS IPC opcodes (0x30/0x31/0x32). HTTPS demo cell connects to example.com:443, validates cert chain, issues HTTP GET. Foundation for MQTT over TLS, secure device communication, IoT protocols.
+- 📋 **TLS server-side accept** `[G2, optional]` — PARKED. Full plan at [.agents/260623-1500-tls-server-accept/](.agents/260623-1500-tls-server-accept/). Needed when httpd must serve external HTTP clients (curl/browser) over HTTPS. Robot swarm uses Noise_KKpsk/NNpsk instead (separate plan). Dual-stack design: `tls-client` default (embedded-tls, keeps nano-robot working) + `tls-server` optional Cargo feature (rustls 0.23).
 - 🆕 **RTC / wall-clock time** `[G1]` — ✅ COMPLETE (2026-06-07). Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time with fallback to uptime. See [.agents/260607-1719-rtc-wall-clock/plan.md](.agents/260607-1719-rtc-wall-clock/plan.md)
 - 🆕 **Large-buffer IPC / scatter-gather** `[shared, G3 prerequisite]` — 📋 512-byte IPC buffer → 6000 round-trips for a 3MB tensor (unusable for video, file transfer, NPU inference). Recommended: `sys_grant_pages(tid, vaddr, len, perms)` — page-table remap, no memcpy, ~1K LOC. Extends existing Lease/GrantEntry pattern. **G3 cannot start without this.**
 
@@ -554,13 +556,29 @@ Porting simple games using the **C → Lua → Rust** progression is the officia
 
 **Decision: TÁCH thành 2 bài toán, XÂY CHUNG 1 nền móng.** Robot swarm (G1) và server cluster (G2/G3) chia sẻ cùng substrate nhưng phân nhánh hoàn toàn ở tầng điều phối — leaderless peer-to-peer vs hierarchical control plane. Build foundation once (G1 đẻ ra nó), then branch.
 
+#### Transport security — by tier (decision 2026-06-23, after Noise red-team)
+> Plan: [.agents/260623-0907-net-broker-robot-swarm/](../.agents/260623-0907-net-broker-robot-swarm/) · red-team: [redteam-noise-transport.md](../.agents/260623-0907-net-broker-robot-swarm/redteam-noise-transport.md).
+> **Key reframe: "Noise vs mTLS" is NOT a crypto-strength axis — they are cryptographic peers** (both = AEAD + ephemeral DH + mutual auth; Noise-with-static-keys is exactly what WireGuard runs at datacenter scale). The real axis is the **identity model** (shared PSK vs per-node identity + revocation + X.509 interop). What breaks at G2 is **K1 (one shared cluster PSK)**, NOT the cipher.
+
+| Layer | Transport | Identity | Why |
+|-------|-----------|----------|-----|
+| **Native Cell↔Cell, G1** (Tier 1) | **Noise KKpsk0** p2p / **XChaCha20-Poly1305** gossip | **K1** PSK (baked, fleet-shared) | homogeneous robot fleet, one operator, re-flash to rotate |
+| **Native Cell↔Cell, G2** (Tier 1) | **Same Noise core** (keep it) | **K3** per-node static key + DICE attestation (NOT K1) | third-party code + dynamic membership + 1-node-compromise must not = whole-cluster; revocation via KMS Cell (§G) |
+| **Interop / external / compliance** | **full mTLS (X.509)** | CA-rooted PKI | only where the *ecosystem* demands X.509 (k8s mesh, external LB, enterprise/audit) |
+
+**Hard rules:**
+- **Native Tier-1 Cells NEVER speak mTLS.** Noise is the lingua franca between Cellos Cells, at every stage. G1→G2 is an *identity* upgrade (K1→K3), NOT a transport swap — do NOT "rip out Noise, install mTLS" at G2.
+- **mTLS lives ONLY at the Tier-3/interop boundary**, and Cellos gets it from the **Tier 3b Linux VM** (rustls/OpenSSL run natively there) OR from an **external LB/service-mesh terminating mTLS** — **never build X.509 PKI inside the Cellos kernel.**
+- **Fail-closed entropy gate (all native crypto):** `GetRandom(214)` silently falls back to predictable xorshift32 when VirtIO-RNG is absent (`kernel/src/task/syscall.rs:2493-2504`) — broker MUST panic if real entropy is unavailable (mirror `tls/rng.rs:31-35`); VirtIO-RNG mandatory on G1 hardware.
+- **Multicast gossip is G1-only-ish:** cloud VPCs typically block multicast → at G2 the discovery model itself changes to a registry/control plane (part of L.2), so the XChaCha20-gossip layer does not simply carry forward.
+
 #### L.0 Shared foundation `[build once, G1 delivers]`
 > ⚠️ All cross-machine enforcement lives in a **userspace `net-broker` Cell** — zero kernel changes for the transport/auth substrate. LBI does NOT cross machine boundaries: remote machines are untrusted; the kernel sees only local IPC.
 
-- 📋 **`net-broker` Cell** — Tier-1 Rust Cell (greenfield, `cells/services/net-broker/`). mTLS connection pool keyed by `(machine_id, service_id)`; IPC routing loop; supervisor-restartable. Reuses existing UDP+IGMP multicast (`net/handlers.rs:235-316`) + TLS 1.3 (shipped). ~3-4 wk.
-- 📋 **3 cluster modes** — `Isolated` (default, intra-machine only) · `Public` (any Public cell, no auth) · `Private(id)` (same named cluster, HMAC-PSK). New additive `__ViCell_cluster` ELF section (follows `__ViCell_syscalls` pattern) + two new `Task` fields (`cluster_mode: u8`, `cluster_id: u64`). **No Law 1 trigger** — additive, no trait/ABI change.
-- 📋 **SwarmBeacon discovery** — 64-byte UDP multicast; proves cluster membership without revealing key (`beacon_hmac` unverifiable without PSK). ~1-2 wk.
-- 📋 **ClusterAuth** — mutual HMAC-SHA256 1.5-RTT challenge over TLS; Public→Public skips auth. `ClusterId: u64` = FNV-1a(name), routing-only (NEVER authn); `ClusterKey: [u8;32]` PSK, only broker holds it.
+- 📋 **`net-broker` Cell** — Tier-1 Rust Cell (greenfield, `cells/services/net-broker/`). Noise_KKpsk/NNpsk connection pool keyed by `(machine_id, service_id)`; IPC routing loop; supervisor-restartable. Reuses existing UDP+IGMP multicast (`net/handlers.rs:235-316`). ~3-4 wk.
+- 📋 **3 cluster modes** — `Isolated` (default, intra-machine only) · `Public` (any Public cell, no auth) · `Private(id)` (same named cluster, PSK-authenticated). New additive `__ViCell_cluster` ELF section (follows `__ViCell_syscalls` pattern) + two new `Task` fields (`cluster_mode: u8`, `cluster_id: u64`). RT-barring enforced at spawn (loader rejects RT-priority + cluster combo — no runtime priority syscall exists). **No Law 1 trigger** — additive, no trait/ABI change.
+- 📋 **SwarmBeacon discovery** — UDP multicast; proves cluster membership without revealing key (AEAD Poly1305 tag unverifiable without PSK). ~1-2 wk.
+- 📋 **ClusterAuth (hybrid, per-layer — see "Transport security by tier" above)** — p2p = **Noise KKpsk0** (`clatter` crate, no_std, caller-RNG); gossip = **XChaCha20-Poly1305 + 192-bit random nonce + per-sender machine_id prefix**; **fail-closed RNG gate**. Public→Public skips auth. `ClusterId: u64` = FNV-1a(name), routing-only (NEVER authn); `ClusterKey: [u8;32]` PSK (K1), only broker holds it via VFS cap. Crypto crates = broker-cell `Cargo.toml`, NOT Law 1.
 - 📋 **RemoteServiceProxy** — mirror of `sys_lookup_service` shape but explicitly remote; lets a Cell use a remote service "as if local". ⚠️ Transparency (silent remote `sys_send`) is a **non-goal** — would force kernel routing. ~2 wk.
 
 Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · Private(A)→Private(B) ✗ · any→Isolated ✗.
@@ -577,7 +595,8 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 #### L.2 Server Cluster `[G2/G3 — separate problem, defer]`
 > Reuses the L.0 foundation but its coordination layer is a distinct project. **Do NOT reimplement etcd/Istio/CNCF** (wrong fight, enormous opportunity cost). Cellos is a great *node*; borrow the control plane.
 
-- 📋 **G2 early posture** — expose plain TCP/HTTP; horizontal scaling delegated to external proven infra (k8s/L4 LB). Document: "Cellos nodes scale behind standard external infrastructure; no native mesh."
+- 📋 **G2 transport/identity** — keep the **Noise core** from L.0 for native Cell↔Cell; upgrade identity **K1 PSK → K3 per-node static key + DICE attestation** (revocation via KMS Cell, §G). NOT a transport swap. **mTLS only at the interop boundary**, sourced from the Tier 3b Linux VM or an external LB — never X.509 PKI in the kernel (see "Transport security by tier" above).
+- 📋 **G2 early posture** — expose plain TCP/HTTP; horizontal scaling delegated to external proven infra (k8s/L4 LB). Document: "Cellos nodes scale behind standard external infrastructure; no native mesh." Discovery shifts from multicast beacon → registry/control plane (cloud VPCs block multicast).
 - 📋 **Native control plane (G3, on-demand)** — only when a real customer needs it. Build *thin* — Cells already supply discovery/health/auth, so a Cellos control plane is far lighter than k8s. Load balancing across replicas + health routing + service replication. Consensus (the genuinely hard part) decided then, hardware/customer-informed.
 
 #### L.3 Orchestrator — re-specified `[STOP-as-stated → split in two]`
@@ -586,7 +605,7 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 - 📋 **(a) Local kernel coordinator** `[local-only, NEVER network-reachable]` — extend the *existing* kernel supervisor + `service_registry.rs` with a bounded local coordination API. This is what already exists (NotifyOnExit auto-restart, HotSwap, StateStash) — formalize it. Needs `/hc-spec` for the precise TCB-touching API boundary BEFORE any plan.
 - 📋 **(b) Unprivileged Cluster Agent Cell** — participates in the cluster via `net-broker`; has NO special kernel syscalls. Talks to (a) over ordinary IPC. The "forager" to (a)'s "sentry".
 
-**Sequencing:** L.0+L.1 first (one bounded `/hc-plan` — robot swarm net-broker + demo). `/hc-spec` L.3(a) API boundary separately (touches TCB). L.2 + L.3(b) deferred to G2/G3. **Build a 2-node ARM64 QEMU testbed and measure beacon convergence + HMAC handshake latency + degrade-to-standalone before committing the design.**
+**Sequencing:** L.0+L.1 first (one bounded `/hc-plan` — robot swarm net-broker + demo; **10-phase plan exists** at [.agents/260623-0907-net-broker-robot-swarm/](../.agents/260623-0907-net-broker-robot-swarm/), incl. P00 de-risk spikes that GATE the transport phases). `/hc-spec` L.3(a) API boundary separately (touches TCB). L.2 + L.3(b) deferred to G2/G3. **Build a 2-node ARM64 QEMU testbed and measure beacon convergence + Noise handshake latency + degrade-to-standalone before committing the design.**
 
 ---
 

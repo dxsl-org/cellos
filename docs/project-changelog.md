@@ -4,6 +4,31 @@
 
 ---
 
+## [2026-06-23] Distributed Cells — Swarm & Cluster designed (planning only, no code)
+
+### Summary
+Design + planning session for cross-machine Cell communication (roadmap §L, system-architecture "Cross-Machine Communication & Clustering"). No code shipped — outcome is a decided architecture + a 10-phase plan. Validated through brainstorm (`--debate --edges`) + two adversarial red-teams (architecture + Noise transport).
+
+### Decisions
+- **Split into 2 problems sharing 1 foundation.** G1 robot swarm (leaderless, small N, fixed hardware) and G2/G3 server cluster (hierarchical control plane) share the same substrate (net-broker Cell + 3 cluster modes + discovery + auth) but diverge entirely above it. G1 swarm = GO, sequence-first (it delivers the foundation as a by-product). G2/G3 cluster = separate, deferred; lean on external k8s/LB, do **not** reimplement CNCF.
+- **LBI stops at the machine boundary** — remote machines are untrusted; all cross-machine enforcement lives in a userspace `net-broker` Cell (zero kernel changes to the substrate). Zero-copy IPC → one-copy across machines.
+- **3 cluster modes** via a new additive `__ViCell_cluster` ELF section (no Law 1): `Isolated` (default) / `Public` / `Private(id)`. `ClusterId = FNV-1a-64(name)` is routing-only, never authn.
+- **Transport security by tier** (after Noise red-team): native Cell↔Cell uses **Noise** at every stage — KKpsk0 (p2p) + XChaCha20-Poly1305 (gossip) + fail-closed RNG gate. G1→G2 is an **identity** upgrade (K1 PSK → K3 per-node + DICE via KMS Cell), **not** a transport swap — native Tier-1 Cells never speak mTLS. **mTLS only at the Tier-3/interop boundary**, sourced from the Tier 3b Linux VM or external LB; never X.509 PKI in the kernel.
+- **Orchestrator (original ask) = STOP-as-stated → split in two**: a local-only kernel coordinator (never network-reachable) + an unprivileged cluster-agent Cell. "Network-reachable component that intervenes at kernel level" is a security inversion under SAS+LBI.
+
+### Red-team catches folded into the plan
+- `NET_BROKER` service ID must be **8**, not 6 (6 is `SILO_SERVICE_ID`).
+- **embedded-tls 0.19 is client-only** (no server role) → cluster transport uses Noise over plain TCP, not TLS.
+- **RT cells barred from cluster participation at spawn** (no runtime priority syscall exists) — latency cliff would break control loops.
+- **Lease ≠ strict mutual exclusion** in a partition → physical actuator safety must use a local interlock independent of the cluster lease; suspected partition → STOP.
+
+### Artifacts
+- Roadmap §L + "Transport security by tier" table; system-architecture "Cross-Machine Communication & Clustering" section.
+- Plans: `.agents/260623-0907-net-broker-robot-swarm/` (10 phases, P00 de-risk spikes GATE) · `.agents/260623-remote-cell-ipc-research/` (research) · `.agents/260623-1500-tls-server-accept/` (parked, edge-only fallback, re-anchored to §L).
+- **Law 1 status: 1/2 confirmed** (additive `libs/api` touches: new `cluster.rs`, `NET_BROKER=8` const, append-only enums). 2nd confirmation required when `/hc-cook` first touches `libs/api`.
+
+---
+
 ## [2026-06-23] Layer-2 Hardware Security Supplements — CFI + MTE + CET + PKU (all 5 phases complete)
 
 ### Summary

@@ -18,6 +18,12 @@ Cellos is **NOT** a traditional Linux-style OS. It uses:
 
 **Impact**: No expensive context switches, no TLB flushes, minimal privilege escalation overhead.
 
+### Scope Doctrine — SAS/LBI-first (decided 2026-06-23)
+
+The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer — it runs in a **Tier 3 Linux VM** (`apt install nginx/postgres/python`), except a narrow set of libraries linked into Tier 1/1b cells (crypto, codec, libm, sensor protocols). This keeps Cellos's identity intact and avoids re-implementing what Linux already does well.
+
+Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier 1/1b cell needs → **Tier 1b shim — port the library, not the feature**; (3) general Linux app / fork-based / POSIX → **Tier 3 VM**; (4) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, WASM Tier 2 + MicroPython dropped.
+
 ---
 
 ## System Layers
@@ -808,6 +814,48 @@ Layer 3 — Silo / VM (Stage-2 MMU)  → Key/VM isolation from kernel   [DONE, G
 - **MTE**: Probabilistic (1/16 tag collision); hardening only, not a strict safety boundary
 - **PKU**: PTE key tagging (bits [62:59]) deferred to G2; current implementation is wired but keys are zeroed
 - **RISC-V**: Zicfilp/Zimt/Smepmp extensions ratified 2024–2025 but no shipping silicon yet
+
+---
+
+## Cross-Machine Communication & Clustering (📋 PLANNED — see roadmap §L)
+
+> Designed 2026-06-23. Status: **planned, not implemented** (all 📋). Plans: [.agents/260623-0907-net-broker-robot-swarm/](../.agents/260623-0907-net-broker-robot-swarm/) (G1 swarm + foundation, 10 phases) · research in [.agents/260623-remote-cell-ipc-research/](../.agents/260623-remote-cell-ipc-research/). This section records the agreed architecture so it is not re-litigated; defer detail to the plans.
+
+### Foundational principle: LBI stops at the machine boundary
+
+Language-Based Isolation is the Rust type system within **one** compiler's address space (SAS). It proves nothing about a remote machine. Therefore **every remote machine is untrusted**, cross-machine messages must be explicitly authenticated, and the kernel only ever sees *local* IPC. All cross-machine logic lives in a **userspace `net-broker` Cell** — zero kernel changes to the transport/auth substrate. Intra-machine zero-copy IPC (Grant) degrades to **one-copy** across machines; every other Cell guarantee (supervisor restart, capability gating, owned buffers) survives.
+
+### Cluster membership: 3 modes
+
+A Cell declares its mode via a new additive `__ViCell_cluster` ELF section (follows the `__ViCell_syscalls` pattern; not a manifest/Law-1 change):
+
+- **`Isolated`** (default) — intra-machine IPC only; no cross-machine visibility.
+- **`Public`** — reachable by any Public cell on any machine, no auth.
+- **`Private(id)`** — cross-machine IPC only within the same named cluster (`ClusterId = FNV-1a-64(name)`, routing-only, **never** authentication).
+
+Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private(A)→Private(B) ✗ · any→Isolated ✗.
+
+### Transport security — by tier (decision 2026-06-23, after Noise red-team)
+
+**"Noise vs mTLS" is not a crypto-strength axis** — they are cryptographic peers (AEAD + ephemeral DH + mutual auth). The real axis is the **identity model**. What breaks at G2 is the shared PSK (K1), not the cipher.
+
+| Layer | Transport | Identity |
+|-------|-----------|----------|
+| **Native Cell↔Cell, G1** | **Noise KKpsk0** (p2p) + **XChaCha20-Poly1305** (gossip) | **K1** PSK (baked, fleet-shared) |
+| **Native Cell↔Cell, G2** | **same Noise core** (identity upgrade, not a transport swap) | **K3** per-node static key + DICE attestation; revocation via KMS Cell |
+| **Interop / external / HTTPS-serving** | **full mTLS (X.509)** — from Tier 3b Linux VM or external LB | CA-rooted PKI |
+
+**Hard rules (architectural invariants):**
+- Native Tier-1 Cells **never speak mTLS** — Noise is the lingua franca at every stage; G1→G2 is an *identity* upgrade (K1→K3), not a transport swap.
+- mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3b Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. (The parked [TLS-server-accept plan](../.agents/260623-1500-tls-server-accept/) is an edge-only fallback for nodes that cannot terminate TLS externally.)
+- **Fail-closed entropy gate**: `sys_get_random` falls back to predictable xorshift32 when VirtIO-RNG is absent — any native crypto must refuse to start without real entropy.
+- `ClusterId` is routing-only; the PSK/Noise handshake is the sole authenticator. Multicast gossip is ~G1-only (cloud VPCs block multicast → G2 discovery shifts to a registry).
+
+### Robot swarm (G1) vs server cluster (G2/G3)
+
+Same foundation, **opposite coordination semantics** → two separate problems:
+- **G1 robot swarm** — leaderless, small N, fixed hardware. "Merge" = federation (shared control surface + one primary), NOT literal SAS unification. Adds: task-claiming gossip, runtime enrollment, **degrade-to-standalone** (lose peers > X s → drop shared tasks, release leases; lease is an *optimistic hint* — physical actuator safety must use a local interlock independent of it). k8s's hard problems (scheduler, Raft consensus, autoscaling) **do not apply**.
+- **G2/G3 server cluster** — hierarchical control plane; deferred. Lean on external k8s/LB; **do not reimplement CNCF**. Cellos is a great *node*.
 
 ---
 
