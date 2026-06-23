@@ -14,6 +14,8 @@ use hal_arch_trait::Arch;
 #[cfg(target_arch = "aarch64")] pub mod rtc;
 pub mod stage2_regs; // non-AArch64 builds get ENOSYS stubs; no cfg gate needed
 #[cfg(target_arch = "aarch64")] pub mod timer;
+#[cfg(target_arch = "aarch64")] pub mod cfi;
+#[cfg(target_arch = "aarch64")] pub mod mte;
 #[cfg(target_arch = "aarch64")] pub mod trap;
 #[cfg(target_arch = "aarch64")] pub mod trap_el2;
 #[cfg(target_arch = "aarch64")] pub mod uart_pl011;
@@ -50,6 +52,11 @@ impl Arch for AArch64Arch {
     type Context = context::CpuContext;
 
     fn init(&self) {
+        // CFI + MTE: harden the execution environment before any trap handlers
+        // are installed.  Order: CFI first (SCTLR BT0/BT1 + PAC key), then MTE
+        // (SCTLR ATA/TCF bits), then GIC, timer, and finally trap vectors.
+        cfi::init();   // LAYER2-CFI-INIT
+        mte::init();   // LAYER2-MTE-INIT
         // GIC must precede timer: timer::init() enables SPI 30 in the distributor.
         gic::init();
         timer::init();

@@ -6,6 +6,7 @@ license = "MPL-2.0"
 
 [dependencies]
 hal-arch-trait  = { path = "../../traits/arch" }
+hal-mte         = { path = "../../traits/mte" }
 hal-paging      = { path = "../../traits/paging" }
 hal-hypervisor  = { path = "../../traits/hypervisor" }
 types = { path = "../../../libs/types" }
@@ -17,3 +18,7 @@ aarch64-cpu = "11"
 [features]
 default = []
 critical-section-impl = ["dep:critical-section"]
+# Enable BTI landing-pad enforcement in SCTLR_EL1 (requires -C target-feature=+bti).
+cfi-bti = []
+# Enable MTE2 tag-check faults in SCTLR_EL1 (requires ARMv8.5 hardware or TCG MTE model).
+mte = []

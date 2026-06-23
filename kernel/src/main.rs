@@ -26,6 +26,7 @@ pub mod memory;
 pub mod policy; // Signed operator policy (P5b) — headless consent
 pub mod sha256; // Self-contained SHA-256 for measurement
 pub mod snapshot;
+pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
@@ -148,6 +149,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         crate::hal::gdt::init();
         crate::hal::idt::init();
+        crate::hal::cet::init_kernel_cet(); // LAYER2-CET-INIT
+        crate::hal::pku::init();            // LAYER2-PKU-INIT (requires IBT, checked inside)
         crate::hal::syscall::init();
         // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
     }
@@ -491,6 +494,17 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("cell signing self-test PASS");
         } else {
             log_info("cell signing self-test FAIL — cell signature gate unsafe");
+        }
+
+        // Layer-2 hardware security self-tests (test-hooks feature only).
+        // MTE (aarch64) and PKU (x86_64) — each prints PASS or SKIP.
+        // Runs here: after all HW init, before scheduler + first cell spawn.
+        #[cfg(feature = "test-hooks")]
+        {
+            #[cfg(target_arch = "aarch64")]
+            crate::layer2_selftest::run_mte_selftest();
+            #[cfg(target_arch = "x86_64")]
+            crate::layer2_selftest::run_pku_selftest();
         }
 
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)

@@ -14,3 +14,12 @@ critical-section = { version = "1", optional = true, features = ["restore-state-
 [features]
 default = []
 critical-section-impl = ["dep:critical-section"]
+# CET-IBT: Indirect Branch Tracking enforcement (requires CPU support; detected at runtime).
+cet-ibt = []
+# CET shadow stack: kernel shadow stack (activates WRSS; requires CPU + cet-ibt at runtime).
+# Only enable when the paging module is updated to write-protect the shadow-stack page.
+cet-shadow-stack = []
+# PKU/MPK: per-key memory protection domains (x86_64 G2 roadmap; requires cet-ibt first).
+pku = []
+# PKS: supervisor protection keys (x86_64 G2 roadmap).
+pks = []

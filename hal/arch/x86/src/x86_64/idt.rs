@@ -64,6 +64,11 @@ pub fn init() {
             (*idt_ptr).e[vec as usize] = IdtEntry::new(ec_handler, 0);
         }
 
+        // Vector 21 (#CP — Control Protection Exception, from CET IBT / Shadow Stack).
+        // Registered unconditionally: the handler is only invoked if CET is enabled
+        // by cet::init_kernel_cet(), so having the entry present does no harm when CET is off.
+        (*idt_ptr).e[21] = IdtEntry::new(x86_64_cp_handler as *const () as u64, 0);
+
         // Vector 0x80: DPL=3 so user code can issue `int 0x80` (legacy, tolerated).
         (*idt_ptr).e[0x80] = IdtEntry::new(handler_addr, 3);
 
@@ -182,4 +187,51 @@ extern "x86-interrupt" fn x86_64_ec_handler(frame: InterruptFrame, error_code: u
     unsafe { vi_handle_page_fault(cr2 as usize, error_code); }
 
     let _ = frame; // frame rip/cs available for future per-vector dispatch
+}
+
+/// #CP — Control Protection Exception (vector 21, CET IBT / Shadow Stack violation).
+///
+/// Error code layout (Intel SDM Vol.3 §6.15 Table 6-9):
+///   bits [2:0]: violation type
+///     0x01 = near-RET shadow-stack token mismatch
+///     0x02 = far-RET / IRET shadow-stack token mismatch
+///     0x04 = missing ENDBR64 (IBT violation — most common during development)
+///     0x05 = RSTORSSP mismatch
+///     0x06 = SETSSBSY without matching SAVEPREVSSP
+///
+/// On a production kernel this fault is always fatal: an IBT violation means
+/// either a hijacked return address (exploit in progress) or an ENDBR-missing
+/// indirect call target (kernel bug). We halt immediately to prevent further
+/// damage and print a minimal diagnostic to COM1.
+#[no_mangle]
+extern "x86-interrupt" fn x86_64_cp_handler(frame: InterruptFrame, error_code: u64) {
+    use super::uart_16550::putchar;
+
+    let msg = b"[FAULT] #CP (CET) RIP=0x";
+    for &c in msg { putchar(c); }
+
+    // Print RIP as 16 hex digits (big-endian nibbles).
+    let rip = frame.rip;
+    for i in (0..16u32).rev() {
+        let nibble = ((rip >> (i * 4)) & 0xF) as u8;
+        putchar(if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 });
+    }
+
+    let ec_msg = b" ec=0x";
+    for &c in ec_msg { putchar(c); }
+
+    // Print low byte of error code as two hex digits.
+    let ec = (error_code & 0xFF) as u8;
+    let hi = ec >> 4;
+    let lo = ec & 0xF;
+    putchar(if hi < 10 { b'0' + hi } else { b'a' + hi - 10 });
+    putchar(if lo < 10 { b'0' + lo } else { b'a' + lo - 10 });
+    putchar(b'\n');
+
+    // Halt indefinitely — a #CP is always fatal in the kernel.
+    loop {
+        // SAFETY: hlt waits for the next interrupt; combined with cli (IF=0
+        // on fault entry) this spins forever, which is the desired halt.
+        unsafe { core::arch::asm!("hlt", options(nomem, nostack)); }
+    }
 }

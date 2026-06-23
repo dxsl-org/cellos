@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-23 (Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-06-23 (Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-remote-cell-ipc-research/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
 
 ---
 
@@ -63,6 +63,8 @@ Cellos ships in two product stages defined by target hardware. The mapping princ
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + Cellos-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (2026-06-16) — full SHT3x I2C + GPIO actuator + MQTT pipeline; `robot-demo-e2e` integration test passes on QEMU ARM64 in 9.83s | **G1** (graduation) |
+| 🆕 Distributed Cells — robot swarm (net-broker + merge/split + gossip) | *new* | 📋 DESIGNED (2026-06-23) — shared foundation + leaderless swarm; brainstorm GO; needs `/hc-plan`. See §L | **G1** |
+| 🆕 Distributed Cells — server cluster (control plane) | *new* | 📋 DESIGNED (2026-06-23) — separate problem, reuses foundation; defer; lean on external k8s/LB. See §L.2 | **G2/G3** |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
 | WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
 | WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |
@@ -314,12 +316,17 @@ Layer 3 — Silo / VM (Stage-2 hw)    → Key/VM isolation from kernel    [DONE,
 **🟢 IOMMU DMA isolation (previously 🔴 CRITICAL gap — NOW FIXED):**
 - ✅ **Per-Cell DMA isolation (2026-06-22)** `[G1-hw / G2]` — IOMMU upgraded from bare passthrough (`DDTP MODE=1`, IOVA==PA, zero DMA isolation) to per-Cell translate mode. **RISC-V**: 3-level DDT (MODE=3LVL), per-Cell Sv39 domains, unique PSCIDs, PSCID free-list, IOTINVAL.VMA/IOFENCE.C/IODIR.INVAL_DDT. **x86**: per-Cell VtdSlpt + DID, ECAP.IRO-computed IOTLB offsets, PSI/DSI IOTLB flush, context-cache DSI invalidation. **Cell exit**: `cleanup_cell()` in Exit/ForceExit/watchdog paths, IOFENCE/IVT flush before frame reclaim. **Capability**: new `sys_grant_dma(233)` syscall (BDF ownership, DMA quota = 1× memory quota, page alignment). Kernel enforces DMA quota via `can_map_dma()` + `record_dma_mapped/unmapped()`. Zero DMA attack surface — peripherals pinned to kernel domain; user Driver Cells request authorization via syscall. See docs/research/research-hardware-isolation.md for closure of the Thunderclap gap. NIC/NVMe still kernel-local; userspace Driver Cells (future) use syscall. Both arches boots clean; syscall ABI tests pass. **Hardware isolation research gap CLOSED.**
 
+**✅ Layer-2 Hardware Security Supplements — ALL 5 PHASES COMPLETE (2026-06-23)**
+- **P01 ARM64 BTI+PAC-RET** ✅ — SCTLR_EL1.BT0/BT1/APIAKEY_EL1 init, compiler flags `+bti,+paca,+pacg`, runtime detection via ID_AA64PFR1_EL1/ID_AA64ISAR1_EL1
+- **P02 ARM64 MTE** ✅ — ViMte trait, AArch64Mte impl (SCTLR_EL1.ATA/ATA0/TCF/TCF0), STGP tag writes, sync/async fault modes, RK3588 support
+- **P03 x86_64 CET-IBT** ✅ — CR4.CET + MSR_IA32_S_CET ENDBR_EN, ENDBR64 landing pads on all ring-3 stubs, #CP (IDT vec 21) handler
+- **P04 x86_64 PKU** ✅ — CR4.PKE, 3-key model (0=trusted/1=service/2=FFI), WRPKRU guards on iretq+sysretq, CET-IBT prerequisite enforced, PTE key tagging deferred to G2
+- **P05 Testing** ✅ — cfi-test cell, MTE/PKU/CET kernel self-tests, docs/specs/10-testing.md Layer-2 matrix, CI/CD feature-gates
+
 **Backlog items:**
 
 - 📋 **rustc TCB documentation** `[immediate]` — Document that rustc IS the Trusted Computing Base. Add to `docs/specs/00-context.md`. A compromised compiler bypasses all LBI guarantees — this must be explicit in threat model.
-- 📋 **Forward-edge CFI (BTI / CET-IBT)** `[G2, prerequisite for MPK]` — Spatial protection doesn't stop a corrupted indirect branch. PAC covers backward edge only; pair with **BTI** (ARM `+bti,+pac-ret`) / **CET IBT+Shadow Stack** (x86 `CONFIG_X86_KERNEL_IBT`) / **Zicfilp+Zicfiss** (RISC-V, ratified 2024, await silicon). ⚠️ **MPK is NOT a security boundary without CFI**: `WRPKRU` is unprivileged; a JOP gadget defeats all keys (ERIM / PKU-Pitfalls). Enable CFI *before* any MPK domain.
-- 📋 **ARM64 MTE (Memory Tagging Extension)** `[G2]` — Pointer tags detect use-after-free. Requires RK3588/ARMv8.5-A. HAL trait `ViMte::tag_region(vaddr, color)` + kernel integration. No virtualization — Tier 1. ⚠️ **Hardening only, not a boundary** — probabilistic (1/16) and defeated by speculative gadgets (TikTag 2024). Prior art: SPARC ADI (2015).
-- 📋 **x86 MPK/PKU + PKS** `[G2]` — Coarse **tier** domains (3 keys: kernel-trusted / service / app), NOT per-Cell (16-key hard limit → use tiers or libmpk multiplexing). `WRPKRU` ~20 cycle, no TLB flush. **PKS** (Intel Ice Lake+) protects kernel metadata (Cell Registry, Frame Allocator). AMD has no PKS → feature-gate. Requires CFI (above).
+- 📋 **PKU PTE key tagging (G2 follow-up)** `[G2]` — Loader fills PTE bits [62:59] with cell-assigned key during load; WRPKRU enforcement becomes active (currently PKU is wired but keys are all-zero, so enforcement is bypassed). Prerequisite: CET-IBT already enforced (P03 complete, addresses JOP gadget threat).
 - 📋 **RISC-V PMP / Smepmp** `[G1-ext / G2]` — Under `satp=Bare` (Cellos SAS), PMP writes need **no** `sfence.vma` → SAS-safe; cost is O(N) CSR writes/switch. Smepmp (ratified) adds M-mode self-protection (MML/MMWP). Per-Cell PMP for C-tier (Tock/Hubris dual-tier model: Rust Cells = no PMP, C-tier = PMP-gated).
 - 📋 **RISC-V WorldGuard / Smmtt** `[G2 future, watch]` — Beyond PMP, both isolate domains in one address space **without TLB flush**. **WorldGuard** (SiFive→RISC-V Int'l, QEMU 4/2025): 1 WID CSR write/switch, ≤32 worlds, propagates to bus fabric (covers DMA too). **Smmtt/Smsdid** (draft): per-SDID physical-page access control, SDID switch + MTT-fence (lighter than SATP). Design Cell scheduling + grant API to be SDID/WID-aware now. Available when SiFive P/E-series silicon ships.
 - 📋 **Confidential computing for Tier 3** `[G2/G3]` — TDX/SEV-SNP (x86), **ARM CCA/RME/GPT** (ARMv9.3, Fujitsu Monaka ~FY2027) protect against a *compromised kernel/hypervisor* — a threat LBI does NOT cover. Make the Tier 3 `VmHandle` ABI CC-neutral now so attested multi-tenant slots in without protocol redesign (extends the Silo "safe even if kernel compromised" principle).
@@ -539,6 +546,47 @@ Porting simple games using the **C → Lua → Rust** progression is the officia
    - **Phase 2 (Rust)**: Rewrite natively using ViUI v2 (Reactive Signal Tree).
 3. **Space Invaders (Advanced 2D)**
    - **Phase 1 (C/Rust)**: Tests handling of multiple concurrent objects, continuous input loops, and higher framerate rendering.
+
+### L. Distributed Cells — Swarm & Cluster `[G1 swarm · G2/G3 cluster]`
+
+> Added 2026-06-23 after a remote-IPC + swarm design session. Research: [.agents/260623-remote-cell-ipc-research/research-report.md](../.agents/260623-remote-cell-ipc-research/research-report.md) (remote IPC architecture options) · [cluster-membership-report.md](../.agents/260623-remote-cell-ipc-research/cluster-membership-report.md) (Public/Private/Isolated membership model). Brainstorm verdict: **A=GO (sequence first), B=separate problem, C=STOP-as-stated**.
+> **Core premise:** Cellos already has the *data plane* (Cell↔Cell discovery + health + auth + IPC) that k8s/Consul/Istio bolt onto Linux processes. Cross-machine = extend that plane, NOT clone CNCF. Zero-copy IPC degrades to one-copy across machines; every other Cell feature survives.
+
+**Decision: TÁCH thành 2 bài toán, XÂY CHUNG 1 nền móng.** Robot swarm (G1) và server cluster (G2/G3) chia sẻ cùng substrate nhưng phân nhánh hoàn toàn ở tầng điều phối — leaderless peer-to-peer vs hierarchical control plane. Build foundation once (G1 đẻ ra nó), then branch.
+
+#### L.0 Shared foundation `[build once, G1 delivers]`
+> ⚠️ All cross-machine enforcement lives in a **userspace `net-broker` Cell** — zero kernel changes for the transport/auth substrate. LBI does NOT cross machine boundaries: remote machines are untrusted; the kernel sees only local IPC.
+
+- 📋 **`net-broker` Cell** — Tier-1 Rust Cell (greenfield, `cells/services/net-broker/`). mTLS connection pool keyed by `(machine_id, service_id)`; IPC routing loop; supervisor-restartable. Reuses existing UDP+IGMP multicast (`net/handlers.rs:235-316`) + TLS 1.3 (shipped). ~3-4 wk.
+- 📋 **3 cluster modes** — `Isolated` (default, intra-machine only) · `Public` (any Public cell, no auth) · `Private(id)` (same named cluster, HMAC-PSK). New additive `__ViCell_cluster` ELF section (follows `__ViCell_syscalls` pattern) + two new `Task` fields (`cluster_mode: u8`, `cluster_id: u64`). **No Law 1 trigger** — additive, no trait/ABI change.
+- 📋 **SwarmBeacon discovery** — 64-byte UDP multicast; proves cluster membership without revealing key (`beacon_hmac` unverifiable without PSK). ~1-2 wk.
+- 📋 **ClusterAuth** — mutual HMAC-SHA256 1.5-RTT challenge over TLS; Public→Public skips auth. `ClusterId: u64` = FNV-1a(name), routing-only (NEVER authn); `ClusterKey: [u8;32]` PSK, only broker holds it.
+- 📋 **RemoteServiceProxy** — mirror of `sys_lookup_service` shape but explicitly remote; lets a Cell use a remote service "as if local". ⚠️ Transparency (silent remote `sys_send`) is a **non-goal** — would force kernel routing. ~2 wk.
+
+Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · Private(A)→Private(B) ✗ · any→Isolated ✗.
+
+#### L.1 Robot Swarm `[G1 — GO, sequence first]`
+> The differentiated, filmable story; building it delivers the entire L.0 foundation as a by-product. Bee/ant/coral model: leaderless, small N, fixed hardware, intermittent WiFi.
+
+- 📋 **Task-claiming gossip** — broadcast a task; whichever robot is idle/nearest claims it (lease-based). On existing multicast. ~2-3 wk. Replaces k8s scheduler (which is N/A: robots are fixed hardware, no migration).
+- 📋 **Runtime enrollment / merge-split** — two standalone robots join the same `Private` cluster at runtime (token-based join; static baked-PSK cannot merge in the field). "Merge into one robot" = **federation** (shared control surface, one primary), NOT literal SAS unification (physically impossible over WiFi). ~2 wk.
+- 📋 **Degrade-to-standalone (split-brain rule)** — `⚠️ SPEC ON PAPER FIRST.` The one genuinely hard distributed problem swarm cannot avoid. Rule: lose peers > X seconds → drop shared tasks, release leases, return to `Isolated`. Lightweight timeout + lease, NOT Raft consensus. ~1-2 wk.
+
+**k8s hard problems that DON'T apply to robot swarm:** scheduler/bin-packing (fixed hardware), Raft consensus (leaderless = eventually-consistent by design), autoscaling (robot count is physical). → Robot swarm is Cellos's home turf, a game k8s was never built to play.
+
+#### L.2 Server Cluster `[G2/G3 — separate problem, defer]`
+> Reuses the L.0 foundation but its coordination layer is a distinct project. **Do NOT reimplement etcd/Istio/CNCF** (wrong fight, enormous opportunity cost). Cellos is a great *node*; borrow the control plane.
+
+- 📋 **G2 early posture** — expose plain TCP/HTTP; horizontal scaling delegated to external proven infra (k8s/L4 LB). Document: "Cellos nodes scale behind standard external infrastructure; no native mesh."
+- 📋 **Native control plane (G3, on-demand)** — only when a real customer needs it. Build *thin* — Cells already supply discovery/health/auth, so a Cellos control plane is far lighter than k8s. Load balancing across replicas + health routing + service replication. Consensus (the genuinely hard part) decided then, hardware/customer-informed.
+
+#### L.3 Orchestrator — re-specified `[STOP-as-stated → split in two]`
+> ⚠️ "Userspace Cell that intervenes at kernel level + network-reachable" = **STOP**: a contradiction under SAS+LBI (rustc is the TCB), and *remote kernel control* is a catastrophic security inversion for an isolation OS. The brainstorm verdict: never make one component both kernel-privileged and cluster-reachable.
+
+- 📋 **(a) Local kernel coordinator** `[local-only, NEVER network-reachable]` — extend the *existing* kernel supervisor + `service_registry.rs` with a bounded local coordination API. This is what already exists (NotifyOnExit auto-restart, HotSwap, StateStash) — formalize it. Needs `/hc-spec` for the precise TCB-touching API boundary BEFORE any plan.
+- 📋 **(b) Unprivileged Cluster Agent Cell** — participates in the cluster via `net-broker`; has NO special kernel syscalls. Talks to (a) over ordinary IPC. The "forager" to (a)'s "sentry".
+
+**Sequencing:** L.0+L.1 first (one bounded `/hc-plan` — robot swarm net-broker + demo). `/hc-spec` L.3(a) API boundary separately (touches TCB). L.2 + L.3(b) deferred to G2/G3. **Build a 2-node ARM64 QEMU testbed and measure beacon convergence + HMAC handshake latency + degrade-to-standalone before committing the design.**
 
 ---
 

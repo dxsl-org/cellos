@@ -249,6 +249,24 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             granted.apply_to(task);
+
+            // x86_64 PKU: derive the protection-key domain from the granted caps.
+            // Trusted-core cells (block_io / network / spawn / hypervisor) get key 0
+            // (all-access); standard cells get key 1. Key 2 is reserved for Tier-1b
+            // C/FFI cells and will be assigned once the manifest carries a tier field.
+            // On non-x86_64 targets these fields default to 0 and are never consulted.
+            #[cfg(target_arch = "x86_64")]
+            {
+                let is_trusted = granted.block_io
+                    || granted.network
+                    || granted.spawn
+                    || granted.hypervisor;
+                // TODO(pku-ffi): derive key 2 from a future manifest tier field.
+                // Until then, all non-trusted cells use key 1 (standard domain).
+                let key: u8 = if is_trusted { 0 } else { 1 };
+                task.pku_key   = key;
+                task.pku_value = crate::hal::pku::pkru_for_key(key);
+            }
         }
     }
 

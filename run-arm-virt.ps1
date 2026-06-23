@@ -36,7 +36,14 @@ $kernel  = "target/$target/release/vicell-kernel"
 $disk    = "disk_arm_virt.img"
 
 Write-Host "Building aarch64 release kernel..."
-$env:RUSTFLAGS = "-C relocation-model=pic"
+# relocation-model=pic: kernel self-relocates at _start via GOT-indirect (la/ldr pseudo).
+# +bti,+paca,+pacg: emit BTI landing pads and PAC return-address signing.
+#   +bti  = BTI landing-pad nops at indirect-branch targets (ARMv8.5)
+#   +paca = PACIASP/AUTIASP for return-address signing (ARMv8.3 A-key, QARMA)
+#   +pacg = G-key variant (needed for complete codegen on some LLVM versions)
+# IMPORTANT: RUSTFLAGS env var REPLACES (not merges with) config.toml rustflags
+# for the same target, so all desired features must be listed together here.
+$env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
 cargo build --release -p vicell-kernel --target $target
 $env:RUSTFLAGS = $null
 

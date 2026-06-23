@@ -209,6 +209,19 @@ pub struct Task {
     /// (snapshot) have no bit — those ranges are kernel-only by construction.
     pub block_regions: u8,
 
+    /// x86_64 PKU protection key for this cell's ELF pages (0=trusted, 1=standard, 2=ffi).
+    /// On other architectures this field exists but is always 0 and never consulted.
+    /// Key assignment: 0 = trusted-core cells (block_io/network/spawn/hypervisor),
+    ///                 1 = standard Tier-1 Rust cells,
+    ///                 2 = Tier-1b C/FFI cells (mlibc, DOOM).
+    pub pku_key:   u8,
+
+    /// Precomputed PKRU register value for this cell's key domain.
+    /// Written to CPU_LOCAL.pku_value by the scheduler before ring-3 re-entry,
+    /// then loaded into PKRU by the asm exit paths (`__trap_exit` / `syscall_entry`).
+    /// Always 0 on non-x86_64 targets (and for trusted-core cells on x86_64).
+    pub pku_value: u32,
+
     /// Scheduling priority tier.  Higher value = higher priority.
     /// See `api::TaskPriority` for the three defined levels.
     pub priority: u8,
@@ -298,6 +311,8 @@ impl Task {
             hypervisor_cap: None,
             mmio_devices:   0,
             block_regions:  0,
+            pku_key:        0,
+            pku_value:      0,
             priority: api::TaskPriority::Normal as u8,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             run_ticks: 0,

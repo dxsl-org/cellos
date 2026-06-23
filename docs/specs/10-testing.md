@@ -136,3 +136,72 @@ cargo llvm-cov --target x86_64-unknown-linux-gnu -p types -p api --html
 
 For kernel coverage, use `scripts/measure-coverage.sh` (requires QEMU and
 instrumented kernel build).
+
+---
+
+## 6. Layer-2 Hardware Security Tests
+
+These tests prove each hardware enforcement feature **actually faults on
+violation**, not merely logs "enabled". A feature that logs "enabled" but
+allows an illegal access is NOT done.
+
+| Feature | Arch | Mechanism | Expected result | QEMU flag |
+|---------|------|-----------|-----------------|-----------|
+| BTI | aarch64 | `cfi-test` cell: indirect branch to non-BTI address | EC=0x0D synchronous fault | `-cpu max` |
+| PAC-RET | aarch64 | Boot log `CFI: PAC-RET enabled` | No fault on normal return | `-cpu max` |
+| MTE | aarch64 | Kernel self-test (tag/re-tag round-trip via STG/LDG) | `MTE-SELFTEST: PASS` | `-cpu max,+mte` |
+| CET-IBT | x86_64 | `cfi-test` cell: indirect call to non-ENDBR64 address | `#CP` fault (vector 21) | `-cpu max` |
+| PKU | x86_64 | Kernel self-test (PKRU value + RDPKRU verification) | `PKU-SELFTEST: PASS` | `-cpu max` |
+
+### Test locations
+
+| Test | Location | Trigger |
+|------|----------|---------|
+| CFI violation cell | `cells/demos/cfi-test/` | Spawned from shell: `cfi-test` |
+| MTE self-test | `kernel/src/layer2_selftest.rs` | Auto at boot with `test-hooks` feature |
+| PKU self-test | `kernel/src/layer2_selftest.rs` | Auto at boot with `test-hooks` feature |
+
+### Running Layer-2 tests
+
+**ARM64 (BTI + MTE) — requires QEMU ≥ 6.2 with MTE support:**
+
+```powershell
+# 1. Build aarch64 kernel with test-hooks
+$env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
+cargo build --release -p vicell-kernel `
+    --target aarch64-unknown-none-softfloat `
+    --features test-hooks
+$env:RUSTFLAGS = $null
+
+# 2. Run with -cpu max,+mte and grep Layer-2 output
+qemu-system-aarch64 -machine virt,gic-version=2 -cpu "max,+mte" -m 256M -nographic `
+    -kernel target/aarch64-unknown-none-softfloat/release/vicell-kernel `
+    -drive if=none,file=disk_arm_virt.img,format=raw,id=hd0 `
+    -device virtio-blk-device,drive=hd0 -no-reboot 2>&1 |
+    Select-String "SELFTEST|BTI|MTE|cfi-test"
+```
+
+**x86_64 (CET-IBT + PKU) — requires QEMU ≥ 7.0:**
+
+```powershell
+# 1. Build x86_64 kernel with test-hooks
+cargo build --release -p vicell-kernel `
+    --target x86_64-unknown-none `
+    --features test-hooks
+
+# 2. Boot via run-x86.ps1 (builds Limine ISO + launches QEMU -cpu max)
+#    then grep serial for PKU-SELFTEST and cfi-test output
+.\run-x86.ps1 2>&1 | Select-String "SELFTEST|CET|PKU|cfi-test"
+```
+
+### Test availability and SKIP behaviour
+
+Each test prints `SKIP` (never `FAIL`) when the feature is absent from
+the hardware or QEMU CPU model:
+
+- `MTE-SELFTEST: SKIP` — QEMU does not emulate MTE without `+mte` flag
+- `PKU-SELFTEST: SKIP` — CPU lacks PKU (CPUID leaf 7 ECX[3] = 0)
+- `cfi-test: SKIP: BTI/CET-IBT not enforced` — feature not enabled at EL1/CR4
+
+This lets CI run on baseline QEMU (without `-cpu max`) without producing
+false failures. Hardware-enforcement proof requires explicit `-cpu max` runs.

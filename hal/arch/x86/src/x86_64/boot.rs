@@ -77,6 +77,9 @@ global_asm!(
     ".section .text, \"ax\"",
     ".global __trap_exit",
     "__trap_exit:",
+    // CET-IBT landing pad: every indirect-branch target must begin with ENDBR64.
+    // Encoding: F3 0F 1E FA (acts as a NOP on CPUs that do not support CET).
+    ".byte 0xF3, 0x0F, 0x1E, 0xFA",
     // ── Build the 5-word iretq frame in regs[27..31] ────────────────────────
     // user RIP ← sepc (+264)
     "mov rax, [rsp + 264]",
@@ -111,6 +114,17 @@ global_asm!(
     "mov rcx, [rsp + 8]",       // regs[1]
     "mov r11, [rsp + 80]",      // regs[10]
     "mov rax, [rsp + 136]",     // regs[17]
+    // ── PKU: restore user PKRU before ring-3 re-entry (iretq path) ──────────
+    // Guard: wrpkru causes #UD on CPUs without PKU — test ViCell_pku_active first.
+    // ECX must be 0 for wrpkru; this clobbers %rax which is then reloaded.
+    "cmp byte ptr [rip + ViCell_pku_active], 0",
+    "je 1f",
+    "mov eax, dword ptr gs:[16]", // pku_value from CPU_LOCAL (offset 16)
+    "xor ecx, ecx",              // WRPKRU precondition: ECX = 0
+    "xor edx, edx",              // WRPKRU precondition: EDX = 0
+    "wrpkru",                    // PKRU := EAX
+    "mov rax, [rsp + 136]",      // reload user rax (was overwritten by pku_value)
+    "1:",
     // ── Advance RSP to the iretq frame and enter ring-3 ─────────────────────
     "add rsp, 216",
     "iretq",
@@ -131,6 +145,9 @@ global_asm!(
     ".section .text, \"ax\"",
     ".global thread_trampoline",
     "thread_trampoline:",
+    // CET-IBT landing pad: every indirect-branch target must begin with ENDBR64.
+    // Encoding: F3 0F 1E FA (acts as a NOP on CPUs that do not support CET).
+    ".byte 0xF3, 0x0F, 0x1E, 0xFA",
     // Move arg into first parameter register per SysV AMD64 ABI.
     "mov rdi, r12",
     // Call the kernel thread body.  If it returns, the CPU should not

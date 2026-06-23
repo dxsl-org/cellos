@@ -715,6 +715,11 @@ impl Scheduler {
             if let Some(next_task) = self.tasks.get_mut(&nid) {
                 next_task.state = TaskState::Running;
                 super::hart_local::set_current_cell_id(next_task.cell_id.0 as usize);
+                // x86_64 PKU: update CPU_LOCAL.pku_value for the incoming task so
+                // the asm ring-3 exit path restores the correct PKRU. Must run while
+                // we still hold a reference to the task (before releasing the lock).
+                #[cfg(target_arch = "x86_64")]
+                crate::hal::syscall::set_task_pku(next_task.pku_value);
             }
             if Some(nid) == current_id {
                 rl::set_current_task_id(hart_id, nid);

@@ -49,6 +49,7 @@ cargo build --release -p input-test 2>&1 | Select-Object -Last 3
 cargo build --release -p audio-demo 2>&1 | Select-Object -Last 3   # VirtIO sound test tone
 cargo build --release -p app-https-demo 2>&1 | Select-Object -Last 3   # G14 TLS server-auth e2e gate
 cargo build --release -p app-http-smoke 2>&1 | Select-Object -Last 3  # ostd::http + ostd::json e2e gate
+cargo build --release -p cfi-test 2>&1 | Select-Object -Last 3   # Layer-2 CFI violation test cell
 
 # DOOM — only if doomgeneric sources have been cloned
 $doom_src = "cells\demos\doom\src\c\doomgeneric\doomgeneric"
@@ -138,6 +139,7 @@ Invoke-SignCell "$rel_dir\input-test"
 Invoke-SignCell "$rel_dir\audio-demo"
 Invoke-SignCell "$rel_dir\app-https-demo"
 Invoke-SignCell "$rel_dir\http-smoke"
+Invoke-SignCell "$rel_dir\cfi-test"
 Invoke-SignCell "$rel_dir\hotswap-demo-v1"
 Invoke-SignCell "$rel_dir\hotswap-demo-v2"
 Invoke-SignCell "$rel_dir\ls"
@@ -205,6 +207,7 @@ $input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input deliver
 $audio_bin = "$rel_dir\audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
 $https_demo_bin = "$rel_dir\app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
 $http_smoke_bin = "$rel_dir\http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
+$cfi_test_bin   = "$rel_dir\cfi-test"        # Layer-2 CFI violation test (shell: `cfi-test`)
 $hotswap_demo_v1_bin = "$rel_dir\hotswap-demo-v1"  # M4.1 hotswap demo cell v1
 $hotswap_demo_v2_bin = "$rel_dir\hotswap-demo-v2"  # M4.1 hotswap demo cell v2
 $ls_bin   = "$rel_dir\ls"    # M3.2 embedded debug utils
@@ -275,6 +278,7 @@ if (Test-Path $tetris_lua_bin) { $kfs_args += @($tetris_lua_bin, "/bin/tetris-lu
 if (Test-Path $audio_bin) { $kfs_args += @($audio_bin, "/bin/audio-demo") }
 if (Test-Path $https_demo_bin) { $kfs_args += @($https_demo_bin, "/bin/https-demo") }
 if (Test-Path $http_smoke_bin) { $kfs_args += @($http_smoke_bin, "/bin/http-smoke") }
+if (Test-Path $cfi_test_bin)   { $kfs_args += @($cfi_test_bin,   "/bin/cfi-test") }
 if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
 if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
 if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
@@ -350,6 +354,7 @@ if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_tes
 if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
+if (Test-Path $cfi_test_bin)   { $table_args += "/bin/cfi-test=$cfi_test_bin" }
 if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hotswap_demo_v1_bin" }
 if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
 # Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds

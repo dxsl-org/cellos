@@ -780,6 +780,37 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 
 ---
 
+## Security Model Implementation Status (2026-06-23)
+
+### Three-Layer Security Model
+
+```
+Layer 1 — LBI (Rust compiler)       → Cell↔Cell isolation            [DONE]
+Layer 2 — Hardware supplement       → CFI + MTE + CET + PKU + DMA   [COMPLETE 2026-06-23]
+Layer 3 — Silo / VM (Stage-2 MMU)  → Key/VM isolation from kernel   [DONE, G2]
+```
+
+**Layer 2 (Hardware Security) Implementations by Architecture:**
+
+| Component | ARM64 | x86_64 | RISC-V |
+|-----------|-------|--------|--------|
+| **CFI (Forward-edge)** | BTI+PAC ✅ | CET-IBT ✅ | Zicfilp (ratified, await silicon) |
+| **Memory Tagging** | MTE ✅ (ARMv8.5, RK3588) | N/A | Zimt (draft, await silicon) |
+| **Domain Isolation** | N/A | PKU ✅ (Broadwell+) | PMP / Smepmp (ratified, await silicon) |
+| **DMA Enforcement** | Per-Cell DDT ✅ | Per-Cell VT-d ✅ | Per-Cell IOMMU ✅ |
+
+**Deployment Details:**
+- **ARM64**: Compiler flags `-C target-feature=+bti,+paca,+pacg`; hardware detection via ID_AA64PFR1_EL1, MTE requires ARMv8.5-A
+- **x86_64**: CR4.CET + MSR_IA32_S_CET for CET-IBT; CR4.PKE for PKU (feature-gated, CET-IBT prerequisite enforced)
+- **RISC-V**: DMA isolation (3-level DDT, Sv39 domains) complete; CFI/memory-tagging extensions pending silicon availability
+
+**Known Limitations:**
+- **MTE**: Probabilistic (1/16 tag collision); hardening only, not a strict safety boundary
+- **PKU**: PTE key tagging (bits [62:59]) deferred to G2; current implementation is wired but keys are zeroed
+- **RISC-V**: Zicfilp/Zimt/Smepmp extensions ratified 2024–2025 but no shipping silicon yet
+
+---
+
 ## Current Status (2026-06-05)
 
 ### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo)

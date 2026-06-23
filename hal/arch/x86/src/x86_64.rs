@@ -17,6 +17,8 @@ use hal_arch_trait::Arch;
 #[cfg(target_arch = "x86_64")] pub mod timer;
 #[cfg(target_arch = "x86_64")] pub mod uart_16550;
 #[cfg(target_arch = "x86_64")] pub mod trap;
+#[cfg(target_arch = "x86_64")] pub mod cet;
+#[cfg(target_arch = "x86_64")] pub mod pku;
 
 #[cfg(target_arch = "x86_64")] pub use context::CpuContext as Context;
 #[cfg(target_arch = "x86_64")] pub use paging::PageTable;
@@ -170,6 +172,8 @@ impl Arch for X86_64Arch {
     fn init(&self) {
         gdt::init();
         idt::init();
+        cet::init_kernel_cet(); // LAYER2-CET-INIT — must follow idt (registers #CP vector 21)
+        pku::init();            // LAYER2-PKU-INIT — requires IBT (checked inside)
         syscall::init();
         apic::init_lapic();
     }

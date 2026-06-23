@@ -1,0 +1,16 @@
+[package]
+name = "cfi-test"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+api   = { path = "../../../libs/api" }
+ostd  = { path = "../../../libs/ostd" }
+
+[[bin]]
+name = "cfi-test"
+path = "src/main.rs"
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }

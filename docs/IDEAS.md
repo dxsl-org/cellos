@@ -2,7 +2,7 @@
 - Port app đầu tiên cho Cellos: https://github.com/lasselian/prism-desktop
 
 ## Task
-- ARM64 MTE / x86 MPK / CFI
+- net cell TLS hiện chỉ client-side (connect+verify server), CHƯA có TLS server-side accept
 
 ## Defer
 - SerialHandle — cần service IPC mới cho serial driver, scope lớn hơn

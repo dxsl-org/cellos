@@ -42,17 +42,22 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 
 /// Per-CPU storage used by the `swapgs`-based stack swap in syscall_entry.
 ///
-/// Layout: [0] = kernel RSP (loaded on syscall entry),
-///         [8] = scratch (user RSP saved here during syscall).
+/// Layout (offsets are load-bearing — referenced directly in asm):
+///   gs:0  = kernel RSP (loaded on syscall entry)
+///   gs:8  = scratch (user RSP saved here during syscall)
+///   gs:16 = PKU value for the current task (loaded into PKRU on ring-3 re-entry)
 ///
 /// KERNEL_GS_BASE MSR must point here before any Ring-3 entry.
-/// `set_cpu_local` initialises this; `set_kernel_stack` updates slot [0].
+/// `set_cpu_local` initialises this; `set_kernel_stack` updates slot [0];
+/// `set_task_pku` updates slot [16].
 #[repr(C, align(16))]
 struct CpuLocal {
-    kernel_rsp: u64,
-    user_rsp:   u64,
+    kernel_rsp: u64,   // offset 0  — gs:0
+    user_rsp:   u64,   // offset 8  — gs:8
+    pku_value:  u32,   // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
+    _pad:       u32,   // offset 20 — alignment padding
 }
-static mut CPU_LOCAL: CpuLocal = CpuLocal { kernel_rsp: 0, user_rsp: 0 };
+static mut CPU_LOCAL: CpuLocal = CpuLocal { kernel_rsp: 0, user_rsp: 0, pku_value: 0, _pad: 0 };
 
 fn rdmsr(msr: u32) -> u64 {
     let lo:u32; let hi:u32;
@@ -116,6 +121,22 @@ pub fn set_kernel_stack(sp: u64) {
     }
 }
 
+/// Update the PKU value for the current task.
+///
+/// Called by the scheduler alongside `set_kernel_stack` before every ring-3 re-entry.
+/// The value is loaded from `gs:16` into PKRU by the asm exit paths in `syscall_entry`
+/// (sysretq path) and `__trap_exit` (iretq path).
+///
+/// # Safety contract
+/// CPU_LOCAL is a per-CPU static; this is the only writer (scheduler, single-core SAS).
+/// No concurrent Rust reference to `pku_value` exists.
+pub fn set_task_pku(val: u32) {
+    // SAFETY: CPU_LOCAL is a static; access is single-threaded (single-core SAS).
+    // The asm paths read gs:16 — this write is sequenced before the ring-3 entry
+    // by the scheduler lock that also surrounds set_kernel_stack.
+    unsafe { CPU_LOCAL.pku_value = val; }
+}
+
 extern "Rust" {
     // SAFETY: `ViCell_syscall_dispatch` is defined in kernel/src/task/syscall.rs
     // with `#[no_mangle] pub extern "Rust"`.  It is called only from
@@ -167,7 +188,21 @@ global_asm!(r#"
     .global syscall_entry
     .balign 16
 syscall_entry:
+    # CET-IBT landing pad: SYSCALL is a hardware-directed branch so technically
+    # ENDBR64 is not required by the CPU here, but having it keeps this address
+    # valid for any static-analysis tool or future IBT audit of the syscall path.
+    # Encoding: F3 0F 1E FA (NOP on non-CET CPUs).
+    .byte 0xF3, 0x0F, 0x1E, 0xFA
     swapgs
+    # PKU: enter kernel domain (PKRU=0 = all-access).
+    # Guard: wrpkru is #UD on CPUs without PKU — check ViCell_pku_active first.
+    cmpb $0, ViCell_pku_active(%rip)
+    je .Lpku_entry_skip
+    xorl %eax, %eax        # PKRU = 0 (all-access for kernel)
+    xorl %ecx, %ecx        # WRPKRU precondition: ECX must be 0
+    xorl %edx, %edx        # WRPKRU precondition: EDX must be 0
+    wrpkru
+.Lpku_entry_skip:
     # Save user RSP into per-CPU scratch; load kernel RSP.
     movq %rsp, %gs:8
     movq %gs:0, %rsp
@@ -251,6 +286,17 @@ syscall_entry:
     # Return value is in frame.regs[10] (+80).
     movq 80(%rsp), %rax
 
+    # PKU: restore user PKRU before ring-3 re-entry.
+    # CRITICAL: must run BEFORE loading %rcx with the return RIP below —
+    # wrpkru requires xorl %ecx which destroys %rcx.
+    cmpb $0, ViCell_pku_active(%rip)
+    je .Lpku_exit_skip
+    movl %gs:16, %eax          # pku_value from CPU_LOCAL (offset 16)
+    xorl %ecx, %ecx            # WRPKRU precondition: ECX must be 0
+    xorl %edx, %edx            # WRPKRU precondition: EDX must be 0
+    wrpkru                     # PKRU := EAX
+    movq 80(%rsp), %rax        # reload return value (eax was overwritten by pku_value)
+.Lpku_exit_skip:
     # Reload RCX (return RIP) and R11 (RFLAGS) for SYSRET.
     movq 264(%rsp), %rcx     # sepc    → RCX
     movq 256(%rsp), %r11     # sstatus → R11
