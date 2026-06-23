@@ -132,7 +132,14 @@ impl TlsSocketEntry {
         sockets: *mut (),
     ) -> Result<usize, TlsError> {
         set_tls_context(iface, device, sockets);
-        self.conn.write(data)
+        // embedded-tls `write()` only BUFFERS the record (blocking.rs:130) — without
+        // an explicit `flush()` the encrypted record never reaches the transport and
+        // is never transmitted. `conn.open()` flushes its own handshake records, which
+        // is why the handshake completes but the first application write (the HTTP POST)
+        // silently stalled: the peer waited forever for a request that never left.
+        let n = self.conn.write(data)?;
+        self.conn.flush()?;
+        Ok(n)
     }
 
     /// Convenience: set TLS context and read data.
