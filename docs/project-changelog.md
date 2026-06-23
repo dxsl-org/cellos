@@ -4,12 +4,22 @@
 
 ---
 
-## [2026-06-23] Hot migration M4.1 — zero-downtime cell replacement with no dropped connections
+## [2026-06-23] Cell binary signing + M4.1 hot migration — zero-downtime deployment with cryptographic origin proof
 
 ### Summary
-Completed M4.1 hot migration milestone: Cells can now be replaced without interrupting IPC or losing in-flight messages. A 5-step hotswap protocol (freeze → serialize → spawn → deserialize → unfreeze) preserves taskstate and IPC queue contents during replacement. New `TaskState::Frozen` state machine phase gates the transition; `ViStateTransfer` trait allows applications to serialize/deserialize domain-specific state with schema versioning. Message buffering during freeze prevents connection loss. Verified with 9 unit tests and hotswap-demo cells (v1 basic, v2 stateful).
+Two complementary G2-critical features shipped together in commits 9a695a5d (hotswap), 56dc7946 (signing), and ab0b9ecd (P2 table + cell cap). **Cell binary signing** enforces origin verification at spawn (Ed25519, signed cells required if flag set, dev seed for G1). **M4.1 hot migration** enables zero-downtime cell replacement with IPC queue preservation and state snapshots. Combined, these unlock **zero-downtime deployment with cryptographic proof of origin** — mandatory for G2/G3 untrusted third-party workloads. 11/11 hotswap-smoke tests pass (2 QEMU + 9 unit); signing gate verified end-to-end.
 
 ### Changes
+
+#### Cell Binary Signing (commit 56dc7946)
+- **`kernel/src/signing.rs`** (NEW) — Ed25519 verify-at-spawn gate. Verifies `__ViCell_sig` ELF section before cell is scheduled. Dev-key verification under `dev-signing-key` feature. `signed` manifest flag + `signing-required` feature flag. Three-way decision: signed → verify, unsigned+required → deny, unsigned dev → permit.
+- **`kernel/src/loader.rs`** — spawn-time gate calls `signing::verify_cell_signature()` before `schedule_task()`. Kernel denies unsigned cells when `signing-required` feature active. Spawn path unaffected for dev builds; production flips the feature.
+- **`scripts/sign-cell.py`** (NEW) — Ed25519 signer tool; fixed dev seed (0x43 × 32); reproducible dev keypair. Emits dev pubkey as Rust literal or signs ELF → `__ViCell_sig` noload section.
+- **`kernel/src/audit.rs`** — `AuditEvent::CellSignatureVerified(21)` + `CellSignatureFailed(22)`.
+- **`cells/demos/hotswap-demo-v1/` + `hotswap-demo-v2/`** — registered in P2 cell bootstrap table; demo cells now signed with dev seed.
+- **`kernel/src/task/tcb.rs`** — `MAX_CELL_ENTRIES` bumped 32 → 64 to accommodate P2 bootstrap table growth.
+
+#### Hot Migration M4.1 (commits 9a695a5d, ab0b9ecd)
 - **`kernel/src/cell/hotswap.rs`** — 5-step hotswap protocol: `freeze_cell()` pauses scheduling + drains IPC queue, `serialize_cell()` snapshots `TaskState` + app-supplied data via `ViStateTransfer::serialize`, `spawn_replacement()` loads new ELF at same VA, `deserialize_cell()` restores state + app data, `unfreeze_cell()` resumes scheduling. Queue preservation: in-flight messages buffered during freeze window, drained to new cell post-unfreeze.
 - **`kernel/src/task.rs`** — `TaskState` enum extended with `Frozen` variant (between Ready/Polling/Blocked). Cell exit during freeze triggers force-cleanup (no partial state handoff). Cell tcb snapshots `CapSet` for ceiling enforcement (hotswap cannot re-grant).
 - **`libs/ostd/src/hotswap.rs`** (NEW) — `ViStateTransfer` trait: `serialize(snapshot_buf: &mut [u8]) -> usize` and `deserialize(snapshot_buf: &[u8]) -> ViResult<()>`. Apps opt-in via `#[derive(ViStateTransfer)]` or manual impl. Schema versioning: first byte = version, app-specific format follows. Built-in `Unit` impl for stateless cells.
@@ -28,15 +38,18 @@ Completed M4.1 hot migration milestone: Cells can now be replaced without interr
 - **Opt-in by design**: cells without `HotSwapReady` support cannot hotswap (safe default = no mutation).
 
 ### Impact
-- **G2 zero-downtime deployment**: rolling updates, blue-green deploys, A/B testing without dropping clients
-- **Stateful service restart**: supervisor kills crashed cell → hotswap new binary → state restored from snapshot
-- **Backward compatibility**: all 9 tests verify old-binary → new-binary transitions (schema versioning in ViStateTransfer)
-- **No Law 1 violations**: syscall ABI stable (401/412 opcodes); manifest stays at FULL bitmask
+- **Cell origin verification**: Ed25519 signature enforces that spawned cells match the signed binary (prevents tampering/replay in untrusted environments)
+- **G2 zero-downtime deployment**: rolling updates, blue-green deploys, A/B testing without dropping clients — signed cells prove the new binary is legitimate
+- **Stateful service restart**: supervisor kills crashed cell → hotswap new binary (signed) → state restored from snapshot
+- **Backward compatibility**: all 9 tests verify old-binary → new-binary transitions (schema versioning in ViStateTransfer); unsigned cells work in dev mode
+- **No Law 1 violations**: syscall ABI stable (401/412 opcodes); manifest stays at FULL bitmask; signing happens pre-schedule
+- **G2/G3 prerequisite**: Combined (signing + hotswap) unlock trustworthy third-party app deployment model (operator policy + signed cells + never-die supervisor)
 
 ### Known Limitations
 - State snapshot size capped at 1MB (MAX_STASH_LEN); G2 extension to 16MB if needed
 - Snapshot serialization is app-driven (no automatic heap walk); apps must implement ViStateTransfer
 - Long freeze windows block other cells on the same hart; real-time cells should be pinned to separate harts
+- Development signing uses fixed seed (0x43 × 32); production deploys require real KMS (Cell Signing plan Phase 3 in roadmap)
 
 ---
 

@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-06-22 (Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). · Earlier 2026-06-21: §G Security Platform expanded with TWO deep dives: hardware-isolation — CFI/MPK-PKS/WorldGuard-Smmtt/IOMMU-IOPMP/confidential-computing + 🔴 IOMMU-passthrough DMA gap [NOW FIXED]; and §G.2 permission-model + attestation — parameterized caps/delegation/revocation/operator-policy/DICE/OpenTitan. See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-06-23 (Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
 
 ---
 
@@ -80,7 +80,7 @@ Cellos ships in two product stages defined by target hardware. The mapping princ
 | 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-06-07 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); 812 LOC; RPi4/VisionFive2 ready | **G1** |
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
 | 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
-| Hot migration / zero-downtime | M4.1 | ✅ COMPLETE 2026-06-23 — 5-step hotswap protocol with TaskState::Frozen, ViStateTransfer trait, IPC queue preservation, HotSwapReady(401)/StateStashClear(412) syscalls, 9 unit tests, hotswap-demo v1/v2 cells | G2 |
+| Hot migration / zero-downtime + cell signing | M4.1 + G.2 P2 | ✅ COMPLETE 2026-06-23 — Ed25519 verify-at-spawn gate (signed cells required if flag set, dev seed for G1), 5-step hotswap protocol with TaskState::Frozen, ViStateTransfer trait, IPC queue preservation, HotSwapReady(401)/StateStashClear(412) syscalls, 11/11 hotswap-smoke tests (2 QEMU + 9 unit), hotswap-demo v1/v2 cells signed | **G2** |
 | 🆕 x86_64 full bring-up | ext. M1.3 | ✅ COMPLETE (2026-06-13) — APIC, HPET/TSC, real MMU, VirtIO, PL011 RX; 5/5 QEMU integration tests pass; syscall exit path fixed | **G2** |
 | VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
 | Full utility suite (grep/sed/awk/top/ps…) | M3.2 full | 📋 | G2 |
