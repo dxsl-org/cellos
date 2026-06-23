@@ -18,7 +18,7 @@ SECTOR_SIZE       = 512
 CELL_TABLE_BASE_LBA = 526_336         # must match disk_layout.rs
 CELL_TABLE_MAGIC  = 0x5649_4F53_5F43_454C  # "Cellos_CEL"
 CELL_PATH_LEN     = 64
-MAX_CELL_ENTRIES  = 32
+MAX_CELL_ENTRIES  = 64
 
 # ── Layout helpers ────────────────────────────────────────────────────────────
 

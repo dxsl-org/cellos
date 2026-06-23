@@ -88,8 +88,76 @@ foreach ($line in $zig_output) {
     }
 }
 
+# ── Cell binary signing (Ed25519) ────────────────────────────────────────────
+# Sign each cell ELF with the dev key before embedding. Runs here — inside
+# gen_disk — so signing is never accidentally skipped (a separate wrapper could
+# be bypassed; this cannot). The dev seed [0x43]*32 is fixed so rebuilds are
+# reproducible and no key paste is required.
+Write-Host "Signing cell binaries (Ed25519 dev key)..."
+$sign_script = "scripts\sign-cell.py"
+if (-not (Test-Path $sign_script)) {
+    Write-Host "ERROR: $sign_script not found — run from the Cellos repo root." -ForegroundColor Red
+    exit 1
+}
+
+function Invoke-SignCell {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return }  # optional cells handled below
+    Write-Host "  signing $Path"
+    python $sign_script --in $Path --out $Path
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: sign-cell.py failed for $Path" -ForegroundColor Red
+        exit 1
+    }
+}
+
+# Sign the cells that are embedded / placed in the disk image.
+Invoke-SignCell "$rel_dir\app-init"
+Invoke-SignCell "$rel_dir\app-shell"
+Invoke-SignCell "$rel_dir\service-vfs"
+Invoke-SignCell "$rel_dir\service-config"
+Invoke-SignCell "$rel_dir\service-net"
+Invoke-SignCell "$rel_dir\service-compositor"
+Invoke-SignCell "$rel_dir\service-input"
+Invoke-SignCell "$rel_dir\app-bench"
+Invoke-SignCell "$rel_dir\bench-probe"
+Invoke-SignCell "$rel_dir\app-net-tools"
+Invoke-SignCell "$rel_dir\app-sys-tools"
+Invoke-SignCell "$rel_dir\robot-demo"
+Invoke-SignCell "$rel_dir\robot-dashboard"
+Invoke-SignCell "$rel_dir\hypha-llm-gateway"
+Invoke-SignCell "$rel_dir\hypha-core"
+Invoke-SignCell "$rel_dir\hypha-tool-fs"
+Invoke-SignCell "$rel_dir\hypha-tool-sys"
+Invoke-SignCell "$rel_dir\hypha-tool-spawn"
+Invoke-SignCell "$rel_dir\input-test"
+Invoke-SignCell "$rel_dir\audio-demo"
+Invoke-SignCell "$rel_dir\app-https-demo"
+Invoke-SignCell "$rel_dir\http-smoke"
+Invoke-SignCell "$rel_dir\hotswap-demo-v1"
+Invoke-SignCell "$rel_dir\hotswap-demo-v2"
+Invoke-SignCell "$rel_dir\ls"
+Invoke-SignCell "$rel_dir\cat"
+Invoke-SignCell "$rel_dir\echo"
+Invoke-SignCell "$rel_dir\ps"
+Invoke-SignCell "$rel_dir\kill"
+if (Test-Path "$rel_dir\lua")          { Invoke-SignCell "$rel_dir\lua" }
+if (Test-Path "$rel_dir\doom")         { Invoke-SignCell "$rel_dir\doom" }
+if (Test-Path "$rel_dir\tetris")       { Invoke-SignCell "$rel_dir\tetris" }
+if (Test-Path "$rel_dir\tetris-c")     { Invoke-SignCell "$rel_dir\tetris-c" }
+if (Test-Path "$rel_dir\tetris-lua")   { Invoke-SignCell "$rel_dir\tetris-lua" }
+if (Test-Path "$rel_dir\micropython")  { Invoke-SignCell "$rel_dir\micropython" }
+if (Test-Path "$rel_dir\posix-shim-test") { Invoke-SignCell "$rel_dir\posix-shim-test" }
+# Sign Zig cells
+foreach ($zig_path in $zig_elfs.Values) {
+    if (Test-Path $zig_path) { Invoke-SignCell $zig_path }
+}
+
+Write-Host "All cells signed."
+
 # 1b. Update kernel embedded cells (init, shell, vfs, config) from release builds.
 # These 4 cells are embedded in kernel_fs.img via include_bytes!.
+# NOTE: cells are already signed in-place by Sign-Cell above.
 Write-Host "Updating kernel embedded cells..."
 $embedded = "kernel\src\embedded"
 Copy-Item "$rel_dir\app-init"       "$embedded\init"   -Force
@@ -133,6 +201,8 @@ $input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input deliver
 $audio_bin = "$rel_dir\audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
 $https_demo_bin = "$rel_dir\app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
 $http_smoke_bin = "$rel_dir\http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
+$hotswap_demo_v1_bin = "$rel_dir\hotswap-demo-v1"  # M4.1 hotswap demo cell v1
+$hotswap_demo_v2_bin = "$rel_dir\hotswap-demo-v2"  # M4.1 hotswap demo cell v2
 $ls_bin   = "$rel_dir\ls"    # M3.2 embedded debug utils
 $cat_bin  = "$rel_dir\cat"
 $echo_bin = "$rel_dir\echo"
@@ -201,6 +271,8 @@ if (Test-Path $tetris_lua_bin) { $kfs_args += @($tetris_lua_bin, "/bin/tetris-lu
 if (Test-Path $audio_bin) { $kfs_args += @($audio_bin, "/bin/audio-demo") }
 if (Test-Path $https_demo_bin) { $kfs_args += @($https_demo_bin, "/bin/https-demo") }
 if (Test-Path $http_smoke_bin) { $kfs_args += @($http_smoke_bin, "/bin/http-smoke") }
+if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
+if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
 if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
 if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
 if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
@@ -274,6 +346,8 @@ if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_tes
 if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
+if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hotswap_demo_v1_bin" }
+if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
 # Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds
 foreach ($kv in $zig_elfs.GetEnumerator()) {
     $table_args += "/bin/$($kv.Key)=$($kv.Value)"

@@ -2,7 +2,7 @@
 - Port app đầu tiên cho Cellos: https://github.com/lasselian/prism-desktop
 
 ## Task
-
+- ARM64 MTE / x86 MPK / CFI
 
 ## Defer
 - SerialHandle — cần service IPC mới cho serial driver, scope lớn hơn

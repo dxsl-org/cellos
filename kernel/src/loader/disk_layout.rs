@@ -46,7 +46,7 @@ pub const CELL_TABLE_BASE_LBA: u64 = api::disk::PART_CELLTBL_BASE_LBA;
 pub const CELL_TABLE_MAGIC: u64 = 0x5649_4F53_5F43_454C; // "ViCell_CEL" in ASCII
 
 /// Maximum number of cells that can appear in the bootstrap table.
-pub const MAX_CELL_ENTRIES: usize = 32;
+pub const MAX_CELL_ENTRIES: usize = 64;
 
 /// Maximum path length (bytes) for a cell path in the bootstrap table.
 pub const CELL_PATH_LEN: usize = 64;

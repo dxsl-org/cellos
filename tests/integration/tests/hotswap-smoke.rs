@@ -71,7 +71,12 @@ fn hotswap_demo_v1_spawns_and_announces() {
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    qemu.send_line("/bin/hotswap-demo-v1 &");
+    // Send char-by-char to avoid UART FIFO overflow (>16 bytes drops chars).
+    for b in b"hotswap-demo-v1 &" {
+        qemu.send_bytes(&[*b]);
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    qemu.send_bytes(b"\n");
     qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!(
             "demo-v1 banner not seen: {e}\n--- output ---\n{}", qemu.dump()
@@ -92,7 +97,11 @@ fn hotswap_demo_v2_spawns_and_announces() {
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 
-    qemu.send_line("/bin/hotswap-demo-v2 &");
+    for b in b"hotswap-demo-v2 &" {
+        qemu.send_bytes(&[*b]);
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    qemu.send_bytes(b"\n");
     qemu.wait_for("[hotswap-demo-v2] ready", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!(
             "demo-v2 banner not seen: {e}\n--- output ---\n{}", qemu.dump()
