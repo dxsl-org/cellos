@@ -76,6 +76,18 @@ if (Test-Path $tetris_os_src) {
 Write-Host "Building Tetris-Lua cell..."
 cargo build --release -p tetris-lua 2>&1 | Select-Object -Last 3
 
+# 1c. Build Zig cells (optional — requires zig 0.13+ in PATH).
+$zig_elfs = @{}
+$zig_output = & pwsh "$kernel_root\scripts\build-zig-cells.ps1" 2>&1
+foreach ($line in $zig_output) {
+    if ($line -match '^cell:(.+)=(.+)$') {
+        $zig_elfs[$Matches[1]] = $Matches[2]
+        Write-Host "  Zig cell ready: $($Matches[1]) -> $($Matches[2])"
+    } else {
+        Write-Host $line
+    }
+}
+
 # 1b. Update kernel embedded cells (init, shell, vfs, config) from release builds.
 # These 4 cells are embedded in kernel_fs.img via include_bytes!.
 Write-Host "Updating kernel embedded cells..."
@@ -117,6 +129,7 @@ $httpd_bin  = "$rel_dir\httpd"            # Phase U: HTTP server
 $mqtt_bin   = "$rel_dir\mqtt"             # Phase X-5: MQTT client
 $posix_shim_test_bin = "$rel_dir\posix-shim-test"  # Tier 1b POSIX shim test cell
 $input_test_bin      = "$rel_dir\input-test"       # P05 bare-cell input delivery test
+# Zig cells — paths resolved by build-zig-cells.ps1 into $zig_elfs hashtable
 $audio_bin = "$rel_dir\audio-demo"   # VirtIO sound test-tone cell (shell: `audio-demo`)
 $https_demo_bin = "$rel_dir\app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
 $http_smoke_bin = "$rel_dir\http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
@@ -261,6 +274,10 @@ if (Test-Path $input_test_bin)      { $table_args += "/bin/input-test=$input_tes
 if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
+# Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds
+foreach ($kv in $zig_elfs.GetEnumerator()) {
+    $table_args += "/bin/$($kv.Key)=$($kv.Value)"
+}
 if (Test-Path $ls_bin)   { $table_args += "/bin/ls=$ls_bin" }
 if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
 if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }

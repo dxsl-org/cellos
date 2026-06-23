@@ -1,0 +1,33 @@
+OUTPUT_ARCH(aarch64)
+ENTRY(_start)
+
+/* PIE cell: no fixed load address. The kernel allocates a VA at spawn
+   and applies RELA relocations before jumping to _start. */
+SECTIONS
+{
+    .text : {
+        *(.text.boot)
+        *(.text .text.*)
+    }
+
+    .rodata : ALIGN(4096) {
+        *(.rodata .rodata.*)
+    }
+
+    .data : ALIGN(4096) {
+        *(.data .data.*)
+        *(.data.rel.ro .data.rel.ro.*)
+        *(.got .got.* .got.plt)
+    }
+
+    .bss : ALIGN(4096) {
+        __bss_start = .;
+        *(.bss .bss.*)
+        *(COMMON)
+        __bss_end = .;
+    }
+
+    __ViCell_manifest : ALIGN(4096) {
+        KEEP(*(__ViCell_manifest))
+    }
+}

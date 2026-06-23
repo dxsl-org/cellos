@@ -4,6 +4,10 @@
 target/
 Cargo.lock
 
+# Zig build artifacts
+**/.zig-cache/
+**/zig-out/
+
 # Hook / scratch logs (per-directory .logs/)
 .logs/
 

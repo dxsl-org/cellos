@@ -508,7 +508,9 @@ cells/tests/gpio-test-rv/    — RISC-V GPIO integration
 cells/tests/periph-test/     — Peripheral driver unit tests
 cells/tests/posix-shim-test/ — POSIX stdio/math/setjmp tests
 cells/tests/c-math-smoke/    — C runtime verification (12 scenarios, 3 arches)
-cells/tests/mlibc-smoke/     — mlibc Tier B integration
+cells/tests/mlibc-smoke/     — mlibc Tier B integration (Rust + libc.a)
+cells/tests/zig-hello/       — Tier 1b Zig Level A smoke test (raw syscalls, no mlibc)
+cells/tests/zig-mlibc-smoke/ — Tier 1b Zig Level B smoke test (links mlibc libc.a)
 cells/tests/input-test/      — Input service focus & event tests
 cells/tests/silo-test/       — Security Silo (6 end-to-end test cases)
 cells/tests/test-isolation/  — Cell fault isolation tests
