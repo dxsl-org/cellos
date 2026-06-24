@@ -17,7 +17,6 @@ pub mod uart;
 
 // Drivers
 pub mod console_drv;
-pub mod font;
 pub mod block;
 pub mod mmc;
 pub mod ramdisk; // RAM Disk workaround for VirtIO hang
