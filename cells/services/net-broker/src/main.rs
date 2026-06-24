@@ -51,6 +51,10 @@ api::declare_syscalls![
 
 mod rng;
 mod transport;
+mod identity;
+mod stun;
+mod relay;
+mod connection_manager;
 
 mod beacon;
 mod enrollment;
@@ -58,10 +62,22 @@ mod gossip;
 mod lease;
 mod routing;
 
-use ostd::io::println;
+use ostd::io::{print, println};
 use ostd::syscall::{sys_heartbeat, sys_try_recv, SyscallResult};
 use rng::BrokerRng;
 use transport::StaticKeypair;
+use identity::BrokerIdentity;
+use relay::RelayClient;
+
+fn print_hex_byte(b: u8) {
+    const HEX: &[u8] = b"0123456789abcdef";
+    let hi = HEX[(b >> 4) as usize] as char;
+    let lo = HEX[(b & 0xf) as usize] as char;
+    let mut buf = [0u8; 2];
+    buf[0] = hi as u8;
+    buf[1] = lo as u8;
+    if let Ok(s) = core::str::from_utf8(&buf) { print(s); }
+}
 
 /// IPC buffer for incoming dispatch requests.
 const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
@@ -71,33 +87,45 @@ const HEARTBEAT_MS: u64 = 500;
 
 #[no_mangle]
 pub fn main() {
-    println("[net-broker] Cluster net-broker v0.1 (P03 skeleton)");
+    println("[net-broker] Cluster net-broker v0.2 (G1 internet relay)");
     println("[net-broker] service::NET_BROKER = 8 (registered by init)");
 
-    // Fail-closed entropy gate — panics if VirtIO-RNG device is absent.
-    // This MUST run before any crypto operation; mirrors ViRng::new() in the net cell.
+    // Fail-closed entropy gate — panics if VirtIO-RNG is absent.
     let mut rng = BrokerRng::new_seeded();
     println("[net-broker] VirtIO-RNG entropy gate passed.");
 
-    // Generate a per-run X25519 static keypair; broadcast public half via P05 beacon.
-    let _static_kp = StaticKeypair::generate(&mut rng);
-    println("[net-broker] static keypair ready (public key broadcast via beacon in P05).");
+    // Generate per-run X25519 static keypair. Public half = G1 CellNetId.
+    let static_kp = StaticKeypair::generate(&mut rng);
+    let mut identity = BrokerIdentity::from_static_pub(static_kp.public_bytes());
+    identity.load_config();
 
-    // TODO P04: load K1 PSK from /etc/cellos/cluster.key via VfsFileKeySource.
-    // TODO P05: bind UDP multicast socket + join beacon group (non-blocking).
-    // TODO P05: first beacon RECV is in the loop below, NOT here.
+    // Log the first 4 bytes of NodeId as a boot identifier.
+    let nid = identity.node_id.0;
+    print("[net-broker] NodeId prefix: ");
+    for b in &nid[..4] { print_hex_byte(*b); }
+    println("...");
+
+    // TODO: load K1 PSK from /etc/cellos/cluster.key via VfsFileKeySource.
+    // TODO P05: bind UDP multicast socket for LAN beacon.
+
+    // Build a relay client from the first peer's relay config (G1 = 1 relay server).
+    let relay_config = identity.get_peer(0).map(|p| (p.relay_ip, p.relay_port));
+    let relay_ip   = relay_config.map(|(ip, _)| ip).unwrap_or([0; 4]);
+    let relay_port = relay_config.map(|(_, pt)| pt).unwrap_or(0);
+    let relay_client = RelayClient::new(identity.node_id, relay_ip, relay_port);
 
     let mut buf = [0u8; IPC_BUF_SIZE];
 
     loop {
-        // INVARIANT: heartbeat re-armed at the top of every iteration, including
-        // iterations that go deep into P04 handshake spin-polls.  If this call
-        // moves further down, the RT watchdog will kill the broker mid-handshake.
+        // INVARIANT: heartbeat re-armed at top of every iteration.
         sys_heartbeat(HEARTBEAT_MS);
 
-        // TODO P05: check beacon send timer; multicast beacon if interval elapsed.
-        // TODO P05: try_recv beacon UDP socket and process.
-        // TODO P04: poll Noise handshake progress for any pending peer sessions.
+        // Poll relay for inbound frames (non-blocking).
+        // TODO: wire incoming relay frames into routing dispatch.
+        let _ = relay_client.is_connected();
+
+        // TODO P05: check beacon timer; send LAN multicast beacon if due.
+        // TODO P05: try_recv beacon UDP socket.
         // TODO P08: tick lease renewal / peer-loss sweep.
 
         buf.fill(0);
@@ -106,10 +134,6 @@ pub fn main() {
                 dispatch(&buf, sender);
             }
             _ => {
-                // No IPC message ready. Yield briefly to avoid burning the CPU
-                // in a hot spin-loop; the scheduler will reschedule as needed.
-                // TODO P04/P05: replace yield with sys_wait_for_event (NIC-RX)
-                // once transport sockets are active, mirroring the net cell.
                 ostd::task::yield_now();
             }
         }

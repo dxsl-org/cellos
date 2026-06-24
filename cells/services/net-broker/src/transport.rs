@@ -31,6 +31,7 @@ use ostd::{clients::vfs::VfsClient, syscall::sys_heartbeat, ViError, ViResult};
 use ostd::service::NetRef;
 use api::ipc::{NetRequest, NetResponse};
 
+use api::cluster::CellNetId;
 use crate::rng::BrokerRng;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -117,22 +118,34 @@ impl NoiseSession {
     /// Caller must have already verified `cluster_id` matches the local broker's
     /// cluster before calling this — a mismatch here means the TCP connection was
     /// accepted from the wrong cluster.
+    ///
+    /// `local_node_id` and `remote_node_id` are bound into the Noise prologue so
+    /// both machines must agree on each other's identity during the handshake.
+    /// This prevents routing spoofing even when the K1 PSK is shared (FATAL-1).
     pub fn new(
         rng: &mut BrokerRng,
         psk: &[u8; 32],
         my_static: &StaticKeypair,
         peer_static_pub: [u8; 32],
         cluster_id: u64,
+        local_node_id: &CellNetId,
+        remote_node_id: &CellNetId,
         cap_id: u32,
         is_initiator: bool,
     ) -> ViResult<Self> {
         // Pre-generate our ephemeral key so clatter never calls BrokerRng::default().
         let ephemeral = X25519::genkey_rng(rng).map_err(|_| ViError::IO)?;
-        let prologue = cluster_id.to_le_bytes();
+
+        // Prologue = cluster_id(8) ‖ local_node_id(32) ‖ remote_node_id(32) = 72 bytes.
+        // Both sides must compute identically; a NodeId mismatch fails the handshake.
+        let mut prologue = [0u8; 72];
+        prologue[..8].copy_from_slice(&cluster_id.to_le_bytes());
+        prologue[8..40].copy_from_slice(&local_node_id.0);
+        prologue[40..72].copy_from_slice(&remote_node_id.0);
 
         let mut hs = NqHandshakeCore::<X25519, ChaChaPoly, Sha256, BrokerRng>::new(
             noise_kk_psk0(),
-            &prologue,
+            prologue.as_slice(),
             is_initiator,
             Some(KeyPair {
                 public: my_static.inner.public,

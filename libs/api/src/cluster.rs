@@ -106,6 +106,80 @@ impl ClusterSection {
     }
 }
 
+// ── CellNetId ─────────────────────────────────────────────────────────────────
+
+/// Stable per-machine network identity — 32-byte public key.
+///
+/// G1: derived from the X25519 Noise static keypair (no separate Ed25519 keygen).
+/// G2: proper Ed25519 public key with signing capability.
+///
+/// Bound into the Noise prologue so both machines must agree on each other's
+/// NodeId during the handshake — prevents routing spoofing (FATAL-1 fix).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct CellNetId(pub [u8; 32]);
+
+impl CellNetId {
+    pub const ZERO: Self = Self([0u8; 32]);
+    pub const fn from_bytes(b: [u8; 32]) -> Self { Self(b) }
+    pub fn as_bytes(&self) -> &[u8; 32] { &self.0 }
+}
+
+// ── PeerTicket ────────────────────────────────────────────────────────────────
+
+/// Peer address book — how to connect to one remote Cellos machine.
+///
+/// Fixed-size, IPv4-only. No hostname fields (DNS resolver absent in G1).
+/// Max encoded size: 57 bytes (fits comfortably in IPC_BUF_SIZE).
+#[derive(Debug, Clone, Copy)]
+pub struct PeerTicket {
+    pub node_id:    CellNetId,
+    pub relay_ip:   [u8; 4],
+    pub relay_port: u16,
+    /// Direct IPv4:port addrs (LAN address + STUN reflexive, up to 3).
+    pub addrs:      [([u8; 4], u16); 3],
+    pub addrs_len:  u8,
+}
+
+impl PeerTicket {
+    pub const ENCODED_MAX: usize = 32 + 4 + 2 + 1 + 3 * 6; // = 57
+
+    pub fn encode(&self, out: &mut [u8]) -> usize {
+        assert!(out.len() >= Self::ENCODED_MAX);
+        let mut p = 0;
+        out[p..p + 32].copy_from_slice(&self.node_id.0);             p += 32;
+        out[p..p + 4].copy_from_slice(&self.relay_ip);               p += 4;
+        out[p..p + 2].copy_from_slice(&self.relay_port.to_le_bytes()); p += 2;
+        out[p] = self.addrs_len;                                      p += 1;
+        for i in 0..self.addrs_len as usize {
+            out[p..p + 4].copy_from_slice(&self.addrs[i].0);         p += 4;
+            out[p..p + 2].copy_from_slice(&self.addrs[i].1.to_le_bytes()); p += 2;
+        }
+        p
+    }
+
+    pub fn decode(data: &[u8]) -> Option<Self> {
+        if data.len() < 39 { return None; }
+        let mut node_id = [0u8; 32];
+        node_id.copy_from_slice(&data[0..32]);
+        let mut relay_ip = [0u8; 4];
+        relay_ip.copy_from_slice(&data[32..36]);
+        let relay_port = u16::from_le_bytes([data[36], data[37]]);
+        let addrs_len  = (data[38] as usize).min(3) as u8;
+        let mut addrs  = [([0u8; 4], 0u16); 3];
+        let mut p = 39;
+        for i in 0..addrs_len as usize {
+            if p + 6 > data.len() { break; }
+            let mut ip = [0u8; 4];
+            ip.copy_from_slice(&data[p..p + 4]);
+            let port = u16::from_le_bytes([data[p + 4], data[p + 5]]);
+            addrs[i] = (ip, port);
+            p += 6;
+        }
+        Some(Self { node_id: CellNetId(node_id), relay_ip, relay_port, addrs, addrs_len })
+    }
+}
+
 /// Emit the `__ViCell_cluster` ELF section declaring this Cell's cluster mode.
 ///
 /// The section is read by the kernel loader at spawn time.  Cells that omit
