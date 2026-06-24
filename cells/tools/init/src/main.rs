@@ -110,6 +110,33 @@ pub extern "C" fn main() {
         if paths[i] == "/bin/shell" {
             continue;
         }
+
+        // Driver Cells must register BEFORE the net service's first pump_rx_split()
+        // call.  sys_heartbeat is non-blocking, so net immediately probes e1000_tid()
+        // on its first loop iteration; any ABSENT result is cached permanently.
+        // VFS (index 0) is already up at this point (extra yield at i==0 below).
+        if paths[i] == "/bin/net" {
+            // Platform Cell scans ECAM bus 0, registers all BARs, then exits.
+            // Must complete before PCIe Driver Cells (nvme, e1000) call sys_request_mmio.
+            let _ = sys_spawn_from_path("/bin/platform");
+            for _ in 0..6 { ostd::task::yield_now(); }
+
+            let _ = sys_spawn_from_path("/bin/virtio-net"); // RISC-V/AArch64 VirtIO NIC
+            let _ = sys_spawn_from_path("/bin/nvme");       // PCIe NVMe (x86_64)
+            let _ = sys_spawn_from_path("/bin/e1000");      // PCIe e1000 NIC (x86_64)
+            // Give driver cells enough quanta to load ELF, probe hardware, and
+            // call sys_register_nic_driver before net starts its first Rx poll.
+            for _ in 0..4 { ostd::task::yield_now(); }
+        }
+
+        // GPU Driver Cell must register BEFORE compositor's first GpuFlush call.
+        if paths[i] == "/bin/compositor" {
+            let _ = sys_spawn_from_path("/bin/virtio-gpu"); // VirtIO GPU — RISC-V + AArch64
+            // Give the GPU Cell time to probe VirtIO, init framebuffer, and register
+            // before the compositor sends its first GpuFlush on startup.
+            for _ in 0..4 { ostd::task::yield_now(); }
+        }
+
         match sys_spawn_from_path(paths[i]) {
             SyscallResult::Ok(tid) => {
                 tids[i] = Some(tid);

@@ -149,7 +149,14 @@ pub fn init_kernel_paging(
             .map_err(|_| PageTableError::OutOfMemory)?;
         root_table.identity_map(plic_base, plic_base + plic_size, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table.identity_map(uart_region, uart_region + 0x10000, mmio_flags, &mut alloc_fn)
+        // Make the UART+VirtIO MMIO range USER-accessible so Driver Cells (virtio-net, etc.)
+        // can access VirtIO MMIO slots (0x10001000–0x10008000) from U-mode.
+        // UART at 0x10000000 is also exposed; LBI (UartCap) prevents unauthorized use.
+        let rv_cell_mmio = PageFlags::from_bits(
+            PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
+                | PageFlags::USER | PageFlags::ACCESSED | PageFlags::DIRTY,
+        );
+        root_table.identity_map(uart_region, uart_region + 0x10000, rv_cell_mmio, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // Goldfish RTC (QEMU virt: 0x101000). Without this, sys_get_wall_secs/
         // sys_get_wall_time (op 2/3) dereference an unmapped MMIO address in

@@ -115,6 +115,25 @@ pub fn is_pcie_bar(base: usize, len: usize) -> bool {
     guard.get(&base).map_or(false, |&bar_len| len <= bar_len)
 }
 
+/// Request exclusive MMIO ownership without allowlist validation (Platform Cell only).
+///
+/// Bypasses the per-arch ALLOWED list and the PCIE_BARS table. The overlap check
+/// still runs — two cells cannot share a byte. Used by the PlatformCap bypass path
+/// in `sys_request_mmio` so the Platform Cell can claim the ECAM config-space window
+/// (which is not a device BAR and therefore not in either allowlist).
+pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViResult<()> {
+    let end = base.checked_add(len).ok_or(ViError::InvalidInput)?;
+    let mut reg = REGISTRY.lock();
+    for (&eb, &(el, _)) in reg.iter() {
+        let ee = eb + el;
+        if !(end <= eb || base >= ee) {
+            return Err(ViError::AlreadyExists);
+        }
+    }
+    reg.insert(base, (len, cell_id));
+    Ok(())
+}
+
 /// Request exclusive ownership of `[base, base+len)` for `cell_id`.
 ///
 /// Returns:

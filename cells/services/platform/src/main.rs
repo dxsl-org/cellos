@@ -33,7 +33,7 @@ use ostd::syscall::sys_exit;
 
 // Syscall allowlist: only the syscalls this cell actually calls.
 // Must come before run_app! (run_app! does not emit VICELL_SYSCALLS).
-api::declare_syscalls![Log, RequestMmio, RegisterPcieBar];
+api::declare_syscalls![Log, RequestMmio, RegisterPcieBar, RegisterPciDevice];
 
 // No privileged manifest flags: PlatformCap is granted by path match, not here.
 api::declare_manifest!(

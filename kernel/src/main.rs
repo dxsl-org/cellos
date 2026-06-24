@@ -502,6 +502,20 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             crate::layer2_selftest::run_pku_selftest();
         }
 
+        // Spawn Platform Cell (PCIe ECAM scanner) before init so PCI_DEVICES is
+        // populated before init's NVMe/e1000 Driver Cells call sys_find_pcie_device.
+        // PCIe ECAM only on x86_64 q35 and RISC-V virt — ARM64 virt uses VirtIO MMIO.
+        // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
+        // that rely on sys_find_pcie_device will simply not find their device.
+        #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
+        match crate::loader::spawn_from_path(
+            "/bin/platform",
+            crate::task::cap::Spawner::Root,
+        ) {
+            Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
+            Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
+        }
+
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
         let init_data = alloc::vec::Vec::from(INIT_ELF);
         match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {

@@ -32,6 +32,7 @@ mod dispatcher;
 mod layout_us_qwerty;
 mod modifier_state;
 mod mouse_state;
+mod virtio_device;
 
 use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers};
 use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
@@ -40,10 +41,11 @@ use layout_us_qwerty::{translate, key_state_from_evdev};
 use modifier_state::ModifierState;
 use mouse_state::{MouseState, btn_to_mouse_button, BTN_LEFT};
 use ostd::io::println;
-use ostd::syscall::{sys_recv, sys_send, sys_get_time, SyscallResult};
+use ostd::syscall::{sys_recv_timeout, sys_send, sys_get_time, sys_heartbeat, SyscallResult};
+use virtio_device::{find_and_init_input, InputDevice};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, Heartbeat, GetTime];
+api::declare_syscalls![Send, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
 const EV_KEY: u8 = 0;
@@ -51,28 +53,90 @@ const EV_KEY: u8 = 0;
 /// The code field carries the raw ASCII byte; no scancode translation needed.
 const EV_ASCII: u8 = 0x04;
 
+/// Linux evdev event types used by VirtIO input device.
+const EVDEV_KEY: u16 = 1;
+const EVDEV_REL: u16 = 2;
+const EVDEV_ABS: u16 = 3;
+
+/// Poll the VirtIO virtqueue once per scheduler tick (≈10 ms).
+/// Using scheduler-tick units (not mtime); see net service UNIT TRAP note.
+const POLL_SCHED_TICKS: u64 = 1;
+
+/// Watchdog interval: 500 scheduler ticks × 10ms = 5 seconds.
+const HEARTBEAT_TICKS: u64 = 500;
+
 /// Input Cell entry point.
 ///
-/// Runs an infinite receive loop, translating and dispatching every raw event.
+/// On startup, attempts to probe and claim a VirtIO input device. Once claimed,
+/// the kernel's `virtio_input::poll_events` / `dispatch_pending` migrate guard
+/// detects the MMIO owner and stops pushing kernel-side events — this service
+/// then owns the virtqueue exclusively.
+///
+/// Until the device is claimed (or if no VirtIO input is present), the kernel
+/// continues to push raw IPC events (sender=0) as before.
 #[no_mangle]
 pub fn main() {
-    println("[input] Input Service v0.3: US QWERTY + typed focus routing");
+    println("[input] Input Service v0.3: US QWERTY + VirtIO + typed focus routing");
 
     let mut modifiers = ModifierState::new();
     let mut mouse = MouseState::new();
     let mut dispatcher = Dispatcher::new();
     let mut buf = [0u8; IPC_BUF_SIZE];
 
+    // Probe and claim the VirtIO input device.  After sys_request_mmio succeeds
+    // inside find_and_init_input, the kernel migration guard in virtio_input.rs
+    // will see the MMIO owner and stop pushing events via dispatch_pending.
+    let mut device: Option<InputDevice> = find_and_init_input();
+    if device.is_some() {
+        println("[input] VirtIO input device claimed; polling virtqueue directly");
+    } else {
+        println("[input] No VirtIO input device; relying on kernel push");
+    }
+
     loop {
-        // Accept sender=0 (kernel raw push) and sender>0 (typed cell request).
-        match sys_recv(0, &mut buf) {
+        sys_heartbeat(HEARTBEAT_TICKS);
+
+        // Drain the VirtIO virtqueue before blocking.  This catches events that
+        // arrived since the last iteration without waiting for the timeout.
+        if let Some(ref mut dev) = device {
+            drain_virtio(dev, &mut buf, &mut modifiers, &mut mouse, &mut dispatcher);
+        }
+
+        // Block for at most one scheduler tick (≈10ms), or until a kernel/IPC
+        // message wakes us.
+        match sys_recv_timeout(0, &mut buf, POLL_SCHED_TICKS) {
+            SyscallResult::Ok(0) => {
+                // Timeout — nothing from IPC; VirtIO drain already done above.
+            }
             SyscallResult::Ok(sender) => {
                 handle_message(&buf, sender, &mut modifiers, &mut mouse, &mut dispatcher);
             }
-            _ => {
-                ostd::task::yield_now();
-            }
+            _ => {}
         }
+    }
+}
+
+/// Drain all pending events from the VirtIO virtqueue and dispatch them.
+fn drain_virtio(
+    dev: &mut InputDevice,
+    buf: &mut [u8; IPC_BUF_SIZE],
+    modifiers: &mut ModifierState,
+    mouse: &mut MouseState,
+    dispatcher: &mut Dispatcher,
+) {
+    while let Some(ev) = dev.try_get_event() {
+        // Map Linux evdev event types → the same opcode encoding the kernel uses
+        // in dispatch_pending, so handle_kernel_event processes them identically.
+        let opcode: u8 = match ev.event_type {
+            EVDEV_KEY => 0, // EV_KEY
+            EVDEV_REL => 1, // EV_REL
+            EVDEV_ABS => 2, // EV_ABS
+            _ => continue,  // unknown type (EV_SYN, EV_MSC, etc.) — drop
+        };
+        buf[0] = opcode;
+        buf[1..5].copy_from_slice(&(ev.code as u32).to_le_bytes());
+        buf[5..9].copy_from_slice(&ev.value.to_le_bytes());
+        handle_kernel_event(buf, modifiers, mouse, dispatcher);
     }
 }
 

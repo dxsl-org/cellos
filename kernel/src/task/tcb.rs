@@ -87,6 +87,14 @@ pub enum TaskState {
     Frozen {
         swap_id: u64,
     },
+    /// Blocked in `sys_wait_irq(irq, mmio_base)` until hardware IRQ `irq` fires.
+    ///
+    /// Woken by the scheduler sweep (NOT from ISR — ISR only sets `IRQ_PENDING[irq]`).
+    /// No deadline: IRQ-only wake; Driver Cells must implement their own poll-fallback
+    /// if the device can hang without raising an IRQ.
+    WaitIrq {
+        irq: u8,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -200,6 +208,9 @@ pub struct Task {
     /// PCIe Driver Cell: claim BAR MMIO + authorise DMA via GrantDma.
     /// Granted when manifest declares `pcie_driver = true`.
     pub pcie_driver_cap: Option<super::cap::PcieDriverCap>,
+    /// Platform Cell: singleton capability gating `sys_register_pcie_bar`.
+    /// Granted by path match `/bin/platform` in loader.rs; at most one holder ever.
+    pub platform_cap: Option<super::cap::PlatformCap>,
 
     /// MMIO device-class capability bitmask (`DEV_GPIO` / `DEV_UART` from
     /// [`crate::resource_registry`]). Set from the ELF manifest's `gpio`/`uart`
@@ -333,6 +344,7 @@ impl Task {
             hypervisor_cap:  None,
             supervisor_cap:  None,
             pcie_driver_cap: None,
+            platform_cap:    None,
             mmio_devices:   0,
             block_regions:  0,
             pku_key:        0,

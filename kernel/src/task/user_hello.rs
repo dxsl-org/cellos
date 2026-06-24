@@ -1,3 +1,4 @@
+#![cfg(feature = "test-hooks")]
 //! Minimal Ring-3 smoke-test task.
 //!
 //! Allocates a user code page at [`ENTRY`], writes machine code that calls

@@ -76,6 +76,39 @@ impl PcieDriverCap {
     pub(crate) fn new() -> Self { Self(()) }
 }
 
+/// Permits PCIe ECAM enumeration and BAR registration via `sys_register_pcie_bar`.
+///
+/// Granted by exact path match in `loader.rs` to `/bin/platform` ONLY, and is a
+/// singleton — the kernel refuses to grant it a second time (second `/bin/platform`
+/// spawn is rejected). This prevents any cell other than the one trusted Platform
+/// Cell from declaring fake BARs in the allowlist.
+#[derive(Copy, Clone, Debug)]
+pub struct PlatformCap(());
+
+use core::sync::atomic::{AtomicBool, Ordering};
+
+/// Singleton latch: set when PlatformCap has been granted to any task.
+/// Once true, `try_grant_platform()` returns `None` for all future callers.
+static PLATFORM_CAP_GRANTED: AtomicBool = AtomicBool::new(false);
+
+impl PlatformCap {
+    /// Create a `PlatformCap` token.  Only callable within the kernel crate.
+    pub(crate) fn new() -> Self { Self(()) }
+}
+
+/// Attempt to grant `PlatformCap`.
+///
+/// Returns `Some(PlatformCap)` on the first call, `None` on all subsequent calls
+/// (singleton enforcement). The compare_exchange is sequentially consistent to
+/// avoid races on SMP (even though Cellos is currently UP, the invariant must hold
+/// under future SMP enablement).
+pub(crate) fn try_grant_platform() -> Option<PlatformCap> {
+    PLATFORM_CAP_GRANTED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .ok()
+        .map(|_| PlatformCap::new())
+}
+
 // ─── Capability set + spawn-delegation (P2 — monotonic downgrade) ────────────
 
 /// A plain-data snapshot of a Task's capabilities, used to enforce spawn-time

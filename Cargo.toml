@@ -56,11 +56,14 @@ members = [
     "cells/drivers/pwm-gpio",
     "cells/drivers/adc-sim",
     "cells/drivers/can-loopback",
+    "cells/drivers/virtio-net",
+    "cells/drivers/virtio-gpu",
     "cells/drivers/gpio-sifive",
     "cells/drivers/serial",
     "cells/drivers/wasm",
     
     # Cells - Services
+    "cells/services/platform",
     "cells/services/vfs",
     "cells/services/compositor",
     "cells/services/net",
