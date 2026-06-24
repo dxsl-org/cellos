@@ -10,6 +10,10 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
 static IOMMU_ISOLATED: AtomicBool = AtomicBool::new(false);
+/// Set when `pcie_ecam::init()` is removed from the boot path.
+/// `try_deferred_init()` (called from `RegisterPciDevice` handler) checks this
+/// and runs `init()` once PCI_DEVICES is populated with the IOMMU device entry.
+static IOMMU_DEFERRED: AtomicBool = AtomicBool::new(false);
 
 /// Phase 1: probe IOMMU hardware and allocate isolation data structures.
 ///
@@ -81,4 +85,40 @@ pub fn is_active() -> bool {
 /// Mark DMA isolation as active. Called by arch backends on successful activation.
 pub(super) fn set_active() {
     IOMMU_ISOLATED.store(true, Ordering::Relaxed);
+}
+
+/// Arm deferred IOMMU init.
+///
+/// Call from `main.rs` instead of `init()` when the Platform Cell owns PCIe
+/// enumeration. `try_deferred_init()` will call `init()` + `activate_isolation()`
+/// once the IOMMU device entry appears in `PCI_DEVICES` via `RegisterPciDevice`.
+pub fn set_deferred_init_pending() {
+    IOMMU_DEFERRED.store(true, Ordering::Relaxed);
+}
+
+/// Attempt IOMMU init if deferred and the IOMMU device has been registered.
+///
+/// Called from the `RegisterPciDevice` syscall handler after each device is added
+/// to `PCI_DEVICES`. Returns immediately if already initialized or not deferred.
+///
+/// Phase 3 (`activate_isolation`) runs immediately after `init_hw` here: by the
+/// time the IOMMU device is registered, no Driver Cell DMA has occurred yet
+/// (Driver Cells spawn after Platform Cell completes enumeration). Subsequent
+/// `map_dma_for_cell` calls add DDT entries lazily and take effect immediately.
+pub fn try_deferred_init() {
+    if !IOMMU_DEFERRED.load(Ordering::Relaxed) { return; }
+    if IOMMU_ISOLATED.load(Ordering::Relaxed)  { return; }
+
+    // init() calls arch init_hw() which calls find_class() — succeeds only once
+    // the IOMMU device has been registered in PCI_DEVICES.
+    init();
+
+    // If init_hw() found the IOMMU hardware (BAR0 != 0), activate isolation.
+    // activate() is a no-op when init_hw() returned early (device not found yet).
+    activate_isolation();
+
+    if IOMMU_ISOLATED.load(Ordering::Relaxed) {
+        IOMMU_DEFERRED.store(false, Ordering::Relaxed);
+        log::info!("[iommu] deferred init complete — DMA isolation active");
+    }
 }

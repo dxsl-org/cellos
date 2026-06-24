@@ -388,19 +388,17 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // virtio_pci::init() probes vendor 0x1AF4 PCIe devices for BLK/NET.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
-        task::drivers::pcie_ecam::init();
-        // Phase 1: probe IOMMU hardware on both PCIe arches, allocate page tables.
-        // Stays passthrough until activate_isolation() — drivers register DMA ranges first.
-        task::drivers::iommu::init();
-        // NVMe and e1000 are now Driver Cells (cells/drivers/nvme, cells/drivers/e1000).
-        // They claim their PCIe BARs via sys_find_pcie_device + sys_request_mmio after
-        // spawn, using PcieDriverCap. No kernel-side init_driver() calls needed here.
+        // PCIe enumeration is now owned by the Platform Cell.
+        // It scans ECAM and calls sys_register_pci_device + sys_register_pcie_bar for each device.
+        // Arm deferred IOMMU init — fires once the IOMMU device entry appears in PCI_DEVICES.
+        task::drivers::iommu::set_deferred_init_pending();
         // VirtIO PCI: probe vendor 0x1AF4 on PCIe bus 0.
         // On x86_64 q35, VirtIO BLK/NET are PCIe devices; on RISC-V virt,
         // VirtIO is MMIO — virtio_pci::init() is a no-op there.
         task::drivers::virtio_pci::init();
-        // Phase 3: switch IOMMU from passthrough to enforcement.
-        // All PCIe DMA buffers registered via map_dma(); IOVA not in those ranges → fault.
+        // activate_isolation() is now called inside iommu::try_deferred_init() once the
+        // IOMMU device has been registered by the Platform Cell. The call below is a no-op
+        // (IOMMU not yet initialized at this point in boot).
         task::drivers::iommu::activate_isolation();
     }
 
@@ -537,7 +535,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
     // RISC-V only — task writes RISC-V machine code directly.
     // Expected serial output: "Hi from U-mode!\n" followed by task exit.
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     match task::user_hello::spawn() {
         Ok(tid) => {
             puts("[task] spawning user_hello at ");

@@ -15,7 +15,7 @@
 //! Call ordering: `platform::init()` → `init_kernel_paging*()` → `pcie_ecam::init()`.
 
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use crate::sync::Spinlock;
 
 // ── ECAM base addresses (QEMU machine defaults) ───────────────────────────────
@@ -148,6 +148,26 @@ pub struct PciDevice {
 // ── Global device list ────────────────────────────────────────────────────────
 
 static PCI_DEVICES: Spinlock<Vec<PciDevice>> = Spinlock::new(Vec::new());
+
+/// Set to `true` once the Platform Cell has completed its ECAM scan and called
+/// `sys_register_pcie_bar` for all discovered BARs. Phase 08 uses this flag to
+/// skip the kernel `init()` scan when the Platform Cell is the authoritative
+/// source of BAR information.
+static PLATFORM_REGISTERED: AtomicBool = AtomicBool::new(false);
+
+/// Mark the Platform Cell's ECAM registration as complete.
+///
+/// Called from the `RegisterPcieBar` syscall handler after the Platform Cell
+/// issues its final `sys_register_pcie_bar`. Sets `PLATFORM_REGISTERED` so
+/// Phase 08 can gate out the kernel ECAM scan.
+pub fn mark_platform_registered() {
+    PLATFORM_REGISTERED.store(true, Ordering::Release);
+}
+
+/// Return `true` if the Platform Cell has completed ECAM enumeration.
+pub fn is_platform_registered() -> bool {
+    PLATFORM_REGISTERED.load(Ordering::Acquire)
+}
 
 // ── ECAM MMIO accessors ───────────────────────────────────────────────────────
 
@@ -549,6 +569,61 @@ pub fn init() {
             };
             crate::resource_registry::register_pcie_bar(base, len);
         }
+    }
+}
+
+/// Register a device announced by the Platform Cell via `sys_register_pci_device`.
+///
+/// Decodes `bdf` and `cls` into a `PciDevice` stub with BAR0 populated.
+/// Skips duplicate BDFs (idempotent: kernel ECAM scan may already have found the device).
+/// Also registers BAR0 in the Resource Registry for `sys_request_mmio` validation.
+pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
+    let bus = ((bdf >> 16) & 0xFF) as u8;
+    let dev = ((bdf >> 8)  & 0xFF) as u8;
+    let fun = (bdf          & 0xFF) as u8;
+    let class    = ((cls >> 16) & 0xFF) as u8;
+    let subclass = ((cls >> 8)  & 0xFF) as u8;
+    let prog_if  = (cls          & 0xFF) as u8;
+
+    {
+        let devices = PCI_DEVICES.lock();
+        if devices.iter().any(|d| d.bdf == (bus, dev, fun)) {
+            return; // already present (kernel ECAM scan ran first)
+        }
+    }
+
+    let bars = if bar0_base != 0 {
+        let bar0 = if bar0_size <= u32::MAX as usize {
+            Bar::Memory32 { addr: bar0_base as u32, size: bar0_size as u32 }
+        } else {
+            Bar::Memory64 { addr: bar0_base as u64, size: bar0_size as u64 }
+        };
+        let mut arr = [Bar::None; 6];
+        arr[0] = bar0;
+        arr
+    } else {
+        [Bar::None; 6]
+    };
+
+    log::info!(
+        "[pcie] platform-reg {:02x}:{:02x}.{} class={:02x}:{:02x}:{:02x} bar0={:#x}",
+        bus, dev, fun, class, subclass, prog_if, bar0_base
+    );
+
+    PCI_DEVICES.lock().push(PciDevice {
+        bdf: (bus, dev, fun),
+        vendor_id: 0, // not probed by Platform Cell (BAR/class is sufficient for find_class)
+        device_id: 0,
+        class,
+        subclass,
+        prog_if,
+        bars,
+        msix: None,
+        pm:   None,
+    });
+
+    if bar0_base != 0 && bar0_size != 0 {
+        crate::resource_registry::register_pcie_bar(bar0_base, bar0_size);
     }
 }
 

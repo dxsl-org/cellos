@@ -1098,6 +1098,55 @@ pub fn sys_request_mmio(base: usize, len: usize) -> usize {
     ret as usize
 }
 
+/// Block the calling Driver Cell until hardware IRQ `irq_num` fires.
+///
+/// `mmio_base` is the VirtIO MMIO slot base address; the kernel ISR uses it to
+/// write the InterruptACK register (offset 0x64) before marking the IRQ pending,
+/// preventing interrupt storms on level-triggered VirtIO devices. Pass 0 for
+/// non-VirtIO devices (e.g. PCIe MSI or GPIO).
+///
+/// Lost-wakeup safe: an IRQ that fired before this call is returned immediately.
+/// Requires PcieDriverCap or PlatformCap (allowlist bit 51).
+pub fn sys_wait_irq(irq_num: u8, mmio_base: usize) -> Result<(), SyscallError> {
+    // SAFETY: kernel validates caller capability at dispatch.
+    let ret = unsafe { syscall(ViSyscall::WaitIrq, irq_num as usize, mmio_base, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// Register a PCIe device BAR in the kernel BAR allowlist table.
+///
+/// Called by the Platform Cell after scanning ECAM config space to announce each
+/// discovered device BAR. Subsequent Driver Cell calls to `sys_request_mmio` are
+/// validated against this table. Requires singleton PlatformCap (allowlist bit 52).
+pub fn sys_register_pcie_bar(bdf: u32, base: usize, len: usize) -> Result<(), SyscallError> {
+    // SAFETY: kernel validates PlatformCap at dispatch.
+    let ret = unsafe { syscall(ViSyscall::RegisterPcieBar, bdf as usize, base, len, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// Register a discovered PCI device with class and BAR0 info.
+///
+/// Populates the kernel `PCI_DEVICES` list so `sys_find_pcie_device` queries work
+/// without a kernel-side ECAM scan. Call once per discovered device after `scan_and_register`.
+/// Requires singleton PlatformCap (allowlist bit 53).
+///
+/// * `bdf`       — `(bus << 16) | (dev << 8) | fun`
+/// * `cls`       — `(class << 16) | (subclass << 8) | prog_if`
+/// * `bar0_base` — physical base of BAR0, or 0 if absent
+/// * `bar0_size` — probed BAR0 size in bytes, or 0
+pub fn sys_register_pci_device(
+    bdf: u32,
+    cls: u32,
+    bar0_base: usize,
+    bar0_size: usize,
+) -> Result<(), SyscallError> {
+    // SAFETY: kernel validates PlatformCap at dispatch.
+    let ret = unsafe {
+        syscall(ViSyscall::RegisterPciDevice, bdf as usize, cls as usize, bar0_base, bar0_size)
+    };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
 /// Fill `buf` with VirtIO-RNG entropy (true hardware randomness).
 ///
 /// Required for TLS key generation — mtime-seeded PRNG is cryptographically broken.
@@ -1207,6 +1256,26 @@ pub fn sys_register_block_driver() -> Result<(), SyscallError> {
 pub fn sys_register_nic_driver() -> Result<(), SyscallError> {
     // SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
     let ret = unsafe { syscall(ViSyscall::RegisterNicDriver, 0, 0, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+}
+
+/// Register the calling cell as the active GPU driver.
+///
+/// Uses `RegisterService` with `service::GPU_DRIVER` + `tid=0` (self-registration).
+/// The kernel `RegisterService` handler allows this for `PcieDriverCap` holders.
+/// Requires `PcieDriverCap` (`pcie_driver = true` in manifest).
+pub fn sys_register_gpu_driver() -> Result<(), SyscallError> {
+    // SAFETY: RegisterService always-permitted past allowlist; kernel validates
+    // PcieDriverCap + GPU_DRIVER + tid=0 at dispatch.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::RegisterService,
+            api::syscall::service::GPU_DRIVER as usize,
+            0, // tid=0 means "register the caller itself"
+            0,
+            0,
+        )
+    };
     if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
 }
 

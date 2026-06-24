@@ -80,6 +80,14 @@ pub fn is_present() -> bool {
 /// creating an interrupt storm that deadlocks all polling loops.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
+    // Driver Cell IRQ routing: if a Cell registered for this IRQ via sys_wait_irq,
+    // signal it (sets IRQ_PENDING + writes VirtIO InterruptACK) and return early.
+    // The kernel-internal driver does NOT receive this IRQ while a Cell holds it.
+    if crate::task::drivers::irq_wait::has_waiter(irq as u8) {
+        crate::task::drivers::irq_wait::signal_irq(irq as u8);
+        return;
+    }
+
     // --- Block device ---
     let block_irq = *BLOCK_DEVICE_IRQ.lock();
     if block_irq != 0 && block_irq == irq {
@@ -96,12 +104,9 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
     }
 
     // --- Input (keyboard) device ---
-    // ack_irq clears InterruptStatus; without this an input IRQ becomes a storm.
-    // After ACKing, call poll_events() to drain pending events into event_queue so
-    // they are ready when the shell next calls sys_read(0, ...).
-    if crate::task::drivers::virtio_input::ack_irq(irq) {
-        crate::task::drivers::virtio_input::poll_events();
-        crate::task::drivers::virtio_input::dispatch_pending();
+    // ACK the input IRQ to prevent interrupt storms when the input Cell is not yet
+    // running. Event routing is handled entirely by the input service Cell.
+    if crate::task::drivers::input_irq_ack::ack_if_input(irq) {
         return;
     }
 

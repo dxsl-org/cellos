@@ -17,18 +17,14 @@ pub mod uart;
 
 // Drivers
 pub mod console_drv;
-pub mod fb_console;
 pub mod font;
-pub mod input_map;
 pub mod block;
 pub mod mmc;
 pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_common;
 pub mod virtio_blk;
-pub mod virtio_gpu;
-pub mod virtio_input;
+pub mod input_irq_ack; // Minimal VirtIO input IRQ ACK shim (event routing is in input Cell)
 pub mod virtio_net;
-pub mod virtio_sound; // VirtIO sound (virtio-snd) output — backs the AudioPlay syscall
 pub mod gpio_irq;     // GPIO edge IRQ → MMIO-owner IPC dispatch (AArch64 PL061)
 pub mod virtio_rng;
 pub mod pcie_ecam;    // PCIe ECAM config-space walker (bus 0)
@@ -39,6 +35,7 @@ pub mod iommu_x86;    // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
 pub mod nic;          // NIC selector (VirtIO; PCIe NICs are Driver Cells)
 pub mod virtio_pci;   // VirtIO PCI transport for x86_64 q35 (transitional BLK/NET)
 pub mod driver_cell;  // Driver Cell registration statics (BLOCK_DRIVER_CELL / NIC_DRIVER_CELL)
+pub mod irq_wait;     // IRQ wait/pending tables for Driver Cell sys_wait_irq
 // blk_nvme and nic_e1000 have been migrated to Driver Cells:
 //   cells/drivers/nvme/   ← NVMe PCIe block driver
 //   cells/drivers/e1000/  ← Intel e1000 PCIe NIC driver
@@ -50,7 +47,7 @@ pub fn init() {
     registry::init();
 
     // Init specific drivers
-    virtio_input::init_driver();
+    input_irq_ack::init_driver(); // ACK-only shim; event routing is in input service Cell
     console_drv::init();
     ramdisk::init_driver(); // RAM disk for embedded FAT32 (kernel self-hosted FS)
     // Disable global interrupts during VirtIO init to prevent IRQ deadlocks.
@@ -59,9 +56,13 @@ pub fn init() {
     // forever.  We re-enable SIE after all drivers are initialised.
     virtio_blk::init_driver(); // VirtIO block — GPU probe hang fixed via mem::forget
     mmc::init_driver();        // MMC/SD — no-op on QEMU (VirtIO wins); probes SDHCI on real board
-    virtio_net::init_driver(); // VirtIO NIC — backs the net service cell
-    virtio_gpu::init_driver();
-    virtio_sound::init_driver(); // VirtIO sound — backs the AudioPlay syscall
+    // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so virtio-net Driver Cell
+    // can claim them via sys_request_mmio (PcieDriverCap path). Must run before
+    // virtio_net::init_driver so the BAR table is ready before net IPC begins.
+    for slot in virtio_common::virtio_slots() {
+        crate::resource_registry::register_pcie_bar(slot.base, 0x200);
+    }
+    virtio_net::init_driver(); // VirtIO NIC — kernel fallback until virtio-net Cell registers
     // VirtIO RNG init deferred: full MMIO probe hangs on RISC-V when probing
     // already-claimed slots (block/net). The no-op stub is sufficient until a
     // safe probe strategy is implemented (skip slots claimed by other drivers).

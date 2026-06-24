@@ -1,0 +1,17 @@
+[package]
+name    = "service-platform"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[[bin]]
+name = "platform"
+path = "src/main.rs"
+
+[dependencies]
+types = { path = "../../../libs/types" }
+api   = { path = "../../../libs/api" }
+ostd  = { path = "../../../libs/ostd" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }

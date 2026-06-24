@@ -8,6 +8,7 @@ pub mod drivers;
 pub mod ipc_test;
 pub mod scheduler;
 pub mod stack;
+#[cfg(feature = "test-hooks")]
 pub mod user_hello;
 pub mod waker;
 
@@ -148,15 +149,8 @@ pub extern "Rust" fn vi_timer_tick() {
         hal::common::sbi::set_timer(next);
     }
 
-    // Poll VirtIO input on every 10 ms tick.
-    //
-    // VirtIO RING_EVENT_IDX may suppress the device→driver interrupt even when
-    // QEMU places an event in the used ring.  Polling the ring directly ensures
-    // keyboard/mouse events are never dropped regardless of IRQ delivery.
-    // ipc_send(0, …) is fire-and-forget (caller_id=0 has no task entry), so
-    // this is safe to call from timer-ISR context with interrupts disabled.
-    crate::task::drivers::virtio_input::poll_events();
-    crate::task::drivers::virtio_input::dispatch_pending();
+    // VirtIO input event routing is handled entirely by the input service Cell.
+    // The kernel's timer tick no longer needs to poll or dispatch input events.
 
     // Poll UART hardware and relay any new bytes to the input service.
     // Makes UART delivery reader-independent: events arrive even when no cell
@@ -199,7 +193,7 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::cell::hotswap::force_unlock_locks();
     crate::cell::service_registry::force_unlock_locks();
     crate::task::drivers::virtio_blk::force_unlock_locks();
-    crate::task::drivers::virtio_input::force_unlock_locks();
+    crate::task::drivers::input_irq_ack::force_unlock_locks();
     crate::task::drivers::mmc::force_unlock_locks();
     crate::resource_registry::force_unlock_locks();
     crate::measurement_log::force_unlock_locks();
@@ -940,6 +934,65 @@ pub fn ipc_send(
     Err(())
 }
 
+/// Post a message to `target_id` without blocking the caller.
+///
+/// Delivers immediately if target is in `Recv` state (copies into its buffer,
+/// marks it Ready, pends a preempt).  If the target is busy, queues the message
+/// into `pending_msgs` (bounded by `HOTSWAP_MSG_QUEUE_DEPTH`).
+///
+/// Never puts the caller in `Sending` state — the caller always continues.
+/// Returns `Ok(())` if delivered or queued, `Err(())` if target is gone or queue full.
+///
+/// Used by `GpuFlush`/`GpuCursor` syscall handlers to fire-and-forget
+/// IPC to the GPU Driver Cell without parking the compositor.
+pub fn ipc_post_nonblock(
+    sender_id: usize,
+    target_id: usize,
+    msg: &[u8],
+) -> core::result::Result<(), ()> {
+    if let Some(sched) = SCHEDULER.lock().as_mut() {
+        if !sched.tasks.contains_key(&target_id) {
+            return Err(());
+        }
+
+        let target_ready = sched.tasks.get(&target_id).and_then(|t| {
+            match t.state {
+                TaskState::Recv { buf_ptr, buf_len, .. } => Some((buf_ptr, buf_len)),
+                _ => None,
+            }
+        });
+
+        if let Some((dest_ptr, dest_len)) = target_ready {
+            let copy_len = msg.len().min(dest_len);
+            // SAFETY: dest_ptr is the target cell's recv buffer (SAS identity mapping);
+            // we hold SCHEDULER lock so the target is not concurrently executing.
+            unsafe {
+                core::ptr::copy_nonoverlapping(msg.as_ptr(), dest_ptr as *mut u8, copy_len);
+            }
+            if let Some(t) = sched.tasks.get_mut(&target_id) {
+                t.state = TaskState::Ready;
+                t.current_caller = Some(sender_id);
+            }
+            let prio = sched.push_ready(target_id);
+            sched.pend_preempt_if_needed(prio);
+            return Ok(());
+        }
+
+        // Target not in Recv — queue to pending_msgs (bounded).
+        if let Some(t) = sched.tasks.get_mut(&target_id) {
+            if t.pending_msgs.len() < tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+                t.pending_msgs.push(tcb::PendingMsg {
+                    sender_tid: sender_id,
+                    data: msg.to_vec().into_boxed_slice(),
+                    enqueued_tick: crate::task::system_ticks() as u64,
+                });
+                return Ok(());
+            }
+        }
+    }
+    Err(())
+}
+
 pub fn ipc_recv(
     caller_id: usize,
     mask: usize,
@@ -1271,10 +1324,6 @@ pub fn print_user_log(msg: &str) {
             }
         }
     }
-    // Mirror raw output to the framebuffer console (best-effort; no-op when GPU
-    // is absent or not yet initialised).  Written without the "USER: " serial
-    // prefix so the framebuffer looks like a real terminal, not a log stream.
-    crate::task::drivers::fb_console::FramebufferConsole::write_str(msg);
 }
 
 /// Spawns a synthetic task for testing User Mode without filesystem

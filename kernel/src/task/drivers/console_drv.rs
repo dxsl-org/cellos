@@ -30,7 +30,7 @@ impl viConsole {
         let mut received = false;
 
         // Hoist input_tid once; used for both UART relay (below) and VirtIO dispatch (§2).
-        let input_tid = crate::task::drivers::virtio_input::INPUT_CELL_ID
+        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
             .load(Ordering::Relaxed);
 
         // 1a. Directly poll the 16550 RHR — RISC-V QEMU virt only.
@@ -114,7 +114,8 @@ impl viConsole {
 /// Reads/writes sstatus.SUM (bit 18) on RISC-V to allow S-mode copy into the
 /// U-mode IPC buffer. Safe because SUM is scoped to this function's lifetime.
 fn relay_ascii_to_input(input_tid: usize, byte: u8) {
-    use crate::task::drivers::input_map::WIRE_ASCII;
+    // Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
+    const WIRE_ASCII: u8 = 0x04;
 
     // RISC-V only: SUM (sstatus bit 18) must be set for ipc_send to write into
     // the U-mode receive buffer.  Preserve the current SUM state so we do not

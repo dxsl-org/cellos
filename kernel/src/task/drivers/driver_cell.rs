@@ -1,9 +1,9 @@
-//! Driver Cell registration — tracks which cells own the block and NIC roles.
+//! Driver Cell registration — tracks which cells own the block, NIC, and GPU roles.
 //!
-//! When a Tier-1 Driver Cell calls `sys_register_block_driver` or
-//! `sys_register_nic_driver`, the kernel records its TID here.  Service clients
-//! (VFS, net cell) use `sys_lookup_service(service::BLOCK_DRIVER)` to find the
-//! provider; these statics are the backing store for that lookup.
+//! When a Tier-1 Driver Cell calls `sys_register_block_driver`,
+//! `sys_register_nic_driver`, or `sys_register_gpu_driver`, the kernel records
+//! its TID here.  Service clients use `sys_lookup_service(service::X)` to find
+//! the provider; these statics are the backing store for that lookup.
 //!
 //! `0` means "no driver cell registered; fall back to kernel-resident driver".
 
@@ -14,6 +14,9 @@ pub static BLOCK_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
 /// TID of the registered NIC Driver Cell (0 = none; kernel e1000/VirtIO is active).
 pub static NIC_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
+
+/// TID of the registered GPU Driver Cell (0 = none; kernel virtio_gpu is active).
+pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
 /// Record `tid` as the active block driver.  Overwrites any previous registration.
 pub fn register_block_driver(tid: usize) {
@@ -35,4 +38,30 @@ pub fn deregister_block_driver(tid: usize) {
 /// Clear the NIC driver registration (called on cell exit/kill).
 pub fn deregister_nic_driver(tid: usize) {
     NIC_DRIVER_CELL.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
+}
+
+/// Record `tid` as the active GPU driver.  Overwrites any previous registration.
+pub fn register_gpu_driver(tid: usize) {
+    GPU_DRIVER_CELL.store(tid, Ordering::Release);
+    log::info!("[driver_cell] GPU driver registered: tid={}", tid);
+}
+
+/// Clear the GPU driver registration (called on cell exit/kill).
+pub fn deregister_gpu_driver(tid: usize) {
+    GPU_DRIVER_CELL.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
+}
+
+/// TID of the registered input service Cell (0 = unregistered).
+/// Set by the loader after spawning `/bin/input`; cleared on its death.
+pub static INPUT_CELL_TID: AtomicUsize = AtomicUsize::new(0);
+
+/// Register the input service cell.  Called by the loader after spawning `/bin/input`.
+pub fn set_input_cell(tid: usize) {
+    INPUT_CELL_TID.store(tid, Ordering::Release);
+    log::info!("[input] registered input service TID {}", tid);
+}
+
+/// Clear the input service registration if it matches `tid` (called on cell death).
+pub fn clear_input_cell_if(tid: usize) {
+    INPUT_CELL_TID.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
 }

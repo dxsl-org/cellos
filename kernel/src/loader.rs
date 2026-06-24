@@ -297,8 +297,18 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
             //   Mirrored in the init grant path (kernel/src/main.rs) so that if the
             //   Supervisor Cell crashes and init needs to unfreeze its frozen targets,
             //   init retains the authority to do so.
-            if path == "/bin/nvme" || path == "/bin/e1000" {
+            if path == "/bin/nvme" || path == "/bin/e1000" || path == "/bin/virtio-net"
+                || path == "/bin/input" || path == "/bin/virtio-gpu" {
                 task.pcie_driver_cap = Some(crate::task::cap::PcieDriverCap::new());
+            }
+            if path == "/bin/platform" {
+                match crate::task::cap::try_grant_platform() {
+                    Some(cap) => task.platform_cap = Some(cap),
+                    None => {
+                        log::error!("[loader] PlatformCap already granted — refusing 2nd /bin/platform spawn");
+                        return Err(types::ViError::PermissionDenied);
+                    }
+                }
             }
             if path == "/bin/supervisor" {
                 task.supervisor_cap = Some(crate::task::cap::SupervisorCap::new());
@@ -318,7 +328,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     }
     // Register input service endpoint regardless of manifest presence.
     if path.ends_with("/bin/input") {
-        crate::task::drivers::virtio_input::set_input_cell(tid);
+        crate::task::drivers::driver_cell::set_input_cell(tid);
     }
     Ok(tid)
 }

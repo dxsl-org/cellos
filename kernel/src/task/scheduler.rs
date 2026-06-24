@@ -356,7 +356,7 @@ impl Scheduler {
 
         // Input-service registration cleanup: prevent the kernel poll path from pushing
         // events to a dead/reused TID. Supervisor re-registers after respawn.
-        crate::task::drivers::virtio_input::clear_input_cell_if(tid);
+        crate::task::drivers::driver_cell::clear_input_cell_if(tid);
 
         // Remove from every hart's ready queue if present.
         super::hart_local::ready::remove_from_all(tid);
@@ -516,6 +516,15 @@ impl Scheduler {
                             task.trap_frame.regs[10] = 0; // timeout — return 0
                             should_wake = true;
                             timed_out = true;
+                        }
+                    }
+                    // WaitIrq: IRQ-only wake — no deadline, no timeout.
+                    // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).
+                    // This sweep is the only place that transitions WaitIrq → Ready.
+                    TaskState::WaitIrq { irq } => {
+                        if crate::task::drivers::irq_wait::take_pending(*irq) {
+                            crate::task::drivers::irq_wait::clear_waiter(*irq);
+                            should_wake = true;
                         }
                     }
                     _ => {}

@@ -334,6 +334,10 @@ fn caller_has_pcie_driver(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.pcie_driver_cap.is_some())
 }
 
+fn caller_has_platform(caller_id: usize) -> bool {
+    caller_has_cap(caller_id, |t| t.platform_cap.is_some())
+}
+
 /// Validate a user-supplied (ptr, len) buffer descriptor.
 ///
 /// Rejects: NULL pointer, zero-length when expected non-empty, lengths above
@@ -627,6 +631,18 @@ pub enum Syscall {
     WriteGuestMemory { vm_id: usize, gpa: u64, src_ptr: usize, len: usize },
     /// 227: ReadGuestMemory — copy `len` bytes from guest GPA into `dst_ptr`.
     ReadGuestMemory  { vm_id: usize, gpa: u64, dst_ptr: usize, len: usize },
+    /// 234: WaitIrq — block until hardware IRQ `irq` fires (Driver Cell).
+    /// ISR sets IRQ_PENDING[irq] (atomic, no lock); scheduler sweep wakes the task.
+    /// `mmio_base`: VirtIO MMIO slot base for InterruptACK write, or 0 for non-VirtIO.
+    WaitIrq { irq: u8, mmio_base: usize },
+    /// 235: RegisterPcieBar — Platform Cell announces a discovered PCIe BAR.
+    /// Populates the kernel BAR allowlist used by `sys_request_mmio`.
+    /// Requires singleton PlatformCap.
+    RegisterPcieBar { bdf: u32, base: usize, len: usize },
+    /// 236: RegisterPciDevice — Platform Cell announces a PCI device with class/BAR info.
+    /// Populates kernel PCI_DEVICES so find_class() works without a kernel ECAM scan.
+    /// Requires singleton PlatformCap (allowlist bit 53).
+    RegisterPciDevice { bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize },
 }
 
 /// Read the per-Cell syscall allowlist from the TCB.
@@ -726,6 +742,9 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::InjectIrq { .. }      => V::InjectIrq,
         Syscall::WriteGuestMemory { .. } => V::WriteGuestMemory,
         Syscall::ReadGuestMemory  { .. } => V::ReadGuestMemory,
+        Syscall::WaitIrq { .. }         => V::WaitIrq,
+        Syscall::RegisterPcieBar { .. }   => V::RegisterPcieBar,
+        Syscall::RegisterPciDevice { .. } => V::RegisterPciDevice,
         // Always-permitted; allowlist_bit() returns None → filter is a no-op.
         Syscall::Yield
         | Syscall::Exit { .. }
@@ -1386,6 +1405,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::RegisterService { service_id, tid } => {
+            // Driver Cell self-registration path: PcieDriverCap + GPU_DRIVER + tid=0.
+            // tid=0 means "register me (the caller)". No SpawnCap needed — PcieDriverCap
+            // is the authority gate for driver namespace IDs.
+            if caller_has_pcie_driver(caller_id)
+                && tid == 0
+                && service_id == api::syscall::service::GPU_DRIVER
+            {
+                crate::task::drivers::driver_cell::register_gpu_driver(caller_id);
+                crate::cell::service_registry::register(service_id, caller_id);
+                return Ok(0);
+            }
             // Privileged: only SpawnCap holders (the supervisor) own the service
             // namespace — same authority gate as NotifyOnExit/ForceExit. Prevents a
             // cell from hijacking a well-known endpoint (e.g. the VFS service).
@@ -2088,89 +2118,73 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 _ => Ok(0),
             }
         }
-        Syscall::AudioPlay { buf_ptr, buf_len } => {
-            if buf_len == 0 {
-                return Ok(0);
-            }
-            validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
-            // SAFETY: pointer/length validated above; SUM is set by the syscall
-            // dispatcher for this handler, so the S-mode read of the U-mode PCM
-            // buffer is permitted. play() blocks until all frames are transferred.
-            let frames = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, buf_len) };
-            let played = crate::task::drivers::virtio_sound::play(frames);
-            Ok(played)
+        Syscall::AudioPlay { .. } => {
+            // No Sound Cell registered; virtio_sound.rs removed (kernel boundary law).
+            // Syscall 218 is reserved — do not reuse. A VirtIO Sound Driver Cell
+            // will handle audio in G2 via direct MMIO + IPC, no kernel driver needed.
+            log::warn!("[audio] AudioPlay: no Sound Cell registered (G2 TODO)");
+            Err(SyscallError::Unknown)
         }
         Syscall::GpuFlush { data_ptr, data_len, xy, wh } => {
-            use crate::task::drivers::virtio_gpu::GPU_CONTEXT;
-            let x = ((xy >> 16) & 0xFFFF) as i32;
-            let y = (xy & 0xFFFF) as i32;
-            let w = ((wh >> 16) & 0xFFFF) as u32;
-            let h = (wh & 0xFFFF) as u32;
-            let expected = (w * h * 4) as usize;
-            if data_len < expected {
-                log::warn!("[gpu_flush] data_len {} < expected {}", data_len, expected);
-                return Err(SyscallError::BufferTooSmall);
-            }
-            let mut guard = GPU_CONTEXT.lock();
-            if let Some(ctx) = guard.as_mut() {
-                let stride = ctx.width as usize * 4; // read width before mutable borrow
-                let fb = ctx.framebuffer();
-                // SAFETY: data_ptr is a user-space address in the same SAS;
-                // data_len was validated against w*h*4 above; we read exactly
-                // that many bytes without writing past fb bounds.
-                let src = unsafe { core::slice::from_raw_parts(data_ptr as *const u8, data_len) };
-                let dy = y as usize;
-                let dx = x as usize;
-                for row in 0..h as usize {
-                    let fb_off = (dy + row) * stride + dx * 4;
-                    let src_off = row * w as usize * 4;
-                    let row_bytes = w as usize * 4;
-                    if fb_off + row_bytes <= fb.len() {
-                        fb[fb_off..fb_off + row_bytes]
-                            .copy_from_slice(&src[src_off..src_off + row_bytes]);
-                    }
+            // If a GPU Driver Cell is registered, forward the flush via fire-and-forget IPC.
+            // The Cell owns the VirtIO GPU hardware; we copy nothing — the Cell reads
+            // data_ptr directly from the SAS (single address space).
+            {
+                use crate::task::drivers::driver_cell::GPU_DRIVER_CELL;
+                use core::sync::atomic::Ordering;
+                let gpu_cell = GPU_DRIVER_CELL.load(Ordering::Acquire);
+                if gpu_cell != 0 {
+                    let mut msg = [0u8; 21];
+                    msg[0] = 0x10; // OP_FLUSH
+                    msg[1..5].copy_from_slice(&(xy as u32).to_le_bytes());
+                    msg[5..9].copy_from_slice(&(wh as u32).to_le_bytes());
+                    msg[9..17].copy_from_slice(&(data_ptr as u64).to_le_bytes());
+                    msg[17..21].copy_from_slice(&(data_len as u32).to_le_bytes());
+                    let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
+                    return Ok(0);
                 }
-                ctx.flush_rect(x as u32, y as u32, w, h);
-                Ok(0)
-            } else {
-                Err(SyscallError::Unknown) // GPU not initialised
             }
+            // GPU Driver Cell not registered — no kernel fallback (Phase 08).
+            log::warn!("[gpu_flush] GPU Driver Cell not registered");
+            Err(SyscallError::Unknown)
         }
         Syscall::GpuCursor { op, data_ptr, xy, hot } => {
-            let x     = ((xy  >> 16) & 0xFFFF) as u32;
-            let y     = ( xy         & 0xFFFF) as u32;
-            let hot_x = ((hot >> 16) & 0xFFFF) as u32;
-            let hot_y = ( hot        & 0xFFFF) as u32;
-            match op {
-                0 => {
-                    // op=0: set sprite — data_ptr → 64×64 BGRA8888 (exactly 16384 bytes).
-                    const SPRITE_LEN: usize = 64 * 64 * 4;
-                    // SAFETY: data_ptr is a user-space address in the SAS; the cursor module
-                    // validates that the slice length equals SPRITE_LEN before passing it to
-                    // the virtio-drivers layer.
-                    let image = unsafe {
-                        core::slice::from_raw_parts(data_ptr as *const u8, SPRITE_LEN)
-                    };
-                    crate::task::drivers::virtio_gpu::cursor::set_sprite(image, x, y, hot_x, hot_y)
-                        .map(|_| 0usize)
-                        .map_err(|_| SyscallError::Unknown)
+            // If a GPU Driver Cell is registered, forward the cursor op via fire-and-forget IPC.
+            {
+                use crate::task::drivers::driver_cell::GPU_DRIVER_CELL;
+                use core::sync::atomic::Ordering;
+                let gpu_cell = GPU_DRIVER_CELL.load(Ordering::Acquire);
+                if gpu_cell != 0 {
+                    match op {
+                        0 => {
+                            // OP_CUR_SET: data_ptr=sprite, xy=position, hot=hotspot
+                            let mut msg = [0u8; 17];
+                            msg[0] = 0x11;
+                            msg[1..9].copy_from_slice(&(data_ptr as u64).to_le_bytes());
+                            msg[9..13].copy_from_slice(&(xy as u32).to_le_bytes());
+                            msg[13..17].copy_from_slice(&(hot as u32).to_le_bytes());
+                            let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
+                        }
+                        1 => {
+                            // OP_CUR_MOVE: xy=new position
+                            let mut msg = [0u8; 5];
+                            msg[0] = 0x12;
+                            msg[1..5].copy_from_slice(&(xy as u32).to_le_bytes());
+                            let _ = super::ipc_post_nonblock(0, gpu_cell, &msg);
+                        }
+                        _ => return Err(SyscallError::InvalidInput),
+                    }
+                    return Ok(0);
                 }
-                1 => {
-                    // op=1: move — data_ptr and hot unused.
-                    crate::task::drivers::virtio_gpu::cursor::move_to(x, y)
-                        .map(|_| 0usize)
-                        .map_err(|_| SyscallError::Unknown)
-                }
-                _ => Err(SyscallError::InvalidInput),
             }
+            // GPU Driver Cell not registered — no kernel fallback (Phase 08).
+            log::warn!("[gpu_cursor] GPU Driver Cell not registered");
+            Err(SyscallError::Unknown)
         }
         Syscall::GpuGetResolution => {
-            use crate::task::drivers::virtio_gpu::GPU_CONTEXT;
-            let (w, h) = GPU_CONTEXT.lock().as_ref()
-                .map(|c| (c.width, c.height))
-                .unwrap_or((1280, 800));
-            // Pack both dimensions into one usize: width in high 32 bits, height in low 32 bits.
-            Ok(((w as usize) << 32) | (h as usize))
+            // Resolution is owned by the GPU Driver Cell (Phase 08).
+            // Return the default until the Cell registers a query IPC path.
+            Ok(((1280usize) << 32) | 800usize)
         }
         Syscall::NetTx { frame_ptr, frame_len } => {
             if !caller_has_network(caller_id) {
@@ -2380,6 +2394,59 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     Ok(1)
                 }
             }
+        }
+
+        // 234: WaitIrq — block until hardware IRQ fires (Driver Cell).
+        // ISR calls irq_wait::signal_irq (atomic only; no lock, no scheduler access).
+        // Scheduler sweep (pick_next) does the actual Ready transition.
+        Syscall::WaitIrq { irq, mmio_base } => {
+            if !caller_has_pcie_driver(caller_id) && !caller_has_platform(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            // Lost-wakeup guard: if IRQ already fired before this call, return immediately.
+            if crate::task::drivers::irq_wait::take_pending(irq) {
+                return Ok(0);
+            }
+            // Single-waiter policy: second caller on same IRQ gets TryAgain.
+            if !crate::task::drivers::irq_wait::register_waiter(irq, caller_id, mmio_base) {
+                return Err(SyscallError::TryAgain);
+            }
+            // Park the task — scheduler sweep will wake it when IRQ_PENDING[irq] is set.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                    task.state = super::tcb::TaskState::WaitIrq { irq };
+                }
+            }
+            super::yield_cpu();
+            Ok(0)
+        }
+
+        // 235: RegisterPcieBar — Platform Cell announces a discovered PCIe BAR.
+        // Populates PCIE_BARS allowlist (resource_registry) so Driver Cells can
+        // claim the BAR via sys_request_mmio. Records BDF → caller ownership.
+        Syscall::RegisterPcieBar { bdf, base, len } => {
+            if !caller_has_platform(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::resource_registry::register_pcie_bar(base, len);
+            crate::resource_registry::register_bdf_owner(bdf, caller_id);
+            // Any RegisterPcieBar call from the Platform Cell marks it as active;
+            // Phase 08 uses this to gate out the kernel ECAM scan.
+            crate::task::drivers::pcie_ecam::mark_platform_registered();
+            Ok(0)
+        }
+
+        // 236: RegisterPciDevice — Platform Cell announces a device with class/BAR info.
+        // Populates PCI_DEVICES so sys_find_pcie_device queries work without kernel ECAM scan.
+        // After each registration, attempt deferred IOMMU init (no-op until IOMMU device appears).
+        Syscall::RegisterPciDevice { bdf, cls, bar0_base, bar0_size } => {
+            if !caller_has_platform(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            crate::task::drivers::pcie_ecam::register_device(bdf, cls, bar0_base, bar0_size);
+            crate::task::drivers::pcie_ecam::mark_platform_registered();
+            crate::task::drivers::iommu::try_deferred_init();
+            Ok(0)
         }
 
         Syscall::BlkFlush => {
@@ -2661,6 +2728,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::RequestMmio { base, len } => {
+            // PlatformCap bypass: Platform Cell may claim any MMIO range
+            // (including the ECAM config-space window, which is not in PCIE_BARS).
+            // Overlap check still applies — no two cells may share a byte.
+            if caller_has_platform(caller_id) {
+                return match crate::resource_registry::request_mmio_unchecked(
+                    types::CellId(caller_id as u64), base, len,
+                ) {
+                    Ok(()) => Ok(0),
+                    Err(types::ViError::AlreadyExists) => Ok(2),
+                    Err(_) => Ok(3),
+                };
+            }
             // PCIe BAR path: cells with PcieDriverCap may claim any BAR
             // discovered during ECAM scan (registered in resource_registry::PCIE_BARS).
             if caller_has_pcie_driver(caller_id)
@@ -2954,6 +3033,13 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         },
         ViSyscall::ReadGuestMemory  => Syscall::ReadGuestMemory {
             vm_id: a0, gpa: a1 as u64, dst_ptr: a2, len: a3,
+        },
+        ViSyscall::WaitIrq       => Syscall::WaitIrq { irq: a0 as u8, mmio_base: a1 },
+        ViSyscall::RegisterPcieBar => Syscall::RegisterPcieBar {
+            bdf: a0 as u32, base: a1, len: a2,
+        },
+        ViSyscall::RegisterPciDevice => Syscall::RegisterPciDevice {
+            bdf: a0 as u32, cls: a1 as u32, bar0_base: a2, bar0_size: a3,
         },
         _ => match syscall_id {
             3   => Syscall::SetTimer { deadline: a0 },

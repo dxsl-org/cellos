@@ -38,9 +38,10 @@ if (-not $env:LIBCLANG_PATH) {
 Write-Host "Building release cells..."
 cargo build --release `
     -p app-init -p app-shell `
+    -p service-platform `
     -p service-vfs -p service-config `
     -p service-input -p service-net -p service-compositor -p service-net-broker `
-    -p supervisor -p driver-nvme -p driver-e1000 2>&1 | Select-Object -Last 5
+    -p supervisor -p driver-nvme -p driver-e1000 -p driver-virtio-net -p driver-virtio-gpu 2>&1 | Select-Object -Last 5
 cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench + bench-probe
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p app-sys-tools 2>&1 | Select-Object -Last 3
@@ -120,6 +121,7 @@ function Invoke-SignCell {
 # Sign the cells that are embedded / placed in the disk image.
 Invoke-SignCell "$rel_dir\app-init"
 Invoke-SignCell "$rel_dir\app-shell"
+Invoke-SignCell "$rel_dir\platform"
 Invoke-SignCell "$rel_dir\service-vfs"
 Invoke-SignCell "$rel_dir\service-config"
 Invoke-SignCell "$rel_dir\service-net"
@@ -128,6 +130,8 @@ Invoke-SignCell "$rel_dir\service-compositor"
 Invoke-SignCell "$rel_dir\supervisor"
 Invoke-SignCell "$rel_dir\driver-nvme"
 Invoke-SignCell "$rel_dir\driver-e1000"
+Invoke-SignCell "$rel_dir\driver-virtio-net"
+Invoke-SignCell "$rel_dir\driver-virtio-gpu"
 Invoke-SignCell "$rel_dir\service-input"
 Invoke-SignCell "$rel_dir\app-bench"
 Invoke-SignCell "$rel_dir\bench-probe"
@@ -195,8 +199,11 @@ $input_bin  = "$rel_dir\service-input"     # Phase 14: input service cell
 $net_bin    = "$rel_dir\service-net"       # Phase 15: network service cell
 $net_broker_bin   = "$rel_dir\service-net-broker" # L.0: cluster net-broker cell
 $supervisor_bin   = "$rel_dir\supervisor"         # Kernel Boundary Law: hotswap orchestration
+$platform_bin     = "$rel_dir\platform"            # Kernel Boundary Law: PCIe ECAM Platform Cell
 $nvme_bin         = "$rel_dir\driver-nvme"        # Kernel Boundary Law: NVMe PCIe Driver Cell
 $e1000_bin        = "$rel_dir\driver-e1000"       # Kernel Boundary Law: e1000 PCIe Driver Cell
+$virtio_net_bin   = "$rel_dir\driver-virtio-net"  # Kernel Boundary Law: VirtIO MMIO NIC Driver Cell
+$virtio_gpu_bin   = "$rel_dir\driver-virtio-gpu"  # Kernel Boundary Law: VirtIO GPU Driver Cell
 $comp_bin      = "$rel_dir\service-compositor" # Phase 16: compositor + GPU
 $robot_demo_bin = "$rel_dir\robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir\robot-dashboard"  # G1 ViUI v2 dashboard demo
@@ -295,6 +302,19 @@ if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
 if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
 if (Test-Path $ps_bin)   { $kfs_args += @($ps_bin,   "/bin/ps") }
 if (Test-Path $kill_bin) { $kfs_args += @($kill_bin, "/bin/kill") }
+# Boot service + driver cells — must be in kernel_fs.img so boot works without
+# a VirtIO block device (ARM64, diskless CI, and the future VirtIO Block Cell
+# phase where kernel no longer has a built-in block driver).
+if (Test-Path $net_bin)        { $kfs_args += @($net_bin,        "/bin/net") }
+if (Test-Path $input_bin)      { $kfs_args += @($input_bin,      "/bin/input") }
+if (Test-Path $comp_bin)       { $kfs_args += @($comp_bin,       "/bin/compositor") }
+if (Test-Path $supervisor_bin) { $kfs_args += @($supervisor_bin, "/bin/supervisor") }
+if (Test-Path $platform_bin)   { $kfs_args += @($platform_bin,   "/bin/platform") }
+if (Test-Path $nvme_bin)       { $kfs_args += @($nvme_bin,       "/bin/nvme") }
+if (Test-Path $e1000_bin)      { $kfs_args += @($e1000_bin,      "/bin/e1000") }
+if (Test-Path $virtio_net_bin) { $kfs_args += @($virtio_net_bin, "/bin/virtio-net") }
+if (Test-Path $virtio_gpu_bin) { $kfs_args += @($virtio_gpu_bin, "/bin/virtio-gpu") }
+if (Test-Path $net_broker_bin) { $kfs_args += @($net_broker_bin, "/bin/net-broker") }
 python "$tools_dir\mkfat32.py" @kfs_args 2>&1
 Remove-Item -Recurse -Force $tmpDir
 $kfs_mb = [Math]::Round((Get-Item "kernel\src\embedded\kernel_fs.img").Length/1MB,1)
@@ -347,8 +367,11 @@ if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
 if (Test-Path $net_bin)   { $table_args += "/bin/net=$net_bin" }
 if (Test-Path $net_broker_bin) { $table_args += "/bin/net-broker=$net_broker_bin" }
 if (Test-Path $supervisor_bin) { $table_args += "/bin/supervisor=$supervisor_bin" }
+if (Test-Path $platform_bin)   { $table_args += "/bin/platform=$platform_bin" }
 if (Test-Path $nvme_bin)       { $table_args += "/bin/nvme=$nvme_bin" }
 if (Test-Path $e1000_bin)      { $table_args += "/bin/e1000=$e1000_bin" }
+if (Test-Path $virtio_net_bin) { $table_args += "/bin/virtio-net=$virtio_net_bin" }
+if (Test-Path $virtio_gpu_bin) { $table_args += "/bin/virtio-gpu=$virtio_gpu_bin" }
 if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
 if (Test-Path $robot_demo_bin)  { $table_args += "/bin/robot-demo=$robot_demo_bin" }
 if (Test-Path $dashboard_bin)   { $table_args += "/bin/robot-dashboard=$dashboard_bin" }

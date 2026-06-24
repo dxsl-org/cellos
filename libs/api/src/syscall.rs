@@ -63,6 +63,27 @@ pub enum ViSyscall {
     /// ABI: a0 = bdf: u32, a1 = phys: u64, a2 = size: usize → IOVA (== phys for SAS) on success.
     /// Caller must own the BDF via Resource Registry; range must be within Cell memory quota.
     GrantDma = 233,
+    /// Block the calling Driver Cell until hardware IRQ `irq_num` fires.
+    /// The kernel ISR sets an atomic flag (no lock); the scheduler sweep transitions the task
+    /// to Ready. Lost-wakeup safe: an IRQ that fires between the Cell's queue-check and this
+    /// call is not missed (take_pending before park). Requires PcieDriverCap or PlatformCap.
+    /// ABI: a0 = irq_num (u8), a1 = mmio_base (VirtIO MMIO slot base for InterruptACK, or 0).
+    WaitIrq = 234,
+    /// Register a PCIe device BAR in the kernel ECAM BAR table (Platform Cell only).
+    /// Called by the Platform Cell after scanning ECAM config space; populates the allowlist
+    /// that Driver Cells consult via `sys_request_mmio`. Singleton PlatformCap required.
+    /// ABI: a0 = bdf (u32), a1 = base (usize), a2 = len (usize) → 0 on success.
+    RegisterPcieBar = 235,
+    /// Register a discovered PCI device with class/BAR info (Platform Cell only).
+    ///
+    /// Called by the Platform Cell after ECAM scan; populates kernel `PCI_DEVICES` so
+    /// `sys_find_pcie_device` queries work without a kernel-side ECAM scan.
+    /// `bdf`       = (bus<<16)|(dev<<8)|fun
+    /// `cls`       = (class<<16)|(subclass<<8)|prog_if
+    /// `bar0_base` = physical base of BAR0 (or 0 if absent)
+    /// `bar0_size` = probed BAR0 size in bytes (or 0)
+    /// Requires singleton PlatformCap (allowlist bit 53).
+    RegisterPciDevice = 236,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -502,6 +523,15 @@ impl ViSyscall {
             // and discover PCIe device BARs. All gated by PcieDriverCap.
             Self::RegisterBlockDriver | Self::RegisterNicDriver
             | Self::FindPcieDevice => Some(50),
+            // WaitIrq (bit 51): block a Driver Cell until a hardware IRQ fires.
+            // Gated by PcieDriverCap or PlatformCap — only Driver Cells may wait on IRQs.
+            Self::WaitIrq => Some(51),
+            // RegisterPcieBar (bit 52): Platform Cell announces a discovered BAR.
+            // Singleton PlatformCap is the gate — only one trusted Platform Cell may call this.
+            Self::RegisterPcieBar => Some(52),
+            // RegisterPciDevice (bit 53): Platform Cell announces a PCI device with class info.
+            // Populates kernel PCI_DEVICES so find_class() queries work without kernel ECAM scan.
+            Self::RegisterPciDevice => Some(53),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -580,6 +610,9 @@ impl From<usize> for ViSyscall {
             231 => ViSyscall::TruncateCap,
             232 => ViSyscall::SyncCap,
             233 => ViSyscall::GrantDma,
+            234 => ViSyscall::WaitIrq,
+            235 => ViSyscall::RegisterPcieBar,
+            236 => ViSyscall::RegisterPciDevice,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -643,6 +676,9 @@ pub mod service {
     /// Supervisor Cell — hotswap/snapshot orchestration. Trusted by init; holds SupervisorCap.
     /// Send `HotswapRequest` / `SnapshotRequest` IPC to trigger live cell replacement.
     pub const SUPERVISOR: u16 = 11;
+    /// VirtIO GPU Driver Cell — owns the VirtIO GPU MMIO and framebuffer DMA.
+    /// Kernel `GpuFlush`/`GpuCursor` syscalls forward to this Cell when registered.
+    pub const GPU_DRIVER: u16 = 12;
 }
 
 /// Arguments for SpawnFromMem syscall.
