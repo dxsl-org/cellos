@@ -14,38 +14,17 @@
 
 extern crate alloc;
 
-// Export types so they are available via api::* if needed,
-// and to satisfy `use crate::*` in modules if they rely on it.
 pub use types::*;
 
-pub mod allocator;
-pub mod async_io;
-pub mod cluster;
-pub mod fast_ipc;
-pub mod ipc;
-pub mod task;
-pub use task::TaskPriority;
-pub mod cap;
-pub mod benchmark;
-pub mod block;
-pub mod config;
-pub mod driver;
-pub mod display;
-pub mod fs;
-pub mod disk;
-pub mod hotswap;
-pub mod hypervisor;
-pub mod input;
-pub mod manifest;
-pub mod net;
-pub mod posix;
-pub mod serde_helpers;
-pub mod syscall;
-pub mod vm;
+/// Frozen kernel ABI — changes require 2× explicit confirmation.
+pub mod abi;
+/// Extensible service interface contracts — new services go here.
+pub mod services;
 
-// POSIX Shim Layer
+// Flat re-exports: all existing `api::X` paths continue to work unchanged
+// in kernel and cell code. The abi/services split is organisational only.
+pub use abi::*;
+pub use services::*;
 
-
-pub use syscall::ViSyscall;
-
-pub mod syscall_tests;
+pub use abi::syscall::ViSyscall;
+pub use abi::task::TaskPriority;
