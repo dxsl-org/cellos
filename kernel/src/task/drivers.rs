@@ -23,7 +23,7 @@ pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_common;
 pub mod virtio_blk;
 pub mod input_irq_ack; // Minimal VirtIO input IRQ ACK shim (event routing is in input Cell)
-pub mod virtio_net;
+// virtio_net removed: VirtIO NIC is now the virtio-net Driver Cell (cells/drivers/virtio-net/).
 pub mod gpio_irq;     // GPIO edge IRQ → MMIO-owner IPC dispatch (AArch64 PL061)
 pub mod virtio_rng;
 pub mod pcie_ecam;    // PCIe ECAM config-space walker (bus 0)
@@ -61,7 +61,7 @@ pub fn init() {
     for slot in virtio_common::virtio_slots() {
         crate::resource_registry::register_pcie_bar(slot.base, 0x200);
     }
-    virtio_net::init_driver(); // VirtIO NIC — kernel fallback until virtio-net Cell registers
+    // VirtIO NIC is now served by the virtio-net Driver Cell (P06 complete).
     // VirtIO RNG init deferred: full MMIO probe hangs on RISC-V when probing
     // already-claimed slots (block/net). The no-op stub is sufficient until a
     // safe probe strategy is implemented (skip slots claimed by other drivers).

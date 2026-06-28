@@ -1154,6 +1154,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::Log { msg_ptr, msg_len } => {
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            log::warn!("[rpi3] Log syscall: msg_ptr=0x{:X} len={}", msg_ptr, msg_len);
             // Reject NULL, oversize, or overflowing buffers. The kernel
             // print path holds locks with interrupts disabled, so a
             // multi-MB log message effectively hangs the system.

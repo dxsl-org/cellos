@@ -98,11 +98,6 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
         return;
     }
 
-    // --- Net device ---
-    if crate::task::drivers::virtio_net::ack_irq(irq) {
-        return;
-    }
-
     // --- Input (keyboard) device ---
     // ACK the input IRQ to prevent interrupt storms when the input Cell is not yet
     // running. Event routing is handled entirely by the input service Cell.

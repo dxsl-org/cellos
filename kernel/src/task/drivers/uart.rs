@@ -74,7 +74,9 @@ impl fmt::Write for DirectWriter {
         for c in s.bytes() {
             #[cfg(target_arch = "riscv64")]
             { let _ = crate::hal::sbi::console_putchar(c); }
-            #[cfg(target_arch = "aarch64")]
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            { crate::hal::uart_bcm_mini::putchar(c); }
+            #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
             { crate::hal::uart_pl011::putchar(c); }
             #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
             { crate::hal::uart_16550::putchar(c); }

@@ -1,6 +1,6 @@
 //! Shared VirtIO MMIO slot enumeration.
 //!
-//! Both `virtio_blk`, `virtio_input`, and `virtio_net` use `virtio_slots()` to
+//! `virtio_blk`, `input_irq_ack`, and Driver Cells use `virtio_slots()` to
 //! iterate all VirtIO MMIO slots for the current platform.
 //!
 //! AArch64: scans all 32 slots at 0x0a000000, stride 0x200 (QEMU virt layout).

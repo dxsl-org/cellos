@@ -1,10 +1,11 @@
-//! VirtIO PCI transport for x86_64 QEMU q35.
+//! VirtIO PCI transport for x86_64 QEMU q35 — BLK only.
 //!
 //! QEMU q35 exposes VirtIO devices via PCIe (vendor 0x1AF4) rather than the
 //! MMIO slots used by the ARM64/RISC-V `virt` machine.  This module scans the
-//! ECAM bus-0 snapshot built by `pcie_ecam::init()`, locates VirtIO BLK and
-//! NET devices, maps their BAR1 MMIO region, and hands the mapped `VirtIOHeader`
-//! pointer to the existing `MmioTransport`-based drivers.
+//! ECAM bus-0 snapshot built by `pcie_ecam::init()`, locates VirtIO BLK
+//! devices, maps their BAR1 MMIO region, and hands the mapped `VirtIOHeader`
+//! pointer to `MmioTransport`.  VirtIO NET was removed (P08): handled by the
+//! virtio-net Driver Cell on RISC-V/ARM64, e1000 Driver Cell on x86_64.
 //!
 //! ## VirtIO PCI device layout (QEMU default — transitional)
 //!
@@ -37,10 +38,8 @@ const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
 const VIRTIO_PCI_BLK_LEGACY:  u16 = 0x1001;
 /// Modern VirtIO block (capability-based; deferred).
 const VIRTIO_PCI_BLK_MODERN:  u16 = 0x1042;
-/// Transitional VirtIO net (legacy BAR1 MMIO header layout).
-const VIRTIO_PCI_NET_LEGACY:  u16 = 0x1000;
-/// Modern VirtIO net (capability-based; deferred).
-const VIRTIO_PCI_NET_MODERN:  u16 = 0x1041;
+// VirtIO PCI NET (0x1000 legacy / 0x1041 modern) removed: VirtIO net is now the
+// virtio-net Driver Cell (cells/drivers/virtio-net/).  x86_64 uses e1000 Driver Cell.
 
 // BAR size to map: 4 KiB covers the VirtIOHeader (0x100 bytes) plus queue
 // notify registers with plenty of headroom.  QEMU reports the real size during
@@ -55,25 +54,22 @@ const FALLBACK_BAR_MAP_SIZE: usize = 4096;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-/// Probe PCIe bus 0 for VirtIO devices (vendor 0x1AF4) and initialise BLK / NET.
+/// Probe PCIe bus 0 for VirtIO BLK devices (vendor 0x1AF4) and initialise them.
 ///
-/// Idempotent: if a block or net device was already registered by the MMIO path
-/// (ARM64/RISC-V), this function skips re-initialisation for that device type.
+/// VirtIO NET is handled by the virtio-net Driver Cell; this function initialises
+/// BLK only.  x86_64 uses e1000 Driver Cell for networking.
 ///
-/// On x86_64, every device BAR is identity-mapped via `map_mmio_x86` before the
+/// On x86_64, every BAR is identity-mapped via `map_mmio_x86` before the
 /// `VirtIOHeader` pointer is passed to `MmioTransport::new`.
 ///
-/// # Limitations (documented, not silently skipped)
-/// - Modern VirtIO PCI (device IDs 0x1041/0x1042) requires walking VirtIO PCI
-///   capability structures to locate the common-config, notify, and ISR BARs.
-///   This path is deferred; a `log::warn!` is emitted and the device is skipped.
-/// - MSI-X is not wired; VirtIO runs in polled mode (same as MMIO path).
-/// - Only BLK and NET are initialised; GPU/input/rng are not handled here.
+/// # Limitations
+/// - Modern VirtIO PCI (device ID 0x1042) requires walking VirtIO PCI capability
+///   structures; that path is deferred.
+/// - MSI-X is not wired; VirtIO runs in polled mode.
 pub fn init() {
     let devices = pcie_ecam::devices();
 
     let mut blk_done = false;
-    let mut net_done = false;
 
     for dev in &devices {
         if dev.vendor_id != VIRTIO_VENDOR_ID {
@@ -106,32 +102,13 @@ pub fn init() {
                     );
                 }
             }
-            VIRTIO_PCI_NET_LEGACY => {
-                if net_done {
-                    log::info!("[virtio_pci] NET already initialised, skipping");
-                    continue;
-                }
-                if let Some(bar_mmio) = find_mmio_bar(dev) {
-                    if init_net(bar_mmio) {
-                        net_done = true;
-                    }
-                } else {
-                    log::warn!(
-                        "[virtio_pci] NET device {:04x}:{:04x} has no usable MMIO BAR — skipped",
-                        dev.vendor_id, dev.device_id
-                    );
-                }
-            }
-            VIRTIO_PCI_BLK_MODERN | VIRTIO_PCI_NET_MODERN => {
+            VIRTIO_PCI_BLK_MODERN => {
                 // Modern VirtIO PCI requires walking vendor capability structures
                 // (VIRTIO_PCI_CAP_COMMON_CFG / NOTIFY / ISR) to locate the correct
-                // BAR regions.  This is distinct from transitional devices where
-                // BAR1 == VirtIOHeader directly.  Deferred: `virtio-drivers`
-                // `PciTransport` requires its own `PciRoot` abstraction that
-                // duplicates ECAM access already in `pcie_ecam`.  Track-up item:
-                // bridge the two via a thin `PciRoot` adapter over `pcie_ecam`.
+                // BAR regions.  Deferred: `virtio-drivers` `PciTransport` requires
+                // its own `PciRoot` abstraction.
                 log::warn!(
-                    "[virtio_pci] Modern VirtIO PCI device {:#06x} detected — init deferred \
+                    "[virtio_pci] Modern VirtIO BLK PCI device {:#06x} detected — init deferred \
                      (modern capability walk not yet implemented)",
                     dev.device_id
                 );
@@ -145,8 +122,8 @@ pub fn init() {
         }
     }
 
-    if !blk_done && !net_done {
-        log::info!("[virtio_pci] No VirtIO PCI BLK/NET devices found on PCIe bus 0");
+    if !blk_done {
+        log::info!("[virtio_pci] No VirtIO PCI BLK device found on PCIe bus 0");
     }
 }
 
@@ -244,64 +221,5 @@ fn init_blk(bar_phys: usize) -> bool {
     }
 }
 
-/// Attempt to initialise a VirtIO net device from a PCI BAR1 MMIO address.
-///
-/// Same flow as `init_blk`: map → `MmioTransport` → `VirtIONet` → `NET_DEVICE`.
-///
-/// Returns `true` on success.
-fn init_net(bar_phys: usize) -> bool {
-    use crate::task::drivers::virtio_net;
-
-    // Already initialised by the MMIO path.
-    if virtio_net::is_present() {
-        log::info!("[virtio_pci] NET device already set — skipping PCI init");
-        return false;
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    crate::memory::paging::map_mmio_x86(bar_phys, FALLBACK_BAR_MAP_SIZE);
-
-    // SAFETY: bar_phys is identity-mapped; non-null; MmioTransport validates magic.
-    let header = match core::ptr::NonNull::new(bar_phys as *mut VirtIOHeader) {
-        Some(h) => h,
-        None => {
-            log::warn!("[virtio_pci] NET BAR physical address is zero");
-            return false;
-        }
-    };
-
-    // SAFETY: same contract as init_blk.
-    let transport = match unsafe { MmioTransport::new(header) } {
-        Ok(t) => t,
-        Err(e) => {
-            log::warn!("[virtio_pci] NET MmioTransport::new failed at {:#x}: {:?}", bar_phys, e);
-            return false;
-        }
-    };
-
-    if transport.device_type() != DeviceType::Network {
-        log::warn!(
-            "[virtio_pci] NET BAR at {:#x} reported device type {:?}, expected Network",
-            bar_phys,
-            transport.device_type()
-        );
-        core::mem::forget(transport);
-        return false;
-    }
-
-    // Queue size and RX buffer length are canonically defined in virtio_net.rs;
-    // SafeNet is the concrete VirtIONet<VirtioHal, MmioTransport, 16> type.
-    const RX_BUFFER_LEN: usize = 2048;
-
-    match virtio_net::SafeNet::new(transport, RX_BUFFER_LEN) {
-        Ok(net) => {
-            virtio_net::store_pci_device(net);
-            log::info!("[virtio_pci] NET initialised from PCI BAR at {:#x}", bar_phys);
-            true
-        }
-        Err(e) => {
-            log::warn!("[virtio_pci] NET VirtIONet::new failed: {:?}", e);
-            false
-        }
-    }
-}
+// init_net() removed: VirtIO NET is now the virtio-net Driver Cell (P06 complete).
+// x86_64 networking is handled by the e1000 Driver Cell.

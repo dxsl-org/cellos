@@ -48,7 +48,14 @@ pub const DEV_PCIE: u8 = 1 << 2;
 /// class scopes the capability: a cell may claim a range only if it declared
 /// the matching device (manifest gpio/uart flag), so a GPIO-only cell cannot
 /// grab the UART window and vice-versa.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+const ALLOWED: &[(usize, usize, u8)] = &[
+    (0x3F20_0000, 0x1_0000, DEV_GPIO), // BCM2837 GPIO — Raspberry Pi 3 (54 pins)
+    (0x3F21_5000, 0x0_1000, DEV_UART), // BCM mini UART (AUX block) — RPi 3
+    // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
+];
+
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 const ALLOWED: &[(usize, usize, u8)] = &[
     (0x0900_0000, 0x1000, DEV_UART), // PL011 UART0  — QEMU ARM virt
     (0x0903_0000, 0x1000, DEV_GPIO), // PL061 GPIO   — QEMU ARM virt

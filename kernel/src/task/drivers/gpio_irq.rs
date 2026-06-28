@@ -14,8 +14,13 @@
 //! entry when the cell exits.  A new cell that re-opens GPIO after a restart
 //! becomes the new owner transparently.
 
-/// PL061 GPIO MMIO base on QEMU ARM virt — matches the allowlist in resource_registry.rs.
-const PL061_BASE: usize = 0x0903_0000;
+/// GPIO MMIO base — PL061 on QEMU ARM virt, BCM2837 on Raspberry Pi 3.
+/// Must match the allowlist entry in resource_registry.rs for the current target.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+const GPIO_MMIO_BASE: usize = 0x3F20_0000; // BCM2837 GPIO — RPi 3
+
+#[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+const GPIO_MMIO_BASE: usize = 0x0903_0000; // PL061 GPIO — QEMU ARM virt
 
 /// IPC opcode sent to the GPIO owner cell on interrupt.
 /// Chosen to not collide with kernel raw event opcodes 0 (EV_KEY) / 1 (EV_REL) / 2 (EV_ABS).
@@ -31,7 +36,7 @@ const GPIO_IRQ_NOTIFY: u8 = 0xA0;
 /// state the event is dropped (the cell re-polls GPIOMIS on its next recv).
 #[no_mangle]
 pub extern "Rust" fn vi_gpio_notify_irq() {
-    let Some(tid) = crate::resource_registry::lookup_mmio_owner(PL061_BASE) else {
+    let Some(tid) = crate::resource_registry::lookup_mmio_owner(GPIO_MMIO_BASE) else {
         return; // No cell currently owns GPIO — drop the interrupt.
     };
     log::info!("[gpio-irq] IRQ fired — notifying GPIO owner tid={}", tid);

@@ -1,12 +1,6 @@
 use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 
-// use crate::task::drivers::console_drv;
-// use crate::task::drivers::virtio_blk;
-// use crate::task::drivers::virtio_gpu;
-// use crate::task::drivers::virtio_input;
-// use crate::task::drivers::fb_console;
-
 pub struct DriverRegistry {
     /// Map Name -> Driver ID
     name_to_id: BTreeMap<&'static str, usize>,
@@ -64,8 +58,6 @@ pub fn init() {
     // virtio_gpu::init_driver();
     // virtio_input::init_driver();
 
-    // Init Framebuffer Console (after GPU)
-    // fb_console::FramebufferConsole::init();
 }
 
 pub fn resolve(name: &str) -> Option<usize> {
