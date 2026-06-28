@@ -13,22 +13,38 @@
 
 extern crate alloc;
 
-use core::ffi::{c_char, c_int};
 use api::declare_manifest;
+
+// All implementation-specific imports are gated so the fallback stub compiles
+// cleanly when no ELF C compiler is available (lua_c_unavailable).
+#[cfg(not(lua_c_unavailable))]
+use core::ffi::{c_char, c_int};
+#[cfg(not(lua_c_unavailable))]
 use api::input::{InputEvent, KeyState, KeySym};
+#[cfg(not(lua_c_unavailable))]
 use api::display::PixelFormat;
+#[cfg(not(lua_c_unavailable))]
 use ostd::display::{ViSurface, wait_for_compositor};
+#[cfg(not(lua_c_unavailable))]
 use ostd::font::FONT8X8;
+#[cfg(not(lua_c_unavailable))]
 use ostd::input::{poll_events, request_focus};
+#[cfg(not(lua_c_unavailable))]
 use ostd::syscall::{sys_exit, sys_get_time};
+#[cfg(not(lua_c_unavailable))]
 use ostd::task::yield_now;
 
 declare_manifest!(block_io = false, network = false, spawn = false);
 
+#[cfg(not(lua_c_unavailable))]
 const SURF_W: u32 = api::display::FALLBACK_WIDTH;
+#[cfg(not(lua_c_unavailable))]
 const SURF_H: u32 = api::display::FALLBACK_HEIGHT;
 
+// ── Full implementation (requires Lua C library) ──────────────────────────────
+
 // CGA 16-color BGRA palette — indices 0-15 (A=FF, format 0xAARRGGBB).
+#[cfg(not(lua_c_unavailable))]
 static PALETTE: [u32; 16] = [
     0xFF000000,0xFF0000AA,0xFF00AA00,0xFF00AAAA,
     0xFFAA0000,0xFFAA00AA,0xFFAA5500,0xFFAAAAAA,
@@ -36,18 +52,24 @@ static PALETTE: [u32; 16] = [
     0xFFFF5555,0xFFFF55FF,0xFFFFFF55,0xFFFFFFFF,
 ];
 
+#[cfg(not(lua_c_unavailable))]
 static mut SURFACE:   Option<ViSurface> = None;
+#[cfg(not(lua_c_unavailable))]
 static mut KEY_QUEUE: [u8; 16]          = [0; 16];
+#[cfg(not(lua_c_unavailable))]
 static mut KEY_HEAD:  usize             = 0;
+#[cfg(not(lua_c_unavailable))]
 static mut KEY_TAIL:  usize             = 0;
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 
+#[cfg(not(lua_c_unavailable))]
 unsafe fn enqueue(k: u8) {
     let next = (KEY_TAIL + 1) % 16;
     if next != KEY_HEAD { KEY_QUEUE[KEY_TAIL] = k; KEY_TAIL = next; }
 }
 
+#[cfg(not(lua_c_unavailable))]
 fn keysym_to_code(sym: KeySym) -> u8 {
     match sym {
         KeySym::Left   => 1, KeySym::Right  => 2, KeySym::Up     => 3,
@@ -58,6 +80,7 @@ fn keysym_to_code(sym: KeySym) -> u8 {
 
 // ── Pixel helpers (called by Lua C functions) ─────────────────────────────────
 
+#[cfg(not(lua_c_unavailable))]
 unsafe fn fill_rect_px(x: i32, y: i32, w: i32, h: i32, bgra: u32) {
     let s = match SURFACE.as_mut() { Some(s) => s, None => return };
     let stride = s.stride();
@@ -74,6 +97,7 @@ unsafe fn fill_rect_px(x: i32, y: i32, w: i32, h: i32, bgra: u32) {
     }
 }
 
+#[cfg(not(lua_c_unavailable))]
 unsafe fn draw_glyph(px: i32, py: i32, c: u8, bgra: u32, scale: u32) {
     let s = match SURFACE.as_mut() { Some(s) => s, None => return };
     let stride = s.stride();
@@ -99,6 +123,7 @@ unsafe fn draw_glyph(px: i32, py: i32, c: u8, bgra: u32, scale: u32) {
 }
 
 // ── Lua C callbacks ───────────────────────────────────────────────────────────
+#[cfg(not(lua_c_unavailable))]
 #[allow(non_snake_case)]
 mod lua_fns {
     use super::*;
@@ -169,6 +194,7 @@ mod lua_fns {
 
 // ── Embedded Lua script ───────────────────────────────────────────────────────
 
+#[cfg(not(lua_c_unavailable))]
 const TETRIS_LUA: &[u8] = include_bytes!("../scripts/tetris.lua");
 
 // ── Entry ─────────────────────────────────────────────────────────────────────

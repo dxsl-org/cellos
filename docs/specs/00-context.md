@@ -1,5 +1,5 @@
 # Cellos system context & design rules
-**Last Updated**: 2026-06-22
+**Last Updated**: 2026-06-24
 **Audience**: Developers & AI Agents
 
 
@@ -226,5 +226,24 @@ Bất kỳ lỗ hổng nào trong `rustc`'s unsafe checker, borrow checker, ho�
 - Logic bugs và incorrect IPC protocol usage
 - Grant misuse (phải kiểm tra `!Copy + !Clone` invariant trên owner handle)
 - Capability escalation qua IPC (Cell request syscall không có trong manifest)
+
+### So sánh prior art (Singularity / Midori / Cellos)
+
+| Dimension | Singularity | Midori | Cellos |
+|---|---|---|---|
+| **Isolation mechanism** | Sing# + MSIL verifier | M# type system | Rust ownership + borrow checker |
+| **IPC cost** | ~1,200 cycles (channel) | Not published | ~2–3 cycles (vtable) |
+| **Large data transfer** | Exchange heap (linear types) | Isolated object graph | Grant API (page-level, runtime) |
+| **MMU isolation** | Eliminated (Ring 0) | Eliminated | Eliminated (Cellular SAS) |
+| **Mutable statics** | Allowed | Banned by language | Convention only (`Spinlock<Option<T>>`); no lint |
+| **GC / memory** | GC (Bartok) | GC (CLR-derived); RT-unsolved | **RAII, no GC** |
+| **Real-time capable** | No | No | **Yes** |
+| **Compiler TCB** | Bartok (closed, unverified) | Bartok + M# (closed) | rustc (open-source, Ferrocene) |
+| **Channel contracts** | Full FSM verification | Typed async RPC | Interface types only (YAGNI) |
+| **Production shipped** | No | One workload (Bing speech) | In progress |
+
+**Ghi chú về mutable statics (F6):** Midori ban `static mut` tại language level — Cellos chỉ enforce bằng convention. Cells đã block qua `#![forbid(unsafe_code)]`. Kernel unsafe code là gap còn lại. TODO: xem xét custom clippy lint cho kernel non-HAL paths.
+
+**Bài học tổ chức (F8):** Midori bị cancel vì lý do organizational/political, không phải technical failure (performance đạt parity với C/C++). Regret lớn nhất của team: không open-source ngay từ đầu, không publish papers. Cellos nên duy trì public GitHub presence sớm.
 
 *Sources: Hunt & Larus ACM 2007; Deconstructing Process Isolation MSPC 2006; Joe Duffy "Safe Native Code" (2015). Full analysis: `docs/research/research-singularity-midori.md`*

@@ -1,25 +1,13 @@
-## App
-- Port app đầu tiên cho Cellos: https://github.com/lasselian/prism-desktop
+# Ideas
 
-## Task
-- net cell TLS hiện chỉ client-side (connect+verify server), CHƯA có TLS server-side accept
-
-## Defer
-- SerialHandle — cần service IPC mới cho serial driver, scope lớn hơn
-- embedded_io_async — cần async executor integration, làm sau Phase 1-3 ổn định
-
-### https://github.com/orgs/rust-embedded/repositories
-
-Bước 7: riscv-peripheral (PLIC/CLINT) — cần verify trước
-
-Nếu vẫn còn raw MMIO PLIC writes trong hal/arch/riscv/, dùng plic_codegen! macro
+## Must have
+- Thiết kế một Network Fabric (Mạng kết nối phần cứng) riêng (giống cách Google làm cáp quang nội bộ cho TPU).
+- Mở rộng Xgrant để nó có thể "chuyển nhượng quyền sở hữu vùng nhớ" xuyên suốt các node vật lý khác nhau thông qua mạng quang học siêu tốc. Zero-copy IPC across boards.
+- Distributed SAS (Không gian địa chỉ phân tán): có thể áp dụng nguyên lý thiết kế đệ quy phân lớp để các cụm node giao tiếp địa chỉ bộ nhớ với nhau một cách xuyên suốt mà không dẫm chân lên nhau.
+- Thiết kế lõi theo dạng Chiplet UCIe: Lõi điều khiển (Controller Die) và Lõi tính toán (Compute Die) lắp trên cùng một đế silicon
+- Suy nghĩ thêm về 1 tập lệnh bảo mật/mã hóa chuyên dụng cho chip Cellos.
 
 
-### SKIP
-cortex-m* family — Cortex-M only, Cellos target là A-class + RISC-V
-svd2rust / svdtools — Cellos không dùng SVD
-linux-embedded-hal, rust-sysfs-* — Linux sysfs, không liên quan
-
-### Reference (đọc học, không copy code)
+## Reference
 - rust-raspberrypi-OS-tutorials — ground truth cho EL2→EL1, GIC v2, PL011 (đối chiếu hal/arch/arm/)
 - awesome-embedded-rust — discovery tool tìm sensor driver crates tương thích embedded-hal

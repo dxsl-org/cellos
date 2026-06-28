@@ -58,6 +58,13 @@ CLAUDE.md
 # Disk Images
 *.img
 
+# Accidentally-created disk images from script invocations (e.g. gen_disk.ps1 --help)
+--help
+
+# Build / debug artifacts in workspace root
+*.rlib
+*.pcap
+
 # Limine bootloader binary (downloaded at build/CI time via scripts/download-limine.sh)
 tools/limine-riscv64
 
@@ -70,3 +77,8 @@ third_party/mlibc-src/
 # mlibc build outputs
 third_party/mlibc/build/
 third_party/mlibc/build-aarch64/
+
+# Vove — private restricted sub-repo (git@github.com:dxsl-org/vove.git)
+# Maintained as a standalone git repo; zero trace in Cellos history.
+# Clone separately: git clone git@github.com:dxsl-org/vove.git cells/apps/vove
+cells/apps/vove/

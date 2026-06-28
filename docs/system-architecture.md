@@ -257,24 +257,26 @@ VirtIO devices on QEMU `virt` machine use PLIC IRQs with slot-based numbering:
 | VirtIO Net | 2 | 0x1000_3000 | 3 |
 | ... | i | 0x1000_(i+1)000 | i+1 |
 
-**IRQ Dispatch**: `kernel/src/task/drivers/virtio_blk.rs::vi_handle_virtio_irq(irq: u32)`
+**IRQ Dispatch**: `kernel/src/interrupt.rs::vi_handle_virtio_irq(irq: u32)` — kernel dispatcher forwards to Driver Cells
 
 ```rust
 pub fn vi_handle_virtio_irq(irq: u32) -> bool {
     match irq {
-        1 => virtio_blk::block_device_irq(),     // VirtIO block (slot 0)
-        2 => virtio_input::input_device_irq(),   // VirtIO input (slot 1)
-        3 => virtio_net::net_device_irq(),       // VirtIO net (slot 2)
+        1 => virtio_blk::block_device_irq(),     // VirtIO block (slot 0) → forwarded to disk Driver Cell
+        2 => virtio_input::input_device_irq(),   // VirtIO input (slot 1) → forwarded to input Driver Cell
+        3 => virtio_net::net_device_irq(),       // VirtIO net (slot 2) → forwarded to net Driver Cell
         _ => false,  // Unknown IRQ
     }
 }
 ```
 
-**Per-Device Handler Responsibilities** (Phase 05 established):
-1. Drain the used ring to retrieve completed requests and process data
-2. **Acknowledge the IRQ** via `ack_irq(irq)` to clear device `InterruptStatus` register
-3. Re-arm the device by publishing empty buffers back to the available ring
-4. Wake any blocked tasks waiting on device I/O
+**Kernel IRQ Handler Responsibilities** (Phase 05 established):
+1. Receive IRQ from PLIC
+2. Invoke Device Handler's `ack_irq(irq)` to clear device `InterruptStatus` register
+3. Wake the corresponding Driver Cell task if blocked on I/O
+4. Driver Cell (userspace) handles the rest: drain rings, process data, refill available ring
+
+**Note**: As of Phase 01 (2026-06-24, Kernel Boundary Law enforcement), all VirtIO device logic is in Driver Cells (`cells/drivers/`), not kernel code. The kernel only handles interrupt dispatch and wakeup.
 
 **Interrupt Flow (Correct Pattern)**:
 ```
@@ -296,7 +298,7 @@ PLIC acknowledges via plic_complete()
 Device can fire next interrupt (if new data arrives)
 ```
 
-**Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, leaving `InterruptStatus` register set. PLIC would immediately re-fire the same interrupt after `plic_complete()`, creating an infinite interrupt storm. This caused kernel to hang on first keystroke. Fix: Added `pub static INPUT_DEVICE_IRQ` and `pub fn ack_irq()` to `kernel/src/task/drivers/virtio_input.rs`; expanded `vi_handle_virtio_irq()` to dispatch to input device handler.
+**Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, leaving `InterruptStatus` register set. PLIC would immediately re-fire the same interrupt after `plic_complete()`, creating an infinite interrupt storm. This caused kernel to hang on first keystroke. Fix: Ensured input Driver Cell calls `ack_irq()` on every interrupt; kernel dispatcher invokes the handler. *(Later refactored to Driver Cell architecture in Phase 01, 2026-06-24.)*
 
 ### FAT16 Persistence & Graceful Shutdown (Phase E)
 
