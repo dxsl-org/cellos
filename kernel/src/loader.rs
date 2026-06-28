@@ -151,27 +151,10 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     // Extract cell name from the last path component (e.g. "/bin/shell" → "shell").
     let name = path.rsplit('/').next().unwrap_or(path);
 
-    // Spawn via the in-memory path.  For PIE cells, spawn_from_mem allocates a
-    // VA base and loads segments there; it returns (tid, load_base).
-    let (tid, load_base) = crate::task::spawn_from_mem(&elf_bytes, name, CellId(0), alloc::vec::Vec::new())
+    // Spawn via the in-memory path.  spawn_from_mem now applies .rela.dyn
+    // relocations internally, so no separate apply_relocations call is needed.
+    let (tid, _load_base) = crate::task::spawn_from_mem(&elf_bytes, name, CellId(0), alloc::vec::Vec::new())
         .map_err(|_| ViError::OutOfMemory)?;
-
-    // Apply ELF relocations AFTER pages are mapped (the relocation engine writes
-    // to the cell's live VA pages, not to the raw ELF buffer).
-    // For PIE cells load_base != 0; for fixed-VA cells this is a no-op (base==0
-    // and the formula *ptr = 0 + addend == addend was already baked in at link time).
-    if let Ok(rela_section) = elf_loader.get_section(&elf_bytes, ".rela.dyn") {
-        if let Err(e) = reloc::apply_relocations(load_base, &rela_section) {
-            // Relocation failed — the task is already in the scheduler but must
-            // never run with partial relocations.  Kill it before returning.
-            // CellSegments::Drop (inside exit_task's eager_unmap path) frees
-            // the segment frames and PIE VA slot.
-            if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-                sched.exit_task(tid, 0xff);
-            }
-            return Err(e);
-        }
-    }
 
     // Assign a unique CellId based on the task ID so per-cell quota and
     // capability checks are correctly scoped.  `spawn_from_mem` defaults to

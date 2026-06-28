@@ -97,14 +97,14 @@ impl ElfLoader {
 
                 // --- Translate ELF p_flags to page-table flags ---
                 // p_flags bits: 0x1=X, 0x2=W, 0x4=R. Default deny if all zero.
+                //
+                // All cell pages are mapped WRITE so the kernel can apply PIE
+                // relocations (.rela.dyn) after loading.  SAS/LBI enforces R/W/X
+                // semantics via Rust's type system, not hardware read-only pages;
+                // hardware-enforced W^X (MTE, SMMU, PKU) is a G2 item.
                 use crate::memory::paging::Flags;
-                let mut perm_bits = Flags::VALID | Flags::USER | Flags::ACCESSED;
-                if ph_flags.is_read() {
-                    perm_bits = perm_bits | Flags::READ;
-                }
-                if ph_flags.is_write() {
-                    perm_bits = perm_bits | Flags::WRITE | Flags::DIRTY;
-                }
+                let mut perm_bits = Flags::VALID | Flags::USER | Flags::ACCESSED
+                    | Flags::READ | Flags::WRITE | Flags::DIRTY;
                 if ph_flags.is_execute() {
                     perm_bits = perm_bits | Flags::EXECUTE;
                 }

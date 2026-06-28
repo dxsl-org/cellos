@@ -75,5 +75,8 @@ maintenance-mode = []
 board-vf2 = []
 # Raspberry Pi 4 (BCM2711): enables SDHCI probe at 0xFE340000 (Arasan eMMC2).
 board-rpi4 = []
+# Raspberry Pi 3 (BCM2837): load@0x80000, BCM mini UART, BCM2836 local IRQ,
+# SDHCI at 0x3F300000. Propagates to hal-arm for IRQ/timer/UART dispatch.
+board-rpi3 = ["hal/board-rpi3"]
 # Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
 test-hooks = ["dep:qemu-exit"]

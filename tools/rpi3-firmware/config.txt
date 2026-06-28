@@ -1,0 +1,12 @@
+# Raspberry Pi 3 VideoCore config — Cellos board-rpi3
+#
+# arm_64bit=1:    Load kernel8.img as AArch64 binary at 0x80000
+# enable_uart=1:  Enable mini UART (UART1) on GPIO14/15 at 115200 baud
+#                 PL011 is routed to Bluetooth; mini UART → serial console
+#
+# DO NOT set core_freq here — BCM mini UART baud depends on VPU core clock.
+# Default VPU core clock = 250 MHz → BAUD_REG = 270 for 115200 baud.
+
+arm_64bit=1
+kernel=kernel8.img
+enable_uart=1

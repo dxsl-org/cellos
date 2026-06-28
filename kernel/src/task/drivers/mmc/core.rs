@@ -32,6 +32,16 @@ impl MmcCore {
     /// Returns [`CardInfo`] describing the detected card type, RCA, and sector count.
     /// On success the card is in Transfer state, clocked at ~25 MHz, 1-bit bus.
     pub fn init_card(&mut self) -> ViResult<CardInfo> {
+        // Step 0 — fast bail: check card-present bit before any polling.
+        // On QEMU without a `-drive if=sd,file=...` image the Arasan SDHCI
+        // controller is present but no card is inserted (PS_CARD_PRESENT = 0).
+        // Without this check the probe burns 5M+ MMIO reads polling CMD_COMPLETE,
+        // each taking ~1–10 µs in QEMU TCG → multi-second silent hang.
+        let ps = self.host.read_present_state();
+        if ps & PS_CARD_PRESENT == 0 {
+            return Err(ViError::NotFound);
+        }
+
         // Step 1 — hardware reset, power on, 400 kHz identification clock.
         self.host.reset_all()?;
         self.host.power_on();

@@ -88,10 +88,28 @@ pub fn init(sbi_dtb: usize) {
     *PLATFORM.lock() = Some(info);
 }
 
+// ── Raspberry Pi 3 defaults (BCM2837, aarch64, board-rpi3) ───────────────────
+// BCM2837: peripherals at 0x3F000000, no GIC, no VirtIO, no Goldfish RTC.
+// Mini UART IO register at 0x3F215040 (AUX_MU_IO).
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub fn init(_dtb_ptr: usize) {
+    // RPi 3 has no Goldfish/PL031 RTC — uptime only via ARM counter, epoch=0.
+    *PLATFORM.lock() = Some(PlatformInfo {
+        uart_base:   0x3F21_5040, // BCM mini UART IO register (AUX_MU_IO)
+        uart_irq:    0,           // mini UART IRQ not used (polled I/O)
+        plic_base:   0,
+        plic_size:   0,
+        clint_base:  0,
+        virtio_mmio: [None; 8],   // No VirtIO on RPi 3 — real hardware Driver Cells
+        rtc_base:    0,           // No Goldfish RTC; epoch unknown without external RTC
+    });
+    log::info!("[platform] RPi 3 BCM2837: UART=0x3F215040 periph=0x3F000000 RAM=960MiB");
+}
+
 // ── QEMU ARM virt defaults (aarch64) ─────────────────────────────────────────
 // QEMU ARM virt: 32 VirtIO MMIO slots at 0x0a000000, 512 bytes each, SPI 16+i.
 // Goldfish RTC at 0x0902_0000 on ARM virt; UART (PL011) at 0x0900_0000.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 pub fn init(_dtb_ptr: usize) {
     hal::rtc::init_default();
     *PLATFORM.lock() = Some(PlatformInfo {

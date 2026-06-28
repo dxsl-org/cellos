@@ -23,15 +23,18 @@ pub use traits::*; // Khớp với cấu trúc hal/traits của mày
 // 2. Bộ điều phối kiến trúc (The Facade)
 
 // Hỗ trợ RV64 (Jarvis)
-#[cfg(feature = "riscv64")]
+// Guard with target_arch too: hal-core's default feature is riscv64 so a
+// workspace build for AArch64 still sees feature=riscv64, but hal_riscv::common
+// and ::rv64 don't exist for non-RISC-V targets.
+#[cfg(all(feature = "riscv64", target_arch = "riscv64"))]
 pub use hal_riscv::common;
-#[cfg(feature = "riscv64")]
+#[cfg(all(feature = "riscv64", target_arch = "riscv64"))]
 pub use hal_riscv::rv64::*;
 
 // Hỗ trợ RV32 (Robot Nano)
-#[cfg(feature = "riscv32")]
+#[cfg(all(feature = "riscv32", target_arch = "riscv32"))]
 pub use hal_riscv::common;
-#[cfg(feature = "riscv32")]
+#[cfg(all(feature = "riscv32", target_arch = "riscv32"))]
 pub use hal_riscv::rv32::*;
 
 // Hỗ trợ ARM (AArch64 + AArch32)

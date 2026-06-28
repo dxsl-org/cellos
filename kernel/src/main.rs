@@ -82,7 +82,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 0. Initialize UART immediately for early logging
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     task::drivers::uart::init();
-    #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    crate::hal::uart_bcm_mini::init();
+    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+    crate::hal::uart_pl011::init();
+    #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     crate::hal::uart_16550::init();
@@ -157,8 +161,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(not(target_arch = "x86_64"))]
     hal::ARCH.init();
     // Initialize Goldfish RTC for wall-clock time on QEMU ARM64 virt.
-    // Must run after ARCH.init() (which sets up MMIO identity map via paging::init).
-    #[cfg(target_arch = "aarch64")]
+    // board-rpi3 has no Goldfish RTC (BCM2837); leave BASE=0 (epoch unknown).
+    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
     hal::rtc::init_default();
 
     // Define puts helper — arch-specific character output.
@@ -166,7 +170,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         for c in s.bytes() {
             #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
             { let _ = crate::hal::sbi::console_putchar(c); }
-            #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            { crate::hal::uart_bcm_mini::putchar(c); }
+            #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+            { crate::hal::uart_pl011::putchar(c); }
+            #[cfg(target_arch = "arm")]
             { crate::hal::uart_pl011::putchar(c); }
             #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
             { crate::hal::uart_16550::putchar(c); }
@@ -521,6 +529,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
             Ok((init_tid, _load_base)) => {
                 log_info("Successfully spawned init");
+                // Probe 'V': confirms spawn_from_mem succeeded → init is in ready queue.
+                #[cfg(feature = "board-rpi3")]
+                crate::hal::uart_bcm_mini::probe_put(b'V');
                 // init is the ROOT AUTHORITY (P2 monotonic-downgrade): grant the
                 // FULL capability set directly here. init is spawned via
                 // spawn_from_mem (NOT spawn_from_path), so its manifest is never
@@ -542,7 +553,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 }
                 log_info("init granted root authority (CapSet::ALL + SupervisorCap)");
             }
-            Err(_e) => log_info("Failed to spawn init"),
+            Err(_e) => {
+                log_info("Failed to spawn init");
+                // Probe 'F': spawn_from_mem failed, init NOT in ready queue.
+                #[cfg(feature = "board-rpi3")]
+                crate::hal::uart_bcm_mini::probe_put(b'F');
+            }
         }
     }
 
@@ -595,6 +611,43 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(any(target_arch = "x86_64", target_arch = "x86", target_arch = "arm"))]
     crate::hal::ARCH.enable_interrupts();
 
+    // Probe 'Q': fires ONLY if no IRQ preempted the code between daifclr and here.
+    // Q fires  → BCM2835 IRQ is not actually delivered to CPU on QEMU (pending but silent).
+    // Q absent → IRQ fired immediately after daifclr (expected); check if H/G appear.
+    #[cfg(feature = "board-rpi3")]
+    crate::hal::uart_bcm_mini::probe_put(b'Q');
+
+    // board-rpi3: Print IRQ state snapshot immediately after enabling IRQs.
+    // Format: "K<src_bit8><pend_bit1><src_nibble>" where src = CORE0_IRQ_SOURCE,
+    // pend = IRQ_PENDING1 bit 1 (BCM2835 systimer C1 pending).
+    // If G never fires but K shows pend=1 and src=0: QEMU does not route BCM2835→BCM2836.
+    #[cfg(feature = "board-rpi3")]
+    {
+        let src_raw = unsafe { core::ptr::read_volatile(0x4000_0060usize as *const u32) };
+        let pend    = unsafe { core::ptr::read_volatile(0x3F00_B204usize as *const u32) };
+        let hex = |n: u32| -> u8 { if n < 10 { b'0' + n as u8 } else { b'a' + n as u8 - 10 } };
+        crate::hal::uart_bcm_mini::probe_put(b'K');
+        crate::hal::uart_bcm_mini::probe_put(if src_raw & (1 << 8) != 0 { b'1' } else { b'0' });
+        crate::hal::uart_bcm_mini::probe_put(if pend & (1 << 1) != 0 { b'1' } else { b'0' });
+        crate::hal::uart_bcm_mini::probe_put(hex(src_raw & 0xF));
+    }
+
+    // Probe 'L': fires once per idle loop iteration (only first 3 on board-rpi3 to avoid flood).
+    // If 'L' never appears after 'K', the code never reaches the idle loop.
+    #[cfg(feature = "board-rpi3")]
+    {
+        static IDLE_COUNT: core::sync::atomic::AtomicUsize =
+            core::sync::atomic::AtomicUsize::new(0);
+        loop {
+            let n = IDLE_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+            if n < 4 {
+                crate::hal::uart_bcm_mini::probe_put(b'L');
+            }
+            crate::task::yield_cpu();
+            crate::hal::ARCH.wait_for_interrupt();
+        }
+    }
+    #[cfg(not(feature = "board-rpi3"))]
     loop {
         crate::task::yield_cpu();
         crate::hal::ARCH.wait_for_interrupt();
@@ -620,7 +673,11 @@ fn panic(info: &PanicInfo) -> ! {
             fn cell_panic_putchar(c: u8) {
                 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
                 { let _ = crate::hal::sbi::console_putchar(c); }
-                #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+                { crate::hal::uart_bcm_mini::putchar(c); }
+                #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+                { crate::hal::uart_pl011::putchar(c); }
+                #[cfg(target_arch = "arm")]
                 { crate::hal::uart_pl011::putchar(c); }
                 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
                 { crate::hal::uart_16550::putchar(c); }
@@ -650,7 +707,11 @@ fn panic(info: &PanicInfo) -> ! {
     fn panic_putchar(c: u8) {
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         { let _ = crate::hal::sbi::console_putchar(c); }
-        #[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        { crate::hal::uart_bcm_mini::putchar(c); }
+        #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+        { crate::hal::uart_pl011::putchar(c); }
+        #[cfg(target_arch = "arm")]
         { crate::hal::uart_pl011::putchar(c); }
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
         { crate::hal::uart_16550::putchar(c); }

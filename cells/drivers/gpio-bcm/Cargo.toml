@@ -1,0 +1,16 @@
+[package]
+name = "driver-gpio-bcm"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+types    = { path = "../../../libs/types" }
+api      = { path = "../../../libs/api" }
+ostd     = { path = "../../../libs/ostd" }
+hal-gpio = { path = "../../../hal/traits/gpio" }
+
+[lib]
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }

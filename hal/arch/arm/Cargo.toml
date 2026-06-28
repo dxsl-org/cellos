@@ -22,3 +22,6 @@ critical-section-impl = ["dep:critical-section"]
 cfi-bti = []
 # Enable MTE2 tag-check faults in SCTLR_EL1 (requires ARMv8.5 hardware or TCG MTE model).
 mte = []
+# Raspberry Pi 3 (BCM2837) board target: selects BCM mini UART, BCM2836 local IRQ
+# controller, and auto-detected timer frequency instead of GIC + QEMU virt defaults.
+board-rpi3 = []

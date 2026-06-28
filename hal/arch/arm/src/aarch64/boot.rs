@@ -17,6 +17,15 @@ global_asm!(
     .global _start
     .balign 4
 _start:
+    // Park secondary CPUs immediately.
+    // QEMU raspi3b boots all 4 Cortex-A53 cores simultaneously; without this gate
+    // they all execute kmain in parallel, corrupting BSS, frame allocator, paging,
+    // SDHCI probe state, and UART output.
+    // BCM2836 MPIDR_EL1[7:0] = Aff0 = core index (0–3).  Only core 0 proceeds.
+    mrs  x1, mpidr_el1
+    and  x1, x1, #0xFF          // extract Aff0 (CPU index within cluster)
+    cbnz x1, .Lsecondary_park   // non-zero → secondary core → park forever
+
     // Disable all interrupts (DAIF = 0b1111).
     msr daifset, #0xf
 
@@ -61,8 +70,8 @@ _start:
     str  xzr, [x0], #8
     b    1b
 2:
-    // UART sentinel 'E': confirms EL2 init path was taken.
-    // Visible even if kmain hangs before UART is fully initialised.
+    // UART sentinel 'E': on QEMU virt this reaches PL011 and confirms EL2 init.
+    // On board-rpi3 (MMU off, no PL011) this writes to RAM@0x09000000 — harmless.
     mov  x0, #0x09000000
     mov  w1, #0x45          // ASCII 'E'
     strb w1, [x0]
@@ -85,7 +94,16 @@ _start:
     msr cpacr_el1, x0
     isb
 
-    // Set up initial stack at __stack_top (defined in linker script).
+    // Force EL1h mode: exceptions taken to EL1 use SP_EL1 (not SP_EL0).
+    // QEMU raspi3b boots at EL1 and may leave PSTATE.SPSEL=0 (EL1t), meaning
+    // SP_EL1 stays at the unknown reset value.  Any EL0→EL1 exception would
+    // then crash on its first `sub sp, sp, #N` because SP_EL1 is garbage.
+    // Setting SPSEL=1 before the stack `mov sp, x0` makes `mov sp` write to
+    // SP_EL1, so both the kernel and exception handlers share a valid stack.
+    msr spsel, #1
+    isb
+
+    // Set up initial stack at __stack_top (now writes SP_EL1 since SPSEL=1).
     adrp x0, __stack_top
     add  x0, x0, :lo12:__stack_top
     mov  sp, x0
@@ -110,5 +128,14 @@ _start:
 6:
     wfi
     b    6b
+
+    // Secondary CPU park: interrupts masked, loop on WFI forever.
+    // QEMU raspi3b boots cores 1–3 here; they yield the CPU and never interfere
+    // with core 0's boot sequence.  Future SMP bringup can replace this with a
+    // spin-table or PSCI-based wake loop.
+.Lsecondary_park:
+    msr  daifset, #0xf          // mask all interrupts (prevent spurious wake)
+    wfi
+    b    .Lsecondary_park
     "#
 );

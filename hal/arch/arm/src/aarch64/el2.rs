@@ -119,6 +119,49 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
             options(nostack),
         );
     }
+
+    // ── EL1 stage-1 setup for cells at EL0 (non-VHE: EL0 uses TTBR0_EL1) ─────
+    // On Cortex-A53 / raspi3b (ARMv8.0, no VHE), HCR_EL2.TGE=1 routes EL0
+    // exceptions to EL2 but EL0 translations still use TTBR0_EL1/TCR_EL1.
+    // Mirror MAIR, TTBR0, and TCR from EL2 to EL1 so cells (at EL0) see the
+    // same KERNEL_ROOT page table as the kernel (at EL2).
+    //
+    // TCR_EL1 bit[23] = EPD1 (disable TTBR1_EL1, upper-half unused).
+    // TCR_EL2 bit[23] = RES1 (non-VHE ARMv8.0 requirement) — same bit, different semantics.
+    let tcr_el1: u64 = 25_u64
+        | (1 << 8)   // IRGN0 = WB-WA-RA
+        | (1 << 10)  // ORGN0 = WB-WA-RA
+        | (3 << 12)  // SH0   = Inner-shareable
+        | (0 << 14)  // TG0   = 4 KB
+        | (1 << 23); // EPD1  = disable TTBR1_EL1
+    // SAFETY: EL2 has full access to EL1 system registers; page table covers
+    // all kernel and cell VAs; called after EL2 MMU is live.
+    unsafe {
+        core::arch::asm!(
+            "msr mair_el1,  {mair}",
+            "msr tcr_el1,   {tcr_el1}",
+            "isb",
+            "msr ttbr0_el1, {ttbr0}",
+            "dsb sy",
+            "isb",
+            "tlbi vmalle1",             // invalidate all EL1/EL0 TLB entries
+            "dsb nsh",
+            "isb",
+            // Enable EL1 MMU: M=1 (bit0), C=1 (bit2), I=1 (bit12).
+            "mrs {t}, sctlr_el1",
+            "orr {t}, {t}, #(1 << 0)",
+            "orr {t}, {t}, #(1 << 2)",
+            "orr {t}, {t}, #(1 << 12)",
+            "msr sctlr_el1, {t}",
+            "dsb sy",
+            "isb",
+            mair    = in(reg) mair,
+            tcr_el1 = in(reg) tcr_el1,
+            ttbr0   = in(reg) ttbr0_phys,
+            t       = out(reg) _,
+            options(nostack),
+        );
+    }
 }
 
 // ── EL2 context switch ────────────────────────────────────────────────────────
@@ -269,6 +312,16 @@ vt_sync_el2_cur:
     // ── Lower-EL sync: Cell SVC or guest EL1 trap ────────────────────────────
     .balign 4
 vt_sync_el2_lower:
+    // Debug probe: write 'V' to BCM mini UART to confirm vector entry.
+    // Saves/restores x9+x10 before any other stack usage.
+    sub  sp, sp, #32
+    stp  x9, x10, [sp]
+    movz x9, #0x5040
+    movk x9, #0x3F21, lsl #16
+    mov  w10, #0x56             // 'V'
+    str  w10, [x9]
+    ldp  x9, x10, [sp]
+    add  sp, sp, #32
     // Temporarily save x0 and x1 to the host stack (16-byte aligned scratch area).
     sub  sp, sp, #16
     stp  x0, x1, [sp]

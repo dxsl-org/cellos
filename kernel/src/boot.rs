@@ -274,16 +274,33 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
+// AArch64 RPi 3 (BCM2837): kernel at 0x80000, RAM 0..0x3F000000 before MMIO.
+// VideoCore firmware loads kernel8.img at 0x80000; GPU reserves top 64 MiB but
+// on QEMU raspi3b with -m 1G the full range below the peripheral base is usable.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
+    // Kernel: 0x80000 — 0x1080000 (16 MiB, covers binary + embedded init ELF)
+    MemoryMapEntry { base: 0x0008_0000, length: 0x0100_0000, ty: MemoryType::Kernel },
+    // Usable: 0x1080000 — 0x3F000000 (~989 MiB, before BCM2837 peripheral MMIO)
+    MemoryMapEntry { base: 0x0108_0000, length: 0x3EF8_0000, ty: MemoryType::Usable },
+];
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
+    memory_map: &FALLBACK_MEMORY_MAP,
+    kernel_phys_base: 0x0008_0000,
+    hhdm_offset: 0x0,
+};
+
 // AArch64 QEMU virt (256MB at 0x4000_0000, kernel loaded at 0x4008_0000):
 // MMIO below 0x4000_0000 is mapped by init_kernel_paging; RAM regions only here.
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     // Kernel: 0x4000_0000 — 0x4200_0000 (32MB, covers binary + embedded init ELF)
     MemoryMapEntry { base: 0x4000_0000, length: 0x200_0000,  ty: MemoryType::Kernel },
     // Usable: 0x4200_0000 — 0x5000_0000 (~224MB)
     MemoryMapEntry { base: 0x4200_0000, length: 0x0E00_0000, ty: MemoryType::Usable },
 ];
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &FALLBACK_MEMORY_MAP,
     kernel_phys_base: 0x4008_0000,

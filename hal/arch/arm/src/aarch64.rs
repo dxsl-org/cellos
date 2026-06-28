@@ -19,6 +19,10 @@ pub mod stage2_regs; // non-AArch64 builds get ENOSYS stubs; no cfg gate needed
 #[cfg(target_arch = "aarch64")] pub mod trap;
 #[cfg(target_arch = "aarch64")] pub mod trap_el2;
 #[cfg(target_arch = "aarch64")] pub mod uart_pl011;
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))] pub mod uart_bcm_mini;
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))] pub mod bcm2836_irq;
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))] pub mod bcm2835_legacy_irq;
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))] pub mod bcm2835_systimer;
 #[cfg(target_arch = "aarch64")] pub mod vcpu;
 #[cfg(target_arch = "aarch64")] pub mod vgic;
 
@@ -54,11 +58,20 @@ impl Arch for AArch64Arch {
     fn init(&self) {
         // CFI + MTE: harden the execution environment before any trap handlers
         // are installed.  Order: CFI first (SCTLR BT0/BT1 + PAC key), then MTE
-        // (SCTLR ATA/TCF bits), then GIC, timer, and finally trap vectors.
+        // (SCTLR ATA/TCF bits), then IRQ controller, timer, and finally trap vectors.
         cfi::init();   // LAYER2-CFI-INIT
         mte::init();   // LAYER2-MTE-INIT
-        // GIC must precede timer: timer::init() enables SPI 30 in the distributor.
+
+        // IRQ controller: BCM2836 local on RPi 3, GIC-400 on QEMU virt.
+        // The IRQ controller MUST precede timer::init() which enables a timer PPI.
+        #[cfg(feature = "board-rpi3")]
+        {
+            bcm2836_irq::init();
+            bcm2835_legacy_irq::init();
+        }
+        #[cfg(not(feature = "board-rpi3"))]
         gic::init();
+
         timer::init();
         trap::init();
     }

@@ -318,6 +318,12 @@ pub fn yield_cpu() {
             core::arch::asm!("sti", options(nomem, nostack));
         }
     }
+    // Probe 'N': fires when pick_next() returns None (no task in ready queue).
+    // If 'N' appears repeatedly but 'A' never appears, init spawn failed.
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    if switch_info.is_none() {
+        crate::hal::uart_bcm_mini::probe_put(b'N');
+    }
 
     if let Some((curr, next)) = switch_info {
         unsafe {
@@ -346,6 +352,9 @@ pub fn yield_cpu() {
             }
 
             // switch(current, next)
+            // Probe 'A': fires right before Context::switch, confirms the scheduler picked a task.
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            crate::hal::uart_bcm_mini::probe_put(b'A');
             crate::hal::arch::Context::switch(final_curr, final_next);
 
             // Execution resumes here when this context is switched BACK to.
@@ -392,10 +401,11 @@ fn elf_is_pie(data: &[u8]) -> bool {
 
 /// Spawn a cell from an ELF image already in memory.
 ///
+/// Applies ELF relocations internally (`.rela.dyn`) so callers need not do it.
+///
 /// Returns `(tid, load_base)` where `load_base` is:
 /// - `0` for fixed-VA (non-PIE) cells — load address comes from the ELF itself.
-/// - The allocated VA base for PIE cells — callers must pass this to
-///   `reloc::apply_relocations` after this function returns.
+/// - The allocated VA base for PIE cells (informational; relocations already applied).
 pub fn spawn_from_mem(
     data: &[u8],
     name: &str,
@@ -509,6 +519,48 @@ pub fn spawn_from_mem(
                 *tf_dest = task.trap_frame;
             }
 
+            // board-rpi3 debug: print tf_ptr and actual [tf_ptr+264] (sepc) after copy.
+            // '1'<tf_ptr hex>:   address of TrapFrame on kstack.
+            // '2'<sepc hex>:     what was written to [tf_ptr+264] (should == entry_va).
+            // '3'<entry hex>:    entry_va value (expected sepc).
+            // '4'<kstack_top>:   kstack_top (tf_ptr should be kstack_top - 288).
+            // Uses FIFO-safe writes (waits for LSR TX-empty bit) to prevent byte
+            // drops when the TX FIFO is still draining from a prior log message.
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            unsafe {
+                let lsr = 0x3F21_5054 as *const u32;
+                let io  = 0x3F21_5040 as *mut u32;
+                macro_rules! fifo_put {
+                    ($byte:expr) => {{
+                        while core::ptr::read_volatile(lsr) & (1 << 5) == 0 {}
+                        core::ptr::write_volatile(io, $byte as u32);
+                    }};
+                }
+                macro_rules! fifo_hex {
+                    ($val:expr) => {{
+                        let v: u64 = $val;
+                        // Correct: shifts 60,56,...,4,0 (16 nibbles, MSB first).
+                        for i in (0..16usize).rev() {
+                            let n = ((v >> (i * 4)) & 0xF) as u8;
+                            fifo_put!(if n < 10 { b'0' + n } else { b'a' + n - 10 });
+                        }
+                    }};
+                }
+                fifo_put!(b'1');
+                fifo_hex!(tf_ptr as u64);
+                fifo_put!(b'\n');
+                fifo_put!(b'2');
+                let sepc_on_kstack = core::ptr::read_volatile((tf_ptr + 264) as *const u64);
+                fifo_hex!(sepc_on_kstack);
+                fifo_put!(b'\n');
+                fifo_put!(b'3');
+                fifo_hex!(entry_va as u64);
+                fifo_put!(b'\n');
+                fifo_put!(b'4');
+                fifo_hex!(kstack_top as u64);
+                fifo_put!(b'\n');
+            }
+
             // Point Context to Kernel Stack (sp field exists on all Context types)
             task.context.sp = tf_ptr as _;
             #[cfg(target_arch = "riscv64")]
@@ -549,6 +601,20 @@ pub fn spawn_from_mem(
             sched.exit_task(tid, 0xff);
         }
         return Err(ViError::Unknown);
+    }
+
+    // Apply PIE relocations (.rela.dyn) now that all segments are mapped.
+    if load_base != 0 {
+        use crate::loader::ElfParser;
+        if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
+            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, &rela) {
+                log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
+                if let Some(sched) = SCHEDULER.lock().as_mut() {
+                    sched.exit_task(tid, 0xff);
+                }
+                return Err(e);
+            }
+        }
     }
 
     Ok((tid, load_base))

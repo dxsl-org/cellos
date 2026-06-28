@@ -82,6 +82,16 @@ pub fn init() {
 pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
     let esr = frame.esr_el1; // field holds ESR_EL2 at EL2; naming is irrelevant here
     let ec  = (esr >> 26) & 0x3F;
+    // Debug probe: confirm trap handler was entered (rpi3 only).
+    // Writes "T<hi><lo>" where hi/lo are hex nibbles of EC — visible even if
+    // the log subsystem is broken; uses identity-mapped BCM mini UART directly.
+    #[cfg(feature = "board-rpi3")]
+    {
+        super::uart_bcm_mini::probe_put(b'T');
+        let hex = |n: u64| if n < 10 { b'0' + n as u8 } else { b'a' + n as u8 - 10 };
+        super::uart_bcm_mini::probe_put(hex((ec >> 4) & 0xF));
+        super::uart_bcm_mini::probe_put(hex(ec & 0xF));
+    }
     match ec {
         // EC 0x15 = SVC instruction from AArch64.
         // ViCell ARM64 syscall ABI: x0=syscall_nr, x1=a0, x2=a1, x3=a2, x4=a3.
@@ -116,15 +126,17 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
 }
 
 /// GIC ID for the PL061 GPIO controller on QEMU ARM virt (SPI 7 = GIC ID 39).
+#[cfg(not(feature = "board-rpi3"))]
 const GPIO_GIC_ID: u32 = 39;
 
 /// IRQ handler — dispatches timer, GPIO, and VirtIO MMIO interrupts.
 ///
+/// On `board-rpi3`: reads BCM2836 local IRQ source; dispatches timer PPIs
+/// (nCNTPNSIRQ / nCNTHPIRQ) and GPU (BCM2835 peripheral) interrupts.
+///
+/// On QEMU virt (default): uses GIC claim/complete cycle.
 /// Timer PPIs: EL1 = GIC ID 30 (CNTP), EL2 = GIC ID 26 (CNTHP).
-/// GPIO PL061: GIC ID 39 (SPI 7) → forwards to MMIO-owner cell via IPC.
-/// VirtIO MMIO: QEMU virt SPI 16..47 = GIC IDs 48..79 (32 slots).
-/// `vi_handle_virtio_irq` expects SPI numbers (as stored in `VirtioEntry.irq`),
-/// so GIC ID is converted: SPI_nr = GIC_ID − 32.
+/// GPIO PL061: GIC ID 39 (SPI 7); VirtIO MMIO: GIC IDs 48..79 (SPI 16..47).
 #[no_mangle]
 pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
     extern "Rust" {
@@ -132,39 +144,100 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         fn vi_handle_virtio_irq(irq: u32);
         fn vi_gpio_notify_irq();
     }
-    let irq = super::gic::claim();
-    let timer_irq = if super::el2::is_el2() { 26 } else { 30 };
-    if irq == timer_irq {
-        // Rearm the hardware countdown first.
-        super::timer::reset();
-        // Send EOI (priority drop) BEFORE calling vi_timer_tick().
-        // vi_timer_tick() calls yield_cpu() which context-switches away.
-        // GICv2: until GICC_EOIR is written, the IRQ stays "active" and the
-        // GIC priority preemption logic blocks all same/lower priority IRQs
-        // (all VirtIO + timer share priority 0xA0).  If we EOI after yield,
-        // the interrupted task must be rescheduled before the next timer tick
-        // can fire — but that task may be stuck in Sending{} waiting for an
-        // IPC reply whose sender (net) can only wake via a timer timeout.
-        // EOI first → priority drop → new timer ticks can fire on any task.
-        super::gic::complete(irq);
-        // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
-        unsafe { vi_timer_tick(); }
-        return; // skip the final complete() below — EOI already sent
-    } else if irq == GPIO_GIC_ID {
-        // GPIO PL061 edge interrupt: EOI first (priority drop), then notify cell.
-        // EOI before notify so the GIC can deliver the next GPIO edge immediately
-        // after the cell re-enables the interrupt (GPIOIE write from userspace).
-        super::gic::complete(irq);
-        // SAFETY: vi_gpio_notify_irq is #[no_mangle] in kernel/src/task/drivers/gpio_irq.rs.
-        unsafe { vi_gpio_notify_irq(); }
+
+    #[cfg(feature = "board-rpi3")]
+    {
+        let src = super::bcm2836_irq::irq_source();
+        // Timer: non-secure physical (EL1) or hypervisor physical (EL2).
+        let timer_bits = super::bcm2836_irq::IRQ_SRC_TIMER_NS
+            | super::bcm2836_irq::IRQ_SRC_TIMER_HP;
+        // Fallback: check ARM generic timer ISTATUS directly.
+        // QEMU raspi3b may not update CORE0_IRQ_SOURCE even when the timer fires,
+        // routing the interrupt directly to the CPU IRQ line.  The timer CTL ISTATUS
+        // bit (bit 2) is hardware-authoritative: set iff the timer condition is met.
+        // Use CNTP_CTL_EL0 at EL1, CNTHP_CTL_EL2 at EL2.
+        let timer_fired_by_status: bool = if super::el2::is_el2() {
+            unsafe {
+                let ctl: u64;
+                core::arch::asm!("mrs {}, cnthp_ctl_el2", out(reg) ctl, options(nomem, nostack));
+                ctl & (1 << 2) != 0
+            }
+        } else {
+            unsafe {
+                let ctl: u64;
+                core::arch::asm!("mrs {}, cntp_ctl_el0", out(reg) ctl, options(nomem, nostack));
+                ctl & (1 << 2) != 0
+            }
+        };
+        if src & timer_bits != 0 || timer_fired_by_status {
+            // Probe 'M': fires on every rpi3 timer IRQ (via BCM2836 source OR ISTATUS).
+            // Repeated M output → timer fires but init never reaches SVC (infinite loop at EL0).
+            // M never appears → BCM2836 IRQ not reaching CPU; context switches won't happen.
+            super::uart_bcm_mini::probe_put(b'M');
+            super::timer::reset();
+            // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
+            unsafe { vi_timer_tick(); }
+            return;
+        }
+        // GPU pass-through: BCM2835 peripheral interrupts (system timer, GPIO, …).
+        // Check BCM2835 systimer C1 FIRST — both when CORE0_IRQ_SOURCE bit 8 is set
+        // (normal path) AND unconditionally as a fallback.  QEMU raspi3b may deliver
+        // the BCM2835 IRQ to the CPU nIRQ line without setting bit 8 in
+        // CORE0_IRQ_SOURCE (the GPU routing register may not be fully emulated).
+        if super::bcm2835_systimer::is_c1_pending() {
+            // Probe 'M': fires on every BCM2835 system timer tick.
+            // Repeated M → timer works; if M never appears → BCM2835 C1 not pending or
+            // IRQ never delivered to CPU.
+            super::uart_bcm_mini::probe_put(b'M');
+            super::timer::reset(); // ack C1 + re-arm
+            // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
+            unsafe { vi_timer_tick(); }
+            return;
+        }
+        // GPU peripheral IRQs that are not the systimer.
+        if src & super::bcm2836_irq::IRQ_SRC_GPU != 0 {
+            // GPIO banks via BCM2835 IRQ controller.
+            if super::bcm2835_legacy_irq::identify_gpio_irq().is_some() {
+                // SAFETY: vi_gpio_notify_irq is #[no_mangle] in kernel/src/task/drivers/gpio_irq.rs.
+                unsafe { vi_gpio_notify_irq(); }
+                return;
+            }
+            // Other GPU sources (UART, SPI, I2C) — fall through to spurious.
+        }
+        // Spurious or unhandled.
         return;
-    } else if irq >= 32 && irq != 0x3FF {
-        // SPI range (GIC ID ≥ 32): dispatch to the VirtIO IRQ handler.
-        // Convert GIC ID → SPI number so the comparison against VirtioEntry.irq works.
-        // SAFETY: vi_handle_virtio_irq is #[no_mangle] in kernel/src/task/drivers.
-        unsafe { vi_handle_virtio_irq(irq - 32); }
     }
-    if irq != 0x3FF { super::gic::complete(irq); }
+
+    #[cfg(not(feature = "board-rpi3"))]
+    {
+        let irq = super::gic::claim();
+        let timer_irq = if super::el2::is_el2() { 26 } else { 30 };
+        if irq == timer_irq {
+            // Rearm the hardware countdown first.
+            super::timer::reset();
+            // Send EOI (priority drop) BEFORE calling vi_timer_tick().
+            // vi_timer_tick() calls yield_cpu() which context-switches away.
+            // GICv2: until GICC_EOIR is written, the IRQ stays "active" and the
+            // GIC priority preemption logic blocks all same/lower priority IRQs.
+            // EOI first → priority drop → new timer ticks can fire on any task.
+            super::gic::complete(irq);
+            // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
+            unsafe { vi_timer_tick(); }
+            return;
+        } else if irq == GPIO_GIC_ID {
+            // GPIO PL061 edge: EOI before notify so the next GPIO edge can fire
+            // as soon as the cell re-enables it (GPIOIE write from userspace).
+            super::gic::complete(irq);
+            // SAFETY: vi_gpio_notify_irq is #[no_mangle] in kernel/src/task/drivers/gpio_irq.rs.
+            unsafe { vi_gpio_notify_irq(); }
+            return;
+        } else if irq >= 32 && irq != 0x3FF {
+            // SPI range (GIC ID ≥ 32): dispatch VirtIO; convert GIC ID → SPI number.
+            // SAFETY: vi_handle_virtio_irq is #[no_mangle] in kernel/src/task/drivers.
+            unsafe { vi_handle_virtio_irq(irq - 32); }
+        }
+        if irq != 0x3FF { super::gic::complete(irq); }
+    }
 }
 
 /// Noop: ARM64 uses SP_EL0 via context switch, not an sscratch-style CSR.
@@ -178,6 +251,176 @@ pub fn enable_interrupts() {
 
 /// ARM64 has no GP/TP registers — return zeroes so kernel spawn paths compile.
 pub fn get_gp_tp() -> (usize, usize) { (0, 0) }
+
+/// Debug probe called from `__trap_exit` assembly entry (rpi3 only).
+/// Writes 'X' to the BCM mini UART — confirms __trap_exit was entered and
+/// that the context switch brought control here correctly.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_trap_exit_probe() {
+    super::uart_bcm_mini::probe_put(b'X');
+}
+
+/// Stub for non-rpi3 builds so the assembly's `bl __rpi3_trap_exit_probe` links.
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_trap_exit_probe() {}
+
+/// Debug probe called from `__trap_exit` EL2 path just before `eret` (rpi3 only).
+/// Writes 'E' to the BCM mini UART — confirms ELR_EL2/SPSR_EL2/SP_EL0 are set
+/// and `eret` is actually about to execute.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_eret_probe() {
+    super::uart_bcm_mini::probe_put(b'E');
+}
+
+/// Stub for non-rpi3 builds.
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_eret_probe() {}
+
+/// Print a 64-bit value as "P<16 hex digits>\n" to BCM UART before EL1 eret.
+/// Called from __trap_exit EL1 path with x0 = ELR_EL1 value.
+/// Lets us confirm the exact jump target even when F/N probes never fire.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_print_elr(elr: u64) {
+    super::uart_bcm_mini::probe_put(b'P');
+    // Shifts 60,56,...,4,0 → 16 nibbles, MSB first.
+    for i in (0..16usize).rev() {
+        let nibble = ((elr >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        super::uart_bcm_mini::probe_put(ch);
+    }
+    super::uart_bcm_mini::probe_put(b'\n');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_print_elr(_elr: u64) {}
+
+/// Print the 32-bit instruction word at ELR as "D<8 hex digits>\n" to BCM UART.
+/// Called from __trap_exit EL1 path with w0 = first instruction at entry point.
+/// If 'D' prints 00000000, the init ELF is not mapped at that VA.
+/// A valid AArch64 instruction (e.g. 0x58000093 for ldr x19, [pc]) confirms ELF is loaded.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_print_instr(word: u32) {
+    super::uart_bcm_mini::probe_put(b'D');
+    for i in (0..8usize).rev() {
+        let nibble = ((word as u64 >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        super::uart_bcm_mini::probe_put(ch);
+    }
+    super::uart_bcm_mini::probe_put(b'\n');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_print_instr(_word: u32) {}
+
+/// Print SPSR_EL1 as "V<8 hex digits>\n" to BCM UART after setting it to 0.
+/// Called from __trap_exit EL1 path with x0 = mrs spsr_el1 readback.
+/// Expected output: V00000000 (EL0t, DAIF=0 → all exceptions enabled after eret).
+/// Any non-zero value explains why init can't reach EL0 or why IRQs are masked there.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_print_spsr(spsr: u64) {
+    super::uart_bcm_mini::probe_put(b'V');
+    for i in (0..8usize).rev() {
+        let nibble = ((spsr >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        super::uart_bcm_mini::probe_put(ch);
+    }
+    super::uart_bcm_mini::probe_put(b'\n');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_print_spsr(_spsr: u64) {}
+
+/// Probe 'Y': right after the X probe restore, before EL dispatch check.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_probe_y() {
+    super::uart_bcm_mini::probe_put(b'Y');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_probe_y() {}
+
+/// Probe 'Z': EL1 path taken (EL2_ACTIVE was 0).
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_probe_z() {
+    super::uart_bcm_mini::probe_put(b'Z');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_probe_z() {}
+
+/// Probe 'W': EL2 path taken (EL2_ACTIVE was 1).
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_probe_w() {
+    super::uart_bcm_mini::probe_put(b'W');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_probe_w() {}
+
+/// Probe 'F': fires right before `bl vi_aarch64_trap_handler` in vt_sync_el0.
+/// If F appears but T does not, the fault is inside vi_aarch64_trap_handler itself.
+/// If F never appears, vt_sync_el0 is never entered — VBAR_EL1 wrong or no EL0 exceptions.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_probe_f() {
+    super::uart_bcm_mini::probe_put(b'F');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_probe_f() {}
+
+/// Probe 'G': fires at entry of vt_irq_spx (IRQ while kernel is at EL1, e.g. during WFI).
+/// G fires → timer IRQ reaches EL1 while kernel is running.
+/// G never fires → timer never generates a CPU interrupt at all.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_probe_g() {
+    super::uart_bcm_mini::probe_put(b'G');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_probe_g() {}
+
+/// Probe 'N': fires at entry of vt_irq_el0 (IRQ from EL0 — init running).
+/// N fires → timer IRQ reaches EL1 while init is at EL0 (TGE=0, routing correct).
+/// N never fires but G does → EL0 IRQs not reaching EL1 (HCR_EL2.TGE=1 suspected).
+/// Neither fires → timer never generates CPU interrupt.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_probe_n() {
+    super::uart_bcm_mini::probe_put(b'N');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_probe_n() {}
+
+/// Print sp as "B<16 hex digits>\n" to BCM UART before sepc read in __trap_exit.
+/// Called with x0 = sp — confirms sp == tf_ptr set by spawn_from_mem.
+#[no_mangle]
+#[cfg(feature = "board-rpi3")]
+pub extern "C" fn __rpi3_print_sp(sp: u64) {
+    super::uart_bcm_mini::probe_put(b'B');
+    // Shifts 60,56,...,4,0 → 16 nibbles, MSB first.
+    for i in (0..16usize).rev() {
+        let nibble = ((sp >> (i * 4)) & 0xF) as u8;
+        let ch = if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 };
+        super::uart_bcm_mini::probe_put(ch);
+    }
+    super::uart_bcm_mini::probe_put(b'\n');
+}
+#[no_mangle]
+#[cfg(not(feature = "board-rpi3"))]
+pub extern "C" fn __rpi3_print_sp(_sp: u64) {}
 
 global_asm!(r#"
     .section .text
@@ -204,6 +447,14 @@ global_asm!(r#"
     .global __trap_exit
     .balign 4
 __trap_exit:
+    // Debug probe: write 'X' to BCM mini UART to confirm __trap_exit was entered.
+    // __rpi3_trap_exit_probe() is a no-op on non-rpi3 builds (stub always linked).
+    // bl clobbers x30 (link reg), but we reload x30 from [sp, #240] before eret.
+    str  x30, [sp, #-16]!      // push x30 (sp must stay 16-byte aligned)
+    bl   __rpi3_trap_exit_probe
+    ldr  x30, [sp], #16        // pop x30
+    bl   __rpi3_probe_y         // 'Y': confirm code reaches here; x30 clobbered but OK
+
     // Runtime EL dispatch via EL2_ACTIVE flag.
     // SAFETY: EL2_ACTIVE is an AtomicBool (1 byte); ldrb loads it atomically
     // for reads (store-release in el2_mark_active provides the ordering guarantee).
@@ -213,12 +464,35 @@ __trap_exit:
     cbnz  w9, 1f
 
     // ── EL1 path ─────────────────────────────────────────────────────────────
+    bl   __rpi3_probe_z        // 'Z': EL1 path taken (EL2_ACTIVE==0); x30 clobbered, OK
+    mov  x0, sp               // x0 = sp (should == tf_ptr set by spawn_from_mem)
+    bl   __rpi3_print_sp      // 'B<16 hex>' — confirm sp; x30 clobbered, OK
     ldr  x9,  [sp, #264]     // sepc → ELR_EL1 (user entry point)
     msr  elr_el1, x9
+    // Print ELR value ("P<16 hex nibbles>") so we can confirm the jump target.
+    // bl clobbers x30 (OK—loaded from [sp,#240] before eret) and may use x0-x18
+    // (OK—all reloaded by ldp chain below). x9 holds ELR which is what we print.
+    mov  x0, x9
+    bl   __rpi3_print_elr
+    // 'D': read first instruction at ELR to confirm init ELF is mapped at jump target.
+    // bl __rpi3_print_elr may have clobbered x9; re-read ELR from the system register.
+    mrs  x9, elr_el1
+    ldr  w0, [x9]               // first 4-byte AArch64 instruction at entry point
+    bl   __rpi3_print_instr     // 'D<8hex>\n'; 00000000 → ELF not mapped; valid instr → loaded
+    // 'V': set SPSR_EL1 = 0 (EL0t, DAIF=0) then read back to confirm write took effect.
     mov  x9,  #0
-    msr  spsr_el1, x9         // EL0t, no interrupt masking
+    msr  spsr_el1, x9
+    mrs  x0, spsr_el1
+    bl   __rpi3_print_spsr      // 'V00000000\n' → correct; non-zero → IRQs masked or EL wrong
     ldr  x9,  [sp, #16]      // regs[2] = user sp
     msr  sp_el0, x9
+    // Debug probe 'E' for the EL1 eret path — mirrors the EL2 path below.
+    // Push x30 (currently garbage from earlier bl calls, but saved/restored only
+    // for the push/pop symmetry), call the probe, then pop before the ldp chain.
+    // This also confirms SP_EL1 is valid (the push/pop exercises the kernel stack).
+    str  x30, [sp, #-16]!
+    bl   __rpi3_eret_probe
+    ldr  x30, [sp], #16
     ldp  x0,  x1,  [sp, #0]
     ldp  x2,  x3,  [sp, #16]
     ldp  x4,  x5,  [sp, #32]
@@ -240,12 +514,19 @@ __trap_exit:
 
     // ── EL2 path ─────────────────────────────────────────────────────────────
 1:
+    bl   __rpi3_probe_w        // 'W': EL2 path taken (EL2_ACTIVE==1); x30 clobbered, OK
     ldr  x9,  [sp, #264]     // sepc → ELR_EL2 (user entry point)
     msr  elr_el2, x9
     mov  x9,  #0
     msr  spsr_el2, x9         // EL0t — Cells stay at EL0
     ldr  x9,  [sp, #16]      // regs[2] = user sp
     msr  sp_el0, x9
+    // Debug probe: write 'E' to BCM mini UART right before eret.
+    // Called after ELR_EL2/SPSR_EL2/SP_EL0 are set. bl clobbers x0-x18,x30
+    // but the ldp chain below restores them from TrapFrame immediately after.
+    str  x30, [sp, #-16]!
+    bl   __rpi3_eret_probe
+    ldr  x30, [sp], #16
     ldp  x0,  x1,  [sp, #0]
     ldp  x2,  x3,  [sp, #16]
     ldp  x4,  x5,  [sp, #32]
@@ -309,6 +590,16 @@ __vectors:
 vt_sync_sp0:
 vt_sync_spx:
 vt_sync_el0:
+    // Raw 'S' probe — first instruction of ANY sync exception handler.
+    // Fires before `sub sp` touches the stack, so it cannot fault.
+    // If 'S' appears but 'F' does not, the sub/stp faulted (SP_EL1 bad).
+    // If neither 'S' nor 'F' appears, this handler is never entered.
+    // Uses w9/x10 (caller-saved; saved by stp later — values will be 'S' and
+    // 0x3F215040 in the TrapFrame, acceptable for crash-diagnosis runs).
+    mov  w9,  #0x53              // ASCII 'S'
+    movz x10, #0x5040
+    movk x10, #0x3F21, lsl #16  // BCM mini UART IO register
+    str  w9,  [x10]              // raw write — no branch, no stack
     sub  sp, sp, #(35 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
@@ -332,6 +623,10 @@ vt_sync_el0:
     mrs  x12, esr_el1
     stp  x9,  x10, [sp, #248]
     stp  x11, x12, [sp, #264]
+    // Probe 'F': fires immediately before vi_aarch64_trap_handler.
+    // x30 is already saved at [sp, #240] so bl clobbering it is harmless.
+    // __rpi3_probe_f is a no-op stub on non-rpi3 builds.
+    bl   __rpi3_probe_f
     mov  x0,  sp
     bl   vi_aarch64_trap_handler
     ldp  x9,  x10, [sp, #248]
@@ -356,10 +651,42 @@ vt_sync_el0:
     add  sp, sp, #(35 * 8)
     eret
 
+    // ── IRQ from current EL (SP_EL0 or SP_ELx) ─────────────────────────────
+    // Probe 'H': fires BEFORE any stack access on EL1 IRQ entry.
+    //   H fires, G doesn't → str x30,[sp,#-16]! faults (stack bad/unmapped).
+    //   H never fires      → IRQ never reached this vector (VBAR_EL1 wrong?).
+    // Uses w0/x1 (caller-saved; saved by .Lirq_common anyway). NO bl → no x30 clobber.
+    // Probe 'G': fires AFTER str x30 succeeds — confirms stack access OK.
     .balign 4
 vt_irq_sp0:
 vt_irq_spx:
+    mov  w0, #0x48              // ASCII 'H'
+    movz x1, #0x5040            // BCM AUX UART [15:0]
+    movk x1, #0x3F21, lsl #16  // BCM AUX UART → 0x3F215040
+    str  w0, [x1]               // write 'H' — no branch, x30 untouched
+    str  x30, [sp, #-16]!
+    bl   __rpi3_probe_g
+    ldr  x30, [sp], #16
+    b    .Lirq_common
+
+    // ── IRQ from lower EL (AArch64 EL0 — init/cells running) ───────────────
+    // Probe 'R': fires BEFORE any stack access on EL0→EL1 IRQ entry.
+    //   R fires → init is at EL0 and timer IRQs reach EL1 (TGE=0, correct).
+    // Uses w0/x1 (caller-saved). NO bl → no x30 clobber.
+    // Probe 'N': fires AFTER str x30 succeeds.
+    .balign 4
 vt_irq_el0:
+    mov  w0, #0x52              // ASCII 'R'
+    movz x1, #0x5040
+    movk x1, #0x3F21, lsl #16
+    str  w0, [x1]               // write 'R' — no branch, x30 untouched
+    str  x30, [sp, #-16]!
+    bl   __rpi3_probe_n
+    ldr  x30, [sp], #16
+    b    .Lirq_common
+
+    .balign 4
+.Lirq_common:
     sub  sp, sp, #(35 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]

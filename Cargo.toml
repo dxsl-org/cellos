@@ -13,6 +13,9 @@ exclude = [
     # as a [build-dependency]; excluding it keeps `cargo check` from trying to
     # compile it for the bare-metal target (riscv64gc-unknown-none-elf).
     "libs/cell-build",
+    # vove is a restricted private sub-repo (git submodule) — separate license,
+    # excluded from the public Cellos workspace to prevent accidental inclusion.
+    "cells/apps/vove",
 ]
 members = [
     "kernel",
@@ -49,6 +52,7 @@ members = [
     "cells/drivers/disk",
     "cells/drivers/e1000",
     "cells/drivers/gpio",
+    "cells/drivers/gpio-bcm",
     "cells/drivers/nvme",
     "cells/drivers/gpu",
     "cells/drivers/i2c-gpio",

@@ -1,5 +1,9 @@
 #![no_std]
 
+// common/ contains RISC-V-specific SBI calls and CSR asm — only compile for
+// RISC-V targets; building for AArch64/x86 in the same workspace must not
+// see these inline asm register names (a0-a7) which are invalid there.
+#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
 pub mod common;
 
 #[cfg(feature = "critical-section-impl")]

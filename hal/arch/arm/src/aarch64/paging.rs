@@ -75,7 +75,13 @@ impl PageTableTrait for PageTable {
             entry |= PTE_UXN | PTE_PXN;
         }
 
-        l3_table.entries[l3_idx] = entry;
+        // SAFETY: l3_table is a valid page table frame; l3_idx is in [0..512).
+        unsafe { core::ptr::write_volatile(&mut l3_table.entries[l3_idx], entry); }
+        // DSB ISH ensures all PTE writes (L1/L2 intermediates from get_or_alloc +
+        // L3 leaf above) are visible to the page-table walker before any translation
+        // that uses this mapping proceeds (Arm ARM §D8.11).
+        // No `nomem` — the compiler must not reorder Rust stores past this barrier.
+        unsafe { core::arch::asm!("dsb ish", options(nostack)); }
         Ok(())
     }
 
@@ -174,7 +180,8 @@ impl PageTable {
             let frame = alloc_fn().ok_or(ViError::OutOfMemory)?;
             // SAFETY: frame is a freshly allocated 4KB frame; identity-mapped pre-MMU.
             unsafe { core::ptr::write_bytes(frame as *mut u8, 0, PAGE_SIZE) };
-            self.entries[idx] = (frame as u64) | PTE_VALID | PTE_TABLE;
+            // SAFETY: self.entries[idx] is a PTE slot in a valid page table frame.
+            unsafe { core::ptr::write_volatile(&mut self.entries[idx], (frame as u64) | PTE_VALID | PTE_TABLE); }
         }
         let next_phys = (self.entries[idx] & !0xFFF) as PhysAddr;
         // SAFETY: identity-mapped; next_phys is a valid page table frame.

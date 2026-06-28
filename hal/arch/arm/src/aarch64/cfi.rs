@@ -76,6 +76,12 @@ pub fn detect() -> CfiCaps {
 /// for dev/QEMU. Production boards must derive a per-device key via Silo
 /// before the kernel is finalised; replace this call at that stage.
 pub fn init() {
+    // Board-aware early UART output (MMU is still off; routes to the active console).
+    #[cfg(feature = "board-rpi3")]
+    let cfi_puts = |s: &str| super::uart_bcm_mini::puts(s);
+    #[cfg(not(feature = "board-rpi3"))]
+    let cfi_puts = |s: &str| super::uart_pl011::puts(s);
+
     let caps = detect();
 
     if caps.bti {
@@ -99,9 +105,9 @@ pub fn init() {
             );
             core::arch::asm!("isb", options(nomem, nostack));
         }
-        super::uart_pl011::puts("[INFO] CFI: BTI enabled\n");
+        cfi_puts("[INFO] CFI: BTI enabled\n");
     } else {
-        super::uart_pl011::puts("[INFO] CFI: BTI unavailable\n");
+        cfi_puts("[INFO] CFI: BTI unavailable\n");
     }
 
     if caps.pac {
@@ -113,21 +119,27 @@ pub fn init() {
 
         // SAFETY: writing PAC key registers from EL1 is a standard key-setup
         // operation. No pointer or memory invariant is affected.
+        //
+        // Raw S3 encoding avoids the +paca assembler feature requirement:
+        //   APIAKEYLO_EL1 = S3_0_C2_C1_0  (Op0=3,Op1=0,CRn=2,CRm=1,Op2=0)
+        //   APIAKEYHI_EL1 = S3_0_C2_C1_1  (Op0=3,Op1=0,CRn=2,CRm=1,Op2=1)
+        // The runtime `if caps.pac` guard prevents this from executing on
+        // cores that don't implement PAC (e.g. Cortex-A53 on RPi 3).
         unsafe {
             core::arch::asm!(
-                "msr apiakeylo_el1, {}",
+                "msr S3_0_C2_C1_0, {}",
                 in(reg) PAC_KEY_LO,
                 options(nomem, nostack)
             );
             core::arch::asm!(
-                "msr apiakeyhi_el1, {}",
+                "msr S3_0_C2_C1_1, {}",
                 in(reg) PAC_KEY_HI,
                 options(nomem, nostack)
             );
             core::arch::asm!("isb", options(nomem, nostack));
         }
-        super::uart_pl011::puts("[INFO] CFI: PAC-RET enabled (dev key)\n");
+        cfi_puts("[INFO] CFI: PAC-RET enabled (dev key)\n");
     } else {
-        super::uart_pl011::puts("[INFO] CFI: PAC-RET unavailable\n");
+        cfi_puts("[INFO] CFI: PAC-RET unavailable\n");
     }
 }

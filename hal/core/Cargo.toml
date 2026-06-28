@@ -37,3 +37,5 @@ critical-section-impl = [
     "hal-arm?/critical-section-impl",
     "hal-x86?/critical-section-impl",
 ]
+# Propagate board-rpi3 to hal-arm so BCM2837-specific dispatch is compiled in.
+board-rpi3 = ["hal-arm?/board-rpi3"]

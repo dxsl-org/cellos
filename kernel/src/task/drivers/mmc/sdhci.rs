@@ -85,6 +85,13 @@ impl SdhciController {
         Ok(())
     }
 
+    /// Read the Present State register (offset 0x24) — single MMIO read, no poll.
+    ///
+    /// Used by callers for a fast card-present check before any lengthy poll sequences.
+    pub fn read_present_state(&self) -> u32 {
+        self.read32(SDHCI_PRESENT_STATE)
+    }
+
     /// Reset the controller (all lines).
     pub fn reset_all(&mut self) -> ViResult<()> {
         self.write8(SDHCI_SOFT_RESET, RESET_ALL);

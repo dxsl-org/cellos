@@ -94,10 +94,25 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
             ($label:literal) => {{
                 let patch_va = base.wrapping_add(entry.offset as usize);
                 let value    = base.wrapping_add(entry.addend as usize);
+
+                // On AArch64 non-VHE (EL2 kernel), AP[1]=1 in the EL2 stage-1 PTE
+                // means the page is read-only from EL2 — the same bit that grants EL0
+                // access. Write through the physical frame's identity-mapped VA instead,
+                // which is always kernel-writable (no AP[1]).
+                // On RISC-V/x86 the SSTATUS.SUM / U-bit semantics allow S-mode writes.
+                #[cfg(target_arch = "aarch64")]
+                let write_ptr: *mut usize = {
+                    let phys = crate::memory::paging::virt_to_phys(patch_va)
+                        .expect("apply_relocations: relocation target VA not mapped");
+                    // phys includes the in-page offset (translate returns full PA).
+                    crate::memory::frame::phys_to_virt(phys) as *mut usize
+                };
+                #[cfg(not(target_arch = "aarch64"))]
                 // SAFETY: patch_va is within the cell's mapped pages (SAS);
-                // SSTATUS.SUM=1 lets S-mode write to U-mode pages.
-                unsafe { (patch_va as *mut usize).write_unaligned(value) };
-                log::trace!("[reloc] {} @ 0x{:X} = 0x{:X}", $label, patch_va, value);
+                // SSTATUS.SUM=1 lets S-mode write to U-mode pages on RISC-V.
+                let write_ptr: *mut usize = patch_va as *mut usize;
+
+                unsafe { write_ptr.write_unaligned(value) };
             }};
         }
 
