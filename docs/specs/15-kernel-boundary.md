@@ -142,20 +142,32 @@ categories to `kernel/src/` must be rejected at review.
 |----------------|--------------|
 | NVMe, MMC/SDHCI (storage) | `cells/drivers/nvme/`, `cells/drivers/mmc/` |
 | e1000, RTL8168 (NIC) | `cells/drivers/e1000/`, `cells/drivers/nic-*/` |
-| VirtIO transports (block, net, GPU, sound, input, RNG) | `cells/drivers/virtio-*/` — G2 target |
-| PCIe ECAM enumeration | Platform Cell / Boot Cell — G2 target |
-| GPIO IRQ dispatch | `cells/drivers/gpio/` (already done) |
+| VirtIO block, PCI transport | `cells/drivers/virtio-blk/` — G2 (loader dependency) |
+| VirtIO net, GPU, input, sound | `cells/drivers/virtio-*/` — **DONE (P06/02/03/04)** |
+| PCIe ECAM enumeration | Platform Cell — **done (P01)**; kernel retains `register_bar`/`find_class` store |
+| GPIO IRQ dispatch | `cells/drivers/gpio/` — **done** |
 | UART (beyond early console) | Driver Cell after early boot |
 
-**Current exceptions (tracked tech debt):**
+**Current exceptions (tracked tech debt — G2):**
 
 | Driver | LOC | Migration target |
 |--------|-----|-----------------|
-| `kernel/src/task/drivers/blk_nvme.rs` | 856 | `cells/drivers/nvme/` — pre-G2 |
-| `kernel/src/task/drivers/nic_e1000.rs` | 469 | `cells/drivers/e1000/` — pre-G2 |
-| `kernel/src/task/drivers/virtio_*.rs` | ~600 | `cells/drivers/virtio-*/` — G2 |
-| `kernel/src/task/drivers/pcie_ecam.rs` | ~100 | Platform Cell — G2 |
-| `kernel/src/task/drivers/mmc.rs` + subs | ~200 | `cells/drivers/mmc/` — G2 |
+| `kernel/src/task/drivers/virtio_blk.rs` | ~217 | `cells/drivers/virtio-blk/` — G2 (loader depends on kernel block I/O) |
+| `kernel/src/task/drivers/virtio_pci.rs` | ~225 | part of virtio-blk Cell — G2 |
+| `kernel/src/task/drivers/mmc.rs` + subs | ~200 | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
+| `kernel/src/task/drivers/pcie_ecam.rs` | ~100 | simplify to store-only; full removal in G2 |
+
+**Migrated (kernel-boundary-cleanup plan, 2026-06-24):**
+
+| Driver | Migrated to |
+|--------|------------|
+| `blk_nvme.rs` (856 LOC) | `cells/drivers/nvme/` ✅ |
+| `nic_e1000.rs` (469 LOC) | `cells/drivers/e1000/` ✅ |
+| `virtio_gpu.rs` | `cells/drivers/virtio-gpu/` ✅ |
+| `virtio_input.rs`, `input_map.rs` | input service Cell ✅ |
+| `virtio_net.rs` | `cells/drivers/virtio-net/` ✅ |
+| `virtio_sound.rs` | deleted (no consumer, YAGNI) ✅ |
+| `fb_console.rs` | GPU Cell + compositor ✅ |
 
 **"We need it early" is not justification.** This reasoning is how Linux became a
 monolith. The correct solution is: (1) design init spawn ordering so Driver Cells start
@@ -249,7 +261,7 @@ fewer places for a bug to compromise everything.
 | Redox | None | All userspace | Limited | ~19,000 |
 | MINIX3 | None | All userspace | Reincarnation | ~4,000 |
 | **Cellos (target)** | **Kernel (Zircon model)** | **All → Driver Cells** | **Supervisory Cell** | **≤ 5,000** |
-| Cellos (today) | Kernel | NVMe+e1000 in kernel | Kernel orchestration | ~9,100 |
+| Cellos (G1, 2026-06) | Kernel | NVMe+e1000+GPU+NIC+Input+Sound in Cells; VirtIO-Blk+MMC G2 pending | Kernel orchestration (hotswap/snapshot deferred) | ~7,200 |
 
 ---
 

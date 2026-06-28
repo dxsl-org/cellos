@@ -5,17 +5,19 @@
 //! its TID here.  Service clients use `sys_lookup_service(service::X)` to find
 //! the provider; these statics are the backing store for that lookup.
 //!
-//! `0` means "no driver cell registered; fall back to kernel-resident driver".
+//! `0` means "no driver cell registered". Block + NIC fall back to kernel-resident drivers
+//! (virtio_blk / MMC for block; no NIC fallback — NIC is always a Driver Cell).
+//! GPU has no kernel fallback; compositor refuses to init until a GPU Cell registers.
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-/// TID of the registered block Driver Cell (0 = none; kernel NVMe/VirtIO/MMC is active).
+/// TID of the registered block Driver Cell (0 = none; kernel virtio_blk/MMC is the fallback).
 pub static BLOCK_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
-/// TID of the registered NIC Driver Cell (0 = none; kernel e1000/VirtIO is active).
+/// TID of the registered NIC Driver Cell (0 = none; no kernel NIC fallback exists).
 pub static NIC_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
-/// TID of the registered GPU Driver Cell (0 = none; kernel virtio_gpu is active).
+/// TID of the registered GPU Driver Cell (0 = none; no kernel GPU fallback).
 pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
 /// Record `tid` as the active block driver.  Overwrites any previous registration.

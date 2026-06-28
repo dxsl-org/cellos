@@ -1,10 +1,8 @@
-//! Driver interfaces and registry.
+//! Kernel-side driver shims, capability registry, and routing tables.
 //!
-//! This module manages the lifecycle and registration of kernel drivers.
-//! It serves as the central point for:
-//! 1. Hardware Abstraction (HAL) implementations (e.g., VirtIO)
-//! 2. Driver discovery and initialization
-//! 3. Driver naming and ID resolution
+//! Only kernel-resident drivers that satisfy the Boundary Law remain here
+//! (early-boot console, VirtIO block + MMC as G2-pending fallbacks, IOMMU,
+//! IRQ wait tables).  All other device drivers live in `cells/drivers/`.
 
 // Export the registry for driver management
 pub mod registry;

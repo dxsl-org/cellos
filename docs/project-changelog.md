@@ -69,7 +69,7 @@ Enforced the Kernel Boundary Law by exiling kernel-resident VirtIO GPU and VirtI
 | **P02** | VirtIO GPU Driver Cell spawn + IPC | ✅ Kernel forwards virt-gpu registers to GPU cell; compositor uses Grant surfaces |
 | **P06** | VirtIO Net + VirtIO Sound Driver Cells | ✅ Net cell registers with `sys_lookup_service` (never kernel polling) |
 | **P07** | MMC Cell spawn | 📋 Descoped to G2 — QEMU virtualization has no SDHCI hardware to test |
-| **P08** | Kernel cleanup (remove fallback code) | ⏳ Pending 3-arch boot verification |
+| **P08** | Kernel cleanup (remove migrated NIC/GPU/Input/Sound code) | ✅ NIC/GPU/Input/Sound removed; VirtIO-Blk+MMC deferred to G2 |
 
 ### Key Deliverables
 - **`kernel/src/cell/platform_cell.rs`** (new) — Platform Cell spawner; `declare_syscalls!` updated to include `RegisterPciDevice(op=227)`

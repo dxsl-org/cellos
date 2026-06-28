@@ -50,14 +50,6 @@ pub fn init() {
         r.name_to_id.insert("console", 1);
     }
 
-    // Init Console Driver
-    // console_drv::init();
-
-    // Init VirtIO
-    // virtio_blk::init_driver();
-    // virtio_gpu::init_driver();
-    // virtio_input::init_driver();
-
 }
 
 pub fn resolve(name: &str) -> Option<usize> {
