@@ -176,6 +176,10 @@ pub extern "C" fn main() {
     }
 
     // ── Optional system services (auto-start when binary is present) ──────────
+    // fb-console: mirrors kernel user-log to HDMI display (background surface).
+    // Spawned after compositor is up (index 4 in the supervised list).
+    let _ = sys_spawn_from_path("/bin/fb-console");
+
     // Hypervisor: AArch64 + virtualization=on kernel builds only.
     let _ = sys_spawn_from_path("/bin/hypervisor");
 

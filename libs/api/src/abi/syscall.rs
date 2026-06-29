@@ -84,6 +84,16 @@ pub enum ViSyscall {
     /// `bar0_size` = probed BAR0 size in bytes (or 0)
     /// Requires singleton PlatformCap (allowlist bit 53).
     RegisterPciDevice = 236,
+    /// Drain up to `max` bytes from the kernel user-log ring buffer into `buf`.
+    ///
+    /// Returns the number of bytes actually copied (may be 0 if no new output).
+    /// The ring buffer is written by `sys_log` (cell stdout) and `print_user_log`
+    /// (kernel's USER: prefixed UART path) — gives the fb-console cell a live
+    /// mirror of everything that appears on the serial console.
+    ///
+    /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
+    /// Gated by ReadLogCap (allowlist bit 54) — declare with `ReadLog` in manifest.
+    ReadLog = 237,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -532,6 +542,10 @@ impl ViSyscall {
             // RegisterPciDevice (bit 53): Platform Cell announces a PCI device with class info.
             // Populates kernel PCI_DEVICES so find_class() queries work without kernel ECAM scan.
             Self::RegisterPciDevice => Some(53),
+            // ReadLog (bit 54): read the kernel user-log ring buffer.
+            // Gated so random cells cannot snoop on other cells' stdout.
+            // Declare with `ReadLog` in the cell manifest to enable.
+            Self::ReadLog => Some(54),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -613,6 +627,7 @@ impl From<usize> for ViSyscall {
             234 => ViSyscall::WaitIrq,
             235 => ViSyscall::RegisterPcieBar,
             236 => ViSyscall::RegisterPciDevice,
+            237 => ViSyscall::ReadLog,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

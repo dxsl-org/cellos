@@ -1352,6 +1352,57 @@ pub fn futex_wake(_caller_id: usize, addr: VAddr, count: usize) -> core::result:
     Ok(woken)
 }
 
+/// 8 KB circular ring buffer for `ReadLog = 237` syscall.
+///
+/// `print_user_log` writes here in addition to UART so the fb-console cell can
+/// mirror kernel user-log output to the HDMI screen without touching serial I/O.
+/// Capacity is a power-of-two so head/tail wrapping uses bitwise AND.
+const LOG_RING_CAP: usize = 8192;
+
+struct LogRing {
+    buf: [u8; LOG_RING_CAP],
+    head: usize, // next byte to write (producer)
+    tail: usize, // next byte to read  (consumer)
+}
+
+impl LogRing {
+    const fn new() -> Self {
+        Self { buf: [0u8; LOG_RING_CAP], head: 0, tail: 0 }
+    }
+
+    /// Append bytes, overwriting oldest data when full.
+    fn push(&mut self, data: &[u8]) {
+        for &b in data {
+            self.buf[self.head & (LOG_RING_CAP - 1)] = b;
+            self.head = self.head.wrapping_add(1);
+            // If we lapped the tail, advance it to discard the oldest byte.
+            if self.head.wrapping_sub(self.tail) > LOG_RING_CAP {
+                self.tail = self.tail.wrapping_add(1);
+            }
+        }
+    }
+
+    /// Drain up to `max` bytes into `out`. Returns number of bytes copied.
+    fn drain(&mut self, out: &mut [u8]) -> usize {
+        let max = out.len();
+        let avail = self.head.wrapping_sub(self.tail).min(LOG_RING_CAP);
+        let n = avail.min(max);
+        for i in 0..n {
+            out[i] = self.buf[(self.tail.wrapping_add(i)) & (LOG_RING_CAP - 1)];
+        }
+        self.tail = self.tail.wrapping_add(n);
+        n
+    }
+}
+
+static LOG_RING: crate::sync::Spinlock<LogRing> = crate::sync::Spinlock::new(LogRing::new());
+
+/// Drain up to `buf.len()` bytes from the user-log ring into `buf`.
+/// Called by the `ReadLog = 237` syscall handler.
+pub fn read_log_ring(buf: &mut [u8]) -> usize {
+    LOG_RING.lock().drain(buf)
+}
+
 /// Tracks whether the console cursor is at the start of a line, so the "USER: "
 /// prefix is emitted ONCE per line rather than once per `sys_log` call. Without
 /// this, `print()` (no trailing newline — used for the shell prompt and per-key
@@ -1372,6 +1423,10 @@ pub fn print_user_log(msg: &str) {
     // print() concatenates inline; println() ends the line. The "USER: " prefix
     // is injected only at each line start, keeping log scrapers/tests matching
     // while making interactive echo behave like a real terminal.
+    // Mirror raw message bytes to the ring buffer so the fb-console cell can read
+    // them via ReadLog without reconstructing the UART prefix logic.
+    LOG_RING.lock().push(msg.as_bytes());
+
     let mut rest = msg;
     while !rest.is_empty() {
         if USER_LOG_AT_LINE_START.load(Ordering::Relaxed) {

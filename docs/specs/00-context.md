@@ -152,6 +152,8 @@ Cellos/
 
 ## 5. Trusted Computing Base (TCB)
 
+> **Full spec**: [`docs/specs/16-rustc-tcb.md`](./16-rustc-tcb.md) — authoritative reference for TCB guarantees, limits, risk mitigations, and operational policies. This section is a summary.
+
 Cellos dùng **Language-Based Isolation (LBI)** làm cơ chế bảo mật chính thay cho hardware MMU per-process. Điều này có một hệ quả quan trọng: **`rustc` là load-bearing TCB**.
 
 ### Tại sao `rustc` là TCB

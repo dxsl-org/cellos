@@ -161,6 +161,17 @@ pub fn sys_log(msg: &str) -> SyscallResult {
     }
 }
 
+/// Drain up to `buf.len()` bytes from the kernel user-log ring buffer.
+///
+/// Returns the number of bytes actually copied (0 when no new output is available).
+/// Requires the `ReadLog` capability declared in the cell manifest.
+pub fn sys_read_log(buf: &mut [u8]) -> usize {
+    let n = unsafe {
+        syscall(ViSyscall::ReadLog, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
+    };
+    n as usize
+}
+
 pub fn sys_yield() {
     unsafe {
         syscall(ViSyscall::Yield, 0, 0, 0, 0);

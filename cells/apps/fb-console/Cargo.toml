@@ -1,0 +1,15 @@
+[package]
+name    = "fb-console"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "fb-console"
+path = "src/main.rs"
+
+[dependencies]
+ostd = { path = "../../../libs/ostd" }
+api  = { path = "../../../libs/api" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }

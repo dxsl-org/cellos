@@ -48,6 +48,7 @@ mod tests {
         (120,  ViSyscall::GetTime),
         (218,  ViSyscall::AudioPlay),
         (219,  ViSyscall::CapRevoke),
+        (237,  ViSyscall::ReadLog),
         (310,  ViSyscall::NetTx),
         (311,  ViSyscall::NetRx),
     ];

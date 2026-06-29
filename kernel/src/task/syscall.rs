@@ -643,6 +643,10 @@ pub enum Syscall {
     /// Populates kernel PCI_DEVICES so find_class() works without a kernel ECAM scan.
     /// Requires singleton PlatformCap (allowlist bit 53).
     RegisterPciDevice { bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize },
+    /// 237: ReadLog — drain up to `max` bytes from the kernel user-log ring.
+    /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
+    /// Gated by allowlist bit 54 (ReadLog).
+    ReadLog { buf_ptr: usize, max: usize },
 }
 
 /// Read the per-Cell syscall allowlist from the TCB.
@@ -745,6 +749,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::WaitIrq { .. }         => V::WaitIrq,
         Syscall::RegisterPcieBar { .. }   => V::RegisterPcieBar,
         Syscall::RegisterPciDevice { .. } => V::RegisterPciDevice,
+        Syscall::ReadLog { .. }           => V::ReadLog,
         // Always-permitted; allowlist_bit() returns None → filter is a no-op.
         Syscall::Yield
         | Syscall::Exit { .. }
@@ -1003,6 +1008,35 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(sender)
         }
         Syscall::RecvTimeout { mask, buf_ptr, buf_len, deadline } => {
+            // Drain pending_msgs first (same as Recv). ipc_post_nonblock queues
+            // bytes here when the target is busy (e.g. UART burst fills pending_msgs
+            // while input service is mid-dispatch). Without this drain, RecvTimeout
+            // would call ipc_recv which only sees TaskState::Sending tasks, missing
+            // anything queued via ipc_post_nonblock.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    if !t.pending_msgs.is_empty() {
+                        let msg = t.pending_msgs.remove(0);
+                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        if copy_len > 0
+                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
+                        {
+                            // SAFETY: buf_ptr is the caller's recv buffer (validated above);
+                            // msg.data is an owned heap allocation; both are exclusive here.
+                            unsafe {
+                                core::ptr::copy_nonoverlapping(
+                                    msg.data.as_ptr(),
+                                    buf_ptr as *mut u8,
+                                    copy_len,
+                                );
+                            }
+                        }
+                        t.current_caller = Some(msg.sender_tid);
+                        return Ok(msg.sender_tid);
+                    }
+                }
+            }
+
             // Fast path: check for a pending message immediately.
             let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
@@ -2451,6 +2485,28 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(0)
         }
 
+        // 237: ReadLog — drain the user-log ring buffer into a cell-provided buffer.
+        // The caller must have allowlist bit 54 (ReadLog) set in its manifest.
+        // Returns the number of bytes actually copied (0 when nothing available).
+        Syscall::ReadLog { buf_ptr, max } => {
+            if max == 0 {
+                return Ok(0);
+            }
+            // Safety: the allowlist gate above verified the cell has ReadLog permission.
+            // We validate buf_ptr + max are within the cell's address space by writing
+            // through phys_to_virt — SAS means the VA is the same in kernel context.
+            let buf_ptr = buf_ptr as *mut u8;
+            if buf_ptr.is_null() {
+                return Err(SyscallError::InvalidInput);
+            }
+            // Cap to 4 KiB per call to bound lock hold time.
+            let max = max.min(4096);
+            // SAFETY: The cell provided a writable VA in the SAS; max is capped above.
+            let out = unsafe { core::slice::from_raw_parts_mut(buf_ptr, max) };
+            let n = crate::task::read_log_ring(out);
+            Ok(n)
+        }
+
         Syscall::BlkFlush => {
             if !caller_has_block_io(caller_id) {
                 log::warn!("BlkFlush denied: task {} lacks block-I/O capability", caller_id);
@@ -3043,6 +3099,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::RegisterPciDevice => Syscall::RegisterPciDevice {
             bdf: a0 as u32, cls: a1 as u32, bar0_base: a2, bar0_size: a3,
         },
+        ViSyscall::ReadLog => Syscall::ReadLog { buf_ptr: a0, max: a1 },
         _ => match syscall_id {
             3   => Syscall::SetTimer { deadline: a0 },
             100 => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },

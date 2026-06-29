@@ -46,6 +46,7 @@ cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench
 cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p app-sys-tools 2>&1 | Select-Object -Last 3
 cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Last 3
+cargo build --release -p fb-console 2>&1 | Select-Object -Last 3
 cargo build --release -p hypha-llm-gateway -p hypha-core -p hypha-tool-fs -p hypha-tool-sys -p hypha-tool-spawn 2>&1 | Select-Object -Last 3   # Hypha P0-P3
 cargo build --release -p input-test 2>&1 | Select-Object -Last 3
 cargo build --release -p audio-demo 2>&1 | Select-Object -Last 3   # VirtIO sound test tone
@@ -139,6 +140,7 @@ Invoke-SignCell "$rel_dir\app-net-tools"
 Invoke-SignCell "$rel_dir\app-sys-tools"
 Invoke-SignCell "$rel_dir\robot-demo"
 Invoke-SignCell "$rel_dir\robot-dashboard"
+Invoke-SignCell "$rel_dir\fb-console"
 Invoke-SignCell "$rel_dir\hypha-llm-gateway"
 Invoke-SignCell "$rel_dir\hypha-core"
 Invoke-SignCell "$rel_dir\hypha-tool-fs"
@@ -205,6 +207,7 @@ $e1000_bin        = "$rel_dir\driver-e1000"       # Kernel Boundary Law: e1000 P
 $virtio_net_bin   = "$rel_dir\driver-virtio-net"  # Kernel Boundary Law: VirtIO MMIO NIC Driver Cell
 $virtio_gpu_bin   = "$rel_dir\driver-virtio-gpu"  # Kernel Boundary Law: VirtIO GPU Driver Cell
 $comp_bin      = "$rel_dir\service-compositor" # Phase 16: compositor + GPU
+$fb_console_bin = "$rel_dir\fb-console"       # HMI: mirror kernel log to HDMI screen
 $robot_demo_bin = "$rel_dir\robot-demo"       # G1 sensor→actuator reference demo
 $dashboard_bin = "$rel_dir\robot-dashboard"  # G1 ViUI v2 dashboard demo
 $hypha_llm_bin = "$rel_dir\hypha-llm-gateway" # Hypha P0 — LLM network gateway
@@ -373,6 +376,7 @@ if (Test-Path $e1000_bin)      { $table_args += "/bin/e1000=$e1000_bin" }
 if (Test-Path $virtio_net_bin) { $table_args += "/bin/virtio-net=$virtio_net_bin" }
 if (Test-Path $virtio_gpu_bin) { $table_args += "/bin/virtio-gpu=$virtio_gpu_bin" }
 if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
+if (Test-Path $fb_console_bin)  { $table_args += "/bin/fb-console=$fb_console_bin" }
 if (Test-Path $robot_demo_bin)  { $table_args += "/bin/robot-demo=$robot_demo_bin" }
 if (Test-Path $dashboard_bin)   { $table_args += "/bin/robot-dashboard=$dashboard_bin" }
 if (Test-Path $hypha_llm_bin)      { $table_args += "/bin/llm-gateway=$hypha_llm_bin" }
