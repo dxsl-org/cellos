@@ -17,10 +17,8 @@
 //! that calls `SetFocus` resumes delivery.
 
 use api::input::{InputEvent, INPUT_EVENT_IPC_SIZE, encode_event};
-use ostd::syscall::{sys_heartbeat, sys_send, SyscallResult};
+use ostd::syscall::sys_try_send;
 
-// Must match main.rs HEARTBEAT_TICKS — renew before each blocking send.
-const DISPATCH_HEARTBEAT: u64 = 500;
 
 /// Opcode prefix byte sent to the focused cell's IPC endpoint.
 pub const INPUT_EVENT_OPCODE: u8 = 0x10;
@@ -73,14 +71,8 @@ impl Dispatcher {
         encode_event(event, &mut payload);
         buf[1..INPUT_EVENT_IPC_SIZE + 1].copy_from_slice(&payload);
 
-        // Renew the liveness deadline before blocking. The focused cell may be
-        // busy (e.g. spawning sub-cells via VFS IPC) and not in sys_recv yet,
-        // so this send can stall for several seconds.
-        sys_heartbeat(DISPATCH_HEARTBEAT);
-        if let SyscallResult::Err(_) = sys_send(self.focused, &buf) {
-            // Focused cell has exited — park (focused=0) until next SetFocus.
-            self.focused = self.fallback_tid; // fallback_tid is 0
-        }
+        // Non-blocking dispatch: if focused cell is not in sys_recv, drop event.
+        let _ = sys_try_send(self.focused, &buf);
         // NOTE: no per-dispatch logging — it would print a line on the shared
         // console for every keystroke, burying the shell prompt the user types at.
     }

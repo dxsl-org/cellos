@@ -952,12 +952,13 @@ pub fn ipc_send(
 
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
             match target.state {
+                // G18 fix: honour the mask — only deliver if mask==0 (wildcard) or mask==caller_id.
                 TaskState::Recv {
-                    mask: _,
+                    mask,
                     buf_ptr,
                     buf_len,
                     ..
-                } => Some((buf_ptr, buf_len)),
+                } if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
                 _ => None,
             }
         } else {
@@ -1074,7 +1075,9 @@ pub fn ipc_recv(
                 msg_len,
             } = task.state
             {
-                if target == caller_id {
+                // G18 fix: honour the mask — mask==0 accepts any sender,
+                // mask!=0 accepts only that specific sender TID.
+                if target == caller_id && (mask == 0 || *tid == mask) {
                     found_sender = Some((*tid, msg_ptr, msg_len));
                     break;
                 }
@@ -1136,7 +1139,7 @@ pub fn recv_from(_source: usize, buf: &mut [u8]) -> types::ViResult<usize> {
 
 pub fn ipc_try_recv(
     caller_id: usize,
-    _mask: usize,
+    mask: usize,
     buf_ptr: VAddr,
     buf_len: usize,
 ) -> core::result::Result<usize, ()> {
@@ -1149,7 +1152,8 @@ pub fn ipc_try_recv(
                 msg_len,
             } = task.state
             {
-                if target == caller_id {
+                // G18 fix: same mask semantics as ipc_recv.
+                if target == caller_id && (mask == 0 || *tid == mask) {
                     found_sender = Some((*tid, msg_ptr, msg_len));
                     break;
                 }
@@ -1180,6 +1184,85 @@ pub fn ipc_try_recv(
         } else {
             return Ok(0);
         }
+    }
+    Err(())
+}
+
+/// Non-blocking IPC send: deliver to target if it is in `Recv` state with a
+/// matching mask; otherwise return `Err(())` without blocking the caller.
+///
+/// Used by the input service dispatcher so that key events are dropped (not
+/// queued in the caller) when the focused cell is not ready to receive.
+/// This prevents the input/focused-cell deadlock: both sides in `Sending`.
+pub fn ipc_try_send(
+    caller_id: usize,
+    target_id: usize,
+    msg_ptr: VAddr,
+    msg_len: usize,
+) -> core::result::Result<(), ()> {
+    if let Some(sched) = SCHEDULER.lock().as_mut() {
+        if !sched.tasks.contains_key(&target_id) {
+            return Err(());
+        }
+        let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
+            match target.state {
+                TaskState::Recv { mask, buf_ptr, buf_len, .. }
+                    if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        if let Some((dest_ptr, dest_len)) = target_ready {
+            let copy_len = core::cmp::min(msg_len, dest_len);
+            // SAFETY: msg_ptr is a valid user-space buffer for this syscall's
+            // duration (SAS, single address space, caller is mid-syscall).
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    msg_ptr as *const u8,
+                    dest_ptr as *mut u8,
+                    copy_len,
+                );
+            }
+            if let Some(target) = sched.tasks.get_mut(&target_id) {
+                target.state = TaskState::Ready;
+                target.current_caller = Some(caller_id);
+            }
+            let prio = sched.push_ready(target_id);
+            sched.pend_preempt_if_needed(prio);
+            return Ok(());
+        }
+        // Target not in Recv. The input service must never DROP a translated key
+        // event just because the focused cell is momentarily out of Recv (e.g. it
+        // is echoing the previous char or re-entering its read loop): a burst typed
+        // at the serial console ("hypha\n") arrives faster than the focused cell can
+        // re-park, so a fire-once try_send loses all but the first key.  For the
+        // input service specifically, fall back to a BOUNDED queue into the target's
+        // pending_msgs (same primitive as ipc_post_nonblock), which the target drains
+        // on its next sys_recv / sys_recv_timeout.  Bounded depth keeps a wedged GUI
+        // cell from growing the queue without limit; when full we drop as before.
+        // All other try_send callers keep strict drop-if-not-ready semantics.
+        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
+            .load(core::sync::atomic::Ordering::Relaxed);
+        if caller_id == input_tid && input_tid != 0 {
+            if let Some(t) = sched.tasks.get_mut(&target_id) {
+                if t.pending_msgs.len() < tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+                    // SAFETY: copy the message bytes out of the caller's user buffer
+                    // (SAS identity mapping; caller is mid-syscall) into an owned box.
+                    let data = unsafe {
+                        core::slice::from_raw_parts(msg_ptr as *const u8, msg_len)
+                    }.to_vec().into_boxed_slice();
+                    t.pending_msgs.push(tcb::PendingMsg {
+                        sender_tid: caller_id,
+                        data,
+                        enqueued_tick: crate::task::system_ticks() as u64,
+                    });
+                    return Ok(());
+                }
+            }
+        }
+        // Non-input caller, or queue full — drop event without blocking.
+        return Err(());
     }
     Err(())
 }

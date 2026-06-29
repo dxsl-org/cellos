@@ -370,6 +370,12 @@ pub enum Syscall {
         msg_ptr: usize,
         msg_len: usize,
     },
+    /// 4: TrySend (Non-blocking send — drops if target not in Recv)
+    TrySend {
+        target: usize,
+        msg_ptr: usize,
+        msg_len: usize,
+    },
     /// 1: Recv (Blocking Message Receive)
     Recv {
         mask: usize,
@@ -673,6 +679,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
     use api::syscall::ViSyscall as V;
     Some(match syscall {
         Syscall::Send { .. }          => V::Send,
+        Syscall::TrySend { .. }       => V::TrySend,
         Syscall::Recv { .. }          => V::Recv,
         Syscall::TryRecv { .. }       => V::TryRecv,
         Syscall::RecvTimeout { .. }   => V::RecvTimeout,
@@ -818,6 +825,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 Err(_) => Err(SyscallError::InvalidCommand),
                 _ => Ok(0),
+            }
+        }
+        Syscall::TrySend {
+            target,
+            msg_ptr,
+            msg_len,
+        } => {
+            // Non-blocking: deliver if target in Recv, else drop. Never blocks.
+            // (Input-service sends fall back to a bounded queue — see ipc_try_send.)
+            match super::ipc_try_send(caller_id, target, msg_ptr, msg_len) {
+                Ok(()) => Ok(0), // delivered (or queued for the input service)
+                Err(()) => Ok(usize::MAX), // dropped (target not ready or gone)
             }
         }
         Syscall::Recv {
@@ -2993,6 +3012,7 @@ use crate::hal::arch::ViTrapFrame;
 fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> Option<Syscall> {
     let sc = match ViSyscall::from(syscall_id) {
         ViSyscall::Send          => Syscall::Send { target: a0, msg_ptr: a1, msg_len: a2 },
+        ViSyscall::TrySend       => Syscall::TrySend { target: a0, msg_ptr: a1, msg_len: a2 },
         ViSyscall::Recv          => Syscall::Recv { mask: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::TryRecv       => Syscall::TryRecv { mask: a0, buf_ptr: a1, buf_len: a2 },
         ViSyscall::SendGather    => Syscall::SendGather { target: a0, iovec_ptr: a1, iovec_count: a2 },

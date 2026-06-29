@@ -16,6 +16,7 @@ mod tests {
         (1,    ViSyscall::Recv),
         (2,    ViSyscall::Call),
         (3,    ViSyscall::Reply),
+        (4,    ViSyscall::TrySend),
         (5,    ViSyscall::Spawn),
         (7,    ViSyscall::TryRecv),
         (8,    ViSyscall::Wait),
@@ -85,7 +86,7 @@ mod tests {
     #[test]
     fn unknown_id_decodes_to_unknown_variant() {
         // IDs that have no assigned meaning must produce Unknown, not panic.
-        let unassigned = [4, 9, 50, 99, 100, 108, 999, usize::MAX];
+        let unassigned = [9, 50, 99, 100, 108, 999, usize::MAX];
         for id in unassigned {
             let got = ViSyscall::from(id);
             assert_eq!(

@@ -41,11 +41,11 @@ use layout_us_qwerty::{translate, key_state_from_evdev};
 use modifier_state::ModifierState;
 use mouse_state::{MouseState, btn_to_mouse_button, BTN_LEFT};
 use ostd::io::println;
-use ostd::syscall::{sys_recv_timeout, sys_send, sys_get_time, sys_heartbeat, SyscallResult};
+use ostd::syscall::{sys_recv_timeout, sys_try_send, sys_get_time, sys_heartbeat, SyscallResult};
 use virtio_device::{find_and_init_input, InputDevice};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio, GrantAlloc, GrantFree];
+api::declare_syscalls![Send, TrySend, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio, GrantAlloc, GrantFree];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
 const EV_KEY: u8 = 0;
@@ -62,8 +62,9 @@ const EVDEV_ABS: u16 = 3;
 /// Using scheduler-tick units (not mtime); see net service UNIT TRAP note.
 const POLL_SCHED_TICKS: u64 = 1;
 
-/// Watchdog interval: 500 scheduler ticks × 10ms = 5 seconds.
-const HEARTBEAT_TICKS: u64 = 500;
+/// Watchdog interval: 5000 scheduler ticks × 10ms = 50 seconds.
+/// Must match DISPATCH_HEARTBEAT in dispatcher.rs — they share the same timeline.
+const HEARTBEAT_TICKS: u64 = 5_000;
 
 /// Input Cell entry point.
 ///
@@ -82,6 +83,11 @@ pub fn main() {
     let mut mouse = MouseState::new();
     let mut dispatcher = Dispatcher::new();
     let mut buf = [0u8; IPC_BUF_SIZE];
+
+    // Renew the watchdog before the potentially slow VirtIO MMIO probe — the
+    // cell is spawned with a default deadline and find_and_init_input can take
+    // several scheduling cycles before we reach the loop's sys_heartbeat call.
+    sys_heartbeat(HEARTBEAT_TICKS);
 
     // Probe and claim the VirtIO input device.  After sys_request_mmio succeeds
     // inside find_and_init_input, the kernel migration guard in virtio_input.rs
@@ -260,23 +266,25 @@ fn handle_typed_request(
             // Use kernel-verified sender TID instead of the cell_tid field to
             // prevent a cell from redirecting focus to an arbitrary TID.
             dispatcher.set_focus(sender);
-            if let Ok(encoded) = api::ipc::encode(&InputResponse::Ok, &mut resp_buf) {
-                sys_send(sender, encoded);
-            }
+            // Fire-and-forget: no reply. Focus is set atomically on receipt.
+            // A blocking reply would deadlock when the focused cell is not yet
+            // in sys_recv (startup race — G18 deadlock fix).
         }
         Ok(InputRequest::GetFocus) => {
             let focused = dispatcher.focus() as u32;
             if let Ok(encoded) = api::ipc::encode(&InputResponse::Focus(focused), &mut resp_buf) {
-                sys_send(sender, encoded);
+                // GetFocus is only called by compositor (never during startup race).
+                // Use sys_try_send to be safe — compositor is in recv waiting for this.
+                let _ = sys_try_send(sender, encoded);
             }
         }
-        Ok(InputRequest::ClearFocus { cell_tid }) => {
-            if dispatcher.focus() == cell_tid as usize {
+        Ok(InputRequest::ClearFocus { cell_tid: _ }) => {
+            // Use kernel-verified sender TID (same as SetFocus) — prevents a cell
+            // from clearing another cell's focus. When sender == focused, drop focus.
+            if dispatcher.focus() == sender {
                 dispatcher.set_focus(0);
             }
-            if let Ok(encoded) = api::ipc::encode(&InputResponse::Ok, &mut resp_buf) {
-                sys_send(sender, encoded);
-            }
+            // Fire-and-forget: no reply. Same rationale as SetFocus.
         }
         Err(_) => {} // unknown message — drop silently
     }

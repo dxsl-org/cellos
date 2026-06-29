@@ -309,7 +309,8 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
         }
         crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
     }
-    // Register input service endpoint regardless of manifest presence.
+    // Register the input service endpoint so console_drv can route UART bytes to it.
+    // (Service-registry registration is done by init via sys_register_service.)
     if path.ends_with("/bin/input") {
         crate::task::drivers::driver_cell::set_input_cell(tid);
     }

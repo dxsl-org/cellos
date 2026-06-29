@@ -95,13 +95,14 @@ impl Stdin {
     pub fn read_line(&self, buf: &mut String) -> ViResult<usize> {
         if sys_lookup_service(service::INPUT).is_some() {
             // Input-service path: receive InputEvent frames dispatched to this cell.
-            // Uses a per-iteration timeout so we can re-request focus if the input
-            // service died and restarted (new TID, new focus state) between calls.
-            // TIMEOUT_TICKS must match FOCUS_TIMEOUT_TICKS in ostd::input so a
-            // request_focus round-trip (send + recv) completes within one tick budget.
-            const TIMEOUT_TICKS: u64 = 20; // ~200ms between focus re-checks
+            // Uses a per-iteration timeout only to detect input-service restarts —
+            // we re-request focus only when the TID changes, NOT on every timeout.
+            // Re-requesting focus on every timeout created a ~10ms dead zone where
+            // shell was in sys_send(SetFocus) and sys_try_send drops from dispatcher
+            // would cause burst keystrokes to be silently lost (G18 fix regression).
+            const TIMEOUT_TICKS: u64 = 20; // ~200ms between TID-change checks
             let mut bytes_read: usize = 0;
-            let mut focused = false;
+            let mut focused_on_tid: usize = 0; // 0 = no focus yet
             loop {
                 // Re-check input service TID on each iteration — it may have restarted.
                 let Some(input_tid) = sys_lookup_service(service::INPUT) else {
@@ -109,22 +110,22 @@ impl Stdin {
                     break;
                 };
 
-                // Ensure we have focus before waiting for events.
-                if !focused {
-                    focused = crate::input::request_focus();
-                    if !focused {
-                        // Input service up but SetFocus timed out — service may be
+                // Request focus only on startup or when input service restarted (TID changed).
+                if focused_on_tid != input_tid {
+                    if !crate::input::request_focus() {
+                        // Input service up but SetFocus failed — service may be
                         // initialising.  Try again next iteration.
                         continue;
                     }
+                    focused_on_tid = input_tid;
                 }
 
                 let mut frame = [0u8; IPC_BUF_SIZE];
                 match sys_recv_timeout(0, &mut frame, TIMEOUT_TICKS) {
                     SyscallResult::Ok(0) => {
-                        // Timeout — input service may have restarted; drop focus flag
-                        // so next iteration re-requests.
-                        focused = false;
+                        // Timeout — loop back to check if TID changed (restart detection).
+                        // Do NOT reset focused_on_tid here — that would trigger a SetFocus
+                        // sys_send dead zone on every 200ms timeout, causing dropped chars.
                     }
                     SyscallResult::Ok(sender) if sender == input_tid => {
                         if frame[0] != INPUT_EVENT_OPCODE { continue; }

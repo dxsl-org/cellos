@@ -1,6 +1,8 @@
 use ostd::executor::yield_now;
-use ostd::input::{poll_events, InputEvent, KeyState, KeySym};
+use ostd::input::{InputEvent, KeyState, KeySym};
 use ostd::prelude::*;
+use ostd::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
+use api::input::{INPUT_EVENT_OPCODE, decode_event};
 use api::syscall::service;
 
 pub struct AsyncStdin;
@@ -9,8 +11,11 @@ impl AsyncStdin {
     /// Read a line from stdin into an owned Vec<u8>.
     ///
     /// Sources in priority order:
-    ///   1. VirtIO keyboard + UART via input service (EV_ASCII relay)
+    ///   1. VirtIO keyboard + UART via input service (EV_ASCII relay), received
+    ///      via `sys_recv_timeout` (1-tick block) so shell enters `TaskState::Recv`
+    ///      and input service's `sys_try_send` can deliver events.
     ///   2. UART/serial via sys_read(fd=0) — fallback when input service absent
+    ///      or when the 1-tick IPC window times out with no event.
     ///
     /// Returns the bytes entered (excluding the newline). Ownership satisfies
     /// Law 2: no borrowed slice across `.await`.
@@ -28,86 +33,95 @@ impl AsyncStdin {
                 break;
             }
 
-            // ── Input service path (VirtIO keyboard → input service → shell) ──
-            // KeySym is already decoded; no escape-state-machine needed here.
-            let events = poll_events(8);
-            let got_event = !events.is_empty();
-
-            for ev in events {
-                let InputEvent::Key(k) = ev else { continue };
-                if !matches!(k.state, KeyState::Pressed | KeyState::Repeated) {
-                    continue;
-                }
-                match k.keysym {
-                    KeySym::Return => {
-                        ostd::io::print("\n");
-                        break 'read;
-                    }
-                    KeySym::Backspace => {
-                        if !buffer.is_empty() {
-                            ostd::io::print("\x08 \x08");
-                            buffer.pop();
-                        }
-                    }
-                    KeySym::Tab => {
-                        Self::handle_tab(&mut buffer);
-                    }
-                    KeySym::Up => {
-                        if history_idx > 0 {
-                            history_idx -= 1;
-                            Self::clear_line(&buffer);
-                            buffer.clear();
-                            if let Some(cmd) = history.get(history_idx) {
-                                ostd::io::print(cmd);
-                                buffer.extend_from_slice(cmd.as_bytes());
-                            }
-                        }
-                    }
-                    KeySym::Down => {
-                        if history_idx < history.len() {
-                            history_idx += 1;
-                            Self::clear_line(&buffer);
-                            buffer.clear();
-                            if history_idx < history.len() {
-                                if let Some(cmd) = history.get(history_idx) {
-                                    ostd::io::print(cmd);
-                                    buffer.extend_from_slice(cmd.as_bytes());
+            // ── Input service path ──────────────────────────────────────────
+            // sys_recv_timeout puts shell into TaskState::Recv for 1 tick
+            // (~10ms), allowing input service's sys_try_send to deliver events.
+            // poll_events (sys_try_recv) never places shell in Recv — input
+            // service's sys_try_send always drops when shell is not in Recv
+            // state (G18 fix side-effect resolved here).
+            if let Some(input_tid) = sys_lookup_service(service::INPUT) {
+                let mut frame = [0u8; 65];
+                match sys_recv_timeout(0, &mut frame, 100) {
+                    SyscallResult::Ok(sender) if sender == input_tid => {
+                        if frame[0] == INPUT_EVENT_OPCODE {
+                            if let Some(ev) = decode_event(&frame[1..]) {
+                                let InputEvent::Key(k) = ev else { continue 'read; };
+                                if !matches!(k.state, KeyState::Pressed | KeyState::Repeated) {
+                                    continue 'read;
+                                }
+                                match k.keysym {
+                                    KeySym::Return => {
+                                        ostd::io::print("\n");
+                                        break 'read;
+                                    }
+                                    KeySym::Backspace => {
+                                        if !buffer.is_empty() {
+                                            ostd::io::print("\x08 \x08");
+                                            buffer.pop();
+                                        }
+                                    }
+                                    KeySym::Tab => {
+                                        Self::handle_tab(&mut buffer);
+                                    }
+                                    KeySym::Up => {
+                                        if history_idx > 0 {
+                                            history_idx -= 1;
+                                            Self::clear_line(&buffer);
+                                            buffer.clear();
+                                            if let Some(cmd) = history.get(history_idx) {
+                                                ostd::io::print(cmd);
+                                                buffer.extend_from_slice(cmd.as_bytes());
+                                            }
+                                        }
+                                    }
+                                    KeySym::Down => {
+                                        if history_idx < history.len() {
+                                            history_idx += 1;
+                                            Self::clear_line(&buffer);
+                                            buffer.clear();
+                                            if history_idx < history.len() {
+                                                if let Some(cmd) = history.get(history_idx) {
+                                                    ostd::io::print(cmd);
+                                                    buffer.extend_from_slice(cmd.as_bytes());
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => {
+                                        if let Some(ch) = k.char() {
+                                            let cp = ch as u32;
+                                            if cp >= 0x20 && cp <= 0x7E && buffer.len() < max_len {
+                                                let byte = ch as u8;
+                                                if let Ok(s) = core::str::from_utf8(core::slice::from_ref(&byte)) {
+                                                    ostd::io::print(s);
+                                                }
+                                                buffer.push(byte);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
+                        // IPC message received (even if unparseable) — re-check
+                        // input service for the next char before falling to UART.
+                        continue 'read;
                     }
-                    _ => {
-                        // Printable ASCII only — multi-byte UTF-8 deferred.
-                        if let Some(ch) = k.char() {
-                            let cp = ch as u32;
-                            if cp >= 0x20 && cp <= 0x7E && buffer.len() < max_len {
-                                let byte = ch as u8;
-                                if let Ok(s) = core::str::from_utf8(core::slice::from_ref(&byte)) {
-                                    ostd::io::print(s);
-                                }
-                                buffer.push(byte);
-                            }
-                        }
+                    SyscallResult::Ok(0) => {
+                        // timeout — no IPC event; fall through to UART.
                     }
+                    SyscallResult::Ok(_other) => {
+                        // Unexpected IPC sender — discard and fall through to UART.
+                    }
+                    SyscallResult::Err(_) => {}
                 }
             }
 
-            if got_event {
-                // Processed at least one input-service event; re-check before
-                // falling through to UART so key bursts don't stall.
-                continue;
-            }
-
-            // When the input service is registered it delivers UART chars via
-            // EV_ASCII IPC *and* the kernel also stores them in the UART ring
-            // buffer.  Reading both paths doubles every keystroke.  Skip UART
-            // entirely while the input service is online.
-            if ostd::syscall::sys_lookup_service(service::INPUT).is_some() {
-                yield_now().await;
-                continue;
-            }
-
-            // ── UART / serial fallback (headless: no VirtIO keyboard) ─────
+            // ── UART / serial fallback ────────────────────────────────────
+            // Handles the early-boot case (input service not yet registered)
+            // and characters that arrived in the UART ring buffer directly.
+            // When input service is online, the kernel routes UART bytes to
+            // input service via EV_ASCII IPC (not the ring buffer), so this
+            // path is mostly idle when the IPC path above is active.
             let mut c = [0u8; 1];
             match ostd::syscall::sys_read(0, &mut c) {
                 Ok(n) if n > 0 => {

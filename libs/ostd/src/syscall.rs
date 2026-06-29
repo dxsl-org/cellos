@@ -635,6 +635,18 @@ pub fn sys_send(target: usize, msg: &[u8]) -> SyscallResult {
     }
 }
 
+/// Non-blocking send: deliver to `target` if it is in `Recv`, otherwise drop.
+///
+/// Returns `Ok(0)` on delivery, `Ok(usize::MAX)` if the target was not ready
+/// (busy or exited). Never blocks the caller.
+pub fn sys_try_send(target: usize, msg: &[u8]) -> SyscallResult {
+    // SAFETY: msg is a valid slice; kernel copies before returning.
+    let ret = unsafe {
+        syscall(ViSyscall::TrySend, target, msg.as_ptr() as usize, msg.len(), 0)
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
 /// A contiguous (ptr, len) segment for scatter/gather IPC.
 ///
 /// The layout matches what the kernel reads: two `usize` values back-to-back.

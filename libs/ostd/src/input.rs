@@ -27,17 +27,12 @@ pub use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers, MouseBut
 
 use api::{
     input::{INPUT_EVENT_OPCODE, decode_event},
-    ipc::{InputRequest, InputResponse, IPC_BUF_SIZE},
+    ipc::{InputRequest, IPC_BUF_SIZE},
     syscall::service,
 };
 use crate::syscall::{
-    sys_lookup_service, sys_recv_timeout, sys_send, sys_try_recv, SyscallResult,
+    sys_lookup_service, sys_send, sys_try_recv, SyscallResult,
 };
-
-/// Timeout for the `request_focus` round-trip in scheduler ticks (~10ms each).
-/// 50 ticks = ~500ms. Prevents `request_focus` from blocking forever if the
-/// input service dies between the `sys_send` and the `sys_recv` for the Ok reply.
-const FOCUS_TIMEOUT_TICKS: u64 = 50;
 
 /// Register this cell as the keyboard/mouse focus recipient.
 ///
@@ -45,11 +40,13 @@ const FOCUS_TIMEOUT_TICKS: u64 = 50;
 /// kernel-verified IPC sender TID — the `cell_tid` field is ignored, preventing
 /// TID impersonation.
 ///
-/// Returns `true` when focus is granted. Returns `false` when the input service
-/// is not yet registered (boot race), `sys_send` fails (input service dead), or
-/// the round-trip times out (input service died mid-request).
-/// Callers in async context should retry with a yield; synchronous callers should
-/// retry in a bounded loop and fall back gracefully on failure.
+/// SetFocus is fire-and-forget: focus is granted atomically when the input service
+/// receives the message. No reply is sent or awaited — a blocking reply caused a
+/// scheduling race where input service ran before the caller entered sys_recv,
+/// leaving a dangling send that blocked for the full watchdog interval (G18 fix).
+///
+/// Returns `true` when focus is sent. Returns `false` when the input service
+/// is not yet registered (boot race) or `sys_send` fails (service dead).
 pub fn request_focus() -> bool {
     let Some(input_tid) = sys_lookup_service(service::INPUT) else { return false };
 
@@ -58,19 +55,46 @@ pub fn request_focus() -> bool {
     let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) else { return false };
 
     // Abort immediately if send fails (input service dead).
-    if let SyscallResult::Err(_) = sys_send(input_tid, encoded) {
-        return false;
-    }
+    !matches!(sys_send(input_tid, encoded), SyscallResult::Err(_))
+}
 
-    let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    // Use a timeout so we don't block forever if the input service dies after
-    // receiving SetFocus but before sending the Ok reply.
-    match sys_recv_timeout(0, &mut resp_buf, FOCUS_TIMEOUT_TICKS) {
-        SyscallResult::Ok(0) => false, // timed out — input service didn't reply
-        SyscallResult::Ok(_sender) => {
-            matches!(api::ipc::decode::<InputResponse>(&resp_buf), Ok(InputResponse::Ok))
+/// Release keyboard/mouse focus from this cell.
+///
+/// Sends `InputRequest::ClearFocus` to the input service. The service clears
+/// focus only if the sender is currently the focused cell (kernel-verified TID).
+/// No-op if the input service is not registered or the send fails.
+///
+/// ClearFocus is fire-and-forget (same rationale as SetFocus). Call this before
+/// blocking in `sys_wait` for a child cell, then re-request focus afterwards.
+pub fn release_focus() {
+    let Some(input_tid) = sys_lookup_service(service::INPUT) else { return };
+    let mut req_buf = [0u8; IPC_BUF_SIZE];
+    let req = InputRequest::ClearFocus { cell_tid: 0 };
+    let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) else { return };
+    let _ = sys_send(input_tid, encoded);
+}
+
+/// Drain any pending IPC messages sent by the input service to this cell.
+///
+/// Shell reads UART via `sys_read(0)` (ring buffer) and also registers focus
+/// with the input service (for VirtIO keyboard). The same keystroke arrives via
+/// BOTH paths. After shell processes Enter from the UART path and exits
+/// `read_line`, input service is blocked in `sys_send(shell, Enter_event)`
+/// because shell is no longer in `sys_recv`. Call this before `release_focus()`
+/// in `spawn_external` to drain via `sys_try_recv(input_tid)`, unblocking
+/// input service so the subsequent `sys_send(input_tid, ClearFocus)` does not
+/// deadlock (both would be in Sending state indefinitely).
+pub fn drain_pending_input_events() {
+    let Some(input_tid) = sys_lookup_service(service::INPUT) else { return };
+    let mut buf = [0u8; IPC_BUF_SIZE];
+    // mask=input_tid: only drain messages from the input service (not from
+    // other cells that may have sent to us).  Loop until queue empty (Ok(0)).
+    for _ in 0..32 {
+        match sys_try_recv(input_tid, &mut buf) {
+            SyscallResult::Ok(0) => break,
+            SyscallResult::Ok(_) => {}
+            SyscallResult::Err(_) => break,
         }
-        _ => false,
     }
 }
 

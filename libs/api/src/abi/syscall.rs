@@ -11,6 +11,10 @@ pub enum ViSyscall {
     Recv = 1,
     Call = 2,
     Reply = 3,
+    /// Non-blocking send: delivers immediately if target is in `Recv`, otherwise
+    /// drops the message and returns without blocking the caller.
+    /// Prevents deadlock when the focused cell is busy (e.g. reading UART).
+    TrySend = 4,
     /// Non-blocking receive: returns 0 immediately when no message is queued
     /// (vs `Recv`, which parks the task until a message arrives).
     TryRecv = 7,
@@ -452,6 +456,7 @@ impl ViSyscall {
     pub const fn allowlist_bit(self) -> Option<u8> {
         match self {
             Self::Send          => Some(0),
+            Self::TrySend       => Some(0), // same allowlist bit as Send (subset of Send)
             Self::Recv          => Some(1),
             Self::TryRecv       => Some(2),
             Self::Reply         => Some(3),
@@ -562,6 +567,7 @@ impl From<usize> for ViSyscall {
         match id {
             0 => ViSyscall::Send,
             1 => ViSyscall::Recv,
+            4 => ViSyscall::TrySend,
             7 => ViSyscall::TryRecv,
             2 => ViSyscall::Call,
             3 => ViSyscall::Reply,

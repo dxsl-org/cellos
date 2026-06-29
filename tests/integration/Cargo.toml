@@ -83,6 +83,10 @@ path = "tests/http-smoke.rs"
 name = "hotswap-smoke"
 path = "tests/hotswap-smoke.rs"
 
+[[test]]
+name = "hypha-p3-boot"
+path = "tests/hypha-p3-boot.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

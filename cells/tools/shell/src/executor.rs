@@ -951,16 +951,32 @@ fn spawn_external(prog: &str, args: &[&str]) -> i32 {
     path.push_str(prog);
     match syscall::sys_spawn_from_path(&path) {
         syscall::SyscallResult::Ok(tid) => {
+            // Drain any pending input-service IPC events before ClearFocus.
+            // Shell reads UART via sys_read(0), so Enter arrives via BOTH the ring
+            // buffer (consumed in read_line) AND input-service EV_ASCII IPC. The IPC
+            // path blocks input service in sys_send(shell, Enter_event) while shell
+            // is not in sys_recv. drain_pending_input_events() uses sys_try_recv with
+            // mask=input_tid (the correct G18 wildcard) to drain the queued message,
+            // unblocking input service so release_focus does not deadlock.
+            ostd::input::drain_pending_input_events();
+            // Release keyboard focus before blocking in sys_wait. While the shell
+            // is in sys_wait it is NOT in sys_recv, so the input service would
+            // block indefinitely trying to dispatch key events to this cell and
+            // eventually be killed by its own heartbeat watchdog (G18 deadlock).
+            ostd::input::release_focus();
             // Foreground: block until the child exits so it owns the console
             // (stdin/UART). Without this the shell loops back to read the next
             // line and races interactive children (e.g. `hypha`) for keystrokes.
             // Fast commands return immediately (kernel Wait short-circuits when
             // the child is already Terminated). Background (`&`) already runs
             // synchronously in G1, so this does not regress it.
-            match syscall::sys_wait(tid) {
+            let code = match syscall::sys_wait(tid) {
                 syscall::SyscallResult::Ok(code) => code as i32,
                 syscall::SyscallResult::Err(_) => 0,
-            }
+            };
+            // Re-acquire focus for the next interactive prompt.
+            for _ in 0..10 { if ostd::input::request_focus() { break; } }
+            code
         }
         syscall::SyscallResult::Err(_) => {
             ostd::io::print("shell: command not found: ");

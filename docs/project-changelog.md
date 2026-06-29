@@ -4,6 +4,24 @@
 
 ---
 
+## [2026-06-29] Fix: shell typing dead on serial console — burst keystroke loss
+
+### Summary
+The shell prompt appeared but typing did nothing. Two causes, both fixed:
+
+1. **Burst keystroke loss (kernel)** — When the input service translated UART bytes and dispatched key events to the focused cell via `sys_try_send`, a fast burst (e.g. `hypha\n` from a serial paste) arrived faster than the shell could re-park in `Recv` between keys. Fire-once `try_send` dropped every event landing while the shell was momentarily `Ready`, so only the first key survived.
+   **Fix** (`kernel/src/task.rs` `ipc_try_send`): when the target is not in `Recv` **and the caller is the input service** (`caller_id == INPUT_CELL_TID`), fall back to a **bounded** queue into the target's `pending_msgs` (the `ipc_post_nonblock` primitive) instead of dropping. The shell drains `pending_msgs` at the top of its `RecvTimeout` handler. All other `try_send` callers keep strict drop-if-not-ready semantics (gated on caller identity → minimal blast radius).
+
+2. **Stale shell binary (build process)** — `run.ps1` rebuilds only the kernel, never the cells or `disk_v3.img`. A shell binary predating the current `async_utils.rs` read-loop never parked in `Recv`. Resolved by `gen_disk.ps1` (the documented test prerequisite). **Always run `gen_disk.ps1` after changing any cell.**
+
+### Verification
+`tests/integration/tests/hypha-p3-boot.rs` now passes: boot → `ViCell >` → `send_line("hypha")` over UART → all four tool cells spawn → `you>` prompt → `exit` → `[hypha] bye`.
+
+### Notes
+- The earlier "input service not in the service registry" diagnosis was incorrect: init registers `service::INPUT` via `sys_register_service` and verifies it at boot ("Init: service registry verified"). The redundant loader-side registration was reverted; the loader still calls `set_input_cell(tid)` for UART routing.
+
+---
+
 ## [2026-06-24] Raspberry Pi 3 Board Support Complete — ARM64 SBC graduation unlock (all 7 phases)
 
 ### Summary

@@ -52,9 +52,13 @@ pub fn main() {
         // Claim keyboard focus so VirtIO keyboard events are routed here via
         // the input service (fb_console keyboard relay).  Spin-wait for the
         // input service to come online — it races with shell at boot.
-        while !ostd::input::request_focus() {
+        // Don't spin indefinitely — attempt up to 50 times (~25 seconds),
+        // then proceed without focus (UART fallback still works).
+        for _ in 0..50 {
+            if ostd::input::request_focus() { break; }
             ostd::task::yield_now();
         }
+        let _ = ostd::syscall::sys_log("DEBUG: Shell focus acquired (or timed out)\n");
         let mut shell = ViShell::new();
         ostd::executor::block_on(shell.run());
     }
