@@ -45,7 +45,7 @@ use ostd::syscall::{sys_recv_timeout, sys_send, sys_get_time, sys_heartbeat, Sys
 use virtio_device::{find_and_init_input, InputDevice};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio];
+api::declare_syscalls![Send, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio, GrantAlloc, GrantFree];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
 const EV_KEY: u8 = 0;
@@ -104,9 +104,22 @@ pub fn main() {
 
         // Block for at most one scheduler tick (≈10ms), or until a kernel/IPC
         // message wakes us.
+        //
+        // Return value convention:
+        //   Ok(0)                — real timeout; buffer not modified
+        //   Ok(isize::MAX as _)  — kernel UART relay (EV_ASCII); buffer filled
+        //   Ok(n)                — typed IPC from cell n; buffer filled
+        //
+        // The sentinel is isize::MAX (not usize::MAX) because syscall() returns
+        // isize: usize::MAX == -1 as isize, which makes sys_recv_timeout return
+        // Err and the match arm never fires. isize::MAX is positive → Ok branch.
         match sys_recv_timeout(0, &mut buf, POLL_SCHED_TICKS) {
             SyscallResult::Ok(0) => {
-                // Timeout — nothing from IPC; VirtIO drain already done above.
+                // Real timeout — nothing from IPC; VirtIO drain already done above.
+            }
+            SyscallResult::Ok(n) if n == isize::MAX as usize => {
+                // Kernel UART relay (sentinel sender_id = isize::MAX as usize).
+                handle_kernel_event(&buf, &mut modifiers, &mut mouse, &mut dispatcher);
             }
             SyscallResult::Ok(sender) => {
                 handle_message(&buf, sender, &mut modifiers, &mut mouse, &mut dispatcher);

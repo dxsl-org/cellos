@@ -2,6 +2,10 @@
 
 use crate::*;
 use alloc::string::String;
+use api::input::{decode_event, InputEvent, KeyState, KeySym, INPUT_EVENT_OPCODE};
+use api::ipc::IPC_BUF_SIZE;
+use api::syscall::service;
+use crate::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
 
 // ─── embedded-io glue ────────────────────────────────────────────────────────
 
@@ -78,50 +82,118 @@ pub fn print_usize(n: usize) {
 pub struct Stdin;
 
 impl Stdin {
+    /// Read one line from stdin, echoing characters as they arrive.
+    ///
+    /// When the input service is online (registered via `sys_lookup_service`),
+    /// reads via the input-service IPC path so that the caller participates in
+    /// the focus model. Callers must have called `ostd::input::request_focus()`
+    /// at least once before this returns meaningful data; without focus the input
+    /// service will not dispatch key events to this cell.
+    ///
+    /// Falls back to the kernel `sys_read(fd=0)` path when the input service is
+    /// not yet registered (early boot, or input cell not present).
     pub fn read_line(&self, buf: &mut String) -> ViResult<usize> {
-        let mut bytes_read = 0;
-        loop {
-            let mut c = [0u8; 1];
-            if let Ok(n) = syscall::sys_read(0, &mut c) {
-                if n > 0 {
-                    let ch = c[0] as char;
-                    // Echo is handled by kernel now?
-                    // Kernel sys_read implementation I wrote DOES echo.
+        if sys_lookup_service(service::INPUT).is_some() {
+            // Input-service path: receive InputEvent frames dispatched to this cell.
+            // Uses a per-iteration timeout so we can re-request focus if the input
+            // service died and restarted (new TID, new focus state) between calls.
+            // TIMEOUT_TICKS must match FOCUS_TIMEOUT_TICKS in ostd::input so a
+            // request_focus round-trip (send + recv) completes within one tick budget.
+            const TIMEOUT_TICKS: u64 = 20; // ~200ms between focus re-checks
+            let mut bytes_read: usize = 0;
+            let mut focused = false;
+            loop {
+                // Re-check input service TID on each iteration — it may have restarted.
+                let Some(input_tid) = sys_lookup_service(service::INPUT) else {
+                    // Input service gone entirely — fall through to sys_read path.
+                    break;
+                };
 
-                    // Echo back
-                    if ch == '\r' || ch == '\n' {
-                        print("\n");
-                        buf.push('\n');
-                        return Ok(bytes_read + 1);
-                    }
-
-                    // Handle Backspace (127 or 8)
-                    if c[0] == 8 || c[0] == 127 {
-                        if !buf.is_empty() {
-                            // Print backspace sequence to erase char on screen
-                            // \x08 (Back) space \x08
-                            print("\x08 \x08");
-                            buf.pop();
-                            bytes_read -= 1;
-                        }
+                // Ensure we have focus before waiting for events.
+                if !focused {
+                    focused = crate::input::request_focus();
+                    if !focused {
+                        // Input service up but SetFocus timed out — service may be
+                        // initialising.  Try again next iteration.
                         continue;
                     }
-
-                    // Normal char
-                    let mut tmp = [0u8; 4];
-                    let s = ch.encode_utf8(&mut tmp);
-                    print(s);
-
-                    buf.push(ch);
-                    bytes_read += 1;
-                } else {
-                    // NO BLOCKING? sys_read usually blocks.
-                    // But my sys_read implementation loops.
-                    // Wait, my sys_read implementation loops with yielding.
-                    // So it blocks until input.
                 }
-            } else {
-                return Err(ViError::IO);
+
+                let mut frame = [0u8; IPC_BUF_SIZE];
+                match sys_recv_timeout(0, &mut frame, TIMEOUT_TICKS) {
+                    SyscallResult::Ok(0) => {
+                        // Timeout — input service may have restarted; drop focus flag
+                        // so next iteration re-requests.
+                        focused = false;
+                    }
+                    SyscallResult::Ok(sender) if sender == input_tid => {
+                        if frame[0] != INPUT_EVENT_OPCODE { continue; }
+                        let Some(ev) = decode_event(&frame[1..]) else { continue };
+                        if let InputEvent::Key(k) = ev {
+                            if k.state != KeyState::Pressed { continue; }
+                            match k.keysym {
+                                KeySym::Return => {
+                                    print("\n");
+                                    buf.push('\n');
+                                    return Ok(bytes_read + 1);
+                                }
+                                KeySym::Backspace => {
+                                    if !buf.is_empty() {
+                                        print("\x08 \x08");
+                                        buf.pop();
+                                        bytes_read = bytes_read.saturating_sub(1);
+                                    }
+                                }
+                                KeySym::Printable if k.character > 0 => {
+                                    if let Some(ch) = char::from_u32(k.character) {
+                                        let mut tmp = [0u8; 4];
+                                        let s = ch.encode_utf8(&mut tmp);
+                                        print(s);
+                                        buf.push(ch);
+                                        bytes_read += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    SyscallResult::Ok(_other) => {
+                        // Unexpected sender — discard and keep waiting.
+                    }
+                    _ => return Err(ViError::IO),
+                }
+            }
+        }
+        {
+            // Fallback: input service not online; use direct kernel UART buffer.
+            let mut bytes_read: usize = 0;
+            loop {
+                let mut c = [0u8; 1];
+                if let Ok(n) = syscall::sys_read(0, &mut c) {
+                    if n > 0 {
+                        let ch = c[0] as char;
+                        if ch == '\r' || ch == '\n' {
+                            print("\n");
+                            buf.push('\n');
+                            return Ok(bytes_read + 1);
+                        }
+                        if c[0] == 8 || c[0] == 127 {
+                            if !buf.is_empty() {
+                                print("\x08 \x08");
+                                buf.pop();
+                                bytes_read = bytes_read.saturating_sub(1);
+                            }
+                            continue;
+                        }
+                        let mut tmp = [0u8; 4];
+                        let s = ch.encode_utf8(&mut tmp);
+                        print(s);
+                        buf.push(ch);
+                        bytes_read += 1;
+                    }
+                } else {
+                    return Err(ViError::IO);
+                }
             }
         }
     }

@@ -30,8 +30,14 @@ use api::{
     ipc::{InputRequest, InputResponse, IPC_BUF_SIZE},
     syscall::service,
 };
-use crate::syscall::{sys_lookup_service, sys_recv, sys_send, sys_try_recv, SyscallResult};
+use crate::syscall::{
+    sys_lookup_service, sys_recv_timeout, sys_send, sys_try_recv, SyscallResult,
+};
 
+/// Timeout for the `request_focus` round-trip in scheduler ticks (~10ms each).
+/// 50 ticks = ~500ms. Prevents `request_focus` from blocking forever if the
+/// input service dies between the `sys_send` and the `sys_recv` for the Ok reply.
+const FOCUS_TIMEOUT_TICKS: u64 = 50;
 
 /// Register this cell as the keyboard/mouse focus recipient.
 ///
@@ -40,17 +46,27 @@ use crate::syscall::{sys_lookup_service, sys_recv, sys_send, sys_try_recv, Sysca
 /// TID impersonation.
 ///
 /// Returns `true` when focus is granted. Returns `false` when the input service
-/// is not yet registered (boot race) — callers should retry with a yield.
+/// is not yet registered (boot race), `sys_send` fails (input service dead), or
+/// the round-trip times out (input service died mid-request).
+/// Callers in async context should retry with a yield; synchronous callers should
+/// retry in a bounded loop and fall back gracefully on failure.
 pub fn request_focus() -> bool {
     let Some(input_tid) = sys_lookup_service(service::INPUT) else { return false };
 
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let req = InputRequest::SetFocus { cell_tid: 0 };
     let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) else { return false };
-    sys_send(input_tid, encoded);
+
+    // Abort immediately if send fails (input service dead).
+    if let SyscallResult::Err(_) = sys_send(input_tid, encoded) {
+        return false;
+    }
 
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
+    // Use a timeout so we don't block forever if the input service dies after
+    // receiving SetFocus but before sending the Ok reply.
+    match sys_recv_timeout(0, &mut resp_buf, FOCUS_TIMEOUT_TICKS) {
+        SyscallResult::Ok(0) => false, // timed out — input service didn't reply
         SyscallResult::Ok(_sender) => {
             matches!(api::ipc::decode::<InputResponse>(&resp_buf), Ok(InputResponse::Ok))
         }

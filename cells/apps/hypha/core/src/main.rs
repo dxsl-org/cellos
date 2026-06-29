@@ -18,11 +18,12 @@ extern crate ostd;
 use agent_proto::{AgentToolRequest, AgentToolResponse, LlmReply, LlmRequest, ToolCall};
 use alloc::string::String;
 use alloc::vec::Vec;
+use ostd::input::request_focus;
 use ostd::io::{print, println, stdin};
 use ostd::syscall::{sys_exit, sys_recv, sys_send, sys_spawn_from_path, SyscallResult};
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![Send, Recv, Read, Log, SpawnFromPath];
+api::declare_syscalls![Send, Recv, RecvTimeout, Read, Log, SpawnFromPath, LookupService];
 
 const GATEWAY_PATH: &str = "/bin/llm-gateway";
 const TOOL_FS_PATH: &str = "/bin/tool-fs";
@@ -112,6 +113,12 @@ pub fn main() {
     let mut conversation: Vec<(&'static str, String)> = Vec::new();
     let sin = stdin();
 
+    // Register with the input service before entering the readline loop.
+    // Retry a few times in case of a boot race where input service is still starting.
+    for _ in 0..10 {
+        if request_focus() { break; }
+    }
+
     loop {
         print("\nyou> ");
         let mut line = String::new();
@@ -191,7 +198,9 @@ fn ask(gw: usize, prompt: &str) -> Result<LlmReply, String> {
     }
 
     let mut buf = [0u8; 4096];
-    match sys_recv(0, &mut buf) {
+    // Receive specifically from the gateway — prevents input service key events
+    // (queued while the LLM is thinking) from being misread as LlmReply frames.
+    match sys_recv(gw, &mut buf) {
         SyscallResult::Ok(_sender) => match postcard::from_bytes::<LlmReply>(&buf) {
             Ok(reply) => Ok(reply),
             Err(_) => Err(String::from("bad LlmReply encoding")),
@@ -222,7 +231,8 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
     }
 
     let mut buf = [0u8; 4096];
-    match sys_recv(0, &mut buf) {
+    // Receive specifically from the tool cell — same reason as in ask().
+    match sys_recv(cell_tid, &mut buf) {
         SyscallResult::Ok(_sender) => match postcard::from_bytes::<AgentToolResponse>(&buf) {
             Ok(AgentToolResponse::Ok { result_json }) => Ok(result_json),
             Ok(AgentToolResponse::Err { message }) => Err(message),

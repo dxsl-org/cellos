@@ -85,6 +85,9 @@ fn hypha_p3_tool_cells_spawn() {
         panic!("shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}", qemu.dump())
     });
 
+    // Use UART (send_line) to launch hypha — the UART relay path is tested here,
+    // which is the same path any operator would use over a serial console.
+    // Note: send_line appends '\n' so no separate "ret" key needed.
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("hypha");
 

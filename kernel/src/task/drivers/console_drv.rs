@@ -23,48 +23,63 @@ impl viConsole {
     /// Polls input sources and pushes available characters to the buffer.
     /// Returns true if a character was received.
     pub fn poll(&mut self) -> bool {
-        // Already have plenty buffered — don't poll/push more until it drains.
-        if self.buffer.len() >= Self::MAX_BUFFERED {
+        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
+            .load(Ordering::Relaxed);
+
+        // When input service is online, bytes are relayed via IPC — never buffered.
+        // Only apply the buffer-full early-out when operating in fallback buffered mode.
+        if input_tid == 0 && self.buffer.len() >= Self::MAX_BUFFERED {
             return false;
         }
         let mut received = false;
 
-        // Hoist input_tid once; used for both UART relay (below) and VirtIO dispatch (§2).
-        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
-            .load(Ordering::Relaxed);
+        // Route rule: when the input service is online (input_tid != 0), relay
+        // bytes to it exclusively via EV_ASCII IPC — do NOT push to self.buffer.
+        // This prevents double delivery: the shell reads via input service events,
+        // and without this guard any app calling sys_read(fd=0) would also see the
+        // same bytes from self.buffer, causing duplicate input.
+        // When input service is offline (input_tid == 0), bytes go to self.buffer
+        // only, keeping the sys_read(fd=0) fallback path working for early boot.
+        macro_rules! route_byte {
+            ($c:expr) => {
+                let c = $c;
+                if input_tid != 0 {
+                    relay_ascii_to_input(input_tid, c);
+                } else {
+                    if self.buffer.len() < Self::MAX_BUFFERED {
+                        self.buffer.push_back(c);
+                    }
+                }
+                received = true;
+            };
+        }
 
         // 1a. Directly poll the 16550 RHR — RISC-V QEMU virt only.
         // The 16550 lives at 0x10_000_000 on RISC-V; that address is not a
         // 16550 on AArch64 (UART is PL011 at 0x0900_0000). Reading it there
         // returns garbage (0xFF), causing continuous `?` spam.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        while self.buffer.len() < Self::MAX_BUFFERED {
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
             let Some(c) = crate::task::drivers::uart::poll_rhr() else { break };
-            self.buffer.push_back(c);
-            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
-            received = true;
+            route_byte!(c);
         }
 
         // 1b. Drain any chars the UART IRQ handler buffered (when IRQs reach S-mode).
         // This path is also only relevant for RISC-V; on AArch64 IRQ-buffered
         // chars come through the PL011 path below.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        while self.buffer.len() < Self::MAX_BUFFERED {
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
             let Some(c) = crate::task::drivers::uart::getchar() else { break };
-            self.buffer.push_back(c);
-            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
-            received = true;
+            route_byte!(c);
         }
 
         // 1c. Poll PL011 UART RX on AArch64.
         // QEMU virt maps PL011 at 0x0900_0000; `-serial tcp:...` connects its
         // TX/RX to the TCP socket used by the integration-test harness.
         #[cfg(target_arch = "aarch64")]
-        while self.buffer.len() < Self::MAX_BUFFERED {
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
             let Some(c) = crate::hal::uart_pl011::poll_rx() else { break };
-            self.buffer.push_back(c);
-            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
-            received = true;
+            route_byte!(c);
         }
 
         // 1d. Drain IRQ-filled RX buffer on x86_64.
@@ -72,11 +87,9 @@ impl viConsole {
         // COM1 bytes into uart::RX_BUFFER; we drain it here on every poll call
         // so the blocking file_read(fd=0) loop eventually finds a byte.
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        while self.buffer.len() < Self::MAX_BUFFERED {
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
             let Some(c) = crate::task::drivers::uart::getchar() else { break };
-            self.buffer.push_back(c);
-            if input_tid != 0 { relay_ascii_to_input(input_tid, c); }
-            received = true;
+            route_byte!(c);
         }
 
         // NOTE: the SBI DBCN console-read fallback was removed — on this QEMU /
@@ -104,22 +117,23 @@ impl viConsole {
 
 /// Relay a UART byte to the input service as an EV_ASCII press+release pair.
 ///
-/// Called both from the syscall path (SUM already set on RISC-V) and from the
-/// timer ISR path (SUM NOT set). The RISC-V guard reads the current SUM bit and
-/// only toggles it if not already set, so neither caller corrupts their SUM state.
-///
-/// Fire-and-forget: if the input service is not in Recv state the frames drop.
+/// Uses `ipc_post_nonblock` so bytes arriving in a burst (all 6 chars of "hypha\n"
+/// in one timer tick) are queued into `pending_msgs` rather than dropped. The
+/// input service drains pending_msgs at the start of each `sys_recv_timeout` call,
+/// guaranteeing all bytes are delivered even if input service is mid-dispatch.
 ///
 /// # Safety (kernel-only, Law 4)
-/// Reads/writes sstatus.SUM (bit 18) on RISC-V to allow S-mode copy into the
-/// U-mode IPC buffer. Safe because SUM is scoped to this function's lifetime.
+/// `ipc_post_nonblock` immediate-delivery path writes into the receiver's U-mode
+/// buffer from S-mode — requires SUM=1. We preserve the current SUM state and
+/// restore it on return so callers from different contexts (timer ISR vs syscall)
+/// are unaffected.
 fn relay_ascii_to_input(input_tid: usize, byte: u8) {
     // Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
     const WIRE_ASCII: u8 = 0x04;
 
-    // RISC-V only: SUM (sstatus bit 18) must be set for ipc_send to write into
-    // the U-mode receive buffer.  Preserve the current SUM state so we do not
-    // clear it mid-syscall when this is called from the file_read path.
+    // RISC-V: SUM (sstatus bit 18) must be 1 for S-mode to write U-mode pages.
+    // Preserve current state and restore on return so we don't corrupt the
+    // sstatus of whichever context we interrupted (timer ISR vs syscall path).
     #[cfg(target_arch = "riscv64")]
     let sum_was_set = unsafe {
         let s: usize;
@@ -128,17 +142,22 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) {
     };
     #[cfg(target_arch = "riscv64")]
     if !sum_was_set {
-        // SAFETY: SUM allows S-mode access to U-mode pages; cleared on function return.
+        // SAFETY: SUM allows S-mode writes to U-mode pages; cleared on return.
         unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x4_0000usize); }
     }
 
+    // Use isize::MAX as sender_id — distinguishes kernel UART messages from
+    // real timeout (Ok(0)) in the input service. Must be isize::MAX (not
+    // usize::MAX) because syscall() returns isize: usize::MAX == -1 as isize
+    // which causes sys_recv_timeout to return Err instead of Ok.
+    const KERNEL_UART_SENDER: usize = isize::MAX as usize;
     let mut msg = [0u8; 9];
     msg[0] = WIRE_ASCII;
     msg[1..5].copy_from_slice(&(byte as u32).to_le_bytes());
     msg[5..9].copy_from_slice(&1u32.to_le_bytes()); // press
-    let _ = crate::task::ipc_send(0, input_tid, msg.as_ptr() as usize, 9);
+    let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
     msg[5..9].copy_from_slice(&0u32.to_le_bytes()); // release
-    let _ = crate::task::ipc_send(0, input_tid, msg.as_ptr() as usize, 9);
+    let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
 
     #[cfg(target_arch = "riscv64")]
     if !sum_was_set {
