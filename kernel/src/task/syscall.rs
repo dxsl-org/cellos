@@ -2180,8 +2180,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Ok(0);
                 }
             }
-            // GPU Driver Cell not registered — no kernel fallback (Phase 08).
-            log::warn!("[gpu_flush] GPU Driver Cell not registered");
+            // Warn only once — compositor calls this every frame tick.
+            {
+                use core::sync::atomic::{AtomicBool, Ordering};
+                static WARNED: AtomicBool = AtomicBool::new(false);
+                if !WARNED.swap(true, Ordering::Relaxed) {
+                    log::warn!("[gpu_flush] GPU Driver Cell not registered — software fallback active");
+                }
+            }
             Err(SyscallError::Unknown)
         }
         Syscall::GpuCursor { op, data_ptr, xy, hot } => {
@@ -2213,8 +2219,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Ok(0);
                 }
             }
-            // GPU Driver Cell not registered — no kernel fallback (Phase 08).
-            log::warn!("[gpu_cursor] GPU Driver Cell not registered");
+            // Warn only once.
+            {
+                use core::sync::atomic::{AtomicBool, Ordering};
+                static WARNED: AtomicBool = AtomicBool::new(false);
+                if !WARNED.swap(true, Ordering::Relaxed) {
+                    log::warn!("[gpu_cursor] GPU Driver Cell not registered");
+                }
+            }
             Err(SyscallError::Unknown)
         }
         Syscall::GpuGetResolution => {

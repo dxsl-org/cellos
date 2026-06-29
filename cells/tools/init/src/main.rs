@@ -116,11 +116,7 @@ pub extern "C" fn main() {
         // on its first loop iteration; any ABSENT result is cached permanently.
         // VFS (index 0) is already up at this point (extra yield at i==0 below).
         if paths[i] == "/bin/net" {
-            // Platform Cell scans ECAM bus 0, registers all BARs, then exits.
-            // Must complete before PCIe Driver Cells (nvme, e1000) call sys_request_mmio.
-            let _ = sys_spawn_from_path("/bin/platform");
-            for _ in 0..6 { ostd::task::yield_now(); }
-
+            // Platform Cell was already spawned by the kernel before init — no second spawn.
             let _ = sys_spawn_from_path("/bin/virtio-net"); // RISC-V/AArch64 VirtIO NIC
             let _ = sys_spawn_from_path("/bin/nvme");       // PCIe NVMe (x86_64)
             let _ = sys_spawn_from_path("/bin/e1000");      // PCIe e1000 NIC (x86_64)
