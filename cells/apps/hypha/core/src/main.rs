@@ -198,14 +198,21 @@ fn ask(gw: usize, prompt: &str) -> Result<LlmReply, String> {
     }
 
     let mut buf = [0u8; 4096];
-    // Receive specifically from the gateway — prevents input service key events
-    // (queued while the LLM is thinking) from being misread as LlmReply frames.
-    match sys_recv(gw, &mut buf) {
-        SyscallResult::Ok(_sender) => match postcard::from_bytes::<LlmReply>(&buf) {
-            Ok(reply) => Ok(reply),
-            Err(_) => Err(String::from("bad LlmReply encoding")),
-        },
-        _ => Err(String::from("no reply from gateway")),
+    // Kernel `ipc_recv` ignores the mask parameter (os-gap G18: mask filtering not
+    // yet enforced). Loop until we get a reply specifically from the gateway,
+    // draining and discarding any input-service key events that arrive while the
+    // LLM is thinking. take_from_bytes handles trailing zeros in the 4 KiB buffer.
+    loop {
+        match sys_recv(gw, &mut buf) {
+            SyscallResult::Ok(sender) if sender == gw => {
+                return match postcard::take_from_bytes::<LlmReply>(&buf) {
+                    Ok((reply, _)) => Ok(reply),
+                    Err(_) => Err(String::from("bad LlmReply encoding")),
+                };
+            }
+            SyscallResult::Ok(_) => continue, // non-gw message (e.g. input event) — discard
+            _ => return Err(String::from("no reply from gateway")),
+        }
     }
 }
 
@@ -231,14 +238,19 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
     }
 
     let mut buf = [0u8; 4096];
-    // Receive specifically from the tool cell — same reason as in ask().
-    match sys_recv(cell_tid, &mut buf) {
-        SyscallResult::Ok(_sender) => match postcard::from_bytes::<AgentToolResponse>(&buf) {
-            Ok(AgentToolResponse::Ok { result_json }) => Ok(result_json),
-            Ok(AgentToolResponse::Err { message }) => Err(message),
-            Err(_) => Err(String::from("bad AgentToolResponse encoding")),
-        },
-        _ => Err(alloc::format!("no reply from tool cell '{}'", call.name)),
+    // Same drain-loop as ask(): kernel ignores mask, so discard non-tool messages.
+    loop {
+        match sys_recv(cell_tid, &mut buf) {
+            SyscallResult::Ok(sender) if sender == cell_tid => {
+                return match postcard::take_from_bytes::<AgentToolResponse>(&buf) {
+                    Ok((AgentToolResponse::Ok { result_json }, _)) => Ok(result_json),
+                    Ok((AgentToolResponse::Err { message }, _)) => Err(message),
+                    Err(_) => Err(String::from("bad AgentToolResponse encoding")),
+                };
+            }
+            SyscallResult::Ok(_) => continue,
+            _ => return Err(alloc::format!("no reply from tool cell '{}'", call.name)),
+        }
     }
 }
 
