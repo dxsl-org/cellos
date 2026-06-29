@@ -37,6 +37,11 @@ impl viUART {
 
     /// Initialize the UART
     pub fn init(&mut self) {
+        if self.base_addr == 0 {
+            // No NS16550 MMIO on this board (e.g. Pioneer SG2042 — UART at sv39-inaccessible
+            // address). All console I/O goes via SBI DBCN; skip MMIO init entirely.
+            return;
+        }
         unsafe {
             let ptr = self.base_addr as *mut u8;
 
@@ -162,12 +167,22 @@ pub fn getchar() -> Option<u8> {
 /// on the SBI DBCN console-read extension being implemented. Returns the byte
 /// if LSR.DR (Data Ready, bit 0) is set, else `None`.
 pub fn poll_rhr() -> Option<u8> {
-    let serial = SERIAL.lock();
-    // SAFETY: base_addr is the identity-mapped QEMU virt UART MMIO region,
-    // mapped explicitly in init_kernel_paging. RHR (offset 0) is read-only and
-    // side-effect-free to read when LSR.DR is clear, but we gate on DR anyway.
+    let base = SERIAL.lock().base_addr;
+    if base == 0 {
+        // No NS16550 MMIO (e.g. Pioneer SG2042). Fall back to SBI DBCN console read
+        // so the interactive shell still receives keystrokes via the firmware console.
+        #[cfg(target_arch = "riscv64")]
+        {
+            let c = crate::hal::sbi::console_getchar();
+            return if c >= 0 { Some(c as u8) } else { None };
+        }
+        #[cfg(not(target_arch = "riscv64"))]
+        return None;
+    }
+    // SAFETY: base_addr is the identity-mapped UART MMIO region, mapped in
+    // init_kernel_paging. RHR (offset 0) is read-only; we gate on LSR.DR anyway.
     unsafe {
-        let ptr = serial.base_addr as *mut u8;
+        let ptr = base as *mut u8;
         if (ptr.add(LSR).read_volatile() & _LSR_RX_READY) != 0 {
             Some(ptr.add(_RHR).read_volatile())
         } else {
@@ -222,6 +237,8 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                     // MMIO path for RISC-V / AArch64.
                     let serial = SERIAL.lock();
                     let ptr = serial.base_addr as *mut u8;
+                    // No MMIO UART on this board (e.g. Pioneer SG2042): bail out.
+                    if ptr.is_null() { break; }
                     // SAFETY: MMIO region is identity-mapped and valid.
                     let lsr_val = unsafe { ptr.add(LSR).read_volatile() };
                     let byte = if lsr_val & (_LSR_RX_READY as u8) != 0 {

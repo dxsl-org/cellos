@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build ViCell for VisionFive2 and create a Limine UEFI SD card image.
+# Build Cellos for VisionFive2 and create a Limine UEFI SD card image.
 #
 # Usage:
 #   ./scripts/vf2-flash.sh              # build + create vf2-boot.img in repo root
@@ -29,7 +29,7 @@ if [[ ! -s "$LIMINE_EFI" ]]; then
 fi
 
 # ── 2. Build kernel (board-vf2 feature, release) ──────────────────────────────
-echo "[vf2-flash] Building ViCell kernel for VisionFive2..."
+echo "[vf2-flash] Building Cellos kernel for VisionFive2..."
 cd "$REPO_ROOT"
 RUSTFLAGS="-C relocation-model=pic" \
     cargo build --release -p vicell-kernel \
@@ -60,7 +60,7 @@ trap cleanup EXIT
 udevadm settle 2>/dev/null || partprobe "$LOOP" 2>/dev/null || sleep 1
 [[ -b "${LOOP}p1" ]] || { echo "[vf2-flash] ERROR: ${LOOP}p1 not found after settle"; exit 1; }
 
-mkfs.fat -F 32 -n VICELL "${LOOP}p1"
+mkfs.fat -F 32 -n CELLOS "${LOOP}p1"
 
 MNT=/tmp/vf2-mnt
 mkdir -p "$MNT"

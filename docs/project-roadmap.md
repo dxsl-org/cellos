@@ -112,7 +112,8 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 - [x] **Track C (2026-06-13)**: `ViI2c` + `BitBangI2c<G>` + `sensor-demo` (SHT3x) + linker scripts
 - [x] **Track C (2026-06-13)**: `ViSpi` (`hal/traits/spi`) + `BitBangSpi<G>` (pins 2-5, Mode 0) + `spi-demo` + integration test `periph-i2c-spi`
 - [ ] Extension: `ViCan`, `ViPwm`, `ViAdc` (G1 ext / G2)
-- [ ] Real SBC validation (RPi4 / VisionFive2)
+- [x] **VisionFive2 JH7110 bring-up** (2026-06-29) — `board-vf2` feature, Limine UEFI image, flash scripts, PLIC/UART addresses match QEMU virt (zero HAL changes). `docs/vf2-bringup.md`. Pending: physical hardware run.
+- [x] **Pioneer SG2042 bring-up** (2026-06-29) — `board-pioneer` feature, SBI DBCN console (UART sv39-inaccessible), T-Head PLIC/CLINT compat strings, flash scripts. `docs/pioneer-bringup.md`. Pending: physical hardware run.
 
 > ⚠️ Largest new chunk of G1 — needs its own brainstorm → plan → cook cycle. Do not underestimate.
 
@@ -143,7 +144,7 @@ Two sub-items (Silo reclassified — see Hardware Key Isolation entry above):
 3. ✅ RT determinism: a control-loop Cell meets its deadline; IPC latency has a measured bound.
 4. ⚠️ Peripheral I/O: GPIO/I2C/SPI/UART work on QEMU ✅ + ≥1 real board (pending hardware acquisition).
 5. ✅ Instant-On boot under target threshold.
-6. ⚠️ Runs on real RV64 + ARM64 SBC: QEMU full bring-up ✅, real SBC pending hardware acquisition.
+6. ⚠️ Runs on real RV64 + ARM64 SBC: QEMU full bring-up ✅, SBC bring-up code complete (VisionFive2 + Pioneer SG2042, 2026-06-29) — pending physical hardware run.
 7. ✅ Sub-track: Cellos-Nano minimal profile boots on RV32 (QEMU verified).
 8. ✅ Reference robot demo runs end-to-end (`robot-demo-e2e` passes on QEMU ARM64, 2026-06-16).
 

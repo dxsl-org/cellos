@@ -1,5 +1,5 @@
 #!/usr/bin/env pwsh
-# Build ViCell for VisionFive2 on Windows.
+# Build Cellos for VisionFive2 on Windows.
 # Produces target/.../vicell-kernel and delegates image creation to WSL2.
 #
 # Usage:

@@ -1,8 +1,8 @@
 # TODO - Quick references for dev
 
 ## Tasks
-- Hypha AI agent
-- RV64 real SBC (VisionFive2/Pioneer)
+- Hypha AI agent - pending
+- [x] RV64 real SBC (VisionFive2/Pioneer) — code complete 2026-06-29; pending physical hardware run
 - ViCan/ViPwm/ViAdc
 - rustc TCB documentation
 - HMI fb_console keyboard relay

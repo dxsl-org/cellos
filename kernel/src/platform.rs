@@ -81,7 +81,22 @@ pub fn init(sbi_dtb: usize) {
         Some(p) => p,
         None    => sbi_dtb,
     };
-    let info = from_dtb(dtb_ptr);
+    let mut info = from_dtb(dtb_ptr);
+
+    // Pioneer SG2042: UART (snps,dw-apb-uart) lives at 0x7040_0000_0000 — a
+    // physical address that sv39 cannot map as a virtual address (bit 39 set).
+    // Force uart_base=0 so the kernel skips NS16550 MMIO entirely and falls back
+    // to SBI DBCN for all console I/O. PLIC/CLINT are detected from DTB above
+    // (thead,c900-plic / thead,c900-clint at the same base as QEMU defaults).
+    // RTC (snps,dw-apb-rtc) is similarly inaccessible; epoch defaults to 0.
+    #[cfg(feature = "board-pioneer")]
+    {
+        info.uart_base   = 0; // SBI DBCN only
+        info.uart_irq    = 0;
+        info.rtc_base    = 0; // no Goldfish RTC; SG2042 RTC at sv39-inaccessible addr
+        info.virtio_mmio = [None; 8]; // no VirtIO on Pioneer
+    }
+
     log::info!("[platform] UART={:#x} irq={} PLIC={:#x}+{:#x} CLINT={:#x} RTC={:#x}",
         info.uart_base, info.uart_irq, info.plic_base, info.plic_size, info.clint_base, info.rtc_base);
     hal::common::rtc::init(info.rtc_base);
@@ -157,15 +172,18 @@ fn from_dtb(dtb_ptr: usize) -> PlatformInfo {
         }
     };
 
-    let uart_base = reg_base(&fdt, &["ns16550a", "ns16550"])
+    let uart_base = reg_base(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"])
         .unwrap_or_else(|| { log::warn!("[platform] UART not in DTB"); DEFAULT_UART_BASE });
-    let uart_irq  = irq_first(&fdt, &["ns16550a", "ns16550"])
+    let uart_irq  = irq_first(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"])
         .unwrap_or(DEFAULT_UART_IRQ);
 
-    let (plic_base, plic_size) = reg_base_size(&fdt, &["sifive,plic-1.0.0", "riscv,plic0"])
+    // T-Head C900 (SG2042/Pioneer) uses thead,c900-plic / thead,c900-clint.
+    // Their base addresses match the RISC-V virt defaults so the fallback is correct,
+    // but explicit detection here avoids the warning log on Pioneer boot.
+    let (plic_base, plic_size) = reg_base_size(&fdt, &["sifive,plic-1.0.0", "riscv,plic0", "thead,c900-plic"])
         .unwrap_or_else(|| { log::warn!("[platform] PLIC not in DTB"); (DEFAULT_PLIC_BASE, DEFAULT_PLIC_SIZE) });
 
-    let clint_base = reg_base(&fdt, &["sifive,clint0", "riscv,clint0"])
+    let clint_base = reg_base(&fdt, &["sifive,clint0", "riscv,clint0", "thead,c900-clint"])
         .unwrap_or_else(|| { log::warn!("[platform] CLINT not in DTB"); DEFAULT_CLINT_BASE });
 
     let virtio_mmio = collect_virtio(&fdt);

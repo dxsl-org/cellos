@@ -73,6 +73,13 @@ maintenance-mode = []
 # Real VisionFive2 JH7110 board — adjusts fallback DRAM map to 0x4000_0000.
 # Build: RUSTFLAGS="-C relocation-model=pic" cargo build --release --features board-vf2
 board-vf2 = []
+# Milk-V Pioneer / SG2042 (64-core T-Head C910 RISC-V server board).
+# DRAM starts at 0x8000_0000 (same as QEMU virt — no separate fallback map).
+# UART (snps,dw-apb-uart) is at sv39-inaccessible 0x7040000000 — all console I/O
+# goes via SBI DBCN (uart_base forced to 0 in platform::init). PLIC/CLINT fall back
+# to standard addresses (0x0C000000 / 0x02000000) which match T-Head C900 hardware.
+# Build: RUSTFLAGS="-C relocation-model=pic" cargo build --release --features board-pioneer
+board-pioneer = []
 # Raspberry Pi 4 (BCM2711): enables SDHCI probe at 0xFE340000 (Arasan eMMC2).
 board-rpi4 = []
 # Raspberry Pi 3 (BCM2837): load@0x80000, BCM mini UART, BCM2836 local IRQ,

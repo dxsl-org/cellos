@@ -1,6 +1,6 @@
 # Cellos on VisionFive2 — Board Bring-Up Guide
 
-Boot Cellos on a real StarFive VisionFive2 (JH7110, RV64GC) and reach an interactive `Cellos>` shell via UART serial. No SD card driver required — all cells are embedded in the kernel binary.
+Boot Cellos on a real StarFive VisionFive2 (JH7110, RV64GC) and reach an interactive `Cellos>` shell via UART serial. No SD card driver required — all Cells are embedded in the kernel binary.
 
 ---
 
@@ -58,9 +58,9 @@ sudo ./scripts/vf2-flash.sh /dev/sdX
 
 The script:
 1. Downloads `BOOTRISCV64.EFI` (Limine v12) via `scripts/download-limine.sh` if not cached
-2. Compiles `Cellos-kernel` with `--features board-vf2 --release`
+2. Compiles the kernel (`vicell-kernel` crate) with `--features board-vf2 --release`
 3. Creates a 256 MB GPT image with a 200 MB EFI System Partition
-4. Populates: `EFI/BOOT/BOOTRISCV64.EFI`, `limine.conf` (KASLR=no), `Cellos-kernel`
+4. Populates: `EFI/BOOT/BOOTRISCV64.EFI`, `limine.conf` (KASLR=no), `vicell-kernel`
 
 ---
 
@@ -75,7 +75,7 @@ U-Boot SPL 2024.x (VisionFive2)
 
 [Limine]
 Limine 12.x.x
-Loading /Cellos-kernel ...
+Loading /vicell-kernel ...
 Booting ...
 
 [Cellos kernel]
@@ -127,7 +127,7 @@ Cellos>
 | Limine: `BOOTRISCV64.EFI not found` | Script failed silently | Re-run `vf2-flash.sh`; check `tools/limine-riscv64` exists |
 | Kernel panic at `[init]` | VFS binary missing | Check `kernel/src/embedded*/` contains `vfs` ELF |
 | Stuck after `[boot] Limine memory map` | Wrong DRAM base in fallback | Confirm `--features board-vf2` was passed to cargo |
-| U-Boot drops to shell | U-Boot UEFI support disabled | Upgrade VF2 firmware to ≥ 3.9.x; or boot with: `load mmc 0:1 0x84000000 Cellos-kernel; bootefi 0x84000000` |
+| U-Boot drops to shell | U-Boot UEFI support disabled | Upgrade VF2 firmware to ≥ 3.9.x; or boot with: `load mmc 0:1 0x84000000 vicell-kernel; bootefi 0x84000000` |
 | `losetup --partscan` fails (WSL2) | Kernel loop module restricted | Run `vf2-flash.sh` from native Linux instead |
 
 ### Manual U-Boot Boot (if Limine EFI fails)
@@ -136,7 +136,7 @@ At the U-Boot `=>` prompt:
 
 ```
 # Load kernel directly via U-Boot EFI stub
-load mmc 0:1 0x84000000 Cellos-kernel
+load mmc 0:1 0x84000000 vicell-kernel
 bootefi 0x84000000
 ```
 
