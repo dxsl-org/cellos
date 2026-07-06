@@ -547,17 +547,23 @@ jobs:
           OBJCOPY: riscv64-unknown-elf-objcopy
         run: pwsh ./gen_disk.ps1
 
-      - name: Run boot + network data-path tests
+      - name: Run boot + network + shell + VFS tests
         # Allowlist by substring (OR semantics). --test-threads=2: each test
-        # boots its own QEMU and TCG is CPU-bound. Expand this list as more
-        # boot.rs tests are de-rotted (baseline 2026-07-06: 30/53 pass; the
-        # remainder are blocked by a real VFS-write regression + input burst
-        # loss + a few drifted markers — see the analysis plan, not rot alone).
+        # boots its own QEMU and TCG is CPU-bound. Only tests that passed 2/2
+        # consecutive full runs are listed — expand as more are stabilized.
+        # Remaining red (2026-07-07, 40/53 pass): a residual typed-input stall
+        # on the 3rd+ command of a session (~5 shell tests, flaky), 3 input_*
+        # tests needing live-input markers, gpu marker drift, bench timeout,
+        # mqtt_subscribe — see the analysis plan triage.
         run: |
           cd tests/integration
           cargo test --test boot -- --test-threads=2 \
             boots_to_shell_prompt \
-            network_dhcp network_tcp_send network_curl network_tcp_listen
+            network_dhcp network_tcp_send network_curl network_tcp_listen \
+            network_wget_downloads_to_vfs \
+            shell_or_operator shell_exit_code_var shell_echo_e \
+            shell_function_positional_args shell_variable_persists \
+            shell_source_script vfs_fat16_reboot_persistence
 
   security:
     name: Security Scan

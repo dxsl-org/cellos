@@ -33,6 +33,23 @@ impl viConsole {
         }
         let mut received = false;
 
+        // Backpressure: relay any bytes that failed to post on a previous tick
+        // BEFORE reading new ones, so byte order is preserved. If the input
+        // service queue is still full, leave the backlog (and the HW FIFO)
+        // alone — QEMU's chardev applies TCP backpressure while the FIFO is
+        // full, so nothing is lost upstream either.
+        if input_tid != 0 {
+            let mut pending = PENDING_ASCII.lock();
+            while let Some(&b) = pending.front() {
+                if relay_ascii_to_input(input_tid, b) {
+                    pending.pop_front();
+                    received = true;
+                } else {
+                    return received; // input queue still full — retry next tick
+                }
+            }
+        }
+
         // Route rule: when the input service is online (input_tid != 0), relay
         // bytes to it exclusively via EV_ASCII IPC — do NOT push to self.buffer.
         // This prevents double delivery: the shell reads via input service events,
@@ -40,11 +57,19 @@ impl viConsole {
         // same bytes from self.buffer, causing duplicate input.
         // When input service is offline (input_tid == 0), bytes go to self.buffer
         // only, keeping the sys_read(fd=0) fallback path working for early boot.
+        //
+        // A failed relay (input service pending_msgs full during a paste-speed
+        // burst) parks the byte in PENDING_ASCII and stops draining — dropping
+        // it instead silently lost mid-line characters ("vappend /data/…" arrived
+        // as "vappend ta/…") whenever a burst outpaced the input service.
         macro_rules! route_byte {
             ($c:expr) => {
                 let c = $c;
                 if input_tid != 0 {
-                    relay_ascii_to_input(input_tid, c);
+                    if !relay_ascii_to_input(input_tid, c) {
+                        PENDING_ASCII.lock().push_back(c);
+                        return true; // stop draining; order preserved via backlog
+                    }
                 } else {
                     if self.buffer.len() < Self::MAX_BUFFERED {
                         self.buffer.push_back(c);
@@ -115,6 +140,11 @@ impl viConsole {
     }
 }
 
+/// Bytes whose EV_ASCII post failed because the input service's pending_msgs
+/// queue was full (paste-speed burst). Retried at the start of every poll()
+/// tick, in order, before any new FIFO bytes are consumed.
+static PENDING_ASCII: Spinlock<VecDeque<u8>> = Spinlock::new(VecDeque::new());
+
 /// Relay a UART byte to the input service as an EV_ASCII press+release pair.
 ///
 /// Uses `ipc_post_nonblock` so bytes arriving in a burst (all 6 chars of "hypha\n"
@@ -122,12 +152,17 @@ impl viConsole {
 /// input service drains pending_msgs at the start of each `sys_recv_timeout` call,
 /// guaranteeing all bytes are delivered even if input service is mid-dispatch.
 ///
+/// Returns `false` when the PRESS event could not be queued (input service
+/// pending_msgs full) — the caller must retain the byte and retry later. The
+/// RELEASE event is best-effort: shells act on `KeyState::Pressed` only, so a
+/// lost release is harmless, while a lost press is a lost keystroke.
+///
 /// # Safety (kernel-only, Law 4)
 /// `ipc_post_nonblock` immediate-delivery path writes into the receiver's U-mode
 /// buffer from S-mode — requires SUM=1. We preserve the current SUM state and
 /// restore it on return so callers from different contexts (timer ISR vs syscall)
 /// are unaffected.
-fn relay_ascii_to_input(input_tid: usize, byte: u8) {
+fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
     // Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
     const WIRE_ASCII: u8 = 0x04;
 
@@ -155,15 +190,18 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) {
     msg[0] = WIRE_ASCII;
     msg[1..5].copy_from_slice(&(byte as u32).to_le_bytes());
     msg[5..9].copy_from_slice(&1u32.to_le_bytes()); // press
-    let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
-    msg[5..9].copy_from_slice(&0u32.to_le_bytes()); // release
-    let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
+    let press_ok = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]).is_ok();
+    if press_ok {
+        msg[5..9].copy_from_slice(&0u32.to_le_bytes()); // release (best-effort)
+        let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
+    }
 
     #[cfg(target_arch = "riscv64")]
     if !sum_was_set {
         // SAFETY: restore SUM to its pre-call value.
         unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x4_0000usize); }
     }
+    press_ok
 }
 
 pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole {

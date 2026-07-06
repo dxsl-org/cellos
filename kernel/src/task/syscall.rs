@@ -886,8 +886,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             //   the hotswap orchestrator's TID, preserving the IPC identity contract.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if !t.pending_msgs.is_empty() {
-                        let msg = t.pending_msgs.remove(0);
+                    // The drain MUST honour the recv mask: a masked recv (e.g. the
+                    // shell awaiting a VFS reply) must NOT consume a queued input
+                    // key event — that poisoned every VFS request/reply pair after
+                    // the input-queue change (the shell decoded a keystroke as the
+                    // VFS reply → "vwrite failed", and the real reply desynced the
+                    // next conversation). Non-matching messages stay queued for the
+                    // wildcard read loop that wants them.
+                    let slot = t.pending_msgs.iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask);
+                    if let Some(i) = slot {
+                        let msg = t.pending_msgs.remove(i);
                         let copy_len = core::cmp::min(msg.data.len(), buf_len);
                         if copy_len > 0
                             && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
@@ -1034,8 +1043,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // anything queued via ipc_post_nonblock.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    if !t.pending_msgs.is_empty() {
-                        let msg = t.pending_msgs.remove(0);
+                    // Honour the recv mask in the drain — same contract as Recv
+                    // above: a masked RecvTimeout must not consume queued input
+                    // events meant for the wildcard read loop.
+                    let slot = t.pending_msgs.iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask);
+                    if let Some(i) = slot {
+                        let msg = t.pending_msgs.remove(i);
                         let copy_len = core::cmp::min(msg.data.len(), buf_len);
                         if copy_len > 0
                             && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()

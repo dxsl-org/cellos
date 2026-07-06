@@ -50,9 +50,14 @@ fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
         Ok(s) => s.len(),
         Err(_) => return false,
     };
-    syscall::sys_send(vfs_endpoint(), &send_buf[..n]);
+    // Recv MASKED to the VFS tid: the shell holds input focus, so queued key
+    // events can arrive between send and recv — a wildcard recv here decoded a
+    // keystroke as the VFS reply ("vwrite failed" while the write succeeded)
+    // and orphaned the real reply, desyncing every later VFS conversation.
+    let vfs = vfs_endpoint();
+    syscall::sys_send(vfs, &send_buf[..n]);
     let mut reply = [0u8; 64];
-    match syscall::sys_recv(0, &mut reply) {
+    match syscall::sys_recv(vfs, &mut reply) {
         syscall::SyscallResult::Ok(_) => {
             matches!(api::ipc::decode::<api::ipc::VfsResponse>(&reply), Ok(api::ipc::VfsResponse::Ok))
         }
@@ -268,7 +273,8 @@ fn grep_recursive_inner(dir: &str, pattern: &str, ci: bool, invert: bool,
     };
     ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
-    let raw = match ostd::syscall::sys_recv(0, &mut reply) {
+    // Masked recv — see vfs_req_ok: wildcard would eat queued input events.
+    let raw = match ostd::syscall::sys_recv(vfs_tid, &mut reply) {
         ostd::syscall::SyscallResult::Ok(_) => &reply, _ => return,
     };
     match api::ipc::decode::<VfsResponse>(raw) {
@@ -441,14 +447,15 @@ pub fn read_file_vfs(path: &str, out: &mut [u8]) -> usize {
     let decode_buf: &[u8] = if fast_n > 0 {
         &fast_buf[..fast_n]
     } else {
-        // Fallback: full ecall round-trip.
+        // Fallback: full ecall round-trip. Masked recv — see vfs_req_ok.
         let mut send_buf = [0u8; 512];
         let n = match api::ipc::encode(&req, &mut send_buf) {
             Ok(s) => s.len(),
             Err(_) => return 0,
         };
-        syscall::sys_send(vfs_endpoint(), &send_buf[..n]);
-        match syscall::sys_recv(0, &mut fast_buf) {
+        let vfs = vfs_endpoint();
+        syscall::sys_send(vfs, &send_buf[..n]);
+        match syscall::sys_recv(vfs, &mut fast_buf) {
             syscall::SyscallResult::Ok(_) => &fast_buf,
             _ => return 0,
         }
@@ -479,8 +486,10 @@ fn read_file_vfs_async(path: &str, out: &mut [u8]) -> usize {
         Ok(s) => s.len(),
         Err(_) => return 0,
     };
-    syscall::sys_send(vfs_endpoint(), &buf[..n]);
-    let handle = match syscall::sys_recv(0, &mut buf) {
+    // Masked recv for both round-trips — see vfs_req_ok.
+    let vfs = vfs_endpoint();
+    syscall::sys_send(vfs, &buf[..n]);
+    let handle = match syscall::sys_recv(vfs, &mut buf) {
         syscall::SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&buf) {
             Ok(VfsResponse::PendingHandle(h)) => h,
             _ => return 0,
@@ -492,8 +501,8 @@ fn read_file_vfs_async(path: &str, out: &mut [u8]) -> usize {
         Ok(s) => s.len(),
         Err(_) => return 0,
     };
-    syscall::sys_send(vfs_endpoint(), &buf[..n]);
-    match syscall::sys_recv(0, &mut buf) {
+    syscall::sys_send(vfs, &buf[..n]);
+    match syscall::sys_recv(vfs, &mut buf) {
         syscall::SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&buf) {
             Ok(VfsResponse::Data(data)) => {
                 let len = data.len().min(out.len());
@@ -557,7 +566,8 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
     };
     ostd::syscall::sys_send(vfs_tid, &send[..n]);
     let mut reply = [0u8; 512];
-    let raw = match ostd::syscall::sys_recv(0, &mut reply) {
+    // Masked recv — see vfs_req_ok.
+    let raw = match ostd::syscall::sys_recv(vfs_tid, &mut reply) {
         ostd::syscall::SyscallResult::Ok(_) => &reply,
         _ => return,
     };

@@ -59,7 +59,9 @@ impl ViConfig for ConfigClient {
             // We fill it here and return a &str sub-slice that borrows from self.resp_buf,
             // giving it the lifetime of &self — valid because resp_buf lives as long as self.
             let resp_buf = unsafe { &mut *self.resp_buf.get() };
-            match ostd::syscall::sys_recv(0, resp_buf) {
+            // Masked recv: a wildcard here can consume a queued input key event
+            // as the config reply while the shell holds input focus.
+            match ostd::syscall::sys_recv(sid, resp_buf) {
                 ostd::syscall::SyscallResult::Ok(sender) if sender == sid => {
                     match api::ipc::decode::<ConfigResponse>(resp_buf) {
                         Ok(ConfigResponse::Value(val)) => {
@@ -90,7 +92,8 @@ impl ViConfig for ConfigClient {
         ostd::syscall::sys_send(sid, encoded);
 
         let mut ack = [0u8; 64];
-        ostd::syscall::sys_recv(0, &mut ack);
+        // Masked recv — see get().
+        ostd::syscall::sys_recv(sid, &mut ack);
         Ok(())
     }
 }
