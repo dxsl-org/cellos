@@ -48,11 +48,14 @@ fn plain(ip: [u8; 4], port: u16, request: &[u8]) -> Result<Vec<u8>, String> {
         loop {
             match nc.tcp_send(sock, &request[sent..end]) {
                 Ok(()) => break,
-                Err(_) => {
+                Err(e) => {
                     attempts += 1;
                     if attempts > 3000 {
                         let _ = nc.tcp_close(sock);
-                        return Err(String::from("tcp_send failed (connect timeout?)"));
+                        return Err(alloc::format!(
+                            "tcp_send failed after {} attempts, last err={:?}",
+                            attempts, e
+                        ));
                     }
                     ostd::task::yield_now();
                 }

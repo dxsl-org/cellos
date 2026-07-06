@@ -198,12 +198,12 @@ fn ask(gw: usize, prompt: &str) -> Result<LlmReply, String> {
     }
 
     let mut buf = [0u8; 4096];
-    // Kernel `ipc_recv` ignores the mask parameter (os-gap G18: mask filtering not
-    // yet enforced). Loop until we get a reply specifically from the gateway,
-    // draining and discarding any input-service key events that arrive while the
-    // LLM is thinking. take_from_bytes handles trailing zeros in the 4 KiB buffer.
+    // mask=0 (wildcard): accept from any sender so that input-service EV_ASCII events
+    // dispatched to this cell (because it holds keyboard focus) don't deadlock the
+    // input service. G18 enforces the mask in ipc_send — a masked recv blocks senders
+    // that don't match, so we must use 0 here and filter by sender in the match arm.
     loop {
-        match sys_recv(gw, &mut buf) {
+        match sys_recv(0, &mut buf) {
             SyscallResult::Ok(sender) if sender == gw => {
                 return match postcard::take_from_bytes::<LlmReply>(&buf) {
                     Ok((reply, _)) => Ok(reply),
@@ -238,9 +238,10 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
     }
 
     let mut buf = [0u8; 4096];
-    // Same drain-loop as ask(): kernel ignores mask, so discard non-tool messages.
+    // mask=0: same fix as ask() — accept from any sender to avoid G18 deadlock with
+    // the input service; filter by cell_tid in the match arm.
     loop {
-        match sys_recv(cell_tid, &mut buf) {
+        match sys_recv(0, &mut buf) {
             SyscallResult::Ok(sender) if sender == cell_tid => {
                 return match postcard::take_from_bytes::<AgentToolResponse>(&buf) {
                     Ok((AgentToolResponse::Ok { result_json }, _)) => Ok(result_json),
