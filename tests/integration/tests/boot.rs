@@ -69,10 +69,13 @@ fn boots_to_shell_prompt() {
     qemu.wait_for("ViCell >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
-    // Phase 03: Ring-3 user task ran.
+    // Phase 03: a Ring-3 (U-mode) user task ran. The old dedicated ring-3 smoke
+    // cell that printed "user_hello"/"U-mode" was retired once real service cells
+    // replaced it; ring-3 execution is now proven by the shell prompt itself —
+    // only the U-mode shell prints "ViCell >" (waited on above via sys_log).
     assert!(
-        qemu.output_contains("user_hello") || qemu.output_contains("U-mode"),
-        "ring-3 user task did not run"
+        qemu.output_contains("ViCell >"),
+        "ring-3 user task did not run (no U-mode shell prompt)"
     );
     // Phase 13/14/16: services spawned via SpawnFromPath. Assert on the
     // userspace service banners (emitted via print_user_log → direct UART),

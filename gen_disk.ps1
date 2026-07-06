@@ -49,6 +49,32 @@ Write-Host "Building release cells..."
 # Fail-fast on core cell build errors: continuing would re-sign and ship the
 # PREVIOUS binary from target/ — a silent build-skew that makes every later
 # QEMU verify meaningless (you debug code that is not on the disk).
+#
+# CRITICAL: `cargo … | Select-Object` sets $LASTEXITCODE to Select-Object's exit
+# (always 0), MASKING a cargo failure. So Build-Cargo captures output into a
+# variable first — then $LASTEXITCODE reflects cargo — prints the tail, and only
+# then checks. `mode 'core'` aborts; mode 'optional' records for the summary.
+function Build-Cargo {
+    param([string[]]$Packages, [string]$What, [string]$Mode = 'core', [int]$Tail = 4)
+    $pkgArgs = @()
+    foreach ($p in $Packages) { $pkgArgs += @('-p', $p) }
+    $out = & cargo build --release @pkgArgs 2>&1
+    $code = $LASTEXITCODE                    # capture BEFORE any pipe resets it
+    $out | Select-Object -Last $Tail
+    if ($code -ne 0) {
+        if ($Mode -eq 'optional') {
+            $script:FailedOptional += $What
+        } else {
+            Write-Host "FATAL: cargo build failed for $What — aborting before a stale binary is signed/shipped." -ForegroundColor Red
+            exit 1
+        }
+    }
+}
+# Legacy shim: some later cargo lines still pipe to Select-Object and then call
+# Assert-BuildOk. Those are the raw-pipe form and remain UNRELIABLE — migrate
+# them to Build-Cargo when touched. Kept only so an untouched call still errors
+# loudly on the obvious case (Select-Object rarely fails, so treat any non-zero
+# as fatal for the paths that still use it).
 function Assert-BuildOk([string]$what) {
     if ($LASTEXITCODE -ne 0) {
         Write-Host "FATAL: cargo build failed for $what — aborting before a stale binary is signed/shipped." -ForegroundColor Red
@@ -62,65 +88,52 @@ function Add-FailedOptional([string]$what) {
     if ($LASTEXITCODE -ne 0) { $script:FailedOptional += $what }
 }
 
-cargo build --release `
-    -p app-init -p app-shell `
-    -p service-platform `
-    -p service-vfs -p service-config `
-    -p service-input -p service-net -p service-compositor -p service-net-broker `
-    -p supervisor -p driver-nvme -p driver-e1000 -p driver-virtio-net -p driver-virtio-gpu 2>&1 | Select-Object -Last 5
-Assert-BuildOk "core services + drivers"
-cargo build --release -p app-bench 2>&1 | Select-Object -Last 3   # builds bench + bench-probe
-Assert-BuildOk "app-bench"
-cargo build --release -p app-net-tools 2>&1 | Select-Object -Last 3
-Assert-BuildOk "app-net-tools"
-cargo build --release -p app-sys-tools 2>&1 | Select-Object -Last 3
-Assert-BuildOk "app-sys-tools"
-cargo build --release -p robot-demo -p robot-dashboard 2>&1 | Select-Object -Last 3
-Assert-BuildOk "robot-demo + robot-dashboard"
-cargo build --release -p fb-console 2>&1 | Select-Object -Last 3
-Assert-BuildOk "fb-console"
-cargo build --release -p hypha-llm-gateway -p hypha-core -p hypha-tool-fs -p hypha-tool-sys -p hypha-tool-spawn 2>&1 | Select-Object -Last 3   # Hypha P0-P3
-Assert-BuildOk "hypha cells"
-cargo build --release -p input-test 2>&1 | Select-Object -Last 3
-Assert-BuildOk "input-test"
-cargo build --release -p audio-demo 2>&1 | Select-Object -Last 3   # VirtIO sound test tone
-Assert-BuildOk "audio-demo"
-cargo build --release -p app-https-demo 2>&1 | Select-Object -Last 3   # G14 TLS server-auth e2e gate
-Assert-BuildOk "app-https-demo"
-cargo build --release -p app-http-smoke 2>&1 | Select-Object -Last 3  # ostd::http + ostd::json e2e gate
-Assert-BuildOk "app-http-smoke"
-cargo build --release -p cfi-test 2>&1 | Select-Object -Last 3   # Layer-2 CFI violation test cell
-Assert-BuildOk "cfi-test"
+Build-Cargo -What "core services + drivers" -Tail 5 -Packages @(
+    'app-init', 'app-shell', 'service-platform',
+    'service-vfs', 'service-config',
+    'service-input', 'service-net', 'service-compositor', 'service-net-broker',
+    'supervisor', 'driver-nvme', 'driver-e1000', 'driver-virtio-net', 'driver-virtio-gpu')
+Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench + bench-probe
+Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
+Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
+Build-Cargo -What "robot-demo + robot-dashboard" -Packages @('robot-demo', 'robot-dashboard')
+Build-Cargo -What "fb-console"     -Packages @('fb-console')
+Build-Cargo -What "hypha cells"    -Packages @('hypha-llm-gateway', 'hypha-core', 'hypha-tool-fs', 'hypha-tool-sys', 'hypha-tool-spawn')
+Build-Cargo -What "input-test"     -Packages @('input-test')
+Build-Cargo -What "audio-demo"     -Packages @('audio-demo')      # VirtIO sound test tone
+Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS server-auth e2e gate
+Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
+Build-Cargo -What "cfi-test" -Packages @('cfi-test')   # Layer-2 CFI violation test cell
 
-# DOOM — only if doomgeneric sources have been cloned
+# DOOM — only if doomgeneric sources have been cloned. Custom --target + -Z so
+# it can't use Build-Cargo; capture the exit code BEFORE the pipe (see Build-Cargo).
 $doom_src = "cells/demos/doom/src/c/doomgeneric/doomgeneric"
 if (Test-Path $doom_src) {
     Write-Host "Building DOOM cell..."
-    cargo build --release -p doom --target riscv64gc-unknown-none-elf -Z build-std=core,alloc 2>&1 | Select-Object -Last 3
-    Add-FailedOptional "doom"
+    $doomOut = & cargo build --release -p doom --target riscv64gc-unknown-none-elf -Z build-std=core,alloc 2>&1
+    $doomCode = $LASTEXITCODE
+    $doomOut | Select-Object -Last 3
+    if ($doomCode -ne 0) { $script:FailedOptional += "doom" }
 } else {
     Write-Host "Skipping DOOM (clone doomgeneric to $doom_src first)."
 }
 
 # Tetris (pure Rust) — no external deps, always buildable.
 Write-Host "Building Tetris (pure Rust)..."
-cargo build --release -p tetris 2>&1 | Select-Object -Last 3
-Add-FailedOptional "tetris"
+Build-Cargo -What "tetris" -Mode optional -Tail 3 -Packages @('tetris')
 
 # Tetris-C — needs Banaxi-Tech/Tetris-OS cloned into src/c/tetris-os/.
 $tetris_os_src = "cells/demos/tetris-c/src/c/tetris-os"
 if (Test-Path $tetris_os_src) {
     Write-Host "Building Tetris-C cell (Banaxi-Tech/Tetris-OS port)..."
-    cargo build --release -p tetris-c 2>&1 | Select-Object -Last 3
-    Add-FailedOptional "tetris-c"
+    Build-Cargo -What "tetris-c" -Mode optional -Tail 3 -Packages @('tetris-c')
 } else {
     Write-Host "Skipping Tetris-C (clone to $tetris_os_src first)."
 }
 
 # Tetris-Lua — embeds Lua 5.4 + tetris.lua via include_bytes!, shared C sources from lua runtime.
 Write-Host "Building Tetris-Lua cell..."
-cargo build --release -p tetris-lua 2>&1 | Select-Object -Last 3
-Add-FailedOptional "tetris-lua"
+Build-Cargo -What "tetris-lua" -Mode optional -Tail 3 -Packages @('tetris-lua')
 
 # 1c. Build Zig cells (optional — requires zig 0.13+ in PATH).
 $zig_elfs = @{}
@@ -373,11 +386,16 @@ Write-Host "  kernel_fs.img: ${kfs_mb} MB"
 #     Must be done before creating disk_v3.img so the test runner picks up the latest kernel.
 Write-Host "Rebuilding kernel (embedding updated kernel_fs.img)..."
 $env:RUSTFLAGS = "-C relocation-model=pic"
-cargo build --release -p vicell-kernel `
+$kernOut = & cargo build --release -p vicell-kernel `
     --target riscv64gc-unknown-none-elf `
-    -Z build-std=core,alloc 2>&1 | Select-Object -Last 3
-Assert-BuildOk "vicell-kernel (kernel_fs embed)"
+    -Z build-std=core,alloc 2>&1
+$kernCode = $LASTEXITCODE                     # capture BEFORE the pipe (see Build-Cargo)
+$kernOut | Select-Object -Last 3
 Remove-Item Env:/RUSTFLAGS
+if ($kernCode -ne 0) {
+    Write-Host "FATAL: kernel rebuild failed — disk would ship a stale kernel with an old kernel_fs.img." -ForegroundColor Red
+    exit 1
+}
 
 # 3c. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
 #     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4 littlefs @800000
