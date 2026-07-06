@@ -502,6 +502,59 @@ jobs:
       - name: Run shell utility integration tests
         run: cd tests/integration && cargo test --test shell-utils
 
+  # Network data-path integration tests (DHCP → TCP → HTTP → listen/accept)
+  # against the virtio-net Driver Cell. Previously the WHOLE boot suite was
+  # NOT in CI, which let it rot undetected (see below). This job gates the
+  # verified-green network subset so the Driver-Cell path can never silently
+  # regress again. prerequisites use ci_guard(): a missing kernel/disk FAILS
+  # this job instead of silently skipping every test.
+  #
+  # ⚠ Scoped to an ALLOWLIST, not the full `boot` suite: ~20 other boot.rs
+  # tests currently fail on drifted assertions (e.g. boots_to_shell_prompt
+  # reaches the shell but asserts on a "user_hello"/"U-mode" marker the kernel
+  # no longer emits; several /tmp-RamFS-write tests; mqtt_subscribe). The
+  # system boots and works — the ASSERTIONS rot because the suite lived outside
+  # CI. De-rotting the full suite is tracked as the next Bước-1 sub-task in
+  # .agents/260706-0952-system-analysis-g1-g3; expand this allowlist as tests
+  # are reconciled to current boot output.
+  boot-suite:
+    name: Network Data-Path Integration (riscv64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: boot-suite
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+
+      - name: Build cells + kernel + disk images (gen_disk)
+        env:
+          CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          OBJCOPY: riscv64-unknown-elf-objcopy
+        run: pwsh ./gen_disk.ps1
+
+      - name: Run network data-path tests
+        # Allowlist by substring (OR semantics). --test-threads=2: each test
+        # boots its own QEMU and TCG is CPU-bound.
+        run: |
+          cd tests/integration
+          cargo test --test boot -- --test-threads=2 \
+            network_dhcp network_tcp_send network_curl network_tcp_listen
+
   security:
     name: Security Scan
     runs-on: ubuntu-24.04

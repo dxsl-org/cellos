@@ -264,6 +264,30 @@ tests/
 cargo test --test '*' --release
 ```
 
+### Definition of Done (runtime evidence, not checkboxes)
+
+> Ratified 2026-07-06 after the functional audit (a "23/23 complete" claim
+> re-scored to 12 done + 6 partial) and the boot.rs false-green incidents.
+
+A feature, phase, or fix is **done** only when ALL of:
+
+1. **Builds clean** on every architecture it targets (`cargo build --release`,
+   the arch feature matrix in CI).
+2. **Runs on QEMU with observable evidence**: a boot-log line, an integration
+   test, or a shell interaction proving the behavior — captured in the plan or
+   commit message. `cargo check` passing is NOT evidence of anything running.
+3. **Its integration test is wired into CI** (the `boot-suite` job or a
+   dedicated job). A test that only runs on one developer's machine rots —
+   the main suite once rotted 4 days because it lived outside CI.
+4. **Fails loud, never silent**: no silent-deny, silent-empty-reply, or
+   silent-skip paths in the feature OR its tests. `prerequisites_ok()` must
+   go through `ci_guard()`; degraded modes must log.
+5. **Status text updated in the same commit** (roadmap/plan frontmatter/docs
+   body) — stale "✅" markers poison every later planning session.
+
+Plans record status as: 📋 planned → 🔨 code-complete (builds, unverified) →
+✅ **verified** (runtime evidence linked). Never mark ✅ from 🔨 without a run.
+
 ---
 
 ## Comments & Documentation
