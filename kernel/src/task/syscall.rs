@@ -2874,17 +2874,36 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, capped) };
             let written = crate::task::drivers::virtio_rng::get_random(buf);
             if written > 0 { return Ok(written); }
-            // VirtIO-RNG unavailable — fill with xorshift32 seeded from mtime + caller_id.
-            // Not cryptographically secure, but satisfies getentropy(2) correctness contract.
-            let seed = super::system_ticks() as u32 ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
-            let mut state = if seed == 0 { 1 } else { seed };
-            for byte in buf.iter_mut() {
-                state ^= state << 13;
-                state ^= state >> 17;
-                state ^= state << 5;
-                *byte = state as u8;
+            // No true entropy source. Fail-closed by default: return 0 bytes so
+            // crypto callers (TLS ViRng / net-broker BrokerRng) hit their absent-
+            // device guard and panic instead of keying from predictable bytes.
+            // The xorshift32 fallback exists ONLY behind `dev-weak-rng` (G1 dev/
+            // QEMU posture, in default features) and warns once at first use.
+            #[cfg(feature = "dev-weak-rng")]
+            {
+                static WEAK_RNG_WARNED: core::sync::atomic::AtomicBool =
+                    core::sync::atomic::AtomicBool::new(false);
+                if !WEAK_RNG_WARNED.swap(true, core::sync::atomic::Ordering::Relaxed) {
+                    log::warn!(
+                        "[kernel] GetRandom: no VirtIO-RNG — serving WEAK xorshift32 \
+                         (dev-weak-rng). NOT cryptographically secure; never ship this."
+                    );
+                }
+                let seed = super::system_ticks() as u32
+                    ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
+                let mut state = if seed == 0 { 1 } else { seed };
+                for byte in buf.iter_mut() {
+                    state ^= state << 13;
+                    state ^= state >> 17;
+                    state ^= state << 5;
+                    *byte = state as u8;
+                }
+                Ok(capped)
             }
-            Ok(capped)
+            #[cfg(not(feature = "dev-weak-rng"))]
+            {
+                Ok(0)
+            }
         }
 
         Syscall::BlkReadAsync { sector, grant_id } => {
