@@ -216,6 +216,7 @@ def _embed_sig(elf_path: str, sig: bytes, out_path: str, objcopy: str) -> None:
         subprocess.run(
             [
                 objcopy,
+                f"--remove-section={SIG_SECTION}",   # strip stale sig (no-op if absent)
                 f"--add-section={SIG_SECTION}={sig_file}",
                 f"--set-section-flags={SIG_SECTION}=noload,readonly",
                 elf_path,

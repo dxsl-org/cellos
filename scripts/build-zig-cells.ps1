@@ -50,9 +50,9 @@ foreach ($cell in $cells) {
         if (Test-Path $elf) {
             Write-Output "cell:$name=$elf"
         } else {
-            Write-Warning "Zig cell $name: build succeeded but ELF not found at $elf"
+            Write-Warning "Zig cell ${name}: build succeeded but ELF not found at $elf"
         }
     } else {
-        Write-Warning "Zig cell $name: build failed (see output above)."
+        Write-Warning "Zig cell ${name}: build failed (see output above)."
     }
 }
