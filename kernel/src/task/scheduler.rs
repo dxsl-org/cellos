@@ -534,6 +534,15 @@ impl Scheduler {
                     // return register is regs[10], restored by sret when the task runs.
                     if timed_out {
                         task.trap_frame.regs[10] = 0;
+                        // Clear the last sender so the RecvTimeout syscall handler,
+                        // which reads current_caller after yield to build its return
+                        // value, sees "no sender" (0) on a genuine timeout instead of
+                        // the PREVIOUS sender. A stale tid here made every 200 ms
+                        // input-read timeout re-deliver the last keystroke's sender +
+                        // stale buffer, duplicating characters ("wget_out.txt" →
+                        // "wget_ooooo…"). Only the timeout branch clears it, so the
+                        // blocking Recv path (VFS request/reply) is untouched.
+                        task.current_caller = None;
                         task.deadline_misses = task.deadline_misses.saturating_add(1);
                         // Observability: an RT cell whose awaited message missed its deadline
                         // is a missed control-loop cycle — record it (no enforcement). Gated to

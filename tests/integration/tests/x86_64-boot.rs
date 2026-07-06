@@ -48,7 +48,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP x86_64: qemu-system-x86_64 not found (PATH or C:\\Program Files\\qemu\\)");
     }
-    iso_exists && qemu_ok
+    vicell_integration_tests::ci_guard(iso_exists && qemu_ok)
 }
 
 /// The kernel must emit its boot banner on x86_64.

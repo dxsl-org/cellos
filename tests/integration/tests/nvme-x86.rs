@@ -72,7 +72,7 @@ fn prerequisites_ok() -> bool {
              Install QEMU or set VIOS_QEMU_X86 to the binary path."
         );
     }
-    iso_ok && qemu_ok
+    vicell_integration_tests::ci_guard(iso_ok && qemu_ok)
 }
 
 /// Create a small zeroed raw disk image in the system temp directory.

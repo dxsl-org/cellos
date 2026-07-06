@@ -50,7 +50,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP: qemu-system-riscv64 not on PATH");
     }
-    kernel.exists() && qemu_ok
+    vicell_integration_tests::ci_guard(kernel.exists() && qemu_ok)
 }
 
 /// Boot the test-hooks kernel (no disk — embedded FS only, guarantees the

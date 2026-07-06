@@ -62,7 +62,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP tls-gate: qemu-system-riscv64 not on PATH");
     }
-    kernel_ok && disk_ok && qemu_ok
+    vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok)
 }
 
 /// G14 gate (NEG-untrusted): default build must reject a public HTTPS cert.

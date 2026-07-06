@@ -115,7 +115,7 @@ fn prerequisites_ok() -> bool {
         );
     }
 
-    kernel_ok && disk_ok && qemu_ok && python_ok && mock_ok && smoke_ok
+    vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok && python_ok && mock_ok && smoke_ok)
 }
 
 /// Spawn the mock proxy on the host and wait until it accepts TCP connections.

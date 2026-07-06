@@ -43,7 +43,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP virtio-x86: qemu-system-x86_64 not found");
     }
-    iso_exists && qemu_ok
+    vicell_integration_tests::ci_guard(iso_exists && qemu_ok)
 }
 
 /// Create a small raw disk image filled with a known pattern for VirtIO BLK read testing.

@@ -47,7 +47,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP: qemu-system-riscv64 not on PATH");
     }
-    kernel_exists && qemu_ok
+    vicell_integration_tests::ci_guard(kernel_exists && qemu_ok)
 }
 
 /// Phase E: boot the shell-test kernel and wait for all scenario tests to pass.

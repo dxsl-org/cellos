@@ -48,7 +48,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP nic-x86: qemu-system-x86_64 not on PATH");
     }
-    iso_ok && qemu_ok
+    vicell_integration_tests::ci_guard(iso_ok && qemu_ok)
 }
 
 fn make_nvme_disk() -> PathBuf {

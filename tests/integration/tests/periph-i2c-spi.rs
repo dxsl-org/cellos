@@ -60,7 +60,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP periph-i2c-spi: qemu-system-aarch64 not on PATH");
     }
-    kernel_exists && disk_exists && qemu_ok
+    vicell_integration_tests::ci_guard(kernel_exists && disk_exists && qemu_ok)
 }
 
 /// Track C — SPI TX path: the spi-demo cell must write bytes via bit-bang GPIO

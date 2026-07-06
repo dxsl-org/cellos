@@ -56,7 +56,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP periph-can-pwm-adc: qemu-system-aarch64 not on PATH");
     }
-    kernel_exists && disk_exists && qemu_ok
+    vicell_integration_tests::ci_guard(kernel_exists && disk_exists && qemu_ok)
 }
 
 /// PWM bit-bang demo: channel 6/pin 6 on PL061, 50 Hz.

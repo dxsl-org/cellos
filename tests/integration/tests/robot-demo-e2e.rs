@@ -69,7 +69,7 @@ fn prerequisites_ok() -> bool {
     if !qemu_ok {
         eprintln!("SKIP robot-demo-e2e: qemu-system-aarch64 not on PATH");
     }
-    kernel_exists && disk_exists && qemu_ok
+    vicell_integration_tests::ci_guard(kernel_exists && disk_exists && qemu_ok)
 }
 
 /// G1 graduation criterion 8 — primary CI gate.

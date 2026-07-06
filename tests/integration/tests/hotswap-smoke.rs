@@ -47,7 +47,7 @@ fn prerequisites_ok() -> bool {
     if !kernel_ok { eprintln!("SKIP: kernel not built ({})", kernel_path()); }
     if !disk_ok   { eprintln!("SKIP: disk_v3.img missing — run ./gen_disk.ps1"); }
     if !qemu_ok   { eprintln!("SKIP: qemu-system-riscv64 not on PATH"); }
-    kernel_ok && disk_ok && qemu_ok
+    vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok)
 }
 
 /// P04: hotswap-demo-v1 spawns and prints its startup banner.

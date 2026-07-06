@@ -78,7 +78,7 @@ fn prerequisites_ok_with_disk() -> bool {
     if !qemu_ok() {
         eprintln!("SKIP: qemu-system-riscv64 not on PATH");
     }
-    kernel.exists() && disk.exists() && qemu_ok()
+    vicell_integration_tests::ci_guard(kernel.exists() && disk.exists() && qemu_ok())
 }
 
 /// S1–S5: mount, write+read, listdir, mkdir, unlink.

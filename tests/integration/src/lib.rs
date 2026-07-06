@@ -17,6 +17,25 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Prerequisite gate: silent-skip locally, HARD FAIL in CI.
+///
+/// Every test suite starts with `if !prerequisites_ok() { return; }` so devs
+/// without a built kernel/disk aren't blocked. In CI that same pattern once
+/// turned a missing artifact into an all-green run with zero tests executed —
+/// the suite rotted for days undetected. Wrap the prerequisite expression in
+/// this guard: locally it just returns the value; under `CI=…` a missing
+/// prerequisite panics so the job goes red instead of silently vacuous.
+pub fn ci_guard(ok: bool) -> bool {
+    if !ok && std::env::var_os("CI").is_some() {
+        panic!(
+            "prerequisites missing while CI is set — the artifacts this suite \
+             needs (kernel / disk image / QEMU) were not built. A silent skip \
+             here would make the job green with zero tests run."
+        );
+    }
+    ok
+}
+
 /// Resolve the qemu-system-riscv64 binary.
 ///
 /// Order: `$ViCell_QEMU` env override → bare name on PATH → the default Windows
