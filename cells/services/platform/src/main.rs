@@ -27,11 +27,15 @@
 mod scan;
 
 use ostd::app::{AppContext, AppEvent};
-use ostd::io::println;
 use ostd::mmio::request_region;
 use ostd::syscall::sys_exit;
+use ostd::io::println;
 
-// Syscall allowlist: only the syscalls this cell actually calls.
+/// ECAM bus-0 window size: 1 MiB (32 devices × 8 functions × 4 KiB).
+const ECAM_BUS0_SIZE: usize = 0x10_0000;
+
+// Syscall allowlist stays explicit: app_entry!'s generated set (app_syscall_set)
+// lacks RequestMmio/RegisterPcieBar/RegisterPciDevice, which this cell needs.
 // Must come before run_app! (run_app! does not emit VICELL_SYSCALLS).
 api::declare_syscalls![Log, RequestMmio, RegisterPcieBar, RegisterPciDevice];
 
@@ -41,19 +45,15 @@ api::declare_manifest!(
     gpio = false, uart = false, hypervisor = false
 );
 
-/// ECAM bus-0 window size: 1 MiB (32 devices × 8 functions × 4 KiB).
-const ECAM_BUS0_SIZE: usize = 0x10_0000;
+// One-shot cell: scan ECAM in Init, then exit before the recv loop starts.
+// run_app! fires AppEvent::Init once before the first sys_recv (run_with_lifecycle);
+// sys_exit(0) is -> ! so the event loop never runs.
+ostd::run_app!(on_event);
 
-ostd::run_app!(handle_event);
-
-fn handle_event(_ctx: &mut AppContext, event: AppEvent) {
-    match event {
-        AppEvent::Init => {
-            scan_ecam();
-            sys_exit(0);
-        }
-        AppEvent::Shutdown | AppEvent::ShutdownWith { .. } => sys_exit(0),
-        _ => {}
+fn on_event(_ctx: &mut AppContext, event: AppEvent) {
+    if let AppEvent::Init = event {
+        scan_ecam();
+        sys_exit(0);
     }
 }
 

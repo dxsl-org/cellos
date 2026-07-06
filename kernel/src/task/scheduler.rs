@@ -571,6 +571,20 @@ impl Scheduler {
                     "[heartbeat] task {} (cell {}) missed liveness deadline — terminating (hung)",
                     tid, cell_raw
                 );
+                // Dump the hung task's park point (Sending{target}/Recv{mask}/…) —
+                // a silent kill costs hours of triage; the blocked-on peer's state
+                // is the single most useful forensic fact for IPC hangs.
+                if let Some(t) = self.tasks.get(&tid) {
+                    log::error!("[heartbeat] task {} state at kill: {:?}", tid, t.state);
+                    if let TaskState::Sending { target, .. } = t.state {
+                        if let Some(tt) = self.tasks.get(&target) {
+                            log::error!("[heartbeat] send target {} state: {:?} pending_msgs={}",
+                                target, tt.state, tt.pending_msgs.len());
+                        } else {
+                            log::error!("[heartbeat] send target {} no longer exists", target);
+                        }
+                    }
+                }
                 crate::audit::log_event(
                     crate::audit::AuditEvent::CellHung,
                     &crate::audit::encode_u32x2(cell_raw as u32, tid as u32),
@@ -615,8 +629,10 @@ impl Scheduler {
                                             // file is Box<dyn ViFile>
                                             task.open_files.insert(*fd, FileHandle::new(file));
 
-                                            // Set return value (a0 / regs[10])
-                                            task.trap_frame.regs[10] = res.unwrap_or(0) as _; // TODO: Handle Error Properly (negative?)
+                                            // Set return value (a0 / regs[10]); errors use the
+                                            // syscall ABI sentinel usize::MAX (same encoding as
+                                            // ViCell_syscall_dispatch), not a fake 0-byte success.
+                                            task.trap_frame.regs[10] = res.unwrap_or(usize::MAX) as _;
 
 
                                         // Wake task

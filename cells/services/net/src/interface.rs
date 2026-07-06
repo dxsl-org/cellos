@@ -15,8 +15,13 @@ use smoltcp::{
     time::Instant,
 };
 use ostd::syscall::{
-    sys_lookup_service, sys_net_tx, sys_recv, sys_send, SyscallResult,
+    sys_lookup_service, sys_net_tx, sys_recv_timeout, sys_send, SyscallResult,
 };
+
+/// Max scheduler ticks (10 ms each) to wait for a Driver Cell reply.
+/// Bounded so a wedged/killed driver degrades to "no frames" instead of
+/// parking net in Recv past its 5 s heartbeat (watchdog would kill net).
+const DRV_REPLY_TIMEOUT_TICKS: u64 = 20; // 200 ms
 
 /// Maximum Ethernet frame size (VirtIO net header is prepended by kernel).
 const MAX_FRAME: usize = 1514;
@@ -143,8 +148,10 @@ impl VirtioNetDevice {
             SyscallResult::Ok(_)  => {}
         }
         let mut mac = [0u8; 6];
-        sys_recv(tid, &mut mac);
-        Some(mac)
+        match sys_recv_timeout(tid, &mut mac, DRV_REPLY_TIMEOUT_TICKS) {
+            SyscallResult::Ok(s) if s == tid => Some(mac),
+            _ => None, // timeout or misdelivery — treat as unavailable
+        }
     }
 }
 
@@ -157,8 +164,18 @@ fn nic_rx_from_cell(tid: usize, buf: &mut [u8]) -> usize {
         SyscallResult::Ok(_)  => {}
     }
     // Reply: [len_lo, len_hi] ++ frame_bytes. Total ≤ 2 + MAX_FRAME.
+    // Bounded wait: a blocking sys_recv here parked net past its 5 s heartbeat
+    // whenever the driver dropped a request (watchdog kill → restart loop).
+    // On timeout (Ok(0)) treat as "no frame ready" and move on.
     let mut reply = [0u8; 2 + MAX_FRAME];
-    sys_recv(tid, &mut reply);
+    let sender = match sys_recv_timeout(tid, &mut reply, DRV_REPLY_TIMEOUT_TICKS) {
+        SyscallResult::Ok(s) => s,
+        _ => 0,
+    };
+    if sender != tid {
+        // Timeout (sender==0) or G18 misdelivery — no frame this round.
+        return 0;
+    }
     let len = u16::from_le_bytes([reply[0], reply[1]]) as usize;
     if len == 0 || len > buf.len() { return 0; }
     buf[..len].copy_from_slice(&reply[2..2 + len]);
@@ -187,14 +204,16 @@ impl TxToken for NetTxToken {
         let result = f(&mut buf);
         // Route to e1000 Driver Cell when registered; otherwise kernel VirtIO.
         if let Some(tid) = e1000_tid() {
-            // Tx request: [0x00] ++ frame_bytes.
-            let mut req = alloc::vec![OP_TX];
+            // Tx request: [0x00, len_lo, len_hi] ++ frame_bytes — explicit length
+            // because raw IPC hands the driver its whole recv buffer (no count).
+            let flen = buf.len() as u16;
+            let mut req = alloc::vec![OP_TX, (flen & 0xFF) as u8, (flen >> 8) as u8];
             req.extend_from_slice(&buf);
             match sys_send(tid, &req) {
                 SyscallResult::Ok(_) => {
-                    // Discard the 1-byte status reply (fire-and-continue).
+                    // Bounded wait for the 1-byte status reply — see nic_rx_from_cell.
                     let mut status = [0u8; 1];
-                    sys_recv(tid, &mut status);
+                    let _ = sys_recv_timeout(tid, &mut status, DRV_REPLY_TIMEOUT_TICKS);
                 }
                 SyscallResult::Err(_) => {}
             }

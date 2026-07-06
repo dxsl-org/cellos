@@ -24,7 +24,7 @@ mod dispatch;
 
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_register_nic_driver, sys_send};
+use ostd::syscall::{sys_register_nic_driver, sys_try_send};
 use device::NetDevice;
 use dispatch::{handle, NicReply, REPLY_BUF};
 
@@ -36,7 +36,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             // Probe VirtIO MMIO slots for a Network device.
             let Some(dev) = device::find_and_init_net() else {
                 // No VirtIO MMIO NIC on this platform — exit gracefully.
-                // The kernel's virtio_net fallback remains active.
+                // The e1000 Driver Cell handles PCIe platforms.
                 ostd::syscall::sys_exit(0);
             };
 
@@ -45,24 +45,35 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             let _ = sys_register_nic_driver();
 
             *STATE.lock() = Some(dev);
+            ostd::io::println("[virtio-net] ready");
         }
 
-        AppEvent::Message { sender_tid, data } => {
+        // The net service speaks the raw NIC wire protocol (no 0xAC App-SDK
+        // envelope), so requests arrive as RawMessage. Accept Message too for
+        // envelope-wrapped senders — the dispatch payload layout is identical.
+        AppEvent::Message { sender_tid, data }
+        | AppEvent::RawMessage { sender_tid, data } => {
+            // Replies use NON-blocking try_send: the net service waits with a
+            // 200 ms recv timeout — if it already gave up, a blocking send would
+            // park this cell in Sending{net} forever, desyncing every later
+            // request/reply pair (net then blocks sending to us → watchdog kills
+            // net → restart loop). Dropping a missed reply is safe: net treats
+            // it as a timeout and retries (DHCP/TCP are loss-tolerant).
             let mut out_buf = [0u8; REPLY_BUF];
             if let Some(dev) = STATE.lock().as_mut() {
                 match handle(dev, data.as_ref(), &mut out_buf) {
                     NicReply::Status(code) => {
-                        let _ = sys_send(sender_tid, &[code]);
+                        let _ = sys_try_send(sender_tid, &[code]);
                     }
                     NicReply::Frame { len, buf } => {
-                        let _ = sys_send(sender_tid, &buf[..2 + len]);
+                        let _ = sys_try_send(sender_tid, &buf[..2 + len]);
                     }
                     NicReply::Mac(mac) => {
-                        let _ = sys_send(sender_tid, &mac);
+                        let _ = sys_try_send(sender_tid, &mac);
                     }
                 }
             } else {
-                let _ = sys_send(sender_tid, &[1u8]);
+                let _ = sys_try_send(sender_tid, &[1u8]);
             }
         }
 

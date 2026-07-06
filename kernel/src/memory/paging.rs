@@ -149,14 +149,24 @@ pub fn init_kernel_paging(
             .map_err(|_| PageTableError::OutOfMemory)?;
         root_table.identity_map(plic_base, plic_base + plic_size, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        // Make the UART+VirtIO MMIO range USER-accessible so Driver Cells (virtio-net, etc.)
-        // can access VirtIO MMIO slots (0x10001000–0x10008000) from U-mode.
-        // UART at 0x10000000 is also exposed; LBI (UartCap) prevents unauthorized use.
+        // UART page (0x10000000..0x10001000): kernel-only — S-mode with SUM=0 cannot
+        // access USER pages, so the kernel UART driver (uart::init, poll_rhr, IRQ handler)
+        // needs a non-USER mapping. Cells use sys_log / SBI; they do not touch UART MMIO.
+        if uart_region != 0 {
+            root_table.identity_map(uart_region, uart_region + 0x1000, mmio_flags, &mut alloc_fn)
+                .map_err(|_| PageTableError::OutOfMemory)?;
+        }
+        // VirtIO MMIO (0x10001000–0x10010000): USER-accessible for Driver Cells (U-mode).
+        // The kernel's tech-debt VirtIO drivers (virtio_blk) also access these slots from
+        // S-mode. With sstatus.SUM=1 (set in main.rs right after activate_paging), S-mode
+        // can access USER-mapped pages throughout the kernel lifetime. SUM=1 is safe and
+        // intentional in Cellos's SAS+LBI model — Rust type safety provides isolation.
         let rv_cell_mmio = PageFlags::from_bits(
             PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
                 | PageFlags::USER | PageFlags::ACCESSED | PageFlags::DIRTY,
         );
-        root_table.identity_map(uart_region, uart_region + 0x10000, rv_cell_mmio, &mut alloc_fn)
+        let virtio_start = if uart_region != 0 { uart_region + 0x1000 } else { 0x10001000 };
+        root_table.identity_map(virtio_start, virtio_start + 0xF000, rv_cell_mmio, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // Goldfish RTC (QEMU virt: 0x101000). Without this, sys_get_wall_secs/
         // sys_get_wall_time (op 2/3) dereference an unmapped MMIO address in

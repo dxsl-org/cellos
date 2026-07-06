@@ -159,7 +159,11 @@ macro_rules! run_app {
     ($handler:expr) => {
         #[no_mangle]
         pub fn main() {
-            $crate::app::AppContext::new().run($handler);
+            // run_with_lifecycle (not run) so AppEvent::Init fires once before the
+            // first sys_recv — Driver Cells (virtio-net/gpu, nvme, e1000) do all
+            // device probing + service registration in their Init arm. Matches the
+            // app_entry! contract and the documented run_app! behavior.
+            $crate::app::AppContext::new().run_with_lifecycle($handler);
         }
     };
 }

@@ -275,6 +275,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         log_info("Activating paging...");
         unsafe { memory::paging::activate_paging(root_table_phys); }
         log_info("Paging activated");
+        // Set sstatus.SUM=1 so S-mode (kernel) can access USER-mapped pages throughout
+        // the kernel lifetime. VirtIO/peripheral MMIO is mapped USER=1 for Driver Cells
+        // (U-mode). Without SUM=1 the kernel's tech-debt VirtIO drivers fault at early-boot
+        // MMIO init. In Cellos's SAS+LBI model security comes from Rust type safety, not
+        // hardware USER-bit separation for kernel-vs-cell — SUM=1 is safe and intentional.
+        #[cfg(target_arch = "riscv64")]
+        // SAFETY: csrs modifies sstatus.SUM (bit 18). Safe to set for kernel S-mode code.
+        unsafe { core::arch::asm!("csrs sstatus, {sum}", sum = in(reg) 0x40000_usize, options(nostack)); }
     }
     #[cfg(target_arch = "x86_64")]
     {

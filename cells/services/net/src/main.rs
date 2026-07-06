@@ -15,7 +15,7 @@ api::declare_manifest!(block_io = false, network = true, spawn = false);
 
 // Narrow syscall allowlist -- kernel enforces this at dispatch (Phase 27).
 api::declare_syscalls![
-    Send, Recv, TryRecv, Reply, Log, Heartbeat, LookupService,
+    Send, Recv, TryRecv, RecvTimeout, Reply, Log, Heartbeat, LookupService,
     NetTx, NetRx, GetTime,
     StateStash, StateRestore,
     GetRandom, WaitForEvent,

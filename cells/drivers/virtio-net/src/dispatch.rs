@@ -4,7 +4,10 @@
 //!   byte 0: op  (0 = Tx, 1 = Rx, 2 = GetMac)
 //!   byte 1+: payload
 //!
-//! Tx request:   [0x00] ++ frame_bytes
+//! Tx request:   [0x00, len_lo, len_hi] ++ frame_bytes
+//!   The explicit length is REQUIRED: raw IPC delivery hands the receiver its
+//!   whole 4096-byte recv buffer with no byte count, so the frame boundary
+//!   cannot be inferred from the message itself.
 //! Rx request:   [0x01]
 //! GetMac:       [0x02]
 //!
@@ -44,20 +47,23 @@ pub fn handle<'a>(
 
     match data[0] {
         OP_TX => {
-            let frame = &data[1..];
-            if frame.is_empty() { return NicReply::Status(1); }
+            // [op, len_lo, len_hi, frame...] — length header bounds the frame
+            // inside the (padded) IPC buffer.
+            if data.len() < 3 { return NicReply::Status(1); }
+            let len = u16::from_le_bytes([data[1], data[2]]) as usize;
+            if len == 0 || len > FRAME_BUF || 3 + len > data.len() {
+                return NicReply::Status(1);
+            }
+            let frame = &data[3..3 + len];
             if dev.send(frame) { NicReply::Status(0) } else { NicReply::Status(1) }
         }
 
         OP_RX => {
-            // 1. Try immediate receive.
-            let mut n = dev.try_recv(&mut out_buf[2..]);
-
-            // 2. If nothing ready, block on IRQ then try once more.
-            if n == 0 {
-                n = dev.wait_recv(&mut out_buf[2..]);
-            }
-
+            // Non-blocking: return whatever is in the VirtIO RX ring right now (0 = empty).
+            // The net service's sys_wait_for_event(NET_RX) path handles blocking-wait
+            // for the next packet; blocking here would deadlock pump_rx_split when the
+            // second iteration finds an empty ring while a pending TcpSend is queued.
+            let n = dev.try_recv(&mut out_buf[2..]);
             out_buf[0] = (n & 0xFF) as u8;
             out_buf[1] = ((n >> 8) & 0xFF) as u8;
             NicReply::Frame { len: n, buf: out_buf }

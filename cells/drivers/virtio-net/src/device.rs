@@ -65,13 +65,44 @@ unsafe impl Hal for CellHal {
         unsafe { NonNull::new_unchecked(paddr as *mut u8) }
     }
 
-    unsafe fn share(buffer: NonNull<[u8]>, _dir: BufferDirection) -> PhysAddr {
-        // SAS: virtual address IS the physical address; no IOMMU translation needed.
-        buffer.as_ptr() as *const u8 as PhysAddr
+    unsafe fn share(buffer: NonNull<[u8]>, dir: BufferDirection) -> PhysAddr {
+        // Cell image memory (heap/.bss/stack of a loaded cell) lives at loader
+        // VAs (e.g. 0x1_0800_0000) that are NOT identity-mapped — the device
+        // cannot DMA there (QEMU maps the bogus address as zero-length → device
+        // marked broken). Bounce through an identity-mapped grant page instead.
+        // Grant pages satisfy vaddr == paddr, so the returned base is both.
+        let len = buffer.len();
+        let bounce = sys_grant_alloc(len).expect("[virtio-net] bounce OOM");
+        if matches!(dir, BufferDirection::DriverToDevice | BufferDirection::Both) {
+            // SAFETY: buffer is a live slice owned by virtio-drivers for the DMA
+            // duration; bounce is a fresh grant allocation of >= len bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    buffer.as_ptr() as *const u8,
+                    bounce as *mut u8,
+                    len,
+                );
+            }
+        }
+        bounce as PhysAddr
     }
 
-    unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _dir: BufferDirection) {
-        // Identity mapping: no IOMMU to flush.
+    unsafe fn unshare(paddr: PhysAddr, buffer: NonNull<[u8]>, dir: BufferDirection) {
+        // Copy device-written bytes back into the driver's buffer, then release
+        // the bounce page. paddr == grant base (see share()).
+        if matches!(dir, BufferDirection::DeviceToDriver | BufferDirection::Both) {
+            let len = buffer.len();
+            // SAFETY: paddr is the grant page returned by share() (still mapped);
+            // buffer is the same slice passed to share(), valid for len bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    paddr as *const u8,
+                    buffer.as_ptr() as *mut u8,
+                    len,
+                );
+            }
+        }
+        sys_grant_free(paddr);
     }
 }
 

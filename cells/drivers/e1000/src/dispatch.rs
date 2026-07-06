@@ -4,7 +4,10 @@
 //!   byte 0: op  (0 = Tx, 1 = Rx, 2 = GetMac)
 //!   byte 1+: payload
 //!
-//! Tx request:   [0x00] ++ frame_bytes (Ethernet frame, no FCS)
+//! Tx request:   [0x00, len_lo, len_hi] ++ frame_bytes (Ethernet frame, no FCS)
+//!   The explicit length is REQUIRED: raw IPC delivery hands the receiver its
+//!   whole 4096-byte recv buffer with no byte count, so the frame boundary
+//!   cannot be inferred from the message itself.
 //! Rx request:   [0x01]
 //! GetMac:       [0x02]
 //!
@@ -42,8 +45,14 @@ pub fn handle<'a>(
     if data.is_empty() { return NicReply::Status(1); }
     match data[0] {
         OP_TX => {
-            let frame = &data[1..];
-            if frame.is_empty() { return NicReply::Status(1); }
+            // [op, len_lo, len_hi, frame...] — length header bounds the frame
+            // inside the (padded) IPC buffer.
+            if data.len() < 3 { return NicReply::Status(1); }
+            let len = u16::from_le_bytes([data[1], data[2]]) as usize;
+            if len == 0 || len > BUF_SIZE || 3 + len > data.len() {
+                return NicReply::Status(1);
+            }
+            let frame = &data[3..3 + len];
             match ctrl.send_frame(frame) {
                 Ok(_)  => NicReply::Status(0),
                 Err(_) => NicReply::Status(1),
