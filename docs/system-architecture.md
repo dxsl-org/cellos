@@ -261,16 +261,17 @@ VirtIO devices on QEMU `virt` machine use PLIC IRQs with slot-based numbering:
 | VirtIO Net | 2 | 0x1000_3000 | 3 |
 | ... | i | 0x1000_(i+1)000 | i+1 |
 
-**IRQ Dispatch**: `kernel/src/interrupt.rs::vi_handle_virtio_irq(irq: u32)` — kernel dispatcher forwards to Driver Cells
+**IRQ Dispatch**: `kernel/src/task/drivers/virtio_common.rs::vi_handle_virtio_irq(irq: u32)` — a single generic router (no per-device arms). It signals whichever Driver Cell registered for that IRQ via `sys_wait_irq`; the kernel drives no VirtIO device logic itself.
 
 ```rust
-pub fn vi_handle_virtio_irq(irq: u32) -> bool {
-    match irq {
-        1 => virtio_blk::block_device_irq(),     // VirtIO block (slot 0) → forwarded to disk Driver Cell
-        2 => virtio_input::input_device_irq(),   // VirtIO input (slot 1) → forwarded to input Driver Cell
-        3 => virtio_net::net_device_irq(),       // VirtIO net (slot 2) → forwarded to net Driver Cell
-        _ => false,  // Unknown IRQ
-    }
+#[no_mangle]
+pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
+    // A Driver Cell registered for this IRQ via sys_wait_irq — signal it
+    // (sets IRQ_PENDING + writes VirtIO InterruptACK) and return.
+    if irq_wait::has_waiter(irq as u8) { irq_wait::signal_irq(irq as u8); return; }
+    // Input slot: ACK to prevent an interrupt storm before the input Cell is up.
+    if input_irq_ack::ack_if_input(irq) { return; }
+    log::warn!("[virtio] unhandled IRQ {} — no registered device for this slot", irq);
 }
 ```
 
@@ -282,10 +283,10 @@ pub fn vi_handle_virtio_irq(irq: u32) -> bool {
 
 **Note**: As of Phase 01 (2026-06-24, Kernel Boundary Law enforcement), device logic lives in Driver Cells (`cells/drivers/`), not kernel code. The kernel only handles interrupt dispatch and wakeup.
 
-**Driver residency (2026-07-07)** — migrated to Driver Cells: **virtio_net, virtio_gpu, virtio_input, virtio_sound, e1000, nvme**. The kernel retains only:
-- **boot `virtio_blk`** — bootstrap root-of-trust; needed to load the very first Cell before a VFS/disk Driver Cell can exist (`docs/specs/15-kernel-boundary.md` §2 Category C). Migration to `cells/drivers/virtio-blk/` is tracked tech debt, blocked on the loader dependency.
-- **`mmc`** — descoped (no SDHCI on QEMU to validate against).
+**Driver residency (2026-07-07, post G2 loader redesign)** — migrated to Driver Cells: **virtio_blk, virtio_net, virtio_gpu, virtio_input, virtio_sound, e1000, nvme**. The kernel drives **no block device** — `virtio_blk.rs` + `virtio_pci.rs` were deleted; `cells/drivers/virtio-blk/` owns the disk and serves `service::BLOCK_DRIVER` (bootstrap cells load from the VIFS1 RAM ramdisk, so no block device is needed before the first Cell exists; see the changelog entry + `docs/specs/15-kernel-boundary.md`). The kernel retains only:
+- **`mmc`** — descoped G2 (no SDHCI on QEMU to validate against; genuine tech debt).
 - **IOMMU init + `map_dma_for_cell`** — whitelisted: the only hardware boundary between Driver Cells and physical memory in a Single Address Space.
+- **`NullBlock` fallback** — a stub block device so boot-time reads (snapshot restore, `verify_mbr`) degrade gracefully when no block Cell has claimed the device yet.
 
 **Interrupt Flow (Correct Pattern)**:
 ```

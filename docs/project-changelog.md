@@ -4,6 +4,38 @@
 
 ---
 
+## [2026-07-07] G2 loader redesign — kernel drives NO block hardware (RC-4 closed)
+
+### Summary
+Shrank the kernel from owning a full `virtio_blk` block driver to owning **no block driver at all**. The `virtio-blk` Driver Cell now owns the VirtIO block device (MMIO + DMA) and serves all sector I/O via `service::BLOCK_DRIVER`. This closes the last open thread (RC-4) of the Kernel Boundary Law (`docs/specs/15-kernel-boundary.md`): every device driver — block included — is now a Cell.
+
+The former chicken-and-egg (the device holding cell ELFs must be readable before the first Cell exists) was **dissolved, not worked around**:
+- **Bootstrap cells** (`/bin/platform`, `/bin/block`, `/bin/vfs`, `/bin/config`, `/bin/shell`) load from a **VIFS1 RAM ramdisk** baked into `kernel_fs.img` — no block device touched pre-first-Cell.
+- **All other cells** live in a disk **FAT cell-store** (`PART_CELLSTORE` partition), served by the Block Cell through VFS `/bin`, and are spawned post-boot via the new **`sys_spawn_from_elf`** syscall (238): VFS reads the ELF into a grant → kernel gates + loads it.
+
+### Phases Complete
+
+| Phase | Artifact | Commit |
+|---|---|---|
+| **P01+02** | Ramdisk bootstrap (`early.rs` VIFS1-first) + `cells/drivers/virtio-blk/` Driver Cell (DRIVER_OK self-guard) | `e62bd217` |
+| **P03** | Disk FAT cell-store + `/bin` BinOverlay (VIFS1 ∪ cell-store); `PART_CELLSTORE` disk layout | `da8df55f` |
+| **P04** | `sys_spawn_from_elf` (238) + `ReadFileGrant` VFS op + `spawn_from_path` VFS routing w/ bootstrap fallback | `e8060bc9`, `62cb2d4f`, `92fc4e69` |
+| **P05** | Device handover — kernel gates `virtio_blk::init_driver`; Block Cell claims device | `8bf080e7` |
+| **P06** | Delete kernel `virtio_blk.rs` + `virtio_pci.rs` (459 LOC); VirtIO IRQ router relocated to `virtio_common.rs` | `54362101` |
+| **P08 (docs)** | spec-15 reconciled; CLAUDE.md + changelog + memory | `d4fd9f98` |
+
+### Verification
+riscv64 QEMU boot: `[virtio-blk] ready`, 2 FAT mounts via the cell, 11 `SpawnFromElf` loads (incl. `/bin/net` @455 KB), 0 unhandled VirtIO IRQs, shell prompt reached, no regressions. All 3 architectures (riscv64 / x86_64 / aarch64) compile clean.
+
+### Notes / Deferred
+- **aarch64 + x86 boot regression** — both compile clean; boot-verified only on riscv64 this session (needs multi-arch QEMU harness).
+- **Phase 07 (scoped-SUM narrowing)** — deferred to its own spike-first plan (drop whole-lifetime `sstatus.SUM=1`; cross-cutting).
+- **New syscall lesson**: adding a syscall requires BOTH the `ViSyscall` enum discriminant AND an arm in the manual `ViSyscall::from()` match (`libs/api/src/abi/syscall.rs`) — the missing decode arm silently returned `Err` from `sys_spawn_from_elf` until fixed.
+
+Plan: `.agents/260707-1726-g2-loader-redesign/plan.md`
+
+---
+
 ## [2026-06-29] Fix: shell typing dead on serial console — burst keystroke loss
 
 ### Summary

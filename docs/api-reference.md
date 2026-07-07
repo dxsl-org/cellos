@@ -64,6 +64,13 @@ pub enum ViSyscall {
     Exit = 60,      // Terminate task
     Yield = 104,    // Voluntary context switch
 
+    /// Spawn a cell from ELF bytes already in a page grant (G2 loader redesign).
+    /// The primary path for non-bootstrap cells: VFS reads the ELF from the disk
+    /// cell-store into a grant, then the kernel gates + loads the BYTES (same
+    /// `spawn_gated()` signature + measurement checks as boot-path spawns).
+    /// ABI: a0 = grant_id, a1 = len, a2/a3 = path_hint ptr/len (advisory).
+    SpawnFromElf = 238,
+
     // === Logging (50-59) ===
     Log = 11,       // Kernel logging
 

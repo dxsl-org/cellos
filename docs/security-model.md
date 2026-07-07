@@ -28,7 +28,7 @@ relies on:
 |--------|-----------|--------|
 | Cell writes to another Cell's memory | SAS + Rust ownership; no `unsafe` in cells/ | ✅ Mitigated |
 | Cell modifies a revoked capability | Kernel removes CapId from table on Close; subsequent ops return PermissionDenied | ✅ Mitigated |
-| Attacker modifies disk image to inject malicious ELF | Every spawned ELF is SHA-256 measured into an append-only measurement log (IMA model, `kernel/src/measurement_log.rs`) **and** Ed25519 signature-verified at `spawn_from_path()` before scheduling (`kernel/src/signing.rs` → gated in `kernel/src/loader.rs`). ⚠️ G1 uses a dev-seed signer key (`CELL_SIGNER_PUBKEY`); prod must provision a real key | ✅ Mitigated |
+| Attacker modifies disk image to inject malicious ELF | Every spawned ELF is SHA-256 measured into an append-only measurement log (IMA model, `kernel/src/measurement_log.rs`) **and** Ed25519 signature-verified at the unified `spawn_gated()` gate before scheduling (`kernel/src/signing.rs` → `kernel/src/loader.rs`). The gate runs on the ELF **bytes**, so the source is irrelevant to trust: both the boot/bootstrap path (`spawn_from_path` → ramdisk/VIFS1) and the post-boot **grant-fed `sys_spawn_from_elf`** path (VFS reads the disk cell-store into a grant) pass through the same signature + measurement checks — a tampered cell-store ELF is rejected identically. ⚠️ G1 uses a dev-seed signer key (`CELL_SIGNER_PUBKEY`); prod must provision a real key | ✅ Mitigated |
 
 ### Repudiation
 | Threat | Mitigation | Status |
