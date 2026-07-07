@@ -149,21 +149,21 @@ because they are needed to load the first Cells.
 | Mechanism | Desired final home | Why still in kernel |
 |-----------|-------------------|---------------------|
 | ELF loader (minimal) | Boot Cell | Cannot use a Cell to load the first Cell |
-| BootFS (FAT16 kernel-embedded) | Boot Cell / VFS Cell | VFS Cell needs a filesystem to load from before VFS is available |
-| **Boot block device** (`virtio_blk` + its `virtio_pci` transport on x86) | Minimal boot reader in kernel + a Block Driver Cell for post-boot I/O (G2) | `loader.rs:spawn_from_path → block::read_sector` runs on EVERY spawn; the block device that holds the cell ELFs must be readable **before the first Cell exists**. A Block Driver Cell cannot serve the read that loads the Block Driver Cell. Same class as the ELF loader / BootFS above — a bootstrap root-of-trust (criterion **(c)**), **not** a §3 driver violation. |
+| BootFS (FAT16 kernel-embedded) | Boot Cell / VFS Cell | VFS Cell needs a filesystem to load from before VFS is available. Bootstrap cells (platform, block, vfs, config, shell) load from this RAM image — **not** the block device. |
 | ACPI minimal parse (MADT + DMAR tables only) | Platform Cell | IOMMU init needs DMAR before any Cell spawns |
 
 **Boot Cells (future):** Once a trusted Boot Cell infrastructure exists, ACPI full parsing
 and PCIe ECAM enumeration move there. The kernel retains only what is needed to load the
 Boot Cell itself.
 
-> **Why NVMe/e1000 are Cells but `virtio_blk` is not** — a frequent confusion. NVMe and
-> e1000 are *secondary* devices reached only after cells are running, so they migrated
-> cleanly. `virtio_blk` is the *boot* device on the loader's critical path: it is read to
-> load every cell, including any would-be block Driver Cell. The G2 goal is not "migrate
-> virtio_blk" but "shrink the kernel to a **minimal** boot reader (ramdisk / first-sectors)
-> and serve **post-boot** block I/O from a Cell" — an optimization of the bootstrap, not
-> the removal of a violation.
+> **`virtio_blk` migrated to a Driver Cell (G2 loader redesign, 2026-07-07).** It was once
+> considered a bootstrap root-of-trust — the boot device on the loader's critical path.
+> The redesign dissolved that chicken-and-egg: bootstrap cells now load from the **RAM
+> ramdisk** (VIFS1, kernel-embedded), so no block device is read before the first Cell;
+> non-bootstrap cell ELFs live in a disk **FAT cell-store** served by VFS under `/bin`, and
+> post-boot spawns read the ELF via VFS + the new `sys_spawn_from_elf` syscall. The kernel
+> now drives **no** block hardware — `cells/drivers/virtio-blk/` owns the device and serves
+> `service::BLOCK_DRIVER`. See `.agents/260707-1726-g2-loader-redesign/`.
 
 ### Category D: Hardware Exclusivity Arbiter
 
@@ -194,18 +194,16 @@ categories to `kernel/src/` must be rejected at review.
 |----------------|--------------|
 | NVMe, MMC/SDHCI (storage) | `cells/drivers/nvme/`, `cells/drivers/mmc/` |
 | e1000, RTL8168 (NIC) | `cells/drivers/e1000/`, `cells/drivers/nic-*/` |
-| VirtIO block, PCI transport | **Bootstrap root-of-trust — see §2 Category C, NOT a violation.** Boot device on the loader's critical path; G2 shrinks the kernel to a minimal boot reader + a post-boot Block Cell. |
+| VirtIO block, PCI transport | `cells/drivers/virtio-blk/` — **DONE (G2 loader redesign, 2026-07-07)**; ramdisk boot dissolved the bootstrap chicken-and-egg |
 | VirtIO net, GPU, input, sound | `cells/drivers/virtio-*/` — **DONE (P06/02/03/04)** |
 | PCIe ECAM enumeration | Platform Cell — **done (P01)**; kernel retains `register_bar`/`find_class` store |
 | GPIO IRQ dispatch | `cells/drivers/gpio/` — **done** |
 | UART (beyond early console) | Driver Cell after early boot |
 
-**Bootstrap residents (NOT violations — §2 Category C):**
-
-| Driver | LOC | Status |
-|--------|-----|--------|
-| `kernel/src/task/drivers/virtio_blk.rs` | ~217 | Boot block device, root-of-trust (criterion c). G2: shrink to minimal boot reader + post-boot Block Cell. |
-| `kernel/src/task/drivers/virtio_pci.rs` | ~225 | x86 transport for the boot block device; same class as above. |
+**Bootstrap residents:** none remain in the block subsystem. `virtio_blk.rs` (~217) and
+`virtio_pci.rs` (~225) were **deleted** in the G2 loader redesign (2026-07-07); the
+VirtIO MMIO IRQ router moved to `virtio_common.rs`. Kernel-embedded BootFS (VIFS1) is the
+remaining bootstrap RAM image, not a device driver.
 
 **Remaining genuine exceptions (tech debt — G2):**
 
