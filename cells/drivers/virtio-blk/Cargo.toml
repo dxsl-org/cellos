@@ -1,0 +1,18 @@
+[package]
+name    = "driver-virtio-blk"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[[bin]]
+name = "driver-virtio-blk"
+path = "src/main.rs"
+
+[dependencies]
+types          = { path = "../../../libs/types" }
+api            = { path = "../../../libs/api" }
+ostd           = { path = "../../../libs/ostd" }
+virtio-drivers = "0.7"
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build" }

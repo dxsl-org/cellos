@@ -281,6 +281,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
             //   Supervisor Cell crashes and init needs to unfreeze its frozen targets,
             //   init retains the authority to do so.
             if path == "/bin/nvme" || path == "/bin/e1000" || path == "/bin/virtio-net"
+                || path == "/bin/block"
                 || path == "/bin/input" || path == "/bin/virtio-gpu" {
                 task.pcie_driver_cap = Some(crate::task::cap::PcieDriverCap::new());
             }

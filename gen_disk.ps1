@@ -92,7 +92,7 @@ Build-Cargo -What "core services + drivers" -Tail 5 -Packages @(
     'app-init', 'app-shell', 'service-platform',
     'service-vfs', 'service-config',
     'service-input', 'service-net', 'service-compositor', 'service-net-broker',
-    'supervisor', 'driver-nvme', 'driver-e1000', 'driver-virtio-net', 'driver-virtio-gpu')
+    'supervisor', 'driver-nvme', 'driver-e1000', 'driver-virtio-net', 'driver-virtio-blk', 'driver-virtio-gpu')
 Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench + bench-probe
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
 Build-Cargo -What "app-sys-tools"  -Packages @('app-sys-tools')
@@ -187,6 +187,7 @@ Invoke-SignCell "$rel_dir/supervisor"
 Invoke-SignCell "$rel_dir/driver-nvme"
 Invoke-SignCell "$rel_dir/driver-e1000"
 Invoke-SignCell "$rel_dir/driver-virtio-net"
+Invoke-SignCell "$rel_dir/driver-virtio-blk"
 Invoke-SignCell "$rel_dir/driver-virtio-gpu"
 Invoke-SignCell "$rel_dir/service-input"
 Invoke-SignCell "$rel_dir/app-bench"
@@ -260,6 +261,7 @@ $platform_bin     = "$rel_dir/platform"            # Kernel Boundary Law: PCIe E
 $nvme_bin         = "$rel_dir/driver-nvme"        # Kernel Boundary Law: NVMe PCIe Driver Cell
 $e1000_bin        = "$rel_dir/driver-e1000"       # Kernel Boundary Law: e1000 PCIe Driver Cell
 $virtio_net_bin   = "$rel_dir/driver-virtio-net"  # Kernel Boundary Law: VirtIO MMIO NIC Driver Cell
+$virtio_blk_bin   = "$rel_dir/driver-virtio-blk"  # G2 loader redesign: VirtIO MMIO Block Driver Cell
 $virtio_gpu_bin   = "$rel_dir/driver-virtio-gpu"  # Kernel Boundary Law: VirtIO GPU Driver Cell
 $comp_bin      = "$rel_dir/service-compositor" # Phase 16: compositor + GPU
 $fb_console_bin = "$rel_dir/fb-console"       # HMI: mirror kernel log to HDMI screen
@@ -371,6 +373,7 @@ if (Test-Path $platform_bin)   { $kfs_args += @($platform_bin,   "/bin/platform"
 if (Test-Path $nvme_bin)       { $kfs_args += @($nvme_bin,       "/bin/nvme") }
 if (Test-Path $e1000_bin)      { $kfs_args += @($e1000_bin,      "/bin/e1000") }
 if (Test-Path $virtio_net_bin) { $kfs_args += @($virtio_net_bin, "/bin/virtio-net") }
+if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
 if (Test-Path $virtio_gpu_bin) { $kfs_args += @($virtio_gpu_bin, "/bin/virtio-gpu") }
 if (Test-Path $net_broker_bin) { $kfs_args += @($net_broker_bin, "/bin/net-broker") }
 & $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
@@ -439,6 +442,7 @@ if (Test-Path $platform_bin)   { $table_args += "/bin/platform=$platform_bin" }
 if (Test-Path $nvme_bin)       { $table_args += "/bin/nvme=$nvme_bin" }
 if (Test-Path $e1000_bin)      { $table_args += "/bin/e1000=$e1000_bin" }
 if (Test-Path $virtio_net_bin) { $table_args += "/bin/virtio-net=$virtio_net_bin" }
+if (Test-Path $virtio_blk_bin) { $table_args += "/bin/block=$virtio_blk_bin" }
 if (Test-Path $virtio_gpu_bin) { $table_args += "/bin/virtio-gpu=$virtio_gpu_bin" }
 if (Test-Path $comp_bin)        { $table_args += "/bin/compositor=$comp_bin" }
 if (Test-Path $fb_console_bin)  { $table_args += "/bin/fb-console=$fb_console_bin" }

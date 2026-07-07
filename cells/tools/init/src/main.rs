@@ -104,6 +104,12 @@ pub extern "C" fn main() {
     let mut restart_count: [u32; NSVC] = [0; NSVC];
     let mut window_start: [u64; NSVC] = [0; NSVC];
 
+    // Block Driver Cell — spawned before VFS so that, once the kernel relinquishes
+    // the boot disk (G2 loader redesign phases 05/06), VFS routes sector I/O through
+    // it (service::BLOCK_DRIVER). During the migration window it exits gracefully
+    // (the kernel still owns the single virtio-blk device), which is harmless.
+    let _ = sys_spawn_from_path("/bin/block");
+
     for i in 0..NSVC {
         // Shell is spawned LAST (see below) so its prompt is the final line on the
         // shared UART console — services bring-up + net DHCP all print before it.

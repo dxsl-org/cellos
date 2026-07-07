@@ -28,6 +28,25 @@ struct EarlyTable {
 /// Boot-time cell loader backed by the VirtIO block driver.
 pub struct EarlyLoader;
 
+/// Bootstrap cells embedded in the VIFS1 ramdisk (`kernel_fs.img`). These resolve
+/// from RAM before the block device, so the boot path needs no block driver — the
+/// foundation of the G2 loader redesign (ramdisk boot). `/bin/block` (the
+/// virtio-blk Driver Cell) joins this list once it lands (plan phase 02); `init`
+/// is embedded separately via `include_bytes!` and never goes through `read_file`.
+pub const BOOTSTRAP_CELLS: &[&str] = &[
+    "/bin/platform",
+    "/bin/block",
+    "/bin/vfs",
+    "/bin/config",
+    "/bin/shell",
+];
+
+/// True if `path` is a bootstrap cell that must resolve from the VIFS1 ramdisk
+/// before the block device, so boot does not depend on a kernel block driver.
+pub fn is_bootstrap_path(path: &str) -> bool {
+    BOOTSTRAP_CELLS.contains(&path)
+}
+
 impl EarlyLoader {
     /// Read the cell bootstrap table from disk and cache it.
     ///
@@ -95,53 +114,74 @@ impl EarlyLoader {
         Ok(())
     }
 
-    /// Read a cell ELF from the bootstrap table into a heap-allocated buffer.
+    /// Read a cell ELF from the block-device bootstrap table into a heap buffer.
     ///
-    /// Falls back to the kernel's embedded FAT16 filesystem (VIFS1) when the
-    /// bootstrap table is absent — this allows ARM64 and diskless boots to spawn
-    /// cells whose ELFs live in kernel_fs.img rather than a VirtIO block device.
+    /// # Errors
+    /// `ViError::NotFound` if the table is unprobed or lacks `path`;
+    /// `ViError::InvalidInput` if the entry has zero size.
+    fn read_from_block_table(path: &str) -> ViResult<Box<[u8]>> {
+        let (data_lba, size) = {
+            let guard = CELL_TABLE.lock();
+            let table = guard.as_ref().ok_or(ViError::NotFound)?;
+            let entry = table.entries.iter().find(|e| {
+                let stored = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
+                    .unwrap_or("")
+                    .trim_end_matches('\0');
+                stored == path
+            }).ok_or(ViError::NotFound)?;
+            (entry.data_lba, entry.data_size as usize)
+        };
+        if size == 0 { return Err(ViError::InvalidInput); }
+        let sector_count = (size + SECTOR_SIZE - 1) / SECTOR_SIZE;
+        let mut buf = alloc::vec![0u8; sector_count * SECTOR_SIZE];
+        for i in 0..sector_count {
+            let lba = data_lba + i as u64;
+            let offset = i * SECTOR_SIZE;
+            crate::task::drivers::block::read_sector(lba, &mut buf[offset..offset + SECTOR_SIZE])?;
+        }
+        buf.truncate(size);
+        Ok(buf.into_boxed_slice())
+    }
+
+    /// Read a cell ELF into a heap-allocated buffer.
+    ///
+    /// Resolution order depends on whether the path is a bootstrap cell:
+    /// - **Bootstrap** ([`is_bootstrap_path`]): VIFS1 ramdisk (RAM) FIRST, block
+    ///   table only as a transitional fallback. This is what lets the boot path
+    ///   run with no block driver (G2 loader redesign).
+    /// - **Non-bootstrap**: block table first, VIFS1 fallback (historical order,
+    ///   unchanged until those cells migrate to a VFS-served store — plan phase 03).
     ///
     /// `path` must match what `gen_disk.ps1` wrote (e.g. `/bin/vfs`).
     ///
     /// # Errors
-    /// Returns `ViError::NotFound` if neither the block table nor VIFS1 has the path.
+    /// Returns `ViError::NotFound` if neither source has the path.
     pub fn read_file(path: &str) -> ViResult<Box<[u8]>> {
-        
-        
-
-        // Attempt block-device bootstrap table path first.
-        let block_result = (|| -> ViResult<Box<[u8]>> {
-            let (data_lba, size) = {
-                let guard = CELL_TABLE.lock();
-                let table = guard.as_ref().ok_or(ViError::NotFound)?;
-                let entry = table.entries.iter().find(|e| {
-                    let stored = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
-                        .unwrap_or("")
-                        .trim_end_matches('\0');
-                    stored == path
-                }).ok_or(ViError::NotFound)?;
-                (entry.data_lba, entry.data_size as usize)
-            };
-            if size == 0 { return Err(ViError::InvalidInput); }
-            let sector_count = (size + SECTOR_SIZE - 1) / SECTOR_SIZE;
-            let mut buf = alloc::vec![0u8; sector_count * SECTOR_SIZE];
-            for i in 0..sector_count {
-                let lba = data_lba + i as u64;
-                let offset = i * SECTOR_SIZE;
-                crate::task::drivers::block::read_sector(lba, &mut buf[offset..offset + SECTOR_SIZE])?;
+        if is_bootstrap_path(path) {
+            match crate::fs::read_file_from_vifs1(path) {
+                Ok(buf) => {
+                    // Runtime evidence (G2 loader redesign phase 01): bootstrap cell
+                    // loaded from RAM, not the block device. Emitted at warn! because
+                    // vfs/config/shell are spawned by init AFTER the kernel drops its
+                    // log level to Warn (main.rs:603) — info! would be suppressed, and
+                    // the phase-01 acceptance criterion requires each bootstrap cell to
+                    // be observable. One-time boot output (same rationale as set_input_cell).
+                    log::warn!("[early] bootstrap {} <- VIFS1 ramdisk ({} bytes)", path, buf.len());
+                    return Ok(buf);
+                }
+                Err(_) => {
+                    log::warn!("[early] bootstrap {:?} not in VIFS1 — falling back to block table", path);
+                    return Self::read_from_block_table(path);
+                }
             }
-            buf.truncate(size);
-            Ok(buf.into_boxed_slice())
-        })();
-
-        if block_result.is_ok() {
-            return block_result;
         }
 
-        // Fallback: read from the embedded FAT16 ramdisk (VIFS1).
-        // This path is used when no VirtIO block device is present (e.g. ARM64 QEMU
-        // without a separate disk image, or CI diskless boots).
-        log::debug!("[early] block table miss for {:?} — trying VIFS1", path);
-        crate::fs::read_file_from_vifs1(path)
+        match Self::read_from_block_table(path) {
+            Ok(buf) => Ok(buf),
+            Err(_) => {
+                log::debug!("[early] block table miss for {:?} — trying VIFS1", path);
+                crate::fs::read_file_from_vifs1(path)
+            }
+        }
     }
 }
