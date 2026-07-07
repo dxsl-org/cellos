@@ -87,15 +87,33 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
 
     // Read ELF bytes from the early bootstrap table.
     let elf_bytes = early::EarlyLoader::read_file(path)?;
+    spawn_gated(&elf_bytes, path, spawner)
+}
 
+/// Verify and spawn a cell from ELF bytes already resident in memory.
+///
+/// Shared by `spawn_from_path` (bytes from the boot ramdisk / P2 table) and the
+/// `SpawnFromElf` syscall (bytes a userspace spawner read from VFS). The trust
+/// gate — Ed25519 signature, manifest-privilege check, capability intersection
+/// (P2 downgrade), operator policy, syscall allowlist, cluster membership,
+/// memory quota, and integrity measurement — is applied to the BYTES, so the
+/// source of the bytes is irrelevant to trust. `path` is advisory: it drives the
+/// `/bin/` privilege check, policy lookup, measurement label, and the path-based
+/// capability grants below. A caller lying about `path` can only LOSE privilege
+/// (a non-`/bin/` hint yields the user ceiling), never gain it.
+fn spawn_gated(
+    elf_bytes: &[u8],
+    path: &str,
+    spawner: crate::task::cap::Spawner,
+) -> ViResult<usize> {
     // ── Binary signature gate ─────────────────────────────────────────────────
     // Verify the Ed25519 signature in __ViCell_sig before any ELF parsing or
     // task creation. With `signing-required`, an absent signature is treated
     // the same as an invalid one (fail-closed). In dev mode (default), an
     // absent signature is permitted so unsigned dev cells keep working.
-    match crate::signing::extract_sig(&elf_bytes) {
+    match crate::signing::extract_sig(elf_bytes) {
         Some(sig) => {
-            if !crate::signing::verify_cell(&elf_bytes, &sig) {
+            if !crate::signing::verify_cell(elf_bytes, &sig) {
                 log::warn!("[loader] DENY {:?}: cell signature INVALID", path);
                 crate::audit::log_event(
                     crate::audit::AuditEvent::CellSignatureFailed,
@@ -126,7 +144,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     // Read capability manifest from `__ViCell_manifest` ELF section.
     // Absent or malformed → None (falls back to legacy hardcoded path grants).
     let manifest_opt: Option<api::manifest::CellManifest> =
-        match elf_loader.get_section(&elf_bytes, "__ViCell_manifest") {
+        match elf_loader.get_section(elf_bytes, "__ViCell_manifest") {
             Ok(bytes) => api::manifest::CellManifest::from_bytes(bytes),
             Err(_)    => None,
         };
@@ -153,7 +171,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
 
     // Spawn via the in-memory path.  spawn_from_mem now applies .rela.dyn
     // relocations internally, so no separate apply_relocations call is needed.
-    let (tid, _load_base) = crate::task::spawn_from_mem(&elf_bytes, name, CellId(0), alloc::vec::Vec::new())
+    let (tid, _load_base) = crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())
         .map_err(|_| ViError::OutOfMemory)?;
 
     // Assign a unique CellId based on the task ID so per-cell quota and
@@ -175,12 +193,12 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     // Integrity measurement (IMA-style): hash the ELF image and record it in the
     // append-only measurement log BEFORE the cell is scheduled. Evidence for
     // future DICE/EAT attestation — orthogonal to (and complements) Cell signing.
-    crate::measurement_log::measure(tid, path, &elf_bytes);
+    crate::measurement_log::measure(tid, path, elf_bytes);
 
     // Read per-Cell syscall allowlist from ELF section __ViCell_syscalls.
     // The section (if present) contains a u64 LE bitset; absent = permit-all.
     {
-        let allowlist = match ElfLoader.get_section(&elf_bytes, "__ViCell_syscalls") {
+        let allowlist = match ElfLoader.get_section(elf_bytes, "__ViCell_syscalls") {
             Ok(bytes) if bytes.len() >= 8 => {
                 // SAFETY: bytes slice is valid data from the loaded ELF.
                 u64::from_le_bytes(bytes[..8].try_into().expect("8-byte __ViCell_syscalls section"))
@@ -198,7 +216,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
     // Layout: u8 mode, u8 pad[7], u64 cluster_id (LE) = 16 bytes.
     // Absent section → Isolated mode (mode=0, cluster_id=0); backwards compatible.
     {
-        let (mode, cid) = match ElfLoader.get_section(&elf_bytes, "__ViCell_cluster") {
+        let (mode, cid) = match ElfLoader.get_section(elf_bytes, "__ViCell_cluster") {
             Ok(bytes) if bytes.len() >= 16 => {
                 // SAFETY: bytes slice is valid data from the loaded ELF.
                 let mode = bytes[0];
