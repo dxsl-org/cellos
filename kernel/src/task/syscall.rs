@@ -297,10 +297,11 @@ fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
         Some(e) => e,
         None => return false,
     };
-    const GRANTABLE: [(u8, u64, u64); 3] = [
-        (0b001, dl::PART_FAT32_BASE_LBA, dl::PART_FAT32_SECTORS), // P1 (PART_DATA)
-        (0b010, dl::PART_LFS_BASE_LBA,   dl::PART_LFS_SECTORS),   // P4 (PART_LFS)
-        (0b100, dl::PART_SRV_BASE_LBA,   dl::PART_SRV_SECTORS),   // P5 (SRV/RedoxFS, co-granted w/ LFS)
+    const GRANTABLE: [(u8, u64, u64); 4] = [
+        (0b001,  dl::PART_FAT32_BASE_LBA,     dl::PART_FAT32_SECTORS),     // P1 (PART_DATA)
+        (0b010,  dl::PART_LFS_BASE_LBA,       dl::PART_LFS_SECTORS),       // P4 (PART_LFS)
+        (0b100,  dl::PART_SRV_BASE_LBA,       dl::PART_SRV_SECTORS),       // P5 (SRV/RedoxFS, co-granted w/ LFS)
+        (0b1000, dl::PART_CELLSTORE_BASE_LBA, dl::PART_CELLSTORE_SECTORS), // P6 (cell-store, read-only; VFS /bin overlay)
     ];
     for (bit, base, size) in GRANTABLE {
         if regions & bit != 0 && sector >= base && end <= base + size {

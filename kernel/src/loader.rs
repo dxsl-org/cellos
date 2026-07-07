@@ -297,6 +297,13 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
             if path == "/bin/supervisor" {
                 task.supervisor_cap = Some(crate::task::cap::SupervisorCap::new());
             }
+            // VFS reads the P6 FAT cell-store to serve /bin/<cell> via the BinOverlay
+            // (G2 loader redesign). Manifest flag bits are full in v1, so grant the
+            // cell-store block region (0b1000, see check_block_access GRANTABLE) here
+            // by path, mirroring the PcieDriverCap grant above.
+            if path == "/bin/vfs" {
+                task.block_regions |= 0b1000;
+            }
         }
     }
 

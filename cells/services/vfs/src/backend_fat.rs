@@ -36,9 +36,9 @@ pub struct FatBackend {
 /// A temporary `BlockStream` is used so the probe does not interfere with the
 /// `CachedBlockStream` fatfs will create afterwards (positions are per-instance;
 /// both start at offset 0).
-fn probe_exfat() -> bool {
+fn probe_exfat(base_lba: u64) -> bool {
     use fatfs::Read;
-    let mut bs = BlockStream::new();
+    let mut bs = BlockStream::new(base_lba);
     let mut sec = [0u8; 512];
     // Guard against short reads — need at least 11 bytes for the OEM-Name field.
     match bs.read(&mut sec) {
@@ -51,19 +51,23 @@ impl FatBackend {
     /// Mount the persistent FAT volume on the VirtIO disk. On failure (no disk
     /// attached, bad BPB, or exFAT) the backend stays in fallback mode — every
     /// operation fails cleanly while other mounts keep working.
-    pub fn mount(prefix: &'static str) -> Self {
-        if probe_exfat() {
+    /// Mount a FAT volume whose partition begins at absolute `base_lba`. Used
+    /// for both `/mnt/sd` (P1, `PART_FAT32_BASE_LBA`) and the read-only `/bin`
+    /// cell-store (P6, `PART_CELLSTORE_BASE_LBA`). On failure the backend stays
+    /// in fallback mode — every op fails cleanly while other mounts keep working.
+    pub fn mount(prefix: &'static str, base_lba: u64) -> Self {
+        if probe_exfat(base_lba) {
             println("[vfs] exFAT volume detected — not supported; reformat to FAT32 or use /data (littlefs)");
             return Self { fs: None, prefix };
         }
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
-        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(), opts) {
+        let fs = match fatfs::FileSystem::new(CachedBlockStream::new(base_lba), opts) {
             Ok(fs) => {
-                println("[vfs] FAT32 /mnt/sd volume mounted");
+                println("[vfs] FAT32 volume mounted");
                 Some(fs)
             }
             Err(_) => {
-                println("[vfs] WARNING: FAT32 mount failed — /mnt/sd writes will fail");
+                println("[vfs] WARNING: FAT32 mount failed for this volume");
                 None
             }
         };

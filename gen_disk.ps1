@@ -403,8 +403,11 @@ if ($kernCode -ne 0) {
 # 3c. Create a blank disk image for VirtIO block — MBR layout (Milestone 2.5 P03).
 #     P1 FAT32 @2048+524288 · P2 cell-table @526336 · P3 snapshot @560000 · P4 littlefs @800000
 #     Must match tools/write-mbr.py and kernel/src/loader/disk_layout.rs.
-Write-Host "Creating blank disk image (disk_v3.img, MBR, ~455 MB)..."
-$disk_sectors = 931072
+Write-Host "Creating blank disk image (disk_v3.img, MBR, ~577 MB)..."
+# Grown for the P6 FAT cell-store (G2 loader redesign): base LBA 1_062_144 +
+# 65_536 sectors = 1_127_680. Written non-sparsely below, so the array is large
+# but transient. P1-P4 in the MBR; P5/P6 are constant-addressed (see api::disk).
+$disk_sectors = 1127680
 $diskSize = $disk_sectors * 512
 $blankImg = New-Object byte[] $diskSize
 [System.IO.File]::WriteAllBytes("disk_v3.img", $blankImg)
@@ -480,6 +483,40 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: write-cell-table.py failed — disk_v3.img bootstrap table is invalid." -ForegroundColor Red
     exit 1
 }
+
+# ── P6: FAT cell-store (G2 loader redesign) ───────────────────────────────────
+# Build a standalone FAT16 volume holding every cell ELF at the FAT ROOT (by
+# basename), then write it into disk_v3.img at PART_CELLSTORE_BASE_LBA. The VFS
+# `/bin` BinOverlay reads this after a VIFS1 miss, so non-bootstrap cells stay
+# reachable once the raw P2 table + kernel block reader are retired (phases
+# 05-06). Reuses $table_args (source of truth for the cell set) — VIFS1 wins in
+# the overlay for cells present in both, so the superset is harmless.
+$CELLSTORE_BASE_LBA = 1062144   # MUST match api::disk::PART_CELLSTORE_BASE_LBA
+$CELLSTORE_SECTORS  = 65536     # MUST match api::disk::PART_CELLSTORE_SECTORS (32 MB)
+Write-Host "Building FAT cell-store (P6 @ LBA $CELLSTORE_BASE_LBA)..."
+$cellstore_args = @("cell_store.img")
+foreach ($entry in $table_args) {
+    if ($entry -notmatch '=') { continue }      # skip the leading "disk_v3.img" target arg
+    $kv       = $entry -split '=', 2            # "/bin/<name>=<srcpath>"
+    $basename = $kv[0] -replace '^/bin/', ''    # "<name>" — FAT root, matches FatBackend("/bin") strip
+    $cellstore_args += @($kv[1], "/$basename")
+}
+& $python "$tools_dir/mkfat32.py" @cellstore_args
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FATAL: mkfat32.py failed — cell_store.img is invalid." -ForegroundColor Red
+    exit 1
+}
+$storeBytes = [System.IO.File]::ReadAllBytes("cell_store.img")
+if ($storeBytes.Length -gt ($CELLSTORE_SECTORS * 512)) {
+    Write-Host "FATAL: cell_store.img ($([Math]::Round($storeBytes.Length/1MB,1)) MB) exceeds the $([int]($CELLSTORE_SECTORS/2048)) MB P6 window — grow PART_CELLSTORE_SECTORS + \$disk_sectors." -ForegroundColor Red
+    exit 1
+}
+$dfs = [System.IO.File]::Open((Resolve-Path "disk_v3.img"), 'Open', 'Write')
+$dfs.Seek([long]$CELLSTORE_BASE_LBA * 512, 'Begin') | Out-Null
+$dfs.Write($storeBytes, 0, $storeBytes.Length)
+$dfs.Close()
+Remove-Item -Force "cell_store.img"
+Write-Host "  cell-store written: $([Math]::Round($storeBytes.Length/1MB,1)) MB at LBA $CELLSTORE_BASE_LBA"
 
 if ($script:FailedOptional.Count -gt 0) {
     Write-Host ""

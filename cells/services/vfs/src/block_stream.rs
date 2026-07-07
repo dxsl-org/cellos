@@ -21,14 +21,6 @@ use ostd::syscall::{
 
 const SECTOR_SIZE: u64 = 512;
 
-/// First absolute LBA of the FAT32 volume — MBR partition P1 (Milestone 2.5
-/// Phase 03; see `tools/write-mbr.py` and `kernel/src/loader/disk_layout.rs`).
-/// `pos` stays partition-relative; only the syscall LBA gets the offset, so
-/// fatfs and the page cache never see absolute sector numbers.
-/// TODO(P03 step B): replace with the shared `api::disk` constant once the
-/// Law-1 change lands.
-const FAT_PART_BASE_LBA: u64 = 2_048;
-
 /// Sentinel: not yet probed.
 const NOT_PROBED: usize = 0;
 /// Sentinel: probed and absent (no PCIe NVMe registered).
@@ -104,13 +96,18 @@ fn blk_write(abs_lba: u64, data: &[u8; 512]) -> bool {
 }
 
 pub struct BlockStream {
-    /// Byte position within the FAT32 volume (LBA 0 = byte 0).
+    /// Byte position within the volume (partition-relative; LBA 0 = byte 0).
     pos: u64,
+    /// Absolute base LBA of this volume's partition, added to the relative
+    /// sector before the block syscall so fatfs and the page cache only ever
+    /// see partition-relative sectors. `api::disk::PART_FAT32_BASE_LBA` for the
+    /// `/mnt/sd` volume; `PART_CELLSTORE_BASE_LBA` for the `/bin` cell-store.
+    base_lba: u64,
 }
 
 impl BlockStream {
-    pub fn new() -> Self {
-        Self { pos: 0 }
+    pub fn new(base_lba: u64) -> Self {
+        Self { pos: 0, base_lba }
     }
 }
 
@@ -126,7 +123,7 @@ impl fatfs::Read for BlockStream {
         let sector = self.pos / SECTOR_SIZE;
         let off    = (self.pos % SECTOR_SIZE) as usize;
         let mut sec = [0u8; 512];
-        if !blk_read(FAT_PART_BASE_LBA + sector, &mut sec) {
+        if !blk_read(self.base_lba + sector, &mut sec) {
             return Err(());
         }
         let n = core::cmp::min(SECTOR_SIZE as usize - off, buf.len());
@@ -148,17 +145,17 @@ impl fatfs::Write for BlockStream {
                 // Full-sector write — no need to read first.
                 let mut full = [0u8; 512];
                 full.copy_from_slice(&buf[written..written + 512]);
-                if !blk_write(FAT_PART_BASE_LBA + sector, &full) {
+                if !blk_write(self.base_lba + sector, &full) {
                     return Err(());
                 }
             } else {
                 // Partial sector — read-modify-write.
                 let mut sec = [0u8; 512];
-                if !blk_read(FAT_PART_BASE_LBA + sector, &mut sec) {
+                if !blk_read(self.base_lba + sector, &mut sec) {
                     return Err(());
                 }
                 sec[off..off + chunk].copy_from_slice(&buf[written..written + chunk]);
-                if !blk_write(FAT_PART_BASE_LBA + sector, &sec) {
+                if !blk_write(self.base_lba + sector, &sec) {
                     return Err(());
                 }
             }
@@ -194,13 +191,13 @@ impl BlockStream {
     /// Read one 512-byte sector directly from disk, bypassing the page cache.
     /// Called by `PageCache` on a cache miss. `sector` is partition-relative.
     pub fn read_raw_sector(&mut self, sector: u64, buf: &mut [u8; 512]) -> bool {
-        blk_read(FAT_PART_BASE_LBA + sector, buf)
+        blk_read(self.base_lba + sector, buf)
     }
 
     /// Write one 512-byte sector directly to disk, bypassing the page cache.
     /// Called by `PageCache::flush_dirty`. `sector` is partition-relative.
     pub fn write_raw_sector(&mut self, sector: u64, data: &[u8; 512]) -> bool {
-        blk_write(FAT_PART_BASE_LBA + sector, data)
+        blk_write(self.base_lba + sector, data)
     }
 }
 
@@ -217,9 +214,9 @@ pub struct CachedBlockStream {
 }
 
 impl CachedBlockStream {
-    pub fn new() -> Self {
+    pub fn new(base_lba: u64) -> Self {
         Self {
-            inner: BlockStream::new(),
+            inner: BlockStream::new(base_lba),
             cache: PageCache::new(),
         }
     }

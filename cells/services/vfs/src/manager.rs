@@ -11,7 +11,7 @@ use api::hotswap::ViStateTransfer;
 use ostd::prelude::*;
 
 use crate::access::AccessTable;
-use crate::backend_bootfs::BootFsProxy;
+use crate::backend_bin_overlay::BinOverlay;
 use crate::backend_fat::FatBackend;
 use crate::backend_littlefs::LittlefsBackend;
 use crate::backend_ramfs::RamFsBackend;
@@ -35,16 +35,17 @@ impl VfsManager {
         let ram  = mounts.add_backend(Box::new(RamFsBackend::new()));
         // FAT32 (P1) is the SD-card/PC interop volume since P04 — /data moved
         // to littlefs (P4), which survives power cuts (FAT has no journal).
-        let fat  = mounts.add_backend(Box::new(FatBackend::mount("/mnt/sd")));
+        let fat  = mounts.add_backend(Box::new(FatBackend::mount("/mnt/sd", api::disk::PART_FAT32_BASE_LBA)));
         let lfs  = mounts.add_backend(Box::new(LittlefsBackend::mount("/data")));
-        let boot = mounts.add_backend(Box::new(BootFsProxy));
+        // /bin overlay: VIFS1 ramdisk (bootstrap cells) unioned with the on-disk
+        // FAT cell-store (non-bootstrap cells migrated off the raw P2 table).
+        let binov = mounts.add_backend(Box::new(BinOverlay::new(api::disk::PART_CELLSTORE_BASE_LBA)));
         // Longest prefix wins: the specific mounts shadow the read-only root.
-        mounts.mount("/",       ram,  false);
-        mounts.mount("/tmp",    ram,  true);
-        mounts.mount("/data",   lfs,  true);
-        mounts.mount("/mnt/sd", fat,  true);
-        // /bin proxies the kernel initramfs (VIFS1) — no more double-embedded ELFs.
-        mounts.mount("/bin",    boot, false);
+        mounts.mount("/",       ram,   false);
+        mounts.mount("/tmp",    ram,   true);
+        mounts.mount("/data",   lfs,   true);
+        mounts.mount("/mnt/sd", fat,   true);
+        mounts.mount("/bin",    binov, false);
         // /srv: RedoxFS CoW B-tree filesystem on MBR partition P5.
         // Degrades gracefully to empty/false if P5 is unformatted (see
         // docs/specs/09b-vfs-native-fs-adr.md and scripts/mksrv-img.sh).

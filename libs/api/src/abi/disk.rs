@@ -44,3 +44,11 @@ pub const PART_LFS_SECTORS: u64 = 131_072;
 pub const PART_SRV_BASE_LBA: u64 = 931_072; // LBA 800_000 + 131_072
 /// P5 size in sectors (64 MB RedoxFS volume).
 pub const PART_SRV_SECTORS: u64 = 131_072;
+
+/// P6: FAT cell-store — non-bootstrap cell ELFs served under VFS `/bin`
+/// (G2 loader redesign). Follows P5; constant-addressed (no MBR slot, like P5).
+/// Read-only at runtime: the VFS `/bin` overlay reads it after a VIFS1 miss.
+/// gen_disk formats + populates it with the signed P2-only cell ELFs.
+pub const PART_CELLSTORE_BASE_LBA: u64 = 1_062_144; // LBA 931_072 + 131_072
+/// P6 size in sectors (32 MB — ample for the P2-only cell set).
+pub const PART_CELLSTORE_SECTORS: u64 = 65_536;

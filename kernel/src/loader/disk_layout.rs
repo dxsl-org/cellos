@@ -35,6 +35,7 @@ pub use api::disk::{
     PART_SNAPSHOT_BASE_LBA, PART_SNAPSHOT_SECTORS,
     PART_LFS_BASE_LBA, PART_LFS_SECTORS,
     PART_SRV_BASE_LBA, PART_SRV_SECTORS,
+    PART_CELLSTORE_BASE_LBA, PART_CELLSTORE_SECTORS,
 };
 
 /// Sector offset (from LBA 0) where the cell bootstrap section (P2) begins.

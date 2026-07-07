@@ -8,6 +8,7 @@ extern crate syscall as redox_syscall;
 
 mod access;
 mod backend;
+mod backend_bin_overlay;
 mod backend_bootfs;
 mod backend_fat;
 mod backend_littlefs;
