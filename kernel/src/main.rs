@@ -408,10 +408,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // It scans ECAM and calls sys_register_pci_device + sys_register_pcie_bar for each device.
         // Arm deferred IOMMU init — fires once the IOMMU device entry appears in PCI_DEVICES.
         task::drivers::iommu::set_deferred_init_pending();
-        // VirtIO PCI: probe vendor 0x1AF4 on PCIe bus 0.
-        // On x86_64 q35, VirtIO BLK/NET are PCIe devices; on RISC-V virt,
-        // VirtIO is MMIO — virtio_pci::init() is a no-op there.
-        task::drivers::virtio_pci::init();
+        // VirtIO PCI block init removed (G2 loader redesign phase 06). x86 block I/O
+        // is served by the NVMe Driver Cell (F4); the kernel drives no block hardware.
         // activate_isolation() is now called inside iommu::try_deferred_init() once the
         // IOMMU device has been registered by the Platform Cell. The call below is a no-op
         // (IOMMU not yet initialized at this point in boot).

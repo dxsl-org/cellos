@@ -19,7 +19,7 @@ pub mod block;
 pub mod mmc;
 pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_common;
-pub mod virtio_blk;
+// virtio_blk deleted (G2 loader redesign phase 06) — block is a Driver Cell now.
 pub mod input_irq_ack; // Minimal VirtIO input IRQ ACK shim (event routing is in input Cell)
 // virtio_net removed: VirtIO NIC is now the virtio-net Driver Cell (cells/drivers/virtio-net/).
 pub mod gpio_irq;     // GPIO edge IRQ → MMIO-owner IPC dispatch (AArch64 PL061)
@@ -30,7 +30,7 @@ pub mod iommu;        // IOMMU common API — three-phase DMA isolation
 pub mod iommu_riscv;  // RISC-V IOMMU — 1-level DDT + Sv39 second-stage
 pub mod iommu_x86;    // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
 pub mod nic;          // NIC selector (VirtIO; PCIe NICs are Driver Cells)
-pub mod virtio_pci;   // VirtIO PCI transport for x86_64 q35 (transitional BLK/NET)
+// virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
 pub mod driver_cell;  // Driver Cell registration statics (BLOCK_DRIVER_CELL / NIC_DRIVER_CELL)
 pub mod irq_wait;     // IRQ wait/pending tables for Driver Cell sys_wait_irq
 // blk_nvme and nic_e1000 have been migrated to Driver Cells:
@@ -51,17 +51,13 @@ pub fn init() {
     // VirtIO block raises an IRQ on init; if the PLIC is enabled and the trap
     // handler tries to re-acquire a Spinlock held by this thread, it will spin
     // forever.  We re-enable SIE after all drivers are initialised.
-    // G2 loader redesign phase 05 — DEVICE HANDOVER: the kernel no longer claims the
-    // VirtIO block device. The virtio-blk Driver Cell (/bin/block) probes it (now with
-    // Status clear, so its DRIVER_OK self-guard proceeds), owns the MMIO + DMA, and
-    // registers service::BLOCK_DRIVER; VFS routes all sector I/O to it. Kernel boot-time
-    // block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade gracefully
-    // (block::read_sector → Err on the uninitialised device). The virtio_blk/virtio_pci
-    // stack is deleted in phase 06. (x86 virtio_pci block is handled separately there.)
-    //
-    // virtio_blk::init_driver();  // relinquished — see above
-    let _ = virtio_blk::is_present; // keep the module referenced until phase-06 deletion
-    mmc::init_driver();        // MMC/SD — no-op on QEMU (VirtIO wins); probes SDHCI on real board
+    // G2 loader redesign (phases 05/06): the kernel drives NO block hardware. The
+    // virtio-blk Driver Cell (/bin/block) owns the VirtIO block device (MMIO + DMA)
+    // and registers service::BLOCK_DRIVER; VFS routes all sector I/O to it. Kernel
+    // boot-time block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade
+    // gracefully (block::read_sector → Err on the null device). MMC (SDHCI) still
+    // initialises for real boards.
+    mmc::init_driver();        // MMC/SD — no-op on QEMU (no SDHCI); probes SDHCI on real board
     // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so virtio-net Driver Cell
     // can claim them via sys_request_mmio (PcieDriverCap path). Must run before
     // virtio_net::init_driver so the BAR table is ready before net IPC begins.

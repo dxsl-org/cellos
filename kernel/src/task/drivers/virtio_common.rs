@@ -42,3 +42,30 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
         slots.into_iter()
     }
 }
+
+/// VirtIO MMIO IRQ dispatcher — called from the arch trap handlers (riscv64/aarch64)
+/// when any VirtIO MMIO IRQ fires. Routes the IRQ to whichever Driver Cell registered
+/// for it via `sys_wait_irq` (the block / net / gpu cells all rely on this), ACKs the
+/// input slot when the input service Cell isn't up yet, and warns on an unclaimed slot.
+///
+/// Relocated here from the deleted kernel `virtio_blk` driver (G2 loader redesign
+/// phase 06): it is VirtIO-common, not block-specific. The former kernel-block ACK
+/// branch is gone — the virtio-blk Driver Cell now ACKs its own IRQ via the
+/// `sys_wait_irq` path above.
+#[no_mangle]
+pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
+    // Driver Cell IRQ routing: a Cell registered for this IRQ via sys_wait_irq —
+    // signal it (sets IRQ_PENDING + writes VirtIO InterruptACK) and return.
+    if crate::task::drivers::irq_wait::has_waiter(irq as u8) {
+        crate::task::drivers::irq_wait::signal_irq(irq as u8);
+        return;
+    }
+    // Input (keyboard) slot: ACK to prevent an interrupt storm before the input
+    // service Cell is up; event routing lives entirely in that Cell.
+    if crate::task::drivers::input_irq_ack::ack_if_input(irq) {
+        return;
+    }
+    // Unknown VirtIO slot — no device registered. InterruptStatus is already cleared
+    // by plic_complete in the trap handler.
+    log::warn!("[virtio] unhandled IRQ {} — no registered device for this slot", irq);
+}

@@ -192,7 +192,8 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::memory::rt_heap::force_unlock_locks();
     crate::cell::hotswap::force_unlock_locks();
     crate::cell::service_registry::force_unlock_locks();
-    crate::task::drivers::virtio_blk::force_unlock_locks();
+    // virtio_blk force-unlock removed (G2 loader redesign phase 06): the kernel no
+    // longer owns the block device — the virtio-blk Driver Cell does.
     crate::task::drivers::input_irq_ack::force_unlock_locks();
     crate::task::drivers::mmc::force_unlock_locks();
     crate::resource_registry::force_unlock_locks();
