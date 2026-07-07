@@ -15,6 +15,7 @@ mod backend_fat;
 mod backend_littlefs;
 mod backend_ramfs;
 mod backend_redoxfs;
+mod blk_router;
 mod block_stream;
 mod disk_redoxfs;
 #[cfg(feature = "littlefs")]

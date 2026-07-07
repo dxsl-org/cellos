@@ -12,88 +12,11 @@
 //! builds the NVMe Driver Cell exits early (no PCIe NVMe device), so `nvme_tid()`
 //! always returns `None` there and the VirtIO path is unchanged.
 
-use core::sync::atomic::{AtomicUsize, Ordering};
 use crate::page_cache::PageCache;
-use ostd::syscall::{
-    sys_blk_flush, sys_blk_read, sys_blk_write,
-    sys_lookup_service, sys_recv, sys_send, SyscallResult,
-};
+use crate::blk_router::{blk_read, blk_write};
+use ostd::syscall::sys_blk_flush;
 
 const SECTOR_SIZE: u64 = 512;
-
-/// Sentinel: not yet probed.
-const NOT_PROBED: usize = 0;
-/// Sentinel: probed and absent (no PCIe NVMe registered).
-const ABSENT: usize = usize::MAX;
-
-/// Cached NVMe Driver Cell TID. NOT_PROBED (0) on first access.
-static NVME_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
-
-/// Returns the NVMe Driver Cell TID if one has registered, else `None`.
-/// Caches the result so only the first call performs the syscall.
-fn nvme_tid() -> Option<usize> {
-    let cached = NVME_TID.load(Ordering::Relaxed);
-    if cached == ABSENT    { return None; }
-    if cached != NOT_PROBED { return Some(cached); }
-
-    match sys_lookup_service(api::syscall::service::BLOCK_DRIVER) {
-        Some(tid) if tid != 0 => {
-            NVME_TID.store(tid, Ordering::Relaxed);
-            Some(tid)
-        }
-        _ => {
-            NVME_TID.store(ABSENT, Ordering::Relaxed);
-            None
-        }
-    }
-}
-
-/// Read one 512-byte sector from the active block device.
-///
-/// Routes to the NVMe Driver Cell (DrvRequest IPC) when registered,
-/// falls back to the kernel VirtIO path via `sys_blk_read`.
-fn blk_read(abs_lba: u64, buf: &mut [u8; 512]) -> bool {
-    if let Some(tid) = nvme_tid() {
-        // Read request: [op=0 (2B)] [sector (8B)] — 10 bytes total.
-        let mut req = [0u8; 10];
-        req[0..2].copy_from_slice(&0u16.to_le_bytes());
-        req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
-        match sys_send(tid, &req) {
-            SyscallResult::Err(_) => return false,
-            SyscallResult::Ok(_)  => {}
-        }
-        // Reply: [status (1B)] [data (512B)] = 513 bytes.
-        // mask=tid ensures we only accept the NVMe cell's reply even if
-        // another cell sends to VFS while we are blocked here.
-        let mut reply = [0u8; 513];
-        sys_recv(tid, &mut reply);
-        if reply[0] != 0 { return false; }
-        buf.copy_from_slice(&reply[1..513]);
-        true
-    } else {
-        sys_blk_read(abs_lba, buf)
-    }
-}
-
-/// Write one 512-byte sector to the active block device.
-fn blk_write(abs_lba: u64, data: &[u8; 512]) -> bool {
-    if let Some(tid) = nvme_tid() {
-        // Write request: [op=1 (2B)] [sector (8B)] [data (512B)] = 522 bytes.
-        let mut req = [0u8; 522];
-        req[0..2].copy_from_slice(&1u16.to_le_bytes());
-        req[2..10].copy_from_slice(&abs_lba.to_le_bytes());
-        req[10..522].copy_from_slice(data);
-        match sys_send(tid, &req) {
-            SyscallResult::Err(_) => return false,
-            SyscallResult::Ok(_)  => {}
-        }
-        let mut reply = [0u8; 1];
-        sys_recv(tid, &mut reply);
-        reply[0] == 0
-    } else {
-        sys_blk_write(abs_lba, data)
-    }
-}
 
 pub struct BlockStream {
     /// Byte position within the volume (partition-relative; LBA 0 = byte 0).

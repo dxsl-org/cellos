@@ -63,7 +63,11 @@ impl FatBackend {
         let opts = fatfs::FsOptions::new().update_accessed_date(false);
         let fs = match fatfs::FileSystem::new(CachedBlockStream::new(base_lba), opts) {
             Ok(fs) => {
-                println("[vfs] FAT32 volume mounted");
+                // Include the mount prefix so the two FAT volumes (/mnt/sd P1 and
+                // the /bin cell-store P6) are distinguishable in the boot log.
+                ostd::io::print("[vfs] FAT32 ");
+                ostd::io::print(prefix);
+                println(" volume mounted");
                 Some(fs)
             }
             Err(_) => {

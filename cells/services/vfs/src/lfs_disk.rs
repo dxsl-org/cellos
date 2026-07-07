@@ -5,14 +5,18 @@
 //! independently confines this cell to P1+P4, so even a littlefs bug cannot
 //! reach the cell table or snapshot regions.
 //!
-//! POWER-SAFETY INVARIANT: every read/write goes straight to the block
-//! syscalls — littlefs's copy-on-write correctness depends on its prog/erase
-//! ordering reaching the device. Do NOT route this through the FAT PageCache.
+//! POWER-SAFETY INVARIANT: every read/write goes straight to the block layer
+//! — littlefs's copy-on-write correctness depends on its prog/erase ordering
+//! reaching the device. Do NOT route this through the FAT PageCache. Since the
+//! G2 loader redesign, "the block layer" is the block Driver Cell (via
+//! `blk_router`), not the kernel — the raw `sys_blk_*` syscalls reach only the
+//! kernel's dead null device on QEMU, so every `/data` write failed until this
+//! was routed through `blk_router` like the FAT backend.
 
 use littlefs2::consts::{U16, U512};
 use littlefs2::driver::Storage;
 use littlefs2::io::{Error, Result};
-use ostd::syscall::{sys_blk_read, sys_blk_write};
+use crate::blk_router::{blk_read, blk_write};
 
 const SECTOR: usize = 512;
 
@@ -35,7 +39,7 @@ impl Storage for LfsDisk {
         let base = api::disk::PART_LFS_BASE_LBA + (off / SECTOR) as u64;
         let mut sec = [0u8; SECTOR];
         for (i, chunk) in buf.chunks_mut(SECTOR).enumerate() {
-            if !sys_blk_read(base + i as u64, &mut sec) {
+            if !blk_read(base + i as u64, &mut sec) {
                 return Err(Error::IO);
             }
             chunk.copy_from_slice(&sec);
@@ -49,7 +53,7 @@ impl Storage for LfsDisk {
         let mut sec = [0u8; SECTOR];
         for (i, chunk) in data.chunks(SECTOR).enumerate() {
             sec.copy_from_slice(chunk);
-            if !sys_blk_write(base + i as u64, &sec) {
+            if !blk_write(base + i as u64, &sec) {
                 return Err(Error::IO);
             }
         }

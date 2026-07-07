@@ -5,7 +5,7 @@
 //! block N on the RedoxFS volume → sectors PART_SRV_BASE_LBA + N*8 on disk.
 
 use api::disk::{PART_SRV_BASE_LBA, PART_SRV_SECTORS};
-use ostd::syscall::{sys_blk_read, sys_blk_write};
+use crate::blk_router::{blk_read, blk_write};
 use redox_syscall::error::{Error, Result, EIO};
 use redoxfs::BLOCK_SIZE;
 
@@ -21,7 +21,7 @@ impl redoxfs::Disk for VicellDisk {
         let base = PART_SRV_BASE_LBA + block * SECTORS_PER_BLOCK;
         let mut tmp = [0u8; 512];
         for (i, chunk) in buffer.chunks_mut(512).enumerate() {
-            if !sys_blk_read(base + i as u64, &mut tmp) {
+            if !blk_read(base + i as u64, &mut tmp) {
                 return Err(Error::new(EIO));
             }
             let n = chunk.len();
@@ -35,7 +35,7 @@ impl redoxfs::Disk for VicellDisk {
         for (i, chunk) in buffer.chunks(512).enumerate() {
             let mut tmp = [0u8; 512];
             tmp[..chunk.len()].copy_from_slice(chunk);
-            if !sys_blk_write(base + i as u64, &tmp) {
+            if !blk_write(base + i as u64, &tmp) {
                 return Err(Error::new(EIO));
             }
         }
