@@ -98,6 +98,21 @@ pub enum ViSyscall {
     /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
     /// Gated by ReadLogCap (allowlist bit 54) — declare with `ReadLog` in manifest.
     ReadLog = 237,
+    /// Spawn a cell from ELF bytes supplied in a caller-owned Grant region.
+    ///
+    /// The userspace spawner (init/supervisor/shell) reads a cell's ELF from VFS
+    /// into a Grant, then calls this. The kernel applies the IDENTICAL spawn trust
+    /// gate as `SpawnFromPath` (Ed25519 signature, manifest-privilege, capability
+    /// intersection, policy, syscall allowlist, cluster, quota, measurement) over
+    /// the grant bytes — trust is over the bytes, so the source is irrelevant.
+    /// Lets the kernel loader stop reading a filesystem for post-boot spawns
+    /// (G2 loader redesign). Requires SpawnCap (same as SpawnFromPath).
+    ///
+    /// ABI: a0 = grant_id, a1 = len (bytes), a2 = path_hint_ptr, a3 = path_hint_len
+    ///      → tid (>0) on success. `path_hint` is advisory (drives the /bin/
+    ///      privilege check, policy lookup, measurement label); a caller lying
+    ///      about it can only LOSE privilege, never gain it.
+    SpawnFromElf = 238,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -464,6 +479,9 @@ impl ViSyscall {
             Self::Spawn         => Some(5),
             Self::SpawnFromMem  => Some(6),
             Self::SpawnFromPath => Some(7),
+            // SpawnFromElf shares the SpawnCap allowlist bit (7): same authority as
+            // SpawnFromPath (both require SpawnCap, enforced again in the handler).
+            Self::SpawnFromElf  => Some(7),
             Self::SpawnPinned   => Some(8),
             Self::Wait          => Some(9),
             Self::Log           => Some(10),

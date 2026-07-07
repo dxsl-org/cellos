@@ -101,7 +101,7 @@ pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResu
 /// `/bin/` privilege check, policy lookup, measurement label, and the path-based
 /// capability grants below. A caller lying about `path` can only LOSE privilege
 /// (a non-`/bin/` hint yields the user ceiling), never gain it.
-fn spawn_gated(
+pub fn spawn_gated(
     elf_bytes: &[u8],
     path: &str,
     spawner: crate::task::cap::Spawner,

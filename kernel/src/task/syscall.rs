@@ -464,6 +464,9 @@ pub enum Syscall {
     /// 12: SpawnFromPath (Spawn cell by filesystem path)
     /// ABI: path_ptr in a0, path_len in a1.
     SpawnFromPath { path_ptr: usize, path_len: usize },
+    /// 238: SpawnFromElf (Spawn cell from ELF bytes in a caller-owned Grant).
+    /// ABI: a0=grant_id, a1=len, a2=path_hint_ptr, a3=path_hint_len.
+    SpawnFromElf { grant_id: usize, len: usize, path_ptr: usize, path_len: usize },
     /// 16: SpawnPinned — spawn cell pinned to a core (single-core: core_id must be 0).
     /// ABI: a0=path_ptr, a1=path_len, a2=priority: u8, a3=core_id: usize.
     SpawnPinned { path_ptr: usize, path_len: usize, priority: u8, core_id: usize },
@@ -690,6 +693,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::Spawn { .. }         => V::Spawn,
         Syscall::SpawnFromMem { .. }  => V::SpawnFromMem,
         Syscall::SpawnFromPath { .. } => V::SpawnFromPath,
+        Syscall::SpawnFromElf { .. } => V::SpawnFromElf,
         Syscall::SpawnPinned { .. }   => V::SpawnPinned,
         Syscall::Wait { .. }          => V::Wait,
         Syscall::Log { .. }           => V::Log,
@@ -1712,6 +1716,69 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Use heap allocation (not stack) — the SpawnFromPath call chain
             // is deep and a 512-byte stack buffer would overflow the kernel stack.
             const ARGV_KEY: u64 = 0x0061_7267_7600_0000; // = ostd ARGV_STASH_KEY
+            {
+                let mut argv_buf = alloc::vec![0u8; 512];
+                let n = crate::cell::state_stash::restore(ARGV_KEY, &mut argv_buf);
+                if n > 0 {
+                    let personal_key = ARGV_KEY ^ ((task_id as u64) << 32);
+                    crate::cell::state_stash::stash(personal_key, &argv_buf[..n]);
+                }
+            }
+            Ok(task_id)
+        }
+
+        Syscall::SpawnFromElf { grant_id, len, path_ptr, path_len } => {
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if len == 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
+                return Err(SyscallError::InvalidInput);
+            }
+            // Resolve the caller-owned grant → identity-mapped base; bound `len`.
+            let base = {
+                let guard = grant_table_lock().lock();
+                let table = guard.as_ref().ok_or(SyscallError::InvalidInput)?;
+                let g = table.get(&grant_id).ok_or(SyscallError::InvalidInput)?;
+                if g.owner != caller_id {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                if len > g.size {
+                    return Err(SyscallError::InvalidInput);
+                }
+                g.base
+            };
+            validate_user_buf(path_ptr, path_len, crate::loader::disk_layout::MAX_CELL_PATH)?;
+            // SAFETY: path_ptr validated above; SUM=1 lets S-mode read the U-mode
+            // path. Slice lives only in this frame.
+            let path_str = unsafe {
+                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
+                core::str::from_utf8(slice).map_err(|_| SyscallError::InvalidInput)?
+            };
+            if !path_str.starts_with('/') {
+                return Err(SyscallError::InvalidInput);
+            }
+            // SAFETY: `base` is a kernel-allocated, identity-mapped grant page owned
+            // by the caller (validated above); `len <= g.size`. The caller is blocked
+            // in this syscall, so it cannot free the grant before spawn_gated copies
+            // the ELF segments into fresh frames.
+            let elf_bytes = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
+            let task_id = crate::loader::spawn_gated(
+                elf_bytes,
+                path_str,
+                crate::task::cap::Spawner::User(caller_id),
+            )
+            .map_err(|e| match e {
+                types::ViError::NotFound => SyscallError::FileNotFound,
+                types::ViError::OutOfMemory => SyscallError::Unknown,
+                types::ViError::PermissionDenied => SyscallError::PermissionDenied,
+                _ => SyscallError::InvalidInput,
+            })?;
+            // Personal ARGV slot transfer — parity with SpawnFromPath (args survive a
+            // subsequent global-slot overwrite before the child is scheduled).
+            const ARGV_KEY: u64 = 0x0061_7267_7600_0000;
             {
                 let mut argv_buf = alloc::vec![0u8; 512];
                 let n = crate::cell::state_stash::restore(ARGV_KEY, &mut argv_buf);
@@ -3061,6 +3128,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::Exec          => Syscall::Exec { path_ptr: a0, path_len: a1 },
         ViSyscall::SpawnFromMem  => Syscall::SpawnFromMem { args_ptr: a0 },
         ViSyscall::SpawnFromPath => Syscall::SpawnFromPath { path_ptr: a0, path_len: a1 },
+        ViSyscall::SpawnFromElf => Syscall::SpawnFromElf { grant_id: a0, len: a1, path_ptr: a2, path_len: a3 },
         ViSyscall::SpawnPinned   => Syscall::SpawnPinned {
             path_ptr: a0, path_len: a1, priority: a2 as u8, core_id: a3,
         },

@@ -278,6 +278,32 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
     }
 }
 
+/// Spawn a cell from ELF bytes in a caller-owned Grant region (G2 loader redesign).
+///
+/// `grant_id` must be a `sys_grant_alloc` region the caller owns, holding the full
+/// ELF image (`len` bytes). `path_hint` drives the kernel's `/bin/` privilege check,
+/// operator-policy lookup, and measurement label — advisory only (lying about it can
+/// only lose privilege). The kernel applies the IDENTICAL spawn trust gate as
+/// `sys_spawn_from_path`, so the source of the bytes is irrelevant to trust.
+pub fn sys_spawn_from_elf(grant_id: usize, len: usize, path_hint: &str) -> SyscallResult {
+    // SAFETY: register args plus a valid UTF-8 path slice the kernel copies out
+    // (under SUM) before returning.
+    unsafe {
+        let ret = syscall(
+            ViSyscall::SpawnFromElf,
+            grant_id,
+            len,
+            path_hint.as_ptr() as usize,
+            path_hint.len(),
+        );
+        if ret > 0 {
+            SyscallResult::Ok(ret as usize)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
+    }
+}
+
 /// Serialize all allocated physical frames to the warm-boot snapshot sector range.
 ///
 /// The kernel quiesces hardware and writes a snapshot image at a fixed LBA on
