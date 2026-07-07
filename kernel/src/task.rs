@@ -1246,7 +1246,7 @@ pub fn ipc_try_send(
             .load(core::sync::atomic::Ordering::Relaxed);
         if caller_id == input_tid && input_tid != 0 {
             if let Some(t) = sched.tasks.get_mut(&target_id) {
-                if t.pending_msgs.len() < tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+                if t.pending_msgs.len() < tcb::INPUT_EVENT_QUEUE_DEPTH {
                     // SAFETY: copy the message bytes out of the caller's user buffer
                     // (SAS identity mapping; caller is mid-syscall) into an owned box.
                     let data = unsafe {

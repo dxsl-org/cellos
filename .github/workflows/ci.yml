@@ -551,19 +551,22 @@ jobs:
         # Allowlist by substring (OR semantics). --test-threads=2: each test
         # boots its own QEMU and TCG is CPU-bound. Only tests that passed 2/2
         # consecutive full runs are listed — expand as more are stabilized.
-        # Remaining red (2026-07-07, 40/53 pass): a residual typed-input stall
-        # on the 3rd+ command of a session (~5 shell tests, flaky), 3 input_*
-        # tests needing live-input markers, gpu marker drift, bench timeout,
-        # mqtt_subscribe — see the analysis plan triage.
+        # Remaining red (2026-07-07, 46/53 pass): 3 input_* tests needing
+        # live-input markers, gpu marker drift, bench 180s timeout under
+        # contention, mqtt_subscribe (SUBACK never received — net recv path),
+        # httpd_dynamic (GET path) — see the analysis plan triage.
         run: |
           cd tests/integration
           cargo test --test boot -- --test-threads=2 \
             boots_to_shell_prompt \
             network_dhcp network_tcp_send network_curl network_tcp_listen \
-            network_wget_downloads_to_vfs \
-            shell_or_operator shell_exit_code_var shell_echo_e \
+            network_wget_downloads_to_vfs network_httpd_serves_file \
+            shell_or_operator shell_and_operator shell_exit_code_var shell_echo_e \
             shell_function_positional_args shell_variable_persists \
-            shell_source_script vfs_fat16_reboot_persistence
+            shell_source_script shell_source_multi_command \
+            shell_case_statement shell_while_loop shell_if_else_branch \
+            shell_test_builtin \
+            vfs_fat16_reboot_persistence vfs_fat16_append vfs_fat16_subdir_persistence
 
   security:
     name: Security Scan

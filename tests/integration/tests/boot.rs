@@ -735,7 +735,10 @@ fn shell_while_loop() {
     qemu.send_line("while vcat /no/such/file; do echo SHOULD_NOT_APPEAR; done");
     qemu.wait_for("ViCell >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("while false hung: {e}\n{}", qemu.dump()));
-    assert!(!qemu.output_contains("SHOULD_NOT_APPEAR"),
+    // ": SHOULD_NOT_APPEAR" matches only an OUTPUT line ("USER: SHOULD_NOT_APPEAR"),
+    // not the typed command's own serial echo — a bare substring check failed the
+    // test on its own echo once input fixes made echoes arrive complete.
+    assert!(!qemu.output_contains(": SHOULD_NOT_APPEAR"),
         "while false ran its body\n{}", qemu.dump());
 
     // (b) True-once: write flag, run body (echo + rm), verify body ran, loop exits.
@@ -795,10 +798,14 @@ fn shell_case_statement() {
     qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
 
     // Exact match fires; fallback must NOT fire.
+    // Negative checks match ": CASE_…" — the marker at the start of an OUTPUT
+    // line ("USER: CASE_WILD"). A bare substring check also matched the typed
+    // command's own serial ECHO ("… echo CASE_WILD ;; esac"), failing the test
+    // even though the shell behaved correctly.
     qemu.send_line("case $STATUS in ok) echo CASE_EXACT ;; *) echo CASE_WILD ;; esac");
     qemu.wait_for("CASE_EXACT", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("exact arm not taken: {e}\n{}", qemu.dump()));
-    assert!(!qemu.output_contains("CASE_WILD"),
+    assert!(!qemu.output_contains(": CASE_WILD"),
         "wildcard arm fired when exact matched\n{}", qemu.dump());
 
     // Unknown value hits the `*` fallback.
@@ -807,7 +814,7 @@ fn shell_case_statement() {
     qemu.send_line("case $STATUS in ok) echo CASE_EXACT2 ;; *) echo CASE_FALLBACK ;; esac");
     qemu.wait_for("CASE_FALLBACK", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("wildcard arm not taken: {e}\n{}", qemu.dump()));
-    assert!(!qemu.output_contains("CASE_EXACT2"),
+    assert!(!qemu.output_contains(": CASE_EXACT2"),
         "exact arm fired for unmatched value\n{}", qemu.dump());
 }
 
@@ -1128,7 +1135,7 @@ fn shell_and_operator() {
     qemu.send_line("vcat /no/such/file && echo SHOULD_NOT_APPEAR");
     qemu.wait_for("ViCell >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt after failed &&: {e}\n{}", qemu.dump()));
-    assert!(!qemu.output_contains("SHOULD_NOT_APPEAR"),
+    assert!(!qemu.output_contains(": SHOULD_NOT_APPEAR"),
         "&& ran right side despite left failing\n{}", qemu.dump());
 }
 
@@ -1152,7 +1159,7 @@ fn shell_or_operator() {
         .unwrap_or_else(|e| panic!("left not seen: {e}\n{}", qemu.dump()));
     qemu.wait_for("ViCell >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
-    assert!(!qemu.output_contains("SHOULD_NOT_APPEAR_2"),
+    assert!(!qemu.output_contains(": SHOULD_NOT_APPEAR_2"),
         "|| ran right side despite left succeeding\n{}", qemu.dump());
 }
 
@@ -1222,12 +1229,14 @@ fn shell_if_else_branch() {
 
     // `vcat /no/such/file` prints "not found" and returns non-zero → else fires.
     qemu.send_line("if vcat /no/such/file; then echo WRONG; else echo ELSE_OK; fi");
-    qemu.wait_for("ELSE_OK", CMD_TIMEOUT)
+    qemu.wait_for(": ELSE_OK", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("else branch did not run: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Guard: the then-branch must NOT have fired.
+    // ": WRONG" matches only an OUTPUT line ("USER: WRONG"), not the typed
+    // command's serial echo, which contains the keyword.
     assert!(
-        !qemu.output_contains("WRONG"),
+        !qemu.output_contains(": WRONG"),
         "then branch fired when it should not have\n{}", qemu.dump()
     );
 }
