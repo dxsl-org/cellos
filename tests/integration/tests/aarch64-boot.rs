@@ -81,7 +81,7 @@ fn aarch64_kernel_banner() {
         return;
     }
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("[ViCell] kernel boot v", 15)
+    qemu.wait_for("[Cellos] kernel boot v", 15)
         .unwrap_or_else(|e| panic!("aarch64 kernel banner missing: {e}\n--- output ---\n{}", qemu.dump()));
 }
 

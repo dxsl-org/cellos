@@ -12,7 +12,11 @@ $target    = "x86_64-unknown-none"
 $buildDir  = "target\$target\release"
 $embedded  = "kernel\src\embedded-x86_64"
 $buildStd  = "-Z build-std=core,alloc"
-$rustflags = "-C relocation-model=static -C target-feature=-red-zone"
+# Cells link at CELL_VA_START (0x1_0000_0000 = 4 GiB) since 2026-06-19; a small
+# code-model with relocation-model=static cannot materialise that address
+# (rust-lld: R_X86_64_32S against local symbol). Cells are PIC/PIE — matches the
+# .cargo/config.toml note that cells need relocation-model=pie (kernel uses pic).
+$rustflags = "-C relocation-model=pic"
 
 Write-Host "=== Building x86_64 cells (release) ==="
 
@@ -45,6 +49,21 @@ $cmd = "cargo build --release -p app-sys-tools --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 5
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-sys-tools build failed" }
 $env:RUSTFLAGS = ""
+
+# Build init and refresh the separately-embedded init ELF (kernel spawns it from
+# embedded bytes at boot). Rebuilding here keeps init in lockstep with the other
+# cells' ostd (G2 spawn_from_path routing) instead of a stale committed binary.
+Write-Host "Building app-init..."
+$env:RUSTFLAGS = $rustflags
+$cmd = "cargo build --release -p app-init --target $target $buildStd 2>&1"
+Invoke-Expression $cmd | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "app-init build failed" }
+$env:RUSTFLAGS = ""
+$initSrc = "$buildDir\app-init"
+if (Test-Path $initSrc) {
+    Copy-Item $initSrc "kernel\src\embedded-x86_64\init" -Force
+    Write-Host "  Refreshed kernel\src\embedded-x86_64\init"
+}
 
 # Collect available binaries
 $cells = @(
