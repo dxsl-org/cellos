@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-06-06 (added 2 use-case stages G1/G2 overlay)
+**Last Updated**: 2026-07-07 (docs audit: WASM Tier 2 dropped, native scripting runtimes unmaintained, kernel LOC + phase-number corrections)
 
 ---
 
@@ -13,7 +13,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 **Product delivery is framed in two use-case stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) → "Two Use-Case Stages"):
 - **Stage G1 — Robot & Embedded** (now → ~2026 Q4): complete the OS for robots/embedded. Primary target = Tier A SBC with MMU (RV64/ARM64, RPi-class robot brain); sub-track = Tier B MCU (RV32 <512KB, CHERIoT-Nano) for low-level control. Defining traits: never-die, bounded real-time, fault isolation, peripheral I/O (GPIO/I2C/SPI/UART/CAN), instant-on boot.
-- **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, Tier-2 WASM for untrusted code, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage.
+- **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage. (Note: Tier-2 WASM was previously listed here but is **DROPPED** from the official stack — see Risk Assessment. Untrusted code runs in the Tier 3 Linux VM.)
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
@@ -25,7 +25,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 The architecture spec (03-runtime.md) describes **Heap Snapshotting (Instant On)**: after first boot, serialize the full memory state to `system.img`. Subsequent boots load the snapshot directly, bypassing ELF parsing and re-linking — sub-100 ms cold boot for a full OS stack.
 
-No production OS offers this. If implemented, this becomes Cellos's primary competitive differentiator over Linux, Fuchsia, and unikernels. Planned for Phase 30.
+No production OS offers this. If implemented, this becomes Cellos's primary competitive differentiator over Linux, Fuchsia, and unikernels. Delivered in Phase 29 (Heap Snapshotting / Instant On) — ✅ COMPLETE (2026-06-07).
 
 ---
 
@@ -54,7 +54,7 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
    - No buffer overflows, no use-after-free in application code
 
 3. **Nano-Kernel Philosophy**: Minimize trusted code
-   - Kernel: ~8,700 LOC (vs. Linux: 20M LOC)
+   - Kernel: ~22,600 LOC measured (`kernel/src` all `.rs`, 2026-07-07); grown well past the original ~8,700 / <6,000 aspiration as in-kernel drivers and orchestration await migration to Cells (vs. Linux: 20M LOC)
    - Move filesystem, networking, drivers to userspace Cells
    - Each Cell is independently testable and upgradeable
 
@@ -76,7 +76,7 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
 
 ```
 Kernel & Core
-├── kernel              Nano kernel (~8,700 LOC)
+├── kernel              Nano kernel (~22,600 LOC measured 2026-07-07; migration of drivers/orchestration to Cells will shrink it)
 
 Hardware Abstraction
 ├── hal/core            Facade (feature-gated)
@@ -98,7 +98,7 @@ Cells
 ```
 
 ### Total Codebase
-- **Rust Code**: ~21,473 LOC (kernel 8706 + hal 2503 + libs 4284 + cells 5980)
+- **Rust Code**: kernel measures ~22,600 LOC alone (`kernel/src`, 2026-07-07); the earlier ~21,473 total (kernel 8706 + hal 2503 + libs 4284 + cells 5980) is stale and pending a full recount
 - **Design Docs**: 36 specification files (30,000+ LOC)
 - **Build Target**: `riscv64gc-unknown-none-elf` (primary); `aarch64-unknown-none`, `x86_64-unknown-none` supported
 
@@ -216,13 +216,13 @@ Cells
 
 **Requirement**: Unified keyboard + mouse input routing.
 
-**Current Status**: Stubs only.
+**Current Status**: ✅ COMPLETE (Milestone 2.2, 2026-06-12). PS/2 mouse deferred to G2 (VirtIO mouse/touchpad supported).
 
 **Acceptance Criteria**:
-- [ ] Keyboard driver (AT scancode handling)
-- [ ] Mouse driver (PS/2 or USB HID)
-- [ ] Input event queue (with timestamp)
-- [ ] Compositor receives input, routes to focused Cell
+- [x] Keyboard driver (VirtIO input scancode → ASCII)
+- [ ] PS/2 mouse driver (deferred to G2 — VirtIO pointer works)
+- [x] Input event queue with IPC forwarding (`dispatch_pending()` on IRQ)
+- [x] App focus registration + focused-Cell routing (`request_input_focus()`, `collect_input_events()`); E2E CI test `input_keyboard_e2e`
 
 **Effort**: 80 hours  
 **Owner**: TBD
@@ -251,13 +251,13 @@ Cells
 
 **Requirement**: Graphics framebuffer + window compositing.
 
-**Current Status**: Stubs only.
+**Current Status**: 🚧 PARTIAL (Milestone 2.4 still PLANNED overall). Zero-copy Grant surfaces + damage-driven render + FONT8X8 + `ViSurface` COMPLETE (2026-06-09); basic framebuffer + opt-in GPU (Phase 16). Full desktop windowing/Z-order deferred to G2.
 
 **Acceptance Criteria**:
-- [ ] VirtIO GPU driver (linear framebuffer mode)
-- [ ] Compositor Cell manages windows + Z-order
-- [ ] Window rendering (software rasterizer)
-- [ ] Wayland-like protocol between Cells
+- [x] VirtIO GPU driver (linear framebuffer mode, opt-in)
+- [~] Compositor Cell manages windows + Z-order (grant surfaces done; full window management G2)
+- [x] Window rendering (software rasterizer via `ViCanvas`)
+- [ ] Wayland-like protocol between Cells (G2)
 
 **Effort**: 150 hours  
 **Owner**: TBD
@@ -305,33 +305,13 @@ Cells
 
 **Requirement**: Full Lua 5.4 execution, stdlib access.
 
-**Current Status**: Bindings exist, need testing + Cell integration.
-
-**Acceptance Criteria**:
-- [ ] Load + execute `.lua` scripts from shell
-- [ ] Stdlib functions: table, string, math, io, os
-- [ ] File I/O via VFS syscalls
-- [ ] C FFI for calling kernel/driver functions
-- [ ] Package manager (luarocks) compatibility
-
-**Effort**: 80 hours  
-**Owner**: TBD
+**Current Status**: Milestone 3.3 marked ✅ COMPLETE historically (2026-06-05: typed VFS IPC, io.open, vfs.stat/listdir/remove). **Native runtime is NOT actively maintained** — treated as a half-measure. Scripting/R&D story is now Python via the Tier 3 Linux VM. Package manager (luarocks) and further enhancement targets are cancelled.
 
 #### 3.4 MicroPython Runtime Enhancement
 
 **Requirement**: Python 3 subset execution environment.
 
-**Current Status**: Bindings exist, minimal testing.
-
-**Acceptance Criteria**:
-- [ ] Load + execute `.py` scripts from shell
-- [ ] Stdlib: builtins, sys, os, math, random, json
-- [ ] File I/O via VFS syscalls
-- [ ] Pip package installation (no network yet, but structure ready)
-- [ ] REPL support: `python` interactive shell
-
-**Effort**: 100 hours  
-**Owner**: TBD
+**Current Status**: Milestone 3.4 marked ✅ COMPLETE historically (2026-06-05: `vfs_bridge.rs`, `modvfs.c`, typed VFS IPC). **Native runtime is NOT actively maintained** and the full enhancement targets below (pip, REPL, stdlib expansion) are **dropped**. Python for R&D runs as full CPython inside the **Tier 3 Linux VM** (`apt install python3 pip numpy torch`), not as a native Cell.
 
 **Success Metric**: Total Phase 3 effort = 500 hours (~12 weeks)
 
@@ -420,7 +400,7 @@ Cells
 | Kernel | Rust nightly | 2024+ | ✅ Compiling |
 | HAL | Custom traits | N/A | ✅ RV64 done, ARM/x86 planned |
 | Filesystems | FAT32 | Existing | ✅ Read-only working |
-| Runtimes | Lua / MicroPython | 5.4 / 1.24.1 | ✅ Bindings exist |
+| Runtimes | Lua / MicroPython | 5.4 / 1.24.1 | ⚠️ Native runtimes unmaintained (dropped); Python = Tier 3 VM |
 
 ### Key Dependencies
 
@@ -442,7 +422,7 @@ None documented yet (Phase 1 still stabilizing).
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
-| Kernel LOC | < 10000 | 8,700 | ✅ Met |
+| Kernel LOC | < 10000 | ~22,600 (measured 2026-07-07) | ❌ Exceeded — pending driver/orchestration migration to Cells |
 | Architecture Tests | 10/10 | 10/10 | ✅ Met |
 | Build Time | < 60s | 45s | ✅ Met |
 | VirtIO Block | Working | ✅ Working | ✅ Complete |
@@ -478,8 +458,8 @@ None documented yet (Phase 1 still stabilizing).
 5. **Spec–Reality IPC Gap** — IPC is 100–1000× slower than architecture spec claims (syscall vs. direct call)
 6. **No Per-Cell Memory Quota** — Single cell OOM kills entire system
 7. **KASLR Absent** — Kernel address predictable from first bytecode execution
-8. **WASM Tier 2 Absent** — No safe third-party code path; all Cells must be first-party trusted
-9. **WASI 2.0 Competitive Threat** — Ecosystem increasingly adopts Component Model interfaces
+8. **WASM Tier 2 — DROPPED (2026-06-06)** — Formerly tracked as "no safe third-party code path". Tier 2 WASM was removed from the official stack (no clear use case between trusted Tier 1 and full Tier 3); the untrusted / multi-tenant code path is the **Tier 3 Linux VM**. Phase 28 MVP code retained only under `feature = "wasm-experimental"`. Revisit only if G2 becomes an untrusted multi-tenant platform (Cloudflare Workers–style). See docs/specs/05-application.md §6.
+9. **WASI 2.0 Competitive Threat** — Moot while WASM Tier 2 is dropped; re-evaluate only if the multi-tenant use case above materializes
 
 ### Mitigation Strategies
 
@@ -489,7 +469,7 @@ None documented yet (Phase 1 still stabilizing).
 - Conservative feature additions (one major change per week)
 - Direct IPC fast path (Phase 27) to close spec gap
 - Priority scheduler (Phase 25) for real-time isolation
-- Tier 2 WASM runtime (Phase 28) for safe third-party execution
+- Untrusted third-party code isolated via the Tier 3 Linux VM (Tier 2 WASM path dropped 2026-06-06)
 
 ---
 
@@ -497,7 +477,7 @@ None documented yet (Phase 1 still stabilizing).
 
 > **Use-case stage overlay** (maps onto the technical phases below):
 > - **G1 Robot & Embedded** (now → ~2026 Q4): Core Stability ✅ + Phases 24–26, 29–30 + Peripheral Driver track 🆕 + ARM64 full bring-up 🆕 + VFS robustness + RV32-Nano sub-track (tail) + reference robot demo 🆕.
-> - **G2 Server & PC** (~2027): Phase 28 (WASM), Phase 32 (SMP), Phase 27-3 (direct IPC), full compositor/desktop, hot migration (M4.1), x86_64 full bring-up 🆕, full utilities, throughput benchmarks.
+> - **G2 Server & PC** (~2027): Phase 32 (SMP), Phase 27-3 (direct IPC), full compositor/desktop, hot migration (M4.1), x86_64 full bring-up 🆕, full utilities, throughput benchmarks. (Phase 28 Tier-2 WASM dropped 2026-06-06 — revisit only for an untrusted multi-tenant platform.)
 
 ```
 Phase 1: Core Stability
@@ -551,7 +531,7 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 ## Success Criteria (Overall)
 
 1. ✅ Passes architecture validation (10/10)
-2. ✅ Kernel < 6000 LOC
+2. ❌ Kernel < 6000 LOC — NOT met; measures ~22,600 LOC (`kernel/src`, 2026-07-07). Shrinks once tracked in-kernel drivers/orchestration migrate to Cells (see CLAUDE.md "Kernel Boundary Law")
 3. ✅ Zero unsafe code in Cells
 4. ✅ Multi-architecture HAL (RV64, ARM, x86)
 5. ✅ Full test coverage (80%+)

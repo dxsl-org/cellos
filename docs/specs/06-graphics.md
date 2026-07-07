@@ -32,7 +32,7 @@ Cellos cho phép cấu hình linh hoạt tùy theo mục đích sử dụng:
 | :--- | :--- | :--- |
 | **Mode 1: CLI** | Server / Robot Nano | Không GUI. Chỉ dùng Serial/VGA Driver cho Shell. |
 | **Mode 2: Kiosk** | Industrial Panel / ATM | Full-screen cho một App duy nhất. Tối ưu Direct Scanout. |
-| **Mode 3: Desktop** | Workstation | Hỗ trợ nhiều cửa sổ, Taskbar, Start Menu thông qua Slint. |
+| **Mode 3: Desktop** | Workstation | Hỗ trợ nhiều cửa sổ, Taskbar, Start Menu thông qua ViUI (xem §4; Slint đã bị loại — §4 note 2026-06-07). |
 
 ## 4. UI Toolkit: ViUI (Custom, Cellos-native)
 

@@ -1,6 +1,6 @@
 # Cellos Security Model
 
-**Version:** v0.2.3-dev | **Updated:** 2026-06-21
+**Version:** v0.2.3-dev | **Updated:** 2026-07-07
 
 ## Design Philosophy
 
@@ -28,13 +28,13 @@ relies on:
 |--------|-----------|--------|
 | Cell writes to another Cell's memory | SAS + Rust ownership; no `unsafe` in cells/ | ✅ Mitigated |
 | Cell modifies a revoked capability | Kernel removes CapId from table on Close; subsequent ops return PermissionDenied | ✅ Mitigated |
-| Attacker modifies disk image to inject malicious ELF | ELF is checksummed at load time (TODO: Phase 12 adds SHA256 verification) | 🔶 Partial |
+| Attacker modifies disk image to inject malicious ELF | Every spawned ELF is SHA-256 measured into an append-only measurement log (IMA model, `kernel/src/measurement_log.rs`) **and** Ed25519 signature-verified at `spawn_from_path()` before scheduling (`kernel/src/signing.rs` → gated in `kernel/src/loader.rs`). ⚠️ G1 uses a dev-seed signer key (`CELL_SIGNER_PUBKEY`); prod must provision a real key | ✅ Mitigated |
 
 ### Repudiation
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cell claims it did not send an IPC message | Sender ID in TCB is set by kernel on message delivery; cannot be forged | ✅ Mitigated |
-| Audit log missing | No audit log yet; planned for v1.x | ❌ Deferred |
+| Audit log missing | Kernel audit ring buffer shipped (Phase 26, `kernel/src/audit.rs`) — records `IpcSend`, `CellFault`, `CellExit`, `CellMeasure`, etc. events | ✅ Mitigated |
 
 ### Information Disclosure
 | Threat | Mitigation | Status |
@@ -82,63 +82,77 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 > **explicitly NOT pursued**. PMP is M-mode-only (unreachable from Cellos's S-mode without
 > custom firmware) and sPMP is unratified; per-cell SATP would break Tier 1 zero-copy IPC.
 > Hardware isolation is delivered by **Tier 3 Stage-2 paging (per-VM)**, and untrusted code
-> is confined to Tier 2 (WASM) / Tier 3. The Tier 1 "signed cells only" guarantee depends on
-> **Ed25519 signing + a secure-boot loader gate** (currently spec-only — "trusted" is today
-> approximated by the `/bin/` path prefix). See [specs/12-reliability.md](specs/12-reliability.md) §2.
+> is confined to **Tier 3 (Linux VM / hypervisor)** — the WASM Tier 2 sandbox was **dropped from
+> the official stack (2026-06-06)**, so there is no WASM confinement path. The Tier 1 "signed cells
+> only" guarantee is now **enforced**: Ed25519 signature verification runs at the loader spawn gate
+> (`kernel/src/signing.rs` + `loader.rs`), backed by per-Cell SHA-256 measurement. ⚠️ G1 ships a
+> dev-seed signer key; prod must provision a real one. See [specs/12-reliability.md](specs/12-reliability.md) §2.
 
-### KASLR Absent
-**Severity: High**
+### KASLR — Shipped (Phase 24)
+**Severity: Resolved**
 
-Kernel loads at a fixed virtual address. An attacker with any code execution can immediately locate kernel symbols without brute-forcing.
+**Shipped (2026-06-05, Phase 24)**: KASLR via Limine boot randomization. The boot chain is
+OpenSBI → Limine → kernel, the kernel is built PIE (`-C relocation-model=pic -C link-arg=-pie`
+via `kernel/build.rs`), and `limine.conf` sets `KASLR=yes` so consecutive boots load the kernel
+at different physical bases. Verified across the integration test suite.
 
-**Planned**: KASLR via Limine boot randomization — estimated 3 days to implement, deferred to Phase 24.
+### Per-Cell DMA Isolation — Shipped (2026-06-22)
+**Severity: Resolved (residual gap for untrusted Tier-1b — see below)**
 
-### DMA Isolation Absent — IOMMU in Passthrough Mode
-**Severity: Critical (real hardware with DMA-capable peripherals)**
+The IOMMU was upgraded from bare passthrough (`DDTP.MODE=1` / VT-d single shared passthrough domain,
+IOVA==PA, no permission table) to **per-Cell translate mode** on both architectures:
 
-The RISC-V IOMMU and x86 VT-d shipped in Track B run in **passthrough mode** — RISC-V via `DDTP.MODE=1`
-(bare; translation disabled), x86 via VT-d with translation *enabled* (`TES`) but every one of the 256 BDFs
-mapped to a `TT=0b10` passthrough context entry in a single shared domain. Both yield IOVA==PA with no
-permission table, and `iommu::map_dma()` is a literal identity no-op (`kernel/src/task/drivers/iommu.rs`) —
-functionally equivalent to having no IOMMU. In a SAS, a **Cell *is* the
-driver**: it owns the device MMIO and programs the DMA descriptor ring directly, with no kernel intermediary.
-A compromised (or buggy) Cell that holds a DMA-capable peripheral (NIC, NVMe, GPU, USB host, on-chip DMA
-engine) can read or write **any** physical address — kernel page tables, scheduler/Cell metadata, other Cells'
-stacks — **without a single line of `unsafe`**, purely via MMIO writes it is legitimately permitted to issue.
-This defeats LBI and every CPU-side memory protection at once. The blast radius equals a Linux *kernel driver*
-bug, not a user-space exploit. (Thunderclap, NDSS 2019, bypassed the IOMMU of macOS/Linux/FreeBSD even when
-*enabled* — Cellos has not enabled translation at all.)
+- **RISC-V** (`kernel/src/task/drivers/iommu_riscv.rs`): 3-level DDT (`DDTP.MODE=3LVL`), a per-Cell Sv39
+  translation domain, a unique **PSCID** per Cell (with a free-list to survive Cell restarts), and
+  `IOTINVAL.VMA` / `IOFENCE.C` / `IODIR.INVAL_DDT` invalidation.
+- **x86** (`kernel/src/task/drivers/iommu_x86.rs`): a per-Cell VT-d second-level page table (`VtdSlpt`) with
+  its own DID, ECAP-computed IOTLB offsets, and PSI/DSI IOTLB + context-cache invalidation.
 
-**Key distinction**: MMIO ownership ≠ DMA authorization. The Resource Registry enforces exclusive MMIO
-ownership, but holding NIC MMIO implies DMA capability while holding UART MMIO does not. The kernel must track
-DMA capability **separately** and install per-device, per-Cell IOMMU/IOPMP translation entries.
+DMA authorization is now a first-class capability: the new **`sys_grant_dma` (233)** syscall grants a Cell a
+BDF plus a DMA-mapping quota (1× its memory quota, page-aligned), enforced by `can_map_dma()` +
+`record_dma_mapped/unmapped()`. On Cell exit, `cleanup_cell()` (Exit / ForceExit / watchdog paths) tears down
+the domain and issues `IOFENCE`/IVT flush **before** frame reclaim. Peripherals default to the kernel domain;
+a userspace Driver Cell must explicitly request authorization. This closes the Thunderclap (NDSS 2019) class
+of attack for PCIe DMA-capable devices — the blast radius of a compromised Driver Cell is now confined to its
+own granted pages, not all of physical memory.
 
-**Planned**: Switch IOMMU from passthrough → translate mode with per-device IOVA→PA tables; add
-`sys_grant_dma(device, phys, size)` mapping only granted pages; RISC-V **IOPMP** (bus-side) for on-chip DMA
-controllers that bypass the SMMU. Must be resolved before any Cell is granted a real DMA-capable peripheral on
-hardware. See [research/research-hardware-isolation.md](research/research-hardware-isolation.md) §3.
+**Key distinction preserved**: MMIO ownership ≠ DMA authorization. The Resource Registry enforces exclusive
+MMIO ownership; DMA capability is tracked **separately** via `sys_grant_dma` and per-device, per-Cell IOMMU
+translation entries.
 
-### Forward-Edge CFI Absent (BTI / CET-IBT)
-**Severity: High (prerequisite for MPK)**
+> ⚠️ **Residual gap (honest):** the IOMMU fronts only the **PCIe root complex**. **virtio-mmio** devices are
+> **not** behind the IOMMU (see [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) §1.4). A Tier-1b
+> C/Zig Cell that can issue raw MMIO writes to a virtio-mmio device can still program its virtqueue with
+> arbitrary physical addresses, and the device will DMA there. This remains open for **untrusted Tier-1b**;
+> the roadmapped closure is per-Cell **PMP/WorldGuard** MMIO gating plus IOMMU/WorldGuard coverage of
+> virtio-mmio DMA. See [research/research-hardware-isolation.md](research/research-hardware-isolation.md) §3.
 
-Spatial memory protection does not stop a corrupted indirect branch from jumping anywhere in the SAS. Cellos
-plans PAC (ARM) but PAC only covers the **backward edge** (return addresses) — forward-edge JOP/COP is open
-without **BTI** (ARM) or **CET-IBT** (x86). Critically, **MPK/PKU is not a security boundary without CFI**:
-`WRPKRU` is an unprivileged instruction, so any JOP gadget reaching an unsanctioned `WRPKRU`/`XRSTOR` grants
-the attacker every protection key (ERIM, USENIX Sec 2019; PKU Pitfalls, USENIX Sec 2020 — 10 working bypasses).
-Safe Rust Cells neutralize most of this, but C FFI (mlibc, DOOM), Lua dispatch, and unsafe kernel code
-re-expand the gadget surface to the whole image.
+### Forward-Edge CFI (BTI / CET-IBT) — Shipped (2026-06-23)
+**Severity: Resolved**
 
-**Planned**: Compile Cells + kernel with `+bti,+pac-ret` (ARM) / `CONFIG_X86_KERNEL_IBT` + CET Shadow Stack
-(x86); make CFI a hard prerequisite before enabling any MPK domain. See
-[research/research-hardware-isolation.md](research/research-hardware-isolation.md) §2.
+Forward-edge CFI closes the gap where a corrupted indirect branch jumps anywhere in the SAS. All five phases
+of the **Layer-2 hardware security supplements** are complete:
 
-### No Audit Log
-**Severity: Medium**
+- **ARM64 BTI + PAC-RET** — `SCTLR_EL1.BT0/BT1` + `APIAKEY_EL1` init, compiled with `+bti,+paca,+pacg`,
+  runtime-detected via `ID_AA64PFR1_EL1` / `ID_AA64ISAR1_EL1`. Covers both forward edge (BTI) and backward
+  edge (PAC-RET return addresses).
+- **ARM64 MTE** — `ViMte` trait, `SCTLR_EL1.ATA/TCF` config, `STGP` tag writes, sync/async fault modes.
+- **x86 CET-IBT** — `CR4.CET` + `MSR_IA32_S_CET` ENDBR_EN, `ENDBR64` landing pads on all ring-3 stubs, `#CP`
+  (IDT vector 21) handler.
+- **x86 PKU** — `CR4.PKE`, 3-key model (0=trusted / 1=service / 2=FFI), `WRPKRU` guards on `iretq`/`sysretq`,
+  with CET-IBT enforced as a hard prerequisite (closing the `WRPKRU`-gadget bypass — ERIM / PKU Pitfalls).
 
-Cell actions (IPC sends, file writes, network connects) are not persistently logged. Forensic analysis after an incident is impossible.
+> ⚠️ **One G2 follow-up:** PKU is wired but PTE key tagging is deferred — the loader does not yet stamp
+> per-Cell keys into PTE bits [62:59], so keys are all-zero and PKU **enforcement is bypassed** until then.
+> CET-IBT (already enforced) covers the JOP-gadget threat in the interim. See
+> [research/research-hardware-isolation.md](research/research-hardware-isolation.md) §2 and roadmap §G.
 
-**Planned**: 256 KB kernel ring buffer, flushed to `/data/kernel.log` on shutdown (Phase 26).
+### Audit Log — Shipped (Phase 26)
+**Severity: Resolved**
+
+**Shipped**: a kernel audit ring buffer (`kernel/src/audit.rs`) records security-relevant events —
+`IpcSend`, `CellFault`, `CellExit`, `CellMeasure`, and others — providing an in-kernel trail for forensic
+analysis after an incident.
 
 ### Capability Token System — Implementation Gap
 **Severity: Medium**
@@ -159,20 +173,26 @@ for G2 HMI (sensitive caps only). Hard invariant: the manifest is a **ceiling, n
 kernel enforces** (consent feeds the syscall-boundary check). LBI already closes the TCC "permission-laundering
 via code injection" hole that produced repeated macOS/iOS TCC CVEs.
 
-### Boot Trust Chain + Attestation — Absent
+### Boot Trust Chain + Attestation — Partial (measurement + signing shipped)
 **Severity: Medium (High for fleet deployment)**
 
-Cellos has no secure boot, no measured boot, no device attestation, and no sealed storage. Cell binary signing
-(Ed25519/P-256) is planned but unimplemented. A robot fleet cannot cryptographically prove a device runs
-unmodified Cellos (vs tampered firmware with a cloned identity), and secrets are not bound to a measured boot
-state.
+**Shipped**: two of the building blocks are now in place.
+- **Per-Cell SHA-256 measurement (2026-06-21)** — every ELF is hashed at `spawn_from_path()` and extended
+  into an append-only kernel measurement log (Linux IMA model) *before* the Cell is scheduled
+  (`kernel/src/sha256.rs`, `kernel/src/measurement_log.rs`; emitted as a `CellMeasure` audit event).
+- **Ed25519 cell-signing verify-at-spawn (2026-06-23)** — the loader extracts the `__ViCell_sig` section and
+  verifies the ELF signature before spawning, failing closed when signing is required (`kernel/src/signing.rs`,
+  gated in `kernel/src/loader.rs`). ⚠️ **G1 dev-seed keys:** `signing.rs::CELL_SIGNER_PUBKEY` and
+  `policy.rs::FLEET_ROOT_PUBKEY` fall back to a fixed dev seed under the dev feature gate and to a `[0u8; 32]`
+  fail-closed placeholder otherwise — **production must provision real keys.**
 
-**Planned** (see [research/research-cell-security-permissions.md](research/research-cell-security-permissions.md)
-§3): a TPM-free **DICE/RIoT** layered chain (`CDI_n = HKDF(CDI_{n-1}, HASH(layer_n))`), per-Cell **SHA-256
-measurement** at `spawn_from_path()` extended into a kernel measurement log (Linux IMA model), **remote
-attestation** via EAT tokens (RFC 9711) + RATS (RFC 9334) verified by ARM Veraison fleet-side, and **sealed
-storage** with the AEAD key held in the **Silo** (closes the CDI-in-RAM exposure). Hardware root of trust:
-**OpenTitan** (open-source RISC-V) is the natural backing for the existing Silo abstraction.
+**Still open** (see [research/research-cell-security-permissions.md](research/research-cell-security-permissions.md)
+§3): full **secure/measured boot** and a **device attestation** story — a TPM-free **DICE/RIoT** layered chain
+(`CDI_n = HKDF(CDI_{n-1}, HASH(layer_n))`), **remote attestation** via EAT tokens (RFC 9711) + RATS (RFC 9334)
+verified by ARM Veraison fleet-side, and **sealed storage** with the AEAD key held in the **Silo** (closes the
+CDI-in-RAM exposure). Hardware root of trust: **OpenTitan** (open-source RISC-V) is the natural backing for the
+existing Silo abstraction. A robot fleet still cannot yet cryptographically prove end-to-end that a device runs
+unmodified Cellos, nor bind secrets to a measured boot state.
 
 ## Hardware Isolation Roadmap
 
@@ -252,14 +272,17 @@ Bước 4: Kernel unsafe blocks
    inherent.  Mitigation (retpoline, IBRS, CSR flushing) is deferred to
    Phase 12 hardening.
 
-2. **No KASLR:** Kernel is loaded at a fixed address by Limine.  Planned
-   for v1.x.
+2. **KASLR:** *Shipped (Phase 24).* Limine randomizes the kernel load base
+   (kernel built PIE, `KASLR=yes`).
 
-3. **Trusted Cells:** All installed Cells are fully trusted.  There is no
-   sandbox for untrusted Cells in v1.0.  See Phase 23 for community
-   submission review gates.
+3. **Trusted Cells:** All installed Cells are fully trusted (now enforced by
+   Ed25519 verify-at-spawn + SHA-256 measurement). There is no in-SAS sandbox
+   for untrusted Cells — untrusted third-party code belongs in **Tier 3 (Linux
+   VM / hypervisor)**, not a WASM Tier 2 (WASM was dropped from the stack
+   2026-06-06). See Phase 23 for community submission review gates.
 
-4. **No audit log:** Cell actions are not persistently logged.
+4. **Audit log:** *Shipped (Phase 26).* Cell actions are recorded in the kernel
+   audit ring buffer (`kernel/src/audit.rs`).
 
 ## Defense in Depth
 
@@ -270,9 +293,9 @@ Bước 4: Kernel unsafe blocks
 | Kernel | Capability table, syscall argument validation, frame zeroing |
 | CI | `cargo-geiger`, `cargo-audit`, `cargo-deny` on every PR |
 | Fuzzing | Weekly libFuzzer harnesses on ELF parser + VFS path validator |
-| HW — spatial _(roadmap)_ | MPU/PMP (embedded C-tier), MPK/PKS (x86 tier domains), MTE (ARM UAF hardening) |
-| HW — control-flow _(roadmap)_ | BTI+PAC (ARM), CET IBT+Shadow Stack (x86), Zicfilp/Zicfiss (RISC-V) — **prerequisite for MPK** |
-| HW — DMA _(roadmap)_ | IOMMU/SMMU translate mode + IOPMP; per-Cell `sys_grant_dma` (**not** MMIO ownership) |
+| HW — spatial | ✅ MTE (ARM UAF hardening); PKU domains wired on x86 (keys all-zero → enforcement pending PTE-key tagging, G2); MPU/PMP (embedded C-tier) _(roadmap)_ |
+| HW — control-flow | ✅ **Shipped**: BTI+PAC-RET (ARM), CET-IBT (x86); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
+| HW — DMA | ✅ **Shipped**: IOMMU translate mode (RISC-V 3LVL DDT / x86 VT-d per-Cell) + per-Cell `sys_grant_dma` (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
 | HW — VM-grade _(roadmap)_ | Stage-2/EPT (Tier 3); TDX/SEV-SNP/ARM CCA for attested multi-tenant |
 
 > Hardware layers are rated against the SAS "no-TLB-flush-per-switch" criterion in

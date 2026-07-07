@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-06-05 (Phase X-3 complete)
+**Last Updated**: 2026-07-07 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; WASM Tier 2, Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -30,9 +30,9 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 
 ```
 ┌─────────────────────────────────────────┐
-│  Cells (Applications, Drivers, Services) │  Apps: hello, shell, lua, micropython
-├──────────────────────────────────────────┤  Drivers: disk, gpu, input, net, serial
-│  Kernel (Nano Kernel, ~8,700 LOC)       │  Services: vfs, config, compositor, net, power
+│  Cells (Applications, Drivers, Services) │  Apps: hello, shell, robot-dashboard, doom
+├──────────────────────────────────────────┤  Drivers: disk, gpu, input, net, e1000, nvme, serial (Driver Cells)
+│  Kernel (Nano Kernel, ~22.6K LOC)       │  Services: vfs, config, compositor, net, hypervisor, silo, power
 ├──────────────────────────────────────────┤
 │  HAL (Hardware Abstraction Layer)        │  RV64 ✅, AArch64 ✅ (Ring-3), x86_64 ✅ (Ring-3)
 ├──────────────────────────────────────────┤
@@ -42,7 +42,9 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 
 ---
 
-## Kernel (nano-kernel, ~8,700 LOC)
+## Kernel (nano-kernel)
+
+> **LOC note (measured 2026-07-07)**: `kernel/src`, all `.rs` files = **~22.6K lines** (`find kernel/src -name '*.rs' | xargs wc -l` = 22,604). The historical "<10K LOC nano-kernel" target (variously cited as 5.6K / 7.2K / 8.7K / 11.5K across older docs) predates the driver-migration bookkeeping, IOMMU/DMA-isolation subsystem, the RISC-V/ARM64/x86 HAL integration in-tree, and the ARM64 EL2 hypervisor prep. The kernel is still nano by *responsibility* (see Kernel Boundary Law in `CLAUDE.md` / `docs/specs/15-kernel-boundary.md`), not by this line count.
 
 The kernel is **tiny** by design, handling only:
 
@@ -118,6 +120,8 @@ struct Task {
 10 core syscalls (vs. Linux's 300+):
 
 > **Implementation Note**: The architecture spec (01-core.md) describes inter-cell IPC as direct function calls via vtable (2–3 CPU cycles). The current implementation uses kernel-mediated syscall message passing (~100–1000 cycles per round-trip), equivalent to a lightweight microkernel. Direct vtable IPC is planned for Phase 27 (trusted-cell fast path) once the Metadata Registry is integrated with the linker.
+>
+> **Normative wire contract**: the actual kernel-mediated framing is now ratified in **[`docs/specs/17-ipc-wire-contract.md`](specs/17-ipc-wire-contract.md)** (Ratified 2026-07-07, normative for all cells). It fixes the recurring silent-failure class from ad-hoc per-service framing: `sys_recv(mask, buf)` returns the **sender tid** not a byte count (`mask == 0` wildcard, `mask == tid` filters one sender); the **byte-0 discriminant registry** and message framing/buffer-size rules are defined there. Any new IPC path MUST comply.
 
 | Syscall | Purpose |
 |---------|---------|
@@ -276,7 +280,12 @@ pub fn vi_handle_virtio_irq(irq: u32) -> bool {
 3. Wake the corresponding Driver Cell task if blocked on I/O
 4. Driver Cell (userspace) handles the rest: drain rings, process data, refill available ring
 
-**Note**: As of Phase 01 (2026-06-24, Kernel Boundary Law enforcement), all VirtIO device logic is in Driver Cells (`cells/drivers/`), not kernel code. The kernel only handles interrupt dispatch and wakeup.
+**Note**: As of Phase 01 (2026-06-24, Kernel Boundary Law enforcement), device logic lives in Driver Cells (`cells/drivers/`), not kernel code. The kernel only handles interrupt dispatch and wakeup.
+
+**Driver residency (2026-07-07)** — migrated to Driver Cells: **virtio_net, virtio_gpu, virtio_input, virtio_sound, e1000, nvme**. The kernel retains only:
+- **boot `virtio_blk`** — bootstrap root-of-trust; needed to load the very first Cell before a VFS/disk Driver Cell can exist (`docs/specs/15-kernel-boundary.md` §2 Category C). Migration to `cells/drivers/virtio-blk/` is tracked tech debt, blocked on the loader dependency.
+- **`mmc`** — descoped (no SDHCI on QEMU to validate against).
+- **IOMMU init + `map_dma_for_cell`** — whitelisted: the only hardware boundary between Driver Cells and physical memory in a Single Address Space.
 
 **Interrupt Flow (Correct Pattern)**:
 ```
@@ -442,7 +451,7 @@ cells/tools/shell/     — Interactive REPL (parser, executor, aliases, jobs, hi
 cells/tools/init/      — Bootstrap (spawns vfs, config, input, net, compositor, shell, robot-demo; games/demos run on-demand from shell)
 cells/tools/sys-tools/ — Standalone binaries: ls, cat, echo, ps, kill (0x2A000000 VA base)
 cells/tools/net-tools/ — Network utilities: ping, curl, wget, nc, httpd, mqtt (0x26000000 VA base)
-cells/tools/wasm/      — WASM interpreter cell (feature-gated)
+cells/tools/wasm/      — WASM interpreter cell (⚠️ Tier 2 DROPPED from official stack 2026-06-06; retained under feature = "wasm-experimental" only — not part of the shipping stack; untrusted code → Tier 3 VM)
 ```
 
 **Applications**: User-facing applications
@@ -485,7 +494,7 @@ cells/drivers/spi-gpio/  — BitBangSpi<G> generic over ViGpio
 cells/drivers/pwm-gpio/  — BitBangPwm<G> generic over ViGpio
 cells/drivers/adc-sim/   — Simulated ADC (no MMIO)
 cells/drivers/can-loopback/ — Loopback CAN (no MMIO)
-cells/drivers/wasm/      — WASM runtime wrapper
+cells/drivers/wasm/      — WASM runtime wrapper (⚠️ Tier 2 DROPPED 2026-06-06; experimental feature only)
 ```
 
 **Services**: System services with long-lived state
@@ -503,7 +512,7 @@ cells/services/power/     — Power management (stub)
 
 **Runtimes**: VMs/interpreters for scripting
 ```
-cells/runtimes/lua/       — Lua 5.4 via FFI (✅ REPL verified)
+cells/runtimes/lua/       — Lua 5.4 via FFI (⚠️ milestone marked complete but native runtime NOT actively maintained — roadmap §D; scripting/Python story is Tier 3 Linux VM, not a native runtime)
 ```
 
 **Tests**: Integration & stress test cells
@@ -533,14 +542,14 @@ cells/guests/silo-guest/  — aarch64-unknown-none bare-metal (p256 ECDSA signin
 ```
 libs/viui/             — ViUI toolkit (no_std + alloc, MIT)
   v1 (done):           Elm model, FramebufferCanvas, GlyphAtlas — foundation
-  v2 (G2 planned):     Reactive Signal Tree + Dual-Layer DSL (see below)
+  v2 (✅ shipped 2026-06-16, all 7 phases): Reactive Signal Tree + Dual-Layer DSL (see below)
 ```
 
 ---
 
-## ViUI Architecture (G2 Target)
+## ViUI Architecture (✅ shipped 2026-06-16)
 
-ViUI v2 targets the constraints of Cellos's no_std Cell environment while matching the ergonomics of modern native UI toolkits.
+ViUI v2 targets the constraints of Cellos's no_std Cell environment while matching the ergonomics of modern native UI toolkits. **All 7 phases are complete** (P01 Overlay Widgets · P02 Navigation · P03 Charts · P04 DSL build.rs · P05 Virtual ListView · P06 FlexBox · P07 Advanced Bindings). **Slint was rejected** for ViUI (GPL-3 viral / per-device commercial license unfit for an OS platform — `docs/specs/14-viui.md`, `06-graphics.md §39`); the `.vi` DSL is Slint-*compatible syntax* only, not a Slint dependency.
 
 ### Dual-Layer Design
 
@@ -861,11 +870,13 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 ---
 
-## Current Status (2026-06-05)
+## Current Status (2026-07-07)
 
-### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo)
+> **Status refresh 2026-07-07**: Every item the 2026-06-05 snapshot listed as In-Progress / Planned — KASLR, ARM64 full bring-up, ViUI v2, reliability/supervisor restart, Tier 3b Linux VM, cell signing — has since **shipped** (cross-checked against `docs/project-roadmap.md` milestone table). See the "Recently shipped" block below.
+
+### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3b VM, Cell Signing)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
-- **Nano kernel** (~8,700 LOC) with round-robin scheduler
+- **Nano kernel** (~22.6K LOC `kernel/src`, measured 2026-07-07 — nano by *responsibility*, not line count; see LOC note under "## Kernel") with round-robin scheduler
 - **48 syscall variants** (IPC, memory, task, FS, GPU, network, state) + **Block I/O capability gate**
 - **Block I/O syscalls** (raw 500/501/503 for FAT16 persistence, gated to VFS task 3)
 - Frame allocator (bitmap) and virtual memory
@@ -889,8 +900,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   - **Function arguments** ($1, $2, ..., $9)
   - **read built-in** for input
   - 45+ built-in commands
-- **Lua 5.4** runtime (multi-line REPL, VFS I/O FFI, ViStateTransfer, network bindings) — verified
-- **MicroPython 1.24.1** runtime (REPL, 256KB heap, vnet+DNS+UDP modules) — verified
+- **Lua 5.4** / **MicroPython 1.24.1** native runtimes — ⚠️ milestones (3.3/3.4) marked complete, but **the native runtimes are NOT actively maintained** (roadmap §D, decision 2026-06-06: half-measure dropped). The Python/scripting story is **Tier 3 Linux VM** (`apt install python3`), not a native Cellos runtime. Robot code stays Rust (Tier 1).
 - **Keyboard input** (VirtIO, multi-key support, no deadlock)
 - **Network** (smoltcp TCP/UDP/DNS, DHCP verified, full data-path TCP client+server)
   - **TCP client**: SOCKET_TCP, CONNECT, SEND, RECV, CLOSE
@@ -915,30 +925,31 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 - **CI/CD pipeline** with architecture validation (10/10 score)
 - **VirtIO VA→PA mapping fix** (Phase X-1) — resolves multi-sector write issues
 
-### 🚧 In Progress / Partial
-- **MQTT binary** (skeleton added; implementation deferred)
-- **KASLR** (not implemented)
+### ✅ Recently shipped (were In-Progress/Planned in the 2026-06-05 snapshot)
+- **KASLR** — ✅ COMPLETE (Phase 24, 2026-06-05) via Limine boot randomization (`limine.conf` `KASLR=yes`); 65 integration tests pass with KASLR enabled.
+- **ARM64 full kernel bring-up** (beyond ring-3 smoke) — ✅ COMPLETE 2026-06-12: GIC, generic timer, 3-level MMU, VirtIO, PL011 RX, PL061 GPIO on QEMU virt; 6/6 integration tests pass.
+- **ViUI v2 — Reactive Signal Tree + Dual-Layer DSL** — ✅ ALL 7 PHASES COMPLETE 2026-06-16 (production-ready; overlays, navigation, charts, DSL build.rs, virtual ListView, FlexBox, advanced two-way/computed bindings). See ViUI Architecture section above.
+- **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
+- **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
+- **Tier 3b Linux VM (ARM64 EL2 VMM)** — ✅ COMPLETE 2026-06-16: EL2 hypervisor boots Alpine 3.21.3 aarch64; all 10 phases done; CI smoke job. Untrusted/legacy code isolation now lives here (hardware Stage-2/EPT), replacing the dropped Tier 2 WASM sandbox.
+- **Cell signing + hot migration** — ✅ COMPLETE 2026-06-23: Ed25519 verify-at-spawn gate (`kernel/src/loader.rs`), in-kernel `ed25519::verify` (RFC 8032 self-test at boot), 5-step hotswap with `TaskState::Frozen` + `ViStateTransfer`; 11/11 hotswap-smoke tests.
+- **Hardware Key Isolation (Silo)** — ✅ COMPLETE 2026-06-16 (SiloHandle API; reclassified Tier 3a → Tier 1 hardware capability, G2 ARM64/x86).
 
-### ⏳ Planned (Later phases)
-- **ViUI v2 — Reactive Signal Tree + Dual-Layer DSL** `[G2]`:
-  - Layer 1: `.vi` files with 99% Slint-compatible syntax; vi-compiler (build.rs) generates Layer 2 Rust code; hot-reload via watcher daemon
-  - Layer 2: typed `Signal<T>`-based Rust API — what the compiler generates, also a direct public API for Rust devs; no `Box<dyn>` per update, near-zero allocation per state change
-  - Reactive engine: `Signal<T>` notifies only affected widgets → repaint only dirty rects
-  - `ViRenderer` trait: software rasterizer (CPU default, G1) swappable with GPU backend (G2+)
-  - Design brief: [.agents/brainstorms/260608-viui-nextgen-architecture.md](.agents/brainstorms/260608-viui-nextgen-architecture.md)
-- ARM64 full kernel bring-up (pending, needed for real GPIO on aarch64 QEMU ARM virt)
-- Peripheral Driver extensions: I2C, SPI, CAN, PWM, ADC (G1 ext / G2)
+### 🚧 In Progress / Partial
+- **MQTT binary** (skeleton added; full implementation deferred)
+
+### ⏳ Genuinely planned (later phases)
+- Peripheral Driver extensions: I2C shipped; SPI/CAN/PWM/ADC via sim/loopback + generic bit-bang (G1 ext / G2 real MMIO)
 - Real SBC validation (RPi 4 / VisionFive2 / Radxa ROCK 5)
-- Reliability track: stack guard pages, deadline/watchdog enforcement, supervisor-based
-  cell restart, reboot-on-kernel-panic — see [specs/12-reliability.md](specs/12-reliability.md)
-- Tier 3 hypervisor cell (Stage-2 paging) — hardware isolation for untrusted/legacy code
-- Ed25519 signing + secure-boot loader gate (enforces the Tier 1 "signed cells only" model)
-- Audit logging
-- Additional architecture ports
+- Tier 3b VirtIO-GPU backend (Linux VM graphics / browser) `[G2]`
+- DICE/RIoT attestation chain, KMS Cell for G2 key management
+- Additional architecture ports (RV32 nano, full x86_64 beyond ring-3)
 
 > ⚠️ **Per-Cell SATP isolation at Tier 1 is explicitly NOT pursued** (decided 2026-06-05).
 > Hardware isolation belongs to Tier 3 (per-VM Stage-2 paging), not per-cell page tables.
-> See *Key Design Decisions* below and [specs/05-application.md](specs/05-application.md).
+> **Tier 2 WASM was dropped from the official stack (2026-06-06)** — untrusted third-party
+> code goes to the Tier 3 Linux VM, not a WASM sandbox. See *Key Design Decisions* below
+> and [specs/05-application.md §6](specs/05-application.md).
 
 ---
 
@@ -948,12 +959,12 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 |----------|-----------|
 | Single Address Space | Reduce context-switch overhead, simplify memory management |
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
-| **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to Tier 2 (WASM) / Tier 3 (Stage-2). Decided 2026-06-05. |
-| Tiered isolation (1/2/3) | Trusted signed-native (LBI) · WASM software sandbox · hypervisor hardware silo — isolation strength scales with untrust, hardware MMU cost paid only at Tier 3 |
+| **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
+| Tiered isolation (1 / 3) | Trusted signed-native (LBI) · hypervisor hardware silo (Tier 3b Linux VM). **The former "Tier 2 WASM software sandbox" was dropped from the official stack 2026-06-06** — untrusted third-party code now goes to Tier 3, so hardware MMU cost is paid there. WASM code retained under `feature = "wasm-experimental"` only. |
 | Round-Robin Scheduler | Simple, fair, predictable for embedded real-time systems |
 | Capability-Based Access | Fine-grained control, no global permissions |
 | Owned Buffers in Async | Deterministic cleanup in SAS (no process teardown) |
-| Nano Kernel (~8,700 LOC) | Keep TCB, minimize trusted code, move features to Cells |
+| Nano Kernel (nano by *responsibility*, not line count) | Keep TCB minimal by scope (Kernel Boundary Law); measured `kernel/src` is ~22.6K LOC (2026-07-07) after driver-migration bookkeeping, IOMMU, in-tree HAL, and EL2 hypervisor prep — the "<10K" figure is historical |
 | Trait-Based HAL | Multi-architecture support without code duplication |
 | No mod.rs | Clearer module boundaries, IDE-friendly |
 
@@ -961,19 +972,19 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 ## Architecture Gap Summary
 
-Areas where the current implementation diverges from the specification or modern OS best practices. Tracked for resolution in Phases 24–32.
+Areas where the current implementation diverges from the specification or modern OS best practices.
 
-| Gap | Impact | Target Phase |
-|-----|--------|-------------|
-| IPC is syscall-based, not direct vtable call | 10–100× latency vs. spec | Phase 27 |
-| Round-robin scheduler, no priority levels | RT tasks can starve | Phase 25 |
-| No KASLR | Kernel address predictable | Phase 24 |
-| No per-cell memory quota enforcement | Single cell can OOM system | Phase 26 |
-| Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | Phase 28+ (Tier 3 VM) |
-| Tier 2 WASM runtime absent | No safe third-party code execution | Phase 29 |
-| TLSF allocator not implemented | RT allocation guarantee broken | Phase 25 |
-| No audit ring buffer | Forensics impossible | Phase 26 |
-| Performance baseline unmeasured | Can't validate PDR targets | Phase 24 (immediate) |
+| Gap | Impact | Status / Target |
+|-----|--------|-----------------|
+| IPC is syscall-based, not direct vtable call | 10–100× latency vs. spec | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
+| Round-robin scheduler, no priority levels | RT tasks can starve | **Open** — Phase 25 |
+| TLSF allocator not implemented | RT allocation guarantee broken | **Open** — Phase 25 |
+| Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | **Mitigated by design** — untrusted code confined to Tier 3 Linux VM (Layer-2 HW mitigations for native, see Security Model) |
+| No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
+| No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |
+| Performance baseline unmeasured | Can't validate PDR targets | ✅ **DONE** (Phase 24 — bench cell, RT + SMP latency) |
+| ~~Tier 2 WASM runtime absent~~ | — | ❌ **DROPPED** (2026-06-06) — Tier 2 removed from official stack; untrusted third-party code → Tier 3 Linux VM. Not a gap. |
+| Audit ring buffer | Forensics | Partial — reliability P06 observability shipped; full audit log G2 |
 
 ---
 
