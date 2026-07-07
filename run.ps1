@@ -1,4 +1,10 @@
 # Run ViCell in QEMU
+#
+# Usage:
+#   ./run.ps1            # auto-detects stale cells → regenerates disk, then boots
+#   ./run.ps1 -SkipDisk  # skip the staleness check (kernel-only fast path)
+param([switch]$SkipDisk)
+
 $qemu = "qemu-system-riscv64"
 if (Get-Command $qemu -ErrorAction SilentlyContinue) {
     # QEMU in PATH
@@ -13,6 +19,38 @@ if (Get-Command $qemu -ErrorAction SilentlyContinue) {
 # 256 MB is sufficient: kernel(4.4MB) + heap(64MB) + cells + stacks.
 $kernel = "target/riscv64gc-unknown-none-elf/release/vicell-kernel"
 $disk   = "disk_v3.img"
+
+# ── Build-skew guard ──────────────────────────────────────────────────────────
+# This script rebuilds ONLY the kernel. Cell binaries live in disk_v3.img and
+# in kernel_fs.img (embedded into the kernel), both produced by gen_disk.ps1.
+# Editing a cell/lib and re-running run.ps1 therefore used to boot the OLD cell
+# silently — the #1 "I changed the code but QEMU runs the old thing" footgun,
+# and the source of build-skew phantom panics (new kernel + stale cells).
+# Detect it: if any source under cells/ or libs/ is newer than disk_v3.img,
+# run gen_disk.ps1 before booting. -SkipDisk bypasses when you know the change
+# is kernel-only.
+if (-not $SkipDisk) {
+    $needDisk = -not (Test-Path $disk)
+    if (-not $needDisk) {
+        $diskTime = (Get-Item $disk).LastWriteTime
+        $newer = Get-ChildItem cells, libs -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.FullName -notmatch '\\(target|zig-out|\.zig-cache)\\' -and
+                $_.LastWriteTime -gt $diskTime
+            } | Select-Object -First 1
+        if ($newer) {
+            Write-Host "Cell/lib sources changed since disk_v3.img was built (e.g. $($newer.FullName))." -ForegroundColor Yellow
+            $needDisk = $true
+        }
+    } else {
+        Write-Host "disk_v3.img missing." -ForegroundColor Yellow
+    }
+    if ($needDisk) {
+        Write-Host "Running gen_disk.ps1 so QEMU boots the code you just edited (skip with -SkipDisk)..." -ForegroundColor Yellow
+        & pwsh -File "$PSScriptRoot/gen_disk.ps1"
+        if ($LASTEXITCODE -ne 0) { Write-Host "gen_disk.ps1 failed — not booting a stale image." -ForegroundColor Red; exit 1 }
+    }
+}
 
 # Always rebuild the kernel (a stale binary silently masks build/boot breakage).
 # PIC is scoped to THIS kernel build only via RUSTFLAGS — never via .cargo/config,
