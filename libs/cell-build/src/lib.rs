@@ -24,18 +24,19 @@ use std::{env, fs, path::PathBuf};
 /// Arch-neutral linker script template.  `OUTPUT_ARCH` is prepended per-arch.
 const TEMPLATE: &str = include_str!("cell.ld.in");
 
-/// Emit the Cargo directives to build this cell as a PIE entered at `_start`.
+/// Emit the Cargo directives to build this cell as a PIE with `ENTRY(main)`.
 ///
-/// `_start` (ostd crt0) runs the init-array constructors, calls `main`, and —
-/// crucially — issues the `Exit` ecall when `main` returns. Entering at bare
-/// `main` (the old default) skipped that wrapper: a cell whose `main` loops
-/// forever (services, `run_app!` cells) never noticed, but a finite CLI cell
-/// (mqtt, wget) returned into `ret` with `ra = 0` → jump to 0 → instruction
-/// page fault (scause=0xc, sepc=0) on exit. `_start` calls `main` the same way,
-/// so loop-forever cells are unaffected; the init-array loop is a no-op for
-/// pure-Rust cells (no static constructors).
+/// NOTE: entering at bare `main` means the ostd `_start` crt0 (which would run
+/// init-array + issue the post-`main` `Exit` ecall) is bypassed, so a cell
+/// whose `main` RETURNS falls into `ret` with `ra = 0` → jump to 0 →
+/// instruction page fault (scause=0xc, sepc=0) on exit. This is currently
+/// COSMETIC: the cell has finished its work; the fault fires as it exits.
+/// The clean fix (default to `ENTRY(_start)`) is blocked because `_start`'s
+/// init-array asm uses absolute (`ldr =sym` / ABS64) addressing that the `-pie`
+/// linker rejects on aarch64/x86 — `_start` must be made PC-relative on all
+/// arches first. Tracked in .agents/260706-0952-system-analysis-g1-g3.
 pub fn emit_linker_script() {
-    emit_linker_script_entry("_start");
+    emit_linker_script_entry("main");
 }
 
 /// Emit the Cargo directives to build this cell as a PIE with a custom entry.
