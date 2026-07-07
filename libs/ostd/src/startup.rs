@@ -1,6 +1,24 @@
 use crate::syscall::sys_log;
 use core::panic::PanicInfo;
 
+/// Force `_start` to survive `--gc-sections`.
+///
+/// `_start` lives in `.text.boot`, which the cell linker scripts pull with a
+/// plain `*(.text.boot)` (no `KEEP`). Nothing in Rust code *references* the
+/// symbol — it is only named by the linker script's `ENTRY(_start)`, which is
+/// NOT a GC root. So `_start` was garbage-collected out of every cell; the ELF
+/// entry then silently fell through to `main`, skipping the init-array
+/// constructors AND the post-`main` `Exit` ecall. A cell whose `main` loops
+/// forever (shell, services) never noticed, but a finite CLI cell (mqtt, wget)
+/// returned from `main` into `ret` with `ra = 0` → jump to 0 → instruction
+/// page fault (scause=0xc, sepc=0) on exit.
+///
+/// This `#[used]` pointer creates a real relocation to `_start` from an object
+/// (this module — always linked, it holds the `#[panic_handler]`), rooting it
+/// against GC without editing 40+ per-cell linker scripts.
+#[used]
+static _KEEP_START: unsafe extern "C" fn() -> ! = _start;
+
 #[no_mangle]
 #[unsafe(naked)]
 #[link_section = ".text.boot"]
