@@ -27,8 +27,11 @@ The former chicken-and-egg (the device holding cell ELFs must be readable before
 ### Verification
 riscv64 QEMU boot: `[virtio-blk] ready`, 2 FAT mounts via the cell, 11 `SpawnFromElf` loads (incl. `/bin/net` @455 KB), 0 unhandled VirtIO IRQs, shell prompt reached, no regressions. All 3 architectures (riscv64 / x86_64 / aarch64) compile clean.
 
+Multi-arch boot regression (2026-07-08): **x86_64 green — 7/7** `x86_64-boot` suite (banner, scheduler, init-spawn, boots-to-shell, echo, `ls /bin`, `ps`); the `virtio_pci::init` removal is boot-clean (x86 q35 attaches no block device, so "G2 kernel + committed cells" is the correct config). **aarch64** — the G2 kernel executes correctly through init-spawn + scheduler start, with the NullBlock graceful degradation (`no block device → cold boot`, `mbr LBA 0 unreadable → skip`) behaving as designed; reaching the interactive shell needs freshly-built aarch64 cells, blocked by a pre-existing (non-G2) infra gap (`littlefs2-sys` has no bare-metal aarch64/x86 cross-gcc; only `riscv-none-elf-gcc` is provisioned).
+
 ### Notes / Deferred
-- **aarch64 + x86 boot regression** — both compile clean; boot-verified only on riscv64 this session (needs multi-arch QEMU harness).
+- **aarch64 shell boot** — needs `aarch64-none-elf-gcc` / `x86_64-elf-gcc` provisioned so `service-vfs` (littlefs2) can link for those targets; then the aarch64 cells can be rebuilt for the G2 model. Own infra task.
+- Fixed pre-existing (non-G2) issues found during the regression: `build-x86_64-cells.ps1` `relocation-model=static`→`pic` (4 GiB `CELL_VA_START`), and the stale `[ViCell]`→`[Cellos]` banner assertion in `aarch64-boot.rs`.
 - **Phase 07 (scoped-SUM narrowing)** — deferred to its own spike-first plan (drop whole-lifetime `sstatus.SUM=1`; cross-cutting).
 - **New syscall lesson**: adding a syscall requires BOTH the `ViSyscall` enum discriminant AND an arm in the manual `ViSyscall::from()` match (`libs/api/src/abi/syscall.rs`) — the missing decode arm silently returned `Err` from `sys_spawn_from_elf` until fixed.
 

@@ -161,12 +161,11 @@ impl EarlyLoader {
             match crate::fs::read_file_from_vifs1(path) {
                 Ok(buf) => {
                     // Runtime evidence (G2 loader redesign phase 01): bootstrap cell
-                    // loaded from RAM, not the block device. Emitted at warn! because
-                    // vfs/config/shell are spawned by init AFTER the kernel drops its
-                    // log level to Warn (main.rs:603) — info! would be suppressed, and
-                    // the phase-01 acceptance criterion requires each bootstrap cell to
-                    // be observable. One-time boot output (same rationale as set_input_cell).
-                    log::warn!("[early] bootstrap {} <- VIFS1 ramdisk ({} bytes)", path, buf.len());
+                    // loaded from RAM, not the block device. info! now that the
+                    // migration is verified across arches — one-time boot output,
+                    // suppressed for vfs/config/shell (spawned by init after the log
+                    // level drops to Warn, main.rs) during normal operation.
+                    log::info!("[early] bootstrap {} <- VIFS1 ramdisk ({} bytes)", path, buf.len());
                     return Ok(buf);
                 }
                 Err(_) => {
