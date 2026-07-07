@@ -561,12 +561,14 @@ jobs:
             boots_to_shell_prompt \
             network_dhcp network_tcp_send network_curl network_tcp_listen \
             network_wget_downloads_to_vfs network_httpd_serves_file \
+            network_httpd_dynamic_content \
             shell_or_operator shell_and_operator shell_exit_code_var shell_echo_e \
             shell_function_positional_args shell_variable_persists \
             shell_source_script shell_source_multi_command \
             shell_case_statement shell_while_loop shell_if_else_branch \
             shell_test_builtin \
-            vfs_fat16_reboot_persistence vfs_fat16_append vfs_fat16_subdir_persistence
+            vfs_fat16_reboot_persistence vfs_fat16_append vfs_fat16_subdir_persistence \
+            input_service_registered_at_boot compositor_input_routing_active
 
   security:
     name: Security Scan

@@ -58,9 +58,15 @@ pub fn deregister_gpu_driver(tid: usize) {
 pub static INPUT_CELL_TID: AtomicUsize = AtomicUsize::new(0);
 
 /// Register the input service cell.  Called by the loader after spawning `/bin/input`.
+///
+/// Logged at `warn!`, not `info!`: `/bin/input` spawns after the kernel drops
+/// its log level to Warn at end-of-early-boot, so an info line here is
+/// suppressed. This is a one-time boot-integrity event (the kernel now trusts
+/// this TID as the sole keyboard-event sink) — worth surfacing, and the marker
+/// the input-registration integration test asserts on.
 pub fn set_input_cell(tid: usize) {
     INPUT_CELL_TID.store(tid, Ordering::Release);
-    log::info!("[input] registered input service TID {}", tid);
+    log::warn!("[input] registered input service TID {}", tid);
 }
 
 /// Clear the input service registration if it matches `tid` (called on cell death).
