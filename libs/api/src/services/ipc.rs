@@ -57,6 +57,15 @@ pub enum VfsRequest<'a> {
     /// buffer and writes them to `cap` at `offset`.  GrantDone is sent only
     /// after the write commits (write-through on FAT32) — F14 invariant.
     WriteGrant { cap: u64, offset: u64, grant: usize, bytes: usize },
+    /// Zero-copy full-file read by PATH into the caller's grant (G2 loader redesign).
+    /// Unlike `ReadGrant` (cap + 4 KB page at a time), this resolves `path` through
+    /// the VFS mount table (so it reaches the `/bin` cell-store overlay) and copies
+    /// the ENTIRE file into the caller's pre-shared grant in one shot, replying
+    /// `GrantDone { bytes }`. `grant` must be owned by the caller, GrantShare'd RW to
+    /// VFS, and ≥ the file size; `max` is the grant's byte capacity (VFS copies at most
+    /// `max`, so a file that grew after the caller's Stat can't overflow the grant).
+    /// Used to read a cell ELF for `sys_spawn_from_elf`.
+    ReadFileGrant { path: &'a str, grant: usize, max: usize },
 }
 
 /// Responses from the VFS service.

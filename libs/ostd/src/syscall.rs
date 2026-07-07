@@ -261,6 +261,24 @@ pub fn sys_spawn_from_mem(data: &[u8], name: &str, args: &str) -> SyscallResult 
 /// # Errors
 /// Returns `SyscallError::Unknown` if the path is not found or the ELF is invalid.
 pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
+    // Post-boot (VFS registered): read the cell ELF from VFS into a Grant (reaching
+    // the /bin cell-store overlay + VIFS1 bootstrap cells) and spawn from the bytes,
+    // so the kernel loader needs no disk access for the spawn. Falls back to the raw
+    // kernel bootstrap reader when VFS is not yet up (early boot) OR on ANY failure of
+    // the VFS path — the bootstrap reader still serves every cell until the in-kernel
+    // block reader is removed (phase 06), so this routing is purely ADDITIVE and
+    // cannot regress spawning. (G2 loader redesign phase 04.)
+    if let Some(vfs_tid) = crate::service::lookup(crate::service::service::VFS) {
+        if let Ok((grant_id, len)) = crate::fs::read_full_via_grant(path, vfs_tid) {
+            let r = sys_spawn_from_elf(grant_id, len, path);
+            sys_grant_free(grant_id);
+            if let SyscallResult::Ok(_) = r {
+                return r;
+            }
+            // VFS read OK but spawn failed → fall through to bootstrap (belt-and-suspenders).
+        }
+    }
+    // Bootstrap path: raw SpawnFromPath syscall (VIFS1 / P2 table, VFS-independent).
     // SAFETY: path is a valid UTF-8 str; kernel copies it out before returning.
     unsafe {
         let ret = syscall(

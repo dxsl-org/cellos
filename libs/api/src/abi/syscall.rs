@@ -652,6 +652,7 @@ impl From<usize> for ViSyscall {
             235 => ViSyscall::RegisterPcieBar,
             236 => ViSyscall::RegisterPciDevice,
             237 => ViSyscall::ReadLog,
+            238 => ViSyscall::SpawnFromElf,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

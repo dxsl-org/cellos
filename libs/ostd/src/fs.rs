@@ -256,6 +256,45 @@ fn vfs_call<'r>(vfs_tid: usize, req: &VfsRequest<'_>, resp_buf: &'r mut [u8; 512
     api::ipc::decode::<VfsResponse>(resp_buf).map_err(|_| ViError::IO)
 }
 
+/// Read the ENTIRE file at `path` into a freshly-allocated Grant via the VFS mount
+/// table (so it reaches the `/bin` cell-store overlay AND VIFS1 bootstrap cells).
+/// Returns `(grant_id, len)`; the caller OWNS the grant and MUST `sys_grant_free`
+/// it after use. Backs `sys_spawn_from_path`'s VFS routing — reads a cell ELF for
+/// `sys_spawn_from_elf` so the kernel loader needs no disk access post-boot.
+///
+/// Uses masked `service_call_typed` (recv pinned to `vfs_tid`, spec 17 §2) so a
+/// spawning cell that holds input focus can't decode a queued keystroke as the reply.
+pub fn read_full_via_grant(path: &str, vfs_tid: usize) -> ViResult<(usize, usize)> {
+    // 1. Stat for the file size (bounds the grant).
+    let mut sb = [0u8; 512];
+    let mut rb = [0u8; 64];
+    let size = match crate::ipc::service_call_typed::<_, VfsResponse>(
+        vfs_tid, &VfsRequest::Stat(path), &mut sb, &mut rb,
+    ) {
+        Ok(VfsResponse::Stat { size, is_dir }) if !is_dir && size > 0 => size as usize,
+        _ => return Err(ViError::NotFound),
+    };
+    // 2. Allocate a grant sized to the file; share RW so VFS can fill it.
+    let grant_id = syscall::sys_grant_alloc(size).ok_or(ViError::OutOfMemory)?;
+    syscall::sys_grant_share(grant_id, vfs_tid, 2 /* ReadWrite */);
+    // 3. One-shot full-file read into the grant (bounded by `max = size`).
+    let mut sb2 = [0u8; 512];
+    let mut rb2 = [0u8; 64];
+    let bytes = match crate::ipc::service_call_typed::<_, VfsResponse>(
+        vfs_tid,
+        &VfsRequest::ReadFileGrant { path, grant: grant_id, max: size },
+        &mut sb2,
+        &mut rb2,
+    ) {
+        Ok(VfsResponse::GrantDone { bytes }) if bytes > 0 => bytes,
+        _ => {
+            syscall::sys_grant_free(grant_id);
+            return Err(ViError::IO);
+        }
+    };
+    Ok((grant_id, bytes))
+}
+
 /// Read up to `buf.len()` bytes from a file cap using the optimal I/O path.
 ///
 /// - `buf.len() < 4096`: kernel ReadCap path (no Grant overhead)

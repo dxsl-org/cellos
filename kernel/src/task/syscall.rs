@@ -1760,6 +1760,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
+            // Runtime evidence (G2 loader redesign phase 04): this spawn's ELF came
+            // from a userspace VFS read, not the kernel disk reader. warn! so it
+            // survives the post-boot log-level drop (main.rs).
+            log::warn!("[loader] SpawnFromElf: {} ({} bytes from grant)", path_str, len);
             // SAFETY: `base` is a kernel-allocated, identity-mapped grant page owned
             // by the caller (validated above); `len <= g.size`. The caller is blocked
             // in this syscall, so it cannot free the grant before spawn_gated copies

@@ -203,6 +203,26 @@ pub fn handle_request<'a>(
                 }
             }
         }
+
+        api::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {
+            match ostd::syscall::sys_grant_slice(grant) {
+                None => api::ipc::VfsResponse::Err(1), // grant not shared to VFS
+                Some(ptr) => {
+                    // Resolve via the mount table (BinOverlay → cell-store for /bin),
+                    // then copy the WHOLE file into the caller's grant in one shot.
+                    let data = vfs.read_to_vec(path);
+                    let n = data.len().min(max);
+                    // SAFETY: ptr is the caller's identity-mapped grant, GrantShare'd
+                    // RW and (per `max`) large enough for n bytes; `data` is a fresh
+                    // owned Vec. The caller's ipc_call blocks until we reply, so it
+                    // cannot free the grant before this copy completes.
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);
+                    }
+                    api::ipc::VfsResponse::GrantDone { bytes: n }
+                }
+            }
+        }
     }
 }
 
