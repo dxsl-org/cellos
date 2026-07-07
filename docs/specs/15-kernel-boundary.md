@@ -70,6 +70,49 @@ Capability checks at IPC boundaries (does the sender hold the right to request t
 operation?) must be kernel-enforced or enforced in a trusted kernel-adjacent layer —
 not left to individual Cell code. This is what the syscall gate in `syscall.rs` provides.
 
+### 1.4 LBI covers Rust Cells only — the Tier-1b / USER-MMIO gap
+
+LBI is a property of the **Rust compiler**. It isolates Tier-1 Rust Cells
+(`#![forbid(unsafe_code)]`) from each other. It says **nothing** about a Tier-1b
+C/Zig Cell (mlibc/Cellos-libc), which can form an arbitrary raw pointer — the
+exact thing LBI forbids in Rust.
+
+This matters because Cellos is a **Single Address Space**: there is one page
+table shared by every Cell. Device MMIO that any Driver Cell needs is mapped
+`USER` in that shared table (e.g. the RISC-V VirtIO window `0x10001000–0x10010000`,
+`kernel/src/memory/paging.rs`). The `sys_request_mmio` Resource Registry is a
+**software ownership registry, not a hardware gate** — it governs the syscall,
+not a raw dereference.
+
+**Threat:** a Tier-1b C/Zig Cell can `*(volatile u32*)0x10001000 = …` directly.
+The page is USER-mapped, so no fault. It can program a VirtIO device's virtqueue
+with **arbitrary physical addresses**; virtio-mmio devices are **not** behind the
+IOMMU (which fronts only the PCIe root complex, §2 Category D), so the device
+then DMAs to/from any physical frame — defeating LBI, the SAS frame-identity
+invariant, and capability enforcement in one step. A Rust Cell cannot do this
+(the pointer needs `unsafe`, which cells forbid).
+
+**Decision (G1):** Tier-1b Cells are **trusted, first-party code** (operator-
+compiled, signed by fleet policy — see the headless-robot posture in the roadmap
+§G.2). A malicious Tier-1b Cell is **out of the G1 threat model**; the USER-mapped
+MMIO window is safe under that assumption and is a deliberate performance choice
+(a Driver Cell polls device registers directly instead of via a per-access
+syscall). This assumption is **load-bearing** and must be stated wherever "LBI
+isolates Cells" is claimed — the claim holds for Rust Cells, not for Tier-1b.
+
+**Requirement (G2 / untrusted third-party):** before Tier-1b (or any Cell) may
+run **untrusted**, the MMIO window must be gated in hardware per-Cell:
+- **RISC-V**: per-Cell **PMP/Smepmp** over the MMIO physical range, reprogrammed
+  on context switch (SAS-safe: `satp=Bare` needs no `sfence.vma`) — stops the
+  rogue register write. Roadmap §G backlog.
+- Plus **IOMMU/WorldGuard** coverage of virtio-mmio DMA for defense-in-depth
+  (PMP stops the Cell programming the device; the IOMMU confines a device already
+  told to DMA).
+- **x86**: MPK per-Cell key on the MMIO pages (needs CET-IBT, already shipped).
+
+Until then, **do not spawn an untrusted Tier-1b Cell adjacent to USER-mapped
+device MMIO.** Tier-1b is a first-party capability, not a sandbox.
+
 ---
 
 ## 2. Kernel Whitelist — What BELONGS in the Kernel
