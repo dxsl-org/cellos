@@ -84,7 +84,8 @@ foreach ($c in $cells) {
     if (Test-Path $src) {
         $kb = [Math]::Round((Get-Item $src).Length / 1KB, 0)
         Write-Host "  Found: $($c.Bin) (${kb} KB) -> $($c.Dst)"
-        $imgArgs += "$src`:$($c.Dst)"
+        # mkfat32.py takes space-separated <src> <dst> pairs, NOT src:dst.
+        $imgArgs += @($src, $c.Dst)
         $found += $c.Bin
     } else {
         Write-Warning "  Not found: $src (will be absent from kernel_fs.img)"

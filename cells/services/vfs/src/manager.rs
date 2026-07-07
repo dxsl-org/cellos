@@ -13,6 +13,7 @@ use ostd::prelude::*;
 use crate::access::AccessTable;
 use crate::backend_bin_overlay::BinOverlay;
 use crate::backend_fat::FatBackend;
+#[cfg(feature = "littlefs")]
 use crate::backend_littlefs::LittlefsBackend;
 use crate::backend_ramfs::RamFsBackend;
 use crate::backend_redoxfs::RedoxFsBackend;
@@ -36,6 +37,10 @@ impl VfsManager {
         // FAT32 (P1) is the SD-card/PC interop volume since P04 — /data moved
         // to littlefs (P4), which survives power cuts (FAT has no journal).
         let fat  = mounts.add_backend(Box::new(FatBackend::mount("/mnt/sd", api::disk::PART_FAT32_BASE_LBA)));
+        // /data (littlefs, P4) is gated on the `littlefs` feature: builds without a
+        // bare-metal C toolchain (x86_64/aarch64) omit it — the persistent /data
+        // volume is simply absent there, which boot-to-shell does not require.
+        #[cfg(feature = "littlefs")]
         let lfs  = mounts.add_backend(Box::new(LittlefsBackend::mount("/data")));
         // /bin overlay: VIFS1 ramdisk (bootstrap cells) unioned with the on-disk
         // FAT cell-store (non-bootstrap cells migrated off the raw P2 table).
@@ -43,6 +48,7 @@ impl VfsManager {
         // Longest prefix wins: the specific mounts shadow the read-only root.
         mounts.mount("/",       ram,   false);
         mounts.mount("/tmp",    ram,   true);
+        #[cfg(feature = "littlefs")]
         mounts.mount("/data",   lfs,   true);
         mounts.mount("/mnt/sd", fat,   true);
         mounts.mount("/bin",    binov, false);

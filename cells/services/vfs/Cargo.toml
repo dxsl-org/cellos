@@ -10,11 +10,18 @@ api = { path = "../../../libs/api" }
 ostd = { path = "../../../libs/ostd" }
 driver-disk = { path = "../../drivers/disk" }
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc"] }
-littlefs2 = { version = "0.7.2", default-features = false }
+littlefs2 = { version = "0.7.2", default-features = false, optional = true }
 redoxfs = { path = "../../../third_party/redoxfs", default-features = false }
 redox_syscall = { version = "0.7.5", default-features = false }
 
 [features]
+# `littlefs` gates the /data power-loss-resilient backend (littlefs2-sys), whose
+# C core needs a bare-metal cross-C toolchain (newlib headers). Only riscv has one
+# provisioned (xpack riscv-none-elf-gcc, wired in gen_disk.ps1), so it is a DEFAULT
+# feature to keep the riscv build unchanged; the x86_64/aarch64 cell builds pass
+# --no-default-features (no C toolchain → no /data volume, not needed for boot).
+default = ["littlefs"]
+littlefs = ["dep:littlefs2"]
 # Shrinks the per-cell quota to a tiny limit so the vfs-test cell can exercise
 # quota enforcement (Err 2) without writing the full 32 MB production limit.
 # Enabled ONLY for the integration-test kernel build — never in production.

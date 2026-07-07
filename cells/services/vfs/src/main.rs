@@ -11,11 +11,13 @@ mod backend;
 mod backend_bin_overlay;
 mod backend_bootfs;
 mod backend_fat;
+#[cfg(feature = "littlefs")]
 mod backend_littlefs;
 mod backend_ramfs;
 mod backend_redoxfs;
 mod block_stream;
 mod disk_redoxfs;
+#[cfg(feature = "littlefs")]
 mod lfs_disk;
 mod dispatch;
 mod handle_table;
