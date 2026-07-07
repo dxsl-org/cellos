@@ -44,6 +44,16 @@ impl<T> SingleTaskCell<T> {
 
 static CURRENT_SINK: SingleTaskCell<OutputSink> = SingleTaskCell::new(OutputSink::Console);
 
+/// True while executing the command of an `Ast::Background` (`cmd &`).
+///
+/// A backgrounded EXTERNAL cell (e.g. `httpd 9092 /file &`) must NOT be
+/// sys_wait'd — httpd loops forever, so waiting parks the shell in sys_wait
+/// indefinitely and no subsequent command runs (the symptom: a second
+/// `vwrite` after `httpd &` never executed, so httpd kept serving stale
+/// content). When set, spawn_external returns right after spawn. Built-ins
+/// are unaffected (they run synchronously in the shell task either way).
+static BG_SPAWN: SingleTaskCell<bool> = SingleTaskCell::new(false);
+
 /// Points to the current stdin buffer for pipe-aware built-ins.
 /// Null when no pipe is active (reads from real serial stdin).
 static CURRENT_STDIN: SingleTaskCell<*const [u8]> =
@@ -429,7 +439,12 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             let jid = jobs.add(name);
             // Background job notification always goes to console, not the sink.
             ostd::io::print("["); ostd::io::print_usize(jid); ostd::io::println("] running");
+            // Signal spawn_external to skip sys_wait so a long-running external
+            // cell (httpd) does not park the shell forever. Built-ins ignore it.
+            // SAFETY: single shell task; flag cleared on the same call frame.
+            unsafe { *BG_SPAWN.get() = true; }
             exec_cmd(cmd, &[], jobs);
+            unsafe { *BG_SPAWN.get() = false; }
             jobs.set_state(jid, JobState::Done);
             0
         }
@@ -951,6 +966,15 @@ fn spawn_external(prog: &str, args: &[&str]) -> i32 {
     path.push_str(prog);
     match syscall::sys_spawn_from_path(&path) {
         syscall::SyscallResult::Ok(tid) => {
+            // Backgrounded (`cmd &`): do NOT sys_wait. A long-running external
+            // cell (httpd) would otherwise park the shell forever, so no later
+            // command runs. The child keeps the shell's focus grant; that is
+            // acceptable for a server that never reads the keyboard. Foreground
+            // spawns fall through to the focus-handoff + sys_wait below.
+            // SAFETY: single shell task.
+            if unsafe { *BG_SPAWN.get() } {
+                return 0;
+            }
             // Drain any pending input-service IPC events before ClearFocus.
             // Shell reads UART via sys_read(0), so Enter arrives via BOTH the ring
             // buffer (consumed in read_line) AND input-service EV_ASCII IPC. The IPC
