@@ -107,11 +107,20 @@ because they are needed to load the first Cells.
 |-----------|-------------------|---------------------|
 | ELF loader (minimal) | Boot Cell | Cannot use a Cell to load the first Cell |
 | BootFS (FAT16 kernel-embedded) | Boot Cell / VFS Cell | VFS Cell needs a filesystem to load from before VFS is available |
+| **Boot block device** (`virtio_blk` + its `virtio_pci` transport on x86) | Minimal boot reader in kernel + a Block Driver Cell for post-boot I/O (G2) | `loader.rs:spawn_from_path → block::read_sector` runs on EVERY spawn; the block device that holds the cell ELFs must be readable **before the first Cell exists**. A Block Driver Cell cannot serve the read that loads the Block Driver Cell. Same class as the ELF loader / BootFS above — a bootstrap root-of-trust (criterion **(c)**), **not** a §3 driver violation. |
 | ACPI minimal parse (MADT + DMAR tables only) | Platform Cell | IOMMU init needs DMAR before any Cell spawns |
 
 **Boot Cells (future):** Once a trusted Boot Cell infrastructure exists, ACPI full parsing
 and PCIe ECAM enumeration move there. The kernel retains only what is needed to load the
 Boot Cell itself.
+
+> **Why NVMe/e1000 are Cells but `virtio_blk` is not** — a frequent confusion. NVMe and
+> e1000 are *secondary* devices reached only after cells are running, so they migrated
+> cleanly. `virtio_blk` is the *boot* device on the loader's critical path: it is read to
+> load every cell, including any would-be block Driver Cell. The G2 goal is not "migrate
+> virtio_blk" but "shrink the kernel to a **minimal** boot reader (ramdisk / first-sectors)
+> and serve **post-boot** block I/O from a Cell" — an optimization of the bootstrap, not
+> the removal of a violation.
 
 ### Category D: Hardware Exclusivity Arbiter
 
@@ -142,18 +151,23 @@ categories to `kernel/src/` must be rejected at review.
 |----------------|--------------|
 | NVMe, MMC/SDHCI (storage) | `cells/drivers/nvme/`, `cells/drivers/mmc/` |
 | e1000, RTL8168 (NIC) | `cells/drivers/e1000/`, `cells/drivers/nic-*/` |
-| VirtIO block, PCI transport | `cells/drivers/virtio-blk/` — G2 (loader dependency) |
+| VirtIO block, PCI transport | **Bootstrap root-of-trust — see §2 Category C, NOT a violation.** Boot device on the loader's critical path; G2 shrinks the kernel to a minimal boot reader + a post-boot Block Cell. |
 | VirtIO net, GPU, input, sound | `cells/drivers/virtio-*/` — **DONE (P06/02/03/04)** |
 | PCIe ECAM enumeration | Platform Cell — **done (P01)**; kernel retains `register_bar`/`find_class` store |
 | GPIO IRQ dispatch | `cells/drivers/gpio/` — **done** |
 | UART (beyond early console) | Driver Cell after early boot |
 
-**Current exceptions (tracked tech debt — G2):**
+**Bootstrap residents (NOT violations — §2 Category C):**
+
+| Driver | LOC | Status |
+|--------|-----|--------|
+| `kernel/src/task/drivers/virtio_blk.rs` | ~217 | Boot block device, root-of-trust (criterion c). G2: shrink to minimal boot reader + post-boot Block Cell. |
+| `kernel/src/task/drivers/virtio_pci.rs` | ~225 | x86 transport for the boot block device; same class as above. |
+
+**Remaining genuine exceptions (tech debt — G2):**
 
 | Driver | LOC | Migration target |
 |--------|-----|-----------------|
-| `kernel/src/task/drivers/virtio_blk.rs` | ~217 | `cells/drivers/virtio-blk/` — G2 (loader depends on kernel block I/O) |
-| `kernel/src/task/drivers/virtio_pci.rs` | ~225 | part of virtio-blk Cell — G2 |
 | `kernel/src/task/drivers/mmc.rs` + subs | ~200 | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
 | `kernel/src/task/drivers/pcie_ecam.rs` | ~100 | simplify to store-only; full removal in G2 |
 
