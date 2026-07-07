@@ -51,7 +51,16 @@ pub fn init() {
     // VirtIO block raises an IRQ on init; if the PLIC is enabled and the trap
     // handler tries to re-acquire a Spinlock held by this thread, it will spin
     // forever.  We re-enable SIE after all drivers are initialised.
-    virtio_blk::init_driver(); // VirtIO block — GPU probe hang fixed via mem::forget
+    // G2 loader redesign phase 05 — DEVICE HANDOVER: the kernel no longer claims the
+    // VirtIO block device. The virtio-blk Driver Cell (/bin/block) probes it (now with
+    // Status clear, so its DRIVER_OK self-guard proceeds), owns the MMIO + DMA, and
+    // registers service::BLOCK_DRIVER; VFS routes all sector I/O to it. Kernel boot-time
+    // block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade gracefully
+    // (block::read_sector → Err on the uninitialised device). The virtio_blk/virtio_pci
+    // stack is deleted in phase 06. (x86 virtio_pci block is handled separately there.)
+    //
+    // virtio_blk::init_driver();  // relinquished — see above
+    let _ = virtio_blk::is_present; // keep the module referenced until phase-06 deletion
     mmc::init_driver();        // MMC/SD — no-op on QEMU (VirtIO wins); probes SDHCI on real board
     // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so virtio-net Driver Cell
     // can claim them via sys_request_mmio (PcieDriverCap path). Must run before

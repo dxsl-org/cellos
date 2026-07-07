@@ -104,11 +104,18 @@ pub extern "C" fn main() {
     let mut restart_count: [u32; NSVC] = [0; NSVC];
     let mut window_start: [u64; NSVC] = [0; NSVC];
 
-    // Block Driver Cell — spawned before VFS so that, once the kernel relinquishes
-    // the boot disk (G2 loader redesign phases 05/06), VFS routes sector I/O through
-    // it (service::BLOCK_DRIVER). During the migration window it exits gracefully
-    // (the kernel still owns the single virtio-blk device), which is harmless.
+    // Block Driver Cell — spawned before VFS. The kernel relinquished the disk
+    // (G2 loader redesign phase 05), so /bin/block now OWNS the VirtIO block device
+    // and serves service::BLOCK_DRIVER; VFS routes ALL sector I/O to it. VFS caches
+    // the BLOCK_DRIVER lookup on its first block access (at mount), so the Block Cell
+    // MUST register before VFS spawns — wait (bounded) for it here.
     let _ = sys_spawn_from_path("/bin/block");
+    for _ in 0..400 {
+        if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
+            break;
+        }
+        ostd::task::yield_now();
+    }
 
     for i in 0..NSVC {
         // Shell is spawned LAST (see below) so its prompt is the final line on the
