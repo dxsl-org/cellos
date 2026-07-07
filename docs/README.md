@@ -77,3 +77,10 @@ Internal design docs — read before implementing a subsystem.
 | [specs/09-vfs.md](specs/09-vfs.md) | VFS traits, dual-filesystem, direct I/O |
 | [specs/10-testing.md](specs/10-testing.md) | Test strategy, QEMU harness, coverage |
 | [specs/11-shell.md](specs/11-shell.md) | Shell design, ELF execution, zero-copy ls |
+| [specs/12-reliability.md](specs/12-reliability.md) | Never-die axes, supervisor restart, RT bounds |
+| [specs/13-peripherals.md](specs/13-peripherals.md) | GPIO/I2C/SPI/UART/CAN driver cells |
+| [specs/14-distributed.md](specs/14-distributed.md) | Swarm/cluster lifecycle, lease, split-brain |
+| [specs/14-viui.md](specs/14-viui.md) | ViUI reactive Signal Tree + .vi DSL |
+| [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) | Kernel whitelist/blacklist law + theory |
+| [specs/16-rustc-tcb.md](specs/16-rustc-tcb.md) | rustc as TCB — LBI guarantees, limits, policies |
+| [specs/17-ipc-wire-contract.md](specs/17-ipc-wire-contract.md) | Cell IPC: framing, recv-mask, byte-0 registry |
