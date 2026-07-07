@@ -1,6 +1,18 @@
 use crate::syscall::sys_log;
 use core::panic::PanicInfo;
 
+/// Root `_start` against `--gc-sections`.
+///
+/// `_start` lives in `.text.boot`, which cell linker scripts pull without
+/// `KEEP`. Nothing in Rust code *references* the symbol — it is only named by
+/// the linker script's `ENTRY(_start)`, which is NOT a GC root — so it was
+/// collected out of every cell, and the ELF entry silently fell through to
+/// `main`. This `#[used]` pointer creates a real relocation to `_start` from an
+/// object that is always linked (this module holds the `#[panic_handler]`),
+/// keeping it against GC. Belt-and-suspenders alongside `ENTRY(_start)`.
+#[used]
+static _KEEP_START: unsafe extern "C" fn() -> ! = _start;
+
 #[no_mangle]
 #[unsafe(naked)]
 #[link_section = ".text.boot"]
@@ -14,8 +26,12 @@ pub unsafe extern "C" fn _start() -> ! {
         "andi sp, sp, -16",
         // Use callee-saved s0/s1 as iterators — a0/a1 are caller-saved and
         // would be clobbered by any constructor called via jalr.
-        "la   s0, __init_array_start",
-        "la   s1, __init_array_end",
+        // `lla` (load LOCAL address) is strictly PC-relative (auipc+addi); `la`
+        // for a linker-defined global would go GOT-indirect, which is fragile
+        // under -pie/pic (the GOT must be relocated first). PC-relative is
+        // correct here — the init-array is inside the cell's own image.
+        "lla  s0, __init_array_start",
+        "lla  s1, __init_array_end",
         "1:",
         "beq  s0, s1, 2f",
         "ld   t0, 0(s0)",
@@ -33,8 +49,16 @@ pub unsafe extern "C" fn _start() -> ! {
     // Stack is kernel-aligned on entry; skip re-alignment to avoid clobbering sp.
     #[cfg(target_arch = "aarch64")]
     core::arch::naked_asm!(
-        "ldr  x19, =__init_array_start",
-        "ldr  x20, =__init_array_end",
+        // adrp+add (:lo12:) forms the address PC-relatively. `ldr x,=sym` would
+        // stash the address in a literal pool and emit an R_AARCH64_ABS64 that
+        // rust-lld REJECTS under -pie ("cannot be used against symbol; recompile
+        // with -fPIC") — which is why cells previously entered at bare `main`,
+        // skipping this crt0 and the post-main Exit ecall (CLI cells crashed
+        // scause=0xc sepc=0 on return). See docs/specs/17 §8 / cell-build.
+        "adrp x19, __init_array_start",
+        "add  x19, x19, :lo12:__init_array_start",
+        "adrp x20, __init_array_end",
+        "add  x20, x20, :lo12:__init_array_end",
         "1:",
         "cmp  x19, x20",
         "b.eq 2f",
