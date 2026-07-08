@@ -4,6 +4,23 @@
 
 ---
 
+## [2026-07-08] Boot-suite recovery — three G2-loader follow-on fixes (riscv boot suite 29 → 48)
+
+### Summary
+Post the G2 loader redesign, three read/routing paths were still on the pre-migration mechanism and silently broke large parts of the boot suite. Root-caused and fixed three distinct bugs; the riscv64 `boot` integration suite went from **29/53 to 48/53 passing (+19)**.
+
+| Fix | Commit | Recovered |
+|-----|--------|-----------|
+| **littlefs `/data` + redoxfs `/srv` block I/O** routed through the block Driver Cell (shared `blk_router`), not the now-dead kernel `sys_blk_*` (NullBlock) | `86a5a2d8` | all 9 `vfs_*` + 23 `shell_*` |
+| **fatfs `lfn` feature** enabled so the disk cell-store (P6) is actually readable — `default-features=false` had dropped `lfn`, so fatfs saw only 8.3 `NC~1`, never the long name `nc`; `/bin/<tool>` interactive spawns failed with "command not found" | `66177fb3` | all 7 `network_*` + 2 `posix_shim_*` + `mqtt_publish`, loaded FROM the cell-store |
+
+Both bugs shared a cause: the migration moved the block device to a Driver Cell and non-bootstrap cells to a FAT cell-store, but littlefs/redoxfs kept calling the kernel block syscalls, and the cell-store read was never exercised at boot (every boot cell is also in kernel_fs, so BinOverlay always resolved from the VIFS1 tier). Also restored the per-volume FAT mount log marker (`FAT32 <prefix> volume mounted`) dropped by the Phase-03 refactor. The cell-store is no longer dead weight — large cells (doom/lua/hypha) that live only there are now reachable.
+
+### Remaining (5 red, all unrelated to VFS/cell-store)
+`input_bare_cell` / `input_keyboard_e2e` (need a QMP-keyboard boot variant + input path), `gpu_framebuffer_initialises` (retired marker; GPU-attached boot), `bench_all_pass` (RT timing under TCG — hardware-gated), `mqtt_subscribe` (SUBACK-receive timing). None yield to a shared root cause.
+
+---
+
 ## [2026-07-07] G2 loader redesign — kernel drives NO block hardware (RC-4 closed)
 
 ### Summary
