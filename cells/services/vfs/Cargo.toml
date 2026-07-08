@@ -9,7 +9,12 @@ types = { path = "../../../libs/types" }
 api = { path = "../../../libs/api" }
 ostd = { path = "../../../libs/ostd" }
 driver-disk = { path = "../../drivers/disk" }
-fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc"] }
+# `lfn` is REQUIRED: mkfat32.py stores cell names with a long-filename entry
+# (lowercase basenames like `nc` cannot be represented by an uppercase-only 8.3
+# short name, so the real name lives in the LFN). Without `lfn`, fatfs sees only
+# the mangled 8.3 form (`NC~1`) and a lookup of `/bin/nc` from the disk cell-store
+# fails — which silently made the cell-store unreadable for interactive spawns.
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc", "lfn"] }
 littlefs2 = { version = "0.7.2", default-features = false, optional = true }
 redoxfs = { path = "../../../third_party/redoxfs", default-features = false }
 redox_syscall = { version = "0.7.5", default-features = false }

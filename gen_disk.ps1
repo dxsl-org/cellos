@@ -362,17 +362,10 @@ if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
 if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
 if (Test-Path $ps_bin)   { $kfs_args += @($ps_bin,   "/bin/ps") }
 if (Test-Path $kill_bin) { $kfs_args += @($kill_bin, "/bin/kill") }
-# Core network CLI tools — same class as ls/cat/echo above: small, always-present
-# CLI utilities that belong in the base ramdisk. Interactive `sys_spawn_from_path`
-# resolves them from VIFS1 (BinOverlay's proven first tier). They also stay in the
-# disk cell-store (table_args) for the day cell-store file reads are validated; the
-# large/optional cells (doom, lua, hypha, tetris) remain cell-store-only.
-if (Test-Path $nc_bin)    { $kfs_args += @($nc_bin,    "/bin/nc") }
-if (Test-Path $curl_bin)  { $kfs_args += @($curl_bin,  "/bin/curl") }
-if (Test-Path $wget_bin)  { $kfs_args += @($wget_bin,  "/bin/wget") }
-if (Test-Path $httpd_bin) { $kfs_args += @($httpd_bin, "/bin/httpd") }
-if (Test-Path $mqtt_bin)  { $kfs_args += @($mqtt_bin,  "/bin/mqtt") }
-if (Test-Path $posix_shim_test_bin) { $kfs_args += @($posix_shim_test_bin, "/bin/posix-shim-test") }
+# nc/curl/httpd/wget/mqtt/posix-shim-test are NOT embedded here: they load from
+# the disk cell-store (table_args) via VFS. That path now works (fatfs `lfn`
+# feature enabled), so keeping them cell-store-only honours the G2 kernel-shrink
+# intent. The network + posix_shim boot tests validate the cell-store read.
 # Boot service + driver cells — must be in kernel_fs.img so boot works without
 # a VirtIO block device (ARM64, diskless CI, and the future VirtIO Block Cell
 # phase where kernel no longer has a built-in block driver).
