@@ -145,7 +145,9 @@ fn gpu_framebuffer_initialises() {
         return;
     }
     let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("Framebuffer setup success", BOOT_TIMEOUT).unwrap_or_else(|e| {
+    // The VirtIO GPU Driver Cell claims the MMIO device, initialises its
+    // framebuffer via virtio-drivers, and registers as the system GPU driver.
+    qemu.wait_for("VirtIO GPU Driver Cell registered", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("GPU framebuffer setup did not complete: {e}\n--- output ---\n{}", qemu.dump())
     });
     // Boot must still reach the shell with the GPU attached (no hang).

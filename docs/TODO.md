@@ -3,8 +3,7 @@
 ## Tasks (2026-07-08 — post G2 loader redesign + boot-suite recovery)
 
 ### 🔴 High value — real bugs, QEMU-debuggable
-1. Input virtqueue-poll regression (`input_bare_cell`, `input_keyboard_e2e`) — input service claims virtio-keyboard + polls virtqueue directly (Phase-03 kernel-push→userspace migration), but QMP-injected keys never surface in that poll. Debug `cells/services/input` virtqueue setup / used-ring / IRQ-notify. Input-test cell already spawns + focus-grants (cell-store lfn fix works) — isolated to key delivery.
-2. virtio-gpu Driver Cell not registering (`gpu_framebuffer_initialises`) — cell doesn't spawn/claim its device (compositor falls back to software cursor); also update test's retired `"Framebuffer setup success"` marker. Likely same Driver-Cell device-claim class as #1.
+1. Input virtqueue-poll regression (`input_bare_cell`, `input_keyboard_e2e`, `compositor_cursor_moves_on_mouse_event`) — input service claims virtio-keyboard + polls virtqueue directly (Phase-03 kernel-push→userspace migration), but QMP-injected keys/mouse-abs never surface in that poll (`[input-svc] key event 2` never fires). Debug `cells/services/input` virtqueue setup / used-ring / IRQ-notify. Input-test cell already spawns + focus-grants (cell-store lfn fix works) — isolated to event delivery. NOT the same class as the GPU bounce-DMA fix (that was a HAL `share`/`unshare` issue, not event delivery).
 
 ### 🟡 Medium — single/self-contained
 4. aarch64 userspace boot-to-shell regression — kernel boots + spawns init + scheduler runs, then init produces no output. Bisect Jun-12→HEAD; check aarch64 U-mode entry / crt0 `__init_array` PC-relative. See `project-arm64-peripheral-test-status.md` memory.

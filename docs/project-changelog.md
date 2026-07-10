@@ -4,6 +4,21 @@
 
 ---
 
+## [2026-07-10] virtio-gpu Driver Cell registration fixed — bounce-DMA in the GPU HAL
+
+### Summary
+`gpu_framebuffer_initialises` failed and the compositor fell back to a software cursor. Two independent defects:
+
+1. **Retired test marker.** The test waited for `"Framebuffer setup success"` — a kernel-era string that no longer exists (the GPU driver moved to a Driver Cell per the Kernel Boundary Law). Updated to the Driver Cell's real marker, `"VirtIO GPU Driver Cell registered"`.
+2. **GPU HAL had no bounce-DMA (root cause of the hang).** Instrumented boot showed the cell *found* the GPU (device type 16 at MMIO slot `0x10005000`), claimed the region, built the transport, and constructed `VirtIOGpu` — then **hung in `gpu.resolution()`** (the first control-queue transaction). The cell's `CellHal::share`/`unshare` (`cells/drivers/virtio-gpu/src/display.rs`) naively cast the driver's buffer pointer as a physical address. But command buffers live on the cell heap/stack, whose VAs are **not identity-mapped**; QEMU read garbage for the control command and never posted a used-ring response, so the poll spun forever. This is the same class of bug the virtio-net cell already solved.
+
+### Fix
+Ported the proven bounce-DMA `share`/`unshare` from the virtio-net cell's `CellHal`: copy driver buffers through an identity-mapped grant page (`sys_grant_alloc`) for `DriverToDevice`, copy device-written bytes back on `unshare` for `DeviceToDriver`, then free the grant. The GPU cell now registers and the compositor reports `hardware cursor active` (was `software cursor`). Verified: `gpu_framebuffer_initialises` passes.
+
+**Note:** `compositor_cursor_moves_on_mouse_event` now advances past GPU init (GPU registers, hardware cursor active) but still fails at the input `EV_ABS` leg — that is the separate input virtqueue-poll regression (TODO #1), **not** the same class as this GPU HAL fix.
+
+---
+
 ## [2026-07-10] mqtt_subscribe SUBACK-receive fixed — TCP-stream framing in the MQTT client
 
 ### Summary
