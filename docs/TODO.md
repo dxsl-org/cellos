@@ -7,7 +7,6 @@
 2. virtio-gpu Driver Cell not registering (`gpu_framebuffer_initialises`) — cell doesn't spawn/claim its device (compositor falls back to software cursor); also update test's retired `"Framebuffer setup success"` marker. Likely same Driver-Cell device-claim class as #1.
 
 ### 🟡 Medium — single/self-contained
-3. `mqtt_subscribe` SUBACK receive — reaches "connected"; mock broker sends SUBACK but client `mqtt_recv(5000)` times out. Investigate `mqtt_recv` timing / smoltcp RX buffering (`mqtt_publish` passes).
 4. aarch64 userspace boot-to-shell regression — kernel boots + spawns init + scheduler runs, then init produces no output. Bisect Jun-12→HEAD; check aarch64 U-mode entry / crt0 `__init_array` PC-relative. See `project-arm64-peripheral-test-status.md` memory.
 
 ### 🟢 Architectural follow-ups (now unblocked)

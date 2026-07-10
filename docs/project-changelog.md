@@ -4,6 +4,16 @@
 
 ---
 
+## [2026-07-10] mqtt_subscribe SUBACK-receive fixed — TCP-stream framing in the MQTT client
+
+### Summary
+`mqtt subscribe` reached "connected" then printed `mqtt: SUBACK not received` and timed out. Root cause was **data loss in the MQTT client, not net-service timing**: the net service's `TcpRecv` handler (`recv_slice`, `cells/services/net/src/handlers.rs:168`) drains *all* buffered bytes, but the old `mqtt_recv_once` computed a length from the *first* packet's remaining-length byte and **discarded the trailing bytes**. When CONNACK + SUBACK arrived coalesced in one TCP segment (the mock broker sleeps only 50 ms between them — `tests/integration/src/lib.rs:1592`), `mqtt_handshake` consumed both, kept the 4-byte CONNACK, and silently dropped the SUBACK — which was then gone from smoltcp's buffer, so `do_subscribe`'s 5000-poll loop never saw it.
+
+### Fix
+Rewrote the client's receive path (`cells/tools/net-tools/src/bin/mqtt.rs`) around an `MqttConn` stream framer that **retains leftover bytes across reads** and hands out exactly one complete MQTT packet at a time (`take_packet` + `decode_remaining_len` varint parser). Handshake, SUBACK wait, and the PUBLISH poll loop now consume packets from this buffer, so coalesced control packets are no longer lost regardless of segment boundaries or timing. Verified: `mqtt_subscribe` and `mqtt_publish` both pass (riscv64 `boot` suite). No unsafe added (Cell-safe: stack-owned buffer threaded through, no `static mut`).
+
+---
+
 ## [2026-07-08] Boot-suite recovery — three G2-loader follow-on fixes (riscv boot suite 29 → 48)
 
 ### Summary
