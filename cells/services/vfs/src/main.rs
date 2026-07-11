@@ -55,6 +55,11 @@ api::declare_syscalls![
     GrantRegister, GrantUnregister,
     StateStash, StateRestore,
     Open, Close, ReadDir, OpenCap, ReadCap, CloseCap,
+    // NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
+    // denied for tid <vfs>" kernel warn on x86 is the CANARY for the known x86
+    // syscall-redispatch corruption (syscall number read as user CS = 0x23 = 35
+    // with a pointer as the tick count; see TODO #9 / x86 q35 P02). Allowing it
+    // turns that corruption into an unbounded sleep that hangs the boot.
 ];
 
 // Global VFS manager for the fast-IPC handler (which runs outside the main recv loop).

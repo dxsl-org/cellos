@@ -4,6 +4,19 @@
 
 ---
 
+## [2026-07-11] x86_64 NX-bit paging bug fixed — VFS runs on x86 for the first time since G2 (TODO #9 part A)
+
+### Root cause
+`virt_to_phys` (x86) extracted the physical address from a PTE with `pte & !0xFFF`, which keeps **bit 63 (PTE_NX)** and bits 62:52. Every user RW/RO page carries NX (`pte_flags_user_rw`), so the "physical" address came back as `0x8000_0000_xxxx` → adding the HHDM offset wrapped it into a **non-canonical pointer** → the next dereference raised **#GP (error code 0, CR2 stale)** which the shared error-code IDT handler reported as `#PF va=0x0`. Trigger: the ELF loader's shared-page path (`already_ours`) round-trips `virt_to_phys`→`phys_to_virt` when adjacent PT_LOAD segments share a page — the first NX page hit there (init loading `/bin/vfs`) killed init and ended every x86 boot at "Starting scheduler". Diagnosed by extending the #PF panic with **rip/cs/rsp + a kernel-text return-address scan** (now permanent diagnostics): rip symbolized to `memcpy` ← `spawn_from_mem`, and a per-page probe showed the poisoned `fv=0x7fff8000…` (bit 63 lost to the wrap) on the first shared NX page.
+
+### Fix
+`PTE_ADDR_MASK = 0x000F_FFFF_FFFF_F000` (bits 51:12) applied at every PTE/PDE/PDPTE/PML4E address extraction (hal `walk_create`/`walk_read`/`map_bios_area` + kernel `virt_to_phys`). Same defect class as the previously-fought "Limine NX bit PDPT bug".
+
+### Result + remaining (TODO #9 part B)
+init now survives; **VFS loads and runs on x86** (RamFS serves, FAT/littlefs/redoxfs mounts fail gracefully on the diskless ISO boot). Suite still 3/7: vfs later dies at `[#PF user] va=-1` after an **x86 syscall re-dispatch corruption** — instrumentation proved the kernel received `SetTimer` (35 = **0x23 = user CS**) with a vfs-image POINTER as the tick count, i.e. the syscall number is read from the wrong slot on some x86 resume path. The vfs allowlist deliberately omits SetTimer so the `SetTimer denied for tid <vfs>` warn remains a canary (allowing it turned the corruption into an unbounded sleep). Scope: x86 q35 plan P02 (ring-3/syscall verify).
+
+---
+
 ## [2026-07-11] bench CI gate modernized + littlefs unlocked on aarch64/x86_64 via clang
 
 ### bench_all_pass (TODO #7) — machinery gate on QEMU, thresholds on hardware

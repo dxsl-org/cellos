@@ -132,7 +132,12 @@ extern "Rust" {
     fn vi_handle_uart_irq();
 
     /// #PF handler. Defined in `kernel::memory::paging` with `#[no_mangle]`.
-    fn vi_handle_page_fault(va: usize, error_code: u64);
+    /// `rip`/`cs`/`rsp` come from the CPU-pushed interrupt frame so a kernel
+    /// fault panic can be symbolized (and a mis-dispatched #GP recognized —
+    /// this handler serves EVERY error-code vector until per-vector stubs
+    /// exist). `rsp` lets the kernel walk the faulting stack for return
+    /// addresses.
+    fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64);
 }
 
 /// LAPIC periodic timer handler (vector 0x20).
@@ -184,9 +189,7 @@ extern "x86-interrupt" fn x86_64_ec_handler(frame: InterruptFrame, error_code: u
     // SAFETY: vi_handle_page_fault is defined in kernel::memory::paging; it
     // acquires scheduler and frame-allocator spinlocks which the IDT entry
     // path does not hold.
-    unsafe { vi_handle_page_fault(cr2 as usize, error_code); }
-
-    let _ = frame; // frame rip/cs available for future per-vector dispatch
+    unsafe { vi_handle_page_fault(cr2 as usize, error_code, frame.rip, frame.cs, frame.rsp); }
 }
 
 /// #CP — Control Protection Exception (vector 21, CET IBT / Shadow Stack violation).
