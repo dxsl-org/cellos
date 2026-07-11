@@ -578,9 +578,14 @@ pub fn init() {
 /// Skips duplicate BDFs (idempotent: kernel ECAM scan may already have found the device).
 /// Also registers BAR0 in the Resource Registry for `sys_request_mmio` validation.
 pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
-    let bus = ((bdf >> 16) & 0xFF) as u8;
-    let dev = ((bdf >> 8)  & 0xFF) as u8;
-    let fun = (bdf          & 0xFF) as u8;
+    // Canonical BDF wire layout everywhere (Platform Cell, FindPcieDevice,
+    // GrantDma, iommu_x86): bus[15:8] | dev[7:3] | fun[2:0]. An earlier decode
+    // here assumed bus<<16|dev<<8|fun, which garbled the stored (bus,dev,fun)
+    // tuple for every device (it only round-tripped through FindPcieDevice's
+    // re-encode by luck on bus 0).
+    let bus = ((bdf >> 8) & 0xFF) as u8;
+    let dev = ((bdf >> 3) & 0x1F) as u8;
+    let fun = (bdf         & 0x07) as u8;
     let class    = ((cls >> 16) & 0xFF) as u8;
     let subclass = ((cls >> 8)  & 0xFF) as u8;
     let prog_if  = (cls          & 0xFF) as u8;
