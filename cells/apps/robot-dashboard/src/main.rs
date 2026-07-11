@@ -205,6 +205,10 @@ pub extern "C" fn main() {
     // Accumulate input events across loop iterations so events collected in a
     // non-frame iteration are not lost before tick_with_dt processes them.
     let mut pending_events: Vec<Event> = Vec::new();
+    // One-shot marker: proves the input event path (VirtIO → input service →
+    // focused viui app) reached this cell. Logged once so it never spams the
+    // shared console on subsequent keystrokes (see input dispatcher's no-spam note).
+    let mut input_event_logged = false;
 
     loop {
         // Heartbeat: disable hung-detector (0 = no deadline).
@@ -239,7 +243,12 @@ pub extern "C" fn main() {
         // Events must not be discarded in non-frame iterations — a Tab or button
         // press arriving between frame ticks would otherwise be silently lost.
         {
-            pending_events.extend(viui::input_bridge::collect_input_events(32));
+            let collected = viui::input_bridge::collect_input_events(32);
+            if !input_event_logged && !collected.is_empty() {
+                input_event_logged = true;
+                ostd::io::println("[robot-dashboard] input event received");
+            }
+            pending_events.extend(collected);
         }
 
         // ── Render tick ──────────────────────────────────────────────────────

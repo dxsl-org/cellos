@@ -1107,7 +1107,38 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            // Non-blocking Recv
+            // Drain pending_msgs first (same as Recv / RecvTimeout). ipc_try_send
+            // queues input events here when the focused cell is busy-polling (not
+            // in Recv). Without this drain a cell that receives via sys_try_recv —
+            // every viui app polling through ostd::input::poll_events — would never
+            // see queued key/mouse events (ipc_try_recv only scans Sending tasks).
+            // Honour the recv mask exactly like the blocking paths.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    let slot = t.pending_msgs.iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask);
+                    if let Some(i) = slot {
+                        let msg = t.pending_msgs.remove(i);
+                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        if copy_len > 0
+                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
+                        {
+                            // SAFETY: buf_ptr is the caller's recv buffer (validated above);
+                            // msg.data is an owned heap allocation; both are exclusive here.
+                            unsafe {
+                                core::ptr::copy_nonoverlapping(
+                                    msg.data.as_ptr(),
+                                    buf_ptr as *mut u8,
+                                    copy_len,
+                                );
+                            }
+                        }
+                        t.current_caller = Some(msg.sender_tid);
+                        return Ok(msg.sender_tid);
+                    }
+                }
+            }
+            // Non-blocking Recv (scan Sending tasks)
             let res = super::ipc_try_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
                 Ok(id) => Ok(id), // 0 = No message, >0 = Sender ID

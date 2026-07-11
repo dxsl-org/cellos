@@ -3,7 +3,7 @@
 ## Tasks (2026-07-08 — post G2 loader redesign + boot-suite recovery)
 
 ### 🔴 High value — real bugs, QEMU-debuggable
-1. Input virtqueue-poll regression (`input_bare_cell`, `input_keyboard_e2e`, `compositor_cursor_moves_on_mouse_event`) — input service claims virtio-keyboard + polls virtqueue directly (Phase-03 kernel-push→userspace migration), but QMP-injected keys/mouse-abs never surface in that poll (`[input-svc] key event 2` never fires). Debug `cells/services/input` virtqueue setup / used-ring / IRQ-notify. Input-test cell already spawns + focus-grants (cell-store lfn fix works) — isolated to event delivery. NOT the same class as the GPU bounce-DMA fix (that was a HAL `share`/`unshare` issue, not event delivery).
+1. Multi-device input claiming (`compositor_cursor_moves_on_mouse_event`) — the input cell claims only the FIRST virtio-input device found (keyboard, lower MMIO slot), so `virtio-tablet-device` EV_ABS events are never polled and the compositor cursor never moves. Make `cells/services/input` claim + drain ALL virtio-input devices (return `Vec<InputDevice>`, poll each). The test also still asserts the retired `[input-svc] key event 2` marker — retarget it at `[compositor] cursor at `. (Core input virtqueue-poll regression FIXED 2026-07-10: bounce-DMA in input HAL + `sys_try_recv` now drains `pending_msgs`; `input_bare_cell` + `input_keyboard_e2e` green.)
 
 ### 🟡 Medium — single/self-contained
 4. aarch64 userspace boot-to-shell regression — kernel boots + spawns init + scheduler runs, then init produces no output. Bisect Jun-12→HEAD; check aarch64 U-mode entry / crt0 `__init_array` PC-relative. See `project-arm64-peripheral-test-status.md` memory.

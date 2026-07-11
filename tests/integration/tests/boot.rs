@@ -1533,23 +1533,16 @@ fn input_keyboard_e2e() {
     // Inject Tab via the QEMU monitor (sendkey tab → VirtIO keyboard HID event).
     qemu.send_qemu_key("tab");
 
-    // Leg 1: kernel VirtIO input driver → input service (EV_KEY = opcode 0).
-    // The probe is a single formatted string so it fits on one UART log line.
+    // End-to-end: VirtIO keyboard → input service virtqueue drain → dispatch to
+    // the focused viui app. robot-dashboard logs a one-shot marker when the event
+    // reaches its input queue. (The input service no longer logs per-event — it
+    // would bury the shell prompt; see the dispatcher's no-spam note.)
     // Allow up to 15 s — the guest's 10 ms timer tick polls the VirtIO input
     // ring; under QEMU TCG, the first poll after injection may be delayed.
-    qemu.wait_for("[input-svc] key event 0", 15)
+    qemu.wait_for("[robot-dashboard] input event received", 15)
         .unwrap_or_else(|e| {
             panic!(
-                "kernel event not received by input service: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
-
-    // Leg 2: input service → focused app (robot-dashboard).
-    qemu.wait_for("[input-svc] dispatch to TID ", 5)
-        .unwrap_or_else(|e| {
-            panic!(
-                "input service did not dispatch to app: {e}\n--- output ---\n{}",
+                "keyboard event did not reach the focused app: {e}\n--- output ---\n{}",
                 qemu.dump()
             )
         });

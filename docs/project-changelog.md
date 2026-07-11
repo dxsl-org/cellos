@@ -4,6 +4,22 @@
 
 ---
 
+## [2026-07-10] Input virtqueue-poll regression fixed — bounce-DMA + TryRecv drains pending_msgs
+
+### Summary
+`input_bare_cell` and `input_keyboard_e2e` failed: QMP-injected keys never reached the focused cell. Two independent defects, both surfaced by the Phase-03 kernel-push → userspace-poll migration:
+
+1. **Input HAL had no bounce-DMA (keys never left the device).** The input Driver Cell's `CellHal::share`/`unshare` (`cells/services/input/src/virtio_device.rs`) cast the driver buffer pointer straight to a physical address. But `VirtIOInput`'s event ring is a `Box<[InputEvent; 32]>` on the cell heap (non-identity-mapped VA), so the device wrote events to a bogus physical address and `pop_pending_event` never saw them. Same root cause and fix as the GPU cell — ported the virtio-net bounce-DMA. This alone fixed `input_bare_cell` (its `ostd::app` receiver blocks in `sys_recv`, which already drains `pending_msgs`).
+
+2. **`sys_try_recv` never drained `pending_msgs` (busy-polling cells got nothing).** The input service dispatches events via `sys_try_send`; when the focused cell is busy-polling (not in `Recv`), the kernel queues the event into the target's `pending_msgs`. But `Syscall::TryRecv` (`kernel/src/task/syscall.rs`) only called `ipc_try_recv`, which scans `Sending` tasks and **never drains `pending_msgs`** — unlike `Recv`/`RecvTimeout`, which do. So every viui app receiving through `ostd::input::poll_events` (which uses `sys_try_recv`) silently lost all queued input. Added the same mask-honoring `pending_msgs` drain to `TryRecv`. Also fixed `poll_events` (`libs/ostd/src/input.rs`) to mask on the input service TID instead of `usize::MAX` (which matched neither the `Sending` scan nor the drain), mirroring `drain_pending_input_events`.
+
+### Result
+`input_bare_cell`, `input_keyboard_e2e`, `compositor_input_routing_active`, `input_service_registered_at_boot` all pass. Added a one-shot `[robot-dashboard] input event received` marker (the input service deliberately does not log per-event — it would bury the shell prompt) and retargeted `input_keyboard_e2e` at it (the old `[input-svc] key event 0` / `dispatch to TID` markers were kernel-era strings the service no longer prints).
+
+**Follow-up:** `compositor_cursor_moves_on_mouse_event` still fails — it needs the input cell to claim BOTH the keyboard and the tablet (`virtio-tablet-device`), but the cell claims only the first input device found (the keyboard at a lower MMIO slot), so tablet `EV_ABS` events are never polled. Multi-device input claiming is a separate feature; the test also still asserts the retired `[input-svc] key event 2` marker.
+
+---
+
 ## [2026-07-10] virtio-gpu Driver Cell registration fixed — bounce-DMA in the GPU HAL
 
 ### Summary
