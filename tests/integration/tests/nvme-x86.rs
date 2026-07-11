@@ -99,6 +99,85 @@ fn nvme_driver_cell_registers_x86() {
     let _ = std::fs::remove_file(&disk);
 }
 
+/// VFS must mount a FAT32 volume served by the NVMe Driver Cell.
+///
+/// Builds a disk with a FAT32 filesystem at `PART_FAT32_BASE_LBA` (2048 → byte
+/// offset 1 MiB) using `tools/mkfat32_inplace.py`, boots with it attached as
+/// the NVMe drive, and asserts the mount marker. This exercises real sector
+/// reads over the DrvRequest IPC + NVMe DMA path (BPB probe, FAT, root dir) —
+/// the chain that silently broke when the nvme cell only matched
+/// `AppEvent::Message` (raw DrvRequests arrive as `RawMessage`).
+///
+/// Skips (in addition to the usual ISO/QEMU checks) when `python` is not on
+/// PATH — the FAT32 formatter is a Python tool.
+#[test]
+fn nvme_fat32_mount_x86() {
+    if !prerequisites_ok() { return; }
+    let python_ok = std::process::Command::new("python")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !python_ok {
+        eprintln!("SKIP nvme_fat32_mount_x86: python not on PATH (needed for mkfat32_inplace.py)");
+        return;
+    }
+
+    // 1. Format a 524,288-sector (256 MiB) FAT32 volume in a temp file.
+    const FAT_SECTORS: u64 = 524_288; // == api::disk::PART_FAT32_SECTORS
+    const FAT_BASE_OFFSET: u64 = 2_048 * 512; // PART_FAT32_BASE_LBA in bytes
+    let fat_img = std::env::temp_dir().join(format!(
+        "vicell_fat32_{}_{}.img",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()
+    ));
+    {
+        let f = std::fs::OpenOptions::new()
+            .write(true).create(true).open(&fat_img)
+            .expect("create FAT32 scratch image");
+        f.set_len(FAT_SECTORS * 512).expect("size FAT32 scratch image");
+    }
+    let mkfat = repo_root().join("tools/mkfat32_inplace.py");
+    let status = std::process::Command::new("python")
+        .arg(&mkfat)
+        .arg(&fat_img)
+        .arg(FAT_SECTORS.to_string())
+        .status()
+        .expect("run mkfat32_inplace.py");
+    assert!(status.success(), "mkfat32_inplace.py failed");
+
+    // 2. Splice the volume into an NVMe disk at the partition offset.
+    let disk = make_nvme_disk();
+    {
+        use std::io::{Seek, SeekFrom, Write};
+        let fat_bytes = std::fs::read(&fat_img).expect("read FAT32 image");
+        let mut d = std::fs::OpenOptions::new()
+            .write(true).open(&disk)
+            .expect("open NVMe disk for splice");
+        d.set_len(FAT_BASE_OFFSET + FAT_SECTORS * 512 + 1024 * 1024)
+            .expect("grow NVMe disk");
+        d.seek(SeekFrom::Start(FAT_BASE_OFFSET)).expect("seek to partition base");
+        d.write_all(&fat_bytes).expect("write FAT32 volume");
+    }
+    let _ = std::fs::remove_file(&fat_img);
+
+    // 3. Boot and assert the mount marker.
+    let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
+    qemu.wait_for("[vfs] FAT32 /mnt/sd volume mounted", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| {
+            let _ = std::fs::remove_file(&disk);
+            panic!(
+                "FAT32-on-NVMe mount not seen within {BOOT_TIMEOUT}s: {e}\n\
+                 Chain: nvme Driver Cell registers pre-VFS → VFS blk_router IPC → \
+                 DrvRequest sector reads over NVMe DMA → fatfs BPB accept.\n\
+                 --- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    let _ = std::fs::remove_file(&disk);
+}
+
 /// Boot with an NVMe controller attached must still reach the interactive
 /// shell — the Driver Cell path must not hang or fault the boot.
 #[test]
