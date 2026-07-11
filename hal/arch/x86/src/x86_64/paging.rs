@@ -82,6 +82,12 @@ pub const PTE_ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
 #[inline] pub fn pte_flags_user_exec()   -> u64 { PTE_PRESENT | PTE_USER }
 /// MMIO mapping (supervisor, read/write, cache-disable, no NX).
 #[inline] pub fn pte_flags_mmio()        -> u64 { PTE_PRESENT | PTE_WRITABLE | PTE_PCD }
+/// MMIO leaf flags for ring-3 Driver Cells: user-accessible, cache-disabled,
+/// never executable. Mirrors the riscv/aarch64 `cell_mmio_flags` posture —
+/// exclusivity is enforced by the resource registry + LBI (cells are
+/// `forbid(unsafe_code)`, so only an `MmioRegion` from a granted request can
+/// reach the range), not by per-cell page tables (SAS has none).
+#[inline] pub fn pte_flags_mmio_user()   -> u64 { PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_PCD | PTE_NX }
 
 // ---------------------------------------------------------------------------
 // CR3 / TLB helpers.

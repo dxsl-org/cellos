@@ -61,6 +61,18 @@ $cmd = "cargo build --release -p service-config --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 10
 if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LASTEXITCODE)" }
 
+# Build the PCIe cell stack (Kernel Boundary Law: drivers live in cells).
+# platform = ECAM scanner (kernel spawns /bin/platform before init);
+# nvme/e1000 = PCIe Driver Cells (init spawns them; PcieDriverCap is
+# path-granted by the kernel loader). Each exits cleanly when its device
+# is absent, so diskless/NIC-less boots are unaffected.
+foreach ($pkg in "service-platform", "driver-nvme", "driver-e1000") {
+    Write-Host "Building $pkg..."
+    $cmd = "cargo build --release -p $pkg --target $target $buildStd 2>&1"
+    Invoke-Expression $cmd | Select-Object -Last 10
+    if ($LASTEXITCODE -ne 0) { Write-Warning "$pkg build failed (exit $LASTEXITCODE)" }
+}
+
 $env:RUSTFLAGS = ""
 
 # Build sys-tools (ls/cat/echo/ps/kill — M3.2)
@@ -91,6 +103,9 @@ $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"  },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
     @{ Bin = "service-config"; Dst = "/bin/config" },
+    @{ Bin = "platform";       Dst = "/bin/platform" },
+    @{ Bin = "driver-nvme";    Dst = "/bin/nvme"   },
+    @{ Bin = "driver-e1000";   Dst = "/bin/e1000"  },
     @{ Bin = "ls";             Dst = "/bin/ls"     },
     @{ Bin = "cat";            Dst = "/bin/cat"    },
     @{ Bin = "echo";           Dst = "/bin/echo"   },

@@ -2939,11 +2939,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // PlatformCap bypass: Platform Cell may claim any MMIO range
             // (including the ECAM config-space window, which is not in PCIE_BARS).
             // Overlap check still applies — no two cells may share a byte.
+            // x86 SAS: the boot identity map covers MMIO kernel-only; a granted
+            // window must gain PTE_USER (+PCD, NX) before the ring-3 cell touches
+            // it. BAR windows may not be mapped at all yet — this also creates
+            // the identity mapping. riscv/aarch64 map cell MMIO user at boot.
+            #[cfg(target_arch = "x86_64")]
+            fn user_map(base: usize, len: usize) {
+                crate::memory::paging::map_mmio_user_x86(base, len);
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            fn user_map(_base: usize, _len: usize) {}
+
             if caller_has_platform(caller_id) {
                 return match crate::resource_registry::request_mmio_unchecked(
                     types::CellId(caller_id as u64), base, len,
                 ) {
-                    Ok(()) => Ok(0),
+                    Ok(()) => { user_map(base, len); Ok(0) }
                     Err(types::ViError::AlreadyExists) => Ok(2),
                     Err(_) => Ok(3),
                 };
@@ -2957,7 +2968,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     types::CellId(caller_id as u64), base, len,
                     crate::resource_registry::DEV_PCIE,
                 ) {
-                    Ok(()) => Ok(0),
+                    Ok(()) => { user_map(base, len); Ok(0) }
                     Err(types::ViError::PermissionDenied) => Ok(1),
                     Err(types::ViError::AlreadyExists)    => Ok(2),
                     Err(_)                                => Ok(3),
@@ -2977,7 +2988,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             match crate::resource_registry::request_mmio(
                 types::CellId(caller_id as u64), base, len, allowed_devices,
             ) {
-                Ok(()) => Ok(0),
+                Ok(()) => { user_map(base, len); Ok(0) }
                 Err(types::ViError::PermissionDenied) => Ok(1),
                 Err(types::ViError::AlreadyExists)    => Ok(2),
                 Err(_)                                => Ok(3),

@@ -477,7 +477,25 @@ pub fn map_page_x86(
 /// Panics on OOM or if the frame allocator is not yet initialised.
 #[cfg(target_arch = "x86_64")]
 pub fn map_mmio_x86(phys: usize, size: usize) {
-    use hal::paging::pte_flags_mmio;
+    map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio());
+}
+
+/// Identity-map a MMIO region with USER access (x86_64).
+///
+/// Called by the `RequestMmio` syscall when a ring-3 Driver Cell claims a
+/// range: the SAS identity map built at boot is kernel-only, so the claimed
+/// window must be (re)mapped with `PTE_USER` before the cell can touch it.
+/// Mirrors the riscv/aarch64 posture where cell-owned MMIO windows are mapped
+/// user-accessible — exclusivity is enforced by the resource registry + LBI
+/// (`forbid(unsafe_code)` cells cannot fabricate an MMIO dereference), not by
+/// the U/S bit.
+#[cfg(target_arch = "x86_64")]
+pub fn map_mmio_user_x86(phys: usize, size: usize) {
+    map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio_user());
+}
+
+#[cfg(target_arch = "x86_64")]
+fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
     let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
     let allocator = fa.as_mut().expect("map_mmio_x86: frame allocator not ready");
     let page_mask = PAGE_SIZE - 1;
@@ -485,7 +503,7 @@ pub fn map_mmio_x86(phys: usize, size: usize) {
     let end = (phys + size + page_mask) & !page_mask;
     while va < end {
         // Errors are logged but not fatal; a broken mapping will fault on first use.
-        if let Err(e) = map_page_x86(allocator, va, va, pte_flags_mmio()) {
+        if let Err(e) = map_page_x86(allocator, va, va, flags) {
             log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
         }
         va += PAGE_SIZE;

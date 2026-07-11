@@ -21,15 +21,21 @@ pub static NIC_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
 /// Record `tid` as the active block driver.  Overwrites any previous registration.
+///
+/// Logged at `warn!` for the same reason as `set_input_cell`: Driver Cells are
+/// spawned by init AFTER the kernel drops its log level to Warn, this is a
+/// one-time boot-integrity event (the kernel now routes all sector I/O to this
+/// TID), and it is the marker the x86 nvme/nic integration tests assert on.
 pub fn register_block_driver(tid: usize) {
     BLOCK_DRIVER_CELL.store(tid, Ordering::Release);
-    log::info!("[driver_cell] block driver registered: tid={}", tid);
+    log::warn!("[driver_cell] block driver registered: tid={}", tid);
 }
 
 /// Record `tid` as the active NIC driver.  Overwrites any previous registration.
+/// `warn!` — see `register_block_driver`.
 pub fn register_nic_driver(tid: usize) {
     NIC_DRIVER_CELL.store(tid, Ordering::Release);
-    log::info!("[driver_cell] NIC driver registered: tid={}", tid);
+    log::warn!("[driver_cell] NIC driver registered: tid={}", tid);
 }
 
 /// Clear the block driver registration (called on cell exit/kill).

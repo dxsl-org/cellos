@@ -46,13 +46,24 @@ static STATE: Mutex<Option<NvmeState>> = Mutex::new(None);
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
-            // 1. Discover NVMe device via kernel ECAM table.
+            // 1. Discover NVMe device via kernel ECAM table. This cell spawns
+            // pre-VFS, concurrently with the Platform Cell's ECAM scan — the
+            // device entry may not be registered yet (the scan is slower when
+            // each RegisterPciDevice also runs the deferred VT-d init), so
+            // retry with yields for a bounded window before concluding absent.
             let mut info = PcieDeviceInfo::zeroed();
-            let Ok(true) = sys_find_pcie_device(NVME_CLASS, NVME_SUB, NVME_PROGIF, &mut info)
-            else {
-                // No NVMe found or no PcieDriverCap — exit; kernel NVMe remains active.
+            let mut found = false;
+            for _ in 0..200 {
+                if let Ok(true) = sys_find_pcie_device(NVME_CLASS, NVME_SUB, NVME_PROGIF, &mut info) {
+                    found = true;
+                    break;
+                }
+                ostd::task::yield_now();
+            }
+            if !found {
+                // No NVMe on this machine (or no PcieDriverCap) — exit cleanly.
                 ostd::syscall::sys_exit(0);
-            };
+            }
 
             let bar0_base = info.bar0_base as usize;
             let bdf       = info.bdf;
@@ -82,7 +93,12 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             *STATE.lock() = Some(NvmeState { ctrl, io_buf });
         }
 
-        AppEvent::Message { sender_tid, data } => {
+        // VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope), so
+        // requests arrive as RawMessage; accept Message too — layout is identical.
+        // Without the RawMessage arm the request falls into `_ => {}` and VFS
+        // blocks forever in its reply recv (x86 FAT-on-NVMe boot hang).
+        AppEvent::Message { sender_tid, data }
+        | AppEvent::RawMessage { sender_tid, data } => {
             let mut reply = [0u8; dispatch::REPLY_SIZE];
             let len = if let Some(state) = STATE.lock().as_mut() {
                 dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)

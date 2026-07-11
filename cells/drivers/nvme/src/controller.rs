@@ -149,11 +149,14 @@ impl NvmeController {
         }
 
         // 9. Create I/O CQ (admin opcode 0x05).
+        // CDW10 layout (NVMe 1.x §5.3/§5.4): QSIZE[31:16] (0-based) | QID[15:0].
+        // The first port of this file inverted the two fields — QEMU then created
+        // CQ with QID=63 and Create-SQ failed with Invalid CQID (CQ 1 absent).
         let io_cq_phys = ctrl.io.cq_phys();
         ctrl.admin_cmd(
             ADMIN_OPC_CREATE_CQ, 0, io_cq_phys, 0,
-            (IO_QUEUE_DEPTH as u32 - 1) | (1 << 16), // QID=1, QSIZE
-            (1 << 1) | 1, // IEN=0 (polled), PC=1 (physically contiguous)
+            ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
+            0x1, // CDW11: IEN=0 (polled), PC=1 (physically contiguous)
             0, 0, 0, 0,
         )?;
 
@@ -161,8 +164,8 @@ impl NvmeController {
         let io_sq_phys = ctrl.io.sq_phys();
         ctrl.admin_cmd(
             ADMIN_OPC_CREATE_SQ, 0, io_sq_phys, 0,
-            (IO_QUEUE_DEPTH as u32 - 1) | (1 << 16), // QID=1, QSIZE
-            (1 << 16) | (1 << 1) | 1, // CQID=1, QPRIO=medium, PC=1
+            ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
+            (1 << 16) | 0x1, // CDW11: CQID=1 | PC=1
             0, 0, 0, 0,
         )?;
 
