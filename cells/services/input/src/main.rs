@@ -34,18 +34,20 @@ mod modifier_state;
 mod mouse_state;
 mod virtio_device;
 
-use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers};
+use api::input::{InputEvent, KeyEvent, KeyState, KeySym};
 use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
 use dispatcher::Dispatcher;
 use layout_us_qwerty::{translate, key_state_from_evdev};
 use modifier_state::ModifierState;
 use mouse_state::{MouseState, btn_to_mouse_button, BTN_LEFT};
+use alloc::vec::Vec;
 use ostd::io::println;
 use ostd::syscall::{sys_recv_timeout, sys_try_send, sys_get_time, sys_heartbeat, SyscallResult};
-use virtio_device::{find_and_init_input, InputDevice};
+use virtio_device::{find_and_init_inputs, InputDevice};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, TrySend, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio, GrantAlloc, GrantFree];
+// LookupService: the dispatcher resolves the compositor TID for mouse routing.
+api::declare_syscalls![Send, TrySend, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio, GrantAlloc, GrantFree, LookupService];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
 const EV_KEY: u8 = 0;
@@ -89,11 +91,13 @@ pub fn main() {
     // several scheduling cycles before we reach the loop's sys_heartbeat call.
     sys_heartbeat(HEARTBEAT_TICKS);
 
-    // Probe and claim the VirtIO input device.  After sys_request_mmio succeeds
-    // inside find_and_init_input, the kernel migration guard in virtio_input.rs
-    // will see the MMIO owner and stop pushing events via dispatch_pending.
-    let mut device: Option<InputDevice> = find_and_init_input();
-    if device.is_some() {
+    // Probe and claim ALL VirtIO input devices (QEMU exposes keyboard, tablet,
+    // mouse as separate virtio-input MMIO slots).  After sys_request_mmio
+    // succeeds inside find_and_init_inputs, the kernel migration guard in
+    // virtio_input.rs sees the MMIO owner and stops pushing events via
+    // dispatch_pending — so every unclaimed device would be polled by nobody.
+    let mut devices: Vec<InputDevice> = find_and_init_inputs();
+    if !devices.is_empty() {
         println("[input] VirtIO input device claimed; polling virtqueue directly");
     } else {
         println("[input] No VirtIO input device; relying on kernel push");
@@ -102,9 +106,9 @@ pub fn main() {
     loop {
         sys_heartbeat(HEARTBEAT_TICKS);
 
-        // Drain the VirtIO virtqueue before blocking.  This catches events that
-        // arrived since the last iteration without waiting for the timeout.
-        if let Some(ref mut dev) = device {
+        // Drain every VirtIO virtqueue before blocking.  This catches events
+        // that arrived since the last iteration without waiting for the timeout.
+        for dev in devices.iter_mut() {
             drain_virtio(dev, &mut buf, &mut modifiers, &mut mouse, &mut dispatcher);
         }
 
@@ -197,9 +201,11 @@ fn handle_kernel_event(
         EV_KEY => {
             let state = key_state_from_evdev(value);
             // BTN_* codes (≥ 0x110) are mouse buttons, not keyboard keys.
+            // Pointer events route to the compositor (cursor + Z-order owner),
+            // not the keyboard-focused cell — see Dispatcher::dispatch_mouse.
             if code >= BTN_LEFT {
                 if let Some(button) = btn_to_mouse_button(code) {
-                    dispatcher.dispatch(&InputEvent::MouseButton { button, state });
+                    dispatcher.dispatch_mouse(&InputEvent::MouseButton { button, state });
                 }
                 return;
             }
@@ -217,12 +223,12 @@ fn handle_kernel_event(
         }
         1 => {
             if let Some(ev) = mouse.apply_rel(code, value) {
-                dispatcher.dispatch(&ev);
+                dispatcher.dispatch_mouse(&ev);
             }
         }
         2 => {
             if let Some(ev) = mouse.apply_abs(code, value) {
-                dispatcher.dispatch(&ev);
+                dispatcher.dispatch_mouse(&ev);
             }
         }
         EV_ASCII => {

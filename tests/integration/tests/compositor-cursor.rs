@@ -94,23 +94,16 @@ fn compositor_cursor_moves_on_mouse_event() {
     // The VirtIO input ring is polled on the 10 ms timer tick; allow 15 s.
     qemu.send_qemu_mouse_abs(16383, 16383);
 
-    // Leg 1: input service received EV_ABS (opcode 2 from kernel).
-    qemu.wait_for("[input-svc] key event 2", 15).unwrap_or_else(|e| {
-        panic!(
-            "EV_ABS not received by input service: {e}\n\
-             Hint: verify virtio-tablet-device is attached and input service handles opcode 2.\n\
-             --- serial output ---\n{}",
-            qemu.dump()
-        )
-    });
-
-    // Leg 2: compositor received the MouseMove and drew the cursor.
-    // The probe "[compositor] cursor at X,Y" is emitted by update_cursor in
-    // input_handler.rs on every MouseMove.
-    qemu.wait_for("[compositor] cursor at ", 10).unwrap_or_else(|e| {
+    // End-to-end: tablet EV_ABS → input service virtqueue drain → MouseMove
+    // routed to the compositor (dispatch_mouse) → update_cursor probe.
+    // The input service does not log per-event (it would bury the shell
+    // prompt), so the compositor probe is the first observable marker.
+    qemu.wait_for("[compositor] cursor at ", 15).unwrap_or_else(|e| {
         panic!(
             "compositor cursor probe not seen: {e}\n\
-             Hint: verify update_cursor emits the probe and pending_dirty is set.\n\
+             Hint: verify virtio-tablet-device is attached, the input service\n\
+             claims ALL virtio-input devices, and dispatch_mouse routes to the\n\
+             compositor (update_cursor emits the probe).\n\
              --- serial output ---\n{}",
             qemu.dump()
         )

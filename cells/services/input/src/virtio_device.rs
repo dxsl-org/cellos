@@ -142,10 +142,15 @@ fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
-/// Probe all VirtIO MMIO slots and initialise the first Input device found.
+/// Probe all VirtIO MMIO slots and initialise EVERY Input device found.
 ///
-/// Returns `None` if no VirtIO input device is present.
-pub fn find_and_init_input() -> Option<InputDevice> {
+/// QEMU attaches one virtio-input device per HID (keyboard, tablet, mouse) in
+/// separate MMIO slots — claiming only the first would leave the others polled
+/// by nobody (kernel push is disabled once ANY cell owns an input slot), so
+/// tablet EV_ABS events would silently vanish. Returns an empty `Vec` when no
+/// VirtIO input device is present.
+pub fn find_and_init_inputs() -> alloc::vec::Vec<InputDevice> {
+    let mut devices = alloc::vec::Vec::new();
     for (base, irq) in virtio_slot_iter() {
         // SAFETY: base is within the arch MMIO window mapped USER-accessible by paging init.
         let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
@@ -170,10 +175,9 @@ pub fn find_and_init_input() -> Option<InputDevice> {
             Err(_) => continue,
         };
 
-        match VirtIOInput::<CellHal, MmioTransport>::new(transport) {
-            Ok(dev) => return Some(InputDevice { dev, irq, base }),
-            Err(_) => continue,
+        if let Ok(dev) = VirtIOInput::<CellHal, MmioTransport>::new(transport) {
+            devices.push(InputDevice { dev, irq, base });
         }
     }
-    None
+    devices
 }

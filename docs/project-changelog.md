@@ -4,6 +4,21 @@
 
 ---
 
+## [2026-07-11] Multi-device input claiming + mouse→compositor routing — cursor e2e green
+
+### Summary
+`compositor_cursor_moves_on_mouse_event` failed even after the input virtqueue fixes. Two remaining defects:
+
+1. **Only the first virtio-input device was claimed.** QEMU attaches keyboard/tablet/mouse as separate virtio-input MMIO slots; `find_and_init_input` stopped at the first match (the keyboard). Since kernel push is disabled once ANY cell owns an input slot, the tablet's `EV_ABS` events were polled by nobody. Now `find_and_init_inputs` claims **all** input devices (`Vec<InputDevice>`) and the main loop drains each virtqueue (`cells/services/input/src/virtio_device.rs`, `main.rs`).
+2. **Mouse events were routed to the keyboard-focused cell.** Historically the cursor test passed because the compositor was the last focus claimant; ever since the shell claims focus at startup, pointer events landed in the shell (which ignores them) and the compositor never saw a `MouseMove`. Added `Dispatcher::dispatch_mouse` (`dispatcher.rs`): pointer events (`MouseMove`/`MouseButton`/`MouseScroll`) now route to the **compositor** — the cursor + surface-Z-order owner that hit-tests clicks to surfaces — resolved lazily via `service::COMPOSITOR` and re-resolved on send failure (respawn). Keyboard keys keep the focused-cell route. `LookupService` added to the input cell's syscall allowlist.
+
+Also retargeted the test off the retired `[input-svc] key event 2` marker to the compositor's `[compositor] cursor at X,Y` probe directly.
+
+### Result
+`compositor_cursor_moves_on_mouse_event` passes (`cursor at 16383,0`). Regression green: input (4), compositor routing, boot-to-shell, shell echo, gpu framebuffer.
+
+---
+
 ## [2026-07-10] Input virtqueue-poll regression fixed — bounce-DMA + TryRecv drains pending_msgs
 
 ### Summary
