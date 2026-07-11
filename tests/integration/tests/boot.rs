@@ -706,9 +706,16 @@ fn network_httpd_dynamic_content() {
         "first GET missing CONTENT_V1\n--- response ---\n{r1}\n--- QEMU ---\n{}", qemu.dump());
 
     // Overwrite the file — httpd must serve the new content without restart.
-    qemu.send_line("vwrite /tmp/v1.txt CONTENT_V2");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!("vwrite v2: {e}\n{}", qemu.dump()));
+    //
+    // SYNC NOTE: `wait_for` is a whole-buffer `contains`, so waiting for
+    // "ViCell >" here matches the PROMPTS ALREADY IN THE BUFFER and returns
+    // instantly — the GET below then races the guest still typing/executing
+    // vwrite (observed: ReadAsync interleaved with the vwrite echo). Chain an
+    // `echo WROTE$?` and wait for its OUTPUT ("WROTE0") — the typed echo
+    // contains the unexpanded `$?`, so only the post-vwrite expansion matches.
+    qemu.send_line("vwrite /tmp/v1.txt CONTENT_V2 && echo WROTE$?");
+    qemu.wait_for("WROTE0", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("vwrite v2 not committed: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(200));
 
     let r2 = get_response(host_port);

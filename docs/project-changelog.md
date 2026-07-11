@@ -4,6 +4,27 @@
 
 ---
 
+## [2026-07-11] G2 kernel-shrink: VIFS1 reduced to bootstrap cells — services/tools/demos now cell-store-only
+
+### Summary
+`kernel_fs.img` (the VIFS1 ramdisk baked into the kernel) carried ~35 cells — every service, driver, tool, and game — long after the G2 loader redesign made the disk cell-store the real home for non-bootstrap cells. Since ostd's `sys_spawn_from_path` already routes through VFS + `sys_spawn_from_elf` once `service::VFS` registers (phase 04), the VIFS1 copies were pure dead weight: init and the shell both resolve `/bin/<cell>` from the P6 FAT cell-store.
+
+### Change (`gen_disk.ps1`, riscv64)
+VIFS1 now carries ONLY:
+1. **Bootstrap cells** (`loader::early::BOOTSTRAP_CELLS` + init): `init, shell, vfs, config, platform, block` — the chain that brings up the Block Cell + VFS with no kernel block driver.
+2. **`/doom1.wad`** (28.8 MB, documented exception): DOOM reads it via mlibc → kernel `Open`/`Read` syscalls, which resolve against VIFS1 only. Moving it out needs mlibc file-I/O → VFS routing (TODO).
+3. **hotswap-demo-v1/v2** (90 KB, documented exception): kernel-side hotswap loads the replacement ELF via `loader::spawn_from_path` (VIFS1/P2 — the kernel cannot call VFS).
+
+Everything else (net, input, compositor, supervisor, net-broker, virtio-net/gpu, nvme, e1000, lua, micropython, doom **binary**, tetris×3, audio/https/http-smoke/cfi demos, ls/cat/echo/ps/kill) is cell-store-only; doom + tetris×3 were added to the P2 table/P6 store (they were VIFS1-only before). Also cleaned the dead standalone blobs `kernel/src/embedded/{shell,vfs,config,lua,doom,input,cat,echo,hello,ls}` (only `init` + `kernel_fs.img` are actually embedded — `kernel/build.rs` trimmed to match) — ends the per-`gen_disk` git churn on those files.
+
+### Result
+kernel_fs.img 40 → 36 MB; riscv64 kernel binary 43.3 → 39.1 MB. The remaining fat is the WAD (74% of kernel_fs) — tracked in TODO.
+
+### Latent test race exposed (and fixed): `network_httpd_dynamic_content`
+The shrink's timing shift surfaced a test-harness race, initially misread as a shrink regression. VFS op tracing showed GET#2's `ReadAsync` interleaved with the vwrite echo — the host GET ran while the guest was still **typing** the second `vwrite`. Root cause: `QemuRunner::wait_for` is a whole-buffer `contains`, so `wait_for("ViCell >")` after `send_line` matches the prompts ALREADY in the buffer and returns instantly — the test's only real synchronization was a 200 ms sleep. Fixed with a real barrier: `vwrite … && echo WROTE$?` and wait for the OUTPUT `WROTE0` (the typed echo contains the unexpanded `$?`, so only post-execution expansion matches). **Any test that `wait_for("ViCell >")` after `send_line` has this hazard** — use output markers that cannot appear in the typed command.
+
+---
+
 ## [2026-07-11] aarch64 boot-to-shell regression fixed — RPi3 debug probes poisoned shared exception vectors (suite 3/7 → 7/7)
 
 ### Summary

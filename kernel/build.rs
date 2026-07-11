@@ -54,12 +54,10 @@ fn main() {
     } else {
         PathBuf::from("src/embedded")
     };
-    // kernel_fs.img is the embedded FAT32 image (~8 MB release cells).
-    // The others are kept for reference but kernel_fs.img is what ramdisk.rs embeds.
-    let cells = [
-        "init", "vfs", "shell", "config", "cat", "echo", "hello", "ls",
-        "kernel_fs.img",
-    ];
+    // Only two artifacts are actually embedded: `init` (kernel/src/main.rs
+    // INIT_ELF) and `kernel_fs.img` (ramdisk.rs VIFS1 — bootstrap cells only,
+    // G2 kernel-shrink). Everything else ships in the disk cell-store.
+    let cells = ["init", "kernel_fs.img"];
 
     for cell in &cells {
         let src = embedded_src.join(cell);

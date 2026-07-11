@@ -9,7 +9,9 @@
 *(none — aarch64 boot-to-shell regression fixed 2026-07-11: RPi3 debug probes in shared exception vectors wrote to BCM UART 0x3F215040 → recursive abort on QEMU virt; aarch64-boot suite 7/7. See changelog.)*
 
 ### 🟢 Architectural follow-ups (now unblocked)
-5. Shrink kernel_fs → cell-store — now that the cell-store read works (fatfs `lfn` fix), migrate more non-bootstrap cells off `kernel_fs` into the disk cell-store to reclaim G2's kernel-size goal (keep only true bootstrap cells in VIFS1).
+5. ~~Shrink kernel_fs → cell-store~~ **DONE 2026-07-11** (kernel_fs 40→36MB, kernel 43.3→39.1MB; VIFS1 = bootstrap cells + 2 documented exceptions). Remaining fat, tracked as follow-ups:
+   - **doom1.wad 28.8MB still in VIFS1** — DOOM reads it via mlibc → kernel Open/Read, which resolve against VIFS1 only (`kernel/src/fs.rs::file_open`). Moving it out needs mlibc/kernel-FD file I/O → VFS routing (Tier-1b C story). That is ~74% of the remaining kernel_fs.
+   - **hotswap-demo-v1/v2 in VIFS1** — kernel-side hotswap (`cell/hotswap.rs`) loads the new ELF via `loader::spawn_from_path` (VIFS1/P2, no VFS from kernel). Resolves itself when hotswap orchestration migrates to the Supervisory Cell (tracked kernel tech debt).
 6. Phase 07 — scoped-SUM `[deferred, NO-GO for G1]` — census + decision recorded in `.agents/260707-1726-g2-loader-redesign/phase-07-scoped-sum.md`; split into its own G2 hardening plan if revisited (RAII `SumGuard` + `copy_from/to_user` helpers).
 
 ### ⚪ Environmental — need hardware/harness, not code
