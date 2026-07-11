@@ -253,6 +253,16 @@ pub fn main() {
         passed, passed + failed, failed, passed + failed
     ));
 
+    // Completion marker — printed unconditionally, BEFORE the threshold verdict.
+    // QEMU TCG timing is non-deterministic, so latency thresholds are only
+    // meaningful on real hardware (RK3588 / VisionFive2 / Pioneer); the CI gate
+    // on QEMU is "the whole suite ran to completion" (this line), while
+    // "ALL BENCHMARKS PASS" below remains the real-hardware acceptance gate.
+    println(&alloc::format!(
+        "[bench] BENCHMARK SUITE COMPLETE ({}/{} within target)",
+        passed, passed + failed
+    ));
+
     if failed == 0 {
         println("[bench] ALL BENCHMARKS PASS");
     } else {

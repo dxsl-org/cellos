@@ -14,9 +14,12 @@
    - **hotswap-demo-v1/v2 in VIFS1** — kernel-side hotswap (`cell/hotswap.rs`) loads the new ELF via `loader::spawn_from_path` (VIFS1/P2, no VFS from kernel). Resolves itself when hotswap orchestration migrates to the Supervisory Cell (tracked kernel tech debt).
 6. Phase 07 — scoped-SUM `[deferred, NO-GO for G1]` — census + decision recorded in `.agents/260707-1726-g2-loader-redesign/phase-07-scoped-sum.md`; split into its own G2 hardening plan if revisited (RAII `SumGuard` + `copy_from/to_user` helpers).
 
-### ⚪ Environmental — need hardware/harness, not code
-7. `bench_all_pass` — RT/WCET thresholds fail under QEMU TCG; only meaningful on real hardware (RK3588 / VF2 / Pioneer).
-8. littlefs2 on x86/aarch64 — currently feature-gated off (no bare-metal cross-gcc). Only needed for `/data` on those arches; requires provisioning `aarch64-none-elf-gcc` / `x86_64-elf-gcc` or a clang sysroot.
+### ⚪ Environmental
+7. ~~`bench_all_pass`~~ **DONE 2026-07-11** — bench now prints an unconditional `BENCHMARK SUITE COMPLETE` marker; the QEMU CI gate is machinery-completion (green), while `ALL BENCHMARKS PASS` (latency thresholds) remains the real-hardware acceptance gate (RK3588 / VF2 / Pioneer — run `bench` from the shell). bench+bench-probe live in VIFS1 (children spawn via kernel `sys_spawn_pinned`).
+8. ~~littlefs2 on x86/aarch64~~ **DONE 2026-07-11** — no cross-gcc needed: plain clang + `third_party/freestanding-include` (string.h/inttypes.h declarations; implementations from compiler_builtins + POSIX shim; x86_64 gets a local str* shim in vfs since the api POSIX module is mlibc-gated off there). aarch64 suite 7/7 with littlefs vfs. x86_64 builds+links; runtime verify blocked by #9.
+
+### 🔴 New — x86_64 boot-to-shell broken since G2 loader redesign (pre-existing, found 2026-07-11)
+9. `x86_64-boot` suite = 3/7: init spawns `/bin/block` (not in x86 VIFS1) → kernel loader fallback → **`#PF kernel va=0x0` in `paging.rs:718`** → init killed → no shell. Bisect-verified pre-existing at `d505b7e0` (before this session): the "x86 7/7 (Jul-8)" ran on a stale pre-G2 ISO. Also: x86 `service-vfs` had been silently ABSENT from the image for weeks (littlefs link failure → script Warning → shipped without vfs). Investigate the x86 spawn-fallback NULL deref (kernel-mode read of page 0 during the `/bin/block`→`/bin/vfs` spawn misses); belongs to the x86 q35 completion plan (`.agents/260616-1639`, P02-P05 pending). The #PF handler prints no RIP — add it first.
 
 ### G1 Active
 - Hypha AI agent P3 boot verify → P4 tool-peripheral (robot NL control = G1 showcase)

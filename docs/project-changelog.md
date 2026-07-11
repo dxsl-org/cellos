@@ -4,6 +4,27 @@
 
 ---
 
+## [2026-07-11] bench CI gate modernized + littlefs unlocked on aarch64/x86_64 via clang
+
+### bench_all_pass (TODO #7) — machinery gate on QEMU, thresholds on hardware
+The test was doubly dead: (a) it booted `bench-disk.img` expecting init to auto-spawn `/bin/bench` from the disk cell table — a flow that died with the G2 loader redesign (kernel `NullBlock` cannot read the table; that flow remains valid only on real boards with MMC); (b) even when spawned, "ALL BENCHMARKS PASS" requires latency thresholds that are meaningless under QEMU TCG. Now:
+- bench prints an **unconditional `[bench] BENCHMARK SUITE COMPLETE (N/M within target)`** before the verdict; QEMU CI gates on completion (machinery regression), real hardware gates on `ALL BENCHMARKS PASS`.
+- The test boots the normal disk_v3.img and runs `bench` from the shell.
+- bench + bench-probe joined VIFS1 (same kernel-spawn-bound class as the hotswap demos: children spawn via `sys_spawn_pinned` → kernel loader → VIFS1/P2 only).
+Verified: full suite runs in ~5 s on TCG (4 PDR + 3 RT + SMP, no SKIPs); only `ipc_send_recv` misses its 50 µs threshold (104 µs — the expected TCG noise).
+
+### littlefs on aarch64 + x86_64 (TODO #8) — clang, no cross-gcc
+The `/data` littlefs backend was `--no-default-features`'d off on aarch64/x86_64 for lack of a bare-metal cross C compiler. Provisioned with **plain clang** (`C:\Program Files\LLVM`):
+- `third_party/freestanding-include/` supplies the two libc headers clang lacks for `*-none` targets (`string.h`, `inttypes.h`) — declarations only; implementations come from `compiler_builtins` (mem\*) and the api POSIX shim (str\*, `-zmuldefs`).
+- bindgen needs its own `--target` override (`BINDGEN_EXTRA_CLANG_ARGS_<triple>`): the Rust triple's `softfloat` component is not a valid clang triple.
+- x86_64: the api POSIX shim is deliberately mlibc-gated OFF, so vfs gained a local `lfs_string_shim.rs` (5 `str*` fns, `cfg(x86_64)`).
+Wired into `build-aarch64-cells.ps1` + `build-x86_64-cells.ps1`. aarch64 suite **7/7 with littlefs vfs**; x86_64 builds and links.
+
+### x86_64 boot-to-shell: pre-existing breakage surfaced (new TODO #9)
+Running the x86 suite for the first time since the G2 redesign: **3/7** — init spawns `/bin/block` (never in x86 VIFS1) → kernel loader fallback → `#PF kernel va=0x0` (`paging.rs:718`) → init killed. Worktree-bisect at `d505b7e0` (pre-session) fails identically → NOT a regression from this session; the "x86 7/7 (Jul-8)" evidence ran on a stale pre-G2 ISO. Also surfaced: x86 `service-vfs` had been silently absent from the image (littlefs link failure → script warning → shipped anyway). Tracked as TODO #9 (x86 q35 completion plan).
+
+---
+
 ## [2026-07-11] G2 kernel-shrink: VIFS1 reduced to bootstrap cells — services/tools/demos now cell-store-only
 
 ### Summary

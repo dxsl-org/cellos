@@ -20,6 +20,11 @@ mod block_stream;
 mod disk_redoxfs;
 #[cfg(feature = "littlefs")]
 mod lfs_disk;
+// x86_64-only str* providers for the littlefs C core — the api POSIX shim
+// (which provides them on riscv64/aarch64) is cfg-gated off on x86_64 to
+// avoid duplicate symbols with mlibc Tier-B cells.
+#[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
+mod lfs_string_shim;
 mod dispatch;
 mod handle_table;
 mod manager;

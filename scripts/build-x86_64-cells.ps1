@@ -18,6 +18,27 @@ $buildStd  = "-Z build-std=core,alloc"
 # .cargo/config.toml note that cells need relocation-model=pie (kernel uses pic).
 $rustflags = "-C relocation-model=pic"
 
+# littlefs /data backend (service-vfs default feature): littlefs C core is
+# cross-compiled with plain clang; third_party/freestanding-include supplies
+# the libc declarations (implementations: compiler_builtins + POSIX shim).
+# -mno-red-zone/-mno-sse/-mno-mmx match the Rust x86_64-unknown-none codegen.
+$repoRoot = (Get-Location).Path
+if (-not $env:CC_x86_64_unknown_none) {
+    $env:CC_x86_64_unknown_none = "C:\Program Files\LLVM\bin\clang.exe"
+}
+if (-not $env:CFLAGS_x86_64_unknown_none) {
+    $env:CFLAGS_x86_64_unknown_none =
+        "--target=x86_64-unknown-none-elf -ffreestanding -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I$repoRoot\third_party\freestanding-include"
+}
+if (-not $env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none) {
+    $env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none =
+        "--target=x86_64-unknown-none-elf -I$repoRoot\third_party\freestanding-include"
+}
+if (-not $env:LIBCLANG_PATH) {
+    $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
+    if (Test-Path "$vsLlvm/libclang.dll") { $env:LIBCLANG_PATH = $vsLlvm }
+}
+
 Write-Host "=== Building x86_64 cells (release) ==="
 
 $env:RUSTFLAGS = $rustflags

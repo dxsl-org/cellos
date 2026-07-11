@@ -359,6 +359,11 @@ if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
 if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
 if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
 if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
+# bench + bench-probe: same kernel-spawn-bound class as the hotswap demos —
+# bench re-spawns itself/its probe via sys_spawn_pinned, which resolves through
+# the KERNEL loader (VIFS1/P2 only, no VFS), so the child spawns need VIFS1.
+if ($bench_bin)                       { $kfs_args += @($bench_bin,       "/bin/bench") }
+if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/bench-probe") }
 & $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
