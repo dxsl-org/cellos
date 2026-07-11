@@ -135,20 +135,26 @@ fn aarch64_echo_command() {
 
 /// The periph-demo cell must open GPIO PL061 and UART PL011 on AArch64.
 ///
-/// periph-demo is spawned by init (best-effort, after bench). It exercises the
-/// PL061 GPIO controller at 0x0903_0000 and the PL011 UART at 0x0900_0000 on
-/// the QEMU ARM virt machine. The test only verifies that GPIO was opened
-/// successfully — UART TX also runs but its output merges with the serial
-/// console stream.
+/// Demos are on-demand: init no longer auto-spawns periph-demo (demo
+/// philosophy — no boot-output pollution), so the test launches it from the
+/// shell like a user would. It exercises the PL061 GPIO controller at
+/// 0x0903_0000 and the PL011 UART at 0x0900_0000 on the QEMU ARM virt
+/// machine. The test only verifies that GPIO was opened successfully — UART
+/// TX also runs but its output merges with the serial console stream.
+///
+/// Prerequisites: `/bin/periph-demo` in the aarch64 embedded ramdisk
+/// (scripts/build-aarch64-cells.ps1).
 #[test]
 fn aarch64_periph_demo_gpio() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    // periph-demo is spawned after all supervised services have started —
-    // use the full BOOT_TIMEOUT to allow init to progress past shell spawn.
-    qemu.wait_for("[periph-demo] GPIO PL061 opened", BOOT_TIMEOUT)
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    qemu.send_line("periph-demo &");
+    qemu.wait_for("[periph-demo] GPIO PL061 opened", 30)
         .unwrap_or_else(|e| panic!("periph-demo GPIO not seen: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
@@ -161,21 +167,28 @@ fn aarch64_periph_demo_gpio() {
 ///   relay_ascii_to_input() → input service (EV_ASCII) → dispatcher →
 ///   input-test AppContext
 ///
-/// Verifies both the kernel relay (via `[input-svc] key event 4`) and the
-/// app delivery (via `[input-test] input ok`).
+/// The input service deliberately does not log per-event (it would bury the
+/// shell prompt), so the only observable marker is the app-side delivery
+/// (`[input-test] input ok`).
 ///
-/// Prerequisites: kernel must embed `/bin/input-test` in `kernel_fs.img`
-/// (added to `kernel/src/embedded-aarch64/kernel_fs.img`).
+/// Prerequisites: `/bin/input` + `/bin/input-test` in the aarch64 embedded
+/// ramdisk (scripts/build-aarch64-cells.ps1).
 #[test]
 fn aarch64_uart_input_delivery() {
     if !prerequisites_ok() {
         return;
     }
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+
+    // Demos are on-demand: spawn input-test from the shell (mirrors the riscv
+    // `input_bare_cell` test).
+    qemu.send_line("input-test &");
 
     // Wait for input-test to acquire focus (retries in a yield loop until the
     // input service is registered and grants focus).
-    qemu.wait_for("[input-test] focus granted", BOOT_TIMEOUT)
+    qemu.wait_for("[input-test] focus granted", 30)
         .unwrap_or_else(|e| panic!(
             "input-test did not claim focus: {e}\n--- output ---\n{}",
             qemu.dump()
@@ -189,14 +202,8 @@ fn aarch64_uart_input_delivery() {
     // spurious second key event from the Enter character.
     qemu.send_bytes(b"a");
 
-    // Assert the kernel relay fired (EV_ASCII opcode = 4).
-    qemu.wait_for("[input-svc] key event 4", 15)
-        .unwrap_or_else(|e| panic!(
-            "EV_ASCII relay not seen: {e}\n--- output ---\n{}",
-            qemu.dump()
-        ));
-
-    // Assert the app received the event.
+    // Assert the app received the event (UART relay → input service →
+    // dispatcher → input-test).
     qemu.wait_for("[input-test] input ok", 15)
         .unwrap_or_else(|e| panic!(
             "input-test did not receive key: {e}\n--- output ---\n{}",

@@ -6,7 +6,7 @@
 *(none — input virtqueue-poll, multi-device claiming + mouse→compositor routing, and virtio-gpu registration all fixed 2026-07-10/11; see changelog)*
 
 ### 🟡 Medium — single/self-contained
-4. aarch64 userspace boot-to-shell regression — kernel boots + spawns init + scheduler runs, then init produces no output. Bisect Jun-12→HEAD; check aarch64 U-mode entry / crt0 `__init_array` PC-relative. See `project-arm64-peripheral-test-status.md` memory.
+*(none — aarch64 boot-to-shell regression fixed 2026-07-11: RPi3 debug probes in shared exception vectors wrote to BCM UART 0x3F215040 → recursive abort on QEMU virt; aarch64-boot suite 7/7. See changelog.)*
 
 ### 🟢 Architectural follow-ups (now unblocked)
 5. Shrink kernel_fs → cell-store — now that the cell-store read works (fatfs `lfn` fix), migrate more non-bootstrap cells off `kernel_fs` into the disk cell-store to reclaim G2's kernel-size goal (keep only true bootstrap cells in VIFS1).

@@ -39,6 +39,18 @@ Write-Host "Building app-sys-tools (ls/cat/echo/ps/kill)..."
 cargo build --release -p app-sys-tools --target $target 2>&1 | Select-Object -Last 5
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-sys-tools build failed" }
 
+Write-Host "Building service-input (UART EV_ASCII relay consumer)..."
+cargo build --release -p service-input --target $target 2>&1 | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "service-input build failed" }
+
+Write-Host "Building input-test (aarch64_uart_input_delivery gate)..."
+cargo build --release -p input-test --target $target 2>&1 | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "input-test build failed" }
+
+Write-Host "Building periph-demo (aarch64_periph_demo_gpio gate)..."
+cargo build --release -p periph-demo --target $target 2>&1 | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "periph-demo build failed" }
+
 Write-Host "Building app-init..."
 cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-init build failed" }
@@ -52,14 +64,17 @@ if (Test-Path $initSrc) {
 }
 
 $cells = @(
-    @{ Bin = "app-shell";      Dst = "/bin/shell"  },
-    @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
-    @{ Bin = "service-config"; Dst = "/bin/config" },
-    @{ Bin = "ls";             Dst = "/bin/ls"     },
-    @{ Bin = "cat";            Dst = "/bin/cat"    },
-    @{ Bin = "echo";           Dst = "/bin/echo"   },
-    @{ Bin = "ps";             Dst = "/bin/ps"     },
-    @{ Bin = "kill";           Dst = "/bin/kill"   }
+    @{ Bin = "app-shell";      Dst = "/bin/shell"       },
+    @{ Bin = "service-vfs";    Dst = "/bin/vfs"         },
+    @{ Bin = "service-config"; Dst = "/bin/config"      },
+    @{ Bin = "service-input";  Dst = "/bin/input"       },
+    @{ Bin = "input-test";     Dst = "/bin/input-test"  },
+    @{ Bin = "periph-demo";    Dst = "/bin/periph-demo" },
+    @{ Bin = "ls";             Dst = "/bin/ls"          },
+    @{ Bin = "cat";            Dst = "/bin/cat"         },
+    @{ Bin = "echo";           Dst = "/bin/echo"        },
+    @{ Bin = "ps";             Dst = "/bin/ps"          },
+    @{ Bin = "kill";           Dst = "/bin/kill"        }
 )
 
 $imgArgs = @("kernel\src\embedded-aarch64\kernel_fs.img")

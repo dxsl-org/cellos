@@ -4,6 +4,24 @@
 
 ---
 
+## [2026-07-11] aarch64 boot-to-shell regression fixed — RPi3 debug probes poisoned shared exception vectors (suite 3/7 → 7/7)
+
+### Summary
+Since the RPi3 bring-up commit (`9b4aeead`, post Jun-16), aarch64 QEMU virt booted the kernel, spawned init, started the scheduler — then went permanently silent. Root cause: the RPi3 crash-diagnosis session left **raw MMIO probe writes to `0x3F215040` (BCM2837 mini UART — an RPi3-only device) in the SHARED aarch64 exception vectors** (`hal/arch/arm/src/aarch64/trap.rs`): first instructions of `vt_sync_*` ('S'), `vt_irq_sp0/spx` ('H'), `vt_irq_el0` ('R'), plus a dozen `bl __rpi3_*` probe calls in `__trap_exit`. On QEMU virt, `0x3F215040` is an unmapped hole → the write faults **inside the exception vector itself** → `vt_sync_spx` re-runs the same faulting write → recursive abort, no output, forever. init's first syscall (or the first timer IRQ) died there.
+
+### Fix
+Removed all board probes from the shared vectors/`__trap_exit` (restored the pre-regression minimal paths) and documented the rule in the asm: **board debug probes belong behind `#[cfg(feature = "board-…")]` Rust code, never in shared assembly** (Kernel Boundary Law: test/debug code is cfg-gated only). RPi3 Rust-side cfg'd probes in `main.rs` are untouched.
+
+### Follow-on repairs (aarch64 test parity, same session)
+- **aarch64 ramdisk gained `/bin/input`, `/bin/input-test`, `/bin/periph-demo`** (`scripts/build-aarch64-cells.ps1`) — init's supervised `/bin/input` was "cell not found", and the on-demand demo cells weren't shipped at all.
+- **Shell now holds gpio/uart caps for delegation** (`cells/tools/shell/src/main.rs` manifest): demos are spawned from the shell by design, but P2 monotonic downgrade intersects a child's manifest with the spawner's caps — a spawn-only shell silently stripped `gpio/uart` from every peripheral demo (`request_mmio` → PermissionDenied). The shell never opens MMIO itself; holding the caps only enables delegation, matching the operator-at-the-shell trust model.
+- **Retargeted 2 stale tests** (`aarch64-boot.rs`): `periph_demo_gpio` + `uart_input_delivery` now spawn their cells from the shell (init no longer auto-spawns demos) and the retired `[input-svc] key event 4` marker is dropped (input service intentionally does not log per-event).
+
+### Result
+aarch64-boot suite **7/7** (was 3/7). riscv regression green: shell (24), input (4), boot, vfs_write (2).
+
+---
+
 ## [2026-07-11] Multi-device input claiming + mouse→compositor routing — cursor e2e green
 
 ### Summary
