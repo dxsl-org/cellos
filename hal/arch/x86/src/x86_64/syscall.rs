@@ -173,6 +173,8 @@ extern "Rust" {
 //   regs[2]  +16   ← user RSP (from %gs:8)
 //   regs[3]  +24   ← RBX  (callee-saved: preserve across dispatch)
 //   regs[4]  +32   ← RBP  (callee-saved: preserve across dispatch)
+//   regs[6]  +48   ← RDI  (second copy: regs[10] is overwritten by the return
+//                          value, exit restores original RDI from here)
 //   regs[18] +144  ← R12  (callee-saved: scratch slots regs[18..21])
 //   regs[19] +152  ← R13
 //   regs[20] +160  ← R14
@@ -182,7 +184,10 @@ extern "Rust" {
 //   stval    +272  = 0
 //   scause   +280  = 0
 //
-// After dispatch: RAX ← frame.regs[10] (return value); RCX/R11 ← sepc/sstatus.
+// After dispatch: RAX ← frame.regs[10] (return value); RCX/R11 ← sepc/sstatus;
+// RDI/RSI/RDX/R10/R8/R9 ← original argument values (preserve-all contract —
+// user code may cache live values, even the next syscall number, in any of
+// them; only RAX/RCX/R11 are clobbered, matching the ostd stub's asm! decl).
 global_asm!(r#"
     .section .text
     .global syscall_entry
@@ -218,8 +223,11 @@ syscall_entry:
     movq $0,   8(%rsp)
     # regs[5]  (+40):  RSI physical slot — unused (RSI→regs[11] for dispatch)
     movq $0,  40(%rsp)
-    # regs[6]  (+48):  RDI physical slot — unused (RDI→regs[10] for dispatch)
-    movq $0,  48(%rsp)
+    # regs[6]  (+48):  original RDI — regs[10] is overwritten by the return
+    # value, so the exit path restores RDI from here (preserve-all contract:
+    # the ostd stub declares rdi/rsi/rdx/r10 as `in` and never mentions r8/r9,
+    # so the compiler assumes every register except rax/rcx/r11 survives).
+    movq %rdi, 48(%rsp)
     # regs[7]  (+56):  R8 physical slot — unused (R8→regs[14] for dispatch)
     movq $0,  56(%rsp)
     # regs[8]  (+64):  R9 physical slot — unused (R9→regs[15] for dispatch)
@@ -301,24 +309,38 @@ syscall_entry:
     movq 264(%rsp), %rcx     # sepc    → RCX
     movq 256(%rsp), %r11     # sstatus → R11
 
-    # Load user RSP from frame.regs[2] (+16) BEFORE tearing down the frame.
-    # Reading from %gs:8 instead would be wrong when this task blocked inside
-    # file_read(fd=0) via yield_cpu(): any task that ran a syscall while we were
-    # parked will have overwritten CPU_LOCAL.user_rsp with its own user RSP.
-    # frame.regs[2] holds the value we saved from %gs:8 at entry, before any
-    # other task could touch it.
-    movq  16(%rsp), %rdi     # user RSP saved at entry → %rdi (caller-saved, ok to clobber)
-
-    # Tear down frame; set user RSP.
-    addq $288, %rsp
-    movq %rdi, %rsp          # user RSP from frame (not from potentially-stale %gs:8)
-    swapgs
-
     # CVE-2012-0217: Intel #GP if SYSRET executes with non-canonical RCX.
-    # Use %rdi (already clobbered above) to avoid overwriting the return value in %rax.
+    # Check BEFORE restoring %rdi below so it can serve as scratch.
     movq  %rcx, %rdi
     sarq  $47,  %rdi         # canonical user → 0; kernel/non-canonical → non-zero
-    jnz   1f                 # non-canonical: skip sysretq
+    jnz   1f                 # non-canonical: trap, do not sysretq
+
+    # Restore caller-saved argument registers (preserve-all contract).
+    # The ostd syscall stub declares rdi/rsi/rdx/r10 as `in` (NOT clobbered)
+    # and never mentions r8/r9 — the compiler is entitled to keep live values
+    # (including a cached syscall number) in ANY of them across `syscall`.
+    # Leaking kernel garbage here corrupted the NEXT syscall's RAX (P02 bug:
+    # println's second write arrived as SetTimer).
+    movq  88(%rsp), %rsi     # regs[11] = original arg1
+    movq  96(%rsp), %rdx     # regs[12] = original arg2
+    movq 104(%rsp), %r10     # regs[13] = original arg3
+    movq 112(%rsp), %r8      # regs[14] = original arg4
+    movq 120(%rsp), %r9      # regs[15] = original arg5
+    movq  48(%rsp), %rdi     # regs[6]  = original arg0 (saved at entry)
+
+    # Close the IRQ window for the final descent. If this syscall blocked,
+    # yield_cpu's resume path ran `sti`, so IF=1 here — an IRQ landing after
+    # the RSP switch would push its frame onto the USER stack at CPL0, and
+    # after swapgs the handler would run with GS_BASE = user GS. Both are
+    # survivable in SAS but fragile; mask until sysretq restores IF from R11.
+    cli
+
+    # Switch to user RSP saved at entry (frame.regs[2], +16). Reading %gs:8
+    # instead would be wrong when this task blocked via yield_cpu(): another
+    # task's syscall overwrites CPU_LOCAL.user_rsp. This is the LAST frame
+    # access — the kernel frame is unreachable after this instruction.
+    movq  16(%rsp), %rsp
+    swapgs
     sysretq
 1:  # Non-canonical RCX: trap — caller has a bug or is malicious.
     ud2
