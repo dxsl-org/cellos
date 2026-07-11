@@ -4,6 +4,65 @@
 
 ---
 
+## [2026-07-11] VT-d per-Cell DMA isolation actually translates — FAT32-on-NVMe works with intel-iommu enforced
+
+### Root cause of "NVMe DMA times out under VT-d"
+The VT-d **context entry encoded the Address Width in the wrong qword**: `AW_39BIT = 0b010 << 4` was OR'ed into the LOW qword (bits 5:4 — RESERVED per VT-d §9.3), leaving the HIGH qword's real AW field (hi[2:0]) at 000 = 30-bit AGAW, which QEMU's SAGAW doesn't support. Every translation for a per-Cell domain faulted as context-entry-invalid, so any Driver-Cell DMA (NVMe Identify, queue reads) timed out the moment TE=1. Fixed: `hi = (did << 8) | 0b001` (39-bit/3-level), `lo = slpt_ptr | P`. This had never actually worked — the old Track-B "VT-d enabled" oracle only asserted TE activation, not a translated DMA round-trip.
+
+### Second fix: Platform-scan race ate the pre-VFS NVMe spawn
+Under intel-iommu the Platform Cell's scan is slower (the first RegisterPciDevice runs the whole deferred VT-d init), so the pre-VFS NVMe cell's single-shot `sys_find_pcie_device` ran before the NVMe device was registered → cell exited "no device" → only the gated net-hook retry (tid 7) came up, after VFS had already mounted-and-failed. Fixed in the nvme cell: bounded find-retry loop (200 yields) before concluding absent.
+
+### Result
+With `-device intel-iommu`: VT-d ACTIVE → NVMe Driver Cell registers (tid 3, pre-VFS) → `[vfs] FAT32 /mnt/sd volume mounted` → shell `echo >`/`cat` round-trip on /mnt/sd **PASS with DMA isolation enforced**. `nic_x86_vtd_enabled` now asserts block-driver registration under VT-d (the strong oracle — it requires real DMA through the per-Cell SLPT). All 4 x86 suites remain green (12/12).
+
+---
+
+## [2026-07-11] x86_64 FAT32-on-NVMe end-to-end — first real disk I/O on x86 via Driver-Cell IPC
+
+### What shipped
+`[vfs] FAT32 /mnt/sd volume mounted` on QEMU q35 with a FAT32-formatted NVMe disk, and a shell round-trip (`echo … > /mnt/sd/probe.txt` → `cat`) verified write+read through the full chain: shell → VFS → DrvRequest IPC → NVMe Driver Cell → DMA → QEMU NVMe. All 4 x86 suites stay green (12/12).
+
+### Two fixes
+1. **init ordering**: `/bin/nvme` now spawns in the pre-VFS block section (with `/bin/block`), so the BLOCK_DRIVER registration lands before VFS mounts — previously VFS probed the service registry at mount time, cached ABSENT, and FAT-on-NVMe was permanently dead. The net-hook spawn remains as a cell-store retry for non-x86 platforms, gated on `sys_lookup_service(BLOCK_DRIVER).is_none()` — an ungated second instance would steal the live cell's BDF ownership via `sys_find_pcie_device`.
+2. **NVMe cell swallowed DrvRequests** (total boot hang with a formatted disk): VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope) → ostd delivers it as `AppEvent::RawMessage`, but the nvme cell matched only `AppEvent::Message` — the request fell into `_ => {}`, no reply was ever sent, and VFS parked forever in its masked reply-recv (init then wedged behind it in `Sending`). The virtio-blk cell already had the `Message | RawMessage` union arm (with a comment saying exactly why); nvme's port dropped it. Diagnosed with temporary kernel probes: timer-tick liveness (`cur_tid=0` — all parked), task-state dump (`vfs Recv{mask:3}` / `nvme Recv{mask:0} pending=0` / `init Sending{target:vfs}`), and an IPC trace showing the request delivered (`send 4->3 DIRECT`, `recv wake tid=3 sender=4`) with no reply ever sent.
+
+### Lesson
+The `AppEvent::Message`-only match is a silent-drop trap for every Driver Cell speaking a raw (non-enveloped) protocol — dispatch handlers must match `Message | RawMessage`. Grep confirmed e1000 already does; any future Driver Cell port must too.
+
+---
+
+## [2026-07-11] x86_64 PCIe Driver-Cell stack live — all 4 x86 suites green (12/12)
+
+### What shipped
+The x86 image (VIFS1 ramdisk) now carries the PCIe cell stack: `/bin/platform` (ECAM scanner, kernel-spawned), `/bin/nvme` and `/bin/e1000` (Driver Cells, init-spawned) — added to `scripts/build-x86_64-cells.ps1`. On QEMU q35 with `-device nvme -device e1000`: Platform Cell scans ECAM and registers devices/BARs, the NVMe cell completes controller init (admin+IO queues, Identify DMA) and registers as block driver, the e1000 cell registers as NIC driver. Boot stays clean to `ViCell >`.
+
+### Two bugs fixed on the way
+1. **x86 MMIO was kernel-only for ring-3 cells**: the SAS identity map built at boot has no `PTE_USER`, and BAR windows weren't mapped at all — the Platform Cell #PF'd on its first ECAM read (`va=0xB0000000 error_code=0x5`). Fix: `RequestMmio` success now calls `map_mmio_user_x86` (new; `pte_flags_mmio_user` = P|W|USER|PCD|NX) to identity-map the claimed window user-accessible. Mirrors the riscv/aarch64 boot-time `cell_mmio_flags` posture — exclusivity remains registry+LBI-enforced (cells are `forbid(unsafe_code)`).
+2. **NVMe Driver Cell CDW10 field inversion**: the port from `blk_nvme.rs` swapped QID/QSIZE in Create-IO-CQ/SQ CDW10 (`(depth-1) | (1<<16)` instead of `((depth-1)<<16) | 1`). QEMU created the CQ as QID=63, then Create-SQ failed with Invalid CQID and the cell exited silently. Diagnosed by step-level probes; fixed to match the original kernel driver (git `c70d8273~1`).
+
+### Test suite modernised (was gating on deleted kernel-driver logs)
+`nvme-x86.rs` and `nic-x86.rs` asserted `[e1000] NIC initialized` / `[nvme] driver ready` / `[vtd] passthrough enabled` — strings that no longer exist since the drivers were exiled to cells. New oracles: `[driver_cell] block driver registered` / `[driver_cell] NIC driver registered` (promoted info→warn — they fire post-scheduler after the log level drops, same rationale as the input-registration marker) and `[vtd] Intel VT-d: DMA isolation ACTIVE` (deferred init, also warn now). nvme tests boot the ISO (the old `-kernel` boot never worked with Limine). Result: **boot 7/7 + nvme 2/2 + nic 2/2 + virtio 1/1 (+1 ignored: virtio-blk cell is MMIO-only, not in the x86 image)**.
+
+### Known issues (tracked, not regressions)
+- **NVMe under VT-d**: with `-device intel-iommu`, the NVMe cell's Identify DMA times out — lazy per-Cell SLPT mapping after TE=1 isn't honoured by QEMU DMAR yet (a domain-selective IOTLB flush after SLPT writes was added — correct per spec for CM=1 — but insufficient). e1000 registration and VT-d activation itself work; the vtd test asserts those only.
+- **vfs mounts before the NVMe cell registers** (init spawns `/bin/nvme` at the net hook, after vfs) and caches `BLOCK_DRIVER` as absent — FAT-on-NVMe needs an init-ordering pass.
+- Platform scan's `bdf` devfn encoding round-trips today's kernel decode but the intermediate `(bus,dev,fun)` tuple is garbled for bus>0 — harmless on q35 bus 0, worth normalising.
+
+---
+
+## [2026-07-11] x86_64 sysretq register-leak fixed — boot-to-shell suite 7/7 (TODO #9 part B, P02 closed)
+
+### Root cause
+The "SetTimer re-dispatch corruption" was neither a re-dispatch nor a trap-frame slot bug: the **sysretq exit path restored only rbx/rbp/r12-r15 + rax/rcx/r11**, returning kernel garbage in **rdi/rsi/rdx/r8/r9/r10**. The ostd x86_64 syscall stub declares those registers `in` (non-clobbered) and never mentions r8/r9, so LLVM legitimately caches live values in them across `syscall` — inside `ostd::io::println` it cached the syscall number 11 in **R8** and reloaded `RAX` from R8 for the second (newline) write. R8 came back from the kernel holding 35 → the second write arrived as `SetTimer(ptr)` → denied → `-1` in RAX propagated into vfs's message-length arithmetic → `#PF va=-1` in `postcard::Slice::pop`. The earlier "35 = 0x23 = user CS" reading was numeric coincidence. Diagnosed by dumping the full trap frame on the denial (frame well-formed, `sepc` symbolized to `println`+0x22) and disassembling the stub call-site (`push $0xb; pop %r8; … mov %r8,%rax; syscall`).
+
+### Fix
+`hal/arch/x86/src/x86_64/syscall.rs` (kernel-side only — existing cell binaries unaffected): entry stub saves original RDI into `regs[6]` (+48, previously zeroed); exit path restores rsi/rdx/r10/r8/r9 from `regs[11..15]` and rdi from `regs[6]`, switches to the user stack directly via `movq 16(%rsp), %rsp`, and moves the CVE-2012-0217 canonical-RCX check before the rdi restore. Syscall ABI contract now matches the stub: only RAX/RCX/R11 clobbered (Linux-convention).
+
+### Result
+x86_64 boot suite **7/7** (was 3/7): banner, scheduler, init, boot-to-shell, `echo`, `ls /bin` (VFS IPC under ring-3), `ps`. The vfs allowlist keeps SetTimer omitted — the denial warn remains a canary for this defect class. riscv64 unaffected (`cargo check` green). x86 q35 completion plan P02 closed.
+
+---
+
 ## [2026-07-11] x86_64 NX-bit paging bug fixed — VFS runs on x86 for the first time since G2 (TODO #9 part A)
 
 ### Root cause
