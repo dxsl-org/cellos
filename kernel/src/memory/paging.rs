@@ -178,11 +178,19 @@ pub fn init_kernel_paging(
         // PCIe ECAM bus-0 window (1 MiB at 0x3000_0000) for RISC-V virt gpex.
         // Required before pcie_ecam::init() accesses config space.
         // Only bus 0 is mapped; extend if a PCIe device lands on bus > 0.
+        //
+        // USER-inclusive (rv_cell_mmio, not kernel-only mmio_flags): the Platform
+        // Cell (`/bin/platform`) runs in U-mode and scans ECAM directly (scan.rs →
+        // mmio.rs read_volatile). With kernel-only flags its very first config read
+        // (dev0 vendor-id at ECAM_BASE) took a Load Page Fault every boot, silently
+        // killing the cell-driven PCIe scan (masked by never-die + the kernel S-mode
+        // fallback scanner). The kernel's own pcie_ecam::init S-mode reads still work
+        // against a USER page because SUM=1 (set right after activate_paging).
         root_table.identity_map(
             crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV,
             crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV
                 + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
-            mmio_flags, &mut alloc_fn,
+            rv_cell_mmio, &mut alloc_fn,
         ).map_err(|_| PageTableError::OutOfMemory)?;
     }
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
