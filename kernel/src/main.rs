@@ -504,6 +504,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("cell signing self-test FAIL — cell signature gate unsafe");
         }
+        // P-TRUST: privileged path-caps are bounded by the spawn ceiling. Pure
+        // CapSet logic (no scheduler), so it runs here alongside the crypto tests,
+        // before any cap-bearing cell spawns.
+        if crate::task::p_trust_selftest::self_test() {
+            log_info("P-TRUST self-test PASS (privileged path-caps ceiling-bounded)");
+        } else {
+            log_info("P-TRUST self-test FAIL");
+        }
 
         // Layer-2 hardware security self-tests (test-hooks feature only).
         // MTE (aarch64) and PKU (x86_64) — each prints PASS or SKIP.

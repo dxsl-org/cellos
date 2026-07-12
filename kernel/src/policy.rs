@@ -173,6 +173,10 @@ fn parse(body: &[u8]) -> Option<Vec<PolicyEntry>> {
                 hypervisor: caps_raw[3] != 0,
                 mmio_devices,
                 block_regions,
+                // The operator-policy blob has no fields for the privileged
+                // path-caps; they are never policy-granted (P-TRUST folds them
+                // into the spawner-ceiling intersection, not the policy one).
+                ..CapSet::EMPTY
             },
         });
     }
@@ -222,7 +226,7 @@ pub fn self_test() -> bool {
 
     // 3. Phase 04 narrowing rule (decision_to_caps) — default (dev-permissive) posture.
     let full = CapSet { block_io: true, network: true, spawn: true,
-        hypervisor: false, mmio_devices: 0, block_regions: 0 };
+        hypervisor: false, mmio_devices: 0, block_regions: 0, ..CapSet::EMPTY };
     let net_only = CapSet { network: true, ..CapSet::EMPTY };
     // Permit narrows: full ∩ {network} = {network}.
     if decision_to_caps("/bin/app", full, PolicyDecision::Permit(net_only)) != net_only {

@@ -1,6 +1,7 @@
 pub mod cap;
 pub mod hart_local;
 pub mod smp;
+pub mod p_trust_selftest;
 pub mod syscall;
 pub mod tcb;
 pub use tcb::Task;

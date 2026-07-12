@@ -242,10 +242,15 @@ pub fn spawn_gated(
     //    cap it does not itself hold. `init` (Spawner::Root) is the root authority
     //    and is exempt; HotSwap passes the replaced cell's caps as the ceiling.
     use crate::task::cap::{CapSet, Spawner};
+    // `requested` = manifest (or legacy) caps, PLUS the privileged path-triggered
+    // caps (pcie_driver/platform/supervisor) layered on by `with_path_caps`. Folding
+    // them into `requested` means the single ceiling intersection below governs them
+    // too — closing the pre-P-TRUST hole where they were minted by a raw path match
+    // after (and blind to) the intersection.
     let requested: CapSet = match manifest_opt {
         Some(ref m) => CapSet::from_manifest(m),
         None        => legacy_path_caps(path),
-    };
+    }.with_path_caps(path);
     // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
     // before the child-mutation lock below (the Spinlock is non-reentrant).
     let after_spawner: CapSet = match spawner {
@@ -290,20 +295,14 @@ pub fn spawn_gated(
                 task.pku_value = crate::hal::pku::pkru_for_key(key);
             }
 
-            // Path-based non-manifest caps — granted here because all 8 manifest flag
-            // bits are occupied (v1 manifest is full; v2 requires a Law-1 bump).
+            // Privileged path-caps (PcieDriverCap / SupervisorCap) are now written by
+            // `granted.apply_to(task)` above — they ride in the CapSet and are bounded
+            // by the ceiling intersection (P-TRUST). Only the two exceptions remain here:
             //
-            // PcieDriverCap: Driver Cells that own PCIe BAR MMIO + DMA grants.
-            // SupervisorCap: single Supervisor Cell that orchestrates live hotswap.
-            //   Mirrored in the init grant path (kernel/src/main.rs) so that if the
-            //   Supervisor Cell crashes and init needs to unfreeze its frozen targets,
-            //   init retains the authority to do so.
-            if path == "/bin/nvme" || path == "/bin/e1000" || path == "/bin/virtio-net"
-                || path == "/bin/block"
-                || path == "/bin/input" || path == "/bin/virtio-gpu" {
-                task.pcie_driver_cap = Some(crate::task::cap::PcieDriverCap::new());
-            }
-            if path == "/bin/platform" {
+            // 1. PlatformCap — ceiling-gated via `granted.platform`, THEN the one-holder
+            //    singleton latch (`try_grant_platform`). It is not written by `apply_to`
+            //    because a plain bool cannot enforce the singleton.
+            if granted.platform {
                 match crate::task::cap::try_grant_platform() {
                     Some(cap) => task.platform_cap = Some(cap),
                     None => {
@@ -312,13 +311,12 @@ pub fn spawn_gated(
                     }
                 }
             }
-            if path == "/bin/supervisor" {
-                task.supervisor_cap = Some(crate::task::cap::SupervisorCap::new());
-            }
-            // VFS reads the P6 FAT cell-store to serve /bin/<cell> via the BinOverlay
-            // (G2 loader redesign). Manifest flag bits are full in v1, so grant the
-            // cell-store block region (0b1000, see check_block_access GRANTABLE) here
-            // by path, mirroring the PcieDriverCap grant above.
+            // 2. VFS cell-store block region (0b1000) — DEFERRED post-policy raw grant.
+            //    Folding it into the ceiling (like the caps above) would be zeroed by
+            //    the `/bin/vfs` operator-policy entry (`block_regions = 0b111`), breaking
+            //    VFS. Closing this channel needs a POLICY.BIN re-bake that grants vfs
+            //    0b1111; tracked as a P-TRUST follow-up. Lower severity than the caps
+            //    above (partition access, not DMA-anywhere).
             if path == "/bin/vfs" {
                 task.block_regions |= 0b1000;
             }
