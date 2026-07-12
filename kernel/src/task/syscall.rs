@@ -1148,14 +1148,50 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::Spawn { entry, arg } => {
             let drivers = alloc::vec::Vec::new();
             let name = "thread";
-            // TODO: Spawned threads should inherit parent's CellId or be assigned properly
-            // For now, use CellId(0) as default (system/kernel cell)
-            let tid = super::spawn_with_arg(name, CellId(0), drivers, entry, arg);
-            if tid > 0 {
-                Ok(tid)
-            } else {
-                Err(SyscallError::Unknown)
+            // A spawned thread is the same cell running more TIDs: it inherits the
+            // parent cell's identity on every axis the kernel gates — CellId (so its
+            // allocations charge the parent's quota, not the unlimited CellId(0) slot),
+            // the transferable CapSet, the syscall allowlist, and the PKU protection
+            // domain. Singleton caps (supervisor/pcie_driver/platform) are deliberately
+            // NOT propagated: they carry a one-holder invariant.
+            //
+            // Snapshot the parent identity under the lock, then DROP it before
+            // spawn_with_arg (which re-locks SCHEDULER — Spinlock is not reentrant),
+            // then re-lock to apply. Mirrors the CellId fix-up on the cell-spawn path
+            // (loader.rs:174-186). Fail-safe: an unresolved caller DENIES the spawn —
+            // it must never fall back to CellId(0), which is exactly the quota-escape
+            // this closes.
+            let (parent_cell_id, parent_caps, parent_allowlist, parent_pku) = {
+                let mut sched_opt = super::SCHEDULER.lock();
+                let sched = match sched_opt.as_mut() {
+                    Some(s) => s,
+                    None => return Err(SyscallError::Unknown),
+                };
+                match sched.tasks.get(&caller_id) {
+                    Some(t) => (
+                        t.cell_id,
+                        super::cap::CapSet::of_task(t),
+                        t.syscall_allowlist,
+                        (t.pku_key, t.pku_value),
+                    ),
+                    None => return Err(SyscallError::Unknown),
+                }
+            };
+
+            let tid = super::spawn_with_arg(name, parent_cell_id, drivers, entry, arg);
+            if tid == 0 {
+                return Err(SyscallError::Unknown);
             }
+
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&tid) {
+                    parent_caps.apply_to(t);
+                    t.syscall_allowlist = parent_allowlist;
+                    t.pku_key   = parent_pku.0;
+                    t.pku_value = parent_pku.1;
+                }
+            }
+            Ok(tid)
         }
         Syscall::Wait { pid } => {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
@@ -1431,6 +1467,28 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .unwrap_or(false);
                 if !has_spawn {
                     return Err(SyscallError::PermissionDenied);
+                }
+
+                // Gate 1b: refuse bits whose authority is AMBIENT — already handed out
+                // and exercised WITHOUT a per-use syscall re-check, so clearing the TCB
+                // field does not actually revoke it. HYPERVISOR (H-ext CSR access) and
+                // MMIO device windows (mapped into the cell's page tables) both persist
+                // after the field is cleared: the cell keeps poking the hardware. Until
+                // the eager teardown lands (unmap_dma + IOTLB flush, MMIO page-table
+                // unmap — .agents/260712-1901 P01-P05), revoking these would be a lie.
+                // Refuse them so the shipped syscall is honest. block_io/network are
+                // refused by Gate 2 below; SPAWN and BLKREGION are re-checked at each
+                // use (lazy revocation is sound for them).
+                const AMBIENT_UNTIL_TEARDOWN: u32 = CM::HYPERVISOR | CM::MMIO_MASK;
+                if cap_mask & AMBIENT_UNTIL_TEARDOWN != 0 {
+                    crate::audit::log_event(
+                        crate::audit::AuditEvent::CapRevoked,
+                        &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
+                    );
+                    log::warn!("[kernel] CapRevoke: refused ambient-authority bits \
+                        mask={:#010x} from task {} (teardown not implemented)",
+                        cap_mask, caller_id);
+                    return Err(SyscallError::NotSupported);
                 }
 
                 // Gate 2: protect system service cells — revoking I/O caps from a
