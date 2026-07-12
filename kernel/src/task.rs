@@ -3,6 +3,7 @@ pub mod hart_local;
 pub mod smp;
 pub mod syscall;
 pub mod tcb;
+pub mod thread_cap_selftest;
 pub use tcb::Task;
 pub mod drivers;
 pub mod ipc_test;
