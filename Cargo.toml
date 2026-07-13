@@ -22,6 +22,7 @@ members = [
     "libs/types",
     "libs/api",
     "libs/ostd",
+    "libs/attestation",
     "libs/http-core",
     "libs/mlibc-shim",
     "libs/agent-proto",

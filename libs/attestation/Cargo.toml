@@ -1,0 +1,21 @@
+[package]
+name = "attestation"
+version = "0.1.0"
+edition = "2021"
+license = "MPL-2.0"
+
+# HOST TESTS: the workspace pins a bare-metal default target, so run them with an
+# explicit host triple, e.g. `cargo test -p attestation --target x86_64-pc-windows-msvc`.
+#
+# This crate defines NO #[global_allocator] and NO #[panic_handler] so that
+# `cargo test -p attestation` compiles and runs on the host (std test harness).
+# No `alloc` dependency either — every type here is a fixed-size byte array
+# (mirrors kernel/src/policy.rs's VPOL fixed-width discipline).
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[dependencies]
+# Version + features MUST match cells/guests/silo-guest/Cargo.toml exactly so
+# Cargo does not pull two copies of p256 into the workspace graph.
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "ecdh"] }
