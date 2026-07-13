@@ -7,6 +7,13 @@
 // Disable `no_std` when running the test harness so `#[test]` can link
 // against the host libstd.  All production builds remain bare-metal.
 #![cfg_attr(not(test), no_std)]
+// Required for VaList::next_arg (posix stdio_fmt) on toolchains where c_variadic
+// is still unstable. The pinned nightly-2026-05-01 already stabilized it and
+// flags this declaration as unused; allow(unused_features) keeps both old and
+// new toolchains compiling clean instead of picking one at the other's expense.
+#![allow(unused_features)]
+#![feature(c_variadic)]
+
 extern crate alloc;
 
 pub use types::*;
