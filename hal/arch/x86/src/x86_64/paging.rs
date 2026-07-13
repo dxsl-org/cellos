@@ -56,6 +56,16 @@ pub const PTE_PCD:      u64 = 1 << 4;
 /// No-execute (requires IA32_EFER.NXE set by bootloader).
 pub const PTE_NX:       u64 = 1 << 63;
 
+/// Physical-address field of a PTE/PDE/PDPTE/PML4E: bits 51:12.
+///
+/// Extracting a physical address with `entry & !0xFFF` is WRONG on x86-64 —
+/// it keeps bit 63 (NX) and bits 62:52 (ignored/available). Any NX-marked
+/// entry (every user RW/RO page, see `pte_flags_user_rw`) then yields a
+/// "physical" address with bit 63 set; adding the HHDM offset wraps it into
+/// a NON-CANONICAL pointer and the next dereference is a #GP (error code 0,
+/// CR2 stale) that masquerades as a #PF at va=0.
+pub const PTE_ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
+
 // ---------------------------------------------------------------------------
 // Composed flag sets for common mapping kinds.
 // ---------------------------------------------------------------------------
@@ -72,6 +82,12 @@ pub const PTE_NX:       u64 = 1 << 63;
 #[inline] pub fn pte_flags_user_exec()   -> u64 { PTE_PRESENT | PTE_USER }
 /// MMIO mapping (supervisor, read/write, cache-disable, no NX).
 #[inline] pub fn pte_flags_mmio()        -> u64 { PTE_PRESENT | PTE_WRITABLE | PTE_PCD }
+/// MMIO leaf flags for ring-3 Driver Cells: user-accessible, cache-disabled,
+/// never executable. Mirrors the riscv/aarch64 `cell_mmio_flags` posture —
+/// exclusivity is enforced by the resource registry + LBI (cells are
+/// `forbid(unsafe_code)`, so only an `MmioRegion` from a granted request can
+/// reach the range), not by per-cell page tables (SAS has none).
+#[inline] pub fn pte_flags_mmio_user()   -> u64 { PTE_PRESENT | PTE_WRITABLE | PTE_USER | PTE_PCD | PTE_NX }
 
 // ---------------------------------------------------------------------------
 // CR3 / TLB helpers.
@@ -150,7 +166,7 @@ pub unsafe fn walk_create(
         let entry = unsafe { core::ptr::read_volatile(entry_ptr) };
         if entry & PTE_PRESENT != 0 {
             // Already present: strip flags, apply HHDM offset.
-            let next_phys = (entry & !0xFFF) as usize;
+            let next_phys = (entry & PTE_ADDR_MASK) as usize;
             Some(phys_to_virt_ptr(next_phys) as *mut u64)
         } else {
             // Allocate a new zeroed frame.
@@ -201,17 +217,17 @@ pub unsafe fn walk_read(pml4: *const u64, va: usize) -> Option<u64> {
     // SAFETY: pml4 is a valid PML4 pointer.
     let e3 = unsafe { core::ptr::read_volatile(pml4.add(i3)) };
     if e3 & PTE_PRESENT == 0 { return None; }
-    let pdpt = phys_to_virt_ptr((e3 & !0xFFF) as usize) as *const u64;
+    let pdpt = phys_to_virt_ptr((e3 & PTE_ADDR_MASK) as usize) as *const u64;
 
     // SAFETY: pdpt derived from a present PML4 entry.
     let e2 = unsafe { core::ptr::read_volatile(pdpt.add(i2)) };
     if e2 & PTE_PRESENT == 0 { return None; }
-    let pd = phys_to_virt_ptr((e2 & !0xFFF) as usize) as *const u64;
+    let pd = phys_to_virt_ptr((e2 & PTE_ADDR_MASK) as usize) as *const u64;
 
     // SAFETY: pd derived from a present PDPT entry.
     let e1 = unsafe { core::ptr::read_volatile(pd.add(i1)) };
     if e1 & PTE_PRESENT == 0 { return None; }
-    let pt = phys_to_virt_ptr((e1 & !0xFFF) as usize) as *const u64;
+    let pt = phys_to_virt_ptr((e1 & PTE_ADDR_MASK) as usize) as *const u64;
 
     // SAFETY: pt derived from a present PD entry.
     let e0 = unsafe { core::ptr::read_volatile(pt.add(i0)) };
@@ -335,13 +351,13 @@ pub unsafe fn map_bios_area() {
     if e3 & PTE_PRESENT == 0 { return; }   // HHDM entirely absent
     if e3 & (1 << 7) != 0    { return; }   // 1 GiB leaf — everything mapped
 
-    let pdpt = p2v!((e3 & !0xFFF) as usize);
+    let pdpt = p2v!((e3 & PTE_ADDR_MASK) as usize);
     // SAFETY: PDPT is in usable RAM → accessible via HHDM.
     let e2 = unsafe { core::ptr::read_volatile(pdpt.add(0)) };
     if e2 & PTE_PRESENT == 0 { return; }   // First 1 GiB absent
     if e2 & (1 << 7) != 0    { return; }   // 1 GiB leaf — everything mapped
 
-    let pd = p2v!((e2 & !0xFFF) as usize);
+    let pd = p2v!((e2 & PTE_ADDR_MASK) as usize);
 
     // ── Part 1: BIOS area — fine-grained 4 KiB fix in PD[0]'s PT ────────────
     // SAFETY: PD is in usable RAM → accessible via HHDM.
@@ -349,7 +365,7 @@ pub unsafe fn map_bios_area() {
     if e1 & PTE_PRESENT != 0 && e1 & (1 << 7) == 0 {
         // PD[0] is a PT pointer; fill missing entries for [0x9F000, 0x100000).
         // PT covers [0, 2 MiB); entries 0x9F–0xFF are the BIOS/ROM area.
-        let pt = p2v!((e1 & !0xFFF) as usize);
+        let pt = p2v!((e1 & PTE_ADDR_MASK) as usize);
         for page in 0x9F_usize..=0xFF {
             // SAFETY: PT is in usable RAM → accessible via HHDM.
             let pte_ptr = unsafe { pt.add(page) };

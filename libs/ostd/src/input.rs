@@ -112,7 +112,12 @@ pub fn poll_events(max: usize) -> Vec<InputEvent> {
     let mut events = Vec::with_capacity(max.min(16));
     while events.len() < max {
         let mut buf = [0u8; 65];
-        match sys_try_recv(usize::MAX, &mut buf) {
+        // Mask on the input service TID: matches both the Sending-scan and the
+        // pending_msgs drain in the kernel's TryRecv handler, and — crucially —
+        // leaves non-input IPC (e.g. compositor replies) queued rather than
+        // consuming and discarding it. A wildcard mask (0 or usize::MAX) would
+        // either eat unrelated messages or match nothing queued.
+        match sys_try_recv(input_tid, &mut buf) {
             SyscallResult::Ok(0) => break, // queue empty
             SyscallResult::Ok(sender) if sender == input_tid => {
                 if let Some(ev) = parse_frame(&buf) {

@@ -1,11 +1,21 @@
-//! Phase B-03/B-04: x86_64 PCIe NIC (e1000) + Intel VT-d integration tests.
+//! x86_64 PCIe NIC (e1000) + Intel VT-d integration tests — Driver Cell
+//! architecture.
+//!
+//! The kernel drives no NIC hardware (Kernel Boundary Law): the Platform Cell
+//! scans ECAM, init spawns the e1000 Driver Cell (`/bin/e1000`), which claims
+//! BAR0 MMIO and announces itself via `sys_register_nic_driver`. The oracle is
+//! the kernel registration marker `[driver_cell] NIC driver registered`.
 //!
 //! `nic_x86_e1000_init` — boots QEMU q35 with `-device e1000` and asserts the
-//! NIC driver probe log. Verifies the ECAM scan, BAR mapping, EEPROM read, and
-//! ring initialisation all succeed.
+//! Driver Cell registration.
 //!
-//! `nic_x86_vtd_enabled` — same boot plus `-device intel-iommu`; asserts both
-//! the VT-d passthrough log and the NIC init log.
+//! `nic_x86_vtd_enabled` — same boot plus `-device intel-iommu`; asserts the
+//! deferred VT-d activation (`[vtd] Intel VT-d: DMA isolation ACTIVE`, fired
+//! from the Platform Cell's RegisterPciDevice path) AND that BOTH Driver
+//! Cells still register with translation enabled. The NVMe registration is
+//! the strong oracle: it requires Identify/queue DMA round-trips through the
+//! per-Cell VT-d SLPT, proving DMA isolation actually translates (a malformed
+//! context entry — the original AW-in-lo bug — fails exactly this).
 //!
 //! Both tests skip gracefully when the x86_64 ISO is not built or
 //! `qemu-system-x86_64` is not on PATH.
@@ -69,10 +79,12 @@ fn make_nvme_disk() -> PathBuf {
     path
 }
 
-/// Phase B-03: e1000 NIC initialises on x86_64 q35.
+/// The e1000 Driver Cell must bind the QEMU `-device e1000` NIC and register
+/// as the system NIC driver.
 ///
-/// Verifies ECAM finds the e1000 endpoint, BAR0 is mapped, EEPROM
-/// gives a valid MAC, and the TX/RX rings are programmed.
+/// Proves: Platform Cell ECAM scan finds class 02:00:00, the Driver Cell
+/// claims BAR0 via user-mapped MMIO, initialises the controller, and calls
+/// `sys_register_nic_driver`.
 #[test]
 fn nic_x86_e1000_init() {
     if !prerequisites_ok() { return; }
@@ -80,12 +92,13 @@ fn nic_x86_e1000_init() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("[e1000] NIC initialized", BOOT_TIMEOUT)
+    qemu.wait_for("[driver_cell] NIC driver registered", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             let _ = std::fs::remove_file(&disk);
             panic!(
-                "e1000 init not seen within {BOOT_TIMEOUT}s: {e}\n\
-                 Hint: check ECAM class filter (0x02/0x00/0x00) and BAR mapping.\n\
+                "e1000 Driver Cell did not register within {BOOT_TIMEOUT}s: {e}\n\
+                 Chain: platform ECAM scan → find_pcie_device(02:00:00) → BAR0 MMIO \
+                 claim → sys_register_nic_driver.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
             )
@@ -94,11 +107,11 @@ fn nic_x86_e1000_init() {
     let _ = std::fs::remove_file(&disk);
 }
 
-/// Phase B-04: Intel VT-d passthrough + e1000 on x86_64 q35.
+/// Intel VT-d deferred activation + e1000 Driver Cell on x86_64 q35.
 ///
-/// Verifies the VT-d MMIO at 0xFED90000 is identity-mapped, GCAP is valid,
-/// root/context tables are programmed, GCMD.TE succeeds, and the e1000
-/// initialises after VT-d is active.
+/// Verifies the deferred IOMMU init fires from the Platform Cell's device
+/// registration (GCAP probe, root/context tables, GCMD.SRTP + TE), and the
+/// e1000 Driver Cell still registers with translation enabled.
 #[test]
 fn nic_x86_vtd_enabled() {
     if !prerequisites_ok() { return; }
@@ -106,23 +119,38 @@ fn nic_x86_vtd_enabled() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_vtd(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("[vtd] Intel VT-d passthrough enabled", BOOT_TIMEOUT)
+    qemu.wait_for("[vtd] Intel VT-d: DMA isolation ACTIVE", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             let _ = std::fs::remove_file(&disk);
             panic!(
-                "VT-d not enabled within {BOOT_TIMEOUT}s: {e}\n\
-                 Hint: -device intel-iommu must be in QEMU args before -device e1000.\n\
+                "VT-d not activated within {BOOT_TIMEOUT}s: {e}\n\
+                 Deferred init fires from RegisterPciDevice — check the Platform \
+                 Cell spawned and -device intel-iommu precedes endpoint devices.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
             )
         });
 
-    // e1000 must also initialise after VT-d is active.
-    qemu.wait_for("[e1000] NIC initialized", 10)
+    // The NVMe Driver Cell must register after VT-d is active — its controller
+    // init does real DMA (Identify + queue creation) THROUGH the per-Cell SLPT,
+    // so this is the proof that VT-d translation actually works.
+    qemu.wait_for("[driver_cell] block driver registered", 20)
         .unwrap_or_else(|e| {
             let _ = std::fs::remove_file(&disk);
             panic!(
-                "e1000 not init after VT-d: {e}\n--- serial output ---\n{}",
+                "NVMe Driver Cell did not register under VT-d (DMA through SLPT broken): {e}\n\
+                 --- serial output ---\n{}",
+                qemu.dump()
+            )
+        });
+
+    // The e1000 Driver Cell must also register after VT-d is active.
+    qemu.wait_for("[driver_cell] NIC driver registered", 15)
+        .unwrap_or_else(|e| {
+            let _ = std::fs::remove_file(&disk);
+            panic!(
+                "e1000 Driver Cell did not register after VT-d activation: {e}\n\
+                 --- serial output ---\n{}",
                 qemu.dump()
             )
         });

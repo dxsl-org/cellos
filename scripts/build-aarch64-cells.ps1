@@ -5,10 +5,6 @@
 # kernel/src/embedded-aarch64/kernel_fs.img (the VirtIO-virt RAM ramdisk the
 # aarch64 kernel loads cells from). Also refreshes the separately-embedded init.
 #
-# service-vfs is built with --no-default-features: the `littlefs` /data backend
-# needs a bare-metal cross-C toolchain (only riscv has one wired), so aarch64
-# omits it — the persistent /data volume is simply absent, not needed for boot.
-#
 # Run from the Cellos root directory.
 
 Set-StrictMode -Version Latest
@@ -20,6 +16,29 @@ $buildDir = "target\$target\release"
 # return-address signing (must match the kernel's aarch64 codegen features).
 $rustflags = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
 
+# littlefs /data backend (service-vfs default feature): the littlefs C core is
+# cross-compiled with plain clang — no bare-metal gcc needed. clang lacks libc
+# headers for *-none targets, so third_party/freestanding-include supplies the
+# declarations (implementations come from compiler_builtins + the POSIX shim).
+# bindgen needs its OWN --target override: the Rust triple's "softfloat"
+# component is not a valid clang triple.
+$repoRoot = (Get-Location).Path
+if (-not $env:CC_aarch64_unknown_none_softfloat) {
+    $env:CC_aarch64_unknown_none_softfloat = "C:\Program Files\LLVM\bin\clang.exe"
+}
+if (-not $env:CFLAGS_aarch64_unknown_none_softfloat) {
+    $env:CFLAGS_aarch64_unknown_none_softfloat =
+        "--target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I$repoRoot\third_party\freestanding-include"
+}
+if (-not $env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat) {
+    $env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat =
+        "--target=aarch64-unknown-none-elf -I$repoRoot\third_party\freestanding-include"
+}
+if (-not $env:LIBCLANG_PATH) {
+    $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
+    if (Test-Path "$vsLlvm/libclang.dll") { $env:LIBCLANG_PATH = $vsLlvm }
+}
+
 Write-Host "=== Building aarch64 cells (release) ==="
 $env:RUSTFLAGS = $rustflags
 
@@ -27,8 +46,8 @@ Write-Host "Building app-shell..."
 cargo build --release -p app-shell --target $target 2>&1 | Select-Object -Last 8
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-shell build failed (exit $LASTEXITCODE)" }
 
-Write-Host "Building service-vfs (--no-default-features: no littlefs/C)..."
-cargo build --release -p service-vfs --target $target --no-default-features 2>&1 | Select-Object -Last 8
+Write-Host "Building service-vfs (littlefs /data via clang cross-compile)..."
+cargo build --release -p service-vfs --target $target 2>&1 | Select-Object -Last 8
 if ($LASTEXITCODE -ne 0) { Write-Warning "service-vfs build failed (exit $LASTEXITCODE)" }
 
 Write-Host "Building service-config..."
@@ -38,6 +57,18 @@ if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LAS
 Write-Host "Building app-sys-tools (ls/cat/echo/ps/kill)..."
 cargo build --release -p app-sys-tools --target $target 2>&1 | Select-Object -Last 5
 if ($LASTEXITCODE -ne 0) { Write-Warning "app-sys-tools build failed" }
+
+Write-Host "Building service-input (UART EV_ASCII relay consumer)..."
+cargo build --release -p service-input --target $target 2>&1 | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "service-input build failed" }
+
+Write-Host "Building input-test (aarch64_uart_input_delivery gate)..."
+cargo build --release -p input-test --target $target 2>&1 | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "input-test build failed" }
+
+Write-Host "Building periph-demo (aarch64_periph_demo_gpio gate)..."
+cargo build --release -p periph-demo --target $target 2>&1 | Select-Object -Last 5
+if ($LASTEXITCODE -ne 0) { Write-Warning "periph-demo build failed" }
 
 Write-Host "Building app-init..."
 cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
@@ -52,14 +83,17 @@ if (Test-Path $initSrc) {
 }
 
 $cells = @(
-    @{ Bin = "app-shell";      Dst = "/bin/shell"  },
-    @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
-    @{ Bin = "service-config"; Dst = "/bin/config" },
-    @{ Bin = "ls";             Dst = "/bin/ls"     },
-    @{ Bin = "cat";            Dst = "/bin/cat"    },
-    @{ Bin = "echo";           Dst = "/bin/echo"   },
-    @{ Bin = "ps";             Dst = "/bin/ps"     },
-    @{ Bin = "kill";           Dst = "/bin/kill"   }
+    @{ Bin = "app-shell";      Dst = "/bin/shell"       },
+    @{ Bin = "service-vfs";    Dst = "/bin/vfs"         },
+    @{ Bin = "service-config"; Dst = "/bin/config"      },
+    @{ Bin = "service-input";  Dst = "/bin/input"       },
+    @{ Bin = "input-test";     Dst = "/bin/input-test"  },
+    @{ Bin = "periph-demo";    Dst = "/bin/periph-demo" },
+    @{ Bin = "ls";             Dst = "/bin/ls"          },
+    @{ Bin = "cat";            Dst = "/bin/cat"         },
+    @{ Bin = "echo";           Dst = "/bin/echo"        },
+    @{ Bin = "ps";             Dst = "/bin/ps"          },
+    @{ Bin = "kill";           Dst = "/bin/kill"        }
 )
 
 $imgArgs = @("kernel\src\embedded-aarch64\kernel_fs.img")

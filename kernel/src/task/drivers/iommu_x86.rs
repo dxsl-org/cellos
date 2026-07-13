@@ -42,9 +42,18 @@ const IOTLB_DWD: u64 = 1u64 << 48;
 const IOTLB_DSI: u64 = 0b01 << 4; // domain-selective
 const IOTLB_PSI: u64 = 0b10 << 4; // page-selective
 
-// Context entry encoding
-const AW_39BIT:    u64 = 0b010 << 4; // Address Width = 39-bit (3-level SLPT)
-const CTX_PRESENT: u64 = 1;
+// Context entry encoding (VT-d spec §9.3, 128-bit entry):
+//   lo[0]    = Present
+//   lo[3:2]  = TT (00 = untranslated requests walk the SLPT)
+//   lo[11:4] = RESERVED — QEMU faults the walk if any bit is set
+//   lo[63:12]= SLPT pointer
+//   hi[2:0]  = AW (001 = 39-bit / 3-level AGAW)
+//   hi[23:8] = Domain ID
+// The first version OR'ed the AW value into lo bits 5:4 (reserved!) and left
+// hi AW = 000 (30-bit, unsupported by QEMU SAGAW) — every translation faulted
+// with context-entry-invalid and Driver-Cell DMA timed out under intel-iommu.
+const CTX_AW_39BIT_HI: u64 = 0b001; // hi[2:0]
+const CTX_PRESENT:     u64 = 1;
 
 // QEMU q35 hardcoded VT-d MMIO base (identity-mapped by init_kernel_paging_x86).
 const VTD_BASE:  usize = 0xFED9_0000;
@@ -186,8 +195,8 @@ unsafe fn write_ctx_entry(ctx_virt: usize, bus: u8, dev: u8, func: u8,
     // With one shared context table for all buses (Phase 01 limitation), index by dev+func only.
     let i = (dev as usize) * 8 + (func as usize);
     let slot = ctx_virt + i * 16;
-    let hi = (did as u64) << 8;
-    let lo = (slpt_phys & !0xFFF) | AW_39BIT | CTX_PRESENT;
+    let hi = ((did as u64) << 8) | CTX_AW_39BIT_HI;
+    let lo = (slpt_phys & !0xFFF) | CTX_PRESENT;
     // SAFETY: slot is within the 4096-B context table page.
     unsafe {
         core::ptr::write_volatile((slot + 8) as *mut u64, hi); // hi first (DID)
@@ -275,6 +284,10 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
 
     // Context-cache flush so hardware sees the new entry before the first DMA.
     ctx_flush_domain(did);
+    // IOTLB domain flush: QEMU intel-iommu runs with Caching Mode (CM=1), which
+    // caches not-present/faulting walks too — SLPT entries added after TE=1 are
+    // invisible to the device until the domain IOTLB is invalidated.
+    iotlb_flush_domain(did);
     log::info!("[vtd] Cell {} BDF {:02x}:{:02x}.{} DID={} SLPT={:#x}",
                tid, bus, dev, func, did, slpt_phys);
 }
@@ -333,7 +346,10 @@ pub(super) fn activate() {
     }
 
     super::iommu::set_active();
-    log::info!("[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT)");
+    // `warn!` — activation happens post-scheduler (deferred init fires from the
+    // Platform Cell's RegisterPciDevice), after the kernel log level drops to
+    // Warn. One-time boot-integrity event + the nic_x86_vtd_enabled test oracle.
+    log::warn!("[vtd] Intel VT-d: DMA isolation ACTIVE (per-Cell domains, Sv39 SLPT)");
 }
 
 // ── Cell exit: DSI flush + context entry cleanup ──────────────────────────────

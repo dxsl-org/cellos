@@ -20,6 +20,11 @@ mod block_stream;
 mod disk_redoxfs;
 #[cfg(feature = "littlefs")]
 mod lfs_disk;
+// x86_64-only str* providers for the littlefs C core — the api POSIX shim
+// (which provides them on riscv64/aarch64) is cfg-gated off on x86_64 to
+// avoid duplicate symbols with mlibc Tier-B cells.
+#[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
+mod lfs_string_shim;
 mod dispatch;
 mod handle_table;
 mod manager;
@@ -50,6 +55,11 @@ api::declare_syscalls![
     GrantRegister, GrantUnregister,
     StateStash, StateRestore,
     Open, Close, ReadDir, OpenCap, ReadCap, CloseCap,
+    // NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
+    // denied for tid <vfs>" kernel warn on x86 is the CANARY for the known x86
+    // syscall-redispatch corruption (syscall number read as user CS = 0x23 = 35
+    // with a pointer as the tick count; see TODO #9 / x86 q35 P02). Allowing it
+    // turns that corruption into an unbounded sleep that hangs the boot.
 ];
 
 // Global VFS manager for the fast-IPC handler (which runs outside the main recv loop).

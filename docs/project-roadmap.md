@@ -85,7 +85,7 @@ Cellos ships in two product stages defined by target hardware. The mapping princ
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
 | 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
 | Hot migration / zero-downtime + cell signing | M4.1 + G.2 P2 | ✅ COMPLETE 2026-06-23 — Ed25519 verify-at-spawn gate (signed cells required if flag set, dev seed for G1), 5-step hotswap protocol with TaskState::Frozen, ViStateTransfer trait, IPC queue preservation, HotSwapReady(401)/StateStashClear(412) syscalls, 11/11 hotswap-smoke tests (2 QEMU + 9 unit), hotswap-demo v1/v2 cells signed | **G2** |
-| 🆕 x86_64 full bring-up | ext. M1.3 | ✅ COMPLETE (2026-06-13) — APIC, HPET/TSC, real MMU, VirtIO, PL011 RX; 5/5 QEMU integration tests pass; syscall exit path fixed | **G2** |
+| 🆕 x86_64 full bring-up | ext. M1.3 | ✅ COMPLETE (2026-07-11) — APIC/HPET/MMU + PCIe Driver-Cell stack (platform/nvme/e1000 in VIFS1); FAT32-on-NVMe end-to-end incl. under VT-d per-Cell DMA isolation; sysretq preserve-all ABI fixed; 4 QEMU suites 12/12 (the 2026-06-13 "5/5" claim ran on a stale pre-G2 ISO) | **G2** |
 | VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
 | Full utility suite (grep/sed/awk/top/ps…) | M3.2 full | 📋 | G2 |
 | Throughput benchmark (SMP) | M4.4 subset | ✅ DONE 2026-06-16 — 3 SMP scenarios in bench cell: spawn_rate(≥20/s), ipc_throughput(≥5000/s), work_distribution(scale≥1.4×); QEMU-TCG caveat logged | G2 |
@@ -120,7 +120,7 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 #### Architecture Full Bring-Up (split from "Multi-Arch HAL ✅")
 The existing Milestone 1.3 marks ARM64/x86_64 as **ring-3 smoke only**. Real targets need full bring-up (interrupt controller, timer, real MMU, device drivers).
 - **ARM64 full bring-up `[G1]`** ✅ COMPLETE (2026-06-12) — GIC, generic timer, 3-level MMU, VirtIO, PL011, PL061 on QEMU virt; 6/6 integration tests pass
-- **x86_64 full bring-up `[G2]`** ✅ COMPLETE (2026-06-13) — APIC, HPET/TSC, real MMU, VirtIO, PL011 RX; 5/5 QEMU integration tests pass; syscall exit path fixed (CVE-2012-0217 canonical check, user RSP restore)
+- **x86_64 full bring-up `[G2]`** ✅ COMPLETE (2026-07-11) — APIC, HPET/TSC, real MMU, UART RX; PCIe Driver-Cell stack (platform ECAM + NVMe + e1000 cells, user-mapped MMIO); FAT32-on-NVMe end-to-end incl. under VT-d per-Cell DMA isolation; sysretq preserve-all ABI + CVE-2012-0217 check; 4 QEMU suites 12/12 (supersedes the 2026-06-13 claim, which ran on a stale pre-G2 ISO with kernel drivers)
 
 #### Reference Robot Demo `[G1]`
 **Status**: 🆕 — **G1 graduation gate**

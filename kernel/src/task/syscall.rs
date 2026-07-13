@@ -1107,7 +1107,38 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            // Non-blocking Recv
+            // Drain pending_msgs first (same as Recv / RecvTimeout). ipc_try_send
+            // queues input events here when the focused cell is busy-polling (not
+            // in Recv). Without this drain a cell that receives via sys_try_recv —
+            // every viui app polling through ostd::input::poll_events — would never
+            // see queued key/mouse events (ipc_try_recv only scans Sending tasks).
+            // Honour the recv mask exactly like the blocking paths.
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    let slot = t.pending_msgs.iter()
+                        .position(|m| mask == 0 || m.sender_tid == mask);
+                    if let Some(i) = slot {
+                        let msg = t.pending_msgs.remove(i);
+                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        if copy_len > 0
+                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
+                        {
+                            // SAFETY: buf_ptr is the caller's recv buffer (validated above);
+                            // msg.data is an owned heap allocation; both are exclusive here.
+                            unsafe {
+                                core::ptr::copy_nonoverlapping(
+                                    msg.data.as_ptr(),
+                                    buf_ptr as *mut u8,
+                                    copy_len,
+                                );
+                            }
+                        }
+                        t.current_caller = Some(msg.sender_tid);
+                        return Ok(msg.sender_tid);
+                    }
+                }
+            }
+            // Non-blocking Recv (scan Sending tasks)
             let res = super::ipc_try_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
                 Ok(id) => Ok(id), // 0 = No message, >0 = Sender ID
@@ -1117,14 +1148,50 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::Spawn { entry, arg } => {
             let drivers = alloc::vec::Vec::new();
             let name = "thread";
-            // TODO: Spawned threads should inherit parent's CellId or be assigned properly
-            // For now, use CellId(0) as default (system/kernel cell)
-            let tid = super::spawn_with_arg(name, CellId(0), drivers, entry, arg);
-            if tid > 0 {
-                Ok(tid)
-            } else {
-                Err(SyscallError::Unknown)
+            // A spawned thread is the same cell running more TIDs: it inherits the
+            // parent cell's identity on every axis the kernel gates — CellId (so its
+            // allocations charge the parent's quota, not the unlimited CellId(0) slot),
+            // the transferable CapSet, the syscall allowlist, and the PKU protection
+            // domain. Singleton caps (supervisor/pcie_driver/platform) are deliberately
+            // NOT propagated: they carry a one-holder invariant.
+            //
+            // Snapshot the parent identity under the lock, then DROP it before
+            // spawn_with_arg (which re-locks SCHEDULER — Spinlock is not reentrant),
+            // then re-lock to apply. Mirrors the CellId fix-up on the cell-spawn path
+            // (loader.rs:174-186). Fail-safe: an unresolved caller DENIES the spawn —
+            // it must never fall back to CellId(0), which is exactly the quota-escape
+            // this closes.
+            let (parent_cell_id, parent_caps, parent_allowlist, parent_pku) = {
+                let mut sched_opt = super::SCHEDULER.lock();
+                let sched = match sched_opt.as_mut() {
+                    Some(s) => s,
+                    None => return Err(SyscallError::Unknown),
+                };
+                match sched.tasks.get(&caller_id) {
+                    Some(t) => (
+                        t.cell_id,
+                        super::cap::CapSet::of_task(t),
+                        t.syscall_allowlist,
+                        (t.pku_key, t.pku_value),
+                    ),
+                    None => return Err(SyscallError::Unknown),
+                }
+            };
+
+            let tid = super::spawn_with_arg(name, parent_cell_id, drivers, entry, arg);
+            if tid == 0 {
+                return Err(SyscallError::Unknown);
             }
+
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                if let Some(t) = sched.tasks.get_mut(&tid) {
+                    parent_caps.apply_to(t);
+                    t.syscall_allowlist = parent_allowlist;
+                    t.pku_key   = parent_pku.0;
+                    t.pku_value = parent_pku.1;
+                }
+            }
+            Ok(tid)
         }
         Syscall::Wait { pid } => {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
@@ -1400,6 +1467,28 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .unwrap_or(false);
                 if !has_spawn {
                     return Err(SyscallError::PermissionDenied);
+                }
+
+                // Gate 1b: refuse bits whose authority is AMBIENT — already handed out
+                // and exercised WITHOUT a per-use syscall re-check, so clearing the TCB
+                // field does not actually revoke it. HYPERVISOR (H-ext CSR access) and
+                // MMIO device windows (mapped into the cell's page tables) both persist
+                // after the field is cleared: the cell keeps poking the hardware. Until
+                // the eager teardown lands (unmap_dma + IOTLB flush, MMIO page-table
+                // unmap — .agents/260712-1901 P01-P05), revoking these would be a lie.
+                // Refuse them so the shipped syscall is honest. block_io/network are
+                // refused by Gate 2 below; SPAWN and BLKREGION are re-checked at each
+                // use (lazy revocation is sound for them).
+                const AMBIENT_UNTIL_TEARDOWN: u32 = CM::HYPERVISOR | CM::MMIO_MASK;
+                if cap_mask & AMBIENT_UNTIL_TEARDOWN != 0 {
+                    crate::audit::log_event(
+                        crate::audit::AuditEvent::CapRevoked,
+                        &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
+                    );
+                    log::warn!("[kernel] CapRevoke: refused ambient-authority bits \
+                        mask={:#010x} from task {} (teardown not implemented)",
+                        cap_mask, caller_id);
+                    return Err(SyscallError::NotSupported);
                 }
 
                 // Gate 2: protect system service cells — revoking I/O caps from a
@@ -2908,11 +2997,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // PlatformCap bypass: Platform Cell may claim any MMIO range
             // (including the ECAM config-space window, which is not in PCIE_BARS).
             // Overlap check still applies — no two cells may share a byte.
+            // x86 SAS: the boot identity map covers MMIO kernel-only; a granted
+            // window must gain PTE_USER (+PCD, NX) before the ring-3 cell touches
+            // it. BAR windows may not be mapped at all yet — this also creates
+            // the identity mapping. riscv/aarch64 map cell MMIO user at boot.
+            #[cfg(target_arch = "x86_64")]
+            fn user_map(base: usize, len: usize) {
+                crate::memory::paging::map_mmio_user_x86(base, len);
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            fn user_map(_base: usize, _len: usize) {}
+
             if caller_has_platform(caller_id) {
                 return match crate::resource_registry::request_mmio_unchecked(
                     types::CellId(caller_id as u64), base, len,
                 ) {
-                    Ok(()) => Ok(0),
+                    Ok(()) => { user_map(base, len); Ok(0) }
                     Err(types::ViError::AlreadyExists) => Ok(2),
                     Err(_) => Ok(3),
                 };
@@ -2926,7 +3026,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     types::CellId(caller_id as u64), base, len,
                     crate::resource_registry::DEV_PCIE,
                 ) {
-                    Ok(()) => Ok(0),
+                    Ok(()) => { user_map(base, len); Ok(0) }
                     Err(types::ViError::PermissionDenied) => Ok(1),
                     Err(types::ViError::AlreadyExists)    => Ok(2),
                     Err(_)                                => Ok(3),
@@ -2946,7 +3046,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             match crate::resource_registry::request_mmio(
                 types::CellId(caller_id as u64), base, len, allowed_devices,
             ) {
-                Ok(()) => Ok(0),
+                Ok(()) => { user_map(base, len); Ok(0) }
                 Err(types::ViError::PermissionDenied) => Ok(1),
                 Err(types::ViError::AlreadyExists)    => Ok(2),
                 Err(_)                                => Ok(3),

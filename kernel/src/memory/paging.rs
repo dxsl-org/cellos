@@ -178,11 +178,19 @@ pub fn init_kernel_paging(
         // PCIe ECAM bus-0 window (1 MiB at 0x3000_0000) for RISC-V virt gpex.
         // Required before pcie_ecam::init() accesses config space.
         // Only bus 0 is mapped; extend if a PCIe device lands on bus > 0.
+        //
+        // USER-inclusive (rv_cell_mmio, not kernel-only mmio_flags): the Platform
+        // Cell (`/bin/platform`) runs in U-mode and scans ECAM directly (scan.rs →
+        // mmio.rs read_volatile). With kernel-only flags its very first config read
+        // (dev0 vendor-id at ECAM_BASE) took a Load Page Fault every boot, silently
+        // killing the cell-driven PCIe scan (masked by never-die + the kernel S-mode
+        // fallback scanner). The kernel's own pcie_ecam::init S-mode reads still work
+        // against a USER page because SUM=1 (set right after activate_paging).
         root_table.identity_map(
             crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV,
             crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV
                 + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
-            mmio_flags, &mut alloc_fn,
+            rv_cell_mmio, &mut alloc_fn,
         ).map_err(|_| PageTableError::OutOfMemory)?;
     }
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
@@ -477,7 +485,25 @@ pub fn map_page_x86(
 /// Panics on OOM or if the frame allocator is not yet initialised.
 #[cfg(target_arch = "x86_64")]
 pub fn map_mmio_x86(phys: usize, size: usize) {
-    use hal::paging::pte_flags_mmio;
+    map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio());
+}
+
+/// Identity-map a MMIO region with USER access (x86_64).
+///
+/// Called by the `RequestMmio` syscall when a ring-3 Driver Cell claims a
+/// range: the SAS identity map built at boot is kernel-only, so the claimed
+/// window must be (re)mapped with `PTE_USER` before the cell can touch it.
+/// Mirrors the riscv/aarch64 posture where cell-owned MMIO windows are mapped
+/// user-accessible — exclusivity is enforced by the resource registry + LBI
+/// (`forbid(unsafe_code)` cells cannot fabricate an MMIO dereference), not by
+/// the U/S bit.
+#[cfg(target_arch = "x86_64")]
+pub fn map_mmio_user_x86(phys: usize, size: usize) {
+    map_mmio_x86_flags(phys, size, hal::paging::pte_flags_mmio_user());
+}
+
+#[cfg(target_arch = "x86_64")]
+fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
     let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
     let allocator = fa.as_mut().expect("map_mmio_x86: frame allocator not ready");
     let page_mask = PAGE_SIZE - 1;
@@ -485,7 +511,7 @@ pub fn map_mmio_x86(phys: usize, size: usize) {
     let end = (phys + size + page_mask) & !page_mask;
     while va < end {
         // Errors are logged but not fatal; a broken mapping will fault on first use.
-        if let Err(e) = map_page_x86(allocator, va, va, pte_flags_mmio()) {
+        if let Err(e) = map_page_x86(allocator, va, va, flags) {
             log::warn!("[paging] map_mmio_x86: failed to map {:#x} ({:?})", va, e);
         }
         va += PAGE_SIZE;
@@ -672,7 +698,7 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 
 #[cfg(target_arch = "x86_64")]
 pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
-    use hal::paging::{walk_read, PTE_PRESENT};
+    use hal::paging::{walk_read, PTE_ADDR_MASK, PTE_PRESENT};
     use crate::memory::frame::phys_to_virt;
     let root_guard = KERNEL_ROOT.lock();
     let root_phys = (*root_guard)?;
@@ -680,7 +706,10 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
     // SAFETY: pml4 is the kernel's active PML4.
     let pte = unsafe { walk_read(pml4, vaddr) }?;
     if pte & PTE_PRESENT == 0 { return None; }
-    Some(((pte & !0xFFF) as usize) | (vaddr & 0xFFF))
+    // PTE_ADDR_MASK, NOT !0xFFF: user pages carry PTE_NX (bit 63) — keeping it
+    // made the "physical" address non-canonical after the HHDM offset, and the
+    // ELF loader's shared-page path (already_ours) then wrote through a #GP.
+    Some(((pte & PTE_ADDR_MASK) as usize) | (vaddr & 0xFFF))
 }
 
 /// Bare-physical identity translation.
@@ -708,16 +737,40 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 /// FRAME_ALLOCATOR).
 #[cfg(target_arch = "x86_64")]
 #[no_mangle]
-pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64) {
+pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64) {
     use crate::task::SCHEDULER;
 
     // Bit 2 of the error code = U/S: fault originated from user mode.
     let user_fault = error_code & (1 << 2) != 0;
 
     if !user_fault {
+        // NOTE: the IDT routes EVERY error-code vector (#DF/#TS/#NP/#SS/#GP/
+        // #PF/#AC) through this handler, so `va` (CR2) may be STALE — a #GP
+        // with error_code=0 (e.g. a non-canonical address access) shows up
+        // here as "va=0x0 error_code=0x0". rip/cs identify the real faulting
+        // instruction; symbolize rip against the kernel ELF.
+        //
+        // Poor-man's backtrace: scan the faulting stack for kernel-text
+        // return addresses so the memcpy-style builtins (which fault deep
+        // inside compiler_builtins) can be attributed to their caller.
+        let mut callers: [u64; 6] = [0; 6];
+        let mut n = 0;
+        // SAFETY: rsp is the faulting kernel stack (cs=8); reading a few
+        // qwords above it is safe — the stack is mapped or we would have
+        // double-faulted before reaching this handler.
+        if rsp != 0 && rsp % 8 == 0 {
+            for i in 0..64usize {
+                if n >= callers.len() { break; }
+                let q = unsafe { core::ptr::read_volatile((rsp as *const u64).add(i)) };
+                if (0xffff_ffff_8000_0000..0xffff_ffff_9000_0000).contains(&q) {
+                    callers[n] = q;
+                    n += 1;
+                }
+            }
+        }
         panic!(
-            "[#PF kernel] va={:#x} error_code={:#x} — kernel-mode page fault",
-            va, error_code
+            "[#PF kernel] va={:#x} error_code={:#x} rip={:#x} cs={:#x} rsp={:#x} ret-candidates={:#x?} — kernel-mode fault (may be #GP: CR2 can be stale)",
+            va, error_code, rip, cs, rsp, &callers[..n]
         );
     }
 
@@ -764,8 +817,8 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64) {
         }
         None => {
             panic!(
-                "[#PF user] va={:#x} error_code={:#x} — no VMA covers this address",
-                va, error_code
+                "[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — no VMA covers this address",
+                va, error_code, rip, cs
             );
         }
     }

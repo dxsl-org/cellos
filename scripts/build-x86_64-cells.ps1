@@ -18,6 +18,27 @@ $buildStd  = "-Z build-std=core,alloc"
 # .cargo/config.toml note that cells need relocation-model=pie (kernel uses pic).
 $rustflags = "-C relocation-model=pic"
 
+# littlefs /data backend (service-vfs default feature): littlefs C core is
+# cross-compiled with plain clang; third_party/freestanding-include supplies
+# the libc declarations (implementations: compiler_builtins + POSIX shim).
+# -mno-red-zone/-mno-sse/-mno-mmx match the Rust x86_64-unknown-none codegen.
+$repoRoot = (Get-Location).Path
+if (-not $env:CC_x86_64_unknown_none) {
+    $env:CC_x86_64_unknown_none = "C:\Program Files\LLVM\bin\clang.exe"
+}
+if (-not $env:CFLAGS_x86_64_unknown_none) {
+    $env:CFLAGS_x86_64_unknown_none =
+        "--target=x86_64-unknown-none-elf -ffreestanding -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I$repoRoot\third_party\freestanding-include"
+}
+if (-not $env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none) {
+    $env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none =
+        "--target=x86_64-unknown-none-elf -I$repoRoot\third_party\freestanding-include"
+}
+if (-not $env:LIBCLANG_PATH) {
+    $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
+    if (Test-Path "$vsLlvm/libclang.dll") { $env:LIBCLANG_PATH = $vsLlvm }
+}
+
 Write-Host "=== Building x86_64 cells (release) ==="
 
 $env:RUSTFLAGS = $rustflags
@@ -39,6 +60,18 @@ Write-Host "Building service-config..."
 $cmd = "cargo build --release -p service-config --target $target $buildStd 2>&1"
 Invoke-Expression $cmd | Select-Object -Last 10
 if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LASTEXITCODE)" }
+
+# Build the PCIe cell stack (Kernel Boundary Law: drivers live in cells).
+# platform = ECAM scanner (kernel spawns /bin/platform before init);
+# nvme/e1000 = PCIe Driver Cells (init spawns them; PcieDriverCap is
+# path-granted by the kernel loader). Each exits cleanly when its device
+# is absent, so diskless/NIC-less boots are unaffected.
+foreach ($pkg in "service-platform", "driver-nvme", "driver-e1000") {
+    Write-Host "Building $pkg..."
+    $cmd = "cargo build --release -p $pkg --target $target $buildStd 2>&1"
+    Invoke-Expression $cmd | Select-Object -Last 10
+    if ($LASTEXITCODE -ne 0) { Write-Warning "$pkg build failed (exit $LASTEXITCODE)" }
+}
 
 $env:RUSTFLAGS = ""
 
@@ -70,6 +103,9 @@ $cells = @(
     @{ Bin = "app-shell";      Dst = "/bin/shell"  },
     @{ Bin = "service-vfs";    Dst = "/bin/vfs"    },
     @{ Bin = "service-config"; Dst = "/bin/config" },
+    @{ Bin = "platform";       Dst = "/bin/platform" },
+    @{ Bin = "driver-nvme";    Dst = "/bin/nvme"   },
+    @{ Bin = "driver-e1000";   Dst = "/bin/e1000"  },
     @{ Bin = "ls";             Dst = "/bin/ls"     },
     @{ Bin = "cat";            Dst = "/bin/cat"    },
     @{ Bin = "echo";           Dst = "/bin/echo"   },

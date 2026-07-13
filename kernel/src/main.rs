@@ -461,6 +461,18 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     task::init();
     log_info("Scheduler initialized");
 
+    // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
+    // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the
+    // synthetic thread it spawns cannot be raced onto another hart before teardown.
+    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    {
+        if task::thread_cap_selftest::self_test() {
+            log_info("thread-cap self-test PASS (thread-inherit + honest-revoke)");
+        } else {
+            log_info("thread-cap self-test FAIL");
+        }
+    }
+
     // 7b. Bring secondary harts online (riscv64 only; no-op on other arches).
     // Must run AFTER task::init() so the heap and scheduler are live before
     // any secondary hart starts running kernel code.
@@ -531,8 +543,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
 
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
+        // CellId(0) placeholder → fixed up to CellId(init_tid) below, mirroring the
+        // path-spawn convention (loader.rs: cell_id = CellId(tid)). A hardcoded
+        // CellId(1) here would COLLIDE with the Platform Cell, which spawns first
+        // (tid=1 → CellId(1)); the collision commingled their per-cell quota slots
+        // and made fault attribution ambiguous ("Cell 1" meant either).
         let init_data = alloc::vec::Vec::from(INIT_ELF);
-        match task::spawn_from_mem(&init_data, "init", types::CellId(1), alloc::vec![]) {
+        match task::spawn_from_mem(&init_data, "init", types::CellId(0), alloc::vec![]) {
             Ok((init_tid, _load_base)) => {
                 log_info("Successfully spawned init");
                 // Probe 'V': confirms spawn_from_mem succeeded → init is in ready queue.
@@ -548,6 +565,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 // remain compile-time constants (no data-derived paths).
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
+                        // Unique per-cell identity (see spawn comment above): init
+                        // gets CellId(init_tid), never the placeholder or a value
+                        // shared with an earlier path-spawned cell.
+                        t.cell_id = types::CellId(init_tid as u64);
                         task::cap::CapSet::ALL.apply_to(t);
                         // SupervisorCap is NOT in CapSet (not delegatable via intersection).
                         // Init holds it so it can unfreeze cells if the Supervisor Cell crashes.

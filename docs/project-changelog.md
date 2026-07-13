@@ -4,6 +4,194 @@
 
 ---
 
+## [2026-07-11] VT-d per-Cell DMA isolation actually translates — FAT32-on-NVMe works with intel-iommu enforced
+
+### Root cause of "NVMe DMA times out under VT-d"
+The VT-d **context entry encoded the Address Width in the wrong qword**: `AW_39BIT = 0b010 << 4` was OR'ed into the LOW qword (bits 5:4 — RESERVED per VT-d §9.3), leaving the HIGH qword's real AW field (hi[2:0]) at 000 = 30-bit AGAW, which QEMU's SAGAW doesn't support. Every translation for a per-Cell domain faulted as context-entry-invalid, so any Driver-Cell DMA (NVMe Identify, queue reads) timed out the moment TE=1. Fixed: `hi = (did << 8) | 0b001` (39-bit/3-level), `lo = slpt_ptr | P`. This had never actually worked — the old Track-B "VT-d enabled" oracle only asserted TE activation, not a translated DMA round-trip.
+
+### Second fix: Platform-scan race ate the pre-VFS NVMe spawn
+Under intel-iommu the Platform Cell's scan is slower (the first RegisterPciDevice runs the whole deferred VT-d init), so the pre-VFS NVMe cell's single-shot `sys_find_pcie_device` ran before the NVMe device was registered → cell exited "no device" → only the gated net-hook retry (tid 7) came up, after VFS had already mounted-and-failed. Fixed in the nvme cell: bounded find-retry loop (200 yields) before concluding absent.
+
+### Result
+With `-device intel-iommu`: VT-d ACTIVE → NVMe Driver Cell registers (tid 3, pre-VFS) → `[vfs] FAT32 /mnt/sd volume mounted` → shell `echo >`/`cat` round-trip on /mnt/sd **PASS with DMA isolation enforced**. `nic_x86_vtd_enabled` now asserts block-driver registration under VT-d (the strong oracle — it requires real DMA through the per-Cell SLPT). All 4 x86 suites remain green (12/12).
+
+---
+
+## [2026-07-11] x86_64 FAT32-on-NVMe end-to-end — first real disk I/O on x86 via Driver-Cell IPC
+
+### What shipped
+`[vfs] FAT32 /mnt/sd volume mounted` on QEMU q35 with a FAT32-formatted NVMe disk, and a shell round-trip (`echo … > /mnt/sd/probe.txt` → `cat`) verified write+read through the full chain: shell → VFS → DrvRequest IPC → NVMe Driver Cell → DMA → QEMU NVMe. All 4 x86 suites stay green (12/12).
+
+### Two fixes
+1. **init ordering**: `/bin/nvme` now spawns in the pre-VFS block section (with `/bin/block`), so the BLOCK_DRIVER registration lands before VFS mounts — previously VFS probed the service registry at mount time, cached ABSENT, and FAT-on-NVMe was permanently dead. The net-hook spawn remains as a cell-store retry for non-x86 platforms, gated on `sys_lookup_service(BLOCK_DRIVER).is_none()` — an ungated second instance would steal the live cell's BDF ownership via `sys_find_pcie_device`.
+2. **NVMe cell swallowed DrvRequests** (total boot hang with a formatted disk): VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope) → ostd delivers it as `AppEvent::RawMessage`, but the nvme cell matched only `AppEvent::Message` — the request fell into `_ => {}`, no reply was ever sent, and VFS parked forever in its masked reply-recv (init then wedged behind it in `Sending`). The virtio-blk cell already had the `Message | RawMessage` union arm (with a comment saying exactly why); nvme's port dropped it. Diagnosed with temporary kernel probes: timer-tick liveness (`cur_tid=0` — all parked), task-state dump (`vfs Recv{mask:3}` / `nvme Recv{mask:0} pending=0` / `init Sending{target:vfs}`), and an IPC trace showing the request delivered (`send 4->3 DIRECT`, `recv wake tid=3 sender=4`) with no reply ever sent.
+
+### Lesson
+The `AppEvent::Message`-only match is a silent-drop trap for every Driver Cell speaking a raw (non-enveloped) protocol — dispatch handlers must match `Message | RawMessage`. Grep confirmed e1000 already does; any future Driver Cell port must too.
+
+---
+
+## [2026-07-11] x86_64 PCIe Driver-Cell stack live — all 4 x86 suites green (12/12)
+
+### What shipped
+The x86 image (VIFS1 ramdisk) now carries the PCIe cell stack: `/bin/platform` (ECAM scanner, kernel-spawned), `/bin/nvme` and `/bin/e1000` (Driver Cells, init-spawned) — added to `scripts/build-x86_64-cells.ps1`. On QEMU q35 with `-device nvme -device e1000`: Platform Cell scans ECAM and registers devices/BARs, the NVMe cell completes controller init (admin+IO queues, Identify DMA) and registers as block driver, the e1000 cell registers as NIC driver. Boot stays clean to `ViCell >`.
+
+### Two bugs fixed on the way
+1. **x86 MMIO was kernel-only for ring-3 cells**: the SAS identity map built at boot has no `PTE_USER`, and BAR windows weren't mapped at all — the Platform Cell #PF'd on its first ECAM read (`va=0xB0000000 error_code=0x5`). Fix: `RequestMmio` success now calls `map_mmio_user_x86` (new; `pte_flags_mmio_user` = P|W|USER|PCD|NX) to identity-map the claimed window user-accessible. Mirrors the riscv/aarch64 boot-time `cell_mmio_flags` posture — exclusivity remains registry+LBI-enforced (cells are `forbid(unsafe_code)`).
+2. **NVMe Driver Cell CDW10 field inversion**: the port from `blk_nvme.rs` swapped QID/QSIZE in Create-IO-CQ/SQ CDW10 (`(depth-1) | (1<<16)` instead of `((depth-1)<<16) | 1`). QEMU created the CQ as QID=63, then Create-SQ failed with Invalid CQID and the cell exited silently. Diagnosed by step-level probes; fixed to match the original kernel driver (git `c70d8273~1`).
+
+### Test suite modernised (was gating on deleted kernel-driver logs)
+`nvme-x86.rs` and `nic-x86.rs` asserted `[e1000] NIC initialized` / `[nvme] driver ready` / `[vtd] passthrough enabled` — strings that no longer exist since the drivers were exiled to cells. New oracles: `[driver_cell] block driver registered` / `[driver_cell] NIC driver registered` (promoted info→warn — they fire post-scheduler after the log level drops, same rationale as the input-registration marker) and `[vtd] Intel VT-d: DMA isolation ACTIVE` (deferred init, also warn now). nvme tests boot the ISO (the old `-kernel` boot never worked with Limine). Result: **boot 7/7 + nvme 2/2 + nic 2/2 + virtio 1/1 (+1 ignored: virtio-blk cell is MMIO-only, not in the x86 image)**.
+
+### Known issues (tracked, not regressions)
+- **NVMe under VT-d**: with `-device intel-iommu`, the NVMe cell's Identify DMA times out — lazy per-Cell SLPT mapping after TE=1 isn't honoured by QEMU DMAR yet (a domain-selective IOTLB flush after SLPT writes was added — correct per spec for CM=1 — but insufficient). e1000 registration and VT-d activation itself work; the vtd test asserts those only.
+- **vfs mounts before the NVMe cell registers** (init spawns `/bin/nvme` at the net hook, after vfs) and caches `BLOCK_DRIVER` as absent — FAT-on-NVMe needs an init-ordering pass.
+- Platform scan's `bdf` devfn encoding round-trips today's kernel decode but the intermediate `(bus,dev,fun)` tuple is garbled for bus>0 — harmless on q35 bus 0, worth normalising.
+
+---
+
+## [2026-07-11] x86_64 sysretq register-leak fixed — boot-to-shell suite 7/7 (TODO #9 part B, P02 closed)
+
+### Root cause
+The "SetTimer re-dispatch corruption" was neither a re-dispatch nor a trap-frame slot bug: the **sysretq exit path restored only rbx/rbp/r12-r15 + rax/rcx/r11**, returning kernel garbage in **rdi/rsi/rdx/r8/r9/r10**. The ostd x86_64 syscall stub declares those registers `in` (non-clobbered) and never mentions r8/r9, so LLVM legitimately caches live values in them across `syscall` — inside `ostd::io::println` it cached the syscall number 11 in **R8** and reloaded `RAX` from R8 for the second (newline) write. R8 came back from the kernel holding 35 → the second write arrived as `SetTimer(ptr)` → denied → `-1` in RAX propagated into vfs's message-length arithmetic → `#PF va=-1` in `postcard::Slice::pop`. The earlier "35 = 0x23 = user CS" reading was numeric coincidence. Diagnosed by dumping the full trap frame on the denial (frame well-formed, `sepc` symbolized to `println`+0x22) and disassembling the stub call-site (`push $0xb; pop %r8; … mov %r8,%rax; syscall`).
+
+### Fix
+`hal/arch/x86/src/x86_64/syscall.rs` (kernel-side only — existing cell binaries unaffected): entry stub saves original RDI into `regs[6]` (+48, previously zeroed); exit path restores rsi/rdx/r10/r8/r9 from `regs[11..15]` and rdi from `regs[6]`, switches to the user stack directly via `movq 16(%rsp), %rsp`, and moves the CVE-2012-0217 canonical-RCX check before the rdi restore. Syscall ABI contract now matches the stub: only RAX/RCX/R11 clobbered (Linux-convention).
+
+### Result
+x86_64 boot suite **7/7** (was 3/7): banner, scheduler, init, boot-to-shell, `echo`, `ls /bin` (VFS IPC under ring-3), `ps`. The vfs allowlist keeps SetTimer omitted — the denial warn remains a canary for this defect class. riscv64 unaffected (`cargo check` green). x86 q35 completion plan P02 closed.
+
+---
+
+## [2026-07-11] x86_64 NX-bit paging bug fixed — VFS runs on x86 for the first time since G2 (TODO #9 part A)
+
+### Root cause
+`virt_to_phys` (x86) extracted the physical address from a PTE with `pte & !0xFFF`, which keeps **bit 63 (PTE_NX)** and bits 62:52. Every user RW/RO page carries NX (`pte_flags_user_rw`), so the "physical" address came back as `0x8000_0000_xxxx` → adding the HHDM offset wrapped it into a **non-canonical pointer** → the next dereference raised **#GP (error code 0, CR2 stale)** which the shared error-code IDT handler reported as `#PF va=0x0`. Trigger: the ELF loader's shared-page path (`already_ours`) round-trips `virt_to_phys`→`phys_to_virt` when adjacent PT_LOAD segments share a page — the first NX page hit there (init loading `/bin/vfs`) killed init and ended every x86 boot at "Starting scheduler". Diagnosed by extending the #PF panic with **rip/cs/rsp + a kernel-text return-address scan** (now permanent diagnostics): rip symbolized to `memcpy` ← `spawn_from_mem`, and a per-page probe showed the poisoned `fv=0x7fff8000…` (bit 63 lost to the wrap) on the first shared NX page.
+
+### Fix
+`PTE_ADDR_MASK = 0x000F_FFFF_FFFF_F000` (bits 51:12) applied at every PTE/PDE/PDPTE/PML4E address extraction (hal `walk_create`/`walk_read`/`map_bios_area` + kernel `virt_to_phys`). Same defect class as the previously-fought "Limine NX bit PDPT bug".
+
+### Result + remaining (TODO #9 part B)
+init now survives; **VFS loads and runs on x86** (RamFS serves, FAT/littlefs/redoxfs mounts fail gracefully on the diskless ISO boot). Suite still 3/7: vfs later dies at `[#PF user] va=-1` after an **x86 syscall re-dispatch corruption** — instrumentation proved the kernel received `SetTimer` (35 = **0x23 = user CS**) with a vfs-image POINTER as the tick count, i.e. the syscall number is read from the wrong slot on some x86 resume path. The vfs allowlist deliberately omits SetTimer so the `SetTimer denied for tid <vfs>` warn remains a canary (allowing it turned the corruption into an unbounded sleep). Scope: x86 q35 plan P02 (ring-3/syscall verify).
+
+---
+
+## [2026-07-11] bench CI gate modernized + littlefs unlocked on aarch64/x86_64 via clang
+
+### bench_all_pass (TODO #7) — machinery gate on QEMU, thresholds on hardware
+The test was doubly dead: (a) it booted `bench-disk.img` expecting init to auto-spawn `/bin/bench` from the disk cell table — a flow that died with the G2 loader redesign (kernel `NullBlock` cannot read the table; that flow remains valid only on real boards with MMC); (b) even when spawned, "ALL BENCHMARKS PASS" requires latency thresholds that are meaningless under QEMU TCG. Now:
+- bench prints an **unconditional `[bench] BENCHMARK SUITE COMPLETE (N/M within target)`** before the verdict; QEMU CI gates on completion (machinery regression), real hardware gates on `ALL BENCHMARKS PASS`.
+- The test boots the normal disk_v3.img and runs `bench` from the shell.
+- bench + bench-probe joined VIFS1 (same kernel-spawn-bound class as the hotswap demos: children spawn via `sys_spawn_pinned` → kernel loader → VIFS1/P2 only).
+Verified: full suite runs in ~5 s on TCG (4 PDR + 3 RT + SMP, no SKIPs); only `ipc_send_recv` misses its 50 µs threshold (104 µs — the expected TCG noise).
+
+### littlefs on aarch64 + x86_64 (TODO #8) — clang, no cross-gcc
+The `/data` littlefs backend was `--no-default-features`'d off on aarch64/x86_64 for lack of a bare-metal cross C compiler. Provisioned with **plain clang** (`C:\Program Files\LLVM`):
+- `third_party/freestanding-include/` supplies the two libc headers clang lacks for `*-none` targets (`string.h`, `inttypes.h`) — declarations only; implementations come from `compiler_builtins` (mem\*) and the api POSIX shim (str\*, `-zmuldefs`).
+- bindgen needs its own `--target` override (`BINDGEN_EXTRA_CLANG_ARGS_<triple>`): the Rust triple's `softfloat` component is not a valid clang triple.
+- x86_64: the api POSIX shim is deliberately mlibc-gated OFF, so vfs gained a local `lfs_string_shim.rs` (5 `str*` fns, `cfg(x86_64)`).
+Wired into `build-aarch64-cells.ps1` + `build-x86_64-cells.ps1`. aarch64 suite **7/7 with littlefs vfs**; x86_64 builds and links.
+
+### x86_64 boot-to-shell: pre-existing breakage surfaced (new TODO #9)
+Running the x86 suite for the first time since the G2 redesign: **3/7** — init spawns `/bin/block` (never in x86 VIFS1) → kernel loader fallback → `#PF kernel va=0x0` (`paging.rs:718`) → init killed. Worktree-bisect at `d505b7e0` (pre-session) fails identically → NOT a regression from this session; the "x86 7/7 (Jul-8)" evidence ran on a stale pre-G2 ISO. Also surfaced: x86 `service-vfs` had been silently absent from the image (littlefs link failure → script warning → shipped anyway). Tracked as TODO #9 (x86 q35 completion plan).
+
+---
+
+## [2026-07-11] G2 kernel-shrink: VIFS1 reduced to bootstrap cells — services/tools/demos now cell-store-only
+
+### Summary
+`kernel_fs.img` (the VIFS1 ramdisk baked into the kernel) carried ~35 cells — every service, driver, tool, and game — long after the G2 loader redesign made the disk cell-store the real home for non-bootstrap cells. Since ostd's `sys_spawn_from_path` already routes through VFS + `sys_spawn_from_elf` once `service::VFS` registers (phase 04), the VIFS1 copies were pure dead weight: init and the shell both resolve `/bin/<cell>` from the P6 FAT cell-store.
+
+### Change (`gen_disk.ps1`, riscv64)
+VIFS1 now carries ONLY:
+1. **Bootstrap cells** (`loader::early::BOOTSTRAP_CELLS` + init): `init, shell, vfs, config, platform, block` — the chain that brings up the Block Cell + VFS with no kernel block driver.
+2. **`/doom1.wad`** (28.8 MB, documented exception): DOOM reads it via mlibc → kernel `Open`/`Read` syscalls, which resolve against VIFS1 only. Moving it out needs mlibc file-I/O → VFS routing (TODO).
+3. **hotswap-demo-v1/v2** (90 KB, documented exception): kernel-side hotswap loads the replacement ELF via `loader::spawn_from_path` (VIFS1/P2 — the kernel cannot call VFS).
+
+Everything else (net, input, compositor, supervisor, net-broker, virtio-net/gpu, nvme, e1000, lua, micropython, doom **binary**, tetris×3, audio/https/http-smoke/cfi demos, ls/cat/echo/ps/kill) is cell-store-only; doom + tetris×3 were added to the P2 table/P6 store (they were VIFS1-only before). Also cleaned the dead standalone blobs `kernel/src/embedded/{shell,vfs,config,lua,doom,input,cat,echo,hello,ls}` (only `init` + `kernel_fs.img` are actually embedded — `kernel/build.rs` trimmed to match) — ends the per-`gen_disk` git churn on those files.
+
+### Result
+kernel_fs.img 40 → 36 MB; riscv64 kernel binary 43.3 → 39.1 MB. The remaining fat is the WAD (74% of kernel_fs) — tracked in TODO.
+
+### Latent test race exposed (and fixed): `network_httpd_dynamic_content`
+The shrink's timing shift surfaced a test-harness race, initially misread as a shrink regression. VFS op tracing showed GET#2's `ReadAsync` interleaved with the vwrite echo — the host GET ran while the guest was still **typing** the second `vwrite`. Root cause: `QemuRunner::wait_for` is a whole-buffer `contains`, so `wait_for("ViCell >")` after `send_line` matches the prompts ALREADY in the buffer and returns instantly — the test's only real synchronization was a 200 ms sleep. Fixed with a real barrier: `vwrite … && echo WROTE$?` and wait for the OUTPUT `WROTE0` (the typed echo contains the unexpanded `$?`, so only post-execution expansion matches). **Any test that `wait_for("ViCell >")` after `send_line` has this hazard** — use output markers that cannot appear in the typed command.
+
+---
+
+## [2026-07-11] aarch64 boot-to-shell regression fixed — RPi3 debug probes poisoned shared exception vectors (suite 3/7 → 7/7)
+
+### Summary
+Since the RPi3 bring-up commit (`9b4aeead`, post Jun-16), aarch64 QEMU virt booted the kernel, spawned init, started the scheduler — then went permanently silent. Root cause: the RPi3 crash-diagnosis session left **raw MMIO probe writes to `0x3F215040` (BCM2837 mini UART — an RPi3-only device) in the SHARED aarch64 exception vectors** (`hal/arch/arm/src/aarch64/trap.rs`): first instructions of `vt_sync_*` ('S'), `vt_irq_sp0/spx` ('H'), `vt_irq_el0` ('R'), plus a dozen `bl __rpi3_*` probe calls in `__trap_exit`. On QEMU virt, `0x3F215040` is an unmapped hole → the write faults **inside the exception vector itself** → `vt_sync_spx` re-runs the same faulting write → recursive abort, no output, forever. init's first syscall (or the first timer IRQ) died there.
+
+### Fix
+Removed all board probes from the shared vectors/`__trap_exit` (restored the pre-regression minimal paths) and documented the rule in the asm: **board debug probes belong behind `#[cfg(feature = "board-…")]` Rust code, never in shared assembly** (Kernel Boundary Law: test/debug code is cfg-gated only). RPi3 Rust-side cfg'd probes in `main.rs` are untouched.
+
+### Follow-on repairs (aarch64 test parity, same session)
+- **aarch64 ramdisk gained `/bin/input`, `/bin/input-test`, `/bin/periph-demo`** (`scripts/build-aarch64-cells.ps1`) — init's supervised `/bin/input` was "cell not found", and the on-demand demo cells weren't shipped at all.
+- **Shell now holds gpio/uart caps for delegation** (`cells/tools/shell/src/main.rs` manifest): demos are spawned from the shell by design, but P2 monotonic downgrade intersects a child's manifest with the spawner's caps — a spawn-only shell silently stripped `gpio/uart` from every peripheral demo (`request_mmio` → PermissionDenied). The shell never opens MMIO itself; holding the caps only enables delegation, matching the operator-at-the-shell trust model.
+- **Retargeted 2 stale tests** (`aarch64-boot.rs`): `periph_demo_gpio` + `uart_input_delivery` now spawn their cells from the shell (init no longer auto-spawns demos) and the retired `[input-svc] key event 4` marker is dropped (input service intentionally does not log per-event).
+
+### Result
+aarch64-boot suite **7/7** (was 3/7). riscv regression green: shell (24), input (4), boot, vfs_write (2).
+
+---
+
+## [2026-07-11] Multi-device input claiming + mouse→compositor routing — cursor e2e green
+
+### Summary
+`compositor_cursor_moves_on_mouse_event` failed even after the input virtqueue fixes. Two remaining defects:
+
+1. **Only the first virtio-input device was claimed.** QEMU attaches keyboard/tablet/mouse as separate virtio-input MMIO slots; `find_and_init_input` stopped at the first match (the keyboard). Since kernel push is disabled once ANY cell owns an input slot, the tablet's `EV_ABS` events were polled by nobody. Now `find_and_init_inputs` claims **all** input devices (`Vec<InputDevice>`) and the main loop drains each virtqueue (`cells/services/input/src/virtio_device.rs`, `main.rs`).
+2. **Mouse events were routed to the keyboard-focused cell.** Historically the cursor test passed because the compositor was the last focus claimant; ever since the shell claims focus at startup, pointer events landed in the shell (which ignores them) and the compositor never saw a `MouseMove`. Added `Dispatcher::dispatch_mouse` (`dispatcher.rs`): pointer events (`MouseMove`/`MouseButton`/`MouseScroll`) now route to the **compositor** — the cursor + surface-Z-order owner that hit-tests clicks to surfaces — resolved lazily via `service::COMPOSITOR` and re-resolved on send failure (respawn). Keyboard keys keep the focused-cell route. `LookupService` added to the input cell's syscall allowlist.
+
+Also retargeted the test off the retired `[input-svc] key event 2` marker to the compositor's `[compositor] cursor at X,Y` probe directly.
+
+### Result
+`compositor_cursor_moves_on_mouse_event` passes (`cursor at 16383,0`). Regression green: input (4), compositor routing, boot-to-shell, shell echo, gpu framebuffer.
+
+---
+
+## [2026-07-10] Input virtqueue-poll regression fixed — bounce-DMA + TryRecv drains pending_msgs
+
+### Summary
+`input_bare_cell` and `input_keyboard_e2e` failed: QMP-injected keys never reached the focused cell. Two independent defects, both surfaced by the Phase-03 kernel-push → userspace-poll migration:
+
+1. **Input HAL had no bounce-DMA (keys never left the device).** The input Driver Cell's `CellHal::share`/`unshare` (`cells/services/input/src/virtio_device.rs`) cast the driver buffer pointer straight to a physical address. But `VirtIOInput`'s event ring is a `Box<[InputEvent; 32]>` on the cell heap (non-identity-mapped VA), so the device wrote events to a bogus physical address and `pop_pending_event` never saw them. Same root cause and fix as the GPU cell — ported the virtio-net bounce-DMA. This alone fixed `input_bare_cell` (its `ostd::app` receiver blocks in `sys_recv`, which already drains `pending_msgs`).
+
+2. **`sys_try_recv` never drained `pending_msgs` (busy-polling cells got nothing).** The input service dispatches events via `sys_try_send`; when the focused cell is busy-polling (not in `Recv`), the kernel queues the event into the target's `pending_msgs`. But `Syscall::TryRecv` (`kernel/src/task/syscall.rs`) only called `ipc_try_recv`, which scans `Sending` tasks and **never drains `pending_msgs`** — unlike `Recv`/`RecvTimeout`, which do. So every viui app receiving through `ostd::input::poll_events` (which uses `sys_try_recv`) silently lost all queued input. Added the same mask-honoring `pending_msgs` drain to `TryRecv`. Also fixed `poll_events` (`libs/ostd/src/input.rs`) to mask on the input service TID instead of `usize::MAX` (which matched neither the `Sending` scan nor the drain), mirroring `drain_pending_input_events`.
+
+### Result
+`input_bare_cell`, `input_keyboard_e2e`, `compositor_input_routing_active`, `input_service_registered_at_boot` all pass. Added a one-shot `[robot-dashboard] input event received` marker (the input service deliberately does not log per-event — it would bury the shell prompt) and retargeted `input_keyboard_e2e` at it (the old `[input-svc] key event 0` / `dispatch to TID` markers were kernel-era strings the service no longer prints).
+
+**Follow-up:** `compositor_cursor_moves_on_mouse_event` still fails — it needs the input cell to claim BOTH the keyboard and the tablet (`virtio-tablet-device`), but the cell claims only the first input device found (the keyboard at a lower MMIO slot), so tablet `EV_ABS` events are never polled. Multi-device input claiming is a separate feature; the test also still asserts the retired `[input-svc] key event 2` marker.
+
+---
+
+## [2026-07-10] virtio-gpu Driver Cell registration fixed — bounce-DMA in the GPU HAL
+
+### Summary
+`gpu_framebuffer_initialises` failed and the compositor fell back to a software cursor. Two independent defects:
+
+1. **Retired test marker.** The test waited for `"Framebuffer setup success"` — a kernel-era string that no longer exists (the GPU driver moved to a Driver Cell per the Kernel Boundary Law). Updated to the Driver Cell's real marker, `"VirtIO GPU Driver Cell registered"`.
+2. **GPU HAL had no bounce-DMA (root cause of the hang).** Instrumented boot showed the cell *found* the GPU (device type 16 at MMIO slot `0x10005000`), claimed the region, built the transport, and constructed `VirtIOGpu` — then **hung in `gpu.resolution()`** (the first control-queue transaction). The cell's `CellHal::share`/`unshare` (`cells/drivers/virtio-gpu/src/display.rs`) naively cast the driver's buffer pointer as a physical address. But command buffers live on the cell heap/stack, whose VAs are **not identity-mapped**; QEMU read garbage for the control command and never posted a used-ring response, so the poll spun forever. This is the same class of bug the virtio-net cell already solved.
+
+### Fix
+Ported the proven bounce-DMA `share`/`unshare` from the virtio-net cell's `CellHal`: copy driver buffers through an identity-mapped grant page (`sys_grant_alloc`) for `DriverToDevice`, copy device-written bytes back on `unshare` for `DeviceToDriver`, then free the grant. The GPU cell now registers and the compositor reports `hardware cursor active` (was `software cursor`). Verified: `gpu_framebuffer_initialises` passes.
+
+**Note:** `compositor_cursor_moves_on_mouse_event` now advances past GPU init (GPU registers, hardware cursor active) but still fails at the input `EV_ABS` leg — that is the separate input virtqueue-poll regression (TODO #1), **not** the same class as this GPU HAL fix.
+
+---
+
+## [2026-07-10] mqtt_subscribe SUBACK-receive fixed — TCP-stream framing in the MQTT client
+
+### Summary
+`mqtt subscribe` reached "connected" then printed `mqtt: SUBACK not received` and timed out. Root cause was **data loss in the MQTT client, not net-service timing**: the net service's `TcpRecv` handler (`recv_slice`, `cells/services/net/src/handlers.rs:168`) drains *all* buffered bytes, but the old `mqtt_recv_once` computed a length from the *first* packet's remaining-length byte and **discarded the trailing bytes**. When CONNACK + SUBACK arrived coalesced in one TCP segment (the mock broker sleeps only 50 ms between them — `tests/integration/src/lib.rs:1592`), `mqtt_handshake` consumed both, kept the 4-byte CONNACK, and silently dropped the SUBACK — which was then gone from smoltcp's buffer, so `do_subscribe`'s 5000-poll loop never saw it.
+
+### Fix
+Rewrote the client's receive path (`cells/tools/net-tools/src/bin/mqtt.rs`) around an `MqttConn` stream framer that **retains leftover bytes across reads** and hands out exactly one complete MQTT packet at a time (`take_packet` + `decode_remaining_len` varint parser). Handshake, SUBACK wait, and the PUBLISH poll loop now consume packets from this buffer, so coalesced control packets are no longer lost regardless of segment boundaries or timing. Verified: `mqtt_subscribe` and `mqtt_publish` both pass (riscv64 `boot` suite). No unsafe added (Cell-safe: stack-owned buffer threaded through, no `static mut`).
+
+---
+
 ## [2026-07-08] Boot-suite recovery — three G2-loader follow-on fixes (riscv boot suite 29 → 48)
 
 ### Summary

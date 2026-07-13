@@ -5,7 +5,13 @@ extern crate alloc;
 extern crate ostd;
 
 // Declares spawn capability; the kernel grants SpawnCap at spawn.
-api::declare_manifest!(block_io = false, network = false, spawn = true);
+// gpio/uart: held for DELEGATION only (P2 monotonic downgrade intersects a
+// child's manifest with the spawner's caps) — the shell never opens MMIO
+// itself, but interactively-spawned peripheral demos (periph-demo, robot-demo,
+// sensor-demo, …) would otherwise lose their gpio/uart caps and fail with
+// PermissionDenied. The interactive operator at the shell IS the robot
+// operator, so shell-level peripheral delegation matches the trust model.
+api::declare_manifest!(block_io = false, network = false, spawn = true, gpio = true, uart = true);
 
 // Narrow syscall allowlist — kernel enforces this at dispatch (Phase 27).
 // ForceExit is always-permitted (SpawnCap-gated at dispatch).

@@ -1,37 +1,26 @@
-//! Phase A-03: NVMe boot + block-read integration test on x86_64 q35.
+//! x86_64 PCIe NVMe integration tests — Driver Cell architecture.
 //!
-//! Boots the x86_64 kernel on a QEMU q35 machine with a PCIe NVMe controller
-//! attached.  The kernel runs its full PCIe ECAM scan + NVMe init sequence and
-//! must log `[nvme] driver ready` on the serial port.
+//! Since the Kernel Boundary migration the kernel drives no block hardware:
+//! the Platform Cell (`/bin/platform`, spawned by the kernel) scans ECAM and
+//! registers devices/BARs; init spawns the NVMe Driver Cell (`/bin/nvme`),
+//! which locates the controller via `sys_find_pcie_device`, claims BAR0 MMIO,
+//! initialises the controller (admin + IO queues over DMA), and announces
+//! itself via `sys_register_block_driver`.
 //!
-//! A second test sends `blktest` via the shell prompt and verifies that the
-//! first sector is read without error (the `blktest` tool reads sector 0 via
-//! the active `ViBlockDevice` and prints "blkio: denied" only for non-VFS cells;
-//! for the VFS cell, or if called from the shell, the current cell lacks
-//! `can_block_io` so the kernel gate returns `PermissionDenied`; this proves the
-//! NVMe device is reachable and the gate is wired up).
+//! The oracle is the kernel's registration marker:
+//!   `[driver_cell] block driver registered`
+//! which is only reachable after the FULL chain (ECAM scan → BAR registration
+//! → find → MMIO claim → controller RDY → Identify DMA round-trip → IO queue
+//! creation) has succeeded.
 //!
-//! Prerequisites:
-//!   - `qemu-system-x86_64` on PATH (or `VIOS_QEMU_X86` env var).
-//!   - The Limine ISO built at `build/vicell-x86.iso`
-//!     (`build/make-iso.sh` or `scripts/build-x86_64-cells.ps1`).
-//!   - The disk image `disk_v3.img` for the boot filesystem (VirtIO block, RISC-V
-//!     disk) is NOT used here; an ephemeral zeroed NVMe image is created on the fly.
-//!
-//! Skip semantics: the test returns without failing when any prerequisite is
-//! absent, mirroring the pattern in `boot.rs`.
+//! Tests skip gracefully when the ISO or `qemu-system-x86_64` is absent.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use vicell_integration_tests::{qemu_x86_binary, QemuRunner};
 
-/// Timeout for the NVMe init log line (controller + queues init, sector ident).
-const NVME_INIT_TIMEOUT: u64 = 60;
-/// Timeout for the shell prompt (full service chain boot).
-const BOOT_TIMEOUT: u64 = 90;
-/// Timeout for shell command round-trips after boot.
-const CMD_TIMEOUT: u64 = 15;
+const BOOT_TIMEOUT: u64 = 45;
 
-/// Repo root = tests/integration/../../
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -40,7 +29,6 @@ fn repo_root() -> PathBuf {
         .expect("repo root resolves")
 }
 
-/// Path to the x86_64 Limine ISO.
 fn iso_path() -> String {
     repo_root()
         .join("build/vicell-x86.iso")
@@ -48,213 +36,165 @@ fn iso_path() -> String {
         .into_owned()
 }
 
-/// Check all prerequisites for x86_64 NVMe tests.
-///
-/// Returns `true` when everything is available.  Prints a human-readable skip
-/// reason for each missing prerequisite to make CI failures easy to diagnose.
 fn prerequisites_ok() -> bool {
     let iso_ok = PathBuf::from(iso_path()).exists();
     let qemu_ok = std::process::Command::new(qemu_x86_binary())
         .arg("--version")
         .output()
         .is_ok();
-
     if !iso_ok {
         eprintln!(
-            "SKIP nvme-x86: x86_64 ISO not built ({})\n\
-             Build with: scripts/build-x86_64-cells.ps1 then build/make-iso.sh",
+            "SKIP nvme-x86: x86_64 ISO not built ({})\n  Run: scripts/build-x86_64-cells.ps1 then .\\run-x86.ps1 -NoQemu",
             iso_path()
         );
     }
     if !qemu_ok {
-        eprintln!(
-            "SKIP nvme-x86: qemu-system-x86_64 not on PATH\n\
-             Install QEMU or set VIOS_QEMU_X86 to the binary path."
-        );
+        eprintln!("SKIP nvme-x86: qemu-system-x86_64 not on PATH");
     }
     vicell_integration_tests::ci_guard(iso_ok && qemu_ok)
 }
 
-/// Create a small zeroed raw disk image in the system temp directory.
-///
-/// The NVMe driver only reads the namespace identify page (no filesystem
-/// needed) during init, so a zeroed image is sufficient for boot tests.
-/// Returns the path; the caller is responsible for deleting it.
-///
-/// Size: 64 MiB (131072 × 512-byte sectors) — enough to hold the FAT16
-/// partition if the same disk is used for extended tests.
 fn make_nvme_disk() -> PathBuf {
-    use std::sync::atomic::{AtomicU64, Ordering};
     static CTR: AtomicU64 = AtomicU64::new(0);
     let path = std::env::temp_dir().join(format!(
-        "vicell_nvme_{}_{}.img",
+        "vicell_nvme_x86_{}_{}.img",
         std::process::id(),
         CTR.fetch_add(1, Ordering::Relaxed)
     ));
-    use std::io::Write;
-    let mut f = std::fs::OpenOptions::new()
+    let f = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .open(&path)
         .expect("create NVMe disk image");
-    let size: u64 = 64 * 1024 * 1024;
-    f.set_len(size).expect("set NVMe disk size");
-    let _ = f.write_all(b"");
-    drop(f);
+    f.set_len(64 * 1024 * 1024).expect("set NVMe disk size");
     path
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
-
-/// Phase A-03-1: NVMe controller initialises on x86_64 q35.
+/// The NVMe Driver Cell must bind the QEMU `-device nvme` controller and
+/// register as the system block driver.
 ///
-/// The kernel must boot, scan the PCIe ECAM bus, find the NVMe endpoint,
-/// complete the init sequence (reset → AQA/ASQ/ACQ → CC.EN → CSTS.RDY →
-/// Identify → IO queues), and print the success log line.
-///
-/// This is the primary Phase A integration criterion: without it, the NVMe
-/// driver is dead code.
+/// Proves the whole PCIe storage chain under ring-3: Platform Cell ECAM scan,
+/// BAR registration, `sys_find_pcie_device`, user-mapped BAR0 MMIO, controller
+/// reset/enable, Identify Controller + Namespace DMA round-trips, and IO
+/// queue-pair creation.
 #[test]
-fn nvme_controller_initialises_x86() {
-    if !prerequisites_ok() {
-        return;
-    }
+fn nvme_driver_cell_registers_x86() {
+    if !prerequisites_ok() { return; }
 
-    let nvme_disk = make_nvme_disk();
+    let disk = make_nvme_disk();
+    let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    let qemu = QemuRunner::boot_x86_bios_with_nvme(
-        &iso_path(),
-        &nvme_disk.to_string_lossy(),
-    );
-
-    // Primary assertion: driver ready log line emitted by blk_nvme::init_driver().
-    qemu.wait_for("[nvme] driver ready", NVME_INIT_TIMEOUT)
+    qemu.wait_for("[driver_cell] block driver registered", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&nvme_disk);
+            let _ = std::fs::remove_file(&disk);
             panic!(
-                "NVMe driver did not initialise on x86_64 q35: {e}\n\
-                 Hint: check that PCIe ECAM is scanned before blk_nvme::init_driver().\n\
+                "NVMe Driver Cell did not register within {BOOT_TIMEOUT}s: {e}\n\
+                 Chain: platform ECAM scan → find_pcie_device(01:08:02) → BAR0 MMIO \
+                 claim → controller init → sys_register_block_driver.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
             )
         });
 
-    let _ = std::fs::remove_file(&nvme_disk);
+    let _ = std::fs::remove_file(&disk);
 }
 
-/// Phase A-03-2: PCIe ECAM scan finds NVMe endpoint on x86_64.
+/// VFS must mount a FAT32 volume served by the NVMe Driver Cell.
 ///
-/// The kernel must log that it found the NVMe PCI device during the ECAM
-/// bus-0 scan.  This verifies the ECAM walker correctly decodes the NVMe
-/// class (0x01 / 0x08 / 0x02) and that `find_class()` returns a device.
+/// Builds a disk with a FAT32 filesystem at `PART_FAT32_BASE_LBA` (2048 → byte
+/// offset 1 MiB) using `tools/mkfat32_inplace.py`, boots with it attached as
+/// the NVMe drive, and asserts the mount marker. This exercises real sector
+/// reads over the DrvRequest IPC + NVMe DMA path (BPB probe, FAT, root dir) —
+/// the chain that silently broke when the nvme cell only matched
+/// `AppEvent::Message` (raw DrvRequests arrive as `RawMessage`).
+///
+/// Skips (in addition to the usual ISO/QEMU checks) when `python` is not on
+/// PATH — the FAT32 formatter is a Python tool.
 #[test]
-fn pcie_ecam_finds_nvme_x86() {
-    if !prerequisites_ok() {
+fn nvme_fat32_mount_x86() {
+    if !prerequisites_ok() { return; }
+    let python_ok = std::process::Command::new("python")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !python_ok {
+        eprintln!("SKIP nvme_fat32_mount_x86: python not on PATH (needed for mkfat32_inplace.py)");
         return;
     }
 
-    let nvme_disk = make_nvme_disk();
+    // 1. Format a 524,288-sector (256 MiB) FAT32 volume in a temp file.
+    const FAT_SECTORS: u64 = 524_288; // == api::disk::PART_FAT32_SECTORS
+    const FAT_BASE_OFFSET: u64 = 2_048 * 512; // PART_FAT32_BASE_LBA in bytes
+    let fat_img = std::env::temp_dir().join(format!(
+        "vicell_fat32_{}_{}.img",
+        std::process::id(),
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos()
+    ));
+    {
+        let f = std::fs::OpenOptions::new()
+            .write(true).create(true).open(&fat_img)
+            .expect("create FAT32 scratch image");
+        f.set_len(FAT_SECTORS * 512).expect("size FAT32 scratch image");
+    }
+    let mkfat = repo_root().join("tools/mkfat32_inplace.py");
+    let status = std::process::Command::new("python")
+        .arg(&mkfat)
+        .arg(&fat_img)
+        .arg(FAT_SECTORS.to_string())
+        .status()
+        .expect("run mkfat32_inplace.py");
+    assert!(status.success(), "mkfat32_inplace.py failed");
 
-    let qemu = QemuRunner::boot_x86_bios_with_nvme(
-        &iso_path(),
-        &nvme_disk.to_string_lossy(),
-    );
+    // 2. Splice the volume into an NVMe disk at the partition offset.
+    let disk = make_nvme_disk();
+    {
+        use std::io::{Seek, SeekFrom, Write};
+        let fat_bytes = std::fs::read(&fat_img).expect("read FAT32 image");
+        let mut d = std::fs::OpenOptions::new()
+            .write(true).open(&disk)
+            .expect("open NVMe disk for splice");
+        d.set_len(FAT_BASE_OFFSET + FAT_SECTORS * 512 + 1024 * 1024)
+            .expect("grow NVMe disk");
+        d.seek(SeekFrom::Start(FAT_BASE_OFFSET)).expect("seek to partition base");
+        d.write_all(&fat_bytes).expect("write FAT32 volume");
+    }
+    let _ = std::fs::remove_file(&fat_img);
 
-    // The ECAM scan log line is emitted by pcie_ecam::init() before NVMe init.
-    qemu.wait_for("[pcie] ECAM scan complete", NVME_INIT_TIMEOUT)
+    // 3. Boot and assert the mount marker.
+    let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
+    qemu.wait_for("[vfs] FAT32 /mnt/sd volume mounted", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&nvme_disk);
+            let _ = std::fs::remove_file(&disk);
             panic!(
-                "ECAM scan did not complete on x86_64 q35: {e}\n\
+                "FAT32-on-NVMe mount not seen within {BOOT_TIMEOUT}s: {e}\n\
+                 Chain: nvme Driver Cell registers pre-VFS → VFS blk_router IPC → \
+                 DrvRequest sector reads over NVMe DMA → fatfs BPB accept.\n\
                  --- serial output ---\n{}",
                 qemu.dump()
             )
         });
 
-    // The NVMe found log line.
-    qemu.wait_for("[nvme] found NVMe device", NVME_INIT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&nvme_disk);
-            panic!(
-                "ECAM scan did not find NVMe device on x86_64 q35: {e}\n\
-                 Hint: QEMU q35 maps NVMe at PCIe root port; check ECAM_BASE_X86.\n\
-                 --- serial output ---\n{}",
-                qemu.dump()
-            )
-        });
-
-    let _ = std::fs::remove_file(&nvme_disk);
+    let _ = std::fs::remove_file(&disk);
 }
 
-/// Phase A-03-3: Shell `blktest` is gated (PermissionDenied) when NVMe is active.
-///
-/// With NVMe as the active block device, the shell cell still lacks
-/// `can_block_io` so the kernel must deny the raw block I/O syscall.
-/// This verifies:
-///   1. The kernel booted fully to the shell (VFS + shell cells spawned).
-///   2. `block_device()` returns the NVMe ZST proxy (not VirtIO).
-///   3. The `can_block_io` capability gate still fires for unprivileged cells.
-///
-/// Note: this test boots WITHOUT a VirtIO block device so the NVMe path is
-/// the only block device.  The kernel must still reach the shell prompt via
-/// the embedded ramdisk (which is loaded from the kernel ELF itself).
+/// Boot with an NVMe controller attached must still reach the interactive
+/// shell — the Driver Cell path must not hang or fault the boot.
 #[test]
-fn nvme_block_io_gate_enforced_x86() {
-    if !prerequisites_ok() {
-        return;
-    }
+fn nvme_boot_reaches_shell_x86() {
+    if !prerequisites_ok() { return; }
 
-    let nvme_disk = make_nvme_disk();
+    let disk = make_nvme_disk();
+    let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    let mut qemu = QemuRunner::boot_x86_bios_with_nvme(
-        &iso_path(),
-        &nvme_disk.to_string_lossy(),
-    );
-
-    // Wait for NVMe to initialise first.
-    qemu.wait_for("[nvme] driver ready", NVME_INIT_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&nvme_disk);
-            panic!(
-                "NVMe did not init before shell test: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
-
-    // Wait for the shell prompt.
     qemu.wait_for("ViCell >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&nvme_disk);
+            let _ = std::fs::remove_file(&disk);
             panic!(
-                "Shell prompt not reached on x86_64 NVMe boot: {e}\n--- output ---\n{}",
+                "shell prompt not reached with NVMe attached: {e}\n--- serial output ---\n{}",
                 qemu.dump()
             )
         });
 
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    qemu.send_line("blktest");
-
-    qemu.wait_for("blkio: denied", CMD_TIMEOUT)
-        .unwrap_or_else(|e| {
-            let _ = std::fs::remove_file(&nvme_disk);
-            panic!(
-                "Block I/O was NOT denied for non-VFS cell on NVMe boot: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
-
-    // Guard: NVMe must be the active device (not VirtIO fallback).
-    assert!(
-        qemu.output_contains("[nvme] driver ready"),
-        "NVMe driver was not active when blktest ran\n--- output ---\n{}",
-        qemu.dump()
-    );
-    // Guard: capability gate must fire, not grant access.
-    assert!(
-        !qemu.output_contains("blkio: ALLOWED"),
-        "Block I/O gate let an unprivileged cell read NVMe device\n--- output ---\n{}",
-        qemu.dump()
-    );
-
-    let _ = std::fs::remove_file(&nvme_disk);
+    let _ = std::fs::remove_file(&disk);
 }

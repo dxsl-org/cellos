@@ -104,12 +104,16 @@ pub extern "C" fn main() {
     let mut restart_count: [u32; NSVC] = [0; NSVC];
     let mut window_start: [u64; NSVC] = [0; NSVC];
 
-    // Block Driver Cell — spawned before VFS. The kernel relinquished the disk
-    // (G2 loader redesign phase 05), so /bin/block now OWNS the VirtIO block device
-    // and serves service::BLOCK_DRIVER; VFS routes ALL sector I/O to it. VFS caches
-    // the BLOCK_DRIVER lookup on its first block access (at mount), so the Block Cell
-    // MUST register before VFS spawns — wait (bounded) for it here.
+    // Block Driver Cells — spawned before VFS. The kernel relinquished the disk
+    // (G2 loader redesign phase 05): /bin/block owns the VirtIO block device
+    // (RISC-V/AArch64), /bin/nvme owns the PCIe NVMe controller (x86_64); the
+    // active one serves service::BLOCK_DRIVER and VFS routes ALL sector I/O to
+    // it. VFS caches the BLOCK_DRIVER lookup on its first block access (at
+    // mount), so the winning Block Cell MUST register before VFS spawns — wait
+    // (bounded) for it here. Each cell exits cleanly when its device is absent,
+    // so spawning both costs nothing on either platform.
     let _ = sys_spawn_from_path("/bin/block");
+    let _ = sys_spawn_from_path("/bin/nvme");
     for _ in 0..400 {
         if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
             break;
@@ -131,8 +135,15 @@ pub extern "C" fn main() {
         if paths[i] == "/bin/net" {
             // Platform Cell was already spawned by the kernel before init — no second spawn.
             let _ = sys_spawn_from_path("/bin/virtio-net"); // RISC-V/AArch64 VirtIO NIC
-            let _ = sys_spawn_from_path("/bin/nvme");       // PCIe NVMe (x86_64)
             let _ = sys_spawn_from_path("/bin/e1000");      // PCIe e1000 NIC (x86_64)
+            // /bin/nvme retry — ONLY if no block driver registered yet. The pre-VFS
+            // spawn covers x86 (nvme lives in VIFS1); on cell-store platforms that
+            // path fails before VFS is up, so retry here where VFS can serve /bin.
+            // The lookup gate prevents a second instance from stealing the live
+            // cell's BDF ownership via sys_find_pcie_device.
+            if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
+                let _ = sys_spawn_from_path("/bin/nvme");
+            }
             // Give driver cells enough quanta to load ELF, probe hardware, and
             // call sys_register_nic_driver before net starts its first Rx poll.
             for _ in 0..4 { ostd::task::yield_now(); }

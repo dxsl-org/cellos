@@ -233,11 +233,10 @@ Write-Host "All cells signed."
 # NOTE: cells are already signed in-place by Sign-Cell above.
 Write-Host "Updating kernel embedded cells..."
 $embedded = "kernel/src/embedded"
+# Only `init` is embedded as a separate blob (kernel/src/main.rs INIT_ELF).
+# shell/vfs/config/lua ship inside kernel_fs.img — the old standalone copies
+# were dead weight that churned git on every gen_disk run.
 Copy-Item "$rel_dir/app-init"       "$embedded/init"   -Force
-Copy-Item "$rel_dir/app-shell"      "$embedded/shell"  -Force
-Copy-Item "$rel_dir/service-vfs"    "$embedded/vfs"    -Force
-Copy-Item "$rel_dir/service-config" "$embedded/config" -Force
-if (Test-Path "$rel_dir/lua") { Copy-Item "$rel_dir/lua" "$embedded/lua" -Force }
 
 # 2. Paths — all bootstrap table entries use RELEASE builds.
 $init_bin   = "$rel_dir/app-init"
@@ -335,6 +334,17 @@ $tmpDir = "$env:TEMP/ViCell_kfs"
 New-Item -ItemType Directory -Force $tmpDir | Out-Null
 Set-Content -Path "$tmpDir/hostname" -Value "ViCell" -NoNewline -Encoding ascii
 Set-Content -Path "$tmpDir/readme"   -Value "Welcome to ViCell!" -NoNewline -Encoding ascii
+# G2 kernel-shrink: VIFS1 carries ONLY what must resolve before/without VFS.
+#   1. Bootstrap cells (loader::early::BOOTSTRAP_CELLS + init): the chain that
+#      brings up the Block Cell + VFS with no block driver in the kernel.
+#   2. Kernel-FD-only data: /doom1.wad — DOOM reads it through mlibc → kernel
+#      Open/Read syscalls, which resolve against VIFS1 only (kernel/src/fs.rs).
+#      Moving it out needs mlibc file I/O → VFS routing (tracked in TODO).
+#   3. hotswap-demo-v1/v2: kernel-side hotswap (cell/hotswap.rs) loads the new
+#      ELF via loader::spawn_from_path (VIFS1/P2 only — no VFS from kernel).
+# EVERYTHING else lives in the disk cell-store (table_args → P2 table + P6 FAT)
+# and is spawned via VFS + sys_spawn_from_elf (ostd sys_spawn_from_path does
+# this automatically once service::VFS is registered).
 $kfs_args = @(
     "kernel/src/embedded/kernel_fs.img",
     "$rel_dir/app-init",       "/bin/init",
@@ -344,42 +354,16 @@ $kfs_args = @(
     "$tmpDir/hostname",        "/etc/hostname",
     "$tmpDir/readme",          "/readme.txt"
 )
-if ($lua_bin)   { $kfs_args += @($lua_bin,  "/bin/lua") }
-if ($upy_bin)   { $kfs_args += @($upy_bin,  "/bin/python") }
-if ($doom_bin)  { $kfs_args += @($doom_bin, "/bin/doom") }
+if (Test-Path $platform_bin)   { $kfs_args += @($platform_bin,   "/bin/platform") }
+if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
 if ($doom_wad)  { $kfs_args += @($doom_wad, "/doom1.wad") }
-if (Test-Path $tetris_bin)     { $kfs_args += @($tetris_bin,     "/bin/tetris") }
-if (Test-Path $tetris_c_bin)   { $kfs_args += @($tetris_c_bin,   "/bin/tetris-c") }
-if (Test-Path $tetris_lua_bin) { $kfs_args += @($tetris_lua_bin, "/bin/tetris-lua") }
-if (Test-Path $audio_bin) { $kfs_args += @($audio_bin, "/bin/audio-demo") }
-if (Test-Path $https_demo_bin) { $kfs_args += @($https_demo_bin, "/bin/https-demo") }
-if (Test-Path $http_smoke_bin) { $kfs_args += @($http_smoke_bin, "/bin/http-smoke") }
-if (Test-Path $cfi_test_bin)   { $kfs_args += @($cfi_test_bin,   "/bin/cfi-test") }
 if (Test-Path $hotswap_demo_v1_bin) { $kfs_args += @($hotswap_demo_v1_bin, "/bin/hotswap-demo-v1") }
 if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin/hotswap-demo-v2") }
-if (Test-Path $ls_bin)   { $kfs_args += @($ls_bin,   "/bin/ls") }
-if (Test-Path $cat_bin)  { $kfs_args += @($cat_bin,  "/bin/cat") }
-if (Test-Path $echo_bin) { $kfs_args += @($echo_bin, "/bin/echo") }
-if (Test-Path $ps_bin)   { $kfs_args += @($ps_bin,   "/bin/ps") }
-if (Test-Path $kill_bin) { $kfs_args += @($kill_bin, "/bin/kill") }
-# nc/curl/httpd/wget/mqtt/posix-shim-test are NOT embedded here: they load from
-# the disk cell-store (table_args) via VFS. That path now works (fatfs `lfn`
-# feature enabled), so keeping them cell-store-only honours the G2 kernel-shrink
-# intent. The network + posix_shim boot tests validate the cell-store read.
-# Boot service + driver cells — must be in kernel_fs.img so boot works without
-# a VirtIO block device (ARM64, diskless CI, and the future VirtIO Block Cell
-# phase where kernel no longer has a built-in block driver).
-if (Test-Path $net_bin)        { $kfs_args += @($net_bin,        "/bin/net") }
-if (Test-Path $input_bin)      { $kfs_args += @($input_bin,      "/bin/input") }
-if (Test-Path $comp_bin)       { $kfs_args += @($comp_bin,       "/bin/compositor") }
-if (Test-Path $supervisor_bin) { $kfs_args += @($supervisor_bin, "/bin/supervisor") }
-if (Test-Path $platform_bin)   { $kfs_args += @($platform_bin,   "/bin/platform") }
-if (Test-Path $nvme_bin)       { $kfs_args += @($nvme_bin,       "/bin/nvme") }
-if (Test-Path $e1000_bin)      { $kfs_args += @($e1000_bin,      "/bin/e1000") }
-if (Test-Path $virtio_net_bin) { $kfs_args += @($virtio_net_bin, "/bin/virtio-net") }
-if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
-if (Test-Path $virtio_gpu_bin) { $kfs_args += @($virtio_gpu_bin, "/bin/virtio-gpu") }
-if (Test-Path $net_broker_bin) { $kfs_args += @($net_broker_bin, "/bin/net-broker") }
+# bench + bench-probe: same kernel-spawn-bound class as the hotswap demos —
+# bench re-spawns itself/its probe via sys_spawn_pinned, which resolves through
+# the KERNEL loader (VIFS1/P2 only, no VFS), so the child spawns need VIFS1.
+if ($bench_bin)                       { $kfs_args += @($bench_bin,       "/bin/bench") }
+if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/bench-probe") }
 & $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
@@ -439,6 +423,13 @@ $table_args = @(
 )
 if ($lua_bin)   { $table_args += "/bin/lua=$lua_bin" }
 if ($upy_bin)   { $table_args += "/bin/python=$upy_bin" }
+# Games moved off VIFS1 (G2 kernel-shrink) — spawn from the cell-store via VFS.
+# DOOM's WAD stays in VIFS1 (/doom1.wad — kernel-FD read path); only the binary
+# moves here.
+if ($doom_bin)  { $table_args += "/bin/doom=$doom_bin" }
+if (Test-Path $tetris_bin)     { $table_args += "/bin/tetris=$tetris_bin" }
+if (Test-Path $tetris_c_bin)   { $table_args += "/bin/tetris-c=$tetris_c_bin" }
+if (Test-Path $tetris_lua_bin) { $table_args += "/bin/tetris-lua=$tetris_lua_bin" }
 if ($bench_bin)       { $table_args += "/bin/bench=$bench_bin" }
 if (Test-Path "$rel_dir/bench-probe") { $table_args += "/bin/bench-probe=$bench_probe_bin" }
 if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
