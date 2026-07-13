@@ -510,7 +510,7 @@ impl Scheduler {
                         let fired = super::waker::consume_pending(*mask);
                         if fired != 0 {
                             // Return fired mask as the syscall result.
-                            task.trap_frame.regs[10] = fired as usize;
+                            task.trap_frame.regs[10] = fired as _;
                             should_wake = true;
                         } else if deadline.map(|d| now as u64 >= d).unwrap_or(false) {
                             task.trap_frame.regs[10] = 0; // timeout — return 0

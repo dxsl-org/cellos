@@ -2428,7 +2428,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::GpuGetResolution => {
             // Resolution is owned by the GPU Driver Cell (Phase 08).
             // Return the default until the Cell registers a query IPC path.
-            Ok(((1280usize) << 32) | 800usize)
+            // Packed as (width << 32) | height, which only fits a 64-bit
+            // register; RV32 Nano has no GPU cell so this path never fires there.
+            #[cfg(not(target_arch = "riscv32"))]
+            { Ok(((1280usize) << 32) | 800usize) }
+            #[cfg(target_arch = "riscv32")]
+            { Ok(0) }
         }
         Syscall::NetTx { frame_ptr, frame_len } => {
             if !caller_has_network(caller_id) {
@@ -2990,7 +2995,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .and_then(|s| s.tasks.get(&caller_id))
                 .map(|t| t.trap_frame.regs[10])
                 .unwrap_or(0);
-            Ok(fired)
+            Ok(fired as usize)
         }
 
         Syscall::RequestMmio { base, len } => {

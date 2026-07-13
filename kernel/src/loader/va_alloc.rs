@@ -11,7 +11,13 @@
 //! free list (atomic bitset) for slots returned by `free_cell_va`.  Allocations
 //! are O(n_freed) in the worst case, O(1) when the free list is empty.
 
-use core::sync::atomic::{AtomicU64, Ordering};
+// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+// via the critical-section impl hal/arch/riscv registers.
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 /// Cell VA region start — 4 GiB (0x1_0000_0000).
 ///
@@ -24,7 +30,14 @@ use core::sync::atomic::{AtomicU64, Ordering};
 /// the SV39 user-half (256 GiB = 0x40_0000_0000).
 ///
 /// RISC-V medany: intra-cell refs are ≤32 MiB apart → always within ±2 GiB.
+///
+/// RV32 Nano boots with SATP=0 (bare physical, no paging — see specs/04), so
+/// PIE cells never occur there and `alloc_cell_va` is never actually called;
+/// this constant only needs to type-check as a 32-bit `usize` on that target.
+#[cfg(not(target_arch = "riscv32"))]
 const CELL_VA_START: usize = 0x1_0000_0000;
+#[cfg(target_arch = "riscv32")]
+const CELL_VA_START: usize = 0x2000_0000;
 
 /// Each cell slot is 32 MiB — same spacing as the old static VA assignments,
 /// large enough for code + data + stack for any current cell.

@@ -25,6 +25,10 @@ ed25519-compact = { version = "2", default-features = false }
 [target.'cfg(target_arch = "riscv32")'.dependencies]
 hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv32", "critical-section-impl"] }
 riscv = "0.16.0"
+# RV32 has no native 64-bit atomics (max_atomic_width = 32) — core::sync::atomic::AtomicU64
+# does not exist on this target. portable-atomic polyfills it via the critical-section
+# impl hal/arch/riscv already registers (hal/arch/riscv/src/critical_section.rs).
+portable-atomic = { version = "1", features = ["critical-section"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv64", "critical-section-impl"] }

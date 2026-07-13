@@ -15,7 +15,13 @@
 //! - KASLR_ALIGN:     64 KiB (16 × 4 KiB pages) between cells
 //! - Maximum distinct slots: KASLR_RANGE / KASLR_ALIGN ≈ 28 000
 
-use core::sync::atomic::{AtomicU64, Ordering};
+// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+// via the critical-section impl hal/arch/riscv registers.
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 use types::VAddr;
 
 static KASLR_SEED: AtomicU64 = AtomicU64::new(0);

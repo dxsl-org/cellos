@@ -16,7 +16,13 @@ use alloc::{
     collections::BTreeMap,
     vec::Vec,
 };
-use core::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
+// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+// via the critical-section impl hal/arch/riscv registers.
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 use crate::sync::Spinlock;
 use super::iommu_pt::Sv39IommuPt;
 use crate::task::drivers::pcie_ecam;

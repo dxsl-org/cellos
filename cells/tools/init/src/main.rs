@@ -8,10 +8,16 @@ api::declare_manifest!(block_io = false, network = false, spawn = true);
 
 // Narrow syscall allowlist — kernel enforces this at dispatch (Phase 27).
 // ForceExit, NotifyOnExit, RegisterService are always-permitted (SpawnCap-gated).
+// GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
+// GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
+// one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
+// Required for the restart-on-crash loop, which re-spawns services well after
+// VFS registers (unlike the early-boot spawns, which fall back to the raw
+// bootstrap syscall before VFS is looked up).
 api::declare_syscalls![
     Send, Recv, TryRecv, RecvTimeout, Reply, Log, Heartbeat, LookupService,
     SpawnFromPath, SpawnFromMem, SpawnPinned, Wait, GetTime, SetTimer,
-    HotSwap, StateStash, StateRestore,
+    HotSwap, StateStash, StateRestore, GrantAlloc,
 ];
 
 use ostd::io::println;

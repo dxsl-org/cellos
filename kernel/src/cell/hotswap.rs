@@ -23,7 +23,13 @@
 //! `FROZEN` (leaf) is always acquired **before** `SCHEDULER` is dropped, never
 //! while holding it.  SCHEDULER → FROZEN ordering is safe (one-way dependency).
 
-use core::sync::atomic::{AtomicU64, Ordering};
+// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+// via the critical-section impl hal/arch/riscv registers.
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 use types::{CellId, ViError, ViResult};
 use crate::sync::Spinlock;
 

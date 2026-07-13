@@ -23,7 +23,10 @@ use ostd::io::{print, println, stdin};
 use ostd::syscall::{sys_exit, sys_recv, sys_send, sys_spawn_from_path, SyscallResult};
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![Send, Recv, RecvTimeout, Read, Log, SpawnFromPath, LookupService];
+// GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
+// GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
+// one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
+api::declare_syscalls![Send, Recv, RecvTimeout, Read, Log, SpawnFromPath, LookupService, GrantAlloc];
 
 const GATEWAY_PATH: &str = "/bin/llm-gateway";
 const TOOL_FS_PATH: &str = "/bin/tool-fs";

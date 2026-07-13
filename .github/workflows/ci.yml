@@ -509,14 +509,20 @@ jobs:
   # regress again. prerequisites use ci_guard(): a missing kernel/disk FAILS
   # this job instead of silently skipping every test.
   #
-  # ⚠ Scoped to an ALLOWLIST, not the full `boot` suite: ~20 other boot.rs
-  # tests currently fail on drifted assertions (e.g. boots_to_shell_prompt
-  # reaches the shell but asserts on a "user_hello"/"U-mode" marker the kernel
-  # no longer emits; several /tmp-RamFS-write tests; mqtt_subscribe). The
-  # system boots and works — the ASSERTIONS rot because the suite lived outside
-  # CI. De-rotting the full suite is tracked as the next Bước-1 sub-task in
-  # .agents/260706-0952-system-analysis-g1-g3; expand this allowlist as tests
-  # are reconciled to current boot output.
+  # ⚠ Scoped to an ALLOWLIST, not an unfiltered `boot` suite run — so any
+  # FUTURE new test starts excluded until proven 2/2, same discipline as
+  # always. UPDATE (2026-07-13, .agents/260712-0901-suite-green-3arch/
+  # reports/truth-matrix.md): the "~20 tests fail on drifted assertions" note
+  # this used to carry is STALE — two independent fresh-image full-suite runs
+  # (54 tests, --test-threads=2) both passed 53-54/54, with exactly one test
+  # timing out per run (always one of network_tcp_send_recv /
+  # network_curl_http_get) under TCG contention from running the whole suite
+  # at once; each passed 100% in isolation and across both full runs overall.
+  # The allowlist below was expanded to the full current test list on that
+  # evidence. Verified only on local QEMU 10.2.0/Windows, not yet on this
+  # job's ubuntu-24.04 QEMU build — first CI run after this change is the
+  # verification; if a test proves flaky here that wasn't locally, remove it
+  # and note why, don't silently retry until green.
   boot-suite:
     name: Network Data-Path Integration (riscv64)
     runs-on: ubuntu-24.04
@@ -548,27 +554,39 @@ jobs:
         run: pwsh ./gen_disk.ps1
 
       - name: Run boot + network + shell + VFS tests
-        # Allowlist by substring (OR semantics). --test-threads=2: each test
-        # boots its own QEMU and TCG is CPU-bound. Only tests that passed 2/2
-        # consecutive full runs are listed — expand as more are stabilized.
-        # Remaining red (2026-07-07, 46/53 pass): 3 input_* tests needing
-        # live-input markers, gpu marker drift, bench 180s timeout under
-        # contention, mqtt_subscribe (SUBACK never received — net recv path),
-        # httpd_dynamic (GET path) — see the analysis plan triage.
+        # Allowlist by exact test-fn name (OR semantics). --test-threads=2: each
+        # test boots its own QEMU and TCG is CPU-bound. 2026-07-13: expanded from
+        # a 22-test subset to the full current 54-test list — two independent
+        # fresh-image full-suite runs both passed 53-54/54 (see the job comment
+        # above). Includes the P02 input-delivery fixes (input_keyboard_e2e,
+        # input_bare_cell) and the P03 char-8-stall regression guard
+        # (console_long_line_with_backspace_no_stall). Any NEW test added to
+        # boot.rs after this point starts excluded until it passes 2/2
+        # consecutive full runs, per the existing discipline.
         run: |
           cd tests/integration
           cargo test --test boot -- --test-threads=2 \
-            boots_to_shell_prompt \
-            network_dhcp network_tcp_send network_curl network_tcp_listen \
-            network_wget_downloads_to_vfs network_httpd_serves_file \
-            network_httpd_dynamic_content \
-            shell_or_operator shell_and_operator shell_exit_code_var shell_echo_e \
-            shell_function_positional_args shell_variable_persists \
-            shell_source_script shell_source_multi_command \
-            shell_case_statement shell_while_loop shell_if_else_branch \
-            shell_test_builtin \
-            vfs_fat16_reboot_persistence vfs_fat16_append vfs_fat16_subdir_persistence \
-            input_service_registered_at_boot compositor_input_routing_active
+            boots_to_shell_prompt fat_filesystem_mounts shell_executes_echo \
+            hot_migration_state_transfer_works gpu_framebuffer_initialises \
+            network_dhcp_acquires_ip network_tcp_send_recv network_curl_http_get \
+            network_tcp_listen_accept \
+            vfs_write_echo_redirect vfs_fat16_write_read vfs_fat16_reboot_persistence \
+            vfs_write_large_content vfs_fat16_unlink vfs_fat16_subdir \
+            block_io_denied_non_vfs vfs_fat16_subdir_persistence vfs_fat16_recursive_rmdir \
+            vfs_fat16_append \
+            network_httpd_serves_file network_httpd_dynamic_content \
+            shell_while_loop shell_function_positional_args shell_case_statement \
+            shell_echo_e shell_redirect_append network_wget_downloads_to_vfs \
+            mqtt_publish mqtt_subscribe shell_test_builtin shell_function_define_and_call \
+            shell_midtoken_var_expansion shell_unset_var shell_exit_code_var \
+            shell_break_loop shell_and_operator shell_or_operator shell_for_loop \
+            shell_if_true_branch shell_if_else_branch shell_variable_assignment \
+            shell_variable_persists shell_source_script shell_sleep_returns \
+            shell_source_multi_command shell_cmd_substitution \
+            console_long_line_with_backspace_no_stall \
+            input_service_registered_at_boot compositor_input_routing_active \
+            bench_all_pass input_keyboard_e2e input_bare_cell \
+            posix_shim_getentropy posix_shim_net
 
   security:
     name: Security Scan
