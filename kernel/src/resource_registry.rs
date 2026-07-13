@@ -39,6 +39,11 @@ pub const DEV_GPIO: u8 = 1 << 1;
 /// PCIe device BAR window. Set on tasks with `PcieDriverCap` — not a manifest flag
 /// (all 8 manifest bits are occupied); gated by the ZST cap instead.
 pub const DEV_PCIE: u8 = 1 << 2;
+/// CAN bus controller window (v2 manifest — freed by the u16 flags widening).
+/// Set when the manifest declares `can = true`.
+pub const DEV_CAN: u8 = 1 << 3;
+/// ADC controller window (v2 manifest). Set when the manifest declares `adc = true`.
+pub const DEV_ADC: u8 = 1 << 4;
 
 // ---------------------------------------------------------------------------
 // Allowlist (per QEMU machine, v1 hardcoded)

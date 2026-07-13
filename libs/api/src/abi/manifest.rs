@@ -1,227 +1,145 @@
 //! Cell capability manifest embedded in the `__ViCell_manifest` ELF section.
 //!
-//! A fixed 8-byte `#[repr(C)]` record declaring which privileged capabilities a
-//! Cell requests.  The kernel reads it at spawn time (see
-//! `kernel/src/loader.rs::spawn_from_path`) to grant capability tokens and to
-//! reject user Cells that over-declare privilege.
+//! A fixed **16-byte** `#[repr(C)]` record (v2) declaring which privileged
+//! capabilities a Cell requests, its isolation **tier**, and a reserved hook for
+//! future per-cell cap arguments.  The kernel reads it at spawn time (see
+//! `kernel/src/loader.rs::spawn_from_path`) to grant capability tokens, choose the
+//! x86 PKU protection domain, and reject user Cells that over-declare privilege.
 //!
-//! Binary layout (8 bytes, little-endian):
+//! Binary layout (16 bytes, little-endian):
 //! ```text
-//!   offset 0–3: magic   u32  = MANIFEST_MAGIC  (0x5649_4345)
-//!   offset   4: version u8   = MANIFEST_VERSION (1)
-//!   offset   5: flags   u8   = bitwise-OR of MANIFEST_FLAG_*
-//!   offset 6–7: _pad   [u8;2]= 0x00 0x00  (reserved)
+//!   offset  0–3 : magic        u32  = MANIFEST_MAGIC (0x5649_4345)
+//!   offset  4   : version      u8   = MANIFEST_VERSION (2)
+//!   offset  5   : tier         u8   = TIER_* (isolation floor request; TIER_LEGACY
+//!                                     on upcast from v1 → keep the is_trusted heuristic)
+//!   offset  6–7 : flags        u16  = bitwise-OR of MANIFEST_FLAG_*
+//!   offset  8–11: cap_args_off u32  = RESERVED (0) — future offset into a
+//!                                     __ViCell_cap_args section (do not repurpose)
+//!   offset 12–15: reserved     u32  = 0
 //! ```
+//!
+//! ## v1 compatibility
+//! v1 was an 8-byte record `{magic, version=1, flags:u8, _pad:[u8;2]}`.  A v2
+//! kernel reads a v1 manifest via `from_bytes` (zero-extends `flags`, sets
+//! `tier = TIER_LEGACY` so the loader keeps v1's `is_trusted`→PKU-key behaviour
+//! byte-for-byte).  A v1 kernel reading a v2 manifest sees `version != 1` and
+//! rejects it (fail-closed → legacy path grants).  `TIER_LEGACY` is ALSO a valid
+//! tier value in a native v2 record (not just a v1-upcast artifact) — it is what
+//! the tier-less constructors (`CellManifest::new`/`with_parts`) bake in by
+//! default, meaning "no explicit tier requested." ABI-stable — see Law 1.
 
-/// Magic value identifying a valid manifest (`0x5649_4345`, "VICE" as a u32).
-pub const MANIFEST_MAGIC: u32 = 0x5649_4345;
+// Constants (magic/version, tiers, flag bits, mask) live in the sibling
+// `manifest_flags` module (Law 5: `foo.rs` parallel to `foo/`, keeps this file
+// under 200 LOC) and are re-exported here so `api::manifest::MANIFEST_FLAG_*` /
+// `TIER_*` keep resolving unchanged for every existing caller.
+pub use super::manifest_flags::*;
 
-/// Current manifest layout version.  Bump on any field addition or reorder.
-pub const MANIFEST_VERSION: u8 = 1;
-
-/// Raw block-device access (BlkRead/BlkWrite/BlkFlush).  Grants `BlockIoCap`.
-pub const MANIFEST_FLAG_BLOCK_IO: u8 = 1 << 0;
-
-/// Network transmit/receive (NetTx/NetRx).  Grants `NetworkCap`.
-pub const MANIFEST_FLAG_NETWORK: u8 = 1 << 1;
-
-/// Cell spawning and hot-swap (SpawnFromPath/SpawnPinned/HotSwap).  Grants `SpawnCap`.
-pub const MANIFEST_FLAG_SPAWN: u8 = 1 << 2;
-
-/// GPIO pin control (ViGpio driver cell — PL061 on QEMU ARM virt).
-/// Grants access to the GPIO MMIO range via `sys_request_mmio`.
-pub const MANIFEST_FLAG_GPIO: u8 = 1 << 3;
-
-/// UART serial access (ViUart driver cell — PL011 on QEMU ARM virt).
-/// Grants access to the UART MMIO range via `sys_request_mmio`.
-pub const MANIFEST_FLAG_UART: u8 = 1 << 4;
-
-/// RISC-V H-extension (hypervisor) CSR access for VMM cells.
-/// Grants `HypervisorCap` only when the CPU also reports H-ext at boot.
-pub const MANIFEST_FLAG_HYPERVISOR: u8 = 1 << 5;
-
-/// Block-I/O sector range grant: MBR partition P1 (FAT32, `api::disk`).
-/// Refines `MANIFEST_FLAG_BLOCK_IO` — the cap says a cell MAY issue raw block
-/// syscalls; the PART_* bits say WHICH partition's LBA range they may touch
-/// (kernel `check_block_access`, deny-by-default for manifest-carrying cells).
-/// P2 (cell table) and P3 (snapshot) are kernel-only and never grantable.
-pub const MANIFEST_FLAG_PART_DATA: u8 = 1 << 6;
-
-/// Block-I/O sector range grant: MBR partition P4 (littlefs, `api::disk`).
-pub const MANIFEST_FLAG_PART_LFS: u8 = 1 << 7;
-
-// TODO: Add MANIFEST_FLAG_PART_SRV (P5 RedoxFS) once `flags: u8` expands to
-// u16 (Law 1 bump required — all 8 bits of v1 are occupied).  Until then, P5
-// access is co-granted with PART_LFS by `kernel/src/loader.rs` (VFS service is
-// the exclusive owner of both partitions).  See `docs/specs/09b-vfs-native-fs-adr.md`.
-
-/// Bitmask of all defined flags for version 1.
+/// Fixed-layout capability manifest (v2).  ABI-stable — see Law 1.
 ///
-/// `from_bytes` rejects manifests where `flags & !MANIFEST_FLAGS_MASK != 0` —
-/// a stale v1 binary accidentally setting an undefined bit (e.g., from a future
-/// SDK) is rejected and falls back to legacy path grants, preventing a
-/// capability it never intended from silently activating on an older kernel.
-/// (Kernels older than the PART_* bits reject manifests that set them — the
-/// cell then runs on legacy path grants, which is the fail-safe direction.)
-pub const MANIFEST_FLAGS_MASK: u8 =
-    MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK | MANIFEST_FLAG_SPAWN
-    | MANIFEST_FLAG_GPIO | MANIFEST_FLAG_UART | MANIFEST_FLAG_HYPERVISOR
-    | MANIFEST_FLAG_PART_DATA | MANIFEST_FLAG_PART_LFS;
-
-/// Fixed-layout capability manifest.  ABI-stable — see Law 1.
-///
-/// Always 8 bytes due to `#[repr(C)]` and explicit padding.  Version the struct
-/// via `MANIFEST_VERSION` before adding fields.
+/// Always 16 bytes due to `#[repr(C)]` and explicit reserved fields.  Version the
+/// struct via `MANIFEST_VERSION` before adding fields.
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct CellManifest {
     /// Must equal `MANIFEST_MAGIC`; `from_bytes` rejects any other value.
     pub magic: u32,
-    /// Must equal `MANIFEST_VERSION`; forward-compatibility gate.
+    /// `MANIFEST_VERSION` (2) for a native v2 manifest; a v1 upcast keeps this at 2
+    /// (the value in `tier` records that it came from v1).
     pub version: u8,
-    /// Bitwise-OR of `MANIFEST_FLAG_*` constants.
-    pub flags: u8,
-    /// Reserved — must be `[0, 0]`.
-    pub _pad: [u8; 2],
+    /// Isolation tier request (`TIER_*`); `TIER_LEGACY` when upcast from v1.
+    pub tier: u8,
+    /// Bitwise-OR of `MANIFEST_FLAG_*` constants (u16 in v2).
+    pub flags: u16,
+    /// RESERVED — must be 0.  Future offset into a `__ViCell_cap_args` section for
+    /// parameterized capabilities; kept here so filling it is an additive section
+    /// parse, not a third ABI confirmation.
+    pub cap_args_off: u32,
+    /// RESERVED — must be 0.
+    pub reserved: u32,
 }
 
 impl CellManifest {
-    /// Construct a manifest from capability bits.
+    /// Construct a manifest from capability bits (tier defaults to `TIER_LEGACY`,
+    /// preserving v1's `is_trusted`→PKU-key behaviour for cells that do not opt in).
     ///
     /// Evaluates at compile time; safe to use as a `static` initializer.
     pub const fn new(
         block_io: bool, network: bool, spawn: bool,
         gpio: bool, uart: bool, hypervisor: bool,
     ) -> Self {
-        Self::with_parts(block_io, network, spawn, gpio, uart, hypervisor, false, false)
+        Self::with_all(block_io, network, spawn, gpio, uart, hypervisor,
+            false, false, false, false, TIER_LEGACY)
     }
 
     /// Construct a manifest including block-I/O partition range grants.
-    ///
-    /// `part_data`/`part_lfs` only have effect when `block_io` is also set —
-    /// they scope WHICH partition the raw block syscalls may address.
-    #[allow(clippy::too_many_arguments)] // mirrors the flat flag layout; macro is the public face
+    #[allow(clippy::too_many_arguments)]
     pub const fn with_parts(
         block_io: bool, network: bool, spawn: bool,
         gpio: bool, uart: bool, hypervisor: bool,
         part_data: bool, part_lfs: bool,
     ) -> Self {
+        Self::with_all(block_io, network, spawn, gpio, uart, hypervisor,
+            part_data, part_lfs, false, false, TIER_LEGACY)
+    }
+
+    /// Full constructor — all flags + tier.  The macro is the public face.
+    #[allow(clippy::too_many_arguments)]
+    pub const fn with_all(
+        block_io: bool, network: bool, spawn: bool,
+        gpio: bool, uart: bool, hypervisor: bool,
+        part_data: bool, part_lfs: bool,
+        can: bool, adc: bool, tier: u8,
+    ) -> Self {
         Self {
             magic:   MANIFEST_MAGIC,
             version: MANIFEST_VERSION,
-            flags:   (block_io   as u8 * MANIFEST_FLAG_BLOCK_IO)
-                   | (network    as u8 * MANIFEST_FLAG_NETWORK)
-                   | (spawn      as u8 * MANIFEST_FLAG_SPAWN)
-                   | (gpio       as u8 * MANIFEST_FLAG_GPIO)
-                   | (uart       as u8 * MANIFEST_FLAG_UART)
-                   | (hypervisor as u8 * MANIFEST_FLAG_HYPERVISOR)
-                   | (part_data  as u8 * MANIFEST_FLAG_PART_DATA)
-                   | (part_lfs   as u8 * MANIFEST_FLAG_PART_LFS),
-            _pad:    [0; 2],
+            tier,
+            flags:   (block_io   as u16 * MANIFEST_FLAG_BLOCK_IO)
+                   | (network    as u16 * MANIFEST_FLAG_NETWORK)
+                   | (spawn      as u16 * MANIFEST_FLAG_SPAWN)
+                   | (gpio       as u16 * MANIFEST_FLAG_GPIO)
+                   | (uart       as u16 * MANIFEST_FLAG_UART)
+                   | (hypervisor as u16 * MANIFEST_FLAG_HYPERVISOR)
+                   | (part_data  as u16 * MANIFEST_FLAG_PART_DATA)
+                   | (part_lfs   as u16 * MANIFEST_FLAG_PART_LFS)
+                   | (can        as u16 * MANIFEST_FLAG_CAN)
+                   | (adc        as u16 * MANIFEST_FLAG_ADC),
+            cap_args_off: 0,
+            reserved: 0,
         }
     }
 
-    /// Parse a manifest from raw ELF section bytes.
-    ///
-    /// Field-by-field — never casts the slice to `&Self` (alignment hazard in
-    /// `no_std`).
-    ///
-    /// # Returns
-    /// `None` if the slice is shorter than 8 bytes, the magic mismatches, or the
-    /// version is unsupported.
-    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 8 {
-            return None;
-        }
-        let magic = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        if magic != MANIFEST_MAGIC {
-            return None;
-        }
-        if bytes[4] != MANIFEST_VERSION {
-            return None;
-        }
-        let flags = bytes[5];
-        // Reject reserved flag bits — a stale binary setting a future flag is
-        // treated as malformed rather than silently gaining an unintended cap.
-        if flags & !MANIFEST_FLAGS_MASK != 0 {
-            return None;
-        }
-        Some(Self {
-            magic,
-            version: bytes[4],
-            flags,
-            _pad:    [bytes[6], bytes[7]],
-        })
-    }
+    // `from_bytes` (the ELF-section parser) lives in the sibling `manifest_parse`
+    // module — see that file for the v1-upcast / v2-parse logic.
 
     /// Returns `true` if the cell declared raw block-device access.
     pub fn has_block_io(&self) -> bool { self.flags & MANIFEST_FLAG_BLOCK_IO != 0 }
-
     /// Returns `true` if the cell declared network transmit/receive.
     pub fn has_network(&self) -> bool { self.flags & MANIFEST_FLAG_NETWORK != 0 }
-
     /// Returns `true` if the cell declared cell-spawning and hot-swap.
     pub fn has_spawn(&self) -> bool { self.flags & MANIFEST_FLAG_SPAWN != 0 }
-
     /// Returns `true` if the cell declared GPIO pin-control access.
     pub fn has_gpio(&self) -> bool { self.flags & MANIFEST_FLAG_GPIO != 0 }
-
     /// Returns `true` if the cell declared UART serial access.
     pub fn has_uart(&self) -> bool { self.flags & MANIFEST_FLAG_UART != 0 }
-
     /// Returns `true` if the cell declared H-extension hypervisor CSR access.
     pub fn has_hypervisor(&self) -> bool { self.flags & MANIFEST_FLAG_HYPERVISOR != 0 }
-
     /// Returns `true` if the cell's block I/O is granted the P1 (FAT32) range.
     pub fn has_part_data(&self) -> bool { self.flags & MANIFEST_FLAG_PART_DATA != 0 }
-
     /// Returns `true` if the cell's block I/O is granted the P4 (littlefs) range.
     pub fn has_part_lfs(&self) -> bool { self.flags & MANIFEST_FLAG_PART_LFS != 0 }
+    /// Returns `true` if the cell declared CAN controller MMIO access (v2).
+    pub fn has_can(&self) -> bool { self.flags & MANIFEST_FLAG_CAN != 0 }
+    /// Returns `true` if the cell declared ADC controller MMIO access (v2).
+    pub fn has_adc(&self) -> bool { self.flags & MANIFEST_FLAG_ADC != 0 }
 
-    /// Returns `true` if any privileged capability bit is set.
-    ///
-    /// Used by `spawn_from_path` to reject over-declaring user Cells (non-`/bin/`
-    /// paths).
+    /// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from v1).
+    pub fn tier(&self) -> u8 { self.tier }
+
+    /// Returns `true` if any privileged capability bit is set.  Used by
+    /// `spawn_from_path` to reject over-declaring user Cells (non-`/bin/` paths).
     pub fn declares_any_privilege(&self) -> bool { self.flags != 0 }
 }
 
-/// Embed a capability manifest into the current Cell's ELF binary.
-///
-/// Places a fixed 8-byte `CellManifest` into the `__ViCell_manifest` ELF section.
-/// The cell linker script must `KEEP` that section or `--gc-sections` will
-/// silently drop it in release/LTO builds.
-///
-/// # Usage
-/// ```ignore
-/// // At module scope, after `use` declarations:
-/// api::declare_manifest!(block_io = true, network = false, spawn = false, gpio = false, uart = false);
-/// ```
-#[macro_export]
-macro_rules! declare_manifest {
-    // Full form — includes block-I/O partition range grants (P1 data / P4 lfs).
-    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal, part_data = $pd:literal, part_lfs = $pl:literal) => {
-        #[used]
-        #[link_section = "__ViCell_manifest"]
-        pub static VICELL_MANIFEST: $crate::manifest::CellManifest =
-            $crate::manifest::CellManifest::with_parts($bio, $net, $spawn, $gpio, $uart, $hv, $pd, $pl);
-    };
-    // Convenience form: block_io with partition scopes, no gpio/uart/hypervisor.
-    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, part_data = $pd:literal, part_lfs = $pl:literal) => {
-        $crate::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, gpio = false, uart = false, hypervisor = false, part_data = $pd, part_lfs = $pl);
-    };
-    // 6-param form — includes hypervisor flag.
-    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal) => {
-        #[used]
-        #[link_section = "__ViCell_manifest"]
-        pub static VICELL_MANIFEST: $crate::manifest::CellManifest =
-            $crate::manifest::CellManifest::new($bio, $net, $spawn, $gpio, $uart, $hv);
-    };
-    // 5-param form (no hypervisor) — hypervisor defaults to false.
-    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal) => {
-        $crate::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, gpio = $gpio, uart = $uart, hypervisor = false);
-    };
-    // 3-param back-compat form (no gpio/uart/hypervisor) — all default to false.
-    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal) => {
-        $crate::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, gpio = false, uart = false, hypervisor = false);
-    };
-}
+// `declare_manifest!` (embeds a CellManifest into the current Cell's ELF binary)
+// lives in the sibling `manifest_macro` module.
