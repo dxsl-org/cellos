@@ -242,6 +242,28 @@ macro_rules! app_entry {
             $crate::runtime::CellRuntime::new().help($help).run($handler);
         }
     };
+    // Full explicit 3-cap form + explicit tier (Manifest v2 opt-in) — e.g. a
+    // Tier-1b C/FFI cell requesting `tier = api::manifest::TIER_TIER1B_FFI` for
+    // PKU key 2. Additive: every pre-existing form keeps the default TIER_LEGACY.
+    (
+        block_io = $bio:literal,
+        network  = $net:literal,
+        spawn    = $spawn:literal,
+        tier     = $tier:expr,
+        handler  = $handler:expr $(,)?
+    ) => {
+        api::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, tier = $tier);
+
+        #[used]
+        #[link_section = "__ViCell_syscalls"]
+        pub static VICELL_SYSCALLS: u64 =
+            $crate::runtime::app_syscall_set($bio, $net, $spawn);
+
+        #[no_mangle]
+        pub fn main() {
+            $crate::runtime::CellRuntime::new().run($handler);
+        }
+    };
     // Shorthand — only spawn
     (spawn = $spawn:literal, handler = $handler:expr $(,)?) => {
         $crate::app_entry!(block_io = false, network = false, spawn = $spawn, handler = $handler);

@@ -512,6 +512,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("P-TRUST self-test FAIL");
         }
+        // Manifest v2: v1-upcast/v2-parse + the tier-floor invariant. Pure logic,
+        // no scheduler — runs alongside the other crypto/trust self-tests.
+        if crate::task::manifest_v2_selftest::self_test() {
+            log_info("Manifest-v2 self-test PASS (v1 upcast + v2 parse + tier-floor)");
+        } else {
+            log_info("Manifest-v2 self-test FAIL");
+        }
 
         // Layer-2 hardware security self-tests (test-hooks feature only).
         // MTE (aarch64) and PKU (x86_64) — each prints PASS or SKIP.

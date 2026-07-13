@@ -189,6 +189,8 @@ impl CapSet {
         let mut mmio = 0u8;
         if m.has_gpio() { mmio |= crate::resource_registry::DEV_GPIO; }
         if m.has_uart() { mmio |= crate::resource_registry::DEV_UART; }
+        if m.has_can()  { mmio |= crate::resource_registry::DEV_CAN; }
+        if m.has_adc()  { mmio |= crate::resource_registry::DEV_ADC; }
         CapSet {
             block_io:   m.has_block_io(),
             network:    m.has_network(),
@@ -260,6 +262,36 @@ impl CapSet {
         // (`try_grant_platform` enforces one-holder-ever); the loader consults the
         // latch when `granted.platform` is set. Writing it from a plain bool would
         // bypass the latch and allow two holders.
+    }
+}
+
+/// Compute the granted x86 PKU isolation tier from the granted caps and the
+/// manifest's requested tier (Manifest v2). Pure logic, host/target-agnostic —
+/// extracted so it is unit-testable independent of the loader's spawn plumbing.
+///
+/// `tier` is a FLOOR, not a ceiling — the inverse of a capability. A higher tier
+/// number means MORE isolation / LESS authority. A cell may always RAISE its own
+/// tier (self-restrict further); it may NEVER lower it below the floor derived
+/// from its granted caps (that would be a privilege escalation). Hence
+/// `max(requested_tier, floor)`, not a plain assignment.
+///
+/// `floor`: cells holding real system authority (block_io/network/spawn/
+/// hypervisor — the pre-v2 "is_trusted" set) may run at `TIER_TRUSTED_CORE` (0,
+/// unfenced). Everything else has a floor of `TIER_STANDARD` (1) — it can never
+/// claim tier 0 no matter what it asks for.
+///
+/// `TIER_LEGACY` (manifest absent, or a tier-less manifest) means "no explicit
+/// request" — the granted tier is exactly the floor, reproducing the pre-v2
+/// behaviour byte-for-byte (NOT `max(0xFF, floor)`, which would wrongly force
+/// every such cell to the most-isolated tier).
+pub fn granted_tier(granted: &CapSet, requested_tier: u8) -> u8 {
+    use api::manifest::{TIER_LEGACY, TIER_STANDARD, TIER_TRUSTED_CORE};
+    let is_trusted = granted.block_io || granted.network || granted.spawn || granted.hypervisor;
+    let floor: u8 = if is_trusted { TIER_TRUSTED_CORE } else { TIER_STANDARD };
+    if requested_tier == TIER_LEGACY {
+        floor
+    } else {
+        core::cmp::max(requested_tier, floor)
     }
 }
 

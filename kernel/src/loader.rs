@@ -277,20 +277,17 @@ pub fn spawn_gated(
         if let Some(task) = sched.tasks.get_mut(&tid) {
             granted.apply_to(task);
 
-            // x86_64 PKU: derive the protection-key domain from the granted caps.
-            // Trusted-core cells (block_io / network / spawn / hypervisor) get key 0
-            // (all-access); standard cells get key 1. Key 2 is reserved for Tier-1b
-            // C/FFI cells and will be assigned once the manifest carries a tier field.
+            // x86_64 PKU: derive the protection-key domain from the granted caps
+            // AND the manifest's declared tier (Manifest v2). See
+            // `cap::granted_tier` for the floor-not-ceiling invariant this encodes.
+            // Tiers map 1:1 onto PKU keys 0-3 (TRUSTED_CORE=0 .. UNTRUSTED=3);
+            // `pkru_for_key` handles any key in range generically.
             // On non-x86_64 targets these fields default to 0 and are never consulted.
             #[cfg(target_arch = "x86_64")]
             {
-                let is_trusted = granted.block_io
-                    || granted.network
-                    || granted.spawn
-                    || granted.hypervisor;
-                // TODO(pku-ffi): derive key 2 from a future manifest tier field.
-                // Until then, all non-trusted cells use key 1 (standard domain).
-                let key: u8 = if is_trusted { 0 } else { 1 };
+                let requested_tier = manifest_opt.as_ref().map(|m| m.tier())
+                    .unwrap_or(api::manifest::TIER_LEGACY);
+                let key: u8 = crate::task::cap::granted_tier(&granted, requested_tier);
                 task.pku_key   = key;
                 task.pku_value = crate::hal::pku::pkru_for_key(key);
             }

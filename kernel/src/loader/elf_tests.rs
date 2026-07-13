@@ -7,7 +7,7 @@
 
 use api::manifest::{
     CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK, MANIFEST_FLAGS_MASK,
-    MANIFEST_MAGIC, MANIFEST_VERSION,
+    MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1, TIER_LEGACY, TIER_STANDARD,
 };
 use api::syscall::ViSyscall;
 use types::{ViError, ViResult};
@@ -25,12 +25,16 @@ pub fn run_all() {
     test_reloc_unsupported_type_rejected();
     test_reloc_none_type_noop();
     test_reloc_relative_patches_memory();
-    test_manifest_size_is_8();
+    test_manifest_size_is_16();
     test_manifest_parsing_valid();
+    test_manifest_v1_upcast();
     test_manifest_parsing_bad_magic();
     test_manifest_parsing_short();
     test_manifest_parsing_bad_version();
     test_manifest_reserved_flags_rejected();
+    test_manifest_v2_reserved_fields_rejected();
+    test_manifest_v2_tier_out_of_range_rejected();
+    test_manifest_v2_tier_legacy_is_valid_native();
     test_manifest_network_false_grants_no_network_cap();
     test_force_exit_opcode_mapped();
     test_force_exit_allowlist_bit_none();
@@ -160,34 +164,60 @@ fn test_reloc_relative_patches_memory() {
 
 // ─── CellManifest parsing ────────────────────────────────────────────────────
 
-fn manifest_bytes(magic: u32, version: u8, flags: u8) -> [u8; 8] {
+/// Build a legacy v1 8-byte manifest record: `{magic, version=1, flags:u8, _pad:[u8;2]}`.
+fn manifest_bytes_v1(magic: u32, version: u8, flags: u8) -> [u8; 8] {
     let m = magic.to_le_bytes();
     [m[0], m[1], m[2], m[3], version, flags, 0, 0]
 }
 
-fn test_manifest_size_is_8() {
+/// Build a native v2 16-byte manifest record: `{magic, version, tier, flags:u16,
+/// cap_args_off:u32, reserved:u32}`.
+fn manifest_bytes_v2(magic: u32, version: u8, tier: u8, flags: u16,
+                     cap_args_off: u32, reserved: u32) -> [u8; 16] {
+    let m = magic.to_le_bytes();
+    let f = flags.to_le_bytes();
+    let c = cap_args_off.to_le_bytes();
+    let r = reserved.to_le_bytes();
+    [m[0], m[1], m[2], m[3], version, tier, f[0], f[1],
+     c[0], c[1], c[2], c[3], r[0], r[1], r[2], r[3]]
+}
+
+fn test_manifest_size_is_16() {
     assert_eq!(
-        core::mem::size_of::<CellManifest>(), 8,
-        "CellManifest must be exactly 8 bytes (ABI invariant)"
+        core::mem::size_of::<CellManifest>(), 16,
+        "CellManifest (v2) must be exactly 16 bytes (ABI invariant)"
     );
-    log::info!("  [ok] CellManifest is 8 bytes");
+    log::info!("  [ok] CellManifest is 16 bytes (v2)");
 }
 
 fn test_manifest_parsing_valid() {
-    let bytes = manifest_bytes(
-        MANIFEST_MAGIC, MANIFEST_VERSION,
-        MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK,
+    let bytes = manifest_bytes_v2(
+        MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD,
+        MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK, 0, 0,
     );
-    let m = CellManifest::from_bytes(&bytes).expect("valid manifest must parse");
+    let m = CellManifest::from_bytes(&bytes).expect("valid v2 manifest must parse");
     assert!(m.has_block_io(), "block_io flag must be set");
     assert!(m.has_network(),  "network flag must be set");
     assert!(!m.has_spawn(),   "spawn flag must be clear");
+    assert_eq!(m.tier(), TIER_STANDARD, "tier must round-trip");
     assert!(m.declares_any_privilege(), "declares_any_privilege must be true");
-    log::info!("  [ok] valid manifest parses with correct flags");
+    log::info!("  [ok] valid v2 manifest parses with correct flags + tier");
+}
+
+fn test_manifest_v1_upcast() {
+    // A legacy v1 8-byte manifest must still parse under the v2 CellManifest —
+    // this is the backward-compat contract: old cells keep working unmodified.
+    let bytes = manifest_bytes_v1(MANIFEST_MAGIC, MANIFEST_VERSION_V1,
+        MANIFEST_FLAG_BLOCK_IO as u8);
+    let m = CellManifest::from_bytes(&bytes).expect("v1 manifest must upcast-parse");
+    assert!(m.has_block_io(), "upcast must preserve v1 flags");
+    assert_eq!(m.tier(), TIER_LEGACY,
+        "v1 upcast must set tier=TIER_LEGACY so the loader keeps the old is_trusted heuristic");
+    log::info!("  [ok] v1 manifest upcasts to v2 with TIER_LEGACY");
 }
 
 fn test_manifest_parsing_bad_magic() {
-    let bytes = manifest_bytes(0xDEAD_BEEF, MANIFEST_VERSION, 0);
+    let bytes = manifest_bytes_v2(0xDEAD_BEEF, MANIFEST_VERSION, TIER_STANDARD, 0, 0, 0);
     assert!(
         CellManifest::from_bytes(&bytes).is_none(),
         "wrong magic must return None"
@@ -200,11 +230,19 @@ fn test_manifest_parsing_short() {
         CellManifest::from_bytes(&[0u8; 4]).is_none(),
         "slice shorter than 8 bytes must return None"
     );
-    log::info!("  [ok] short slice rejected");
+    // A v2-versioned record truncated to less than 16 bytes must also be rejected
+    // (forward-compat: a v1-shaped kernel would misread it, so v2 refuses too-short).
+    let short = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD, 0, 0, 0);
+    assert!(
+        CellManifest::from_bytes(&short[..10]).is_none(),
+        "v2 record shorter than 16 bytes must return None"
+    );
+    log::info!("  [ok] short slice rejected (both v1 floor and v2 16-byte floor)");
 }
 
 fn test_manifest_parsing_bad_version() {
-    let bytes = manifest_bytes(MANIFEST_MAGIC, MANIFEST_VERSION.wrapping_add(1), 0);
+    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION.wrapping_add(1),
+        TIER_STANDARD, 0, 0, 0);
     assert!(
         CellManifest::from_bytes(&bytes).is_none(),
         "unsupported version must return None"
@@ -213,21 +251,52 @@ fn test_manifest_parsing_bad_version() {
 }
 
 fn test_manifest_reserved_flags_rejected() {
-    // Any bit above the defined mask must be rejected — prevents stale v1 binaries
-    // from silently gaining a future-version capability via a reserved bit.
-    let reserved = !MANIFEST_FLAGS_MASK; // e.g., 0xF8
-    let bytes = manifest_bytes(MANIFEST_MAGIC, MANIFEST_VERSION, reserved | 0x01);
+    // Any bit above the defined mask must be rejected — prevents a stale/forward
+    // binary from silently gaining an unintended capability via a reserved bit.
+    let reserved = !MANIFEST_FLAGS_MASK;
+    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD,
+        reserved | 0x01, 0, 0);
     assert!(
         CellManifest::from_bytes(&bytes).is_none(),
         "reserved flags must return None"
     );
-    // Pure reserved (no defined flags): also rejected.
-    let bytes2 = manifest_bytes(MANIFEST_MAGIC, MANIFEST_VERSION, 0x08);
-    assert!(
-        CellManifest::from_bytes(&bytes2).is_none(),
-        "reserved-only flags must return None"
-    );
     log::info!("  [ok] reserved flag bits rejected");
+}
+
+fn test_manifest_v2_reserved_fields_rejected() {
+    // cap_args_off and reserved MUST be zero in v2 — a future field silently
+    // ignored by a kernel that predates it would be a forward-compat hole.
+    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD, 0, 1, 0);
+    assert!(CellManifest::from_bytes(&bytes).is_none(), "non-zero cap_args_off must return None");
+    let bytes2 = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD, 0, 0, 1);
+    assert!(CellManifest::from_bytes(&bytes2).is_none(), "non-zero reserved must return None");
+    log::info!("  [ok] v2 reserved fields (cap_args_off, reserved) rejected when non-zero");
+}
+
+fn test_manifest_v2_tier_out_of_range_rejected() {
+    // TIER_UNTRUSTED (3) is the highest valid explicit on-disk tier; anything
+    // between it and TIER_LEGACY (0xFF, exclusive) is malformed.
+    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, 4, 0, 0, 0);
+    assert!(CellManifest::from_bytes(&bytes).is_none(), "tier=4 (out of range) must return None");
+    let bytes2 = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, 0xFE, 0, 0, 0);
+    assert!(CellManifest::from_bytes(&bytes2).is_none(), "tier=0xFE (out of range, not the LEGACY sentinel) must return None");
+    log::info!("  [ok] out-of-range tier values rejected");
+}
+
+fn test_manifest_v2_tier_legacy_is_valid_native() {
+    // TIER_LEGACY is what the tier-less constructors (CellManifest::new/with_parts,
+    // used by declare_manifest!'s back-compat forms) bake into a NATIVE v2 record.
+    // Confirm the constructor's actual output round-trips through from_bytes —
+    // matching the raw-bytes construction below is what `new()` produces.
+    let ctor_output = CellManifest::new(true, false, false, false, false, false);
+    assert_eq!(ctor_output.tier(), TIER_LEGACY, "tier-less constructor must default to TIER_LEGACY");
+
+    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_LEGACY,
+        MANIFEST_FLAG_BLOCK_IO, 0, 0);
+    let parsed = CellManifest::from_bytes(&bytes)
+        .expect("a native v2 manifest with TIER_LEGACY (the tier-less constructor default) must parse");
+    assert_eq!(parsed.tier(), TIER_LEGACY);
+    log::info!("  [ok] TIER_LEGACY parses as a valid native v2 tier (tier-less constructor output)");
 }
 
 fn test_force_exit_opcode_mapped() {

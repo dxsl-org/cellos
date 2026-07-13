@@ -1,6 +1,7 @@
 pub mod cap;
 pub mod hart_local;
 pub mod smp;
+pub mod manifest_v2_selftest;
 pub mod p_trust_selftest;
 pub mod syscall;
 pub mod tcb;
