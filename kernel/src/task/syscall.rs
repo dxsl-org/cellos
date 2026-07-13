@@ -36,7 +36,7 @@ fn shm_register(handle: usize) {
 
 fn shm_is_valid(handle: usize) -> bool {
     let guard = shm_handles_lock().lock();
-    guard.as_ref().map_or(false, |set| set.contains(&handle))
+    guard.as_ref().is_some_and(|set| set.contains(&handle))
 }
 
 // ── Zero-Copy Grant Table ─────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
         let Some(map) = tbl.as_mut() else { return };
         // Clear grantee references (no removal needed — owner keeps the entry).
         for grant in map.values_mut() {
-            if grant.shared_to.map_or(false, |(tid, _)| tid == dead_tid) {
+            if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
                 grant.shared_to = None;
             }
         }
@@ -221,7 +221,7 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
         let Some(map) = tbl.as_mut() else { return };
         // Clear grantee references when the grantee dies.
         for grant in map.values_mut() {
-            if grant.shared_to.map_or(false, |(tid, _)| tid == dead_tid) {
+            if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
                 grant.shared_to = None;
             }
         }
@@ -2849,7 +2849,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
                 return Ok(0); // size == 0 or > 16 MiB cap — OOM sentinel per F10
             }
-            let n_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+            let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
                 Some(p) => p,
                 None    => return Ok(0),
@@ -2901,7 +2901,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 let tbl = grant_table_lock().lock();
                 if let Some(grant) = tbl.as_ref().and_then(|m| m.get(&grant_id)) {
                     let allowed = grant.owner == caller_id
-                        || grant.shared_to.map_or(false, |(tid, _)| tid == caller_id);
+                        || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
                     return Ok(if allowed { grant.base } else { usize::MAX });
                 }
             }
@@ -2911,7 +2911,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 None => Ok(usize::MAX),
                 Some(grant) => {
                     let allowed = grant.owner == caller_id
-                        || grant.shared_to.map_or(false, |(tid, _)| tid == caller_id);
+                        || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
                     Ok(if allowed { grant.base } else { usize::MAX })
                 }
             }
@@ -2922,7 +2922,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let entry = {
                 let mut tbl = grant_table_lock().lock();
                 tbl.as_mut().and_then(|m| {
-                    if m.get(&grant_id).map_or(false, |g| g.owner == caller_id) {
+                    if m.get(&grant_id).is_some_and(|g| g.owner == caller_id) {
                         m.remove(&grant_id)
                     } else {
                         None
@@ -2942,7 +2942,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
                 return Ok(0); // OOM sentinel per F10
             }
-            let n_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+            let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
                 Some(p) => p,
                 None    => return Ok(0),
@@ -2959,7 +2959,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let entry = {
                 let mut tbl = reg_grant_table_lock().lock();
                 tbl.as_mut().and_then(|m| {
-                    if m.get(&reg_id).map_or(false, |g| g.owner == caller_id) {
+                    if m.get(&reg_id).is_some_and(|g| g.owner == caller_id) {
                         m.remove(&reg_id)
                     } else {
                         None
@@ -2995,7 +2995,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .and_then(|s| s.tasks.get(&caller_id))
                 .map(|t| t.trap_frame.regs[10])
                 .unwrap_or(0);
-            Ok(fired as usize)
+            Ok(fired)
         }
 
         Syscall::RequestMmio { base, len } => {
@@ -3163,7 +3163,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             validate_user_buf(out_ptr, core::mem::size_of::<api::hypervisor::ViVmExit>(), MAX_USER_BUF)?;
             // SAFETY: pointer validated above; SAS means it's also valid in kernel.
             let exit_out = out_ptr as *mut api::hypervisor::ViVmExit;
-            crate::hypervisor::registry::run_vcpu(caller_id, vm_id, vcpu_id, budget_ns, exit_out)
+            unsafe { crate::hypervisor::registry::run_vcpu(caller_id, vm_id, vcpu_id, budget_ns, exit_out) }
                 .map_err(|_| SyscallError::NotSupported)
         }
 

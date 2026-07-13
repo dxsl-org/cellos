@@ -16,6 +16,7 @@
 //! - 0b0001 = MTE1 (store-only tagging, no load check)
 //! - 0b0010 = MTE2 (full load+store tag checking)
 //! - 0b0011 = MTE3 (+ async mode w/ precise tagging option)
+//!
 //! Value ≥ 2 is required for useful `TCF` enforcement.
 
 use hal_mte::ViMte;

@@ -11,6 +11,10 @@ use super::sysio::raw_syscall;
 ///
 /// Maps to `sys_get_random(214)`. Returns 0 on success, −1 if the device is
 /// absent or `buflen` exceeds the 256-byte POSIX limit.
+///
+/// # Safety
+/// `buf` must be either null or point to at least `buflen` writable bytes
+/// for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn getentropy(buf: *mut c_void, buflen: usize) -> i32 {
     if buf.is_null() || buflen > 256 { return -1; }
@@ -26,6 +30,11 @@ pub unsafe extern "C" fn getentropy(buf: *mut c_void, buflen: usize) -> i32 {
 }
 
 /// arc4random_buf — fills `buf` with `n` random bytes; no return value.
+///
+/// # Safety
+/// `buf` must be either null or point to at least `n` writable bytes for
+/// the duration of the call (only up to 256 of them are actually written,
+/// per `getentropy`'s POSIX limit).
 #[no_mangle]
 pub unsafe extern "C" fn arc4random_buf(buf: *mut c_void, n: usize) {
     getentropy(buf, n.min(256));

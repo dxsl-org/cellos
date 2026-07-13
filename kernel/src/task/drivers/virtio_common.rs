@@ -29,7 +29,7 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
         let slots: Vec<VirtioSlot> = (0..32_usize)
             .map(|i| VirtioSlot { base: BASE + i * STRIDE, irq: 16 + i as u32 })
             .collect();
-        return slots.into_iter();
+        slots.into_iter()
     }
     #[cfg(not(target_arch = "aarch64"))]
     {

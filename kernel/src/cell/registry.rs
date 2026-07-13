@@ -60,6 +60,12 @@ pub struct CellRegistry {
     next_id: usize,
 }
 
+impl Default for CellRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CellRegistry {
     pub const fn new() -> Self {
         Self {

@@ -56,10 +56,16 @@ jobs:
         include:
           - target: riscv64gc-unknown-none-elf
             short: rv64
+            cc_pkg: gcc-riscv64-unknown-elf
+            cc_bin: riscv64-unknown-elf-gcc
           - target: aarch64-unknown-none-softfloat
             short: aarch64
+            cc_pkg: gcc-aarch64-linux-gnu
+            cc_bin: aarch64-linux-gnu-gcc
           - target: x86_64-unknown-none
             short: x86_64
+            cc_pkg: ""
+            cc_bin: cc
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +80,15 @@ jobs:
           cache-on-failure: true
           key: ${{ matrix.short }}
 
+      # littlefs2-sys (pulled in via redoxfs) compiles a vendored C shim for
+      # whatever target `-Z build-std` is cross-compiling to; cc-rs looks for a
+      # <target>-gcc by convention and finds nothing on a bare `-none` target
+      # unless we install and point it at a matching cross compiler.
+      - name: Install cross C compiler for littlefs2-sys
+        if: matrix.cc_pkg != ''
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q ${{ matrix.cc_pkg }}
+
       - name: Build (release)
         # The rv64 kernel links as -pie (build.rs, for Limine KASLR); rustc must
         # emit position-independent code or the linker rejects absolute R_RISCV_64
@@ -81,6 +96,9 @@ jobs:
         # and a workspace-wide pic would also miscompile Cells (GOT-indirect .data).
         env:
           RUSTFLAGS: ${{ matrix.short == 'rv64' && '-D warnings -C relocation-model=pic' || '-D warnings' }}
+          CC_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && matrix.cc_bin || '' }}
+          CC_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && matrix.cc_bin || '' }}
+          CC_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && matrix.cc_bin || '' }}
         run: >
           cargo build
           --release
@@ -119,6 +137,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install QEMU
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc
 
       - name: Download kernel artifact
@@ -181,6 +200,7 @@ jobs:
           key: aarch64-boot
 
       - name: Install QEMU and libclang
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev
 
       - name: Build aarch64 kernel
@@ -228,6 +248,7 @@ jobs:
           key: hypervisor-smoke
 
       - name: Install QEMU
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm
 
       - name: Cache Alpine artifacts
@@ -320,6 +341,7 @@ jobs:
           key: x86_64-boot
 
       - name: Install QEMU and xorriso
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
 
       - name: Build x86_64 kernel
@@ -355,6 +377,7 @@ jobs:
           key: vfs-quota
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       - name: Build test-hooks kernel
@@ -383,6 +406,7 @@ jobs:
           key: redoxfs-srv
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
@@ -445,15 +469,28 @@ jobs:
         with:
           cache-on-failure: true
 
+      # littlefs2-sys (pulled in via redoxfs) compiles a vendored C shim for the
+      # cross-compiled target; cc-rs needs a matching <target>-gcc on PATH.
+      - name: Install cross C compiler for littlefs2-sys
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
+
       - name: Install cargo-geiger
         run: cargo install --locked cargo-geiger
 
       - name: Assert zero unsafe in cells/
+        env:
+          CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
         run: |
           cargo geiger --workspace --output-format json \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
-            > geiger.json 2>&1 || true
+            > geiger.json 2>&1
+          if ! python3 -c "import json; json.load(open('geiger.json'))" 2>/dev/null; then
+            echo "::error::cargo geiger did not produce valid JSON — dumping output:"
+            cat geiger.json
+            exit 1
+          fi
           python3 - << 'PYEOF'
           import json, sys
           with open("geiger.json") as f:
@@ -489,6 +526,7 @@ jobs:
           key: shell-utils
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
@@ -542,6 +580,7 @@ jobs:
           key: boot-suite
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \

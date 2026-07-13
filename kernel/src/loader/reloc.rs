@@ -64,7 +64,7 @@ impl Rela64 {
 /// Returns `ViError::NotSupported` if an unsupported relocation type is found.
 pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
     let entry_size = core::mem::size_of::<Rela64>();
-    if rela_section.len() % entry_size != 0 {
+    if !rela_section.len().is_multiple_of(entry_size) {
         log::error!(
             "[reloc] .rela.dyn size {} not a multiple of Rela64 size {}",
             rela_section.len(),
@@ -118,9 +118,10 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
 
         match entry.r_type() {
             // ── no-ops ────────────────────────────────────────────────────────
-            riscv_reloc_type::R_RISCV_NONE
-            | aarch64_reloc_type::R_AARCH64_NONE
-            | x86_64_reloc_type::R_X86_64_NONE => {}
+            // Relocation type 0 is universally "NONE" across every ELF psABI
+            // (RISC-V, AArch64, x86-64 all define it as 0), so a single arm on
+            // the shared literal value covers all three constants.
+            riscv_reloc_type::R_RISCV_NONE => {}
 
             // ── RISC-V ────────────────────────────────────────────────────────
             riscv_reloc_type::R_RISCV_RELATIVE => {

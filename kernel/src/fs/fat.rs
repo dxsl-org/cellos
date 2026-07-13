@@ -31,6 +31,12 @@ impl BlockStream {
     }
 }
 
+impl Default for BlockStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // Implement fatfs IO traits
 // fatfs 0.4 Read/Write/Seek traits inherit from IoBase
 
@@ -42,7 +48,7 @@ impl Read for BlockStream {
     // type Error is in IoBase
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(0);
         }
 
@@ -210,10 +216,7 @@ impl ViFileSystem for ViFatFS {
         let root = fs_lock.root_dir();
         
         // Determine intent
-        let can_create = match mode {
-             OpenMode::Write | OpenMode::ReadWrite => true,
-             _ => false,
-        };
+        let can_create = matches!(mode, OpenMode::Write | OpenMode::ReadWrite);
 
         let mut is_dir = false;
 

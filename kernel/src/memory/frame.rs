@@ -9,7 +9,6 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 // Define PAGE_SIZE to avoid circular dependency with paging.rs
 const PAGE_SIZE: usize = 4096;
-const KERNEL_HEAP_PAGES: usize = 4096;
 
 /// Physical-to-virtual address offset.
 /// - RISC-V: 0 (identity-mapped before activate_paging, SATP disabled)
@@ -54,12 +53,10 @@ impl FrameAllocator {
 
         // 1. Find largest usable region
         for entry in entries {
-            if entry.ty == crate::boot::MemoryType::Usable {
-                if entry.length > max_len {
-                    max_len = entry.length;
-                    best_start = entry.base;
-                    best_end = entry.base + entry.length;
-                }
+            if entry.ty == crate::boot::MemoryType::Usable && entry.length > max_len {
+                max_len = entry.length;
+                best_start = entry.base;
+                best_end = entry.base + entry.length;
             }
         }
 
@@ -73,12 +70,12 @@ impl FrameAllocator {
         // We need 1 bit per frame.
         // 1 u64 = 64 bits = 64 frames.
         // Bitmap size in u64s = (total_frames + 63) / 64
-        let bitmap_u64_count = (total_frames + 63) / 64;
+        let bitmap_u64_count = total_frames.div_ceil(64);
         let bitmap_size_bytes = bitmap_u64_count * 8;
 
         // 3. Place bitmap at the beginning of the region
         // We need to reserve enough *pages* for the bitmap
-        let bitmap_pages = (bitmap_size_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+        let bitmap_pages = bitmap_size_bytes.div_ceil(PAGE_SIZE);
         let bitmap_phys_addr = aligned_start;
 
         // 4. Create the bitmap slice.
@@ -95,8 +92,8 @@ impl FrameAllocator {
         // 5. Initialize bitmap
         // Initially, we mark ALL frames as FREE (0).
         // Then we mark the frames used by the bitmap itself as USED (1).
-        for i in 0..bitmap_u64_count {
-            bitmap[i] = 0;
+        for slot in bitmap.iter_mut() {
+            *slot = 0;
         }
 
         // 6. Adjust allocator start to after the bitmap

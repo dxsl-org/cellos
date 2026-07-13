@@ -138,8 +138,8 @@ pub fn check_x2apic() -> bool {
 /// Replaces the hardcoded initial count from `init_lapic`.
 /// Safety: if calibration returned 0 or the 10× product overflows u32 (ticks_per_ms
 /// > 429_496_729), fall back to a hardcoded estimate.
-/// Writing count=0 to the LAPIC initial-count register STOPS the timer entirely.
-/// A tiny count (< 10_000) means ~160 μs period → recursive ISR storm → crash.
+/// > Writing count=0 to the LAPIC initial-count register STOPS the timer entirely.
+/// > A tiny count (< 10_000) means ~160 μs period → recursive ISR storm → crash.
 pub fn init_lapic_calibrated(ticks_per_ms: u64) {
     // u32::MAX / 10 = 429_496_729.  If ticks_per_ms exceeds this, the cast wraps
     // to a tiny value (e.g. 429_496_730 × 10 = 4_294_967_300 → cast = 4) which

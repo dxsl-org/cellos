@@ -8,7 +8,6 @@
 
 use api::*;
 use api::hotswap::ViStateTransfer;
-use api::serde_helpers::*;
 use api::vm::*;
 
 // Mock network driver with complex state for ViStateTransfer testing.
@@ -88,6 +87,7 @@ struct MockVMM {
     vms: Vec<MockVM>,
 }
 
+#[allow(dead_code)] // reason: mirrors the real VMM's per-VM record shape; id/state verify construction even though only `running` is read back in these tests
 struct MockVM {
     id: usize,
     state: VmState,
@@ -183,8 +183,8 @@ impl ViVmRuntime for MockVMM {
 }
 
 #[test]
-fn test_ViStateTransfer_roundtrip() {
-    let mut driver1 = MockNetworkDriver::new();
+fn test_vi_state_transfer_roundtrip() {
+    let driver1 = MockNetworkDriver::new();
     let size = driver1.state_size();
     let mut buffer = vec![0u8; size];
     
@@ -207,7 +207,7 @@ fn test_ViStateTransfer_roundtrip() {
 }
 
 #[test]
-fn test_ViVmRuntime_lifecycle() {
+fn test_vi_vm_runtime_lifecycle() {
     let mut vmm = MockVMM::new();
     
     // Create VM

@@ -28,6 +28,7 @@ use api::syscall::service;
 
 const OP_LOOKUP_REMOTE: u8 = 0x01;
 const RESP_FOUND:       u8 = 0x00;
+#[allow(dead_code)] // reason: documents the wire-protocol byte; client only branches on RESP_FOUND today
 const RESP_NOT_FOUND:   u8 = 0x01;
 
 const BUF_SIZE: usize = 64;

@@ -9,7 +9,7 @@ targets = [
 version = 2
 # yanked crates are denied by default in 0.15+
 # unmaintained/unsound: "all" = check all deps, "workspace" = workspace only
-unmaintained = "all"
+unmaintained = "deny"
 
 [licenses]
 confidence-threshold = 0.93
@@ -27,7 +27,7 @@ allow = [
 ]
 
 [[licenses.exceptions]]
-allow = ["GPL-2.0-only"]
+allow = ["GPL-2.0"]
 name = "doom"
 
 [[licenses.exceptions]]

@@ -35,6 +35,11 @@ const NO_WAITER: usize = 0;
 /// Cleared by `clear_waiter` (scheduler sweep after task transitions to Ready).
 static IRQ_WAITERS: [AtomicUsize; MAX_IRQ] = {
     // `AtomicUsize::new(0)` is const; arrays of const-init atomics are safe.
+    // `ZERO` is consumed exactly once, by `[ZERO; MAX_IRQ]` below — rustc evaluates
+    // a `const` operand fresh per array slot, so each IRQ line gets its OWN
+    // independent atomic, not a shared one. Switching to `static` would break the
+    // repeat expression (needs a `const` for non-`Copy` element types).
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: AtomicUsize = AtomicUsize::new(NO_WAITER);
     [ZERO; MAX_IRQ]
 };
@@ -44,6 +49,8 @@ static IRQ_WAITERS: [AtomicUsize; MAX_IRQ] = {
 /// Set by `signal_irq` (ISR, Release ordering).
 /// Cleared by `take_pending` (scheduler sweep or lost-wakeup guard, AcqRel swap).
 static IRQ_PENDING: [AtomicBool; MAX_IRQ] = {
+    // Same independent-per-slot rationale as `IRQ_WAITERS` above.
+    #[allow(clippy::declare_interior_mutable_const)]
     const FALSE: AtomicBool = AtomicBool::new(false);
     [FALSE; MAX_IRQ]
 };
@@ -52,6 +59,8 @@ static IRQ_PENDING: [AtomicBool; MAX_IRQ] = {
 /// (offset 0x64) and prevent interrupt storms on level-triggered VirtIO devices.
 /// 0 = non-VirtIO device (PCIe MSI, GPIO, …) — ISR skips the ack write.
 static IRQ_MMIO_BASE: [AtomicUsize; MAX_IRQ] = {
+    // Same independent-per-slot rationale as `IRQ_WAITERS` above.
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: AtomicUsize = AtomicUsize::new(0);
     [ZERO; MAX_IRQ]
 };

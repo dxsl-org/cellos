@@ -8,8 +8,10 @@
 //! produces a complete match for the hypervisor Syscall arms on every target.
 
 extern crate alloc;
+#[cfg(target_arch = "aarch64")]
 use alloc::{collections::{BTreeMap, VecDeque}, vec::Vec};
 use types::{ViError, ViResult};
+#[cfg(target_arch = "aarch64")]
 use crate::sync::Spinlock;
 
 // ── AArch64-only concrete types ───────────────────────────────────────────────
@@ -34,6 +36,9 @@ struct Vm {
     /// Per-vCPU pending virtual IRQ queue; intids written by inject_irq, drained
     /// into GICH LRs just before each run_vcpu_impl call (Phase 09).
     vcpu_irqs: Vec<VecDeque<u32>>,
+    // reason: retained for future VM introspection/debug tooling (e.g. listing
+    // active Stage-2 VMIDs); written at creation, not yet consumed by any reader.
+    #[allow(dead_code)]
     vmid:    u16,
 }
 
@@ -54,6 +59,9 @@ fn registry_lock() -> &'static Spinlock<Option<BTreeMap<(usize, usize), Vm>>> {
 
 /// Per-owner sequential VM-id counter, stored alongside each owner's first VM.
 /// Simple: we just use the total registered VM count + 1 as the next id.
+// reason: kept for near-future VM lifecycle refactor (currently `create_vm`
+// inlines equivalent logic); not yet wired up as a callable helper.
+#[allow(dead_code)]
 #[cfg(target_arch = "aarch64")]
 fn next_vm_id_for(owner: usize) -> usize {
     let guard = registry_lock().lock();
@@ -179,7 +187,7 @@ pub fn map_guest_memory(owner: usize, vm_id: usize, ipa: u64, size: usize, writa
 /// # Safety
 /// `exit_out` must point to a valid, writable `ViVmExit`-sized buffer in the
 /// caller's address space.  Validated by the syscall layer before this call.
-pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
+pub unsafe fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
                 exit_out: *mut api::hypervisor::ViVmExit) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {

@@ -130,7 +130,7 @@ pub fn serialize_slice(slice: &[u8], buffer: &mut [u8]) -> ViResult<usize> {
 }
 
 /// Helper for deserializing slices with length prefix.
-pub fn deserialize_slice<'a>(buffer: &'a [u8]) -> ViResult<(&'a [u8], usize)> {
+pub fn deserialize_slice(buffer: &[u8]) -> ViResult<(&[u8], usize)> {
     if buffer.len() < 8 {
         return Err(ViError::InvalidArgument);
     }

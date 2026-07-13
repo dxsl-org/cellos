@@ -106,7 +106,7 @@ fn calculate_std_dev(samples: &[u64], mean: u64) -> u64 {
     let variance: u64 = samples
         .iter()
         .map(|&x| {
-            let diff = if x > mean { x - mean } else { mean - x };
+            let diff = x.abs_diff(mean);
             diff * diff
         })
         .sum::<u64>()
@@ -122,7 +122,7 @@ fn integer_sqrt(n: u64) -> u64 {
         return 0;
     }
     let mut x = n;
-    let mut y = (x + 1) / 2;
+    let mut y = x.div_ceil(2);
     while y < x {
         x = y;
         y = (x + n / x) / 2;

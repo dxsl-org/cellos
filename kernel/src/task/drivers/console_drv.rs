@@ -7,6 +7,12 @@ pub struct viConsole {
     pub buffer: VecDeque<u8>,
 }
 
+impl Default for viConsole {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl viConsole {
     pub fn new() -> Self {
         Self {

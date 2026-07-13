@@ -30,7 +30,7 @@ fn inb(port: u16) -> u8 {
 pub fn init() {
     outb(COM1 + 1, 0x00); // Disable IRQs
     outb(COM1 + 3, 0x80); // DLAB = 1
-    outb(COM1 + 0, 0x01); // Divisor low  (115200 baud)
+    outb(COM1, 0x01);     // Divisor low  (115200 baud)
     outb(COM1 + 1, 0x00); // Divisor high
     outb(COM1 + 3, 0x03); // 8N1
     outb(COM1 + 2, 0xC7); // FIFO, 14-byte threshold

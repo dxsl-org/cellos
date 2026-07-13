@@ -619,7 +619,7 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
             use hal::paging::PAGE_SIZE;
             for i in 0..pages {
                 let addr = start + (i * PAGE_SIZE);
-                let _ = table.map(addr, addr, flags, &mut alloc_closure)
+                table.map(addr, addr, flags, &mut alloc_closure)
                     .expect("Failed to map user stack page!");
             }
         }
@@ -758,7 +758,7 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
         // SAFETY: rsp is the faulting kernel stack (cs=8); reading a few
         // qwords above it is safe — the stack is mapped or we would have
         // double-faulted before reaching this handler.
-        if rsp != 0 && rsp % 8 == 0 {
+        if rsp != 0 && rsp.is_multiple_of(8) {
             for i in 0..64usize {
                 if n >= callers.len() { break; }
                 let q = unsafe { core::ptr::read_volatile((rsp as *const u64).add(i)) };

@@ -79,11 +79,11 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
     //   TG0=4 KB (bits 15:14 = 0b00)
     //   bit23 = RES1 (ARMv8.0 non-VHE requirement)
     //   bit31 = RES1 (ARMv8.0 non-VHE requirement)
+    // TG0 = 4 KB (bits 15:14 = 0b00, already zero at reset — no term needed)
     let tcr: u64 = 25_u64
         | (1 << 8)       // IRGN0 = WB-WA-RA
         | (1 << 10)      // ORGN0 = WB-WA-RA
         | (3 << 12)      // SH0   = Inner-shareable
-        | (0 << 14)      // TG0   = 4 KB
         | (1 << 23)      // RES1
         | (1_u64 << 31); // RES1
     // SAFETY: EL2-private registers; identity-map covers current PC; caller verified EL2.
@@ -128,11 +128,11 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
     //
     // TCR_EL1 bit[23] = EPD1 (disable TTBR1_EL1, upper-half unused).
     // TCR_EL2 bit[23] = RES1 (non-VHE ARMv8.0 requirement) — same bit, different semantics.
+    // TG0 = 4 KB (bits 15:14 = 0b00, already zero at reset — no term needed)
     let tcr_el1: u64 = 25_u64
         | (1 << 8)   // IRGN0 = WB-WA-RA
         | (1 << 10)  // ORGN0 = WB-WA-RA
         | (3 << 12)  // SH0   = Inner-shareable
-        | (0 << 14)  // TG0   = 4 KB
         | (1 << 23); // EPD1  = disable TTBR1_EL1
     // SAFETY: EL2 has full access to EL1 system registers; page table covers
     // all kernel and cell VAs; called after EL2 MMU is live.

@@ -28,6 +28,11 @@ pub struct Tss {
     _rest: [u8; 84],
 }
 impl Tss { pub const fn new() -> Self { Self { _r0: 0, rsp0: 0, _rest: [0; 84] } } }
+impl Default for Tss {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[repr(transparent)]
 #[derive(Copy, Clone)]

@@ -27,6 +27,9 @@ pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [
 
 /// How many 10 ms ticks hart 0 waits for each secondary to come online before
 /// logging a warning and continuing single-hart.  500 ms is generous for QEMU.
+/// Only consumed by `start_secondaries`, which is riscv64-only (SBI HSM). Gated
+/// to avoid a dead-code warning on aarch64/x86_64.
+#[cfg(target_arch = "riscv64")]
 const SECONDARY_BOOT_TIMEOUT_TICKS: usize = 50;
 
 /// Called by hart 0 **after** `task::init()` to bring secondary harts online.

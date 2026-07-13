@@ -168,12 +168,12 @@ impl PeerTicket {
         let addrs_len  = (data[38] as usize).min(3) as u8;
         let mut addrs  = [([0u8; 4], 0u16); 3];
         let mut p = 39;
-        for i in 0..addrs_len as usize {
+        for addr in addrs.iter_mut().take(addrs_len as usize) {
             if p + 6 > data.len() { break; }
             let mut ip = [0u8; 4];
             ip.copy_from_slice(&data[p..p + 4]);
             let port = u16::from_le_bytes([data[p + 4], data[p + 5]]);
-            addrs[i] = (ip, port);
+            *addr = (ip, port);
             p += 6;
         }
         Some(Self { node_id: CellNetId(node_id), relay_ip, relay_port, addrs, addrs_len })

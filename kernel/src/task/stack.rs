@@ -5,7 +5,6 @@
 
 use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
-use alloc::vec::Vec;
 use log::{error, trace};
 use types::{VAddr, ViError};
 

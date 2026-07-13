@@ -8,9 +8,11 @@ use syscall::error::{Error, Result, EKEYREJECTED, ENOENT, ENOKEY};
 use xts_mode::{get_tweak_default, Xts128};
 
 #[cfg(feature = "std")]
-use crate::{AllocEntry, AllocList, BlockData, BlockTrait, Key, KeySlot, Node, Salt, TreeList};
 use crate::{
-    Allocator, BlockAddr, BlockLevel, BlockMeta, Disk, Header, Transaction, BLOCK_SIZE,
+    AllocEntry, AllocList, BlockData, BlockLevel, BlockTrait, Key, KeySlot, Node, Salt, TreeList,
+};
+use crate::{
+    Allocator, BlockAddr, BlockMeta, Disk, Header, Transaction, BLOCK_SIZE,
     HEADER_RING, RECORD_SIZE,
 };
 

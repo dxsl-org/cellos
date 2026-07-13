@@ -34,7 +34,7 @@ const TEST_CELL_ID: u64 = 0x00C0_FFEE;
 // Task::new default of u64::MAX — bit 63 is unassigned (real syscalls use bits
 // ≤54), so clearing it is behaviourally inert but proves the field was inherited
 // rather than left at the permit-all default.
-const TEST_ALLOWLIST: u64 = u64::MAX & !(1u64 << 63);
+const TEST_ALLOWLIST: u64 = !(1u64 << 63);
 const TEST_PKU_KEY: u8 = 2;
 const TEST_PKU_VALUE: u32 = 0xABCD_1234;
 
@@ -160,7 +160,7 @@ pub fn self_test() -> bool {
         let cleared = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
             sched.tasks.get(&CTRL_TID).map(|t| t.spawn_cap.is_none()).unwrap_or(false)
         } else { false };
-        if !(matches!(r_spawn, Ok(_)) && cleared) {
+        if !(r_spawn.is_ok() && cleared) {
             ok = false;
             log::error!("[selftest] REVOKE-ALLOW: FAIL r={:?} cleared={}", r_spawn, cleared);
         }

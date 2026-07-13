@@ -111,10 +111,11 @@ impl AArch64Vcpu {
     /// SPSR_EL2 = 0x3C5: EL1h (SP_EL1), all DAIF bits masked, AArch64 state.
     /// All GP registers default to 0; EL1 sysregs default to safe reset values.
     pub fn new(entry: u64) -> Self {
-        let mut v = Self::default();
-        v.g_elr_el2  = entry;
-        v.g_spsr_el2 = 0x3C5; // EL1h, DAIF=1111
-        v
+        Self {
+            g_elr_el2: entry,
+            g_spsr_el2: 0x3C5, // EL1h, DAIF=1111
+            ..Default::default()
+        }
     }
 
     /// Decode the VM exit recorded on the last trap.

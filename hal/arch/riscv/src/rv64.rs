@@ -62,9 +62,7 @@ impl Arch for RiscVArch {
     }
 
     fn wait_for_interrupt(&self) {
-        unsafe {
-            riscv::asm::wfi();
-        }
+        riscv::asm::wfi();
     }
 
     fn interrupts_enabled(&self) -> bool {

@@ -45,6 +45,14 @@ pub struct ViHartLocal {
 /// SAFETY: interior mutability via AtomicUsize; the `usize` fields are only
 /// written during `install()` before the hart handles any interrupt.
 pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
+    // `ZERO` is consumed exactly once below, by the `[ZERO; MAX_HARTS]` array-repeat
+    // expression — rustc evaluates a `const` operand fresh per array slot, so each
+    // hart gets its OWN independent `AtomicUsize`/`Spinlock`, not a shared instance.
+    // That is the desired behaviour here (see module doc: hart N only touches slot N),
+    // so this is not the aliasing footgun `declare_interior_mutable_const` warns about;
+    // switching to `static` would break the repeat expression (requires a `const` for
+    // non-`Copy` element types).
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: ViHartLocal = ViHartLocal {
         hart_id: 0,
         current_cell_id: AtomicUsize::new(0),
@@ -190,5 +198,9 @@ pub unsafe fn write_tp(val: usize) {
     core::arch::asm!("mv tp, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
+/// No-op on non-RISC-V targets (no `tp`-based hart-local addressing).
+///
+/// # Safety
+/// No preconditions on these targets — `_val` is unused and no state is written.
 #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
 pub unsafe fn write_tp(_val: usize) {}

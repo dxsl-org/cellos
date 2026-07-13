@@ -15,7 +15,9 @@
 //! Call ordering: `platform::init()` → `init_kernel_paging*()` → `pcie_ecam::init()`.
 
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
+#[cfg(target_arch = "x86_64")]
+use core::sync::atomic::AtomicUsize;
 use crate::sync::Spinlock;
 
 // ── ECAM base addresses (QEMU machine defaults) ───────────────────────────────

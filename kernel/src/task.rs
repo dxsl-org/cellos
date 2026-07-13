@@ -1,3 +1,8 @@
+// This module's Result<_, ()> IPC/task-management functions predate a proper
+// kernel error-type design; redesigning ~20 signatures (and every call site
+// matching Err(())) is out of scope for a lint cleanup — tracked separately.
+#![allow(clippy::result_unit_err)]
+
 pub mod cap;
 pub mod hart_local;
 pub mod smp;
@@ -31,7 +36,7 @@ extern "C" {
 }
 
 // use alloc::vec::Vec;
-use tcb::{SyscallFuture, TaskState};
+use tcb::TaskState;
 use types::*;
 
 // Global Scheduler Instance
@@ -430,7 +435,7 @@ pub fn spawn_from_mem(
     // Ensure alignment (xmas-elf requires it)
     use alloc::vec::Vec;
     let mut _aligned_storage: Option<Vec<u8>> = None;
-    let elf_data = if (data.as_ptr() as usize) % 8 != 0 {
+    let elf_data = if !(data.as_ptr() as usize).is_multiple_of(8) {
         log::warn!("Spawn: Unaligned ELF data (0x{:X}). Copying to aligned buffer...", data.as_ptr() as usize);
         let mut v = Vec::with_capacity(data.len());
         v.extend_from_slice(data);
@@ -460,13 +465,12 @@ pub fn spawn_from_mem(
         let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let frame_allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
         loader.load_segments(elf_data, frame_allocator, load_base)
-            .map_err(|e| {
+            .inspect_err(|_| {
                 // If segment loading fails after allocating a PIE VA slot,
                 // return the slot so it can be reused.
                 if load_base != 0 {
                     crate::loader::va_alloc::free_cell_va(load_base);
                 }
-                e
             })?
     };
 
@@ -611,7 +615,7 @@ pub fn spawn_from_mem(
     if load_base != 0 {
         use crate::loader::ElfParser;
         if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
-            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, &rela) {
+            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
                 log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
                 if let Some(sched) = SCHEDULER.lock().as_mut() {
                     sched.exit_task(tid, 0xff);
@@ -879,7 +883,6 @@ pub fn file_getcwd(_buf: &mut [u8]) -> core::result::Result<usize, ()> {
     Err(())
 }
 use crate::task::tcb::LeaseAttributes;
-use log::warn;
 
 pub fn ipc_lend(
     _lender_id: usize,
@@ -1474,8 +1477,8 @@ impl LogRing {
         let max = out.len();
         let avail = self.head.wrapping_sub(self.tail).min(LOG_RING_CAP);
         let n = avail.min(max);
-        for i in 0..n {
-            out[i] = self.buf[(self.tail.wrapping_add(i)) & (LOG_RING_CAP - 1)];
+        for (i, slot) in out.iter_mut().enumerate().take(n) {
+            *slot = self.buf[(self.tail.wrapping_add(i)) & (LOG_RING_CAP - 1)];
         }
         self.tail = self.tail.wrapping_add(n);
         n

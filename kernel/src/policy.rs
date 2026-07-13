@@ -23,7 +23,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Magic "VPOL" as a little-endian u32 (bytes V,P,O,L).
-const MAGIC: u32 = u32::from_le_bytes([b'V', b'P', b'O', b'L']);
+const MAGIC: u32 = u32::from_le_bytes(*b"VPOL");
 const VERSION: u8 = 1;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)

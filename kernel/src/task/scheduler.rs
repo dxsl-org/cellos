@@ -203,7 +203,7 @@ impl Scheduler {
         }
 
         let entry = task_entry_point as *const () as usize;
-        let (gp, tp) = crate::task::get_kernel_gp_tp();
+        let (_gp, _tp) = crate::task::get_kernel_gp_tp();
 
         // Allocate User Stack
         let ustack = crate::task::stack::Stack::new_user(STACK_FRAMES).expect("OOM User Stack");
@@ -214,7 +214,7 @@ impl Scheduler {
         task.trap_frame.sstatus = 0x20_u64 as _;  // SPIE enabled, SPP=0 (User Mode)
         task.trap_frame.regs[2] = ustack_top as _; // sp = x2
         #[cfg(target_arch = "riscv64")]
-        { task.context.ra = entry; task.context.gp = gp; task.context.tp = tp; }
+        { task.context.ra = entry; task.context.gp = _gp; task.context.tp = _tp; }
         #[cfg(target_arch = "aarch64")]
         { task.context.x30 = entry as u64; }
         #[cfg(target_arch = "x86_64")]
@@ -265,7 +265,7 @@ impl Scheduler {
                 STACK_FRAMES * crate::memory::paging::PAGE_SIZE,
             );
 
-            let (gp, tp) = crate::task::get_kernel_gp_tp();
+            let (_gp, _tp) = crate::task::get_kernel_gp_tp();
             let trampoline = crate::hal::arch::thread_trampoline as *const () as usize;
 
             task.context.sp = stack_top as _;
@@ -273,11 +273,11 @@ impl Scheduler {
             task.trap_frame.sstatus = 0x120;
             #[cfg(target_arch = "riscv64")]
             { task.context.ra = trampoline; task.context.s0 = arg; task.context.s1 = entry;
-              task.context.gp = gp; task.context.tp = tp; }
+              task.context.gp = _gp; task.context.tp = _tp; }
             #[cfg(target_arch = "riscv32")]
             { task.context.ra = trampoline as u32; task.context.s0 = arg as u32;
-              task.context.s1 = entry as u32; task.context.gp = gp as u32;
-              task.context.tp = tp as u32; }
+              task.context.s1 = entry as u32; task.context.gp = _gp as u32;
+              task.context.tp = _tp as u32; }
             #[cfg(target_arch = "aarch64")]
             { task.context.x30 = trampoline as u64;
               task.context.x19 = arg as u64;
@@ -493,18 +493,14 @@ impl Scheduler {
                 let mut should_wake = false;
                 let mut timed_out = false;
                 match &task.state {
-                    TaskState::Sleeping { until } => {
-                        if now >= *until {
-                            should_wake = true;
-                        }
+                    TaskState::Sleeping { until } if now >= *until => {
+                        should_wake = true;
                     }
-                    TaskState::Recv { deadline: Some(d), .. } => {
-                        // `deadline` is u64 (mtime-domain field); `now` is usize system
-                        // ticks. On rv64 usize == u64, so the cast is lossless.
-                        if now as u64 >= *d {
-                            should_wake = true;
-                            timed_out = true;
-                        }
+                    // `deadline` is u64 (mtime-domain field); `now` is usize system
+                    // ticks. On rv64 usize == u64, so the cast is lossless.
+                    TaskState::Recv { deadline: Some(d), .. } if now as u64 >= *d => {
+                        should_wake = true;
+                        timed_out = true;
                     }
                     TaskState::WaitEvent { mask, deadline } => {
                         let fired = super::waker::consume_pending(*mask);
@@ -521,11 +517,9 @@ impl Scheduler {
                     // WaitIrq: IRQ-only wake — no deadline, no timeout.
                     // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).
                     // This sweep is the only place that transitions WaitIrq → Ready.
-                    TaskState::WaitIrq { irq } => {
-                        if crate::task::drivers::irq_wait::take_pending(*irq) {
-                            crate::task::drivers::irq_wait::clear_waiter(*irq);
-                            should_wake = true;
-                        }
+                    TaskState::WaitIrq { irq } if crate::task::drivers::irq_wait::take_pending(*irq) => {
+                        crate::task::drivers::irq_wait::clear_waiter(*irq);
+                        should_wake = true;
                     }
                     _ => {}
                 }
@@ -762,7 +756,7 @@ impl Scheduler {
             // SAFETY: Box<Task> pins the Task on the heap; pointer is valid until reap.
             let next_ctx: *const crate::hal::arch::Context = self.tasks
                 .get(&nid).map(|t| &t.context as *const _)
-                .unwrap_or(core::ptr::null());
+                .unwrap_or_default();
             rl::set_current_task_id(hart_id, nid);
 
             if let Some(cid) = current_id {

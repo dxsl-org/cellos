@@ -26,8 +26,8 @@ use core::sync::atomic::Ordering;
 ///   - PCIe ECAM at 0x3000_0000 (1 MiB); VirtIO BAR below 0x8000_0000
 ///   - RAM identity map: 256 MB at 0x8000_0000 → ends at 0x8FFF_FFFF
 ///   - QEMU virt AArch64: GIC/peripheral MMIO below 0x1000_0000
-/// 4 GiB clears all of the above with room to spare and remains well inside
-/// the SV39 user-half (256 GiB = 0x40_0000_0000).
+///     4 GiB clears all of the above with room to spare and remains well inside
+///     the SV39 user-half (256 GiB = 0x40_0000_0000).
 ///
 /// RISC-V medany: intra-cell refs are ≤32 MiB apart → always within ±2 GiB.
 ///
@@ -48,7 +48,7 @@ const CELL_VA_STRIDE: usize = 0x200_0000;
 const MAX_SLOTS: usize = 512;
 
 /// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
-const BITMAP_WORDS: usize = (MAX_SLOTS + 63) / 64;
+const BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(64);
 
 /// Bump index: the first slot that has NEVER been allocated.
 static BUMP: core::sync::atomic::AtomicUsize =
@@ -56,11 +56,12 @@ static BUMP: core::sync::atomic::AtomicUsize =
 
 /// Free-list bitmap: bit N = 1 means slot N is available for reuse.
 /// Uses relaxed CAS loops — no ordering guarantee needed beyond the CAS itself.
-static FREE: [AtomicU64; BITMAP_WORDS] = {
-    // const-init an array of AtomicU64::new(0)
-    const ZERO: AtomicU64 = AtomicU64::new(0);
-    [ZERO; BITMAP_WORDS]
-};
+// Each repeat evaluates the inline `const` block independently, giving
+// BITMAP_WORDS distinct AtomicU64 instances (not one instance aliased across
+// slots) — an inline const sidesteps `clippy::declare_interior_mutable_const`,
+// which would otherwise flag a *named* const of this type, without changing
+// the initialization semantics.
+static FREE: [AtomicU64; BITMAP_WORDS] = [const { AtomicU64::new(0) }; BITMAP_WORDS];
 
 /// Allocate a 32 MiB VA base for a new PIE cell.
 ///
@@ -98,7 +99,7 @@ pub fn alloc_cell_va() -> Option<usize> {
 pub fn free_cell_va(base: usize) {
     if base < CELL_VA_START { return; }
     let offset = base - CELL_VA_START;
-    if offset % CELL_VA_STRIDE != 0 { return; }
+    if !offset.is_multiple_of(CELL_VA_STRIDE) { return; }
     let slot = offset / CELL_VA_STRIDE;
     if slot >= MAX_SLOTS { return; }
     let word = &FREE[slot / 64];

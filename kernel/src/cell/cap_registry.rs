@@ -60,6 +60,12 @@ pub struct CapTable {
 /// Maximum number of times a capability can be delegated via `grant_to`.
 const MAX_GRANT_DEPTH: u8 = 4;
 
+impl Default for CapTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CapTable {
     pub const fn new() -> Self {
         Self {

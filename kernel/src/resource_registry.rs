@@ -124,7 +124,7 @@ pub fn register_pcie_bar(base: usize, len: usize) {
 /// Used by the `RequestMmio` handler to decide whether to take the PCIe path.
 pub fn is_pcie_bar(base: usize, len: usize) -> bool {
     let guard = PCIE_BARS.lock();
-    guard.get(&base).map_or(false, |&bar_len| len <= bar_len)
+    guard.get(&base).is_some_and(|&bar_len| len <= bar_len)
 }
 
 /// Request exclusive MMIO ownership without allowlist validation (Platform Cell only).
@@ -163,7 +163,7 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
     // PCIe path: validate against the dynamic BAR table populated by pcie_ecam.
     let in_allowlist = if allowed_devices & DEV_PCIE != 0 {
         let bars = PCIE_BARS.lock();
-        bars.get(&base).map_or(false, |&bar_len| len <= bar_len)
+        bars.get(&base).is_some_and(|&bar_len| len <= bar_len)
     } else {
         // GPIO/UART path: static per-arch allowlist.
         ALLOWED.iter().any(|&(ab, al, class)| {

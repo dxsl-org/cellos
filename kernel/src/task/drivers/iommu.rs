@@ -45,6 +45,8 @@ pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> u64 {
     super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
     super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+    let _ = (tid, bdf); // no IOMMU backend on this arch yet
     phys
 }
 
@@ -60,6 +62,8 @@ pub fn cleanup_cell(tid: u64) {
     super::iommu_riscv::unmap_cell(tid);
     #[cfg(target_arch = "x86_64")]
     super::iommu_x86::unmap_cell_domain(tid); // Phase 02 will implement
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+    let _ = tid; // no IOMMU backend on this arch yet
 }
 
 /// Phase 3: switch IOMMU from passthrough to page-table enforcement.
@@ -83,6 +87,7 @@ pub fn is_active() -> bool {
 }
 
 /// Mark DMA isolation as active. Called by arch backends on successful activation.
+#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 pub(super) fn set_active() {
     IOMMU_ISOLATED.store(true, Ordering::Relaxed);
 }

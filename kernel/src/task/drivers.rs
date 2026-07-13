@@ -27,8 +27,10 @@ pub mod virtio_rng;
 pub mod pcie_ecam;    // PCIe ECAM config-space walker (bus 0)
 pub mod iommu_pt;     // IOMMU identity-mapping page tables (Sv39 / VT-d SLPT)
 pub mod iommu;        // IOMMU common API — three-phase DMA isolation
-pub mod iommu_riscv;  // RISC-V IOMMU — 1-level DDT + Sv39 second-stage
-pub mod iommu_x86;    // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
+#[cfg(target_arch = "riscv64")]
+pub mod iommu_riscv; // RISC-V IOMMU — 1-level DDT + Sv39 second-stage
+#[cfg(target_arch = "x86_64")]
+pub mod iommu_x86; // Intel VT-d — TT=TRANSLATED + Sv39 SLPT
 pub mod nic;          // NIC selector (VirtIO; PCIe NICs are Driver Cells)
 // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
 pub mod driver_cell;  // Driver Cell registration statics (BLOCK_DRIVER_CELL / NIC_DRIVER_CELL)

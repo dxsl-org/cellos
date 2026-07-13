@@ -95,7 +95,7 @@ impl SdhciController {
     /// Reset the controller (all lines).
     pub fn reset_all(&mut self) -> ViResult<()> {
         self.write8(SDHCI_SOFT_RESET, RESET_ALL);
-        self.poll_clear(SDHCI_SOFT_RESET as usize, RESET_ALL as u32, POLL_TIMEOUT_US)?;
+        self.poll_clear(SDHCI_SOFT_RESET, RESET_ALL as u32, POLL_TIMEOUT_US)?;
         Ok(())
     }
 
@@ -113,8 +113,8 @@ impl SdhciController {
 
         let clk = if self.spec_ver >= SPEC_V3 {
             // 10-bit divider: bits[7:0] in bits[15:8], bits[9:8] in bits[7:6].
-            let lo = (div & 0xFF) as u16;
-            let hi = ((div >> 8) & 0x03) as u16;
+            let lo = div & 0xFF;
+            let hi = (div >> 8) & 0x03;
             (lo << 8) | (hi << 6) | CLK_INT_EN
         } else {
             // 8-bit divider (spec v1/v2): bits[7:0] in bits[15:8].
@@ -124,7 +124,7 @@ impl SdhciController {
         self.write16(SDHCI_CLOCK_CONTROL, clk);
         // Wait for internal clock to stabilise.
         let _ = self.poll_set(
-            SDHCI_CLOCK_CONTROL as usize,
+            SDHCI_CLOCK_CONTROL,
             CLK_INT_STABLE as u32,
             POLL_TIMEOUT_US,
         );
@@ -256,7 +256,7 @@ impl ViMmcHost for SdhciController {
         // We assume 200 MHz; the divider is rounded up to the nearest power-of-2 (spec v1/v2)
         // or any value (spec v3). For boot-time use we target either 400 kHz (ID) or 25 MHz (DS).
         const BASE_HZ: u32 = 200_000_000;
-        let div = if hz == 0 { 0 } else { (BASE_HZ / hz / 2).max(1) as u16 };
+        let div = BASE_HZ.checked_div(hz).map_or(0, |q| (q / 2).max(1) as u16);
         self.set_clock_div(div);
         Ok(())
     }

@@ -39,7 +39,7 @@ static VFS_HANDLER_CELL: AtomicUsize = AtomicUsize::new(0);
 pub extern "Rust" fn register_vfs(handler: VfsFastHandler) {
     // SAFETY: fn-ptr → *mut () for atomic storage; recovered with the same type
     // in `call_vfs`. Published Release so the handler body is visible to Acquire readers.
-    VFS_HANDLER_PTR.store(unsafe { core::mem::transmute(handler) }, Ordering::Release);
+    VFS_HANDLER_PTR.store(handler as *mut (), Ordering::Release);
 }
 
 /// Record which cell owns the registered handler (kernel-internal; called from

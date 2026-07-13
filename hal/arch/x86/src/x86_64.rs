@@ -51,6 +51,7 @@ pub mod arch {
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// Runtime HPET MMIO base parsed from ACPI; 0 = use compile-time default.

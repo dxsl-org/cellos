@@ -112,7 +112,9 @@ pub fn set_kernel_stack(sp: usize) {
 
 // ── Hypervisor skeleton (P01) ─────────────────────────────────────────────────
 
+#[cfg(target_arch = "aarch64")]
 use hal_hypervisor::{ViHypervisor, ViVmExit, ViVmStub, ViVcpuStub, ViStage2TableStub};
+#[cfg(target_arch = "aarch64")]
 use types::{ViResult, ViError};
 
 /// AArch64 hypervisor trait skeleton (ViHypervisor wiring deferred to P04).

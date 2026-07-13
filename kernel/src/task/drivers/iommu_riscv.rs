@@ -335,6 +335,7 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
 }
 
 /// Backward-compat: register a DMA range for the kernel domain (tid=0) without a BDF.
+#[allow(dead_code)] // reason: kept for API parity with iommu_x86; no caller wired up yet
 pub(super) fn map_range(phys: u64, size: usize) {
     map_range_for_cell(0, 0, phys, size);
 }

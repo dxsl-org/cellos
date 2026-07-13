@@ -10,18 +10,13 @@
 /// highest-priority ready Cell; ties are broken by FIFO within the same
 /// tier.
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum TaskPriority {
     /// Lowest priority — batch workloads, AI inference, non-urgent logging.
     Background = 0,
     /// Default priority — shell, VFS, config, network.
+    #[default]
     Normal = 1,
     /// Highest priority — robot control, sensor polling, hard-deadline tasks.
     RealTime = 2,
-}
-
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }

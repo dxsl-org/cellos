@@ -103,6 +103,10 @@ pub extern "C" fn ldexp(x: f64, n: i32) -> f64 { libm::ldexp(x, n) }
 pub extern "C" fn ilogb(x: f64) -> i32 { libm::ilogb(x) }
 
 /// modf: splits x into integer and fractional parts; stores integer in *iptr.
+///
+/// # Safety
+/// `iptr` must be either null or point to a single writable, properly
+/// aligned `f64` for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn modf(x: f64, iptr: *mut f64) -> f64 {
     let (frac, int_part) = libm::modf(x);
@@ -111,6 +115,10 @@ pub unsafe extern "C" fn modf(x: f64, iptr: *mut f64) -> f64 {
 }
 
 /// frexp: decomposes x into mantissa ∈ [0.5, 1) and exponent.
+///
+/// # Safety
+/// `exp` must be either null or point to a single writable, properly
+/// aligned `i32` for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn frexp(x: f64, exp: *mut i32) -> f64 {
     let (mantissa, exponent) = libm::frexp(x);
@@ -184,6 +192,10 @@ pub extern "C" fn ldexpf(x: f32, n: i32) -> f32 { libm::ldexpf(x, n) }
 pub extern "C" fn ilogbf(x: f32) -> i32 { libm::ilogbf(x) }
 
 /// modff: float variant of modf.
+///
+/// # Safety
+/// `iptr` must be either null or point to a single writable, properly
+/// aligned `f32` for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn modff(x: f32, iptr: *mut f32) -> f32 {
     let (frac, int_part) = libm::modff(x);
@@ -192,6 +204,10 @@ pub unsafe extern "C" fn modff(x: f32, iptr: *mut f32) -> f32 {
 }
 
 /// frexpf: float variant of frexp.
+///
+/// # Safety
+/// `exp` must be either null or point to a single writable, properly
+/// aligned `i32` for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn frexpf(x: f32, exp: *mut i32) -> f32 {
     let (mantissa, exponent) = libm::frexpf(x);

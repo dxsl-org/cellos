@@ -153,6 +153,16 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
 }
 
 // Softfloat aarch64 (NEON disabled): no FP callee-saved registers to preserve.
+///
+/// Save the calling environment (x19–x30, sp) into `env` for a later `longjmp`.
+///
+/// # Safety
+/// `env` must be non-null, properly aligned, and point to a writable
+/// `JmpBuf` for the duration of the call. The saved environment is only
+/// valid for `longjmp` while the stack frame that invoked `setjmp` is still
+/// live on the call stack — jumping back after that frame has returned (or
+/// been unwound) is undefined behavior, per the C standard `setjmp`/`longjmp`
+/// contract.
 #[cfg(all(target_arch = "aarch64", not(target_feature = "neon")))]
 #[unsafe(naked)]
 #[no_mangle]
@@ -172,6 +182,16 @@ pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
     )
 }
 
+/// Restore the environment saved by a prior `setjmp(env)` and resume
+/// execution there, making that `setjmp` call return `val` (or 1 if `val == 0`).
+///
+/// # Safety
+/// `env` must be non-null, properly aligned, and point to a `JmpBuf`
+/// previously populated by `setjmp` on **this same call stack**, and the
+/// stack frame that called that `setjmp` must still be live (not returned
+/// or unwound) — restoring `sp`/`x19`–`x30` to a dead frame corrupts the
+/// stack and is undefined behavior. This function never returns to its
+/// caller; control transfers directly to the `setjmp` call site.
 #[cfg(all(target_arch = "aarch64", not(target_feature = "neon")))]
 #[unsafe(naked)]
 #[no_mangle]

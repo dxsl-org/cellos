@@ -14,6 +14,23 @@ jobs:
           fetch-depth: 0
 
       - name: Check DCO sign-off
-        uses: dco-org/check-dco@v1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        # Inline check — no third-party Action — every commit in the PR range
+        # (base..head) must carry a "Signed-off-by:" trailer (DCO requirement).
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS= read -r sha; do
+            [ -z "$sha" ] && continue
+            if ! git log -1 --format=%B "$sha" | grep -qi '^Signed-off-by: .*<.*@.*>'; then
+              echo "::error::Commit $sha is missing a Signed-off-by trailer"
+              missing=1
+            fi
+          done < <(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA")
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more commits are missing DCO sign-off. Run: git commit --amend -s (or rebase with -s)."
+            exit 1
+          fi
+          echo "PASS: all commits in this PR are signed off."

@@ -40,6 +40,7 @@ const IOTLB_IVT: u64 = 1u64 << 63;
 const IOTLB_DRD: u64 = 1u64 << 49;
 const IOTLB_DWD: u64 = 1u64 << 48;
 const IOTLB_DSI: u64 = 0b01 << 4; // domain-selective
+#[allow(dead_code)] // reason: page-selective flush path (iotlb_flush_page) awaits its Phase 02 caller
 const IOTLB_PSI: u64 = 0b10 << 4; // page-selective
 
 // Context entry encoding (VT-d spec §9.3, 128-bit entry):
@@ -142,13 +143,14 @@ fn iotlb_flush_domain(did: u16) {
 }
 
 /// Issue a page-selective IOTLB flush for a single page `iova` in domain `did`.
+#[allow(dead_code)] // reason: awaits its Phase 02 caller (unmap_range_for_cell)
 fn iotlb_flush_page(did: u16, iova: u64) {
     let iva_off = VTD_IVA_OFF.load(Ordering::Relaxed);
     if iva_off == 0 { return; }
 
     let iotlb_off = iva_off + 8;
     // IVA: bits[63:12] = page addr, bits[5:0] = AM (0 = single page)
-    let iva_val = (iova & !0xFFF) | 0; // AM=0
+    let iva_val = iova & !0xFFF; // AM=0
     // SAFETY: VTD_BASE + iva_off is identity-mapped VT-d MMIO.
     unsafe { write64(VTD_BASE, iva_off, iva_val) };
     let cmd = IOTLB_IVT | IOTLB_PSI | IOTLB_DRD | IOTLB_DWD | ((did as u64) << 32);
@@ -189,7 +191,7 @@ fn ctx_flush_domain(did: u16) {
 /// Write a single VT-d context entry for (bus, dev, func) → (slpt_phys, did).
 ///
 /// Write order per VT-d spec §6.2.3.1: hi (DID) first, fence, lo (P=1) last.
-unsafe fn write_ctx_entry(ctx_virt: usize, bus: u8, dev: u8, func: u8,
+unsafe fn write_ctx_entry(ctx_virt: usize, _bus: u8, dev: u8, func: u8,
                           slpt_phys: u64, did: u16) {
     // Context table layout: 256 bus×32 devices×8 funcs, each entry = 16 bytes.
     // With one shared context table for all buses (Phase 01 limitation), index by dev+func only.
@@ -293,6 +295,7 @@ pub(super) fn map_range_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) {
 }
 
 /// Backward-compat wrapper: kernel domain (tid=0, bdf=0) → map in tid=0 domain.
+#[allow(dead_code)] // reason: kept for API parity with iommu_riscv; no caller wired up yet
 pub(super) fn map_range(phys: u64, size: usize) {
     map_range_for_cell(0, 0, phys, size);
 }
@@ -390,6 +393,7 @@ pub(super) fn unmap_cell_domain(tid: u64) {
 }
 
 /// Issue a page-selective IOTLB flush for a specific IOVA owned by `tid`.
+#[allow(dead_code)] // reason: finer-grained per-IOVA unmap; iommu.rs currently only wires full-cell unmap_cell_domain (Phase 02)
 pub(super) fn unmap_range_for_cell(tid: u64, iova: u64, _size: usize) {
     let domains = VTD_DOMAINS.lock();
     if let Some(domain) = domains.get(&tid) {

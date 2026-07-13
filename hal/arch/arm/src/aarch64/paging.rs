@@ -131,11 +131,11 @@ impl PageTableTrait for PageTable {
 
         // ── EL1 path (unchanged) ─────────────────────────────────────────────
         let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
+        // TG0=4KB (bits 15:14 = 0b00, already zero at reset — no term needed)
         let tcr: u64 = 25      // T0SZ=25 (39-bit VA)
                      | (1 << 8)  // IRGN0=WB-WA
                      | (1 << 10) // ORGN0=WB-WA
                      | (3 << 12) // SH0=Inner-shareable
-                     | (0 << 14) // TG0=4KB
                      | (1 << 23); // EPD1=disable TTBR1
         // SAFETY: MMU activation sequence per AArch64 Architecture Reference Manual.
         // Order: write MAIR/TCR, then TTBR0, then barriers, then enable in SCTLR.

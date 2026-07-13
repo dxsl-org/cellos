@@ -10,14 +10,23 @@
 use crate::sync::Spinlock;
 
 // ── QEMU virt defaults (riscv64 fallback) ─────────────────────────────────────
+// Only consumed by `PlatformInfo::qemu_defaults` and `from_dtb`, both riscv64-only
+// (the DTB parser below only exists on riscv64 — other arches hardcode PlatformInfo
+// directly in their own `init`). Gated to avoid dead-code warnings on aarch64/x86_64.
 
+#[cfg(target_arch = "riscv64")]
 const DEFAULT_UART_BASE:  usize = 0x1000_0000;
+#[cfg(target_arch = "riscv64")]
 const DEFAULT_UART_IRQ:   u32   = 10;
+#[cfg(target_arch = "riscv64")]
 const DEFAULT_PLIC_BASE:  usize = 0x0C00_0000;
 /// 64 MB: PLIC claim/complete registers are at base + 0x20_0000 * context.
+#[cfg(target_arch = "riscv64")]
 const DEFAULT_PLIC_SIZE:  usize = 0x400_0000;
+#[cfg(target_arch = "riscv64")]
 const DEFAULT_CLINT_BASE: usize = 0x0200_0000;
 /// Goldfish RTC default on QEMU RISC-V virt (google,goldfish-rtc in DTB).
+#[cfg(target_arch = "riscv64")]
 const DEFAULT_RTC_BASE:   usize = 0x0010_1000;
 
 // ── Public types ───────────────────────────────────────────────────────────────
@@ -45,6 +54,9 @@ pub struct PlatformInfo {
 }
 
 impl PlatformInfo {
+    /// Only called from `from_dtb`, which is riscv64-only (the DTB parser section
+    /// below). Gated to avoid a dead-code warning on aarch64/x86_64.
+    #[cfg(target_arch = "riscv64")]
     fn qemu_defaults() -> Self {
         Self {
             uart_base:   DEFAULT_UART_BASE,
@@ -81,6 +93,7 @@ pub fn init(sbi_dtb: usize) {
         Some(p) => p,
         None    => sbi_dtb,
     };
+    #[allow(unused_mut)] // reason: only mutated under the board-pioneer feature below
     let mut info = from_dtb(dtb_ptr);
 
     // Pioneer SG2042: UART (snps,dw-apb-uart) lives at 0x7040_0000_0000 — a

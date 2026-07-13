@@ -6,7 +6,6 @@
 //! RT tasks (priority ≥ RealTime) are never stolen; Phase 04 will hart-pin them.
 
 use super::{HART_LOCALS, MAX_HARTS};
-use alloc::collections::VecDeque;
 
 const RT_PRIO: u8 = api::TaskPriority::RealTime as u8;
 
@@ -17,7 +16,7 @@ pub fn push_on_hart(hart_id: usize, id: usize, priority: u8) {
     if hart_id < MAX_HARTS {
         HART_LOCALS[hart_id].ready.lock()
             .entry(priority)
-            .or_insert_with(VecDeque::new)
+            .or_default()
             .push_back(id);
     }
 }
@@ -41,8 +40,8 @@ pub fn pick_local(hart_id: usize) -> Option<usize> {
 /// Remove task `id` from every hart's ready queue.
 /// Call while holding SCHEDULER (lock order: SCHEDULER → ready).
 pub fn remove_from_all(id: usize) {
-    for h in 0..MAX_HARTS {
-        let mut rq = HART_LOCALS[h].ready.lock();
+    for local in HART_LOCALS.iter() {
+        let mut rq = local.ready.lock();
         for queue in rq.values_mut() { queue.retain(|&x| x != id); }
     }
 }
@@ -108,7 +107,7 @@ pub fn steal_from_busiest(thief: usize) {
             if let Some(vq) = g1.get_mut(&p) {
                 while stolen < to_steal {
                     match vq.pop_front() {
-                        Some(id) => { g0.entry(p).or_insert_with(VecDeque::new).push_back(id); stolen += 1; }
+                        Some(id) => { g0.entry(p).or_default().push_back(id); stolen += 1; }
                         None => break,
                     }
                 }
@@ -118,7 +117,7 @@ pub fn steal_from_busiest(thief: usize) {
             if let Some(vq) = g0.get_mut(&p) {
                 while stolen < to_steal {
                     match vq.pop_front() {
-                        Some(id) => { g1.entry(p).or_insert_with(VecDeque::new).push_back(id); stolen += 1; }
+                        Some(id) => { g1.entry(p).or_default().push_back(id); stolen += 1; }
                         None => break,
                     }
                 }

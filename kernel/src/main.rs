@@ -133,7 +133,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Use hardcoded q35 defaults here; TODO: re-parse after init_kernel_paging
         // creates a full physical window that covers all e820 regions.
         if rsdp != 0 && rsdp >= 0x10_0000 {
-            let info = crate::acpi::parse(rsdp, |p| phys_to_virt(p));
+            let info = crate::acpi::parse(rsdp, phys_to_virt);
             early_puts("[INFO] ACPI tables parsed\n");
             info
         } else {
@@ -769,7 +769,7 @@ fn panic(info: &PanicInfo) -> ! {
             Ok(())
         }
     }
-    let _ = write!(PanicWriter, "{}\n", info);
+    let _ = writeln!(PanicWriter, "{}", info);
 
     // Reboot or spin: RISC-V uses SBI SRST; ARM64 / x86_64 spin.
     puts("[KERNEL PANIC] halting...\n");

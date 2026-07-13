@@ -51,6 +51,12 @@ pub struct Sv39IommuPt {
 // SAFETY: pointers are into kernel-owned 4 KiB pages never aliased externally.
 unsafe impl Send for Sv39IommuPt {}
 
+impl Default for Sv39IommuPt {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sv39IommuPt {
     pub fn new() -> Self {
         let (v, p) = alloc_page();
@@ -114,6 +120,12 @@ pub struct VtdSlpt {
 
 // SAFETY: pointers are into kernel-owned 4 KiB pages never aliased externally.
 unsafe impl Send for VtdSlpt {}
+
+impl Default for VtdSlpt {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl VtdSlpt {
     pub fn new() -> Self {

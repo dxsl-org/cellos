@@ -106,7 +106,7 @@ impl ElfLoader {
                 let mut perm_bits = Flags::VALID | Flags::USER | Flags::ACCESSED
                     | Flags::READ | Flags::WRITE | Flags::DIRTY;
                 if ph_flags.is_execute() {
-                    perm_bits = perm_bits | Flags::EXECUTE;
+                    perm_bits |= Flags::EXECUTE;
                 }
                 let flags = Flags::from_bits(perm_bits);
 

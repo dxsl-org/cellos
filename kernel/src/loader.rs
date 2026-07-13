@@ -49,9 +49,9 @@ pub struct ElfHeader {
 /// - `ViError::NotFound` — path absent from the bootstrap table.
 /// - `ViError::InvalidInput` — malformed ELF or unsupported relocation.
 /// - `ViError::OutOfMemory` — cannot allocate frames for segments.
-/// Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
-/// Mirrors the pre-manifest behavior; only `/bin/` paths gain privilege. The
-/// returned set is still subject to spawner intersection in `spawn_from_path`.
+///   Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
+///   Mirrors the pre-manifest behavior; only `/bin/` paths gain privilege. The
+///   returned set is still subject to spawner intersection in `spawn_from_path`.
 fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
     let mut c = crate::task::cap::CapSet::EMPTY;
     if path.starts_with("/bin/") {

@@ -71,7 +71,7 @@ pub fn decode_vmexit(
             let imm = (iss & 0xFFFF) as u16;
             let mut regs = [0u64; 8];
             // Copy guest x0-x7 as the SMCCC/PSCI argument registers.
-            for i in 0..8 { regs[i] = gp[i]; }
+            regs.copy_from_slice(&gp[..8]);
             ViVmExit::Hvc { imm, regs }
         }
 

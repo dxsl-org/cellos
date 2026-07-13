@@ -14,6 +14,9 @@
 
 use super::cap::CapSet;
 
+/// One (path, cap-accessor) case exercised by `self_test`.
+type PrivCapCase = (&'static str, fn(&CapSet) -> bool);
+
 /// Returns true iff the ceiling correctly bounds every privileged path-cap.
 pub fn self_test() -> bool {
     let mut ok = true;
@@ -24,7 +27,7 @@ pub fn self_test() -> bool {
 
     // Each privileged cap: path REQUESTS it, non-priv ceiling DROPS it (C1 closed),
     // init's ALL ceiling PRESERVES it (the legitimate cell still works).
-    let cases: [(&str, fn(&CapSet) -> bool); 3] = [
+    let cases: [PrivCapCase; 3] = [
         ("/bin/nvme",       |c| c.pcie_driver),
         ("/bin/platform",   |c| c.platform),
         ("/bin/supervisor", |c| c.supervisor),

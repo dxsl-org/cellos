@@ -31,6 +31,7 @@
 /// Normal-WB-WA Inner+Outer-shareable, bit[31]=RES1.
 ///
 /// T0SZ=24 | SL0=1 | IRGN0=01 | ORGN0=01 | SH0=11 | PS=010 | RES1
+#[cfg(target_arch = "aarch64")]
 const VTCR_VALUE: u64 = 0x8002_3558;
 
 /// Enable Stage-2 translation for the given `vmid` and root page-table at `root_pa`.

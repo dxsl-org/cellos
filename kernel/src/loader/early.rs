@@ -132,7 +132,7 @@ impl EarlyLoader {
             (entry.data_lba, entry.data_size as usize)
         };
         if size == 0 { return Err(ViError::InvalidInput); }
-        let sector_count = (size + SECTOR_SIZE - 1) / SECTOR_SIZE;
+        let sector_count = size.div_ceil(SECTOR_SIZE);
         let mut buf = alloc::vec![0u8; sector_count * SECTOR_SIZE];
         for i in 0..sector_count {
             let lba = data_lba + i as u64;

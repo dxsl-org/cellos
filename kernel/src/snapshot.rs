@@ -92,7 +92,7 @@ pub fn serialize_snapshot() -> Result<u32, &'static str> {
     #[cfg(target_arch = "riscv64")]
     let t0 = hal::common::timer::read_mtime();
     #[cfg(not(target_arch = "riscv64"))]
-    let t0 = 0u64;
+    let _t0 = 0u64;
 
     let guard = FRAME_ALLOCATOR.lock();
     let allocator = guard.as_ref().ok_or("frame allocator not initialized")?;
@@ -230,15 +230,14 @@ pub fn try_restore() -> bool {
         hdr_copy[36..40].copy_from_slice(&[0u8; 4]);
         hasher.update(&hdr_copy[..core::mem::size_of::<SnapshotHeader>()]);
 
-        let mut frame_lba = SNAPSHOT_BASE_LBA + 1;
         let mut buf = [0u8; 512];
-        for _ in 0..frame_count * 8 {
+        let crc_lba_end = SNAPSHOT_BASE_LBA + 1 + frame_count as u64 * 8;
+        for frame_lba in (SNAPSHOT_BASE_LBA + 1)..crc_lba_end {
             if block::read_sector(frame_lba, &mut buf).is_err() {
                 log::warn!("[snapshot] read error during CRC verify → cold boot");
                 return false;
             }
             hasher.update(&buf);
-            frame_lba += 1;
         }
         if hasher.finalize() != saved_crc {
             log::warn!("[snapshot] CRC32 mismatch → cold boot (corrupted snapshot)");
@@ -251,7 +250,7 @@ pub fn try_restore() -> bool {
     #[cfg(target_arch = "riscv64")]
     let t_restore_start = hal::common::timer::read_mtime();
     #[cfg(not(target_arch = "riscv64"))]
-    let t_restore_start = 0u64;
+    let _t_restore_start = 0u64;
 
     // Restore frames to their original physical addresses.
     // This overwrites ALL of physical RAM including kernel .bss/.data — global

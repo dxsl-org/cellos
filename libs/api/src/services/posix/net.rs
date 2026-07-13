@@ -52,8 +52,8 @@ fn net_tid() -> usize {
 }
 
 fn alloc_fd() -> Option<(c_int, usize)> {
-    for i in 0..MAX_SOCKETS {
-        if SOCK_CAPS[i].compare_exchange(0, u32::MAX, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+    for (i, cap) in SOCK_CAPS.iter().enumerate() {
+        if cap.compare_exchange(0, u32::MAX, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             return Some((SOCK_BASE_FD + i as c_int, i));
         }
     }
@@ -67,12 +67,23 @@ fn cap_from_fd(fd: c_int) -> Option<u32> {
     if cap == 0 || cap == u32::MAX { None } else { Some(cap) }
 }
 
+/// Allocate a socket fd (AF_INET/SOCK_STREAM only).
+///
+/// # Safety
+/// No pointer arguments; safe to call with any integer values. Caller must
+/// still route the returned fd through the other functions in this module
+/// (it is not a kernel fd and is meaningless to raw syscalls).
 #[no_mangle]
 pub unsafe extern "C" fn socket(domain: c_int, type_: c_int, _protocol: c_int) -> c_int {
     if domain != AF_INET || type_ != SOCK_STREAM { return -1; }
     match alloc_fd() { Some((fd, _)) => fd, None => -1 }
 }
 
+/// # Safety
+/// `addr` must be either null or point to a readable, initialized
+/// `sockaddr_in` of at least `addrlen` bytes for the duration of the call;
+/// the caller retains ownership and this function does not read past
+/// `size_of::<sockaddr_in>()` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn connect(fd: c_int, addr: *const c_void, addrlen: c_int) -> c_int {
     let idx = fd - SOCK_BASE_FD;
@@ -105,6 +116,10 @@ pub unsafe extern "C" fn connect(fd: c_int, addr: *const c_void, addrlen: c_int)
 }
 
 /// Send up to 495 bytes per call (IPC payload ceiling after postcard framing).
+///
+/// # Safety
+/// `buf` must be either null or point to at least `len` readable, initialized
+/// bytes for the duration of the call (only up to 495 of them are actually read).
 #[no_mangle]
 pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags: c_int) -> c_int {
     if buf.is_null() { return -1; }
@@ -137,6 +152,10 @@ pub unsafe extern "C" fn send(fd: c_int, buf: *const c_void, len: usize, _flags:
     -1
 }
 
+/// # Safety
+/// `buf` must be either null or point to at least `len` writable bytes for
+/// the duration of the call; only up to the number of bytes actually
+/// received (never more than `len`) are written.
 #[no_mangle]
 pub unsafe extern "C" fn recv(fd: c_int, buf: *mut c_void, len: usize, _flags: c_int) -> c_int {
     if buf.is_null() { return -1; }
@@ -164,6 +183,12 @@ pub unsafe extern "C" fn recv(fd: c_int, buf: *mut c_void, len: usize, _flags: c
 }
 
 // _close dispatches socket fds here; regular fds go to the kernel Close syscall.
+///
+/// # Safety
+/// No pointer arguments. `handle` must be an fd previously returned by
+/// `socket()` or another kernel-fd-returning call; passing an arbitrary
+/// integer is safe (returns an error) but closing an fd still in use by
+/// another thread races with that use, per standard POSIX close() semantics.
 #[no_mangle]
 pub unsafe extern "C" fn _close(handle: c_int) -> c_int {
     if handle >= SOCK_BASE_FD && handle < SOCK_BASE_FD + MAX_SOCKETS as c_int {

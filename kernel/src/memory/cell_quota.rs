@@ -27,8 +27,13 @@ static QUOTA_LIMITS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::
 
 /// Live byte counters — one AtomicUsize per Cell slot, zero-initialized.
 /// Updated lock-free inside `charge`/`refund` to avoid alloc-inside-alloc deadlock.
-const ZERO: AtomicUsize = AtomicUsize::new(0);
-static IN_USE: [AtomicUsize; MAX_CELLS] = [ZERO; MAX_CELLS];
+///
+/// Uses an inline `const { }` repeat-array seed (not a named `const`) — each
+/// slot is independently zero-initialized at compile time, so there is no
+/// shared-instance footgun (clippy::declare_interior_mutable_const) to worry
+/// about; a named `static` cannot be used here because `AtomicUsize` is not
+/// `Copy`, which the `[expr; N]` repeat form otherwise requires.
+static IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
 /// Force-release this module's locks during fault teardown.
 ///
@@ -128,8 +133,10 @@ pub fn in_use(cell_id: CellId) -> usize {
 
 /// Live DMA-mapped byte counts — one AtomicUsize per Cell slot, zero-initialized.
 /// DMA quota = 1× memory quota (validated 2026-06-22).
-const DMA_ZERO: AtomicUsize = AtomicUsize::new(0);
-static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [DMA_ZERO; MAX_CELLS];
+///
+/// See `IN_USE` above for why this uses an inline `const { }` repeat seed
+/// instead of a named `const`.
+static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MAX_CELLS];
 
 /// Returns `true` if Cell `cell_id_raw` can map `size` more bytes into the IOMMU
 /// without exceeding its DMA quota (1× memory quota limit).

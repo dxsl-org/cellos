@@ -29,23 +29,20 @@ pub fn init_driver() {
     use crate::task::drivers::virtio_common::virtio_slots;
     for slot in virtio_slots() {
         let header = unsafe { NonNull::new_unchecked(slot.base as *mut VirtIOHeader) };
-        match unsafe { MmioTransport::new(header) } {
-            Ok(transport) => {
-                if transport.device_type() == DeviceType::Input {
-                    match VirtIOInput::<VirtioHal, MmioTransport>::new(transport) {
-                        Ok(inner) => {
-                            log::info!("[input_irq_ack] input device at {:#x} irq={}", slot.base, slot.irq);
-                            INPUT_IRQ.store(slot.irq, Ordering::Release);
-                            *KEYBOARD_ACK.lock() = Some(InputAckDriver { inner });
-                            return;
-                        }
-                        Err(e) => log::warn!("[input_irq_ack] init failed at {:#x}: {:?}", slot.base, e),
+        if let Ok(transport) = unsafe { MmioTransport::new(header) } {
+            if transport.device_type() == DeviceType::Input {
+                match VirtIOInput::<VirtioHal, MmioTransport>::new(transport) {
+                    Ok(inner) => {
+                        log::info!("[input_irq_ack] input device at {:#x} irq={}", slot.base, slot.irq);
+                        INPUT_IRQ.store(slot.irq, Ordering::Release);
+                        *KEYBOARD_ACK.lock() = Some(InputAckDriver { inner });
+                        return;
                     }
-                } else {
-                    core::mem::forget(transport);
+                    Err(e) => log::warn!("[input_irq_ack] init failed at {:#x}: {:?}", slot.base, e),
                 }
+            } else {
+                core::mem::forget(transport);
             }
-            Err(_) => {}
         }
     }
 }

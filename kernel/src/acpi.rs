@@ -158,7 +158,7 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
         // XSDT path: 64-bit table pointers.
         // SAFETY: RSDP v2 is at least size_of::<RsdpV2>() bytes; Limine guarantees it.
         let rsdp_v2: RsdpV2 = unsafe { read_unaligned(rsdp_virt) };
-        let xsdt_phys = { let a = rsdp_v2.xsdt_address; a } as usize;
+        let xsdt_phys = rsdp_v2.xsdt_address as usize;
         if xsdt_phys == 0 {
             log::warn!("[acpi] XSDT address is null — using defaults");
             return info;
@@ -168,7 +168,7 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
         unsafe { parse_xsdt(xsdt_phys, &phys_to_virt, &mut info); }
     } else {
         // RSDT path: 32-bit table pointers.
-        let rsdt_phys = { let a = rsdp.rsdt_address; a } as usize;
+        let rsdt_phys = rsdp.rsdt_address as usize;
         if rsdt_phys == 0 {
             log::warn!("[acpi] RSDT address is null — using defaults");
             return info;
@@ -193,7 +193,7 @@ unsafe fn validate_sdt(phys: usize, phys_to_virt: &impl Fn(usize) -> usize) -> O
     // Read the length field at offset 4 (4 bytes into the header).
     // SAFETY: phys points to a valid SDT; length field is at offset 4.
     let length = unsafe { core::ptr::read_unaligned((virt + 4) as *const u32) } as usize;
-    if length < 36 || length > 0x10_0000 {
+    if !(36..=0x10_0000).contains(&length) {
         log::warn!("[acpi] SDT at {:#x} has implausible length {} — skipping", phys, length);
         return None;
     }
@@ -380,7 +380,7 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
 /// MCFG body layout (after 36-byte SDT header):
 ///   - 8 bytes reserved
 ///   - then N × 16-byte allocation entries:
-///       base_address (u64), segment (u16), bus_start (u8), bus_end (u8), _reserved (u32)
+///     base_address (u64), segment (u16), bus_start (u8), bus_end (u8), _reserved (u32)
 fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
     // First allocation entry starts at offset 44 (36-byte header + 8-byte reserved).
     if length < 44 + 16 {

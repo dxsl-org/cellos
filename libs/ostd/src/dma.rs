@@ -11,10 +11,7 @@
 //! let phys = buf.phys();                         // program into NVMe/e1000 regs
 //! ```
 
-use crate::syscall::{
-    sys_grant_alloc, sys_grant_dma, sys_grant_free,
-    sys_register_block_driver, sys_register_nic_driver, SyscallError,
-};
+use crate::syscall::{sys_grant_alloc, sys_grant_dma, sys_grant_free, SyscallError};
 
 /// A physically-contiguous, page-aligned DMA buffer backed by a Grant region.
 ///

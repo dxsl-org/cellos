@@ -142,6 +142,13 @@ extern "Rust" {
     // with `#[no_mangle] pub extern "Rust"`.  It is called only from
     // `syscall_entry` below, which has already built the full ViTrapFrame on
     // the kernel stack and passes a valid `&mut ViTrapFrame` pointer in RDI.
+    //
+    // allow(dead_code): this declaration is never referenced from Rust — the
+    // `global_asm!` stub below calls it directly by symbol name (`call
+    // ViCell_syscall_dispatch`), so the linker resolves it even though rustc
+    // sees no caller. The `extern "Rust"` block exists solely to assert the
+    // ABI/signature contract with kernel/src/task/syscall.rs at compile time.
+    #[allow(dead_code)]
     fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame);
 }
 

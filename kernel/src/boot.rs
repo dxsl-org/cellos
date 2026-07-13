@@ -185,7 +185,7 @@ pub fn get_limine_memory_entries() -> &'static [limine::LimineMemoryMapEntry] {
 
             // Create slice from pointer array
             let entries_array = core::slice::from_raw_parts(entries_ptr, count);
-            let first_entry_ptr = *entries_array.get(0).unwrap_or(&core::ptr::null());
+            let first_entry_ptr = *entries_array.first().unwrap_or(&core::ptr::null());
 
             if first_entry_ptr.is_null() {
                 return &[];
