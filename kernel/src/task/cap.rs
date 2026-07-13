@@ -52,9 +52,13 @@ impl HypervisorCap {
 
 /// Permits `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell`.
 ///
-/// Granted ONLY by kernel init via direct TCB write — NOT propagated through
-/// `CapSet` or the manifest path. A supervisor cell can orchestrate hot-swap
-/// and targeted cell kill without being able to forge this cap into children.
+/// Carried in `CapSet` (P-TRUST) and gated by the spawn-time ceiling: the
+/// `/bin/supervisor` install path *requests* it (`with_path_caps`), and the
+/// request is intersected against the spawner's ceiling like every other cap, so
+/// a cell can only receive it if its spawner (ultimately init) holds it. A
+/// supervisor cell still cannot forge it into a child beyond its own authority
+/// (monotonic downgrade). init also holds it directly (root authority) so it can
+/// unfreeze orphaned targets if the Supervisor Cell crashes.
 #[derive(Copy, Clone, Debug)]
 pub struct SupervisorCap(());
 
@@ -123,6 +127,16 @@ pub struct CapSet {
     pub hypervisor:    bool,
     pub mmio_devices:  u8, // bitmask of resource_registry::DEV_*
     pub block_regions: u8, // P03 partition bitmask
+    // P-TRUST: the privileged path-triggered caps now live in the CapSet so the
+    // SAME spawn-time intersection that bounds every other cap also bounds them.
+    // Before this, they were minted by a raw `path ==` match AFTER (and blind to)
+    // the ceiling intersection — reachable via sys_spawn_from_elf to hand any
+    // SpawnCap holder PcieDriverCap → DMA-anywhere (LBI bypass). They have no
+    // manifest flag bit (v1 manifest is full); the install path is the request
+    // signal, but the request is now `∩ ceiling` like everything else.
+    pub pcie_driver:   bool,
+    pub platform:      bool,
+    pub supervisor:    bool,
 }
 
 impl CapSet {
@@ -130,6 +144,7 @@ impl CapSet {
     pub const EMPTY: CapSet = CapSet {
         block_io: false, network: false, spawn: false,
         hypervisor: false, mmio_devices: 0, block_regions: 0,
+        pcie_driver: false, platform: false, supervisor: false,
     };
 
     /// Full capability authority — granted ONLY to `init` (the root authority,
@@ -141,6 +156,11 @@ impl CapSet {
         block_io: true, network: true, spawn: true, hypervisor: true,
         mmio_devices: crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_UART,
         block_regions: 0b111,
+        // init is root authority, so its ceiling permits delegating the privileged
+        // path-caps to the driver/supervisor cells it spawns. `platform` is inert
+        // in practice — the Platform Cell is Root-spawned by the kernel, and
+        // `apply_to` never writes `platform_cap` (the singleton latch owns it).
+        pcie_driver: true, platform: true, supervisor: true,
     };
 
     /// Snapshot a (running) Task's current capabilities.
@@ -152,6 +172,9 @@ impl CapSet {
             hypervisor:    t.hypervisor_cap.is_some(),
             mmio_devices:  t.mmio_devices,
             block_regions: t.block_regions,
+            pcie_driver:   t.pcie_driver_cap.is_some(),
+            platform:      t.platform_cap.is_some(),
+            supervisor:    t.supervisor_cap.is_some(),
         }
     }
 
@@ -175,7 +198,35 @@ impl CapSet {
             block_regions: (m.has_part_data() as u8)
                          | ((m.has_part_lfs() as u8) << 1)
                          | ((m.has_part_lfs() as u8) << 2),
+            // The manifest never requests the privileged path-caps (no flag bits);
+            // they are layered on by `with_path_caps` from the install path.
+            pcie_driver: false, platform: false, supervisor: false,
         }
+    }
+
+    /// Layer the path-triggered privileged authority onto a requested CapSet.
+    /// These caps have no manifest flag bit (v1 manifest is full), so the install
+    /// path is the request signal — but the resulting request is still run through
+    /// the same `∩ ceiling` intersection as every other cap. This is the P-TRUST
+    /// fix: the loader used to mint these by raw `path ==` AFTER the intersection,
+    /// so `sys_spawn_from_elf(bytes, "/bin/nvme")` handed any SpawnCap holder
+    /// `PcieDriverCap` regardless of its ceiling → DMA-anywhere.
+    ///
+    /// The cell-store block region for `/bin/vfs` is intentionally NOT folded here:
+    /// the `/bin/vfs` operator-policy entry grants `block_regions = 0b111`, so
+    /// folding `0b1000` into the request would be zeroed by the policy `∩` and
+    /// break VFS. It stays a post-policy raw grant in the loader until a POLICY.BIN
+    /// re-bake lets it be folded (documented follow-up).
+    pub fn with_path_caps(mut self, path: &str) -> CapSet {
+        if matches!(path,
+            "/bin/nvme" | "/bin/e1000" | "/bin/virtio-net"
+            | "/bin/block" | "/bin/input" | "/bin/virtio-gpu")
+        {
+            self.pcie_driver = true;
+        }
+        if path == "/bin/platform"   { self.platform = true; }
+        if path == "/bin/supervisor" { self.supervisor = true; }
+        self
     }
 
     /// Field-wise minimum (bool AND, bitmask AND). The monotonic-downgrade core.
@@ -187,6 +238,9 @@ impl CapSet {
             hypervisor:    self.hypervisor    && o.hypervisor,
             mmio_devices:  self.mmio_devices  &  o.mmio_devices,
             block_regions: self.block_regions &  o.block_regions,
+            pcie_driver:   self.pcie_driver   && o.pcie_driver,
+            platform:      self.platform      && o.platform,
+            supervisor:    self.supervisor    && o.supervisor,
         }
     }
 
@@ -200,6 +254,12 @@ impl CapSet {
         t.hypervisor_cap = self.hypervisor.then(HypervisorCap::new);
         t.mmio_devices   = self.mmio_devices;
         t.block_regions  = self.block_regions;
+        t.pcie_driver_cap = self.pcie_driver.then(PcieDriverCap::new);
+        t.supervisor_cap  = self.supervisor.then(SupervisorCap::new);
+        // NOTE: `platform_cap` is deliberately NOT written here. It is a singleton
+        // (`try_grant_platform` enforces one-holder-ever); the loader consults the
+        // latch when `granted.platform` is set. Writing it from a plain bool would
+        // bypass the latch and allow two holders.
     }
 }
 
@@ -222,9 +282,11 @@ mod tests {
     #[test]
     fn intersect_is_monotonic_downgrade() {
         let spawner = CapSet { block_io: false, network: true, spawn: true,
-            hypervisor: false, mmio_devices: 0b01, block_regions: 0b010 };
+            hypervisor: false, mmio_devices: 0b01, block_regions: 0b010,
+            ..CapSet::EMPTY };
         let child = CapSet { block_io: true, network: true, spawn: false,
-            hypervisor: true, mmio_devices: 0b11, block_regions: 0b111 };
+            hypervisor: true, mmio_devices: 0b11, block_regions: 0b111,
+            ..CapSet::EMPTY };
         let g = child.intersect(spawner);
         assert!(!g.block_io, "child cannot gain block_io its spawner lacks");
         assert!(g.network);
@@ -237,8 +299,25 @@ mod tests {
     #[test]
     fn all_intersect_child_is_child() {
         let child = CapSet { block_io: true, network: false, spawn: true,
-            hypervisor: false, mmio_devices: 0b10, block_regions: 0b101 };
+            hypervisor: false, mmio_devices: 0b10, block_regions: 0b101,
+            ..CapSet::EMPTY };
         // init (ALL) spawning a child must leave the child's requested caps intact.
         assert_eq!(child.intersect(CapSet::ALL), child);
+    }
+
+    #[test]
+    fn privileged_path_cap_bounded_by_ceiling() {
+        // P-TRUST: a /bin/nvme request carries pcie_driver, but a spawner whose
+        // ceiling lacks it must NOT be able to hand it to the child (the closed
+        // DMA-anywhere hole). EMPTY.with_path_caps sets the request bits.
+        let requested = CapSet::EMPTY.with_path_caps("/bin/nvme");
+        assert!(requested.pcie_driver, "path request sets pcie_driver");
+        // Non-privileged spawner (no pcie_driver in its ceiling).
+        let ceiling = CapSet { spawn: true, ..CapSet::EMPTY };
+        assert!(!requested.intersect(ceiling).pcie_driver,
+            "child cannot gain pcie_driver its spawner lacks");
+        // init (ALL) as ceiling → the legitimate driver spawn keeps it.
+        assert!(requested.intersect(CapSet::ALL).pcie_driver,
+            "init's Root ceiling permits the real driver cell");
     }
 }
