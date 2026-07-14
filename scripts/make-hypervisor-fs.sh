@@ -91,6 +91,11 @@ MKFAT_ARGS+=("$INITRD" "/initrd.gz")
 
 python3 tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
 
+# INIT_ELF (include_bytes! in kernel main.rs) is embedded separately from
+# kernel_fs.img — the EMBEDDED_OVERRIDE dir must also carry the init binary.
+cp "$BIN_DIR/app-init" "$EMBEDDED_HV/init"
+echo "[make-hv-fs] init <- $BIN_DIR/app-init"
+
 echo ""
 echo "[make-hv-fs] kernel_fs.img created at $EMBEDDED_HV/kernel_fs.img"
 ls -lh "$EMBEDDED_HV/kernel_fs.img"
