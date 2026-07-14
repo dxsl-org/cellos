@@ -44,7 +44,9 @@ impl Plic {
     /// Priority: 0 (disabled) to 7 (highest).
     pub fn set_priority(&self, irq: u32, priority: u32) {
         let addr = Self::base() + PLIC_PRIORITY_BASE + (irq as usize) * 4;
-        unsafe { (addr as *mut u32).write_volatile(priority); }
+        unsafe {
+            (addr as *mut u32).write_volatile(priority);
+        }
     }
 
     /// Enable interrupt for a specific Context.
@@ -61,7 +63,9 @@ impl Plic {
     /// Interrupts <= threshold are masked.
     pub fn set_threshold(&self, context: usize, threshold: u32) {
         let addr = Self::base() + PLIC_THRESHOLD_AND_CLAIM_BASE + (context * 0x1000);
-        unsafe { (addr as *mut u32).write_volatile(threshold); }
+        unsafe {
+            (addr as *mut u32).write_volatile(threshold);
+        }
     }
 
     /// Claim an interrupt for a specific Context.
@@ -74,7 +78,9 @@ impl Plic {
     /// Complete an interrupt for a specific Context.
     pub fn complete(&self, context: usize, irq: u32) {
         let addr = Self::base() + PLIC_THRESHOLD_AND_CLAIM_BASE + (context * 0x1000) + 4;
-        unsafe { (addr as *mut u32).write_volatile(irq); }
+        unsafe {
+            (addr as *mut u32).write_volatile(irq);
+        }
     }
 }
 

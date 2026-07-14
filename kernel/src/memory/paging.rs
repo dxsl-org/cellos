@@ -49,13 +49,17 @@ pub fn init_bare() {}
 pub fn tlb_flush_all() {
     #[cfg(target_arch = "riscv64")]
     // SAFETY: sfence.vma is a privileged S-mode fence; always safe from S-mode.
-    unsafe { core::arch::asm!("sfence.vma", options(nostack)); }
+    unsafe {
+        core::arch::asm!("sfence.vma", options(nostack));
+    }
 
     #[cfg(target_arch = "aarch64")]
     // SAFETY: tlbi vmalle1is invalidates all EL1 TLB entries broadcast across CPUs.
     // dsb sy ensures the invalidation completes before subsequent memory accesses.
     // isb serializes the instruction stream so the next fetch sees the clean TLB.
-    unsafe { core::arch::asm!("tlbi vmalle1is", "dsb sy", "isb", options(nostack, nomem)); }
+    unsafe {
+        core::arch::asm!("tlbi vmalle1is", "dsb sy", "isb", options(nostack, nomem));
+    }
 
     #[cfg(target_arch = "x86_64")]
     {
@@ -94,31 +98,53 @@ pub fn init_kernel_paging(
     for entry in mmap.iter() {
         let flags = match entry.ty {
             crate::boot::MemoryType::Usable => PageFlags::from_bits(
-                PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                    | PageFlags::EXECUTE | PageFlags::ACCESSED | PageFlags::DIRTY,
+                PageFlags::VALID
+                    | PageFlags::READ
+                    | PageFlags::WRITE
+                    | PageFlags::EXECUTE
+                    | PageFlags::ACCESSED
+                    | PageFlags::DIRTY,
             ),
             crate::boot::MemoryType::Kernel => PageFlags::from_bits(
-                PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                    | PageFlags::EXECUTE | PageFlags::ACCESSED | PageFlags::DIRTY,
+                PageFlags::VALID
+                    | PageFlags::READ
+                    | PageFlags::WRITE
+                    | PageFlags::EXECUTE
+                    | PageFlags::ACCESSED
+                    | PageFlags::DIRTY,
             ),
             crate::boot::MemoryType::Bootloader => PageFlags::from_bits(
-                PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                    | PageFlags::ACCESSED | PageFlags::DIRTY,
+                PageFlags::VALID
+                    | PageFlags::READ
+                    | PageFlags::WRITE
+                    | PageFlags::ACCESSED
+                    | PageFlags::DIRTY,
             ),
             crate::boot::MemoryType::Framebuffer => PageFlags::from_bits(
-                PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                    | PageFlags::ACCESSED | PageFlags::DIRTY,
+                PageFlags::VALID
+                    | PageFlags::READ
+                    | PageFlags::WRITE
+                    | PageFlags::ACCESSED
+                    | PageFlags::DIRTY,
             ),
             crate::boot::MemoryType::MMIO => PageFlags::from_bits(
-                PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                    | PageFlags::ACCESSED | PageFlags::DIRTY,
+                PageFlags::VALID
+                    | PageFlags::READ
+                    | PageFlags::WRITE
+                    | PageFlags::ACCESSED
+                    | PageFlags::DIRTY,
             ),
             _ => continue,
         };
 
         let mut alloc_closure = || allocator.allocate_frame();
         root_table
-            .identity_map(entry.base, entry.base + entry.length, flags, &mut alloc_closure)
+            .identity_map(
+                entry.base,
+                entry.base + entry.length,
+                flags,
+                &mut alloc_closure,
+            )
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
 
@@ -130,30 +156,47 @@ pub fn init_kernel_paging(
     // RISC-V / other: no DEVICE bit; the arch paging code ignores it.
     #[cfg(target_arch = "aarch64")]
     let mmio_flags = PageFlags::from_bits(
-        PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-            | PageFlags::DEVICE | PageFlags::ACCESSED | PageFlags::DIRTY,
+        PageFlags::VALID
+            | PageFlags::READ
+            | PageFlags::WRITE
+            | PageFlags::DEVICE
+            | PageFlags::ACCESSED
+            | PageFlags::DIRTY,
     );
     #[cfg(not(target_arch = "aarch64"))]
     let mmio_flags = PageFlags::from_bits(
-        PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-            | PageFlags::ACCESSED | PageFlags::DIRTY,
+        PageFlags::VALID
+            | PageFlags::READ
+            | PageFlags::WRITE
+            | PageFlags::ACCESSED
+            | PageFlags::DIRTY,
     );
     let mut alloc_fn = || allocator.allocate_frame();
 
     #[cfg(target_arch = "riscv64")]
     {
-        let (clint_base, plic_base, plic_size, uart_region, rtc_region) = crate::platform::with(|p| {
-            (p.clint_base, p.plic_base, p.plic_size, p.uart_base & !0xFFFF, p.rtc_base & !0xFFF)
-        });
-        root_table.identity_map(clint_base, clint_base + 0x10000, mmio_flags, &mut alloc_fn)
+        let (clint_base, plic_base, plic_size, uart_region, rtc_region) =
+            crate::platform::with(|p| {
+                (
+                    p.clint_base,
+                    p.plic_base,
+                    p.plic_size,
+                    p.uart_base & !0xFFFF,
+                    p.rtc_base & !0xFFF,
+                )
+            });
+        root_table
+            .identity_map(clint_base, clint_base + 0x10000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table.identity_map(plic_base, plic_base + plic_size, mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(plic_base, plic_base + plic_size, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // UART page (0x10000000..0x10001000): kernel-only — S-mode with SUM=0 cannot
         // access USER pages, so the kernel UART driver (uart::init, poll_rhr, IRQ handler)
         // needs a non-USER mapping. Cells use sys_log / SBI; they do not touch UART MMIO.
         if uart_region != 0 {
-            root_table.identity_map(uart_region, uart_region + 0x1000, mmio_flags, &mut alloc_fn)
+            root_table
+                .identity_map(uart_region, uart_region + 0x1000, mmio_flags, &mut alloc_fn)
                 .map_err(|_| PageTableError::OutOfMemory)?;
         }
         // VirtIO MMIO (0x10001000–0x10010000): USER-accessible for Driver Cells (U-mode).
@@ -162,18 +205,33 @@ pub fn init_kernel_paging(
         // can access USER-mapped pages throughout the kernel lifetime. SUM=1 is safe and
         // intentional in Cellos's SAS+LBI model — Rust type safety provides isolation.
         let rv_cell_mmio = PageFlags::from_bits(
-            PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                | PageFlags::USER | PageFlags::ACCESSED | PageFlags::DIRTY,
+            PageFlags::VALID
+                | PageFlags::READ
+                | PageFlags::WRITE
+                | PageFlags::USER
+                | PageFlags::ACCESSED
+                | PageFlags::DIRTY,
         );
-        let virtio_start = if uart_region != 0 { uart_region + 0x1000 } else { 0x10001000 };
-        root_table.identity_map(virtio_start, virtio_start + 0xF000, rv_cell_mmio, &mut alloc_fn)
+        let virtio_start = if uart_region != 0 {
+            uart_region + 0x1000
+        } else {
+            0x10001000
+        };
+        root_table
+            .identity_map(
+                virtio_start,
+                virtio_start + 0xF000,
+                rv_cell_mmio,
+                &mut alloc_fn,
+            )
             .map_err(|_| PageTableError::OutOfMemory)?;
         // Goldfish RTC (QEMU virt: 0x101000). Without this, sys_get_wall_secs/
         // sys_get_wall_time (op 2/3) dereference an unmapped MMIO address in
         // rtc::now_epoch_ns and the kernel takes a Load Page Fault (scause=13)
         // while servicing the syscall — first hit by the TLS handshake's cert
         // validity clock. The RTC window is one 4 KiB page.
-        root_table.identity_map(rtc_region, rtc_region + 0x1000, mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(rtc_region, rtc_region + 0x1000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // PCIe ECAM bus-0 window (1 MiB at 0x3000_0000) for RISC-V virt gpex.
         // Required before pcie_ecam::init() accesses config space.
@@ -186,12 +244,15 @@ pub fn init_kernel_paging(
         // killing the cell-driven PCIe scan (masked by never-die + the kernel S-mode
         // fallback scanner). The kernel's own pcie_ecam::init S-mode reads still work
         // against a USER page because SUM=1 (set right after activate_paging).
-        root_table.identity_map(
-            crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV,
-            crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV
-                + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
-            rv_cell_mmio, &mut alloc_fn,
-        ).map_err(|_| PageTableError::OutOfMemory)?;
+        root_table
+            .identity_map(
+                crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV,
+                crate::task::drivers::pcie_ecam::ECAM_BASE_RISCV
+                    + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
+                rv_cell_mmio,
+                &mut alloc_fn,
+            )
+            .map_err(|_| PageTableError::OutOfMemory)?;
     }
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     {
@@ -199,42 +260,61 @@ pub fn init_kernel_paging(
         // Covers mini UART, GPIO, I2C, SPI, EMMC — kernel maps them all; individual
         // cells receive sub-regions via sys_request_mmio / resource_registry.
         let cell_mmio_flags = PageFlags::from_bits(
-            PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                | PageFlags::USER | PageFlags::DEVICE | PageFlags::ACCESSED | PageFlags::DIRTY,
+            PageFlags::VALID
+                | PageFlags::READ
+                | PageFlags::WRITE
+                | PageFlags::USER
+                | PageFlags::DEVICE
+                | PageFlags::ACCESSED
+                | PageFlags::DIRTY,
         );
-        root_table.identity_map(0x3F00_0000, 0x4000_0000, cell_mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(0x3F00_0000, 0x4000_0000, cell_mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // BCM2836 local interrupt controller 0x40000000–0x40001000 (kernel-only).
-        root_table.identity_map(0x4000_0000, 0x4000_1000, mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(0x4000_0000, 0x4000_1000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
 
     #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
     {
         // GIC (EL1-only): cells must not modify interrupt routing — keep mmio_flags.
-        root_table.identity_map(0x0800_0000, 0x0900_0000, mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(0x0800_0000, 0x0900_0000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // Peripheral MMIO (GPIO PL061, UART PL011, RTC): cells access directly via
         // driver rlibs (bit-bang GPIO/I2C/SPI/PWM). LBI guarantees only cells with
         // the GPIO capability can construct driver objects, so USER access is safe.
         let cell_mmio_flags = PageFlags::from_bits(
-            PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                | PageFlags::USER | PageFlags::DEVICE | PageFlags::ACCESSED | PageFlags::DIRTY,
+            PageFlags::VALID
+                | PageFlags::READ
+                | PageFlags::WRITE
+                | PageFlags::USER
+                | PageFlags::DEVICE
+                | PageFlags::ACCESSED
+                | PageFlags::DIRTY,
         );
-        root_table.identity_map(0x0900_0000, 0x0904_0000, cell_mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(0x0900_0000, 0x0904_0000, cell_mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table.identity_map(0x0A00_0000, 0x0A00_4000, cell_mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(0x0A00_0000, 0x0A00_4000, cell_mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
-        root_table.identity_map(0x1000_0000, 0x1001_0000, mmio_flags, &mut alloc_fn)
+        root_table
+            .identity_map(0x1000_0000, 0x1001_0000, mmio_flags, &mut alloc_fn)
             .map_err(|_| PageTableError::OutOfMemory)?;
         // PCIe ECAM bus-0 window (1 MiB at 0x3F00_0000) for ARM64 virt gpex.
         // Required before pcie_ecam::init() accesses config space.
-        root_table.identity_map(
-            crate::task::drivers::pcie_ecam::ECAM_BASE_AARCH64,
-            crate::task::drivers::pcie_ecam::ECAM_BASE_AARCH64
-                + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
-            mmio_flags, &mut alloc_fn,
-        ).map_err(|_| PageTableError::OutOfMemory)?;
+        root_table
+            .identity_map(
+                crate::task::drivers::pcie_ecam::ECAM_BASE_AARCH64,
+                crate::task::drivers::pcie_ecam::ECAM_BASE_AARCH64
+                    + crate::task::drivers::pcie_ecam::ECAM_BUS0_SIZE,
+                mmio_flags,
+                &mut alloc_fn,
+            )
+            .map_err(|_| PageTableError::OutOfMemory)?;
     }
 
     *KERNEL_ROOT.lock() = Some(root_frame);
@@ -250,7 +330,9 @@ pub unsafe fn activate_paging(root_table_phys: PhysAddr) {
     // SAFETY: upheld by caller contract.
     let root_table = unsafe { &*(root_table_phys as *const PageTable) };
     // SAFETY: PageTable::activate writes SATP/TTBR0 using the table's physical address.
-    unsafe { root_table.activate(); }
+    unsafe {
+        root_table.activate();
+    }
 }
 
 // ─── riscv64 + aarch64 + x86_64: map_page / unmap_page ──────────────────────
@@ -344,17 +426,17 @@ pub fn init_kernel_paging_x86(
     lapic_base: u64,
     ecam_base: u64,
 ) -> PagingResult<PhysAddr> {
-    use hal::paging::{
-        read_cr3, walk_create, walk_read,
-        pte_flags_mmio,
-        PTE_PRESENT,
-    };
     use crate::memory::frame::phys_to_virt;
+    use hal::paging::{pte_flags_mmio, read_cr3, walk_create, walk_read, PTE_PRESENT};
 
     // 1. Allocate and zero a new PML4 frame.
-    let pml4_phys = allocator.allocate_frame().ok_or(PageTableError::OutOfMemory)?;
+    let pml4_phys = allocator
+        .allocate_frame()
+        .ok_or(PageTableError::OutOfMemory)?;
     // SAFETY: pml4_phys is a freshly allocated 4KB frame; HHDM virt pointer is valid.
-    unsafe { core::ptr::write_bytes(phys_to_virt(pml4_phys) as *mut u8, 0, PAGE_SIZE); }
+    unsafe {
+        core::ptr::write_bytes(phys_to_virt(pml4_phys) as *mut u8, 0, PAGE_SIZE);
+    }
 
     let pml4_virt = phys_to_virt(pml4_phys) as *mut u64;
 
@@ -390,17 +472,17 @@ pub fn init_kernel_paging_x86(
     //    VT-d:    0xFED9_0000 (q35 Intel IOMMU)     — 4 KB
     //    LAPIC:   lapic_base  (default 0xFEE0_0000) — 4 KB
     let ioapic_base_usize = ioapic_base as usize;
-    let hpet_base_usize   = hpet_base   as usize;
-    let lapic_base_usize  = lapic_base  as usize;
-    let ecam_base_usize   = ecam_base   as usize;
+    let hpet_base_usize = hpet_base as usize;
+    let lapic_base_usize = lapic_base as usize;
+    let ecam_base_usize = ecam_base as usize;
     // PCIe ECAM bus-0 window = 1 MiB (256 devices × 8 fns × 4 KiB config space).
     const ECAM_BUS0_SIZE: usize = 0x10_0000;
     let mmio_regions: &[(usize, usize)] = &[
         (ioapic_base_usize, ioapic_base_usize + PAGE_SIZE), // IOAPIC (from ACPI)
-        (hpet_base_usize,   hpet_base_usize   + PAGE_SIZE), // HPET   (from ACPI)
-        (0xFED9_0000,       0xFED9_0000       + PAGE_SIZE), // VT-d IOMMU (q35)
-        (lapic_base_usize,  lapic_base_usize  + PAGE_SIZE), // LAPIC  (from ACPI)
-        (ecam_base_usize,   ecam_base_usize   + ECAM_BUS0_SIZE), // PCIe ECAM bus 0
+        (hpet_base_usize, hpet_base_usize + PAGE_SIZE),     // HPET   (from ACPI)
+        (0xFED9_0000, 0xFED9_0000 + PAGE_SIZE),             // VT-d IOMMU (q35)
+        (lapic_base_usize, lapic_base_usize + PAGE_SIZE),   // LAPIC  (from ACPI)
+        (ecam_base_usize, ecam_base_usize + ECAM_BUS0_SIZE), // PCIe ECAM bus 0
     ];
     for &(start, end) in mmio_regions {
         let mut va = start;
@@ -411,7 +493,9 @@ pub fn init_kernel_paging_x86(
             let pte_ptr = unsafe { walk_create(pml4_virt, va, &mut alloc_fn) }
                 .ok_or(PageTableError::OutOfMemory)?;
             // SAFETY: pte_ptr is the leaf PTE slot returned by walk_create; safe to write.
-            unsafe { core::ptr::write_volatile(pte_ptr, va as u64 | pte_flags_mmio()); }
+            unsafe {
+                core::ptr::write_volatile(pte_ptr, va as u64 | pte_flags_mmio());
+            }
             va += PAGE_SIZE;
         }
     }
@@ -442,7 +526,9 @@ pub fn init_kernel_paging_x86(
 pub unsafe fn activate_paging(root_phys: PhysAddr) {
     // SAFETY: caller guarantees root_phys is a valid, fully populated PML4 that
     // keeps the kernel alive after the CR3 switch.
-    unsafe { hal::paging::write_cr3(root_phys as u64); }
+    unsafe {
+        hal::paging::write_cr3(root_phys as u64);
+    }
     log::info!("[kernel] paging activated");
 }
 
@@ -458,8 +544,8 @@ pub fn map_page_x86(
     paddr: PhysAddr,
     flags: u64,
 ) -> PagingResult<()> {
-    use hal::paging::{walk_create, invlpg};
     use crate::memory::frame::phys_to_virt;
+    use hal::paging::{invlpg, walk_create};
 
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
@@ -470,9 +556,13 @@ pub fn map_page_x86(
     let pte_ptr = unsafe { walk_create(pml4_virt, vaddr, &mut alloc_fn) }
         .ok_or(PageTableError::OutOfMemory)?;
     // SAFETY: pte_ptr is the leaf PTE address; writing it installs the mapping.
-    unsafe { core::ptr::write_volatile(pte_ptr, paddr as u64 | flags); }
+    unsafe {
+        core::ptr::write_volatile(pte_ptr, paddr as u64 | flags);
+    }
     // SAFETY: invlpg flushes only the single TLB entry for vaddr.
-    unsafe { invlpg(vaddr); }
+    unsafe {
+        invlpg(vaddr);
+    }
     Ok(())
 }
 
@@ -505,7 +595,9 @@ pub fn map_mmio_user_x86(phys: usize, size: usize) {
 #[cfg(target_arch = "x86_64")]
 fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
     let mut fa = crate::memory::frame::FRAME_ALLOCATOR.lock();
-    let allocator = fa.as_mut().expect("map_mmio_x86: frame allocator not ready");
+    let allocator = fa
+        .as_mut()
+        .expect("map_mmio_x86: frame allocator not ready");
     let page_mask = PAGE_SIZE - 1;
     let mut va = phys & !page_mask;
     let end = (phys + size + page_mask) & !page_mask;
@@ -524,8 +616,8 @@ fn map_mmio_x86_flags(phys: usize, size: usize, flags: u64) {
 /// page was already unmapped (idempotent — safe for guard-page creation).
 #[cfg(target_arch = "x86_64")]
 pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
-    use hal::paging::{walk_read, walk_create, invlpg, PTE_PRESENT};
     use crate::memory::frame::phys_to_virt;
+    use hal::paging::{invlpg, walk_create, walk_read, PTE_PRESENT};
 
     let root_lock = KERNEL_ROOT.lock();
     let root_phys = match *root_lock {
@@ -544,9 +636,13 @@ pub fn unmap_page_x86(vaddr: VAddr) -> PagingResult<()> {
             let mut noop_alloc = || None::<usize>;
             if let Some(pte_ptr) = unsafe { walk_create(pml4_virt_mut, vaddr, &mut noop_alloc) } {
                 // SAFETY: pte_ptr is the leaf PTE slot; clearing it unmaps the page.
-                unsafe { core::ptr::write_volatile(pte_ptr, 0u64); }
+                unsafe {
+                    core::ptr::write_volatile(pte_ptr, 0u64);
+                }
                 // SAFETY: invlpg flushes the TLB entry for this virtual address.
-                unsafe { invlpg(vaddr); }
+                unsafe {
+                    invlpg(vaddr);
+                }
             }
         }
     }
@@ -575,15 +671,21 @@ pub fn map_page(
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    use hal::paging::{PTE_WRITABLE, PTE_USER, PTE_NX, PTE_PRESENT};
+    use hal::paging::{PTE_NX, PTE_PRESENT, PTE_USER, PTE_WRITABLE};
     // Convert generic PageFlags to x86_64 PTE bits.
     // Note: cache-disable (PCD/MMIO) has no generic PageFlags equivalent;
     // callers needing MMIO mappings must use map_page_x86 with pte_flags_mmio().
     let bits = flags.bits();
     let mut pte_flags: u64 = PTE_PRESENT;
-    if bits & hal::PageFlags::WRITE   != 0 { pte_flags |= PTE_WRITABLE; }
-    if bits & hal::PageFlags::USER    != 0 { pte_flags |= PTE_USER; }
-    if bits & hal::PageFlags::EXECUTE == 0 { pte_flags |= PTE_NX; }
+    if bits & hal::PageFlags::WRITE != 0 {
+        pte_flags |= PTE_WRITABLE;
+    }
+    if bits & hal::PageFlags::USER != 0 {
+        pte_flags |= PTE_USER;
+    }
+    if bits & hal::PageFlags::EXECUTE == 0 {
+        pte_flags |= PTE_NX;
+    }
     map_page_x86(allocator, vaddr, paddr, pte_flags)
 }
 
@@ -612,14 +714,19 @@ pub fn remap_range_user(start: PhysAddr, pages: usize) {
             let mut alloc_closure = || allocator.allocate_frame();
             use hal::traits::PageTableTrait;
             let flags = PageFlags::from_bits(
-                PageFlags::VALID | PageFlags::READ | PageFlags::WRITE
-                    | PageFlags::EXECUTE | PageFlags::USER
-                    | PageFlags::ACCESSED | PageFlags::DIRTY,
+                PageFlags::VALID
+                    | PageFlags::READ
+                    | PageFlags::WRITE
+                    | PageFlags::EXECUTE
+                    | PageFlags::USER
+                    | PageFlags::ACCESSED
+                    | PageFlags::DIRTY,
             );
             use hal::paging::PAGE_SIZE;
             for i in 0..pages {
                 let addr = start + (i * PAGE_SIZE);
-                table.map(addr, addr, flags, &mut alloc_closure)
+                table
+                    .map(addr, addr, flags, &mut alloc_closure)
                     .expect("Failed to map user stack page!");
             }
         }
@@ -677,7 +784,9 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
         unsafe { core::arch::asm!("csrr {}, satp", out(reg) satp) };
         let root_ppn = satp & ((1 << 44) - 1);
         let root_phys = root_ppn << 12;
-        if root_phys == 0 { return None; }
+        if root_phys == 0 {
+            return None;
+        }
         // SAFETY: root_phys is the physical address of the active root PageTable.
         let root_table = unsafe { &*(root_phys as *const hal::PageTable) };
         return root_table.translate(vaddr);
@@ -688,7 +797,9 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
         let ttbr0: usize;
         unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack)) };
         let root_phys = ttbr0 & !0xFFF;
-        if root_phys == 0 { return None; }
+        if root_phys == 0 {
+            return None;
+        }
         let root_table = unsafe { &*(root_phys as *const hal::PageTable) };
         return root_table.translate(vaddr);
     }
@@ -698,14 +809,16 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 
 #[cfg(target_arch = "x86_64")]
 pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
-    use hal::paging::{walk_read, PTE_ADDR_MASK, PTE_PRESENT};
     use crate::memory::frame::phys_to_virt;
+    use hal::paging::{walk_read, PTE_ADDR_MASK, PTE_PRESENT};
     let root_guard = KERNEL_ROOT.lock();
     let root_phys = (*root_guard)?;
     let pml4 = phys_to_virt(root_phys) as *const u64;
     // SAFETY: pml4 is the kernel's active PML4.
     let pte = unsafe { walk_read(pml4, vaddr) }?;
-    if pte & PTE_PRESENT == 0 { return None; }
+    if pte & PTE_PRESENT == 0 {
+        return None;
+    }
     // PTE_ADDR_MASK, NOT !0xFFF: user pages carry PTE_NX (bit 63) — keeping it
     // made the "physical" address non-canonical after the HHDM offset, and the
     // ELF loader's shared-page path (already_ours) then wrote through a #GP.
@@ -760,7 +873,9 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
         // double-faulted before reaching this handler.
         if rsp != 0 && rsp.is_multiple_of(8) {
             for i in 0..64usize {
-                if n >= callers.len() { break; }
+                if n >= callers.len() {
+                    break;
+                }
                 let q = unsafe { core::ptr::read_volatile((rsp as *const u64).add(i)) };
                 if (0xffff_ffff_8000_0000..0xffff_ffff_9000_0000).contains(&q) {
                     callers[n] = q;
@@ -804,11 +919,13 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             // Phase 01: VMA list is always empty, so this branch is unreachable
             // in practice — any user fault panics at the None branch above.
             let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-            let alloc = frame_guard.as_mut()
+            let alloc = frame_guard
+                .as_mut()
                 .unwrap_or_else(|| panic!("[#PF] frame allocator unavailable at va={:#x}", va));
             let effective_pa = if paddr == 0 {
                 // Demand-allocate a new zeroed frame.
-                alloc.allocate_frame()
+                alloc
+                    .allocate_frame()
                     .unwrap_or_else(|| panic!("[#PF] OOM allocating demand page at va={:#x}", va))
             } else {
                 paddr

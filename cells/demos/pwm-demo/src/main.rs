@@ -13,7 +13,13 @@ use ostd::syscall::sys_yield;
 use types::ViError;
 
 // Gate under gpio manifest flag — bit-bang PWM is GPIO in disguise (same precedent as SPI).
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = true, uart = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = true,
+    uart = false
+);
 
 // Channel 6 = pin 6: avoids I2C (pins 0/1) and SPI (pins 2–5) conflicts.
 const CHANNEL: u8 = 6;
@@ -27,7 +33,9 @@ pub fn main() {
     let gpio = loop {
         match Pl061Gpio::open() {
             Ok(g) => break g,
-            Err(ViError::AlreadyExists) => { sys_yield(); }
+            Err(ViError::AlreadyExists) => {
+                sys_yield();
+            }
             Err(ViError::PermissionDenied) => {
                 println("[pwm-demo] unavailable (gpio cap not granted — non-aarch64 target)");
                 return;

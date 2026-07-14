@@ -12,8 +12,8 @@ use crate::{
     AllocEntry, AllocList, BlockData, BlockLevel, BlockTrait, Key, KeySlot, Node, Salt, TreeList,
 };
 use crate::{
-    Allocator, BlockAddr, BlockMeta, Disk, Header, Transaction, BLOCK_SIZE,
-    HEADER_RING, RECORD_SIZE,
+    Allocator, BlockAddr, BlockMeta, Disk, Header, Transaction, BLOCK_SIZE, HEADER_RING,
+    RECORD_SIZE,
 };
 
 fn compress_cache() -> Box<[u8]> {

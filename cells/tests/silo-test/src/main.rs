@@ -17,18 +17,18 @@ extern crate alloc;
 
 // No hypervisor capability — intentional for API isolation test (T6).
 api::declare_manifest!(
-    block_io   = false,
-    network    = false,
-    spawn      = false,
-    gpio       = false,
-    uart       = false,
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
     hypervisor = false
 );
 
 api::declare_syscalls![Send, Recv, Log, LookupService];
 
 use ostd::io::println;
-use ostd::silo::{SiloHandle, SiloError};
+use ostd::silo::{SiloError, SiloHandle};
 
 #[no_mangle]
 pub fn main() {
@@ -72,7 +72,10 @@ pub fn main() {
             }
         }
         Err(e) => {
-            println(&alloc::format!("[silo-test] T2 FAIL: init_key error={:?}", e));
+            println(&alloc::format!(
+                "[silo-test] T2 FAIL: init_key error={:?}",
+                e
+            ));
             [0u8; 65]
         }
     };
@@ -80,9 +83,9 @@ pub fn main() {
     // ── T3: Sign round-trip ───────────────────────────────────────────────────
     // Hash the test message, sign inside the silo, verify with p256 on cell side.
     {
-        use sha2::{Sha256, Digest};
-        use p256::ecdsa::{VerifyingKey, DerSignature};
         use p256::ecdsa::signature::hazmat::PrehashVerifier;
+        use p256::ecdsa::{DerSignature, VerifyingKey};
+        use sha2::{Digest, Sha256};
 
         let mut hasher = Sha256::new();
         hasher.update(b"ViCell Security Silo Test 2026");
@@ -93,24 +96,20 @@ pub fn main() {
                 let sig_slice = &sig.bytes[..sig.len as usize];
                 // DerSignature::try_from(&[u8]) — p256 0.13 inherent impl.
                 match DerSignature::try_from(sig_slice) {
-                    Ok(der_sig) => {
-                        match VerifyingKey::from_sec1_bytes(&pub_key) {
-                            Ok(vk) => {
-                                match vk.verify_prehash(&digest_bytes, &der_sig) {
-                                    Ok(()) => {
-                                        println("[silo-test] T3 PASS: ECDSA sign+verify ok");
-                                        passed += 1;
-                                    }
-                                    Err(_) => {
-                                        println("[silo-test] T3 FAIL: signature verify failed");
-                                    }
-                                }
+                    Ok(der_sig) => match VerifyingKey::from_sec1_bytes(&pub_key) {
+                        Ok(vk) => match vk.verify_prehash(&digest_bytes, &der_sig) {
+                            Ok(()) => {
+                                println("[silo-test] T3 PASS: ECDSA sign+verify ok");
+                                passed += 1;
                             }
                             Err(_) => {
-                                println("[silo-test] T3 FAIL: pub_key parse failed");
+                                println("[silo-test] T3 FAIL: signature verify failed");
                             }
+                        },
+                        Err(_) => {
+                            println("[silo-test] T3 FAIL: pub_key parse failed");
                         }
-                    }
+                    },
                     Err(_) => {
                         println("[silo-test] T3 FAIL: DER parse failed");
                     }
@@ -126,10 +125,10 @@ pub fn main() {
     // Generate a local ephemeral P-256 key, send its public key to the silo,
     // compute the shared secret both ways, and verify they match.
     {
-        use p256::{SecretKey, PublicKey, EncodedPoint};
-        use p256::ecdsa::SigningKey;
         use p256::ecdh::diffie_hellman;
+        use p256::ecdsa::SigningKey;
         use p256::elliptic_curve::sec1::FromEncodedPoint;
+        use p256::{EncodedPoint, PublicKey, SecretKey};
 
         // Deterministic test ephemeral scalar — 0x5A repeated.
         // SecretKey::from_bytes takes &GenericArray<u8, U32>; use .as_slice().into().
@@ -268,7 +267,9 @@ pub fn main() {
         // The kernel returns usize::MAX (PermissionDenied) for cap-gated denials.
         if result == 0 {
             println("[silo-test] SECURITY GATE T6 FAILED");
-            println("[silo-test] T6 FAIL: CreateVm succeeded without HypervisorCap — security bug!");
+            println(
+                "[silo-test] T6 FAIL: CreateVm succeeded without HypervisorCap — security bug!",
+            );
         } else {
             println(&alloc::format!(
                 "[silo-test] T6 PASS: capability isolation enforced (syscall 220 → denied, code=0x{:x})",
@@ -283,6 +284,9 @@ pub fn main() {
     if passed == 6 {
         println("[silo-test] ALL TESTS PASSED (6/6)");
     } else {
-        println(&alloc::format!("[silo-test] FAIL: only {}/6 passed", passed));
+        println(&alloc::format!(
+            "[silo-test] FAIL: only {}/6 passed",
+            passed
+        ));
     }
 }

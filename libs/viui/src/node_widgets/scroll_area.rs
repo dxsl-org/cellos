@@ -29,25 +29,25 @@ use crate::render_ctx::RenderCtx;
 use crate::signal::SubscriptionHandle;
 
 const SCROLL_SPEED: f32 = 30.0;
-const SCROLLBAR_W:  f32 = 6.0;
-const THUMB_MIN_H:  f32 = 24.0;
+const SCROLLBAR_W: f32 = 6.0;
+const THUMB_MIN_H: f32 = 24.0;
 
 pub struct ScrollArea {
-    child:          Box<dyn ViNode>,
+    child: Box<dyn ViNode>,
     /// Current vertical scroll offset in pixels (top of visible window).
-    scroll_y:       Cell<f32>,
+    scroll_y: Cell<f32>,
     /// Full unclipped height of the child content.
     content_height: Cell<f32>,
-    bounds_cache:   Cell<Rect>,
+    bounds_cache: Cell<Rect>,
 }
 
 impl ScrollArea {
     pub fn new(child: Box<dyn ViNode>) -> Self {
         Self {
             child,
-            scroll_y:       Cell::new(0.0),
+            scroll_y: Cell::new(0.0),
             content_height: Cell::new(0.0),
-            bounds_cache:   Cell::new(Rect::ZERO),
+            bounds_cache: Cell::new(Rect::ZERO),
         }
     }
 
@@ -63,17 +63,15 @@ impl ViNode for ScrollArea {
             w: constraints.max.w,
             h: constraints.max.h,
         });
-        self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+        self.bounds_cache
+            .set(Rect::from_origin_size(constraints.origin, size));
 
         let scroll = self.scroll_y.get();
 
         // Child gets full width minus scrollbar, unbounded height.
         // Origin is shifted up by scroll_y so child bounds are already scrolled.
         let child_constraints = Constraints {
-            origin: Point::new(
-                constraints.origin.x,
-                constraints.origin.y - scroll,
-            ),
+            origin: Point::new(constraints.origin.x, constraints.origin.y - scroll),
             min: Size { w: 0.0, h: 0.0 },
             max: Size {
                 w: (size.w - SCROLLBAR_W).max(0.0),
@@ -87,10 +85,12 @@ impl ViNode for ScrollArea {
         size
     }
 
-    fn bounds(&self) -> Rect { self.bounds_cache.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds_cache.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
-        let b      = self.bounds_cache.get();
+        let b = self.bounds_cache.get();
         let scroll = self.scroll_y.get();
 
         // Clip to viewport — hides child content that scrolled out of view
@@ -105,13 +105,18 @@ impl ViNode for ScrollArea {
         // Scrollbar — only rendered when content overflows
         let content_h = self.content_height.get();
         if content_h > b.h {
-            let track = Rect { x: b.x + b.w - SCROLLBAR_W, y: b.y, w: SCROLLBAR_W, h: b.h };
+            let track = Rect {
+                x: b.x + b.w - SCROLLBAR_W,
+                y: b.y,
+                w: SCROLLBAR_W,
+                h: b.h,
+            };
             cx.canvas.fill_rect(track, Color::rgb(25, 25, 38));
 
-            let max_scroll  = (content_h - b.h).max(1.0);
+            let max_scroll = (content_h - b.h).max(1.0);
             let thumb_ratio = b.h / content_h;
-            let thumb_h     = (thumb_ratio * b.h).max(THUMB_MIN_H).min(b.h);
-            let thumb_top   = b.y + (scroll / max_scroll) * (b.h - thumb_h);
+            let thumb_h = (thumb_ratio * b.h).max(THUMB_MIN_H).min(b.h);
+            let thumb_top = b.y + (scroll / max_scroll) * (b.h - thumb_h);
             let thumb = Rect {
                 x: track.x + 1.0,
                 y: thumb_top.clamp(b.y, b.y + b.h - thumb_h),
@@ -128,8 +133,8 @@ impl ViNode for ScrollArea {
         match event {
             Event::Scroll { pos, delta_y } if b.contains(*pos) => {
                 // delta_y: negative = scroll down (conventional mouse wheel direction)
-                let new_y = (self.scroll_y.get() - delta_y * SCROLL_SPEED)
-                    .clamp(0.0, self.max_scroll());
+                let new_y =
+                    (self.scroll_y.get() - delta_y * SCROLL_SPEED).clamp(0.0, self.max_scroll());
                 self.scroll_y.set(new_y);
                 true
             }

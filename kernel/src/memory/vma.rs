@@ -8,7 +8,7 @@
 //! them with `ElfText` and `ElfData` entries when loading a binary. Until then,
 //! any user-mode page fault will find no matching region and panic.
 
-use types::{VAddr, PhysAddr};
+use types::{PhysAddr, VAddr};
 
 /// Semantic classification of a VMA region.
 ///
@@ -42,13 +42,13 @@ pub struct VmaRegion {
     /// Inclusive start of the virtual range (page-aligned).
     pub va_start: VAddr,
     /// Exclusive end of the virtual range (page-aligned).
-    pub va_end:   VAddr,
+    pub va_end: VAddr,
     /// Physical base of the backing memory (0 for demand-allocated regions).
     pub pa_start: PhysAddr,
     /// Architecture-specific PTE flags for the on-demand mapping.
-    pub flags:    u64,
+    pub flags: u64,
     /// Semantic kind of this region.
-    pub kind:     VmaKind,
+    pub kind: VmaKind,
 }
 
 /// Per-cell list of virtual memory areas.

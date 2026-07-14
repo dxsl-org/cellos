@@ -16,8 +16,8 @@
 #![no_std]
 #![no_main]
 extern crate api;
-extern crate ostd;
 extern crate mlibc_shim;
+extern crate ostd;
 
 use ostd::syscall::sys_exit;
 
@@ -38,7 +38,7 @@ extern "C" {
 
 #[repr(C)]
 struct TimeSpec {
-    tv_sec:  i64,
+    tv_sec: i64,
     tv_nsec: i64,
 }
 
@@ -82,15 +82,21 @@ pub fn main() {
 
     // Test 3: clock_gettime (CLOCK_MONOTONIC) → sys_clock_get → GetTime op=0
     unsafe {
-        let mut ts = TimeSpec { tv_sec: 0, tv_nsec: 0 };
+        let mut ts = TimeSpec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
         let ret = clock_gettime(CLOCK_MONOTONIC, &mut ts as *mut TimeSpec);
         // Kernel always returns a positive tick count; tv_sec or tv_nsec must be > 0
         if ret == 0 && (ts.tv_sec > 0 || ts.tv_nsec > 0) {
             pass += 1;
             printf(b"MLIBC-SMOKE: clock OK (sec=%lld)\n\0".as_ptr(), ts.tv_sec);
         } else {
-            printf(b"MLIBC-SMOKE: clock FAIL (ret=%d sec=%lld)\n\0".as_ptr(),
-                   ret, ts.tv_sec);
+            printf(
+                b"MLIBC-SMOKE: clock FAIL (ret=%d sec=%lld)\n\0".as_ptr(),
+                ret,
+                ts.tv_sec,
+            );
         }
     }
 

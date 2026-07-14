@@ -60,22 +60,42 @@ struct FocusState {
     /// Screen rects of all focusable widgets, in tree (tab) order.
     list: alloc::vec::Vec<crate::layout::Rect>,
     /// Currently focused index into `list`, or `None` when no widget is focused.
-    idx:  Option<usize>,
+    idx: Option<usize>,
 }
 
 impl FocusState {
-    fn new() -> Self { Self { list: alloc::vec::Vec::new(), idx: None } }
+    fn new() -> Self {
+        Self {
+            list: alloc::vec::Vec::new(),
+            idx: None,
+        }
+    }
 
     /// Advance or reverse focus by one step, wrapping around.
     fn advance(&mut self, reverse: bool) {
-        if self.list.is_empty() { self.idx = None; return; }
+        if self.list.is_empty() {
+            self.idx = None;
+            return;
+        }
         self.idx = Some(match self.idx {
-            None => if reverse { self.list.len() - 1 } else { 0 },
-            Some(i) => if reverse {
-                if i == 0 { self.list.len() - 1 } else { i - 1 }
-            } else {
-                (i + 1) % self.list.len()
-            },
+            None => {
+                if reverse {
+                    self.list.len() - 1
+                } else {
+                    0
+                }
+            }
+            Some(i) => {
+                if reverse {
+                    if i == 0 {
+                        self.list.len() - 1
+                    } else {
+                        i - 1
+                    }
+                } else {
+                    (i + 1) % self.list.len()
+                }
+            }
         });
     }
 
@@ -105,11 +125,11 @@ const KEY_REPEAT_INTERVAL_MS: u64 = 50;
 /// the two paths do not fight.
 struct KeyRepeatState {
     /// The key currently held, or `None` when no key is pressed.
-    held_key:  Option<KeyCode>,
+    held_key: Option<KeyCode>,
     /// Modifier state captured at the moment the key was pressed.
     held_mods: Modifiers,
     /// Accumulated milliseconds since the key was first pressed (reset on new press).
-    held_ms:   u64,
+    held_ms: u64,
     /// Accumulated milliseconds since the last repeat event fired (reset on each fire).
     since_last_ms: u64,
 }
@@ -117,9 +137,13 @@ struct KeyRepeatState {
 impl KeyRepeatState {
     const fn new() -> Self {
         Self {
-            held_key:      None,
-            held_mods:     Modifiers { shift: false, ctrl: false, alt: false },
-            held_ms:       0,
+            held_key: None,
+            held_mods: Modifiers {
+                shift: false,
+                ctrl: false,
+                alt: false,
+            },
+            held_ms: 0,
             since_last_ms: 0,
         }
     }
@@ -131,29 +155,29 @@ impl KeyRepeatState {
 /// buffered input events and — for animation — the milliseconds elapsed since
 /// the last call.
 pub struct ViApp {
-    root:          Box<dyn ViNode>,
-    renderer:      Box<dyn ViRenderer>,
-    font_ctx:      FontContext,
-    animations:    Vec<Box<dyn Animatable>>,
-    dirty_region:  DirtyRegion,
+    root: Box<dyn ViNode>,
+    renderer: Box<dyn ViRenderer>,
+    font_ctx: FontContext,
+    animations: Vec<Box<dyn Animatable>>,
+    dirty_region: DirtyRegion,
     dirty_handles: Vec<SubscriptionHandle>,
-    layout_dirty:  bool,
+    layout_dirty: bool,
     /// Active design-token set. Widgets read colors/spacing from `cx.theme`.
-    theme:         Box<dyn ViTheme>,
+    theme: Box<dyn ViTheme>,
     /// Software key-repeat state. See `KeyRepeatState` for rationale.
-    key_repeat:    KeyRepeatState,
+    key_repeat: KeyRepeatState,
     /// Tab-order focus state. Rebuilt after every layout pass.
-    focus:         FocusState,
+    focus: FocusState,
     /// Last known mouse position, updated on every MouseMove.
     /// Injected into MousePress/MouseRelease events whose pos is (0,0) because
     /// the input service encodes button events without position (caller must track).
-    mouse_pos:     crate::layout::Point,
+    mouse_pos: crate::layout::Point,
     /// Stack of overlay widgets (dialogs, drop-down popups). Rendered and
     /// dispatched on top of `root`; topmost entry wins events first.
-    overlays:      Vec<OverlayEntry>,
+    overlays: Vec<OverlayEntry>,
     /// Deferred overlay mutations queued by widgets during `event()`.
     /// Drained once per frame after all input events are processed.
-    action_queue:  OverlayActionQueue,
+    action_queue: OverlayActionQueue,
     /// Active toast notifications, in chronological order.
     toast_entries: VecDeque<crate::node_widgets::toast::ToastEntry>,
 }
@@ -167,17 +191,17 @@ impl ViApp {
         Self {
             root,
             renderer,
-            font_ctx:      FontContext::no_font(),
-            animations:    Vec::new(),
+            font_ctx: FontContext::no_font(),
+            animations: Vec::new(),
             dirty_region,
             dirty_handles: Vec::new(),
-            layout_dirty:  true,
-            theme:         Box::new(DarkTheme),
-            key_repeat:    KeyRepeatState::new(),
-            focus:         FocusState::new(),
-            mouse_pos:     crate::layout::Point::new(0.0, 0.0),
-            overlays:      Vec::new(),
-            action_queue:  new_action_queue(),
+            layout_dirty: true,
+            theme: Box::new(DarkTheme),
+            key_repeat: KeyRepeatState::new(),
+            focus: FocusState::new(),
+            mouse_pos: crate::layout::Point::new(0.0, 0.0),
+            overlays: Vec::new(),
+            action_queue: new_action_queue(),
             toast_entries: VecDeque::new(),
         }
     }
@@ -203,7 +227,7 @@ impl ViApp {
             widget,
             blocking,
             dismiss_outside: !blocking,
-            anchor_bounds:   None,
+            anchor_bounds: None,
         });
         self.layout_dirty = true;
     }
@@ -220,11 +244,12 @@ impl ViApp {
     /// `config.duration_ms` milliseconds (`0` = never auto-dismiss).
     pub fn show_toast(&mut self, config: crate::node_widgets::toast::ToastConfig) {
         let widget = crate::node_widgets::toast::Toast::new(&config);
-        self.toast_entries.push_back(crate::node_widgets::toast::ToastEntry {
-            config,
-            elapsed_ms: 0,
-            widget,
-        });
+        self.toast_entries
+            .push_back(crate::node_widgets::toast::ToastEntry {
+                config,
+                elapsed_ms: 0,
+                widget,
+            });
         self.layout_dirty = true;
     }
 
@@ -283,7 +308,11 @@ impl ViApp {
         // ── Process input events ──────────────────────────────────────────────
         for e in events {
             // Tab focus cycling — consumed by the focus system, not dispatched to root.
-            if let Event::KeyPress { key: KeyCode::Tab, modifiers } = e {
+            if let Event::KeyPress {
+                key: KeyCode::Tab,
+                modifiers,
+            } = e
+            {
                 self.focus.advance(modifiers.shift);
                 self.layout_dirty = true;
                 continue;
@@ -292,11 +321,17 @@ impl ViApp {
             // Enter activation — route directly to the focused widget via activate_at().
             // When a blocking overlay is active, activate_at on the overlay is more
             // appropriate; skip root activation in that case.
-            if let Event::KeyPress { key: KeyCode::Enter, .. } = e {
+            if let Event::KeyPress {
+                key: KeyCode::Enter,
+                ..
+            } = e
+            {
                 let top_blocking = self.overlays.last().map(|o| o.blocking).unwrap_or(false);
                 if !top_blocking {
                     if let Some(b) = self.focus.current_bounds() {
-                        if self.root.activate_at(b) { self.layout_dirty = true; }
+                        if self.root.activate_at(b) {
+                            self.layout_dirty = true;
+                        }
                     }
                 }
                 continue;
@@ -317,15 +352,24 @@ impl ViApp {
             let patched;
             let ev: &Event = match e {
                 Event::MousePress { pos, button } if pos.x == 0.0 && pos.y == 0.0 => {
-                    patched = Event::MousePress { pos: self.mouse_pos, button: *button };
+                    patched = Event::MousePress {
+                        pos: self.mouse_pos,
+                        button: *button,
+                    };
                     &patched
                 }
                 Event::MouseRelease { pos, button } if pos.x == 0.0 && pos.y == 0.0 => {
-                    patched = Event::MouseRelease { pos: self.mouse_pos, button: *button };
+                    patched = Event::MouseRelease {
+                        pos: self.mouse_pos,
+                        button: *button,
+                    };
                     &patched
                 }
                 Event::Scroll { pos, delta_y } if pos.x == 0.0 && pos.y == 0.0 => {
-                    patched = Event::Scroll { pos: self.mouse_pos, delta_y: *delta_y };
+                    patched = Event::Scroll {
+                        pos: self.mouse_pos,
+                        delta_y: *delta_y,
+                    };
                     &patched
                 }
                 other => other,
@@ -334,9 +378,9 @@ impl ViApp {
             // Track held key for software repeat injection (see KeyRepeatState).
             match ev {
                 Event::KeyPress { key, modifiers } => {
-                    self.key_repeat.held_key      = Some(*key);
-                    self.key_repeat.held_mods     = *modifiers;
-                    self.key_repeat.held_ms       = 0;
+                    self.key_repeat.held_key = Some(*key);
+                    self.key_repeat.held_mods = *modifiers;
+                    self.key_repeat.held_ms = 0;
                     self.key_repeat.since_last_ms = 0;
                 }
                 Event::KeyRelease { .. } => {
@@ -347,7 +391,10 @@ impl ViApp {
 
             // Route event: topmost overlay wins, then falls through if non-blocking.
             // Snapshot overlay metadata before the mutable borrow for event().
-            let overlay_meta = self.overlays.last().map(|t| (t.blocking, t.dismiss_outside, t.widget.bounds()));
+            let overlay_meta = self
+                .overlays
+                .last()
+                .map(|t| (t.blocking, t.dismiss_outside, t.widget.bounds()));
 
             let consumed = if let Some(top) = self.overlays.last_mut() {
                 let top_blocking = top.blocking;
@@ -373,8 +420,8 @@ impl ViApp {
             if let Some((blocking, dismiss_outside, overlay_bounds)) = overlay_meta {
                 if !blocking && dismiss_outside {
                     let outside_press = match ev {
-                        Event::MousePress { pos, .. }  => !overlay_bounds.contains(*pos),
-                        Event::TouchBegin { pos, .. }  => !overlay_bounds.contains(*pos),
+                        Event::MousePress { pos, .. } => !overlay_bounds.contains(*pos),
+                        Event::TouchBegin { pos, .. } => !overlay_bounds.contains(*pos),
                         _ => false,
                     };
                     if outside_press {
@@ -383,7 +430,9 @@ impl ViApp {
                 }
             }
 
-            if consumed { self.layout_dirty = true; }
+            if consumed {
+                self.layout_dirty = true;
+            }
         }
 
         // ── Software key-repeat injection ─────────────────────────────────────
@@ -393,7 +442,7 @@ impl ViApp {
         // held_ms crosses the thresholds without hardware-repeat interruption.
         if dt_ms > 0 {
             if let Some(key) = self.key_repeat.held_key {
-                self.key_repeat.held_ms       += dt_ms as u64;
+                self.key_repeat.held_ms += dt_ms as u64;
                 self.key_repeat.since_last_ms += dt_ms as u64;
 
                 if self.key_repeat.held_ms >= KEY_REPEAT_DELAY_MS
@@ -407,13 +456,19 @@ impl ViApp {
                     let consumed = if let Some(top) = self.overlays.last_mut() {
                         let top_blocking = top.blocking;
                         let overlay_consumed = top.widget.event(&repeat_event);
-                        if top_blocking { overlay_consumed }
-                        else if !overlay_consumed { self.root.event(&repeat_event) }
-                        else { true }
+                        if top_blocking {
+                            overlay_consumed
+                        } else if !overlay_consumed {
+                            self.root.event(&repeat_event)
+                        } else {
+                            true
+                        }
                     } else {
                         self.root.event(&repeat_event)
                     };
-                    if consumed { self.layout_dirty = true; }
+                    if consumed {
+                        self.layout_dirty = true;
+                    }
                 }
             }
         }
@@ -428,8 +483,7 @@ impl ViApp {
                 entry.elapsed_ms = entry.elapsed_ms.saturating_add(dt_ms);
             }
             self.toast_entries.retain(|entry| {
-                entry.config.duration_ms == 0
-                    || entry.elapsed_ms < entry.config.duration_ms
+                entry.config.duration_ms == 0 || entry.elapsed_ms < entry.config.duration_ms
             });
             if self.toast_entries.len() != prev_len {
                 self.layout_dirty = true;
@@ -458,7 +512,9 @@ impl ViApp {
             // Rebuild focus list.  When a blocking overlay is active, focus is
             // confined to that overlay's focusable bounds.
             if self.overlays.last().map(|e| e.blocking).unwrap_or(false) {
-                self.focus.list = self.overlays.last_mut()
+                self.focus.list = self
+                    .overlays
+                    .last_mut()
                     .map(|e| e.widget.collect_focusable_bounds())
                     .unwrap_or_default();
             } else {
@@ -466,13 +522,19 @@ impl ViApp {
             }
             // Clamp idx if the list shrank (e.g. widget removed).
             if let Some(i) = self.focus.idx {
-                if i >= self.focus.list.len() { self.focus.idx = None; }
+                if i >= self.focus.list.len() {
+                    self.focus.idx = None;
+                }
             }
 
             // Rebuild signal subscriptions for root + overlays.
-            self.dirty_handles = self.root.collect_dirty_handles(Rc::clone(&self.dirty_region));
+            self.dirty_handles = self
+                .root
+                .collect_dirty_handles(Rc::clone(&self.dirty_region));
             for entry in &mut self.overlays {
-                let handles = entry.widget.collect_dirty_handles(Rc::clone(&self.dirty_region));
+                let handles = entry
+                    .widget
+                    .collect_dirty_handles(Rc::clone(&self.dirty_region));
                 self.dirty_handles.extend(handles);
             }
 
@@ -481,22 +543,28 @@ impl ViApp {
 
         // ── Path B: render accumulated dirty region ───────────────────────────
         let damage = self.dirty_region.borrow_mut().take();
-        if damage.is_none() { return false; }
+        if damage.is_none() {
+            return false;
+        }
 
         // Snapshot focus bounds before the borrow split — Option<Rect> is Copy.
         let focus_bounds = self.focus.current_bounds();
 
         // Split borrows: renderer, font_ctx, theme, root, overlays, and
         // toast_entries are all disjoint struct fields.
-        let renderer      = &mut self.renderer;
-        let font_ctx      = &mut self.font_ctx;
-        let theme         = &*self.theme;
-        let root          = &self.root;
-        let overlays      = &self.overlays;
+        let renderer = &mut self.renderer;
+        let font_ctx = &mut self.font_ctx;
+        let theme = &*self.theme;
+        let root = &self.root;
+        let overlays = &self.overlays;
         let toast_entries = &self.toast_entries;
 
         renderer.render(damage, &mut |canvas| {
-            let mut cx = RenderCtx { canvas, font: font_ctx, theme };
+            let mut cx = RenderCtx {
+                canvas,
+                font: font_ctx,
+                theme,
+            };
             root.paint(&mut cx);
 
             // Paint overlays bottom-to-top.
@@ -552,11 +620,12 @@ impl ViApp {
                 }
                 OverlayAction::ShowToast(config) => {
                     let widget = crate::node_widgets::toast::Toast::new(&config);
-                    self.toast_entries.push_back(crate::node_widgets::toast::ToastEntry {
-                        config,
-                        elapsed_ms: 0,
-                        widget,
-                    });
+                    self.toast_entries
+                        .push_back(crate::node_widgets::toast::ToastEntry {
+                            config,
+                            elapsed_ms: 0,
+                            widget,
+                        });
                     self.layout_dirty = true;
                 }
             }
@@ -564,5 +633,7 @@ impl ViApp {
     }
 
     /// Force a full repaint on the next `tick()` call.
-    pub fn mark_dirty(&mut self) { self.layout_dirty = true; }
+    pub fn mark_dirty(&mut self) {
+        self.layout_dirty = true;
+    }
 }

@@ -10,8 +10,8 @@ name = "tetris"
 path = "src/main.rs"
 
 [dependencies]
-api  = { path = "../../../libs/api" }
-ostd = { path = "../../../libs/ostd" }
+api  = { path = "../../../libs/api", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

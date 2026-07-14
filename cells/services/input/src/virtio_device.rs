@@ -12,17 +12,17 @@
 extern crate alloc;
 
 use core::ptr::NonNull;
+use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_request_mmio};
 use virtio_drivers::{
-    BufferDirection, Hal, PhysAddr,
     device::input::VirtIOInput,
     transport::mmio::{MmioTransport, VirtIOHeader},
     transport::{DeviceType, Transport},
+    BufferDirection, Hal, PhysAddr,
 };
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_request_mmio};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const VIRTIO_MAGIC: u32   = 0x7472_6976;
+const VIRTIO_MAGIC: u32 = 0x7472_6976;
 const VIRTIO_DEV_INPUT: u32 = 18; // VirtIO device type: Input (18)
 pub const MMIO_SLOT_SIZE: usize = 0x200;
 
@@ -61,7 +61,11 @@ unsafe impl Hal for CellHal {
             // SAFETY: buffer is a live slice owned by virtio-drivers for the DMA
             // duration; bounce is a fresh grant allocation of >= len bytes.
             unsafe {
-                core::ptr::copy_nonoverlapping(buffer.as_ptr() as *const u8, bounce as *mut u8, len);
+                core::ptr::copy_nonoverlapping(
+                    buffer.as_ptr() as *const u8,
+                    bounce as *mut u8,
+                    len,
+                );
             }
         }
         bounce as PhysAddr
@@ -87,8 +91,8 @@ unsafe impl Hal for CellHal {
 /// One raw VirtIO input event as drained from the virtqueue.
 pub struct RawEvent {
     pub event_type: u16,
-    pub code:       u16,
-    pub value:      u32,
+    pub code: u16,
+    pub value: u32,
 }
 
 // ─── Device state ─────────────────────────────────────────────────────────────
@@ -96,8 +100,13 @@ pub struct RawEvent {
 type InputDev = VirtIOInput<CellHal, MmioTransport>;
 
 pub struct InputDevice {
-    dev:      InputDev,
-    pub irq:  u32,
+    dev: InputDev,
+    // reason: irq/base are recorded at probe time for diagnostics and a planned
+    // IRQ-driven wake path; the cell currently polls try_get_event() rather than
+    // waiting on these (unlike the virtio-net cell's analogous wait_recv()).
+    #[allow(dead_code)]
+    pub irq: u32,
+    #[allow(dead_code)]
     pub base: usize,
 }
 
@@ -107,12 +116,15 @@ impl InputDevice {
     pub fn try_get_event(&mut self) -> Option<RawEvent> {
         self.dev.pop_pending_event().map(|ev| RawEvent {
             event_type: ev.event_type,
-            code:       ev.code,
-            value:      ev.value,
+            code: ev.code,
+            value: ev.value,
         })
     }
 
     /// Acknowledge the VirtIO interrupt (must call after waking on IRQ).
+    // reason: paired with the planned IRQ-wake path above (irq/base) — not
+    // called today since this cell polls try_get_event() instead.
+    #[allow(dead_code)]
     pub fn ack_irq(&mut self) {
         self.dev.ack_interrupt();
     }
@@ -124,13 +136,13 @@ impl InputDevice {
 fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
     #[cfg(target_arch = "aarch64")]
     {
-        const BASE:   usize = 0x0a00_0000;
+        const BASE: usize = 0x0a00_0000;
         const STRIDE: usize = 0x200;
         (0..32_usize).map(|i| (BASE + i * STRIDE, 16 + i as u32))
     }
     #[cfg(target_arch = "riscv64")]
     {
-        const BASE:   usize = 0x1000_1000;
+        const BASE: usize = 0x1000_1000;
         const STRIDE: usize = 0x1000;
         (0..8_usize).map(|i| (BASE + i * STRIDE, 1 + i as u32))
     }
@@ -154,10 +166,14 @@ pub fn find_and_init_inputs() -> alloc::vec::Vec<InputDevice> {
     for (base, irq) in virtio_slot_iter() {
         // SAFETY: base is within the arch MMIO window mapped USER-accessible by paging init.
         let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
-        if magic != VIRTIO_MAGIC { continue; }
+        if magic != VIRTIO_MAGIC {
+            continue;
+        }
 
         let device_id = unsafe { core::ptr::read_volatile((base + 8) as *const u32) };
-        if device_id != VIRTIO_DEV_INPUT { continue; }
+        if device_id != VIRTIO_DEV_INPUT {
+            continue;
+        }
 
         // Claim exclusive MMIO ownership.  This also gates the kernel poll path:
         // `virtio_input::poll_events` checks `lookup_mmio_owner(base)` and skips
@@ -171,7 +187,10 @@ pub fn find_and_init_inputs() -> alloc::vec::Vec<InputDevice> {
         let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::Input => t,
-            Ok(t) => { core::mem::forget(t); continue; }
+            Ok(t) => {
+                core::mem::forget(t);
+                continue;
+            }
             Err(_) => continue,
         };
 

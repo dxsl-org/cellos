@@ -7,17 +7,29 @@
 //! `set_lapic_phys` / `set_ioapic_phys` before `init_timers()`.
 use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
-static HHDM_BASE:   AtomicU64   = AtomicU64::new(0);
-static LAPIC_PHYS:  AtomicUsize = AtomicUsize::new(0xFEE0_0000);
+static HHDM_BASE: AtomicU64 = AtomicU64::new(0);
+static LAPIC_PHYS: AtomicUsize = AtomicUsize::new(0xFEE0_0000);
 static IOAPIC_PHYS: AtomicUsize = AtomicUsize::new(0xFEC0_0000);
 
 /// ISA IRQ → GSI override table from ACPI MADT type-2 entries.
 /// Index = ISA IRQ (0–15); value = GSI. Identity-mapped by default.
 static IRQ_OVERRIDES: [AtomicU32; 16] = [
-    AtomicU32::new(0),  AtomicU32::new(1),  AtomicU32::new(2),  AtomicU32::new(3),
-    AtomicU32::new(4),  AtomicU32::new(5),  AtomicU32::new(6),  AtomicU32::new(7),
-    AtomicU32::new(8),  AtomicU32::new(9),  AtomicU32::new(10), AtomicU32::new(11),
-    AtomicU32::new(12), AtomicU32::new(13), AtomicU32::new(14), AtomicU32::new(15),
+    AtomicU32::new(0),
+    AtomicU32::new(1),
+    AtomicU32::new(2),
+    AtomicU32::new(3),
+    AtomicU32::new(4),
+    AtomicU32::new(5),
+    AtomicU32::new(6),
+    AtomicU32::new(7),
+    AtomicU32::new(8),
+    AtomicU32::new(9),
+    AtomicU32::new(10),
+    AtomicU32::new(11),
+    AtomicU32::new(12),
+    AtomicU32::new(13),
+    AtomicU32::new(14),
+    AtomicU32::new(15),
 ];
 /// GSI base of the first I/O APIC (MADT type-1 gsi_base field). Usually 0.
 static IOAPIC_GSI_BASE: AtomicU32 = AtomicU32::new(0);
@@ -62,7 +74,9 @@ fn ioapic_base() -> usize {
 
 fn lw(reg: usize, v: u32) {
     // SAFETY: LAPIC is identity-mapped by init_kernel_paging_x86 at the parsed base.
-    unsafe { core::ptr::write_volatile((lapic_base() + reg) as *mut u32, v); }
+    unsafe {
+        core::ptr::write_volatile((lapic_base() + reg) as *mut u32, v);
+    }
 }
 fn iow(idx: u8, v: u32) {
     // SAFETY: IOAPIC is identity-mapped by init_kernel_paging_x86 at the parsed base.
@@ -75,9 +89,9 @@ fn iow(idx: u8, v: u32) {
 
 /// Initialise LAPIC and configure periodic timer at ~100 Hz (vector 0x20).
 pub fn init_lapic() {
-    lw(0x0F0, 0x1FF);          // SVR: enable LAPIC, spurious vector 0xFF
-    lw(0x3E0, 0x3);            // Timer divide-by-16
-    lw(0x320, 0x20 | (1<<17)); // LVT_TIMER: periodic mode, vector 0x20
+    lw(0x0F0, 0x1FF); // SVR: enable LAPIC, spurious vector 0xFF
+    lw(0x3E0, 0x3); // Timer divide-by-16
+    lw(0x320, 0x20 | (1 << 17)); // LVT_TIMER: periodic mode, vector 0x20
     lw(0x380, 1_000_000 / 16); // Initial count (~100 Hz at 1 GHz LAPIC clock)
 }
 
@@ -91,10 +105,10 @@ pub fn eoi() {
 /// # Safety
 /// LAPIC must be identity-mapped and enabled.
 pub unsafe fn start_oneshot(count: u32) {
-    lw(0x3E0, 0x3);            // Timer divide-by-16
-    // bits 18:17 = 00 → one-shot mode; bit 16 = 1 → masked (silent calibration)
-    lw(0x320, 0x20 | (1<<16)); // LVT_TIMER: one-shot, masked, vector 0x20
-    lw(0x380, count);           // Initial count
+    lw(0x3E0, 0x3); // Timer divide-by-16
+                    // bits 18:17 = 00 → one-shot mode; bit 16 = 1 → masked (silent calibration)
+    lw(0x320, 0x20 | (1 << 16)); // LVT_TIMER: one-shot, masked, vector 0x20
+    lw(0x380, count); // Initial count
 }
 
 /// Read the current LAPIC timer count (used by HPET calibration).
@@ -130,7 +144,7 @@ pub fn check_x2apic() -> bool {
             out("edx") _,
         );
     }
-    lo & (1 << 10) != 0  // bit 10 = x2APIC enable
+    lo & (1 << 10) != 0 // bit 10 = x2APIC enable
 }
 
 /// Re-initialise LAPIC timer with a calibrated ticks-per-ms value (~100 Hz).
@@ -149,10 +163,14 @@ pub fn init_lapic_calibrated(ticks_per_ms: u64) {
         FALLBACK
     } else {
         let c = (ticks_per_ms * 10) as u32;
-        if c < 10_000 { FALLBACK } else { c }
+        if c < 10_000 {
+            FALLBACK
+        } else {
+            c
+        }
     };
-    lw(0x3E0, 0x3);             // Timer divide-by-16
-    lw(0x320, 0x20 | (1<<17));  // LVT_TIMER: periodic, vector 0x20
+    lw(0x3E0, 0x3); // Timer divide-by-16
+    lw(0x320, 0x20 | (1 << 17)); // LVT_TIMER: periodic, vector 0x20
     lw(0x380, safe_count);
 }
 
@@ -168,6 +186,6 @@ pub fn ioapic_redirect(isa_irq: u8, vec: u8) {
         .unwrap_or(isa_irq as u32);
     let gsi_base = IOAPIC_GSI_BASE.load(Ordering::Relaxed);
     let pin = gsi.saturating_sub(gsi_base) as u8;
-    iow(0x10 + pin * 2 + 1, 0);        // destination: CPU 0
-    iow(0x10 + pin * 2,     vec as u32); // vector, unmasked
+    iow(0x10 + pin * 2 + 1, 0); // destination: CPU 0
+    iow(0x10 + pin * 2, vec as u32); // vector, unmasked
 }

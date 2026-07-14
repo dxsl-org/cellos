@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! Minimal C++ ABI stubs for freestanding C++ (no exceptions, no RTTI).
-//! 
+//!
 //! SAFETY: These stubs ONLY support -fno-exceptions -fno-rtti compiled C++ code.
 //! Do NOT attempt to use exceptions, RTTI, or STL containers — they require
 //! full libcxxabi/libstdc++ which is SAS-unsafe. Use Tier 3b Linux VM instead.
@@ -18,7 +18,13 @@ use crate::syscall::ViSyscall;
 /// unoverridden pure virtual slot; never call directly. Never returns.
 #[no_mangle]
 pub unsafe extern "C" fn __cxa_pure_virtual() -> ! {
-    raw_syscall(ViSyscall::Log, b"FATAL: pure virtual call\n".as_ptr() as usize, 25, 0, 0);
+    raw_syscall(
+        ViSyscall::Log,
+        b"FATAL: pure virtual call\n".as_ptr() as usize,
+        25,
+        0,
+        0,
+    );
     raw_syscall(ViSyscall::Exit, 134, 0, 0, 0); // 134 = 128 + SIGABRT(6)
     loop {
         core::hint::spin_loop();
@@ -35,7 +41,11 @@ pub unsafe extern "C" fn __cxa_pure_virtual() -> ! {
 /// must not be concurrently accessed (single-threaded cells only).
 #[no_mangle]
 pub unsafe extern "C" fn __cxa_guard_acquire(guard: *mut u64) -> i32 {
-    if *guard == 0 { 1 } else { 0 }  // 1 = needs init, 0 = already done
+    if *guard == 0 {
+        1
+    } else {
+        0
+    } // 1 = needs init, 0 = already done
 }
 
 /// Marks the function-local static guarded by `guard` as initialized.
@@ -45,7 +55,7 @@ pub unsafe extern "C" fn __cxa_guard_acquire(guard: *mut u64) -> i32 {
 /// `__cxa_guard_acquire` call and must still be valid and properly aligned.
 #[no_mangle]
 pub unsafe extern "C" fn __cxa_guard_release(guard: *mut u64) {
-    *guard = 1;  // mark initialized
+    *guard = 1; // mark initialized
 }
 
 /// Signals that function-local static initialization failed, leaving the

@@ -9,16 +9,16 @@ fn main() {
     emit_git_sha();
     // Choose linker script based on target architecture (and board feature).
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-    let board_rpi3  = std::env::var("CARGO_FEATURE_BOARD_RPI3").is_ok();
+    let board_rpi3 = std::env::var("CARGO_FEATURE_BOARD_RPI3").is_ok();
     let (ld_script, rerun_path) = match target_arch.as_str() {
         // board-rpi3: VideoCore loads at 0x80000; use dedicated linker script.
-        "aarch64" if board_rpi3 => ("kernel/linker-rpi3.ld",    "kernel/linker-rpi3.ld"),
-        "aarch64"               => ("kernel/linker-aarch64.ld", "kernel/linker-aarch64.ld"),
-        "x86_64"                => ("kernel/linker-x86-64.ld",  "kernel/linker-x86-64.ld"),
-        "riscv32"               => ("kernel/linker-riscv32.ld", "kernel/linker-riscv32.ld"),
-        "arm"                   => ("kernel/linker-aarch32.ld", "kernel/linker-aarch32.ld"),
-        "x86"                   => ("kernel/linker-x86-32.ld",  "kernel/linker-x86-32.ld"),
-        _                       => ("kernel/linker.ld",          "kernel/linker.ld"),
+        "aarch64" if board_rpi3 => ("kernel/linker-rpi3.ld", "kernel/linker-rpi3.ld"),
+        "aarch64" => ("kernel/linker-aarch64.ld", "kernel/linker-aarch64.ld"),
+        "x86_64" => ("kernel/linker-x86-64.ld", "kernel/linker-x86-64.ld"),
+        "riscv32" => ("kernel/linker-riscv32.ld", "kernel/linker-riscv32.ld"),
+        "arm" => ("kernel/linker-aarch32.ld", "kernel/linker-aarch32.ld"),
+        "x86" => ("kernel/linker-x86-32.ld", "kernel/linker-x86-32.ld"),
+        _ => ("kernel/linker.ld", "kernel/linker.ld"),
     };
     println!("cargo:rustc-link-arg=-T{ld_script}");
     println!("cargo:rerun-if-changed={rerun_path}");
@@ -95,10 +95,7 @@ fn main() {
 /// Falls back to a placeholder ("00000000") when not in a git repository.
 fn emit_git_sha() {
     // Use vergen-gitcl to read the git SHA; ignore errors gracefully.
-    let git = vergen_gitcl::GitclBuilder::default()
-        .sha(true)
-        .build()
-        .ok();
+    let git = vergen_gitcl::GitclBuilder::default().sha(true).build().ok();
     let mut emitter = vergen_gitcl::Emitter::default();
     if let Some(g) = git {
         let _ = emitter.add_instructions(&g);

@@ -54,7 +54,8 @@ fn plain(ip: [u8; 4], port: u16, request: &[u8]) -> Result<Vec<u8>, String> {
                         let _ = nc.tcp_close(sock);
                         return Err(alloc::format!(
                             "tcp_send failed after {} attempts, last err={:?}",
-                            attempts, e
+                            attempts,
+                            e
                         ));
                     }
                     ostd::task::yield_now();

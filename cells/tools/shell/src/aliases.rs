@@ -13,11 +13,16 @@ pub struct Aliases {
 }
 
 impl Aliases {
-    pub fn new() -> Self { Self { map: BTreeMap::new() } }
+    pub fn new() -> Self {
+        Self {
+            map: BTreeMap::new(),
+        }
+    }
 
     /// Define or update an alias.
     pub fn set(&mut self, name: &str, replacement: &str) {
-        self.map.insert(String::from(name), String::from(replacement));
+        self.map
+            .insert(String::from(name), String::from(replacement));
     }
 
     /// Remove an alias.

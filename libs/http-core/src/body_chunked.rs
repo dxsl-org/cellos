@@ -23,9 +23,7 @@
 //!     `MAX_CHUNK_SIZE`).
 
 use super::source::Byte;
-use super::{
-    BodyReader, ChunkPhase, HttpError, Read, State, LINE_BUF_LEN, MAX_CHUNK_SIZE,
-};
+use super::{BodyReader, ChunkPhase, HttpError, Read, State, LINE_BUF_LEN, MAX_CHUNK_SIZE};
 
 impl BodyReader {
     pub(super) fn read_chunked<R: Read>(
@@ -79,7 +77,9 @@ impl BodyReader {
         out: &mut [u8],
     ) -> Result<usize, HttpError> {
         let remaining = match &self.state {
-            State::Chunked { chunk_remaining, .. } => *chunk_remaining,
+            State::Chunked {
+                chunk_remaining, ..
+            } => *chunk_remaining,
             _ => return Err(HttpError::BadChunk),
         };
         // `remaining` fits in usize: bounded by MAX_CHUNK_SIZE at parse time.
@@ -102,7 +102,12 @@ impl BodyReader {
         }
 
         let new_remaining = remaining - written as u64;
-        if let State::Chunked { chunk_remaining, phase, .. } = &mut self.state {
+        if let State::Chunked {
+            chunk_remaining,
+            phase,
+            ..
+        } = &mut self.state
+        {
             *chunk_remaining = new_remaining;
             if new_remaining == 0 {
                 *phase = ChunkPhase::TrailingCrlf;
@@ -112,7 +117,13 @@ impl BodyReader {
     }
 
     fn begin_chunk(&mut self, size: u64) {
-        if let State::Chunked { chunk_remaining, phase, line_len, .. } = &mut self.state {
+        if let State::Chunked {
+            chunk_remaining,
+            phase,
+            line_len,
+            ..
+        } = &mut self.state
+        {
             *chunk_remaining = size;
             *line_len = 0;
             *phase = ChunkPhase::Data;
@@ -127,10 +138,7 @@ impl BodyReader {
 
     /// Accumulate and parse a chunk-size line.  Returns `Some(size)` when the
     /// line is complete, `None` if more transport data is needed (caller retry).
-    fn parse_size_line<R: Read>(
-        &mut self,
-        transport: &mut R,
-    ) -> Result<Option<u64>, HttpError> {
+    fn parse_size_line<R: Read>(&mut self, transport: &mut R) -> Result<Option<u64>, HttpError> {
         loop {
             let line_len = match &self.state {
                 State::Chunked { line_len, .. } => *line_len,
@@ -166,7 +174,10 @@ impl BodyReader {
 
     /// Push one byte into the size-line accumulator, guarding its capacity.
     fn push_line_byte(&mut self, b: u8) -> Result<(), HttpError> {
-        if let State::Chunked { line_buf, line_len, .. } = &mut self.state {
+        if let State::Chunked {
+            line_buf, line_len, ..
+        } = &mut self.state
+        {
             if *line_len >= LINE_BUF_LEN {
                 // A size line longer than the buffer is malformed/hostile.
                 return Err(HttpError::BadChunk);

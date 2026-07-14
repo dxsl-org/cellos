@@ -1,9 +1,9 @@
 //! Benchmark report: statistics computation and JSON/text emission.
 
 extern crate alloc;
+use super::timer::ticks_to_ns;
 use alloc::vec::Vec;
 use api::benchmark::BenchReport;
-use super::timer::ticks_to_ns;
 use ostd::io::println;
 
 /// Compute a `BenchReport` from a raw (unsorted) tick-delta sample buffer.

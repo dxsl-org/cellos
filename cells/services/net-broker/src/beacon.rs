@@ -1,3 +1,9 @@
+// reason: this module implements the SwarmBeacon LAN-multicast discovery wire
+// protocol (P05) for the net-broker robot-swarm feature. `main.rs` only declares
+// `mod beacon;` (main.rs:62) and never references `beacon::` — the dispatch loop's
+// beacon-timer and try_recv calls are still TODOs (main.rs:134-135). Not wired yet.
+#![allow(dead_code)]
+
 /// SwarmBeacon — XChaCha20-Poly1305 UDP multicast discovery for net-broker.
 ///
 /// Wire frame (80B): nonce[24] || ciphertext[40] || poly1305-tag[16].
@@ -7,7 +13,6 @@
 ///
 /// Gossip key ≠ K1: XOR domain-separated from K1.
 /// Noise does NOT cover gossip — multicast is connectionless, no handshake/session.
-#[allow(dead_code)] // Wired into dispatch loop in P07 integration
 extern crate alloc;
 
 use alloc::vec::Vec;

@@ -136,7 +136,7 @@ pub fn init() {
         | (1u64 << 43)      // ATA:  allow tag access at EL1
         | (1u64 << 42)      // ATA0: allow tag access at EL0
         | (0b10u64 << 40)   // TCF:  synchronous fault at EL1
-        | (0b10u64 << 38);  // TCF0: synchronous fault at EL0
+        | (0b10u64 << 38); // TCF0: synchronous fault at EL0
 
     // SAFETY: SCTLR_EL1 write from EL1 to set MTE control bits.
     // ATA/ATA0 enable tag-memory access; TCF/TCF0 choose fault delivery.

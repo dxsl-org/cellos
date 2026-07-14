@@ -16,10 +16,9 @@
 //! exited, `sys_send` returns `Err(_)` and focus reverts to 0.  The next app
 //! that calls `SetFocus` resumes delivery.
 
-use api::input::{InputEvent, INPUT_EVENT_IPC_SIZE, encode_event};
+use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
 use ostd::syscall::{sys_lookup_service, sys_try_send};
-
 
 /// Opcode prefix byte sent to the focused cell's IPC endpoint.
 pub const INPUT_EVENT_OPCODE: u8 = 0x10;
@@ -29,6 +28,10 @@ pub struct Dispatcher {
     /// Task ID of the currently focused cell (0 = no focus, events dropped).
     focused: usize,
     /// Fallback TID on focus-cell death (0 = park until next SetFocus).
+    // reason: current death-reversion policy (see module doc "Death reversion")
+    // hard-reverts to 0 and waits for the next SetFocus; this field predates that
+    // decision and is kept for a planned "revert to shell" fallback path.
+    #[allow(dead_code)]
     fallback_tid: usize,
     /// Cached compositor TID for mouse routing (0 = not yet resolved).
     /// Re-resolved lazily; reset to 0 when a send fails (compositor respawned).
@@ -38,7 +41,11 @@ pub struct Dispatcher {
 impl Dispatcher {
     /// Create a dispatcher with no initial focus (events dropped until SetFocus).
     pub fn new() -> Self {
-        Self { focused: 0, fallback_tid: 0, compositor_tid: 0 }
+        Self {
+            focused: 0,
+            fallback_tid: 0,
+            compositor_tid: 0,
+        }
     }
 
     /// Change which cell receives input events.
@@ -122,5 +129,7 @@ impl Dispatcher {
 }
 
 impl Default for Dispatcher {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

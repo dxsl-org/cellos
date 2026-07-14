@@ -214,20 +214,28 @@ impl FrameAllocator {
     // ── Snapshot serialization accessors ──────────────────────────────────────
 
     /// Physical start address of the allocator's managed region.
-    pub fn memory_start(&self) -> PhysAddr { self.memory_start }
+    pub fn memory_start(&self) -> PhysAddr {
+        self.memory_start
+    }
 
     /// Physical end address (exclusive) of the allocator's managed region.
-    pub fn memory_end(&self) -> PhysAddr { self.memory_end }
+    pub fn memory_end(&self) -> PhysAddr {
+        self.memory_end
+    }
 
     /// Total number of 4096-byte frames managed by this allocator.
-    pub fn total_frames(&self) -> usize { self.total_frames }
+    pub fn total_frames(&self) -> usize {
+        self.total_frames
+    }
 
     /// Returns `true` if frame `idx` is currently allocated (in use).
     ///
     /// Used by the snapshot serializer to enumerate only the allocated frames,
     /// avoiding snapshotting free memory and reducing snapshot size.
     pub fn is_frame_allocated(&self, idx: usize) -> bool {
-        if idx >= self.total_frames { return false; }
+        if idx >= self.total_frames {
+            return false;
+        }
         let u64_idx = idx / 64;
         let bit_offset = idx % 64;
         (self.bitmap[u64_idx] >> bit_offset) & 1 != 0
@@ -246,7 +254,9 @@ impl FrameAllocator {
         debug_assert!(
             start_idx + n <= self.total_frames,
             "mark_range_used: frame range [{}, {}) out of bounds (total={})",
-            start_idx, start_idx + n, self.total_frames,
+            start_idx,
+            start_idx + n,
+            self.total_frames,
         );
         for i in 0..n {
             self.mark_used(start_idx + i);
@@ -299,7 +309,7 @@ pub fn allocate_guest_ram(n_pages: usize) -> Option<PhysAddr> {
     let total = FRAME_ALLOCATOR.lock().as_ref()?.total_frames;
     let limit = total.saturating_sub(n_pages);
     let mut candidate = 0usize; // current candidate run start (frame index)
-    let mut run_len = 0usize;   // confirmed free frames from candidate onward
+    let mut run_len = 0usize; // confirmed free frames from candidate onward
 
     while candidate <= limit {
         let probe_from = candidate + run_len;

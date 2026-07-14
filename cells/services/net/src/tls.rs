@@ -14,10 +14,10 @@
 //!   socket   — TlsSocketEntry (per-connection TLS state + handshake)
 //!   block_on — blocking executor shim
 
+pub mod block_on;
 pub mod clock;
-pub mod roots;
 pub mod provider;
 pub mod rng;
-pub mod transport;
+pub mod roots;
 pub mod socket;
-pub mod block_on;
+pub mod transport;

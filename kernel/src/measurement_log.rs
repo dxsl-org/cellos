@@ -23,18 +23,18 @@ const MAX_ENTRIES: usize = 256;
 
 /// One measured cell: its TID, the SHA-256 of its ELF image, and its path.
 pub struct MeasureEntry {
-    pub tid:  u32,
+    pub tid: u32,
     pub hash: [u8; 32],
     pub path: String,
 }
 
 struct Log {
-    entries:   Vec<MeasureEntry>,
+    entries: Vec<MeasureEntry>,
     aggregate: [u8; 32],
 }
 
 static LOG: Spinlock<Log> = Spinlock::new(Log {
-    entries:   Vec::new(),
+    entries: Vec::new(),
     aggregate: [0u8; 32],
 });
 
@@ -64,9 +64,16 @@ pub fn measure(tid: usize, path: &str, elf: &[u8]) -> [u8; 32] {
         log.aggregate = crate::sha256::sha256(&buf);
 
         if log.entries.len() < MAX_ENTRIES {
-            log.entries.push(MeasureEntry { tid: tid as u32, hash, path: String::from(path) });
+            log.entries.push(MeasureEntry {
+                tid: tid as u32,
+                hash,
+                path: String::from(path),
+            });
         } else {
-            log::warn!("[measure] log full ({} entries) — aggregate still advancing", MAX_ENTRIES);
+            log::warn!(
+                "[measure] log full ({} entries) — aggregate still advancing",
+                MAX_ENTRIES
+            );
         }
     }
 

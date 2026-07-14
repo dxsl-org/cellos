@@ -48,9 +48,15 @@ fn is_leap(y: u64) -> bool {
 fn days_in_month(month: u8, year: u64) -> u64 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-        4 | 6 | 9 | 11               => 30,
-        2                             => if is_leap(year) { 29 } else { 28 },
-        _                             => 0,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if is_leap(year) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 0,
     }
 }
 
@@ -78,13 +84,13 @@ pub fn now_epoch_ns() -> u64 {
         while cmos_read(0x0A) & 0x80 != 0 {
             core::hint::spin_loop();
         }
-        let s  = cmos_read(0x00);
+        let s = cmos_read(0x00);
         let mi = cmos_read(0x02);
-        let h  = cmos_read(0x04);
-        let d  = cmos_read(0x07);
+        let h = cmos_read(0x04);
+        let d = cmos_read(0x07);
         let mo = cmos_read(0x08);
-        let y  = cmos_read(0x09);
-        let c  = cmos_read(0x32);
+        let y = cmos_read(0x09);
+        let c = cmos_read(0x32);
         // Double-read: confirm seconds haven't changed.
         while cmos_read(0x0A) & 0x80 != 0 {
             core::hint::spin_loop();
@@ -92,14 +98,14 @@ pub fn now_epoch_ns() -> u64 {
         if s != cmos_read(0x00) {
             continue;
         }
-        sec   = bcd(s);
-        min   = bcd(mi);
-        hour  = bcd(h);
-        day   = bcd(d);
+        sec = bcd(s);
+        min = bcd(mi);
+        hour = bcd(h);
+        day = bcd(d);
         month = bcd(mo);
         // Century register 0x32: treat 0 or implausible values as 21st century.
         let cent = if c == 0 || c > 0x30 { 20u8 } else { bcd(c) };
-        year  = bcd(y) as u64 + cent as u64 * 100;
+        year = bcd(y) as u64 + cent as u64 * 100;
         break;
     }
     calendar_to_epoch(year, month, day, hour, min, sec) * 1_000_000_000

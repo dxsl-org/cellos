@@ -146,7 +146,10 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
     // SAFETY: RSDP is at least 20 bytes (v1 size); Limine guarantees it.
     let cksum = unsafe { table_checksum(rsdp_virt, 20) };
     if cksum != 0 {
-        log::warn!("[acpi] RSDP v1 checksum failed ({}) — using defaults", cksum);
+        log::warn!(
+            "[acpi] RSDP v1 checksum failed ({}) — using defaults",
+            cksum
+        );
         return info;
     }
 
@@ -165,7 +168,9 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
         }
         // SAFETY: xsdt_phys is a physical address from RSDP v2; phys_to_virt
         // maps it to a valid HHDM virtual address readable by the kernel.
-        unsafe { parse_xsdt(xsdt_phys, &phys_to_virt, &mut info); }
+        unsafe {
+            parse_xsdt(xsdt_phys, &phys_to_virt, &mut info);
+        }
     } else {
         // RSDT path: 32-bit table pointers.
         let rsdt_phys = rsdp.rsdt_address as usize;
@@ -175,7 +180,9 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
         }
         // SAFETY: rsdt_phys is a physical address from RSDP v1; phys_to_virt
         // maps it to a valid HHDM virtual address readable by the kernel.
-        unsafe { parse_rsdt(rsdt_phys, &phys_to_virt, &mut info); }
+        unsafe {
+            parse_rsdt(rsdt_phys, &phys_to_virt, &mut info);
+        }
     }
 
     info
@@ -188,19 +195,30 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
 /// Validate an SDT header checksum and return `(virt_base, length)` if valid.
 ///
 /// Returns `None` and logs a warning if the checksum fails.
-unsafe fn validate_sdt(phys: usize, phys_to_virt: &impl Fn(usize) -> usize) -> Option<(usize, usize)> {
+unsafe fn validate_sdt(
+    phys: usize,
+    phys_to_virt: &impl Fn(usize) -> usize,
+) -> Option<(usize, usize)> {
     let virt = phys_to_virt(phys);
     // Read the length field at offset 4 (4 bytes into the header).
     // SAFETY: phys points to a valid SDT; length field is at offset 4.
     let length = unsafe { core::ptr::read_unaligned((virt + 4) as *const u32) } as usize;
     if !(36..=0x10_0000).contains(&length) {
-        log::warn!("[acpi] SDT at {:#x} has implausible length {} — skipping", phys, length);
+        log::warn!(
+            "[acpi] SDT at {:#x} has implausible length {} — skipping",
+            phys,
+            length
+        );
         return None;
     }
     // SAFETY: [virt, virt+length) is within a valid Limine HHDM-mapped region.
     let cksum = unsafe { table_checksum(virt, length) };
     if cksum != 0 {
-        log::warn!("[acpi] SDT at {:#x} checksum failed ({}) — skipping", phys, cksum);
+        log::warn!(
+            "[acpi] SDT at {:#x} checksum failed ({}) — skipping",
+            phys,
+            cksum
+        );
         return None;
     }
     Some((virt, length))
@@ -227,8 +245,11 @@ unsafe fn parse_xsdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut Acpi
 
     for i in 0..entries_len {
         // SAFETY: within validated XSDT body.
-        let child_phys = unsafe { core::ptr::read_unaligned((entries_start + i * 8) as *const u64) } as usize;
-        if child_phys == 0 { continue; }
+        let child_phys =
+            unsafe { core::ptr::read_unaligned((entries_start + i * 8) as *const u64) } as usize;
+        if child_phys == 0 {
+            continue;
+        }
         dispatch_sdt(child_phys, p2v, info);
     }
 }
@@ -246,15 +267,20 @@ unsafe fn parse_rsdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut Acpi
 
     for i in 0..entries_len {
         // SAFETY: within validated RSDT body.
-        let child_phys = unsafe { core::ptr::read_unaligned((entries_start + i * 4) as *const u32) } as usize;
-        if child_phys == 0 { continue; }
+        let child_phys =
+            unsafe { core::ptr::read_unaligned((entries_start + i * 4) as *const u32) } as usize;
+        if child_phys == 0 {
+            continue;
+        }
         dispatch_sdt(child_phys, p2v, info);
     }
 }
 
 /// Validate and dispatch a child SDT by its 4-byte signature.
 fn dispatch_sdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut AcpiInfo) {
-    let Some((virt, length)) = (unsafe { validate_sdt(phys, p2v) }) else { return; };
+    let Some((virt, length)) = (unsafe { validate_sdt(phys, p2v) }) else {
+        return;
+    };
     // SAFETY: virt is the start of a validated SDT.
     let sig = unsafe { read_sig(virt) };
 
@@ -302,11 +328,16 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
         // Each entry: type (u8), length (u8), then type-specific payload.
         // SAFETY: offset is within the validated MADT.
         let entry_type = unsafe { core::ptr::read_volatile((virt + offset) as *const u8) };
-        let entry_len  = unsafe { core::ptr::read_volatile((virt + offset + 1) as *const u8) } as usize;
+        let entry_len =
+            unsafe { core::ptr::read_volatile((virt + offset + 1) as *const u8) } as usize;
 
         if entry_len < 2 || virt + offset + entry_len > end {
             // Malformed entry — stop parsing entries but keep what we got.
-            log::warn!("[acpi] MADT entry type={} has bad length={}", entry_type, entry_len);
+            log::warn!(
+                "[acpi] MADT entry type={} has bad length={}",
+                entry_type,
+                entry_len
+            );
             break;
         }
 
@@ -320,12 +351,10 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
             //   offset+4: ioapic_address (u32)
             //   offset+8: gsi_base (u32)
             1 if entry_len >= 12 => {
-                let ioapic_addr = unsafe {
-                    core::ptr::read_unaligned((virt + offset + 4) as *const u32)
-                };
-                let gsi_base = unsafe {
-                    core::ptr::read_unaligned((virt + offset + 8) as *const u32)
-                };
+                let ioapic_addr =
+                    unsafe { core::ptr::read_unaligned((virt + offset + 4) as *const u32) };
+                let gsi_base =
+                    unsafe { core::ptr::read_unaligned((virt + offset + 8) as *const u32) };
                 if ioapic_addr != 0 {
                     info.ioapic_base = ioapic_addr as u64;
                     info.ioapic_gsi_base = gsi_base;
@@ -338,9 +367,9 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
             //   offset+4: gsi (u32)
             //   offset+8: flags (u16)
             2 if entry_len >= 10 => {
-                let bus    = unsafe { core::ptr::read_volatile((virt + offset + 2) as *const u8) };
+                let bus = unsafe { core::ptr::read_volatile((virt + offset + 2) as *const u8) };
                 let source = unsafe { core::ptr::read_volatile((virt + offset + 3) as *const u8) };
-                let gsi    = unsafe { core::ptr::read_unaligned((virt + offset + 4) as *const u32) };
+                let gsi = unsafe { core::ptr::read_unaligned((virt + offset + 4) as *const u32) };
                 // Only remap ISA bus (bus==0) IRQs that fit in our table.
                 if bus == 0 && (source as usize) < 16 {
                     info.irq_overrides[source as usize] = gsi;
@@ -354,9 +383,8 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
             //   offset+2: reserved (u16)
             //   offset+4: lapic_address (u64)
             5 if entry_len >= 12 => {
-                let lapic64 = unsafe {
-                    core::ptr::read_unaligned((virt + offset + 4) as *const u64)
-                };
+                let lapic64 =
+                    unsafe { core::ptr::read_unaligned((virt + offset + 4) as *const u64) };
                 if lapic64 != 0 {
                     info.lapic_base = lapic64;
                 }
@@ -384,7 +412,10 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
 fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
     // First allocation entry starts at offset 44 (36-byte header + 8-byte reserved).
     if length < 44 + 16 {
-        log::warn!("[acpi] MCFG too short ({} bytes) for any allocation entry", length);
+        log::warn!(
+            "[acpi] MCFG too short ({} bytes) for any allocation entry",
+            length
+        );
         return;
     }
 
@@ -424,7 +455,10 @@ fn parse_hpet(virt: usize, length: usize, info: &mut AcpiInfo) {
     let addr_space = unsafe { core::ptr::read_volatile((virt + 40) as *const u8) };
     if addr_space != 0 {
         // Non-zero address space means I/O ports or PCI config — not simple MMIO.
-        log::warn!("[acpi] HPET GAS address_space_id={} (not MMIO) — keeping default", addr_space);
+        log::warn!(
+            "[acpi] HPET GAS address_space_id={} (not MMIO) — keeping default",
+            addr_space
+        );
         return;
     }
 

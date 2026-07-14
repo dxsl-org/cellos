@@ -12,15 +12,15 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use api::input::{InputEvent, KeyEvent, KeyState, KeySym, Modifiers as ApiModifiers};
 use crate::event::{Event, KeyCode, Modifiers, MouseButton};
 use crate::layout::Point;
+use api::input::{InputEvent, KeyEvent, KeyState};
 
 // ─── Modifier bit constants (api::input::Modifiers bitmask) ──────────────────
 
 const MOD_SHIFT: u8 = 0b0000_0001;
-const MOD_CTRL:  u8 = 0b0000_0010;
-const MOD_ALT:   u8 = 0b0000_0100;
+const MOD_CTRL: u8 = 0b0000_0010;
+const MOD_ALT: u8 = 0b0000_0100;
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -49,10 +49,10 @@ pub fn collect_input_events(max_events: usize) -> Vec<Event> {
 
 fn input_event_to_viui(ev: &InputEvent) -> Vec<Event> {
     match ev {
-        InputEvent::Key(k)                     => convert_key(k),
-        InputEvent::MouseMove { x, y, .. }     => convert_mouse_move(*x, *y),
+        InputEvent::Key(k) => convert_key(k),
+        InputEvent::MouseMove { x, y, .. } => convert_mouse_move(*x, *y),
         InputEvent::MouseButton { button, state } => convert_mouse_button(button, state),
-        InputEvent::MouseScroll { dy, .. }     => convert_mouse_scroll(*dy),
+        InputEvent::MouseScroll { dy, .. } => convert_mouse_scroll(*dy),
     }
 }
 
@@ -74,7 +74,10 @@ fn convert_key(k: &KeyEvent) -> Vec<Event> {
         KeyState::Pressed | KeyState::Repeated => {
             let mut events = Vec::with_capacity(2);
             if let Some(key) = keysym_to_keycode(keysym_u32) {
-                events.push(Event::KeyPress { key, modifiers: mods });
+                events.push(Event::KeyPress {
+                    key,
+                    modifiers: mods,
+                });
             }
             // Emit Char for printable characters; skip if Ctrl/Alt held (shortcuts).
             if k.character != 0 && !mods.ctrl && !mods.alt {
@@ -94,8 +97,8 @@ fn convert_mouse_move(x: i32, y: i32) -> Vec<Event> {
 
 fn convert_mouse_button(button: &api::input::MouseButton, state: &KeyState) -> Vec<Event> {
     let btn = match button {
-        api::input::MouseButton::Left   => MouseButton::Left,
-        api::input::MouseButton::Right  => MouseButton::Right,
+        api::input::MouseButton::Left => MouseButton::Left,
+        api::input::MouseButton::Right => MouseButton::Right,
         api::input::MouseButton::Middle => MouseButton::Middle,
         // Back/Forward have no viui::MouseButton equivalent — drop silently.
         _ => return Vec::new(),
@@ -103,15 +106,18 @@ fn convert_mouse_button(button: &api::input::MouseButton, state: &KeyState) -> V
     let pos = Point::new(0.0, 0.0); // position unknown; callers must track separately
     let ev = match state {
         KeyState::Released => Event::MouseRelease { pos, button: btn },
-        KeyState::Pressed  => Event::MousePress   { pos, button: btn },
-        _                  => return Vec::new(),
+        KeyState::Pressed => Event::MousePress { pos, button: btn },
+        _ => return Vec::new(),
     };
     alloc::vec![ev]
 }
 
 fn convert_mouse_scroll(dy: i32) -> Vec<Event> {
     let pos = Point::new(0.0, 0.0);
-    alloc::vec![Event::Scroll { pos, delta_y: dy as f32 }]
+    alloc::vec![Event::Scroll {
+        pos,
+        delta_y: dy as f32
+    }]
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -119,8 +125,8 @@ fn convert_mouse_scroll(dy: i32) -> Vec<Event> {
 fn decode_modifiers(bits: u8) -> Modifiers {
     Modifiers {
         shift: (bits & MOD_SHIFT) != 0,
-        ctrl:  (bits & MOD_CTRL)  != 0,
-        alt:   (bits & MOD_ALT)   != 0,
+        ctrl: (bits & MOD_CTRL) != 0,
+        alt: (bits & MOD_ALT) != 0,
     }
 }
 
@@ -141,6 +147,6 @@ fn keysym_to_keycode(keysym: u32) -> Option<KeyCode> {
         0x0023 => Some(KeyCode::PageDown),
         k if k > 0x0100 && k <= 0x010C => Some(KeyCode::F((k - 0x0100) as u8)),
         0x8000 => None, // Printable — Char emitted by the caller
-        _      => None,
+        _ => None,
     }
 }

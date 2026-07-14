@@ -17,8 +17,8 @@
 
 use crate::device::NetDevice;
 
-const OP_TX:     u8 = 0;
-const OP_RX:     u8 = 1;
+const OP_TX: u8 = 0;
+const OP_RX: u8 = 1;
 const OP_GETMAC: u8 = 2;
 
 /// Max frame size (1514 bytes Ethernet + 2-byte length header).
@@ -39,23 +39,31 @@ pub enum NicReply<'a> {
 ///
 /// `out_buf` must be `REPLY_BUF` bytes; returns a `NicReply` describing the response.
 pub fn handle<'a>(
-    dev:     &mut NetDevice,
-    data:    &[u8],
+    dev: &mut NetDevice,
+    data: &[u8],
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
-    if data.is_empty() { return NicReply::Status(1); }
+    if data.is_empty() {
+        return NicReply::Status(1);
+    }
 
     match data[0] {
         OP_TX => {
             // [op, len_lo, len_hi, frame...] — length header bounds the frame
             // inside the (padded) IPC buffer.
-            if data.len() < 3 { return NicReply::Status(1); }
+            if data.len() < 3 {
+                return NicReply::Status(1);
+            }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > FRAME_BUF || 3 + len > data.len() {
                 return NicReply::Status(1);
             }
             let frame = &data[3..3 + len];
-            if dev.send(frame) { NicReply::Status(0) } else { NicReply::Status(1) }
+            if dev.send(frame) {
+                NicReply::Status(0)
+            } else {
+                NicReply::Status(1)
+            }
         }
 
         OP_RX => {
@@ -66,7 +74,10 @@ pub fn handle<'a>(
             let n = dev.try_recv(&mut out_buf[2..]);
             out_buf[0] = (n & 0xFF) as u8;
             out_buf[1] = ((n >> 8) & 0xFF) as u8;
-            NicReply::Frame { len: n, buf: out_buf }
+            NicReply::Frame {
+                len: n,
+                buf: out_buf,
+            }
         }
 
         OP_GETMAC => NicReply::Mac(dev.mac()),

@@ -25,8 +25,7 @@ use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 ///
 /// Reads the request and writes the response into `out`.
 /// Returns the number of bytes written into `out`.
-pub type VfsFastHandler =
-    unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
+pub type VfsFastHandler = unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
 
 static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId of the cell that registered the VFS handler; 0 = unregistered.
@@ -109,7 +108,9 @@ impl Drop for SieGuard {
         if self.0 {
             // SAFETY: restoring SIE to the state saved in disable(); S-mode only.
             #[cfg(target_arch = "riscv64")]
-            unsafe { core::arch::asm!("csrsi sstatus, 0x2"); }
+            unsafe {
+                core::arch::asm!("csrsi sstatus, 0x2");
+            }
         }
     }
 }

@@ -50,13 +50,19 @@ impl<G: ViGpio> BitBangI2c<G> {
     // ── SDA helpers (open-drain emulation) ──────────────────────────────────
 
     fn sda_low(&mut self) -> Result<(), I2cError> {
-        self.gpio.set_direction(SDA, PinDir::Output).map_err(|_| I2cError::BusError)?;
-        self.gpio.write_pin(SDA, false).map_err(|_| I2cError::BusError)
+        self.gpio
+            .set_direction(SDA, PinDir::Output)
+            .map_err(|_| I2cError::BusError)?;
+        self.gpio
+            .write_pin(SDA, false)
+            .map_err(|_| I2cError::BusError)
     }
 
     fn sda_release(&mut self) -> Result<(), I2cError> {
         // Input mode → SDA floats high via pull-up; slave can pull low for ACK.
-        self.gpio.set_direction(SDA, PinDir::Input).map_err(|_| I2cError::BusError)
+        self.gpio
+            .set_direction(SDA, PinDir::Input)
+            .map_err(|_| I2cError::BusError)
     }
 
     fn read_sda(&self) -> Result<bool, I2cError> {
@@ -66,11 +72,15 @@ impl<G: ViGpio> BitBangI2c<G> {
     // ── SCL helpers (master always drives clock) ─────────────────────────────
 
     fn scl_high(&mut self) -> Result<(), I2cError> {
-        self.gpio.write_pin(SCL, true).map_err(|_| I2cError::BusError)
+        self.gpio
+            .write_pin(SCL, true)
+            .map_err(|_| I2cError::BusError)
     }
 
     fn scl_low(&mut self) -> Result<(), I2cError> {
-        self.gpio.write_pin(SCL, false).map_err(|_| I2cError::BusError)
+        self.gpio
+            .write_pin(SCL, false)
+            .map_err(|_| I2cError::BusError)
     }
 
     // ── Bus conditions ───────────────────────────────────────────────────────
@@ -100,7 +110,11 @@ impl<G: ViGpio> BitBangI2c<G> {
     // ── Bit-level I/O ────────────────────────────────────────────────────────
 
     fn send_bit(&mut self, bit: bool) -> Result<(), I2cError> {
-        if bit { self.sda_release()?; } else { self.sda_low()?; }
+        if bit {
+            self.sda_release()?;
+        } else {
+            self.sda_low()?;
+        }
         self.delay();
         self.scl_high()?;
         self.delay();
@@ -137,7 +151,11 @@ impl<G: ViGpio> BitBangI2c<G> {
             byte = (byte << 1) | (self.recv_bit()? as u8);
         }
         // ACK/NACK: master drives SDA.
-        if ack { self.sda_low()?; } else { self.sda_release()?; }
+        if ack {
+            self.sda_low()?;
+        } else {
+            self.sda_release()?;
+        }
         self.delay();
         self.scl_high()?;
         self.delay();
@@ -155,7 +173,9 @@ impl<G: ViGpio> ViI2c for BitBangI2c<G> {
 
     fn write(&mut self, addr: u8, bytes: &[u8]) -> Result<(), I2cError> {
         // SCL must be Output throughout; set once before START.
-        self.gpio.set_direction(SCL, PinDir::Output).map_err(|_| I2cError::BusError)?;
+        self.gpio
+            .set_direction(SCL, PinDir::Output)
+            .map_err(|_| I2cError::BusError)?;
         self.start()?;
         if !self.send_addr(addr, false)? {
             let _ = self.stop();
@@ -171,7 +191,9 @@ impl<G: ViGpio> ViI2c for BitBangI2c<G> {
     }
 
     fn read(&mut self, addr: u8, buf: &mut [u8]) -> Result<(), I2cError> {
-        self.gpio.set_direction(SCL, PinDir::Output).map_err(|_| I2cError::BusError)?;
+        self.gpio
+            .set_direction(SCL, PinDir::Output)
+            .map_err(|_| I2cError::BusError)?;
         self.start()?;
         if !self.send_addr(addr, true)? {
             let _ = self.stop();
@@ -185,7 +207,9 @@ impl<G: ViGpio> ViI2c for BitBangI2c<G> {
     }
 
     fn write_read(&mut self, addr: u8, wr: &[u8], rd: &mut [u8]) -> Result<(), I2cError> {
-        self.gpio.set_direction(SCL, PinDir::Output).map_err(|_| I2cError::BusError)?;
+        self.gpio
+            .set_direction(SCL, PinDir::Output)
+            .map_err(|_| I2cError::BusError)?;
         // Write phase
         self.start()?;
         if !self.send_addr(addr, false)? {

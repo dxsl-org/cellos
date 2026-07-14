@@ -74,11 +74,12 @@ static IRQ_MMIO_BASE: [AtomicUsize; MAX_IRQ] = {
 /// `register_waiter` returns will always see the new TID.
 pub fn register_waiter(irq: u8, tid: usize, mmio_base: usize) -> bool {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return false; }
+    if idx >= MAX_IRQ {
+        return false;
+    }
     // compare_exchange: only register if slot is empty.
-    let result = IRQ_WAITERS[idx].compare_exchange(
-        NO_WAITER, tid, Ordering::SeqCst, Ordering::SeqCst,
-    );
+    let result =
+        IRQ_WAITERS[idx].compare_exchange(NO_WAITER, tid, Ordering::SeqCst, Ordering::SeqCst);
     if result.is_ok() {
         IRQ_MMIO_BASE[idx].store(mmio_base, Ordering::Release);
         true
@@ -93,7 +94,9 @@ pub fn register_waiter(irq: u8, tid: usize, mmio_base: usize) -> bool {
 /// Used as both the lost-wakeup guard in `sys_wait_irq` AND the scheduler sweep.
 pub fn take_pending(irq: u8) -> bool {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return false; }
+    if idx >= MAX_IRQ {
+        return false;
+    }
     // swap(false): clears the flag and returns the old value in one atomic op.
     IRQ_PENDING[idx].swap(false, Ordering::AcqRel)
 }
@@ -109,7 +112,9 @@ pub fn take_pending(irq: u8) -> bool {
 /// The actual task state transition (WaitIrq → Ready) happens in `pick_next`.
 pub fn signal_irq(irq: u8) {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return; }
+    if idx >= MAX_IRQ {
+        return;
+    }
 
     let mmio_base = IRQ_MMIO_BASE[idx].load(Ordering::Acquire);
     if mmio_base != 0 {
@@ -137,7 +142,9 @@ pub fn signal_irq(irq: u8) {
 /// the next iteration.
 pub fn clear_waiter(irq: u8) {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return; }
+    if idx >= MAX_IRQ {
+        return;
+    }
     IRQ_WAITERS[idx].store(NO_WAITER, Ordering::Release);
     IRQ_MMIO_BASE[idx].store(0, Ordering::Release);
 }
@@ -148,13 +155,17 @@ pub fn clear_waiter(irq: u8) {
 /// (Cell-claimed) or the kernel-internal VirtIO driver (not yet migrated).
 pub fn has_waiter(irq: u8) -> bool {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return false; }
+    if idx >= MAX_IRQ {
+        return false;
+    }
     IRQ_WAITERS[idx].load(Ordering::Acquire) != NO_WAITER
 }
 
 /// Return the MMIO base stored for `irq`, or 0 if none.
 pub fn get_mmio_base(irq: u8) -> usize {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return 0; }
+    if idx >= MAX_IRQ {
+        return 0;
+    }
     IRQ_MMIO_BASE[idx].load(Ordering::Acquire)
 }

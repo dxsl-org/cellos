@@ -39,7 +39,9 @@ pub struct Gl {
 
 impl Gl {
     /// Construct a stub context (feature-check compilation only).
-    pub fn stub() -> Self { Self { _opaque: () } }
+    pub fn stub() -> Self {
+        Self { _opaque: () }
+    }
 }
 
 // ─── Gles2Canvas ─────────────────────────────────────────────────────────────
@@ -49,23 +51,35 @@ impl Gl {
 /// All `ViCanvas` methods are no-ops in this skeleton. The full implementation
 /// will batch colored quads into a VBO and upload glyphs to a 512×512 R8 texture.
 pub struct Gles2Canvas<'a> {
-    gl:         &'a Gl,
-    width:      u32,
-    height:     u32,
+    gl: &'a Gl,
+    width: u32,
+    height: u32,
     clip_stack: [Rect; CLIP_DEPTH],
     clip_depth: usize,
     /// Scratch buffer returned by `pixels_mut()`.
     /// The v2 `ViNode` paint path never calls `pixels_mut()` — empty is safe.
-    scratch:    Vec<u8>,
+    scratch: Vec<u8>,
 }
 
 impl<'a> Gles2Canvas<'a> {
     /// Create a canvas bound to the given GLES2 context.
     pub fn new(gl: &'a Gl, width: u32, height: u32) -> Self {
-        let full = Rect { x: 0.0, y: 0.0, w: width as f32, h: height as f32 };
+        let full = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: width as f32,
+            h: height as f32,
+        };
         let mut clip_stack = [Rect::default(); CLIP_DEPTH];
         clip_stack[0] = full;
-        Self { gl, width, height, clip_stack, clip_depth: 0, scratch: Vec::new() }
+        Self {
+            gl,
+            width,
+            height,
+            clip_stack,
+            clip_depth: 0,
+            scratch: Vec::new(),
+        }
     }
 
     /// Submit all batched vertex buffers to the GPU (no-op until EGL is wired).
@@ -74,7 +88,9 @@ impl<'a> Gles2Canvas<'a> {
         let _ = self.gl;
     }
 
-    fn active_clip(&self) -> Rect { self.clip_stack[self.clip_depth] }
+    fn active_clip(&self) -> Rect {
+        self.clip_stack[self.clip_depth]
+    }
 }
 
 impl ViCanvas for Gles2Canvas<'_> {
@@ -101,25 +117,34 @@ impl ViCanvas for Gles2Canvas<'_> {
         // G2: call glScissor with the intersected clip rect.
         if self.clip_depth + 1 < CLIP_DEPTH {
             self.clip_depth += 1;
-            let intersected = self.active_clip().intersect(&rect)
-                .unwrap_or(Rect::ZERO);
+            let intersected = self.active_clip().intersect(&rect).unwrap_or(Rect::ZERO);
             self.clip_stack[self.clip_depth] = intersected;
         }
     }
 
     fn clip_pop(&mut self) {
-        if self.clip_depth > 0 { self.clip_depth -= 1; }
+        if self.clip_depth > 0 {
+            self.clip_depth -= 1;
+        }
     }
 
     fn clip_rect(&self) -> Option<Rect> {
         Some(self.clip_stack[self.clip_depth])
     }
 
-    fn pixels_mut(&mut self) -> &mut [u8] { &mut self.scratch }
+    fn pixels_mut(&mut self) -> &mut [u8] {
+        &mut self.scratch
+    }
 
-    fn stride(&self) -> u32 { self.width * 4 }
+    fn stride(&self) -> u32 {
+        self.width * 4
+    }
 
-    fn width(&self)  -> u32 { self.width }
+    fn width(&self) -> u32 {
+        self.width
+    }
 
-    fn height(&self) -> u32 { self.height }
+    fn height(&self) -> u32 {
+        self.height
+    }
 }

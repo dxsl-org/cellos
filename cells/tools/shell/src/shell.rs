@@ -13,6 +13,11 @@ use alloc::string::String;
 
 pub struct ViShell<'a> {
     prompt: &'a str,
+    // Held for its lifetime/connection side effects at construction; `export`
+    // currently opens its own short-lived `ConfigClient` instead of reusing
+    // this one (see `dispatch`). Reserved for a future shell-config feature
+    // that reads config through the shell's own long-lived client.
+    #[allow(dead_code)]
     config: ConfigClient,
     /// Legacy inline history (kept for AsyncStdin arrow-key compat).
     history: VecDeque<String>,
@@ -58,14 +63,16 @@ impl<'a> ViShell<'a> {
                     // Add to history if not empty and not repeat of last
                     let trim_line = line.trim();
                     // Skip comment lines (# prefix) without executing or adding to history.
-                    if trim_line.starts_with('#') { continue; }
+                    if trim_line.starts_with('#') {
+                        continue;
+                    }
                     if !trim_line.is_empty() {
-                         if self.history.back().map(|s| s.as_str()) != Some(trim_line) {
-                             if self.history.len() >= 32 {
-                                 self.history.pop_front();
-                             }
-                             self.history.push_back(String::from(trim_line));
-                         }
+                        if self.history.back().map(|s| s.as_str()) != Some(trim_line) {
+                            if self.history.len() >= 32 {
+                                self.history.pop_front();
+                            }
+                            self.history.push_back(String::from(trim_line));
+                        }
                     }
 
                     let _ = self.dispatch(line).await;
@@ -90,7 +97,9 @@ impl<'a> ViShell<'a> {
     /// here before handing off to the executor.
     pub async fn dispatch(&mut self, line: &str) -> ViResult<()> {
         let trimmed = line.trim();
-        if trimmed.is_empty() { return Ok(()); }
+        if trimmed.is_empty() {
+            return Ok(());
+        }
 
         // ── Alias expansion ───────────────────────────────────────────────
         let expanded_storage;

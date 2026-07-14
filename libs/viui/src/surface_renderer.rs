@@ -38,7 +38,7 @@ pub struct ViSurfaceRenderer {
     /// BGRA8888 pixel buffer owned by this renderer.
     /// Length = width * height * 4 bytes.
     pixels: Vec<u8>,
-    width:  u32,
+    width: u32,
     height: u32,
 }
 

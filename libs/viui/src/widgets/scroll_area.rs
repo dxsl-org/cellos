@@ -7,18 +7,23 @@ use alloc::boxed::Box;
 
 use crate::event::{Event, EventCx, EventStatus};
 use crate::layout::{Constraints, LayoutNode, Rect, Size};
-use crate::widget::{PaintCx, WidgetId, ViWidget};
+use crate::widget::{PaintCx, ViWidget, WidgetId};
 
 pub struct ScrollArea {
-    pub id:         WidgetId,
-    child:          Box<dyn ViWidget>,
-    child_h:        f32,    // cached from last layout
-    visible_h:      f32,    // cached from last layout
+    pub id: WidgetId,
+    child: Box<dyn ViWidget>,
+    child_h: f32,   // cached from last layout
+    visible_h: f32, // cached from last layout
 }
 
 impl ScrollArea {
     pub fn new(id: WidgetId, child: Box<dyn ViWidget>) -> Self {
-        Self { id, child, child_h: 0.0, visible_h: 0.0 }
+        Self {
+            id,
+            child,
+            child_h: 0.0,
+            visible_h: 0.0,
+        }
     }
 }
 
@@ -32,7 +37,10 @@ impl ViWidget for ScrollArea {
         let own_size = constraints.constrain(own_size);
 
         // Child: unconstrained height (up to 4× own to limit allocation)
-        let child_max = Size { w: own_size.w, h: own_size.h * 4.0 };
+        let child_max = Size {
+            w: own_size.w,
+            h: own_size.h * 4.0,
+        };
         let child_constraints = Constraints::new(constraints.origin, child_max);
         let child_node = self.child.layout(child_constraints);
 
@@ -51,7 +59,13 @@ impl ViWidget for ScrollArea {
     }
 
     fn paint(&self, cx: &mut PaintCx) {
-        let bounds = Rect::from_origin_size(cx.origin, Size { w: cx.canvas.width() as f32, h: self.visible_h });
+        let bounds = Rect::from_origin_size(
+            cx.origin,
+            Size {
+                w: cx.canvas.width() as f32,
+                h: self.visible_h,
+            },
+        );
         cx.canvas.clip_push(bounds);
         // PaintCx doesn't carry state; scroll offset is approximated from own fields.
         // In P06+ Elm mode, the Elm app manages scroll_y explicitly.
@@ -77,11 +91,16 @@ impl ViWidget for ScrollArea {
             other => {
                 let scroll_y = cx.state.entry(self.id).scroll_y;
                 if let Some(pos) = other.pointer_pos() {
-                    if !bounds.contains(pos) { return EventStatus::Ignored; }
+                    if !bounds.contains(pos) {
+                        return EventStatus::Ignored;
+                    }
                 }
                 // For simplicity in P04: forward all events to child without translation.
                 // Proper translation (adding scroll_y to pos) deferred to container impl in P06.
-                let child_layout = match cx.layout.child(0) { Some(l) => l, None => return EventStatus::Ignored };
+                let child_layout = match cx.layout.child(0) {
+                    Some(l) => l,
+                    None => return EventStatus::Ignored,
+                };
                 // EventCx for child — creates a child context
                 // We approximate by setting widget_id to a child derivation
                 let child_id = self.id.child(0);
@@ -94,7 +113,9 @@ impl ViWidget for ScrollArea {
                 };
                 let _ = scroll_y; // used later when translation is added
                 let status = self.child.event(&mut child_cx, other);
-                if child_cx.needs_repaint { cx.mark_dirty(); }
+                if child_cx.needs_repaint {
+                    cx.mark_dirty();
+                }
                 status
             }
         }

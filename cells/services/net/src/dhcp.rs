@@ -5,14 +5,14 @@
 //! `interface.update_ip_addrs()` and `interface.routes_mut()` to apply the
 //! leased address and default gateway.
 
+use crate::interface::VirtioNetDevice;
+use ostd::io::println;
 use smoltcp::{
     iface::{Interface, SocketSet},
     socket::dhcpv4,
     time::Instant,
     wire::IpCidr,
 };
-use crate::interface::VirtioNetDevice;
-use ostd::io::println;
 
 /// State of the DHCP boot sequence.
 #[derive(Debug, PartialEq, Eq)]

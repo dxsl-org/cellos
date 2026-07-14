@@ -4,9 +4,9 @@
 //! See [docs/architecture/03-driver-strategy.md] for the full rationale.
 
 use super::tcb::TaskState;
+use crate::sync::Spinlock;
 use alloc::collections::{BTreeMap, BTreeSet};
 use api::syscall::ViSpawnArgs;
-use crate::sync::Spinlock;
 // use log::info;
 use types::*;
 
@@ -48,10 +48,10 @@ fn shm_is_valid(handle: usize) -> bool {
 /// from `current_task_id()`. We intentionally avoid `CellId` wrappers here
 /// because `caller_id` IS a task id, not a Cell id (F7).
 struct PageGrant {
-    base:      usize,                        // physical address of the first allocated page
-    size:      usize,                        // total byte count (multiple of 4096)
-    owner:     usize,                        // task id of the GrantAlloc caller
-    shared_to: Option<(usize, GrantPerm)>,   // current grantee task id + permission
+    base: usize,                           // physical address of the first allocated page
+    size: usize,                           // total byte count (multiple of 4096)
+    owner: usize,                          // task id of the GrantAlloc caller
+    shared_to: Option<(usize, GrantPerm)>, // current grantee task id + permission
 }
 
 static PAGE_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, PageGrant>>> = Spinlock::new(None);
@@ -70,10 +70,10 @@ const MAX_GRANT_PAGES: usize = 4096;
 ///
 /// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as `PageGrant`).
 struct RegGrant {
-    base:      usize,                        // physical address of first allocated page
-    size:      usize,                        // byte count (multiple of 4096)
-    owner:     usize,                        // task id — only owner may call GrantUnregister
-    shared_to: Option<(usize, GrantPerm)>,   // authorized grantee task id + permission
+    base: usize,                           // physical address of first allocated page
+    size: usize,                           // byte count (multiple of 4096)
+    owner: usize,                          // task id — only owner may call GrantUnregister
+    shared_to: Option<(usize, GrantPerm)>, // authorized grantee task id + permission
 }
 
 static REG_GRANT_TABLE: Spinlock<Option<BTreeMap<usize, RegGrant>>> = Spinlock::new(None);
@@ -94,8 +94,8 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
     use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
 
-    let user_flags = Flags::VALID | Flags::READ | Flags::WRITE
-        | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
+    let user_flags =
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::USER | Flags::ACCESSED | Flags::DIRTY;
 
     let paddr = {
         let mut g = FRAME_ALLOCATOR.lock();
@@ -108,7 +108,9 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         if let Some(alloc) = guard.as_mut() {
             for i in 0..n_pages {
                 let v = paddr + i * PAGE_SIZE;
-                if crate::memory::paging::map_page(alloc, v, v, Flags::from_bits(user_flags)).is_ok() {
+                if crate::memory::paging::map_page(alloc, v, v, Flags::from_bits(user_flags))
+                    .is_ok()
+                {
                     mapped += 1;
                 } else {
                     break;
@@ -121,8 +123,12 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
         // Partial map: restore the kernel identity mapping for the pages we
         // re-mapped USER (NOT a bare unmap — every Usable frame must stay
         // identity-mapped for the loader's identity-address zeroing), then free.
-        let kernel_rwx = Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE
-            | Flags::ACCESSED | Flags::DIRTY;
+        let kernel_rwx = Flags::VALID
+            | Flags::READ
+            | Flags::WRITE
+            | Flags::EXECUTE
+            | Flags::ACCESSED
+            | Flags::DIRTY;
         let mut fa = FRAME_ALLOCATOR.lock();
         if let Some(a) = fa.as_mut() {
             for i in 0..mapped {
@@ -130,7 +136,9 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
                 let _ = crate::memory::paging::unmap_page(f);
                 let _ = crate::memory::paging::map_page(a, f, f, Flags::from_bits(kernel_rwx));
             }
-            for k in 0..n_pages { a.deallocate_frame(paddr + k * PAGE_SIZE); }
+            for k in 0..n_pages {
+                a.deallocate_frame(paddr + k * PAGE_SIZE);
+            }
         }
         crate::memory::paging::tlb_flush_all();
         return None;
@@ -139,7 +147,9 @@ fn alloc_grant_pages(n_pages: usize) -> Option<usize> {
     // Zero every mapped page before handing to user: prevents stale data from a
     // previously-freed grant leaking to a different cell (info-disclosure under G2).
     // SAFETY: frames are identity-mapped USER RW; SUM=1 allows S-mode writes.
-    unsafe { core::ptr::write_bytes(paddr as *mut u8, 0, n_pages * PAGE_SIZE); }
+    unsafe {
+        core::ptr::write_bytes(paddr as *mut u8, 0, n_pages * PAGE_SIZE);
+    }
 
     Some(paddr)
 }
@@ -162,8 +172,7 @@ fn free_grant_pages(base: usize, n_pages: usize) {
     use crate::memory::paging::Flags;
     const PAGE_SIZE: usize = 4096;
     let kernel_rwx = Flags::from_bits(
-        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE
-            | Flags::ACCESSED | Flags::DIRTY,
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
     );
 
     let mut fa = FRAME_ALLOCATOR.lock();
@@ -289,7 +298,9 @@ fn caller_has_block_io(caller_id: usize) -> bool {
 /// bit exists for them. Logs every denial (silent denials cost us a day once).
 fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
     use crate::loader::disk_layout as dl;
-    let regions = super::SCHEDULER.lock().as_ref()
+    let regions = super::SCHEDULER
+        .lock()
+        .as_ref()
         .and_then(|s| s.tasks.get(&caller_id))
         .map(|t| t.block_regions)
         .unwrap_or(0);
@@ -298,10 +309,14 @@ fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
         None => return false,
     };
     const GRANTABLE: [(u8, u64, u64); 4] = [
-        (0b001,  dl::PART_FAT32_BASE_LBA,     dl::PART_FAT32_SECTORS),     // P1 (PART_DATA)
-        (0b010,  dl::PART_LFS_BASE_LBA,       dl::PART_LFS_SECTORS),       // P4 (PART_LFS)
-        (0b100,  dl::PART_SRV_BASE_LBA,       dl::PART_SRV_SECTORS),       // P5 (SRV/RedoxFS, co-granted w/ LFS)
-        (0b1000, dl::PART_CELLSTORE_BASE_LBA, dl::PART_CELLSTORE_SECTORS), // P6 (cell-store, read-only; VFS /bin overlay)
+        (0b001, dl::PART_FAT32_BASE_LBA, dl::PART_FAT32_SECTORS), // P1 (PART_DATA)
+        (0b010, dl::PART_LFS_BASE_LBA, dl::PART_LFS_SECTORS),     // P4 (PART_LFS)
+        (0b100, dl::PART_SRV_BASE_LBA, dl::PART_SRV_SECTORS), // P5 (SRV/RedoxFS, co-granted w/ LFS)
+        (
+            0b1000,
+            dl::PART_CELLSTORE_BASE_LBA,
+            dl::PART_CELLSTORE_SECTORS,
+        ), // P6 (cell-store, read-only; VFS /bin overlay)
     ];
     for (bit, base, size) in GRANTABLE {
         if regions & bit != 0 && sector >= base && end <= base + size {
@@ -310,7 +325,10 @@ fn check_block_access(caller_id: usize, sector: u64, count: u64) -> bool {
     }
     log::warn!(
         "[blk] sector {}..{} denied for tid {} (regions={:#04b})",
-        sector, end, caller_id, regions
+        sector,
+        end,
+        caller_id,
+        regions
     );
     false
 }
@@ -384,9 +402,17 @@ pub enum Syscall {
         buf_len: usize,
     },
     /// 202: SendGather — send one IPC message from multiple non-contiguous buffers.
-    SendGather { target: usize, iovec_ptr: usize, iovec_count: usize },
+    SendGather {
+        target: usize,
+        iovec_ptr: usize,
+        iovec_count: usize,
+    },
     /// 203: RecvScatter — receive one IPC message into multiple non-contiguous buffers.
-    RecvScatter { mask: usize, iovec_ptr: usize, iovec_count: usize },
+    RecvScatter {
+        mask: usize,
+        iovec_ptr: usize,
+        iovec_count: usize,
+    },
     /// 201: RecvTimeout — Recv with a monotonic-tick deadline (Phase 20).
     RecvTimeout {
         mask: usize,
@@ -466,21 +492,43 @@ pub enum Syscall {
     SpawnFromPath { path_ptr: usize, path_len: usize },
     /// 238: SpawnFromElf (Spawn cell from ELF bytes in a caller-owned Grant).
     /// ABI: a0=grant_id, a1=len, a2=path_hint_ptr, a3=path_hint_len.
-    SpawnFromElf { grant_id: usize, len: usize, path_ptr: usize, path_len: usize },
+    SpawnFromElf {
+        grant_id: usize,
+        len: usize,
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 16: SpawnPinned — spawn cell pinned to a core (single-core: core_id must be 0).
     /// ABI: a0=path_ptr, a1=path_len, a2=priority: u8, a3=core_id: usize.
-    SpawnPinned { path_ptr: usize, path_len: usize, priority: u8, core_id: usize },
+    SpawnPinned {
+        path_ptr: usize,
+        path_len: usize,
+        priority: u8,
+        core_id: usize,
+    },
     /// 13: OpenCap — open a file and return a CapId.
     OpenCap { path_ptr: usize, path_len: usize },
     /// 14: ReadCap — read bytes from a cap-backed file.
-    ReadCap { cap_id: usize, buf_ptr: usize, buf_len: usize },
+    ReadCap {
+        cap_id: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 15: CloseCap — revoke a capability.
     CloseCap { cap_id: usize },
     /// 228: SeekCap — seek a cap-backed file cursor.
     /// offset is transmitted as a raw i64 bit-pattern via usize (reinterpret_cast).
-    SeekCap { cap_id: usize, offset: usize, whence: usize },
+    SeekCap {
+        cap_id: usize,
+        offset: usize,
+        whence: usize,
+    },
     /// 229: WriteCap — write bytes into a cap-backed file at the current cursor.
-    WriteCap { cap_id: usize, buf_ptr: usize, buf_len: usize },
+    WriteCap {
+        cap_id: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 230: StatCap — query file size via cap (cursor unchanged).
     StatCap { cap_id: usize },
     /// 231: TruncateCap — truncate file to len bytes via cap.
@@ -544,21 +592,27 @@ pub enum Syscall {
         whence: usize,
     },
     /// 107: FileOp (Op, Arg1, Arg2)
-    FileOp {
-        op: usize,
-        arg1: usize,
-        arg2: usize,
-    },
+    FileOp { op: usize, arg1: usize, arg2: usize },
     /// 120: GetTime (Op)
     GetTime { op: usize },
     /// 300: GpuFlush — copy cell pixel buffer to VirtIO GPU framebuffer.
-    GpuFlush { data_ptr: usize, data_len: usize, xy: usize, wh: usize },
+    GpuFlush {
+        data_ptr: usize,
+        data_len: usize,
+        xy: usize,
+        wh: usize,
+    },
     /// 218: AudioPlay — write raw PCM (S16LE/2ch/44100) to the VirtIO sound output.
     AudioPlay { buf_ptr: usize, buf_len: usize },
     /// 219: CapRevoke — strip capabilities from a live cell at runtime.
     CapRevoke { target_tid: usize, cap_mask: u32 },
     /// 301: GpuCursor — set sprite (op=0) or move (op=1) the VirtIO GPU hardware cursor.
-    GpuCursor { op: usize, data_ptr: usize, xy: usize, hot: usize },
+    GpuCursor {
+        op: usize,
+        data_ptr: usize,
+        xy: usize,
+        hot: usize,
+    },
     /// 302: GpuGetResolution — return current GPU scanout (width, height) packed as (w<<32)|h.
     GpuGetResolution,
     /// 310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.
@@ -566,9 +620,17 @@ pub enum Syscall {
     /// 311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.
     NetRx { buf_ptr: usize, buf_len: usize },
     /// 410: StateStash — save serialized cell state under `key` for hot-swap.
-    StateStash { key: usize, buf_ptr: usize, buf_len: usize },
+    StateStash {
+        key: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 411: StateRestore — recover stashed state for `key` into the buffer.
-    StateRestore { key: usize, buf_ptr: usize, buf_len: usize },
+    StateRestore {
+        key: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
     /// 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
     StateStashClear { key: usize },
     /// 413: FreezeCell — freeze a running Cell. Requires SupervisorCap.
@@ -582,12 +644,21 @@ pub enum Syscall {
     /// 417: RegisterNicDriver — announce caller as the active NIC driver.
     RegisterNicDriver,
     /// 418: FindPcieDevice — locate a PCIe device by class/subclass/prog_if.
-    FindPcieDevice { class: u8, subclass: u8, prog_if: u8, out_ptr: usize },
+    FindPcieDevice {
+        class: u8,
+        subclass: u8,
+        prog_if: u8,
+        out_ptr: usize,
+    },
     /// 419: QueryHotswapReady — check whether `target_tid` has called sys_hotswap_ready().
     /// Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.
     QueryHotswapReady { target_tid: usize },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
-    HotSwap { cell_id: usize, path_ptr: usize, path_len: usize },
+    HotSwap {
+        cell_id: usize,
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 401: HotSwapReady — signal that the new cell has finished deserializing
     /// state and is ready to receive IPC.  No arguments.
     HotSwapReady,
@@ -605,7 +676,11 @@ pub enum Syscall {
     /// 208: GrantAlloc — allocate n pages as a zero-copy Grant region.
     GrantAlloc { size: usize },
     /// 209: GrantShare — share a Grant region with `target_cell` under `perm`.
-    GrantShare { grant_id: usize, target_cell: usize, perm: usize },
+    GrantShare {
+        grant_id: usize,
+        target_cell: usize,
+        perm: usize,
+    },
     /// 210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.
     GrantSlice { grant_id: usize },
     /// 211: GrantFree — unmap + deallocate a Grant region.
@@ -626,21 +701,50 @@ pub enum Syscall {
 
     // === Hypervisor (220-225) — HypervisorCap ZST-gated ===
     /// 220: CreateVm — allocate guest RAM + Stage-2 table → vm_id.
-    CreateVm        { guest_pages: usize },
+    CreateVm { guest_pages: usize },
     /// 221: CreateVcpu — create a vCPU with `entry_pc` in `vm_id` → vcpu_id.
-    CreateVcpu      { vm_id: usize, entry_pc: u64 },
+    CreateVcpu { vm_id: usize, entry_pc: u64 },
     /// 222: MapGuestMemory — map guest IPA range in `vm_id` Stage-2 table.
-    MapGuestMemory  { vm_id: usize, ipa: u64, size: usize, writable: bool },
+    MapGuestMemory {
+        vm_id: usize,
+        ipa: u64,
+        size: usize,
+        writable: bool,
+    },
     /// 223: RunVcpu — world-switch into vCPU; write `ViVmExit` to `out_ptr`.
-    RunVcpu         { vm_id: usize, vcpu_id: usize, budget_ns: u64, out_ptr: usize },
+    RunVcpu {
+        vm_id: usize,
+        vcpu_id: usize,
+        budget_ns: u64,
+        out_ptr: usize,
+    },
     /// 224: VcpuRegs — read (write=false) or write (write=true) GP registers.
-    VcpuRegs        { vm_id: usize, vcpu_id: usize, buf_ptr: usize, write: bool },
+    VcpuRegs {
+        vm_id: usize,
+        vcpu_id: usize,
+        buf_ptr: usize,
+        write: bool,
+    },
     /// 225: InjectIrq — inject GICv2 virtual interrupt (0 ≤ intid ≤ 1019).
-    InjectIrq       { vm_id: usize, vcpu_id: usize, intid: u32 },
+    InjectIrq {
+        vm_id: usize,
+        vcpu_id: usize,
+        intid: u32,
+    },
     /// 226: WriteGuestMemory — copy `len` bytes from `src_ptr` to guest GPA.
-    WriteGuestMemory { vm_id: usize, gpa: u64, src_ptr: usize, len: usize },
+    WriteGuestMemory {
+        vm_id: usize,
+        gpa: u64,
+        src_ptr: usize,
+        len: usize,
+    },
     /// 227: ReadGuestMemory — copy `len` bytes from guest GPA into `dst_ptr`.
-    ReadGuestMemory  { vm_id: usize, gpa: u64, dst_ptr: usize, len: usize },
+    ReadGuestMemory {
+        vm_id: usize,
+        gpa: u64,
+        dst_ptr: usize,
+        len: usize,
+    },
     /// 234: WaitIrq — block until hardware IRQ `irq` fires (Driver Cell).
     /// ISR sets IRQ_PENDING[irq] (atomic, no lock); scheduler sweep wakes the task.
     /// `mmio_base`: VirtIO MMIO slot base for InterruptACK write, or 0 for non-VirtIO.
@@ -652,7 +756,12 @@ pub enum Syscall {
     /// 236: RegisterPciDevice — Platform Cell announces a PCI device with class/BAR info.
     /// Populates kernel PCI_DEVICES so find_class() works without a kernel ECAM scan.
     /// Requires singleton PlatformCap (allowlist bit 53).
-    RegisterPciDevice { bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize },
+    RegisterPciDevice {
+        bdf: u32,
+        cls: u32,
+        bar0_base: usize,
+        bar0_size: usize,
+    },
     /// 237: ReadLog — drain up to `max` bytes from the kernel user-log ring.
     /// ABI: a0 = buf_ptr, a1 = max → bytes_copied.
     /// Gated by allowlist bit 54 (ReadLog).
@@ -682,86 +791,86 @@ fn get_syscall_allowlist(caller_id: usize) -> u64 {
 fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
     use api::syscall::ViSyscall as V;
     Some(match syscall {
-        Syscall::Send { .. }          => V::Send,
-        Syscall::TrySend { .. }       => V::TrySend,
-        Syscall::Recv { .. }          => V::Recv,
-        Syscall::TryRecv { .. }       => V::TryRecv,
-        Syscall::RecvTimeout { .. }   => V::RecvTimeout,
-        Syscall::SendGather { .. }    => V::SendGather,
-        Syscall::RecvScatter { .. }   => V::RecvScatter,
-        Syscall::Reply { .. }         => V::Reply,
-        Syscall::Spawn { .. }         => V::Spawn,
-        Syscall::SpawnFromMem { .. }  => V::SpawnFromMem,
+        Syscall::Send { .. } => V::Send,
+        Syscall::TrySend { .. } => V::TrySend,
+        Syscall::Recv { .. } => V::Recv,
+        Syscall::TryRecv { .. } => V::TryRecv,
+        Syscall::RecvTimeout { .. } => V::RecvTimeout,
+        Syscall::SendGather { .. } => V::SendGather,
+        Syscall::RecvScatter { .. } => V::RecvScatter,
+        Syscall::Reply { .. } => V::Reply,
+        Syscall::Spawn { .. } => V::Spawn,
+        Syscall::SpawnFromMem { .. } => V::SpawnFromMem,
         Syscall::SpawnFromPath { .. } => V::SpawnFromPath,
         Syscall::SpawnFromElf { .. } => V::SpawnFromElf,
-        Syscall::SpawnPinned { .. }   => V::SpawnPinned,
-        Syscall::Wait { .. }          => V::Wait,
-        Syscall::Log { .. }           => V::Log,
-        Syscall::SetTimer { .. }      => V::SetTimer,
-        Syscall::ShmAlloc { .. }      => V::ShmAlloc,
-        Syscall::ShmMap { .. }        => V::ShmMap,
-        Syscall::GetProcs { .. }      => V::GetProcs,
-        Syscall::OpenCap { .. }       => V::OpenCap,
-        Syscall::ReadCap { .. }       => V::ReadCap,
-        Syscall::CloseCap { .. }      => V::CloseCap,
-        Syscall::SeekCap { .. }       => V::SeekCap,
-        Syscall::WriteCap { .. }      => V::WriteCap,
-        Syscall::StatCap { .. }       => V::StatCap,
-        Syscall::TruncateCap { .. }   => V::TruncateCap,
-        Syscall::SyncCap { .. }       => V::SyncCap,
-        Syscall::GrantDma { .. }      => V::GrantDma,
-        Syscall::Open { .. }          => V::Open,
-        Syscall::Read { .. }          => V::Read,
-        Syscall::Write { .. }         => V::Write,
-        Syscall::Close { .. }         => V::Close,
-        Syscall::ReadDir { .. }       => V::ReadDir,
-        Syscall::Seek { .. }          => V::Seek,
-        Syscall::FileOp { .. }        => V::FileOp,
-        Syscall::GetTime { .. }       => V::GetTime,
-        Syscall::GpuFlush { .. }         => V::GpuFlush,
-        Syscall::AudioPlay { .. }        => V::AudioPlay,
-        Syscall::GpuCursor { .. }        => V::GpuCursor,
-        Syscall::GpuGetResolution        => V::GpuGetResolution,
-        Syscall::NetTx { .. }         => V::NetTx,
-        Syscall::NetRx { .. }         => V::NetRx,
-        Syscall::HotSwap { .. }       => V::HotSwap,
-        Syscall::HotSwapReady         => V::HotSwapReady,
-        Syscall::Snapshot             => V::Snapshot,
-        Syscall::StateStash { .. }      => V::StateStash,
-        Syscall::StateRestore { .. }   => V::StateRestore,
-        Syscall::StateStashClear { .. }   => V::StateStashClear,
-        Syscall::FreezeCell { .. }        => V::FreezeCell,
-        Syscall::ResumeCell { .. }        => V::ResumeCell,
-        Syscall::KillCell { .. }          => V::KillCell,
+        Syscall::SpawnPinned { .. } => V::SpawnPinned,
+        Syscall::Wait { .. } => V::Wait,
+        Syscall::Log { .. } => V::Log,
+        Syscall::SetTimer { .. } => V::SetTimer,
+        Syscall::ShmAlloc { .. } => V::ShmAlloc,
+        Syscall::ShmMap { .. } => V::ShmMap,
+        Syscall::GetProcs { .. } => V::GetProcs,
+        Syscall::OpenCap { .. } => V::OpenCap,
+        Syscall::ReadCap { .. } => V::ReadCap,
+        Syscall::CloseCap { .. } => V::CloseCap,
+        Syscall::SeekCap { .. } => V::SeekCap,
+        Syscall::WriteCap { .. } => V::WriteCap,
+        Syscall::StatCap { .. } => V::StatCap,
+        Syscall::TruncateCap { .. } => V::TruncateCap,
+        Syscall::SyncCap { .. } => V::SyncCap,
+        Syscall::GrantDma { .. } => V::GrantDma,
+        Syscall::Open { .. } => V::Open,
+        Syscall::Read { .. } => V::Read,
+        Syscall::Write { .. } => V::Write,
+        Syscall::Close { .. } => V::Close,
+        Syscall::ReadDir { .. } => V::ReadDir,
+        Syscall::Seek { .. } => V::Seek,
+        Syscall::FileOp { .. } => V::FileOp,
+        Syscall::GetTime { .. } => V::GetTime,
+        Syscall::GpuFlush { .. } => V::GpuFlush,
+        Syscall::AudioPlay { .. } => V::AudioPlay,
+        Syscall::GpuCursor { .. } => V::GpuCursor,
+        Syscall::GpuGetResolution => V::GpuGetResolution,
+        Syscall::NetTx { .. } => V::NetTx,
+        Syscall::NetRx { .. } => V::NetRx,
+        Syscall::HotSwap { .. } => V::HotSwap,
+        Syscall::HotSwapReady => V::HotSwapReady,
+        Syscall::Snapshot => V::Snapshot,
+        Syscall::StateStash { .. } => V::StateStash,
+        Syscall::StateRestore { .. } => V::StateRestore,
+        Syscall::StateStashClear { .. } => V::StateStashClear,
+        Syscall::FreezeCell { .. } => V::FreezeCell,
+        Syscall::ResumeCell { .. } => V::ResumeCell,
+        Syscall::KillCell { .. } => V::KillCell,
         Syscall::QueryHotswapReady { .. } => V::QueryHotswapReady,
-        Syscall::RegisterBlockDriver      => V::RegisterBlockDriver,
-        Syscall::RegisterNicDriver        => V::RegisterNicDriver,
-        Syscall::FindPcieDevice { .. }    => V::FindPcieDevice,
-        Syscall::Exec { .. }          => V::Exec,
+        Syscall::RegisterBlockDriver => V::RegisterBlockDriver,
+        Syscall::RegisterNicDriver => V::RegisterNicDriver,
+        Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
+        Syscall::Exec { .. } => V::Exec,
         Syscall::LookupService { .. } => V::LookupService,
-        Syscall::Heartbeat { .. }     => V::Heartbeat,
-        Syscall::GrantAlloc { .. }    => V::GrantAlloc,
-        Syscall::GrantShare { .. }    => V::GrantShare,
-        Syscall::GrantSlice { .. }    => V::GrantSlice,
-        Syscall::GrantFree { .. }     => V::GrantFree,
-        Syscall::BlkReadAsync { .. }    => V::BlkReadAsync,
-        Syscall::RequestMmio { .. }    => V::RequestMmio,
-        Syscall::GetRandom { .. }      => V::GetRandom,
-        Syscall::GrantRegister { .. }  => V::GrantRegister,
-        Syscall::GrantUnregister { .. }=> V::GrantUnregister,
-        Syscall::WaitForEvent { .. }   => V::WaitForEvent,
-        Syscall::CreateVm { .. }       => V::CreateVm,
-        Syscall::CreateVcpu { .. }     => V::CreateVcpu,
+        Syscall::Heartbeat { .. } => V::Heartbeat,
+        Syscall::GrantAlloc { .. } => V::GrantAlloc,
+        Syscall::GrantShare { .. } => V::GrantShare,
+        Syscall::GrantSlice { .. } => V::GrantSlice,
+        Syscall::GrantFree { .. } => V::GrantFree,
+        Syscall::BlkReadAsync { .. } => V::BlkReadAsync,
+        Syscall::RequestMmio { .. } => V::RequestMmio,
+        Syscall::GetRandom { .. } => V::GetRandom,
+        Syscall::GrantRegister { .. } => V::GrantRegister,
+        Syscall::GrantUnregister { .. } => V::GrantUnregister,
+        Syscall::WaitForEvent { .. } => V::WaitForEvent,
+        Syscall::CreateVm { .. } => V::CreateVm,
+        Syscall::CreateVcpu { .. } => V::CreateVcpu,
         Syscall::MapGuestMemory { .. } => V::MapGuestMemory,
-        Syscall::RunVcpu { .. }        => V::RunVcpu,
-        Syscall::VcpuRegs { .. }       => V::VcpuRegs,
-        Syscall::InjectIrq { .. }      => V::InjectIrq,
+        Syscall::RunVcpu { .. } => V::RunVcpu,
+        Syscall::VcpuRegs { .. } => V::VcpuRegs,
+        Syscall::InjectIrq { .. } => V::InjectIrq,
         Syscall::WriteGuestMemory { .. } => V::WriteGuestMemory,
-        Syscall::ReadGuestMemory  { .. } => V::ReadGuestMemory,
-        Syscall::WaitIrq { .. }         => V::WaitIrq,
-        Syscall::RegisterPcieBar { .. }   => V::RegisterPcieBar,
+        Syscall::ReadGuestMemory { .. } => V::ReadGuestMemory,
+        Syscall::WaitIrq { .. } => V::WaitIrq,
+        Syscall::RegisterPcieBar { .. } => V::RegisterPcieBar,
         Syscall::RegisterPciDevice { .. } => V::RegisterPciDevice,
-        Syscall::ReadLog { .. }           => V::ReadLog,
+        Syscall::ReadLog { .. } => V::ReadLog,
         // Always-permitted; allowlist_bit() returns None → filter is a no-op.
         Syscall::Yield
         | Syscall::Exit { .. }
@@ -792,7 +901,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if (allowed >> bit) & 1 == 0 {
                 log::warn!(
                     "[kernel] syscall {:?} denied for tid {} (allowlist={:#018x})",
-                    vi, caller_id, allowed
+                    vi,
+                    caller_id,
+                    allowed
                 );
                 crate::audit::log_event(
                     crate::audit::AuditEvent::SyscallDenied,
@@ -840,7 +951,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Non-blocking: deliver if target in Recv, else drop. Never blocks.
             // (Input-service sends fall back to a bounded queue — see ipc_try_send.)
             match super::ipc_try_send(caller_id, target, msg_ptr, msg_len) {
-                Ok(()) => Ok(0), // delivered (or queued for the input service)
+                Ok(()) => Ok(0),           // delivered (or queued for the input service)
                 Err(()) => Ok(usize::MAX), // dropped (target not ready or gone)
             }
         }
@@ -859,11 +970,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         // Deliver the exit reason as the recv payload (NotifyOnExit
                         // contract) so a supervisor can apply a restart policy.
                         if buf_len >= core::mem::size_of::<u64>()
-                            && validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF).is_ok()
+                            && validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)
+                                .is_ok()
                         {
                             // SAFETY: buf_ptr is validated as this caller's user buffer;
                             // the caller is mid-syscall so the write is exclusive in the SAS.
-                            unsafe { core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64); }
+                            unsafe {
+                                core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
+                            }
                         }
                         return Ok(dead_tid);
                     }
@@ -898,7 +1012,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // VFS reply → "vwrite failed", and the real reply desynced the
                     // next conversation). Non-matching messages stay queued for the
                     // wildcard read loop that wants them.
-                    let slot = t.pending_msgs.iter()
+                    let slot = t
+                        .pending_msgs
+                        .iter()
                         .position(|m| mask == 0 || m.sender_tid == mask);
                     if let Some(i) = slot {
                         let msg = t.pending_msgs.remove(i);
@@ -942,11 +1058,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     }
                     if let Some(reason) = death_reason {
                         if buf_len >= core::mem::size_of::<u64>()
-                            && validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF).is_ok()
+                            && validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)
+                                .is_ok()
                         {
                             // SAFETY: buf_ptr is validated as this caller's user buffer; we
                             // run in the caller's syscall context, so the store is permitted.
-                            unsafe { core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64); }
+                            unsafe {
+                                core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
+                            }
                         }
                     }
                     Ok(sender)
@@ -956,7 +1075,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         // ── Scatter/gather IPC ────────────────────────────────────────────────
-        Syscall::SendGather { target, iovec_ptr, iovec_count } => {
+        Syscall::SendGather {
+            target,
+            iovec_ptr,
+            iovec_count,
+        } => {
             // Concatenate all segments into a contiguous kernel buffer, then
             // deliver as a single IPC message to `target`.
             const MAX_IOVEC: usize = 8;
@@ -971,12 +1094,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 // iovec_count is bounded by MAX_IOVEC; each element is 2×sizeof(usize).
                 let len = unsafe {
                     core::ptr::read_unaligned(
-                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>()) as *const usize,
+                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>())
+                            as *const usize,
                     )
                 };
                 total = total.saturating_add(len);
             }
-            if total > MAX_USER_BUF { return Err(SyscallError::BufferTooSmall); }
+            if total > MAX_USER_BUF {
+                return Err(SyscallError::BufferTooSmall);
+            }
             let mut gathered: alloc::vec::Vec<u8> = alloc::vec![0u8; total];
             let mut pos = 0;
             for i in 0..iovec_count {
@@ -984,12 +1110,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 let (ptr, len) = unsafe {
                     let base = iovec_ptr + i * IOVEC_ENTRY;
                     let p = core::ptr::read_unaligned(base as *const usize);
-                    let l = core::ptr::read_unaligned((base + core::mem::size_of::<usize>()) as *const usize);
+                    let l = core::ptr::read_unaligned(
+                        (base + core::mem::size_of::<usize>()) as *const usize,
+                    );
                     (p, l)
                 };
                 // SAFETY: ptr is a valid user-space pointer; len validated against MAX_USER_BUF.
                 unsafe {
-                    core::ptr::copy_nonoverlapping(ptr as *const u8, gathered[pos..].as_mut_ptr(), len);
+                    core::ptr::copy_nonoverlapping(
+                        ptr as *const u8,
+                        gathered[pos..].as_mut_ptr(),
+                        len,
+                    );
                 }
                 pos += len;
             }
@@ -997,7 +1129,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::ipc_send(caller_id, target, msg_ptr, total)
                 .map_err(|_| SyscallError::InvalidCommand)
         }
-        Syscall::RecvScatter { mask, iovec_ptr, iovec_count } => {
+        Syscall::RecvScatter {
+            mask,
+            iovec_ptr,
+            iovec_count,
+        } => {
             // Receive a single IPC message and scatter it across the iovec buffers.
             // For v1.0: receive into one temp buffer then scatter.
             const MAX_IOVEC: usize = 8;
@@ -1010,12 +1146,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 // SAFETY: iovec_ptr valid user-space array; bounds checked.
                 let len = unsafe {
                     core::ptr::read_unaligned(
-                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>()) as *const usize,
+                        (iovec_ptr + i * IOVEC_ENTRY + core::mem::size_of::<usize>())
+                            as *const usize,
                     )
                 };
                 total = total.saturating_add(len);
             }
-            if total > MAX_USER_BUF { return Err(SyscallError::BufferTooSmall); }
+            if total > MAX_USER_BUF {
+                return Err(SyscallError::BufferTooSmall);
+            }
             let mut tmp: alloc::vec::Vec<u8> = alloc::vec![0u8; total];
             let sender = super::ipc_recv(caller_id, mask, tmp.as_mut_ptr() as usize, total)
                 .map_err(|_| SyscallError::InvalidCommand)?;
@@ -1026,21 +1165,32 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 let (ptr, len) = unsafe {
                     let base = iovec_ptr + i * IOVEC_ENTRY;
                     let p = core::ptr::read_unaligned(base as *const usize);
-                    let l = core::ptr::read_unaligned((base + core::mem::size_of::<usize>()) as *const usize);
+                    let l = core::ptr::read_unaligned(
+                        (base + core::mem::size_of::<usize>()) as *const usize,
+                    );
                     (p, l)
                 };
                 let copy_len = len.min(total.saturating_sub(pos));
                 if copy_len > 0 {
                     // SAFETY: ptr is a valid user-space mutable buffer; copy_len ≤ len.
                     unsafe {
-                        core::ptr::copy_nonoverlapping(tmp[pos..].as_ptr(), ptr as *mut u8, copy_len);
+                        core::ptr::copy_nonoverlapping(
+                            tmp[pos..].as_ptr(),
+                            ptr as *mut u8,
+                            copy_len,
+                        );
                     }
                     pos += copy_len;
                 }
             }
             Ok(sender)
         }
-        Syscall::RecvTimeout { mask, buf_ptr, buf_len, deadline } => {
+        Syscall::RecvTimeout {
+            mask,
+            buf_ptr,
+            buf_len,
+            deadline,
+        } => {
             // Drain pending_msgs first (same as Recv). ipc_post_nonblock queues
             // bytes here when the target is busy (e.g. UART burst fills pending_msgs
             // while input service is mid-dispatch). Without this drain, RecvTimeout
@@ -1051,7 +1201,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // Honour the recv mask in the drain — same contract as Recv
                     // above: a masked RecvTimeout must not consume queued input
                     // events meant for the wildcard read loop.
-                    let slot = t.pending_msgs.iter()
+                    let slot = t
+                        .pending_msgs
+                        .iter()
                         .position(|m| mask == 0 || m.sender_tid == mask);
                     if let Some(i) = slot {
                         let msg = t.pending_msgs.remove(i);
@@ -1082,7 +1234,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // Blocked with deadline:None — install the absolute deadline.
                     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                         if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                            if let super::tcb::TaskState::Recv { deadline: ref mut d, .. } = task.state {
+                            if let super::tcb::TaskState::Recv {
+                                deadline: ref mut d,
+                                ..
+                            } = task.state
+                            {
                                 *d = Some(deadline);
                             }
                         }
@@ -1115,7 +1271,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Honour the recv mask exactly like the blocking paths.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    let slot = t.pending_msgs.iter()
+                    let slot = t
+                        .pending_msgs
+                        .iter()
                         .position(|m| mask == 0 || m.sender_tid == mask);
                     if let Some(i) = slot {
                         let msg = t.pending_msgs.remove(i);
@@ -1187,7 +1345,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 if let Some(t) = sched.tasks.get_mut(&tid) {
                     parent_caps.apply_to(t);
                     t.syscall_allowlist = parent_allowlist;
-                    t.pku_key   = parent_pku.0;
+                    t.pku_key = parent_pku.0;
                     t.pku_value = parent_pku.1;
                 }
             }
@@ -1262,13 +1420,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
             let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
             if let Some(allocator) = frame_guard.as_mut() {
-                if crate::memory::paging::map_page(
-                    allocator,
-                    vaddr,
-                    frame,
-                    Flags::from_bits(flags),
-                )
-                .is_ok()
+                if crate::memory::paging::map_page(allocator, vaddr, frame, Flags::from_bits(flags))
+                    .is_ok()
                 {
                     return Ok(vaddr);
                 }
@@ -1294,7 +1447,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         Syscall::Log { msg_ptr, msg_len } => {
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            log::warn!("[rpi3] Log syscall: msg_ptr=0x{:X} len={}", msg_ptr, msg_len);
+            log::warn!(
+                "[rpi3] Log syscall: msg_ptr=0x{:X} len={}",
+                msg_ptr,
+                msg_len
+            );
             // Reject NULL, oversize, or overflowing buffers. The kernel
             // print path holds locks with interrupts disabled, so a
             // multi-MB log message effectively hangs the system.
@@ -1322,7 +1479,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::audit::AuditEvent::CellExit,
                 &crate::audit::encode_u32x2(caller_id as u32, code as u32),
             );
-            log::info!("Syscall::Exit: task {} exited with code {}", caller_id, code);
+            log::info!(
+                "Syscall::Exit: task {} exited with code {}",
+                caller_id,
+                code
+            );
 
             // Capture cell_id BEFORE exit_task removes the task — querying after
             // returns None, which would deregister quota for CellId(0) (a latent
@@ -1348,7 +1509,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Revoke all capabilities owned by this cell so the cap table doesn't
             // retain orphaned entries and so a future cell with the same ID cannot
             // inherit them.
-            crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(cell_id);
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
+                .revoke_all_for(cell_id);
 
             // Release the Cell's memory quota entry and any MMIO regions it held.
             crate::memory::cell_quota::deregister(cell_id);
@@ -1387,7 +1550,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // self-exits between them, causing a spurious InvalidCommand return.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 // Gate 1: only SpawnCap holders (init/shell) may force-terminate tasks.
-                let has_spawn = sched.tasks.get(&caller_id)
+                let has_spawn = sched
+                    .tasks
+                    .get(&caller_id)
                     .map(|t| t.spawn_cap.is_some())
                     .unwrap_or(false);
                 if !has_spawn {
@@ -1396,7 +1561,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
                 // Gate 2: protect system service cells (VFS=block_io_cap, net=network_cap).
                 // Killing them mid-I/O leaves driver state inconsistent; use hot-swap instead.
-                let target_is_system = sched.tasks.get(&tid)
+                let target_is_system = sched
+                    .tasks
+                    .get(&tid)
                     .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
                     .unwrap_or(false);
                 if target_is_system {
@@ -1406,7 +1573,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 // Gate 3: protect Frozen cells — they are mid-swap and cannot be killed
                 // by external actors; only the hotswap orchestrator may terminate them via
                 // the internal exit_task path after a successful swap (or rollback on failure).
-                let target_is_frozen = sched.tasks.get(&tid)
+                let target_is_frozen = sched
+                    .tasks
+                    .get(&tid)
                     .map(|t| matches!(t.state, TaskState::Frozen { .. }))
                     .unwrap_or(false);
                 if target_is_frozen {
@@ -1432,7 +1601,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
 
             // Cap + quota + MMIO cleanup — same as Exit handler.
-            crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(target_cell_id);
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
+                .revoke_all_for(target_cell_id);
             crate::memory::cell_quota::deregister(target_cell_id);
             crate::resource_registry::release_for(target_cell_id);
             reap_grants_for_task(tid);
@@ -1448,12 +1619,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Flush IOTLB for any DMA domains the target Cell held.
             super::drivers::iommu::cleanup_cell(tid as u64);
 
-            log::info!("[kernel] ForceExit: task {} killed by task {}", tid, caller_id);
+            log::info!(
+                "[kernel] ForceExit: task {} killed by task {}",
+                tid,
+                caller_id
+            );
 
             Ok(0) // non-blocking — caller keeps running; do NOT yield_cpu
         }
 
-        Syscall::CapRevoke { target_tid, cap_mask } => {
+        Syscall::CapRevoke {
+            target_tid,
+            cap_mask,
+        } => {
             use api::syscall::cap_mask as CM;
 
             if target_tid == caller_id {
@@ -1462,7 +1640,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 // Gate 1: caller must hold SpawnCap (same authority as ForceExit).
-                let has_spawn = sched.tasks.get(&caller_id)
+                let has_spawn = sched
+                    .tasks
+                    .get(&caller_id)
                     .map(|t| t.spawn_cap.is_some())
                     .unwrap_or(false);
                 if !has_spawn {
@@ -1485,16 +1665,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         crate::audit::AuditEvent::CapRevoked,
                         &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
                     );
-                    log::warn!("[kernel] CapRevoke: refused ambient-authority bits \
+                    log::warn!(
+                        "[kernel] CapRevoke: refused ambient-authority bits \
                         mask={:#010x} from task {} (teardown not implemented)",
-                        cap_mask, caller_id);
+                        cap_mask,
+                        caller_id
+                    );
                     return Err(SyscallError::NotSupported);
                 }
 
                 // Gate 2: protect system service cells — revoking I/O caps from a
                 // running VFS/net service mid-flight corrupts driver state. Use
                 // HotSwap to replace them safely.
-                let target_is_system = sched.tasks.get(&target_tid)
+                let target_is_system = sched
+                    .tasks
+                    .get(&target_tid)
                     .map(|t| t.block_io_cap.is_some() || t.network_cap.is_some())
                     .unwrap_or(false);
                 if target_is_system {
@@ -1507,10 +1692,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 };
 
                 // Apply revocation — clear each indicated cap field.
-                if cap_mask & CM::BLOCK_IO != 0 { task.block_io_cap   = None; }
-                if cap_mask & CM::NETWORK  != 0 { task.network_cap    = None; }
-                if cap_mask & CM::SPAWN    != 0 { task.spawn_cap      = None; }
-                if cap_mask & CM::HYPERVISOR != 0 { task.hypervisor_cap = None; }
+                if cap_mask & CM::BLOCK_IO != 0 {
+                    task.block_io_cap = None;
+                }
+                if cap_mask & CM::NETWORK != 0 {
+                    task.network_cap = None;
+                }
+                if cap_mask & CM::SPAWN != 0 {
+                    task.spawn_cap = None;
+                }
+                if cap_mask & CM::HYPERVISOR != 0 {
+                    task.hypervisor_cap = None;
+                }
 
                 // Parameterised sub-fields: clear the indicated bits, preserving the rest.
                 let mmio_revoke = ((cap_mask >> CM::MMIO_SHIFT) & 0xFF) as u8;
@@ -1525,8 +1718,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::audit::AuditEvent::CapRevoked,
                 &crate::audit::encode_u32x2(target_tid as u32, cap_mask),
             );
-            log::info!("[kernel] CapRevoke: task {} revoked mask={:#010x} from task {}",
-                caller_id, cap_mask, target_tid);
+            log::info!(
+                "[kernel] CapRevoke: task {} revoked mask={:#010x} from task {}",
+                caller_id,
+                cap_mask,
+                target_tid
+            );
 
             Ok(0)
         }
@@ -1540,11 +1737,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // In that case push a synthetic pending death directly onto the watcher
             // so recv_exit() is never stranded. Lock order: SCHEDULER first, then
             // release before touching DEATH_SUBSCRIBERS (per documented lock order).
-            enum Action { Subscribe, AlreadyDead }
+            enum Action {
+                Subscribe,
+                AlreadyDead,
+            }
             let action = {
                 let mut sched_opt = super::SCHEDULER.lock();
-                let sched = match sched_opt.as_mut() { Some(s) => s, None => return Ok(0) };
-                let has_spawn = sched.tasks.get(&caller_id)
+                let sched = match sched_opt.as_mut() {
+                    Some(s) => s,
+                    None => return Ok(0),
+                };
+                let has_spawn = sched
+                    .tasks
+                    .get(&caller_id)
                     .map(|t| t.spawn_cap.is_some())
                     .unwrap_or(false);
                 if !has_spawn {
@@ -1649,9 +1854,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             validate_user_buf(name_ptr, name_len, MAX_LOG_MSG)?;
             // SAFETY: validate_user_buf checked the pointer and length above.
             let name = unsafe {
-                core::str::from_utf8(
-                    core::slice::from_raw_parts(name_ptr as *const u8, name_len)
-                ).map_err(|_| SyscallError::InvalidInput)?
+                core::str::from_utf8(core::slice::from_raw_parts(name_ptr as *const u8, name_len))
+                    .map_err(|_| SyscallError::InvalidInput)?
             };
             // Hardcoded spawn-order lookup. The kernel spawns init (ID 1) and a
             // user_hello smoke-test task (ID 2) before the init binary runs.
@@ -1659,12 +1863,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // compositor=7, shell=8. Verified from QEMU serial log.
             // Replace with a dynamic registry in v0.3.
             let id: usize = match name {
-                "vfs"        => 3,
-                "config"     => 4,
-                "input"      => 5,
-                "net"        => 6,
+                "vfs" => 3,
+                "config" => 4,
+                "input" => 5,
+                "net" => 6,
                 "compositor" => 7,
-                "shell"      => 8,
+                "shell" => 8,
                 _ => return Err(SyscallError::FileNotFound),
             };
             Ok(id)
@@ -1782,7 +1986,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
                 return Err(SyscallError::InvalidInput);
             }
-            validate_user_buf(path_ptr, path_len, crate::loader::disk_layout::MAX_CELL_PATH)?;
+            validate_user_buf(
+                path_ptr,
+                path_len,
+                crate::loader::disk_layout::MAX_CELL_PATH,
+            )?;
             // SAFETY: path_ptr is a valid user buffer (validated above); SUM=1
             // lets S-mode read U-mode pages.  Slice lives only in this frame.
             let path_str = unsafe {
@@ -1792,7 +2000,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
-            let task_id = crate::loader::spawn_from_path(path_str, crate::task::cap::Spawner::User(caller_id)).map_err(|e| match e {
+            let task_id = crate::loader::spawn_from_path(
+                path_str,
+                crate::task::cap::Spawner::User(caller_id),
+            )
+            .map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,
@@ -1816,7 +2028,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(task_id)
         }
 
-        Syscall::SpawnFromElf { grant_id, len, path_ptr, path_len } => {
+        Syscall::SpawnFromElf {
+            grant_id,
+            len,
+            path_ptr,
+            path_len,
+        } => {
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -1839,7 +2056,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 g.base
             };
-            validate_user_buf(path_ptr, path_len, crate::loader::disk_layout::MAX_CELL_PATH)?;
+            validate_user_buf(
+                path_ptr,
+                path_len,
+                crate::loader::disk_layout::MAX_CELL_PATH,
+            )?;
             // SAFETY: path_ptr validated above; SUM=1 lets S-mode read the U-mode
             // path. Slice lives only in this frame.
             let path_str = unsafe {
@@ -1854,7 +2075,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // the migration is verified across arches — per-spawn, so it would be
             // noise; suppressed by the post-boot log-level drop (main.rs) during
             // normal operation, still visible under a debug/verbose level.
-            log::info!("[loader] SpawnFromElf: {} ({} bytes from grant)", path_str, len);
+            log::info!(
+                "[loader] SpawnFromElf: {} ({} bytes from grant)",
+                path_str,
+                len
+            );
             // SAFETY: `base` is a kernel-allocated, identity-mapped grant page owned
             // by the caller (validated above); `len <= g.size`. The caller is blocked
             // in this syscall, so it cannot free the grant before spawn_gated copies
@@ -1885,7 +2110,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(task_id)
         }
 
-        Syscall::SpawnPinned { path_ptr, path_len, priority, core_id } => {
+        Syscall::SpawnPinned {
+            path_ptr,
+            path_len,
+            priority,
+            core_id,
+        } => {
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -1897,7 +2127,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
                 return Err(SyscallError::InvalidInput);
             }
-            validate_user_buf(path_ptr, path_len, crate::loader::disk_layout::MAX_CELL_PATH)?;
+            validate_user_buf(
+                path_ptr,
+                path_len,
+                crate::loader::disk_layout::MAX_CELL_PATH,
+            )?;
             // SAFETY: validated above; SUM=1.
             let path_str = unsafe {
                 let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
@@ -1907,7 +2141,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidInput);
             }
             // Spawn at requested priority; future SMP can use core_id for affinity.
-            let task_id = crate::loader::spawn_from_path(path_str, crate::task::cap::Spawner::User(caller_id)).map_err(|e| match e {
+            let task_id = crate::loader::spawn_from_path(
+                path_str,
+                crate::task::cap::Spawner::User(caller_id),
+            )
+            .map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,
@@ -1930,7 +2168,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // is impossible/forgeable.
             const RT_PRIORITY: u8 = api::TaskPriority::RealTime as u8;
             if priority == RT_PRIORITY {
-                let cluster_mode = crate::task::SCHEDULER.lock().as_ref()
+                let cluster_mode = crate::task::SCHEDULER
+                    .lock()
+                    .as_ref()
                     .and_then(|s| s.tasks.get(&task_id))
                     .map(|t| t.cluster_mode)
                     .unwrap_or(0);
@@ -1968,14 +2208,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             use crate::fs::VIFS1;
             let file = {
                 let mut guard = VIFS1.lock();
-                guard.as_mut().ok_or(SyscallError::FileNotFound)?
+                guard
+                    .as_mut()
+                    .ok_or(SyscallError::FileNotFound)?
                     .open(path_str, api::fs::OpenMode::ReadWrite)
                     .map_err(|_| SyscallError::FileNotFound)?
             };
 
             // Resolve the cell ID of the calling task (distinct from task ID).
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
@@ -1989,7 +2235,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(cap_id.0 as usize)
         }
 
-        Syscall::ReadCap { cap_id, buf_ptr, buf_len } => {
+        Syscall::ReadCap {
+            cap_id,
+            buf_ptr,
+            buf_len,
+        } => {
             if buf_len == 0 {
                 return Ok(0);
             }
@@ -1997,13 +2247,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
             // Resolve caller's cell_id.
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
 
             // Park the file Box (releases the cap-table lock so other caps are unblocked).
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
 
@@ -2015,7 +2270,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
 
             // Return the file Box (unpark). No-op if the cap was revoked during I/O.
-            crate::cell::cap_registry::CAP_TABLE.lock()
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
 
             // Return bytes_read, or usize::MAX on I/O error (distinguishable from 0 = EOF).
@@ -2025,7 +2281,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
 
-        Syscall::SeekCap { cap_id, offset, whence } => {
+        Syscall::SeekCap {
+            cap_id,
+            offset,
+            whence,
+        } => {
             let pos = match whence {
                 0 => api::fs::SeekFrom::Start(offset as u64),
                 1 => api::fs::SeekFrom::Current(offset as isize as i64),
@@ -2034,19 +2294,25 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
 
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
 
             // Park → seek outside lock → unpark (same pattern as ReadCap).
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
 
             let seek_result = boxed_file.seek(pos);
 
-            crate::cell::cap_registry::CAP_TABLE.lock()
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
 
             match seek_result {
@@ -2055,19 +2321,28 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
 
-        Syscall::WriteCap { cap_id, buf_ptr, buf_len } => {
+        Syscall::WriteCap {
+            cap_id,
+            buf_ptr,
+            buf_len,
+        } => {
             if buf_len == 0 {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, buf_len, MAX_USER_BUF)?;
 
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
 
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
 
@@ -2077,7 +2352,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 boxed_file.write(buf)
             };
 
-            crate::cell::cap_registry::CAP_TABLE.lock()
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
 
             match write_result {
@@ -2088,45 +2364,65 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
         Syscall::StatCap { cap_id } => {
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.size();
-            crate::cell::cap_registry::CAP_TABLE.lock()
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
-            result.map(|s| s as usize).map_err(|_| SyscallError::Unknown)
+            result
+                .map(|s| s as usize)
+                .map_err(|_| SyscallError::Unknown)
         }
 
         Syscall::TruncateCap { cap_id, len } => {
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.truncate(len as u64);
-            crate::cell::cap_registry::CAP_TABLE.lock()
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
         }
 
         Syscall::SyncCap { cap_id } => {
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
-            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE.lock()
+            let mut boxed_file = crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .park_file(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             let result = boxed_file.sync();
-            crate::cell::cap_registry::CAP_TABLE.lock()
+            crate::cell::cap_registry::CAP_TABLE
+                .lock()
                 .unpark_file(crate::cell::cap_registry::CapId(cap_id as u64), boxed_file);
             result.map(|_| 0usize).map_err(|_| SyscallError::Unknown)
         }
@@ -2143,7 +2439,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // BDF ownership check: caller must own this PCIe device.
             let bdf_owner = crate::resource_registry::owner_of_bdf(bdf);
             let cell_id_raw = {
-                super::SCHEDULER.lock()
+                super::SCHEDULER
+                    .lock()
                     .as_ref()
                     .and_then(|s| s.tasks.get(&caller_id).map(|t| t.cell_id.0 as usize))
                     .unwrap_or(0)
@@ -2155,25 +2452,41 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             // DMA quota: total DMA mapped must not exceed 1× memory quota.
             if !crate::memory::cell_quota::can_map_dma(cell_id_raw, size) {
-                log::warn!("[iommu] Cell {} DMA quota exceeded (size={})", caller_id, size);
+                log::warn!(
+                    "[iommu] Cell {} DMA quota exceeded (size={})",
+                    caller_id,
+                    size
+                );
                 return Err(SyscallError::PermissionDenied);
             }
             // Map into IOMMU.
             super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size);
             crate::memory::cell_quota::record_dma_mapped(cell_id_raw, size);
-            log::info!("[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
-                       caller_id, (bdf >> 8) & 0xFF, (bdf >> 3) & 0x1F, bdf & 0x7, phys, size);
+            log::info!(
+                "[iommu] Cell {} granted DMA BDF={:02x}:{:02x}.{} phys={:#x} size={}",
+                caller_id,
+                (bdf >> 8) & 0xFF,
+                (bdf >> 3) & 0x1F,
+                bdf & 0x7,
+                phys,
+                size
+            );
             Ok(phys as usize) // IOVA == phys in SAS identity mapping
         }
 
         Syscall::CloseCap { cap_id } => {
             let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                sched.tasks.get(&caller_id).map(|t| t.cell_id).unwrap_or(types::CellId(0))
+                sched
+                    .tasks
+                    .get(&caller_id)
+                    .map(|t| t.cell_id)
+                    .unwrap_or(types::CellId(0))
             } else {
                 types::CellId(0)
             };
             let mut table = crate::cell::cap_registry::CAP_TABLE.lock();
-            table.verify(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
+            table
+                .verify(crate::cell::cap_registry::CapId(cap_id as u64), cell_id)
                 .map_err(|_| SyscallError::PermissionDenied)?;
             table.revoke(crate::cell::cap_registry::CapId(cap_id as u64));
             Ok(0)
@@ -2236,14 +2549,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
         Syscall::GetProcs { buf_ptr, buf_len } => {
             unsafe {
-                let slice = core::slice::from_raw_parts_mut(buf_ptr as *mut api::syscall::ProcessInfo, buf_len);
+                let slice = core::slice::from_raw_parts_mut(
+                    buf_ptr as *mut api::syscall::ProcessInfo,
+                    buf_len,
+                );
                 if let Some(sched) = super::SCHEDULER.lock().as_ref() {
                     let mut count = 0;
                     for (pid, task) in sched.tasks.iter() {
                         if count >= slice.len() {
                             break;
                         }
-                        
+
                         let mut name = [0u8; 32];
                         let name_bytes = task.name.as_bytes();
                         let len = core::cmp::min(name_bytes.len(), 32);
@@ -2268,11 +2584,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Ok(0)
             }
         }
-        
+
         Syscall::Seek { fd, offset, whence } => {
             super::file_seek(fd, offset, whence).map_err(|_| SyscallError::Unknown)
         }
-        
+
         Syscall::FileOp { op, arg1, arg2 } => {
             match op {
                 0 => {
@@ -2280,7 +2596,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     unsafe {
                         let slice = core::slice::from_raw_parts(arg1 as *const u8, arg2);
                         if let Ok(path) = core::str::from_utf8(slice) {
-                             return super::file_remove(path).map_err(|_| SyscallError::PermissionDenied);
+                            return super::file_remove(path)
+                                .map_err(|_| SyscallError::PermissionDenied);
                         }
                         Err(SyscallError::InvalidInput)
                     }
@@ -2292,7 +2609,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 _ => Err(SyscallError::InvalidCommand),
             }
         }
-        
+
         Syscall::GetTime { op } => {
             match op {
                 // op=0: raw monotonic ticks (arch-specific frequency)
@@ -2303,7 +2620,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     let t = hal::timer::read_ticks() as usize;
                     #[cfg(target_arch = "x86_64")]
                     let t = hal::hpet::now_ns() as usize;
-                    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+                    #[cfg(not(any(
+                        target_arch = "riscv64",
+                        target_arch = "aarch64",
+                        target_arch = "x86_64"
+                    )))]
                     let t = 0usize;
                     Ok(t)
                 }
@@ -2318,7 +2639,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     // HPET already returns nanoseconds; ÷ 1_000_000 → ms
                     #[cfg(target_arch = "x86_64")]
                     let ms = (hal::hpet::now_ns() / 1_000_000) as usize;
-                    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+                    #[cfg(not(any(
+                        target_arch = "riscv64",
+                        target_arch = "aarch64",
+                        target_arch = "x86_64"
+                    )))]
                     let ms = 0usize;
                     Ok(ms)
                 }
@@ -2330,7 +2655,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     let ns = hal::rtc::now_epoch_ns() as usize;
                     #[cfg(target_arch = "x86_64")]
                     let ns = hal::rtc::now_epoch_ns() as usize;
-                    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+                    #[cfg(not(any(
+                        target_arch = "riscv64",
+                        target_arch = "aarch64",
+                        target_arch = "x86_64"
+                    )))]
                     let ns = 0usize;
                     Ok(ns)
                 }
@@ -2342,7 +2671,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     let s = (hal::rtc::now_epoch_ns() / 1_000_000_000) as usize;
                     #[cfg(target_arch = "x86_64")]
                     let s = (hal::rtc::now_epoch_ns() / 1_000_000_000) as usize;
-                    #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+                    #[cfg(not(any(
+                        target_arch = "riscv64",
+                        target_arch = "aarch64",
+                        target_arch = "x86_64"
+                    )))]
                     let s = 0usize;
                     Ok(s)
                 }
@@ -2357,7 +2690,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             log::warn!("[audio] AudioPlay: no Sound Cell registered (G2 TODO)");
             Err(SyscallError::Unknown)
         }
-        Syscall::GpuFlush { data_ptr, data_len, xy, wh } => {
+        Syscall::GpuFlush {
+            data_ptr,
+            data_len,
+            xy,
+            wh,
+        } => {
             // If a GPU Driver Cell is registered, forward the flush via fire-and-forget IPC.
             // The Cell owns the VirtIO GPU hardware; we copy nothing — the Cell reads
             // data_ptr directly from the SAS (single address space).
@@ -2381,12 +2719,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 use core::sync::atomic::{AtomicBool, Ordering};
                 static WARNED: AtomicBool = AtomicBool::new(false);
                 if !WARNED.swap(true, Ordering::Relaxed) {
-                    log::warn!("[gpu_flush] GPU Driver Cell not registered — software fallback active");
+                    log::warn!(
+                        "[gpu_flush] GPU Driver Cell not registered — software fallback active"
+                    );
                 }
             }
             Err(SyscallError::Unknown)
         }
-        Syscall::GpuCursor { op, data_ptr, xy, hot } => {
+        Syscall::GpuCursor {
+            op,
+            data_ptr,
+            xy,
+            hot,
+        } => {
             // If a GPU Driver Cell is registered, forward the cursor op via fire-and-forget IPC.
             {
                 use crate::task::drivers::driver_cell::GPU_DRIVER_CELL;
@@ -2431,11 +2776,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Packed as (width << 32) | height, which only fits a 64-bit
             // register; RV32 Nano has no GPU cell so this path never fires there.
             #[cfg(not(target_arch = "riscv32"))]
-            { Ok(((1280usize) << 32) | 800usize) }
+            {
+                Ok(((1280usize) << 32) | 800usize)
+            }
             #[cfg(target_arch = "riscv32")]
-            { Ok(0) }
+            {
+                Ok(0)
+            }
         }
-        Syscall::NetTx { frame_ptr, frame_len } => {
+        Syscall::NetTx {
+            frame_ptr,
+            frame_len,
+        } => {
             if !caller_has_network(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -2461,13 +2813,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let n = crate::task::drivers::nic::recv_frame(buf);
             Ok(n)
         }
-        Syscall::StateStash { key, buf_ptr, buf_len } => {
+        Syscall::StateStash {
+            key,
+            buf_ptr,
+            buf_len,
+        } => {
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             // SAFETY: validated above — readable user buffer of exactly buf_len bytes.
             let bytes = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, buf_len) };
             Ok(crate::cell::state_stash::stash(key as u64, bytes))
         }
-        Syscall::StateRestore { key, buf_ptr, buf_len } => {
+        Syscall::StateRestore {
+            key,
+            buf_ptr,
+            buf_len,
+        } => {
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
             // SAFETY: validated above — writable user buffer of exactly buf_len bytes.
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buf_len) };
@@ -2506,7 +2866,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidInput);
             }
             // Refuse to freeze critical cells (init, kernel threads).
-            let is_crit = super::SCHEDULER.lock()
+            let is_crit = super::SCHEDULER
+                .lock()
                 .as_ref()
                 .and_then(|s| s.tasks.get(&target_tid).map(|t| t.is_critical))
                 .unwrap_or(false);
@@ -2532,7 +2893,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         // 415: KillCell — terminate a Cell and reclaim its resources.
-        Syscall::KillCell { target_tid, exit_code } => {
+        Syscall::KillCell {
+            target_tid,
+            exit_code,
+        } => {
             if !caller_has_supervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -2545,7 +2909,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let (is_crit, cell_id) = {
                 let guard = super::SCHEDULER.lock();
                 match guard.as_ref().and_then(|s| s.tasks.get(&target_tid)) {
-                    None    => return Err(SyscallError::FileNotFound),
+                    None => return Err(SyscallError::FileNotFound),
                     Some(t) => (t.is_critical, t.cell_id),
                 }
             };
@@ -2566,13 +2930,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !caller_has_supervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            let ready = super::SCHEDULER.lock()
+            let ready = super::SCHEDULER
+                .lock()
                 .as_ref()
                 .and_then(|s| s.tasks.get(&target_tid).map(|t| t.hotswap_ready));
             match ready {
-                Some(true)  => Ok(1),
+                Some(true) => Ok(1),
                 Some(false) => Ok(0),
-                None        => Err(SyscallError::FileNotFound), // tid does not exist
+                None => Err(SyscallError::FileNotFound), // tid does not exist
             }
         }
 
@@ -2588,10 +2953,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::task::drivers::driver_cell::register_block_driver(caller_id);
             // Bypass the SpawnCap gate — PcieDriverCap is the authority for driver
             // namespace registration. Direct write into service registry.
-            crate::cell::service_registry::register(
-                api::syscall::service::BLOCK_DRIVER,
-                caller_id,
-            );
+            crate::cell::service_registry::register(api::syscall::service::BLOCK_DRIVER, caller_id);
             Ok(0)
         }
 
@@ -2601,26 +2963,27 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::PermissionDenied);
             }
             crate::task::drivers::driver_cell::register_nic_driver(caller_id);
-            crate::cell::service_registry::register(
-                api::syscall::service::NIC_DRIVER,
-                caller_id,
-            );
+            crate::cell::service_registry::register(api::syscall::service::NIC_DRIVER, caller_id);
             Ok(0)
         }
 
         // 418: FindPcieDevice — query ECAM table for a device by class triple.
         // Writes a `PcieDeviceInfo` record to `out_ptr` and returns 1 if found.
         // Requires PcieDriverCap; also records BDF ownership in resource_registry.
-        Syscall::FindPcieDevice { class, subclass, prog_if, out_ptr } => {
+        Syscall::FindPcieDevice {
+            class,
+            subclass,
+            prog_if,
+            out_ptr,
+        } => {
             if !caller_has_pcie_driver(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
             match crate::task::drivers::pcie_ecam::find_class(class, subclass, prog_if) {
                 None => Ok(0), // device not present → VirtIO fallback
                 Some(dev) => {
-                    let bdf: u32 = (dev.bdf.0 as u32) << 8
-                                 | (dev.bdf.1 as u32) << 3
-                                 | (dev.bdf.2 as u32);
+                    let bdf: u32 =
+                        (dev.bdf.0 as u32) << 8 | (dev.bdf.1 as u32) << 3 | (dev.bdf.2 as u32);
                     let bar0_base = dev.bars[0].base_addr();
                     let bar0_len: u64 = match dev.bars[0] {
                         crate::task::drivers::pcie_ecam::Bar::Memory32 { size, .. } => size as u64,
@@ -2688,7 +3051,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         // 236: RegisterPciDevice — Platform Cell announces a device with class/BAR info.
         // Populates PCI_DEVICES so sys_find_pcie_device queries work without kernel ECAM scan.
         // After each registration, attempt deferred IOMMU init (no-op until IOMMU device appears).
-        Syscall::RegisterPciDevice { bdf, cls, bar0_base, bar0_size } => {
+        Syscall::RegisterPciDevice {
+            bdf,
+            cls,
+            bar0_base,
+            bar0_size,
+        } => {
             if !caller_has_platform(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -2722,14 +3090,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
         Syscall::BlkFlush => {
             if !caller_has_block_io(caller_id) {
-                log::warn!("BlkFlush denied: task {} lacks block-I/O capability", caller_id);
+                log::warn!(
+                    "BlkFlush denied: task {} lacks block-I/O capability",
+                    caller_id
+                );
                 return Err(SyscallError::PermissionDenied);
             }
-            
-            
+
             match crate::task::drivers::block::flush() {
                 Ok(()) => Ok(1),
-                Err(_)  => Ok(0),
+                Err(_) => Ok(0),
             }
         }
         Syscall::Shutdown => {
@@ -2738,22 +3108,33 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             unsafe {
                 // SAFETY: ecall traps to OpenSBI which powers off QEMU; no return.
                 core::arch::asm!(
-                    "li a7, 0x53525354",  // SBI_EXT_SRST
-                    "li a6, 0",           // fid = SYSTEM_RESET
-                    "li a0, 0",           // reset_type = Shutdown
-                    "li a1, 0",           // reset_reason = NoReason
+                    "li a7, 0x53525354", // SBI_EXT_SRST
+                    "li a6, 0",          // fid = SYSTEM_RESET
+                    "li a0, 0",          // reset_type = Shutdown
+                    "li a1, 0",          // reset_reason = NoReason
                     "ecall",
                     options(noreturn)
                 );
             }
             #[cfg(target_arch = "x86_64")]
-            loop { unsafe { core::arch::asm!("hlt", options(nomem, nostack)); } }
+            loop {
+                unsafe {
+                    core::arch::asm!("hlt", options(nomem, nostack));
+                }
+            }
             #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
-            loop { unsafe { core::arch::asm!("wfi", options(nomem, nostack)); } }
+            loop {
+                unsafe {
+                    core::arch::asm!("wfi", options(nomem, nostack));
+                }
+            }
         }
         Syscall::BlkRead { sector, buf_ptr } => {
             if !caller_has_block_io(caller_id) {
-                log::warn!("BlkRead denied: task {} lacks block-I/O capability", caller_id);
+                log::warn!(
+                    "BlkRead denied: task {} lacks block-I/O capability",
+                    caller_id
+                );
                 return Err(SyscallError::PermissionDenied);
             }
             // Per-cell partition range gate — a runaway FAT offset must never
@@ -2762,7 +3143,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
-
 
             // Bounce buffer: VirtioHal::share() treats the buffer's virtual address
             // as its physical address (identity-map assumption). Stack frames ARE
@@ -2783,7 +3163,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
         Syscall::BlkWrite { sector, buf_ptr } => {
             if !caller_has_block_io(caller_id) {
-                log::warn!("BlkWrite denied: task {} lacks block-I/O capability", caller_id);
+                log::warn!(
+                    "BlkWrite denied: task {} lacks block-I/O capability",
+                    caller_id
+                );
                 return Err(SyscallError::PermissionDenied);
             }
             // Per-cell partition range gate — prevents a cell from corrupting
@@ -2792,8 +3175,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Ok(0);
             }
             validate_user_buf(buf_ptr, 512, MAX_USER_BUF)?;
-            
-            
+
             // Bounce buffer for the same identity-map reason as BlkRead above.
             // SAFETY: buf_ptr is a validated 512-byte user buffer; SUM=1 allows
             // S-mode to read it.
@@ -2805,7 +3187,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(_) => Ok(0),
             }
         }
-        Syscall::HotSwap { cell_id, path_ptr, path_len } => {
+        Syscall::HotSwap {
+            cell_id,
+            path_ptr,
+            path_len,
+        } => {
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -2814,11 +3200,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // SAFETY: path_ptr is a user-space string pointer passed via syscall registers;
             // path_len is bounded by MAX_CELL_PATH (≤ 256); the caller is responsible for
             // ensuring the pointed-to memory is valid for their task's lifetime.
-            let path_bytes = unsafe {
-                core::slice::from_raw_parts(path_ptr as *const u8, path_len)
-            };
-            let path = core::str::from_utf8(path_bytes)
-                .map_err(|_| SyscallError::InvalidInput)?;
+            let path_bytes =
+                unsafe { core::slice::from_raw_parts(path_ptr as *const u8, path_len) };
+            let path = core::str::from_utf8(path_bytes).map_err(|_| SyscallError::InvalidInput)?;
             let target = types::CellId(cell_id as u64);
             crate::cell::hotswap::hotswap(target, path, caller_id)
                 .map_err(|_| SyscallError::Unknown)
@@ -2843,7 +3227,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         // ── Zero-Copy Grant Syscalls (Phase 01, Storage 2.0) ─────────────────
-
         Syscall::GrantAlloc { size } => {
             const PAGE_SIZE: usize = 4096;
             if size == 0 || size > MAX_GRANT_PAGES * PAGE_SIZE {
@@ -2852,23 +3235,32 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
                 Some(p) => p,
-                None    => return Ok(0),
+                None => return Ok(0),
             };
             // Register in the grant table.
             let mut tbl = grant_table_lock().lock();
-            if tbl.is_none() { *tbl = Some(BTreeMap::new()); }
+            if tbl.is_none() {
+                *tbl = Some(BTreeMap::new());
+            }
             if let Some(map) = tbl.as_mut() {
-                map.insert(paddr, PageGrant {
-                    base:      paddr,
-                    size:      n_pages * PAGE_SIZE,
-                    owner:     caller_id,
-                    shared_to: None,
-                });
+                map.insert(
+                    paddr,
+                    PageGrant {
+                        base: paddr,
+                        size: n_pages * PAGE_SIZE,
+                        owner: caller_id,
+                        shared_to: None,
+                    },
+                );
             }
             Ok(paddr) // grant_id == physical base (identity-mapped vaddr in SAS)
         }
 
-        Syscall::GrantShare { grant_id, target_cell, perm } => {
+        Syscall::GrantShare {
+            grant_id,
+            target_cell,
+            perm,
+        } => {
             let perm = match GrantPerm::try_from(perm as u8) {
                 Ok(p) => p,
                 Err(_) => return Err(SyscallError::InvalidInput),
@@ -2876,9 +3268,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Check PAGE_GRANT_TABLE first, then fall back to REG_GRANT_TABLE.
             {
                 let mut tbl = grant_table_lock().lock();
-                if tbl.is_none() { *tbl = Some(BTreeMap::new()); }
+                if tbl.is_none() {
+                    *tbl = Some(BTreeMap::new());
+                }
                 if let Some(grant) = tbl.as_mut().and_then(|m| m.get_mut(&grant_id)) {
-                    if grant.owner != caller_id { return Err(SyscallError::PermissionDenied); }
+                    if grant.owner != caller_id {
+                        return Err(SyscallError::PermissionDenied);
+                    }
                     grant.shared_to = Some((target_cell, perm));
                     return Ok(0);
                 }
@@ -2931,7 +3327,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let entry = match entry {
                 Some(e) => e,
-                None    => return Err(SyscallError::PermissionDenied),
+                None => return Err(SyscallError::PermissionDenied),
             };
             free_grant_pages(entry.base, entry.size / 4096);
             Ok(0)
@@ -2945,12 +3341,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let n_pages = size.div_ceil(PAGE_SIZE);
             let paddr = match alloc_grant_pages(n_pages) {
                 Some(p) => p,
-                None    => return Ok(0),
+                None => return Ok(0),
             };
             let mut tbl = reg_grant_table_lock().lock();
-            if tbl.is_none() { *tbl = Some(BTreeMap::new()); }
+            if tbl.is_none() {
+                *tbl = Some(BTreeMap::new());
+            }
             if let Some(map) = tbl.as_mut() {
-                map.insert(paddr, RegGrant { base: paddr, size: n_pages * PAGE_SIZE, owner: caller_id, shared_to: None });
+                map.insert(
+                    paddr,
+                    RegGrant {
+                        base: paddr,
+                        size: n_pages * PAGE_SIZE,
+                        owner: caller_id,
+                        shared_to: None,
+                    },
+                );
             }
             Ok(paddr) // reg_id == physical base
         }
@@ -2968,7 +3374,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             let entry = match entry {
                 Some(e) => e,
-                None    => return Err(SyscallError::PermissionDenied),
+                None => return Err(SyscallError::PermissionDenied),
             };
             free_grant_pages(entry.base, entry.size / 4096);
             Ok(0)
@@ -2990,7 +3396,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::yield_cpu();
             // After re-schedule: timer sweep wrote the fired mask into trap_frame.regs[10].
             // Return it so ViCell_syscall_dispatch writes the correct value back.
-            let fired = super::SCHEDULER.lock()
+            let fired = super::SCHEDULER
+                .lock()
                 .as_ref()
                 .and_then(|s| s.tasks.get(&caller_id))
                 .map(|t| t.trap_frame.regs[10])
@@ -3015,32 +3422,42 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
             if caller_has_platform(caller_id) {
                 return match crate::resource_registry::request_mmio_unchecked(
-                    types::CellId(caller_id as u64), base, len,
+                    types::CellId(caller_id as u64),
+                    base,
+                    len,
                 ) {
-                    Ok(()) => { user_map(base, len); Ok(0) }
+                    Ok(()) => {
+                        user_map(base, len);
+                        Ok(0)
+                    }
                     Err(types::ViError::AlreadyExists) => Ok(2),
                     Err(_) => Ok(3),
                 };
             }
             // PCIe BAR path: cells with PcieDriverCap may claim any BAR
             // discovered during ECAM scan (registered in resource_registry::PCIE_BARS).
-            if caller_has_pcie_driver(caller_id)
-                && crate::resource_registry::is_pcie_bar(base, len)
+            if caller_has_pcie_driver(caller_id) && crate::resource_registry::is_pcie_bar(base, len)
             {
                 return match crate::resource_registry::request_mmio(
-                    types::CellId(caller_id as u64), base, len,
+                    types::CellId(caller_id as u64),
+                    base,
+                    len,
                     crate::resource_registry::DEV_PCIE,
                 ) {
-                    Ok(()) => { user_map(base, len); Ok(0) }
+                    Ok(()) => {
+                        user_map(base, len);
+                        Ok(0)
+                    }
                     Err(types::ViError::PermissionDenied) => Ok(1),
-                    Err(types::ViError::AlreadyExists)    => Ok(2),
-                    Err(_)                                => Ok(3),
+                    Err(types::ViError::AlreadyExists) => Ok(2),
+                    Err(_) => Ok(3),
                 };
             }
             // GPIO/UART path: gate on manifest-declared device classes.
             let allowed_devices = {
                 let sched = super::SCHEDULER.lock();
-                sched.as_ref()
+                sched
+                    .as_ref()
                     .and_then(|s| s.tasks.get(&caller_id))
                     .map(|t| t.mmio_devices)
                     .unwrap_or(0)
@@ -3049,24 +3466,34 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::PermissionDenied);
             }
             match crate::resource_registry::request_mmio(
-                types::CellId(caller_id as u64), base, len, allowed_devices,
+                types::CellId(caller_id as u64),
+                base,
+                len,
+                allowed_devices,
             ) {
-                Ok(()) => { user_map(base, len); Ok(0) }
+                Ok(()) => {
+                    user_map(base, len);
+                    Ok(0)
+                }
                 Err(types::ViError::PermissionDenied) => Ok(1),
-                Err(types::ViError::AlreadyExists)    => Ok(2),
-                Err(_)                                => Ok(3),
+                Err(types::ViError::AlreadyExists) => Ok(2),
+                Err(_) => Ok(3),
             }
         }
 
         Syscall::GetRandom { buf_ptr, len } => {
             // Cap at 64 bytes per call (one VirtIO-RNG descriptor).
             let capped = len.min(64);
-            if capped == 0 { return Ok(0); }
+            if capped == 0 {
+                return Ok(0);
+            }
             // SAFETY: SUM is enabled by the caller (ViCell_syscall_dispatch). buf_ptr is
             // a user-space pointer in the same SAS; we write exactly `capped` bytes.
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, capped) };
             let written = crate::task::drivers::virtio_rng::get_random(buf);
-            if written > 0 { return Ok(written); }
+            if written > 0 {
+                return Ok(written);
+            }
             // No true entropy source. Fail-closed by default: return 0 bytes so
             // crypto callers (TLS ViRng / net-broker BrokerRng) hit their absent-
             // device guard and panic instead of keying from predictable bytes.
@@ -3082,8 +3509,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                          (dev-weak-rng). NOT cryptographically secure; never ship this."
                     );
                 }
-                let seed = super::system_ticks() as u32
-                    ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
+                let seed =
+                    super::system_ticks() as u32 ^ (caller_id as u32).wrapping_mul(0x9e37_79b9);
                 let mut state = if seed == 0 { 1 } else { seed };
                 for byte in buf.iter_mut() {
                     state ^= state << 13;
@@ -3114,21 +3541,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .filter(|g| g.owner == caller_id && g.size >= 512)
                     .map(|g| g.base)
             };
-            let buf_paddr = match buf_paddr { Some(p) => p, None => return Ok(0) };
+            let buf_paddr = match buf_paddr {
+                Some(p) => p,
+                None => return Ok(0),
+            };
             // Grant pages are identity-mapped (vaddr == paddr), so DMA addresses are correct.
             // SAFETY: buf_paddr is a physically contiguous, identity-mapped grant page; valid
             // for 512 bytes of VirtIO DMA read.
-            
-            
+
             let buf = unsafe { core::slice::from_raw_parts_mut(buf_paddr as *mut u8, 512) };
             match crate::task::drivers::block::read_sector(sector, buf) {
                 Ok(()) => Ok(1), // async_id = 1 means immediately complete (Phase 04 for real async)
-                Err(_)  => Ok(0),
+                Err(_) => Ok(0),
             }
         }
 
         // ── Hypervisor syscalls 220-225 (HypervisorCap ZST-gated) ────────────────
-
         Syscall::CreateVm { guest_pages } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
@@ -3145,29 +3573,53 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .map_err(|_| SyscallError::NotSupported)
         }
 
-        Syscall::MapGuestMemory { vm_id, ipa, size, writable } => {
+        Syscall::MapGuestMemory {
+            vm_id,
+            ipa,
+            size,
+            writable,
+        } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
             // C3: overflow guard on IPA + size.
-            ipa.checked_add(size as u64).ok_or(SyscallError::InvalidInput)?;
+            ipa.checked_add(size as u64)
+                .ok_or(SyscallError::InvalidInput)?;
             crate::hypervisor::registry::map_guest_memory(caller_id, vm_id, ipa, size, writable)
                 .map(|_| 0usize)
                 .map_err(|_| SyscallError::NotSupported)
         }
 
-        Syscall::RunVcpu { vm_id, vcpu_id, budget_ns, out_ptr } => {
+        Syscall::RunVcpu {
+            vm_id,
+            vcpu_id,
+            budget_ns,
+            out_ptr,
+        } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            validate_user_buf(out_ptr, core::mem::size_of::<api::hypervisor::ViVmExit>(), MAX_USER_BUF)?;
+            validate_user_buf(
+                out_ptr,
+                core::mem::size_of::<api::hypervisor::ViVmExit>(),
+                MAX_USER_BUF,
+            )?;
             // SAFETY: pointer validated above; SAS means it's also valid in kernel.
             let exit_out = out_ptr as *mut api::hypervisor::ViVmExit;
-            unsafe { crate::hypervisor::registry::run_vcpu(caller_id, vm_id, vcpu_id, budget_ns, exit_out) }
-                .map_err(|_| SyscallError::NotSupported)
+            unsafe {
+                crate::hypervisor::registry::run_vcpu(
+                    caller_id, vm_id, vcpu_id, budget_ns, exit_out,
+                )
+            }
+            .map_err(|_| SyscallError::NotSupported)
         }
 
-        Syscall::VcpuRegs { vm_id, vcpu_id, buf_ptr, write } => {
+        Syscall::VcpuRegs {
+            vm_id,
+            vcpu_id,
+            buf_ptr,
+            write,
+        } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -3177,7 +3629,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .map_err(|_| SyscallError::NotSupported)
         }
 
-        Syscall::InjectIrq { vm_id, vcpu_id, intid } => {
+        Syscall::InjectIrq {
+            vm_id,
+            vcpu_id,
+            intid,
+        } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
@@ -3189,22 +3645,34 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .map_err(|_| SyscallError::NotSupported)
         }
 
-        Syscall::WriteGuestMemory { vm_id, gpa, src_ptr, len } => {
+        Syscall::WriteGuestMemory {
+            vm_id,
+            gpa,
+            src_ptr,
+            len,
+        } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
             // Overflow guard: gpa+len and src_ptr+len must not wrap.
-            gpa.checked_add(len as u64).ok_or(SyscallError::InvalidInput)?;
+            gpa.checked_add(len as u64)
+                .ok_or(SyscallError::InvalidInput)?;
             validate_user_buf(src_ptr, len, MAX_USER_BUF)?;
             crate::hypervisor::registry::write_guest_memory(caller_id, vm_id, gpa, src_ptr, len)
                 .map_err(|_| SyscallError::InvalidInput)
         }
 
-        Syscall::ReadGuestMemory { vm_id, gpa, dst_ptr, len } => {
+        Syscall::ReadGuestMemory {
+            vm_id,
+            gpa,
+            dst_ptr,
+            len,
+        } => {
             if !caller_has_hypervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            gpa.checked_add(len as u64).ok_or(SyscallError::InvalidInput)?;
+            gpa.checked_add(len as u64)
+                .ok_or(SyscallError::InvalidInput)?;
             validate_user_buf(dst_ptr, len, MAX_USER_BUF)?;
             crate::hypervisor::registry::read_guest_memory(caller_id, vm_id, gpa, dst_ptr, len)
                 .map_err(|_| SyscallError::InvalidInput)
@@ -3212,9 +3680,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
     }
 }
 
-use api::syscall::ViSyscall;
 #[cfg(not(target_arch = "riscv32"))]
 use crate::hal::arch::ViTrapFrame;
+use api::syscall::ViSyscall;
 
 /// Map a syscall ID + promoted register args to the internal [`Syscall`] enum.
 ///
@@ -3223,143 +3691,352 @@ use crate::hal::arch::ViTrapFrame;
 /// arch-appropriate sentinel (usize::MAX or u32::MAX) to the return register.
 fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) -> Option<Syscall> {
     let sc = match ViSyscall::from(syscall_id) {
-        ViSyscall::Send          => Syscall::Send { target: a0, msg_ptr: a1, msg_len: a2 },
-        ViSyscall::TrySend       => Syscall::TrySend { target: a0, msg_ptr: a1, msg_len: a2 },
-        ViSyscall::Recv          => Syscall::Recv { mask: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::TryRecv       => Syscall::TryRecv { mask: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::SendGather    => Syscall::SendGather { target: a0, iovec_ptr: a1, iovec_count: a2 },
-        ViSyscall::RecvScatter   => Syscall::RecvScatter { mask: a0, iovec_ptr: a1, iovec_count: a2 },
-        ViSyscall::RecvTimeout   => Syscall::RecvTimeout {
-            mask: a0, buf_ptr: a1, buf_len: a2,
+        ViSyscall::Send => Syscall::Send {
+            target: a0,
+            msg_ptr: a1,
+            msg_len: a2,
+        },
+        ViSyscall::TrySend => Syscall::TrySend {
+            target: a0,
+            msg_ptr: a1,
+            msg_len: a2,
+        },
+        ViSyscall::Recv => Syscall::Recv {
+            mask: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::TryRecv => Syscall::TryRecv {
+            mask: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::SendGather => Syscall::SendGather {
+            target: a0,
+            iovec_ptr: a1,
+            iovec_count: a2,
+        },
+        ViSyscall::RecvScatter => Syscall::RecvScatter {
+            mask: a0,
+            iovec_ptr: a1,
+            iovec_count: a2,
+        },
+        ViSyscall::RecvTimeout => Syscall::RecvTimeout {
+            mask: a0,
+            buf_ptr: a1,
+            buf_len: a2,
             deadline: (super::system_ticks() as u64).wrapping_add(a3 as u64),
         },
-        ViSyscall::Reply         => Syscall::Reply { caller: a0, result: a1 },
-        ViSyscall::Call          => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },
-        ViSyscall::Spawn         => Syscall::Spawn { entry: a0, arg: a1 },
-        ViSyscall::Exec          => Syscall::Exec { path_ptr: a0, path_len: a1 },
-        ViSyscall::SpawnFromMem  => Syscall::SpawnFromMem { args_ptr: a0 },
-        ViSyscall::SpawnFromPath => Syscall::SpawnFromPath { path_ptr: a0, path_len: a1 },
-        ViSyscall::SpawnFromElf => Syscall::SpawnFromElf { grant_id: a0, len: a1, path_ptr: a2, path_len: a3 },
-        ViSyscall::SpawnPinned   => Syscall::SpawnPinned {
-            path_ptr: a0, path_len: a1, priority: a2 as u8, core_id: a3,
+        ViSyscall::Reply => Syscall::Reply {
+            caller: a0,
+            result: a1,
         },
-        ViSyscall::OpenCap       => Syscall::OpenCap { path_ptr: a0, path_len: a1 },
-        ViSyscall::ReadCap       => Syscall::ReadCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::CloseCap      => Syscall::CloseCap { cap_id: a0 },
-        ViSyscall::SeekCap       => Syscall::SeekCap { cap_id: a0, offset: a1, whence: a2 },
-        ViSyscall::WriteCap      => Syscall::WriteCap { cap_id: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::StatCap       => Syscall::StatCap { cap_id: a0 },
-        ViSyscall::TruncateCap   => Syscall::TruncateCap { cap_id: a0, len: a1 },
-        ViSyscall::SyncCap       => Syscall::SyncCap { cap_id: a0 },
-        ViSyscall::GrantDma      => Syscall::GrantDma { bdf: a0 as u32, phys: a1 as u64, size: a2 },
-        ViSyscall::Wait          => Syscall::Wait { pid: a0 },
-        ViSyscall::ShmAlloc      => Syscall::ShmAlloc { size: a0 },
-        ViSyscall::ShmMap        => Syscall::ShmMap { handle: a0, target_pid: a1 },
-        ViSyscall::Exit          => Syscall::Exit { code: a0 },
-        ViSyscall::ForceExit     => Syscall::ForceExit { tid: a0 },
-        ViSyscall::NotifyOnExit  => Syscall::NotifyOnExit { watched: a0 },
-        ViSyscall::RegisterService => Syscall::RegisterService { service_id: a0 as u16, tid: a1 },
-        ViSyscall::LookupService => Syscall::LookupService { service_id: a0 as u16 },
-        ViSyscall::Heartbeat     => Syscall::Heartbeat { interval: a0 },
-        ViSyscall::Yield         => Syscall::Yield,
-        ViSyscall::SetTimer      => Syscall::SetTimer { deadline: a0 },
-        ViSyscall::Log           => Syscall::Log { msg_ptr: a0, msg_len: a1 },
-        ViSyscall::GetProcs      => Syscall::GetProcs { buf_ptr: a0, buf_len: a1 },
-        ViSyscall::Open          => Syscall::Open { path_ptr: a0, path_len: a1 },
-        ViSyscall::Read          => Syscall::Read { fd: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::Close         => Syscall::Close { fd: a0 },
-        ViSyscall::ReadDir       => Syscall::ReadDir { fd: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::Write         => Syscall::Write { fd: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::Seek          => Syscall::Seek { fd: a0, offset: a1 as isize, whence: a2 },
-        ViSyscall::FileOp        => Syscall::FileOp { op: a0, arg1: a1, arg2: a2 },
-        ViSyscall::GetTime       => Syscall::GetTime { op: a0 },
-        ViSyscall::GpuFlush         => Syscall::GpuFlush { data_ptr: a0, data_len: a1, xy: a2, wh: a3 },
-        ViSyscall::AudioPlay        => Syscall::AudioPlay { buf_ptr: a0, buf_len: a1 },
-        ViSyscall::CapRevoke        => Syscall::CapRevoke { target_tid: a0, cap_mask: a1 as u32 },
-        ViSyscall::GpuCursor        => Syscall::GpuCursor { op: a0, data_ptr: a1, xy: a2, hot: a3 },
+        ViSyscall::Call => Syscall::ServiceLookup {
+            name_ptr: a0,
+            name_len: a1,
+        },
+        ViSyscall::Spawn => Syscall::Spawn { entry: a0, arg: a1 },
+        ViSyscall::Exec => Syscall::Exec {
+            path_ptr: a0,
+            path_len: a1,
+        },
+        ViSyscall::SpawnFromMem => Syscall::SpawnFromMem { args_ptr: a0 },
+        ViSyscall::SpawnFromPath => Syscall::SpawnFromPath {
+            path_ptr: a0,
+            path_len: a1,
+        },
+        ViSyscall::SpawnFromElf => Syscall::SpawnFromElf {
+            grant_id: a0,
+            len: a1,
+            path_ptr: a2,
+            path_len: a3,
+        },
+        ViSyscall::SpawnPinned => Syscall::SpawnPinned {
+            path_ptr: a0,
+            path_len: a1,
+            priority: a2 as u8,
+            core_id: a3,
+        },
+        ViSyscall::OpenCap => Syscall::OpenCap {
+            path_ptr: a0,
+            path_len: a1,
+        },
+        ViSyscall::ReadCap => Syscall::ReadCap {
+            cap_id: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::CloseCap => Syscall::CloseCap { cap_id: a0 },
+        ViSyscall::SeekCap => Syscall::SeekCap {
+            cap_id: a0,
+            offset: a1,
+            whence: a2,
+        },
+        ViSyscall::WriteCap => Syscall::WriteCap {
+            cap_id: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::StatCap => Syscall::StatCap { cap_id: a0 },
+        ViSyscall::TruncateCap => Syscall::TruncateCap {
+            cap_id: a0,
+            len: a1,
+        },
+        ViSyscall::SyncCap => Syscall::SyncCap { cap_id: a0 },
+        ViSyscall::GrantDma => Syscall::GrantDma {
+            bdf: a0 as u32,
+            phys: a1 as u64,
+            size: a2,
+        },
+        ViSyscall::Wait => Syscall::Wait { pid: a0 },
+        ViSyscall::ShmAlloc => Syscall::ShmAlloc { size: a0 },
+        ViSyscall::ShmMap => Syscall::ShmMap {
+            handle: a0,
+            target_pid: a1,
+        },
+        ViSyscall::Exit => Syscall::Exit { code: a0 },
+        ViSyscall::ForceExit => Syscall::ForceExit { tid: a0 },
+        ViSyscall::NotifyOnExit => Syscall::NotifyOnExit { watched: a0 },
+        ViSyscall::RegisterService => Syscall::RegisterService {
+            service_id: a0 as u16,
+            tid: a1,
+        },
+        ViSyscall::LookupService => Syscall::LookupService {
+            service_id: a0 as u16,
+        },
+        ViSyscall::Heartbeat => Syscall::Heartbeat { interval: a0 },
+        ViSyscall::Yield => Syscall::Yield,
+        ViSyscall::SetTimer => Syscall::SetTimer { deadline: a0 },
+        ViSyscall::Log => Syscall::Log {
+            msg_ptr: a0,
+            msg_len: a1,
+        },
+        ViSyscall::GetProcs => Syscall::GetProcs {
+            buf_ptr: a0,
+            buf_len: a1,
+        },
+        ViSyscall::Open => Syscall::Open {
+            path_ptr: a0,
+            path_len: a1,
+        },
+        ViSyscall::Read => Syscall::Read {
+            fd: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::Close => Syscall::Close { fd: a0 },
+        ViSyscall::ReadDir => Syscall::ReadDir {
+            fd: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::Write => Syscall::Write {
+            fd: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::Seek => Syscall::Seek {
+            fd: a0,
+            offset: a1 as isize,
+            whence: a2,
+        },
+        ViSyscall::FileOp => Syscall::FileOp {
+            op: a0,
+            arg1: a1,
+            arg2: a2,
+        },
+        ViSyscall::GetTime => Syscall::GetTime { op: a0 },
+        ViSyscall::GpuFlush => Syscall::GpuFlush {
+            data_ptr: a0,
+            data_len: a1,
+            xy: a2,
+            wh: a3,
+        },
+        ViSyscall::AudioPlay => Syscall::AudioPlay {
+            buf_ptr: a0,
+            buf_len: a1,
+        },
+        ViSyscall::CapRevoke => Syscall::CapRevoke {
+            target_tid: a0,
+            cap_mask: a1 as u32,
+        },
+        ViSyscall::GpuCursor => Syscall::GpuCursor {
+            op: a0,
+            data_ptr: a1,
+            xy: a2,
+            hot: a3,
+        },
         ViSyscall::GpuGetResolution => Syscall::GpuGetResolution,
-        ViSyscall::NetTx         => Syscall::NetTx { frame_ptr: a0, frame_len: a1 },
-        ViSyscall::NetRx         => Syscall::NetRx { buf_ptr: a0, buf_len: a1 },
-        ViSyscall::StateStash      => Syscall::StateStash { key: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::StateRestore    => Syscall::StateRestore { key: a0, buf_ptr: a1, buf_len: a2 },
-        ViSyscall::StateStashClear    => Syscall::StateStashClear { key: a0 },
-        ViSyscall::FreezeCell         => Syscall::FreezeCell { target_tid: a0 },
-        ViSyscall::ResumeCell         => Syscall::ResumeCell { target_tid: a0 },
-        ViSyscall::KillCell           => Syscall::KillCell { target_tid: a0, exit_code: a1 as u32 },
+        ViSyscall::NetTx => Syscall::NetTx {
+            frame_ptr: a0,
+            frame_len: a1,
+        },
+        ViSyscall::NetRx => Syscall::NetRx {
+            buf_ptr: a0,
+            buf_len: a1,
+        },
+        ViSyscall::StateStash => Syscall::StateStash {
+            key: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::StateRestore => Syscall::StateRestore {
+            key: a0,
+            buf_ptr: a1,
+            buf_len: a2,
+        },
+        ViSyscall::StateStashClear => Syscall::StateStashClear { key: a0 },
+        ViSyscall::FreezeCell => Syscall::FreezeCell { target_tid: a0 },
+        ViSyscall::ResumeCell => Syscall::ResumeCell { target_tid: a0 },
+        ViSyscall::KillCell => Syscall::KillCell {
+            target_tid: a0,
+            exit_code: a1 as u32,
+        },
         ViSyscall::RegisterBlockDriver => Syscall::RegisterBlockDriver,
-        ViSyscall::RegisterNicDriver   => Syscall::RegisterNicDriver,
+        ViSyscall::RegisterNicDriver => Syscall::RegisterNicDriver,
         ViSyscall::FindPcieDevice => Syscall::FindPcieDevice {
-            class:    a0 as u8,
+            class: a0 as u8,
             subclass: a1 as u8,
-            prog_if:  a2 as u8,
-            out_ptr:  a3,
+            prog_if: a2 as u8,
+            out_ptr: a3,
         },
         ViSyscall::QueryHotswapReady => Syscall::QueryHotswapReady { target_tid: a0 },
-        ViSyscall::HotSwap       => Syscall::HotSwap { cell_id: a0, path_ptr: a1, path_len: a2 },
-        ViSyscall::HotSwapReady  => Syscall::HotSwapReady,
-        ViSyscall::Snapshot      => Syscall::Snapshot,
-        ViSyscall::GrantAlloc    => Syscall::GrantAlloc { size: a0 },
-        ViSyscall::GrantShare    => Syscall::GrantShare { grant_id: a0, target_cell: a1, perm: a2 },
-        ViSyscall::GrantSlice    => Syscall::GrantSlice { grant_id: a0 },
-        ViSyscall::GrantFree     => Syscall::GrantFree { grant_id: a0 },
-        ViSyscall::BlkReadAsync  => Syscall::BlkReadAsync { sector: a0 as u64, grant_id: a1 },
-        ViSyscall::RequestMmio      => Syscall::RequestMmio { base: a0, len: a1 },
-        ViSyscall::GetRandom        => Syscall::GetRandom { buf_ptr: a0, len: a1 },
-        ViSyscall::GrantRegister    => Syscall::GrantRegister { size: a0 },
-        ViSyscall::GrantUnregister  => Syscall::GrantUnregister { reg_id: a0 },
-        ViSyscall::WaitForEvent     => {
+        ViSyscall::HotSwap => Syscall::HotSwap {
+            cell_id: a0,
+            path_ptr: a1,
+            path_len: a2,
+        },
+        ViSyscall::HotSwapReady => Syscall::HotSwapReady,
+        ViSyscall::Snapshot => Syscall::Snapshot,
+        ViSyscall::GrantAlloc => Syscall::GrantAlloc { size: a0 },
+        ViSyscall::GrantShare => Syscall::GrantShare {
+            grant_id: a0,
+            target_cell: a1,
+            perm: a2,
+        },
+        ViSyscall::GrantSlice => Syscall::GrantSlice { grant_id: a0 },
+        ViSyscall::GrantFree => Syscall::GrantFree { grant_id: a0 },
+        ViSyscall::BlkReadAsync => Syscall::BlkReadAsync {
+            sector: a0 as u64,
+            grant_id: a1,
+        },
+        ViSyscall::RequestMmio => Syscall::RequestMmio { base: a0, len: a1 },
+        ViSyscall::GetRandom => Syscall::GetRandom {
+            buf_ptr: a0,
+            len: a1,
+        },
+        ViSyscall::GrantRegister => Syscall::GrantRegister { size: a0 },
+        ViSyscall::GrantUnregister => Syscall::GrantUnregister { reg_id: a0 },
+        ViSyscall::WaitForEvent => {
             // ABI: a0 = mask (u32), a1 = timeout_ticks_lo, a2 = timeout_ticks_hi.
             let mask = a0 as u32;
             let timeout = (a1 as u64) | ((a2 as u64) << 32);
-            let deadline = if timeout == 0 { None } else {
+            let deadline = if timeout == 0 {
+                None
+            } else {
                 Some((super::system_ticks() as u64).wrapping_add(timeout))
             };
             Syscall::WaitForEvent { mask, deadline }
         }
         // Hypervisor syscalls 220-225.
-        ViSyscall::CreateVm       => Syscall::CreateVm { guest_pages: a0 },
-        ViSyscall::CreateVcpu     => Syscall::CreateVcpu { vm_id: a0, entry_pc: a1 as u64 },
+        ViSyscall::CreateVm => Syscall::CreateVm { guest_pages: a0 },
+        ViSyscall::CreateVcpu => Syscall::CreateVcpu {
+            vm_id: a0,
+            entry_pc: a1 as u64,
+        },
         ViSyscall::MapGuestMemory => Syscall::MapGuestMemory {
-            vm_id: a0, ipa: a1 as u64, size: a2, writable: a3 != 0,
+            vm_id: a0,
+            ipa: a1 as u64,
+            size: a2,
+            writable: a3 != 0,
         },
-        ViSyscall::RunVcpu        => Syscall::RunVcpu {
-            vm_id: a0, vcpu_id: a1, budget_ns: a2 as u64, out_ptr: a3,
+        ViSyscall::RunVcpu => Syscall::RunVcpu {
+            vm_id: a0,
+            vcpu_id: a1,
+            budget_ns: a2 as u64,
+            out_ptr: a3,
         },
-        ViSyscall::VcpuRegs       => Syscall::VcpuRegs {
-            vm_id: a0, vcpu_id: a1, buf_ptr: a2, write: a3 != 0,
+        ViSyscall::VcpuRegs => Syscall::VcpuRegs {
+            vm_id: a0,
+            vcpu_id: a1,
+            buf_ptr: a2,
+            write: a3 != 0,
         },
-        ViSyscall::InjectIrq      => Syscall::InjectIrq {
-            vm_id: a0, vcpu_id: a1, intid: a2 as u32,
+        ViSyscall::InjectIrq => Syscall::InjectIrq {
+            vm_id: a0,
+            vcpu_id: a1,
+            intid: a2 as u32,
         },
         ViSyscall::WriteGuestMemory => Syscall::WriteGuestMemory {
-            vm_id: a0, gpa: a1 as u64, src_ptr: a2, len: a3,
+            vm_id: a0,
+            gpa: a1 as u64,
+            src_ptr: a2,
+            len: a3,
         },
-        ViSyscall::ReadGuestMemory  => Syscall::ReadGuestMemory {
-            vm_id: a0, gpa: a1 as u64, dst_ptr: a2, len: a3,
+        ViSyscall::ReadGuestMemory => Syscall::ReadGuestMemory {
+            vm_id: a0,
+            gpa: a1 as u64,
+            dst_ptr: a2,
+            len: a3,
         },
-        ViSyscall::WaitIrq       => Syscall::WaitIrq { irq: a0 as u8, mmio_base: a1 },
+        ViSyscall::WaitIrq => Syscall::WaitIrq {
+            irq: a0 as u8,
+            mmio_base: a1,
+        },
         ViSyscall::RegisterPcieBar => Syscall::RegisterPcieBar {
-            bdf: a0 as u32, base: a1, len: a2,
+            bdf: a0 as u32,
+            base: a1,
+            len: a2,
         },
         ViSyscall::RegisterPciDevice => Syscall::RegisterPciDevice {
-            bdf: a0 as u32, cls: a1 as u32, bar0_base: a2, bar0_size: a3,
+            bdf: a0 as u32,
+            cls: a1 as u32,
+            bar0_base: a2,
+            bar0_size: a3,
         },
-        ViSyscall::ReadLog => Syscall::ReadLog { buf_ptr: a0, max: a1 },
+        ViSyscall::ReadLog => Syscall::ReadLog {
+            buf_ptr: a0,
+            max: a1,
+        },
         _ => match syscall_id {
-            3   => Syscall::SetTimer { deadline: a0 },
-            100 => Syscall::ServiceLookup { name_ptr: a0, name_len: a1 },
-            106 => Syscall::FStat { fd: a0, stat_ptr: a1 },
-            107 => Syscall::ChDir { path_ptr: a0, path_len: a1 },
-            108 => Syscall::GetCwd { buf_ptr: a0, buf_len: a1 },
-            110 => Syscall::MkDir { path_ptr: a0, path_len: a1 },
-            111 => Syscall::Create { path_ptr: a0, path_len: a1 },
+            3 => Syscall::SetTimer { deadline: a0 },
+            100 => Syscall::ServiceLookup {
+                name_ptr: a0,
+                name_len: a1,
+            },
+            106 => Syscall::FStat {
+                fd: a0,
+                stat_ptr: a1,
+            },
+            107 => Syscall::ChDir {
+                path_ptr: a0,
+                path_len: a1,
+            },
+            108 => Syscall::GetCwd {
+                buf_ptr: a0,
+                buf_len: a1,
+            },
+            110 => Syscall::MkDir {
+                path_ptr: a0,
+                path_len: a1,
+            },
+            111 => Syscall::Create {
+                path_ptr: a0,
+                path_len: a1,
+            },
             // Block I/O — intentionally absent from ViSyscall/libs/api (avoids Law 1).
-            500 => Syscall::BlkRead  { sector: a0 as u64, buf_ptr: a1 },
-            501 => Syscall::BlkWrite { sector: a0 as u64, buf_ptr: a1 },
+            500 => Syscall::BlkRead {
+                sector: a0 as u64,
+                buf_ptr: a1,
+            },
+            501 => Syscall::BlkWrite {
+                sector: a0 as u64,
+                buf_ptr: a1,
+            },
             502 => Syscall::Shutdown,
             503 => Syscall::BlkFlush,
-            _   => return None,
-        }
+            _ => return None,
+        },
     };
     Some(sc)
 }
@@ -3373,7 +4050,11 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
     let sc = ViSyscall::from(syscall_id);
     let bit = sc.allowlist_bit();
     // Bit 36 gates raw block-I/O opcodes (500/501/503) and BlkReadAsync (212).
-    let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) { Some(36) } else { None };
+    let blk_io_bit: Option<u8> = if matches!(syscall_id, 500 | 501 | 503 | 212) {
+        Some(36)
+    } else {
+        None
+    };
 
     // Raw opcodes with a dedicated `map_syscall` fallback mapping. These are
     // intentionally absent from `ViSyscall` (Law 1: keeps experimental ids out
@@ -3386,7 +4067,9 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
         3 | 100 | 106 | 107 | 108 | 110 | 111 | 500 | 501 | 502 | 503
     );
 
-    let allowlist = super::SCHEDULER.lock().as_ref()
+    let allowlist = super::SCHEDULER
+        .lock()
+        .as_ref()
         .and_then(|s| s.tasks.get(&caller_id))
         .map(|t| t.syscall_allowlist)
         .unwrap_or(0); // task absent → deny-all for safety
@@ -3404,21 +4087,33 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
         && !matches!(syscall_id, 60 | 104)
         && allowlist != u64::MAX
     {
-        log::warn!("[kernel] unknown opcode {} denied for tid {} (allowlist={:#018x})",
-            syscall_id, caller_id, allowlist);
+        log::warn!(
+            "[kernel] unknown opcode {} denied for tid {} (allowlist={:#018x})",
+            syscall_id,
+            caller_id,
+            allowlist
+        );
         return Err(SyscallError::PermissionDenied);
     }
     if let Some(b) = bit {
         if allowlist & (1u64 << b) == 0 {
-            log::warn!("[kernel] syscall {:?} (bit {}) denied for tid {} (allowlist={:#018x})",
-                sc, b, caller_id, allowlist);
+            log::warn!(
+                "[kernel] syscall {:?} (bit {}) denied for tid {} (allowlist={:#018x})",
+                sc,
+                b,
+                caller_id,
+                allowlist
+            );
             return Err(SyscallError::PermissionDenied);
         }
     }
     if let Some(b) = blk_io_bit {
         if allowlist & (1u64 << b) == 0 {
-            log::warn!("[kernel] raw block opcode {} denied for tid {} (no bit 36)",
-                syscall_id, caller_id);
+            log::warn!(
+                "[kernel] raw block opcode {} denied for tid {} (no bit 36)",
+                syscall_id,
+                caller_id
+            );
             return Err(SyscallError::PermissionDenied);
         }
     }
@@ -3468,16 +4163,20 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     // for the duration of handle_syscall. Disabled immediately after to prevent
     // inadvertent user-page reads on subsequent kernel faults.
     #[cfg(target_arch = "riscv64")]
-    unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize); }
+    unsafe {
+        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
+    }
 
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
-    unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize); }
+    unsafe {
+        core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
+    }
 
     match result {
         Ok(val) => frame.regs[10] = val,
-        Err(_)  => frame.regs[10] = usize::MAX,
+        Err(_) => frame.regs[10] = usize::MAX,
     }
 }
 
@@ -3521,14 +4220,18 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 
     // SAFETY: csrs/csrc sstatus SUM (bit 18) — same bit position on RV32 and RV64
     // per the RISC-V Privileged Spec §4.1.1. Disabled after handle_syscall.
-    unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize); }
+    unsafe {
+        core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
+    }
 
     let result = handle_syscall(caller_id, syscall);
 
-    unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize); }
+    unsafe {
+        core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
+    }
 
     match result {
         Ok(val) => frame.regs[10] = val as u32,
-        Err(_)  => frame.regs[10] = u32::MAX,
+        Err(_) => frame.regs[10] = u32::MAX,
     }
 }

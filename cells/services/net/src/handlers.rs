@@ -5,44 +5,41 @@
 
 extern crate alloc;
 
+use crate::{
+    interface::VirtioNetDevice, next_ephemeral_port, now_instant, socket_state::SocketState,
+    socket_table::SocketTable, tls::socket::TlsSocketEntry,
+};
 use alloc::collections::BTreeMap;
-use api::ipc::{self, IPC_BUF_SIZE, NetRequest, NetResponse};
-use ostd::syscall::{sys_send, sys_heartbeat, sys_get_time, sys_net_tx};
+use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use ostd::syscall::{sys_get_time, sys_heartbeat, sys_net_tx, sys_send};
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::{tcp, udp},
     wire::{IpAddress, IpEndpoint},
 };
-use crate::{
-    interface::VirtioNetDevice,
-    next_ephemeral_port, now_instant,
-    socket_state::SocketState,
-    socket_table::SocketTable,
-    tls::socket::TlsSocketEntry,
-};
 
 // ─── TLS raw opcode constants (ostd::tls wire format) ────────────────────────
 
-const TLS_CLOSE_OP:   u8 = 0x15;  // mirrors ostd::tls CLOSE; lowest raw opcode
+const TLS_CLOSE_OP: u8 = 0x15; // mirrors ostd::tls CLOSE; lowest raw opcode
 const TLS_CONNECT_OP: u8 = 0x30;
-const TLS_SEND_OP:    u8 = 0x31;
-const TLS_RECV_OP:    u8 = 0x32;
+const TLS_SEND_OP: u8 = 0x31;
+const TLS_RECV_OP: u8 = 0x32;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn tcp_state_byte(s: tcp::State) -> u8 {
     match s {
-        tcp::State::Closed      => 0x00,
-        tcp::State::SynSent     => 0x01,
+        tcp::State::Closed => 0x00,
+        tcp::State::SynSent => 0x01,
         tcp::State::SynReceived => 0x02,
         tcp::State::Established => 0x03,
-        tcp::State::FinWait1    => 0x04,
-        tcp::State::FinWait2    => 0x05,
-        tcp::State::CloseWait   => 0x06,
-        tcp::State::Closing     => 0x07,
-        tcp::State::LastAck     => 0x08,
-        tcp::State::TimeWait    => 0x09,
-        tcp::State::Listen      => 0x0A,
+        tcp::State::FinWait1 => 0x04,
+        tcp::State::FinWait2 => 0x05,
+        tcp::State::CloseWait => 0x06,
+        tcp::State::Closing => 0x07,
+        tcp::State::LastAck => 0x08,
+        tcp::State::TimeWait => 0x09,
+        tcp::State::Listen => 0x0A,
     }
 }
 
@@ -74,7 +71,10 @@ fn make_tcp(
     ));
     match table.insert(handle) {
         Ok(cap) => Ok((handle, cap)),
-        Err(_) => { sockets.remove(handle); Err(()) }
+        Err(_) => {
+            sockets.remove(handle);
+            Err(())
+        }
     }
 }
 
@@ -99,7 +99,9 @@ pub fn handle_request(
     match ipc::decode::<NetRequest<'_>>(buf) {
         Ok(req) => {
             iface.poll(now_instant(), device, sockets);
-            handle_typed(req, sender, iface, device, sockets, table, tls_table, local_ip);
+            handle_typed(
+                req, sender, iface, device, sockets, table, tls_table, local_ip,
+            );
             iface.poll(now_instant(), device, sockets);
         }
         Err(_) if buf.first().copied().unwrap_or(0) >= TLS_CLOSE_OP => {
@@ -129,16 +131,23 @@ fn handle_typed(
         NetRequest::TcpConnect { addr, port } => {
             let (handle, cap) = match make_tcp(sockets, table) {
                 Ok(t) => t,
-                Err(_) => { send_typed(sender, R::Err(0xFF)); return; }
+                Err(_) => {
+                    send_typed(sender, R::Err(0xFF));
+                    return;
+                }
             };
             let remote = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), port);
             {
                 let cx = iface.context();
-                if sockets.get_mut::<tcp::Socket>(handle)
-                    .connect(cx, remote, next_ephemeral_port()).is_err()
+                if sockets
+                    .get_mut::<tcp::Socket>(handle)
+                    .connect(cx, remote, next_ephemeral_port())
+                    .is_err()
                 {
-                    table.remove(cap); sockets.remove(handle);
-                    send_typed(sender, R::Err(0xFF)); return;
+                    table.remove(cap);
+                    sockets.remove(handle);
+                    send_typed(sender, R::Err(0xFF));
+                    return;
                 }
             }
             table.set_state(cap, SocketState::Connecting);
@@ -147,18 +156,30 @@ fn handle_typed(
 
         NetRequest::TcpSend { cap_id, data } => {
             let cap = cap_id as u64;
-            if table.is_udp(cap) { send_typed(sender, R::Data(&0u32.to_le_bytes())); return; }
+            if table.is_udp(cap) {
+                send_typed(sender, R::Data(&0u32.to_le_bytes()));
+                return;
+            }
             try_promote(table, sockets, cap);
             let n = if let Some(h) = table.get(cap) {
                 let s = sockets.get_mut::<tcp::Socket>(h);
-                if s.can_send() { s.send_slice(data).unwrap_or(0) } else { 0 }
-            } else { 0 };
+                if s.can_send() {
+                    s.send_slice(data).unwrap_or(0)
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
             send_typed(sender, R::Data(&(n as u32).to_le_bytes()));
         }
 
         NetRequest::TcpRecv { cap_id, buf_len } => {
             let cap = cap_id as u64;
-            if table.is_udp(cap) { send_typed(sender, R::Data(&[])); return; }
+            if table.is_udp(cap) {
+                send_typed(sender, R::Data(&[]));
+                return;
+            }
             try_promote(table, sockets, cap);
             let buf_len = (buf_len as usize).min(4096);
             let mut data = alloc::vec![0u8; buf_len];
@@ -180,7 +201,9 @@ fn handle_typed(
 
         NetRequest::TcpClose { cap_id } => {
             let cap = cap_id as u64;
-            if let Some(h) = table.remove(cap) { sockets.remove(h); }
+            if let Some(h) = table.remove(cap) {
+                sockets.remove(h);
+            }
             tls_table.remove(&cap);
             send_typed(sender, R::Ok);
         }
@@ -188,11 +211,16 @@ fn handle_typed(
         NetRequest::TcpListen { port } => {
             let (handle, cap) = match make_tcp(sockets, table) {
                 Ok(t) => t,
-                Err(_) => { send_typed(sender, R::Err(0xFF)); return; }
+                Err(_) => {
+                    send_typed(sender, R::Err(0xFF));
+                    return;
+                }
             };
             if sockets.get_mut::<tcp::Socket>(handle).listen(port).is_err() {
-                table.remove(cap); sockets.remove(handle);
-                send_typed(sender, R::Err(0xFF)); return;
+                table.remove(cap);
+                sockets.remove(handle);
+                send_typed(sender, R::Err(0xFF));
+                return;
             }
             table.set_state(cap, SocketState::Listening);
             table.set_listen_port(cap, port);
@@ -202,18 +230,26 @@ fn handle_typed(
         NetRequest::TcpAccept { cap_id } => {
             let cap = cap_id as u64;
             if table.is_udp(cap) || table.get_state(cap) != Some(SocketState::Listening) {
-                send_typed(sender, R::Err(0xFF)); return;
+                send_typed(sender, R::Err(0xFF));
+                return;
             }
             let handle = match table.get(cap) {
                 Some(h) => h,
-                None => { send_typed(sender, R::Err(0xFF)); return; }
+                None => {
+                    send_typed(sender, R::Err(0xFF));
+                    return;
+                }
             };
             if sockets.get_mut::<tcp::Socket>(handle).state() != tcp::State::Established {
-                send_typed(sender, R::Err(0xFE)); return;  // not ready — consumer retries
+                send_typed(sender, R::Err(0xFE));
+                return; // not ready — consumer retries
             }
             let listen_port = match table.get_listen_port(cap) {
                 Some(p) => p,
-                None => { send_typed(sender, R::Err(0xFF)); return; }
+                None => {
+                    send_typed(sender, R::Err(0xFF));
+                    return;
+                }
             };
             match table.insert_with_state(handle, SocketState::Connected) {
                 Ok(stream_cap) => {
@@ -228,32 +264,61 @@ fn handle_typed(
                     table.set_listen_port(cap, listen_port);
                     send_typed(sender, R::CapId(stream_cap as u32));
                 }
-                Err(_) => { send_typed(sender, R::Err(0xFF)); }
+                Err(_) => {
+                    send_typed(sender, R::Err(0xFF));
+                }
             }
         }
 
         NetRequest::UdpCreate => {
             let handle = sockets.add(udp::Socket::new(
-                udp::PacketBuffer::new(alloc::vec![udp::PacketMetadata::EMPTY; 4], alloc::vec![0u8; 1024]),
-                udp::PacketBuffer::new(alloc::vec![udp::PacketMetadata::EMPTY; 4], alloc::vec![0u8; 1024]),
+                udp::PacketBuffer::new(
+                    alloc::vec![udp::PacketMetadata::EMPTY; 4],
+                    alloc::vec![0u8; 1024],
+                ),
+                udp::PacketBuffer::new(
+                    alloc::vec![udp::PacketMetadata::EMPTY; 4],
+                    alloc::vec![0u8; 1024],
+                ),
             ));
             match table.insert(handle) {
-                Ok(cap) => { table.mark_udp(cap); send_typed(sender, R::CapId(cap as u32)); }
-                Err(_)  => { sockets.remove(handle); send_typed(sender, R::Err(0xFF)); }
+                Ok(cap) => {
+                    table.mark_udp(cap);
+                    send_typed(sender, R::CapId(cap as u32));
+                }
+                Err(_) => {
+                    sockets.remove(handle);
+                    send_typed(sender, R::Err(0xFF));
+                }
             }
         }
 
         NetRequest::UdpBind { cap_id, port } => {
             let cap = cap_id as u64;
-            let port = if port == 0 { next_ephemeral_port() } else { port };
+            let port = if port == 0 {
+                next_ephemeral_port()
+            } else {
+                port
+            };
             let ok = if let Some(h) = table.get(cap) {
                 sockets.get_mut::<udp::Socket>(h).bind(port).is_ok()
-            } else { false };
-            if ok { table.set_state(cap, SocketState::Listening); send_typed(sender, R::Ok); }
-            else  { send_typed(sender, R::Err(0xFF)); }
+            } else {
+                false
+            };
+            if ok {
+                table.set_state(cap, SocketState::Listening);
+                send_typed(sender, R::Ok);
+            } else {
+                send_typed(sender, R::Err(0xFF));
+            }
         }
 
-        NetRequest::UdpSend { cap_id, addr, port, data } => {
+        NetRequest::UdpSend {
+            cap_id,
+            addr,
+            port,
+            data,
+        } => {
             let cap = cap_id as u64;
             let ep = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), port);
             let n = if let Some(h) = table.get(cap) {
@@ -261,8 +326,12 @@ fn handle_typed(
                 if result.is_ok() {
                     iface.poll(now_instant(), device, sockets);
                     data.len()
-                } else { 0 }
-            } else { 0 };
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
             send_typed(sender, R::Data(&(n as u32).to_le_bytes()));
         }
 
@@ -278,26 +347,39 @@ fn handle_typed(
                         let mut reply = alloc::vec![0u8; 6 + n];
                         reply[0..4].copy_from_slice(src_ip.as_bytes());
                         reply[4..6].copy_from_slice(&meta.endpoint.port.to_le_bytes());
-                        reply[6..6+n].copy_from_slice(&raw[..n]);
+                        reply[6..6 + n].copy_from_slice(&raw[..n]);
                         reply
                     })
-                } else { None }
-            } else { None };
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             match result {
                 Some(reply) => {
                     let mut rb = [0u8; IPC_BUF_SIZE];
-                    if let Ok(s) = ipc::encode(&R::Data(&reply), &mut rb) { sys_send(sender, s); }
+                    if let Ok(s) = ipc::encode(&R::Data(&reply), &mut rb) {
+                        sys_send(sender, s);
+                    }
                 }
-                None => { send_typed(sender, R::Data(&[])); }
+                None => {
+                    send_typed(sender, R::Data(&[]));
+                }
             }
         }
 
         NetRequest::SocketState { cap_id } => {
             let cap = cap_id as u64;
-            if table.is_udp(cap) { send_typed(sender, R::State(0x00)); return; }
+            if table.is_udp(cap) {
+                send_typed(sender, R::State(0x00));
+                return;
+            }
             let byte = if let Some(h) = table.get(cap) {
                 tcp_state_byte(sockets.get_mut::<tcp::Socket>(h).state())
-            } else { 0x00 };
+            } else {
+                0x00
+            };
             send_typed(sender, R::State(byte));
         }
 
@@ -313,12 +395,14 @@ fn handle_typed(
 
         NetRequest::MulticastLeave { cap_id: _, group } => {
             let g = IpAddress::v4(group[0], group[1], group[2], group[3]);
-            let ok = iface.leave_multicast_group(device, g, now_instant()).is_ok();
+            let ok = iface
+                .leave_multicast_group(device, g, now_instant())
+                .is_ok();
             send_typed(sender, if ok { R::Ok } else { R::Err(0xFF) });
         }
 
         NetRequest::Resolve { .. } => {
-            send_typed(sender, R::Err(0xFF));  // DNS resolver not yet implemented
+            send_typed(sender, R::Err(0xFF)); // DNS resolver not yet implemented
         }
 
         NetRequest::L2Send { data } => {
@@ -359,41 +443,62 @@ fn handle_tls_raw(
     table: &mut SocketTable,
     tls_table: &mut BTreeMap<u64, TlsSocketEntry>,
 ) {
-    if buf.len() < 9 { sys_send(sender, &[0u8; 8]); return; }
-    let opcode  = buf[0];
-    let cap     = u64::from_le_bytes(buf[1..9].try_into().unwrap_or([0; 8]));
+    if buf.len() < 9 {
+        sys_send(sender, &[0u8; 8]);
+        return;
+    }
+    let opcode = buf[0];
+    let cap = u64::from_le_bytes(buf[1..9].try_into().unwrap_or([0; 8]));
     // Trim trailing zeros — raw wire has no length prefix; buf is pre-zeroed before recv.
-    let actual  = buf.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(9).max(9);
+    let actual = buf
+        .iter()
+        .rposition(|&b| b != 0)
+        .map(|i| i + 1)
+        .unwrap_or(9)
+        .max(9);
     let payload = &buf[9..actual];
 
     match opcode {
         TLS_CLOSE_OP => {
             // Reply mirrors old cell_opcodes::CLOSE: 1 zero byte.
-            if let Some(h) = table.remove(cap) { sockets.remove(h); }
+            if let Some(h) = table.remove(cap) {
+                sockets.remove(h);
+            }
             tls_table.remove(&cap);
             sys_send(sender, &[0x00]);
         }
 
         TLS_CONNECT_OP => {
             // payload: [addr:4][port:2 LE][hostname:*]
-            if payload.len() < 6 { sys_send(sender, &[0u8; 8]); return; }
-            let addr     = [payload[0], payload[1], payload[2], payload[3]];
-            let port     = u16::from_le_bytes([payload[4], payload[5]]);
+            if payload.len() < 6 {
+                sys_send(sender, &[0u8; 8]);
+                return;
+            }
+            let addr = [payload[0], payload[1], payload[2], payload[3]];
+            let port = u16::from_le_bytes([payload[4], payload[5]]);
             let hostname = core::str::from_utf8(&payload[6..])
-                .unwrap_or("").trim_end_matches('\0');
+                .unwrap_or("")
+                .trim_end_matches('\0');
 
             let (handle, cap_id) = match make_tcp(sockets, table) {
                 Ok(t) => t,
-                Err(_) => { sys_send(sender, &[0u8; 8]); return; }
+                Err(_) => {
+                    sys_send(sender, &[0u8; 8]);
+                    return;
+                }
             };
             let remote = IpEndpoint::new(IpAddress::v4(addr[0], addr[1], addr[2], addr[3]), port);
             {
                 let cx = iface.context();
-                if sockets.get_mut::<tcp::Socket>(handle)
-                    .connect(cx, remote, next_ephemeral_port()).is_err()
+                if sockets
+                    .get_mut::<tcp::Socket>(handle)
+                    .connect(cx, remote, next_ephemeral_port())
+                    .is_err()
                 {
-                    table.remove(cap_id); sockets.remove(handle);
-                    sys_send(sender, &[0u8; 8]); return;
+                    table.remove(cap_id);
+                    sockets.remove(handle);
+                    sys_send(sender, &[0u8; 8]);
+                    return;
                 }
             }
             table.set_state(cap_id, SocketState::Connecting);
@@ -404,7 +509,7 @@ fn handle_tls_raw(
             // takes ~1–10 µs of real time (unpredictably), making count-based timeouts behave
             // like anywhere from 20 s to 200 s. The TLS transport uses the same pattern.
             let tcp_deadline = sys_get_time() + 150_000_000; // 15 s × 10_000_000 ticks/s
-            let mut next_hb  = sys_get_time() + 5_000_000;   // heartbeat every 500 ms
+            let mut next_hb = sys_get_time() + 5_000_000; // heartbeat every 500 ms
             loop {
                 device.pump_rx();
                 iface.poll(now_instant(), device, sockets);
@@ -412,18 +517,24 @@ fn handle_tls_raw(
                     tcp::State::Established => break,
                     tcp::State::Closed | tcp::State::CloseWait => {
                         let _ = ostd::syscall::sys_log(
-                            "[net/tls] connect failed — transport I/O (timeout or connection drop)"
+                            "[net/tls] connect failed — transport I/O (timeout or connection drop)",
                         );
-                        table.remove(cap_id); sockets.remove(handle); sys_send(sender, &[0u8; 8]); return;
+                        table.remove(cap_id);
+                        sockets.remove(handle);
+                        sys_send(sender, &[0u8; 8]);
+                        return;
                     }
                     _ => {}
                 }
                 let now = sys_get_time();
                 if now >= tcp_deadline {
                     let _ = ostd::syscall::sys_log(
-                        "[net/tls] connect failed — transport I/O (timeout or connection drop)"
+                        "[net/tls] connect failed — transport I/O (timeout or connection drop)",
                     );
-                    table.remove(cap_id); sockets.remove(handle); sys_send(sender, &[0u8; 8]); return;
+                    table.remove(cap_id);
+                    sockets.remove(handle);
+                    sys_send(sender, &[0u8; 8]);
+                    return;
                 }
                 if now >= next_hb {
                     sys_heartbeat(500);
@@ -437,7 +548,9 @@ fn handle_tls_raw(
             // SAFETY: pointers remain valid for the duration of handshake(); single-threaded cell.
             unsafe {
                 crate::tls::transport::set_tls_context(
-                    iface as *mut Interface, device as *mut VirtioNetDevice, sockets_ptr,
+                    iface as *mut Interface,
+                    device as *mut VirtioNetDevice,
+                    sockets_ptr,
                 );
             }
             match unsafe { TlsSocketEntry::handshake(handle, hostname) } {
@@ -456,21 +569,25 @@ fn handle_tls_raw(
                             "[net/tls] connect REJECTED — certificate verification failed \
                              (untrusted CA / expired / hostname mismatch / tampered)"
                         }
-                        embedded_tls::TlsError::Io(_) | embedded_tls::TlsError::IoError
+                        embedded_tls::TlsError::Io(_)
+                        | embedded_tls::TlsError::IoError
                         | embedded_tls::TlsError::ConnectionClosed => {
                             "[net/tls] connect failed — transport I/O (closed or timed out)"
                         }
                         embedded_tls::TlsError::HandshakeAborted(_, a) => {
                             let _ = ostd::syscall::sys_log(
-                                "[net/tls] connect failed — TLS alert from server"
+                                "[net/tls] connect failed — TLS alert from server",
                             );
                             let _ = ostd::syscall::sys_log(match a {
-                                embedded_tls::alert::AlertDescription::HandshakeFailure =>
-                                    "  alert: HandshakeFailure (cipher/group/cert mismatch)",
-                                embedded_tls::alert::AlertDescription::CertificateUnknown =>
-                                    "  alert: CertificateUnknown",
-                                embedded_tls::alert::AlertDescription::UnknownCa =>
-                                    "  alert: UnknownCa (server rejected our CA)",
+                                embedded_tls::alert::AlertDescription::HandshakeFailure => {
+                                    "  alert: HandshakeFailure (cipher/group/cert mismatch)"
+                                }
+                                embedded_tls::alert::AlertDescription::CertificateUnknown => {
+                                    "  alert: CertificateUnknown"
+                                }
+                                embedded_tls::alert::AlertDescription::UnknownCa => {
+                                    "  alert: UnknownCa (server rejected our CA)"
+                                }
                                 _ => "  alert: (other TLS alert)",
                             });
                             table.remove(cap_id);
@@ -493,11 +610,14 @@ fn handle_tls_raw(
             let sockets_ptr = sockets as *mut SocketSet<'_> as *mut ();
             let result = tls_table.get_mut(&cap).map(|entry|
                 // SAFETY: pointers valid for duration of send; single-threaded cell.
-                unsafe { entry.send(payload, iface as *mut _, device as *mut _, sockets_ptr) }
-            );
+                unsafe { entry.send(payload, iface as *mut _, device as *mut _, sockets_ptr) });
             match result {
-                Some(Ok(n)) => { sys_send(sender, &(n as u32).to_le_bytes()); }
-                _           => { sys_send(sender, &0u32.to_le_bytes()); }
+                Some(Ok(n)) => {
+                    sys_send(sender, &(n as u32).to_le_bytes());
+                }
+                _ => {
+                    sys_send(sender, &0u32.to_le_bytes());
+                }
             }
         }
 
@@ -505,20 +625,31 @@ fn handle_tls_raw(
             // payload: [buf_len:4 LE]  reply: [data:*] or empty
             let buf_len = if payload.len() >= 4 {
                 u32::from_le_bytes(payload[0..4].try_into().unwrap_or([0; 4])) as usize
-            } else { 512 }.min(4096);
+            } else {
+                512
+            }
+            .min(4096);
             let sockets_ptr = sockets as *mut SocketSet<'_> as *mut ();
             let result = tls_table.get_mut(&cap).map(|entry| {
                 let mut data = alloc::vec![0u8; buf_len];
                 // SAFETY: pointers valid for duration of recv; single-threaded cell.
-                let r = unsafe { entry.recv(&mut data, iface as *mut _, device as *mut _, sockets_ptr) };
+                let r = unsafe {
+                    entry.recv(&mut data, iface as *mut _, device as *mut _, sockets_ptr)
+                };
                 (data, r)
             });
             match result {
-                Some((data, Ok(n))) => { sys_send(sender, &data[..n]); }
-                _                   => { sys_send(sender, &[]); }
+                Some((data, Ok(n))) => {
+                    sys_send(sender, &data[..n]);
+                }
+                _ => {
+                    sys_send(sender, &[]);
+                }
             }
         }
 
-        _ => { sys_send(sender, &[]); }
+        _ => {
+            sys_send(sender, &[]);
+        }
     }
 }

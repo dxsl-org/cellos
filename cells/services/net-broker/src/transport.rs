@@ -20,6 +20,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use api::ipc::{NetRequest, NetResponse};
 use clatter::{
     crypto::{cipher::ChaChaPoly, dh::X25519, hash::Sha256},
     handshakepattern::noise_kk_psk0,
@@ -27,12 +28,11 @@ use clatter::{
     transportstate::TransportState,
     KeyPair, NqHandshakeCore,
 };
-use ostd::{clients::vfs::VfsClient, syscall::sys_heartbeat, ViError, ViResult};
 use ostd::service::NetRef;
-use api::ipc::{NetRequest, NetResponse};
+use ostd::{clients::vfs::VfsClient, syscall::sys_heartbeat, ViError, ViResult};
 
-use api::cluster::CellNetId;
 use crate::rng::BrokerRng;
+use api::cluster::CellNetId;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -83,7 +83,9 @@ pub struct StaticKeypair {
 
 impl StaticKeypair {
     pub fn generate(rng: &mut BrokerRng) -> Self {
-        Self { inner: X25519::genkey_rng(rng).expect("[net-broker] static keygen failed") }
+        Self {
+            inner: X25519::genkey_rng(rng).expect("[net-broker] static keygen failed"),
+        }
     }
 
     /// Public key bytes — share with cluster peers via P05 beacon.
@@ -154,7 +156,8 @@ impl NoiseSession {
             Some(ephemeral),
             Some(peer_static_pub),
             None,
-        ).map_err(|_| ViError::InvalidArgument)?;
+        )
+        .map_err(|_| ViError::InvalidArgument)?;
 
         hs.push_psk(psk);
 
@@ -180,26 +183,39 @@ impl NoiseSession {
         if is_init {
             // Initiator: write msg1 → send → wait msg2 → read.
             sys_heartbeat(HEARTBEAT_MS);
-            let n = self.handshake_mut()?.write_message(&[], &mut buf).map_err(|_| ViError::IO)?;
+            let n = self
+                .handshake_mut()?
+                .write_message(&[], &mut buf)
+                .map_err(|_| ViError::IO)?;
             tcp_write_msg(net, cap_id, &buf[..n])?;
 
             sys_heartbeat(HEARTBEAT_MS);
             let n = tcp_read_msg(net, cap_id, &mut buf)?;
-            self.handshake_mut()?.read_message(&buf[..n], &mut []).map_err(|_| ViError::IO)?;
+            self.handshake_mut()?
+                .read_message(&buf[..n], &mut [])
+                .map_err(|_| ViError::IO)?;
         } else {
             // Responder: wait msg1 → read → write msg2 → send.
             sys_heartbeat(HEARTBEAT_MS);
             let n = tcp_read_msg(net, cap_id, &mut buf)?;
-            self.handshake_mut()?.read_message(&buf[..n], &mut []).map_err(|_| ViError::IO)?;
+            self.handshake_mut()?
+                .read_message(&buf[..n], &mut [])
+                .map_err(|_| ViError::IO)?;
 
             sys_heartbeat(HEARTBEAT_MS);
-            let n = self.handshake_mut()?.write_message(&[], &mut buf).map_err(|_| ViError::IO)?;
+            let n = self
+                .handshake_mut()?
+                .write_message(&[], &mut buf)
+                .map_err(|_| ViError::IO)?;
             tcp_write_msg(net, cap_id, &buf[..n])?;
         }
 
         // Finalize: move the handshake out of the Box and into a TransportState.
         let old = core::mem::replace(&mut self.phase, Phase::Finalizing);
-        let hs = match old { Phase::Handshake(h) => *h, _ => return Err(ViError::IO) };
+        let hs = match old {
+            Phase::Handshake(h) => *h,
+            _ => return Err(ViError::IO),
+        };
         let ts = TransportState::new(hs).map_err(|_| ViError::IO)?;
         self.phase = Phase::Transport(Box::new(ts));
         Ok(())
@@ -255,9 +271,18 @@ impl ConnectionPool {
     /// Returns the slot index.
     pub fn insert(&mut self, session: NoiseSession) -> usize {
         self.clock += 1;
-        let slot = self.sessions.iter().position(|s| s.is_none()).unwrap_or_else(|| {
-            self.stamps.iter().enumerate().min_by_key(|&(_, t)| t).map(|(i, _)| i).unwrap()
-        });
+        let slot = self
+            .sessions
+            .iter()
+            .position(|s| s.is_none())
+            .unwrap_or_else(|| {
+                self.stamps
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|&(_, t)| t)
+                    .map(|(i, _)| i)
+                    .unwrap()
+            });
         self.sessions[slot] = Some(session);
         self.stamps[slot] = self.clock;
         slot
@@ -289,11 +314,15 @@ fn tcp_write_msg(net: &mut NetRef, cap_id: u32, msg: &[u8]) -> ViResult<()> {
     let len_bytes = (msg.len() as u16).to_le_bytes();
     let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
     net.call::<NetRequest, NetResponse>(
-        &NetRequest::TcpSend { cap_id, data: &len_bytes }, &mut resp,
-    ).map_err(|_| ViError::IO)?;
-    net.call::<NetRequest, NetResponse>(
-        &NetRequest::TcpSend { cap_id, data: msg }, &mut resp,
-    ).map_err(|_| ViError::IO)?;
+        &NetRequest::TcpSend {
+            cap_id,
+            data: &len_bytes,
+        },
+        &mut resp,
+    )
+    .map_err(|_| ViError::IO)?;
+    net.call::<NetRequest, NetResponse>(&NetRequest::TcpSend { cap_id, data: msg }, &mut resp)
+        .map_err(|_| ViError::IO)?;
     Ok(())
 }
 
@@ -301,20 +330,32 @@ fn tcp_write_msg(net: &mut NetRef, cap_id: u32, msg: &[u8]) -> ViResult<()> {
 fn tcp_read_msg(net: &mut NetRef, cap_id: u32, buf: &mut [u8]) -> ViResult<usize> {
     let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
     // Read 2-byte length header.
-    let hdr = match net.call::<NetRequest, NetResponse>(
-        &NetRequest::TcpRecv { cap_id, buf_len: 2 }, &mut resp,
-    ).map_err(|_| ViError::IO)? {
+    let hdr = match net
+        .call::<NetRequest, NetResponse>(&NetRequest::TcpRecv { cap_id, buf_len: 2 }, &mut resp)
+        .map_err(|_| ViError::IO)?
+    {
         NetResponse::Data(d) => d,
         _ => return Err(ViError::IO),
     };
-    if hdr.len() < 2 { return Err(ViError::IO); }
+    if hdr.len() < 2 {
+        return Err(ViError::IO);
+    }
     let msg_len = u16::from_le_bytes([hdr[0], hdr[1]]) as usize;
-    if msg_len > buf.len() { return Err(ViError::IO); }
+    if msg_len > buf.len() {
+        return Err(ViError::IO);
+    }
 
     // Read payload — may arrive in one TcpRecv (smoltcp buffers it).
-    let payload = match net.call::<NetRequest, NetResponse>(
-        &NetRequest::TcpRecv { cap_id, buf_len: msg_len as u32 }, &mut resp,
-    ).map_err(|_| ViError::IO)? {
+    let payload = match net
+        .call::<NetRequest, NetResponse>(
+            &NetRequest::TcpRecv {
+                cap_id,
+                buf_len: msg_len as u32,
+            },
+            &mut resp,
+        )
+        .map_err(|_| ViError::IO)?
+    {
         NetResponse::Data(d) => d,
         _ => return Err(ViError::IO),
     };

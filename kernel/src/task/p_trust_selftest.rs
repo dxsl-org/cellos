@@ -23,13 +23,16 @@ pub fn self_test() -> bool {
 
     // A spawner that holds SpawnCap but none of the privileged caps — the actor
     // the C1 exploit assumed (any SpawnCap holder reaching sys_spawn_from_elf).
-    let non_priv = CapSet { spawn: true, ..CapSet::EMPTY };
+    let non_priv = CapSet {
+        spawn: true,
+        ..CapSet::EMPTY
+    };
 
     // Each privileged cap: path REQUESTS it, non-priv ceiling DROPS it (C1 closed),
     // init's ALL ceiling PRESERVES it (the legitimate cell still works).
     let cases: [PrivCapCase; 3] = [
-        ("/bin/nvme",       |c| c.pcie_driver),
-        ("/bin/platform",   |c| c.platform),
+        ("/bin/nvme", |c| c.pcie_driver),
+        ("/bin/platform", |c| c.platform),
         ("/bin/supervisor", |c| c.supervisor),
     ];
 
@@ -37,15 +40,24 @@ pub fn self_test() -> bool {
         let requested = CapSet::EMPTY.with_path_caps(path);
         if !sel(&requested) {
             ok = false;
-            log::error!("[selftest] P-TRUST: FAIL — path {} did not request its cap", path);
+            log::error!(
+                "[selftest] P-TRUST: FAIL — path {} did not request its cap",
+                path
+            );
         }
         if sel(&requested.intersect(non_priv)) {
             ok = false;
-            log::error!("[selftest] P-TRUST: FAIL — {} cap survived a non-privileged ceiling (C1 OPEN)", path);
+            log::error!(
+                "[selftest] P-TRUST: FAIL — {} cap survived a non-privileged ceiling (C1 OPEN)",
+                path
+            );
         }
         if !sel(&requested.intersect(CapSet::ALL)) {
             ok = false;
-            log::error!("[selftest] P-TRUST: FAIL — {} cap lost under init's Root ceiling (over-tighten)", path);
+            log::error!(
+                "[selftest] P-TRUST: FAIL — {} cap lost under init's Root ceiling (over-tighten)",
+                path
+            );
         }
     }
 

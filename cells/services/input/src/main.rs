@@ -34,20 +34,32 @@ mod modifier_state;
 mod mouse_state;
 mod virtio_device;
 
+use alloc::vec::Vec;
 use api::input::{InputEvent, KeyEvent, KeyState, KeySym};
 use api::ipc::{InputRequest, InputResponse, IPC_BUF_SIZE};
 use dispatcher::Dispatcher;
-use layout_us_qwerty::{translate, key_state_from_evdev};
+use layout_us_qwerty::{key_state_from_evdev, translate};
 use modifier_state::ModifierState;
-use mouse_state::{MouseState, btn_to_mouse_button, BTN_LEFT};
-use alloc::vec::Vec;
+use mouse_state::{btn_to_mouse_button, MouseState, BTN_LEFT};
 use ostd::io::println;
-use ostd::syscall::{sys_recv_timeout, sys_try_send, sys_get_time, sys_heartbeat, SyscallResult};
+use ostd::syscall::{sys_get_time, sys_heartbeat, sys_recv_timeout, sys_try_send, SyscallResult};
 use virtio_device::{find_and_init_inputs, InputDevice};
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 // LookupService: the dispatcher resolves the compositor TID for mouse routing.
-api::declare_syscalls![Send, TrySend, Recv, RecvTimeout, Log, Heartbeat, GetTime, RequestMmio, GrantAlloc, GrantFree, LookupService];
+api::declare_syscalls![
+    Send,
+    TrySend,
+    Recv,
+    RecvTimeout,
+    Log,
+    Heartbeat,
+    GetTime,
+    RequestMmio,
+    GrantAlloc,
+    GrantFree,
+    LookupService
+];
 
 /// Raw event type discriminant for keyboard events (kernel VirtIO push).
 const EV_KEY: u8 = 0;
@@ -193,8 +205,10 @@ fn handle_kernel_event(
     mouse: &mut MouseState,
     dispatcher: &mut Dispatcher,
 ) {
-    if buf.len() < 9 { return; }
-    let code  = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
+    if buf.len() < 9 {
+        return;
+    }
+    let code = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
     let value = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
 
     match buf[0] {
@@ -209,7 +223,9 @@ fn handle_kernel_event(
                 }
                 return;
             }
-            if modifiers.update(code, state) { return; }
+            if modifiers.update(code, state) {
+                return;
+            }
             let (keysym, character) = translate(code, modifiers.snapshot());
             dispatcher.dispatch(&InputEvent::Key(KeyEvent {
                 timestamp_ticks: sys_get_time(),
@@ -236,13 +252,17 @@ fn handle_kernel_event(
             // `code` carries the raw ASCII code point; skip scancode translation.
             // Map C0 control chars to semantic KeySyms so GUI apps get proper events
             // regardless of whether input originates from VirtIO or UART terminal.
-            let state = if value > 0 { KeyState::Pressed } else { KeyState::Released };
+            let state = if value > 0 {
+                KeyState::Pressed
+            } else {
+                KeyState::Released
+            };
             let (keysym, character) = match code {
-                0x1B        => (KeySym::Escape,    0),
-                0x0D | 0x0A => (KeySym::Return,    code),
+                0x1B => (KeySym::Escape, 0),
+                0x0D | 0x0A => (KeySym::Return, code),
                 0x08 | 0x7F => (KeySym::Backspace, code),
-                0x09        => (KeySym::Tab,        code),
-                _           => (KeySym::Printable,  code),
+                0x09 => (KeySym::Tab, code),
+                _ => (KeySym::Printable, code),
             };
             dispatcher.dispatch(&InputEvent::Key(KeyEvent {
                 timestamp_ticks: sys_get_time(),

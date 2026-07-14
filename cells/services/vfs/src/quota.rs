@@ -18,7 +18,10 @@ pub struct QuotaTracker {
 
 impl QuotaTracker {
     pub fn new() -> Self {
-        Self { used: BTreeMap::new(), limit: DEFAULT_QUOTA_BYTES }
+        Self {
+            used: BTreeMap::new(),
+            limit: DEFAULT_QUOTA_BYTES,
+        }
     }
 
     /// Create a tracker with a custom byte limit.
@@ -28,7 +31,10 @@ impl QuotaTracker {
     /// path would take ~67k messages, far too slow for a QEMU integration test.
     #[cfg(feature = "test-hooks")]
     pub fn with_limit(limit: u64) -> Self {
-        Self { used: BTreeMap::new(), limit }
+        Self {
+            used: BTreeMap::new(),
+            limit,
+        }
     }
 
     /// Check whether `owner` can afford `bytes` without exceeding the quota.
@@ -63,7 +69,9 @@ impl QuotaTracker {
     }
 
     /// Number of cells with recorded usage (for state-transfer sizing).
-    pub fn entry_count(&self) -> usize { self.used.len() }
+    pub fn entry_count(&self) -> usize {
+        self.used.len()
+    }
 
     /// Return all (cell_id, bytes_used) pairs for serialisation.
     pub fn all_entries(&self) -> alloc::vec::Vec<(u64, u64)> {

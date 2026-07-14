@@ -12,9 +12,9 @@
 //! ⚠️ Runtime numbers require the bench cell embedded at `/bin/bench` (phase-05).
 
 extern crate alloc;
-use alloc::vec::Vec;
 use crate::framework::rt_report::RtReport;
-use ostd::syscall::{sys_get_time, sys_recv, sys_recv_timeout, sys_send, sys_exit, SyscallResult};
+use alloc::vec::Vec;
+use ostd::syscall::{sys_exit, sys_get_time, sys_recv, sys_recv_timeout, sys_send, SyscallResult};
 
 /// Target loop period: 50 ms @ 10 MHz mtime (5 scheduler ticks).
 const PERIOD_TICKS: u64 = 50 * 10_000;
@@ -44,17 +44,26 @@ pub fn run_control_loop() -> ! {
         let _ = sys_recv_timeout(0, &mut buf, PERIOD_TICKS);
         let now = sys_get_time();
         let actual = now.saturating_sub(prev);
-        let err = if actual > PERIOD_TICKS { actual - PERIOD_TICKS } else { PERIOD_TICKS - actual };
+        let err = if actual > PERIOD_TICKS {
+            actual - PERIOD_TICKS
+        } else {
+            PERIOD_TICKS - actual
+        };
         errors.push(err);
-        if actual > PERIOD_TICKS + SLACK_TICKS { miss += 1; }
+        if actual > PERIOD_TICKS + SLACK_TICKS {
+            miss += 1;
+        }
         prev = now;
     }
 
     let r = RtReport::build("control_loop_jitter", &mut errors, miss);
     r.print();
     r.print_json();
-    if r.deadline_miss == 0 { ostd::io::println("[rt] control_loop PASS"); }
-    else { ostd::io::println("[rt] control_loop FAIL (deadline misses)"); }
+    if r.deadline_miss == 0 {
+        ostd::io::println("[rt] control_loop PASS");
+    } else {
+        ostd::io::println("[rt] control_loop FAIL (deadline misses)");
+    }
 
     let _ = sys_send(orch, &[1u8]); // signal orchestrator we are done
     sys_exit(0);

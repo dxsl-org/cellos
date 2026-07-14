@@ -22,22 +22,33 @@ pub struct History {
 
 impl History {
     pub fn new() -> Self {
-        let mut h = Self { entries: VecDeque::with_capacity(MAX_HISTORY), dirty: false };
+        let mut h = Self {
+            entries: VecDeque::with_capacity(MAX_HISTORY),
+            dirty: false,
+        };
         h.load_from_disk();
         h
     }
 
     /// Add a command; de-duplicates consecutive identical entries.
     pub fn push(&mut self, line: &str) {
-        if line.is_empty() { return; }
-        if self.entries.back().map(|s| s.as_str()) == Some(line) { return; }
-        if self.entries.len() >= MAX_HISTORY { self.entries.pop_front(); }
+        if line.is_empty() {
+            return;
+        }
+        if self.entries.back().map(|s| s.as_str()) == Some(line) {
+            return;
+        }
+        if self.entries.len() >= MAX_HISTORY {
+            self.entries.pop_front();
+        }
         self.entries.push_back(String::from(line));
         self.dirty = true;
     }
 
     /// Number of entries.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Access by 0-based index (0 = oldest).
     pub fn get(&self, idx: usize) -> Option<&str> {
@@ -48,7 +59,9 @@ impl History {
     ///
     /// Silently skips if the VFS write path is not yet functional.
     pub fn flush_to_disk(&mut self) {
-        if !self.dirty { return; }
+        if !self.dirty {
+            return;
+        }
         // VFS write not yet available (Phase 13 FAT32); silently skip.
         self.dirty = false;
     }
@@ -61,5 +74,7 @@ impl History {
 }
 
 impl Default for History {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

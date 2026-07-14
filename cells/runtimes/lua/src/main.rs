@@ -2,8 +2,8 @@
 #![no_main]
 
 extern crate alloc;
-extern crate ostd;
 extern crate api;
+extern crate ostd;
 
 // Lua Cell: no direct network access — net data goes via IPC to the net Cell.
 // Scripts load from VFS only; io.popen/os.execute/debug are stripped at init.
@@ -35,11 +35,11 @@ mod repl_session;
 // Scripts are sourced from cells/runtimes/lua/scripts/ (MIT-licensed libraries
 // and ViCell-authored tests).
 #[cfg(not(lua_c_unavailable))]
-const JSON_LUA:        &[u8] = include_bytes!("../scripts/json.lua");
+const JSON_LUA: &[u8] = include_bytes!("../scripts/json.lua");
 #[cfg(not(lua_c_unavailable))]
-const JSON_TEST_LUA:   &[u8] = include_bytes!("../scripts/json_test.lua");
+const JSON_TEST_LUA: &[u8] = include_bytes!("../scripts/json_test.lua");
 #[cfg(not(lua_c_unavailable))]
-const CORO_TEST_LUA:   &[u8] = include_bytes!("../scripts/coroutine_test.lua");
+const CORO_TEST_LUA: &[u8] = include_bytes!("../scripts/coroutine_test.lua");
 
 /// Install bundled Lua scripts into `/tmp` so `require()` can find them.
 ///
@@ -49,9 +49,9 @@ const CORO_TEST_LUA:   &[u8] = include_bytes!("../scripts/coroutine_test.lua");
 /// missing (unlikely; VFS starts before the shell spawns Lua).
 #[cfg(not(lua_c_unavailable))]
 fn install_bundled_scripts() {
-    bindings_vfs::write_bytes("/tmp/json.lua",            JSON_LUA);
-    bindings_vfs::write_bytes("/tmp/json_test.lua",       JSON_TEST_LUA);
-    bindings_vfs::write_bytes("/tmp/coroutine_test.lua",  CORO_TEST_LUA);
+    bindings_vfs::write_bytes("/tmp/json.lua", JSON_LUA);
+    bindings_vfs::write_bytes("/tmp/json_test.lua", JSON_TEST_LUA);
+    bindings_vfs::write_bytes("/tmp/coroutine_test.lua", CORO_TEST_LUA);
 }
 
 #[cfg(not(lua_c_unavailable))]
@@ -274,9 +274,8 @@ extern "C" fn main() -> usize {
                 )
             };
             if rc == ffi::LUA_OK {
-                let _ = unsafe {
-                    ffi::lua_pcallk(L, 0, ffi::LUA_MULTRET, 0, 0, core::ptr::null_mut())
-                };
+                let _ =
+                    unsafe { ffi::lua_pcallk(L, 0, ffi::LUA_MULTRET, 0, 0, core::ptr::null_mut()) };
             } else {
                 let mut len = 0usize;
                 // SAFETY: L is valid; -1 is the error string at stack top.
@@ -292,13 +291,17 @@ extern "C" fn main() -> usize {
                 unsafe { ffi::lua_settop(L, -2) };
             }
         }
-        loop { ostd::task::yield_now(); }
+        loop {
+            ostd::task::yield_now();
+        }
     }
 
     // No `-e`: interactive REPL (multi-line, history, Ctrl+C/D).
     ostd::io::println("Lua 5.4 on ViCell  (Ctrl+D to exit)");
     // SAFETY: L is non-null and valid; run_repl drives the full REPL loop.
-    unsafe { repl_session::run_repl(L); }
+    unsafe {
+        repl_session::run_repl(L);
+    }
 
     // SAFETY: L is non-null; lua_close frees the state.
     unsafe { ffi::lua_close(L) };

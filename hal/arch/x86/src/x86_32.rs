@@ -32,7 +32,9 @@ impl Arch for X86_32Arch {
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
-    fn interrupts_enabled(&self) -> bool { false }
+    fn interrupts_enabled(&self) -> bool {
+        false
+    }
 }
 
 // ── Full Arch implementation for x86_32 ──────────────────────────────────────
@@ -52,23 +54,31 @@ impl Arch for X86_32Arch {
 
     fn enable_interrupts(&self) {
         // SAFETY: STI enables IRQs in EFLAGS; only called after GDT/IDT are set up.
-        unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
     }
 
     fn disable_interrupts(&self) {
         // SAFETY: CLI disables IRQs; standard kernel-mode operation.
-        unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("cli", options(nomem, nostack));
+        }
     }
 
     fn wait_for_interrupt(&self) {
         // SAFETY: HLT waits for the next interrupt; IRQs must be enabled first.
-        unsafe { core::arch::asm!("hlt", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack));
+        }
     }
 
     fn interrupts_enabled(&self) -> bool {
         let flags: u32;
         // SAFETY: PUSHFD/POPFD read EFLAGS without modifying machine state.
-        unsafe { core::arch::asm!("pushfd; pop {}", out(reg) flags, options(nomem)); }
+        unsafe {
+            core::arch::asm!("pushfd; pop {}", out(reg) flags, options(nomem));
+        }
         flags & (1 << 9) != 0 // IF bit
     }
 }
@@ -85,9 +95,9 @@ pub mod arch {
     #[derive(Debug, Clone, Copy, Default)]
     pub struct ViTrapFrame {
         /// General-purpose register file (eax..edi + padding to 32 slots).
-        pub regs:    [usize; 32],
+        pub regs: [usize; 32],
         /// Instruction pointer (equiv. of RV64 sepc).
-        pub sepc:    usize,
+        pub sepc: usize,
         /// EFLAGS (equiv. of RV64 sstatus).
         pub sstatus: usize,
     }
@@ -96,7 +106,9 @@ pub mod arch {
     pub use super::context::CpuContext32 as Context;
 
     /// GP and TP registers (RISC-V concept; x86_32 has neither → (0, 0)).
-    pub fn get_gp_tp() -> (usize, usize) { (0, 0) }
+    pub fn get_gp_tp() -> (usize, usize) {
+        (0, 0)
+    }
 
     /// Set kernel stack pointer in scratch register (x86_32 uses TSS; stub for nano).
     pub fn set_kernel_stack(_kernel_stack_top: usize) {}
@@ -110,9 +122,13 @@ pub mod arch {
     /// Enable hardware interrupts (STI).
     pub fn enable_interrupts() {
         // SAFETY: STI is valid only after GDT/IDT have been loaded (init() called).
-        unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
     }
 
     // Thread trampoline — symbol provided by boot.rs global_asm.
-    extern "C" { pub fn thread_trampoline(); }
+    extern "C" {
+        pub fn thread_trampoline();
+    }
 }

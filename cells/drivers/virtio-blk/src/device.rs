@@ -13,13 +13,13 @@
 extern crate alloc;
 
 use core::ptr::NonNull;
+use ostd::syscall::{sys_grant_alloc, sys_grant_free};
 use virtio_drivers::{
     device::blk::VirtIOBlk,
     transport::mmio::{MmioTransport, VirtIOHeader},
     transport::{DeviceType, Transport},
     BufferDirection, Hal, PhysAddr,
 };
-use ostd::syscall::{sys_grant_alloc, sys_grant_free};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -79,7 +79,11 @@ unsafe impl Hal for CellHal {
             // SAFETY: buffer is a live slice owned by virtio-drivers for the DMA
             // duration; bounce is a fresh grant allocation of >= len bytes.
             unsafe {
-                core::ptr::copy_nonoverlapping(buffer.as_ptr() as *const u8, bounce as *mut u8, len);
+                core::ptr::copy_nonoverlapping(
+                    buffer.as_ptr() as *const u8,
+                    bounce as *mut u8,
+                    len,
+                );
             }
         }
         bounce as PhysAddr
@@ -176,7 +180,8 @@ pub fn find_and_init_blk() -> Option<BlkDevice> {
         // device. Once the kernel relinquishes the device (phase 06), Status is
         // clear here and the claim proceeds.
         // SAFETY: same MMIO window; Status register at a fixed offset.
-        let status = unsafe { core::ptr::read_volatile((base + VIRTIO_STATUS_OFFSET) as *const u32) };
+        let status =
+            unsafe { core::ptr::read_volatile((base + VIRTIO_STATUS_OFFSET) as *const u32) };
         if status & VIRTIO_STATUS_DRIVER_OK != 0 {
             continue;
         }

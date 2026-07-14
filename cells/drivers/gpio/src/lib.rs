@@ -28,7 +28,7 @@ const GPIOIE: usize = 0x410; // interrupt enable
 const GPIOIS: usize = 0x404; // interrupt sense: 0=edge, 1=level
 const GPIOIBE: usize = 0x408; // both edges
 const GPIOIEV: usize = 0x40C; // event: 0=falling, 1=rising
-const GPIOIC: usize = 0x41C;  // interrupt clear (write 1 to clear)
+const GPIOIC: usize = 0x41C; // interrupt clear (write 1 to clear)
 const GPIOMIS: usize = 0x418; // masked interrupt status (read-only)
 
 /// PL061 GPIO controller for QEMU ARM virt.
@@ -91,7 +91,7 @@ impl ViGpio for Pl061Gpio {
         let current = self.mmio.read_u32(GPIODIR)? as u8;
         let new_val: u32 = match dir {
             PinDir::Output => (current | (1 << pin)) as u32,
-            PinDir::Input  => (current & !(1 << pin)) as u32,
+            PinDir::Input => (current & !(1 << pin)) as u32,
         };
         self.mmio.write_u32(GPIODIR, new_val)
     }
@@ -137,7 +137,11 @@ impl ViGpio for Pl061Gpio {
                 let ibe = self.mmio.read_u32(GPIOIBE)? & !mask;
                 self.mmio.write_u32(GPIOIBE, ibe)?;
                 let iev = self.mmio.read_u32(GPIOIEV)?;
-                let iev_new = if matches!(edge, Edge::Rising) { iev | mask } else { iev & !mask };
+                let iev_new = if matches!(edge, Edge::Rising) {
+                    iev | mask
+                } else {
+                    iev & !mask
+                };
                 self.mmio.write_u32(GPIOIEV, iev_new)?;
             }
         }

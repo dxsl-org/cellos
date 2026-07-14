@@ -231,9 +231,21 @@ impl BootInfo for SimpleBootInfo {
 // MMIO regions are mapped by init_kernel_paging; RAM regions only here.
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    MemoryMapEntry { base: 0x8000_0000, length: 0x0020_0000, ty: MemoryType::Bootloader },
-    MemoryMapEntry { base: 0x8020_0000, length: 0x0400_0000, ty: MemoryType::Kernel },
-    MemoryMapEntry { base: 0x8420_0000, length: 0x0BE0_0000, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x8000_0000,
+        length: 0x0020_0000,
+        ty: MemoryType::Bootloader,
+    },
+    MemoryMapEntry {
+        base: 0x8020_0000,
+        length: 0x0400_0000,
+        ty: MemoryType::Kernel,
+    },
+    MemoryMapEntry {
+        base: 0x8420_0000,
+        length: 0x0BE0_0000,
+        ty: MemoryType::Usable,
+    },
 ];
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -248,9 +260,21 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 // Limine UEFI boot, the firmware provides the correct memory map directly.
 #[cfg(all(target_arch = "riscv64", feature = "board-vf2"))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    MemoryMapEntry { base: 0x4000_0000, length: 0x0020_0000, ty: MemoryType::Bootloader }, // OpenSBI (2 MB)
-    MemoryMapEntry { base: 0x4020_0000, length: 0x0400_0000, ty: MemoryType::Kernel },     // Kernel  (4 MB)
-    MemoryMapEntry { base: 0x4420_0000, length: 0x0BE0_0000, ty: MemoryType::Usable },     // Usable (~192 MB)
+    MemoryMapEntry {
+        base: 0x4000_0000,
+        length: 0x0020_0000,
+        ty: MemoryType::Bootloader,
+    }, // OpenSBI (2 MB)
+    MemoryMapEntry {
+        base: 0x4020_0000,
+        length: 0x0400_0000,
+        ty: MemoryType::Kernel,
+    }, // Kernel  (4 MB)
+    MemoryMapEntry {
+        base: 0x4420_0000,
+        length: 0x0BE0_0000,
+        ty: MemoryType::Usable,
+    }, // Usable (~192 MB)
 ];
 #[cfg(all(target_arch = "riscv64", feature = "board-vf2"))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -263,9 +287,21 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 // SATP=0 (bare physical); no paging in Phase-31 Nano.
 #[cfg(target_arch = "riscv32")]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    MemoryMapEntry { base: 0x8000_0000, length: 0x0020_0000, ty: MemoryType::Bootloader }, // OpenSBI 2 MB
-    MemoryMapEntry { base: 0x8020_0000, length: 0x0040_0000, ty: MemoryType::Kernel },     // Kernel  4 MB
-    MemoryMapEntry { base: 0x8060_0000, length: 0x07A0_0000, ty: MemoryType::Usable },     // Usable 122 MB
+    MemoryMapEntry {
+        base: 0x8000_0000,
+        length: 0x0020_0000,
+        ty: MemoryType::Bootloader,
+    }, // OpenSBI 2 MB
+    MemoryMapEntry {
+        base: 0x8020_0000,
+        length: 0x0040_0000,
+        ty: MemoryType::Kernel,
+    }, // Kernel  4 MB
+    MemoryMapEntry {
+        base: 0x8060_0000,
+        length: 0x07A0_0000,
+        ty: MemoryType::Usable,
+    }, // Usable 122 MB
 ];
 #[cfg(target_arch = "riscv32")]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -280,9 +316,17 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     // Kernel: 0x80000 — 0x1080000 (16 MiB, covers binary + embedded init ELF)
-    MemoryMapEntry { base: 0x0008_0000, length: 0x0100_0000, ty: MemoryType::Kernel },
+    MemoryMapEntry {
+        base: 0x0008_0000,
+        length: 0x0100_0000,
+        ty: MemoryType::Kernel,
+    },
     // Usable: 0x1080000 — 0x3F000000 (~989 MiB, before BCM2837 peripheral MMIO)
-    MemoryMapEntry { base: 0x0108_0000, length: 0x3EF8_0000, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x0108_0000,
+        length: 0x3EF8_0000,
+        ty: MemoryType::Usable,
+    },
 ];
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -296,9 +340,17 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     // Kernel: 0x4000_0000 — 0x4200_0000 (32MB, covers binary + embedded init ELF)
-    MemoryMapEntry { base: 0x4000_0000, length: 0x200_0000,  ty: MemoryType::Kernel },
+    MemoryMapEntry {
+        base: 0x4000_0000,
+        length: 0x200_0000,
+        ty: MemoryType::Kernel,
+    },
     // Usable: 0x4200_0000 — 0x5000_0000 (~224MB)
-    MemoryMapEntry { base: 0x4200_0000, length: 0x0E00_0000, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x4200_0000,
+        length: 0x0E00_0000,
+        ty: MemoryType::Usable,
+    },
 ];
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -312,9 +364,17 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 #[cfg(target_arch = "x86_64")]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     // Conventional low memory (first 640 KB)
-    MemoryMapEntry { base: 0x0000_0000, length: 0x0009_FC00, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x0000_0000,
+        length: 0x0009_FC00,
+        ty: MemoryType::Usable,
+    },
     // Extended memory (1 MB – 255 MB, MMIO gap excluded)
-    MemoryMapEntry { base: 0x0010_0000, length: 0x0EF0_0000, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x0010_0000,
+        length: 0x0EF0_0000,
+        ty: MemoryType::Usable,
+    },
 ];
 #[cfg(target_arch = "x86_64")]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -328,9 +388,17 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 #[cfg(target_arch = "x86")]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     // Kernel region: 1 MiB → 5 MiB (4 MiB kernel window).
-    MemoryMapEntry { base: 0x0010_0000, length: 0x0040_0000, ty: MemoryType::Kernel },
+    MemoryMapEntry {
+        base: 0x0010_0000,
+        length: 0x0040_0000,
+        ty: MemoryType::Kernel,
+    },
     // Usable: 5 MiB → 128 MiB.
-    MemoryMapEntry { base: 0x0050_0000, length: 0x07B0_0000, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x0050_0000,
+        length: 0x07B0_0000,
+        ty: MemoryType::Usable,
+    },
 ];
 #[cfg(target_arch = "x86")]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -344,9 +412,17 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 #[cfg(target_arch = "arm")]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     // Kernel region: 0x4008_0000 → 0x4048_0000 (4 MiB).
-    MemoryMapEntry { base: 0x4008_0000, length: 0x0040_0000, ty: MemoryType::Kernel },
+    MemoryMapEntry {
+        base: 0x4008_0000,
+        length: 0x0040_0000,
+        ty: MemoryType::Kernel,
+    },
     // Usable: 0x4048_0000 → 0x5000_0000 (~188 MiB).
-    MemoryMapEntry { base: 0x4048_0000, length: 0x0BB8_0000, ty: MemoryType::Usable },
+    MemoryMapEntry {
+        base: 0x4048_0000,
+        length: 0x0BB8_0000,
+        ty: MemoryType::Usable,
+    },
 ];
 #[cfg(target_arch = "arm")]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {

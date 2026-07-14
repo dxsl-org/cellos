@@ -48,12 +48,18 @@ mod tests {
         let prev = [0x11u8; 32];
         let hash_a = [0x22u8; 32];
         let hash_b = [0x23u8; 32];
-        assert_ne!(derive_cdi(&prev, &hash_a), derive_cdi(&prev, &hash_b),
-            "changing layer_hash must change the derived CDI");
+        assert_ne!(
+            derive_cdi(&prev, &hash_a),
+            derive_cdi(&prev, &hash_b),
+            "changing layer_hash must change the derived CDI"
+        );
 
         let prev_b = [0x12u8; 32];
-        assert_ne!(derive_cdi(&prev, &hash_a), derive_cdi(&prev_b, &hash_a),
-            "changing prev must change the derived CDI");
+        assert_ne!(
+            derive_cdi(&prev, &hash_a),
+            derive_cdi(&prev_b, &hash_a),
+            "changing prev must change the derived CDI"
+        );
     }
 
     #[test]

@@ -13,9 +13,9 @@
 
 extern crate alloc;
 
+use api::syscall::service;
 use ostd::io::println;
 use ostd::syscall::{sys_lookup_service, sys_yield};
-use api::syscall::service;
 
 mod handlers;
 mod net_ipc;
@@ -34,7 +34,10 @@ pub fn main() {
 
     let listen_cap = match net_ipc::tcp_listen(HTTPD_PORT, net_ep) {
         Some(c) => c,
-        None => { println("httpd: TcpListen failed"); return; }
+        None => {
+            println("httpd: TcpListen failed");
+            return;
+        }
     };
 
     println("httpd: listening on :8080");
@@ -44,14 +47,18 @@ pub fn main() {
         let stream_cap = loop {
             match net_ipc::tcp_accept(listen_cap, net_ep) {
                 Some(c) => break c,
-                None => { sys_yield(); }
+                None => {
+                    sys_yield();
+                }
             }
         };
 
         router::handle_connection(stream_cap, net_ep, vfs_ep);
 
         // Yield so smoltcp can flush the TX ring before we send FIN.
-        for _ in 0..200 { sys_yield(); }
+        for _ in 0..200 {
+            sys_yield();
+        }
         net_ipc::tcp_close(stream_cap, net_ep);
     }
 }
@@ -68,5 +75,7 @@ fn wait_for_service(id: u16, name: &str) -> usize {
     // Service absent — print and park rather than panic! (no process death in SAS)
     let _ = name;
     println("httpd: required service not found, parking");
-    loop { sys_yield(); }
+    loop {
+        sys_yield();
+    }
 }

@@ -15,10 +15,7 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
     let mut req = httparse::Request::new(&mut header_buf);
 
     let (method, path) = match req.parse(&raw) {
-        Ok(_) => (
-            req.method.unwrap_or("GET"),
-            req.path.unwrap_or("/"),
-        ),
+        Ok(_) => (req.method.unwrap_or("GET"), req.path.unwrap_or("/")),
         Err(_) => {
             handlers::send_response(cap, net_ep, 400, "text/plain", b"Bad Request");
             return;
@@ -29,8 +26,8 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
     let path_only = path.split('?').next().unwrap_or(path);
 
     match (method, path_only) {
-        ("GET",  "/")        => handlers::index(cap, net_ep),
-        ("GET",  "/status")  => handlers::status_page(cap, net_ep),
+        ("GET", "/") => handlers::index(cap, net_ep),
+        ("GET", "/status") => handlers::status_page(cap, net_ep),
 
         // Static file serving from VFS: /files/<vfs_path>
         ("GET", p) if p.starts_with("/files/") => {
@@ -38,9 +35,9 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
         }
 
         // JSON REST API
-        ("GET",  "/api/status") => handlers::api_status(cap, net_ep),
-        ("GET",  "/api/cells")  => handlers::api_cells(cap, net_ep),
-        ("GET",  "/api/files")  => {
+        ("GET", "/api/status") => handlers::api_status(cap, net_ep),
+        ("GET", "/api/cells") => handlers::api_cells(cap, net_ep),
+        ("GET", "/api/files") => {
             let vfs_path = extract_query_param(path, "path").unwrap_or("/");
             handlers::api_files(cap, net_ep, vfs_ep, vfs_path);
         }

@@ -75,7 +75,11 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
 
     let count = rela_section.len() / entry_size;
     if count > MAX_RELA_ENTRIES {
-        log::error!("[reloc] too many relocations: {} > {}", count, MAX_RELA_ENTRIES);
+        log::error!(
+            "[reloc] too many relocations: {} > {}",
+            count,
+            MAX_RELA_ENTRIES
+        );
         return Err(ViError::InvalidInput);
     }
 
@@ -93,7 +97,7 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
         macro_rules! apply_relative {
             ($label:literal) => {{
                 let patch_va = base.wrapping_add(entry.offset as usize);
-                let value    = base.wrapping_add(entry.addend as usize);
+                let value = base.wrapping_add(entry.addend as usize);
 
                 // On AArch64 non-VHE (EL2 kernel), AP[1]=1 in the EL2 stage-1 PTE
                 // means the page is read-only from EL2 — the same bit that grants EL0
@@ -132,7 +136,10 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
                 // treat identically to R_RISCV_RELATIVE.
                 let sym_index = (entry.info >> 32) as u32;
                 if sym_index != 0 {
-                    log::error!("[reloc] R_RISCV_64 with non-zero sym {} not supported", sym_index);
+                    log::error!(
+                        "[reloc] R_RISCV_64 with non-zero sym {} not supported",
+                        sym_index
+                    );
                     return Err(ViError::NotSupported);
                 }
                 apply_relative!("R_RISCV_64");
@@ -155,6 +162,10 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
         }
     }
 
-    log::debug!("[reloc] applied {} relocation(s) with base 0x{:X}", count, base);
+    log::debug!(
+        "[reloc] applied {} relocation(s) with base 0x{:X}",
+        count,
+        base
+    );
     Ok(())
 }

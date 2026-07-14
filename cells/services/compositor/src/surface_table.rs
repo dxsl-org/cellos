@@ -67,7 +67,10 @@ impl SurfaceState {
         // would briefly sit on top of the compositor's own framebuffers and OOM its
         // 8 MiB cell heap. The legacy WRITE_PIXELS path grows the buffer lazily.
         Self {
-            x, y, w, h,
+            x,
+            y,
+            w,
+            h,
             fmt: PixelFormat::Bgra8888,
             source: PixelSource::Owned(alloc::vec::Vec::new().into_boxed_slice()),
             damage: None,
@@ -79,8 +82,14 @@ impl SurfaceState {
     ///
     /// `ptr` comes from `sys_grant_slice` after the app shared the grant read-only.
     /// Updates dimensions and format from the `AttachGrant` message.
-    pub fn attach_grant(&mut self, ptr: *const u8, reg_id: usize,
-                        w: u32, h: u32, fmt: PixelFormat) {
+    pub fn attach_grant(
+        &mut self,
+        ptr: *const u8,
+        reg_id: usize,
+        w: u32,
+        h: u32,
+        fmt: PixelFormat,
+    ) {
         self.w = w;
         self.h = h;
         self.fmt = fmt;
@@ -132,7 +141,9 @@ impl SurfaceState {
             PixelSource::Grant { .. } => return,
         };
         let expected = (pw * ph * 4) as usize;
-        if data.len() < expected { return; }
+        if data.len() < expected {
+            return;
+        }
         let stride = self.w as usize * 4;
         for row in 0..ph as usize {
             let dst_off = (py as usize + row) * stride + px as usize * 4;
@@ -143,7 +154,12 @@ impl SurfaceState {
                     .copy_from_slice(&data[src_off..src_off + row_bytes]);
             }
         }
-        let new_dmg = Rect { x: px, y: py, w: pw, h: ph };
+        let new_dmg = Rect {
+            x: px,
+            y: py,
+            w: pw,
+            h: ph,
+        };
         self.damage = Some(match self.damage {
             Some(existing) => existing.union(&new_dmg),
             None => new_dmg,
@@ -151,23 +167,35 @@ impl SurfaceState {
     }
 
     /// Clear the damage accumulator after a flush.
-    pub fn clear_damage(&mut self) { self.damage = None; }
+    pub fn clear_damage(&mut self) {
+        self.damage = None;
+    }
 
     /// Bounding rect of this surface on screen.
     pub fn screen_rect(&self) -> Rect {
-        Rect { x: self.x, y: self.y, w: self.w, h: self.h }
+        Rect {
+            x: self.x,
+            y: self.y,
+            w: self.w,
+            h: self.h,
+        }
     }
 }
 
 /// CapId-keyed surface registry.
 #[derive(Default)]
 pub struct SurfaceTable {
-    entries:  BTreeMap<u64, SurfaceState>,
+    entries: BTreeMap<u64, SurfaceState>,
     next_cap: u64,
 }
 
 impl SurfaceTable {
-    pub fn new() -> Self { Self { entries: BTreeMap::new(), next_cap: 1 } }
+    pub fn new() -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            next_cap: 1,
+        }
+    }
 
     /// Allocate a new surface slot and return its CapId.
     ///
@@ -175,13 +203,14 @@ impl SurfaceTable {
     ///
     /// # Errors
     /// Returns `OutOfMemory` if `MAX_SURFACES` is already reached.
-    pub fn create(&mut self, x: i32, y: i32, w: u32, h: u32, owner: usize)
-        -> Result<u64, ViError>
-    {
-        if self.entries.len() >= MAX_SURFACES { return Err(ViError::OutOfMemory); }
+    pub fn create(&mut self, x: i32, y: i32, w: u32, h: u32, owner: usize) -> Result<u64, ViError> {
+        if self.entries.len() >= MAX_SURFACES {
+            return Err(ViError::OutOfMemory);
+        }
         let cap = self.next_cap;
         self.next_cap += 1;
-        self.entries.insert(cap, SurfaceState::new(x, y, w, h, owner));
+        self.entries
+            .insert(cap, SurfaceState::new(x, y, w, h, owner));
         Ok(cap)
     }
 
@@ -210,7 +239,8 @@ impl SurfaceTable {
     /// Find all surfaces owned by `tid` and return their caps.
     #[allow(dead_code)] // used by future NotifyOnExit cleanup path
     pub fn caps_owned_by(&self, tid: usize) -> alloc::vec::Vec<u64> {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|(_, s)| s.owner == tid)
             .map(|(&cap, _)| cap)
             .collect()

@@ -18,10 +18,10 @@ mod error;
 mod hotswap;
 mod protocol;
 
+use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
 use ostd::syscall::sys_send;
-use protocol::{HotswapRequest, encode_status, OP_HOTSWAP};
-use api::syscall::service;
+use protocol::{encode_status, HotswapRequest, OP_HOTSWAP};
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
@@ -33,7 +33,9 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
         AppEvent::Message { sender_tid, data } => {
             let data: &[u8] = data.as_ref();
-            if data.is_empty() { return; }
+            if data.is_empty() {
+                return;
+            }
 
             match data[0] {
                 OP_HOTSWAP => {
@@ -72,11 +74,11 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 /// Map a well-known ASCII service name to its numeric `service::*` constant.
 fn service_id_for_name(name: &str) -> u16 {
     match name {
-        "vfs"        => service::VFS,
-        "net"        => service::NET,
+        "vfs" => service::VFS,
+        "net" => service::NET,
         "compositor" => service::COMPOSITOR,
-        "input"      => service::INPUT,
-        _            => 0,
+        "input" => service::INPUT,
+        _ => 0,
     }
 }
 
@@ -87,6 +89,10 @@ ostd::run_app!(handler);
 // - SupervisorCap is granted by the kernel loader via path match "/bin/supervisor"
 //   (not a manifest flag — v1 manifest is full; v2 requires a Law-1 bump)
 api::declare_manifest!(
-    block_io = false, network = false, spawn = true,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = true,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );

@@ -13,7 +13,13 @@ use ostd::io::println;
 use ostd::syscall::sys_recv_timeout;
 
 // Declare gpio capability so the kernel grants PL061 MMIO access at spawn.
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = true, uart = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = true,
+    uart = false
+);
 
 #[no_mangle]
 pub fn main() {
@@ -51,14 +57,29 @@ fn poll_sensor(i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>, tick: u32) -> sh
 }
 
 fn print_reading(r: &sht3x::Reading) {
-    let label  = if r.simulated { " [sim]" } else { "" };
-    let t_int  = r.temp_cx10 / 10;
+    let label = if r.simulated { " [sim]" } else { "" };
+    let t_int = r.temp_cx10 / 10;
     let t_frac = (r.temp_cx10 % 10).abs();
     // When temp is between -0.9 and -0.1°C, t_int == 0 but the value is still negative.
-    let t_sign = if r.temp_cx10 < 0 && t_int == 0 { "-" } else { "" };
-    let h_int  = r.hum_px10 / 10;
+    let t_sign = if r.temp_cx10 < 0 && t_int == 0 {
+        "-"
+    } else {
+        ""
+    };
+    let h_int = r.hum_px10 / 10;
     let h_frac = r.hum_px10 % 10;
-    println(alloc::format!("T={}{}.{}C H={}.{}%{}", t_sign, t_int, t_frac, h_int, h_frac, label).as_str());
+    println(
+        alloc::format!(
+            "T={}{}.{}C H={}.{}%{}",
+            t_sign,
+            t_int,
+            t_frac,
+            h_int,
+            h_frac,
+            label
+        )
+        .as_str(),
+    );
 }
 
 fn run_synthetic() {

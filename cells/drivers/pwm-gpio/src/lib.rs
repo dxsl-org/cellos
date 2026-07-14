@@ -42,7 +42,14 @@ struct Channel {
 
 impl Channel {
     const fn idle(pin: u8) -> Self {
-        Self { pin, period_ticks: 1, high_ticks: 0, counter: 0, high: false, enabled: false }
+        Self {
+            pin,
+            period_ticks: 1,
+            high_ticks: 0,
+            counter: 0,
+            high: false,
+            enabled: false,
+        }
     }
 }
 
@@ -89,7 +96,9 @@ impl<G: ViGpio> ViPwm for BitBangPwm<G> {
         let ch = &mut self.channels[channel as usize];
         let period = (ASSUMED_TICKS_PER_SEC / hz).max(1);
         // Recompute high_ticks to preserve duty ratio across frequency changes.
-        let duty = ch.high_ticks.checked_mul(1000)
+        let duty = ch
+            .high_ticks
+            .checked_mul(1000)
             .and_then(|n| n.checked_div(ch.period_ticks))
             .unwrap_or(0);
         ch.period_ticks = period;
@@ -115,7 +124,9 @@ impl<G: ViGpio> ViPwm for BitBangPwm<G> {
             return Err(PwmError::InvalidChannel);
         }
         let pin = self.channels[channel as usize].pin;
-        self.gpio.set_direction(pin, PinDir::Output).map_err(|_| PwmError::InvalidChannel)?;
+        self.gpio
+            .set_direction(pin, PinDir::Output)
+            .map_err(|_| PwmError::InvalidChannel)?;
         self.channels[channel as usize].counter = 0;
         self.channels[channel as usize].enabled = true;
         Ok(())

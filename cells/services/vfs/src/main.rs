@@ -23,10 +23,10 @@ mod lfs_disk;
 // x86_64-only str* providers for the littlefs C core — the api POSIX shim
 // (which provides them on riscv64/aarch64) is cfg-gated off on x86_64 to
 // avoid duplicate symbols with mlibc Tier-B cells.
-#[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
-mod lfs_string_shim;
 mod dispatch;
 mod handle_table;
+#[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
+mod lfs_string_shim;
 mod manager;
 mod mount;
 mod page_cache;
@@ -40,8 +40,13 @@ use ostd::prelude::*;
 // Declares block-I/O capability; the kernel grants BlockIoCap at spawn.
 // part_data/part_lfs scope the raw block syscalls to P1 (FAT32) + P4
 // (littlefs) — P2 cell-table and P3 snapshot stay kernel-only (P03 design).
-api::declare_manifest!(block_io = true, network = false, spawn = false,
-                       part_data = true, part_lfs = true);
+api::declare_manifest!(
+    block_io = true,
+    network = false,
+    spawn = false,
+    part_data = true,
+    part_lfs = true
+);
 
 // Narrow syscall allowlist — kernel enforces this at dispatch (Phase 27).
 // BootFS proxy (/bin via the kernel initramfs VIFS1): Open/Close/ReadDir for
@@ -50,11 +55,28 @@ api::declare_manifest!(block_io = true, network = false, spawn = false,
 // requires the caller to park immediately, which a service dispatch loop
 // cannot do (see backend_bootfs.rs::read_to_vec).
 api::declare_syscalls![
-    Send, Recv, TryRecv, Reply, Log, Heartbeat, LookupService,
-    GrantAlloc, GrantShare, GrantSlice, GrantFree, BlkReadAsync,
-    GrantRegister, GrantUnregister,
-    StateStash, StateRestore,
-    Open, Close, ReadDir, OpenCap, ReadCap, CloseCap,
+    Send,
+    Recv,
+    TryRecv,
+    Reply,
+    Log,
+    Heartbeat,
+    LookupService,
+    GrantAlloc,
+    GrantShare,
+    GrantSlice,
+    GrantFree,
+    BlkReadAsync,
+    GrantRegister,
+    GrantUnregister,
+    StateStash,
+    StateRestore,
+    Open,
+    Close,
+    ReadDir,
+    OpenCap,
+    ReadCap,
+    CloseCap,
     // NOTE: deliberately NO SetTimer. VFS never calls it — a "SetTimer (bit 11)
     // denied for tid <vfs>" kernel warn on x86 is the CANARY for the known x86
     // syscall-redispatch corruption (syscall number read as user CS = 0x23 = 35
@@ -78,7 +100,10 @@ unsafe fn vfs_fast_handler(
         api::ipc::VfsRequest::GetFile(path) => {
             if let Some(vfs) = GLOBAL_VFS.lock().as_ref() {
                 if let Some((ptr, len)) = vfs.get_file_ptr(path) {
-                    api::ipc::VfsResponse::DataPtr { ptr: ptr as u64, len: len as u64 }
+                    api::ipc::VfsResponse::DataPtr {
+                        ptr: ptr as u64,
+                        len: len as u64,
+                    }
                 } else {
                     api::ipc::VfsResponse::Err(1)
                 }
@@ -119,10 +144,14 @@ pub fn main() {
                     let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
                     // Acquire VFS state; released at end of this block, before sys_send.
                     let mut gvfs = GLOBAL_VFS.lock();
-                    let vfs = gvfs.as_mut().expect("VFS initialized before serving requests");
+                    let vfs = gvfs
+                        .as_mut()
+                        .expect("VFS initialized before serving requests");
                     let resp = dispatch::handle_request(vfs, &buf, sender, &mut resp_buf);
                     // Encode while holding the lock (safe: no sys_send yet).
-                    encoded_len = api::ipc::encode(&resp, &mut encoded).map(|s| s.len()).unwrap_or(0);
+                    encoded_len = api::ipc::encode(&resp, &mut encoded)
+                        .map(|s| s.len())
+                        .unwrap_or(0);
                 } // GLOBAL_VFS lock released here — before sys_send
 
                 // Send after releasing the lock so a blocked ipc_send + yield_cpu

@@ -11,11 +11,7 @@ const LIMINE_COMMON_MAGIC: [u64; 2] = [0xc7b1dd30df4c8b88, 0x0a82e883a194f07b];
 /// The bootloader writes back the revision it will honour.
 #[used]
 #[link_section = ".requests"]
-static LIMINE_BASE_REVISION: [u64; 3] = [
-    0xf9562b2d5c95a6c8,
-    0x6a7b384944536bdc,
-    3,
-];
+static LIMINE_BASE_REVISION: [u64; 3] = [0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, 3];
 
 /// Limine request-section delimiter: start marker (required by rev 2+).
 #[used]
@@ -355,7 +351,11 @@ pub fn get_rsdp_ptr() -> Option<usize> {
             return None;
         }
         let addr = (*response).address as usize;
-        if addr == 0 { None } else { Some(addr) }
+        if addr == 0 {
+            None
+        } else {
+            Some(addr)
+        }
     }
 }
 

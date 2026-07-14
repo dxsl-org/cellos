@@ -48,7 +48,13 @@ impl<'a> RequestBuilder<'a> {
         extra_headers: &'a [(&'a str, &'a str)],
         body: Option<&'a [u8]>,
     ) -> Self {
-        Self { method, path, host, extra_headers, body }
+        Self {
+            method,
+            path,
+            host,
+            extra_headers,
+            body,
+        }
     }
 
     /// Serialise the request into a byte vector ready to write to a stream.

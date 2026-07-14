@@ -30,11 +30,7 @@ extern crate alloc;
 
 // NetworkCap (TCP/UDP) + VFS read cap (for /etc/cellos/cluster.key in P04).
 // spawn = false: the broker routes IPC, it never spawns cells.
-api::declare_manifest!(
-    block_io = false,
-    network  = true,
-    spawn    = false
-);
+api::declare_manifest!(block_io = false, network = true, spawn = false);
 
 // Declare cluster membership — broker participates in the "robots" private cluster.
 // Hardcoded demo cluster name; P09 enrollment will replace this with a config read.
@@ -44,17 +40,24 @@ api::declare_cluster!(mode = Private, name = "robots");
 // RegisterService is NOT listed — init registers service::NET_BROKER on the
 // broker's behalf (init has SpawnCap; the broker does not).
 api::declare_syscalls![
-    Send, Recv, TryRecv, Reply, Log, Heartbeat,
-    LookupService, GetTime, GetRandom,
+    Send,
+    Recv,
+    TryRecv,
+    Reply,
+    Log,
+    Heartbeat,
+    LookupService,
+    GetTime,
+    GetRandom,
     WaitForEvent,
 ];
 
-mod rng;
-mod transport;
-mod identity;
-mod stun;
-mod relay;
 mod connection_manager;
+mod identity;
+mod relay;
+mod rng;
+mod stun;
+mod transport;
 
 mod beacon;
 mod enrollment;
@@ -62,12 +65,12 @@ mod gossip;
 mod lease;
 mod routing;
 
+use identity::BrokerIdentity;
 use ostd::io::{print, println};
 use ostd::syscall::{sys_heartbeat, sys_try_recv, SyscallResult};
+use relay::RelayClient;
 use rng::BrokerRng;
 use transport::StaticKeypair;
-use identity::BrokerIdentity;
-use relay::RelayClient;
 
 fn print_hex_byte(b: u8) {
     const HEX: &[u8] = b"0123456789abcdef";
@@ -76,7 +79,9 @@ fn print_hex_byte(b: u8) {
     let mut buf = [0u8; 2];
     buf[0] = hi as u8;
     buf[1] = lo as u8;
-    if let Ok(s) = core::str::from_utf8(&buf) { print(s); }
+    if let Ok(s) = core::str::from_utf8(&buf) {
+        print(s);
+    }
 }
 
 /// IPC buffer for incoming dispatch requests.
@@ -102,7 +107,9 @@ pub fn main() {
     // Log the first 4 bytes of NodeId as a boot identifier.
     let nid = identity.node_id.0;
     print("[net-broker] NodeId prefix: ");
-    for b in &nid[..4] { print_hex_byte(*b); }
+    for b in &nid[..4] {
+        print_hex_byte(*b);
+    }
     println("...");
 
     // TODO: load K1 PSK from /etc/cellos/cluster.key via VfsFileKeySource.
@@ -110,7 +117,7 @@ pub fn main() {
 
     // Build a relay client from the first peer's relay config (G1 = 1 relay server).
     let relay_config = identity.get_peer(0).map(|p| (p.relay_ip, p.relay_port));
-    let relay_ip   = relay_config.map(|(ip, _)| ip).unwrap_or([0; 4]);
+    let relay_ip = relay_config.map(|(ip, _)| ip).unwrap_or([0; 4]);
     let relay_port = relay_config.map(|(_, pt)| pt).unwrap_or(0);
     let relay_client = RelayClient::new(identity.node_id, relay_ip, relay_port);
 

@@ -31,9 +31,9 @@ api::declare_syscalls![Send, Recv, Log, LookupService, GetRandom];
 #[repr(C)]
 struct SockaddrIn {
     sin_family: u16,
-    sin_port:   u16,
-    sin_addr:   u32,
-    sin_zero:   [u8; 8],
+    sin_port: u16,
+    sin_addr: u32,
+    sin_zero: [u8; 8],
 }
 
 extern "C" {
@@ -73,17 +73,23 @@ fn test_net() {
 
     let addr = SockaddrIn {
         sin_family: 2u16,
-        sin_port:   ECHO_PORT.to_be(),
-        sin_addr:   u32::from_be_bytes(ECHO_IP),
-        sin_zero:   [0u8; 8],
+        sin_port: ECHO_PORT.to_be(),
+        sin_addr: u32::from_be_bytes(ECHO_IP),
+        sin_zero: [0u8; 8],
     };
     // SAFETY: addr is a valid SockaddrIn on the stack; addrlen matches.
     let ret = unsafe {
-        connect(fd, &addr as *const _ as *const c_void, core::mem::size_of::<SockaddrIn>() as i32)
+        connect(
+            fd,
+            &addr as *const _ as *const c_void,
+            core::mem::size_of::<SockaddrIn>() as i32,
+        )
     };
     if ret < 0 {
         println("[posix-shim] POSIX-NET: FAIL connect");
-        unsafe { close(fd); }
+        unsafe {
+            close(fd);
+        }
         return;
     }
 
@@ -91,7 +97,9 @@ fn test_net() {
     let sent = unsafe { send(fd, msg.as_ptr() as *const c_void, msg.len(), 0) };
     if sent < 0 {
         println(&format!("[posix-shim] POSIX-NET: FAIL send sent={sent}"));
-        unsafe { close(fd); }
+        unsafe {
+            close(fd);
+        }
         return;
     }
 
@@ -99,10 +107,14 @@ fn test_net() {
     let mut n: isize = -1;
     for _ in 0..2000 {
         n = unsafe { recv(fd, rbuf.as_mut_ptr() as *mut c_void, rbuf.len(), 0) };
-        if n > 0 { break; }
+        if n > 0 {
+            break;
+        }
         ostd::syscall::sys_yield();
     }
-    unsafe { close(fd); }
+    unsafe {
+        close(fd);
+    }
 
     if n > 0 {
         println("[posix-shim] POSIX-NET: OK");

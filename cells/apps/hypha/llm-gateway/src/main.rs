@@ -77,9 +77,19 @@ fn complete(model: &str, prompt: &str) -> Result<String, String> {
     let request = http::build_post(PROXY_HOST, "/v1/chat/completions", &body);
 
     print("[gw] ");
-    println(if USE_TLS { "TLS mode -> :8443" } else { "plaintext mode -> :8080" });
+    println(if USE_TLS {
+        "TLS mode -> :8443"
+    } else {
+        "plaintext mode -> :8080"
+    });
 
-    let resp = transport::roundtrip(USE_TLS, PROXY_HOST, PROXY_IP, PROXY_PORT, request.as_bytes())?;
+    let resp = transport::roundtrip(
+        USE_TLS,
+        PROXY_HOST,
+        PROXY_IP,
+        PROXY_PORT,
+        request.as_bytes(),
+    )?;
 
     print("[gw] response bytes: ");
     print_usize(resp.len());

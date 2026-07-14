@@ -39,10 +39,10 @@ pub mod args;
 pub use args::args;
 pub use args::check_help;
 pub mod fast_ipc;
-/// Typed request/reply IPC helpers (Spec 17 — masked recv, fail-loud errors).
-pub mod ipc;
 /// Typed linear Grant handles for zero-copy shared memory (Singularity exchange-heap pattern).
 pub mod grant;
+/// Typed request/reply IPC helpers (Spec 17 — masked recv, fail-loud errors).
+pub mod ipc;
 pub mod mmio;
 pub mod startup;
 pub mod sync;

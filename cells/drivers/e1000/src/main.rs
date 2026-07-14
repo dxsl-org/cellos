@@ -20,16 +20,16 @@ extern crate alloc;
 mod controller;
 mod dispatch;
 
+use controller::E1000Controller;
+use dispatch::{handle, NicReply, REPLY_BUF};
 use ostd::app::{AppContext, AppEvent};
 use ostd::mmio;
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_find_pcie_device, sys_register_nic_driver, sys_try_send, PcieDeviceInfo};
-use controller::E1000Controller;
-use dispatch::{handle, NicReply, REPLY_BUF};
 
 /// Ethernet controller: class 0x02, subclass 0x00, prog-if 0x00.
-const ETH_CLASS:  u8 = 0x02;
-const ETH_SUB:    u8 = 0x00;
+const ETH_CLASS: u8 = 0x02;
+const ETH_SUB: u8 = 0x00;
 const ETH_PROGIF: u8 = 0x00;
 
 /// BAR0 window size — e1000 register space is 128 KiB.
@@ -46,24 +46,23 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         AppEvent::Init => {
             // 1. Discover the e1000 via the kernel ECAM table.
             let mut info = PcieDeviceInfo::zeroed();
-            let Ok(true) = sys_find_pcie_device(ETH_CLASS, ETH_SUB, ETH_PROGIF, &mut info)
-            else {
+            let Ok(true) = sys_find_pcie_device(ETH_CLASS, ETH_SUB, ETH_PROGIF, &mut info) else {
                 // No e1000 on this platform — exit gracefully; kernel NIC remains.
                 ostd::syscall::sys_exit(0);
             };
 
             let bar0_base = info.bar0_base as usize;
-            let bdf       = info.bdf;
+            let bdf = info.bdf;
 
             // 2. Claim exclusive MMIO access to BAR0.
             let mmio_region = match mmio::request_region(bar0_base, E1000_BAR0_LEN) {
-                Ok(r)  => r,
+                Ok(r) => r,
                 Err(_) => ostd::syscall::sys_exit(1),
             };
 
             // 3. Initialise controller (reset + MAC read + ring setup).
             let ctrl = match E1000Controller::new(mmio_region, bdf) {
-                Ok(c)  => c,
+                Ok(c) => c,
                 Err(_) => ostd::syscall::sys_exit(1),
             };
 
@@ -76,8 +75,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // The net service speaks the raw NIC wire protocol (no 0xAC App-SDK
         // envelope), so requests arrive as RawMessage. Accept Message too for
         // envelope-wrapped senders — the dispatch payload layout is identical.
-        AppEvent::Message { sender_tid, data }
-        | AppEvent::RawMessage { sender_tid, data } => {
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             // Replies use NON-blocking try_send — see virtio-net/src/main.rs:
             // a blocking reply to a net service that already timed out parks
             // this cell in Sending{net} and desyncs every later request/reply.
@@ -111,6 +109,10 @@ ostd::run_app!(handler);
 // ── Capability manifest ───────────────────────────────────────────────────────
 // PcieDriverCap is granted by init via direct TCB write (not a manifest flag).
 api::declare_manifest!(
-    block_io = false, network = false, spawn = false,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );

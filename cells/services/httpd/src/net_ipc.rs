@@ -4,8 +4,8 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use ostd::syscall::{sys_send, sys_recv, sys_yield, SyscallResult};
-use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use ostd::syscall::{sys_recv, sys_send, sys_yield, SyscallResult};
 
 /// Create a listening TCP socket on `port`. Returns listen cap_id or None.
 pub fn tcp_listen(port: u16, net_ep: usize) -> Option<u32> {
@@ -45,14 +45,22 @@ pub fn tcp_send_all(cap: u32, net_ep: usize, data: &[u8]) {
     while sent < data.len() {
         let chunk_len = (data.len() - sent).min(480);
         let chunk = &data[sent..sent + chunk_len];
-        let n = match api::ipc::encode(&NetRequest::TcpSend { cap_id: cap, data: chunk }, &mut req) {
+        let n = match api::ipc::encode(
+            &NetRequest::TcpSend {
+                cap_id: cap,
+                data: chunk,
+            },
+            &mut req,
+        ) {
             Ok(b) => b.len(),
             Err(_) => break,
         };
         sys_send(net_ep, &req[..n]);
         match sys_recv(0, &mut resp) {
             SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp) {
-                Ok(NetResponse::Ok) => { sent += chunk_len; }
+                Ok(NetResponse::Ok) => {
+                    sent += chunk_len;
+                }
                 // Net service may return Data([count as 4 LE bytes]) on some builds.
                 Ok(NetResponse::Data(b)) if b.len() >= 4 => {
                     let mut arr = [0u8; 4];
@@ -71,20 +79,32 @@ pub fn recv_request(cap: u32, net_ep: usize) -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::with_capacity(512);
     let mut req = [0u8; IPC_BUF_SIZE];
     let mut resp = [0u8; IPC_BUF_SIZE];
-    let n = match api::ipc::encode(&NetRequest::TcpRecv { cap_id: cap, buf_len: 256 }, &mut req) {
+    let n = match api::ipc::encode(
+        &NetRequest::TcpRecv {
+            cap_id: cap,
+            buf_len: 256,
+        },
+        &mut req,
+    ) {
         Ok(b) => b.len(),
         Err(_) => return buf,
     };
     for _ in 0..200 {
-        if buf.len() > 4096 { break; }
+        if buf.len() > 4096 {
+            break;
+        }
         sys_send(net_ep, &req[..n]);
         match sys_recv(0, &mut resp) {
             SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp) {
                 Ok(NetResponse::Data(data)) if !data.is_empty() => {
                     buf.extend_from_slice(data);
-                    if buf.windows(4).any(|w| w == b"\r\n\r\n") { break; }
+                    if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
                 }
-                Ok(NetResponse::Ok) | Ok(NetResponse::Data(_)) => { sys_yield(); }
+                Ok(NetResponse::Ok) | Ok(NetResponse::Data(_)) => {
+                    sys_yield();
+                }
                 _ => break,
             },
             _ => break,

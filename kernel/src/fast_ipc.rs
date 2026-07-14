@@ -23,8 +23,7 @@ use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 /// Signature of a registered VFS fast-IPC handler: read `req`, write the
 /// response into `out`, return the number of bytes written.
-pub type VfsFastHandler =
-    unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
+pub type VfsFastHandler = unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
 
 static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId that registered the handler; 0 = unregistered. Lets the kernel
@@ -91,7 +90,9 @@ impl Drop for SieGuard {
         if self.0 {
             // SAFETY: restoring SIE to the value saved in disable(); S-mode only.
             #[cfg(target_arch = "riscv64")]
-            unsafe { core::arch::asm!("csrsi sstatus, 0x2"); }
+            unsafe {
+                core::arch::asm!("csrsi sstatus, 0x2");
+            }
         }
     }
 }
@@ -144,7 +145,7 @@ pub unsafe extern "Rust" fn call_vfs(
 pub fn resolve_export(name: &str) -> Option<usize> {
     match name {
         "register_vfs" => Some(register_vfs as *const () as usize),
-        "call_vfs"     => Some(call_vfs     as *const () as usize),
+        "call_vfs" => Some(call_vfs as *const () as usize),
         _ => None,
     }
 }

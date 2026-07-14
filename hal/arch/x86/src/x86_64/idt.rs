@@ -15,38 +15,59 @@ use core::arch::asm;
 /// Interrupt stack frame pushed by the CPU on every exception/interrupt entry.
 #[repr(C)]
 pub struct InterruptFrame {
-    pub rip:    u64,
-    pub cs:     u64,
+    pub rip: u64,
+    pub cs: u64,
     pub rflags: u64,
-    pub rsp:    u64,
-    pub ss:     u64,
+    pub rsp: u64,
+    pub ss: u64,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct IdtEntry {
-    off_lo: u16, sel: u16, ist: u8, attr: u8, off_mid: u16, off_hi: u32, _res: u32,
+    off_lo: u16,
+    sel: u16,
+    ist: u8,
+    attr: u8,
+    off_mid: u16,
+    off_hi: u32,
+    _res: u32,
 }
 impl IdtEntry {
     fn new(handler: u64, dpl: u8) -> Self {
         Self {
-            off_lo:  (handler & 0xFFFF) as u16,
-            sel:     0x08,
-            ist:     0,
-            attr:    0x8E | ((dpl & 3) << 5),
+            off_lo: (handler & 0xFFFF) as u16,
+            sel: 0x08,
+            ist: 0,
+            attr: 0x8E | ((dpl & 3) << 5),
             off_mid: ((handler >> 16) & 0xFFFF) as u16,
-            off_hi:  ((handler >> 32) & 0xFFFF_FFFF) as u32,
-            _res:    0,
+            off_hi: ((handler >> 32) & 0xFFFF_FFFF) as u32,
+            _res: 0,
         }
     }
 }
 
 #[repr(C, align(16))]
-struct Idt { e: [IdtEntry; 256] }
+struct Idt {
+    e: [IdtEntry; 256],
+}
 #[repr(C, packed)]
-struct IdtPtr { limit: u16, base: u64 }
+struct IdtPtr {
+    limit: u16,
+    base: u64,
+}
 
-static mut IDT: Idt = Idt { e: [IdtEntry { off_lo:0, sel:0, ist:0, attr:0, off_mid:0, off_hi:0, _res:0 }; 256] };
+static mut IDT: Idt = Idt {
+    e: [IdtEntry {
+        off_lo: 0,
+        sel: 0,
+        ist: 0,
+        attr: 0,
+        off_mid: 0,
+        off_hi: 0,
+        _res: 0,
+    }; 256],
+};
 
 pub fn init() {
     // SAFETY: single-threaded boot; IDT is a static global.
@@ -56,7 +77,9 @@ pub fn init() {
 
         // General handler for most vectors (no CPU-pushed error code).
         let handler_addr = x86_64_irq_handler as *const () as u64;
-        for e in (*idt_ptr).e.iter_mut() { *e = IdtEntry::new(handler_addr, 0); }
+        for e in (*idt_ptr).e.iter_mut() {
+            *e = IdtEntry::new(handler_addr, 0);
+        }
 
         // Exceptions that push an error code: #DF=8, #TS=10, #NP=11, #SS=12, #GP=13, #PF=14, #AC=17
         let ec_handler = x86_64_ec_handler as *const () as u64;
@@ -80,7 +103,7 @@ pub fn init() {
         (*idt_ptr).e[0x24] = IdtEntry::new(x86_64_uart_handler as *const () as u64, 0);
 
         let ptr = IdtPtr {
-            limit: (core::mem::size_of::<Idt>()-1) as u16,
+            limit: (core::mem::size_of::<Idt>() - 1) as u16,
             base: core::ptr::addr_of!((*idt_ptr).e) as u64,
         };
         // SAFETY: ptr points to a valid, aligned IDT; lidt from Ring 0 is safe.
@@ -154,7 +177,9 @@ extern "x86-interrupt" fn x86_64_timer_handler(_frame: InterruptFrame) {
     super::apic::eoi();
     // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs; safe to call
     // from interrupt context (interrupts disabled by CPU on IRQ entry).
-    unsafe { vi_timer_tick(); }
+    unsafe {
+        vi_timer_tick();
+    }
 }
 
 /// COM1 UART RX handler (vector 0x24 / IOAPIC IRQ 4).
@@ -163,7 +188,9 @@ extern "x86-interrupt" fn x86_64_timer_handler(_frame: InterruptFrame) {
 #[no_mangle]
 extern "x86-interrupt" fn x86_64_uart_handler(_frame: InterruptFrame) {
     // SAFETY: vi_handle_uart_irq is #[no_mangle] in kernel/src/task/drivers/uart.rs.
-    unsafe { vi_handle_uart_irq(); }
+    unsafe {
+        vi_handle_uart_irq();
+    }
     super::apic::eoi();
 }
 
@@ -179,7 +206,9 @@ extern "x86-interrupt" fn x86_64_uart_handler(_frame: InterruptFrame) {
 extern "x86-interrupt" fn x86_64_ec_handler(frame: InterruptFrame, error_code: u64) {
     let cr2: u64;
     // SAFETY: reading CR2 does not modify any state.
-    unsafe { asm!("mov {}, cr2", out(reg) cr2, options(nomem, nostack)); }
+    unsafe {
+        asm!("mov {}, cr2", out(reg) cr2, options(nomem, nostack));
+    }
 
     // Heuristic: attempt page-fault handling for every error-code exception.
     // For true #PF (vector 14) the kernel handler maps the page or panics.
@@ -189,7 +218,9 @@ extern "x86-interrupt" fn x86_64_ec_handler(frame: InterruptFrame, error_code: u
     // SAFETY: vi_handle_page_fault is defined in kernel::memory::paging; it
     // acquires scheduler and frame-allocator spinlocks which the IDT entry
     // path does not hold.
-    unsafe { vi_handle_page_fault(cr2 as usize, error_code, frame.rip, frame.cs, frame.rsp); }
+    unsafe {
+        vi_handle_page_fault(cr2 as usize, error_code, frame.rip, frame.cs, frame.rsp);
+    }
 }
 
 /// #CP — Control Protection Exception (vector 21, CET IBT / Shadow Stack violation).
@@ -211,17 +242,25 @@ extern "x86-interrupt" fn x86_64_cp_handler(frame: InterruptFrame, error_code: u
     use super::uart_16550::putchar;
 
     let msg = b"[FAULT] #CP (CET) RIP=0x";
-    for &c in msg { putchar(c); }
+    for &c in msg {
+        putchar(c);
+    }
 
     // Print RIP as 16 hex digits (big-endian nibbles).
     let rip = frame.rip;
     for i in (0..16u32).rev() {
         let nibble = ((rip >> (i * 4)) & 0xF) as u8;
-        putchar(if nibble < 10 { b'0' + nibble } else { b'a' + nibble - 10 });
+        putchar(if nibble < 10 {
+            b'0' + nibble
+        } else {
+            b'a' + nibble - 10
+        });
     }
 
     let ec_msg = b" ec=0x";
-    for &c in ec_msg { putchar(c); }
+    for &c in ec_msg {
+        putchar(c);
+    }
 
     // Print low byte of error code as two hex digits.
     let ec = (error_code & 0xFF) as u8;
@@ -235,6 +274,8 @@ extern "x86-interrupt" fn x86_64_cp_handler(frame: InterruptFrame, error_code: u
     loop {
         // SAFETY: hlt waits for the next interrupt; combined with cli (IF=0
         // on fault entry) this spins forever, which is the desired halt.
-        unsafe { core::arch::asm!("hlt", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack));
+        }
     }
 }

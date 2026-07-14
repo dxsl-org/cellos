@@ -6,7 +6,7 @@
 //! which is intentional (hard failure = detected early).
 
 use api::manifest::{
-    CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK, MANIFEST_FLAGS_MASK,
+    CellManifest, MANIFEST_FLAGS_MASK, MANIFEST_FLAG_BLOCK_IO, MANIFEST_FLAG_NETWORK,
     MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1, TIER_LEGACY, TIER_STANDARD,
 };
 use api::syscall::ViSyscall;
@@ -78,12 +78,20 @@ fn test_spawn_path_too_long_rejected() {
 fn test_spawn_path_valid_format_accepted() {
     // A well-formatted path may still fail with NotFound (disk not ready) —
     // that is acceptable; only InvalidInput counts as a format rejection.
-    let res = crate::loader::spawn_from_path("/bin/nonexistent-elf-for-test", crate::task::cap::Spawner::Root);
+    let res = crate::loader::spawn_from_path(
+        "/bin/nonexistent-elf-for-test",
+        crate::task::cap::Spawner::Root,
+    );
     match res {
         Err(ViError::NotFound) | Ok(_) => {}
-        Err(ViError::InvalidInput) => panic!("well-formed path should not be rejected as InvalidInput"),
+        Err(ViError::InvalidInput) => {
+            panic!("well-formed path should not be rejected as InvalidInput")
+        }
         Err(e) => {
-            log::warn!("  [ok] /bin/nonexistent-elf-for-test → {:?} (expected NotFound)", e);
+            log::warn!(
+                "  [ok] /bin/nonexistent-elf-for-test → {:?} (expected NotFound)",
+                e
+            );
         }
     }
     log::info!("  [ok] well-formed path passes format validation");
@@ -111,7 +119,11 @@ fn test_reloc_non_multiple_size_rejected() {
     // 7 bytes is not a multiple of 24 (sizeof Rela64).
     let bad = [0u8; 7];
     let res = crate::loader::reloc::apply_relocations(0, &bad);
-    assert_eq!(res, Err(ViError::InvalidInput), "non-multiple size should be InvalidInput");
+    assert_eq!(
+        res,
+        Err(ViError::InvalidInput),
+        "non-multiple size should be InvalidInput"
+    );
     log::info!("  [ok] non-multiple rela size → InvalidInput");
 }
 
@@ -120,7 +132,11 @@ fn test_reloc_too_many_entries_rejected() {
     const OVER_LIMIT: usize = 65_537;
     let big = alloc::vec![0u8; OVER_LIMIT * 24];
     let res = crate::loader::reloc::apply_relocations(0, &big);
-    assert_eq!(res, Err(ViError::InvalidInput), "over-limit count should be InvalidInput");
+    assert_eq!(
+        res,
+        Err(ViError::InvalidInput),
+        "over-limit count should be InvalidInput"
+    );
     log::info!("  [ok] {} entries (> 65536) → InvalidInput", OVER_LIMIT);
 }
 
@@ -128,7 +144,11 @@ fn test_reloc_unsupported_type_rejected() {
     // Type 0xFF is not a recognised RISC-V relocation.
     let entry = make_rela(0, 0xFF, 0);
     let res = crate::loader::reloc::apply_relocations(0, &entry);
-    assert_eq!(res, Err(ViError::NotSupported), "unknown type should be NotSupported");
+    assert_eq!(
+        res,
+        Err(ViError::NotSupported),
+        "unknown type should be NotSupported"
+    );
     log::info!("  [ok] unknown reloc type 0xFF → NotSupported");
 }
 
@@ -154,12 +174,14 @@ fn test_reloc_relative_patches_memory() {
     // Read back the patched value (usize-width, unaligned-safe).
     // SAFETY: buf is alive for the duration of this test; we wrote exactly
     // sizeof(usize) bytes at offset 0 via apply_relocations.
-    let patched: usize = unsafe {
-        core::ptr::read_unaligned(buf.as_ptr() as *const usize)
-    };
+    let patched: usize = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const usize) };
     let expected = base.wrapping_add(0x400);
     assert_eq!(patched, expected, "R_RISCV_RELATIVE patch value mismatch");
-    log::info!("  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}", base, expected);
+    log::info!(
+        "  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}",
+        base,
+        expected
+    );
 }
 
 // ─── CellManifest parsing ────────────────────────────────────────────────────
@@ -172,19 +194,28 @@ fn manifest_bytes_v1(magic: u32, version: u8, flags: u8) -> [u8; 8] {
 
 /// Build a native v2 16-byte manifest record: `{magic, version, tier, flags:u16,
 /// cap_args_off:u32, reserved:u32}`.
-fn manifest_bytes_v2(magic: u32, version: u8, tier: u8, flags: u16,
-                     cap_args_off: u32, reserved: u32) -> [u8; 16] {
+fn manifest_bytes_v2(
+    magic: u32,
+    version: u8,
+    tier: u8,
+    flags: u16,
+    cap_args_off: u32,
+    reserved: u32,
+) -> [u8; 16] {
     let m = magic.to_le_bytes();
     let f = flags.to_le_bytes();
     let c = cap_args_off.to_le_bytes();
     let r = reserved.to_le_bytes();
-    [m[0], m[1], m[2], m[3], version, tier, f[0], f[1],
-     c[0], c[1], c[2], c[3], r[0], r[1], r[2], r[3]]
+    [
+        m[0], m[1], m[2], m[3], version, tier, f[0], f[1], c[0], c[1], c[2], c[3], r[0], r[1],
+        r[2], r[3],
+    ]
 }
 
 fn test_manifest_size_is_16() {
     assert_eq!(
-        core::mem::size_of::<CellManifest>(), 16,
+        core::mem::size_of::<CellManifest>(),
+        16,
         "CellManifest (v2) must be exactly 16 bytes (ABI invariant)"
     );
     log::info!("  [ok] CellManifest is 16 bytes (v2)");
@@ -192,27 +223,40 @@ fn test_manifest_size_is_16() {
 
 fn test_manifest_parsing_valid() {
     let bytes = manifest_bytes_v2(
-        MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD,
-        MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK, 0, 0,
+        MANIFEST_MAGIC,
+        MANIFEST_VERSION,
+        TIER_STANDARD,
+        MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK,
+        0,
+        0,
     );
     let m = CellManifest::from_bytes(&bytes).expect("valid v2 manifest must parse");
     assert!(m.has_block_io(), "block_io flag must be set");
-    assert!(m.has_network(),  "network flag must be set");
-    assert!(!m.has_spawn(),   "spawn flag must be clear");
+    assert!(m.has_network(), "network flag must be set");
+    assert!(!m.has_spawn(), "spawn flag must be clear");
     assert_eq!(m.tier(), TIER_STANDARD, "tier must round-trip");
-    assert!(m.declares_any_privilege(), "declares_any_privilege must be true");
+    assert!(
+        m.declares_any_privilege(),
+        "declares_any_privilege must be true"
+    );
     log::info!("  [ok] valid v2 manifest parses with correct flags + tier");
 }
 
 fn test_manifest_v1_upcast() {
     // A legacy v1 8-byte manifest must still parse under the v2 CellManifest —
     // this is the backward-compat contract: old cells keep working unmodified.
-    let bytes = manifest_bytes_v1(MANIFEST_MAGIC, MANIFEST_VERSION_V1,
-        MANIFEST_FLAG_BLOCK_IO as u8);
+    let bytes = manifest_bytes_v1(
+        MANIFEST_MAGIC,
+        MANIFEST_VERSION_V1,
+        MANIFEST_FLAG_BLOCK_IO as u8,
+    );
     let m = CellManifest::from_bytes(&bytes).expect("v1 manifest must upcast-parse");
     assert!(m.has_block_io(), "upcast must preserve v1 flags");
-    assert_eq!(m.tier(), TIER_LEGACY,
-        "v1 upcast must set tier=TIER_LEGACY so the loader keeps the old is_trusted heuristic");
+    assert_eq!(
+        m.tier(),
+        TIER_LEGACY,
+        "v1 upcast must set tier=TIER_LEGACY so the loader keeps the old is_trusted heuristic"
+    );
     log::info!("  [ok] v1 manifest upcasts to v2 with TIER_LEGACY");
 }
 
@@ -241,8 +285,14 @@ fn test_manifest_parsing_short() {
 }
 
 fn test_manifest_parsing_bad_version() {
-    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION.wrapping_add(1),
-        TIER_STANDARD, 0, 0, 0);
+    let bytes = manifest_bytes_v2(
+        MANIFEST_MAGIC,
+        MANIFEST_VERSION.wrapping_add(1),
+        TIER_STANDARD,
+        0,
+        0,
+        0,
+    );
     assert!(
         CellManifest::from_bytes(&bytes).is_none(),
         "unsupported version must return None"
@@ -254,8 +304,14 @@ fn test_manifest_reserved_flags_rejected() {
     // Any bit above the defined mask must be rejected — prevents a stale/forward
     // binary from silently gaining an unintended capability via a reserved bit.
     let reserved = !MANIFEST_FLAGS_MASK;
-    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD,
-        reserved | 0x01, 0, 0);
+    let bytes = manifest_bytes_v2(
+        MANIFEST_MAGIC,
+        MANIFEST_VERSION,
+        TIER_STANDARD,
+        reserved | 0x01,
+        0,
+        0,
+    );
     assert!(
         CellManifest::from_bytes(&bytes).is_none(),
         "reserved flags must return None"
@@ -267,9 +323,15 @@ fn test_manifest_v2_reserved_fields_rejected() {
     // cap_args_off and reserved MUST be zero in v2 — a future field silently
     // ignored by a kernel that predates it would be a forward-compat hole.
     let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD, 0, 1, 0);
-    assert!(CellManifest::from_bytes(&bytes).is_none(), "non-zero cap_args_off must return None");
+    assert!(
+        CellManifest::from_bytes(&bytes).is_none(),
+        "non-zero cap_args_off must return None"
+    );
     let bytes2 = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_STANDARD, 0, 0, 1);
-    assert!(CellManifest::from_bytes(&bytes2).is_none(), "non-zero reserved must return None");
+    assert!(
+        CellManifest::from_bytes(&bytes2).is_none(),
+        "non-zero reserved must return None"
+    );
     log::info!("  [ok] v2 reserved fields (cap_args_off, reserved) rejected when non-zero");
 }
 
@@ -277,9 +339,15 @@ fn test_manifest_v2_tier_out_of_range_rejected() {
     // TIER_UNTRUSTED (3) is the highest valid explicit on-disk tier; anything
     // between it and TIER_LEGACY (0xFF, exclusive) is malformed.
     let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, 4, 0, 0, 0);
-    assert!(CellManifest::from_bytes(&bytes).is_none(), "tier=4 (out of range) must return None");
+    assert!(
+        CellManifest::from_bytes(&bytes).is_none(),
+        "tier=4 (out of range) must return None"
+    );
     let bytes2 = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, 0xFE, 0, 0, 0);
-    assert!(CellManifest::from_bytes(&bytes2).is_none(), "tier=0xFE (out of range, not the LEGACY sentinel) must return None");
+    assert!(
+        CellManifest::from_bytes(&bytes2).is_none(),
+        "tier=0xFE (out of range, not the LEGACY sentinel) must return None"
+    );
     log::info!("  [ok] out-of-range tier values rejected");
 }
 
@@ -289,44 +357,67 @@ fn test_manifest_v2_tier_legacy_is_valid_native() {
     // Confirm the constructor's actual output round-trips through from_bytes —
     // matching the raw-bytes construction below is what `new()` produces.
     let ctor_output = CellManifest::new(true, false, false, false, false, false);
-    assert_eq!(ctor_output.tier(), TIER_LEGACY, "tier-less constructor must default to TIER_LEGACY");
+    assert_eq!(
+        ctor_output.tier(),
+        TIER_LEGACY,
+        "tier-less constructor must default to TIER_LEGACY"
+    );
 
-    let bytes = manifest_bytes_v2(MANIFEST_MAGIC, MANIFEST_VERSION, TIER_LEGACY,
-        MANIFEST_FLAG_BLOCK_IO, 0, 0);
-    let parsed = CellManifest::from_bytes(&bytes)
-        .expect("a native v2 manifest with TIER_LEGACY (the tier-less constructor default) must parse");
+    let bytes = manifest_bytes_v2(
+        MANIFEST_MAGIC,
+        MANIFEST_VERSION,
+        TIER_LEGACY,
+        MANIFEST_FLAG_BLOCK_IO,
+        0,
+        0,
+    );
+    let parsed = CellManifest::from_bytes(&bytes).expect(
+        "a native v2 manifest with TIER_LEGACY (the tier-less constructor default) must parse",
+    );
     assert_eq!(parsed.tier(), TIER_LEGACY);
-    log::info!("  [ok] TIER_LEGACY parses as a valid native v2 tier (tier-less constructor output)");
+    log::info!(
+        "  [ok] TIER_LEGACY parses as a valid native v2 tier (tier-less constructor output)"
+    );
 }
 
 fn test_force_exit_opcode_mapped() {
     // Opcode 61 must resolve to ForceExit; any other result means the dispatcher
     // would silently ignore ForceExit calls.
-    assert!(matches!(ViSyscall::from(61), ViSyscall::ForceExit),
-        "opcode 61 must resolve to ViSyscall::ForceExit");
+    assert!(
+        matches!(ViSyscall::from(61), ViSyscall::ForceExit),
+        "opcode 61 must resolve to ViSyscall::ForceExit"
+    );
     log::info!("  [ok] opcode 61 → ForceExit");
 }
 
 fn test_force_exit_allowlist_bit_none() {
     // ForceExit must bypass the allowlist (like Exit/Yield); SpawnCap is the gate.
-    assert!(ViSyscall::ForceExit.allowlist_bit().is_none(),
-        "ForceExit must not have an allowlist bit — SpawnCap is the authority check");
+    assert!(
+        ViSyscall::ForceExit.allowlist_bit().is_none(),
+        "ForceExit must not have an allowlist bit — SpawnCap is the authority check"
+    );
     log::info!("  [ok] ForceExit allowlist_bit = None");
 }
 
 fn test_manifest_network_false_grants_no_network_cap() {
     let m = CellManifest::new(true, false, false, false, false, false);
-    assert!(m.has_block_io(),   "block_io=true must set block_io flag");
-    assert!(!m.has_network(),   "network=false must NOT set network flag");
-    assert!(!m.has_spawn(),     "spawn=false must NOT set spawn flag");
-    assert!(m.declares_any_privilege(), "block_io alone is still a privilege");
+    assert!(m.has_block_io(), "block_io=true must set block_io flag");
+    assert!(!m.has_network(), "network=false must NOT set network flag");
+    assert!(!m.has_spawn(), "spawn=false must NOT set spawn flag");
+    assert!(
+        m.declares_any_privilege(),
+        "block_io alone is still a privilege"
+    );
     log::info!("  [ok] network=false → no NetworkCap granted");
 }
 
 // ─── Cell signing tests ───────────────────────────────────────────────────────
 
 fn test_signing_self_test_passes() {
-    assert!(crate::signing::self_test(), "signing::self_test must pass at boot");
+    assert!(
+        crate::signing::self_test(),
+        "signing::self_test must pass at boot"
+    );
     log::info!("  [ok] signing::self_test() passed");
 }
 
@@ -363,7 +454,10 @@ fn test_signing_extract_sig_none_for_non_elf() {
 fn test_signing_extract_sig_some_from_constructed_elf() {
     let elf = build_minimal_signed_elf([0xABu8; 64]);
     let result = crate::signing::extract_sig(&elf);
-    assert!(result.is_some(), "extract_sig must find __ViCell_sig in minimal ELF");
+    assert!(
+        result.is_some(),
+        "extract_sig must find __ViCell_sig in minimal ELF"
+    );
     let extracted = result.unwrap();
     assert!(
         extracted.iter().all(|&b| b == 0xAB),
@@ -397,7 +491,7 @@ fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
     v[4] = 2; // ELFCLASS64
     v[5] = 1; // ELFDATA2LSB
     v[6] = 1; // EV_CURRENT
-    // e_type=2 (ET_EXEC), e_machine=0xF3 (EM_RISCV)
+              // e_type=2 (ET_EXEC), e_machine=0xF3 (EM_RISCV)
     v[16..18].copy_from_slice(&2u16.to_le_bytes());
     v[18..20].copy_from_slice(&0xF3u16.to_le_bytes());
     // e_version=1
@@ -419,13 +513,13 @@ fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
     // ── PT_LOAD program header (offset 64, 56 bytes) ─────────────────────────
     // ELF64 Phdr: p_type(4), p_flags(4), p_offset(8), p_vaddr(8), p_paddr(8),
     //             p_filesz(8), p_memsz(8), p_align(8)
-    v[64..68].copy_from_slice(&1u32.to_le_bytes());       // p_type = PT_LOAD
-    v[68..72].copy_from_slice(&5u32.to_le_bytes());       // p_flags = R|X
-    v[72..80].copy_from_slice(&120u64.to_le_bytes());     // p_offset = 120
-    v[80..88].copy_from_slice(&0x1000u64.to_le_bytes());  // p_vaddr
-    v[88..96].copy_from_slice(&0x1000u64.to_le_bytes());  // p_paddr
-    v[96..104].copy_from_slice(&8u64.to_le_bytes());      // p_filesz = 8
-    v[104..112].copy_from_slice(&8u64.to_le_bytes());     // p_memsz = 8
+    v[64..68].copy_from_slice(&1u32.to_le_bytes()); // p_type = PT_LOAD
+    v[68..72].copy_from_slice(&5u32.to_le_bytes()); // p_flags = R|X
+    v[72..80].copy_from_slice(&120u64.to_le_bytes()); // p_offset = 120
+    v[80..88].copy_from_slice(&0x1000u64.to_le_bytes()); // p_vaddr
+    v[88..96].copy_from_slice(&0x1000u64.to_le_bytes()); // p_paddr
+    v[96..104].copy_from_slice(&8u64.to_le_bytes()); // p_filesz = 8
+    v[104..112].copy_from_slice(&8u64.to_le_bytes()); // p_memsz = 8
     v[112..120].copy_from_slice(&0x1000u64.to_le_bytes()); // p_align
 
     // [120..128]: code bytes, already zero.
@@ -435,21 +529,21 @@ fn build_minimal_signed_elf(sig: [u8; 64]) -> alloc::vec::Vec<u8> {
     // ── Section header 1: __ViCell_sig (offset 192, 64 bytes) ────────────────
     // ELF64 Shdr: sh_name(4), sh_type(4), sh_flags(8), sh_addr(8), sh_offset(8),
     //             sh_size(8), sh_link(4), sh_info(4), sh_addralign(8), sh_entsize(8)
-    v[192..196].copy_from_slice(&1u32.to_le_bytes());   // sh_name = strtab[1]
-    v[196..200].copy_from_slice(&1u32.to_le_bytes());   // sh_type = SHT_PROGBITS
-    // sh_flags = 0 (no ALLOC — sig section must never be mapped), already zero
-    // sh_offset = 320 (sig data starts there)
+    v[192..196].copy_from_slice(&1u32.to_le_bytes()); // sh_name = strtab[1]
+    v[196..200].copy_from_slice(&1u32.to_le_bytes()); // sh_type = SHT_PROGBITS
+                                                      // sh_flags = 0 (no ALLOC — sig section must never be mapped), already zero
+                                                      // sh_offset = 320 (sig data starts there)
     v[216..224].copy_from_slice(&320u64.to_le_bytes());
-    v[224..232].copy_from_slice(&64u64.to_le_bytes());  // sh_size = 64
-    v[240..248].copy_from_slice(&1u64.to_le_bytes());   // sh_addralign = 1
+    v[224..232].copy_from_slice(&64u64.to_le_bytes()); // sh_size = 64
+    v[240..248].copy_from_slice(&1u64.to_le_bytes()); // sh_addralign = 1
 
     // ── Section header 2: .shstrtab (offset 256, 64 bytes) ───────────────────
-    v[256..260].copy_from_slice(&14u32.to_le_bytes());  // sh_name = strtab[14]
-    v[260..264].copy_from_slice(&3u32.to_le_bytes());   // sh_type = SHT_STRTAB
-    // sh_offset = 384
+    v[256..260].copy_from_slice(&14u32.to_le_bytes()); // sh_name = strtab[14]
+    v[260..264].copy_from_slice(&3u32.to_le_bytes()); // sh_type = SHT_STRTAB
+                                                      // sh_offset = 384
     v[280..288].copy_from_slice(&384u64.to_le_bytes());
     v[288..296].copy_from_slice(&(STRTAB.len() as u64).to_le_bytes()); // sh_size
-    v[304..312].copy_from_slice(&1u64.to_le_bytes());   // sh_addralign = 1
+    v[304..312].copy_from_slice(&1u64.to_le_bytes()); // sh_addralign = 1
 
     // ── Signature bytes (offset 320, 64 bytes) ────────────────────────────────
     v[320..384].copy_from_slice(&sig);

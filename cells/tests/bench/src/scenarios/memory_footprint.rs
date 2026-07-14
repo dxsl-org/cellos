@@ -33,12 +33,21 @@ impl MemoryFootprintBench {
     /// against the 10 MB PDR target.
     pub fn footprint_report(&self) -> BenchReport {
         let b = self.measured_bytes;
-        BenchReport { name: "memory_footprint", n: 1, min: b, p50: b, p99: b, max: b }
+        BenchReport {
+            name: "memory_footprint",
+            n: 1,
+            min: b,
+            p50: b,
+            p99: b,
+            max: b,
+        }
     }
 }
 
 impl ViBenchmark for MemoryFootprintBench {
-    fn name(&self) -> &'static str { "memory_footprint" }
+    fn name(&self) -> &'static str {
+        "memory_footprint"
+    }
 
     fn run_once(&mut self) -> api::ViResult<u64> {
         // TODO: replace with MemInfo syscall when implemented.
@@ -49,5 +58,7 @@ impl ViBenchmark for MemoryFootprintBench {
 }
 
 impl Default for MemoryFootprintBench {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

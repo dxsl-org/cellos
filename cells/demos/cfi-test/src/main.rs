@@ -57,9 +57,7 @@ fn run_test() {
         // PAYLOAD[0] executes. If BTI is not enabled the call returns normally
         // and we print SKIP below.
         static PAYLOAD: [u8; 1] = [0xC0]; // arbitrary non-BTI byte
-        let fptr: unsafe extern "C" fn() = unsafe {
-            core::mem::transmute(PAYLOAD.as_ptr())
-        };
+        let fptr: unsafe extern "C" fn() = unsafe { core::mem::transmute(PAYLOAD.as_ptr()) };
         // SAFETY: deliberate CFI violation — testing hardware BTI enforcement.
         unsafe { fptr() };
 
@@ -81,9 +79,7 @@ fn run_test() {
         // Expected outcome: #CP fault logged by the kernel. Reaching the line
         // after fptr() means IBT is disabled or unavailable.
         static PAYLOAD: [u8; 4] = [0x90, 0x90, 0x90, 0xC3]; // NOP NOP NOP RET
-        let fptr: unsafe extern "C" fn() = unsafe {
-            core::mem::transmute(PAYLOAD.as_ptr())
-        };
+        let fptr: unsafe extern "C" fn() = unsafe { core::mem::transmute(PAYLOAD.as_ptr()) };
         // SAFETY: deliberate CFI violation — testing hardware CET-IBT enforcement.
         unsafe { fptr() };
 

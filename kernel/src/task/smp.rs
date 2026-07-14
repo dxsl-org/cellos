@@ -20,10 +20,7 @@ pub const HART_RT: usize = 1;
 
 /// Set to `true` by each secondary hart once its trap vector and timer are ready.
 /// Hart 0's bounded wait reads this via `Acquire` to observe all preceding stores.
-pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [
-    AtomicBool::new(false),
-    AtomicBool::new(false),
-];
+pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), AtomicBool::new(false)];
 
 /// How many 10 ms ticks hart 0 waits for each secondary to come online before
 /// logging a warning and continuing single-hart.  500 ms is generous for QEMU.
@@ -74,7 +71,11 @@ pub fn start_secondaries() {
         // *const () to avoid the "direct cast of function item" lint.
         let entry_paddr = _secondary_entry as *const () as usize;
         match sbi_hart_start(hart_id, entry_paddr, stack_top) {
-            Ok(()) => log::info!("[smp] hart {} start requested (entry={:#x})", hart_id, entry_paddr),
+            Ok(()) => log::info!(
+                "[smp] hart {} start requested (entry={:#x})",
+                hart_id,
+                entry_paddr
+            ),
             Err(e) => {
                 log::warn!("[smp] hart {} SBI hart_start failed: err={}", hart_id, e);
                 continue;
@@ -89,7 +90,10 @@ pub fn start_secondaries() {
                 break;
             }
             if crate::task::system_ticks() >= deadline {
-                log::warn!("[smp] hart {} did not come online in time — continuing single-hart", hart_id);
+                log::warn!(
+                    "[smp] hart {} did not come online in time — continuing single-hart",
+                    hart_id
+                );
                 break;
             }
             core::hint::spin_loop();
@@ -135,7 +139,9 @@ pub extern "C" fn smp_hart_entry(hart_id: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
     {
         // SAFETY: csrs on sie is always legal from S-mode (RISC-V priv spec §4.1.3).
-        unsafe { core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize); }
+        unsafe {
+            core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize);
+        }
         let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
         hal::common::sbi::set_timer(next);
     }
@@ -152,7 +158,9 @@ pub extern "C" fn smp_hart_entry(hart_id: usize) -> ! {
     loop {
         // SAFETY: wfi suspends until the next interrupt; state is unchanged.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)) };
+        unsafe {
+            core::arch::asm!("wfi", options(nomem, nostack))
+        };
         core::hint::spin_loop();
     }
 }

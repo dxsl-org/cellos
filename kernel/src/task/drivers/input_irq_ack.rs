@@ -33,12 +33,18 @@ pub fn init_driver() {
             if transport.device_type() == DeviceType::Input {
                 match VirtIOInput::<VirtioHal, MmioTransport>::new(transport) {
                     Ok(inner) => {
-                        log::info!("[input_irq_ack] input device at {:#x} irq={}", slot.base, slot.irq);
+                        log::info!(
+                            "[input_irq_ack] input device at {:#x} irq={}",
+                            slot.base,
+                            slot.irq
+                        );
                         INPUT_IRQ.store(slot.irq, Ordering::Release);
                         *KEYBOARD_ACK.lock() = Some(InputAckDriver { inner });
                         return;
                     }
-                    Err(e) => log::warn!("[input_irq_ack] init failed at {:#x}: {:?}", slot.base, e),
+                    Err(e) => {
+                        log::warn!("[input_irq_ack] init failed at {:#x}: {:?}", slot.base, e)
+                    }
                 }
             } else {
                 core::mem::forget(transport);

@@ -20,10 +20,7 @@ pub(super) enum Byte {
 
 impl BodyReader {
     /// Pull a single byte from leftover-then-transport.
-    pub(super) fn next_byte<R: Read>(
-        &mut self,
-        transport: &mut R,
-    ) -> Result<Byte, HttpError> {
+    pub(super) fn next_byte<R: Read>(&mut self, transport: &mut R) -> Result<Byte, HttpError> {
         if !self.leftover_empty() {
             let b = self.leftover[self.leftover_pos];
             self.leftover_pos += 1;

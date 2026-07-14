@@ -3,10 +3,17 @@
 extern crate alloc;
 use alloc::{format, string::String, vec::Vec};
 
-#[cfg(target_arch = "riscv64")] const ARCH: &str = "riscv64";
-#[cfg(target_arch = "aarch64")] const ARCH: &str = "aarch64";
-#[cfg(target_arch = "x86_64")]  const ARCH: &str = "x86_64";
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(target_arch = "riscv64")]
+const ARCH: &str = "riscv64";
+#[cfg(target_arch = "aarch64")]
+const ARCH: &str = "aarch64";
+#[cfg(target_arch = "x86_64")]
+const ARCH: &str = "x86_64";
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 const ARCH: &str = "unknown";
 
 use crate::net_ipc;
@@ -20,11 +27,14 @@ pub fn send_response(cap: u32, net_ep: usize, status: u16, content_type: &str, b
         400 => "Bad Request",
         404 => "Not Found",
         500 => "Internal Server Error",
-        _   => "OK",
+        _ => "OK",
     };
     let header = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        status, status_text, content_type, body.len()
+        status,
+        status_text,
+        content_type,
+        body.len()
     );
     net_ipc::tcp_send_all(cap, net_ep, header.as_bytes());
     net_ipc::tcp_send_all(cap, net_ep, body);
@@ -71,7 +81,13 @@ pub fn index(cap: u32, net_ep: usize) {
 </body></html>"#,
         ARCH
     );
-    send_response(cap, net_ep, 200, "text/html; charset=utf-8", html.as_bytes());
+    send_response(
+        cap,
+        net_ep,
+        200,
+        "text/html; charset=utf-8",
+        html.as_bytes(),
+    );
 }
 
 pub fn status_page(cap: u32, net_ep: usize) {
@@ -98,7 +114,13 @@ pub fn status_page(cap: u32, net_ep: usize) {
 </body></html>"#,
         ARCH
     );
-    send_response(cap, net_ep, 200, "text/html; charset=utf-8", html.as_bytes());
+    send_response(
+        cap,
+        net_ep,
+        200,
+        "text/html; charset=utf-8",
+        html.as_bytes(),
+    );
 }
 
 pub fn not_found(cap: u32, net_ep: usize) {
@@ -120,15 +142,15 @@ pub fn serve_file(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) {
 fn mime_from_ext(path: &str) -> &'static str {
     match path.rsplit('.').next() {
         Some("html") | Some("htm") => "text/html; charset=utf-8",
-        Some("css")                => "text/css",
-        Some("js")                 => "application/javascript",
-        Some("json")               => "application/json",
-        Some("png")                => "image/png",
+        Some("css") => "text/css",
+        Some("js") => "application/javascript",
+        Some("json") => "application/json",
+        Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("svg")                => "image/svg+xml",
-        Some("ico")                => "image/x-icon",
-        Some("txt")                => "text/plain",
-        _                          => "application/octet-stream",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("txt") => "text/plain",
+        _ => "application/octet-stream",
     }
 }
 
@@ -147,15 +169,18 @@ pub fn api_cells(cap: u32, net_ep: usize) {
     use ostd::service::{lookup, service};
     let mut entries = Vec::new();
     let known: &[(&str, u16)] = &[
-        ("net",        service::NET),
-        ("vfs",        service::VFS),
-        ("input",      service::INPUT),
+        ("net", service::NET),
+        ("vfs", service::VFS),
+        ("input", service::INPUT),
         ("compositor", service::COMPOSITOR),
-        ("config",     service::CONFIG),
+        ("config", service::CONFIG),
     ];
     for (name, id) in known {
         if let Some(tid) = lookup(*id) {
-            entries.push(format!(r#"{{"name":"{}","tid":{},"state":"Running"}}"#, name, tid));
+            entries.push(format!(
+                r#"{{"name":"{}","tid":{},"state":"Running"}}"#,
+                name, tid
+            ));
         }
     }
     let list = entries.join(",");
@@ -178,5 +203,10 @@ pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) {
 
 pub fn api_restart(cap: u32, net_ep: usize, _cell_name: &str) {
     // Restart via init IPC is not yet implemented — return accepted.
-    send_json(cap, net_ep, 200, r#"{"ok":true,"note":"restart not yet wired to init"}"#);
+    send_json(
+        cap,
+        net_ep,
+        200,
+        r#"{"ok":true,"note":"restart not yet wired to init"}"#,
+    );
 }

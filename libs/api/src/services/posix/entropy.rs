@@ -3,9 +3,9 @@
 
 #![allow(unsafe_code)]
 
-use core::ffi::c_void;
-use crate::syscall::ViSyscall;
 use super::sysio::raw_syscall;
+use crate::syscall::ViSyscall;
+use core::ffi::c_void;
 
 /// Fill `buf` with `buflen` cryptographically random bytes via VirtIO-RNG.
 ///
@@ -17,13 +17,17 @@ use super::sysio::raw_syscall;
 /// for the duration of the call.
 #[no_mangle]
 pub unsafe extern "C" fn getentropy(buf: *mut c_void, buflen: usize) -> i32 {
-    if buf.is_null() || buflen > 256 { return -1; }
+    if buf.is_null() || buflen > 256 {
+        return -1;
+    }
     let mut written = 0usize;
     let dst = buf as *mut u8;
     while written < buflen {
         let chunk = (buflen - written).min(64);
         let ret = raw_syscall(ViSyscall::GetRandom, dst.add(written) as usize, chunk, 0, 0);
-        if ret <= 0 { return -1; }
+        if ret <= 0 {
+            return -1;
+        }
         written += ret as usize;
     }
     0

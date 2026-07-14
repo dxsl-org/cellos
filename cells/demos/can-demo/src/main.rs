@@ -9,7 +9,13 @@ use hal_can::{CanFrame, ViCan};
 use ostd::io::println;
 
 // No MMIO required — loopback only. No capability flags needed.
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = false, uart = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false
+);
 
 const FRAME_COUNT: u32 = 5;
 const BASE_ID: u32 = 0x100;
@@ -39,7 +45,12 @@ pub fn main() {
 
         let msg = alloc::format!(
             "[can-demo] TX id=0x{:03X} dlc={} data=[{:#04X},{:#04X},{:#04X},{:#04X}]",
-            frame.id, frame.dlc, frame.data[0], frame.data[1], frame.data[2], frame.data[3]
+            frame.id,
+            frame.dlc,
+            frame.data[0],
+            frame.data[1],
+            frame.data[2],
+            frame.data[3]
         );
         println(&msg);
     }
@@ -53,15 +64,14 @@ pub fn main() {
                 if frame.id != expected_id {
                     let msg = alloc::format!(
                         "[can-demo] RX id mismatch: got 0x{:03X}, expected 0x{:03X}",
-                        frame.id, expected_id
+                        frame.id,
+                        expected_id
                     );
                     println(&msg);
                     return;
                 }
-                let msg = alloc::format!(
-                    "[can-demo] RX id=0x{:03X} dlc={} OK",
-                    frame.id, frame.dlc
-                );
+                let msg =
+                    alloc::format!("[can-demo] RX id=0x{:03X} dlc={} OK", frame.id, frame.dlc);
                 println(&msg);
             }
             Err(_) => {

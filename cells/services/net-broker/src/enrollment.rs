@@ -1,3 +1,9 @@
+// reason: implements the P09 enrollment/merge-split wire protocol
+// (EnrollRequest/EnrollResponse) for the net-broker robot-swarm feature;
+// main.rs's dispatch() still has this as a TODO ("handle enrollment /
+// merge-split messages") — not yet reachable from the binary's entry point.
+#![allow(dead_code)]
+
 /// P09 — Runtime enrollment / merge-split.
 ///
 /// ## Enrollment protocol (4-message, over Noise KKpsk0 session)
@@ -33,7 +39,6 @@
 ///
 /// P09 ships the data structures; the full protocol is wired in the
 /// dispatch loop once P07 gate is green.
-
 use ostd::syscall::sys_get_time;
 
 // ── Wire types (32B request, 16B response) ────────────────────────────────────
@@ -41,11 +46,11 @@ use ostd::syscall::sys_get_time;
 /// Request sent by a joining node to an existing peer's broker.
 #[derive(Clone, Copy, Debug)]
 pub struct EnrollRequest {
-    pub machine_id:       u64,
-    pub cluster_id:       u64,
-    pub boot_epoch:       u64,
+    pub machine_id: u64,
+    pub cluster_id: u64,
+    pub boot_epoch: u64,
     pub capability_flags: u32, // bit 0 = rt_capable, bits 1+ reserved
-    pub pad:              [u8; 4],
+    pub pad: [u8; 4],
 }
 
 impl EnrollRequest {
@@ -62,9 +67,9 @@ impl EnrollRequest {
 
     pub fn decode(w: &[u8; Self::WIRE_LEN]) -> Self {
         Self {
-            machine_id:       u64::from_le_bytes(w[0..8].try_into().unwrap()),
-            cluster_id:       u64::from_le_bytes(w[8..16].try_into().unwrap()),
-            boot_epoch:       u64::from_le_bytes(w[16..24].try_into().unwrap()),
+            machine_id: u64::from_le_bytes(w[0..8].try_into().unwrap()),
+            cluster_id: u64::from_le_bytes(w[8..16].try_into().unwrap()),
+            boot_epoch: u64::from_le_bytes(w[16..24].try_into().unwrap()),
             capability_flags: u32::from_le_bytes(w[24..28].try_into().unwrap()),
             pad: [0; 4],
         }
@@ -75,23 +80,33 @@ impl EnrollRequest {
 #[derive(Clone, Copy, Debug)]
 pub struct EnrollResponse {
     /// True if the peer accepted this node into the cluster.
-    pub accepted:    bool,
+    pub accepted: bool,
     /// Cluster's canonical cluster_id (may differ if merge occurred).
-    pub cluster_id:  u64,
+    pub cluster_id: u64,
     /// Assigned machine index within the cluster (1-based; 0 = rejected).
     pub assigned_id: u32,
-    pub pad:         [u8; 3],
+    pub pad: [u8; 3],
 }
 
 impl EnrollResponse {
     pub const WIRE_LEN: usize = 16;
 
     pub fn accept(cluster_id: u64, assigned_id: u32) -> Self {
-        Self { accepted: true, cluster_id, assigned_id, pad: [0; 3] }
+        Self {
+            accepted: true,
+            cluster_id,
+            assigned_id,
+            pad: [0; 3],
+        }
     }
 
     pub fn reject(cluster_id: u64) -> Self {
-        Self { accepted: false, cluster_id, assigned_id: 0, pad: [0; 3] }
+        Self {
+            accepted: false,
+            cluster_id,
+            assigned_id: 0,
+            pad: [0; 3],
+        }
     }
 
     pub fn encode(&self) -> [u8; Self::WIRE_LEN] {
@@ -104,8 +119,8 @@ impl EnrollResponse {
 
     pub fn decode(w: &[u8; Self::WIRE_LEN]) -> Self {
         Self {
-            accepted:    w[0] != 0,
-            cluster_id:  u64::from_le_bytes(w[1..9].try_into().unwrap()),
+            accepted: w[0] != 0,
+            cluster_id: u64::from_le_bytes(w[1..9].try_into().unwrap()),
             assigned_id: u32::from_le_bytes(w[9..13].try_into().unwrap()),
             pad: [0; 3],
         }
@@ -127,13 +142,13 @@ pub enum EnrollmentStatus {
 }
 
 pub struct EnrollmentState {
-    pub status:    EnrollmentStatus,
+    pub status: EnrollmentStatus,
     pub my_machine_id: u64,
     pub my_cluster_id: u64,
     /// Counter: how many machines have successfully enrolled with us.
     pub peer_count: usize,
     /// Next assigned_id to hand out (1-based).
-    next_id:       u32,
+    next_id: u32,
 }
 
 impl EnrollmentState {
@@ -151,7 +166,9 @@ impl EnrollmentState {
 
     /// Call after sending an EnrollRequest to a peer.
     pub fn on_request_sent(&mut self) {
-        self.status = EnrollmentStatus::Pending { sent_at: sys_get_time() };
+        self.status = EnrollmentStatus::Pending {
+            sent_at: sys_get_time(),
+        };
     }
 
     /// Call when an EnrollResponse is received.

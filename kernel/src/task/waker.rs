@@ -35,7 +35,9 @@ pub fn signal_net_rx() {
     // SIE is currently cleared by the hardware trap entry, so this is queued and
     // fires once the ISR returns and sret restores sstatus.SIE.
     #[cfg(target_arch = "riscv64")]
-    unsafe { core::arch::asm!("csrsi sip, 0x2", options(nomem, nostack)) };
+    unsafe {
+        core::arch::asm!("csrsi sip, 0x2", options(nomem, nostack))
+    };
 }
 
 /// Check whether event `mask` has any pending bits.  Returns the matching fired bits,
@@ -46,7 +48,9 @@ pub fn signal_net_rx() {
 pub fn consume_pending(mask: u32) -> u32 {
     let mut fired: u32 = 0;
     if mask & api::syscall::events::NET_RX != 0
-        && NET_RX_PENDING.compare_exchange(true, false, Ordering::AcqRel, Ordering::Relaxed).is_ok()
+        && NET_RX_PENDING
+            .compare_exchange(true, false, Ordering::AcqRel, Ordering::Relaxed)
+            .is_ok()
     {
         fired |= api::syscall::events::NET_RX;
     }

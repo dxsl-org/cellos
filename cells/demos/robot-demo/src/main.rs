@@ -20,11 +20,25 @@ use hal_i2c::ViI2c;
 use ostd::io::println;
 use types::ViError;
 
-declare_manifest!(block_io = false, network = true, spawn = false, gpio = true, uart = false);
-api::declare_syscalls![Send, Recv, RecvTimeout, Log, LookupService, Heartbeat, RequestMmio];
+declare_manifest!(
+    block_io = false,
+    network = true,
+    spawn = false,
+    gpio = true,
+    uart = false
+);
+api::declare_syscalls![
+    Send,
+    Recv,
+    RecvTimeout,
+    Log,
+    LookupService,
+    Heartbeat,
+    RequestMmio
+];
 
-const ACTUATOR_PIN:        u8  = 3;
-const LOOP_CYCLES:         u32 = 5;
+const ACTUATOR_PIN: u8 = 3;
+const LOOP_CYCLES: u32 = 5;
 /// 25.0 °C threshold — relay ON when temperature exceeds this.
 const TEMP_THRESHOLD_CX10: i32 = 250;
 
@@ -94,15 +108,24 @@ fn poll_sensor(i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>, tick: u32) -> sh
 }
 
 fn print_reading(r: &sht3x::Reading, relay: bool) {
-    let label  = if r.simulated { " [sim]" } else { "" };
-    let t_int  = r.temp_cx10 / 10;
+    let label = if r.simulated { " [sim]" } else { "" };
+    let t_int = r.temp_cx10 / 10;
     let t_frac = (r.temp_cx10 % 10).abs();
-    let t_sign = if r.temp_cx10 < 0 && t_int == 0 { "-" } else { "" };
-    let h_int  = r.hum_px10 / 10;
+    let t_sign = if r.temp_cx10 < 0 && t_int == 0 {
+        "-"
+    } else {
+        ""
+    };
+    let h_int = r.hum_px10 / 10;
     let h_frac = r.hum_px10 % 10;
     println(&alloc::format!(
         "[robot-demo] T={}{}.{}C H={}.{}%{} relay={}",
-        t_sign, t_int, t_frac, h_int, h_frac, label,
+        t_sign,
+        t_int,
+        t_frac,
+        h_int,
+        h_frac,
+        label,
         if relay { "on" } else { "off" }
     ));
 }
@@ -110,7 +133,9 @@ fn print_reading(r: &sht3x::Reading, relay: bool) {
 fn publish_cycle(r: &sht3x::Reading, relay: bool) {
     let payload = alloc::format!(
         r#"{{"t_cx10":{},"h_px10":{},"relay":{}}}"#,
-        r.temp_cx10, r.hum_px10, relay
+        r.temp_cx10,
+        r.hum_px10,
+        relay
     );
     mqtt::publish_telemetry(&payload);
 }

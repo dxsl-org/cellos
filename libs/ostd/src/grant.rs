@@ -57,7 +57,11 @@ impl<T> GrantHandle<T> {
         let byte_len = count.checked_mul(core::mem::size_of::<T>())?;
         let byte_len = byte_len.max(1); // zero-size grants are not useful
         let id = sys_grant_alloc(byte_len)?;
-        Some(Self { id, len: byte_len, _type: PhantomData })
+        Some(Self {
+            id,
+            len: byte_len,
+            _type: PhantomData,
+        })
     }
 
     /// Wrap a raw grant ID received from another Cell via IPC.
@@ -68,7 +72,11 @@ impl<T> GrantHandle<T> {
     /// by the original `sys_grant_alloc`. Calling this twice with the same `id`
     /// creates two owners and will double-free on drop — undefined behaviour.
     pub unsafe fn from_raw(id: usize, len: usize) -> Self {
-        Self { id, len, _type: PhantomData }
+        Self {
+            id,
+            len,
+            _type: PhantomData,
+        }
     }
 
     /// Consume the handle, returning `(grant_id, byte_len)` **without** freeing.
@@ -86,11 +94,15 @@ impl<T> GrantHandle<T> {
 
     /// Raw kernel grant ID (physical base address in SAS == virtual address).
     #[inline]
-    pub fn id(&self) -> usize { self.id }
+    pub fn id(&self) -> usize {
+        self.id
+    }
 
     /// Byte length of the grant region.
     #[inline]
-    pub fn len(&self) -> usize { self.len }
+    pub fn len(&self) -> usize {
+        self.len
+    }
 
     /// Get an exclusive byte slice over the entire grant region.
     ///

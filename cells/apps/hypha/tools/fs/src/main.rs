@@ -91,14 +91,11 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
                     // VFS list format: "d:name\n" or "f:name\n" per entry.
                     // Strip the two-byte type prefix before building the JSON array.
                     let text = core::str::from_utf8(&raw).unwrap_or("");
-                    let entries_json: String = text
-                        .split('\n')
-                        .filter(|e| e.len() > 2)
-                        .fold(String::new(), |mut acc, entry| {
+                    let entries_json: String = text.split('\n').filter(|e| e.len() > 2).fold(
+                        String::new(),
+                        |mut acc, entry| {
                             // strip leading "d:" / "f:" type prefix
-                            let name = if entry.starts_with("d:")
-                                || entry.starts_with("f:")
-                            {
+                            let name = if entry.starts_with("d:") || entry.starts_with("f:") {
                                 &entry[2..]
                             } else {
                                 entry
@@ -110,7 +107,8 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
                             acc.push_str(&json_escape(name));
                             acc.push('"');
                             acc
-                        });
+                        },
+                    );
                     AgentToolResponse::Ok {
                         result_json: alloc::format!("{{\"files\":[{}]}}", entries_json),
                     }

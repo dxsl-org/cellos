@@ -7,7 +7,8 @@
 
 use core::arch::global_asm;
 
-global_asm!(r#"
+global_asm!(
+    r#"
     .section .text.boot
     .global _start
 _start:
@@ -43,4 +44,5 @@ _start:
 3:
     wfi
     j 3b
-"#);
+"#
+);

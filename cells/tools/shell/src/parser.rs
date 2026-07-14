@@ -39,10 +39,17 @@ pub struct Cmd {
 }
 
 impl Cmd {
-    fn new() -> Self { Cmd { argv: Vec::new(), redirects: Vec::new() } }
+    fn new() -> Self {
+        Cmd {
+            argv: Vec::new(),
+            redirects: Vec::new(),
+        }
+    }
 
     /// True if the command has no name (empty line or whitespace-only).
-    pub fn is_empty(&self) -> bool { self.argv.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.argv.is_empty()
+    }
 }
 
 /// Top-level abstract syntax tree for one shell line.
@@ -91,15 +98,15 @@ pub enum Ast {
     /// Sets `$VAR` to each word in order, runs BODY, then advances. `$VAR`
     /// expansion in BODY uses the same static var store as `VAR=value`.
     For {
-        var:   alloc::string::String,
+        var: alloc::string::String,
         words: alloc::vec::Vec<alloc::string::String>,
-        body:  alloc::boxed::Box<Ast>,
+        body: alloc::boxed::Box<Ast>,
     },
     /// `if COND; then BODY; fi` — conditional execution.
     ///
     /// `cond` exit-code 0 → run `then_b`; non-zero → run `else_b` if present.
     If {
-        cond:   alloc::boxed::Box<Ast>,
+        cond: alloc::boxed::Box<Ast>,
         then_b: alloc::boxed::Box<Ast>,
         else_b: Option<alloc::boxed::Box<Ast>>,
     },
@@ -127,10 +134,14 @@ enum Tok {
     // always remain as Word tokens.  parse_if_stmt detects them by string
     // comparison so they never silently disappear from external command arguments
     // (e.g. `lua -e "if x then ... end"` must reach Lua intact).
-    If,   // reserved — kept for exhaustive match arms in parse_cmd
-    Then, // reserved
-    Else, // reserved
-    Fi,   // reserved
+    #[allow(dead_code)] // reserved — kept for exhaustive match arms in parse_cmd
+    If,
+    #[allow(dead_code)] // reserved
+    Then,
+    #[allow(dead_code)] // reserved
+    Else,
+    #[allow(dead_code)] // reserved
+    Fi,
 }
 
 /// Tokenize a shell input line.
@@ -156,7 +167,9 @@ fn tokenize(line: &str) -> Vec<Tok> {
 
     while let Some(c) = chars.next() {
         match c {
-            ' ' | '\t' => { flush!(); }
+            ' ' | '\t' => {
+                flush!();
+            }
             '"' => {
                 // Consume until closing '"'.
                 loop {
@@ -168,18 +181,38 @@ fn tokenize(line: &str) -> Vec<Tok> {
             }
             '|' => {
                 flush!();
-                if chars.peek() == Some(&'|') { chars.next(); tokens.push(Tok::Or); }
-                else { tokens.push(Tok::Pipe); }
+                if chars.peek() == Some(&'|') {
+                    chars.next();
+                    tokens.push(Tok::Or);
+                } else {
+                    tokens.push(Tok::Pipe);
+                }
             }
             '&' => {
                 flush!();
-                if chars.peek() == Some(&'&') { chars.next(); tokens.push(Tok::And); }
-                else { tokens.push(Tok::Ampersand); }
+                if chars.peek() == Some(&'&') {
+                    chars.next();
+                    tokens.push(Tok::And);
+                } else {
+                    tokens.push(Tok::Ampersand);
+                }
             }
-            ';' => { flush!(); tokens.push(Tok::Semicolon); }
-            '{' => { flush!(); tokens.push(Tok::LBrace); }
-            '}' => { flush!(); tokens.push(Tok::RBrace); }
-            '<' => { flush!(); tokens.push(Tok::RedirectIn); }
+            ';' => {
+                flush!();
+                tokens.push(Tok::Semicolon);
+            }
+            '{' => {
+                flush!();
+                tokens.push(Tok::LBrace);
+            }
+            '}' => {
+                flush!();
+                tokens.push(Tok::RBrace);
+            }
+            '<' => {
+                flush!();
+                tokens.push(Tok::RedirectIn);
+            }
             '>' => {
                 flush!();
                 if chars.peek() == Some(&'>') {
@@ -209,17 +242,26 @@ fn tokenize(line: &str) -> Vec<Tok> {
                 loop {
                     match chars.next() {
                         None => break, // unclosed: pass through
-                        Some('(') => { depth += 1; current.push('('); }
+                        Some('(') => {
+                            depth += 1;
+                            current.push('(');
+                        }
                         Some(')') => {
                             depth -= 1;
                             current.push(')');
-                            if depth == 0 { break; }
+                            if depth == 0 {
+                                break;
+                            }
                         }
-                        Some(ch) => { current.push(ch); }
+                        Some(ch) => {
+                            current.push(ch);
+                        }
                     }
                 }
             }
-            other => { current.push(other); }
+            other => {
+                current.push(other);
+            }
         }
     }
     flush!();
@@ -236,7 +278,9 @@ fn tokenize(line: &str) -> Vec<Tok> {
 /// Returns `Ast::Empty` for blank input.
 pub fn parse(line: &str) -> Ast {
     let tokens = tokenize(line.trim());
-    if tokens.is_empty() { return Ast::Empty; }
+    if tokens.is_empty() {
+        return Ast::Empty;
+    }
 
     // `if...then...fi` must be parsed BEFORE semicolon splitting, because the
     // semicolons inside an if-statement are structural (not sequence separators).
@@ -245,7 +289,10 @@ pub fn parse(line: &str) -> Ast {
     // `name() { body; }` — function definition.
     // name() is a single Word token ending with "()" (no spaces inside).
     if let Some(Tok::Word(w)) = tokens.first() {
-        if w.ends_with("()") && tokens.get(1) == Some(&Tok::LBrace) && tokens.last() == Some(&Tok::RBrace) {
+        if w.ends_with("()")
+            && tokens.get(1) == Some(&Tok::LBrace)
+            && tokens.last() == Some(&Tok::RBrace)
+        {
             let name = String::from(&w[..w.len() - 2]);
             let body = tokens_to_string(&tokens[2..tokens.len() - 1]);
             return Ast::FuncDef { name, body };
@@ -270,9 +317,7 @@ pub fn parse(line: &str) -> Ast {
     // Split on `;` into sub-sequences first.
     let segments: Vec<&[Tok]> = split_on(&tokens, |t| t == &Tok::Semicolon);
     if segments.len() > 1 {
-        let seq: Vec<Ast> = segments.iter()
-            .map(|seg| parse_pipeline(seg))
-            .collect();
+        let seq: Vec<Ast> = segments.iter().map(|seg| parse_pipeline(seg)).collect();
         return Ast::Sequence(seq);
     }
 
@@ -285,10 +330,19 @@ pub fn parse(line: &str) -> Ast {
 /// slice — used by `parse_if_stmt` to parse condition and body sections.
 fn parse_tokens(tokens: &[Tok]) -> Ast {
     // Strip leading/trailing semicolons that linger from the structural split.
-    let start = tokens.iter().position(|t| t != &Tok::Semicolon).unwrap_or(tokens.len());
-    let end   = tokens.iter().rposition(|t| t != &Tok::Semicolon).map(|i| i + 1).unwrap_or(0);
+    let start = tokens
+        .iter()
+        .position(|t| t != &Tok::Semicolon)
+        .unwrap_or(tokens.len());
+    let end = tokens
+        .iter()
+        .rposition(|t| t != &Tok::Semicolon)
+        .map(|i| i + 1)
+        .unwrap_or(0);
     let tokens = &tokens[start..end];
-    if tokens.is_empty() { return Ast::Empty; }
+    if tokens.is_empty() {
+        return Ast::Empty;
+    }
     let segments: Vec<&[Tok]> = split_on(tokens, |t| t == &Tok::Semicolon);
     if segments.len() > 1 {
         let seq: Vec<Ast> = segments.iter().map(|seg| parse_pipeline(seg)).collect();
@@ -305,21 +359,24 @@ fn parse_tokens(tokens: &[Tok]) -> Ast {
 ///
 /// Used by function definition to store the body as a re-parseable string.
 fn tokens_to_string(tokens: &[Tok]) -> String {
-    let parts: alloc::vec::Vec<&str> = tokens.iter().map(|t| match t {
-        Tok::Word(w)      => w.as_str(),
-        Tok::Pipe         => "|",
-        Tok::And          => "&&",
-        Tok::Or           => "||",
-        Tok::Semicolon    => ";",
-        Tok::Ampersand    => "&",
-        Tok::RedirectOut  => ">",
-        Tok::RedirectAppend => ">>",
-        Tok::RedirectIn   => "<",
-        Tok::RedirectErr  => "2>",
-        Tok::LBrace       => "{",
-        Tok::RBrace       => "}",
-        _ => "",
-    }).collect();
+    let parts: alloc::vec::Vec<&str> = tokens
+        .iter()
+        .map(|t| match t {
+            Tok::Word(w) => w.as_str(),
+            Tok::Pipe => "|",
+            Tok::And => "&&",
+            Tok::Or => "||",
+            Tok::Semicolon => ";",
+            Tok::Ampersand => "&",
+            Tok::RedirectOut => ">",
+            Tok::RedirectAppend => ">>",
+            Tok::RedirectIn => "<",
+            Tok::RedirectErr => "2>",
+            Tok::LBrace => "{",
+            Tok::RBrace => "}",
+            _ => "",
+        })
+        .collect();
     parts.join(" ")
 }
 
@@ -349,7 +406,7 @@ fn parse_for_stmt(tokens: &[Tok]) -> Ast {
         Some(p) => p,
         None => return parse_tokens(tokens),
     };
-    let do_pos   = tokens.iter().position(|t| is_kw(t, "do"));
+    let do_pos = tokens.iter().position(|t| is_kw(t, "do"));
     let done_pos = tokens.iter().rposition(|t| is_kw(t, "done"));
     let (dp, np) = match (do_pos, done_pos) {
         (Some(d), Some(n)) if n > d => (d, n),
@@ -358,7 +415,13 @@ fn parse_for_stmt(tokens: &[Tok]) -> Ast {
     // Word list: tokens between `in` and `do`, stripping Semicolons.
     let words: alloc::vec::Vec<alloc::string::String> = tokens[in_pos + 1..dp]
         .iter()
-        .filter_map(|t| if let Tok::Word(w) = t { Some(w.clone()) } else { None })
+        .filter_map(|t| {
+            if let Tok::Word(w) = t {
+                Some(w.clone())
+            } else {
+                None
+            }
+        })
         .collect();
     let body = parse_tokens(&tokens[dp + 1..np]);
     Ast::For {
@@ -374,7 +437,7 @@ fn parse_for_stmt(tokens: &[Tok]) -> Ast {
 /// token of each arm with a trailing `)` stripped.  `*` is a catch-all.
 /// Malformed input (missing `in` or `esac`) falls back to `parse_tokens`.
 fn parse_case_stmt(tokens: &[Tok]) -> Ast {
-    let in_pos   = tokens.iter().position(|t| is_kw(t, "in"));
+    let in_pos = tokens.iter().position(|t| is_kw(t, "in"));
     let esac_pos = tokens.iter().rposition(|t| is_kw(t, "esac"));
     let (ip, ep) = match (in_pos, esac_pos) {
         (Some(i), Some(e)) if e > i => (i, e),
@@ -411,7 +474,10 @@ fn parse_case_stmt(tokens: &[Tok]) -> Ast {
 
 fn push_arm(tokens: &[Tok], arms: &mut alloc::vec::Vec<(String, alloc::boxed::Box<Ast>)>) {
     // Strip leading/trailing Semicolons left from the split.
-    let start = tokens.iter().position(|t| t != &Tok::Semicolon).unwrap_or(tokens.len());
+    let start = tokens
+        .iter()
+        .position(|t| t != &Tok::Semicolon)
+        .unwrap_or(tokens.len());
     let tokens = &tokens[start..];
     if let Some(Tok::Word(pat)) = tokens.first() {
         let pattern = String::from(pat.trim_end_matches(')'));
@@ -421,11 +487,11 @@ fn push_arm(tokens: &[Tok], arms: &mut alloc::vec::Vec<(String, alloc::boxed::Bo
 }
 
 fn parse_while_stmt(tokens: &[Tok]) -> Ast {
-    let do_pos   = tokens.iter().position(|t| is_kw(t, "do"));
+    let do_pos = tokens.iter().position(|t| is_kw(t, "do"));
     let done_pos = tokens.iter().rposition(|t| is_kw(t, "done"));
     let (dp, np) = match (do_pos, done_pos) {
         (Some(d), Some(n)) if n > d => (d, n),
-        _ => return parse_tokens(tokens),   // malformed: fall back without infinite recursion
+        _ => return parse_tokens(tokens), // malformed: fall back without infinite recursion
     };
     let cond = parse_tokens(&tokens[1..dp]);
     let body = parse_tokens(&tokens[dp + 1..np]);
@@ -439,9 +505,15 @@ fn parse_if_stmt(tokens: &[Tok]) -> Ast {
     // Locate structural keywords after the leading `if` Word.
     // Keywords are plain Word tokens — never converted — so they survive intact
     // in external command argument strings.
-    let then_pos = tokens.iter().position(|t| is_kw(t, "then")).unwrap_or(tokens.len());
+    let then_pos = tokens
+        .iter()
+        .position(|t| is_kw(t, "then"))
+        .unwrap_or(tokens.len());
     let else_pos = tokens.iter().position(|t| is_kw(t, "else"));
-    let fi_pos   = tokens.iter().rposition(|t| is_kw(t, "fi")).unwrap_or(tokens.len());
+    let fi_pos = tokens
+        .iter()
+        .rposition(|t| is_kw(t, "fi"))
+        .unwrap_or(tokens.len());
 
     // Condition: tokens[1..then_pos]   (skip leading `If`)
     let cond_slice = &tokens[1..then_pos];
@@ -459,7 +531,7 @@ fn parse_if_stmt(tokens: &[Tok]) -> Ast {
     });
 
     Ast::If {
-        cond:   alloc::boxed::Box::new(cond),
+        cond: alloc::boxed::Box::new(cond),
         then_b: alloc::boxed::Box::new(then_b),
         else_b,
     }
@@ -470,18 +542,19 @@ fn parse_pipeline(tokens: &[Tok]) -> Ast {
     // Split on the FIRST occurrence; right side is parsed recursively so
     // `A && B && C` builds `And(A, And(B, C))` with left-to-right evaluation.
     if let Some(pos) = tokens.iter().position(|t| t == &Tok::And || t == &Tok::Or) {
-        let left  = parse_pipeline(&tokens[..pos]);
+        let left = parse_pipeline(&tokens[..pos]);
         let right = parse_pipeline(&tokens[pos + 1..]);
         return match &tokens[pos] {
             Tok::And => Ast::And(alloc::boxed::Box::new(left), alloc::boxed::Box::new(right)),
-            Tok::Or  => Ast::Or(alloc::boxed::Box::new(left),  alloc::boxed::Box::new(right)),
+            Tok::Or => Ast::Or(alloc::boxed::Box::new(left), alloc::boxed::Box::new(right)),
             _ => unreachable!(),
         };
     }
 
     let pipe_segs: Vec<&[Tok]> = split_on(tokens, |t| t == &Tok::Pipe);
 
-    let cmds: Vec<Cmd> = pipe_segs.iter()
+    let cmds: Vec<Cmd> = pipe_segs
+        .iter()
         .filter_map(|seg| {
             // Ignore the per-segment `bg` flag here — the trailing `&` check on
             // `tokens.last()` below is the authoritative background detector.
@@ -545,7 +618,8 @@ fn parse_cmd(tokens: &[Tok]) -> (Cmd, bool) {
 
 /// Split a token slice on positions where `pred` returns true.
 fn split_on<'a, F>(tokens: &'a [Tok], pred: F) -> Vec<&'a [Tok]>
-where F: Fn(&Tok) -> bool
+where
+    F: Fn(&Tok) -> bool,
 {
     let mut result = Vec::new();
     let mut start = 0;
@@ -575,7 +649,9 @@ mod tests {
     fn parse_simple() {
         if let Ast::Simple(cmd) = parse("ls /bin") {
             assert_eq!(cmd.argv, &["ls", "/bin"]);
-        } else { panic!("expected Simple"); }
+        } else {
+            panic!("expected Simple");
+        }
     }
 
     #[test]
@@ -584,21 +660,30 @@ mod tests {
             assert_eq!(cmds.len(), 2);
             assert_eq!(cmds[0].argv[0], "cat");
             assert_eq!(cmds[1].argv[0], "grep");
-        } else { panic!("expected Pipeline"); }
+        } else {
+            panic!("expected Pipeline");
+        }
     }
 
     #[test]
     fn parse_redirect_out() {
         if let Ast::Simple(cmd) = parse("echo hi > /tmp/a.txt") {
-            assert_eq!(cmd.redirects, &[Redirect::StdoutTo(String::from("/tmp/a.txt"))]);
-        } else { panic!("expected Simple with redirect"); }
+            assert_eq!(
+                cmd.redirects,
+                &[Redirect::StdoutTo(String::from("/tmp/a.txt"))]
+            );
+        } else {
+            panic!("expected Simple with redirect");
+        }
     }
 
     #[test]
     fn parse_redirect_append() {
         if let Ast::Simple(cmd) = parse("echo hi >> /tmp/log") {
             assert!(matches!(&cmd.redirects[0], Redirect::StdoutAppend(_)));
-        } else { panic!("expected Simple with append redirect"); }
+        } else {
+            panic!("expected Simple with append redirect");
+        }
     }
 
     #[test]

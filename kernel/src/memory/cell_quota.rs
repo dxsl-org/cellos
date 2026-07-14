@@ -92,7 +92,11 @@ pub fn charge(cell_id_raw: usize, size: usize) -> bool {
         return true; // kernel itself: unlimited
     }
     // Read the limit — BTreeMap::get does NOT allocate.  Lock released immediately.
-    let limit = QUOTA_LIMITS.lock().get(&cell_id_raw).copied().unwrap_or(usize::MAX);
+    let limit = QUOTA_LIMITS
+        .lock()
+        .get(&cell_id_raw)
+        .copied()
+        .unwrap_or(usize::MAX);
     if cell_id_raw >= MAX_CELLS {
         return true; // no slot in IN_USE — uncapped
     }
@@ -126,7 +130,11 @@ pub fn refund(cell_id_raw: usize, size: usize) {
 /// Current byte usage for a Cell (for diagnostics).
 pub fn in_use(cell_id: CellId) -> usize {
     let id = cell_id.0 as usize;
-    if id < MAX_CELLS { IN_USE[id].load(Ordering::Relaxed) } else { 0 }
+    if id < MAX_CELLS {
+        IN_USE[id].load(Ordering::Relaxed)
+    } else {
+        0
+    }
 }
 
 // ── DMA quota tracking (for sys_grant_dma) ───────────────────────────────────
@@ -143,21 +151,31 @@ static DMA_IN_USE: [AtomicUsize; MAX_CELLS] = [const { AtomicUsize::new(0) }; MA
 ///
 /// Kernel domain (cell_id_raw=0) is always allowed.
 pub fn can_map_dma(cell_id_raw: usize, size: usize) -> bool {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS { return true; }
-    let limit = QUOTA_LIMITS.lock().get(&cell_id_raw).copied().unwrap_or(DEFAULT_QUOTA_BYTES);
+    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
+        return true;
+    }
+    let limit = QUOTA_LIMITS
+        .lock()
+        .get(&cell_id_raw)
+        .copied()
+        .unwrap_or(DEFAULT_QUOTA_BYTES);
     let cur = DMA_IN_USE[cell_id_raw].load(Ordering::Relaxed);
     cur.saturating_add(size) <= limit
 }
 
 /// Record `size` bytes of DMA mapped for Cell `cell_id_raw`. Lock-free.
 pub fn record_dma_mapped(cell_id_raw: usize, size: usize) {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS { return; }
+    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
+        return;
+    }
     DMA_IN_USE[cell_id_raw].fetch_add(size, Ordering::Relaxed);
 }
 
 /// Record `size` bytes of DMA released for Cell `cell_id_raw`. Lock-free.
 pub fn record_dma_unmapped(cell_id_raw: usize, size: usize) {
-    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS { return; }
+    if cell_id_raw == 0 || cell_id_raw >= MAX_CELLS {
+        return;
+    }
     let _ = DMA_IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
         Some(cur.saturating_sub(size))
     });

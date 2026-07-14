@@ -27,9 +27,9 @@ use crate::{syscall, ViError, ViResult};
 use api::syscall::service;
 
 const OP_LOOKUP_REMOTE: u8 = 0x01;
-const RESP_FOUND:       u8 = 0x00;
+const RESP_FOUND: u8 = 0x00;
 #[allow(dead_code)] // reason: documents the wire-protocol byte; client only branches on RESP_FOUND today
-const RESP_NOT_FOUND:   u8 = 0x01;
+const RESP_NOT_FOUND: u8 = 0x01;
 
 const BUF_SIZE: usize = 64;
 
@@ -59,12 +59,16 @@ impl ClusterRef {
     /// broker is unavailable.
     pub fn lookup_remote(&mut self, service_id: u16) -> Option<usize> {
         let mut resp = [0u8; BUF_SIZE];
-        let n = self.raw_send_recv(
-            &[OP_LOOKUP_REMOTE, service_id as u8, (service_id >> 8) as u8],
-            &mut resp,
-        ).ok()?;
+        let n = self
+            .raw_send_recv(
+                &[OP_LOOKUP_REMOTE, service_id as u8, (service_id >> 8) as u8],
+                &mut resp,
+            )
+            .ok()?;
 
-        if n < 1 || resp[0] != RESP_FOUND || n < 9 { return None; }
+        if n < 1 || resp[0] != RESP_FOUND || n < 9 {
+            return None;
+        }
         let proxy_tid = u64::from_le_bytes(resp[1..9].try_into().ok()?) as usize;
         Some(proxy_tid)
     }
@@ -99,5 +103,7 @@ impl ClusterRef {
 }
 
 impl Default for ClusterRef {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -156,7 +156,7 @@ vm-fdt   = { version = "0.3",  default-features = false, features = ["alloc"] }
 # - VirtIOGpu::flush_rect() — partial-rect DMA flush
 # - VirtIOGpu::read_events() / clear_events() — display hotplug event handling
 # Keep in sync with kernel/third_party/virtio_drivers/ on any upstream bump.
-virtio-drivers = { path = "kernel/third_party/virtio_drivers" }
+virtio-drivers = { path = "kernel/third_party/virtio_drivers", version = "0.7.5" }
 
 [profile.dev]
 panic = "abort"

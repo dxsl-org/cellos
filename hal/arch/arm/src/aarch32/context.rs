@@ -13,16 +13,16 @@ use core::arch::global_asm;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Arm32Context {
-    pub r4:   u32, // offset  0
-    pub r5:   u32, // offset  4
-    pub r6:   u32, // offset  8
-    pub r7:   u32, // offset 12
-    pub r8:   u32, // offset 16
-    pub r9:   u32, // offset 20
-    pub r10:  u32, // offset 24
-    pub r11:  u32, // offset 28
-    pub sp:   u32, // offset 32 — kernel stack pointer
-    pub lr:   u32, // offset 36 — resume address (caller's LR)
+    pub r4: u32,   // offset  0
+    pub r5: u32,   // offset  4
+    pub r6: u32,   // offset  8
+    pub r7: u32,   // offset 12
+    pub r8: u32,   // offset 16
+    pub r9: u32,   // offset 20
+    pub r10: u32,  // offset 24
+    pub r11: u32,  // offset 28
+    pub sp: u32,   // offset 32 — kernel stack pointer
+    pub lr: u32,   // offset 36 — resume address (caller's LR)
     pub cpsr: u32, // offset 40 — CPSR flags
 }
 
@@ -30,7 +30,7 @@ pub struct Arm32Context {
 // ARM AAPCS: r0 = old_ptr, r1 = new_ptr
 global_asm!(
     ".global __switch_arm32",
-    ".arm",                             // force ARM (not Thumb) encoding
+    ".arm", // force ARM (not Thumb) encoding
     "__switch_arm32:",
     // Save r4-r11 at *r0, post-increment r0 by 32.
     "stmia r0!, {{r4-r11}}",

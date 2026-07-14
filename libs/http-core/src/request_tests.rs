@@ -13,9 +13,15 @@ fn post_with_body_exact_bytes() {
     .build();
 
     let text = core::str::from_utf8(&req).unwrap();
-    assert!(text.starts_with("POST /v1/completions HTTP/1.1\r\n"), "request line: {text:?}");
+    assert!(
+        text.starts_with("POST /v1/completions HTTP/1.1\r\n"),
+        "request line: {text:?}"
+    );
     assert!(text.contains("Host: api.example.com\r\n"), "host: {text:?}");
-    assert!(text.contains("Content-Type: application/json\r\n"), "ct: {text:?}");
+    assert!(
+        text.contains("Content-Type: application/json\r\n"),
+        "ct: {text:?}"
+    );
     let cl = alloc::format!("Content-Length: {}\r\n", body.len());
     assert!(text.contains(&cl), "cl: {text:?}");
     assert!(text.contains("Connection: close\r\n"), "conn: {text:?}");
@@ -28,7 +34,10 @@ fn get_no_body_no_content_length() {
     let req = RequestBuilder::new("GET", "/index.html", "example.com", &[], None).build();
     let text = core::str::from_utf8(&req).unwrap();
     assert!(text.starts_with("GET /index.html HTTP/1.1\r\n"));
-    assert!(!text.contains("Content-Length"), "cl must be absent for GET: {text:?}");
+    assert!(
+        !text.contains("Content-Length"),
+        "cl must be absent for GET: {text:?}"
+    );
     assert!(text.ends_with("\r\n\r\n"));
 }
 
@@ -36,7 +45,10 @@ fn get_no_body_no_content_length() {
 fn empty_body_no_content_length() {
     let req = RequestBuilder::new("POST", "/", "host.invalid", &[], Some(b"")).build();
     let text = core::str::from_utf8(&req).unwrap();
-    assert!(!text.contains("Content-Length"), "cl must be absent for empty body: {text:?}");
+    assert!(
+        !text.contains("Content-Length"),
+        "cl must be absent for empty body: {text:?}"
+    );
 }
 
 #[test]

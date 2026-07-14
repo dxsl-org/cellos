@@ -67,7 +67,9 @@ impl ElfLoader {
                     return Err(ViError::InvalidInput);
                 }
                 // file_offset + file_size must fit inside the ELF buffer.
-                let file_end = file_offset.checked_add(file_size).ok_or(ViError::InvalidInput)?;
+                let file_end = file_offset
+                    .checked_add(file_size)
+                    .ok_or(ViError::InvalidInput)?;
                 if file_end > data.len() {
                     log::error!(
                         "ELF: segment file range {}..{} exceeds buffer len {}",
@@ -93,7 +95,8 @@ impl ElfLoader {
 
                 // Align start/end to page boundaries
                 let start_page = start_addr & !(4096 - 1);
-                let end_page = end_addr.checked_add(4095).ok_or(ViError::InvalidInput)? & !(4096 - 1);
+                let end_page =
+                    end_addr.checked_add(4095).ok_or(ViError::InvalidInput)? & !(4096 - 1);
 
                 // --- Translate ELF p_flags to page-table flags ---
                 // p_flags bits: 0x1=X, 0x2=W, 0x4=R. Default deny if all zero.
@@ -103,8 +106,12 @@ impl ElfLoader {
                 // semantics via Rust's type system, not hardware read-only pages;
                 // hardware-enforced W^X (MTE, SMMU, PKU) is a G2 item.
                 use crate::memory::paging::Flags;
-                let mut perm_bits = Flags::VALID | Flags::USER | Flags::ACCESSED
-                    | Flags::READ | Flags::WRITE | Flags::DIRTY;
+                let mut perm_bits = Flags::VALID
+                    | Flags::USER
+                    | Flags::ACCESSED
+                    | Flags::READ
+                    | Flags::WRITE
+                    | Flags::DIRTY;
                 if ph_flags.is_execute() {
                     perm_bits |= Flags::EXECUTE;
                 }
@@ -123,7 +130,8 @@ impl ElfLoader {
                     // we reuse the frame, merging the new segment's flags into the page
                     // rather than allocating a fresh one or blindly overwriting flags.
                     let already_ours = mapped.iter().any(|(va, _, _)| *va == current_page);
-                    if !already_ours && crate::memory::paging::virt_to_phys(current_page).is_some() {
+                    if !already_ours && crate::memory::paging::virt_to_phys(current_page).is_some()
+                    {
                         log::error!(
                             "ELF: load VA 0x{:X} already mapped — rejecting spawn (VA collision with a live cell or kernel MMIO; fix the cell's linker script)",
                             current_page
@@ -143,11 +151,18 @@ impl ElfLoader {
                         // satisfies both segments' access requirements.
                         let phys = crate::memory::paging::virt_to_phys(current_page)
                             .expect("already_ours but virt_to_phys returned None");
-                        if let Some(entry) = mapped.iter_mut().find(|(va, _, _)| *va == current_page) {
+                        if let Some(entry) =
+                            mapped.iter_mut().find(|(va, _, _)| *va == current_page)
+                        {
                             let merged = Flags::from_bits(entry.2.bits() | flags.bits());
                             if merged != entry.2 {
                                 entry.2 = merged;
-                                let _ = crate::memory::paging::map_page(frame_allocator, current_page, phys, merged);
+                                let _ = crate::memory::paging::map_page(
+                                    frame_allocator,
+                                    current_page,
+                                    phys,
+                                    merged,
+                                );
                             }
                         }
                         crate::memory::frame::phys_to_virt(phys)
@@ -172,7 +187,9 @@ impl ElfLoader {
                         // Use phys_to_virt: on RISC-V it's a no-op (identity map);
                         // on x86_64 physical RAM is only accessible via HHDM_BASE+phys.
                         let fv = crate::memory::frame::phys_to_virt(buf_frame);
-                        unsafe { core::ptr::write_bytes(fv as *mut u8, 0, 4096); }
+                        unsafe {
+                            core::ptr::write_bytes(fv as *mut u8, 0, 4096);
+                        }
                         fv
                     };
 

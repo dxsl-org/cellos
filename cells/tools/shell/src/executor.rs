@@ -7,12 +7,12 @@
 
 extern crate alloc;
 
+use crate::jobs::{JobState, Jobs};
+use crate::parser::{Ast, Cmd, Redirect};
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::UnsafeCell;
-use crate::parser::{Ast, Cmd, Redirect};
-use crate::jobs::{Jobs, JobState};
 use ostd::prelude::*;
 use ostd::syscall;
 
@@ -26,7 +26,10 @@ use ostd::syscall;
 // never call `shell_print`, so there is no concurrent-access hazard.
 // `CURRENT_STDIN` follows the same pattern for pipe-fed stdin data.
 
-enum OutputSink { Console, Buffer(*mut Vec<u8>) }
+enum OutputSink {
+    Console,
+    Buffer(*mut Vec<u8>),
+}
 
 /// Newtype that asserts `Sync` for an `UnsafeCell` in a single-task context.
 ///
@@ -38,8 +41,12 @@ struct SingleTaskCell<T>(UnsafeCell<T>);
 unsafe impl<T> Sync for SingleTaskCell<T> {}
 
 impl<T> SingleTaskCell<T> {
-    const fn new(val: T) -> Self { Self(UnsafeCell::new(val)) }
-    fn get(&self) -> *mut T { self.0.get() }
+    const fn new(val: T) -> Self {
+        Self(UnsafeCell::new(val))
+    }
+    fn get(&self) -> *mut T {
+        self.0.get()
+    }
 }
 
 static CURRENT_SINK: SingleTaskCell<OutputSink> = SingleTaskCell::new(OutputSink::Console);
@@ -73,7 +80,9 @@ impl SinkGuard {
 impl Drop for SinkGuard {
     fn drop(&mut self) {
         // SAFETY: single shell task; restoring saved sink on any exit path.
-        unsafe { *CURRENT_SINK.get() = core::mem::replace(&mut self.0, OutputSink::Console); }
+        unsafe {
+            *CURRENT_SINK.get() = core::mem::replace(&mut self.0, OutputSink::Console);
+        }
     }
 }
 
@@ -85,13 +94,16 @@ impl Drop for SinkGuard {
 pub fn shell_print(s: &str) {
     // SAFETY: only the shell task reads/writes CURRENT_SINK.
     match unsafe { &*CURRENT_SINK.get() } {
-        OutputSink::Console   => ostd::io::print(s),
+        OutputSink::Console => ostd::io::print(s),
         OutputSink::Buffer(v) => unsafe { (**v).extend_from_slice(s.as_bytes()) },
     }
 }
 
 /// `shell_print(s)` followed by a newline.
-pub fn shell_println(s: &str) { shell_print(s); shell_print("\n"); }
+pub fn shell_println(s: &str) {
+    shell_print(s);
+    shell_print("\n");
+}
 
 /// Return the current pipe-fed stdin bytes, or an empty slice.
 ///
@@ -100,16 +112,20 @@ pub fn shell_println(s: &str) { shell_print(s); shell_print("\n"); }
 pub fn shell_stdin() -> &'static [u8] {
     // SAFETY: CURRENT_STDIN is set and live for the duration of dispatch_builtin.
     let ptr = unsafe { *CURRENT_STDIN.get() };
-    if ptr.is_null() { &[] } else { unsafe { &*ptr } }
+    if ptr.is_null() {
+        &[]
+    } else {
+        unsafe { &*ptr }
+    }
 }
 
 /// All recognized shell built-in names, used by tab completion.
 pub const BUILTINS: &[&str] = &[
-    "alias", "awk", "bg", "blktest", "break", "cat", "clear", "continue", "echo", "env",
-    "exec", "exit", "export", "fg", "find", "free", "grep", "head", "help", "jobs",
-    "kill", "ls", "mkdir", "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown",
-    "sleep", "snapshot", "sort", "source", "tail", "tee", "test", "top", "unalias",
-    "uniq", "unset", "uname", "uptime", "vappend", "vcat", "vwrite", "wc",
+    "alias", "awk", "bg", "blktest", "break", "cat", "clear", "continue", "echo", "env", "exec",
+    "exit", "export", "fg", "find", "free", "grep", "head", "help", "jobs", "kill", "ls", "mkdir",
+    "ps", "pwd", "read", "rm", "rmdir", "sed", "shutdown", "sleep", "snapshot", "sort", "source",
+    "tail", "tee", "test", "top", "unalias", "uniq", "unset", "uname", "uptime", "vappend", "vcat",
+    "vwrite", "wc",
 ];
 
 // ── Shell function store ──────────────────────────────────────────────────────
@@ -129,7 +145,10 @@ pub fn define_function(name: &str, body: &str) {
     let nlen = nb.len().min(31);
     let blen = bb.len().min(479);
     // SAFETY: single shell task; no concurrent writes.
-    let store = unsafe { &mut FUNS };
+    // SAFETY: addr_of_mut! avoids materializing a `&mut` directly on the
+    // static-mut path expression (satisfies `clippy::static_mut_refs`); the
+    // single-shell-task invariant above still makes this reference exclusive.
+    let store = unsafe { &mut *core::ptr::addr_of_mut!(FUNS) };
     // Update existing.
     for slot in store.iter_mut() {
         if slot.0 && &slot.1[..nlen] == &nb[..nlen] && slot.1[nlen] == 0 {
@@ -155,7 +174,9 @@ fn get_function(name: &str) -> Option<&'static str> {
     let nb = name.as_bytes();
     let nlen = nb.len().min(31);
     // SAFETY: single shell task; no concurrent reads.
-    let store = unsafe { &FUNS };
+    // SAFETY: addr_of! avoids materializing a `&` directly on the static-mut
+    // path expression (satisfies `clippy::static_mut_refs`); single shell task.
+    let store = unsafe { &*core::ptr::addr_of!(FUNS) };
     for slot in store.iter() {
         if slot.0 && &slot.1[..nlen] == &nb[..nlen] && slot.1[nlen] == 0 {
             let blen = slot.2.iter().position(|&b| b == 0).unwrap_or(480);
@@ -171,12 +192,15 @@ fn get_function(name: &str) -> Option<&'static str> {
 // command and terminates when set.  Single-threaded — static is safe.
 
 static mut EXIT_REQUESTED: bool = false;
-static mut EXIT_CODE_VALUE: i32  = 0;
+static mut EXIT_CODE_VALUE: i32 = 0;
 
 /// Signal the shell to exit with the given code on its next loop iteration.
 pub fn request_exit(code: i32) {
     // SAFETY: single shell task; no concurrent writes.
-    unsafe { EXIT_REQUESTED = true; EXIT_CODE_VALUE = code; }
+    unsafe {
+        EXIT_REQUESTED = true;
+        EXIT_CODE_VALUE = code;
+    }
 }
 
 /// True if `exit` has been called; clears the flag.
@@ -199,13 +223,22 @@ pub fn take_exit_request() -> Option<i32> {
 // (one task, cooperative scheduling) so a static flag is safe.
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum LoopSignal { None, Break, Continue }
+enum LoopSignal {
+    None,
+    Break,
+    Continue,
+}
 
 static mut LOOP_SIGNAL: LoopSignal = LoopSignal::None;
 
-pub fn set_loop_signal(s: LoopSignal) {
+// Only called from within this module (the `break`/`continue` builtins below),
+// so this stays private to match `LoopSignal`'s privacy — a `pub` fn exposing
+// a private type tripped the `private_interfaces` lint.
+fn set_loop_signal(s: LoopSignal) {
     // SAFETY: single shell task; no concurrent writes.
-    unsafe { LOOP_SIGNAL = s; }
+    unsafe {
+        LOOP_SIGNAL = s;
+    }
 }
 
 fn take_loop_signal() -> LoopSignal {
@@ -234,7 +267,10 @@ fn unset_var(key: &str) {
     let kb = key.as_bytes();
     let klen = kb.len().min(31);
     // SAFETY: single shell task; no concurrent writes.
-    let store = unsafe { &mut VARS };
+    // SAFETY: addr_of_mut! avoids materializing a `&mut` directly on the
+    // static-mut path expression (satisfies `clippy::static_mut_refs`); the
+    // single-shell-task invariant above still makes this reference exclusive.
+    let store = unsafe { &mut *core::ptr::addr_of_mut!(VARS) };
     for slot in store.iter_mut() {
         if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
             slot.0 = false;
@@ -247,7 +283,10 @@ fn set_var(key: &str, value: &str) {
     let kb = key.as_bytes();
     let vb = value.as_bytes();
     // SAFETY: single shell task; no concurrent writes to VARS.
-    let store = unsafe { &mut VARS };
+    // SAFETY: addr_of_mut! avoids materializing a `&mut` directly on the
+    // static-mut path expression (satisfies `clippy::static_mut_refs`); the
+    // single-shell-task invariant above still makes this reference exclusive.
+    let store = unsafe { &mut *core::ptr::addr_of_mut!(VARS) };
     let klen = kb.len().min(31);
     let vlen = vb.len().min(127);
     // Update existing slot first.
@@ -276,7 +315,9 @@ fn get_var(key: &str) -> Option<&'static str> {
     let kb = key.as_bytes();
     let klen = kb.len().min(31);
     // SAFETY: single shell task; no concurrent reads.
-    let store = unsafe { &VARS };
+    // SAFETY: addr_of! avoids materializing a `&` directly on the static-mut
+    // path expression (satisfies `clippy::static_mut_refs`); single shell task.
+    let store = unsafe { &*core::ptr::addr_of!(VARS) };
     for slot in store.iter() {
         if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
             let vlen = slot.2.iter().position(|&b| b == 0).unwrap_or(128);
@@ -300,7 +341,10 @@ fn get_var(key: &str) -> Option<&'static str> {
 /// Nested `$(...)` is the caller's responsibility to reject before calling.
 fn run_capture(inner: &str) -> String {
     let mut words = inner.split_whitespace();
-    let cmd = match words.next() { Some(c) => c, None => return String::new() };
+    let cmd = match words.next() {
+        Some(c) => c,
+        None => return String::new(),
+    };
     let args: alloc::vec::Vec<&str> = words.collect();
     match cmd {
         "echo" => {
@@ -313,8 +357,12 @@ fn run_capture(inner: &str) -> String {
                 let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
                 if n > 0 {
                     String::from(core::str::from_utf8(&buf[..n]).unwrap_or(""))
-                } else { String::new() }
-            } else { String::new() }
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
         }
         "pwd" => String::from("/\n"),
         _ => String::new(),
@@ -322,7 +370,9 @@ fn run_capture(inner: &str) -> String {
 }
 
 fn expand_token(s: &str) -> String {
-    if !s.contains('$') { return String::from(s); }
+    if !s.contains('$') {
+        return String::from(s);
+    }
     let mut result = String::new();
     let bytes = s.as_bytes();
     let mut i = 0;
@@ -336,10 +386,13 @@ fn expand_token(s: &str) -> String {
                 let mut depth = 1usize;
                 let mut j = inner_start;
                 while j < bytes.len() {
-                    if bytes[j] == b'(' { depth += 1; }
-                    else if bytes[j] == b')' {
+                    if bytes[j] == b'(' {
+                        depth += 1;
+                    } else if bytes[j] == b')' {
                         depth -= 1;
-                        if depth == 0 { break; }
+                        if depth == 0 {
+                            break;
+                        }
                     }
                     j += 1;
                 }
@@ -361,37 +414,49 @@ fn expand_token(s: &str) -> String {
             }
             if next == b'?' {
                 // $? — exit code of the last command.
-                if let Some(v) = get_var("?") { result.push_str(v); }
+                if let Some(v) = get_var("?") {
+                    result.push_str(v);
+                }
                 i += 2;
                 continue;
             }
             if next == b'#' {
                 // $# — positional argument count.
-                if let Some(v) = get_var("#") { result.push_str(v); }
+                if let Some(v) = get_var("#") {
+                    result.push_str(v);
+                }
                 i += 2;
                 continue;
             }
             if next == b'@' {
                 // $@ — all positional arguments joined with spaces.
-                if let Some(v) = get_var("@") { result.push_str(v); }
+                if let Some(v) = get_var("@") {
+                    result.push_str(v);
+                }
                 i += 2;
                 continue;
             }
             if next.is_ascii_digit() && next != b'0' {
                 // $1..$9 — single-digit positional parameter.
-                let key = unsafe { core::str::from_utf8_unchecked(&bytes[i+1..i+2]) };
-                if let Some(v) = get_var(key) { result.push_str(v); }
+                let key = unsafe { core::str::from_utf8_unchecked(&bytes[i + 1..i + 2]) };
+                if let Some(v) = get_var(key) {
+                    result.push_str(v);
+                }
                 i += 2;
                 continue;
             }
             if next.is_ascii_alphabetic() || next == b'_' {
                 let start = i + 1;
-                let end   = bytes[start..].iter()
+                let end = bytes[start..]
+                    .iter()
                     .take_while(|&&b| b.is_ascii_alphanumeric() || b == b'_')
-                    .count() + start;
+                    .count()
+                    + start;
                 // SAFETY: bytes[start..end] contains only ASCII alphanumeric / '_'.
                 let name = unsafe { core::str::from_utf8_unchecked(&bytes[start..end]) };
-                if let Some(v) = get_var(name) { result.push_str(v); }
+                if let Some(v) = get_var(name) {
+                    result.push_str(v);
+                }
                 // Unset variables expand to empty string (POSIX default).
                 i = end;
                 continue;
@@ -438,13 +503,19 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             let name = cmd.argv.first().map(String::as_str).unwrap_or("?");
             let jid = jobs.add(name);
             // Background job notification always goes to console, not the sink.
-            ostd::io::print("["); ostd::io::print_usize(jid); ostd::io::println("] running");
+            ostd::io::print("[");
+            ostd::io::print_usize(jid);
+            ostd::io::println("] running");
             // Signal spawn_external to skip sys_wait so a long-running external
             // cell (httpd) does not park the shell forever. Built-ins ignore it.
             // SAFETY: single shell task; flag cleared on the same call frame.
-            unsafe { *BG_SPAWN.get() = true; }
+            unsafe {
+                *BG_SPAWN.get() = true;
+            }
             exec_cmd(cmd, &[], jobs);
-            unsafe { *BG_SPAWN.get() = false; }
+            unsafe {
+                *BG_SPAWN.get() = false;
+            }
             jobs.set_state(jid, JobState::Done);
             0
         }
@@ -471,20 +542,30 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
         }
         Ast::And(left, right) => {
             let code = execute(left, jobs);
-            if code == 0 { execute(right, jobs) } else { code }
+            if code == 0 {
+                execute(right, jobs)
+            } else {
+                code
+            }
         }
         Ast::Or(left, right) => {
             let code = execute(left, jobs);
-            if code != 0 { execute(right, jobs) } else { code }
+            if code != 0 {
+                execute(right, jobs)
+            } else {
+                code
+            }
         }
         Ast::While { cond, body } => {
             loop {
-                if execute(cond, jobs) != 0 { break; }
+                if execute(cond, jobs) != 0 {
+                    break;
+                }
                 execute(body, jobs);
                 match take_loop_signal() {
-                    LoopSignal::Break    => break,
+                    LoopSignal::Break => break,
                     LoopSignal::Continue => continue,
-                    LoopSignal::None     => {}
+                    LoopSignal::None => {}
                 }
             }
             0
@@ -494,14 +575,18 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
                 set_var(var, word);
                 execute(body, jobs);
                 match take_loop_signal() {
-                    LoopSignal::Break    => break 'for_loop,
+                    LoopSignal::Break => break 'for_loop,
                     LoopSignal::Continue => continue 'for_loop,
-                    LoopSignal::None     => {}
+                    LoopSignal::None => {}
                 }
             }
             0
         }
-        Ast::If { cond, then_b, else_b } => {
+        Ast::If {
+            cond,
+            then_b,
+            else_b,
+        } => {
             let code = execute(cond, jobs);
             if code == 0 {
                 execute(then_b, jobs)
@@ -520,7 +605,9 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
 /// runs directly through the current sink so its exit code is preserved and
 /// any outer capture (nested pipeline or `$(...)`) captures it correctly.
 fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
-    if cmds.is_empty() { return 0; }
+    if cmds.is_empty() {
+        return 0;
+    }
     let last_idx = cmds.len() - 1;
     let mut stdin_data: Vec<u8> = Vec::new();
 
@@ -529,9 +616,13 @@ fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
             // Last stage: run directly (no intermediate capture).
             // Wire pipe stdin so built-ins without a file path read from it.
             // SAFETY: stdin_data is alive for the duration of exec_cmd.
-            unsafe { *CURRENT_STDIN.get() = stdin_data.as_slice() as *const [u8]; }
+            unsafe {
+                *CURRENT_STDIN.get() = stdin_data.as_slice() as *const [u8];
+            }
             let code = exec_cmd(cmd, &stdin_data, jobs);
-            unsafe { *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8]; }
+            unsafe {
+                *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8];
+            }
             return code;
         }
         stdin_data = capture_cmd(cmd, &stdin_data, jobs);
@@ -558,7 +649,9 @@ fn capture_cmd(cmd: &Cmd, stdin: &[u8], jobs: &mut Jobs) -> Vec<u8> {
 ///
 /// Handles redirection, built-in dispatch, and external binary spawn.
 fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
-    if cmd.is_empty() { return 0; }
+    if cmd.is_empty() {
+        return 0;
+    }
 
     // Expand $VAR tokens in every argument before dispatch.
     let expanded: Vec<String> = cmd.argv.iter().map(|s| expand_token(s)).collect();
@@ -578,21 +671,29 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
 
     // echo with stdout redirect: fast path using cmd_echo_to_vec (no OutputSink needed).
     if prog == "echo" {
-        if let Some(Redirect::StdoutTo(path)) =
-            cmd.redirects.iter().find(|r| matches!(r, Redirect::StdoutTo(_)))
+        if let Some(Redirect::StdoutTo(path)) = cmd
+            .redirects
+            .iter()
+            .find(|r| matches!(r, Redirect::StdoutTo(_)))
         {
             let bytes = crate::commands::cmd_echo_to_vec(&args);
             if !crate::cmd_fs::write_file(path, &bytes) {
-                ostd::io::print("echo: cannot write '"); ostd::io::print(path); ostd::io::println("'");
+                ostd::io::print("echo: cannot write '");
+                ostd::io::print(path);
+                ostd::io::println("'");
             }
             return 0;
         }
-        if let Some(Redirect::StdoutAppend(path)) =
-            cmd.redirects.iter().find(|r| matches!(r, Redirect::StdoutAppend(_)))
+        if let Some(Redirect::StdoutAppend(path)) = cmd
+            .redirects
+            .iter()
+            .find(|r| matches!(r, Redirect::StdoutAppend(_)))
         {
             let bytes = crate::commands::cmd_echo_to_vec(&args);
             if !crate::cmd_fs::append_file(path, &bytes) {
-                ostd::io::print("echo: cannot append '"); ostd::io::print(path); ostd::io::println("'");
+                ostd::io::print("echo: cannot append '");
+                ostd::io::print(path);
+                ostd::io::println("'");
             }
             return 0;
         }
@@ -601,14 +702,18 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     // StdinFrom redirect: preload the file into a buffer and expose it via
     // shell_stdin() so built-ins (grep, wc, …) can read from it.
     let stdin_file_buf: Vec<u8>;
-    let effective_stdin: &[u8] = if let Some(Redirect::StdinFrom(path)) =
-        cmd.redirects.iter().find(|r| matches!(r, Redirect::StdinFrom(_)))
+    let effective_stdin: &[u8] = if let Some(Redirect::StdinFrom(path)) = cmd
+        .redirects
+        .iter()
+        .find(|r| matches!(r, Redirect::StdinFrom(_)))
     {
         stdin_file_buf = {
             let mut buf = alloc::vec![0u8; 4096];
             let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
             if n == 0 {
-                ostd::io::print("shell: cannot open '"); ostd::io::print(path); ostd::io::println("'");
+                ostd::io::print("shell: cannot open '");
+                ostd::io::print(path);
+                ostd::io::println("'");
             }
             buf[..n].to_vec()
         };
@@ -623,19 +728,27 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     // semantically equivalent to `>file` — both capture `shell_print` output.
     // When both `>` and `2>` are present, `>` takes precedence; `2>` is a
     // documented no-op in that case (single-channel limitation).
-    let stdout_redir = cmd.redirects.iter().find_map(|r| match r {
-        Redirect::StdoutTo(path)     => Some((path.clone(), false)),
-        Redirect::StdoutAppend(path) => Some((path.clone(), true)),
-        _ => None,
-    }).or_else(|| cmd.redirects.iter().find_map(|r| match r {
-        // Fallback: StderrTo reuses the stdout-capture path (one-channel shell).
-        Redirect::StderrTo(path) => Some((path.clone(), false)),
-        _ => None,
-    }));
+    let stdout_redir = cmd
+        .redirects
+        .iter()
+        .find_map(|r| match r {
+            Redirect::StdoutTo(path) => Some((path.clone(), false)),
+            Redirect::StdoutAppend(path) => Some((path.clone(), true)),
+            _ => None,
+        })
+        .or_else(|| {
+            cmd.redirects.iter().find_map(|r| match r {
+                // Fallback: StderrTo reuses the stdout-capture path (one-channel shell).
+                Redirect::StderrTo(path) => Some((path.clone(), false)),
+                _ => None,
+            })
+        });
 
     // Wire the pipe-fed stdin so pipe-aware built-ins can read it.
     // SAFETY: effective_stdin is alive for the duration of dispatch_builtin.
-    unsafe { *CURRENT_STDIN.get() = effective_stdin as *const [u8]; }
+    unsafe {
+        *CURRENT_STDIN.get() = effective_stdin as *const [u8];
+    }
 
     let code = if let Some((path, append)) = stdout_redir {
         // Capture this command's output into a buffer, then write to VFS.
@@ -651,7 +764,9 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     };
 
     // Clear stdin pointer; keep CURRENT_SINK unmodified (exec_cmd doesn't own it).
-    unsafe { *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8]; }
+    unsafe {
+        *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8];
+    }
 
     set_var("?", i32_to_str(code));
     code
@@ -681,8 +796,16 @@ fn usize_key(n: usize) -> String {
 fn i32_to_str(n: i32) -> &'static str {
     // Use a 'static lookup table for the most common exit codes (0–9).
     match n {
-        0 => "0", 1 => "1", 2 => "2", 3 => "3", 4 => "4",
-        5 => "5", 6 => "6", 7 => "7", 8 => "8", 9 => "9",
+        0 => "0",
+        1 => "1",
+        2 => "2",
+        3 => "3",
+        4 => "4",
+        5 => "5",
+        6 => "6",
+        7 => "7",
+        8 => "8",
+        9 => "9",
         127 => "127",
         _ => "1",
     }
@@ -702,57 +825,68 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
 
     let result = match prog {
         // ── Filesystem ──────────────────────────────────────────────────
-        "ls"    => crate::commands::cmd_ls(make_parts(args)),
-        "cat"   => crate::commands::cmd_cat(make_parts(args)),
-        "wc"    => crate::cmd_fs::cmd_wc(make_parts(args)),
-        "head"  => crate::cmd_fs::cmd_head(make_parts(args)),
-        "tail"  => crate::cmd_fs::cmd_tail(make_parts(args)),
-        "grep"  => crate::cmd_fs::cmd_grep(make_parts(args)),
-        "find"  => crate::cmd_fs::cmd_find(make_parts(args)),
-        "uniq"  => crate::cmd_fs::cmd_uniq(make_parts(args)),
-        "sort"  => crate::cmd_fs::cmd_sort(make_parts(args)),
-        "tee"   => crate::cmd_fs::cmd_tee(make_parts(args)),
-        "sed"   => crate::cmd_fs::cmd_sed(make_parts(args)),
+        "ls" => crate::commands::cmd_ls(make_parts(args)),
+        "cat" => crate::commands::cmd_cat(make_parts(args)),
+        "wc" => crate::cmd_fs::cmd_wc(make_parts(args)),
+        "head" => crate::cmd_fs::cmd_head(make_parts(args)),
+        "tail" => crate::cmd_fs::cmd_tail(make_parts(args)),
+        "grep" => crate::cmd_fs::cmd_grep(make_parts(args)),
+        "find" => crate::cmd_fs::cmd_find(make_parts(args)),
+        "uniq" => crate::cmd_fs::cmd_uniq(make_parts(args)),
+        "sort" => crate::cmd_fs::cmd_sort(make_parts(args)),
+        "tee" => crate::cmd_fs::cmd_tee(make_parts(args)),
+        "sed" => crate::cmd_fs::cmd_sed(make_parts(args)),
         "mkdir" => crate::cmd_fs::cmd_mkdir(make_parts(args)),
         "rmdir" => crate::cmd_fs::cmd_rmdir(make_parts(args)),
-        "rm"    => crate::cmd_fs::cmd_rm(make_parts(args)),
-        "vcat"    => crate::cmd_fs::cmd_vcat(make_parts(args)),
-        "vwrite"  => crate::cmd_fs::cmd_vwrite(make_parts(args)),
+        "rm" => crate::cmd_fs::cmd_rm(make_parts(args)),
+        "vcat" => crate::cmd_fs::cmd_vcat(make_parts(args)),
+        "vwrite" => crate::cmd_fs::cmd_vwrite(make_parts(args)),
         "vappend" => crate::cmd_fs::cmd_vappend(make_parts(args)),
-        "awk"  => crate::cmd_fs::cmd_awk(make_parts(args)),
-        "top"  => crate::commands::cmd_top(make_parts(args)),
+        "awk" => crate::cmd_fs::cmd_awk(make_parts(args)),
+        "top" => crate::commands::cmd_top(make_parts(args)),
         "kill" => crate::commands::cmd_kill(make_parts(args)),
         // ── Snapshot ────────────────────────────────────────────────────
         "snapshot" => {
             shell_println("[shell] writing warm-boot snapshot...");
             match ostd::syscall::sys_snapshot() {
                 ostd::syscall::SyscallResult::Ok(n) if n > 0 => {
-                    shell_print(&alloc::format!("[shell] snapshot: wrote {} frames. Reboot for warm boot.\n", n));
+                    shell_print(&alloc::format!(
+                        "[shell] snapshot: wrote {} frames. Reboot for warm boot.\n",
+                        n
+                    ));
                     Ok(())
                 }
-                _ => { shell_println("[shell] snapshot: failed"); Err(ViError::Unknown) }
+                _ => {
+                    shell_println("[shell] snapshot: failed");
+                    Err(ViError::Unknown)
+                }
             }
         }
         // ── System ──────────────────────────────────────────────────────
-        "ps"     => crate::commands::cmd_ps(make_parts(args)),
-        "pwd"    => crate::cmd_sys::cmd_pwd(make_parts(args)),
-        "uname"  => crate::cmd_sys::cmd_uname(make_parts(args)),
-        "free"   => crate::cmd_sys::cmd_free(make_parts(args)),
-        "env"    => crate::cmd_sys::cmd_env(make_parts(args)),
-        "uptime"   => crate::cmd_sys::cmd_uptime(make_parts(args)),
+        "ps" => crate::commands::cmd_ps(make_parts(args)),
+        "pwd" => crate::cmd_sys::cmd_pwd(make_parts(args)),
+        "uname" => crate::cmd_sys::cmd_uname(make_parts(args)),
+        "free" => crate::cmd_sys::cmd_free(make_parts(args)),
+        "env" => crate::cmd_sys::cmd_env(make_parts(args)),
+        "uptime" => crate::cmd_sys::cmd_uptime(make_parts(args)),
         "shutdown" => crate::cmd_sys::cmd_shutdown(),
-        "sleep"    => crate::cmd_sys::cmd_sleep(make_parts(args)),
-        "blktest"  => crate::cmd_sys::cmd_blkio_test(make_parts(args)),
-        "echo"   => crate::commands::cmd_echo(make_parts(args)),
-        "clear"  => crate::commands::cmd_clear(),
-        "help"   => crate::commands::cmd_help(),
-        "exec"   => crate::commands::cmd_exec(make_parts(args)),
+        "sleep" => crate::cmd_sys::cmd_sleep(make_parts(args)),
+        "blktest" => crate::cmd_sys::cmd_blkio_test(make_parts(args)),
+        "echo" => crate::commands::cmd_echo(make_parts(args)),
+        "clear" => crate::commands::cmd_clear(),
+        "help" => crate::commands::cmd_help(),
+        "exec" => crate::commands::cmd_exec(make_parts(args)),
         // ── Jobs ────────────────────────────────────────────────────────
-        "jobs" => { print_jobs(jobs); Ok(()) }
+        "jobs" => {
+            print_jobs(jobs);
+            Ok(())
+        }
         // fg/bg: ViCell background jobs run synchronously (cooperative scheduler,
         // single-task shell). All &-jobs already completed before fg/bg is called.
         "fg" | "bg" => {
-            shell_println("fg/bg: no job control — background jobs run synchronously in this shell");
+            shell_println(
+                "fg/bg: no job control — background jobs run synchronously in this shell",
+            );
             Ok(())
         }
         // ── Scripting ───────────────────────────────────────────────────
@@ -762,28 +896,39 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
         // Err (exit 1) on false.  `[` strips a trailing `]` argument.
         "test" => cmd_test(args),
         "[" => {
-            let stripped: Vec<&str> = args.iter().copied()
-                .filter(|&a| a != "]")
-                .collect();
+            let stripped: Vec<&str> = args.iter().copied().filter(|&a| a != "]").collect();
             cmd_test(&stripped)
         }
-        "break"    => { set_loop_signal(LoopSignal::Break);    Ok(()) }
-        "continue" => { set_loop_signal(LoopSignal::Continue); Ok(()) }
+        "break" => {
+            set_loop_signal(LoopSignal::Break);
+            Ok(())
+        }
+        "continue" => {
+            set_loop_signal(LoopSignal::Continue);
+            Ok(())
+        }
         "read" => cmd_read(args),
         "exit" => {
-            let code = args.first().and_then(|s| {
-                let mut n = 0i32;
-                for ch in s.bytes() {
-                    if !(b'0'..=b'9').contains(&ch) { return None; }
-                    n = n.saturating_mul(10).saturating_add((ch - b'0') as i32);
-                }
-                Some(n)
-            }).unwrap_or(0);
+            let code = args
+                .first()
+                .and_then(|s| {
+                    let mut n = 0i32;
+                    for ch in s.bytes() {
+                        if !(b'0'..=b'9').contains(&ch) {
+                            return None;
+                        }
+                        n = n.saturating_mul(10).saturating_add((ch - b'0') as i32);
+                    }
+                    Some(n)
+                })
+                .unwrap_or(0);
             request_exit(code);
             Ok(())
         }
         "unset" => {
-            for name in args { unset_var(name); }
+            for name in args {
+                unset_var(name);
+            }
             Ok(())
         }
         // ── External / user-defined functions ───────────────────────────
@@ -819,13 +964,15 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
                 let result = if let Ok(s) = core::str::from_utf8(&buf[..blen]) {
                     let ast = crate::parser::parse(s);
                     execute(&ast, jobs)
-                } else { 1 };
+                } else {
+                    1
+                };
 
                 // Restore saved positional variables.
                 for (k, v) in &saved {
                     match v {
                         Some(old) => set_var(k, old),
-                        None      => unset_var(k),
+                        None => unset_var(k),
                     }
                 }
                 return result;
@@ -833,15 +980,24 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
             return spawn_external(prog, args);
         }
     };
-    match result { Ok(()) => 0, Err(_) => 1 }
+    match result {
+        Ok(()) => 0,
+        Err(_) => 1,
+    }
 }
 
 /// Print all active jobs.
 fn print_jobs(jobs: &Jobs) {
     for (id, state, name) in jobs.list() {
-        shell_print(&alloc::format!("[{}] {}  {}\n", id,
-            match state { JobState::Running => "Running", JobState::Done => "Done   " },
-            name));
+        shell_print(&alloc::format!(
+            "[{}] {}  {}\n",
+            id,
+            match state {
+                JobState::Running => "Running",
+                JobState::Done => "Done   ",
+            },
+            name
+        ));
     }
 }
 
@@ -854,26 +1010,54 @@ fn print_jobs(jobs: &Jobs) {
 /// - `a = b`     : string equality
 /// - `a != b`    : string inequality
 fn cmd_test(args: &[&str]) -> ViResult<()> {
-    let ok   = Ok(());
+    let ok = Ok(());
     let fail = Err(ViError::NotFound); // any non-Ok maps to exit code 1
     match args {
         ["-f", path] => {
             // File-existence check: vcat returns 0 if the file is present and
             // non-empty, 1 otherwise. Re-use the same VFS OP_READ path.
             let mut buf = [0u8; 8];
-            if crate::cmd_fs::read_file_vfs(path, &mut buf) > 0 { ok } else { fail }
+            if crate::cmd_fs::read_file_vfs(path, &mut buf) > 0 {
+                ok
+            } else {
+                fail
+            }
         }
-        [s1, "-z"] | ["-z", s1] => if s1.is_empty() { ok } else { fail },
-        [s1, "-n"] | ["-n", s1] => if !s1.is_empty() { ok } else { fail },
+        [s1, "-z"] | ["-z", s1] => {
+            if s1.is_empty() {
+                ok
+            } else {
+                fail
+            }
+        }
+        [s1, "-n"] | ["-n", s1] => {
+            if !s1.is_empty() {
+                ok
+            } else {
+                fail
+            }
+        }
         _ => {
             // String comparison: `a = b` or `a != b`.
             // args may be ["a", "=", "b"] or ["a", "!=", "b"].
             if args.len() == 3 {
                 let (a, op, b) = (args[0], args[1], args[2]);
                 match op {
-                    "=" | "==" => if a == b { ok } else { fail },
-                    "!="       => if a != b { ok } else { fail },
-                    _          => fail,
+                    "=" | "==" => {
+                        if a == b {
+                            ok
+                        } else {
+                            fail
+                        }
+                    }
+                    "!=" => {
+                        if a != b {
+                            ok
+                        } else {
+                            fail
+                        }
+                    }
+                    _ => fail,
                 }
             } else {
                 fail
@@ -910,7 +1094,9 @@ fn cmd_read(args: &[&str]) -> ViResult<()> {
                     _ => {}
                 }
             }
-            _ => { ostd::syscall::sys_yield(); }
+            _ => {
+                ostd::syscall::sys_yield();
+            }
         }
     }
     ostd::io::println(""); // newline after input
@@ -999,7 +1185,11 @@ fn spawn_external(prog: &str, args: &[&str]) -> i32 {
                 syscall::SyscallResult::Err(_) => 0,
             };
             // Re-acquire focus for the next interactive prompt.
-            for _ in 0..10 { if ostd::input::request_focus() { break; } }
+            for _ in 0..10 {
+                if ostd::input::request_focus() {
+                    break;
+                }
+            }
             code
         }
         syscall::SyscallResult::Err(_) => {

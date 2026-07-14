@@ -5,13 +5,13 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-ostd = { path = "../../../libs/ostd" }
-api = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api = { path = "../../../libs/api", version = "0.1.0" }
 
 [lib]
 crate-type = ["staticlib"]
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }
 
 

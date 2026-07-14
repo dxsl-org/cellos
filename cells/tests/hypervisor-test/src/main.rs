@@ -14,14 +14,29 @@
 
 extern crate alloc;
 
-use api::syscall::ViSyscall;
 use api::hypervisor::ViVmExit;
+use api::syscall::ViSyscall;
 use ostd::io::println;
 
 // Declare manifest: hypervisor = true (grants HypervisorCap at EL2).
-api::declare_manifest!(block_io = false, network = false, spawn = false, gpio = false, uart = false, hypervisor = true);
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = true
+);
 // Declare allowlist bit 44 (HypervisorCap syscalls).
-api::declare_syscalls![Log, CreateVm, CreateVcpu, MapGuestMemory, RunVcpu, VcpuRegs, InjectIrq];
+api::declare_syscalls![
+    Log,
+    CreateVm,
+    CreateVcpu,
+    MapGuestMemory,
+    RunVcpu,
+    VcpuRegs,
+    InjectIrq
+];
 
 /// Guest IPA where the vCPU blob is placed (must be inside the mapped region).
 const BLOB_IPA: u64 = 0x4008_0000;
@@ -55,9 +70,7 @@ pub extern "C" fn main() -> ! {
     println("[hv-test] Phase 04 hypervisor ABI smoke test");
 
     // ── 1. Create VM ──────────────────────────────────────────────────────────
-    let vm_id = unsafe {
-        syscall4(ViSyscall::CreateVm, GUEST_PAGES, 0, 0, 0)
-    };
+    let vm_id = unsafe { syscall4(ViSyscall::CreateVm, GUEST_PAGES, 0, 0, 0) };
     if vm_id == 0 || vm_id == usize::MAX {
         println("[hv-test] FAIL: sys_create_vm returned error (not at EL2?)");
         ostd::syscall::sys_exit(1);
@@ -65,9 +78,7 @@ pub extern "C" fn main() -> ! {
     println("[hv-test] created vm_id=1 (ok)");
 
     // ── 2. Create vCPU (kernel writes HVC smoke blob at BLOB_IPA) ─────────────
-    let vcpu_id = unsafe {
-        syscall4(ViSyscall::CreateVcpu, vm_id, BLOB_IPA as usize, 0, 0)
-    };
+    let vcpu_id = unsafe { syscall4(ViSyscall::CreateVcpu, vm_id, BLOB_IPA as usize, 0, 0) };
     if vcpu_id == 0 || vcpu_id == usize::MAX {
         println("[hv-test] FAIL: sys_create_vcpu returned error");
         ostd::syscall::sys_exit(1);
@@ -83,7 +94,7 @@ pub extern "C" fn main() -> ! {
             ViSyscall::RunVcpu,
             vm_id,
             vcpu_id,
-            0,        // budget_ns = 0 (unlimited for this test)
+            0, // budget_ns = 0 (unlimited for this test)
             exit_ptr,
         )
     };

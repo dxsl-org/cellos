@@ -39,14 +39,15 @@ static FAILED: AtomicU32 = AtomicU32::new(0);
 
 fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
     let mut send_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-    let n = api::ipc::encode(req, &mut send_buf).map(|s| s.len()).unwrap_or(0);
+    let n = api::ipc::encode(req, &mut send_buf)
+        .map(|s| s.len())
+        .unwrap_or(0);
     ostd::syscall::sys_send(vfs_tid(), &send_buf[..n]);
     let buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
         alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; api::ipc::IPC_BUF_SIZE]));
     match ostd::syscall::sys_recv(0, buf) {
-        ostd::syscall::SyscallResult::Ok(_) =>
-            api::ipc::decode::<api::ipc::VfsResponse>(buf)
-                .unwrap_or(api::ipc::VfsResponse::Err(0xFE)),
+        ostd::syscall::SyscallResult::Ok(_) => api::ipc::decode::<api::ipc::VfsResponse>(buf)
+            .unwrap_or(api::ipc::VfsResponse::Err(0xFE)),
         _ => api::ipc::VfsResponse::Err(0xFD),
     }
 }
@@ -73,7 +74,9 @@ fn fail(label: &str, note: &str) {
 fn test_s1_mount() {
     match vfs_req(&api::ipc::VfsRequest::Stat("/srv")) {
         api::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("S1 mount"),
-        api::ipc::VfsResponse::Err(c) => fail("S1 mount", if c == 0xFF { "VFS uninit" } else { "Err" }),
+        api::ipc::VfsResponse::Err(c) => {
+            fail("S1 mount", if c == 0xFF { "VFS uninit" } else { "Err" })
+        }
         _ => fail("S1 mount", "not a dir"),
     }
 }
@@ -83,15 +86,24 @@ fn test_s2_write_read() {
     let content = b"ViCell RedoxFS";
 
     match vfs_req(&api::ipc::VfsRequest::Write {
-        path: "/srv/test.txt", content,
+        path: "/srv/test.txt",
+        content,
     }) {
         api::ipc::VfsResponse::Ok => {}
-        _ => { fail("S2 write+read", "write failed"); return; }
+        _ => {
+            fail("S2 write+read", "write failed");
+            return;
+        }
     }
 
-    let handle = match vfs_req(&api::ipc::VfsRequest::ReadAsync { path: "/srv/test.txt" }) {
+    let handle = match vfs_req(&api::ipc::VfsRequest::ReadAsync {
+        path: "/srv/test.txt",
+    }) {
         api::ipc::VfsResponse::PendingHandle(h) => h,
-        _ => { fail("S2 write+read", "ReadAsync no handle"); return; }
+        _ => {
+            fail("S2 write+read", "ReadAsync no handle");
+            return;
+        }
     };
 
     match vfs_req(&api::ipc::VfsRequest::Poll { handle }) {
@@ -119,12 +131,18 @@ fn test_s3_listdir() {
 fn test_s4_mkdir() {
     match vfs_req(&api::ipc::VfsRequest::Mkdir("/srv/subdir")) {
         api::ipc::VfsResponse::Ok => {}
-        _ => { fail("S4 mkdir", "mkdir failed"); return; }
+        _ => {
+            fail("S4 mkdir", "mkdir failed");
+            return;
+        }
     }
 
     match vfs_req(&api::ipc::VfsRequest::Stat("/srv/subdir")) {
         api::ipc::VfsResponse::Stat { is_dir: true, .. } => pass("S4 mkdir"),
-        _ => { fail("S4 mkdir", "stat not dir"); return; }
+        _ => {
+            fail("S4 mkdir", "stat not dir");
+            return;
+        }
     }
 
     // Clean up so re-runs (e.g. persistence test boot 2) have a clean state.
@@ -134,15 +152,22 @@ fn test_s4_mkdir() {
 /// S5: Write /srv/tmp.txt, unlink it, confirm it no longer exists.
 fn test_s5_unlink() {
     match vfs_req(&api::ipc::VfsRequest::Write {
-        path: "/srv/tmp.txt", content: b"x",
+        path: "/srv/tmp.txt",
+        content: b"x",
     }) {
         api::ipc::VfsResponse::Ok => {}
-        _ => { fail("S5 unlink", "write failed"); return; }
+        _ => {
+            fail("S5 unlink", "write failed");
+            return;
+        }
     }
 
     match vfs_req(&api::ipc::VfsRequest::Unlink("/srv/tmp.txt")) {
         api::ipc::VfsResponse::Ok => {}
-        _ => { fail("S5 unlink", "unlink failed"); return; }
+        _ => {
+            fail("S5 unlink", "unlink failed");
+            return;
+        }
     }
 
     match vfs_req(&api::ipc::VfsRequest::Stat("/srv/tmp.txt")) {
@@ -158,7 +183,11 @@ fn test_s5_unlink() {
 /// can verify two-boot persistence without additional infrastructure.
 fn check_persist_marker() {
     match vfs_req(&api::ipc::VfsRequest::Stat("/srv/persist.txt")) {
-        api::ipc::VfsResponse::Stat { is_dir: false, size, .. } if size > 0 => {
+        api::ipc::VfsResponse::Stat {
+            is_dir: false,
+            size,
+            ..
+        } if size > 0 => {
             ostd::io::println("[srv-test] PERSIST_READ_OK");
         }
         _ => {}

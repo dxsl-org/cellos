@@ -5,9 +5,9 @@
 //! Panics if no RNG device is present — the net cell must never attempt TLS without
 //! real entropy (mtime-seeded PRNG was deliberately removed as a fallback).
 
+use ostd::syscall::sys_get_random;
 use rand_chacha::ChaCha20Rng;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
-use ostd::syscall::sys_get_random;
 
 /// ChaCha20 PRNG seeded from VirtIO-RNG hardware entropy.
 pub struct ViRng(ChaCha20Rng);
@@ -33,7 +33,9 @@ impl ViRng {
                     "[net/tls] VirtIO-RNG absent — cannot generate TLS entropy. \
                      Add -object rng-random,id=rng0 -device virtio-rng-device,rng=rng0 to QEMU."
                 );
-                for _ in 0..1000 { core::hint::spin_loop(); }
+                for _ in 0..1000 {
+                    core::hint::spin_loop();
+                }
             }
         }
         Self(ChaCha20Rng::from_seed(seed))
@@ -41,9 +43,15 @@ impl ViRng {
 }
 
 impl RngCore for ViRng {
-    fn next_u32(&mut self) -> u32 { self.0.next_u32() }
-    fn next_u64(&mut self) -> u64 { self.0.next_u64() }
-    fn fill_bytes(&mut self, dest: &mut [u8]) { self.0.fill_bytes(dest) }
+    fn next_u32(&mut self) -> u32 {
+        self.0.next_u32()
+    }
+    fn next_u64(&mut self) -> u64 {
+        self.0.next_u64()
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.0.fill_bytes(dest)
+    }
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         self.0.try_fill_bytes(dest)
     }

@@ -26,10 +26,10 @@ extern crate alloc;
 mod device;
 mod dispatch;
 
+use device::BlkDevice;
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_register_block_driver, sys_send};
-use device::BlkDevice;
 
 static STATE: Mutex<Option<BlkDevice>> = Mutex::new(None);
 
@@ -54,8 +54,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
         // VFS speaks the raw DrvRequest protocol (no 0xAC App-SDK envelope), so
         // requests may arrive as RawMessage; accept Message too — layout is identical.
-        AppEvent::Message { sender_tid, data }
-        | AppEvent::RawMessage { sender_tid, data } => {
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             let mut reply = [0u8; dispatch::REPLY_SIZE];
             let len = if let Some(dev) = STATE.lock().as_mut() {
                 dispatch::handle(dev, data.as_ref(), &mut reply)
@@ -81,6 +80,10 @@ ostd::run_app!(handler);
 // PcieDriverCap is granted by loader.rs via path match (/bin/block). This
 // manifest declares NO privileged flags — init/loader elevates the cell at spawn.
 api::declare_manifest!(
-    block_io = false, network = false, spawn = false,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );

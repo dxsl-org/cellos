@@ -5,10 +5,10 @@
 
 extern crate alloc;
 
+use crate::syscall;
 use alloc::borrow::ToOwned;
 use alloc::collections::VecDeque;
 use alloc::string::String;
-use crate::syscall;
 
 /// Maximum bytes in a single input line.
 const MAX_LINE: usize = 4096;
@@ -34,19 +34,29 @@ pub struct History {
 
 impl History {
     pub fn new() -> Self {
-        Self { entries: VecDeque::with_capacity(HISTORY_CAP) }
+        Self {
+            entries: VecDeque::with_capacity(HISTORY_CAP),
+        }
     }
 
     /// Push a line (de-duplicates consecutive identical entries).
     pub fn push(&mut self, line: &str) {
-        if line.is_empty() { return; }
-        if self.entries.back().map(|s| s.as_str()) == Some(line) { return; }
-        if self.entries.len() >= HISTORY_CAP { self.entries.pop_front(); }
+        if line.is_empty() {
+            return;
+        }
+        if self.entries.back().map(|s| s.as_str()) == Some(line) {
+            return;
+        }
+        if self.entries.len() >= HISTORY_CAP {
+            self.entries.pop_front();
+        }
         self.entries.push_back(String::from(line));
     }
 
     /// Number of history entries.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Access entry by 0-based index (0 = oldest).
     pub fn get(&self, idx: usize) -> Option<&str> {
@@ -76,7 +86,13 @@ impl Repl {
     pub fn new() -> Self {
         let history = History::new();
         let hist_idx = 0;
-        Self { history, buf: [0; MAX_LINE], len: 0, hist_idx, esc_state: 0 }
+        Self {
+            history,
+            buf: [0; MAX_LINE],
+            len: 0,
+            hist_idx,
+            esc_state: 0,
+        }
     }
 
     /// Display `prompt` and read one complete line.
@@ -119,12 +135,17 @@ impl Repl {
         }
 
         match byte {
-            0x1B => { self.esc_state = 1; None }
-            0x03 => { // Ctrl+C
+            0x1B => {
+                self.esc_state = 1;
+                None
+            }
+            0x03 => {
+                // Ctrl+C
                 crate::io::println("^C");
                 Some(ReadResult::Interrupted)
             }
-            0x04 if self.len == 0 => { // Ctrl+D on empty line → EOF
+            0x04 if self.len == 0 => {
+                // Ctrl+D on empty line → EOF
                 crate::io::println("");
                 Some(ReadResult::Eof)
             }
@@ -166,17 +187,23 @@ impl Repl {
     }
 
     fn clear_display(&self) {
-        for _ in 0..self.len { crate::io::print("\x08 \x08"); }
+        for _ in 0..self.len {
+            crate::io::print("\x08 \x08");
+        }
     }
 
     fn history_prev(&mut self) {
-        if self.hist_idx == 0 { return; }
+        if self.hist_idx == 0 {
+            return;
+        }
         self.hist_idx -= 1;
         self.load_history_entry();
     }
 
     fn history_next(&mut self) {
-        if self.hist_idx >= self.history.len() { return; }
+        if self.hist_idx >= self.history.len() {
+            return;
+        }
         self.hist_idx += 1;
         self.load_history_entry();
     }
@@ -195,5 +222,7 @@ impl Repl {
 }
 
 impl Default for Repl {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -31,8 +31,8 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use crate::{syscall, ViError, ViResult};
+use alloc::vec::Vec;
 
 /// Magic byte prefixing every App SDK envelope.
 ///
@@ -96,7 +96,6 @@ pub enum AppEvent {
     },
 
     // ── Hot-swap lifecycle events (Phase 20) ─────────────────────────────────
-
     /// Kernel-sent signal to the OLD cell during Step 2 of a hot-swap sequence.
     ///
     /// The cell must serialize its state, stash it under `swap_id` as the key
@@ -265,17 +264,20 @@ impl AppContext {
     /// Note: returns `&mut VfsClient` which borrows `self` — store the result in a
     /// local to call other accessors in the same handler invocation.
     pub fn vfs(&mut self) -> &mut crate::clients::VfsClient {
-        self.vfs_client.get_or_insert_with(crate::clients::VfsClient::new)
+        self.vfs_client
+            .get_or_insert_with(crate::clients::VfsClient::new)
     }
 
     /// Lazy accessor for the network service client.
     pub fn net(&mut self) -> &mut crate::clients::NetClient {
-        self.net_client.get_or_insert_with(crate::clients::NetClient::new)
+        self.net_client
+            .get_or_insert_with(crate::clients::NetClient::new)
     }
 
     /// Lazy accessor for the input service client.
     pub fn input(&mut self) -> &mut crate::clients::InputClient {
-        self.input_client.get_or_insert_with(crate::clients::InputClient::new)
+        self.input_client
+            .get_or_insert_with(crate::clients::InputClient::new)
     }
 
     /// Lazy accessor for the cluster net-broker client.
@@ -283,7 +285,8 @@ impl AppContext {
     /// Returns `None` if no net-broker is running (single-node deployment).
     /// Use [`cluster::ClusterRef::is_available`] to probe before sending.
     pub fn cluster(&mut self) -> &mut crate::cluster::ClusterRef {
-        self.cluster_client.get_or_insert_with(crate::cluster::ClusterRef::new)
+        self.cluster_client
+            .get_or_insert_with(crate::cluster::ClusterRef::new)
     }
 
     // ── Private ──────────────────────────────────────────────────────────────
@@ -319,15 +322,24 @@ impl AppContext {
                     key.copy_from_slice(&buf[2..66]);
                     AppEvent::Restore { key }
                 }
-                _ => AppEvent::Message { sender_tid, data: buf[2..].to_vec() },
+                _ => AppEvent::Message {
+                    sender_tid,
+                    data: buf[2..].to_vec(),
+                },
             }
         } else if buf.len() >= 2 && buf[0] == api::input::INPUT_EVENT_OPCODE {
             if let Some(ev) = crate::input::parse_frame(buf) {
                 return AppEvent::Input(ev);
             }
-            AppEvent::RawMessage { sender_tid, data: buf.to_vec() }
+            AppEvent::RawMessage {
+                sender_tid,
+                data: buf.to_vec(),
+            }
         } else {
-            AppEvent::RawMessage { sender_tid, data: buf.to_vec() }
+            AppEvent::RawMessage {
+                sender_tid,
+                data: buf.to_vec(),
+            }
         }
     }
 
@@ -338,7 +350,7 @@ impl AppContext {
         match buf.get(2) {
             Some(1) => ShutdownReason::Watchdog,
             Some(2) => ShutdownReason::ParentDied,
-            _       => ShutdownReason::Requested,
+            _ => ShutdownReason::Requested,
         }
     }
 }

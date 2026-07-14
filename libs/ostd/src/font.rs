@@ -216,11 +216,10 @@ pub static FONT8X8: [[u8; 8]; 95] = [
 ///
 /// Non-printable or out-of-range bytes are rendered as a space.
 /// No heap allocation; no wrapping.
-pub fn draw_text(pixels: &mut [u8], stride: usize, x: i32, y: i32,
-                 text: &str, color: u32) {
+pub fn draw_text(pixels: &mut [u8], stride: usize, x: i32, y: i32, text: &str, color: u32) {
     let b = ((color >> 24) & 0xFF) as u8;
     let g = ((color >> 16) & 0xFF) as u8;
-    let r = ((color >> 8)  & 0xFF) as u8;
+    let r = ((color >> 8) & 0xFF) as u8;
     let a = (color & 0xFF) as u8;
 
     let mut cx = x;
@@ -233,19 +232,27 @@ pub fn draw_text(pixels: &mut [u8], stride: usize, x: i32, y: i32,
         let glyph = &FONT8X8[idx];
         for row in 0..8_i32 {
             let py = y + row;
-            if py < 0 { continue; }
+            if py < 0 {
+                continue;
+            }
             let mask = glyph[row as usize];
-            if mask == 0 { continue; }
+            if mask == 0 {
+                continue;
+            }
             for col in 0..8_i32 {
-                if mask & (0x80u8 >> col as u32) == 0 { continue; }
+                if mask & (0x80u8 >> col as u32) == 0 {
+                    continue;
+                }
                 let px = cx + col;
-                if px < 0 { continue; }
+                if px < 0 {
+                    continue;
+                }
                 let off = py as usize * stride + px as usize * 4;
                 if off + 4 <= pixels.len() {
-                    pixels[off]   = b;
-                    pixels[off+1] = g;
-                    pixels[off+2] = r;
-                    pixels[off+3] = a;
+                    pixels[off] = b;
+                    pixels[off + 1] = g;
+                    pixels[off + 2] = r;
+                    pixels[off + 3] = a;
                 }
             }
         }

@@ -6,8 +6,8 @@
 //! `BenchReport` ABI (Law 1) stays untouched.
 
 extern crate alloc;
-use alloc::vec::Vec;
 use super::timer::ticks_to_ns;
+use alloc::vec::Vec;
 use ostd::io::println;
 
 /// RT latency statistics (nanoseconds), including jitter and deadline misses.
@@ -33,7 +33,17 @@ impl RtReport {
         let ns: Vec<u64> = samples.iter().map(|&t| ticks_to_ns(t)).collect();
         let n = ns.len();
         if n == 0 {
-            return Self { name, n: 0, min: 0, p50: 0, p99: 0, p99_9: 0, max: 0, jitter: 0, deadline_miss };
+            return Self {
+                name,
+                n: 0,
+                min: 0,
+                p50: 0,
+                p99: 0,
+                p99_9: 0,
+                max: 0,
+                jitter: 0,
+                deadline_miss,
+            };
         }
         // Percentile index, clamped to the last element for small sample counts.
         let pct = |num: usize, den: usize| -> u64 { ns[((n * num) / den).min(n - 1)] };

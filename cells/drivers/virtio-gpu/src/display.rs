@@ -11,14 +11,14 @@
 extern crate alloc;
 
 use core::ptr::NonNull;
+use ostd::mmio::request_region;
+use ostd::syscall::{sys_grant_alloc, sys_grant_free};
 use virtio_drivers::{
-    BufferDirection, Hal, PhysAddr,
     device::gpu::VirtIOGpu,
     transport::mmio::{MmioTransport, VirtIOHeader},
     transport::{DeviceType, Transport},
+    BufferDirection, Hal, PhysAddr,
 };
-use ostd::syscall::{sys_grant_alloc, sys_grant_free};
-use ostd::mmio::request_region;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -68,7 +68,11 @@ unsafe impl Hal for CellHal {
             // SAFETY: buffer is a live slice owned by virtio-drivers for the DMA
             // duration; bounce is a fresh grant allocation of >= len bytes.
             unsafe {
-                core::ptr::copy_nonoverlapping(buffer.as_ptr() as *const u8, bounce as *mut u8, len);
+                core::ptr::copy_nonoverlapping(
+                    buffer.as_ptr() as *const u8,
+                    bounce as *mut u8,
+                    len,
+                );
             }
         }
         bounce as PhysAddr
@@ -96,10 +100,10 @@ type GpuDev = VirtIOGpu<CellHal, MmioTransport>;
 /// Owned VirtIO GPU device and its framebuffer.
 pub struct GpuDevice {
     pub(crate) gpu: GpuDev,
-    fb_ptr:         *mut u8,
-    fb_len:         usize,
-    pub width:      u32,
-    pub height:     u32,
+    fb_ptr: *mut u8,
+    fb_len: usize,
+    pub width: u32,
+    pub height: u32,
 }
 
 // SAFETY: GpuDevice is used from a single-threaded Cell event loop.
@@ -119,29 +123,34 @@ impl GpuDevice {
     /// the call is silently ignored to prevent out-of-bounds reads.
     pub fn flush_rect(&mut self, src_ptr: usize, data_len: usize, xy: u32, wh: u32) {
         let x = ((xy >> 16) & 0xFFFF) as u32;
-        let y = (xy  & 0xFFFF) as u32;
+        let y = (xy & 0xFFFF) as u32;
         let w = ((wh >> 16) & 0xFFFF) as u32;
-        let h = (wh  & 0xFFFF) as u32;
-        if w == 0 || h == 0 { return; }
+        let h = (wh & 0xFFFF) as u32;
+        if w == 0 || h == 0 {
+            return;
+        }
         let expected = (w as usize) * (h as usize) * 4;
-        if data_len < expected { return; }
+        if data_len < expected {
+            return;
+        }
         let x = x.min(self.width);
         let y = y.min(self.height);
         let w = w.min(self.width.saturating_sub(x));
         let h = h.min(self.height.saturating_sub(y));
-        if w == 0 || h == 0 { return; }
+        if w == 0 || h == 0 {
+            return;
+        }
         let stride = self.width as usize * 4;
         // SAFETY: src_ptr is a compositor user-space pointer valid in SAS (same address space);
         // data_len was validated above against w*h*4.
         let src = unsafe { core::slice::from_raw_parts(src_ptr as *const u8, data_len) };
         let fb = self.framebuffer();
         for row in 0..h as usize {
-            let fb_off  = (y as usize + row) * stride + x as usize * 4;
+            let fb_off = (y as usize + row) * stride + x as usize * 4;
             let src_off = row * w as usize * 4;
             let row_bytes = w as usize * 4;
             if fb_off + row_bytes <= fb.len() && src_off + row_bytes <= src.len() {
-                fb[fb_off..fb_off + row_bytes]
-                    .copy_from_slice(&src[src_off..src_off + row_bytes]);
+                fb[fb_off..fb_off + row_bytes].copy_from_slice(&src[src_off..src_off + row_bytes]);
             }
         }
         let offset = (y as u64 * self.width as u64 + x as u64) * 4;
@@ -158,13 +167,13 @@ impl GpuDevice {
 fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
     #[cfg(target_arch = "aarch64")]
     {
-        const BASE:   usize = 0x0a00_0000;
+        const BASE: usize = 0x0a00_0000;
         const STRIDE: usize = 0x200;
         (0..32_usize).map(|i| (BASE + i * STRIDE, 16 + i as u32))
     }
     #[cfg(target_arch = "riscv64")]
     {
-        const BASE:   usize = 0x1000_1000;
+        const BASE: usize = 0x1000_1000;
         const STRIDE: usize = 0x1000;
         (0..8_usize).map(|i| (BASE + i * STRIDE, 1 + i as u32))
     }
@@ -183,18 +192,27 @@ pub fn find_and_init_gpu() -> Option<GpuDevice> {
     for (base, _irq) in virtio_slot_iter() {
         // SAFETY: base is within the arch MMIO window mapped USER-accessible by paging init.
         let magic = unsafe { core::ptr::read_volatile(base as *const u32) };
-        if magic != VIRTIO_MAGIC { continue; }
+        if magic != VIRTIO_MAGIC {
+            continue;
+        }
         let device_id = unsafe { core::ptr::read_volatile((base + 8) as *const u32) };
-        if device_id != VIRTIO_DEV_GPU { continue; }
+        if device_id != VIRTIO_DEV_GPU {
+            continue;
+        }
 
         // Claim exclusive MMIO ownership.  Prevents kernel from double-initialising the slot.
-        if request_region(base, MMIO_SLOT_SIZE).is_err() { continue; }
+        if request_region(base, MMIO_SLOT_SIZE).is_err() {
+            continue;
+        }
 
         // SAFETY: base was validated (magic + device type) and exclusively claimed above.
         let header = unsafe { NonNull::new_unchecked(base as *mut VirtIOHeader) };
         let transport = match unsafe { MmioTransport::new(header) } {
             Ok(t) if t.device_type() == DeviceType::GPU => t,
-            Ok(t) => { core::mem::forget(t); continue; }
+            Ok(t) => {
+                core::mem::forget(t);
+                continue;
+            }
             Err(_) => continue,
         };
 
@@ -211,7 +229,13 @@ pub fn find_and_init_gpu() -> Option<GpuDevice> {
         let fb_ptr = fb_slice.as_mut_ptr();
         let fb_len = fb_slice.len();
         let _ = gpu.flush();
-        return Some(GpuDevice { gpu, fb_ptr, fb_len, width, height });
+        return Some(GpuDevice {
+            gpu,
+            fb_ptr,
+            fb_len,
+            width,
+            height,
+        });
     }
     None
 }

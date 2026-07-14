@@ -10,7 +10,13 @@ use hal_gpio::{PinDir, ViGpio};
 use ostd::io::println;
 use types::ViError;
 
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = true, uart = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = true,
+    uart = false
+);
 
 static PASS: AtomicU32 = AtomicU32::new(0);
 static FAIL: AtomicU32 = AtomicU32::new(0);
@@ -55,13 +61,19 @@ pub fn main() {
         // INPUT_VAL reflects physical pin voltage — may be 0 in QEMU without wiring.
         // The important invariant: no trap, no kernel panic.
         match gpio.read_pin(5) {
-            Ok(v)  => pass!(alloc::format!("read_pin(5) = {} after HIGH write (MMIO OK)", v)),
+            Ok(v) => pass!(alloc::format!(
+                "read_pin(5) = {} after HIGH write (MMIO OK)",
+                v
+            )),
             Err(e) => fail!(alloc::format!("read_pin(5) after HIGH: {:?}", e)),
         }
 
         let _ = gpio.write_pin(5, false);
         match gpio.read_pin(5) {
-            Ok(v)  => pass!(alloc::format!("read_pin(5) = {} after LOW write (MMIO OK)", v)),
+            Ok(v) => pass!(alloc::format!(
+                "read_pin(5) = {} after LOW write (MMIO OK)",
+                v
+            )),
             Err(e) => fail!(alloc::format!("read_pin(5) after LOW: {:?}", e)),
         }
     }
@@ -73,22 +85,20 @@ pub fn main() {
         fail!("set_direction(5, Input)");
     } else {
         match gpio.read_pin(5) {
-            Ok(_)  => pass!("read_pin on input pin returned (no trap)"),
+            Ok(_) => pass!("read_pin on input pin returned (no trap)"),
             Err(e) => fail!(alloc::format!("read_pin on input pin: {:?}", e)),
         }
         match gpio.write_pin(5, true) {
             Err(ViError::InvalidInput) => pass!("write to input pin → InvalidInput"),
-            Ok(())                     => fail!("write to input pin unexpectedly OK"),
-            Err(e)                     => fail!(alloc::format!("wrong error: {:?}", e)),
+            Ok(()) => fail!("write to input pin unexpectedly OK"),
+            Err(e) => fail!(alloc::format!("wrong error: {:?}", e)),
         }
     }
 
     // ── Results ───────────────────────────────────────────────────────────────
     let pass = PASS.load(Ordering::Relaxed);
     let fail = FAIL.load(Ordering::Relaxed);
-    println(alloc::format!(
-        "[gpio-test-rv] Results: {}/{} passed", pass, pass + fail
-    ).as_str());
+    println(alloc::format!("[gpio-test-rv] Results: {}/{} passed", pass, pass + fail).as_str());
 
     if fail == 0 {
         println("[gpio-test-rv] ALL PASS");

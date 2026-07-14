@@ -31,18 +31,23 @@ pub struct HandleTable {
 
 impl HandleTable {
     pub fn new() -> Self {
-        Self { entries: BTreeMap::new() }
+        Self {
+            entries: BTreeMap::new(),
+        }
     }
 
     /// Register a new read-only handle backed by `data_ptr/data_len`.
-    pub fn insert_ro(
-        &mut self,
-        cap: CapId,
-        owner: CellId,
-        data_ptr: VAddr,
-        data_len: usize,
-    ) {
-        self.entries.insert(cap.0, HandleEntry { owner, data_ptr, data_len, pos: 0, writable: false });
+    pub fn insert_ro(&mut self, cap: CapId, owner: CellId, data_ptr: VAddr, data_len: usize) {
+        self.entries.insert(
+            cap.0,
+            HandleEntry {
+                owner,
+                data_ptr,
+                data_len,
+                pos: 0,
+                writable: false,
+            },
+        );
     }
 
     /// Look up a handle, returning a mutable reference for read/seek.

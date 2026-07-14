@@ -15,9 +15,24 @@ api::declare_manifest!(block_io = false, network = false, spawn = true);
 // VFS registers (unlike the early-boot spawns, which fall back to the raw
 // bootstrap syscall before VFS is looked up).
 api::declare_syscalls![
-    Send, Recv, TryRecv, RecvTimeout, Reply, Log, Heartbeat, LookupService,
-    SpawnFromPath, SpawnFromMem, SpawnPinned, Wait, GetTime, SetTimer,
-    HotSwap, StateStash, StateRestore, GrantAlloc,
+    Send,
+    Recv,
+    TryRecv,
+    RecvTimeout,
+    Reply,
+    Log,
+    Heartbeat,
+    LookupService,
+    SpawnFromPath,
+    SpawnFromMem,
+    SpawnPinned,
+    Wait,
+    GetTime,
+    SetTimer,
+    HotSwap,
+    StateStash,
+    StateRestore,
+    GrantAlloc,
 ];
 
 use ostd::io::println;
@@ -31,6 +46,12 @@ enum Policy {
     /// is treated as final. Uses the exit reason delivered as the death-notify payload.
     Transient,
     /// Never restart — one-shot tasks that are expected to run once and stop.
+    ///
+    /// No service in the current supervised table (`policy` below) uses this
+    /// variant yet, but the `should_restart` match on `policy[i]` is exhaustive
+    /// over `Policy`, so removing this would require reworking that match.
+    /// Reserved for future one-shot cells (see the "Restart policy" doc above).
+    #[allow(dead_code)]
     Temporary,
 }
 
@@ -50,11 +71,11 @@ const RESTART_WINDOW_TICKS: u64 = 1000;
 ///   3. Spawn Shell — interactive REPL.
 #[no_mangle]
 pub extern "C" fn main() {
+    use api::syscall::service;
     use ostd::syscall::{
         sys_get_time, sys_lookup_service, sys_notify_on_exit, sys_recv, sys_register_service,
         sys_spawn_from_path, SyscallResult,
     };
-    use api::syscall::service;
     println("Init: Starting ViCell Orchestrator...");
 
     // Supervised services in bring-up order — VFS first (it serves /bin/*).
@@ -89,7 +110,7 @@ pub extern "C" fn main() {
         Some(types::silo::SILO_SERVICE_ID), // SILO = 6
         Some(service::NET_BROKER),          // NET_BROKER = 8
         Some(service::SUPERVISOR),          // SUPERVISOR = 11
-        None, // shell is not a registered service
+        None,                               // shell is not a registered service
     ];
 
     // Restart policy per service. All current services are Permanent (a robot must keep
@@ -141,26 +162,30 @@ pub extern "C" fn main() {
         if paths[i] == "/bin/net" {
             // Platform Cell was already spawned by the kernel before init — no second spawn.
             let _ = sys_spawn_from_path("/bin/virtio-net"); // RISC-V/AArch64 VirtIO NIC
-            let _ = sys_spawn_from_path("/bin/e1000");      // PCIe e1000 NIC (x86_64)
-            // /bin/nvme retry — ONLY if no block driver registered yet. The pre-VFS
-            // spawn covers x86 (nvme lives in VIFS1); on cell-store platforms that
-            // path fails before VFS is up, so retry here where VFS can serve /bin.
-            // The lookup gate prevents a second instance from stealing the live
-            // cell's BDF ownership via sys_find_pcie_device.
+            let _ = sys_spawn_from_path("/bin/e1000"); // PCIe e1000 NIC (x86_64)
+                                                       // /bin/nvme retry — ONLY if no block driver registered yet. The pre-VFS
+                                                       // spawn covers x86 (nvme lives in VIFS1); on cell-store platforms that
+                                                       // path fails before VFS is up, so retry here where VFS can serve /bin.
+                                                       // The lookup gate prevents a second instance from stealing the live
+                                                       // cell's BDF ownership via sys_find_pcie_device.
             if sys_lookup_service(service::BLOCK_DRIVER).is_none() {
                 let _ = sys_spawn_from_path("/bin/nvme");
             }
             // Give driver cells enough quanta to load ELF, probe hardware, and
             // call sys_register_nic_driver before net starts its first Rx poll.
-            for _ in 0..4 { ostd::task::yield_now(); }
+            for _ in 0..4 {
+                ostd::task::yield_now();
+            }
         }
 
         // GPU Driver Cell must register BEFORE compositor's first GpuFlush call.
         if paths[i] == "/bin/compositor" {
             let _ = sys_spawn_from_path("/bin/virtio-gpu"); // VirtIO GPU — RISC-V + AArch64
-            // Give the GPU Cell time to probe VirtIO, init framebuffer, and register
-            // before the compositor sends its first GpuFlush on startup.
-            for _ in 0..4 { ostd::task::yield_now(); }
+                                                            // Give the GPU Cell time to probe VirtIO, init framebuffer, and register
+                                                            // before the compositor sends its first GpuFlush on startup.
+            for _ in 0..4 {
+                ostd::task::yield_now();
+            }
         }
 
         match sys_spawn_from_path(paths[i]) {
@@ -212,8 +237,8 @@ pub extern "C" fn main() {
     // ── CI / test-image-only cells (not present in normal disk images) ────────
     // bench is intentionally NOT auto-started — run '/bin/bench' from the shell.
     // Auto-spawning floods the terminal for ~270 s and obscures the shell prompt.
-    let _ = sys_spawn_from_path("/bin/silo-test");  // Security Silo end-to-end tests
-    let _ = sys_spawn_from_path("/bin/vfs-test");   // VFS integration test suite
+    let _ = sys_spawn_from_path("/bin/silo-test"); // Security Silo end-to-end tests
+    let _ = sys_spawn_from_path("/bin/vfs-test"); // VFS integration test suite
 
     // ── Demos: all run on-demand from the shell ───────────────────────────────
     // Philosophy: demos should not pollute boot output or steal focus.

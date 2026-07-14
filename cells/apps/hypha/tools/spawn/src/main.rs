@@ -58,11 +58,7 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
             let path = args_extract_str(args_json, "path").unwrap_or("/bin/nc");
             match sys_spawn_from_path(path) {
                 SyscallResult::Ok(tid) => AgentToolResponse::Ok {
-                    result_json: alloc::format!(
-                        "{{\"spawned\":\"{}\",\"tid\":{}}}",
-                        path,
-                        tid
-                    ),
+                    result_json: alloc::format!("{{\"spawned\":\"{}\",\"tid\":{}}}", path, tid),
                 },
                 _ => AgentToolResponse::Err {
                     message: alloc::format!("spawn_cell: '{}' not found or load failed", path),
@@ -123,6 +119,8 @@ fn args_extract_usize(json: &str, key: &str) -> Option<usize> {
     let search = alloc::format!("\"{}\"", key);
     let idx = json.find(search.as_str())? + search.len();
     let rest = json[idx..].trim_start_matches(|c: char| matches!(c, ' ' | '\t' | ':'));
-    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
     rest[..end].parse::<usize>().ok()
 }

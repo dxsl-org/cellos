@@ -24,8 +24,8 @@
 //! Timing is logged by both `serialize_snapshot()` and `try_restore()`:
 //!   `[snapshot] warm boot: N frames restored in X ms`
 
-use crate::task::drivers::block;
 use crate::memory::frame::FRAME_ALLOCATOR;
+use crate::task::drivers::block;
 
 /// Reserved LBA range for snapshot storage in `disk_v3.img` — MBR partition P3.
 /// Sector 0 = 48-byte header; sectors 1+ = allocated frame data (8 sectors/frame).
@@ -54,21 +54,21 @@ fn kernel_hash() -> u64 {
 #[repr(C)]
 pub struct SnapshotHeader {
     /// Magic: 0x5543_4956 ("UCIV" on disk = "VICU" LE).
-    pub magic:        u32,
+    pub magic: u32,
     /// Format version; cold boot if this doesn't match `SNAPSHOT_FORMAT_VERSION`.
-    pub version:      u16,
+    pub version: u16,
     /// Reserved flags.
-    pub flags:        u16,
+    pub flags: u16,
     /// Kernel git SHA (first 8 hex chars → u64).  Invalidates on rebuild.
-    pub kernel_hash:  u64,
+    pub kernel_hash: u64,
     /// Physical start of the snapshotted region.
-    pub pa_base:      u64,
+    pub pa_base: u64,
     /// Physical end (exclusive) of the snapshotted region.
-    pub pa_end:       u64,
+    pub pa_end: u64,
     /// Number of 4096-byte frames stored (allocated frames only).
-    pub frame_count:  u32,
+    pub frame_count: u32,
     /// CRC32 of (header with this field = 0) + all frame data.
-    pub crc32:        u32,
+    pub crc32: u32,
 }
 
 // Compile-time size guarantee — SnapshotHeader must fit in one 512-byte sector.
@@ -97,11 +97,11 @@ pub fn serialize_snapshot() -> Result<u32, &'static str> {
     let guard = FRAME_ALLOCATOR.lock();
     let allocator = guard.as_ref().ok_or("frame allocator not initialized")?;
 
-    let pa_base     = allocator.memory_start();
-    let pa_end      = allocator.memory_end();
-    let total       = allocator.total_frames();
+    let pa_base = allocator.memory_start();
+    let pa_end = allocator.memory_end();
+    let total = allocator.total_frames();
 
-    let mut hasher      = crc32fast::Hasher::new();
+    let mut hasher = crc32fast::Hasher::new();
     let mut current_lba = SNAPSHOT_BASE_LBA + 1; // sector 0 reserved for header
     let mut frame_count = 0u32;
 
@@ -111,12 +111,16 @@ pub fn serialize_snapshot() -> Result<u32, &'static str> {
     // Instead: collect allocated frame addresses first, then write without lock.
     // For Phase 29 MVP: hold the lock across writes (single-threaded kernel, safe).
     for frame_idx in 0..total {
-        if !allocator.is_frame_allocated(frame_idx) { continue; }
+        if !allocator.is_frame_allocated(frame_idx) {
+            continue;
+        }
 
         let pa = allocator.frame_addr(frame_idx);
         // Exclude MMIO: any physical address below RAM base 0x80000000.
         // Correct kernels should never allocate MMIO frames, but guard anyway.
-        if pa < 0x8000_0000 { continue; }
+        if pa < 0x8000_0000 {
+            continue;
+        }
 
         // Write 8 × 512-byte sectors per 4096-byte frame.
         for sector_offset in 0..8usize {
@@ -141,14 +145,14 @@ pub fn serialize_snapshot() -> Result<u32, &'static str> {
     // Compute final CRC and write header to sector 0 of snapshot region.
     let final_crc = hasher.finalize();
     let header = SnapshotHeader {
-        magic:        SNAPSHOT_MAGIC,
-        version:      SNAPSHOT_FORMAT_VERSION,
-        flags:        0,
-        kernel_hash:  kernel_hash(),
-        pa_base:      pa_base as u64,
-        pa_end:       pa_end as u64,
+        magic: SNAPSHOT_MAGIC,
+        version: SNAPSHOT_FORMAT_VERSION,
+        flags: 0,
+        kernel_hash: kernel_hash(),
+        pa_base: pa_base as u64,
+        pa_end: pa_end as u64,
         frame_count,
-        crc32:        final_crc,
+        crc32: final_crc,
     };
     let mut header_sector = [0u8; 512];
     // SAFETY: SnapshotHeader is repr(C) 48 bytes; copying to a 512-byte buffer is safe.
@@ -163,13 +167,17 @@ pub fn serialize_snapshot() -> Result<u32, &'static str> {
         .map_err(|_| "write header sector failed")?;
 
     #[cfg(target_arch = "riscv64")]
-    let elapsed_ms = (hal::common::timer::read_mtime()
-        .wrapping_sub(t0)) / 10_000;
+    let elapsed_ms = (hal::common::timer::read_mtime().wrapping_sub(t0)) / 10_000;
     #[cfg(not(target_arch = "riscv64"))]
     let elapsed_ms = 0u64;
 
-    log::info!("[snapshot] wrote {} frames ({} KiB) in {} ms to LBA {}",
-        frame_count, frame_count as usize * 4, elapsed_ms, SNAPSHOT_BASE_LBA);
+    log::info!(
+        "[snapshot] wrote {} frames ({} KiB) in {} ms to LBA {}",
+        frame_count,
+        frame_count as usize * 4,
+        elapsed_ms,
+        SNAPSHOT_BASE_LBA
+    );
     Ok(frame_count)
 }
 
@@ -194,17 +202,21 @@ pub fn try_restore() -> bool {
 
     // SAFETY: header_sector is 512 bytes; SnapshotHeader is repr(C) 48 bytes;
     // the first 48 bytes are cast as a header — no pointer provenance issues.
-    let header: &SnapshotHeader = unsafe {
-        &*(header_sector.as_ptr() as *const SnapshotHeader)
-    };
+    let header: &SnapshotHeader = unsafe { &*(header_sector.as_ptr() as *const SnapshotHeader) };
 
     if header.magic != SNAPSHOT_MAGIC {
-        log::info!("[snapshot] no valid snapshot (magic {:08X}) → cold boot", header.magic);
+        log::info!(
+            "[snapshot] no valid snapshot (magic {:08X}) → cold boot",
+            header.magic
+        );
         return false;
     }
     if header.version != SNAPSHOT_FORMAT_VERSION {
-        log::info!("[snapshot] format version mismatch ({} != {}) → cold boot",
-            header.version, SNAPSHOT_FORMAT_VERSION);
+        log::info!(
+            "[snapshot] format version mismatch ({} != {}) → cold boot",
+            header.version,
+            SNAPSHOT_FORMAT_VERSION
+        );
         return false;
     }
     if header.kernel_hash != kernel_hash() {
@@ -214,11 +226,14 @@ pub fn try_restore() -> bool {
     }
 
     let frame_count = header.frame_count as usize;
-    let pa_base     = header.pa_base as usize;
-    let saved_crc   = header.crc32;
+    let pa_base = header.pa_base as usize;
+    let saved_crc = header.crc32;
 
-    log::info!("[snapshot] valid: {} frames at PA 0x{:X} → verifying CRC…",
-        frame_count, pa_base);
+    log::info!(
+        "[snapshot] valid: {} frames at PA 0x{:X} → verifying CRC…",
+        frame_count,
+        pa_base
+    );
 
     // Verify CRC32 over (header with crc32 field = 0) + all frame sectors.
     {
@@ -300,10 +315,12 @@ pub fn try_restore() -> bool {
 
     #[cfg(target_arch = "riscv64")]
     {
-        let elapsed_ms = hal::common::timer::read_mtime()
-            .wrapping_sub(t_restore_start) / 10_000;
-        log::info!("[snapshot] warm boot: {} frames restored in {} ms",
-            frame_count, elapsed_ms);
+        let elapsed_ms = hal::common::timer::read_mtime().wrapping_sub(t_restore_start) / 10_000;
+        log::info!(
+            "[snapshot] warm boot: {} frames restored in {} ms",
+            frame_count,
+            elapsed_ms
+        );
     }
     log::info!("[snapshot] warm boot complete → resuming scheduler");
 
@@ -346,14 +363,14 @@ mod tests {
 
     fn valid_header() -> SnapshotHeader {
         SnapshotHeader {
-            magic:        SNAPSHOT_MAGIC,
-            version:      SNAPSHOT_FORMAT_VERSION,
-            flags:        0,
-            kernel_hash:  kernel_hash(),
-            pa_base:      0x8020_0000,
-            pa_end:       0x8060_0000,
-            frame_count:  1024,
-            crc32:        0xDEAD_BEEF,
+            magic: SNAPSHOT_MAGIC,
+            version: SNAPSHOT_FORMAT_VERSION,
+            flags: 0,
+            kernel_hash: kernel_hash(),
+            pa_base: 0x8020_0000,
+            pa_end: 0x8060_0000,
+            frame_count: 1024,
+            crc32: 0xDEAD_BEEF,
         }
     }
 

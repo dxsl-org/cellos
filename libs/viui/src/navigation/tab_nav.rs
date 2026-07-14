@@ -13,8 +13,8 @@ use crate::signal::SubscriptionHandle;
 
 pub struct TabEntry {
     pub label: String,
-    builder:   Box<dyn Fn() -> Box<dyn ViNode>>,
-    cached:    Option<Box<dyn ViNode>>,
+    builder: Box<dyn Fn() -> Box<dyn ViNode>>,
+    cached: Option<Box<dyn ViNode>>,
 }
 
 /// Tab navigator with a bottom tab bar.
@@ -23,19 +23,19 @@ pub struct TabEntry {
 /// of the navigator — no rebuild on re-switch. Add tabs via the builder pattern:
 /// `TabNavigator::new().add_tab("Home", || Box::new(home_page()))`.
 pub struct TabNavigator {
-    tabs:      Vec<TabEntry>,
-    active:    usize,
+    tabs: Vec<TabEntry>,
+    active: usize,
     tab_bar_h: f32,
-    bounds:    Cell<Rect>,
+    bounds: Cell<Rect>,
 }
 
 impl TabNavigator {
     pub fn new() -> Self {
         Self {
-            tabs:      Vec::new(),
-            active:    0,
+            tabs: Vec::new(),
+            active: 0,
             tab_bar_h: 48.0,
-            bounds:    Cell::new(Rect::ZERO),
+            bounds: Cell::new(Rect::ZERO),
         }
     }
 
@@ -45,9 +45,9 @@ impl TabNavigator {
         builder: impl Fn() -> Box<dyn ViNode> + 'static,
     ) -> Self {
         self.tabs.push(TabEntry {
-            label:   label.into(),
+            label: label.into(),
             builder: Box::new(builder),
-            cached:  None,
+            cached: None,
         });
         self
     }
@@ -64,15 +64,14 @@ impl TabNavigator {
 impl ViNode for TabNavigator {
     fn layout(&mut self, constraints: Constraints) -> Size {
         let full = Size::new(constraints.max.w, constraints.max.h);
-        self.bounds.set(Rect::from_origin_size(constraints.origin, full));
+        self.bounds
+            .set(Rect::from_origin_size(constraints.origin, full));
 
         self.ensure_page(self.active);
 
         let page_h = (constraints.max.h - self.tab_bar_h).max(0.0);
-        let page_constraints = Constraints::new(
-            constraints.origin,
-            Size::new(constraints.max.w, page_h),
-        );
+        let page_constraints =
+            Constraints::new(constraints.origin, Size::new(constraints.max.w, page_h));
 
         if let Some(tab) = self.tabs.get_mut(self.active) {
             if let Some(page) = &mut tab.cached {
@@ -83,7 +82,9 @@ impl ViNode for TabNavigator {
         full
     }
 
-    fn bounds(&self) -> Rect { self.bounds.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
@@ -98,12 +99,19 @@ impl ViNode for TabNavigator {
         // Bottom tab bar background
         let bar_y = b.y + b.h - self.tab_bar_h;
         cx.canvas.fill_rect(
-            Rect { x: b.x, y: bar_y, w: b.w, h: self.tab_bar_h },
+            Rect {
+                x: b.x,
+                y: bar_y,
+                w: b.w,
+                h: self.tab_bar_h,
+            },
             Color::rgb(20, 22, 32),
         );
 
         let n = self.tabs.len();
-        if n == 0 { return; }
+        if n == 0 {
+            return;
+        }
         let tab_w = b.w / n as f32;
 
         for (i, tab) in self.tabs.iter().enumerate() {
@@ -118,7 +126,12 @@ impl ViNode for TabNavigator {
             // Active indicator: 2 px line at top of bar
             if is_active {
                 cx.canvas.fill_rect(
-                    Rect { x: tx, y: bar_y, w: tab_w, h: 2.0 },
+                    Rect {
+                        x: tx,
+                        y: bar_y,
+                        w: tab_w,
+                        h: 2.0,
+                    },
                     cx.theme.accent(),
                 );
             }
@@ -132,14 +145,23 @@ impl ViNode for TabNavigator {
     fn event(&mut self, event: &Event) -> bool {
         let b = self.bounds.get();
         let bar_y = b.y + b.h - self.tab_bar_h;
-        let bar_rect = Rect { x: b.x, y: bar_y, w: b.w, h: self.tab_bar_h };
+        let bar_rect = Rect {
+            x: b.x,
+            y: bar_y,
+            w: b.w,
+            h: self.tab_bar_h,
+        };
         let n = self.tabs.len();
 
         let try_switch = |pos: Point| -> Option<usize> {
             if bar_rect.contains(pos) && n > 0 {
                 let tab_w = b.w / n as f32;
                 let idx = ((pos.x - b.x) / tab_w) as usize;
-                if idx < n { Some(idx) } else { None }
+                if idx < n {
+                    Some(idx)
+                } else {
+                    None
+                }
             } else {
                 None
             }

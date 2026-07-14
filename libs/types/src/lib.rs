@@ -45,7 +45,7 @@ pub struct GrantId(pub usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum GrantPerm {
-    ReadOnly  = 0,
+    ReadOnly = 0,
     WriteOnly = 1,
     ReadWrite = 2,
 }
@@ -261,4 +261,3 @@ mod tests {
         }
     }
 }
-

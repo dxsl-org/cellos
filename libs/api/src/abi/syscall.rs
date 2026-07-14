@@ -120,11 +120,11 @@ pub enum ViSyscall {
     /// Serialize all allocated physical frames to the snapshot sector range.
     /// Triggers a warm-boot-capable snapshot.  Returns frame count on success.
     Snapshot = 420,
-    Wait = 8,          // Wait for task
-    Yield = 104,       // Linux sched_yield is 24, but we use 104 in current code
-    SetTimer = 35,     // Added SetTimer
-    ShmAlloc = 20,     // Allocate Shared Memory
-    ShmMap = 21,       // Map Shared Memory to Task
+    Wait = 8,      // Wait for task
+    Yield = 104,   // Linux sched_yield is 24, but we use 104 in current code
+    SetTimer = 35, // Added SetTimer
+    ShmAlloc = 20, // Allocate Shared Memory
+    ShmMap = 21,   // Map Shared Memory to Task
 
     // === Logging (50-59) ===
     Log = 11, // Current implementation uses 11
@@ -270,22 +270,22 @@ pub enum ViSyscall {
     // without HypervisorCap calling any of these receives `PermissionDenied`.
     /// Allocate guest RAM and a Stage-2 table; returns opaque `vm_id`.
     /// ABI: a0 = guest_pages → vm_id (>0) on success, 0 on OOM / unsupported.
-    CreateVm       = 220,
+    CreateVm = 220,
     /// Create a vCPU in `vm_id` with initial PC `entry_pc`; returns `vcpu_id`.
     /// ABI: a0 = vm_id, a1 = entry_pc → vcpu_id (>0).
-    CreateVcpu     = 221,
+    CreateVcpu = 221,
     /// Map guest IPA range `[ipa, ipa+size)` to kernel-managed frames in `vm_id`.
     /// ABI: a0 = vm_id, a1 = ipa, a2 = size (bytes), a3 = writable:bool → 0.
     MapGuestMemory = 222,
     /// World-switch into vCPU until exit or `budget_ns` ns expire; write `ViVmExit`.
     /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = budget_ns, a3 = out_ptr (*mut ViVmExit) → 0.
-    RunVcpu        = 223,
+    RunVcpu = 223,
     /// Read (write=0) or write (write=1) vCPU registers x0-x30 + sp + pc (32×u64).
     /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = buf_ptr, a3 = write:bool → 0.
-    VcpuRegs       = 224,
+    VcpuRegs = 224,
     /// Inject a GICv2 virtual interrupt into vCPU (0 ≤ intid ≤ 1019).
     /// ABI: a0 = vm_id, a1 = vcpu_id, a2 = intid → 0.
-    InjectIrq      = 225,
+    InjectIrq = 225,
     /// Copy `len` bytes from caller's `src_ptr` into guest physical RAM at `gpa`.
     /// Kernel validates `src_ptr + len` lies within the caller's mapped address space
     /// and `gpa + len` lies within the VM's carved guest-RAM region.
@@ -358,9 +358,9 @@ pub mod cap_mask {
     /// Revoke raw block-device access (BlkRead/BlkWrite/BlkFlush).
     pub const BLOCK_IO: u32 = 1 << 0;
     /// Revoke network transmit/receive (NetTx/NetRx).
-    pub const NETWORK:  u32 = 1 << 1;
+    pub const NETWORK: u32 = 1 << 1;
     /// Revoke cell-spawning authority (SpawnFromPath/HotSwap).
-    pub const SPAWN:    u32 = 1 << 2;
+    pub const SPAWN: u32 = 1 << 2;
     /// Revoke RISC-V H-extension / ARM64 EL2 hypervisor access.
     pub const HYPERVISOR: u32 = 1 << 3;
 
@@ -412,7 +412,9 @@ impl SyscallSet {
     }
 
     /// Raw bit-mask value to embed in `__ViCell_syscalls`.
-    pub const fn bits(self) -> u64 { self.0 }
+    pub const fn bits(self) -> u64 {
+        self.0
+    }
 
     /// Returns `true` if `syscall` is permitted by this set.
     ///
@@ -470,92 +472,101 @@ impl ViSyscall {
     /// bypass `ViSyscall::from()` and must be checked separately at dispatch.
     pub const fn allowlist_bit(self) -> Option<u8> {
         match self {
-            Self::Send          => Some(0),
-            Self::TrySend       => Some(0), // same allowlist bit as Send (subset of Send)
-            Self::Recv          => Some(1),
-            Self::TryRecv       => Some(2),
-            Self::Reply         => Some(3),
-            Self::Call          => Some(4),
-            Self::Spawn         => Some(5),
-            Self::SpawnFromMem  => Some(6),
+            Self::Send => Some(0),
+            Self::TrySend => Some(0), // same allowlist bit as Send (subset of Send)
+            Self::Recv => Some(1),
+            Self::TryRecv => Some(2),
+            Self::Reply => Some(3),
+            Self::Call => Some(4),
+            Self::Spawn => Some(5),
+            Self::SpawnFromMem => Some(6),
             Self::SpawnFromPath => Some(7),
             // SpawnFromElf shares the SpawnCap allowlist bit (7): same authority as
             // SpawnFromPath (both require SpawnCap, enforced again in the handler).
-            Self::SpawnFromElf  => Some(7),
-            Self::SpawnPinned   => Some(8),
-            Self::Wait          => Some(9),
-            Self::Log           => Some(10),
-            Self::SetTimer      => Some(11),
-            Self::ShmAlloc      => Some(12),
-            Self::ShmMap        => Some(13),
-            Self::GetProcs      => Some(14),
-            Self::OpenCap       => Some(15),
+            Self::SpawnFromElf => Some(7),
+            Self::SpawnPinned => Some(8),
+            Self::Wait => Some(9),
+            Self::Log => Some(10),
+            Self::SetTimer => Some(11),
+            Self::ShmAlloc => Some(12),
+            Self::ShmMap => Some(13),
+            Self::GetProcs => Some(14),
+            Self::OpenCap => Some(15),
             Self::ReadCap | Self::SeekCap | Self::StatCap => Some(16),
-            Self::CloseCap      => Some(17),
+            Self::CloseCap => Some(17),
             Self::WriteCap | Self::SyncCap => Some(45),
-            Self::TruncateCap   => Some(46),
-            Self::Open          => Some(18),
-            Self::Read          => Some(19),
-            Self::Write         => Some(20),
-            Self::Close         => Some(21),
-            Self::ReadDir       => Some(22),
-            Self::Seek          => Some(23),
-            Self::FileOp        => Some(24),
-            Self::GetTime       => Some(25),
-            Self::GpuFlush         => Some(26),
-            Self::GpuCursor        => Some(43),
+            Self::TruncateCap => Some(46),
+            Self::Open => Some(18),
+            Self::Read => Some(19),
+            Self::Write => Some(20),
+            Self::Close => Some(21),
+            Self::ReadDir => Some(22),
+            Self::Seek => Some(23),
+            Self::FileOp => Some(24),
+            Self::GetTime => Some(25),
+            Self::GpuFlush => Some(26),
+            Self::GpuCursor => Some(43),
             Self::GpuGetResolution => Some(44),
-            Self::NetTx         => Some(27),
-            Self::NetRx         => Some(28),
-            Self::RecvTimeout   => Some(29),
-            Self::SendGather    => Some(30),
-            Self::RecvScatter   => Some(31),
+            Self::NetTx => Some(27),
+            Self::NetRx => Some(28),
+            Self::RecvTimeout => Some(29),
+            Self::SendGather => Some(30),
+            Self::RecvScatter => Some(31),
             Self::HotSwap | Self::HotSwapReady => Some(32),
-            Self::StateStash      => Some(33),
-            Self::StateRestore    => Some(34),
+            Self::StateStash => Some(33),
+            Self::StateRestore => Some(34),
             // StateStashClear: same allowlist bit as StateRestore (both are stash housekeeping).
             Self::StateStashClear => Some(34),
-            Self::Exec          => Some(35),
+            Self::Exec => Some(35),
             // Snapshot: privileged warm-boot operation; reuses HotSwap bit (SpawnCap required).
-            Self::Snapshot      => Some(32),
+            Self::Snapshot => Some(32),
             // LookupService is an open syscall (any client resolves a service endpoint).
             Self::LookupService => Some(37),
             // Heartbeat is an open syscall (any cell asserts its own liveness).
-            Self::Heartbeat     => Some(38),
+            Self::Heartbeat => Some(38),
             // GrantCap (bit 39): cells that need zero-copy large-file I/O via Grant API.
-            Self::GrantAlloc | Self::GrantShare | Self::GrantSlice | Self::GrantFree
-            | Self::GrantRegister | Self::GrantUnregister => Some(39),
+            Self::GrantAlloc
+            | Self::GrantShare
+            | Self::GrantSlice
+            | Self::GrantFree
+            | Self::GrantRegister
+            | Self::GrantUnregister => Some(39),
             // BlkReadAsync reuses BlockIoCap (bit 36) — same authority as raw block I/O.
-            Self::BlkReadAsync  => Some(36),
+            Self::BlkReadAsync => Some(36),
             // RequestMmio: gated by GPIO (bit 40) or UART (bit 41) manifest flags.
             // The kernel re-checks the manifest and allowlist at dispatch; here we
             // assign bit 40 as the generic "peripheral MMIO" allowlist bit.
-            Self::RequestMmio   => Some(40),
+            Self::RequestMmio => Some(40),
             // GetRandom: any cell that needs entropy (TLS, crypto) declares this.
             // Bit 41 was previously allocated as a UART MMIO alias; repurposing for entropy
             // is safe because UART MMIO is enforced at dispatch by resource-registry check,
             // not by this bit alone.
-            Self::GetRandom     => Some(41),
+            Self::GetRandom => Some(41),
             // WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
-            Self::WaitForEvent  => Some(42),
+            Self::WaitForEvent => Some(42),
             // AudioPlay: VirtIO sound output (bit 47 — next free after TruncateCap 46).
-            Self::AudioPlay     => Some(47),
+            Self::AudioPlay => Some(47),
             // HypervisorCap (bit 44): all 6 VMM syscalls share one bit.
             // Bit 43 is already assigned to GpuCursor; 44 is the next free slot.
-            Self::CreateVm | Self::CreateVcpu | Self::MapGuestMemory
-            | Self::RunVcpu | Self::VcpuRegs | Self::InjectIrq
-            | Self::WriteGuestMemory | Self::ReadGuestMemory => Some(44),
+            Self::CreateVm
+            | Self::CreateVcpu
+            | Self::MapGuestMemory
+            | Self::RunVcpu
+            | Self::VcpuRegs
+            | Self::InjectIrq
+            | Self::WriteGuestMemory
+            | Self::ReadGuestMemory => Some(44),
             // GrantDma (bit 48): PCIe DMA authorization. Cells that need to drive
             // hardware DMA (Driver Cells) declare this capability in their manifest.
             Self::GrantDma => Some(48),
             // SupervisorOp (bit 49): freeze/resume/kill/query a live Cell.
             // Gated by SupervisorCap which is ONLY granted via direct kernel TCB write.
-            Self::FreezeCell | Self::ResumeCell | Self::KillCell
-            | Self::QueryHotswapReady => Some(49),
+            Self::FreezeCell | Self::ResumeCell | Self::KillCell | Self::QueryHotswapReady => {
+                Some(49)
+            }
             // DriverRegistration (bit 50): announce as the active block/NIC driver,
             // and discover PCIe device BARs. All gated by PcieDriverCap.
-            Self::RegisterBlockDriver | Self::RegisterNicDriver
-            | Self::FindPcieDevice => Some(50),
+            Self::RegisterBlockDriver | Self::RegisterNicDriver | Self::FindPcieDevice => Some(50),
             // WaitIrq (bit 51): block a Driver Cell until a hardware IRQ fires.
             // Gated by PcieDriverCap or PlatformCap — only Driver Cells may wait on IRQs.
             Self::WaitIrq => Some(51),
@@ -574,8 +585,13 @@ impl ViSyscall {
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
             // NotifyOnExit, RegisterService, and CapRevoke are privileged (SpawnCap-gated),
             // so they are always permitted past the allowlist — SpawnCap is the gate at dispatch.
-            Self::Yield | Self::Exit | Self::ForceExit | Self::NotifyOnExit
-            | Self::RegisterService | Self::CapRevoke | Self::Unknown => None,
+            Self::Yield
+            | Self::Exit
+            | Self::ForceExit
+            | Self::NotifyOnExit
+            | Self::RegisterService
+            | Self::CapRevoke
+            | Self::Unknown => None,
         }
     }
 }
@@ -598,7 +614,7 @@ impl From<usize> for ViSyscall {
             13 => ViSyscall::OpenCap,
             14 => ViSyscall::ReadCap,
             15 => ViSyscall::CloseCap,
-            16  => ViSyscall::SpawnPinned,
+            16 => ViSyscall::SpawnPinned,
             420 => ViSyscall::Snapshot,
             8 => ViSyscall::Wait,
             104 => ViSyscall::Yield,
@@ -614,7 +630,7 @@ impl From<usize> for ViSyscall {
             106 => ViSyscall::Seek,
             107 => ViSyscall::FileOp,
             120 => ViSyscall::GetTime,
-            30  => ViSyscall::GetProcs,
+            30 => ViSyscall::GetProcs,
             201 => ViSyscall::RecvTimeout,
             202 => ViSyscall::SendGather,
             203 => ViSyscall::RecvScatter,

@@ -51,8 +51,8 @@ pub fn emit_linker_script_entry(entry: &str) {
 
     let output_arch = match arch.as_str() {
         "riscv64" | "riscv32" => "riscv",
-        "aarch64"             => "aarch64",
-        "x86_64"              => "i386:x86-64",
+        "aarch64" => "aarch64",
+        "x86_64" => "i386:x86-64",
         other => {
             println!(
                 "cargo:warning=cell-build: unsupported arch '{other}', linker script not emitted"

@@ -4,11 +4,11 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use api::ipc::{IPC_BUF_SIZE, VfsRequest, VfsResponse};
-use crate::{ViError, ViResult};
-use crate::service::VfsRef;
 use super::vierr_from_code;
+use crate::service::VfsRef;
+use crate::{ViError, ViResult};
+use alloc::vec::Vec;
+use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 /// Ergonomic client for the VFS service.
 ///
@@ -37,7 +37,10 @@ impl VfsClient {
     pub fn read_file(&mut self, path: &str) -> ViResult<Vec<u8>> {
         let req = VfsRequest::GetFile(path);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Data(data) => Ok(data.to_vec()),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -50,7 +53,10 @@ impl VfsClient {
     pub fn write_file(&mut self, path: &str, content: &[u8]) -> ViResult<()> {
         let req = VfsRequest::Write { path, content };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -61,7 +67,10 @@ impl VfsClient {
     pub fn append_file(&mut self, path: &str, content: &[u8]) -> ViResult<()> {
         let req = VfsRequest::Append { path, content };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -72,7 +81,10 @@ impl VfsClient {
     pub fn stat(&mut self, path: &str) -> ViResult<(u64, bool)> {
         let req = VfsRequest::Stat(path);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Stat { size, is_dir } => Ok((size, is_dir)),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -85,7 +97,10 @@ impl VfsClient {
     pub fn list_dir(&mut self, path: &str) -> ViResult<Vec<u8>> {
         let req = VfsRequest::ListDir(path);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Data(data) => Ok(data.to_vec()),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -96,7 +111,10 @@ impl VfsClient {
     pub fn mkdir(&mut self, path: &str) -> ViResult<()> {
         let req = VfsRequest::Mkdir(path);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -107,7 +125,10 @@ impl VfsClient {
     pub fn unlink(&mut self, path: &str) -> ViResult<()> {
         let req = VfsRequest::Unlink(path);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
+        {
             VfsResponse::Ok => Ok(()),
             VfsResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -121,5 +142,7 @@ impl VfsClient {
 }
 
 impl Default for VfsClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

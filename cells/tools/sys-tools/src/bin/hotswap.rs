@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
-extern crate ostd;
 extern crate alloc;
+extern crate ostd;
 
 use alloc::string::String;
 use ostd::syscall;

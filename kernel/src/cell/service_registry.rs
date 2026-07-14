@@ -44,7 +44,11 @@ pub fn register(service_id: u16, tid: usize) -> bool {
     }
     let mut map = REGISTRY.lock();
     if map.len() >= MAX_SERVICES && !map.contains_key(&service_id) {
-        log::warn!("[service-registry] full ({} entries); rejecting id {}", MAX_SERVICES, service_id);
+        log::warn!(
+            "[service-registry] full ({} entries); rejecting id {}",
+            MAX_SERVICES,
+            service_id
+        );
         return false;
     }
     map.insert(service_id, tid);
@@ -66,7 +70,10 @@ pub fn clear_tid(tid: usize) {
     let before = map.len();
     map.retain(|_, &mut t| t != tid);
     if map.len() != before {
-        log::info!("[service-registry] cleared stale entries for dead tid {}", tid);
+        log::info!(
+            "[service-registry] cleared stale entries for dead tid {}",
+            tid
+        );
     }
 }
 

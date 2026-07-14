@@ -38,27 +38,23 @@ use crate::signal::{Signal, SubscriptionHandle};
 /// Lays out as a fixed-height bar that shows the selected value and a
 /// down-arrow indicator. A click pushes `DropDownPopup` as an overlay.
 pub struct DropDown {
-    selected:  Signal<String>,
-    items:     Vec<String>,
-    queue:     OverlayActionQueue,
-    bounds:    Cell<Rect>,
-    hovered:   bool,
+    selected: Signal<String>,
+    items: Vec<String>,
+    queue: OverlayActionQueue,
+    bounds: Cell<Rect>,
+    hovered: bool,
 }
 
 impl DropDown {
     /// Create a drop-down with the given reactive `selected` value and item list.
     ///
     /// `queue` must be the clone obtained from `ViApp::action_queue()`.
-    pub fn new(
-        selected: Signal<String>,
-        items:    Vec<String>,
-        queue:    OverlayActionQueue,
-    ) -> Self {
+    pub fn new(selected: Signal<String>, items: Vec<String>, queue: OverlayActionQueue) -> Self {
         Self {
             selected,
             items,
             queue,
-            bounds:  Cell::new(Rect::ZERO),
+            bounds: Cell::new(Rect::ZERO),
             hovered: false,
         }
     }
@@ -75,12 +71,14 @@ impl DropDown {
             self.bounds.get(),
             self.queue.clone(),
         );
-        self.queue.borrow_mut().push(OverlayAction::Push(OverlayEntry {
-            widget:          Box::new(popup),
-            blocking:        false,
-            dismiss_outside: true,
-            anchor_bounds:   Some(self.bounds.get()),
-        }));
+        self.queue
+            .borrow_mut()
+            .push(OverlayAction::Push(OverlayEntry {
+                widget: Box::new(popup),
+                blocking: false,
+                dismiss_outside: true,
+                anchor_bounds: Some(self.bounds.get()),
+            }));
     }
 }
 
@@ -97,11 +95,17 @@ impl ViNode for DropDown {
         Size::new(w, h)
     }
 
-    fn bounds(&self) -> Rect { self.bounds.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
-        let b  = self.bounds.get();
-        let bg = if self.hovered { Color::rgb(55, 60, 80) } else { Color::rgb(40, 44, 60) };
+        let b = self.bounds.get();
+        let bg = if self.hovered {
+            Color::rgb(55, 60, 80)
+        } else {
+            Color::rgb(40, 44, 60)
+        };
         cx.canvas.fill_rect(b, bg);
         cx.canvas.draw_rect_border(b, Color::rgb(80, 85, 110), 1.0);
 
@@ -109,7 +113,11 @@ impl ViNode for DropDown {
         cx.draw_text(Point::new(b.x + 8.0, b.y + 10.0), &text, Color::WHITE);
 
         // Down-arrow indicator (right-aligned).
-        cx.draw_text(Point::new(b.x + b.w - 18.0, b.y + 10.0), "v", Color::rgb(150, 150, 180));
+        cx.draw_text(
+            Point::new(b.x + b.w - 18.0, b.y + 10.0),
+            "v",
+            Color::rgb(150, 150, 180),
+        );
     }
 
     fn event(&mut self, event: &Event) -> bool {
@@ -119,7 +127,10 @@ impl ViNode for DropDown {
                 self.hovered = self.bounds.get().contains(*pos);
                 was != self.hovered // signal dirty only when state changes
             }
-            Event::MousePress { pos, button: MouseButton::Left } => {
+            Event::MousePress {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 if self.bounds.get().contains(*pos) {
                     self.open_popup();
                     true
@@ -146,27 +157,27 @@ impl ViNode for DropDown {
 /// Selecting an item updates the `selected` signal and pops itself via the queue.
 /// Clicking outside the popup also pops it (`dismiss_outside = true` in the entry).
 struct DropDownPopup {
-    items:    Vec<String>,
+    items: Vec<String>,
     selected: Signal<String>,
-    anchor:   Rect,
-    queue:    OverlayActionQueue,
-    bounds:   Cell<Rect>,
-    hovered:  Option<usize>,
+    anchor: Rect,
+    queue: OverlayActionQueue,
+    bounds: Cell<Rect>,
+    hovered: Option<usize>,
 }
 
 impl DropDownPopup {
     fn new(
-        items:    Vec<String>,
+        items: Vec<String>,
         selected: Signal<String>,
-        anchor:   Rect,
-        queue:    OverlayActionQueue,
+        anchor: Rect,
+        queue: OverlayActionQueue,
     ) -> Self {
         Self {
             items,
             selected,
             anchor,
             queue,
-            bounds:  Cell::new(Rect::ZERO),
+            bounds: Cell::new(Rect::ZERO),
             hovered: None,
         }
     }
@@ -174,7 +185,7 @@ impl DropDownPopup {
     /// Item row height in pixels.
     const ITEM_H: f32 = 32.0;
     /// Maximum popup height before clipping.
-    const MAX_H:  f32 = 200.0;
+    const MAX_H: f32 = 200.0;
 }
 
 impl ViNode for DropDownPopup {
@@ -193,12 +204,14 @@ impl ViNode for DropDownPopup {
         Size::new(w, h)
     }
 
-    fn bounds(&self) -> Rect { self.bounds.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
-        let b        = self.bounds.get();
-        let item_h   = Self::ITEM_H;
-        let current  = self.selected.get();
+        let b = self.bounds.get();
+        let item_h = Self::ITEM_H;
+        let current = self.selected.get();
 
         cx.canvas.fill_rect(b, Color::rgb(35, 38, 52));
         cx.canvas.draw_rect_border(b, Color::rgb(70, 72, 100), 1.0);
@@ -206,7 +219,7 @@ impl ViNode for DropDownPopup {
         for (i, item) in self.items.iter().enumerate() {
             let iy = b.y + i as f32 * item_h;
             let is_selected = item.as_str() == current.as_str();
-            let is_hovered  = self.hovered == Some(i);
+            let is_hovered = self.hovered == Some(i);
             let bg = if is_hovered {
                 Color::rgb(80, 120, 220)
             } else if is_selected {
@@ -214,27 +227,42 @@ impl ViNode for DropDownPopup {
             } else {
                 Color::rgb(35, 38, 52)
             };
-            cx.canvas.fill_rect(Rect { x: b.x, y: iy, w: b.w, h: item_h }, bg);
+            cx.canvas.fill_rect(
+                Rect {
+                    x: b.x,
+                    y: iy,
+                    w: b.w,
+                    h: item_h,
+                },
+                bg,
+            );
             cx.draw_text(Point::new(b.x + 8.0, iy + 8.0), item, Color::WHITE);
         }
     }
 
     fn event(&mut self, event: &Event) -> bool {
         let item_h = Self::ITEM_H;
-        let b      = self.bounds.get();
+        let b = self.bounds.get();
 
         match event {
             Event::MouseMove { pos } => {
                 if b.contains(*pos) {
                     let idx = ((pos.y - b.y) / item_h) as usize;
-                    self.hovered = if idx < self.items.len() { Some(idx) } else { None };
+                    self.hovered = if idx < self.items.len() {
+                        Some(idx)
+                    } else {
+                        None
+                    };
                 } else {
                     self.hovered = None;
                 }
                 // Don't consume: non-blocking so root still sees moves.
                 false
             }
-            Event::MousePress { pos, button: MouseButton::Left } => {
+            Event::MousePress {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 if b.contains(*pos) {
                     true // inside popup — consume to prevent root from acting
                 } else {
@@ -242,7 +270,10 @@ impl ViNode for DropDownPopup {
                     false
                 }
             }
-            Event::MouseRelease { pos, button: MouseButton::Left } => {
+            Event::MouseRelease {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 if b.contains(*pos) {
                     let idx = ((pos.y - b.y) / item_h) as usize;
                     if idx < self.items.len() {

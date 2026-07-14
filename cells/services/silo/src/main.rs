@@ -26,18 +26,25 @@ extern crate alloc;
 
 // Manifest: requires HypervisorCap (allowlist bit 44).
 api::declare_manifest!(
-    block_io   = false,
-    network    = false,
-    spawn      = false,
-    gpio       = false,
-    uart       = false,
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
     hypervisor = true
 );
 
 // Narrow syscall allowlist enforced by the kernel.
 api::declare_syscalls![
-    Send, Recv, Log,
-    CreateVm, CreateVcpu, MapGuestMemory, WriteGuestMemory, RunVcpu, ReadGuestMemory,
+    Send,
+    Recv,
+    Log,
+    CreateVm,
+    CreateVcpu,
+    MapGuestMemory,
+    WriteGuestMemory,
+    RunVcpu,
+    ReadGuestMemory,
 ];
 
 mod ipc;
@@ -94,7 +101,10 @@ pub fn main() {
         println("[silo] write_guest_memory failed");
         return;
     }
-    println(&alloc::format!("[silo] guest loaded {} bytes", GUEST_BIN.len()));
+    println(&alloc::format!(
+        "[silo] guest loaded {} bytes",
+        GUEST_BIN.len()
+    ));
 
     // ── 4. Create vCPU ────────────────────────────────────────────────────────
     let vcpu_id = vmm::create_vcpu(vm_id, GUEST_ENTRY_PC);

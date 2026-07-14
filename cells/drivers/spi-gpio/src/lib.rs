@@ -68,34 +68,56 @@ impl<G: ViGpio> BitBangSpi<G> {
     /// Must be called at the start of every transaction so that open-drain
     /// effects from prior operations don't linger.
     fn setup_pins(&mut self) -> Result<(), SpiError> {
-        self.gpio.set_direction(MOSI, PinDir::Output).map_err(|_| SpiError::BusError)?;
-        self.gpio.set_direction(SCK,  PinDir::Output).map_err(|_| SpiError::BusError)?;
-        self.gpio.set_direction(CS,   PinDir::Output).map_err(|_| SpiError::BusError)?;
-        self.gpio.set_direction(MISO, PinDir::Input).map_err(|_| SpiError::BusError)?;
+        self.gpio
+            .set_direction(MOSI, PinDir::Output)
+            .map_err(|_| SpiError::BusError)?;
+        self.gpio
+            .set_direction(SCK, PinDir::Output)
+            .map_err(|_| SpiError::BusError)?;
+        self.gpio
+            .set_direction(CS, PinDir::Output)
+            .map_err(|_| SpiError::BusError)?;
+        self.gpio
+            .set_direction(MISO, PinDir::Input)
+            .map_err(|_| SpiError::BusError)?;
         // Idle state: SCK low, CS deasserted (high).
-        self.gpio.write_pin(SCK, false).map_err(|_| SpiError::BusError)?;
-        self.gpio.write_pin(CS,  true).map_err(|_| SpiError::BusError)?;
+        self.gpio
+            .write_pin(SCK, false)
+            .map_err(|_| SpiError::BusError)?;
+        self.gpio
+            .write_pin(CS, true)
+            .map_err(|_| SpiError::BusError)?;
         Ok(())
     }
 
     fn cs_low(&mut self) -> Result<(), SpiError> {
-        self.gpio.write_pin(CS, false).map_err(|_| SpiError::BusError)
+        self.gpio
+            .write_pin(CS, false)
+            .map_err(|_| SpiError::BusError)
     }
 
     fn cs_high(&mut self) -> Result<(), SpiError> {
-        self.gpio.write_pin(CS, true).map_err(|_| SpiError::BusError)
+        self.gpio
+            .write_pin(CS, true)
+            .map_err(|_| SpiError::BusError)
     }
 
     fn sck_high(&mut self) -> Result<(), SpiError> {
-        self.gpio.write_pin(SCK, true).map_err(|_| SpiError::BusError)
+        self.gpio
+            .write_pin(SCK, true)
+            .map_err(|_| SpiError::BusError)
     }
 
     fn sck_low(&mut self) -> Result<(), SpiError> {
-        self.gpio.write_pin(SCK, false).map_err(|_| SpiError::BusError)
+        self.gpio
+            .write_pin(SCK, false)
+            .map_err(|_| SpiError::BusError)
     }
 
     fn mosi_set(&mut self, high: bool) -> Result<(), SpiError> {
-        self.gpio.write_pin(MOSI, high).map_err(|_| SpiError::BusError)
+        self.gpio
+            .write_pin(MOSI, high)
+            .map_err(|_| SpiError::BusError)
     }
 
     fn read_miso(&self) -> Result<bool, SpiError> {

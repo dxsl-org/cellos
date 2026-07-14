@@ -57,7 +57,7 @@ pub const DEV_ADC: u8 = 1 << 4;
 const ALLOWED: &[(usize, usize, u8)] = &[
     (0x3F20_0000, 0x1_0000, DEV_GPIO), // BCM2837 GPIO — Raspberry Pi 3 (54 pins)
     (0x3F21_5000, 0x0_1000, DEV_UART), // BCM mini UART (AUX block) — RPi 3
-    // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
+                                       // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
 ];
 
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
@@ -76,7 +76,11 @@ const ALLOWED: &[(usize, usize, u8)] = &[
 #[cfg(target_arch = "x86_64")]
 const ALLOWED: &[(usize, usize, u8)] = &[];
 
-#[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "aarch64",
+    target_arch = "riscv64",
+    target_arch = "x86_64"
+)))]
 const ALLOWED: &[(usize, usize, u8)] = &[];
 
 // ---------------------------------------------------------------------------
@@ -84,14 +88,12 @@ const ALLOWED: &[(usize, usize, u8)] = &[];
 // ---------------------------------------------------------------------------
 
 /// Maps MMIO base address → (len, owner CellId).
-static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> =
-    Spinlock::new(BTreeMap::new());
+static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> = Spinlock::new(BTreeMap::new());
 
 /// Dynamically discovered PCIe BAR windows (base → len).
 /// Populated by `pcie_ecam::init()` after the ECAM scan; consumed by
 /// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
-static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> =
-    Spinlock::new(BTreeMap::new());
+static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new());
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -105,7 +107,9 @@ static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> =
 pub unsafe fn force_unlock_locks() {
     REGISTRY.force_unlock();
     // SAFETY: same contract as REGISTRY above.
-    unsafe { PCIE_BARS.force_unlock(); }
+    unsafe {
+        PCIE_BARS.force_unlock();
+    }
 }
 
 /// Register a PCIe BAR window discovered during ECAM scan.
@@ -193,7 +197,9 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
 ///
 /// Call this from every Cell-exit path (Exit syscall, ForceExit, fault, watchdog).
 pub fn release_for(cell_id: CellId) {
-    REGISTRY.lock().retain(|_base, &mut (_len, owner)| owner != cell_id);
+    REGISTRY
+        .lock()
+        .retain(|_base, &mut (_len, owner)| owner != cell_id);
 }
 
 /// Return the task ID (TID) of the cell that currently owns the MMIO region
@@ -202,7 +208,10 @@ pub fn release_for(cell_id: CellId) {
 /// Returns `None` if no cell has requested that exact base address.
 /// Used by the GPIO IRQ handler to route interrupts to the current MMIO owner.
 pub fn lookup_mmio_owner(base: usize) -> Option<usize> {
-    REGISTRY.lock().get(&base).map(|&(_len, cell_id)| cell_id.0 as usize)
+    REGISTRY
+        .lock()
+        .get(&base)
+        .map(|&(_len, cell_id)| cell_id.0 as usize)
 }
 
 /// Current number of registered regions (diagnostics).

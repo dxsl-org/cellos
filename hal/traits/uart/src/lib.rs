@@ -29,7 +29,7 @@ impl<T: SerialPort> SerialWrite for T {}
 /// UART baud rate (common values; driver validates against hardware limits).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BaudRate {
-    B9600   = 9600,
+    B9600 = 9600,
     B115200 = 115200,
     B1000000 = 1_000_000,
 }
@@ -37,17 +37,21 @@ pub enum BaudRate {
 /// Data-frame configuration (parity, stop bits).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct UartConfig {
-    pub baud:      BaudRate,
+    pub baud: BaudRate,
     /// Data bits per frame (5–8; driver enforces).
     pub data_bits: u8,
     /// Stop bits (1 or 2).
     pub stop_bits: u8,
-    pub parity:    Parity,
+    pub parity: Parity,
 }
 
 /// Parity mode.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Parity { None, Even, Odd }
+pub enum Parity {
+    None,
+    Even,
+    Odd,
+}
 
 /// Extended UART trait for Driver Cells (adds runtime reconfiguration).
 ///

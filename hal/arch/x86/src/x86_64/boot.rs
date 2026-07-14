@@ -88,8 +88,8 @@ global_asm!(
     "mov qword ptr [rsp + 224], 0x23",
     // user RFLAGS ← sstatus (+256) masked to safe user bits, IF forced on
     "mov rax, [rsp + 256]",
-    "and rax, 0x0FFF",          // keep status/control flags (bits 11:0); clears IOPL, NT, VM, AC
-    "or  rax, 0x202",           // force IF=1 (bit 9) + reserved-always-1 bit 1
+    "and rax, 0x0FFF", // keep status/control flags (bits 11:0); clears IOPL, NT, VM, AC
+    "or  rax, 0x202",  // force IF=1 (bit 9) + reserved-always-1 bit 1
     "mov [rsp + 232], rax",
     // user RSP ← regs[2] (+16)
     "mov rax, [rsp + 16]",
@@ -99,31 +99,31 @@ global_asm!(
     // ── Restore GP registers from ViTrapFrame ───────────────────────────────
     // Load callee-saved and caller-saved regs (skip rax/rcx/rdx/r11 for last).
     // rsp itself is NOT restored here — iretq will load user RSP from the frame.
-    "mov rbx, [rsp + 24]",      // regs[3]
-    "mov rbp, [rsp + 32]",      // regs[4]
-    "mov rsi, [rsp + 40]",      // regs[5]
-    "mov rdi, [rsp + 48]",      // regs[6]
-    "mov r8,  [rsp + 56]",      // regs[7]
-    "mov r9,  [rsp + 64]",      // regs[8]
-    "mov r10, [rsp + 72]",      // regs[9]
-    "mov r12, [rsp + 88]",      // regs[11]
-    "mov r13, [rsp + 96]",      // regs[12]
-    "mov r14, [rsp + 104]",     // regs[13]
-    "mov r15, [rsp + 112]",     // regs[14]
-    "mov rdx, [rsp + 120]",     // regs[15]
-    "mov rcx, [rsp + 8]",       // regs[1]
-    "mov r11, [rsp + 80]",      // regs[10]
-    "mov rax, [rsp + 136]",     // regs[17]
+    "mov rbx, [rsp + 24]",  // regs[3]
+    "mov rbp, [rsp + 32]",  // regs[4]
+    "mov rsi, [rsp + 40]",  // regs[5]
+    "mov rdi, [rsp + 48]",  // regs[6]
+    "mov r8,  [rsp + 56]",  // regs[7]
+    "mov r9,  [rsp + 64]",  // regs[8]
+    "mov r10, [rsp + 72]",  // regs[9]
+    "mov r12, [rsp + 88]",  // regs[11]
+    "mov r13, [rsp + 96]",  // regs[12]
+    "mov r14, [rsp + 104]", // regs[13]
+    "mov r15, [rsp + 112]", // regs[14]
+    "mov rdx, [rsp + 120]", // regs[15]
+    "mov rcx, [rsp + 8]",   // regs[1]
+    "mov r11, [rsp + 80]",  // regs[10]
+    "mov rax, [rsp + 136]", // regs[17]
     // ── PKU: restore user PKRU before ring-3 re-entry (iretq path) ──────────
     // Guard: wrpkru causes #UD on CPUs without PKU — test ViCell_pku_active first.
     // ECX must be 0 for wrpkru; this clobbers %rax which is then reloaded.
     "cmp byte ptr [rip + ViCell_pku_active], 0",
     "je 1f",
     "mov eax, dword ptr gs:[16]", // pku_value from CPU_LOCAL (offset 16)
-    "xor ecx, ecx",              // WRPKRU precondition: ECX = 0
-    "xor edx, edx",              // WRPKRU precondition: EDX = 0
-    "wrpkru",                    // PKRU := EAX
-    "mov rax, [rsp + 136]",      // reload user rax (was overwritten by pku_value)
+    "xor ecx, ecx",               // WRPKRU precondition: ECX = 0
+    "xor edx, edx",               // WRPKRU precondition: EDX = 0
+    "wrpkru",                     // PKRU := EAX
+    "mov rax, [rsp + 136]",       // reload user rax (was overwritten by pku_value)
     "1:",
     // ── Advance RSP to the iretq frame and enter ring-3 ─────────────────────
     "add rsp, 216",

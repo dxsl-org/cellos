@@ -15,12 +15,12 @@
 
 #![cfg(feature = "tls-roots-embedded")]
 
-use embedded_tls::{Aes128GcmSha256, CryptoProvider, TlsError, TlsVerifier};
-use embedded_tls::pki::CertVerifier;
-use embedded_tls::CryptoRngCore;
 use crate::tls::clock::ViTlsClock;
 use crate::tls::rng::ViRng;
 use crate::tls::roots::ca_cert;
+use embedded_tls::pki::CertVerifier;
+use embedded_tls::CryptoRngCore;
+use embedded_tls::{Aes128GcmSha256, CryptoProvider, TlsError, TlsVerifier};
 
 /// Cert buffer size for the leaf certificate held in-memory during handshake.
 /// 4096 bytes covers typical ECC certificates with SAN extensions.

@@ -5,13 +5,13 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-types = { path = "../../../libs/types" }
-api   = { path = "../../../libs/api" }
-ostd  = { path = "../../../libs/ostd" }
+types = { path = "../../../libs/types", version = "0.1.0" }
+api   = { path = "../../../libs/api", version = "0.1.0" }
+ostd  = { path = "../../../libs/ostd", version = "0.2.0" }
 
 [[bin]]
 name = "input-test"
 path = "src/main.rs"
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

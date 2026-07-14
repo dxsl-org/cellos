@@ -8,12 +8,12 @@
 pub const PL011_BASE: usize = 0x0900_0000;
 
 // PL011 register offsets (byte offsets from base).
-const UARTDR:   usize = 0x000; // Data Register
-const UARTFR:   usize = 0x018; // Flag Register
+const UARTDR: usize = 0x000; // Data Register
+const UARTFR: usize = 0x018; // Flag Register
 const UARTIBRD: usize = 0x024; // Integer Baud Rate Divisor
 const UARTFBRD: usize = 0x028; // Fractional Baud Rate Divisor
-const UARTLCR:  usize = 0x02C; // Line Control Register
-const UARTCR:   usize = 0x030; // Control Register
+const UARTLCR: usize = 0x02C; // Line Control Register
+const UARTCR: usize = 0x030; // Control Register
 
 const FR_TXFF: u32 = 1 << 5; // TX FIFO full
 const FR_RXFE: u32 = 1 << 4; // RX FIFO empty

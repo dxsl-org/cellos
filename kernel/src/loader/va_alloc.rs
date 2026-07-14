@@ -13,11 +13,11 @@
 
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
-#[cfg(target_arch = "riscv32")]
-use portable_atomic::AtomicU64;
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
 
 /// Cell VA region start — 4 GiB (0x1_0000_0000).
 ///
@@ -51,8 +51,7 @@ const MAX_SLOTS: usize = 512;
 const BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(64);
 
 /// Bump index: the first slot that has NEVER been allocated.
-static BUMP: core::sync::atomic::AtomicUsize =
-    core::sync::atomic::AtomicUsize::new(0);
+static BUMP: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 /// Free-list bitmap: bit N = 1 means slot N is available for reuse.
 /// Uses relaxed CAS loops — no ordering guarantee needed beyond the CAS itself.
@@ -74,9 +73,12 @@ pub fn alloc_cell_va() -> Option<usize> {
         while val != 0 {
             let bit = val.trailing_zeros() as usize;
             let slot = word_idx * 64 + bit;
-            if slot >= MAX_SLOTS { break; }
+            if slot >= MAX_SLOTS {
+                break;
+            }
             let mask = 1u64 << bit;
-            match word.compare_exchange_weak(val, val & !mask, Ordering::AcqRel, Ordering::Relaxed) {
+            match word.compare_exchange_weak(val, val & !mask, Ordering::AcqRel, Ordering::Relaxed)
+            {
                 Ok(_) => return Some(CELL_VA_START + slot * CELL_VA_STRIDE),
                 Err(cur) => val = cur, // retry with updated value
             }
@@ -97,11 +99,17 @@ pub fn alloc_cell_va() -> Option<usize> {
 /// `base` must be a value previously returned by `alloc_cell_va`.
 /// Silently ignores invalid values (out of range or misaligned).
 pub fn free_cell_va(base: usize) {
-    if base < CELL_VA_START { return; }
+    if base < CELL_VA_START {
+        return;
+    }
     let offset = base - CELL_VA_START;
-    if !offset.is_multiple_of(CELL_VA_STRIDE) { return; }
+    if !offset.is_multiple_of(CELL_VA_STRIDE) {
+        return;
+    }
     let slot = offset / CELL_VA_STRIDE;
-    if slot >= MAX_SLOTS { return; }
+    if slot >= MAX_SLOTS {
+        return;
+    }
     let word = &FREE[slot / 64];
     let mask = 1u64 << (slot % 64);
     word.fetch_or(mask, Ordering::Release);

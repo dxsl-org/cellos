@@ -1,9 +1,9 @@
 //! Benchmark runner: warmup loop + measurement loop + percentile computation.
 
 extern crate alloc;
+use super::{report, timer};
 use alloc::vec::Vec;
 use api::benchmark::{BenchReport, ViBenchmark};
-use super::{report, timer};
 
 /// Default warmup iterations (discarded; exist to heat up caches and QEMU JIT).
 pub const DEFAULT_WARMUP: u32 = 100;

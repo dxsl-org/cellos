@@ -97,6 +97,19 @@ jobs:
         env:
           RUSTFLAGS: ${{ matrix.short == 'rv64' && '-D warnings -C relocation-model=pic' || '-D warnings' }}
           CC_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && matrix.cc_bin || '' }}
+          # littlefs2-sys also runs bindgen (for the LFS C struct layout), which
+          # uses libclang independently of the CC_* override above and derives
+          # its --target from the Rust target triple — pointing it at a bare
+          # `-none` OS makes libclang hunt for a nonexistent sysroot instead of
+          # the host's real glibc headers. Force it back to a real Linux target
+          # (a header-only binding pass doesn't need the bare-metal ABI).
+          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && '--target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu' || '' }}
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && '--target=x86_64-linux-gnu' || '' }}
+          # littlefs2-sys's C shim needs freestanding flags + LFS_NO_INTRINSICS to
+          # avoid pulling in libc headers the bare-elf cross-gcc doesn't ship
+          # (matches scripts/build-test-hooks-ci.sh, which already builds this
+          # cleanly for riscv64).
+          CFLAGS_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && '-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS' || '' }}
           CC_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && matrix.cc_bin || '' }}
           CC_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && matrix.cc_bin || '' }}
         run: >
@@ -634,11 +647,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v1
+        # v1's bundled cargo-deny can't parse CVSS 4.0 entries now present in
+        # the RustSec advisory DB ("unsupported CVSS version: 4.0"); v2 ships
+        # a current cargo-deny that supports it.
+        uses: EmbarkStudios/cargo-deny-action@v2
         with:
           arguments: --all-features
 
       - name: cargo-audit
-        uses: rustsec/audit-check@v1.4.1
+        uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

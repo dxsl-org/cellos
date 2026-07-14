@@ -14,11 +14,11 @@
 //!
 //! Call ordering: `platform::init()` → `init_kernel_paging*()` → `pcie_ecam::init()`.
 
+use crate::sync::Spinlock;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_arch = "x86_64")]
 use core::sync::atomic::AtomicUsize;
-use crate::sync::Spinlock;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 // ── ECAM base addresses (QEMU machine defaults) ───────────────────────────────
 
@@ -50,7 +50,11 @@ pub fn set_ecam_base_x86(base: usize) {
 #[inline]
 fn ecam_base_x86() -> usize {
     let b = X86_ECAM_BASE.load(Ordering::Relaxed);
-    if b != 0 { b } else { ECAM_BASE_X86 }
+    if b != 0 {
+        b
+    } else {
+        ECAM_BASE_X86
+    }
 }
 
 /// PCIe ECAM config-space base for RISC-V virt gpex.
@@ -66,22 +70,22 @@ pub const ECAM_BUS0_SIZE: usize = 0x10_0000; // 1 MiB
 
 // ── Config space offsets (PCI 3.0 type-0 header) ─────────────────────────────
 
-const CFG_VENDOR_ID:   usize = 0x00;
-const CFG_DEVICE_ID:   usize = 0x02;
-const CFG_COMMAND:     usize = 0x04;
-const CFG_CLASS_PROG:  usize = 0x09; // Prog IF
-const CFG_SUBCLASS:    usize = 0x0A;
-const CFG_CLASS_CODE:  usize = 0x0B;
+const CFG_VENDOR_ID: usize = 0x00;
+const CFG_DEVICE_ID: usize = 0x02;
+const CFG_COMMAND: usize = 0x04;
+const CFG_CLASS_PROG: usize = 0x09; // Prog IF
+const CFG_SUBCLASS: usize = 0x0A;
+const CFG_CLASS_CODE: usize = 0x0B;
 const CFG_HEADER_TYPE: usize = 0x0E;
-const CFG_BAR0:        usize = 0x10;
-const CFG_CAP_PTR:     usize = 0x34;
-const CFG_STATUS:      usize = 0x06;
+const CFG_BAR0: usize = 0x10;
+const CFG_CAP_PTR: usize = 0x34;
+const CFG_STATUS: usize = 0x06;
 
 // Command register bits.
 const CMD_MEM_SPACE: u16 = 1 << 1;
 
 // Capability IDs.
-const CAP_ID_PM:   u8 = 0x01;
+const CAP_ID_PM: u8 = 0x01;
 const CAP_ID_MSIX: u8 = 0x11;
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -130,21 +134,21 @@ pub struct PmCap {
 #[derive(Clone, Debug)]
 pub struct PciDevice {
     /// (bus, device, function).
-    pub bdf:      (u8, u8, u8),
+    pub bdf: (u8, u8, u8),
     pub vendor_id: u16,
     pub device_id: u16,
     /// Class code (offset 0x0B).
-    pub class:    u8,
+    pub class: u8,
     /// Subclass (offset 0x0A).
     pub subclass: u8,
     /// Programming interface (offset 0x09).
-    pub prog_if:  u8,
+    pub prog_if: u8,
     /// Up to 6 BARs (64-bit BARs consume two slots; slot N+1 is `Bar::None`).
-    pub bars:     [Bar; 6],
+    pub bars: [Bar; 6],
     /// MSI-X capability, if present in capability list.
-    pub msix:     Option<MsixCap>,
+    pub msix: Option<MsixCap>,
     /// PM capability, if present.
-    pub pm:       Option<PmCap>,
+    pub pm: Option<PmCap>,
 }
 
 // ── Global device list ────────────────────────────────────────────────────────
@@ -178,11 +182,8 @@ pub fn is_platform_registered() -> bool {
 /// ECAM formula: base + (bus << 20) + (device << 15) + (function << 12) + offset.
 #[inline(always)]
 fn config_addr(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize) -> *mut u8 {
-    let addr = ecam_base
-        + ((bus  as usize) << 20)
-        + ((dev  as usize) << 15)
-        + ((fun  as usize) << 12)
-        + off;
+    let addr =
+        ecam_base + ((bus as usize) << 20) + ((dev as usize) << 15) + ((fun as usize) << 12) + off;
     addr as *mut u8
 }
 
@@ -230,7 +231,9 @@ unsafe fn write32(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: 
     // SAFETY: caller guarantees the ECAM window is identity-mapped.
     let ptr = config_addr(ecam_base, bus, dev, fun, off) as *mut u32;
     // SAFETY: volatile ensures the write reaches the MMIO register.
-    unsafe { core::ptr::write_volatile(ptr, val); }
+    unsafe {
+        core::ptr::write_volatile(ptr, val);
+    }
 }
 
 /// Write a u16 to PCI config space.
@@ -241,7 +244,9 @@ unsafe fn write16(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: 
     // SAFETY: caller guarantees the ECAM window is identity-mapped.
     let ptr = config_addr(ecam_base, bus, dev, fun, off) as *mut u16;
     // SAFETY: volatile ensures the write reaches the MMIO register.
-    unsafe { core::ptr::write_volatile(ptr, val); }
+    unsafe {
+        core::ptr::write_volatile(ptr, val);
+    }
 }
 
 // ── BAR decode ────────────────────────────────────────────────────────────────
@@ -254,12 +259,7 @@ unsafe fn write16(ecam_base: usize, bus: u8, dev: u8, fun: u8, off: usize, val: 
 ///
 /// # Safety
 /// `ecam_base` must be the identity-mapped ECAM window base.
-unsafe fn decode_bars(
-    ecam_base: usize,
-    bus: u8,
-    dev: u8,
-    fun: u8,
-) -> [Bar; 6] {
+unsafe fn decode_bars(ecam_base: usize, bus: u8, dev: u8, fun: u8) -> [Bar; 6] {
     let mut bars = [Bar::None; 6];
     let mut i = 0usize;
     while i < 6 {
@@ -287,13 +287,19 @@ unsafe fn decode_bars(
             let raw_hi = unsafe { read32(ecam_base, bus, dev, fun, off_hi) };
             let addr64 = (addr32 as u64) | ((raw_hi as u64) << 32);
             let size64 = unsafe { probe_bar_size64(ecam_base, bus, dev, fun, i) };
-            bars[i]     = Bar::Memory64 { addr: addr64, size: size64 };
+            bars[i] = Bar::Memory64 {
+                addr: addr64,
+                size: size64,
+            };
             bars[i + 1] = Bar::None; // second slot consumed
             i += 2;
         } else {
             // 32-bit MMIO.
             let size32 = unsafe { probe_bar_size32(ecam_base, bus, dev, fun, i) };
-            bars[i] = Bar::Memory32 { addr: addr32, size: size32 };
+            bars[i] = Bar::Memory32 {
+                addr: addr32,
+                size: size32,
+            };
             i += 1;
         }
     }
@@ -307,13 +313,7 @@ unsafe fn decode_bars(
 ///
 /// # Safety
 /// `ecam_base` must be the identity-mapped ECAM window base.
-unsafe fn probe_bar_size32(
-    ecam_base: usize,
-    bus: u8,
-    dev: u8,
-    fun: u8,
-    bar_idx: usize,
-) -> u32 {
+unsafe fn probe_bar_size32(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx: usize) -> u32 {
     let off = CFG_BAR0 + bar_idx * 4;
     // Save original values.
     // SAFETY: ECAM window is identity-mapped.
@@ -324,22 +324,39 @@ unsafe fn probe_bar_size32(
     // Disable memory decode before writing all-ones to BAR.
     // This prevents the device from claiming MMIO during the probe window.
     // SAFETY: writing command register disables decode only for this function.
-    unsafe { write16(ecam_base, bus, dev, fun, CFG_COMMAND, orig_cmd & !CMD_MEM_SPACE); }
+    unsafe {
+        write16(
+            ecam_base,
+            bus,
+            dev,
+            fun,
+            CFG_COMMAND,
+            orig_cmd & !CMD_MEM_SPACE,
+        );
+    }
 
     // Write all-ones to BAR.
     // SAFETY: ECAM window is identity-mapped; BAR write is bounded to this function.
-    unsafe { write32(ecam_base, bus, dev, fun, off, 0xFFFF_FFFF); }
+    unsafe {
+        write32(ecam_base, bus, dev, fun, off, 0xFFFF_FFFF);
+    }
     // SAFETY: ECAM window is identity-mapped.
     let readback = unsafe { read32(ecam_base, bus, dev, fun, off) };
 
     // Restore BAR and command register.
     // SAFETY: ECAM window is identity-mapped.
-    unsafe { write32(ecam_base, bus, dev, fun, off, orig_bar); }
-    unsafe { write16(ecam_base, bus, dev, fun, CFG_COMMAND, orig_cmd); }
+    unsafe {
+        write32(ecam_base, bus, dev, fun, off, orig_bar);
+    }
+    unsafe {
+        write16(ecam_base, bus, dev, fun, CFG_COMMAND, orig_cmd);
+    }
 
     // Size = ~(readback & mask) + 1 where mask = 0xFFFFFFF0 (clear lower 4 bits).
     let mask = readback & 0xFFFF_FFF0;
-    if mask == 0 { return 0; }
+    if mask == 0 {
+        return 0;
+    }
     (!mask).wrapping_add(1)
 }
 
@@ -347,31 +364,38 @@ unsafe fn probe_bar_size32(
 ///
 /// # Safety
 /// `ecam_base` must be the identity-mapped ECAM window base.
-unsafe fn probe_bar_size64(
-    ecam_base: usize,
-    bus: u8,
-    dev: u8,
-    fun: u8,
-    bar_idx: usize,
-) -> u64 {
+unsafe fn probe_bar_size64(ecam_base: usize, bus: u8, dev: u8, fun: u8, bar_idx: usize) -> u64 {
     let off_lo = CFG_BAR0 + bar_idx * 4;
     let off_hi = CFG_BAR0 + (bar_idx + 1) * 4;
 
     // SAFETY: ECAM window is identity-mapped.
     let orig_cmd = unsafe { read16(ecam_base, bus, dev, fun, CFG_COMMAND) };
     // SAFETY: ECAM window is identity-mapped.
-    let orig_lo  = unsafe { read32(ecam_base, bus, dev, fun, off_lo) };
+    let orig_lo = unsafe { read32(ecam_base, bus, dev, fun, off_lo) };
     // SAFETY: ECAM window is identity-mapped.
-    let orig_hi  = unsafe { read32(ecam_base, bus, dev, fun, off_hi) };
+    let orig_hi = unsafe { read32(ecam_base, bus, dev, fun, off_hi) };
 
     // Disable memory decode during probe.
     // SAFETY: ECAM window is identity-mapped.
-    unsafe { write16(ecam_base, bus, dev, fun, CFG_COMMAND, orig_cmd & !CMD_MEM_SPACE); }
+    unsafe {
+        write16(
+            ecam_base,
+            bus,
+            dev,
+            fun,
+            CFG_COMMAND,
+            orig_cmd & !CMD_MEM_SPACE,
+        );
+    }
 
     // Write all-ones to both halves.
     // SAFETY: ECAM window is identity-mapped.
-    unsafe { write32(ecam_base, bus, dev, fun, off_lo, 0xFFFF_FFFF); }
-    unsafe { write32(ecam_base, bus, dev, fun, off_hi, 0xFFFF_FFFF); }
+    unsafe {
+        write32(ecam_base, bus, dev, fun, off_lo, 0xFFFF_FFFF);
+    }
+    unsafe {
+        write32(ecam_base, bus, dev, fun, off_hi, 0xFFFF_FFFF);
+    }
 
     // SAFETY: ECAM window is identity-mapped.
     let rb_lo = unsafe { read32(ecam_base, bus, dev, fun, off_lo) };
@@ -380,12 +404,20 @@ unsafe fn probe_bar_size64(
 
     // Restore.
     // SAFETY: ECAM window is identity-mapped.
-    unsafe { write32(ecam_base, bus, dev, fun, off_lo, orig_lo); }
-    unsafe { write32(ecam_base, bus, dev, fun, off_hi, orig_hi); }
-    unsafe { write16(ecam_base, bus, dev, fun, CFG_COMMAND, orig_cmd); }
+    unsafe {
+        write32(ecam_base, bus, dev, fun, off_lo, orig_lo);
+    }
+    unsafe {
+        write32(ecam_base, bus, dev, fun, off_hi, orig_hi);
+    }
+    unsafe {
+        write16(ecam_base, bus, dev, fun, CFG_COMMAND, orig_cmd);
+    }
 
     let mask64 = ((rb_hi as u64) << 32) | ((rb_lo & 0xFFFF_FFF0) as u64);
-    if mask64 == 0 { return 0; }
+    if mask64 == 0 {
+        return 0;
+    }
     (!mask64).wrapping_add(1)
 }
 
@@ -402,7 +434,7 @@ unsafe fn walk_caps(
     fun: u8,
 ) -> (Option<MsixCap>, Option<PmCap>) {
     let mut msix = None;
-    let mut pm   = None;
+    let mut pm = None;
 
     // Capability list is present only when status bit 4 is set.
     // SAFETY: ECAM window is identity-mapped.
@@ -413,25 +445,28 @@ unsafe fn walk_caps(
 
     // SAFETY: ECAM window is identity-mapped.
     let mut cap_ptr = unsafe { read8(ecam_base, bus, dev, fun, CFG_CAP_PTR) } & 0xFC;
-    let mut budget  = 64u8; // guard against malformed circular lists
+    let mut budget = 64u8; // guard against malformed circular lists
 
     while cap_ptr != 0 && budget > 0 {
         budget -= 1;
         // SAFETY: ECAM window is identity-mapped.
         let cap_id = unsafe { read8(ecam_base, bus, dev, fun, cap_ptr as usize) };
         // SAFETY: ECAM window is identity-mapped.
-        let next   = unsafe { read8(ecam_base, bus, dev, fun, cap_ptr as usize + 1) } & 0xFC;
+        let next = unsafe { read8(ecam_base, bus, dev, fun, cap_ptr as usize + 1) } & 0xFC;
 
         match cap_id {
             CAP_ID_MSIX => {
                 // SAFETY: ECAM window is identity-mapped.
-                let msg_ctrl = unsafe {
-                    read16(ecam_base, bus, dev, fun, cap_ptr as usize + 2)
-                };
-                msix = Some(MsixCap { cap_offset: cap_ptr, msg_ctrl });
+                let msg_ctrl = unsafe { read16(ecam_base, bus, dev, fun, cap_ptr as usize + 2) };
+                msix = Some(MsixCap {
+                    cap_offset: cap_ptr,
+                    msg_ctrl,
+                });
             }
             CAP_ID_PM => {
-                pm = Some(PmCap { cap_offset: cap_ptr });
+                pm = Some(PmCap {
+                    cap_offset: cap_ptr,
+                });
             }
             _ => {}
         }
@@ -467,13 +502,15 @@ unsafe fn scan(ecam_base: usize) {
         for fun in 0u8..max_fun {
             // SAFETY: ECAM window is identity-mapped.
             let vid = unsafe { read16(ecam_base, 0, dev, fun, CFG_VENDOR_ID) };
-            if vid == 0xFFFF { continue; }
+            if vid == 0xFFFF {
+                continue;
+            }
 
             // SAFETY: ECAM window is identity-mapped.
-            let did      = unsafe { read16(ecam_base, 0, dev, fun, CFG_DEVICE_ID) };
-            let prog_if  = unsafe { read8(ecam_base, 0, dev, fun, CFG_CLASS_PROG) };
+            let did = unsafe { read16(ecam_base, 0, dev, fun, CFG_DEVICE_ID) };
+            let prog_if = unsafe { read8(ecam_base, 0, dev, fun, CFG_CLASS_PROG) };
             let subclass = unsafe { read8(ecam_base, 0, dev, fun, CFG_SUBCLASS) };
-            let class    = unsafe { read8(ecam_base, 0, dev, fun, CFG_CLASS_CODE) };
+            let class = unsafe { read8(ecam_base, 0, dev, fun, CFG_CLASS_CODE) };
 
             // Decode BARs for type-0 headers (endpoints). Skip bridges (type-1).
             let hdr = unsafe { read8(ecam_base, 0, dev, fun, CFG_HEADER_TYPE) } & 0x7F;
@@ -492,7 +529,15 @@ unsafe fn scan(ecam_base: usize) {
             log::info!(
                 "[pcie] {:02x}:{:02x}.{} vendor={:04x} device={:04x} \
                  class={:02x}:{:02x}:{:02x} bar0={:#x}",
-                0u8, dev, fun, vid, did, class, subclass, prog_if, bar0_addr
+                0u8,
+                dev,
+                fun,
+                vid,
+                did,
+                class,
+                subclass,
+                prog_if,
+                bar0_addr
             );
 
             devices.push(PciDevice {
@@ -527,7 +572,11 @@ pub fn init() {
     let ecam_base = ECAM_BASE_RISCV;
     #[cfg(target_arch = "aarch64")]
     let ecam_base = ECAM_BASE_AARCH64;
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64", target_arch = "aarch64")))]
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "riscv64",
+        target_arch = "aarch64"
+    )))]
     let ecam_base = 0usize; // bare-physical arches: no PCIe
 
     if ecam_base == 0 {
@@ -547,7 +596,9 @@ pub fn init() {
     // `init_kernel_paging` (riscv/arm) or `init_kernel_paging_x86` (x86_64)
     // before this function is called. Volatile config-space reads/writes are
     // bounded to that window.
-    unsafe { scan(ecam_base); }
+    unsafe {
+        scan(ecam_base);
+    }
 
     let count = PCI_DEVICES.lock().len();
     if count == 0 {
@@ -561,12 +612,26 @@ pub fn init() {
     for dev in PCI_DEVICES.lock().iter() {
         for bar in &dev.bars {
             let base = bar.base_addr() as usize;
-            if base == 0 { continue; }
+            if base == 0 {
+                continue;
+            }
             // Probe size is stored in Bar::Memory32/Memory64; use a safe default
             // of 16 KiB if the probed size is 0 (identity entry).
             let len = match bar {
-                Bar::Memory32 { size, .. } => if *size == 0 { 0x4000 } else { *size as usize },
-                Bar::Memory64 { size, .. } => if *size == 0 { 0x4000 } else { *size as usize },
+                Bar::Memory32 { size, .. } => {
+                    if *size == 0 {
+                        0x4000
+                    } else {
+                        *size as usize
+                    }
+                }
+                Bar::Memory64 { size, .. } => {
+                    if *size == 0 {
+                        0x4000
+                    } else {
+                        *size as usize
+                    }
+                }
                 _ => continue,
             };
             crate::resource_registry::register_pcie_bar(base, len);
@@ -587,10 +652,10 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
     // re-encode by luck on bus 0).
     let bus = ((bdf >> 8) & 0xFF) as u8;
     let dev = ((bdf >> 3) & 0x1F) as u8;
-    let fun = (bdf         & 0x07) as u8;
-    let class    = ((cls >> 16) & 0xFF) as u8;
-    let subclass = ((cls >> 8)  & 0xFF) as u8;
-    let prog_if  = (cls          & 0xFF) as u8;
+    let fun = (bdf & 0x07) as u8;
+    let class = ((cls >> 16) & 0xFF) as u8;
+    let subclass = ((cls >> 8) & 0xFF) as u8;
+    let prog_if = (cls & 0xFF) as u8;
 
     {
         let devices = PCI_DEVICES.lock();
@@ -601,9 +666,15 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
 
     let bars = if bar0_base != 0 {
         let bar0 = if bar0_size <= u32::MAX as usize {
-            Bar::Memory32 { addr: bar0_base as u32, size: bar0_size as u32 }
+            Bar::Memory32 {
+                addr: bar0_base as u32,
+                size: bar0_size as u32,
+            }
         } else {
-            Bar::Memory64 { addr: bar0_base as u64, size: bar0_size as u64 }
+            Bar::Memory64 {
+                addr: bar0_base as u64,
+                size: bar0_size as u64,
+            }
         };
         let mut arr = [Bar::None; 6];
         arr[0] = bar0;
@@ -614,7 +685,13 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
 
     log::info!(
         "[pcie] platform-reg {:02x}:{:02x}.{} class={:02x}:{:02x}:{:02x} bar0={:#x}",
-        bus, dev, fun, class, subclass, prog_if, bar0_base
+        bus,
+        dev,
+        fun,
+        class,
+        subclass,
+        prog_if,
+        bar0_base
     );
 
     PCI_DEVICES.lock().push(PciDevice {
@@ -626,7 +703,7 @@ pub fn register_device(bdf: u32, cls: u32, bar0_base: usize, bar0_size: usize) {
         prog_if,
         bars,
         msix: None,
-        pm:   None,
+        pm: None,
     });
 
     if bar0_base != 0 && bar0_size != 0 {

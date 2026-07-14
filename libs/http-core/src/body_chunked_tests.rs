@@ -23,7 +23,10 @@ fn chunked_multiple_chunks() {
     let stream = b"4\r\nWiki\r\n5\r\npedia\r\nE\r\n in\r\n\r\nchunks.\r\n0\r\n\r\n";
     let mut t = MockRead::new(stream);
     let mut r = BodyReader::new(Framing::Chunked, None, b"");
-    assert_eq!(drain_body(&mut r, &mut t, 64), b"Wikipedia in\r\n\r\nchunks.");
+    assert_eq!(
+        drain_body(&mut r, &mut t, 64),
+        b"Wikipedia in\r\n\r\nchunks."
+    );
 }
 
 #[test]
@@ -188,7 +191,10 @@ fn chunked_eof_mid_chunk_data_is_unexpected_eof() {
     let stream = b"d\r\nHello";
     let mut t = MockRead::new(stream);
     let mut r = BodyReader::new(Framing::Chunked, None, b"");
-    assert_eq!(drain_until_err(&mut r, &mut t, 64), HttpError::UnexpectedEof);
+    assert_eq!(
+        drain_until_err(&mut r, &mut t, 64),
+        HttpError::UnexpectedEof
+    );
 }
 
 #[test]
@@ -197,7 +203,10 @@ fn chunked_eof_mid_size_line_is_unexpected_eof() {
     let stream = b"1a";
     let mut t = MockRead::new(stream);
     let mut r = BodyReader::new(Framing::Chunked, None, b"");
-    assert_eq!(drain_until_err(&mut r, &mut t, 64), HttpError::UnexpectedEof);
+    assert_eq!(
+        drain_until_err(&mut r, &mut t, 64),
+        HttpError::UnexpectedEof
+    );
 }
 
 #[test]
@@ -206,7 +215,10 @@ fn chunked_eof_before_terminator_is_unexpected_eof() {
     let stream = b"5\r\nhello\r\n";
     let mut t = MockRead::new(stream);
     let mut r = BodyReader::new(Framing::Chunked, None, b"");
-    assert_eq!(drain_until_err(&mut r, &mut t, 64), HttpError::UnexpectedEof);
+    assert_eq!(
+        drain_until_err(&mut r, &mut t, 64),
+        HttpError::UnexpectedEof
+    );
 }
 
 #[test]
@@ -215,7 +227,10 @@ fn chunked_eof_mid_trailer_is_unexpected_eof() {
     let stream = b"5\r\nhello\r\n0\r\nX-Sig: zz";
     let mut t = MockRead::new(stream);
     let mut r = BodyReader::new(Framing::Chunked, None, b"");
-    assert_eq!(drain_until_err(&mut r, &mut t, 64), HttpError::UnexpectedEof);
+    assert_eq!(
+        drain_until_err(&mut r, &mut t, 64),
+        HttpError::UnexpectedEof
+    );
 }
 
 #[test]

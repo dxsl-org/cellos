@@ -42,12 +42,12 @@ fn emit_min_unix() {
 fn emit_feature_guards() {
     // Detect active features via CARGO_FEATURE_* env vars.
     let roots_embedded = std::env::var("CARGO_FEATURE_TLS_ROOTS_EMBEDDED").is_ok();
-    let roots_full     = std::env::var("CARGO_FEATURE_TLS_ROOTS_FULL").is_ok();
-    let insecure       = std::env::var("CARGO_FEATURE_TLS_INSECURE").is_ok();
-    let ca_private     = std::env::var("CARGO_FEATURE_TLS_CA_PRIVATE").is_ok();
-    let ca_amazon      = std::env::var("CARGO_FEATURE_TLS_CA_AMAZON").is_ok();
+    let roots_full = std::env::var("CARGO_FEATURE_TLS_ROOTS_FULL").is_ok();
+    let insecure = std::env::var("CARGO_FEATURE_TLS_INSECURE").is_ok();
+    let ca_private = std::env::var("CARGO_FEATURE_TLS_CA_PRIVATE").is_ok();
+    let ca_amazon = std::env::var("CARGO_FEATURE_TLS_CA_AMAZON").is_ok();
     let ca_letsencrypt = std::env::var("CARGO_FEATURE_TLS_CA_LETSENCRYPT").is_ok();
-    let ca_rsa         = std::env::var("CARGO_FEATURE_TLS_CA_RSA").is_ok();
+    let ca_rsa = std::env::var("CARGO_FEATURE_TLS_CA_RSA").is_ok();
 
     let flavor_count = [roots_embedded, roots_full, insecure]
         .iter()

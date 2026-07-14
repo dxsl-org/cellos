@@ -23,21 +23,21 @@ const TAP_THRESHOLD: f32 = 8.0;
 /// All pointer and touch events within bounds are captured; the child only
 /// receives events that TouchArea does not consume.
 pub struct TouchArea {
-    child:     Box<dyn ViNode>,
-    on_tap:    Option<Box<dyn Fn()>>,
-    on_drag:   Option<Box<dyn Fn(Point)>>,    // delta from press point
+    child: Box<dyn ViNode>,
+    on_tap: Option<Box<dyn Fn()>>,
+    on_drag: Option<Box<dyn Fn(Point)>>, // delta from press point
     press_pos: Cell<Option<Point>>,
-    last_pos:  Cell<Point>,
+    last_pos: Cell<Point>,
 }
 
 impl TouchArea {
     pub fn new(child: Box<dyn ViNode>) -> Self {
         Self {
             child,
-            on_tap:    None,
-            on_drag:   None,
+            on_tap: None,
+            on_drag: None,
             press_pos: Cell::new(None),
-            last_pos:  Cell::new(Point::new(0.0, 0.0)),
+            last_pos: Cell::new(Point::new(0.0, 0.0)),
         }
     }
 
@@ -60,7 +60,9 @@ impl ViNode for TouchArea {
         self.child.layout(constraints)
     }
 
-    fn bounds(&self) -> Rect { self.child.bounds() }
+    fn bounds(&self) -> Rect {
+        self.child.bounds()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         self.child.paint(cx);
@@ -74,7 +76,9 @@ impl ViNode for TouchArea {
                 self.press_pos.set(Some(pos));
                 self.last_pos.set(pos);
                 true
-            } else { false }
+            } else {
+                false
+            }
         };
 
         let handle_move = |pos: Point| -> bool {
@@ -82,10 +86,14 @@ impl ViNode for TouchArea {
                 self.last_pos.set(pos);
                 if let Some(start) = self.press_pos.get() {
                     let delta = Point::new(pos.x - start.x, pos.y - start.y);
-                    if let Some(cb) = &self.on_drag { cb(delta); }
+                    if let Some(cb) = &self.on_drag {
+                        cb(delta);
+                    }
                 }
                 true
-            } else { false }
+            } else {
+                false
+            }
         };
 
         let handle_end = |pos: Point| -> bool {
@@ -95,19 +103,29 @@ impl ViNode for TouchArea {
                 let dy = pos.y - start.y;
                 // Squared distance — avoids f32::sqrt() unavailable in no_std
                 if dx * dx + dy * dy < TAP_THRESHOLD * TAP_THRESHOLD {
-                    if let Some(cb) = &self.on_tap { cb(); }
+                    if let Some(cb) = &self.on_tap {
+                        cb();
+                    }
                 }
                 true
-            } else { false }
+            } else {
+                false
+            }
         };
 
         match event {
-            Event::MousePress { pos, button: MouseButton::Left } => handle_begin(*pos),
-            Event::MouseMove  { pos }                            => handle_move(*pos),
-            Event::MouseRelease { pos, button: MouseButton::Left } => handle_end(*pos),
-            Event::TouchBegin { pos, finger_id: 0 }             => handle_begin(*pos),
-            Event::TouchMove  { pos, finger_id: 0 }             => handle_move(*pos),
-            Event::TouchEnd   { pos, finger_id: 0 }             => handle_end(*pos),
+            Event::MousePress {
+                pos,
+                button: MouseButton::Left,
+            } => handle_begin(*pos),
+            Event::MouseMove { pos } => handle_move(*pos),
+            Event::MouseRelease {
+                pos,
+                button: MouseButton::Left,
+            } => handle_end(*pos),
+            Event::TouchBegin { pos, finger_id: 0 } => handle_begin(*pos),
+            Event::TouchMove { pos, finger_id: 0 } => handle_move(*pos),
+            Event::TouchEnd { pos, finger_id: 0 } => handle_end(*pos),
             // Pass remaining events to child
             other => self.child.event(other),
         }

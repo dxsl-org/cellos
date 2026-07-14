@@ -65,8 +65,13 @@ pub const MANIFEST_FLAG_ADC: u16 = 1 << 9;
 /// Bitmask of all defined flags.  `from_bytes` rejects manifests setting any bit
 /// outside this mask (a stale/forward binary is treated as malformed → legacy path
 /// grants, the fail-safe direction).
-pub const MANIFEST_FLAGS_MASK: u16 =
-    MANIFEST_FLAG_BLOCK_IO | MANIFEST_FLAG_NETWORK | MANIFEST_FLAG_SPAWN
-    | MANIFEST_FLAG_GPIO | MANIFEST_FLAG_UART | MANIFEST_FLAG_HYPERVISOR
-    | MANIFEST_FLAG_PART_DATA | MANIFEST_FLAG_PART_LFS
-    | MANIFEST_FLAG_CAN | MANIFEST_FLAG_ADC;
+pub const MANIFEST_FLAGS_MASK: u16 = MANIFEST_FLAG_BLOCK_IO
+    | MANIFEST_FLAG_NETWORK
+    | MANIFEST_FLAG_SPAWN
+    | MANIFEST_FLAG_GPIO
+    | MANIFEST_FLAG_UART
+    | MANIFEST_FLAG_HYPERVISOR
+    | MANIFEST_FLAG_PART_DATA
+    | MANIFEST_FLAG_PART_LFS
+    | MANIFEST_FLAG_CAN
+    | MANIFEST_FLAG_ADC;

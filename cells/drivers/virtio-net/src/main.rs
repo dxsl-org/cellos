@@ -22,11 +22,11 @@ extern crate alloc;
 mod device;
 mod dispatch;
 
+use device::NetDevice;
+use dispatch::{handle, NicReply, REPLY_BUF};
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_register_nic_driver, sys_try_send};
-use device::NetDevice;
-use dispatch::{handle, NicReply, REPLY_BUF};
 
 static STATE: Mutex<Option<NetDevice>> = Mutex::new(None);
 
@@ -51,8 +51,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // The net service speaks the raw NIC wire protocol (no 0xAC App-SDK
         // envelope), so requests arrive as RawMessage. Accept Message too for
         // envelope-wrapped senders — the dispatch payload layout is identical.
-        AppEvent::Message { sender_tid, data }
-        | AppEvent::RawMessage { sender_tid, data } => {
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             // Replies use NON-blocking try_send: the net service waits with a
             // 200 ms recv timeout — if it already gave up, a blocking send would
             // park this cell in Sending{net} forever, desyncing every later
@@ -89,6 +88,10 @@ ostd::run_app!(handler);
 
 // PcieDriverCap is granted by loader.rs via path match (/bin/virtio-net).
 api::declare_manifest!(
-    block_io = false, network = false, spawn = false,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );

@@ -132,7 +132,7 @@ pub unsafe fn s2_tlb_flush_all() {
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
     let encoded = ipa >> 12; // TLBI IPAS2E1IS encodes IPA[47:12] in Xt
-    // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
+                             // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
     unsafe {
         core::arch::asm!(
             "tlbi ipas2e1is, {x}",  // invalidate Stage-2 entry for this IPA

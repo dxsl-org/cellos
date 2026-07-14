@@ -81,9 +81,21 @@ impl CapTable {
     pub fn alloc(&mut self, owner: CellId, resource: CapResource, perms: u32) -> CapId {
         let id = CapId(self.next_id);
         let next = self.next_id.wrapping_add(1);
-        debug_assert!(next != 0, "CapId counter wrapped to 0 — unreachable in practice");
+        debug_assert!(
+            next != 0,
+            "CapId counter wrapped to 0 — unreachable in practice"
+        );
         self.next_id = if next == 0 { 1 } else { next };
-        self.entries.insert(id, CapEntry { owner, resource, perms, expires_at: None, grant_depth: MAX_GRANT_DEPTH });
+        self.entries.insert(
+            id,
+            CapEntry {
+                owner,
+                resource,
+                perms,
+                expires_at: None,
+                grant_depth: MAX_GRANT_DEPTH,
+            },
+        );
         id
     }
 
@@ -126,9 +138,9 @@ impl CapTable {
         if entry.grant_depth == 0 {
             return Err(ViError::NotSupported); // depth exhausted — cannot delegate further
         }
-        let new_depth     = entry.grant_depth - 1;
-        let new_perms     = entry.perms;
-        let new_expires   = entry.expires_at;
+        let new_depth = entry.grant_depth - 1;
+        let new_perms = entry.perms;
+        let new_expires = entry.expires_at;
         // Allocate a new cap for the target; we cannot clone the resource itself
         // (it lives inside a Box) so the grant creates a "reference" cap type.
         // For v1.0 we model this as a File cap pointing to the same underlying file.
@@ -138,16 +150,19 @@ impl CapTable {
         // Re-borrow entry after next_id mutation.
         let parent_owner = self.entries[&cap_id].owner;
         let _ = parent_owner; // for future ACL audit trail
-        // Create a shallow grant cap — for now we mark it as non-file to avoid
-        // moving the Box.  The VFS file-handle grant is a separate op in Phase 07.
-        // This primarily enables grant-depth bookkeeping for non-file caps.
-        self.entries.insert(CapId(new_id), CapEntry {
-            owner:       to_cell,
-            resource:    CapResource::File { file: None }, // placeholder; real content in VFS cap
-            perms:       new_perms,
-            expires_at:  new_expires,
-            grant_depth: new_depth,
-        });
+                              // Create a shallow grant cap — for now we mark it as non-file to avoid
+                              // moving the Box.  The VFS file-handle grant is a separate op in Phase 07.
+                              // This primarily enables grant-depth bookkeeping for non-file caps.
+        self.entries.insert(
+            CapId(new_id),
+            CapEntry {
+                owner: to_cell,
+                resource: CapResource::File { file: None }, // placeholder; real content in VFS cap
+                perms: new_perms,
+                expires_at: new_expires,
+                grant_depth: new_depth,
+            },
+        );
         Ok(CapId(new_id))
     }
 
@@ -227,8 +242,10 @@ impl CapTable {
         cap_id: CapId,
         boxed_file: alloc::boxed::Box<dyn api::fs::ViFile + Send + Sync>,
     ) {
-        if let Some(CapEntry { resource: CapResource::File { ref mut file }, .. }) =
-            self.entries.get_mut(&cap_id)
+        if let Some(CapEntry {
+            resource: CapResource::File { ref mut file },
+            ..
+        }) = self.entries.get_mut(&cap_id)
         {
             *file = Some(boxed_file);
         }

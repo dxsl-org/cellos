@@ -10,7 +10,9 @@ use ostd::syscall::sys_yield;
 pub struct ContextSwitchBench;
 
 impl ViBenchmark for ContextSwitchBench {
-    fn name(&self) -> &'static str { "context_switch" }
+    fn name(&self) -> &'static str {
+        "context_switch"
+    }
 
     fn run_once(&mut self) -> api::ViResult<u64> {
         // Yield twice; the caller times the whole run_once() call, so the

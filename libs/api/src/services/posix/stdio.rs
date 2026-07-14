@@ -7,10 +7,10 @@
 #![allow(unsafe_code)]
 #![allow(non_upper_case_globals)]
 
-use core::ffi::{c_char, c_int, c_long, c_void, VaList};
-use super::sysio::{_write, _read, _open};
 use super::net::_close;
 use super::stdio_fmt::vsnprintf_core;
+use super::sysio::{_open, _read, _write};
+use core::ffi::{c_char, c_int, c_long, c_void, VaList};
 
 // ---------------------------------------------------------------------------
 // FILE type and standard streams
@@ -22,28 +22,49 @@ pub struct FILE {
     _pad: [u8; 28], // match common struct size expectations
 }
 
-static mut STDOUT_FILE: FILE = FILE { fd: 1, _pad: [0; 28] };
-static mut STDERR_FILE: FILE = FILE { fd: 2, _pad: [0; 28] };
-static mut STDIN_FILE:  FILE = FILE { fd: 0, _pad: [0; 28] };
+static mut STDOUT_FILE: FILE = FILE {
+    fd: 1,
+    _pad: [0; 28],
+};
+static mut STDERR_FILE: FILE = FILE {
+    fd: 2,
+    _pad: [0; 28],
+};
+static mut STDIN_FILE: FILE = FILE {
+    fd: 0,
+    _pad: [0; 28],
+};
 
 #[no_mangle]
 pub static mut stdout: *mut FILE = core::ptr::addr_of_mut!(STDOUT_FILE);
 #[no_mangle]
 pub static mut stderr: *mut FILE = core::ptr::addr_of_mut!(STDERR_FILE);
 #[no_mangle]
-pub static mut stdin:  *mut FILE = core::ptr::addr_of_mut!(STDIN_FILE);
+pub static mut stdin: *mut FILE = core::ptr::addr_of_mut!(STDIN_FILE);
 
 // ---------------------------------------------------------------------------
 // Helper: extract fd from a FILE*, handling both our FILE structs and
 // foreign picolibc FILE* (which has _flags at offset 0, not fd).
 // ---------------------------------------------------------------------------
 unsafe fn fd_of(stream: *mut FILE) -> i32 {
-    if stream.is_null() { return 1; }
-    if core::ptr::eq(stream, core::ptr::addr_of!(STDOUT_FILE) as *const _) { return 1; }
-    if core::ptr::eq(stream, core::ptr::addr_of!(STDERR_FILE) as *const _) { return 2; }
-    if core::ptr::eq(stream, core::ptr::addr_of!(STDIN_FILE)  as *const _) { return 0; }
+    if stream.is_null() {
+        return 1;
+    }
+    if core::ptr::eq(stream, core::ptr::addr_of!(STDOUT_FILE) as *const _) {
+        return 1;
+    }
+    if core::ptr::eq(stream, core::ptr::addr_of!(STDERR_FILE) as *const _) {
+        return 2;
+    }
+    if core::ptr::eq(stream, core::ptr::addr_of!(STDIN_FILE) as *const _) {
+        return 0;
+    }
     let raw = (*stream).fd;
-    if raw > 0 { raw } else { 2 }
+    if raw > 0 {
+        raw
+    } else {
+        2
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +80,10 @@ unsafe fn fd_of(stream: *mut FILE) -> i32 {
 /// `VaList` whose remaining arguments match the conversion specifiers in `fmt`.
 #[no_mangle]
 pub unsafe extern "C" fn vsnprintf(
-    buf: *mut c_char, size: usize, fmt: *const c_char, args: VaList<'_>,
+    buf: *mut c_char,
+    size: usize,
+    fmt: *const c_char,
+    args: VaList<'_>,
 ) -> c_int {
     vsnprintf_core(buf, size, fmt, args) as c_int
 }
@@ -72,9 +96,7 @@ pub unsafe extern "C" fn vsnprintf(
 /// this function performs no bounds checking beyond an internal cap; `fmt` must
 /// point to a valid NUL-terminated C string; `args` must match `fmt`'s specifiers.
 #[no_mangle]
-pub unsafe extern "C" fn vsprintf(
-    buf: *mut c_char, fmt: *const c_char, args: VaList<'_>,
-) -> c_int {
+pub unsafe extern "C" fn vsprintf(buf: *mut c_char, fmt: *const c_char, args: VaList<'_>) -> c_int {
     vsnprintf_core(buf, usize::MAX / 2, fmt, args) as c_int
 }
 
@@ -100,7 +122,9 @@ pub unsafe extern "C" fn vprintf(fmt: *const c_char, args: VaList<'_>) -> c_int 
 /// match `fmt`'s specifiers.
 #[no_mangle]
 pub unsafe extern "C" fn vfprintf(
-    stream: *mut FILE, fmt: *const c_char, args: VaList<'_>,
+    stream: *mut FILE,
+    fmt: *const c_char,
+    args: VaList<'_>,
 ) -> c_int {
     let fd = fd_of(stream);
     let mut tmp = [0u8; 1024];
@@ -130,9 +154,7 @@ pub unsafe extern "C" fn printf(fmt: *const c_char, args: ...) -> c_int {
 /// `fmt` must point to a valid NUL-terminated C string, and the variadic
 /// arguments must match its conversion specifiers.
 #[no_mangle]
-pub unsafe extern "C" fn fprintf(
-    stream: *mut FILE, fmt: *const c_char, args: ...,
-) -> c_int {
+pub unsafe extern "C" fn fprintf(stream: *mut FILE, fmt: *const c_char, args: ...) -> c_int {
     vfprintf(stream, fmt, args)
 }
 
@@ -159,7 +181,10 @@ pub unsafe extern "C" fn sprintf(buf: *mut c_char, fmt: *const c_char, args: ...
 /// conversion specifiers.
 #[no_mangle]
 pub unsafe extern "C" fn snprintf(
-    buf: *mut c_char, size: usize, fmt: *const c_char, args: ...,
+    buf: *mut c_char,
+    size: usize,
+    fmt: *const c_char,
+    args: ...
 ) -> c_int {
     vsnprintf(buf, size, fmt, args)
 }
@@ -175,11 +200,20 @@ pub unsafe extern "C" fn snprintf(
 /// or point to a valid NUL-terminated C string (only its first byte is read).
 #[no_mangle]
 pub unsafe extern "C" fn fopen(path: *const c_char, mode: *const c_char) -> *mut FILE {
-    let flags = if !mode.is_null() && *mode == b'w' as c_char { 0x201 } else { 0 };
+    let flags = if !mode.is_null() && *mode == b'w' as c_char {
+        0x201
+    } else {
+        0
+    };
     let fd = _open(path, flags, 0o644);
-    if fd < 0 { return core::ptr::null_mut(); }
+    if fd < 0 {
+        return core::ptr::null_mut();
+    }
     let f = super::alloc::malloc_impl(core::mem::size_of::<FILE>()) as *mut FILE;
-    if f.is_null() { _close(fd); return core::ptr::null_mut(); }
+    if f.is_null() {
+        _close(fd);
+        return core::ptr::null_mut();
+    }
     (*f).fd = fd;
     (*f)._pad = [0; 28];
     f
@@ -193,10 +227,14 @@ pub unsafe extern "C" fn fopen(path: *const c_char, mode: *const c_char) -> *mut
 /// dereferenced by [`fd_of`] and, if heap-allocated, passed to `free_impl`.
 #[no_mangle]
 pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
-    if stream.is_null() { return -1; }
+    if stream.is_null() {
+        return -1;
+    }
     let fd = fd_of(stream);
     // Only free heap-allocated FILE* (opened via fopen); never free static streams.
-    if fd > 2 { super::alloc::free_impl(stream as *mut c_void); }
+    if fd > 2 {
+        super::alloc::free_impl(stream as *mut c_void);
+    }
     _close(fd)
 }
 
@@ -208,9 +246,14 @@ pub unsafe extern "C" fn fclose(stream: *mut FILE) -> c_int {
 /// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn fread(
-    ptr: *mut c_void, size: usize, nmemb: usize, stream: *mut FILE,
+    ptr: *mut c_void,
+    size: usize,
+    nmemb: usize,
+    stream: *mut FILE,
 ) -> usize {
-    if stream.is_null() || ptr.is_null() { return 0; }
+    if stream.is_null() || ptr.is_null() {
+        return 0;
+    }
     let total = size.saturating_mul(nmemb);
     let fd = fd_of(stream);
     // Loop to match C standard fread semantics: read until all bytes received
@@ -218,7 +261,9 @@ pub unsafe extern "C" fn fread(
     let mut done = 0usize;
     while done < total {
         let n = _read(fd, (ptr as *mut u8).add(done) as *mut c_void, total - done);
-        if n <= 0 { break; }
+        if n <= 0 {
+            break;
+        }
         done += n as usize;
     }
     done / size.max(1)
@@ -231,12 +276,21 @@ pub unsafe extern "C" fn fread(
 /// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn fwrite(
-    ptr: *const c_void, size: usize, nmemb: usize, stream: *mut FILE,
+    ptr: *const c_void,
+    size: usize,
+    nmemb: usize,
+    stream: *mut FILE,
 ) -> usize {
-    if stream.is_null() || ptr.is_null() { return 0; }
+    if stream.is_null() || ptr.is_null() {
+        return 0;
+    }
     let total = size.saturating_mul(nmemb);
     let n = _write(fd_of(stream), ptr, total);
-    if n <= 0 { 0 } else { n as usize / size.max(1) }
+    if n <= 0 {
+        0
+    } else {
+        n as usize / size.max(1)
+    }
 }
 
 /// Writes the NUL-terminated string `s` to `stream` (no trailing newline added).
@@ -246,7 +300,9 @@ pub unsafe extern "C" fn fwrite(
 /// or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn fputs(s: *const c_char, stream: *mut FILE) -> c_int {
-    if s.is_null() { return -1; }
+    if s.is_null() {
+        return -1;
+    }
     let len = super::strings::strlen(s);
     _write(fd_of(stream), s as *const c_void, len)
 }
@@ -258,7 +314,11 @@ pub unsafe extern "C" fn fputs(s: *const c_char, stream: *mut FILE) -> c_int {
 #[no_mangle]
 pub unsafe extern "C" fn fputc(c: c_int, stream: *mut FILE) -> c_int {
     let b = [c as u8];
-    if _write(fd_of(stream), b.as_ptr() as *const c_void, 1) == 1 { c } else { -1 }
+    if _write(fd_of(stream), b.as_ptr() as *const c_void, 1) == 1 {
+        c
+    } else {
+        -1
+    }
 }
 
 /// Reads a single byte from `stream`, returning it as an unsigned `c_int` or
@@ -271,7 +331,11 @@ pub unsafe extern "C" fn fgetc(stream: *mut FILE) -> c_int {
     let mut b = 0u8;
     // For reads, fd_of returns 2 for unknown streams, but 0 (stdin) for stdin.
     let fd = if stream.is_null() { 0 } else { fd_of(stream) };
-    if _read(fd, &mut b as *mut u8 as *mut c_void, 1) == 1 { b as c_int } else { -1 }
+    if _read(fd, &mut b as *mut u8 as *mut c_void, 1) == 1 {
+        b as c_int
+    } else {
+        -1
+    }
 }
 
 /// Reads up to `n - 1` bytes from `stream` into `buf` and NUL-terminates the result.
@@ -281,10 +345,14 @@ pub unsafe extern "C" fn fgetc(stream: *mut FILE) -> c_int {
 /// must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn fgets(buf: *mut c_char, n: c_int, stream: *mut FILE) -> *mut c_char {
-    if buf.is_null() || n <= 0 { return core::ptr::null_mut(); }
+    if buf.is_null() || n <= 0 {
+        return core::ptr::null_mut();
+    }
     let fd = if stream.is_null() { 0 } else { fd_of(stream) };
     let r = _read(fd, buf as *mut c_void, (n - 1) as usize);
-    if r <= 0 { return core::ptr::null_mut(); }
+    if r <= 0 {
+        return core::ptr::null_mut();
+    }
     *buf.add(r as usize) = 0;
     buf
 }
@@ -306,7 +374,9 @@ pub unsafe extern "C" fn putchar(c: c_int) -> c_int {
 /// `s` must point to a valid NUL-terminated C string.
 #[no_mangle]
 pub unsafe extern "C" fn puts(s: *const c_char) -> c_int {
-    if s.is_null() { return -1; }
+    if s.is_null() {
+        return -1;
+    }
     let len = super::strings::strlen(s);
     _write(1, s as *const c_void, len);
     _write(1, b"\n".as_ptr() as *const c_void, 1);
@@ -327,10 +397,16 @@ pub unsafe extern "C" fn puts(s: *const c_char) -> c_int {
 /// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn fseek(stream: *mut FILE, offset: c_long, whence: c_int) -> c_int {
-    if stream.is_null() { return -1; }
+    if stream.is_null() {
+        return -1;
+    }
     let fd = fd_of(stream);
     let r = super::sysio::_lseek(fd, offset, whence);
-    if r < 0 { -1 } else { 0 }
+    if r < 0 {
+        -1
+    } else {
+        0
+    }
 }
 
 /// Returns the current seek position of `stream`.
@@ -339,7 +415,9 @@ pub unsafe extern "C" fn fseek(stream: *mut FILE, offset: c_long, whence: c_int)
 /// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn ftell(stream: *mut FILE) -> c_long {
-    if stream.is_null() { return -1; }
+    if stream.is_null() {
+        return -1;
+    }
     super::sysio::_lseek(fd_of(stream), 0, 1) // SEEK_CUR
 }
 
@@ -349,7 +427,9 @@ pub unsafe extern "C" fn ftell(stream: *mut FILE) -> c_long {
 /// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn rewind(stream: *mut FILE) {
-    if stream.is_null() { return; }
+    if stream.is_null() {
+        return;
+    }
     super::sysio::_lseek(fd_of(stream), 0, 0); // SEEK_SET
 }
 
@@ -361,27 +441,41 @@ pub unsafe extern "C" fn rewind(stream: *mut FILE) {
 ///
 /// # Safety
 /// `_stream` is unused; no preconditions.
-#[no_mangle] pub unsafe extern "C" fn ferror(_stream: *mut FILE) -> c_int { 0 }
+#[no_mangle]
+pub unsafe extern "C" fn ferror(_stream: *mut FILE) -> c_int {
+    0
+}
 /// Stub: always reports not-at-EOF.
 ///
 /// # Safety
 /// `_stream` is unused; no preconditions.
-#[no_mangle] pub unsafe extern "C" fn feof(_stream: *mut FILE) -> c_int { 0 }
+#[no_mangle]
+pub unsafe extern "C" fn feof(_stream: *mut FILE) -> c_int {
+    0
+}
 /// Stub: no-op (no error state is tracked).
 ///
 /// # Safety
 /// `_stream` is unused; no preconditions.
-#[no_mangle] pub unsafe extern "C" fn clearerr(_stream: *mut FILE) {}
+#[no_mangle]
+pub unsafe extern "C" fn clearerr(_stream: *mut FILE) {}
 /// Stub: no-op (writes are unbuffered).
 ///
 /// # Safety
 /// `_stream` is unused; no preconditions.
-#[no_mangle] pub unsafe extern "C" fn fflush(_stream: *mut FILE) -> c_int { 0 }
+#[no_mangle]
+pub unsafe extern "C" fn fflush(_stream: *mut FILE) -> c_int {
+    0
+}
 /// Returns the underlying file descriptor for `stream`.
 ///
 /// # Safety
 /// `stream` must be null or a valid `FILE*` (dereferenced by [`fd_of`]).
 #[no_mangle]
 pub unsafe extern "C" fn fileno(stream: *mut FILE) -> c_int {
-    if stream.is_null() { -1 } else { fd_of(stream) }
+    if stream.is_null() {
+        -1
+    } else {
+        fd_of(stream)
+    }
 }

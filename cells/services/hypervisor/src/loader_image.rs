@@ -50,7 +50,7 @@ pub fn parse_image_header(kernel_bytes: &[u8]) -> ViResult<(u64, u64)> {
         return Err(ViError::InvalidInput);
     }
     let text_offset = u64::from_le_bytes(kernel_bytes[0x08..0x10].try_into().unwrap());
-    let image_size  = u64::from_le_bytes(kernel_bytes[0x10..0x18].try_into().unwrap());
+    let image_size = u64::from_le_bytes(kernel_bytes[0x10..0x18].try_into().unwrap());
     Ok((text_offset, image_size))
 }
 
@@ -88,8 +88,7 @@ where
     let dtb_gpa = guest_ram_base; // 0x4000_0000
 
     // initramfs: after kernel, 2MB-aligned, within 1GB window.
-    let initrd_offset = aligned_offset
-        + ((image_size + MB2 - 1) & !(MB2 - 1));
+    let initrd_offset = aligned_offset + ((image_size + MB2 - 1) & !(MB2 - 1));
     let initrd_gpa = guest_ram_base + initrd_offset;
 
     // Write DTB first (small, fits before kernel).

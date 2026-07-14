@@ -7,8 +7,8 @@
 
 extern crate alloc;
 use alloc::boxed::Box;
-use api::ipc::{self, IPC_BUF_SIZE, NetRequest, NetResponse};
-use ostd::syscall::{sys_send, sys_recv};
+use api::ipc::{self, NetRequest, NetResponse, IPC_BUF_SIZE};
+use ostd::syscall::{sys_recv, sys_send};
 
 use crate::virtio_net::GUEST_MAC;
 
@@ -16,10 +16,14 @@ use crate::virtio_net::GUEST_MAC;
 ///
 /// Blocks until the Net Cell sends its `Ok` acknowledgement.  No-op when `net_tid == 0`.
 pub fn transmit(net_tid: usize, frame: &[u8]) {
-    if net_tid == 0 { return; }
+    if net_tid == 0 {
+        return;
+    }
     let req = NetRequest::L2Send { data: frame };
     let mut buf = [0u8; IPC_BUF_SIZE];
-    let Ok(msg) = ipc::encode(&req, &mut buf) else { return; };
+    let Ok(msg) = ipc::encode(&req, &mut buf) else {
+        return;
+    };
     sys_send(net_tid, msg);
     // Drain the mandatory Ok response to prevent mailbox accumulation.
     let mut rb = [0u8; IPC_BUF_SIZE];
@@ -31,10 +35,16 @@ pub fn transmit(net_tid: usize, frame: &[u8]) {
 /// Returns `Some(frame)` if a frame was available, `None` otherwise.
 /// Blocks for one round-trip to the Net Cell.  No-op when `net_tid == 0`.
 pub fn try_receive(net_tid: usize) -> Option<Box<[u8]>> {
-    if net_tid == 0 { return None; }
-    let req = NetRequest::L2Recv { guest_mac: GUEST_MAC };
+    if net_tid == 0 {
+        return None;
+    }
+    let req = NetRequest::L2Recv {
+        guest_mac: GUEST_MAC,
+    };
     let mut buf = [0u8; IPC_BUF_SIZE];
-    let Ok(msg) = ipc::encode(&req, &mut buf) else { return None; };
+    let Ok(msg) = ipc::encode(&req, &mut buf) else {
+        return None;
+    };
     sys_send(net_tid, msg);
     let mut rb = [0u8; IPC_BUF_SIZE];
     sys_recv(0, &mut rb);

@@ -52,11 +52,21 @@ pub enum VfsRequest<'a> {
     /// identified by `cap` directly into the caller's pre-allocated grant buffer.
     /// Grant must be owned by the caller and large enough to hold `size` bytes.
     /// VFS calls GrantShare on itself before writing, then replies GrantDone.
-    ReadGrant { cap: u64, offset: u64, size: usize, grant: usize },
+    ReadGrant {
+        cap: u64,
+        offset: u64,
+        size: usize,
+        grant: usize,
+    },
     /// Zero-copy large write: VFS reads `bytes` bytes from the caller's grant
     /// buffer and writes them to `cap` at `offset`.  GrantDone is sent only
     /// after the write commits (write-through on FAT32) — F14 invariant.
-    WriteGrant { cap: u64, offset: u64, grant: usize, bytes: usize },
+    WriteGrant {
+        cap: u64,
+        offset: u64,
+        grant: usize,
+        bytes: usize,
+    },
     /// Zero-copy full-file read by PATH into the caller's grant (G2 loader redesign).
     /// Unlike `ReadGrant` (cap + 4 KB page at a time), this resolves `path` through
     /// the VFS mount table (so it reaches the `/bin` cell-store overlay) and copies
@@ -65,7 +75,11 @@ pub enum VfsRequest<'a> {
     /// VFS, and ≥ the file size; `max` is the grant's byte capacity (VFS copies at most
     /// `max`, so a file that grew after the caller's Stat can't overflow the grant).
     /// Used to read a cell ELF for `sys_spawn_from_elf`.
-    ReadFileGrant { path: &'a str, grant: usize, max: usize },
+    ReadFileGrant {
+        path: &'a str,
+        grant: usize,
+        max: usize,
+    },
 }
 
 /// Responses from the VFS service.
@@ -95,43 +109,83 @@ pub enum VfsResponse<'a> {
 /// Requests sent to the network service (`/bin/net`).
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetRequest<'a> {
-    TcpConnect  { addr: [u8; 4], port: u16 },
-    TcpSend     { cap_id: u32, data: &'a [u8] },
-    TcpRecv     { cap_id: u32, buf_len: u32 },
-    TcpClose    { cap_id: u32 },
-    TcpListen   { port: u16 },
-    TcpAccept   { cap_id: u32 },
+    TcpConnect {
+        addr: [u8; 4],
+        port: u16,
+    },
+    TcpSend {
+        cap_id: u32,
+        data: &'a [u8],
+    },
+    TcpRecv {
+        cap_id: u32,
+        buf_len: u32,
+    },
+    TcpClose {
+        cap_id: u32,
+    },
+    TcpListen {
+        port: u16,
+    },
+    TcpAccept {
+        cap_id: u32,
+    },
     UdpCreate,
-    UdpSend     { cap_id: u32, addr: [u8; 4], port: u16, data: &'a [u8] },
-    UdpRecv     { cap_id: u32, buf_len: u32 },
-    Resolve     { hostname: &'a str },
-    SocketState { cap_id: u32 },
+    UdpSend {
+        cap_id: u32,
+        addr: [u8; 4],
+        port: u16,
+        data: &'a [u8],
+    },
+    UdpRecv {
+        cap_id: u32,
+        buf_len: u32,
+    },
+    Resolve {
+        hostname: &'a str,
+    },
+    SocketState {
+        cap_id: u32,
+    },
     /// Bind a UDP socket to a local port.  Port 0 = auto-assign ephemeral.
-    UdpBind         { cap_id: u32, port: u16 },
+    UdpBind {
+        cap_id: u32,
+        port: u16,
+    },
     /// Return the DHCP-assigned local IPv4 address.
     GetLocalIp,
     /// Join an IPv4 multicast group (IGMP); `cap_id` is unused (iface-level).
-    MulticastJoin   { cap_id: u32, group: [u8; 4] },
+    MulticastJoin {
+        cap_id: u32,
+        group: [u8; 4],
+    },
     /// Leave a previously joined IPv4 multicast group.
-    MulticastLeave  { cap_id: u32, group: [u8; 4] },
+    MulticastLeave {
+        cap_id: u32,
+        group: [u8; 4],
+    },
     /// Forward a raw L2 Ethernet frame to the NIC TX.
     /// `data` is the raw frame bytes (up to 1514 B, no virtio_net_hdr prefix).
     /// The Net Cell calls `sys_net_tx(data)` directly — smoltcp is bypassed.
-    L2Send { data: &'a [u8] },
+    L2Send {
+        data: &'a [u8],
+    },
     /// Poll for one inbound L2 frame from the NIC addressed to `guest_mac`.
     /// The Net Cell splits RX frames by dst MAC; returns `Data(frame)` or `Ok` (empty).
-    L2Recv { guest_mac: [u8; 6] },
+    L2Recv {
+        guest_mac: [u8; 6],
+    },
 }
 
 /// Responses from the network service.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum NetResponse<'a> {
-    CapId  (u32),
-    Data   (&'a [u8]),
-    Addr   ([u8; 4]),
-    State  (u8),
+    CapId(u32),
+    Data(&'a [u8]),
+    Addr([u8; 4]),
+    State(u8),
     Ok,
-    Err    (u8),
+    Err(u8),
 }
 
 // ── Input service ─────────────────────────────────────────────────────────────

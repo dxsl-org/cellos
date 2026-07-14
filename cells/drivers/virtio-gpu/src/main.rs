@@ -40,15 +40,15 @@ extern crate alloc;
 mod cursor;
 mod display;
 
+use display::GpuDevice;
 use ostd::app::{AppContext, AppEvent};
 use ostd::sync::Mutex;
 use ostd::syscall::sys_register_gpu_driver;
-use display::GpuDevice;
 
 // ─── Kernel→Cell IPC opcodes ──────────────────────────────────────────────────
 
-const OP_FLUSH:    u8 = 0x10; // GpuFlush forward: flush rect
-const OP_CUR_SET:  u8 = 0x11; // GpuCursor op=0: set sprite + initial position
+const OP_FLUSH: u8 = 0x10; // GpuFlush forward: flush rect
+const OP_CUR_SET: u8 = 0x11; // GpuCursor op=0: set sprite + initial position
 const OP_CUR_MOVE: u8 = 0x12; // GpuCursor op=1: move cursor (no sprite re-upload)
 
 // ─── Cell state ───────────────────────────────────────────────────────────────
@@ -75,7 +75,10 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             *STATE.lock() = Some(dev);
         }
 
-        AppEvent::Message { sender_tid: _, data } => {
+        AppEvent::Message {
+            sender_tid: _,
+            data,
+        } => {
             dispatch(data.as_ref());
         }
 
@@ -90,14 +93,15 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 // ─── IPC dispatch ─────────────────────────────────────────────────────────────
 
 fn dispatch(buf: &[u8]) {
-    if buf.is_empty() { return; }
+    if buf.is_empty() {
+        return;
+    }
     match buf[0] {
         OP_FLUSH if buf.len() >= 21 => {
-            let xy       = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
-            let wh       = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
+            let xy = u32::from_le_bytes([buf[1], buf[2], buf[3], buf[4]]);
+            let wh = u32::from_le_bytes([buf[5], buf[6], buf[7], buf[8]]);
             let data_ptr = u64::from_le_bytes([
-                buf[9],  buf[10], buf[11], buf[12],
-                buf[13], buf[14], buf[15], buf[16],
+                buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15], buf[16],
             ]) as usize;
             let data_len = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]) as usize;
             if let Some(dev) = STATE.lock().as_mut() {
@@ -107,10 +111,9 @@ fn dispatch(buf: &[u8]) {
 
         OP_CUR_SET if buf.len() >= 17 => {
             let data_ptr = u64::from_le_bytes([
-                buf[1], buf[2], buf[3], buf[4],
-                buf[5], buf[6], buf[7], buf[8],
+                buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
             ]) as usize;
-            let xy  = u32::from_le_bytes([buf[9],  buf[10], buf[11], buf[12]]);
+            let xy = u32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
             let hot = u32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
             if let Some(dev) = STATE.lock().as_mut() {
                 cursor::set_sprite(dev, data_ptr, xy, hot);
@@ -135,6 +138,10 @@ ostd::run_app!(handler);
 // PcieDriverCap is granted by loader.rs via path match (/bin/virtio-gpu).
 // No manifest flags are needed; the cap is granted via direct TCB write at spawn.
 api::declare_manifest!(
-    block_io = false, network = false, spawn = false,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );

@@ -9,16 +9,26 @@ use crate::widget::{PaintCx, ViWidget};
 
 pub struct Row {
     children: Vec<Box<dyn ViWidget>>,
-    spacing:  f32,
-    padding:  Padding,
+    spacing: f32,
+    padding: Padding,
 }
 
 impl Row {
     pub fn new(children: Vec<Box<dyn ViWidget>>) -> Self {
-        Self { children, spacing: 4.0, padding: Padding::ZERO }
+        Self {
+            children,
+            spacing: 4.0,
+            padding: Padding::ZERO,
+        }
     }
-    pub fn spacing(mut self, px: f32) -> Self { self.spacing = px; self }
-    pub fn padding(mut self, p: Padding) -> Self { self.padding = p; self }
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = px;
+        self
+    }
+    pub fn padding(mut self, p: Padding) -> Self {
+        self.padding = p;
+        self
+    }
 }
 
 impl ViWidget for Row {
@@ -31,7 +41,13 @@ impl ViWidget for Row {
 
         for child in &self.children {
             let remaining = (constraints.origin.x + inner_w - ox).max(0.0);
-            let child_c = Constraints::new(Point::new(ox, oy), Size { w: remaining, h: inner_h });
+            let child_c = Constraints::new(
+                Point::new(ox, oy),
+                Size {
+                    w: remaining,
+                    h: inner_h,
+                },
+            );
             let node = child.layout(child_c);
             let w = node.bounds.w;
             child_nodes.push(node);
@@ -49,12 +65,17 @@ impl ViWidget for Row {
     }
 
     fn paint(&self, cx: &mut PaintCx) {
-        for child in &self.children { child.paint(cx); }
+        for child in &self.children {
+            child.paint(cx);
+        }
     }
 
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> EventStatus {
         for (i, child) in self.children.iter_mut().enumerate() {
-            let child_layout = match cx.layout.child(i) { Some(l) => l, None => break };
+            let child_layout = match cx.layout.child(i) {
+                Some(l) => l,
+                None => break,
+            };
             let mut child_cx = EventCx {
                 state: cx.state,
                 focus: cx.focus,
@@ -63,8 +84,12 @@ impl ViWidget for Row {
                 needs_repaint: false,
             };
             let status = child.event(&mut child_cx, e);
-            if child_cx.needs_repaint { cx.mark_dirty(); }
-            if status == EventStatus::Consumed { return EventStatus::Consumed; }
+            if child_cx.needs_repaint {
+                cx.mark_dirty();
+            }
+            if status == EventStatus::Consumed {
+                return EventStatus::Consumed;
+            }
         }
         EventStatus::Ignored
     }

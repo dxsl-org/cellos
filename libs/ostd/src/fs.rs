@@ -10,8 +10,8 @@
 use crate::syscall;
 use alloc::string::String;
 use alloc::vec::Vec;
-use types::*;
 use api::ipc::{VfsRequest, VfsResponse};
+use types::*;
 
 /// Iterator over directory entries returned by the kernel.
 pub struct ReadDir {
@@ -77,11 +77,14 @@ impl File {
     /// # Errors
     /// Returns `ViError::NotFound` if the path does not exist in the kernel FS.
     pub fn open(path: &str) -> ViResult<Self> {
-        let cap_id = syscall::sys_open_cap(path)
-            .map_err(|_| ViError::NotFound)?;
-        let vfs_tid = crate::service::lookup(crate::service::service::VFS)
-            .unwrap_or(0);
-        Ok(Self { cap_id, closed: false, path: String::from(path), vfs_tid })
+        let cap_id = syscall::sys_open_cap(path).map_err(|_| ViError::NotFound)?;
+        let vfs_tid = crate::service::lookup(crate::service::service::VFS).unwrap_or(0);
+        Ok(Self {
+            cap_id,
+            closed: false,
+            path: String::from(path),
+            vfs_tid,
+        })
     }
 
     /// Read all bytes until EOF into `buf`.
@@ -138,7 +141,10 @@ impl File {
             return Err(ViError::InvalidInput);
         }
         for chunk in buf.chunks(CHUNK_CONTENT) {
-            let req = VfsRequest::Append { path: &self.path, content: chunk };
+            let req = VfsRequest::Append {
+                path: &self.path,
+                content: chunk,
+            };
             let mut resp_buf = [0u8; 512];
             match vfs_call(self.vfs_tid, &req, &mut resp_buf)? {
                 VfsResponse::Ok => {}
@@ -214,9 +220,9 @@ impl embedded_io::Read for File {
 impl embedded_io::Seek for File {
     fn seek(&mut self, pos: embedded_io::SeekFrom) -> Result<u64, crate::io::OstdError> {
         let (offset, whence) = match pos {
-            embedded_io::SeekFrom::Start(n)   => (n as i64,  0u8),
-            embedded_io::SeekFrom::Current(n) => (n,         1u8),
-            embedded_io::SeekFrom::End(n)     => (n,         2u8),
+            embedded_io::SeekFrom::Start(n) => (n as i64, 0u8),
+            embedded_io::SeekFrom::Current(n) => (n, 1u8),
+            embedded_io::SeekFrom::End(n) => (n, 2u8),
         };
         crate::syscall::sys_seek_cap(self.cap_id, offset, whence)
             .map_err(|_| crate::io::OstdError(ViError::IO))
@@ -234,8 +240,7 @@ impl embedded_io::Write for File {
     }
 
     fn flush(&mut self) -> Result<(), crate::io::OstdError> {
-        crate::syscall::sys_sync_cap(self.cap_id)
-            .map_err(|_| crate::io::OstdError(ViError::IO))
+        crate::syscall::sys_sync_cap(self.cap_id).map_err(|_| crate::io::OstdError(ViError::IO))
     }
 }
 
@@ -244,9 +249,11 @@ impl embedded_io::Write for File {
 /// Blocking IPC call to the VFS service: encode `req`, send, receive, decode.
 ///
 /// Uses a stack-allocated 512-byte buffer for both directions.
-fn vfs_call<'r>(vfs_tid: usize, req: &VfsRequest<'_>, resp_buf: &'r mut [u8; 512])
-    -> ViResult<VfsResponse<'r>>
-{
+fn vfs_call<'r>(
+    vfs_tid: usize,
+    req: &VfsRequest<'_>,
+    resp_buf: &'r mut [u8; 512],
+) -> ViResult<VfsResponse<'r>> {
     let mut send_buf = [0u8; 512];
     let n = api::ipc::encode(req, &mut send_buf)
         .map(|s| s.len())
@@ -269,7 +276,10 @@ pub fn read_full_via_grant(path: &str, vfs_tid: usize) -> ViResult<(usize, usize
     let mut sb = [0u8; 512];
     let mut rb = [0u8; 64];
     let size = match crate::ipc::service_call_typed::<_, VfsResponse>(
-        vfs_tid, &VfsRequest::Stat(path), &mut sb, &mut rb,
+        vfs_tid,
+        &VfsRequest::Stat(path),
+        &mut sb,
+        &mut rb,
     ) {
         Ok(VfsResponse::Stat { size, is_dir }) if !is_dir && size > 0 => size as usize,
         _ => return Err(ViError::NotFound),
@@ -282,7 +292,11 @@ pub fn read_full_via_grant(path: &str, vfs_tid: usize) -> ViResult<(usize, usize
     let mut rb2 = [0u8; 64];
     let bytes = match crate::ipc::service_call_typed::<_, VfsResponse>(
         vfs_tid,
-        &VfsRequest::ReadFileGrant { path, grant: grant_id, max: size },
+        &VfsRequest::ReadFileGrant {
+            path,
+            grant: grant_id,
+            max: size,
+        },
         &mut sb2,
         &mut rb2,
     ) {
@@ -341,20 +355,31 @@ fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
     syscall::sys_grant_share(grant_id, vfs_tid, 2 /* ReadWrite */);
 
     // Control message fits in 512B IPC buffer.
-    let req = VfsRequest::ReadGrant { cap: cap_id, offset: 0, size, grant: grant_id };
+    let req = VfsRequest::ReadGrant {
+        cap: cap_id,
+        offset: 0,
+        size,
+        grant: grant_id,
+    };
     let mut resp_buf = [0u8; 512];
-    let resp = vfs_call(vfs_tid, &req, &mut resp_buf)
-        .map_err(|e| { syscall::sys_grant_free(grant_id); e })?;
+    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).map_err(|e| {
+        syscall::sys_grant_free(grant_id);
+        e
+    })?;
 
     let bytes = match resp {
         // F14: GrantDone arrives only AFTER VFS has filled the grant buffer.
         VfsResponse::GrantDone { bytes } => bytes,
-        _ => { syscall::sys_grant_free(grant_id); return Err(ViError::IO); }
+        _ => {
+            syscall::sys_grant_free(grant_id);
+            return Err(ViError::IO);
+        }
     };
 
     // SAFETY: grant was allocated with `size` bytes; VFS filled `bytes` of it.
     let ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
-        syscall::sys_grant_free(grant_id); ViError::IO
+        syscall::sys_grant_free(grant_id);
+        ViError::IO
     })?;
     let src = unsafe { core::slice::from_raw_parts(ptr as *const u8, bytes) };
     buf[..bytes].copy_from_slice(src);
@@ -371,18 +396,26 @@ fn grant_write(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
     // Fill grant buffer BEFORE sharing — we own it exclusively here.
     // SAFETY: grant was allocated for `bytes`; ptr is valid for that range.
     let ptr = syscall::sys_grant_slice(grant_id).ok_or_else(|| {
-        syscall::sys_grant_free(grant_id); ViError::IO
+        syscall::sys_grant_free(grant_id);
+        ViError::IO
     })?;
     unsafe { core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, bytes) };
 
     // Share WriteOnly (VFS reads, can't modify).
     syscall::sys_grant_share(grant_id, vfs_tid, 1 /* WriteOnly */);
 
-    let req = VfsRequest::WriteGrant { cap: cap_id, offset: 0, grant: grant_id, bytes };
+    let req = VfsRequest::WriteGrant {
+        cap: cap_id,
+        offset: 0,
+        grant: grant_id,
+        bytes,
+    };
     let mut resp_buf = [0u8; 512];
     // ipc_call blocks until VFS replies — F14 guarantees VFS drained the grant.
-    let resp = vfs_call(vfs_tid, &req, &mut resp_buf)
-        .map_err(|e| { syscall::sys_grant_free(grant_id); e })?;
+    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).map_err(|e| {
+        syscall::sys_grant_free(grant_id);
+        e
+    })?;
 
     syscall::sys_grant_free(grant_id);
     match resp {

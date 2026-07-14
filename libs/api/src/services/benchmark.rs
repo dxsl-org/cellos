@@ -162,15 +162,15 @@ pub struct BenchReport {
     /// Short identifier (e.g. `"context_switch"`).
     pub name: &'static str,
     /// Number of measured iterations (excluding warmup).
-    pub n:      u32,
+    pub n: u32,
     /// Minimum latency observed (ns or ticks).
-    pub min:    u64,
+    pub min: u64,
     /// Median (p50) latency.
-    pub p50:    u64,
+    pub p50: u64,
     /// 99th-percentile latency.
-    pub p99:    u64,
+    pub p99: u64,
     /// Maximum latency observed.
-    pub max:    u64,
+    pub max: u64,
 }
 
 impl BenchReport {
@@ -183,7 +183,14 @@ impl BenchReport {
         let n = samples.len();
         let p50 = samples[n / 2];
         let p99 = samples[(n * 99) / 100];
-        Self { name, n: n as u32, min: samples[0], p50, p99, max: samples[n - 1] }
+        Self {
+            name,
+            n: n as u32,
+            min: samples[0],
+            p50,
+            p99,
+            max: samples[n - 1],
+        }
     }
 
     /// Emit a compact JSON object (single line, no trailing newline).
@@ -194,25 +201,56 @@ impl BenchReport {
     pub fn write_json(&self, out: &mut [u8]) -> usize {
         let mut pos = 0;
         let parts: [(&str, u64); 5] = [
-            ("min", self.min), ("p50", self.p50), ("p99", self.p99), ("max", self.max),
-            ("n",   self.n as u64),
+            ("min", self.min),
+            ("p50", self.p50),
+            ("p99", self.p99),
+            ("max", self.max),
+            ("n", self.n as u64),
         ];
         let prefix = b"{\"name\":\"";
-        if pos + prefix.len() > out.len() { return 0; }
+        if pos + prefix.len() > out.len() {
+            return 0;
+        }
         out[pos..pos + prefix.len()].copy_from_slice(prefix);
         pos += prefix.len();
         for b in self.name.bytes() {
-            if pos >= out.len() { return pos; }
-            out[pos] = b; pos += 1;
+            if pos >= out.len() {
+                return pos;
+            }
+            out[pos] = b;
+            pos += 1;
         }
         for (key, val) in &parts {
-            let sep = if pos < out.len() { out[pos] = b'"'; pos += 1; b",\"" } else { return pos; };
-            for b in sep { if pos < out.len() { out[pos] = *b; pos += 1; } }
-            for b in key.bytes() { if pos < out.len() { out[pos] = b; pos += 1; } }
-            if pos + 2 <= out.len() { out[pos] = b'"'; out[pos+1] = b':'; pos += 2; }
+            let sep = if pos < out.len() {
+                out[pos] = b'"';
+                pos += 1;
+                b",\""
+            } else {
+                return pos;
+            };
+            for b in sep {
+                if pos < out.len() {
+                    out[pos] = *b;
+                    pos += 1;
+                }
+            }
+            for b in key.bytes() {
+                if pos < out.len() {
+                    out[pos] = b;
+                    pos += 1;
+                }
+            }
+            if pos + 2 <= out.len() {
+                out[pos] = b'"';
+                out[pos + 1] = b':';
+                pos += 2;
+            }
             pos += write_u64(&mut out[pos..], *val);
         }
-        if pos < out.len() { out[pos] = b'}'; pos += 1; }
+        if pos < out.len() {
+            out[pos] = b'}';
+            pos += 1;
+        }
         pos
     }
 
@@ -224,13 +262,24 @@ impl BenchReport {
 
 /// Write a `u64` in decimal ASCII into `buf`; returns bytes written.
 fn write_u64(buf: &mut [u8], mut n: u64) -> usize {
-    if buf.is_empty() { return 0; }
-    if n == 0 { buf[0] = b'0'; return 1; }
+    if buf.is_empty() {
+        return 0;
+    }
+    if n == 0 {
+        buf[0] = b'0';
+        return 1;
+    }
     let mut tmp = [0u8; 20];
     let mut len = 0;
-    while n > 0 { tmp[len] = b'0' + (n % 10) as u8; n /= 10; len += 1; }
+    while n > 0 {
+        tmp[len] = b'0' + (n % 10) as u8;
+        n /= 10;
+        len += 1;
+    }
     let written = len.min(buf.len());
-    for i in 0..written { buf[i] = tmp[len - 1 - i]; }
+    for i in 0..written {
+        buf[i] = tmp[len - 1 - i];
+    }
     written
 }
 

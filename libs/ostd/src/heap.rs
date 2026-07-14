@@ -53,7 +53,8 @@ unsafe impl GlobalAlloc for CellAllocator {
             heap.init(addr_of_mut!(HEAP_MEM) as *mut u8, HEAP_SIZE);
             HEAP_INIT = true;
         }
-        heap.allocate_first_fit(layout).map_or(null_mut(), |p| p.as_ptr())
+        heap.allocate_first_fit(layout)
+            .map_or(null_mut(), |p| p.as_ptr())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {

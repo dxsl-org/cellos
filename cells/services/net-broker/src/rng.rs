@@ -1,3 +1,4 @@
+use ostd::syscall::sys_get_random;
 /// BrokerRng — VirtIO-RNG-backed ChaCha20 PRNG for Noise ephemeral keygen.
 ///
 /// Mirrors `cells/services/net/src/tls/rng.rs`. Panic policy: if the kernel
@@ -7,7 +8,6 @@
 /// ephemerals predictable if we proceed).
 use rand_chacha::ChaCha20Rng;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
-use ostd::syscall::sys_get_random;
 
 /// ChaCha20 PRNG seeded from VirtIO-RNG hardware entropy.
 ///
@@ -56,9 +56,15 @@ impl Default for BrokerRng {
 }
 
 impl RngCore for BrokerRng {
-    fn next_u32(&mut self) -> u32 { self.0.next_u32() }
-    fn next_u64(&mut self) -> u64 { self.0.next_u64() }
-    fn fill_bytes(&mut self, dest: &mut [u8]) { self.0.fill_bytes(dest) }
+    fn next_u32(&mut self) -> u32 {
+        self.0.next_u32()
+    }
+    fn next_u64(&mut self) -> u64 {
+        self.0.next_u64()
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.0.fill_bytes(dest)
+    }
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         self.0.try_fill_bytes(dest)
     }

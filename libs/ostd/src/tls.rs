@@ -24,9 +24,9 @@ use crate::syscall::{sys_recv, sys_send, SyscallResult};
 
 // TLS IPC opcodes (mirrors cells/services/net/src/poll_driver.rs cell_opcodes).
 const TLS_CONNECT: u8 = 0x30;
-const TLS_SEND:    u8 = 0x31;
-const TLS_RECV:    u8 = 0x32;
-const CLOSE:       u8 = 0x15;
+const TLS_SEND: u8 = 0x31;
+const TLS_RECV: u8 = 0x32;
+const CLOSE: u8 = 0x15;
 
 /// Open a TLS 1.3 connection to `addr:port` with the given SNI `hostname`.
 ///
@@ -94,7 +94,11 @@ pub fn tls_read(net_tid: usize, cap_id: u64, buf: &mut [u8]) -> usize {
     match sys_recv(0, &mut tmp) {
         SyscallResult::Ok(_) => {
             // Zero-scan to find actual reply length.
-            let n = tmp.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(0);
+            let n = tmp
+                .iter()
+                .rposition(|&b| b != 0)
+                .map(|i| i + 1)
+                .unwrap_or(0);
             let n = n.min(buf.len());
             buf[..n].copy_from_slice(&tmp[..n]);
             n

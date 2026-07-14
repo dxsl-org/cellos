@@ -11,13 +11,13 @@
 
 extern crate alloc;
 
-use api::display::{AttachGrant, DamageNotify, PixelFormat, Rect, compositor_ops};
+use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect};
 use api::syscall::service;
 use types::{ViError, ViResult};
 
 use crate::syscall::{
-    sys_grant_register, sys_grant_share, sys_grant_slice, sys_grant_unregister,
-    sys_lookup_service, sys_recv, sys_send, SyscallResult,
+    sys_grant_register, sys_grant_share, sys_grant_slice, sys_grant_unregister, sys_lookup_service,
+    sys_recv, sys_send, SyscallResult,
 };
 
 // ─── Service lookup ───────────────────────────────────────────────────────────
@@ -45,13 +45,13 @@ pub fn wait_for_compositor() -> usize {
 ///
 /// `ViSurface` is `!Send`: the Grant pointer must stay on the cell's task.
 pub struct ViSurface {
-    comp_tid:  usize,
-    cap:       u32,
-    reg_id:    usize,
-    ptr:       *mut u8,
-    width:     u32,
-    height:    u32,
-    fmt:       PixelFormat,
+    comp_tid: usize,
+    cap: u32,
+    reg_id: usize,
+    ptr: *mut u8,
+    width: u32,
+    height: u32,
+    fmt: PixelFormat,
     /// Makes `ViSurface` !Send on stable Rust — the raw pointer must stay on its origin task.
     _not_send: core::marker::PhantomData<*mut ()>,
 }
@@ -66,9 +66,7 @@ impl ViSurface {
     /// # Errors
     /// - `OutOfMemory` if `sys_grant_register` fails.
     /// - `IO` if the compositor rejects `ATTACH_GRANT` (e.g. too many surfaces).
-    pub fn create(comp_tid: usize, width: u32, height: u32, fmt: PixelFormat)
-        -> ViResult<Self>
-    {
+    pub fn create(comp_tid: usize, width: u32, height: u32, fmt: PixelFormat) -> ViResult<Self> {
         let size = (width * height * fmt.bpp()) as usize;
 
         // 1. Allocate a persistent physical Grant buffer (lives until we call unregister).
@@ -96,8 +94,16 @@ impl ViSurface {
             e
         })?;
 
-        Ok(Self { comp_tid, cap, reg_id, ptr, width, height, fmt,
-                  _not_send: core::marker::PhantomData })
+        Ok(Self {
+            comp_tid,
+            cap,
+            reg_id,
+            ptr,
+            width,
+            height,
+            fmt,
+            _not_send: core::marker::PhantomData,
+        })
     }
 
     /// Direct mutable access to the pixel buffer.
@@ -118,10 +124,14 @@ impl ViSurface {
     }
 
     /// Surface width in pixels.
-    pub fn width(&self) -> u32 { self.width }
+    pub fn width(&self) -> u32 {
+        self.width
+    }
 
     /// Surface height in pixels.
-    pub fn height(&self) -> u32 { self.height }
+    pub fn height(&self) -> u32 {
+        self.height
+    }
 
     /// Signal a dirty region to the compositor (fire-and-forget, 24-byte IPC).
     ///
@@ -129,8 +139,8 @@ impl ViSurface {
     pub fn damage(&self, rect: Rect) {
         let msg = DamageNotify {
             opcode: compositor_ops::DAMAGE_NOTIFY,
-            _pad:   [0; 3],
-            cap:    self.cap,
+            _pad: [0; 3],
+            cap: self.cap,
             rect,
         };
         sys_send(self.comp_tid, &msg.encode());
@@ -138,7 +148,12 @@ impl ViSurface {
 
     /// Signal the entire surface as dirty.
     pub fn damage_all(&self) {
-        self.damage(Rect { x: 0, y: 0, w: self.width, h: self.height });
+        self.damage(Rect {
+            x: 0,
+            y: 0,
+            w: self.width,
+            h: self.height,
+        });
     }
 
     /// Move this surface to a new screen position.
@@ -163,7 +178,9 @@ impl ViSurface {
     }
 
     /// Explicitly destroy the surface (also called by `Drop`).
-    pub fn destroy(self) { drop(self); }
+    pub fn destroy(self) {
+        drop(self);
+    }
 }
 
 impl Drop for ViSurface {
@@ -199,23 +216,33 @@ fn ipc_create_surface(comp_tid: usize, w: u32, h: u32) -> ViResult<u32> {
     match sys_recv(0, &mut resp) {
         SyscallResult::Ok(_) => {
             let cap = u32::from_le_bytes([resp[0], resp[1], resp[2], resp[3]]);
-            if cap == 0 { Err(ViError::IO) } else { Ok(cap) }
+            if cap == 0 {
+                Err(ViError::IO)
+            } else {
+                Ok(cap)
+            }
         }
         _ => Err(ViError::IO),
     }
 }
 
 /// Send `ATTACH_GRANT` and verify the compositor accepted it.
-fn ipc_attach_grant(comp_tid: usize, cap: u32, reg_id: usize,
-                    w: u32, h: u32, fmt: PixelFormat) -> ViResult<()> {
+fn ipc_attach_grant(
+    comp_tid: usize,
+    cap: u32,
+    reg_id: usize,
+    w: u32,
+    h: u32,
+    fmt: PixelFormat,
+) -> ViResult<()> {
     let ag = AttachGrant {
-        opcode:  compositor_ops::ATTACH_GRANT,
-        fmt:     fmt as u8,
-        _pad:    [0; 2],
+        opcode: compositor_ops::ATTACH_GRANT,
+        fmt: fmt as u8,
+        _pad: [0; 2],
         cap,
-        reg_id:  reg_id as u64,
-        width:   w,
-        height:  h,
+        reg_id: reg_id as u64,
+        width: w,
+        height: h,
     };
     sys_send(comp_tid, &ag.encode());
 

@@ -44,61 +44,67 @@ use hal_hypervisor::ViVmExit;
 #[repr(C)]
 pub struct AArch64Vcpu {
     // ─── Guest GP registers x0-x30 (offsets 0..248) ─────────────────
-    pub gp: [u64; 31],           // 31 × 8 = 248 bytes
+    pub gp: [u64; 31], // 31 × 8 = 248 bytes
 
     // ─── VM exit info (offsets 248..280) ────────────────────────────
-    pub exit_esr:   u64,         // 248 — ESR_EL2 on trap
-    pub exit_elr:   u64,         // 256 — ELR_EL2 = guest PC at trap
-    pub exit_far:   u64,         // 264 — FAR_EL2
-    pub exit_hpfar: u64,         // 272 — HPFAR_EL2
+    pub exit_esr: u64,   // 248 — ESR_EL2 on trap
+    pub exit_elr: u64,   // 256 — ELR_EL2 = guest PC at trap
+    pub exit_far: u64,   // 264 — FAR_EL2
+    pub exit_hpfar: u64, // 272 — HPFAR_EL2
 
     // ─── Guest EL1 sysreg bank (offsets 280..400) ───────────────────
-    pub g_sctlr_el1:  u64,      // 280
-    pub g_ttbr0_el1:  u64,      // 288
-    pub g_ttbr1_el1:  u64,      // 296
-    pub g_tcr_el1:    u64,      // 304
-    pub g_mair_el1:   u64,      // 312
-    pub g_vbar_el1:   u64,      // 320
-    pub g_esr_el1:    u64,      // 328
-    pub g_far_el1:    u64,      // 336
-    pub g_tpidr_el0:  u64,      // 344
-    pub g_tpidr_el1:  u64,      // 352
-    pub g_cntv_ctl:   u64,      // 360
-    pub g_cntv_cval:  u64,      // 368
-    pub g_spsr_el1:   u64,      // 376
-    pub g_elr_el1:    u64,      // 384
-    pub g_sp_el1:     u64,      // 392
+    pub g_sctlr_el1: u64, // 280
+    pub g_ttbr0_el1: u64, // 288
+    pub g_ttbr1_el1: u64, // 296
+    pub g_tcr_el1: u64,   // 304
+    pub g_mair_el1: u64,  // 312
+    pub g_vbar_el1: u64,  // 320
+    pub g_esr_el1: u64,   // 328
+    pub g_far_el1: u64,   // 336
+    pub g_tpidr_el0: u64, // 344
+    pub g_tpidr_el1: u64, // 352
+    pub g_cntv_ctl: u64,  // 360
+    pub g_cntv_cval: u64, // 368
+    pub g_spsr_el1: u64,  // 376
+    pub g_elr_el1: u64,   // 384
+    pub g_sp_el1: u64,    // 392
 
     // ─── Guest EL2 entry control (offsets 400..416) ─────────────────
-    pub g_elr_el2:  u64,        // 400 — guest entry/resume PC
-    pub g_spsr_el2: u64,        // 408 — SPSR_EL2 on entry (0x3C5 = EL1h+DAIF)
+    pub g_elr_el2: u64,  // 400 — guest entry/resume PC
+    pub g_spsr_el2: u64, // 408 — SPSR_EL2 on entry (0x3C5 = EL1h+DAIF)
 
     // ─── Host save area (offsets 416..520) ──────────────────────────
     // Callee-saved registers (x19-x30) and SP_EL2 saved by vcpu_enter_guest;
     // restored by vt_vcpu_trap so that `ret` returns to run_vcpu_impl.
-    pub h_x19: u64, pub h_x20: u64, // 416, 424
-    pub h_x21: u64, pub h_x22: u64, // 432, 440
-    pub h_x23: u64, pub h_x24: u64, // 448, 456
-    pub h_x25: u64, pub h_x26: u64, // 464, 472
-    pub h_x27: u64, pub h_x28: u64, // 480, 488
-    pub h_x29: u64, pub h_x30: u64, // 496, 504 — h_x30 = host return address
-    pub h_sp:  u64,                  // 512 — host SP_EL2
+    pub h_x19: u64,
+    pub h_x20: u64, // 416, 424
+    pub h_x21: u64,
+    pub h_x22: u64, // 432, 440
+    pub h_x23: u64,
+    pub h_x24: u64, // 448, 456
+    pub h_x25: u64,
+    pub h_x26: u64, // 464, 472
+    pub h_x27: u64,
+    pub h_x28: u64, // 480, 488
+    pub h_x29: u64,
+    pub h_x30: u64, // 496, 504 — h_x30 = host return address
+    pub h_sp: u64,  // 512 — host SP_EL2
 }
 
 // Verify critical struct offsets match the asm constants at compile time.
 // SAFETY: these are purely compile-time size/offset checks.
 const _: () = {
-    assert!(core::mem::offset_of!(AArch64Vcpu, gp)         == 0);
-    assert!(core::mem::offset_of!(AArch64Vcpu, exit_esr)   == 248);
-    assert!(core::mem::offset_of!(AArch64Vcpu, exit_elr)   == 256);
-    assert!(core::mem::offset_of!(AArch64Vcpu, exit_far)   == 264);
+    assert!(core::mem::offset_of!(AArch64Vcpu, gp) == 0);
+    assert!(core::mem::offset_of!(AArch64Vcpu, exit_esr) == 248);
+    assert!(core::mem::offset_of!(AArch64Vcpu, exit_elr) == 256);
+    assert!(core::mem::offset_of!(AArch64Vcpu, exit_far) == 264);
     assert!(core::mem::offset_of!(AArch64Vcpu, exit_hpfar) == 272);
-    assert!(core::mem::offset_of!(AArch64Vcpu, g_elr_el2)  == 400);
+    assert!(core::mem::offset_of!(AArch64Vcpu, g_elr_el2) == 400);
     assert!(core::mem::offset_of!(AArch64Vcpu, g_spsr_el2) == 408);
-    assert!(core::mem::offset_of!(AArch64Vcpu, h_x19)      == 416);
-    assert!(core::mem::offset_of!(AArch64Vcpu, h_x29)      == 496);
-    assert!(core::mem::offset_of!(AArch64Vcpu, h_x30)      == 504);
-    assert!(core::mem::offset_of!(AArch64Vcpu, h_sp)       == 512);
+    assert!(core::mem::offset_of!(AArch64Vcpu, h_x19) == 416);
+    assert!(core::mem::offset_of!(AArch64Vcpu, h_x29) == 496);
+    assert!(core::mem::offset_of!(AArch64Vcpu, h_x30) == 504);
+    assert!(core::mem::offset_of!(AArch64Vcpu, h_sp) == 512);
 };
 
 // SAFETY: AArch64Vcpu is only accessed from single-CPU kernel context in Phase 03.
@@ -141,10 +147,19 @@ impl Drop for AArch64Vcpu {
 #[derive(Default)]
 #[repr(C)]
 struct HostEl1Bank {
-    sctlr_el1: u64, ttbr0_el1: u64, ttbr1_el1: u64, tcr_el1: u64,
-    mair_el1:  u64, vbar_el1:  u64, tpidr_el0:  u64, tpidr_el1: u64,
-    cntv_ctl:  u64, cntv_cval: u64, spsr_el1:   u64, elr_el1:  u64,
-    sp_el1:    u64,
+    sctlr_el1: u64,
+    ttbr0_el1: u64,
+    ttbr1_el1: u64,
+    tcr_el1: u64,
+    mair_el1: u64,
+    vbar_el1: u64,
+    tpidr_el0: u64,
+    tpidr_el1: u64,
+    cntv_ctl: u64,
+    cntv_cval: u64,
+    spsr_el1: u64,
+    elr_el1: u64,
+    sp_el1: u64,
 }
 
 // ── run_vcpu_impl ─────────────────────────────────────────────────────────────
@@ -241,7 +256,9 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // + exit info to vcpu, restores host callee-saved + SP, clears TPIDR_EL2,
     // and `ret`s — returning here as if vcpu_enter_guest() returned normally.
     // SAFETY: Stage-2 enabled; TPIDR_EL2 used as single-CPU coroutine pointer.
-    unsafe { vcpu_enter_guest(vcpu as *mut AArch64Vcpu); }
+    unsafe {
+        vcpu_enter_guest(vcpu as *mut AArch64Vcpu);
+    }
 
     // ── 4. Restore host EL1 sysregs ─────────────────────────────────────────
     // SAFETY: restoring our own host state; EL1 sysregs safe to write from EL2.
@@ -333,7 +350,8 @@ extern "C" {
 //   h_x30      → offset  504   ← host LR / return address
 //   h_sp       → offset  512
 
-global_asm!(r#"
+global_asm!(
+    r#"
     .section .text
     .global vcpu_enter_guest
     .balign 4
@@ -462,4 +480,5 @@ vt_vcpu_trap:
     mov  sp, x9
 
     ret     // returns to run_vcpu_impl via restored h_x30
-"#);
+"#
+);

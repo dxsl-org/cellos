@@ -7,13 +7,17 @@ const COM1: u16 = 0x3F8;
 
 fn outb(port: u16, val: u8) {
     // SAFETY: writing to a well-known UART port; no memory aliasing.
-    unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nomem, nostack));
+    }
 }
 
 fn inb(port: u16) -> u8 {
     let val: u8;
     // SAFETY: reading from a well-known UART port; no memory aliasing.
-    unsafe { core::arch::asm!("in al, dx", in("dx") port, out("al") val, options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("in al, dx", in("dx") port, out("al") val, options(nomem, nostack));
+    }
     val
 }
 

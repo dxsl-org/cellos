@@ -40,7 +40,9 @@ pub fn map_dma(phys: u64, size: usize) -> u64 {
 /// Creates a per-Cell IOMMU domain on first call. Writes a DDT/context entry for `bdf`.
 /// Returns IOVA (identity == phys in SAS).
 pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> u64 {
-    if size == 0 { return phys; }
+    if size == 0 {
+        return phys;
+    }
     #[cfg(target_arch = "riscv64")]
     super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
@@ -111,8 +113,12 @@ pub fn set_deferred_init_pending() {
 /// (Driver Cells spawn after Platform Cell completes enumeration). Subsequent
 /// `map_dma_for_cell` calls add DDT entries lazily and take effect immediately.
 pub fn try_deferred_init() {
-    if !IOMMU_DEFERRED.load(Ordering::Relaxed) { return; }
-    if IOMMU_ISOLATED.load(Ordering::Relaxed)  { return; }
+    if !IOMMU_DEFERRED.load(Ordering::Relaxed) {
+        return;
+    }
+    if IOMMU_ISOLATED.load(Ordering::Relaxed) {
+        return;
+    }
 
     // init() calls arch init_hw() which calls find_class() — succeeds only once
     // the IOMMU device has been registered in PCI_DEVICES.

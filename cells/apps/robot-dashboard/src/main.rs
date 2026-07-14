@@ -54,16 +54,11 @@ use viui::{
     animation::AnimatedSignal,
     app_runner::ViApp,
     event::Event,
-    node_widgets::{
-        button::Button,
-        column::Column,
-        label::Label,
-        list_view::ListView,
-        progress_bar::ProgressBar,
-        row::Row,
-        slider::Slider,
-    },
     node::ViNode,
+    node_widgets::{
+        button::Button, column::Column, label::Label, list_view::ListView,
+        progress_bar::ProgressBar, row::Row, slider::Slider,
+    },
     renderer::FramebufferRenderer,
     signal::{Signal, SubscriptionHandle},
 };
@@ -110,19 +105,19 @@ pub extern "C" fn main() {
 
     // ── Animated sensor signals ───────────────────────────────────────────────
     // AnimatedSignal is NOT Clone: extract inner Signal before moving into app.
-    let battery_anim    = AnimatedSignal::new(1.0_f32);
-    let cpu_anim        = AnimatedSignal::new(0.2_f32);
-    let motor_anim      = AnimatedSignal::new(0.2_f32);
+    let battery_anim = AnimatedSignal::new(1.0_f32);
+    let cpu_anim = AnimatedSignal::new(0.2_f32);
+    let motor_anim = AnimatedSignal::new(0.2_f32);
 
-    let battery_f    = battery_anim.signal();   // Signal<f32> clone, shared with widgets
-    let cpu_f        = cpu_anim.signal();
-    let motor_f      = motor_anim.signal();
+    let battery_f = battery_anim.signal(); // Signal<f32> clone, shared with widgets
+    let cpu_f = cpu_anim.signal();
+    let motor_f = motor_anim.signal();
 
     // Keep a second clone of each sensor signal to write updates in the loop.
     // (The AnimatedSignal owns the primary; we bypass its tween for direct sets.)
     let battery_w = battery_f.clone();
-    let cpu_w     = cpu_f.clone();
-    let motor_w   = motor_f.clone();
+    let cpu_w = cpu_f.clone();
+    let motor_w = motor_f.clone();
 
     // ── Derived text labels ───────────────────────────────────────────────────
     let (battery_text, s1) = battery_f
@@ -139,21 +134,27 @@ pub extern "C" fn main() {
     subs.push(s3);
 
     // ── Control signals ───────────────────────────────────────────────────────
-    let speed_sig   = Signal::new(0.5_f32);
-    let gain_sig    = Signal::new(0.3_f32);
+    let speed_sig = Signal::new(0.5_f32);
+    let gain_sig = Signal::new(0.3_f32);
     let running_sig = Signal::new(true);
     let log_sig: Signal<Vec<String>> = Signal::new(Vec::new());
 
     // Clones for button callbacks and loop writes.
-    let running_stop  = running_sig.clone();
+    let running_stop = running_sig.clone();
     let running_start = running_sig.clone();
     // running_sig itself is moved into the status_text map below; no separate write clone needed.
-    let log_w         = log_sig.clone();
+    let log_w = log_sig.clone();
 
     // Status label: "RUNNING" / "STOPPED"
     let running_r = running_sig.clone();
     let (status_text, s4) = running_r
-        .map(|r| if *r { String::from("RUNNING") } else { String::from("STOPPED") })
+        .map(|r| {
+            if *r {
+                String::from("RUNNING")
+            } else {
+                String::from("STOPPED")
+            }
+        })
         .into_parts();
     subs.push(s4);
 
@@ -194,10 +195,10 @@ pub extern "C" fn main() {
     app.add_animation(Box::new(motor_anim));
 
     // ── Main loop ─────────────────────────────────────────────────────────────
-    let mut sim        = SimState::new();
-    let mut last_sim   = sys_get_time();
+    let mut sim = SimState::new();
+    let mut last_sim = sys_get_time();
     let mut last_frame = last_sim;
-    let tick_interval  = SIM_TICK_MS * MTIME_TICKS_PER_MS;
+    let tick_interval = SIM_TICK_MS * MTIME_TICKS_PER_MS;
 
     // Render at ~30 fps (33 ms between frames).
     const FRAME_INTERVAL: u64 = 33 * MTIME_TICKS_PER_MS;
@@ -270,19 +271,19 @@ pub extern "C" fn main() {
 // All borrowed signals have already been cloned before this call.
 #[allow(clippy::too_many_arguments)]
 fn build_layout(
-    battery_f:    Signal<f32>,
+    battery_f: Signal<f32>,
     battery_text: Signal<String>,
-    cpu_f:        Signal<f32>,
-    cpu_text:     Signal<String>,
-    motor_f:      Signal<f32>,
-    motor_text:   Signal<String>,
-    speed_sig:    Signal<f32>,
-    speed_text:   Signal<String>,
-    gain_sig:     Signal<f32>,
-    gain_text:    Signal<String>,
-    status_text:  Signal<String>,
-    log_sig:      Signal<Vec<String>>,
-    running_stop:  Signal<bool>,
+    cpu_f: Signal<f32>,
+    cpu_text: Signal<String>,
+    motor_f: Signal<f32>,
+    motor_text: Signal<String>,
+    speed_sig: Signal<f32>,
+    speed_text: Signal<String>,
+    gain_sig: Signal<f32>,
+    gain_text: Signal<String>,
+    status_text: Signal<String>,
+    log_sig: Signal<Vec<String>>,
+    running_stop: Signal<bool>,
     running_start: Signal<bool>,
 ) -> impl ViNode {
     // ── Sensors column ────────────────────────────────────────────────────────
@@ -313,10 +314,14 @@ fn build_layout(
     ])
     .with_spacing(8.0);
 
-    let btn_stop  = Button::new("STOP",  move || { running_stop.set(false); });
-    let btn_start = Button::new("START", move || { running_start.set(true); });
+    let btn_stop = Button::new("STOP", move || {
+        running_stop.set(false);
+    });
+    let btn_start = Button::new("START", move || {
+        running_start.set(true);
+    });
     let btn_row = Row::new(vec![
-        Box::new(btn_stop)  as Box<dyn ViNode>,
+        Box::new(btn_stop) as Box<dyn ViNode>,
         Box::new(btn_start),
     ])
     .with_spacing(12.0);
@@ -333,7 +338,7 @@ fn build_layout(
 
     // ── Top row: sensors | controls ───────────────────────────────────────────
     let top_row = Row::new(vec![
-        Box::new(sensors)  as Box<dyn ViNode>,
+        Box::new(sensors) as Box<dyn ViNode>,
         Box::new(controls),
     ])
     .with_spacing(16.0)
@@ -349,7 +354,7 @@ fn build_layout(
 
     // ── Root column ───────────────────────────────────────────────────────────
     Column::new(vec![
-        Box::new(top_row)     as Box<dyn ViNode>,
+        Box::new(top_row) as Box<dyn ViNode>,
         Box::new(log_section),
     ])
     .with_spacing(8.0)

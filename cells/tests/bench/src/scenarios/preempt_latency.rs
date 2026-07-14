@@ -10,8 +10,8 @@
 //! (plan phase-05). Source compiles + type-checks standalone; numbers require a boot.
 
 extern crate alloc;
-use alloc::vec::Vec;
 use crate::framework::rt_report::RtReport;
+use alloc::vec::Vec;
 use ostd::syscall::{sys_get_time, sys_recv, sys_send, SyscallResult};
 
 const WARMUP: u32 = 50;

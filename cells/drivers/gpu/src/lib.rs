@@ -37,10 +37,10 @@ pub fn fill_rect(rect: Rect, rgba: u32) -> ViResult<()> {
     let mut pixels = alloc::vec![0u8; n * 4];
     for i in 0..n {
         let off = i * 4;
-        pixels[off]   = b;
-        pixels[off+1] = g;
-        pixels[off+2] = r;
-        pixels[off+3] = a;
+        pixels[off] = b;
+        pixels[off + 1] = g;
+        pixels[off + 2] = r;
+        pixels[off + 3] = a;
     }
     flush_rect(&pixels, rect)
 }

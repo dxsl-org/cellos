@@ -18,22 +18,30 @@
 #[derive(Debug, Clone, Copy)]
 pub enum ViVmExit {
     /// Stage-2 data-abort (read) — unmapped MMIO IPA; ISV=1 guaranteed.
-    MmioRead  { ipa: u64, size: u8, reg: u8 }                                   = 0,
+    MmioRead { ipa: u64, size: u8, reg: u8 } = 0,
     /// Stage-2 data-abort (write) — unmapped MMIO IPA; ISV=1 guaranteed.
-    MmioWrite { ipa: u64, size: u8, val: u64 }                                  = 1,
+    MmioWrite { ipa: u64, size: u8, val: u64 } = 1,
     /// HVC instruction — covers PSCI calls and general hypercall ABI.
-    Hvc       { imm: u16, regs: [u64; 8] }                                      = 2,
+    Hvc { imm: u16, regs: [u64; 8] } = 2,
     /// WFI instruction — guest idle; hypervisor may inject a virtual IRQ.
-    Wfi                                                                          = 3,
+    Wfi = 3,
     /// System-register access (EC=0x18) — timer register emulation (P05+).
-    SysReg    { op0: u8, op1: u8, crn: u8, crm: u8, op2: u8, rt: u8, is_write: bool } = 4,
+    SysReg {
+        op0: u8,
+        op1: u8,
+        crn: u8,
+        crm: u8,
+        op2: u8,
+        rt: u8,
+        is_write: bool,
+    } = 4,
     /// `budget_ns` budget expired — no guest fault; re-enter after servicing IPC.
-    Preempted                                                                    = 5,
+    Preempted = 5,
     /// Guest requested shutdown — PSCI SYSTEM_OFF / CPU_OFF (P05+).
-    Shutdown                                                                     = 6,
+    Shutdown = 6,
     /// Unrecognized exception class — includes S1PTW=1 stage-1 walk faults.
     /// Treat as fatal guest fault: log `ec`/`iss` and halt the VM.
-    Unknown   { ec: u32, iss: u32 }                                             = 7,
+    Unknown { ec: u32, iss: u32 } = 7,
 }
 
 impl ViVmExit {

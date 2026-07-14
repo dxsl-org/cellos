@@ -21,23 +21,23 @@ mod controller;
 mod dispatch;
 mod queue;
 
+use controller::NvmeController;
 use ostd::app::{AppContext, AppEvent};
 use ostd::dma::DmaBuf;
 use ostd::mmio;
 use ostd::sync::Mutex;
 use ostd::syscall::{sys_find_pcie_device, sys_register_block_driver, sys_send, PcieDeviceInfo};
-use controller::NvmeController;
 
 /// NVMe PCIe class triple.
-const NVME_CLASS:  u8 = 0x01;
-const NVME_SUB:    u8 = 0x08;
+const NVME_CLASS: u8 = 0x01;
+const NVME_SUB: u8 = 0x08;
 const NVME_PROGIF: u8 = 0x02;
 
 /// BAR0 MMIO window size (NVMe spec: at least 16 KiB for BAR0).
 const NVME_BAR0_LEN: usize = 0x4000; // 16 KiB
 
 struct NvmeState {
-    ctrl:   NvmeController,
+    ctrl: NvmeController,
     io_buf: DmaBuf,
 }
 
@@ -54,7 +54,8 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             let mut info = PcieDeviceInfo::zeroed();
             let mut found = false;
             for _ in 0..200 {
-                if let Ok(true) = sys_find_pcie_device(NVME_CLASS, NVME_SUB, NVME_PROGIF, &mut info) {
+                if let Ok(true) = sys_find_pcie_device(NVME_CLASS, NVME_SUB, NVME_PROGIF, &mut info)
+                {
                     found = true;
                     break;
                 }
@@ -66,24 +67,24 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             let bar0_base = info.bar0_base as usize;
-            let bdf       = info.bdf;
+            let bdf = info.bdf;
 
             // 2. Claim exclusive MMIO access to BAR0.
             let mmio_region = match mmio::request_region(bar0_base, NVME_BAR0_LEN) {
-                Ok(r)  => r,
+                Ok(r) => r,
                 Err(_) => ostd::syscall::sys_exit(1),
             };
 
             // 3. Initialise controller.
             let ctrl = match NvmeController::new(mmio_region, bdf) {
-                Ok(c)  => c,
+                Ok(c) => c,
                 Err(_) => ostd::syscall::sys_exit(1),
             };
 
             // Allocate a reusable 512-byte I/O DMA buffer.
             let io_buf = match DmaBuf::alloc(1) {
                 Some(b) => b,
-                None    => ostd::syscall::sys_exit(1),
+                None => ostd::syscall::sys_exit(1),
             };
             let _ = io_buf.authorize(bdf);
 
@@ -97,8 +98,7 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
         // requests arrive as RawMessage; accept Message too — layout is identical.
         // Without the RawMessage arm the request falls into `_ => {}` and VFS
         // blocks forever in its reply recv (x86 FAT-on-NVMe boot hang).
-        AppEvent::Message { sender_tid, data }
-        | AppEvent::RawMessage { sender_tid, data } => {
+        AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {
             let mut reply = [0u8; dispatch::REPLY_SIZE];
             let len = if let Some(state) = STATE.lock().as_mut() {
                 dispatch::handle(&mut state.ctrl, &state.io_buf, data.as_ref(), &mut reply)
@@ -122,6 +122,10 @@ ostd::run_app!(handler);
 // PcieDriverCap is granted by init via direct TCB write (not a manifest flag).
 // This manifest declares NO privileged flags — init elevates the cell at spawn.
 api::declare_manifest!(
-    block_io = false, network = false, spawn = false,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );

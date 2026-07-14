@@ -25,7 +25,10 @@ pub fn handle_request<'a>(
     match req {
         api::ipc::VfsRequest::GetFile(p) => {
             if let Some((ptr, len)) = vfs.get_file_ptr(p) {
-                api::ipc::VfsResponse::DataPtr { ptr: ptr as u64, len: len as u64 }
+                api::ipc::VfsResponse::DataPtr {
+                    ptr: ptr as u64,
+                    len: len as u64,
+                }
             } else {
                 api::ipc::VfsResponse::Err(1)
             }
@@ -36,12 +39,10 @@ pub fn handle_request<'a>(
             api::ipc::VfsResponse::Data(&resp_buf[..n])
         }
 
-        api::ipc::VfsRequest::Stat(p) => {
-            match vfs.stat(p) {
-                Some((size, is_dir)) => api::ipc::VfsResponse::Stat { size, is_dir },
-                None => api::ipc::VfsResponse::Err(1),
-            }
-        }
+        api::ipc::VfsRequest::Stat(p) => match vfs.stat(p) {
+            Some((size, is_dir)) => api::ipc::VfsResponse::Stat { size, is_dir },
+            None => api::ipc::VfsResponse::Err(1),
+        },
 
         api::ipc::VfsRequest::Write { path, content } => {
             let owner = types::CellId(sender as u64);
@@ -99,7 +100,11 @@ pub fn handle_request<'a>(
 
         api::ipc::VfsRequest::Rmdir(p) => {
             // Verifies the target IS a directory — POSIX ENOTDIR semantics.
-            if vfs.rmdir(p) { api::ipc::VfsResponse::Ok } else { api::ipc::VfsResponse::Err(1) }
+            if vfs.rmdir(p) {
+                api::ipc::VfsResponse::Ok
+            } else {
+                api::ipc::VfsResponse::Err(1)
+            }
         }
 
         api::ipc::VfsRequest::Unlink(p) => {
@@ -154,8 +159,12 @@ pub fn handle_request<'a>(
         }
 
         // ── Zero-Copy Grant I/O (Storage 2.0, Phase 02) ────────────────
-
-        api::ipc::VfsRequest::ReadGrant { cap, offset, size, grant } => {
+        api::ipc::VfsRequest::ReadGrant {
+            cap,
+            offset,
+            size,
+            grant,
+        } => {
             // Validate: VFS must have been GrantShare'd access by the app.
             match ostd::syscall::sys_grant_slice(grant) {
                 None => api::ipc::VfsResponse::Err(1), // no access
@@ -183,7 +192,12 @@ pub fn handle_request<'a>(
             }
         }
 
-        api::ipc::VfsRequest::WriteGrant { cap, offset, grant, bytes } => {
+        api::ipc::VfsRequest::WriteGrant {
+            cap,
+            offset,
+            grant,
+            bytes,
+        } => {
             // TODO(Phase 04): wire quota check here (can_charge → charge) using the
             // same net-delta pattern as the Write arm before routing cap→path.
             let _ = (cap, offset); // path routing via cap table deferred to Phase 04

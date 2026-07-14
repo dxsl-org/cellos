@@ -17,24 +17,26 @@ pub const PL011_BASE: usize = 0x0900_0000;
 pub const PL011_SIZE: usize = 0x1000;
 
 // Register offsets
-const UARTDR:    usize = 0x000;
-const UARTFR:    usize = 0x018;
-const UARTIBRD:  usize = 0x024;
-const UARTFBRD:  usize = 0x028;
+const UARTDR: usize = 0x000;
+const UARTFR: usize = 0x018;
+const UARTIBRD: usize = 0x024;
+const UARTFBRD: usize = 0x028;
 const UARTLCR_H: usize = 0x02C;
-const UARTCR:    usize = 0x030;
-const UARTIMSC:  usize = 0x038;
-const UARTICR:   usize = 0x044;
+const UARTCR: usize = 0x030;
+const UARTIMSC: usize = 0x038;
+const UARTICR: usize = 0x044;
 
-const FR_RXFE:  u32 = 1 << 4;
-const FR_TXFF:  u32 = 1 << 5;
-const LCR_FEN:  u32 = 1 << 4;
+const FR_RXFE: u32 = 1 << 4;
+const FR_TXFF: u32 = 1 << 5;
+const LCR_FEN: u32 = 1 << 4;
 const LCR_WLEN_8: u32 = 0b11 << 5;
 const CR_UARTEN: u32 = 1 << 0;
-const CR_TXE:    u32 = 1 << 8;
-const CR_RXE:    u32 = 1 << 9;
+const CR_TXE: u32 = 1 << 8;
+const CR_RXE: u32 = 1 << 9;
 
-fn vi_to_hal(_: ViError) -> HalError { HalError::IoError }
+fn vi_to_hal(_: ViError) -> HalError {
+    HalError::IoError
+}
 
 /// PL011 UART driver for QEMU ARM virt.
 pub struct Pl011Uart {
@@ -78,7 +80,9 @@ impl SerialPort for Pl011Uart {
     fn send(&mut self, data: u8) -> HalResult<()> {
         loop {
             let fr = self.mmio.read_u32(UARTFR).map_err(vi_to_hal)?;
-            if fr & FR_TXFF == 0 { break; }
+            if fr & FR_TXFF == 0 {
+                break;
+            }
         }
         self.mmio.write_u32(UARTDR, data as u32).map_err(vi_to_hal)
     }
@@ -86,7 +90,9 @@ impl SerialPort for Pl011Uart {
     fn receive(&mut self) -> HalResult<u8> {
         loop {
             let fr = self.mmio.read_u32(UARTFR).map_err(vi_to_hal)?;
-            if fr & FR_RXFE == 0 { break; }
+            if fr & FR_RXFE == 0 {
+                break;
+            }
         }
         let dr = self.mmio.read_u32(UARTDR).map_err(vi_to_hal)?;
         Ok((dr & 0xFF) as u8)
@@ -99,13 +105,15 @@ impl ViUart for Pl011Uart {
     }
 
     fn rx_ready(&self) -> bool {
-        self.mmio.read_u32(UARTFR)
+        self.mmio
+            .read_u32(UARTFR)
             .map(|fr| fr & FR_RXFE == 0)
             .unwrap_or(false)
     }
 
     fn tx_ready(&self) -> bool {
-        self.mmio.read_u32(UARTFR)
+        self.mmio
+            .read_u32(UARTFR)
             .map(|fr| fr & FR_TXFF == 0)
             .unwrap_or(false)
     }

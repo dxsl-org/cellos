@@ -55,9 +55,9 @@ pub fn detect() -> CetCaps {
     let result = core::arch::x86_64::__cpuid_count(7, 0);
     CetCaps {
         // IBT: leaf 7, subleaf 0, EDX bit 20
-        ibt:   (result.edx >> 20) & 1 != 0,
+        ibt: (result.edx >> 20) & 1 != 0,
         // Shadow stack: leaf 7, subleaf 0, ECX bit 7
-        shstk: (result.ecx >>  7) & 1 != 0,
+        shstk: (result.ecx >> 7) & 1 != 0,
     }
 }
 

@@ -5,24 +5,41 @@
 
 use hal_arch_trait::Arch;
 
-#[cfg(target_arch = "x86_64")] pub mod boot;
-#[cfg(target_arch = "x86_64")] pub mod context;
-#[cfg(target_arch = "x86_64")] pub mod gdt;
-#[cfg(target_arch = "x86_64")] pub mod hpet;
-#[cfg(target_arch = "x86_64")] pub mod idt;
-#[cfg(target_arch = "x86_64")] pub mod apic;
-#[cfg(target_arch = "x86_64")] pub mod paging;
-#[cfg(target_arch = "x86_64")] pub mod rtc;
-#[cfg(target_arch = "x86_64")] pub mod syscall;
-#[cfg(target_arch = "x86_64")] pub mod timer;
-#[cfg(target_arch = "x86_64")] pub mod uart_16550;
-#[cfg(target_arch = "x86_64")] pub mod trap;
-#[cfg(target_arch = "x86_64")] pub mod cet;
-#[cfg(target_arch = "x86_64")] pub mod pku;
+#[cfg(target_arch = "x86_64")]
+pub mod apic;
+#[cfg(target_arch = "x86_64")]
+pub mod boot;
+#[cfg(target_arch = "x86_64")]
+pub mod cet;
+#[cfg(target_arch = "x86_64")]
+pub mod context;
+#[cfg(target_arch = "x86_64")]
+pub mod gdt;
+#[cfg(target_arch = "x86_64")]
+pub mod hpet;
+#[cfg(target_arch = "x86_64")]
+pub mod idt;
+#[cfg(target_arch = "x86_64")]
+pub mod paging;
+#[cfg(target_arch = "x86_64")]
+pub mod pku;
+#[cfg(target_arch = "x86_64")]
+pub mod rtc;
+#[cfg(target_arch = "x86_64")]
+pub mod syscall;
+#[cfg(target_arch = "x86_64")]
+pub mod timer;
+#[cfg(target_arch = "x86_64")]
+pub mod trap;
+#[cfg(target_arch = "x86_64")]
+pub mod uart_16550;
 
-#[cfg(target_arch = "x86_64")] pub use context::CpuContext as Context;
-#[cfg(target_arch = "x86_64")] pub use paging::PageTable;
-#[cfg(target_arch = "x86_64")] pub use paging::PAGE_SIZE;
+#[cfg(target_arch = "x86_64")]
+pub use context::CpuContext as Context;
+#[cfg(target_arch = "x86_64")]
+pub use paging::PageTable;
+#[cfg(target_arch = "x86_64")]
+pub use paging::PAGE_SIZE;
 
 /// Mirrors the rv64 `pub mod arch { ... }` consumed by kernel/src/task*.rs.
 ///
@@ -33,15 +50,17 @@ use hal_arch_trait::Arch;
 #[cfg(target_arch = "x86_64")]
 pub mod arch {
     pub use super::context::CpuContext as Context;
-    pub use super::trap::{ViTrapFrame, get_gp_tp};
     pub use super::set_kernel_stack;
+    pub use super::trap::{get_gp_tp, ViTrapFrame};
 
     /// Per-task arch init — no-op on x86_64 (global IDT set up in kmain).
     pub fn init() {}
 
     pub fn enable_interrupts() {
         // SAFETY: sti is a Ring-0 instruction; no memory invariants affected.
-        unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
     }
 
     extern "C" {
@@ -94,17 +113,27 @@ pub fn init_timers() {
     // SAFETY: hpet_base is identity-mapped by init_kernel_paging_x86.
     let hpet_base = {
         let b = HPET_MMIO_BASE.load(Ordering::Relaxed);
-        if b != 0 { b } else { 0xFED0_0000 }
+        if b != 0 {
+            b
+        } else {
+            0xFED0_0000
+        }
     };
-    unsafe { hpet::init(hpet_base); }
+    unsafe {
+        hpet::init(hpet_base);
+    }
     uart_16550::putchar(b'H'); // after HPET init (H=HPET attempted)
 
     let ticks_per_ms = hpet::calibrate_lapic();
     uart_16550::putchar(b'C'); // calibration done
-    // '0'=zero (timer disabled!), '1'=ok.
+                               // '0'=zero (timer disabled!), '1'=ok.
     uart_16550::putchar(if ticks_per_ms == 0 { b'0' } else { b'1' });
     // 'O'=overflow (>u32::MAX/10 → count wraps to tiny value → ISR storm), 'o'=ok.
-    uart_16550::putchar(if ticks_per_ms > (u32::MAX as u64 / 10) { b'O' } else { b'o' });
+    uart_16550::putchar(if ticks_per_ms > (u32::MAX as u64 / 10) {
+        b'O'
+    } else {
+        b'o'
+    });
 
     apic::init_lapic_calibrated(ticks_per_ms);
 
@@ -112,14 +141,20 @@ pub fn init_timers() {
     // 'K'=unmasked+periodic, 'M'=masked, '?'=unexpected.
     let lvt = apic::read_lvt_timer();
     let init_cnt = apic::read_initial_count();
-    let lvt_masked = (lvt >> 16) & 1 != 0;        // bit 16 = mask
-    let lvt_mode   = (lvt >> 17) & 0x3;            // bits 18:17 = timer mode
-    uart_16550::putchar(if lvt_masked { b'M' } else if lvt_mode == 1 { b'K' } else { b'?' });
+    let lvt_masked = (lvt >> 16) & 1 != 0; // bit 16 = mask
+    let lvt_mode = (lvt >> 17) & 0x3; // bits 18:17 = timer mode
+    uart_16550::putchar(if lvt_masked {
+        b'M'
+    } else if lvt_mode == 1 {
+        b'K'
+    } else {
+        b'?'
+    });
     // Print initial count as a range probe:
     // '!'=0 (stopped), 'l'=<10000, 's'=<100000, 'n'=<1000000, 'b'=>=1000000
     uart_16550::putchar(match init_cnt {
-        0             => b'!',
-        1..=9_999     => b'l',
+        0 => b'!',
+        1..=9_999 => b'l',
         10_000..=99_999 => b's',
         100_000..=999_999 => b'n',
         _ => b'b',
@@ -137,12 +172,12 @@ pub fn init_timers() {
         unsafe {
             core::arch::asm!(
                 "sti",
-                "hlt",   // sleep until next interrupt (LAPIC timer or other)
+                "hlt", // sleep until next interrupt (LAPIC timer or other)
                 "cli",
                 options(nomem, nostack)
             );
         }
-        uart_16550::putchar(b'~');  // '~' = returned from this hlt iteration
+        uart_16550::putchar(b'~'); // '~' = returned from this hlt iteration
     }
 }
 
@@ -161,7 +196,9 @@ impl Arch for X86_64Arch {
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
-    fn interrupts_enabled(&self) -> bool { false }
+    fn interrupts_enabled(&self) -> bool {
+        false
+    }
 }
 
 // ── Full implementation for x86_64 ────────────────────────────────────────────
@@ -174,7 +211,7 @@ impl Arch for X86_64Arch {
         gdt::init();
         idt::init();
         cet::init_kernel_cet(); // LAYER2-CET-INIT — must follow idt (registers #CP vector 21)
-        pku::init();            // LAYER2-PKU-INIT — requires IBT (checked inside)
+        pku::init(); // LAYER2-PKU-INIT — requires IBT (checked inside)
         syscall::init();
         apic::init_lapic();
     }
@@ -183,22 +220,30 @@ impl Arch for X86_64Arch {
     /// Both pointers must point to valid, aligned `CpuContext` structs.
     unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
         // SAFETY: invariant upheld by caller.
-        unsafe { context::switch(old, new); }
+        unsafe {
+            context::switch(old, new);
+        }
     }
 
     fn enable_interrupts(&self) {
         // SAFETY: sti is a standard Ring-0 instruction; no memory invariants affected.
-        unsafe { core::arch::asm!("sti", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("sti", options(nomem, nostack));
+        }
     }
 
     fn disable_interrupts(&self) {
         // SAFETY: cli is a standard Ring-0 instruction.
-        unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("cli", options(nomem, nostack));
+        }
     }
 
     fn wait_for_interrupt(&self) {
         // SAFETY: hlt halts the CPU until the next interrupt; no memory side effects.
-        unsafe { core::arch::asm!("hlt", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack));
+        }
     }
 
     fn interrupts_enabled(&self) -> bool {

@@ -16,12 +16,12 @@ extern crate alloc;
 use alloc::vec::Vec;
 // hal-core re-exports hal_arm::* and hal_hypervisor::* on aarch64.
 use hal::aarch64::stage2_regs::{disable_stage2, enable_stage2};
-use hal::aarch64::vcpu::{AArch64Vcpu, run_vcpu_impl};
+use hal::aarch64::vcpu::{run_vcpu_impl, AArch64Vcpu};
 use hal::ViVmExit;
 
-use crate::memory::stage2::Stage2Table;
-use crate::memory::paging::PAGE_SIZE;
 use crate::memory::frame::phys_to_virt;
+use crate::memory::paging::PAGE_SIZE;
+use crate::memory::stage2::Stage2Table;
 
 /// Guest-RAM size for smoke tests: 2 MiB (512 pages, trivial chunked alloc).
 const SMOKE_RAM_PAGES: usize = 512;
@@ -35,37 +35,41 @@ const SMOKE_VMID: u16 = 1;
 // ── AArch64 instruction encodings ────────────────────────────────────────────
 
 /// MOVZ X0, #42 (0x002A)  — sets X0 = 42.
-const MOVZ_X0_42:      u32 = 0xD280_0540;
+const MOVZ_X0_42: u32 = 0xD280_0540;
 /// HVC #0 — traps to EL2, decoded as VmExit::Hvc { imm=0, regs[0]=42 }.
-const HVC_0:           u32 = 0xD400_0002;
+const HVC_0: u32 = 0xD400_0002;
 /// MOVZ X0, #0x0900, LSL #16 — sets X0 = 0x0900_0000.
-const MOVZ_X0_PL011:   u32 = 0xD2A1_2000;
+const MOVZ_X0_PL011: u32 = 0xD2A1_2000;
 /// STR X1, [X0] (unsigned-offset, size=8) — store to [X0+0].
-const STR_X1_X0:       u32 = 0xF900_0001;
+const STR_X1_X0: u32 = 0xF900_0001;
 /// WFI — wait-for-interrupt (decoded as VmExit::Wfi).
-const WFI:             u32 = 0xD503_201F;
+const WFI: u32 = 0xD503_201F;
 /// B . — spin forever (sentinel after each test blob).
-const B_DOT:           u32 = 0x1400_0000;
+const B_DOT: u32 = 0x1400_0000;
 
 // ── Helper: allocate Stage-2 table + guest RAM + enable Stage-2 ──────────────
 
 struct GuestEnv {
-    table:    Stage2Table,
+    table: Stage2Table,
     guest_pa: u64,
 }
 
 impl GuestEnv {
     fn new() -> Self {
-        let mut table = Stage2Table::new()
-            .expect("[smoke] Stage2Table::new failed — frame allocator OOM?");
-        let guest_pa = table.carve_guest_ram(SMOKE_RAM_PAGES)
+        let mut table =
+            Stage2Table::new().expect("[smoke] Stage2Table::new failed — frame allocator OOM?");
+        let guest_pa = table
+            .carve_guest_ram(SMOKE_RAM_PAGES)
             .expect("[smoke] carve_guest_ram failed");
         // Map all guest RAM: IPA 0x40000000 .. 0x40000000 + SMOKE_RAM_PAGES*PAGE_SIZE
-        table.map(0x4000_0000, guest_pa, SMOKE_RAM_PAGES, true)
+        table
+            .map(0x4000_0000, guest_pa, SMOKE_RAM_PAGES, true)
             .expect("[smoke] Stage2Table::map failed");
         // Enable Stage-2 translation for this VMID.
         // SAFETY: table built and flushed; vmid ≥ 1.
-        unsafe { enable_stage2(SMOKE_VMID, table.root_pa()); }
+        unsafe {
+            enable_stage2(SMOKE_VMID, table.root_pa());
+        }
         GuestEnv { table, guest_pa }
     }
 
@@ -73,7 +77,9 @@ impl GuestEnv {
         let pa = self.guest_pa as usize + offset_pages * PAGE_SIZE;
         let va = phys_to_virt(pa) as *mut u32;
         // SAFETY: we own the guest RAM region exclusively.
-        unsafe { core::ptr::copy_nonoverlapping(blob.as_ptr(), va, blob.len()); }
+        unsafe {
+            core::ptr::copy_nonoverlapping(blob.as_ptr(), va, blob.len());
+        }
         // Data cache clean + instruction cache invalidation.
         // On QEMU TCG, caches are unified; no explicit flush needed in practice.
         // Production boards require DC CIVAC + IC IVAU sequences here.
@@ -84,7 +90,9 @@ impl Drop for GuestEnv {
     fn drop(&mut self) {
         // Disable Stage-2 before freeing the table frames (Law 8 + ARM DDI req).
         // SAFETY: no vCPU is running at this point.
-        unsafe { disable_stage2(); }
+        unsafe {
+            disable_stage2();
+        }
         // Stage2Table::drop frees all frames.
     }
 }
@@ -104,8 +112,11 @@ pub fn run_hvc_smoke() {
 
     match exit {
         ViVmExit::Hvc { imm: 0, regs } => {
-            assert_eq!(regs[0], 42,
-                "[smoke::hvc] expected x0=42, got x0={}", regs[0]);
+            assert_eq!(
+                regs[0], 42,
+                "[smoke::hvc] expected x0=42, got x0={}",
+                regs[0]
+            );
             log::info!("[smoke::hvc] PASS: VmExit::Hvc {{ x0={} }}", regs[0]);
         }
         other => panic!("[smoke::hvc] unexpected exit: {:?}", other),
@@ -129,12 +140,19 @@ pub fn run_mmio_write_smoke() {
 
     match exit {
         ViVmExit::MmioWrite { ipa, size, val } => {
-            assert_eq!(ipa, 0x0900_0000,
-                "[smoke::mmio] wrong IPA: got 0x{:X}", ipa);
-            assert_eq!(size, 8, "[smoke::mmio] expected 8-byte store, got size={}", size);
+            assert_eq!(ipa, 0x0900_0000, "[smoke::mmio] wrong IPA: got 0x{:X}", ipa);
+            assert_eq!(
+                size, 8,
+                "[smoke::mmio] expected 8-byte store, got size={}",
+                size
+            );
             let _ = val; // val is guest x1 = 0; checked implicitly by size above
-            log::info!("[smoke::mmio] PASS: MmioWrite {{ ipa=0x{:X}, size={}, val={} }}",
-                ipa, size, val);
+            log::info!(
+                "[smoke::mmio] PASS: MmioWrite {{ ipa=0x{:X}, size={}, val={} }}",
+                ipa,
+                size,
+                val
+            );
         }
         other => panic!("[smoke::mmio] unexpected exit: {:?}", other),
     }
@@ -174,7 +192,10 @@ pub fn run_register_isolation() {
         let exit = unsafe { run_vcpu_impl(&mut vcpu) };
         match exit {
             ViVmExit::Wfi => {}
-            other => panic!("[smoke::isolation] iteration {}: unexpected exit {:?}", i, other),
+            other => panic!(
+                "[smoke::isolation] iteration {}: unexpected exit {:?}",
+                i, other
+            ),
         }
         // The vcpu resumes at BLOB_IPA (WFI again) because run_vcpu_impl advances ELR by 4
         // for Wfi exits, but the blob is WFI; B . — the next instruction is B . (spin),
@@ -197,8 +218,8 @@ pub fn run_register_isolation() {
     }
     assert_eq!(snap_sctlr, cur_sctlr, "[smoke::isolation] SCTLR_EL1 leaked");
     assert_eq!(snap_ttbr0, cur_ttbr0, "[smoke::isolation] TTBR0_EL1 leaked");
-    assert_eq!(snap_mair,  cur_mair,  "[smoke::isolation] MAIR_EL1 leaked");
-    assert_eq!(snap_vbar,  cur_vbar,  "[smoke::isolation] VBAR_EL1 leaked");
+    assert_eq!(snap_mair, cur_mair, "[smoke::isolation] MAIR_EL1 leaked");
+    assert_eq!(snap_vbar, cur_vbar, "[smoke::isolation] VBAR_EL1 leaked");
 
     log::info!("[smoke::isolation] PASS: 1000× WFI round-trips, host sysregs unchanged");
 }

@@ -8,8 +8,8 @@
 //! `pub(crate)`.  Cells obtain one by calling `request_region()`, which
 //! goes through the kernel Resource Registry syscall (Phase 02).
 
-use types::{ViError, ViResult};
 use crate::syscall;
+use types::{ViError, ViResult};
 
 /// Request exclusive access to the MMIO range `[base, base+len)` from the kernel.
 ///

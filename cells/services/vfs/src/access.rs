@@ -30,17 +30,39 @@ pub struct AccessTable {
 
 /// Default rules: all cells may read and write to data/tmp/sd; bin is read-only.
 static DEFAULT_RULES: &[PathRule] = &[
-    PathRule { prefix: "/bin/",    allow_read_all: true,  allow_write_all: false },
-    PathRule { prefix: "/data/",   allow_read_all: true,  allow_write_all: true  },
-    PathRule { prefix: "/tmp/",    allow_read_all: true,  allow_write_all: true  },
-    PathRule { prefix: "/mnt/sd/", allow_read_all: true,  allow_write_all: true  }, // FAT32 interop (P04)
-    PathRule { prefix: "/",        allow_read_all: true,  allow_write_all: false }, // root: read-only
+    PathRule {
+        prefix: "/bin/",
+        allow_read_all: true,
+        allow_write_all: false,
+    },
+    PathRule {
+        prefix: "/data/",
+        allow_read_all: true,
+        allow_write_all: true,
+    },
+    PathRule {
+        prefix: "/tmp/",
+        allow_read_all: true,
+        allow_write_all: true,
+    },
+    PathRule {
+        prefix: "/mnt/sd/",
+        allow_read_all: true,
+        allow_write_all: true,
+    }, // FAT32 interop (P04)
+    PathRule {
+        prefix: "/",
+        allow_read_all: true,
+        allow_write_all: false,
+    }, // root: read-only
 ];
 
 impl AccessTable {
     /// Initialize with the default rules.
     pub fn new() -> Self {
-        Self { rules: DEFAULT_RULES }
+        Self {
+            rules: DEFAULT_RULES,
+        }
     }
 
     /// Check whether `cell` may write to `path`.
@@ -69,5 +91,7 @@ impl AccessTable {
 }
 
 impl Default for AccessTable {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

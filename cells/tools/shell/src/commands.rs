@@ -4,9 +4,15 @@ use ostd::syscall;
 
 pub fn cmd_help() -> ViResult<()> {
     crate::executor::shell_println("ViCell Shell v0.2.1 — built-in commands:");
-    crate::executor::shell_println("  Files:   ls  cat  wc  head  tail  grep  sed  awk  find  uniq  sort  mkdir  rmdir  rm");
-    crate::executor::shell_println("  System:  ps  top  kill  pwd  uname  free  env  uptime  sleep  clear  exec");
-    crate::executor::shell_println("  Shell:   help  echo  export  alias  unalias  jobs  source  .");
+    crate::executor::shell_println(
+        "  Files:   ls  cat  wc  head  tail  grep  sed  awk  find  uniq  sort  mkdir  rmdir  rm",
+    );
+    crate::executor::shell_println(
+        "  System:  ps  top  kill  pwd  uname  free  env  uptime  sleep  clear  exec",
+    );
+    crate::executor::shell_println(
+        "  Shell:   help  echo  export  alias  unalias  jobs  source  .",
+    );
     crate::executor::shell_println("");
     crate::executor::shell_println("Syntax:  cmd | cmd2      (pipe)");
     crate::executor::shell_println("         cmd > file      (redirect stdout)");
@@ -46,22 +52,22 @@ pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             ostd::io::print("exec: loading (KERNEL-FS) ");
             ostd::io::println(path);
             exec_load_and_spawn(file, path, &cmd_args)?;
-        },
+        }
         Err(_) => {
             // Fallback: Try with '/' prefix
             let mut rooted = String::from("/");
             rooted.push_str(path);
             match ostd::fs::File::open(&rooted) {
-                 Ok(file) => {
-                     ostd::io::print("exec: loading (KERNEL-FS) ");
-                     ostd::io::println(&rooted);
-                     exec_load_and_spawn(file, &rooted, &cmd_args)?;
-                 },
-                 Err(_) => {
+                Ok(file) => {
+                    ostd::io::print("exec: loading (KERNEL-FS) ");
+                    ostd::io::println(&rooted);
+                    exec_load_and_spawn(file, &rooted, &cmd_args)?;
+                }
+                Err(_) => {
                     ostd::io::print("exec: cannot open '");
                     ostd::io::print(path);
                     ostd::io::println("' (File not found)");
-                 }
+                }
             }
         }
     }
@@ -73,8 +79,8 @@ fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> 
     // Read file into memory
     let mut data = Vec::new();
     if let Err(_) = file.read_to_end(&mut data) {
-            ostd::io::println("exec: failed to read file.");
-            return Ok(());
+        ostd::io::println("exec: failed to read file.");
+        return Ok(());
     }
 
     if data.len() >= 4 {
@@ -94,7 +100,7 @@ fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> 
             ostd::io::print("exec: process spawned (pid ");
             ostd::io::print_usize(tid);
             ostd::io::println(")");
-            
+
             // Wait for it
             match syscall::sys_wait(tid) {
                 syscall::SyscallResult::Ok(_) => {
@@ -116,19 +122,22 @@ fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> 
 let vfs_cell_id = 3;
 */
 
-
 pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let path = args.next().unwrap_or("/");
     match fs::read_dir(path) {
         Ok(iter) => {
             for entry in iter {
-                let name = core::str::from_utf8(&entry.name).unwrap_or("???").trim_matches('\0');
+                let name = core::str::from_utf8(&entry.name)
+                    .unwrap_or("???")
+                    .trim_matches('\0');
                 crate::executor::shell_println(name);
             }
             Ok(())
         }
         Err(e) => {
-            ostd::io::print("ls: cannot access '"); ostd::io::print(path); ostd::io::print("': ");
+            ostd::io::print("ls: cannot access '");
+            ostd::io::print(path);
+            ostd::io::print("': ");
             match e {
                 ViError::NotFound => ostd::io::println("No such file or directory"),
                 ViError::PermissionDenied => ostd::io::println("Permission denied"),
@@ -190,7 +199,9 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                         }
                     }
                     Ok(0) => {
-                        if pending > 0 { crate::executor::shell_print("\u{FFFD}"); }
+                        if pending > 0 {
+                            crate::executor::shell_print("\u{FFFD}");
+                        }
                         break;
                     }
                     Err(_) => {
@@ -205,14 +216,22 @@ pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             Ok(())
         }
         Err(_) => {
-            ostd::io::print("cat: "); ostd::io::print(path); ostd::io::println(": No such file or directory");
+            ostd::io::print("cat: ");
+            ostd::io::print(path);
+            ostd::io::println(": No such file or directory");
             Ok(())
         }
     }
 }
 
 fn state_order(state: usize) -> usize {
-    match state { 1 => 0, 0 => 1, 2 => 2, 3 => 3, _ => 4 }
+    match state {
+        1 => 0,
+        0 => 1,
+        2 => 2,
+        3 => 3,
+        _ => 4,
+    }
 }
 
 pub fn cmd_ps<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
@@ -220,10 +239,12 @@ pub fn cmd_ps<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let mut sort_by_state = false;
     loop {
         match args.next() {
-            Some("-p") => { filter_tid = args.next().and_then(|s| s.parse().ok()); }
+            Some("-p") => {
+                filter_tid = args.next().and_then(|s| s.parse().ok());
+            }
             Some("-s") => sort_by_state = true,
-            Some(_)    => {}
-            None       => break,
+            Some(_) => {}
+            None => break,
         }
     }
     let mut buffer = [api::syscall::ProcessInfo::default(); 64];
@@ -236,13 +257,24 @@ pub fn cmd_ps<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             crate::executor::shell_println("  PID  STATE      NAME");
             crate::executor::shell_println("  ---  ---------  ----------------");
             for info in entries.iter() {
-                if filter_tid.map(|t| t != info.id).unwrap_or(false) { continue; }
-                let name = core::str::from_utf8(&info.name).unwrap_or("???").trim_matches('\0');
+                if filter_tid.map(|t| t != info.id).unwrap_or(false) {
+                    continue;
+                }
+                let name = core::str::from_utf8(&info.name)
+                    .unwrap_or("???")
+                    .trim_matches('\0');
                 let state_str = match info.state {
-                    0 => "Ready", 1 => "Running", 2 => "Waiting", 3 => "Dead", _ => "???"
+                    0 => "Ready",
+                    1 => "Running",
+                    2 => "Waiting",
+                    3 => "Dead",
+                    _ => "???",
                 };
                 crate::executor::shell_print(&alloc::format!(
-                    "  {:<4} {:<10} {}\n", info.id, state_str, name
+                    "  {:<4} {:<10} {}\n",
+                    info.id,
+                    state_str,
+                    name
                 ));
             }
             Ok(())
@@ -260,7 +292,9 @@ pub fn cmd_ps<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 pub fn cmd_echo_to_vec(args: &[&str]) -> alloc::vec::Vec<u8> {
     let mut out = alloc::vec::Vec::new();
     for (i, a) in args.iter().enumerate() {
-        if i > 0 { out.push(b' '); }
+        if i > 0 {
+            out.push(b' ');
+        }
         out.extend_from_slice(a.as_bytes());
     }
     out.push(b'\n');
@@ -274,13 +308,16 @@ fn expand_echo_escapes(s: &str) -> alloc::string::String {
     while let Some(c) = chars.next() {
         if c == '\\' {
             match chars.next() {
-                Some('n')  => out.push('\n'),
-                Some('t')  => out.push('\t'),
-                Some('r')  => out.push('\r'),
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
                 Some('\\') => out.push('\\'),
-                Some('0')  => out.push('\0'),
-                Some(other) => { out.push('\\'); out.push(other); }
-                None        => out.push('\\'),
+                Some('0') => out.push('\0'),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
             }
         } else {
             out.push(c);
@@ -300,10 +337,19 @@ pub fn cmd_echo<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let mut word_start = 0;
     // Consume leading flags.
     for (i, &a) in parts.iter().enumerate() {
-        if a == "-e" { escape = true; word_start = i + 1; }
-        else if a == "-n" { no_newline = true; word_start = i + 1; }
-        else if a == "-en" || a == "-ne" { escape = true; no_newline = true; word_start = i + 1; }
-        else { break; }
+        if a == "-e" {
+            escape = true;
+            word_start = i + 1;
+        } else if a == "-n" {
+            no_newline = true;
+            word_start = i + 1;
+        } else if a == "-en" || a == "-ne" {
+            escape = true;
+            no_newline = true;
+            word_start = i + 1;
+        } else {
+            break;
+        }
     }
     let text = parts[word_start..].join(" ");
     if escape {
@@ -311,7 +357,9 @@ pub fn cmd_echo<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     } else {
         crate::executor::shell_print(&text);
     }
-    if !no_newline { crate::executor::shell_print("\n"); }
+    if !no_newline {
+        crate::executor::shell_print("\n");
+    }
     Ok(())
 }
 
@@ -330,22 +378,37 @@ pub fn cmd_top<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         let secs = syscall::sys_get_time() / 10_000_000;
         let mut buf = [api::syscall::ProcessInfo::default(); 64];
         let n = syscall::sys_get_procs(&mut buf).unwrap_or(0);
-        let visible = if show_all { n } else {
+        let visible = if show_all {
+            n
+        } else {
             buf[..n].iter().filter(|p| p.state != 3).count()
         };
         ostd::io::print(&alloc::format!(
-            "uptime: {}s  tasks: {}  (q to quit)\n\n", secs, visible
+            "uptime: {}s  tasks: {}  (q to quit)\n\n",
+            secs,
+            visible
         ));
         crate::executor::shell_println("  PID  STATE      NAME");
         crate::executor::shell_println("  ---  ---------  ----------------");
         for info in &buf[..n] {
-            if !show_all && info.state == 3 { continue; }
-            let name = core::str::from_utf8(&info.name).unwrap_or("???").trim_matches('\0');
+            if !show_all && info.state == 3 {
+                continue;
+            }
+            let name = core::str::from_utf8(&info.name)
+                .unwrap_or("???")
+                .trim_matches('\0');
             let state = match info.state {
-                0 => "Ready", 1 => "Running", 2 => "Waiting", 3 => "Dead", _ => "???"
+                0 => "Ready",
+                1 => "Running",
+                2 => "Waiting",
+                3 => "Dead",
+                _ => "???",
             };
             crate::executor::shell_print(&alloc::format!(
-                "  {:<4} {:<10} {}\n", info.id, state, name
+                "  {:<4} {:<10} {}\n",
+                info.id,
+                state,
+                name
             ));
         }
 
@@ -356,14 +419,21 @@ pub fn cmd_top<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         while syscall::sys_get_time() < deadline {
             let mut c = [0u8; 1];
             if let Ok(n) = ostd::syscall::sys_read(0, &mut c) {
-                if n > 0 && (c[0] == b'q' || c[0] == b'Q') { quit = true; break; }
+                if n > 0 && (c[0] == b'q' || c[0] == b'Q') {
+                    quit = true;
+                    break;
+                }
             }
             ostd::task::yield_now();
         }
         if quit {
             // Drain buffered bytes (key-repeat, escape sequences).
             let mut drain = [0u8; 1];
-            while let Ok(n) = ostd::syscall::sys_read(0, &mut drain) { if n == 0 { break; } }
+            while let Ok(n) = ostd::syscall::sys_read(0, &mut drain) {
+                if n == 0 {
+                    break;
+                }
+            }
             break;
         }
     }
@@ -385,20 +455,30 @@ pub fn cmd_top<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let tid_str = match args.next() {
         Some(s) => s,
-        None => { crate::executor::shell_println("Usage: kill <tid>"); return Ok(()); }
+        None => {
+            crate::executor::shell_println("Usage: kill <tid>");
+            return Ok(());
+        }
     };
     let mut tid: usize = 0;
     for ch in tid_str.bytes() {
-        if !(b'0'..=b'9').contains(&ch) { crate::executor::shell_println("kill: invalid tid"); return Ok(()); }
+        if !(b'0'..=b'9').contains(&ch) {
+            crate::executor::shell_println("kill: invalid tid");
+            return Ok(());
+        }
         tid = tid.saturating_mul(10).saturating_add((ch - b'0') as usize);
     }
-    if tid == 0 { crate::executor::shell_println("kill: invalid tid (0)"); return Ok(()); }
+    if tid == 0 {
+        crate::executor::shell_println("kill: invalid tid (0)");
+        return Ok(());
+    }
 
     // Safety check: only send to a task in Waiting (Recv-any) state.
     // Sending to a task in any other state blocks the shell indefinitely because
     // ipc_send puts the caller into TaskState::Sending until the target enters Recv.
     let mut procs = [api::syscall::ProcessInfo::default(); 16];
-    let target_state = syscall::sys_get_procs(&mut procs).ok()
+    let target_state = syscall::sys_get_procs(&mut procs)
+        .ok()
         .and_then(|n| procs[..n].iter().find(|p| p.id == tid).map(|p| p.state));
 
     match target_state {
@@ -410,7 +490,8 @@ pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             let msg = [0xFFu8];
             syscall::sys_send(tid, &msg);
             crate::executor::shell_print(&alloc::format!(
-                "kill: signal sent to task {} — run 'ps' to verify termination\n", tid
+                "kill: signal sent to task {} — run 'ps' to verify termination\n",
+                tid
             ));
         }
         Some(3) => {
@@ -423,7 +504,8 @@ pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
             match syscall::sys_force_exit(tid) {
                 syscall::SyscallResult::Ok(_) => {
                     crate::executor::shell_print(&alloc::format!(
-                        "kill: task {} force-terminated\n", tid
+                        "kill: task {} force-terminated\n",
+                        tid
                     ));
                 }
                 syscall::SyscallResult::Err(_) => {

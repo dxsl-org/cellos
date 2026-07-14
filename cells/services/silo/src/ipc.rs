@@ -22,26 +22,26 @@
 
 extern crate alloc;
 
+use crate::{run_loop, vmm};
 use ostd::io::println;
 use ostd::syscall::{sys_recv, sys_send, SyscallResult};
 use types::silo::{SiloRespCode, MAILBOX_IPA};
-use crate::{run_loop, vmm};
 
 // ── Mailbox field offsets (MailboxPage = 4096 bytes) ─────────────────────────
-const MB_OFF_SEQ: usize = 0;   // u32 LE
-const MB_OFF_CMD: usize = 4;   // u8
-const MB_OFF_RESP: usize = 5;  // u8
-const MB_OFF_DATA: usize = 8;  // [u8; 4088]
+const MB_OFF_SEQ: usize = 0; // u32 LE
+const MB_OFF_CMD: usize = 4; // u8
+const MB_OFF_RESP: usize = 5; // u8
+const MB_OFF_DATA: usize = 8; // [u8; 4088]
 
 // ── SiloRequest field offsets (128 bytes) ─────────────────────────────────────
-const REQ_OFF_OPCODE: usize = 0;   // u8
-const REQ_OFF_DATA: usize = 32;    // [u8; 96]
+const REQ_OFF_OPCODE: usize = 0; // u8
+const REQ_OFF_DATA: usize = 32; // [u8; 96]
 const REQ_DATA_LEN: usize = 96;
 
 // ── SiloResponse field offsets (128 bytes) ────────────────────────────────────
-const RESP_OFF_STATUS: usize = 0;  // u8
-const RESP_OFF_LEN: usize = 1;     // u8
-const RESP_OFF_DATA: usize = 4;    // [u8; 124]
+const RESP_OFF_STATUS: usize = 0; // u8
+const RESP_OFF_LEN: usize = 1; // u8
+const RESP_OFF_DATA: usize = 4; // [u8; 124]
 const RESP_DATA_LEN: usize = 124;
 
 const IPC_MSG_SIZE: usize = 4096;
@@ -73,7 +73,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> ! {
         mb[MB_OFF_SEQ..MB_OFF_SEQ + 4].copy_from_slice(&seq.to_le_bytes());
         mb[MB_OFF_CMD] = opcode;
         mb[MB_OFF_RESP] = SiloRespCode::Fault as u8; // guest overwrites on success
-        // Copy request payload into mailbox data section (first 96 bytes).
+                                                     // Copy request payload into mailbox data section (first 96 bytes).
         mb[MB_OFF_DATA..MB_OFF_DATA + REQ_DATA_LEN].copy_from_slice(&req_data);
         seq = seq.wrapping_add(1);
 
@@ -131,14 +131,11 @@ fn build_response_data(mb_data: &[u8], resp_code: u8, out: &mut [u8; 128]) {
         let der_len = mb_data[0] as usize;
         let copy_len = der_len.min(RESP_DATA_LEN - 1); // leave [0] for len field
         out[RESP_OFF_LEN] = copy_len as u8;
-        out[RESP_OFF_DATA..RESP_OFF_DATA + copy_len]
-            .copy_from_slice(&mb_data[1..1 + copy_len]);
+        out[RESP_OFF_DATA..RESP_OFF_DATA + copy_len].copy_from_slice(&mb_data[1..1 + copy_len]);
     } else if resp_code == SiloRespCode::Secret as u8 {
         out[RESP_OFF_LEN] = 32;
         out[RESP_OFF_DATA..RESP_OFF_DATA + 32].copy_from_slice(&mb_data[..32]);
-    } else if resp_code == SiloRespCode::Ready as u8
-        || resp_code == SiloRespCode::PubKey as u8
-    {
+    } else if resp_code == SiloRespCode::Ready as u8 || resp_code == SiloRespCode::PubKey as u8 {
         out[RESP_OFF_LEN] = 65;
         out[RESP_OFF_DATA..RESP_OFF_DATA + 65].copy_from_slice(&mb_data[..65]);
     } else {

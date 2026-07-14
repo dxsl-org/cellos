@@ -10,8 +10,8 @@
 
 extern crate alloc;
 
-use core::ffi::{c_char, c_int};
 use crate::ffi::{self, LuaState};
+use core::ffi::{c_char, c_int};
 
 const VFS_ENDPOINT: usize = 3;
 /// Safe payload size per IPC call: 512 byte frame minus postcard overhead and path length.
@@ -141,9 +141,15 @@ fn vfs_write_chunked(path: &str, data: &[u8], append: bool) -> bool {
     for chunk in data.chunks(MAX_CHUNK) {
         let req = if first {
             first = false;
-            api::ipc::VfsRequest::Write { path, content: chunk }
+            api::ipc::VfsRequest::Write {
+                path,
+                content: chunk,
+            }
         } else {
-            api::ipc::VfsRequest::Append { path, content: chunk }
+            api::ipc::VfsRequest::Append {
+                path,
+                content: chunk,
+            }
         };
         ok &= vfs_ok(&req);
     }
@@ -160,7 +166,9 @@ unsafe fn lua_arg_bytes<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a [u8]> {
     let mut len: usize = 0;
     // SAFETY: caller guarantees L is valid; idx is a valid stack position.
     let ptr = unsafe { ffi::lua_tolstring(L, idx, &mut len as *mut _) };
-    if ptr.is_null() { return None; }
+    if ptr.is_null() {
+        return None;
+    }
     // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
     Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
 }
@@ -182,10 +190,16 @@ unsafe fn lua_arg_path<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a str> {
 pub unsafe extern "C" fn vfs_read(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushnil(L) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushnil(L) };
+            return 1;
+        }
     };
     let data = vfs_get_file_vec(path);
-    if data.is_empty() { unsafe { ffi::lua_pushnil(L) }; return 1; }
+    if data.is_empty() {
+        unsafe { ffi::lua_pushnil(L) };
+        return 1;
+    }
     // SAFETY: L valid; data contains the initialised file content.
     unsafe { ffi::lua_pushlstring(L, data.as_ptr() as *const c_char, data.len()) };
     1
@@ -199,7 +213,10 @@ pub unsafe extern "C" fn vfs_read(L: *mut LuaState) -> c_int {
 pub unsafe extern "C" fn vfs_write(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushboolean(L, 0) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushboolean(L, 0) };
+            return 1;
+        }
     };
     let content = unsafe { lua_arg_bytes(L, 2) }.unwrap_or(&[]);
     let ok = vfs_write_chunked(path, content, false);
@@ -214,7 +231,10 @@ pub unsafe extern "C" fn vfs_write(L: *mut LuaState) -> c_int {
 pub unsafe extern "C" fn vfs_append(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushboolean(L, 0) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushboolean(L, 0) };
+            return 1;
+        }
     };
     let content = unsafe { lua_arg_bytes(L, 2) }.unwrap_or(&[]);
     let ok = vfs_write_chunked(path, content, true);
@@ -227,7 +247,10 @@ pub unsafe extern "C" fn vfs_append(L: *mut LuaState) -> c_int {
 pub unsafe extern "C" fn vfs_mkdir(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushboolean(L, 0) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushboolean(L, 0) };
+            return 1;
+        }
     };
     let ok = vfs_ok(&api::ipc::VfsRequest::Mkdir(path));
     unsafe { ffi::lua_pushboolean(L, if ok { 1 } else { 0 }) };
@@ -243,12 +266,18 @@ pub unsafe extern "C" fn vfs_mkdir(L: *mut LuaState) -> c_int {
 pub unsafe extern "C" fn vfs_stat(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushnil(L) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushnil(L) };
+            return 1;
+        }
     };
     let mut buf = [0u8; 512];
     let n = match api::ipc::encode(&api::ipc::VfsRequest::Stat(path), &mut buf) {
         Ok(s) => s.len(),
-        Err(_) => { unsafe { ffi::lua_pushnil(L) }; return 1; }
+        Err(_) => {
+            unsafe { ffi::lua_pushnil(L) };
+            return 1;
+        }
     };
     ostd::syscall::sys_send(VFS_ENDPOINT, &buf[..n]);
     let mut reply = [0u8; 64];
@@ -265,10 +294,16 @@ pub unsafe extern "C" fn vfs_stat(L: *mut LuaState) -> c_int {
                     unsafe { ffi::lua_setfield(L, t, c"is_dir".as_ptr()) };
                     1
                 }
-                _ => { unsafe { ffi::lua_pushnil(L) }; 1 }
+                _ => {
+                    unsafe { ffi::lua_pushnil(L) };
+                    1
+                }
             }
         }
-        _ => { unsafe { ffi::lua_pushnil(L) }; 1 }
+        _ => {
+            unsafe { ffi::lua_pushnil(L) };
+            1
+        }
     }
 }
 
@@ -281,12 +316,18 @@ pub unsafe extern "C" fn vfs_stat(L: *mut LuaState) -> c_int {
 pub unsafe extern "C" fn vfs_listdir(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushnil(L) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushnil(L) };
+            return 1;
+        }
     };
     let mut buf = [0u8; 512];
     let n = match api::ipc::encode(&api::ipc::VfsRequest::ListDir(path), &mut buf) {
         Ok(s) => s.len(),
-        Err(_) => { unsafe { ffi::lua_pushnil(L) }; return 1; }
+        Err(_) => {
+            unsafe { ffi::lua_pushnil(L) };
+            return 1;
+        }
     };
     ostd::syscall::sys_send(VFS_ENDPOINT, &buf[..n]);
     let mut reply = [0u8; 512];
@@ -299,7 +340,9 @@ pub unsafe extern "C" fn vfs_listdir(L: *mut LuaState) -> c_int {
                     let t = unsafe { ffi::lua_gettop(L) };
                     let mut i = 1i64;
                     for line in text.lines() {
-                        if line.is_empty() { continue; }
+                        if line.is_empty() {
+                            continue;
+                        }
                         // SAFETY: line borrows from `reply` which is alive; push copies.
                         unsafe {
                             ffi::lua_pushlstring(L, line.as_ptr() as *const c_char, line.len());
@@ -309,10 +352,16 @@ pub unsafe extern "C" fn vfs_listdir(L: *mut LuaState) -> c_int {
                     }
                     1
                 }
-                _ => { unsafe { ffi::lua_pushnil(L) }; 1 }
+                _ => {
+                    unsafe { ffi::lua_pushnil(L) };
+                    1
+                }
             }
         }
-        _ => { unsafe { ffi::lua_pushnil(L) }; 1 }
+        _ => {
+            unsafe { ffi::lua_pushnil(L) };
+            1
+        }
     }
 }
 
@@ -323,7 +372,10 @@ pub unsafe extern "C" fn vfs_listdir(L: *mut LuaState) -> c_int {
 pub unsafe extern "C" fn vfs_remove(L: *mut LuaState) -> c_int {
     let path = match unsafe { lua_arg_path(L, 1) } {
         Some(p) => p,
-        None => { unsafe { ffi::lua_pushboolean(L, 0) }; return 1; }
+        None => {
+            unsafe { ffi::lua_pushboolean(L, 0) };
+            return 1;
+        }
     };
     let ok = vfs_ok(&api::ipc::VfsRequest::Unlink(path));
     unsafe { ffi::lua_pushboolean(L, if ok { 1 } else { 0 }) };

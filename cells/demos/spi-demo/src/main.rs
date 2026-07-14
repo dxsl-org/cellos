@@ -14,7 +14,13 @@ use types::ViError;
 
 // Gate on gpio manifest flag (Option A: bit-bang SPI is GPIO in disguise).
 // This grants PL061 MMIO access at spawn without requiring a dedicated SPI flag.
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = true, uart = false);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = true,
+    uart = false
+);
 
 #[no_mangle]
 pub fn main() {
@@ -53,7 +59,8 @@ fn run_spi_demo(gpio: Pl061Gpio) {
         Ok(()) => {
             let msg = alloc::format!(
                 "[spi-demo] SPI transfer OK: sent 0xAA 0x55, recv 0x{:02X} 0x{:02X} (QEMU MISO=0)",
-                rx[0], rx[1]
+                rx[0],
+                rx[1]
             );
             println(&msg);
         }

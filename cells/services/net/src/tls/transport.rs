@@ -19,20 +19,20 @@
 
 extern crate alloc;
 
+use crate::interface::VirtioNetDevice;
 use core::sync::atomic::{AtomicPtr, Ordering};
 use embedded_io::{ErrorKind, ErrorType, Read, Write};
+use ostd::syscall::{sys_get_time, sys_heartbeat};
 use smoltcp::{
     iface::{Interface, SocketHandle, SocketSet},
     socket::tcp,
     time::Instant,
 };
-use crate::interface::VirtioNetDevice;
-use ostd::syscall::{sys_get_time, sys_heartbeat};
 
 // ── Thread-local smoltcp context (single-core net cell) ───────────────────────
 
-static TLS_IFACE:   AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
-static TLS_DEVICE:  AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+static TLS_IFACE: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+static TLS_DEVICE: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 static TLS_SOCKETS: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 
 /// Update module-level smoltcp context pointers before any TLS I/O call.
@@ -42,13 +42,13 @@ static TLS_SOCKETS: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// hardware the absence of data races makes this safe for the duration of one IPC
 /// handler invocation.
 pub unsafe fn set_tls_context(
-    iface:   *mut Interface,
-    device:  *mut VirtioNetDevice,
+    iface: *mut Interface,
+    device: *mut VirtioNetDevice,
     sockets: *mut (),
 ) {
-    TLS_IFACE  .store(iface   as *mut (), Ordering::Relaxed);
-    TLS_DEVICE .store(device  as *mut (), Ordering::Relaxed);
-    TLS_SOCKETS.store(sockets,            Ordering::Relaxed);
+    TLS_IFACE.store(iface as *mut (), Ordering::Relaxed);
+    TLS_DEVICE.store(device as *mut (), Ordering::Relaxed);
+    TLS_SOCKETS.store(sockets, Ordering::Relaxed);
 }
 
 // ── Timeout constants ─────────────────────────────────────────────────────────
@@ -82,10 +82,10 @@ impl SmoltcpTlsTransport {
         Self { handle }
     }
 
-    unsafe fn iface()   -> &'static mut Interface {
+    unsafe fn iface() -> &'static mut Interface {
         &mut *(TLS_IFACE.load(Ordering::Relaxed) as *mut Interface)
     }
-    unsafe fn device()  -> &'static mut VirtioNetDevice {
+    unsafe fn device() -> &'static mut VirtioNetDevice {
         &mut *(TLS_DEVICE.load(Ordering::Relaxed) as *mut VirtioNetDevice)
     }
     unsafe fn sockets() -> &'static mut SocketSet<'static> {
@@ -103,7 +103,7 @@ impl SmoltcpTlsTransport {
 }
 
 impl ErrorType for SmoltcpTlsTransport {
-    type Error = ErrorKind;  // embedded_io::ErrorKind implements embedded_io::Error
+    type Error = ErrorKind; // embedded_io::ErrorKind implements embedded_io::Error
 }
 
 impl Read for SmoltcpTlsTransport {
@@ -113,17 +113,27 @@ impl Read for SmoltcpTlsTransport {
 
         loop {
             // SAFETY: set_tls_context was called before open()/read().
-            unsafe { Self::poll(); }
+            unsafe {
+                Self::poll();
+            }
             let (n, eof) = unsafe {
                 let socket = Self::sockets().get_mut::<tcp::Socket>(self.handle);
-                let n = if socket.can_recv() { socket.recv_slice(buf).unwrap_or(0) } else { 0 };
+                let n = if socket.can_recv() {
+                    socket.recv_slice(buf).unwrap_or(0)
+                } else {
+                    0
+                };
                 // EOF: remote sent FIN and RX buffer is drained — no more data will arrive.
                 (n, !socket.may_recv() && !socket.can_recv())
             };
-            if n > 0 { return Ok(n); }
+            if n > 0 {
+                return Ok(n);
+            }
             // Signal connection close so embedded-tls returns an error immediately
             // instead of spinning all the way to the 30-second deadline.
-            if eof { return Err(ErrorKind::ConnectionReset); }
+            if eof {
+                return Err(ErrorKind::ConnectionReset);
+            }
 
             let now = sys_get_time();
             if now >= deadline {
@@ -150,7 +160,11 @@ impl Write for SmoltcpTlsTransport {
         while written < buf.len() {
             let n = unsafe {
                 let socket = Self::sockets().get_mut::<tcp::Socket>(self.handle);
-                if socket.can_send() { socket.send_slice(&buf[written..]).unwrap_or(0) } else { 0 }
+                if socket.can_send() {
+                    socket.send_slice(&buf[written..]).unwrap_or(0)
+                } else {
+                    0
+                }
             };
             if n > 0 {
                 written += n;
@@ -161,10 +175,16 @@ impl Write for SmoltcpTlsTransport {
                 // Detect connection close before spinning: if the remote sent FIN/RST
                 // may_send() returns false and we'd spin to the 30-second deadline.
                 let gone = unsafe {
-                    !Self::sockets().get_mut::<tcp::Socket>(self.handle).may_send()
+                    !Self::sockets()
+                        .get_mut::<tcp::Socket>(self.handle)
+                        .may_send()
                 };
-                if gone { return Err(ErrorKind::BrokenPipe); }
-                unsafe { Self::poll(); }
+                if gone {
+                    return Err(ErrorKind::BrokenPipe);
+                }
+                unsafe {
+                    Self::poll();
+                }
 
                 let now = sys_get_time();
                 if now >= deadline {
@@ -177,12 +197,16 @@ impl Write for SmoltcpTlsTransport {
                 core::hint::spin_loop();
             }
         }
-        unsafe { Self::poll(); }
+        unsafe {
+            Self::poll();
+        }
         Ok(written)
     }
 
     fn flush(&mut self) -> Result<(), ErrorKind> {
-        unsafe { Self::poll(); }
+        unsafe {
+            Self::poll();
+        }
         Ok(())
     }
 }

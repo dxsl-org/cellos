@@ -10,4 +10,4 @@ edition     = "2021"
 description = "Build script helper — compile .vi DSL files to Rust during cargo build"
 
 [dependencies]
-vi-compiler = { path = "../vi-compiler" }
+vi-compiler = { path = "../vi-compiler", version = "0.1.0" }

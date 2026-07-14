@@ -4,8 +4,8 @@
 //! BLOCK_SIZE (redoxfs) = 4096 bytes = 8 × 512-byte sectors.
 //! block N on the RedoxFS volume → sectors PART_SRV_BASE_LBA + N*8 on disk.
 
-use api::disk::{PART_SRV_BASE_LBA, PART_SRV_SECTORS};
 use crate::blk_router::{blk_read, blk_write};
+use api::disk::{PART_SRV_BASE_LBA, PART_SRV_SECTORS};
 use redox_syscall::error::{Error, Result, EIO};
 use redoxfs::BLOCK_SIZE;
 

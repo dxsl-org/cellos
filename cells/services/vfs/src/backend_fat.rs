@@ -20,9 +20,11 @@ use ostd::io::println;
 ///
 /// `NullTimeProvider` and `LossyOemCpConverter` are the fatfs defaults;
 /// using them avoids needing a RTC or a UTF-8↔OEM code-page converter.
-type DataFs  = fatfs::FileSystem<CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
+type DataFs =
+    fatfs::FileSystem<CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
 /// Convenience alias for a FAT directory handle — avoids repeating the full generic.
-type DataDir<'a> = fatfs::Dir<'a, CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
+type DataDir<'a> =
+    fatfs::Dir<'a, CachedBlockStream, fatfs::NullTimeProvider, fatfs::LossyOemCpConverter>;
 
 pub struct FatBackend {
     fs: Option<DataFs>,
@@ -82,7 +84,11 @@ impl FatBackend {
     /// `/data/x` → `x`; `/data` and `/data/` → None.
     fn rel_nonempty<'a>(&self, path: &'a str) -> Option<&'a str> {
         let r = path.strip_prefix(self.prefix)?.strip_prefix('/')?;
-        if r.is_empty() { None } else { Some(r) }
+        if r.is_empty() {
+            None
+        } else {
+            Some(r)
+        }
     }
 
     /// Strip the mount prefix; the mount root maps to the volume root (`""`).
@@ -96,7 +102,7 @@ impl FatBackend {
 fn split_last(rel: &str) -> (&str, &str) {
     match rel.rfind('/') {
         Some(i) => (&rel[..i], &rel[i + 1..]),
-        None    => ("", rel),
+        None => ("", rel),
     }
 }
 
@@ -119,7 +125,7 @@ fn ensure_dir_chain<'a>(root: DataDir<'a>, parts: &str) -> Result<DataDir<'a>, (
 /// Collects `iter()` entries before mutating — avoids iterator-vs-mutation aliasing.
 fn remove_tree(fs: &DataFs, rel: &str) -> bool {
     let dir = match fs.root_dir().open_dir(rel) {
-        Ok(d)  => d,
+        Ok(d) => d,
         // `rel` is a file (or already gone) — remove it directly.
         Err(_) => return fs.root_dir().remove(rel).is_ok(),
     };
@@ -129,7 +135,11 @@ fn remove_tree(fs: &DataFs, rel: &str) -> bool {
         .filter_map(|e| e.ok())
         .filter_map(|e| {
             let name = e.file_name();
-            if name == "." || name == ".." { None } else { Some((name, e.is_dir())) }
+            if name == "." || name == ".." {
+                None
+            } else {
+                Some((name, e.is_dir()))
+            }
         })
         .collect();
     drop(dir);
@@ -141,7 +151,9 @@ fn remove_tree(fs: &DataFs, rel: &str) -> bool {
         } else {
             fs.root_dir().remove(&child).is_ok()
         };
-        if !ok { return false; }
+        if !ok {
+            return false;
+        }
     }
     fs.root_dir().remove(rel).is_ok()
 }
@@ -152,7 +164,10 @@ impl FsBackend for FatBackend {
     }
 
     fn list(&self, path: &str, out: &mut [u8]) -> usize {
-        let fs = match &self.fs { Some(f) => f, None => return 0 };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return 0,
+        };
         let rel = self.rel_allow_root(path);
         let dir = if rel.is_empty() {
             fs.root_dir()
@@ -165,13 +180,20 @@ impl FsBackend for FatBackend {
 
         let mut pos = 0;
         for entry in dir.iter() {
-            let e = match entry { Ok(e) => e, Err(_) => break };
+            let e = match entry {
+                Ok(e) => e,
+                Err(_) => break,
+            };
             let name = e.file_name();
-            if name == "." || name == ".." { continue; }
+            if name == "." || name == ".." {
+                continue;
+            }
             let prefix: &[u8] = if e.is_dir() { b"d:" } else { b"f:" };
             let name_b = name.as_bytes();
             let entry_len = 2 + name_b.len() + 1;
-            if pos + entry_len > out.len() { break; }
+            if pos + entry_len > out.len() {
+                break;
+            }
             out[pos..pos + 2].copy_from_slice(prefix);
             out[pos + 2..pos + 2 + name_b.len()].copy_from_slice(name_b);
             out[pos + 2 + name_b.len()] = b'\n';
@@ -184,8 +206,12 @@ impl FsBackend for FatBackend {
         use fatfs::Seek as _;
         let fs = self.fs.as_ref()?;
         let rel = self.rel_allow_root(path);
-        if rel.is_empty() { return Some((0, true)); } // mount root is a directory
-        if rel.split('/').any(|c| c == "..") { return None; }
+        if rel.is_empty() {
+            return Some((0, true));
+        } // mount root is a directory
+        if rel.split('/').any(|c| c == "..") {
+            return None;
+        }
         if let Ok(mut file) = fs.root_dir().open_file(rel) {
             let size = file.seek(fatfs::SeekFrom::End(0)).unwrap_or(0);
             return Some((size, false));
@@ -198,8 +224,14 @@ impl FsBackend for FatBackend {
 
     fn file_size(&self, path: &str) -> u64 {
         use fatfs::Seek as _;
-        let fs = match &self.fs { Some(f) => f, None => return 0 };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return 0 };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return 0,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return 0,
+        };
         let mut file = match fs.root_dir().open_file(rel) {
             Ok(f) => f,
             Err(_) => return 0,
@@ -209,8 +241,14 @@ impl FsBackend for FatBackend {
 
     fn read_to_vec(&self, path: &str) -> Vec<u8> {
         use fatfs::Read as _;
-        let fs = match &self.fs { Some(f) => f, None => return Vec::new() };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return Vec::new() };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return Vec::new(),
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return Vec::new(),
+        };
         let mut file = match fs.root_dir().open_file(rel) {
             Ok(f) => f,
             Err(_) => return Vec::new(),
@@ -231,16 +269,27 @@ impl FsBackend for FatBackend {
     /// remove-then-create for truncate semantics without `seek(End)`.
     fn write(&mut self, path: &str, content: &[u8]) -> bool {
         use fatfs::Write as _;
-        let fs = match &self.fs { Some(f) => f, None => return false };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return false };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
         let (parent, name) = split_last(rel);
-        if name.is_empty() { return false; }
+        if name.is_empty() {
+            return false;
+        }
         let dir = match ensure_dir_chain(fs.root_dir(), parent) {
-            Ok(d)   => d,
+            Ok(d) => d,
             Err(()) => return false,
         };
         let _ = dir.remove(name);
-        let mut file = match dir.create_file(name) { Ok(f) => f, Err(_) => return false };
+        let mut file = match dir.create_file(name) {
+            Ok(f) => f,
+            Err(_) => return false,
+        };
         file.write_all(content).is_ok()
     }
 
@@ -249,59 +298,106 @@ impl FsBackend for FatBackend {
     /// `disk.seek(Start(abs_end))` internally, so the `End` arm of
     /// `BlockStream::seek` (which errors) is never reached.
     fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        use fatfs::{Write as _, Seek as _};
-        let fs = match &self.fs { Some(f) => f, None => return false };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return false };
-        if rel.split('/').any(|c| c == "..") { return false; }
+        use fatfs::{Seek as _, Write as _};
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
+        if rel.split('/').any(|c| c == "..") {
+            return false;
+        }
         let (parent, name) = split_last(rel);
-        if name.is_empty() { return false; }
+        if name.is_empty() {
+            return false;
+        }
         let dir = match ensure_dir_chain(fs.root_dir(), parent) {
-            Ok(d)   => d,
+            Ok(d) => d,
             Err(()) => return false,
         };
         let mut file = match dir.open_file(name) {
-            Ok(f)  => f,
-            Err(_) => match dir.create_file(name) { Ok(f) => f, Err(_) => return false },
+            Ok(f) => f,
+            Err(_) => match dir.create_file(name) {
+                Ok(f) => f,
+                Err(_) => return false,
+            },
         };
-        if file.seek(fatfs::SeekFrom::End(0)).is_err() { return false; }
+        if file.seek(fatfs::SeekFrom::End(0)).is_err() {
+            return false;
+        }
         file.write_all(content).is_ok()
     }
 
     fn mkdir(&mut self, path: &str) -> bool {
-        let fs = match &self.fs { Some(f) => f, None => return false };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return false };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
         ensure_dir_chain(fs.root_dir(), rel).is_ok()
     }
 
     /// Remove an EMPTY directory. `open_dir` succeeds only for directories;
     /// `remove` errors on a non-empty dir — strict POSIX type checking.
     fn rmdir(&mut self, path: &str) -> bool {
-        let fs = match &self.fs { Some(f) => f, None => return false };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return false };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
         // Reject any path component that is ".." — defense-in-depth even though
         // fatfs confines resolution to the volume root.
-        if rel.split('/').any(|c| c == "..") { return false; }
-        if fs.root_dir().open_dir(rel).is_err() { return false; }
+        if rel.split('/').any(|c| c == "..") {
+            return false;
+        }
+        if fs.root_dir().open_dir(rel).is_err() {
+            return false;
+        }
         fs.root_dir().remove(rel).is_ok()
     }
 
     /// Remove a regular FILE. `open_file` succeeds only for files in fatfs —
     /// acts as the type guard (use `rmdir` for directories).
     fn unlink(&mut self, path: &str) -> bool {
-        let fs = match &self.fs { Some(f) => f, None => return false };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return false };
-        if fs.root_dir().open_file(rel).is_err() { return false; }
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
+        if fs.root_dir().open_file(rel).is_err() {
+            return false;
+        }
         fs.root_dir().remove(rel).is_ok()
     }
 
     /// Recursive delete (`rm -r`). A path resolving to a regular file is
     /// removed directly.
     fn rmdir_recursive(&mut self, path: &str) -> bool {
-        let fs = match &self.fs { Some(f) => f, None => return false };
-        let rel = match self.rel_nonempty(path) { Some(r) => r, None => return false };
+        let fs = match &self.fs {
+            Some(f) => f,
+            None => return false,
+        };
+        let rel = match self.rel_nonempty(path) {
+            Some(r) => r,
+            None => return false,
+        };
         // Defense-in-depth: reject ".." before the recursive delete amplifies any
         // path-confusion. fatfs also confines to the volume root, but explicit is safer.
-        if rel.split('/').any(|c| c == "..") { return false; }
+        if rel.split('/').any(|c| c == "..") {
+            return false;
+        }
         remove_tree(fs, rel)
     }
 }

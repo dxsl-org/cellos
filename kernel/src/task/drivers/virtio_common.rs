@@ -15,7 +15,7 @@ use alloc::vec::Vec;
 /// A VirtIO MMIO slot with base address and IRQ.
 pub struct VirtioSlot {
     pub base: usize,
-    pub irq:  u32,
+    pub irq: u32,
 }
 
 /// Iterator over all VirtIO MMIO slots for the current platform.
@@ -24,10 +24,13 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
     {
         // QEMU ARM virt: 32 VirtIO MMIO slots at 0x0a000000, 512 bytes each, SPI 16+i.
         // All 32 slots are identity-mapped by init_kernel_paging (0x0a000000..0x0a004000).
-        const BASE: usize   = 0x0a00_0000;
+        const BASE: usize = 0x0a00_0000;
         const STRIDE: usize = 0x200;
         let slots: Vec<VirtioSlot> = (0..32_usize)
-            .map(|i| VirtioSlot { base: BASE + i * STRIDE, irq: 16 + i as u32 })
+            .map(|i| VirtioSlot {
+                base: BASE + i * STRIDE,
+                irq: 16 + i as u32,
+            })
             .collect();
         slots.into_iter()
     }
@@ -36,7 +39,12 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
         let slots: Vec<VirtioSlot> = crate::platform::with(|p| {
             p.virtio_mmio
                 .iter()
-                .filter_map(|e| e.as_ref().map(|e| VirtioSlot { base: e.base, irq: e.irq }))
+                .filter_map(|e| {
+                    e.as_ref().map(|e| VirtioSlot {
+                        base: e.base,
+                        irq: e.irq,
+                    })
+                })
                 .collect()
         });
         slots.into_iter()
@@ -67,5 +75,8 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
     }
     // Unknown VirtIO slot — no device registered. InterruptStatus is already cleared
     // by plic_complete in the trap handler.
-    log::warn!("[virtio] unhandled IRQ {} — no registered device for this slot", irq);
+    log::warn!(
+        "[virtio] unhandled IRQ {} — no registered device for this slot",
+        irq
+    );
 }

@@ -24,7 +24,9 @@ impl MmcCore {
     /// `sdhci_base` must be a valid kernel-mapped MMIO address for the SDHCI register block.
     pub unsafe fn new(sdhci_base: usize) -> Self {
         // SAFETY: forwarded from caller contract.
-        Self { host: SdhciController::new(sdhci_base) }
+        Self {
+            host: SdhciController::new(sdhci_base),
+        }
     }
 
     /// Run the full card initialization sequence.
@@ -61,16 +63,30 @@ impl MmcCore {
                 Err(_) => {
                     self.cmd0_go_idle()?; // re-idle before SD path
                     let ocr = self.acmd41_sd_ocr_loop(false)?;
-                    (ocr, if ocr & (1 << 30) != 0 { CardType::SdHc } else { CardType::SdSc })
+                    (
+                        ocr,
+                        if ocr & (1 << 30) != 0 {
+                            CardType::SdHc
+                        } else {
+                            CardType::SdSc
+                        },
+                    )
                 }
             }
         } else {
             let ocr = self.acmd41_sd_ocr_loop(true)?;
-            (ocr, if ocr & (1 << 30) != 0 { CardType::SdHc } else { CardType::SdSc })
+            (
+                ocr,
+                if ocr & (1 << 30) != 0 {
+                    CardType::SdHc
+                } else {
+                    CardType::SdSc
+                },
+            )
         };
 
-        let is_block_addressed = matches!(card_type, CardType::Emmc | CardType::SdHc)
-            || (ocr & (1 << 30) != 0);
+        let is_block_addressed =
+            matches!(card_type, CardType::Emmc | CardType::SdHc) || (ocr & (1 << 30) != 0);
 
         // Step 5 — CMD2 (ALL_SEND_CID), CMD3 (SET_RELATIVE_ADDR), CMD7 (SELECT)
         self.cmd2_all_send_cid()?;
@@ -95,13 +111,23 @@ impl MmcCore {
             _ => self.sd_read_csd(rca)?,
         };
 
-        Ok(CardInfo { card_type, rca, sector_count, is_block_addressed })
+        Ok(CardInfo {
+            card_type,
+            rca,
+            sector_count,
+            is_block_addressed,
+        })
     }
 
     // --- private command helpers ---
 
     fn cmd0_go_idle(&mut self) -> ViResult<()> {
-        let cmd = MmcCmd { index: 0, arg: 0, resp_type: RespType::None, has_data: false };
+        let cmd = MmcCmd {
+            index: 0,
+            arg: 0,
+            resp_type: RespType::None,
+            has_data: false,
+        };
         // CMD0 has no response; ignore the (zeroed) return value.
         let _ = self.host.send_cmd(cmd);
         Ok(())
@@ -178,7 +204,12 @@ impl MmcCore {
     }
 
     fn cmd2_all_send_cid(&mut self) -> ViResult<()> {
-        let cmd = MmcCmd { index: 2, arg: 0, resp_type: RespType::R2, has_data: false };
+        let cmd = MmcCmd {
+            index: 2,
+            arg: 0,
+            resp_type: RespType::R2,
+            has_data: false,
+        };
         self.host.send_cmd(cmd)?;
         Ok(())
     }
@@ -216,13 +247,23 @@ impl MmcCore {
     /// Read eMMC EXT_CSD (512 bytes) and extract the sector count from bytes [215:212].
     fn emmc_read_ext_csd(&mut self) -> ViResult<u64> {
         // CMD23 (SET_BLOCK_COUNT) before CMD8 in Transfer state.
-        let cmd23 = MmcCmd { index: 23, arg: 1, resp_type: RespType::R1, has_data: false };
+        let cmd23 = MmcCmd {
+            index: 23,
+            arg: 1,
+            resp_type: RespType::R1,
+            has_data: false,
+        };
         self.host.send_cmd(cmd23)?;
 
         // Set BLOCK_SIZE=512, BLOCK_COUNT=1, TRANSFER_MODE=read-single.
         self.host.setup_data_transfer(0x0200, 1, TM_DATA_READ);
 
-        let cmd8 = MmcCmd { index: 8, arg: 0, resp_type: RespType::R1, has_data: true };
+        let cmd8 = MmcCmd {
+            index: 8,
+            arg: 0,
+            resp_type: RespType::R1,
+            has_data: true,
+        };
         self.host.send_cmd(cmd8)?;
 
         let mut ext_csd = [0u8; 512];
@@ -257,8 +298,7 @@ impl MmcCore {
             // READ_BL_LEN at CSD[83:80] = r[2][11:8]
             let read_bl_len = (r[2] >> 8) & 0xF;
             // C_SIZE at CSD[73:62]: upper 2 bits = r[2][1:0], lower 10 bits = r[1][31:22]
-            let c_size = (((r[2] & 0x3) as u64) << 10)
-                | (((r[1] >> 22) & 0x3FF) as u64);
+            let c_size = (((r[2] & 0x3) as u64) << 10) | (((r[1] >> 22) & 0x3FF) as u64);
             // C_SIZE_MULT at CSD[49:47] = r[1][9:7]
             let c_size_mult = (r[1] >> 7) & 0x7;
             let mult = 1u64 << (c_size_mult + 2);

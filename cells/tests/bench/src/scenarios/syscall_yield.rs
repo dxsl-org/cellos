@@ -10,7 +10,9 @@ use ostd::syscall::sys_yield;
 pub struct SyscallYieldBench;
 
 impl ViBenchmark for SyscallYieldBench {
-    fn name(&self) -> &'static str { "syscall_yield" }
+    fn name(&self) -> &'static str {
+        "syscall_yield"
+    }
 
     fn run_once(&mut self) -> api::ViResult<u64> {
         sys_yield();

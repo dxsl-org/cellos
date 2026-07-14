@@ -17,10 +17,10 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
-use alloc::string::String;
-use alloc::format;
 use crate::syscall;
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::String;
 use api::ViError;
 
 // ── Public error type ─────────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ impl From<HotswapError> for ViError {
     fn from(e: HotswapError) -> ViError {
         match e {
             // WouldBlock: caller should retry later or increase stash capacity.
-            HotswapError::StashFull    => ViError::WouldBlock,
+            HotswapError::StashFull => ViError::WouldBlock,
             // NotFound: no state under this key — cell is starting cold.
-            HotswapError::NoState      => ViError::NotFound,
+            HotswapError::NoState => ViError::NotFound,
             // InvalidInput: restored payload is structurally malformed.
             HotswapError::SizeMismatch => ViError::InvalidInput,
         }
@@ -261,7 +261,8 @@ pub fn restore_transfer<S: ViStateTransfer>(key: u64) -> Result<S, ViError> {
         return Err(ViError::InvalidInput);
     }
     let version = u32::from_le_bytes(packet[..4].try_into().map_err(|_| ViError::InvalidInput)?);
-    let declared_len = u32::from_le_bytes(packet[4..8].try_into().map_err(|_| ViError::InvalidInput)?) as usize;
+    let declared_len =
+        u32::from_le_bytes(packet[4..8].try_into().map_err(|_| ViError::InvalidInput)?) as usize;
     let payload = &packet[HEADER_LEN..];
     if payload.len() != declared_len {
         return Err(ViError::InvalidInput);

@@ -6,9 +6,9 @@
 // #![no_std] // Commented out for integration test on Host which has std
 // extern crate alloc; // Available via std prelude or we can just use std
 
-use api::*;
 use api::hotswap::ViStateTransfer;
 use api::vm::*;
+use api::*;
 
 // Mock network driver with complex state for ViStateTransfer testing.
 struct MockNetworkDriver {
@@ -40,15 +40,15 @@ impl ViStateTransfer for MockNetworkDriver {
         }
 
         let mut offset = 0;
-        
+
         // Serialize active_connections
         buffer[offset..offset + 8].copy_from_slice(&self.active_connections.to_le_bytes());
         offset += 8;
-        
+
         // Serialize buffer_size
         buffer[offset..offset + 8].copy_from_slice(&self.buffer_size.to_le_bytes());
         offset += 8;
-        
+
         // Serialize IP address
         buffer[offset..offset + 4].copy_from_slice(&self.ip_address);
         offset += 4;
@@ -63,18 +63,18 @@ impl ViStateTransfer for MockNetworkDriver {
         }
 
         let mut offset = 0;
-        
+
         // Deserialize active_connections
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(&buffer[offset..offset + 8]);
         self.active_connections = usize::from_le_bytes(bytes);
         offset += 8;
-        
+
         // Deserialize buffer_size
         bytes.copy_from_slice(&buffer[offset..offset + 8]);
         self.buffer_size = usize::from_le_bytes(bytes);
         offset += 8;
-        
+
         // Deserialize IP address
         self.ip_address.copy_from_slice(&buffer[offset..offset + 4]);
 
@@ -117,9 +117,9 @@ impl ViVmRuntime for MockVMM {
         if vm_id >= self.vms.len() {
             return Err(ViError::NotFound);
         }
-        
+
         self.vms[vm_id].running = true;
-        
+
         // Simulate a syscall trap
         Ok(VmTrap::Syscall {
             nr: 1, // write
@@ -175,7 +175,7 @@ impl ViVmRuntime for MockVMM {
         if vm_id >= self.vms.len() {
             return Err(ViError::NotFound);
         }
-        
+
         // In real implementation, would free resources
         self.vms[vm_id].running = false;
         Ok(())
@@ -187,11 +187,11 @@ fn test_vi_state_transfer_roundtrip() {
     let driver1 = MockNetworkDriver::new();
     let size = driver1.state_size();
     let mut buffer = vec![0u8; size];
-    
+
     // Serialize
     let written = driver1.serialize_state(&mut buffer).unwrap();
     assert_eq!(written, size);
-    
+
     // Deserialize into new instance
     let mut driver2 = MockNetworkDriver {
         active_connections: 0,
@@ -199,7 +199,7 @@ fn test_vi_state_transfer_roundtrip() {
         ip_address: [0, 0, 0, 0],
     };
     driver2.deserialize_state(&buffer).unwrap();
-    
+
     // Verify state transferred
     assert_eq!(driver2.active_connections, 42);
     assert_eq!(driver2.buffer_size, 4096);
@@ -209,7 +209,7 @@ fn test_vi_state_transfer_roundtrip() {
 #[test]
 fn test_vi_vm_runtime_lifecycle() {
     let mut vmm = MockVMM::new();
-    
+
     // Create VM
     let vm_state = VmState {
         gpa_base: 0x8000_0000,
@@ -219,20 +219,21 @@ fn test_vi_vm_runtime_lifecycle() {
     };
     let vm_id = vmm.create_vm(vm_state).unwrap();
     assert_eq!(vm_id, 0);
-    
+
     // Map memory
-    vmm.map_memory(vm_id, 0x8000_0000, 0x4000_0000, 4096, true).unwrap();
-    
+    vmm.map_memory(vm_id, 0x8000_0000, 0x4000_0000, 4096, true)
+        .unwrap();
+
     // Run VCPU
     let trap = vmm.run_vcpu(vm_id, 0).unwrap();
     match trap {
         VmTrap::Syscall { nr, .. } => assert_eq!(nr, 1),
         _ => panic!("Expected syscall trap"),
     }
-    
+
     // Handle trap
     vmm.handle_trap(vm_id, 0, trap).unwrap();
-    
+
     // Destroy VM
     vmm.destroy_vm(vm_id).unwrap();
 }

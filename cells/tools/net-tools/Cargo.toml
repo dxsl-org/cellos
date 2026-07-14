@@ -6,8 +6,8 @@ license.workspace = true
 description = "ViCell network utilities: ping, curl, nc, wget"
 
 [dependencies]
-ostd = { path = "../../../libs/ostd" }
-api  = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api  = { path = "../../../libs/api", version = "0.1.0" }
 
 [[bin]]
 name = "ping"
@@ -34,4 +34,4 @@ name = "mqtt"
 path = "src/bin/mqtt.rs"
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

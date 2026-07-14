@@ -51,16 +51,29 @@ impl FsBackend for BootFsProxy {
     }
 
     fn list(&self, path: &str, out: &mut [u8]) -> usize {
-        let fd = match open(path) { Some(f) => f, None => return 0 };
+        let fd = match open(path) {
+            Some(f) => f,
+            None => return 0,
+        };
         let mut pos = 0;
         while let Ok(Some(e)) = sys_readdir(fd.0) {
             let len = e.name.iter().position(|&b| b == 0).unwrap_or(e.name.len());
-            if len == 0 { continue; }
+            if len == 0 {
+                continue;
+            }
             let name = &e.name[..len];
-            if name == b"." || name == b".." { continue; }
-            let prefix: &[u8] = if matches!(e.file_type, types::FileType::Directory) { b"d:" } else { b"f:" };
+            if name == b"." || name == b".." {
+                continue;
+            }
+            let prefix: &[u8] = if matches!(e.file_type, types::FileType::Directory) {
+                b"d:"
+            } else {
+                b"f:"
+            };
             let entry_len = 2 + len + 1;
-            if pos + entry_len > out.len() { break; }
+            if pos + entry_len > out.len() {
+                break;
+            }
             out[pos..pos + 2].copy_from_slice(prefix);
             out[pos + 2..pos + 2 + len].copy_from_slice(name);
             out[pos + 2 + len] = b'\n';
@@ -76,7 +89,9 @@ impl FsBackend for BootFsProxy {
         let trimmed = path.trim_end_matches('/');
         let slash = trimmed.rfind('/')?;
         let name = &trimmed[slash + 1..];
-        if name.is_empty() { return Some((0, true)); }
+        if name.is_empty() {
+            return Some((0, true));
+        }
         let parent = if slash == 0 { "/" } else { &trimmed[..slash] };
         match dir_lookup(parent, name) {
             Some(hit) => Some(hit),
@@ -101,9 +116,11 @@ impl FsBackend for BootFsProxy {
     fn read_to_vec(&self, path: &str) -> Vec<u8> {
         // FAT16 stores 8.3 names uppercase; OpenCap matches the raw path string
         // (unlike the loader's read_file_from_vifs1, which uppercases first).
-        let upper: alloc::string::String =
-            path.chars().map(|c| c.to_ascii_uppercase()).collect();
-        let cap = match sys_open_cap(&upper) { Ok(c) => c, Err(_) => return Vec::new() };
+        let upper: alloc::string::String = path.chars().map(|c| c.to_ascii_uppercase()).collect();
+        let cap = match sys_open_cap(&upper) {
+            Ok(c) => c,
+            Err(_) => return Vec::new(),
+        };
         let mut buf = [0u8; 512];
         let mut result = Vec::new();
         loop {
@@ -117,10 +134,22 @@ impl FsBackend for BootFsProxy {
         result
     }
 
-    fn write(&mut self, _path: &str, _content: &[u8]) -> bool { false }
-    fn append(&mut self, _path: &str, _content: &[u8]) -> bool { false }
-    fn mkdir(&mut self, _path: &str) -> bool { false }
-    fn rmdir(&mut self, _path: &str) -> bool { false }
-    fn unlink(&mut self, _path: &str) -> bool { false }
-    fn rmdir_recursive(&mut self, _path: &str) -> bool { false }
+    fn write(&mut self, _path: &str, _content: &[u8]) -> bool {
+        false
+    }
+    fn append(&mut self, _path: &str, _content: &[u8]) -> bool {
+        false
+    }
+    fn mkdir(&mut self, _path: &str) -> bool {
+        false
+    }
+    fn rmdir(&mut self, _path: &str) -> bool {
+        false
+    }
+    fn unlink(&mut self, _path: &str) -> bool {
+        false
+    }
+    fn rmdir_recursive(&mut self, _path: &str) -> bool {
+        false
+    }
 }

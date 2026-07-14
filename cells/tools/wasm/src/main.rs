@@ -8,8 +8,8 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use driver_wasm::{WasmConfig, WasmRuntime, HostState};
 use driver_wasm::imports::register_vi_imports;
+use driver_wasm::{HostState, WasmConfig, WasmRuntime};
 
 api::declare_syscalls![Send, Recv, Log, Heartbeat];
 
@@ -117,9 +117,7 @@ fn load_from_vfs(path: &str) -> Vec<u8> {
                     // The decode succeeded, confirming this is a valid DataPtr response.
                     // VFS is blocked waiting for its next sys_recv, so no concurrent
                     // modification of the pointed-to memory can occur while we copy.
-                    unsafe {
-                        core::slice::from_raw_parts(ptr as *const u8, len as usize).to_vec()
-                    }
+                    unsafe { core::slice::from_raw_parts(ptr as *const u8, len as usize).to_vec() }
                 }
                 _ => Vec::new(),
             }

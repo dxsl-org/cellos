@@ -7,9 +7,9 @@
 //! standalone state-transfer primitive; it is independent of the IPC-based
 //! orchestrator in `hotswap.rs`.
 
+use crate::sync::Spinlock;
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use crate::sync::Spinlock;
 
 /// Upper bound on a single stashed blob (1 MB) — bounds kernel memory held on
 /// a cell's behalf for one slot. Raised from 64 KB to accommodate full cell
@@ -31,7 +31,10 @@ static STASH: Spinlock<BTreeMap<u64, Vec<u8>>> = Spinlock::new(BTreeMap::new());
 pub fn stash(key: u64, bytes: &[u8]) -> usize {
     let mut map = STASH.lock();
     if map.len() >= MAX_ENTRIES && !map.contains_key(&key) {
-        log::warn!("[state-stash] full ({} entries); rejecting new key", MAX_ENTRIES);
+        log::warn!(
+            "[state-stash] full ({} entries); rejecting new key",
+            MAX_ENTRIES
+        );
         return 0;
     }
     let n = bytes.len().min(MAX_STASH_LEN);
@@ -44,7 +47,9 @@ pub fn stash(key: u64, bytes: &[u8]) -> usize {
 /// readers (or a retry) can recover it.
 pub fn restore(key: u64, buf: &mut [u8]) -> usize {
     let guard = STASH.lock();
-    let Some(bytes) = guard.get(&key) else { return 0 };
+    let Some(bytes) = guard.get(&key) else {
+        return 0;
+    };
     let n = bytes.len().min(buf.len());
     buf[..n].copy_from_slice(&bytes[..n]);
     n

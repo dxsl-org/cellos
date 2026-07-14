@@ -6,8 +6,8 @@
 
 use super::manifest::CellManifest;
 use super::manifest_flags::{
-    MANIFEST_FLAGS_MASK, MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1,
-    TIER_LEGACY, TIER_UNTRUSTED,
+    MANIFEST_FLAGS_MASK, MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1, TIER_LEGACY,
+    TIER_UNTRUSTED,
 };
 
 impl CellManifest {
@@ -70,7 +70,14 @@ impl CellManifest {
                 if cap_args_off != 0 || reserved != 0 {
                     return None;
                 }
-                Some(Self { magic, version: MANIFEST_VERSION, tier, flags, cap_args_off, reserved })
+                Some(Self {
+                    magic,
+                    version: MANIFEST_VERSION,
+                    tier,
+                    flags,
+                    cap_args_off,
+                    reserved,
+                })
             }
             _ => None,
         }

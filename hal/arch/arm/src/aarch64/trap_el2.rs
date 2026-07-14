@@ -24,14 +24,8 @@ use hal_hypervisor::ViVmExit;
 /// `ipa = (hpfar << 8) | (far & 0xFFF)`
 /// because HPFAR_EL2[47:4] = IPA[47:12], so shift-left 8 places the page frame
 /// at its correct position, and FAR[11:0] provides the in-page byte offset.
-pub fn decode_vmexit(
-    esr: u64,
-    _elr: u64,
-    far: u64,
-    hpfar: u64,
-    gp: &[u64; 31],
-) -> ViVmExit {
-    let ec  = ((esr >> 26) & 0x3F) as u32;
+pub fn decode_vmexit(esr: u64, _elr: u64, far: u64, hpfar: u64, gp: &[u64; 31]) -> ViVmExit {
+    let ec = ((esr >> 26) & 0x3F) as u32;
     let iss = esr & 0x01FF_FFFF;
 
     match ec {
@@ -40,16 +34,22 @@ pub fn decode_vmexit(
             // m1 guard: stage-1 page-table walk fault — do NOT dispatch as MMIO.
             let s1ptw = (iss >> 7) & 1;
             if s1ptw != 0 {
-                return ViVmExit::Unknown { ec, iss: iss as u32 };
+                return ViVmExit::Unknown {
+                    ec,
+                    iss: iss as u32,
+                };
             }
             // m2 guard: ISV=0 means no instruction syndrome — size/reg unknown.
             let isv = (iss >> 24) & 1;
             if isv == 0 {
-                return ViVmExit::Unknown { ec, iss: iss as u32 };
+                return ViVmExit::Unknown {
+                    ec,
+                    iss: iss as u32,
+                };
             }
-            let wnr  = ((iss >> 6) & 1) != 0;
-            let sas  = (iss >> 22) & 0x3;          // 0=byte, 1=halfword, 2=word, 3=doubleword
-            let srt  = ((iss >> 16) & 0x1F) as u8; // source/target register index
+            let wnr = ((iss >> 6) & 1) != 0;
+            let sas = (iss >> 22) & 0x3; // 0=byte, 1=halfword, 2=word, 3=doubleword
+            let srt = ((iss >> 16) & 0x1F) as u8; // source/target register index
             let size = 1u8 << sas;
 
             // IPA = HPFAR_EL2[47:4] << 12  |  FAR_EL2[11:0]
@@ -62,7 +62,11 @@ pub fn decode_vmexit(
                 let val = if srt < 31 { gp[srt as usize] } else { 0 };
                 ViVmExit::MmioWrite { ipa, size, val }
             } else {
-                ViVmExit::MmioRead { ipa, size, reg: srt }
+                ViVmExit::MmioRead {
+                    ipa,
+                    size,
+                    reg: srt,
+                }
             }
         }
 
@@ -79,9 +83,15 @@ pub fn decode_vmexit(
         0x01 => ViVmExit::Wfi,
 
         // EC 0x18 — MSR/MRS/SYS trapped at EL2.
-        0x18 => ViVmExit::Unknown { ec, iss: iss as u32 },
+        0x18 => ViVmExit::Unknown {
+            ec,
+            iss: iss as u32,
+        },
 
         // Anything else is unhandled.
-        _ => ViVmExit::Unknown { ec, iss: iss as u32 },
+        _ => ViVmExit::Unknown {
+            ec,
+            iss: iss as u32,
+        },
     }
 }

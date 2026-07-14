@@ -22,7 +22,9 @@ pub struct WasmConfig {
 
 impl Default for WasmConfig {
     fn default() -> Self {
-        Self { fuel_per_tick: 100_000 }
+        Self {
+            fuel_per_tick: 100_000,
+        }
     }
 }
 
@@ -50,7 +52,9 @@ impl WasmRuntime {
     pub fn new(_config: &WasmConfig) -> Self {
         let mut engine_cfg = wasmi::Config::default();
         engine_cfg.consume_fuel(true);
-        Self { engine: Engine::new(&engine_cfg) }
+        Self {
+            engine: Engine::new(&engine_cfg),
+        }
     }
 
     /// Parse and validate a WASM binary.
@@ -67,7 +71,8 @@ impl WasmRuntime {
     /// how many interpreter steps run before the host sees `OutOfFuel`.
     pub fn new_store(&self, config: &WasmConfig, host: HostState) -> Store<HostState> {
         let mut store = Store::new(&self.engine, host);
-        store.set_fuel(config.fuel_per_tick)
+        store
+            .set_fuel(config.fuel_per_tick)
             .expect("fuel metering is always enabled in WasmRuntime::new");
         store
     }

@@ -1,34 +1,63 @@
-use std::prelude::v1::*;
 use crate::error::LexError;
-use crate::token::{Token, TokenKind, Span, keyword};
+use crate::token::{keyword, Span, Token, TokenKind};
+use std::prelude::v1::*;
 
 // ─── Lexer ───────────────────────────────────────────────────────────────────
 
 struct Lexer<'src> {
-    src:  &'src [u8],
-    pos:  usize,
+    src: &'src [u8],
+    pos: usize,
     line: u32,
-    col:  u32,
+    col: u32,
 }
 
 impl<'src> Lexer<'src> {
     fn new(src: &'src str) -> Self {
-        Self { src: src.as_bytes(), pos: 0, line: 1, col: 1 }
+        Self {
+            src: src.as_bytes(),
+            pos: 0,
+            line: 1,
+            col: 1,
+        }
     }
 
-    fn at_end(&self) -> bool { self.pos >= self.src.len() }
-    fn peek(&self) -> u8 { if self.at_end() { 0 } else { self.src[self.pos] } }
-    fn peek2(&self) -> u8 { if self.pos + 1 >= self.src.len() { 0 } else { self.src[self.pos + 1] } }
+    fn at_end(&self) -> bool {
+        self.pos >= self.src.len()
+    }
+    fn peek(&self) -> u8 {
+        if self.at_end() {
+            0
+        } else {
+            self.src[self.pos]
+        }
+    }
+    fn peek2(&self) -> u8 {
+        if self.pos + 1 >= self.src.len() {
+            0
+        } else {
+            self.src[self.pos + 1]
+        }
+    }
 
     fn advance(&mut self) -> u8 {
         let ch = self.src[self.pos];
         self.pos += 1;
-        if ch == b'\n' { self.line += 1; self.col = 1; } else { self.col += 1; }
+        if ch == b'\n' {
+            self.line += 1;
+            self.col = 1;
+        } else {
+            self.col += 1;
+        }
         ch
     }
 
     fn span_from(&self, start: usize, start_line: u32, start_col: u32) -> Span {
-        Span::new(start_line, start_col, start as u32, (self.pos - start) as u32)
+        Span::new(
+            start_line,
+            start_col,
+            start as u32,
+            (self.pos - start) as u32,
+        )
     }
 
     fn slice_str(&self, start: usize, end: usize) -> &str {
@@ -44,16 +73,21 @@ impl<'src> Lexer<'src> {
     }
 
     fn skip_line_comment(&mut self) {
-        while !self.at_end() && self.peek() != b'\n' { self.advance(); }
+        while !self.at_end() && self.peek() != b'\n' {
+            self.advance();
+        }
     }
 
     fn skip_block_comment(&mut self, start: usize, sl: u32, sc: u32) -> Result<(), LexError> {
         loop {
             if self.at_end() {
-                return Err(LexError::UnterminatedComment { span: Span::new(sl, sc, start as u32, 2) });
+                return Err(LexError::UnterminatedComment {
+                    span: Span::new(sl, sc, start as u32, 2),
+                });
             }
             if self.peek() == b'*' && self.peek2() == b'/' {
-                self.advance(); self.advance();
+                self.advance();
+                self.advance();
                 return Ok(());
             }
             self.advance();
@@ -67,12 +101,16 @@ impl<'src> Lexer<'src> {
         let content_start = self.pos;
         loop {
             if self.at_end() {
-                return Err(LexError::UnterminatedString { span: Span::new(sl, sc, start as u32, 1) });
+                return Err(LexError::UnterminatedString {
+                    span: Span::new(sl, sc, start as u32, 1),
+                });
             }
             let ch = self.peek();
             if ch == b'\\' {
                 self.advance(); // consume backslash
-                if !self.at_end() { self.advance(); } // consume escaped char (includes '{')
+                if !self.at_end() {
+                    self.advance();
+                } // consume escaped char (includes '{')
             } else if ch == b'"' {
                 break;
             } else {
@@ -81,7 +119,11 @@ impl<'src> Lexer<'src> {
         }
         let text = self.slice_str(content_start, self.pos).to_string();
         self.advance(); // consume closing `"`
-        Ok(Token::new(TokenKind::StringLit, text, self.span_from(start, sl, sc)))
+        Ok(Token::new(
+            TokenKind::StringLit,
+            text,
+            self.span_from(start, sl, sc),
+        ))
     }
 
     fn lex_color(&mut self, start: usize, sl: u32, sc: u32) -> Token {
@@ -95,17 +137,27 @@ impl<'src> Lexer<'src> {
 
     fn lex_number(&mut self, start: usize, sl: u32, sc: u32) -> Token {
         // Consume digits
-        while !self.at_end() && self.src[self.pos].is_ascii_digit() { self.advance(); }
+        while !self.at_end() && self.src[self.pos].is_ascii_digit() {
+            self.advance();
+        }
 
         // Float?
-        if !self.at_end() && self.src[self.pos] == b'.' && (self.pos + 1 < self.src.len()) && self.src[self.pos + 1].is_ascii_digit() {
+        if !self.at_end()
+            && self.src[self.pos] == b'.'
+            && (self.pos + 1 < self.src.len())
+            && self.src[self.pos + 1].is_ascii_digit()
+        {
             self.advance(); // consume '.'
-            while !self.at_end() && self.src[self.pos].is_ascii_digit() { self.advance(); }
+            while !self.at_end() && self.src[self.pos].is_ascii_digit() {
+                self.advance();
+            }
             let text = self.slice_str(start, self.pos).to_string();
             // check for unit suffix after float (e.g. 3.14em — unusual but handle)
             return if !self.at_end() && self.src[self.pos].is_ascii_alphabetic() {
                 let _unit_start = self.pos;
-                while !self.at_end() && self.src[self.pos].is_ascii_alphabetic() { self.advance(); }
+                while !self.at_end() && self.src[self.pos].is_ascii_alphabetic() {
+                    self.advance();
+                }
                 let full = self.slice_str(start, self.pos).to_string();
                 Token::new(TokenKind::LengthLit, full, self.span_from(start, sl, sc))
             } else {
@@ -115,7 +167,9 @@ impl<'src> Lexer<'src> {
 
         // Check for unit suffix: px, em, rem, pt, dp, vw, vh, ...
         if !self.at_end() && self.src[self.pos].is_ascii_alphabetic() {
-            while !self.at_end() && self.src[self.pos].is_ascii_alphabetic() { self.advance(); }
+            while !self.at_end() && self.src[self.pos].is_ascii_alphabetic() {
+                self.advance();
+            }
             let text = self.slice_str(start, self.pos).to_string();
             return Token::new(TokenKind::LengthLit, text, self.span_from(start, sl, sc));
         }
@@ -132,7 +186,9 @@ impl<'src> Lexer<'src> {
     }
 
     fn lex_ident_or_keyword(&mut self, start: usize, sl: u32, sc: u32) -> Token {
-        while !self.at_end() && (self.src[self.pos].is_ascii_alphanumeric() || self.src[self.pos] == b'_') {
+        while !self.at_end()
+            && (self.src[self.pos].is_ascii_alphanumeric() || self.src[self.pos] == b'_')
+        {
             self.advance();
         }
         let text = self.slice_str(start, self.pos);
@@ -145,7 +201,9 @@ impl<'src> Lexer<'src> {
     fn next_significant(&mut self) -> Result<Option<Token>, LexError> {
         loop {
             self.skip_whitespace();
-            if self.at_end() { return Ok(None); }
+            if self.at_end() {
+                return Ok(None);
+            }
 
             let sl = self.line;
             let sc = self.col;
@@ -154,12 +212,14 @@ impl<'src> Lexer<'src> {
 
             // Comments
             if ch == b'/' && self.peek2() == b'/' {
-                self.advance(); self.advance();
+                self.advance();
+                self.advance();
                 self.skip_line_comment();
                 continue;
             }
             if ch == b'/' && self.peek2() == b'*' {
-                self.advance(); self.advance();
+                self.advance();
+                self.advance();
                 self.skip_block_comment(start, sl, sc)?;
                 continue;
             }
@@ -200,42 +260,72 @@ impl<'src> Lexer<'src> {
             // Multi-char operators (check before single-char)
             self.advance();
             let tok = match ch {
-                b'=' if self.peek() == b'>' => { self.advance(); Token::new(TokenKind::Arrow,   "=>", self.span_from(start, sl, sc)) }
-                b'=' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::EqEq,    "==", self.span_from(start, sl, sc)) }
-                b'!' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::BangEq,  "!=", self.span_from(start, sl, sc)) }
-                b'<' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::LtEq,    "<=", self.span_from(start, sl, sc)) }
-                b'>' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::GtEq,    ">=", self.span_from(start, sl, sc)) }
-                b'&' if self.peek() == b'&' => { self.advance(); Token::new(TokenKind::And,     "&&", self.span_from(start, sl, sc)) }
-                b'|' if self.peek() == b'|' => { self.advance(); Token::new(TokenKind::Or,      "||", self.span_from(start, sl, sc)) }
-                b'+' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::PlusEq,      "+=", self.span_from(start, sl, sc)) }
-                b'-' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::MinusEq,     "-=", self.span_from(start, sl, sc)) }
-                b'@' if self.peek() == b'=' => { self.advance(); Token::new(TokenKind::TwoWayBind,  "@=", self.span_from(start, sl, sc)) }
-                b'@'                        =>                   Token::new(TokenKind::At,           "@",  self.span_from(start, sl, sc)),
+                b'=' if self.peek() == b'>' => {
+                    self.advance();
+                    Token::new(TokenKind::Arrow, "=>", self.span_from(start, sl, sc))
+                }
+                b'=' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::EqEq, "==", self.span_from(start, sl, sc))
+                }
+                b'!' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::BangEq, "!=", self.span_from(start, sl, sc))
+                }
+                b'<' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::LtEq, "<=", self.span_from(start, sl, sc))
+                }
+                b'>' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::GtEq, ">=", self.span_from(start, sl, sc))
+                }
+                b'&' if self.peek() == b'&' => {
+                    self.advance();
+                    Token::new(TokenKind::And, "&&", self.span_from(start, sl, sc))
+                }
+                b'|' if self.peek() == b'|' => {
+                    self.advance();
+                    Token::new(TokenKind::Or, "||", self.span_from(start, sl, sc))
+                }
+                b'+' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::PlusEq, "+=", self.span_from(start, sl, sc))
+                }
+                b'-' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::MinusEq, "-=", self.span_from(start, sl, sc))
+                }
+                b'@' if self.peek() == b'=' => {
+                    self.advance();
+                    Token::new(TokenKind::TwoWayBind, "@=", self.span_from(start, sl, sc))
+                }
+                b'@' => Token::new(TokenKind::At, "@", self.span_from(start, sl, sc)),
                 // Single-char
-                b'+' => Token::new(TokenKind::Plus,      "+", self.span_from(start, sl, sc)),
-                b'-' => Token::new(TokenKind::Minus,     "-", self.span_from(start, sl, sc)),
-                b'*' => Token::new(TokenKind::Star,      "*", self.span_from(start, sl, sc)),
-                b'/' => Token::new(TokenKind::Slash,     "/", self.span_from(start, sl, sc)),
-                b'=' => Token::new(TokenKind::Assign,    "=", self.span_from(start, sl, sc)),
-                b':' => Token::new(TokenKind::Colon,     ":", self.span_from(start, sl, sc)),
+                b'+' => Token::new(TokenKind::Plus, "+", self.span_from(start, sl, sc)),
+                b'-' => Token::new(TokenKind::Minus, "-", self.span_from(start, sl, sc)),
+                b'*' => Token::new(TokenKind::Star, "*", self.span_from(start, sl, sc)),
+                b'/' => Token::new(TokenKind::Slash, "/", self.span_from(start, sl, sc)),
+                b'=' => Token::new(TokenKind::Assign, "=", self.span_from(start, sl, sc)),
+                b':' => Token::new(TokenKind::Colon, ":", self.span_from(start, sl, sc)),
                 b';' => Token::new(TokenKind::Semicolon, ";", self.span_from(start, sl, sc)),
-                b',' => Token::new(TokenKind::Comma,     ",", self.span_from(start, sl, sc)),
-                b'.' => Token::new(TokenKind::Dot,       ".", self.span_from(start, sl, sc)),
-                b'!' => Token::new(TokenKind::Bang,      "!", self.span_from(start, sl, sc)),
-                b'?' => Token::new(TokenKind::Question,  "?", self.span_from(start, sl, sc)),
+                b',' => Token::new(TokenKind::Comma, ",", self.span_from(start, sl, sc)),
+                b'.' => Token::new(TokenKind::Dot, ".", self.span_from(start, sl, sc)),
+                b'!' => Token::new(TokenKind::Bang, "!", self.span_from(start, sl, sc)),
+                b'?' => Token::new(TokenKind::Question, "?", self.span_from(start, sl, sc)),
                 b'&' => Token::new(TokenKind::Ampersand, "&", self.span_from(start, sl, sc)),
-                b'|' => Token::new(TokenKind::Pipe,      "|", self.span_from(start, sl, sc)),
-                b'<' => Token::new(TokenKind::Lt,        "<", self.span_from(start, sl, sc)),
-                b'>' => Token::new(TokenKind::Gt,        ">", self.span_from(start, sl, sc)),
-                b'{' => Token::new(TokenKind::LBrace,    "{", self.span_from(start, sl, sc)),
-                b'}' => Token::new(TokenKind::RBrace,    "}", self.span_from(start, sl, sc)),
-                b'(' => Token::new(TokenKind::LParen,    "(", self.span_from(start, sl, sc)),
-                b')' => Token::new(TokenKind::RParen,    ")", self.span_from(start, sl, sc)),
-                b'[' => Token::new(TokenKind::LBracket,  "[", self.span_from(start, sl, sc)),
-                b']' => Token::new(TokenKind::RBracket,  "]", self.span_from(start, sl, sc)),
+                b'|' => Token::new(TokenKind::Pipe, "|", self.span_from(start, sl, sc)),
+                b'<' => Token::new(TokenKind::Lt, "<", self.span_from(start, sl, sc)),
+                b'>' => Token::new(TokenKind::Gt, ">", self.span_from(start, sl, sc)),
+                b'{' => Token::new(TokenKind::LBrace, "{", self.span_from(start, sl, sc)),
+                b'}' => Token::new(TokenKind::RBrace, "}", self.span_from(start, sl, sc)),
+                b'(' => Token::new(TokenKind::LParen, "(", self.span_from(start, sl, sc)),
+                b')' => Token::new(TokenKind::RParen, ")", self.span_from(start, sl, sc)),
+                b'[' => Token::new(TokenKind::LBracket, "[", self.span_from(start, sl, sc)),
+                b']' => Token::new(TokenKind::RBracket, "]", self.span_from(start, sl, sc)),
                 other => {
                     return Err(LexError::UnexpectedChar {
-                        ch:   other as char,
+                        ch: other as char,
                         span: self.span_from(start, sl, sc),
                     });
                 }
@@ -268,7 +358,8 @@ mod tests {
     use TokenKind::*;
 
     fn kinds(src: &str) -> Vec<TokenKind> {
-        tokenize(src).unwrap()
+        tokenize(src)
+            .unwrap()
             .into_iter()
             .filter(|t| t.kind != Eof)
             .map(|t| t.kind)
@@ -278,9 +369,9 @@ mod tests {
     #[test]
     fn keywords() {
         assert_eq!(kinds("component"), vec![KwComponent]);
-        assert_eq!(kinds("property"),  vec![KwProperty]);
-        assert_eq!(kinds("in"),        vec![KwIn]);
-        assert_eq!(kinds("out"),       vec![KwOut]);
+        assert_eq!(kinds("property"), vec![KwProperty]);
+        assert_eq!(kinds("in"), vec![KwIn]);
+        assert_eq!(kinds("out"), vec![KwOut]);
     }
 
     #[test]
@@ -292,21 +383,24 @@ mod tests {
     #[test]
     fn length_literal() {
         assert_eq!(kinds("16px"), vec![LengthLit]);
-        assert_eq!(kinds("8em"),  vec![LengthLit]);
+        assert_eq!(kinds("8em"), vec![LengthLit]);
         assert_eq!(kinds("2rem"), vec![LengthLit]);
     }
 
     #[test]
     fn color_literal() {
         assert_eq!(kinds("#ffffff"), vec![ColorLit]);
-        assert_eq!(kinds("#fff"),    vec![ColorLit]);
+        assert_eq!(kinds("#fff"), vec![ColorLit]);
     }
 
     #[test]
     fn string_literal_with_interpolation() {
         let toks = tokenize(r#""Count: \{count}""#).unwrap();
         assert_eq!(toks[0].kind, StringLit);
-        assert!(toks[0].text.contains("\\{count}"), "raw escape must be preserved");
+        assert!(
+            toks[0].text.contains("\\{count}"),
+            "raw escape must be preserved"
+        );
     }
 
     #[test]

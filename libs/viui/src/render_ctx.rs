@@ -25,10 +25,10 @@ pub struct RenderCtx<'a> {
     /// The pixel drawing surface for this frame.
     pub canvas: &'a mut dyn ViCanvas,
     /// Scalable glyph state. `atlas` may be `None` (bitmap fallback).
-    pub font:   &'a mut FontContext,
+    pub font: &'a mut FontContext,
     /// Active design token set. Widgets read colors and spacing from here
     /// rather than hardcoding values.
-    pub theme:  &'a dyn ViTheme,
+    pub theme: &'a dyn ViTheme,
 }
 
 impl<'a> RenderCtx<'a> {
@@ -44,10 +44,8 @@ impl<'a> RenderCtx<'a> {
                 self.canvas.draw_text_scaled(pos, text, px, color, atlas);
             }
             None => {
-                self.canvas.draw_text(
-                    pos, text,
-                    TextStyle { color, size_px: 0 },
-                );
+                self.canvas
+                    .draw_text(pos, text, TextStyle { color, size_px: 0 });
             }
         }
     }
@@ -56,8 +54,12 @@ impl<'a> RenderCtx<'a> {
     #[inline]
     pub fn draw_text_at_size(&mut self, pos: Point, text: &str, color: Color, size_px: f32) {
         match self.font.atlas.as_mut() {
-            Some(atlas) => self.canvas.draw_text_scaled(pos, text, size_px, color, atlas),
-            None        => self.canvas.draw_text(pos, text, TextStyle { color, size_px: 0 }),
+            Some(atlas) => self
+                .canvas
+                .draw_text_scaled(pos, text, size_px, color, atlas),
+            None => self
+                .canvas
+                .draw_text(pos, text, TextStyle { color, size_px: 0 }),
         }
     }
 
@@ -68,19 +70,31 @@ impl<'a> RenderCtx<'a> {
     /// `self.font.atlas.as_mut().map(|a| a.advance(ch, px))` directly.
     #[inline]
     pub fn char_width(&self) -> f32 {
-        if self.font.has_font() { self.font.size_px * 0.6 } else { 8.0 }
+        if self.font.has_font() {
+            self.font.size_px * 0.6
+        } else {
+            8.0
+        }
     }
 
     /// Line height at the current font size.
     #[inline]
     pub fn line_height(&self) -> f32 {
-        if self.font.has_font() { self.font.size_px * 1.2 } else { 8.0 }
+        if self.font.has_font() {
+            self.font.size_px * 1.2
+        } else {
+            8.0
+        }
     }
 
     /// Re-borrow as a shorter-lived `RenderCtx`. Allows passing `cx` to child
     /// widgets when the parent still needs access afterward (split borrow).
     #[inline]
     pub fn reborrow(&mut self) -> RenderCtx<'_> {
-        RenderCtx { canvas: self.canvas, font: self.font, theme: self.theme }
+        RenderCtx {
+            canvas: self.canvas,
+            font: self.font,
+            theme: self.theme,
+        }
     }
 }

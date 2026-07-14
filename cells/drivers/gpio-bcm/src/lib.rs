@@ -25,15 +25,15 @@ pub const BCM_GPIO_SIZE: usize = 0x0001_0000; // 64 KiB (covers GPPUDCLK1 at 0x9
 
 // Register offsets (u32, byte-addressed)
 const GPFSEL: [usize; 6] = [0x00, 0x04, 0x08, 0x0C, 0x10, 0x14]; // function select
-const GPSET:  [usize; 2] = [0x1C, 0x20]; // set output high
-const GPCLR:  [usize; 2] = [0x28, 0x2C]; // set output low
-const GPLEV:  [usize; 2] = [0x34, 0x38]; // read level
-const GPEDS:  [usize; 2] = [0x40, 0x44]; // event detect status (write 1 to clear)
-const GPREN:  [usize; 2] = [0x4C, 0x50]; // rising edge detect enable
-const GPFEN:  [usize; 2] = [0x58, 0x5C]; // falling edge detect enable
+const GPSET: [usize; 2] = [0x1C, 0x20]; // set output high
+const GPCLR: [usize; 2] = [0x28, 0x2C]; // set output low
+const GPLEV: [usize; 2] = [0x34, 0x38]; // read level
+const GPEDS: [usize; 2] = [0x40, 0x44]; // event detect status (write 1 to clear)
+const GPREN: [usize; 2] = [0x4C, 0x50]; // rising edge detect enable
+const GPFEN: [usize; 2] = [0x58, 0x5C]; // falling edge detect enable
 
 // Function select encoding (3 bits per pin)
-const FSEL_INPUT:  u32 = 0b000;
+const FSEL_INPUT: u32 = 0b000;
 const FSEL_OUTPUT: u32 = 0b001;
 
 /// BCM2837 GPIO controller for Raspberry Pi 3 (54 pins).
@@ -73,20 +73,29 @@ impl BcmGpio {
 
 impl ViGpio for BcmGpio {
     fn set_direction(&mut self, pin: u8, dir: PinDir) -> ViResult<()> {
-        if pin > 53 { return Err(ViError::InvalidInput); }
-        let func = match dir { PinDir::Output => FSEL_OUTPUT, PinDir::Input => FSEL_INPUT };
+        if pin > 53 {
+            return Err(ViError::InvalidInput);
+        }
+        let func = match dir {
+            PinDir::Output => FSEL_OUTPUT,
+            PinDir::Input => FSEL_INPUT,
+        };
         self.set_fsel(pin, func)
     }
 
     fn read_pin(&self, pin: u8) -> ViResult<bool> {
-        if pin > 53 { return Err(ViError::InvalidInput); }
+        if pin > 53 {
+            return Err(ViError::InvalidInput);
+        }
         let (bank, bit) = ((pin / 32) as usize, pin % 32);
         let val = self.mmio.read_u32(GPLEV[bank])?;
         Ok(val & (1 << bit) != 0)
     }
 
     fn write_pin(&mut self, pin: u8, high: bool) -> ViResult<()> {
-        if pin > 53 { return Err(ViError::InvalidInput); }
+        if pin > 53 {
+            return Err(ViError::InvalidInput);
+        }
         let (bank, bit) = ((pin / 32) as usize, pin % 32);
         if high {
             self.mmio.write_u32(GPSET[bank], 1 << bit)
@@ -96,7 +105,9 @@ impl ViGpio for BcmGpio {
     }
 
     fn enable_edge_irq(&mut self, pin: u8, edge: Edge) -> ViResult<()> {
-        if pin > 53 { return Err(ViError::InvalidInput); }
+        if pin > 53 {
+            return Err(ViError::InvalidInput);
+        }
         let (bank, bit) = ((pin / 32) as usize, pin % 32);
         let mask = 1u32 << bit;
         if matches!(edge, Edge::Rising | Edge::Both) {
@@ -111,7 +122,9 @@ impl ViGpio for BcmGpio {
     }
 
     fn disable_irq(&mut self, pin: u8) -> ViResult<()> {
-        if pin > 53 { return Err(ViError::InvalidInput); }
+        if pin > 53 {
+            return Err(ViError::InvalidInput);
+        }
         let (bank, bit) = ((pin / 32) as usize, pin % 32);
         let mask = 1u32 << bit;
         let cur_ren = self.mmio.read_u32(GPREN[bank])?;

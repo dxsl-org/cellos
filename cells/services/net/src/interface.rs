@@ -8,14 +8,12 @@
 
 extern crate alloc;
 
-use core::sync::atomic::{AtomicUsize, Ordering};
 use alloc::{boxed::Box, collections::VecDeque};
+use core::sync::atomic::{AtomicUsize, Ordering};
+use ostd::syscall::{sys_lookup_service, sys_net_tx, sys_recv_timeout, sys_send, SyscallResult};
 use smoltcp::{
     phy::{Device, DeviceCapabilities, Medium, RxToken, TxToken},
     time::Instant,
-};
-use ostd::syscall::{
-    sys_lookup_service, sys_net_tx, sys_recv_timeout, sys_send, SyscallResult,
 };
 
 /// Max scheduler ticks (10 ms each) to wait for a Driver Cell reply.
@@ -27,13 +25,17 @@ const DRV_REPLY_TIMEOUT_TICKS: u64 = 20; // 200 ms
 const MAX_FRAME: usize = 1514;
 
 /// e1000 IPC op codes (matching cells/drivers/e1000/src/dispatch.rs).
-const OP_TX:     u8 = 0;
-const OP_RX:     u8 = 1;
+const OP_TX: u8 = 0;
+const OP_RX: u8 = 1;
+// reason: only consumed by get_driver_mac(), which is not yet wired into net
+// cell startup (interface MAC currently comes from a fixed default) — kept for
+// the planned "adopt driver MAC" init path.
+#[allow(dead_code)]
 const OP_GETMAC: u8 = 2;
 
 /// Sentinel values for E1000_TID.
 const NOT_PROBED: usize = 0;
-const ABSENT:     usize = usize::MAX;
+const ABSENT: usize = usize::MAX;
 
 /// Cached e1000 Driver Cell TID. NOT_PROBED on startup.
 static E1000_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
@@ -41,8 +43,12 @@ static E1000_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
 /// Returns the e1000 Driver Cell TID if one has registered, else `None`.
 pub fn e1000_tid() -> Option<usize> {
     let cached = E1000_TID.load(Ordering::Relaxed);
-    if cached == ABSENT     { return None; }
-    if cached != NOT_PROBED { return Some(cached); }
+    if cached == ABSENT {
+        return None;
+    }
+    if cached != NOT_PROBED {
+        return Some(cached);
+    }
 
     match sys_lookup_service(api::syscall::service::NIC_DRIVER) {
         Some(tid) if tid != 0 => {
@@ -58,22 +64,27 @@ pub fn e1000_tid() -> Option<usize> {
 
 /// smoltcp `Device` implementation backed by a kernel IPC frame queue.
 pub struct VirtioNetDevice {
-    rx_queue:       VecDeque<Box<[u8]>>,
+    rx_queue: VecDeque<Box<[u8]>>,
     /// Frames destined for the hypervisor guest, separated by dst MAC.
     guest_rx_queue: VecDeque<Box<[u8]>>,
-    guest_mac:      Option<[u8; 6]>,
+    guest_mac: Option<[u8; 6]>,
 }
 
 impl VirtioNetDevice {
     pub fn new() -> Self {
         Self {
-            rx_queue:       VecDeque::new(),
+            rx_queue: VecDeque::new(),
             guest_rx_queue: VecDeque::new(),
-            guest_mac:      None,
+            guest_mac: None,
         }
     }
 
     /// Enqueue an inbound frame received from the kernel VirtIO net driver.
+    // reason: pump_rx()/pump_rx_split() currently pull frames themselves via
+    // sys_net_rx/nic_rx_from_cell; push_rx is the counterpart for a future
+    // push-notification delivery path (kernel/driver cell pushes frames instead
+    // of being polled).
+    #[allow(dead_code)]
     pub fn push_rx(&mut self, frame: Box<[u8]>) {
         self.rx_queue.push_back(frame);
     }
@@ -102,7 +113,9 @@ impl VirtioNetDevice {
             } else {
                 ostd::syscall::sys_net_rx(&mut scratch)
             };
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             self.rx_queue.push_back(Box::from(&scratch[..n]));
             pulled += 1;
         }
@@ -118,15 +131,18 @@ impl VirtioNetDevice {
             } else {
                 ostd::syscall::sys_net_rx(&mut scratch)
             };
-            if n == 0 { break; }
+            if n == 0 {
+                break;
+            }
             let frame = &scratch[..n];
             match &self.guest_mac {
                 None => {
                     self.rx_queue.push_back(Box::from(frame));
                 }
                 Some(mac) => {
-                    let is_broadcast = n >= 6 && frame[0..6] == [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
-                    let is_guest     = n >= 6 && frame[0..6] == mac[..];
+                    let is_broadcast =
+                        n >= 6 && frame[0..6] == [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF];
+                    let is_guest = n >= 6 && frame[0..6] == mac[..];
                     if is_broadcast {
                         self.guest_rx_queue.push_back(Box::from(frame));
                         self.rx_queue.push_back(Box::from(frame));
@@ -141,11 +157,13 @@ impl VirtioNetDevice {
     }
 
     /// Query the e1000 Driver Cell for the MAC address, if registered.
+    // reason: not yet called from net cell init — see OP_GETMAC above.
+    #[allow(dead_code)]
     pub fn get_driver_mac(&self) -> Option<[u8; 6]> {
         let tid = e1000_tid()?;
         match sys_send(tid, &[OP_GETMAC]) {
             SyscallResult::Err(_) => return None,
-            SyscallResult::Ok(_)  => {}
+            SyscallResult::Ok(_) => {}
         }
         let mut mac = [0u8; 6];
         match sys_recv_timeout(tid, &mut mac, DRV_REPLY_TIMEOUT_TICKS) {
@@ -161,7 +179,7 @@ fn nic_rx_from_cell(tid: usize, buf: &mut [u8]) -> usize {
     // Rx request: [0x01] — 1 byte.
     match sys_send(tid, &[OP_RX]) {
         SyscallResult::Err(_) => return 0,
-        SyscallResult::Ok(_)  => {}
+        SyscallResult::Ok(_) => {}
     }
     // Reply: [len_lo, len_hi] ++ frame_bytes. Total ≤ 2 + MAX_FRAME.
     // Bounded wait: a blocking sys_recv here parked net past its 5 s heartbeat
@@ -177,7 +195,9 @@ fn nic_rx_from_cell(tid: usize, buf: &mut [u8]) -> usize {
         return 0;
     }
     let len = u16::from_le_bytes([reply[0], reply[1]]) as usize;
-    if len == 0 || len > buf.len() { return 0; }
+    if len == 0 || len > buf.len() {
+        return 0;
+    }
     buf[..len].copy_from_slice(&reply[2..2 + len]);
     len
 }
@@ -225,8 +245,14 @@ impl TxToken for NetTxToken {
 }
 
 impl Device for VirtioNetDevice {
-    type RxToken<'a> = NetRxToken where Self: 'a;
-    type TxToken<'a> = NetTxToken where Self: 'a;
+    type RxToken<'a>
+        = NetRxToken
+    where
+        Self: 'a;
+    type TxToken<'a>
+        = NetTxToken
+    where
+        Self: 'a;
 
     fn receive(&mut self, _ts: Instant) -> Option<(NetRxToken, NetTxToken)> {
         self.rx_queue
@@ -248,5 +274,7 @@ impl Device for VirtioNetDevice {
 }
 
 impl Default for VirtioNetDevice {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

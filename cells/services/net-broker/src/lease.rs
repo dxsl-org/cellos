@@ -1,3 +1,9 @@
+// reason: implements the P08 lease lifecycle (LeaseTable::grant/renew/revoke/
+// sweep_expired) for the net-broker robot-swarm feature; the dispatch loop in
+// main.rs still has this as a TODO ("tick lease renewal / peer-loss sweep")
+// and never constructs a LeaseTable — not yet wired, not dead junk.
+#![allow(dead_code)]
+
 /// P08 — Lease lifecycle (TTL/renew/expire constants from docs/specs/14-distributed.md).
 ///
 /// ## Lease semantics
@@ -17,7 +23,6 @@
 /// **optimistic distributed hint**.  Physical actuators MUST have an independent
 /// hardware interlock (e-stop, mutex in the actuator driver, etc.) that operates
 /// regardless of lease state.
-
 use ostd::syscall::sys_get_time;
 
 /// How long (ms) a lease remains valid after the last renewal.
@@ -35,7 +40,7 @@ pub const PEER_LOSS_MS: u64 = 9_000;
 /// One active lease entry.
 #[derive(Clone, Copy, Debug)]
 pub struct Lease {
-    pub task_id:    u64,
+    pub task_id: u64,
     pub machine_id: u64,
     /// Monotonic timestamp of the last renewal (from `sys_get_time()`).
     pub renewed_at: u64,
@@ -43,7 +48,11 @@ pub struct Lease {
 
 impl Lease {
     pub fn new(task_id: u64, machine_id: u64) -> Self {
-        Self { task_id, machine_id, renewed_at: sys_get_time() }
+        Self {
+            task_id,
+            machine_id,
+            renewed_at: sys_get_time(),
+        }
     }
 
     /// Extend the lease TTL from now.
@@ -80,7 +89,10 @@ pub struct LeaseTable {
 
 impl LeaseTable {
     pub const fn new(my_machine_id: u64) -> Self {
-        Self { leases: [const { None }; MAX_LEASES], my_machine_id }
+        Self {
+            leases: [const { None }; MAX_LEASES],
+            my_machine_id,
+        }
     }
 
     /// Grant a new lease for `(task_id, machine_id)`, or renew an existing one.
@@ -100,7 +112,11 @@ impl LeaseTable {
             }
         }
         // Table full — evict the oldest expired lease to make room.
-        if let Some(slot) = self.leases.iter_mut().find(|s| s.map(|l| !l.is_valid()).unwrap_or(false)) {
+        if let Some(slot) = self
+            .leases
+            .iter_mut()
+            .find(|s| s.map(|l| !l.is_valid()).unwrap_or(false))
+        {
             *slot = Some(Lease::new(task_id, machine_id));
         }
     }
@@ -122,7 +138,10 @@ impl LeaseTable {
     /// Revoke a lease (called on TaskRelease gossip).
     pub fn revoke(&mut self, task_id: u64, machine_id: u64) {
         for slot in self.leases.iter_mut() {
-            if slot.map(|l| l.task_id == task_id && l.machine_id == machine_id).unwrap_or(false) {
+            if slot
+                .map(|l| l.task_id == task_id && l.machine_id == machine_id)
+                .unwrap_or(false)
+            {
                 *slot = None;
                 return;
             }
@@ -154,26 +173,34 @@ impl LeaseTable {
 
     /// Does any node currently hold a valid lease for `task_id`?
     pub fn is_held(&self, task_id: u64) -> bool {
-        self.leases.iter().flatten()
+        self.leases
+            .iter()
+            .flatten()
             .any(|l| l.task_id == task_id && l.is_valid())
     }
 
     /// Which machine holds the lease for `task_id` (if any)?
     pub fn holder(&self, task_id: u64) -> Option<u64> {
-        self.leases.iter().flatten()
+        self.leases
+            .iter()
+            .flatten()
             .find(|l| l.task_id == task_id && l.is_valid())
             .map(|l| l.machine_id)
     }
 
     pub fn active_count(&self) -> usize {
-        self.leases.iter().filter(|s| s.map(|l| l.is_valid()).unwrap_or(false)).count()
+        self.leases
+            .iter()
+            .filter(|s| s.map(|l| l.is_valid()).unwrap_or(false))
+            .count()
     }
 
     /// Lease the broker should renew for `task_id` if it owns it and expiry
     /// is within 2×RENEW_MS — returns `true` if a renewal was triggered.
     pub fn maybe_renew_local(&mut self, task_id: u64) -> bool {
         for slot in self.leases.iter_mut().flatten() {
-            if slot.task_id == task_id && slot.machine_id == self.my_machine_id
+            if slot.task_id == task_id
+                && slot.machine_id == self.my_machine_id
                 && slot.remaining_ms() < 2 * RENEW_MS
             {
                 slot.renew();

@@ -59,7 +59,9 @@ global_asm!(
 /// The kernel uses `FALLBACK_BOOT_INFO` instead.
 #[no_mangle]
 pub extern "C" fn kmain_x86_32() -> ! {
-    extern "C" { fn kmain(hartid: usize, dtb: usize) -> !; }
+    extern "C" {
+        fn kmain(hartid: usize, dtb: usize) -> !;
+    }
     // SAFETY: kmain is the kernel C entry point; 0,0 are valid placeholder values.
     unsafe { kmain(0, 0) }
 }

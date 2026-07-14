@@ -82,7 +82,9 @@ pub(super) unsafe fn malloc_impl(size: usize) -> *mut c_void {
         Err(_) => return ptr::null_mut(),
     };
     let raw = alloc::alloc::alloc(layout);
-    if raw.is_null() { return ptr::null_mut(); }
+    if raw.is_null() {
+        return ptr::null_mut();
+    }
     let header = raw as *mut AllocHeader;
     (*header).size = size;
     (*header).magic = HEADER_MAGIC;
@@ -90,21 +92,32 @@ pub(super) unsafe fn malloc_impl(size: usize) -> *mut c_void {
 }
 
 pub(super) unsafe fn free_impl(ptr: *mut c_void) {
-    if ptr.is_null() { return; }
+    if ptr.is_null() {
+        return;
+    }
     let raw = (ptr as *mut u8).sub(HEADER_SIZE);
     let header = raw as *mut AllocHeader;
-    if (*header).magic != HEADER_MAGIC { return; }
+    if (*header).magic != HEADER_MAGIC {
+        return;
+    }
     let total = (*header).size + HEADER_SIZE;
     let layout = Layout::from_size_align_unchecked(total, ALIGN);
     alloc::alloc::dealloc(raw, layout);
 }
 
 unsafe fn realloc_impl(ptr: *mut c_void, new_size: usize) -> *mut c_void {
-    if ptr.is_null() { return malloc_impl(new_size); }
-    if new_size == 0 { free_impl(ptr); return ptr::null_mut(); }
+    if ptr.is_null() {
+        return malloc_impl(new_size);
+    }
+    if new_size == 0 {
+        free_impl(ptr);
+        return ptr::null_mut();
+    }
     let raw = (ptr as *mut u8).sub(HEADER_SIZE);
     let header = raw as *mut AllocHeader;
-    if (*header).magic != HEADER_MAGIC { return ptr::null_mut(); }
+    if (*header).magic != HEADER_MAGIC {
+        return ptr::null_mut();
+    }
     let old_size = (*header).size;
     let old_layout = Layout::from_size_align_unchecked(old_size + HEADER_SIZE, ALIGN);
     let total_new = match new_size.checked_add(HEADER_SIZE) {
@@ -112,7 +125,9 @@ unsafe fn realloc_impl(ptr: *mut c_void, new_size: usize) -> *mut c_void {
         None => return ptr::null_mut(),
     };
     let new_raw = alloc::alloc::realloc(raw, old_layout, total_new);
-    if new_raw.is_null() { return ptr::null_mut(); }
+    if new_raw.is_null() {
+        return ptr::null_mut();
+    }
     let new_header = new_raw as *mut AllocHeader;
     (*new_header).size = new_size;
     (*new_header).magic = HEADER_MAGIC;

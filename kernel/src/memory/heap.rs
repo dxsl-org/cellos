@@ -30,23 +30,25 @@ unsafe impl GlobalAlloc for QuotaAlloc {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        crate::memory::cell_quota::refund(
-            crate::task::scheduler::current_cell_id(),
-            layout.size(),
-        );
+        crate::memory::cell_quota::refund(crate::task::scheduler::current_cell_id(), layout.size());
         self.inner.dealloc(ptr, layout);
     }
 }
 
 #[global_allocator]
-static ALLOCATOR: QuotaAlloc = QuotaAlloc { inner: LockedHeap::empty() };
+static ALLOCATOR: QuotaAlloc = QuotaAlloc {
+    inner: LockedHeap::empty(),
+};
 
 /// Initialise the kernel heap.
 ///
 /// # Safety
 /// Must be called exactly once after physical memory is mapped.
 pub unsafe fn init_heap(heap_start: usize, heap_size: usize) {
-    ALLOCATOR.inner.lock().init(heap_start as *mut u8, heap_size);
+    ALLOCATOR
+        .inner
+        .lock()
+        .init(heap_start as *mut u8, heap_size);
 }
 
 /// Allocator error handler
@@ -57,8 +59,12 @@ fn alloc_error_handler(layout: core::alloc::Layout) -> ! {
     // if the panic handler tries to allocate.
     loop {
         #[cfg(target_arch = "x86_64")]
-        unsafe { core::arch::asm!("hlt", options(nomem, nostack)) };
+        unsafe {
+            core::arch::asm!("hlt", options(nomem, nostack))
+        };
         #[cfg(not(target_arch = "x86_64"))]
-        unsafe { core::arch::asm!("wfi") };
+        unsafe {
+            core::arch::asm!("wfi")
+        };
     }
 }

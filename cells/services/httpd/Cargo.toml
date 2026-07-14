@@ -9,12 +9,12 @@ name = "service-httpd"
 path = "src/main.rs"
 
 [dependencies]
-ostd     = { path = "../../../libs/ostd" }
-api      = { path = "../../../libs/api" }
+ostd     = { path = "../../../libs/ostd", version = "0.2.0" }
+api      = { path = "../../../libs/api", version = "0.1.0" }
 # httparse: no_std HTTP/1.1 request parser (no edge-http: embedded-io-async 0.6 vs workspace 0.7 conflict)
 httparse   = { version = "1", default-features = false }
 serde      = { version = "1", default-features = false, features = ["derive"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

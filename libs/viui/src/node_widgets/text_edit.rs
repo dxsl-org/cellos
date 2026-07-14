@@ -13,7 +13,7 @@ use crate::node::ViNode;
 use crate::render_ctx::RenderCtx;
 use crate::signal::{Signal, SubscriptionHandle};
 
-const HEIGHT:  f32 = 28.0;
+const HEIGHT: f32 = 28.0;
 const PADDING: f32 = 4.0;
 
 /// Single-line text input field.
@@ -28,24 +28,24 @@ const PADDING: f32 = 4.0;
 /// (`Left`/`Right`/`Home`/`End`) advances by full Unicode scalar values.
 pub struct TextEdit {
     /// Current text content.
-    pub text:        Signal<String>,
+    pub text: Signal<String>,
     /// Hint shown when the field is empty and unfocused.
     pub placeholder: Signal<String>,
-    on_submit:       Option<Box<dyn Fn(&str)>>,
+    on_submit: Option<Box<dyn Fn(&str)>>,
     /// Byte offset of the cursor in `text`.
-    cursor_pos:      Cell<usize>,
-    focused:         Cell<bool>,
-    bounds_cache:    Cell<Rect>,
+    cursor_pos: Cell<usize>,
+    focused: Cell<bool>,
+    bounds_cache: Cell<Rect>,
 }
 
 impl TextEdit {
     pub fn new(text: Signal<String>) -> Self {
         Self {
             text,
-            placeholder:  Signal::new(String::new()),
-            on_submit:    None,
-            cursor_pos:   Cell::new(0),
-            focused:      Cell::new(false),
+            placeholder: Signal::new(String::new()),
+            on_submit: None,
+            cursor_pos: Cell::new(0),
+            focused: Cell::new(false),
             bounds_cache: Cell::new(Rect::ZERO),
         }
     }
@@ -88,12 +88,18 @@ impl TextEdit {
 
 impl ViNode for TextEdit {
     fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size { w: constraints.max.w, h: HEIGHT });
-        self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+        let size = constraints.constrain(Size {
+            w: constraints.max.w,
+            h: HEIGHT,
+        });
+        self.bounds_cache
+            .set(Rect::from_origin_size(constraints.origin, size));
         size
     }
 
-    fn bounds(&self) -> Rect { self.bounds_cache.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds_cache.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds_cache.get();
@@ -116,15 +122,24 @@ impl ViNode for TextEdit {
         let y0 = b.y;
         let x1 = b.x + b.w;
         let y1 = b.y + b.h;
-        cx.canvas.draw_line(Point::new(x0, y0), Point::new(x1, y0), border); // top
-        cx.canvas.draw_line(Point::new(x1, y0), Point::new(x1, y1), border); // right
-        cx.canvas.draw_line(Point::new(x1, y1), Point::new(x0, y1), border); // bottom
-        cx.canvas.draw_line(Point::new(x0, y1), Point::new(x0, y0), border); // left
+        cx.canvas
+            .draw_line(Point::new(x0, y0), Point::new(x1, y0), border); // top
+        cx.canvas
+            .draw_line(Point::new(x1, y0), Point::new(x1, y1), border); // right
+        cx.canvas
+            .draw_line(Point::new(x1, y1), Point::new(x0, y1), border); // bottom
+        cx.canvas
+            .draw_line(Point::new(x0, y1), Point::new(x0, y0), border); // left
 
         let ty = b.y + (b.h - cx.line_height()) * 0.5;
 
         // Clip text content to the inner area
-        cx.canvas.clip_push(Rect { x: b.x + 1.0, y: b.y + 1.0, w: b.w - 2.0, h: b.h - 2.0 });
+        cx.canvas.clip_push(Rect {
+            x: b.x + 1.0,
+            y: b.y + 1.0,
+            w: b.w - 2.0,
+            h: b.h - 2.0,
+        });
 
         let text = self.text.get();
         if text.is_empty() && !self.focused.get() {
@@ -148,8 +163,8 @@ impl ViNode for TextEdit {
             // Draw cursor bar while focused
             if self.focused.get() {
                 let cursor_byte = self.cursor_pos.get().min(text.len());
-                let char_count  = text[..cursor_byte].chars().count() as f32;
-                let cursor_x    = b.x + PADDING + char_count * cx.char_width();
+                let char_count = text[..cursor_byte].chars().count() as f32;
+                let cursor_x = b.x + PADDING + char_count * cx.char_width();
                 cx.canvas.draw_line(
                     Point::new(cursor_x, b.y + 3.0),
                     Point::new(cursor_x, b.y + b.h - 3.0),
@@ -161,18 +176,28 @@ impl ViNode for TextEdit {
         cx.canvas.clip_pop();
     }
 
-    fn is_focusable(&self) -> bool { true }
+    fn is_focusable(&self) -> bool {
+        true
+    }
 
     fn event(&mut self, event: &Event) -> bool {
         match event {
-            Event::Focus => { self.focused.set(true); true }
-            Event::Blur  => { self.focused.set(false); true }
+            Event::Focus => {
+                self.focused.set(true);
+                true
+            }
+            Event::Blur => {
+                self.focused.set(false);
+                true
+            }
 
             // Character input — insert at cursor
             Event::Char(ch) if self.focused.get() => {
                 let pos = self.cursor_pos.get();
                 let byte_len = ch.len_utf8();
-                self.text.update(|s| { s.insert(pos, *ch); });
+                self.text.update(|s| {
+                    s.insert(pos, *ch);
+                });
                 self.cursor_pos.set(pos + byte_len);
                 true
             }
@@ -188,7 +213,9 @@ impl ViNode for TextEdit {
                                 let text = self.text.get();
                                 Self::retreat_cursor(&text, pos)
                             };
-                            self.text.update(|s| { s.remove(new_pos); });
+                            self.text.update(|s| {
+                                s.remove(new_pos);
+                            });
                             self.cursor_pos.set(new_pos);
                         }
                         true
@@ -197,7 +224,9 @@ impl ViNode for TextEdit {
                         let pos = self.cursor_pos.get();
                         let len = self.text.get().len();
                         if pos < len {
-                            self.text.update(|s| { s.remove(pos); });
+                            self.text.update(|s| {
+                                s.remove(pos);
+                            });
                         }
                         true
                     }
@@ -219,8 +248,11 @@ impl ViNode for TextEdit {
                         self.cursor_pos.set(new_pos);
                         true
                     }
-                    KeyCode::Home => { self.cursor_pos.set(0); true }
-                    KeyCode::End  => {
+                    KeyCode::Home => {
+                        self.cursor_pos.set(0);
+                        true
+                    }
+                    KeyCode::End => {
                         let len = self.text.get().len();
                         self.cursor_pos.set(len);
                         true
@@ -228,7 +260,9 @@ impl ViNode for TextEdit {
                     KeyCode::Enter => {
                         // Clone text before calling callback to release the Ref
                         let text_snap: String = (*self.text.get()).clone();
-                        if let Some(cb) = &self.on_submit { cb(&text_snap); }
+                        if let Some(cb) = &self.on_submit {
+                            cb(&text_snap);
+                        }
                         true
                     }
                     _ => false,
@@ -247,7 +281,9 @@ impl ViNode for TextEdit {
 
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let bounds = self.bounds_cache.get();
-        let h = self.text.subscribe(move || { region.borrow_mut().mark(bounds); });
+        let h = self.text.subscribe(move || {
+            region.borrow_mut().mark(bounds);
+        });
         alloc::vec![h]
     }
 }

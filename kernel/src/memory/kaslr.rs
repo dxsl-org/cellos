@@ -17,11 +17,11 @@
 
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
-#[cfg(target_arch = "riscv32")]
-use portable_atomic::AtomicU64;
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
 use types::VAddr;
 
 static KASLR_SEED: AtomicU64 = AtomicU64::new(0);
@@ -29,9 +29,9 @@ static KASLR_SEED: AtomicU64 = AtomicU64::new(0);
 /// Lowest virtual address a cell may be loaded at.
 const KASLR_BASE_MIN: usize = 0x0000_1000_0000;
 /// Width of the randomisable VA window (must be a power of two or handled as modulo).
-const KASLR_RANGE:    usize = 0x0000_6FFF_0000;
+const KASLR_RANGE: usize = 0x0000_6FFF_0000;
 /// Alignment between cell VA bases (64 KiB).
-const KASLR_ALIGN:    usize = 0x1000 * 16;
+const KASLR_ALIGN: usize = 0x1000 * 16;
 
 /// Initialise the KASLR seed from boot-time entropy.
 ///
@@ -95,17 +95,25 @@ fn read_hw_entropy() -> u64 {
         // SAFETY: `csrr time` reads the mtime-backed TIME CSR (unprivileged read
         // permitted in S-mode when sstatus.TVM=0, which is always the case here).
         let t: u64;
-        unsafe { core::arch::asm!("csrr {}, time", out(reg) t, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("csrr {}, time", out(reg) t, options(nomem, nostack));
+        }
         t
     }
     #[cfg(target_arch = "aarch64")]
     {
         // SAFETY: CNTVCT_EL0 is the virtual count register; accessible from EL1.
         let t: u64;
-        unsafe { core::arch::asm!("mrs {}, cntvct_el0", out(reg) t, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("mrs {}, cntvct_el0", out(reg) t, options(nomem, nostack));
+        }
         t
     }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64", target_arch = "aarch64")))]
+    #[cfg(not(any(
+        target_arch = "x86_64",
+        target_arch = "riscv64",
+        target_arch = "aarch64"
+    )))]
     {
         // No hardware timer available; use a fixed diversifier.
         // This means KASLR is purely seed-based (hhdm_offset) on these arches.

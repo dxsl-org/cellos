@@ -4,11 +4,11 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
-use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
-use crate::{ViError, ViResult};
-use crate::service::NetRef;
 use super::vierr_from_code;
+use crate::service::NetRef;
+use crate::{ViError, ViResult};
+use alloc::vec::Vec;
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 
 /// Max bytes sent per [`TcpStream::write`] call.
 ///
@@ -43,7 +43,10 @@ impl NetClient {
     pub fn tcp_connect(&mut self, addr: [u8; 4], port: u16) -> ViResult<SocketId> {
         let req = NetRequest::TcpConnect { addr, port };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<NetRequest, NetResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
             NetResponse::CapId(id) => Ok(id),
             NetResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -60,7 +63,10 @@ impl NetClient {
     pub fn tcp_send(&mut self, id: SocketId, data: &[u8]) -> ViResult<()> {
         let req = NetRequest::TcpSend { cap_id: id, data };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<NetRequest, NetResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
             NetResponse::Data(b) => {
                 let n = if b.len() >= 4 {
                     u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize
@@ -81,9 +87,15 @@ impl NetClient {
 
     /// Receive up to `buf_len` bytes from an established TCP socket.
     pub fn tcp_recv(&mut self, id: SocketId, buf_len: u32) -> ViResult<Vec<u8>> {
-        let req = NetRequest::TcpRecv { cap_id: id, buf_len };
+        let req = NetRequest::TcpRecv {
+            cap_id: id,
+            buf_len,
+        };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<NetRequest, NetResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
             NetResponse::Data(data) => Ok(data.to_vec()),
             NetResponse::Ok => Ok(alloc::vec![]),
             NetResponse::Err(code) => Err(vierr_from_code(code)),
@@ -95,7 +107,10 @@ impl NetClient {
     pub fn tcp_close(&mut self, id: SocketId) -> ViResult<()> {
         let req = NetRequest::TcpClose { cap_id: id };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<NetRequest, NetResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
             NetResponse::Ok => Ok(()),
             NetResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -106,7 +121,10 @@ impl NetClient {
     pub fn dns_lookup(&mut self, hostname: &str) -> ViResult<[u8; 4]> {
         let req = NetRequest::Resolve { hostname };
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<NetRequest, NetResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
             NetResponse::Addr(addr) => Ok(addr),
             NetResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -117,7 +135,10 @@ impl NetClient {
     pub fn local_ip(&mut self) -> ViResult<[u8; 4]> {
         let req = NetRequest::GetLocalIp;
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self.svc.call::<NetRequest, NetResponse>(&req, &mut resp_buf)? {
+        match self
+            .svc
+            .call::<NetRequest, NetResponse>(&req, &mut resp_buf)?
+        {
             NetResponse::Addr(addr) => Ok(addr),
             NetResponse::Err(code) => Err(vierr_from_code(code)),
             _ => Err(ViError::IO),
@@ -126,7 +147,9 @@ impl NetClient {
 }
 
 impl Default for NetClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ─── TcpStream ────────────────────────────────────────────────────────────────

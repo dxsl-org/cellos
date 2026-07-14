@@ -5,22 +5,22 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-types = { path = "../../libs/types" }
+types = { path = "../../libs/types", version = "0.1.0" }
 
 
-hal-arch-trait = { path = "../traits/arch" }
-hal-timer = { path = "../traits/timer" }
-hal-interrupt = { path = "../traits/interrupt" }
-hal-paging = { path = "../traits/paging" }
+hal-arch-trait = { path = "../traits/arch", version = "0.1.0" }
+hal-timer = { path = "../traits/timer", version = "0.1.0" }
+hal-interrupt = { path = "../traits/interrupt", version = "0.1.0" }
+hal-paging = { path = "../traits/paging", version = "0.1.0" }
 
-hal-uart = { path = "../traits/uart" }
-hal-traits-mmc = { path = "../traits/mmc" }
-hal-display = { path = "../traits/display" }
-hal-hypervisor = { path = "../traits/hypervisor" }
+hal-uart = { path = "../traits/uart", version = "0.1.0" }
+hal-traits-mmc = { path = "../traits/mmc", version = "0.1.0" }
+hal-display = { path = "../traits/display", version = "0.1.0" }
+hal-hypervisor = { path = "../traits/hypervisor", version = "0.1.0" }
 
-hal-riscv = { path = "../arch/riscv", optional = true }
-hal-arm = { path = "../arch/arm", optional = true }
-hal-x86 = { path = "../arch/x86", optional = true }
+hal-riscv = { path = "../arch/riscv", version = "0.2.0", optional = true }
+hal-arm = { path = "../arch/arm", version = "0.1.0", optional = true }
+hal-x86 = { path = "../arch/x86", version = "0.1.0", optional = true }
 
 [features]
 default = ["riscv64"]

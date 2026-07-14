@@ -30,7 +30,7 @@ fn main() {
 
 fn compile_lua(target: &str, manifest: &str) {
     // Lua 5.4 sources live in the lua runtime crate — referenced by absolute path.
-    let src_dir  = format!("{manifest}/../../runtimes/lua/src/c/src");
+    let src_dir = format!("{manifest}/../../runtimes/lua/src/c/src");
     let glue_dir = format!("{manifest}/../../runtimes/lua/glue");
 
     // liolib.c / loslib.c are excluded: they pull in FILE* stdio and strftime
@@ -38,13 +38,36 @@ fn compile_lua(target: &str, manifest: &str) {
     // _C_time_locale — incompatible with PIE cell linking.  Stubs in
     // src/c/lua_game_stubs.c replace them with empty tables.
     const LUA_SRC: &[&str] = &[
-        "lapi.c","lcode.c","lctype.c","ldebug.c","ldo.c","ldump.c",
-        "lfunc.c","lgc.c","llex.c","lmem.c","lobject.c","lopcodes.c",
-        "lparser.c","lstate.c","lstring.c","ltable.c","ltm.c",
-        "lundump.c","lvm.c","lzio.c",
-        "lauxlib.c","lbaselib.c","lcorolib.c","ldblib.c",
-        "lmathlib.c","loadlib.c","lstrlib.c","ltablib.c",
-        "lutf8lib.c","linit.c",
+        "lapi.c",
+        "lcode.c",
+        "lctype.c",
+        "ldebug.c",
+        "ldo.c",
+        "ldump.c",
+        "lfunc.c",
+        "lgc.c",
+        "llex.c",
+        "lmem.c",
+        "lobject.c",
+        "lopcodes.c",
+        "lparser.c",
+        "lstate.c",
+        "lstring.c",
+        "ltable.c",
+        "ltm.c",
+        "lundump.c",
+        "lvm.c",
+        "lzio.c",
+        "lauxlib.c",
+        "lbaselib.c",
+        "lcorolib.c",
+        "ldblib.c",
+        "lmathlib.c",
+        "loadlib.c",
+        "lstrlib.c",
+        "ltablib.c",
+        "lutf8lib.c",
+        "linit.c",
     ];
 
     let mut build = cc::Build::new();
@@ -72,7 +95,7 @@ fn compile_lua(target: &str, manifest: &str) {
     build.file(format!("{glue_dir}/lua_vios_glue.c"));
     // Stubs for io/os libs (excluded above to avoid picolibc non-PIC relocations).
     build.file(format!("{manifest}/src/c/lua_game_stubs.c"));
-    build.compile("lua54_tl");  // suffix _tl to avoid OUT_DIR collision with lua runtime
+    build.compile("lua54_tl"); // suffix _tl to avoid OUT_DIR collision with lua runtime
 
     println!("cargo:rerun-if-changed={src_dir}");
     println!("cargo:rerun-if-changed={glue_dir}");
@@ -82,24 +105,53 @@ fn compile_lua(target: &str, manifest: &str) {
 
 fn has_elf_compiler(target: &str) -> bool {
     let env_key = target.replace('-', "_");
-    if std::env::var(format!("CC_{env_key}")).is_ok() { return true; }
+    if std::env::var(format!("CC_{env_key}")).is_ok() {
+        return true;
+    }
     let host = std::env::var("HOST").unwrap_or_default();
-    if !host.contains("msvc") { return true; }
+    if !host.contains("msvc") {
+        return true;
+    }
     let candidates: &[&str] = if target.contains("aarch64") {
-        &["clang","clang-18","clang-17","clang-16","aarch64-none-elf-gcc"]
+        &[
+            "clang",
+            "clang-18",
+            "clang-17",
+            "clang-16",
+            "aarch64-none-elf-gcc",
+        ]
     } else {
-        &["clang","clang-18","clang-17","clang-16","x86_64-elf-gcc"]
+        &[
+            "clang",
+            "clang-18",
+            "clang-17",
+            "clang-16",
+            "x86_64-elf-gcc",
+        ]
     };
-    candidates.iter().any(|c| std::process::Command::new(c).arg("--version").output().is_ok())
+    candidates.iter().any(|c| {
+        std::process::Command::new(c)
+            .arg("--version")
+            .output()
+            .is_ok()
+    })
 }
 
 fn configure_elf_compiler(build: &mut cc::Build, target: &str) {
     let env_key = target.replace('-', "_");
-    if std::env::var(format!("CC_{env_key}")).is_ok() { return; }
+    if std::env::var(format!("CC_{env_key}")).is_ok() {
+        return;
+    }
     let host = std::env::var("HOST").unwrap_or_default();
-    if !host.contains("msvc") { return; }
-    for name in &["clang","clang-18","clang-17","clang-16"] {
-        if std::process::Command::new(name).arg("--version").output().is_ok() {
+    if !host.contains("msvc") {
+        return;
+    }
+    for name in &["clang", "clang-18", "clang-17", "clang-16"] {
+        if std::process::Command::new(name)
+            .arg("--version")
+            .output()
+            .is_ok()
+        {
             build.compiler(*name);
             let triple = if target.contains("aarch64") {
                 "aarch64-unknown-none-elf"
@@ -117,12 +169,15 @@ fn link_picolibc() {
         let mut a = vec!["-march=rv64gc", "-mabi=lp64d"];
         a.extend_from_slice(args);
         std::process::Command::new("riscv-none-elf-gcc")
-            .args(&a).output()
+            .args(&a)
+            .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default()
     }
-    for p in [riscv_gcc(&["--print-file-name=libc.a"]),
-              riscv_gcc(&["--print-libgcc-file-name"])] {
+    for p in [
+        riscv_gcc(&["--print-file-name=libc.a"]),
+        riscv_gcc(&["--print-libgcc-file-name"]),
+    ] {
         if let Some(dir) = std::path::Path::new(&p).parent() {
             let d = dir.to_string_lossy();
             if !d.is_empty() && d != "." {

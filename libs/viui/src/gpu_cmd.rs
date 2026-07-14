@@ -6,9 +6,9 @@
 //! a `CommandExecutor` — allowing damage-rect filtering and future hardware
 //! GPU execution without changing widget code.
 
-use alloc::{string::String, vec::Vec};
 use crate::canvas::{Color, TextStyle};
 use crate::layout::{Point, Rect};
+use alloc::{string::String, vec::Vec};
 
 // ─── GpuCmd ──────────────────────────────────────────────────────────────────
 
@@ -16,17 +16,30 @@ use crate::layout::{Point, Rect};
 #[derive(Debug)]
 pub enum GpuCmd {
     /// Fill a pre-clipped solid rectangle.
-    FillRect  { rect: Rect, color: Color },
+    FillRect { rect: Rect, color: Color },
     /// Draw a line from `a` to `b` (Bresenham, handled by executor).
-    DrawLine  { a: Point, b: Point, color: Color },
+    DrawLine { a: Point, b: Point, color: Color },
     /// Draw text at `pos`. `style.size_px == 0` = bitmap 8×8 fallback.
-    DrawText  { pos: Point, text: String, style: TextStyle },
+    DrawText {
+        pos: Point,
+        text: String,
+        style: TextStyle,
+    },
     /// Blit raw BGRA pixels. Destination may extend beyond current clip —
     /// executor applies clipping during playback.
-    DrawImage { dest: Rect, pixels: Vec<u8>, src_stride: u32 },
+    DrawImage {
+        dest: Rect,
+        pixels: Vec<u8>,
+        src_stride: u32,
+    },
     /// Zero-alloc path for text ≤ 127 bytes (covers all typical single-line UI strings).
     /// Bytes are always valid UTF-8 — written from `&str` in `GpuCanvas::draw_text`.
-    DrawTextShort { pos: Point, bytes: [u8; 128], len: u8, style: TextStyle },
+    DrawTextShort {
+        pos: Point,
+        bytes: [u8; 128],
+        len: u8,
+        style: TextStyle,
+    },
 }
 
 impl GpuCmd {
@@ -38,21 +51,34 @@ impl GpuCmd {
         match self {
             GpuCmd::FillRect { rect, .. } => Some(*rect),
             GpuCmd::DrawLine { a, b, .. } => {
-                let x  = a.x.min(b.x);
-                let y  = a.y.min(b.y);
+                let x = a.x.min(b.x);
+                let y = a.y.min(b.y);
                 let x2 = a.x.max(b.x);
                 let y2 = a.y.max(b.y);
                 // Min 1px so a horizontal/vertical line still has area.
-                Some(Rect { x, y, w: (x2 - x).max(1.0), h: (y2 - y).max(1.0) })
+                Some(Rect {
+                    x,
+                    y,
+                    w: (x2 - x).max(1.0),
+                    h: (y2 - y).max(1.0),
+                })
             }
             GpuCmd::DrawText { pos, text, .. } => {
                 // 8×8 bitmap font: estimate width = chars × 8px
-                Some(Rect { x: pos.x, y: pos.y, w: text.len() as f32 * 8.0, h: 8.0 })
+                Some(Rect {
+                    x: pos.x,
+                    y: pos.y,
+                    w: text.len() as f32 * 8.0,
+                    h: 8.0,
+                })
             }
             GpuCmd::DrawImage { dest, .. } => Some(*dest),
-            GpuCmd::DrawTextShort { pos, len, .. } => {
-                Some(Rect { x: pos.x, y: pos.y, w: *len as f32 * 8.0, h: 8.0 })
-            }
+            GpuCmd::DrawTextShort { pos, len, .. } => Some(Rect {
+                x: pos.x,
+                y: pos.y,
+                w: *len as f32 * 8.0,
+                h: 8.0,
+            }),
         }
     }
 }
@@ -65,7 +91,7 @@ impl GpuCmd {
 /// `GpuCommandBuffer::push()` so the executor reads a stored field instead
 /// of recomputing it every frame.
 pub struct RecordedCmd {
-    pub cmd:    GpuCmd,
+    pub cmd: GpuCmd,
     pub bounds: Option<Rect>,
 }
 
@@ -77,7 +103,9 @@ pub struct GpuCommandBuffer {
 }
 
 impl GpuCommandBuffer {
-    pub fn new() -> Self { Self { cmds: Vec::new() } }
+    pub fn new() -> Self {
+        Self { cmds: Vec::new() }
+    }
 
     /// Append a command, pre-computing its bounding rect once at record time.
     pub fn push(&mut self, cmd: GpuCmd) {
@@ -86,16 +114,26 @@ impl GpuCommandBuffer {
     }
 
     /// Iterate recorded commands with pre-computed bounds.
-    pub fn recorded_slice(&self) -> &[RecordedCmd] { &self.cmds }
+    pub fn recorded_slice(&self) -> &[RecordedCmd] {
+        &self.cmds
+    }
 
-    pub fn len(&self) -> usize { self.cmds.len() }
+    pub fn len(&self) -> usize {
+        self.cmds.len()
+    }
 
-    pub fn is_empty(&self) -> bool { self.cmds.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.cmds.is_empty()
+    }
 
     /// Clear all commands while retaining the Vec's heap allocation for the next frame.
-    pub fn clear(&mut self) { self.cmds.clear(); }
+    pub fn clear(&mut self) {
+        self.cmds.clear();
+    }
 }
 
 impl Default for GpuCommandBuffer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

@@ -51,8 +51,12 @@ extern "C" {
 // ---------------------------------------------------------------------------
 
 fn write_bytes(s: &[u8]) {
-    extern "C" { fn _write(fd: i32, buf: *const c_void, len: usize) -> i32; }
-    unsafe { _write(1, s.as_ptr() as *const c_void, s.len()); }
+    extern "C" {
+        fn _write(fd: i32, buf: *const c_void, len: usize) -> i32;
+    }
+    unsafe {
+        _write(1, s.as_ptr() as *const c_void, s.len());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -61,8 +65,12 @@ fn write_bytes(s: &[u8]) {
 
 const EPS: f64 = 1e-9;
 
-fn near(a: f64, b: f64) -> bool { (a - b).abs() < EPS }
-fn nearf(a: f32, b: f32) -> bool { (a - b).abs() < 1e-6 }
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() < EPS
+}
+fn nearf(a: f32, b: f32) -> bool {
+    (a - b).abs() < 1e-6
+}
 
 const M_E: f64 = core::f64::consts::E;
 const M_PI: f64 = core::f64::consts::PI;
@@ -73,19 +81,47 @@ pub fn main() {
     let total = 7i32;
 
     // Test 1: sin(0) == 0
-    if near(unsafe { sin(0.0) }, 0.0)      { pass += 1; } else { write_bytes(b"FAIL sin(0)\n"); }
+    if near(unsafe { sin(0.0) }, 0.0) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL sin(0)\n");
+    }
     // Test 2: cos(0) == 1
-    if near(unsafe { cos(0.0) }, 1.0)      { pass += 1; } else { write_bytes(b"FAIL cos(0)\n"); }
+    if near(unsafe { cos(0.0) }, 1.0) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL cos(0)\n");
+    }
     // Test 3: sqrt(4) == 2
-    if near(unsafe { sqrt(4.0) }, 2.0)     { pass += 1; } else { write_bytes(b"FAIL sqrt(4)\n"); }
+    if near(unsafe { sqrt(4.0) }, 2.0) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL sqrt(4)\n");
+    }
     // Test 4: pow(2, 10) == 1024
-    if near(unsafe { pow(2.0, 10.0) }, 1024.0) { pass += 1; } else { write_bytes(b"FAIL pow(2,10)\n"); }
+    if near(unsafe { pow(2.0, 10.0) }, 1024.0) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL pow(2,10)\n");
+    }
     // Test 5: sinf(0) == 0
-    if nearf(unsafe { sinf(0.0f32) }, 0.0f32) { pass += 1; } else { write_bytes(b"FAIL sinf(0)\n"); }
+    if nearf(unsafe { sinf(0.0f32) }, 0.0f32) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL sinf(0)\n");
+    }
     // Test 6: log(e) == 1
-    if near(unsafe { log(M_E) }, 1.0)      { pass += 1; } else { write_bytes(b"FAIL log(e)\n"); }
+    if near(unsafe { log(M_E) }, 1.0) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL log(e)\n");
+    }
     // Test 7: atan2(1,1) == pi/4
-    if near(unsafe { atan2(1.0, 1.0) }, M_PI / 4.0) { pass += 1; } else { write_bytes(b"FAIL atan2(1,1)\n"); }
+    if near(unsafe { atan2(1.0, 1.0) }, M_PI / 4.0) {
+        pass += 1;
+    } else {
+        write_bytes(b"FAIL atan2(1,1)\n");
+    }
 
     // Print summary via printf (tests the stdio shim)
     unsafe {

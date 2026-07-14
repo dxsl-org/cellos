@@ -21,10 +21,18 @@ struct RamFile {
 
 impl RamFile {
     fn new_file(data: &[u8]) -> Self {
-        Self { data: Vec::from(data), is_dir: false, children: BTreeMap::new() }
+        Self {
+            data: Vec::from(data),
+            is_dir: false,
+            children: BTreeMap::new(),
+        }
     }
     fn new_dir() -> Self {
-        Self { data: Vec::new(), is_dir: true, children: BTreeMap::new() }
+        Self {
+            data: Vec::new(),
+            is_dir: true,
+            children: BTreeMap::new(),
+        }
     }
 }
 
@@ -35,18 +43,23 @@ pub struct RamFsBackend {
 impl RamFsBackend {
     pub fn new() -> Self {
         let mut root = Box::new(RamFile::new_dir());
-        root.children.insert(String::from("readme.txt"),
-            Box::new(RamFile::new_file(b"Welcome to ViCell!\n")));
+        root.children.insert(
+            String::from("readme.txt"),
+            Box::new(RamFile::new_file(b"Welcome to ViCell!\n")),
+        );
         // /bin is served by BootFsProxy (kernel initramfs) since Phase 02 —
         // the embedded ELF copies that used to live here doubled every /bin
         // binary in RAM (once in kernel_fs.img, once in the VFS cell image).
-        root.children.insert(String::from("tmp"), Box::new(RamFile::new_dir()));
+        root.children
+            .insert(String::from("tmp"), Box::new(RamFile::new_dir()));
 
         Self { root }
     }
 
     fn find_node(&self, path: &str) -> Option<&RamFile> {
-        if path == "/" { return Some(&self.root); }
+        if path == "/" {
+            return Some(&self.root);
+        }
         let mut cur = &self.root;
         for part in path.split('/').filter(|p| !p.is_empty()) {
             cur = cur.children.get(part)?;
@@ -55,7 +68,9 @@ impl RamFsBackend {
     }
 
     fn find_node_mut(&mut self, path: &str) -> Option<&mut RamFile> {
-        if path == "/" { return Some(&mut self.root); }
+        if path == "/" {
+            return Some(&mut self.root);
+        }
         let mut cur: &mut RamFile = &mut self.root;
         for part in path.split('/').filter(|p| !p.is_empty()) {
             cur = cur.children.get_mut(part)?.as_mut();
@@ -66,17 +81,27 @@ impl RamFsBackend {
     /// Split `path` into (parent_path, child_name). Returns `None` for root "/".
     fn split_parent_name(path: &str) -> Option<(String, String)> {
         let path = path.trim_end_matches('/');
-        if path.is_empty() { return None; }
+        if path.is_empty() {
+            return None;
+        }
         let slash = path.rfind('/')?;
-        let parent = if slash == 0 { String::from("/") } else { String::from(&path[..slash]) };
-        let name   = String::from(&path[slash + 1..]);
-        if name.is_empty() { return None; }
+        let parent = if slash == 0 {
+            String::from("/")
+        } else {
+            String::from(&path[..slash])
+        };
+        let name = String::from(&path[slash + 1..]);
+        if name.is_empty() {
+            return None;
+        }
         Some((parent, name))
     }
 
     fn get_file_data(&self, path: &str) -> Option<&[u8]> {
         let n = self.find_node(path)?;
-        if n.is_dir { return None; }
+        if n.is_dir {
+            return None;
+        }
         Some(&n.data)
     }
 
@@ -93,9 +118,14 @@ impl RamFsBackend {
         };
         match parent.children.get_mut(&name) {
             Some(existing) if existing.is_dir => false,
-            Some(existing) => { existing.data = Vec::from(content); true }
+            Some(existing) => {
+                existing.data = Vec::from(content);
+                true
+            }
             None => {
-                parent.children.insert(name, Box::new(RamFile::new_file(content)));
+                parent
+                    .children
+                    .insert(name, Box::new(RamFile::new_file(content)));
                 true
             }
         }
@@ -105,7 +135,9 @@ impl RamFsBackend {
 impl FsBackend for RamFsBackend {
     fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)> {
         let n = self.find_node(path)?;
-        if n.is_dir { return None; }
+        if n.is_dir {
+            return None;
+        }
         Some((n.data.as_ptr() as usize, n.data.len()))
     }
 
@@ -122,7 +154,9 @@ impl FsBackend for RamFsBackend {
             let prefix: &[u8] = if child.is_dir { b"d:" } else { b"f:" };
             let name_b = name.as_bytes();
             let entry_len = prefix.len() + name_b.len() + 1; // +1 for '\n'
-            if pos + entry_len > cap { break; }
+            if pos + entry_len > cap {
+                break;
+            }
             out[pos..pos + 2].copy_from_slice(prefix);
             out[pos + 2..pos + 2 + name_b.len()].copy_from_slice(name_b);
             out[pos + 2 + name_b.len()] = b'\n';
@@ -132,26 +166,38 @@ impl FsBackend for RamFsBackend {
     }
 
     fn stat(&self, path: &str) -> Option<(u64, bool)> {
-        self.find_node(path).map(|n| (n.data.len() as u64, n.is_dir))
+        self.find_node(path)
+            .map(|n| (n.data.len() as u64, n.is_dir))
     }
 
     fn file_size(&self, path: &str) -> u64 {
-        self.get_file_data(path).map(|d| d.len() as u64).unwrap_or(0)
+        self.get_file_data(path)
+            .map(|d| d.len() as u64)
+            .unwrap_or(0)
     }
 
     fn read_to_vec(&self, path: &str) -> Vec<u8> {
-        self.get_file_data(path).map(|d| d.to_vec()).unwrap_or_default()
+        self.get_file_data(path)
+            .map(|d| d.to_vec())
+            .unwrap_or_default()
     }
 
     fn write(&mut self, path: &str, content: &[u8]) -> bool {
         // Embedded catalog is immutable; only the volatile scratch space accepts writes.
-        if !path.starts_with("/tmp/") { return false; }
+        if !path.starts_with("/tmp/") {
+            return false;
+        }
         self.write_node(path, content)
     }
 
     fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        if !path.starts_with("/tmp/") { return false; }
-        let mut data = self.get_file_data(path).map(|d| d.to_vec()).unwrap_or_default();
+        if !path.starts_with("/tmp/") {
+            return false;
+        }
+        let mut data = self
+            .get_file_data(path)
+            .map(|d| d.to_vec())
+            .unwrap_or_default();
         data.extend_from_slice(content);
         self.write_node(path, &data)
     }
@@ -171,7 +217,9 @@ impl FsBackend for RamFsBackend {
     fn rmdir(&mut self, path: &str) -> bool {
         if let Some((parent_path, name)) = Self::split_parent_name(path) {
             if let Some(parent) = self.find_node_mut(&parent_path) {
-                let removable = parent.children.get(&name)
+                let removable = parent
+                    .children
+                    .get(&name)
                     .map(|c| c.is_dir && c.children.is_empty())
                     .unwrap_or(false);
                 if removable {
@@ -186,7 +234,9 @@ impl FsBackend for RamFsBackend {
     fn unlink(&mut self, path: &str) -> bool {
         if let Some((parent_path, name)) = Self::split_parent_name(path) {
             if let Some(parent) = self.find_node_mut(&parent_path) {
-                let removable = parent.children.get(&name)
+                let removable = parent
+                    .children
+                    .get(&name)
                     .map(|c| !c.is_dir)
                     .unwrap_or(false);
                 if removable {
@@ -201,7 +251,12 @@ impl FsBackend for RamFsBackend {
     fn rmdir_recursive(&mut self, path: &str) -> bool {
         if let Some((parent_path, name)) = Self::split_parent_name(path) {
             if let Some(parent) = self.find_node_mut(&parent_path) {
-                if parent.children.get(&name).map(|c| c.is_dir).unwrap_or(false) {
+                if parent
+                    .children
+                    .get(&name)
+                    .map(|c| c.is_dir)
+                    .unwrap_or(false)
+                {
                     parent.children.remove(&name);
                     return true;
                 }

@@ -17,39 +17,56 @@ use crate::signal::SubscriptionHandle;
 /// `padding` on all sides.
 pub struct Column {
     pub children: Vec<Box<dyn ViNode>>,
-    pub spacing:  f32,
-    pub padding:  f32,
-    bounds:       Rect,
+    pub spacing: f32,
+    pub padding: f32,
+    bounds: Rect,
 }
 
 impl Column {
     pub fn new(children: Vec<Box<dyn ViNode>>) -> Self {
-        Self { children, spacing: 4.0, padding: 0.0, bounds: Rect::ZERO }
+        Self {
+            children,
+            spacing: 4.0,
+            padding: 0.0,
+            bounds: Rect::ZERO,
+        }
     }
 
-    pub fn with_spacing(mut self, s: f32) -> Self { self.spacing = s; self }
-    pub fn with_padding(mut self, p: f32) -> Self { self.padding = p; self }
+    pub fn with_spacing(mut self, s: f32) -> Self {
+        self.spacing = s;
+        self
+    }
+    pub fn with_padding(mut self, p: f32) -> Self {
+        self.padding = p;
+        self
+    }
 }
 
 impl ViNode for Column {
     fn layout(&mut self, constraints: Constraints) -> Size {
         let pad = self.padding;
-        let sp  = self.spacing;
-        let mut y    = constraints.origin.y + pad;
-        let x        = constraints.origin.x + pad;
-        let inner_w  = (constraints.max.w - 2.0 * pad).max(0.0);
+        let sp = self.spacing;
+        let mut y = constraints.origin.y + pad;
+        let x = constraints.origin.x + pad;
+        let inner_w = (constraints.max.w - 2.0 * pad).max(0.0);
         let mut used_h = pad;
 
         for child in &mut self.children {
             let avail_h = (constraints.max.h - used_h - pad).max(0.0);
-            let child_size = child.layout(
-                Constraints::new(Point::new(x, y), Size { w: inner_w, h: avail_h })
-            );
-            y      += child_size.h + sp;
+            let child_size = child.layout(Constraints::new(
+                Point::new(x, y),
+                Size {
+                    w: inner_w,
+                    h: avail_h,
+                },
+            ));
+            y += child_size.h + sp;
             used_h += child_size.h + sp;
         }
 
-        if !self.children.is_empty() { used_h -= sp; }
+        if !self.children.is_empty() {
+            used_h -= sp;
+        }
         used_h += pad;
 
         let size = constraints.constrain(Size {
@@ -60,7 +77,9 @@ impl ViNode for Column {
         size
     }
 
-    fn bounds(&self) -> Rect { self.bounds }
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         for child in &self.children {
@@ -70,13 +89,16 @@ impl ViNode for Column {
 
     fn event(&mut self, event: &Event) -> bool {
         for child in self.children.iter_mut().rev() {
-            if child.event(event) { return true; }
+            if child.event(event) {
+                return true;
+            }
         }
         false
     }
 
     fn collect_focusable_bounds(&mut self) -> alloc::vec::Vec<crate::layout::Rect> {
-        self.children.iter_mut()
+        self.children
+            .iter_mut()
             .flat_map(|c| c.collect_focusable_bounds())
             .collect()
     }

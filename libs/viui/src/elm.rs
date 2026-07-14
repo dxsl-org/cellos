@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use crate::event::{Event, EventCx, EventStatus};
 use crate::layout::{Constraints, LayoutNode, Padding, Point, Rect, Size};
-use crate::widget::{PaintCx, WidgetId, ViWidget};
+use crate::widget::{PaintCx, ViWidget, WidgetId};
 
 // ─── ViApp ───────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,9 @@ pub trait ViApp: 'static + Sized {
     fn update(&mut self, msg: Self::Message);
 
     /// Window title (optional override).
-    fn title(&self) -> &str { "ViCell" }
+    fn title(&self) -> &str {
+        "ViCell"
+    }
 }
 
 // ─── Element<Msg> ────────────────────────────────────────────────────────────
@@ -49,13 +51,19 @@ impl<Msg: 'static> Element<Msg> {
     pub fn inert(widget: impl ViWidget) -> Self {
         struct Inert<W>(W);
         impl<W: ViWidget, M: 'static> ErasedWidget<M> for Inert<W> {
-            fn layout(&self, c: Constraints) -> LayoutNode { self.0.layout(c) }
-            fn paint(&self, cx: &mut PaintCx) { self.0.paint(cx) }
+            fn layout(&self, c: Constraints) -> LayoutNode {
+                self.0.layout(c)
+            }
+            fn paint(&self, cx: &mut PaintCx) {
+                self.0.paint(cx)
+            }
             fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<M>) {
                 (self.0.event(cx, e), None)
             }
         }
-        Self { inner: Box::new(Inert(widget)) }
+        Self {
+            inner: Box::new(Inert(widget)),
+        }
     }
 
     /// Wrap a widget that can emit a message.
@@ -75,19 +83,33 @@ impl<Msg: 'static> Element<Msg> {
         impl<W: ViWidget, F: Fn(&EventCx) -> Option<M> + 'static, M: 'static> ErasedWidget<M>
             for Emitter<W, F, M>
         {
-            fn layout(&self, c: Constraints) -> LayoutNode { self.widget.layout(c) }
-            fn paint(&self, cx: &mut PaintCx) { self.widget.paint(cx) }
+            fn layout(&self, c: Constraints) -> LayoutNode {
+                self.widget.layout(c)
+            }
+            fn paint(&self, cx: &mut PaintCx) {
+                self.widget.paint(cx)
+            }
             fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<M>) {
                 let status = self.widget.event(cx, e);
                 let msg = (self.on_event)(cx);
                 (status, msg)
             }
         }
-        Self { inner: Box::new(Emitter { widget, on_event, _msg: core::marker::PhantomData }) }
+        Self {
+            inner: Box::new(Emitter {
+                widget,
+                on_event,
+                _msg: core::marker::PhantomData,
+            }),
+        }
     }
 
-    pub fn layout(&self, c: Constraints) -> LayoutNode { self.inner.layout(c) }
-    pub fn paint(&self, cx: &mut PaintCx) { self.inner.paint(cx) }
+    pub fn layout(&self, c: Constraints) -> LayoutNode {
+        self.inner.layout(c)
+    }
+    pub fn paint(&self, cx: &mut PaintCx) {
+        self.inner.paint(cx)
+    }
     pub fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<Msg>) {
         self.inner.event(cx, e)
     }
@@ -105,8 +127,16 @@ trait ErasedWidget<Msg: 'static>: 'static {
 //
 // Elm-mode containers that propagate messages from children.
 
-struct ElmColumn<Msg: 'static> { children: Vec<Element<Msg>>, spacing: f32, padding: Padding }
-struct ElmRow<Msg: 'static>    { children: Vec<Element<Msg>>, spacing: f32, padding: Padding }
+struct ElmColumn<Msg: 'static> {
+    children: Vec<Element<Msg>>,
+    spacing: f32,
+    padding: Padding,
+}
+struct ElmRow<Msg: 'static> {
+    children: Vec<Element<Msg>>,
+    spacing: f32,
+    padding: Padding,
+}
 
 impl<Msg: 'static> ErasedWidget<Msg> for ElmColumn<Msg> {
     fn layout(&self, c: Constraints) -> LayoutNode {
@@ -123,22 +153,37 @@ impl<Msg: 'static> ErasedWidget<Msg> for ElmColumn<Msg> {
             nodes.push(node);
             oy += h + self.spacing;
         }
-        let total_h = ((oy - c.origin.y - self.spacing).max(0.0) + self.padding.v_total()).min(c.max.h);
-        LayoutNode::with_children(Rect { x: c.origin.x, y: c.origin.y, w: c.max.w, h: total_h }, nodes)
+        let total_h =
+            ((oy - c.origin.y - self.spacing).max(0.0) + self.padding.v_total()).min(c.max.h);
+        LayoutNode::with_children(
+            Rect {
+                x: c.origin.x,
+                y: c.origin.y,
+                w: c.max.w,
+                h: total_h,
+            },
+            nodes,
+        )
     }
     fn paint(&self, cx: &mut PaintCx) {
-        for child in &self.children { child.paint(cx); }
+        for child in &self.children {
+            child.paint(cx);
+        }
     }
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<Msg>) {
         for (i, child) in self.children.iter_mut().enumerate() {
             let Some(cl) = cx.layout.child(i) else { break };
             let mut ccx = EventCx {
-                state: cx.state, focus: cx.focus,
+                state: cx.state,
+                focus: cx.focus,
                 widget_id: cx.widget_id.child(i),
-                layout: cl, needs_repaint: false,
+                layout: cl,
+                needs_repaint: false,
             };
             let (status, msg) = child.event(&mut ccx, e);
-            if ccx.needs_repaint { cx.mark_dirty(); }
+            if ccx.needs_repaint {
+                cx.mark_dirty();
+            }
             if msg.is_some() || status == EventStatus::Consumed {
                 return (status, msg);
             }
@@ -162,22 +207,37 @@ impl<Msg: 'static> ErasedWidget<Msg> for ElmRow<Msg> {
             nodes.push(node);
             ox += w + self.spacing;
         }
-        let total_w = ((ox - c.origin.x - self.spacing).max(0.0) + self.padding.h_total()).min(c.max.w);
-        LayoutNode::with_children(Rect { x: c.origin.x, y: c.origin.y, w: total_w, h: ih + self.padding.v_total() }, nodes)
+        let total_w =
+            ((ox - c.origin.x - self.spacing).max(0.0) + self.padding.h_total()).min(c.max.w);
+        LayoutNode::with_children(
+            Rect {
+                x: c.origin.x,
+                y: c.origin.y,
+                w: total_w,
+                h: ih + self.padding.v_total(),
+            },
+            nodes,
+        )
     }
     fn paint(&self, cx: &mut PaintCx) {
-        for child in &self.children { child.paint(cx); }
+        for child in &self.children {
+            child.paint(cx);
+        }
     }
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<Msg>) {
         for (i, child) in self.children.iter_mut().enumerate() {
             let Some(cl) = cx.layout.child(i) else { break };
             let mut ccx = EventCx {
-                state: cx.state, focus: cx.focus,
+                state: cx.state,
+                focus: cx.focus,
                 widget_id: cx.widget_id.child(i),
-                layout: cl, needs_repaint: false,
+                layout: cl,
+                needs_repaint: false,
             };
             let (status, msg) = child.event(&mut ccx, e);
-            if ccx.needs_repaint { cx.mark_dirty(); }
+            if ccx.needs_repaint {
+                cx.mark_dirty();
+            }
             if msg.is_some() || status == EventStatus::Consumed {
                 return (status, msg);
             }
@@ -190,15 +250,20 @@ impl<Msg: 'static> ErasedWidget<Msg> for ElmRow<Msg> {
 
 /// Builder for `button()` — adds `.on_press(msg)` before resolving to `Element<Msg>`.
 pub struct ButtonBuilder<Msg> {
-    id:      WidgetId,
-    label:   String,
+    id: WidgetId,
+    label: String,
     padding: Padding,
     on_press: Option<Msg>,
 }
 
 impl<Msg: 'static + Clone> ButtonBuilder<Msg> {
     fn new(id: WidgetId, label: String) -> Self {
-        Self { id, label, padding: Padding::all(6.0), on_press: None }
+        Self {
+            id,
+            label,
+            padding: Padding::all(6.0),
+            on_press: None,
+        }
     }
 
     pub fn on_press(mut self, msg: Msg) -> Element<Msg> {
@@ -206,7 +271,10 @@ impl<Msg: 'static + Clone> ButtonBuilder<Msg> {
         self.into_element()
     }
 
-    pub fn padding(mut self, px: f32) -> Self { self.padding = Padding::all(px); self }
+    pub fn padding(mut self, px: f32) -> Self {
+        self.padding = Padding::all(px);
+        self
+    }
 
     fn into_element(self) -> Element<Msg> {
         use crate::widgets::Button;
@@ -234,17 +302,34 @@ pub fn button<Msg: 'static + Clone>(label: impl Into<String>) -> ButtonBuilder<M
 
 /// Vertically stack children.
 pub fn column<Msg: 'static>(children: Vec<Element<Msg>>) -> Element<Msg> {
-    Element { inner: Box::new(ElmColumn { children, spacing: 4.0, padding: Padding::ZERO }) }
+    Element {
+        inner: Box::new(ElmColumn {
+            children,
+            spacing: 4.0,
+            padding: Padding::ZERO,
+        }),
+    }
 }
 
 /// Horizontally arrange children.
 pub fn row<Msg: 'static>(children: Vec<Element<Msg>>) -> Element<Msg> {
-    Element { inner: Box::new(ElmRow { children, spacing: 4.0, padding: Padding::ZERO }) }
+    Element {
+        inner: Box::new(ElmRow {
+            children,
+            spacing: 4.0,
+            padding: Padding::ZERO,
+        }),
+    }
 }
 
 /// Checkbox that emits `msg(new_checked)` on toggle.
-pub fn checkbox<Msg: 'static + Clone, F>(checked: bool, label: impl Into<String>, on_toggle: F) -> Element<Msg>
-where F: Fn(bool) -> Msg + 'static
+pub fn checkbox<Msg: 'static + Clone, F>(
+    checked: bool,
+    label: impl Into<String>,
+    on_toggle: F,
+) -> Element<Msg>
+where
+    F: Fn(bool) -> Msg + 'static,
 {
     use crate::widgets::Checkbox;
     let s = label.into();
@@ -276,11 +361,20 @@ pub fn image<Msg: 'static>(pixels: alloc::vec::Vec<u8>, w: u32, h: u32) -> Eleme
 pub fn scrollable<Msg: 'static>(id: WidgetId, content: Element<Msg>) -> Element<Msg> {
     // Wraps content in an inert ScrollArea; message propagation deferred to P07.
     // For now, wrap the Elm content as a ViWidget via a thin adapter.
-    struct ElmScrollable<M: 'static> { inner: Element<M>, id: WidgetId }
+    struct ElmScrollable<M: 'static> {
+        inner: Element<M>,
+        id: WidgetId,
+    }
     impl<M: 'static> ErasedWidget<M> for ElmScrollable<M> {
         fn layout(&self, c: Constraints) -> LayoutNode {
             let own_size = c.constrain(c.max);
-            let child_c = Constraints::new(c.origin, Size { w: own_size.w, h: own_size.h * 4.0 });
+            let child_c = Constraints::new(
+                c.origin,
+                Size {
+                    w: own_size.w,
+                    h: own_size.h * 4.0,
+                },
+            );
             let child_node = self.inner.layout(child_c);
             let bounds = Rect::from_origin_size(c.origin, own_size);
             LayoutNode::with_children(bounds, alloc::vec![child_node])
@@ -291,19 +385,25 @@ pub fn scrollable<Msg: 'static>(id: WidgetId, content: Element<Msg>) -> Element<
         fn event(&mut self, cx: &mut EventCx, e: &Event) -> (EventStatus, Option<M>) {
             if let Some(cl) = cx.layout.child(0) {
                 let mut ccx = EventCx {
-                    state: cx.state, focus: cx.focus,
+                    state: cx.state,
+                    focus: cx.focus,
                     widget_id: self.id.child(0),
-                    layout: cl, needs_repaint: false,
+                    layout: cl,
+                    needs_repaint: false,
                 };
                 let result = self.inner.event(&mut ccx, e);
-                if ccx.needs_repaint { cx.mark_dirty(); }
+                if ccx.needs_repaint {
+                    cx.mark_dirty();
+                }
                 result
             } else {
                 (EventStatus::Ignored, None)
             }
         }
     }
-    Element { inner: Box::new(ElmScrollable { inner: content, id }) }
+    Element {
+        inner: Box::new(ElmScrollable { inner: content, id }),
+    }
 }
 
 // ─── run_app ─────────────────────────────────────────────────────────────────
@@ -316,11 +416,11 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
     use crate::canvas::FramebufferCanvas;
     use crate::theme::DARK_THEME;
     use crate::widget::PaintCx;
-    use ostd::display::{wait_for_compositor, ViSurface};
-    use ostd::syscall::{sys_recv, SyscallResult};
-    use ostd::input::InputEvent;
     use crate::window::{decode_input_event, translate_input, WindowChrome};
     use api::display::PixelFormat;
+    use ostd::display::{wait_for_compositor, ViSurface};
+    use ostd::input::InputEvent;
+    use ostd::syscall::{sys_recv, SyscallResult};
 
     let comp_tid = wait_for_compositor();
     let w = 640u32;
@@ -336,26 +436,29 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
     let chrome = WindowChrome::new(app.title());
     let mut mouse_pos = crate::layout::Point::ZERO;
     let mut state = crate::state_store::WidgetStateStore::new();
-    let mut focus  = crate::state_store::FocusManager::new();
+    let mut focus = crate::state_store::FocusManager::new();
     let mut root = root_el;
 
     // Initial layout + paint
-    let screen = crate::layout::Size { w: w as f32, h: h as f32 };
+    let screen = crate::layout::Size {
+        w: w as f32,
+        h: h as f32,
+    };
     let mut layout_cache = root.layout(crate::layout::Constraints::root(screen));
 
-    let paint = |surf: &mut ViSurface, root: &crate::elm::Element<App::Message>,
-                  chrome: &WindowChrome| {
-        let stride = surf.stride() as u32;
-        let sw = surf.width();
-        let sh = surf.height();
-        let pixels = surf.pixels_mut();
-        let mut canvas = FramebufferCanvas::new(pixels, stride, sw, sh);
-        chrome.paint(&mut canvas);
-        let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME);
-        cx.origin = crate::layout::Point::new(0.0, chrome_h as f32);
-        root.paint(&mut cx);
-        surf.damage_all();
-    };
+    let paint =
+        |surf: &mut ViSurface, root: &crate::elm::Element<App::Message>, chrome: &WindowChrome| {
+            let stride = surf.stride() as u32;
+            let sw = surf.width();
+            let sh = surf.height();
+            let pixels = surf.pixels_mut();
+            let mut canvas = FramebufferCanvas::new(pixels, stride, sw, sh);
+            chrome.paint(&mut canvas);
+            let mut cx = PaintCx::with_theme(&mut canvas, &DARK_THEME);
+            cx.origin = crate::layout::Point::new(0.0, chrome_h as f32);
+            root.paint(&mut cx);
+            surf.damage_all();
+        };
     paint(&mut surf, &root, &chrome);
 
     loop {
@@ -367,12 +470,21 @@ pub fn run_app<App: ViApp>(mut app: App) -> ! {
                 }
                 if let Some(ev) = translate_input(raw_ev, mouse_pos) {
                     let content_ev = match &ev {
-                        crate::event::Event::MouseMove { pos } =>
-                            crate::event::Event::MouseMove { pos: crate::layout::Point::new(pos.x, pos.y - chrome_h as f32) },
-                        crate::event::Event::MousePress { pos, button } =>
-                            crate::event::Event::MousePress { pos: crate::layout::Point::new(pos.x, pos.y - chrome_h as f32), button: *button },
-                        crate::event::Event::MouseRelease { pos, button } =>
-                            crate::event::Event::MouseRelease { pos: crate::layout::Point::new(pos.x, pos.y - chrome_h as f32), button: *button },
+                        crate::event::Event::MouseMove { pos } => crate::event::Event::MouseMove {
+                            pos: crate::layout::Point::new(pos.x, pos.y - chrome_h as f32),
+                        },
+                        crate::event::Event::MousePress { pos, button } => {
+                            crate::event::Event::MousePress {
+                                pos: crate::layout::Point::new(pos.x, pos.y - chrome_h as f32),
+                                button: *button,
+                            }
+                        }
+                        crate::event::Event::MouseRelease { pos, button } => {
+                            crate::event::Event::MouseRelease {
+                                pos: crate::layout::Point::new(pos.x, pos.y - chrome_h as f32),
+                                button: *button,
+                            }
+                        }
                         other => other.clone(),
                     };
 
