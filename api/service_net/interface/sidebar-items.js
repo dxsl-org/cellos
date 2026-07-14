@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ABSENT","DRV_REPLY_TIMEOUT_TICKS","MAX_FRAME","NOT_PROBED","OP_GETMAC","OP_RX","OP_TX"],"fn":["e1000_tid","nic_rx_from_cell"],"static":["E1000_TID"],"struct":["NetRxToken","NetTxToken","VirtioNetDevice"]};

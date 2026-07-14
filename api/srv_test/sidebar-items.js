@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["check_persist_marker","fail","main","pass","test_s1_mount","test_s2_write_read","test_s3_listdir","test_s4_mkdir","test_s5_unlink","vfs_req","vfs_tid","write_persist_marker"],"static":["FAILED","PASSED","VICELL_MANIFEST","VICELL_SYSCALLS"]};

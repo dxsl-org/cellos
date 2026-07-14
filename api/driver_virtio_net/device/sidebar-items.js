@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MMIO_SLOT_SIZE","NET_QUEUE_SIZE","RX_BUF_LEN","VIRTIO_DEV_NET","VIRTIO_MAGIC"],"fn":["find_and_init_net","virtio_slot_iter"],"struct":["CellHal","NetDevice"],"type":["CellNet"]};

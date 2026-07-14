@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONNECT_TIMEOUT_MS","HEARTBEAT_MS"],"fn":["reflexive_or_direct"],"struct":["ConnectionManager"]};

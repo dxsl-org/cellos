@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ERR","SCHED_TICK_BUDGET_NS"],"fn":["create_vcpu","create_vm","inject_irq","map_guest_memory","read_guest_memory","run_vcpu","syscall4","vcpu_regs","write_guest_memory"]};

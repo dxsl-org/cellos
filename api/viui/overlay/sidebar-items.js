@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["OverlayAction"],"fn":["new_action_queue"],"struct":["OverlayEntry"],"type":["OverlayActionQueue"]};

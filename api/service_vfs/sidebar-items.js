@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main","vfs_fast_handler"],"mod":["access","backend","backend_bin_overlay","backend_bootfs","backend_fat","backend_littlefs","backend_ramfs","backend_redoxfs","blk_router","block_stream","disk_redoxfs","dispatch","handle_table","lfs_disk","manager","mount","page_cache","pending","quota"],"static":["GLOBAL_VFS","VICELL_MANIFEST","VICELL_SYSCALLS"]};

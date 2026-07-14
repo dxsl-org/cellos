@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PTE_DMA","SV39_A","SV39_D","SV39_R","SV39_V","SV39_W","VTD_RW"],"fn":["alloc_page","ensure_sv39_child","ensure_vtd_child","phys_to_virt_inner","virt_to_phys"],"struct":["Sv39IommuPt","VtdSlpt"]};

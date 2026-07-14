@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FCR","IER","LCR","LSR","_ISR","_LSR_RX_READY","_LSR_TX_EMPTY","_RHR","_THR"],"fn":["getchar","init","init_input","poll_rhr","vi_handle_uart_irq","write_console"],"static":["LOGGER","RX_BUFFER","SERIAL"],"struct":["DirectWriter","SimpleLogger","viUART"]};

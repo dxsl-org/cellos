@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CellState","FileType","GrantPerm","HalError","ViError"],"mod":["silo"],"struct":["CellId","DirEntry","GrantId","SemVer"],"type":["HalResult","PhysAddr","Result","VAddr","ViResult"]};

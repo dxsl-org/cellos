@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HOTSWAP_MSG_QUEUE_DEPTH","INPUT_EVENT_QUEUE_DEPTH"],"enum":["SyscallFuture","TaskState"],"struct":["FileHandle","GrantEntry","Lease","LeaseAttributes","PendingMsg","Task"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GATEWAY_PATH","MAX_TOOL_ROUNDS","PROMPT_MAX","SYSTEM_PREAMBLE","TOOL_FS_PATH","TOOL_SPAWN_PATH","TOOL_SYS_PATH"],"fn":["ask","dispatch_tool","main","render_prompt","run_turn","trim_front"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["Tools"]};

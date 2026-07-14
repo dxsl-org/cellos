@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["OP_CUR_MOVE","OP_CUR_SET","OP_FLUSH"],"fn":["dispatch","handler","main"],"mod":["cursor","display"],"static":["STATE","VICELL_MANIFEST"]};

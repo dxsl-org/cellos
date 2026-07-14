@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GUEST_MAC","NET_SPI","VIRTIO_NET_F_MAC"],"fn":["handle_tx"],"struct":["NetDev"]};

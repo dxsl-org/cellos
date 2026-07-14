@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init","read_file_from_vifs1"],"mod":["fat"],"static":["VIFS1"]};

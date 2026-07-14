@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"enum":["PageTableError"],"fn":["activate_paging","init_bare","init_kernel_paging","map_page","remap_range_user","tlb_flush_all","unmap_page","virt_to_phys"],"static":["KERNEL_ROOT"],"struct":["Flags"],"type":["PagingResult"]};

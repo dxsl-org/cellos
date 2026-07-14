@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GICC_BASE_IPA","GICC_SIZE","GICD_BASE_IPA","GICD_SIZE","MAX_IRQS","WORD_COUNT"],"mod":["reg"],"struct":["Gicd"]};

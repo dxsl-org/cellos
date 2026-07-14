@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["init","register_driver","resolve"],"static":["DRIVER_REGISTRY"],"struct":["DriverRegistry"]};

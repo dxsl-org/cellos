@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HELLO"],"fn":["close_socket","main","parse_ipv4","parse_octet","parse_u16","query_state","resolve_host","serve_connection","server_mode"],"static":["VICELL_SYSCALLS"]};

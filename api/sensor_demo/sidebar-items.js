@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEMO_CYCLES"],"fn":["main","poll_sensor","print_reading","run_synthetic","run_with_gpio","sleep_1s"],"mod":["sht3x"],"static":["VICELL_MANIFEST"]};

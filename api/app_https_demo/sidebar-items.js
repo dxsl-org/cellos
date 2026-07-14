@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EXAMPLE_IP","GET_REQUEST","HOSTNAME","HTTPS_PORT"],"fn":["main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

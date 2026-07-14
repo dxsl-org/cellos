@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["HotswapError"],"fn":["clear","hotswap_key","hotswap_key_str","restore","restore_transfer","stash","stash_transfer"],"trait":["ViStateTransfer"]};

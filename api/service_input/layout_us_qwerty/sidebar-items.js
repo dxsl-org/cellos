@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["key_state_from_evdev","modifier_for_scancode","toggle_modifier_for_scancode","translate"],"static":["LAYOUT"],"struct":["LayoutEntry"]};

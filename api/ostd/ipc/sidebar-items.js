@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["IpcError"],"fn":["recv_async","service_call","service_call_typed"],"struct":["AsyncRecv"]};

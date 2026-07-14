@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["consume_pending","has_any_pending","signal_net_rx"],"static":["NET_RX_PENDING"]};

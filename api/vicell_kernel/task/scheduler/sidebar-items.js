@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["WATCHDOG_BUDGET_TICKS","WATCHDOG_SCAUSE","WATCHDOG_WARN_TICKS"],"fn":["current_cell_id","dummy_raw_waker","dummy_waker","subscribe_death","task_entry_point"],"static":["DEATH_SUBSCRIBERS","DUMMY_VTABLE"],"struct":["Scheduler"]};

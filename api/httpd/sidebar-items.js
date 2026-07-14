@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["close_cap","drain_request","main","parse_u16","query_state","tcp_send","vfs_read","write_content_length"],"static":["VICELL_SYSCALLS"]};

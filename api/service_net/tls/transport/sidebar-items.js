@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HEARTBEAT_INTERVAL_TICKS","TLS_IO_TIMEOUT_TICKS"],"fn":["set_tls_context"],"static":["TLS_DEVICE","TLS_IFACE","TLS_SOCKETS"],"struct":["SmoltcpTlsTransport"]};

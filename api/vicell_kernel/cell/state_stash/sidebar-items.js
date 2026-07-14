@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_ENTRIES","MAX_STASH_LEN"],"fn":["remove","restore","self_test","stash"],"static":["STASH"]};

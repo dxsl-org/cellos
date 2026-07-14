@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["memchr","memcmp","memcpy","memmove","memset","strcat","strchr","strcmp","strcpy","strlen","strncmp","strncpy","strrchr"]};

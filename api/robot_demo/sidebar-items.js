@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ACTUATOR_PIN","LOOP_CYCLES","TEMP_THRESHOLD_CX10"],"fn":["main","poll_sensor","print_reading","publish_cycle","run_with_gpio","simulate_loop"],"mod":["mqtt","sht3x"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

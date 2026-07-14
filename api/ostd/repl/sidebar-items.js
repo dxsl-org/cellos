@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ReadResult"],"struct":["History","Repl"]};

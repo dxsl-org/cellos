@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["hello_handler","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

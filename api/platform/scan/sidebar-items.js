@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CFG_BAR0","CFG_CLASS_CODE","CFG_CLASS_PROG","CFG_COMMAND","CFG_HEADER_TYPE","CFG_SUBCLASS","CFG_VENDOR_ID","CMD_MEM_SPACE"],"fn":["cfg_off","probe32","probe64","r16","r32","r8","scan_and_register","w16","w32"]};

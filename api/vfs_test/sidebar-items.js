@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["fail","main","pass","test_access_control","test_async_read","test_directory_ops","test_edge_cases","test_file_lifecycle","test_ramfs","test_stat_dir","vfs_req","vfs_tid"],"macro":["assert_err","assert_ok"],"static":["FAILED","PASSED","VICELL_MANIFEST","VICELL_SYSCALLS"]};

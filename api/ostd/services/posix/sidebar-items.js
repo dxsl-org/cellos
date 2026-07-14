@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["_close","_putchar","arc4random_buf","connect","getentropy","recv","send","socket"],"mod":["alloc","cxxabi","entropy","math","net","setjmp","stdio","stdio_fmt","strings","sysio"],"struct":["FILE","sockaddr_in"]};

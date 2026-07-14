@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["alloc_error_handler","init_heap"],"static":["ALLOCATOR"],"struct":["QuotaAlloc"]};

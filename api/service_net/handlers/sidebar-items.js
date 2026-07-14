@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TLS_CLOSE_OP","TLS_CONNECT_OP","TLS_RECV_OP","TLS_SEND_OP"],"fn":["handle_request","handle_tls_raw","handle_typed","make_tcp","send_typed","tcp_state_byte","try_promote"]};

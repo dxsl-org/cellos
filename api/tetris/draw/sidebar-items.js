@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BX","BY","CELL_PX","PX"],"fn":["draw_cell","draw_char","draw_label","draw_str2x","draw_value","fill","render"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HISTORY_FILE","MAX_HISTORY"],"struct":["History"]};

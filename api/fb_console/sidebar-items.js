@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BG","FG"],"fn":["draw_char","main","scroll_up"],"mod":["font"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

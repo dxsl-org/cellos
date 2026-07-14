@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["BaudRate","Parity"],"struct":["UartConfig"],"trait":["SerialPort","SerialWrite","ViUart"]};

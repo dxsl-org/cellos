@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEFAULT_CLINT_BASE","DEFAULT_PLIC_BASE","DEFAULT_PLIC_SIZE","DEFAULT_RTC_BASE","DEFAULT_UART_BASE","DEFAULT_UART_IRQ"],"fn":["collect_virtio","from_dtb","init","irq_first","reg_base","reg_base_size","with"],"static":["PLATFORM"],"struct":["PlatformInfo","VirtioEntry"]};

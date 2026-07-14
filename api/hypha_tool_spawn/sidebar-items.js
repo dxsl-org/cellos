@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["args_extract_str","args_extract_usize","dispatch","handle","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

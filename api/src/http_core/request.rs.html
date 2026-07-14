@@ -1,0 +1,148 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `libs/http-core/src/request.rs`."><title>request.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="http_core" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">http_core/</div>request.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! HTTP/1.1 request serialisation.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Generalises `build_post` from `cells/apps/hypha/llm-gateway/src/http.rs`.
+<a href=#4 id=4 data-nosnippet>4</a>//! That function emitted HTTP/1.0; this builder emits HTTP/1.1, which enables
+<a href=#5 id=5 data-nosnippet>5</a>//! chunked responses from modern servers (needed by Phase 02 `BodyReader`).
+<a href=#6 id=6 data-nosnippet>6</a>
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span>alloc::vec::Vec;
+<a href=#8 id=8 data-nosnippet>8</a>
+<a href=#9 id=9 data-nosnippet>9</a><span class="doccomment">/// Builds a well-formed HTTP/1.1 request and serialises it into a `Vec&lt;u8&gt;`.
+<a href=#10 id=10 data-nosnippet>10</a>///
+<a href=#11 id=11 data-nosnippet>11</a>/// # Auto-emitted headers
+<a href=#12 id=12 data-nosnippet>12</a>///
+<a href=#13 id=13 data-nosnippet>13</a>/// - `Host: &lt;host&gt;` — always first after the request line.
+<a href=#14 id=14 data-nosnippet>14</a>/// - `Content-Length: &lt;n&gt;` — only when `body` is `Some` and non-empty.
+<a href=#15 id=15 data-nosnippet>15</a>/// - `Connection: close` — always last in the auto-headers.
+<a href=#16 id=16 data-nosnippet>16</a>///
+<a href=#17 id=17 data-nosnippet>17</a>/// # Caller-supplied headers
+<a href=#18 id=18 data-nosnippet>18</a>///
+<a href=#19 id=19 data-nosnippet>19</a>/// `extra_headers` are emitted between `Host` and `Connection: close`.
+<a href=#20 id=20 data-nosnippet>20</a>/// Callers MUST NOT repeat `Host`, `Content-Length`, or `Connection` in
+<a href=#21 id=21 data-nosnippet>21</a>/// `extra_headers`; doing so produces a technically valid but redundant request.
+<a href=#22 id=22 data-nosnippet>22</a>///
+<a href=#23 id=23 data-nosnippet>23</a>/// # Panics
+<a href=#24 id=24 data-nosnippet>24</a>///
+<a href=#25 id=25 data-nosnippet>25</a>/// Never — all formatting is done via `Vec&lt;u8&gt;` writes which cannot fail in
+<a href=#26 id=26 data-nosnippet>26</a>/// a healthy allocator.  Malformed method/path strings are passed through as-is
+<a href=#27 id=27 data-nosnippet>27</a>/// (no validation — callers own the correctness of those fields).
+<a href=#28 id=28 data-nosnippet>28</a></span><span class="kw">pub struct </span>RequestBuilder&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#29 id=29 data-nosnippet>29</a>    method: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#30 id=30 data-nosnippet>30</a>    path: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#31 id=31 data-nosnippet>31</a>    host: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#32 id=32 data-nosnippet>32</a>    extra_headers: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)],
+<a href=#33 id=33 data-nosnippet>33</a>    body: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8]&gt;,
+<a href=#34 id=34 data-nosnippet>34</a>}
+<a href=#35 id=35 data-nosnippet>35</a>
+<a href=#36 id=36 data-nosnippet>36</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; RequestBuilder&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#37 id=37 data-nosnippet>37</a>    <span class="doccomment">/// Create a new builder.
+<a href=#38 id=38 data-nosnippet>38</a>    ///
+<a href=#39 id=39 data-nosnippet>39</a>    /// - `method` — HTTP verb, e.g. `"POST"`.
+<a href=#40 id=40 data-nosnippet>40</a>    /// - `path` — Request-URI, e.g. `"/v1/chat/completions"`.
+<a href=#41 id=41 data-nosnippet>41</a>    /// - `host` — value for the `Host` header, e.g. `"api.openai.com"`.
+<a href=#42 id=42 data-nosnippet>42</a>    /// - `extra_headers` — ordered list of additional headers to emit.
+<a href=#43 id=43 data-nosnippet>43</a>    /// - `body` — optional request body bytes; triggers `Content-Length`.
+<a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">pub fn </span>new(
+<a href=#45 id=45 data-nosnippet>45</a>        method: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#46 id=46 data-nosnippet>46</a>        path: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#47 id=47 data-nosnippet>47</a>        host: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str,
+<a href=#48 id=48 data-nosnippet>48</a>        extra_headers: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)],
+<a href=#49 id=49 data-nosnippet>49</a>        body: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u8]&gt;,
+<a href=#50 id=50 data-nosnippet>50</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#51 id=51 data-nosnippet>51</a>        <span class="self">Self </span>{
+<a href=#52 id=52 data-nosnippet>52</a>            method,
+<a href=#53 id=53 data-nosnippet>53</a>            path,
+<a href=#54 id=54 data-nosnippet>54</a>            host,
+<a href=#55 id=55 data-nosnippet>55</a>            extra_headers,
+<a href=#56 id=56 data-nosnippet>56</a>            body,
+<a href=#57 id=57 data-nosnippet>57</a>        }
+<a href=#58 id=58 data-nosnippet>58</a>    }
+<a href=#59 id=59 data-nosnippet>59</a>
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="doccomment">/// Serialise the request into a byte vector ready to write to a stream.
+<a href=#61 id=61 data-nosnippet>61</a>    ///
+<a href=#62 id=62 data-nosnippet>62</a>    /// Layout (RFC 9112):
+<a href=#63 id=63 data-nosnippet>63</a>    /// ```text
+<a href=#64 id=64 data-nosnippet>64</a>    /// &lt;METHOD&gt; &lt;path&gt; HTTP/1.1\r\n
+<a href=#65 id=65 data-nosnippet>65</a>    /// Host: &lt;host&gt;\r\n
+<a href=#66 id=66 data-nosnippet>66</a>    /// [&lt;extra headers&gt;\r\n]*
+<a href=#67 id=67 data-nosnippet>67</a>    /// [Content-Length: &lt;n&gt;\r\n]
+<a href=#68 id=68 data-nosnippet>68</a>    /// Connection: close\r\n
+<a href=#69 id=69 data-nosnippet>69</a>    /// \r\n
+<a href=#70 id=70 data-nosnippet>70</a>    /// [&lt;body&gt;]
+<a href=#71 id=71 data-nosnippet>71</a>    /// ```
+<a href=#72 id=72 data-nosnippet>72</a>    </span><span class="kw">pub fn </span>build(<span class="self">self</span>) -&gt; Vec&lt;u8&gt; {
+<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let </span><span class="kw-2">mut </span>out = Vec::new();
+<a href=#74 id=74 data-nosnippet>74</a>
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="comment">// Request line
+<a href=#76 id=76 data-nosnippet>76</a>        </span>push_str(<span class="kw-2">&amp;mut </span>out, <span class="self">self</span>.method);
+<a href=#77 id=77 data-nosnippet>77</a>        out.push(<span class="string">b' '</span>);
+<a href=#78 id=78 data-nosnippet>78</a>        push_str(<span class="kw-2">&amp;mut </span>out, <span class="self">self</span>.path);
+<a href=#79 id=79 data-nosnippet>79</a>        out.extend_from_slice(<span class="string">b" HTTP/1.1\r\n"</span>);
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="comment">// Mandatory Host header
+<a href=#82 id=82 data-nosnippet>82</a>        </span>push_header(<span class="kw-2">&amp;mut </span>out, <span class="string">"Host"</span>, <span class="self">self</span>.host);
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="comment">// Caller-supplied headers
+<a href=#85 id=85 data-nosnippet>85</a>        </span><span class="kw">for </span>(name, value) <span class="kw">in </span><span class="self">self</span>.extra_headers {
+<a href=#86 id=86 data-nosnippet>86</a>            push_header(<span class="kw-2">&amp;mut </span>out, name, value);
+<a href=#87 id=87 data-nosnippet>87</a>        }
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="comment">// Content-Length — only when body is present and non-empty
+<a href=#90 id=90 data-nosnippet>90</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(body) = <span class="self">self</span>.body {
+<a href=#91 id=91 data-nosnippet>91</a>            <span class="kw">if </span>!body.is_empty() {
+<a href=#92 id=92 data-nosnippet>92</a>                <span class="kw">let </span>len_str = usize_to_decimal(body.len());
+<a href=#93 id=93 data-nosnippet>93</a>                push_header(<span class="kw-2">&amp;mut </span>out, <span class="string">"Content-Length"</span>, <span class="kw-2">&amp;</span>len_str);
+<a href=#94 id=94 data-nosnippet>94</a>            }
+<a href=#95 id=95 data-nosnippet>95</a>        }
+<a href=#96 id=96 data-nosnippet>96</a>
+<a href=#97 id=97 data-nosnippet>97</a>        <span class="comment">// Connection: close — signals to the server that this is a one-shot req
+<a href=#98 id=98 data-nosnippet>98</a>        </span>push_header(<span class="kw-2">&amp;mut </span>out, <span class="string">"Connection"</span>, <span class="string">"close"</span>);
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="comment">// Header terminator
+<a href=#101 id=101 data-nosnippet>101</a>        </span>out.extend_from_slice(<span class="string">b"\r\n"</span>);
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="comment">// Body
+<a href=#104 id=104 data-nosnippet>104</a>        </span><span class="kw">if let </span><span class="prelude-val">Some</span>(body) = <span class="self">self</span>.body {
+<a href=#105 id=105 data-nosnippet>105</a>            out.extend_from_slice(body);
+<a href=#106 id=106 data-nosnippet>106</a>        }
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>        out
+<a href=#109 id=109 data-nosnippet>109</a>    }
+<a href=#110 id=110 data-nosnippet>110</a>}
+<a href=#111 id=111 data-nosnippet>111</a>
+<a href=#112 id=112 data-nosnippet>112</a><span class="comment">// ─── helpers ────────────────────────────────────────────────────────────────
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a></span><span class="kw">fn </span>push_str(buf: <span class="kw-2">&amp;mut </span>Vec&lt;u8&gt;, s: <span class="kw-2">&amp;</span>str) {
+<a href=#115 id=115 data-nosnippet>115</a>    buf.extend_from_slice(s.as_bytes());
+<a href=#116 id=116 data-nosnippet>116</a>}
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a><span class="kw">fn </span>push_header(buf: <span class="kw-2">&amp;mut </span>Vec&lt;u8&gt;, name: <span class="kw-2">&amp;</span>str, value: <span class="kw-2">&amp;</span>str) {
+<a href=#119 id=119 data-nosnippet>119</a>    push_str(buf, name);
+<a href=#120 id=120 data-nosnippet>120</a>    buf.extend_from_slice(<span class="string">b": "</span>);
+<a href=#121 id=121 data-nosnippet>121</a>    push_str(buf, value);
+<a href=#122 id=122 data-nosnippet>122</a>    buf.extend_from_slice(<span class="string">b"\r\n"</span>);
+<a href=#123 id=123 data-nosnippet>123</a>}
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a><span class="doccomment">/// Convert a `usize` to its decimal string representation without `std::fmt`.
+<a href=#126 id=126 data-nosnippet>126</a>///
+<a href=#127 id=127 data-nosnippet>127</a>/// Used in no_std context where `format!` works but we want to avoid allocating
+<a href=#128 id=128 data-nosnippet>128</a>/// an extra `String`; this writes directly to a small stack buffer.
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">fn </span>usize_to_decimal(<span class="kw-2">mut </span>n: usize) -&gt; alloc::string::String {
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">if </span>n == <span class="number">0 </span>{
+<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">return </span>alloc::string::String::from(<span class="string">"0"</span>);
+<a href=#132 id=132 data-nosnippet>132</a>    }
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="comment">// 20 digits is enough for u64::MAX
+<a href=#134 id=134 data-nosnippet>134</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>buf = [<span class="number">0u8</span>; <span class="number">20</span>];
+<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">let </span><span class="kw-2">mut </span>i = <span class="number">0</span>;
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">while </span>n &gt; <span class="number">0 </span>{
+<a href=#137 id=137 data-nosnippet>137</a>        buf[i] = <span class="string">b'0' </span>+ (n % <span class="number">10</span>) <span class="kw">as </span>u8;
+<a href=#138 id=138 data-nosnippet>138</a>        n /= <span class="number">10</span>;
+<a href=#139 id=139 data-nosnippet>139</a>        i += <span class="number">1</span>;
+<a href=#140 id=140 data-nosnippet>140</a>    }
+<a href=#141 id=141 data-nosnippet>141</a>    buf[..i].reverse();
+<a href=#142 id=142 data-nosnippet>142</a>    alloc::string::String::from(core::str::from_utf8(<span class="kw-2">&amp;</span>buf[..i]).unwrap())
+<a href=#143 id=143 data-nosnippet>143</a>}
+<a href=#144 id=144 data-nosnippet>144</a>
+<a href=#145 id=145 data-nosnippet>145</a><span class="attr">#[cfg(test)]
+<a href=#146 id=146 data-nosnippet>146</a>#[path = <span class="string">"request_tests.rs"</span>]
+<a href=#147 id=147 data-nosnippet>147</a></span><span class="kw">mod </span>tests;
+</code></pre></div></section></main></body></html>

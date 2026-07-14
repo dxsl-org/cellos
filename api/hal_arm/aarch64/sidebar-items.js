@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["stage2_regs"],"static":["ARCH"],"struct":["AArch64Arch","AArch64Hypervisor"],"type":["PlatformArch"]};

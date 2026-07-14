@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["dispatch_sdt","parse","parse_hpet","parse_madt","parse_mcfg","parse_rsdt","parse_xsdt","read_sig","read_unaligned","table_checksum","validate_sdt"],"struct":["AcpiInfo","Rsdp","RsdpV2"]};

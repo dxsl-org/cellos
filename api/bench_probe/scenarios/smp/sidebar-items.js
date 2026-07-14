@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CAVEAT","PROBE_PATH","SMP_WORKER_ITERS"],"fn":["compute","measure_ipc_throughput","measure_spawn_rate","measure_work_distribution","recv_exit","run_smp_suite","run_worker","spawn_worker","wait_exit"]};

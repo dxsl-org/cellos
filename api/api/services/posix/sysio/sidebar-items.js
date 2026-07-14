@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["_execve","_exit","_fcntl","_fork","_fstat","_getpid","_gettimeofday","_isatty","_kill","_link","_lseek","_open","_putchar","_read","_sbrk","_time","_times","_unlink","_wait","_write"],"struct":["stat","timeval","tms"]};

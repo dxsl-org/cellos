@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["call_vfs","clear_vfs_if_cell","register_vfs","resolve_export","set_vfs_handler_cell"],"static":["VFS_HANDLER_CELL","VFS_HANDLER_PTR"],"struct":["SieGuard"],"type":["VfsFastHandler"]};

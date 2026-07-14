@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KERNEL_PMP_REGIONS"],"fn":["napot_addr"],"mod":["perm"],"struct":["PmpRegion"]};

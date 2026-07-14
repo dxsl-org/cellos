@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ARROW_MASK","BLACK","CURSOR_H","CURSOR_W","OUTLINE_MASK","WHITE"],"fn":["cursor_pixel","hotspot"]};

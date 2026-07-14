@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PLIC_BASE","PLIC_ENABLE_BASE","PLIC_PENDING_BASE","PLIC_PRIORITY_BASE","PLIC_THRESHOLD_AND_CLAIM_BASE"],"fn":["init","set_plic_base"],"static":["PLIC"],"struct":["Plic"]};

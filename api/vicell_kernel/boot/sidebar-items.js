@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_MEMORY_MAP_ENTRIES"],"enum":["MemoryType"],"fn":["get_limine_memory_entries","parse_bootloader_info"],"mod":["limine"],"static":["FALLBACK_BOOT_INFO","FALLBACK_MEMORY_MAP","MEMORY_MAP_BUFFER"],"struct":["FramebufferInfo","LimineBootInfo","MemoryMapEntry","SimpleBootInfo"],"trait":["BootInfo"]};

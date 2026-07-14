@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE"],"fn":["allocate_guest_ram","phys_to_virt","set_phys_offset"],"static":["FRAME_ALLOCATOR","PHYS_OFFSET"],"struct":["FrameAllocator"]};

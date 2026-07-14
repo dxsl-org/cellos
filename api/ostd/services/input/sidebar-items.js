@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INPUT_EVENT_IPC_SIZE","INPUT_EVENT_OPCODE"],"enum":["InputEvent","KeyState","KeySym","MouseButton"],"fn":["decode_event","encode_event"],"struct":["KeyEvent","Modifiers"]};

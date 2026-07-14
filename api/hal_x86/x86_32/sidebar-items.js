@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["ARCH"],"struct":["X86_32Arch"],"type":["PlatformArch"]};

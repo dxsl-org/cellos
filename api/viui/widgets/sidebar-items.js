@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["button","checkbox","column","image","label","row","scroll_area","space","text_edit"]};

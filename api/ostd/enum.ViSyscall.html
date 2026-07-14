@@ -1,0 +1,326 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="System Call Identifiers (The Contract)"><title>ViSyscall in ostd - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="ostd" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc enum"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">ViSyscall</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../ostd/index.html">ostd</a><span class="version">0.2.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">ViSyscall</a></h2><h3><a href="#variants">Variants</a></h3><ul class="block variant"><li><a href="#variant.AudioPlay" title="AudioPlay">AudioPlay</a></li><li><a href="#variant.BlkReadAsync" title="BlkReadAsync">BlkReadAsync</a></li><li><a href="#variant.Call" title="Call">Call</a></li><li><a href="#variant.CapRevoke" title="CapRevoke">CapRevoke</a></li><li><a href="#variant.Close" title="Close">Close</a></li><li><a href="#variant.CloseCap" title="CloseCap">CloseCap</a></li><li><a href="#variant.CreateVcpu" title="CreateVcpu">CreateVcpu</a></li><li><a href="#variant.CreateVm" title="CreateVm">CreateVm</a></li><li><a href="#variant.Exec" title="Exec">Exec</a></li><li><a href="#variant.Exit" title="Exit">Exit</a></li><li><a href="#variant.FileOp" title="FileOp">FileOp</a></li><li><a href="#variant.FindPcieDevice" title="FindPcieDevice">FindPcieDevice</a></li><li><a href="#variant.ForceExit" title="ForceExit">ForceExit</a></li><li><a href="#variant.FreezeCell" title="FreezeCell">FreezeCell</a></li><li><a href="#variant.GetProcs" title="GetProcs">GetProcs</a></li><li><a href="#variant.GetRandom" title="GetRandom">GetRandom</a></li><li><a href="#variant.GetTime" title="GetTime">GetTime</a></li><li><a href="#variant.GpuCursor" title="GpuCursor">GpuCursor</a></li><li><a href="#variant.GpuFlush" title="GpuFlush">GpuFlush</a></li><li><a href="#variant.GpuGetResolution" title="GpuGetResolution">GpuGetResolution</a></li><li><a href="#variant.GrantAlloc" title="GrantAlloc">GrantAlloc</a></li><li><a href="#variant.GrantDma" title="GrantDma">GrantDma</a></li><li><a href="#variant.GrantFree" title="GrantFree">GrantFree</a></li><li><a href="#variant.GrantRegister" title="GrantRegister">GrantRegister</a></li><li><a href="#variant.GrantShare" title="GrantShare">GrantShare</a></li><li><a href="#variant.GrantSlice" title="GrantSlice">GrantSlice</a></li><li><a href="#variant.GrantUnregister" title="GrantUnregister">GrantUnregister</a></li><li><a href="#variant.Heartbeat" title="Heartbeat">Heartbeat</a></li><li><a href="#variant.HotSwap" title="HotSwap">HotSwap</a></li><li><a href="#variant.HotSwapReady" title="HotSwapReady">HotSwapReady</a></li><li><a href="#variant.InjectIrq" title="InjectIrq">InjectIrq</a></li><li><a href="#variant.KillCell" title="KillCell">KillCell</a></li><li><a href="#variant.Log" title="Log">Log</a></li><li><a href="#variant.LookupService" title="LookupService">LookupService</a></li><li><a href="#variant.MapGuestMemory" title="MapGuestMemory">MapGuestMemory</a></li><li><a href="#variant.NetRx" title="NetRx">NetRx</a></li><li><a href="#variant.NetTx" title="NetTx">NetTx</a></li><li><a href="#variant.NotifyOnExit" title="NotifyOnExit">NotifyOnExit</a></li><li><a href="#variant.Open" title="Open">Open</a></li><li><a href="#variant.OpenCap" title="OpenCap">OpenCap</a></li><li><a href="#variant.QueryHotswapReady" title="QueryHotswapReady">QueryHotswapReady</a></li><li><a href="#variant.Read" title="Read">Read</a></li><li><a href="#variant.ReadCap" title="ReadCap">ReadCap</a></li><li><a href="#variant.ReadDir" title="ReadDir">ReadDir</a></li><li><a href="#variant.ReadGuestMemory" title="ReadGuestMemory">ReadGuestMemory</a></li><li><a href="#variant.ReadLog" title="ReadLog">ReadLog</a></li><li><a href="#variant.Recv" title="Recv">Recv</a></li><li><a href="#variant.RecvScatter" title="RecvScatter">RecvScatter</a></li><li><a href="#variant.RecvTimeout" title="RecvTimeout">RecvTimeout</a></li><li><a href="#variant.RegisterBlockDriver" title="RegisterBlockDriver">RegisterBlockDriver</a></li><li><a href="#variant.RegisterNicDriver" title="RegisterNicDriver">RegisterNicDriver</a></li><li><a href="#variant.RegisterPciDevice" title="RegisterPciDevice">RegisterPciDevice</a></li><li><a href="#variant.RegisterPcieBar" title="RegisterPcieBar">RegisterPcieBar</a></li><li><a href="#variant.RegisterService" title="RegisterService">RegisterService</a></li><li><a href="#variant.Reply" title="Reply">Reply</a></li><li><a href="#variant.RequestMmio" title="RequestMmio">RequestMmio</a></li><li><a href="#variant.ResumeCell" title="ResumeCell">ResumeCell</a></li><li><a href="#variant.RunVcpu" title="RunVcpu">RunVcpu</a></li><li><a href="#variant.Seek" title="Seek">Seek</a></li><li><a href="#variant.SeekCap" title="SeekCap">SeekCap</a></li><li><a href="#variant.Send" title="Send">Send</a></li><li><a href="#variant.SendGather" title="SendGather">SendGather</a></li><li><a href="#variant.SetTimer" title="SetTimer">SetTimer</a></li><li><a href="#variant.ShmAlloc" title="ShmAlloc">ShmAlloc</a></li><li><a href="#variant.ShmMap" title="ShmMap">ShmMap</a></li><li><a href="#variant.Snapshot" title="Snapshot">Snapshot</a></li><li><a href="#variant.Spawn" title="Spawn">Spawn</a></li><li><a href="#variant.SpawnFromElf" title="SpawnFromElf">SpawnFromElf</a></li><li><a href="#variant.SpawnFromMem" title="SpawnFromMem">SpawnFromMem</a></li><li><a href="#variant.SpawnFromPath" title="SpawnFromPath">SpawnFromPath</a></li><li><a href="#variant.SpawnPinned" title="SpawnPinned">SpawnPinned</a></li><li><a href="#variant.StatCap" title="StatCap">StatCap</a></li><li><a href="#variant.StateRestore" title="StateRestore">StateRestore</a></li><li><a href="#variant.StateStash" title="StateStash">StateStash</a></li><li><a href="#variant.StateStashClear" title="StateStashClear">StateStashClear</a></li><li><a href="#variant.SyncCap" title="SyncCap">SyncCap</a></li><li><a href="#variant.TruncateCap" title="TruncateCap">TruncateCap</a></li><li><a href="#variant.TryRecv" title="TryRecv">TryRecv</a></li><li><a href="#variant.TrySend" title="TrySend">TrySend</a></li><li><a href="#variant.Unknown" title="Unknown">Unknown</a></li><li><a href="#variant.VcpuRegs" title="VcpuRegs">VcpuRegs</a></li><li><a href="#variant.Wait" title="Wait">Wait</a></li><li><a href="#variant.WaitForEvent" title="WaitForEvent">WaitForEvent</a></li><li><a href="#variant.WaitIrq" title="WaitIrq">WaitIrq</a></li><li><a href="#variant.Write" title="Write">Write</a></li><li><a href="#variant.WriteCap" title="WriteCap">WriteCap</a></li><li><a href="#variant.WriteGuestMemory" title="WriteGuestMemory">WriteGuestMemory</a></li><li><a href="#variant.Yield" title="Yield">Yield</a></li></ul><h3><a href="#implementations">Methods</a></h3><ul class="block method"><li><a href="#method.allowlist_bit" title="allowlist_bit">allowlist_bit</a></li></ul><h3><a href="#trait-implementations">Trait Implementations</a></h3><ul class="block trait-implementation"><li><a href="#impl-Clone-for-ViSyscall" title="Clone">Clone</a></li><li><a href="#impl-Copy-for-ViSyscall" title="Copy">Copy</a></li><li><a href="#impl-Debug-for-ViSyscall" title="Debug">Debug</a></li><li><a href="#impl-Eq-for-ViSyscall" title="Eq">Eq</a></li><li><a href="#impl-From%3Cusize%3E-for-ViSyscall" title="From&#60;usize&#62;">From&#60;usize&#62;</a></li><li><a href="#impl-PartialEq-for-ViSyscall" title="PartialEq">PartialEq</a></li><li><a href="#impl-StructuralPartialEq-for-ViSyscall" title="StructuralPartialEq">StructuralPartialEq</a></li></ul><h3><a href="#synthetic-implementations">Auto Trait Implementations</a></h3><ul class="block synthetic-implementation"><li><a href="#impl-Freeze-for-ViSyscall" title="Freeze">Freeze</a></li><li><a href="#impl-RefUnwindSafe-for-ViSyscall" title="RefUnwindSafe">RefUnwindSafe</a></li><li><a href="#impl-Send-for-ViSyscall" title="Send">Send</a></li><li><a href="#impl-Sync-for-ViSyscall" title="Sync">Sync</a></li><li><a href="#impl-Unpin-for-ViSyscall" title="Unpin">Unpin</a></li><li><a href="#impl-UnsafeUnpin-for-ViSyscall" title="UnsafeUnpin">UnsafeUnpin</a></li><li><a href="#impl-UnwindSafe-for-ViSyscall" title="UnwindSafe">UnwindSafe</a></li></ul><h3><a href="#blanket-implementations">Blanket Implementations</a></h3><ul class="block blanket-implementation"><li><a href="#impl-Any-for-T" title="Any">Any</a></li><li><a href="#impl-Borrow%3CT%3E-for-T" title="Borrow&#60;T&#62;">Borrow&#60;T&#62;</a></li><li><a href="#impl-BorrowMut%3CT%3E-for-T" title="BorrowMut&#60;T&#62;">BorrowMut&#60;T&#62;</a></li><li><a href="#impl-CloneToUninit-for-T" title="CloneToUninit">CloneToUninit</a></li><li><a href="#impl-Equivalent%3CK%3E-for-Q" title="Equivalent&#60;K&#62;">Equivalent&#60;K&#62;</a></li><li><a href="#impl-From%3CT%3E-for-T" title="From&#60;T&#62;">From&#60;T&#62;</a></li><li><a href="#impl-Into%3CU%3E-for-T" title="Into&#60;U&#62;">Into&#60;U&#62;</a></li><li><a href="#impl-ToOwned-for-T" title="ToOwned">ToOwned</a></li><li><a href="#impl-TryFrom%3CU%3E-for-T" title="TryFrom&#60;U&#62;">TryFrom&#60;U&#62;</a></li><li><a href="#impl-TryInto%3CU%3E-for-T" title="TryInto&#60;U&#62;">TryInto&#60;U&#62;</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate ostd</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">ostd</a></div><h1>Enum <span class="enum">ViSyscall</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"></span></div><pre class="rust item-decl"><code><div class="code-attribute">#[repr(usize)]</div>pub enum ViSyscall {
+<details class="toggle type-contents-toggle"><summary class="hideme"><span>Show 88 variants</span></summary>    Send = 0,
+    Recv = 1,
+    Call = 2,
+    Reply = 3,
+    TrySend = 4,
+    TryRecv = 7,
+    Exit = 60,
+    ForceExit = 61,
+    Spawn = 5,
+    Exec = 6,
+    SpawnFromMem = 10,
+    SpawnFromPath = 12,
+    OpenCap = 13,
+    ReadCap = 14,
+    CloseCap = 15,
+    SeekCap = 228,
+    WriteCap = 229,
+    StatCap = 230,
+    TruncateCap = 231,
+    SyncCap = 232,
+    GrantDma = 233,
+    WaitIrq = 234,
+    RegisterPcieBar = 235,
+    RegisterPciDevice = 236,
+    ReadLog = 237,
+    SpawnFromElf = 238,
+    SpawnPinned = 16,
+    Snapshot = 420,
+    Wait = 8,
+    Yield = 104,
+    SetTimer = 35,
+    ShmAlloc = 20,
+    ShmMap = 21,
+    Log = 11,
+    Open = 101,
+    Read = 102,
+    Close = 103,
+    ReadDir = 105,
+    Write = 109,
+    Seek = 106,
+    FileOp = 107,
+    GetTime = 120,
+    GpuFlush = 300,
+    GpuCursor = 301,
+    GpuGetResolution = 302,
+    NetTx = 310,
+    NetRx = 311,
+    RecvTimeout = 201,
+    SendGather = 202,
+    RecvScatter = 203,
+    NotifyOnExit = 204,
+    RegisterService = 205,
+    LookupService = 206,
+    Heartbeat = 207,
+    GrantAlloc = 208,
+    GrantShare = 209,
+    GrantSlice = 210,
+    GrantFree = 211,
+    BlkReadAsync = 212,
+    RequestMmio = 213,
+    GetRandom = 214,
+    GrantRegister = 215,
+    GrantUnregister = 216,
+    WaitForEvent = 217,
+    AudioPlay = 218,
+    CapRevoke = 219,
+    CreateVm = 220,
+    CreateVcpu = 221,
+    MapGuestMemory = 222,
+    RunVcpu = 223,
+    VcpuRegs = 224,
+    InjectIrq = 225,
+    WriteGuestMemory = 226,
+    ReadGuestMemory = 227,
+    HotSwap = 400,
+    HotSwapReady = 401,
+    StateStash = 410,
+    StateRestore = 411,
+    StateStashClear = 412,
+    FreezeCell = 413,
+    ResumeCell = 414,
+    KillCell = 415,
+    RegisterBlockDriver = 416,
+    RegisterNicDriver = 417,
+    FindPcieDevice = 418,
+    QueryHotswapReady = 419,
+    Unknown = 9_999,
+    GetProcs = 30,
+</details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>System Call Identifiers (The Contract)</p>
+<p>These IDs must match between Kernel and User (libs/ostd).</p>
+</div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Send" class="variant"><a href="#variant.Send" class="anchor">§</a><h3 class="code-header">Send = 0</h3></section><section id="variant.Recv" class="variant"><a href="#variant.Recv" class="anchor">§</a><h3 class="code-header">Recv = 1</h3></section><section id="variant.Call" class="variant"><a href="#variant.Call" class="anchor">§</a><h3 class="code-header">Call = 2</h3></section><section id="variant.Reply" class="variant"><a href="#variant.Reply" class="anchor">§</a><h3 class="code-header">Reply = 3</h3></section><section id="variant.TrySend" class="variant"><a href="#variant.TrySend" class="anchor">§</a><h3 class="code-header">TrySend = 4</h3></section><div class="docblock"><p>Non-blocking send: delivers immediately if target is in <code>Recv</code>, otherwise
+drops the message and returns without blocking the caller.
+Prevents deadlock when the focused cell is busy (e.g. reading UART).</p>
+</div><section id="variant.TryRecv" class="variant"><a href="#variant.TryRecv" class="anchor">§</a><h3 class="code-header">TryRecv = 7</h3></section><div class="docblock"><p>Non-blocking receive: returns 0 immediately when no message is queued
+(vs <code>Recv</code>, which parks the task until a message arrives).</p>
+</div><section id="variant.Exit" class="variant"><a href="#variant.Exit" class="anchor">§</a><h3 class="code-header">Exit = 60</h3></section><section id="variant.ForceExit" class="variant"><a href="#variant.ForceExit" class="anchor">§</a><h3 class="code-header">ForceExit = 61</h3></section><div class="docblock"><p>Force-terminate another task by TID.  Non-blocking: caller continues.
+Requires <code>SpawnCap</code> on caller; rejected on system cells (block_io/network_cap).
+ABI: a0 = target_tid → 0 on success, usize::MAX on error.</p>
+</div><section id="variant.Spawn" class="variant"><a href="#variant.Spawn" class="anchor">§</a><h3 class="code-header">Spawn = 5</h3></section><section id="variant.Exec" class="variant"><a href="#variant.Exec" class="anchor">§</a><h3 class="code-header">Exec = 6</h3></section><section id="variant.SpawnFromMem" class="variant"><a href="#variant.SpawnFromMem" class="anchor">§</a><h3 class="code-header">SpawnFromMem = 10</h3></section><section id="variant.SpawnFromPath" class="variant"><a href="#variant.SpawnFromPath" class="anchor">§</a><h3 class="code-header">SpawnFromPath = 12</h3></section><div class="docblock"><p>Spawn a cell by reading its ELF from a VFS path.
+ABI: a0 = path_ptr, a1 = path_len; returns cell id or error code.</p>
+</div><section id="variant.OpenCap" class="variant"><a href="#variant.OpenCap" class="anchor">§</a><h3 class="code-header">OpenCap = 13</h3></section><div class="docblock"><p>Open a file by path, returning a kernel capability ID.
+ABI: a0 = path_ptr, a1 = path_len → CapId (&gt; 0) on success.</p>
+</div><section id="variant.ReadCap" class="variant"><a href="#variant.ReadCap" class="anchor">§</a><h3 class="code-header">ReadCap = 14</h3></section><div class="docblock"><p>Read bytes from a cap-backed file.
+ABI: a0 = cap_id, a1 = buf_ptr, a2 = buf_len → bytes_read.</p>
+</div><section id="variant.CloseCap" class="variant"><a href="#variant.CloseCap" class="anchor">§</a><h3 class="code-header">CloseCap = 15</h3></section><div class="docblock"><p>Revoke a capability (close).
+ABI: a0 = cap_id → 0 on success.</p>
+</div><section id="variant.SeekCap" class="variant"><a href="#variant.SeekCap" class="anchor">§</a><h3 class="code-header">SeekCap = 228</h3></section><div class="docblock"><p>Seek a cap-backed file cursor.
+ABI: a0 = cap_id, a1 = offset (i64 bits), a2 = whence (0=Start,1=Current,2=End)
+→ new absolute position on success.
+Requires the same allowlist bit as ReadCap (bit 16).</p>
+</div><section id="variant.WriteCap" class="variant"><a href="#variant.WriteCap" class="anchor">§</a><h3 class="code-header">WriteCap = 229</h3></section><div class="docblock"><p>Write bytes into a cap-backed file at the current cursor position.
+ABI: a0 = cap_id, a1 = buf_ptr, a2 = buf_len → bytes_written.
+Requires WriteCap allowlist bit (bit 45).</p>
+</div><section id="variant.StatCap" class="variant"><a href="#variant.StatCap" class="anchor">§</a><h3 class="code-header">StatCap = 230</h3></section><div class="docblock"><p>Query the size of a cap-backed file in bytes.
+ABI: a0 = cap_id → file_size on success. Does NOT move the cursor.
+Shares the ReadCap allowlist bit (bit 16).</p>
+</div><section id="variant.TruncateCap" class="variant"><a href="#variant.TruncateCap" class="anchor">§</a><h3 class="code-header">TruncateCap = 231</h3></section><div class="docblock"><p>Truncate a cap-backed file to exactly <code>len</code> bytes.
+ABI: a0 = cap_id, a1 = len → 0 on success.
+Returns an error if <code>len &gt; current_size</code>; use <code>WriteCap</code> to extend.
+Requires TruncateCap allowlist bit (bit 46).</p>
+</div><section id="variant.SyncCap" class="variant"><a href="#variant.SyncCap" class="anchor">§</a><h3 class="code-header">SyncCap = 232</h3></section><div class="docblock"><p>Flush all dirty pages for a cap-backed file to the underlying block device (fsync).
+ABI: a0 = cap_id → 0 on success.
+No-op on write-through filesystems (RamDisk). Hooks into device flush on NVMe (G2).
+Shares the WriteCap allowlist bit (bit 45).</p>
+</div><section id="variant.GrantDma" class="variant"><a href="#variant.GrantDma" class="anchor">§</a><h3 class="code-header">GrantDma = 233</h3></section><div class="docblock"><p>Map a PCIe device’s DMA range into the IOMMU for the calling Cell.
+ABI: a0 = bdf: u32, a1 = phys: u64, a2 = size: usize → IOVA (== phys for SAS) on success.
+Caller must own the BDF via Resource Registry; range must be within Cell memory quota.</p>
+</div><section id="variant.WaitIrq" class="variant"><a href="#variant.WaitIrq" class="anchor">§</a><h3 class="code-header">WaitIrq = 234</h3></section><div class="docblock"><p>Block the calling Driver Cell until hardware IRQ <code>irq_num</code> fires.
+The kernel ISR sets an atomic flag (no lock); the scheduler sweep transitions the task
+to Ready. Lost-wakeup safe: an IRQ that fires between the Cell’s queue-check and this
+call is not missed (take_pending before park). Requires PcieDriverCap or PlatformCap.
+ABI: a0 = irq_num (u8), a1 = mmio_base (VirtIO MMIO slot base for InterruptACK, or 0).</p>
+</div><section id="variant.RegisterPcieBar" class="variant"><a href="#variant.RegisterPcieBar" class="anchor">§</a><h3 class="code-header">RegisterPcieBar = 235</h3></section><div class="docblock"><p>Register a PCIe device BAR in the kernel ECAM BAR table (Platform Cell only).
+Called by the Platform Cell after scanning ECAM config space; populates the allowlist
+that Driver Cells consult via <code>sys_request_mmio</code>. Singleton PlatformCap required.
+ABI: a0 = bdf (u32), a1 = base (usize), a2 = len (usize) → 0 on success.</p>
+</div><section id="variant.RegisterPciDevice" class="variant"><a href="#variant.RegisterPciDevice" class="anchor">§</a><h3 class="code-header">RegisterPciDevice = 236</h3></section><div class="docblock"><p>Register a discovered PCI device with class/BAR info (Platform Cell only).</p>
+<p>Called by the Platform Cell after ECAM scan; populates kernel <code>PCI_DEVICES</code> so
+<code>sys_find_pcie_device</code> queries work without a kernel-side ECAM scan.
+<code>bdf</code>       = (bus&lt;&lt;16)|(dev&lt;&lt;8)|fun
+<code>cls</code>       = (class&lt;&lt;16)|(subclass&lt;&lt;8)|prog_if
+<code>bar0_base</code> = physical base of BAR0 (or 0 if absent)
+<code>bar0_size</code> = probed BAR0 size in bytes (or 0)
+Requires singleton PlatformCap (allowlist bit 53).</p>
+</div><section id="variant.ReadLog" class="variant"><a href="#variant.ReadLog" class="anchor">§</a><h3 class="code-header">ReadLog = 237</h3></section><div class="docblock"><p>Drain up to <code>max</code> bytes from the kernel user-log ring buffer into <code>buf</code>.</p>
+<p>Returns the number of bytes actually copied (may be 0 if no new output).
+The ring buffer is written by <code>sys_log</code> (cell stdout) and <code>print_user_log</code>
+(kernel’s USER: prefixed UART path) — gives the fb-console cell a live
+mirror of everything that appears on the serial console.</p>
+<p>ABI: a0 = buf_ptr, a1 = max → bytes_copied.
+Gated by ReadLogCap (allowlist bit 54) — declare with <code>ReadLog</code> in manifest.</p>
+</div><section id="variant.SpawnFromElf" class="variant"><a href="#variant.SpawnFromElf" class="anchor">§</a><h3 class="code-header">SpawnFromElf = 238</h3></section><div class="docblock"><p>Spawn a cell from ELF bytes supplied in a caller-owned Grant region.</p>
+<p>The userspace spawner (init/supervisor/shell) reads a cell’s ELF from VFS
+into a Grant, then calls this. The kernel applies the IDENTICAL spawn trust
+gate as <code>SpawnFromPath</code> (Ed25519 signature, manifest-privilege, capability
+intersection, policy, syscall allowlist, cluster, quota, measurement) over
+the grant bytes — trust is over the bytes, so the source is irrelevant.
+Lets the kernel loader stop reading a filesystem for post-boot spawns
+(G2 loader redesign). Requires SpawnCap (same as SpawnFromPath).</p>
+<p>ABI: a0 = grant_id, a1 = len (bytes), a2 = path_hint_ptr, a3 = path_hint_len
+→ tid (&gt;0) on success. <code>path_hint</code> is advisory (drives the /bin/
+privilege check, policy lookup, measurement label); a caller lying
+about it can only LOSE privilege, never gain it.</p>
+</div><section id="variant.SpawnPinned" class="variant"><a href="#variant.SpawnPinned" class="anchor">§</a><h3 class="code-header">SpawnPinned = 16</h3></section><div class="docblock"><p>Spawn a cell pinned to a specific hardware core.
+ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
+On single-core systems core_id must be 0; any other value returns NotSupported.</p>
+</div><section id="variant.Snapshot" class="variant"><a href="#variant.Snapshot" class="anchor">§</a><h3 class="code-header">Snapshot = 420</h3></section><div class="docblock"><p>Serialize all allocated physical frames to the snapshot sector range.
+Triggers a warm-boot-capable snapshot.  Returns frame count on success.</p>
+</div><section id="variant.Wait" class="variant"><a href="#variant.Wait" class="anchor">§</a><h3 class="code-header">Wait = 8</h3></section><section id="variant.Yield" class="variant"><a href="#variant.Yield" class="anchor">§</a><h3 class="code-header">Yield = 104</h3></section><section id="variant.SetTimer" class="variant"><a href="#variant.SetTimer" class="anchor">§</a><h3 class="code-header">SetTimer = 35</h3></section><section id="variant.ShmAlloc" class="variant"><a href="#variant.ShmAlloc" class="anchor">§</a><h3 class="code-header">ShmAlloc = 20</h3></section><section id="variant.ShmMap" class="variant"><a href="#variant.ShmMap" class="anchor">§</a><h3 class="code-header">ShmMap = 21</h3></section><section id="variant.Log" class="variant"><a href="#variant.Log" class="anchor">§</a><h3 class="code-header">Log = 11</h3></section><section id="variant.Open" class="variant"><a href="#variant.Open" class="anchor">§</a><h3 class="code-header">Open = 101</h3></section><section id="variant.Read" class="variant"><a href="#variant.Read" class="anchor">§</a><h3 class="code-header">Read = 102</h3></section><section id="variant.Close" class="variant"><a href="#variant.Close" class="anchor">§</a><h3 class="code-header">Close = 103</h3></section><section id="variant.ReadDir" class="variant"><a href="#variant.ReadDir" class="anchor">§</a><h3 class="code-header">ReadDir = 105</h3></section><section id="variant.Write" class="variant"><a href="#variant.Write" class="anchor">§</a><h3 class="code-header">Write = 109</h3></section><section id="variant.Seek" class="variant"><a href="#variant.Seek" class="anchor">§</a><h3 class="code-header">Seek = 106</h3></section><section id="variant.FileOp" class="variant"><a href="#variant.FileOp" class="anchor">§</a><h3 class="code-header">FileOp = 107</h3></section><section id="variant.GetTime" class="variant"><a href="#variant.GetTime" class="anchor">§</a><h3 class="code-header">GetTime = 120</h3></section><section id="variant.GpuFlush" class="variant"><a href="#variant.GpuFlush" class="anchor">§</a><h3 class="code-header">GpuFlush = 300</h3></section><div class="docblock"><p>Flush a pixel rectangle from a cell-provided buffer to the GPU framebuffer.
+ABI: a0 = data_ptr, a1 = data_len, a2 = x, a3 = y (w+h embedded in len)</p>
+</div><section id="variant.GpuCursor" class="variant"><a href="#variant.GpuCursor" class="anchor">§</a><h3 class="code-header">GpuCursor = 301</h3></section><div class="docblock"><p>Set or move the VirtIO GPU hardware cursor.
+ABI: a0 = op (0=set sprite, 1=move), a1 = data_ptr (op=0: 64×64 BGRA sprite),
+a2 = xy ((x&lt;&lt;16)|y), a3 = hot ((hot_x&lt;&lt;16)|hot_y, op=0 only).</p>
+</div><section id="variant.GpuGetResolution" class="variant"><a href="#variant.GpuGetResolution" class="anchor">§</a><h3 class="code-header">GpuGetResolution = 302</h3></section><div class="docblock"><p>Query the VirtIO GPU’s current scanout resolution.
+ABI: no args → returns (width as u32) &lt;&lt; 32 | (height as u32).
+Falls back to (1280, 800) if GPU not yet initialized.</p>
+</div><section id="variant.NetTx" class="variant"><a href="#variant.NetTx" class="anchor">§</a><h3 class="code-header">NetTx = 310</h3></section><div class="docblock"><p>Transmit one Ethernet frame through the kernel VirtIO NIC.
+ABI: a0 = frame_ptr, a1 = frame_len → 1 on success, 0 on failure.</p>
+</div><section id="variant.NetRx" class="variant"><a href="#variant.NetRx" class="anchor">§</a><h3 class="code-header">NetRx = 311</h3></section><div class="docblock"><p>Receive one pending Ethernet frame from the kernel VirtIO NIC.
+ABI: a0 = buf_ptr, a1 = buf_len → bytes written (0 if none ready).</p>
+</div><section id="variant.RecvTimeout" class="variant"><a href="#variant.RecvTimeout" class="anchor">§</a><h3 class="code-header">RecvTimeout = 201</h3></section><div class="docblock"><p>Recv with a deadline in monotonic ticks.
+ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = timeout_ticks → sender_id or ViError::Timeout.</p>
+</div><section id="variant.SendGather" class="variant"><a href="#variant.SendGather" class="anchor">§</a><h3 class="code-header">SendGather = 202</h3></section><div class="docblock"><p>Gather-send: one IPC message assembled from up to 8 non-contiguous buffers.
+ABI: a0 = target, a1 = iovec_ptr ([ptr:usize, len:usize] × count), a2 = iovec_count.</p>
+</div><section id="variant.RecvScatter" class="variant"><a href="#variant.RecvScatter" class="anchor">§</a><h3 class="code-header">RecvScatter = 203</h3></section><div class="docblock"><p>Scatter-receive: one IPC message written into up to 8 non-contiguous buffers.
+ABI: a0 = mask, a1 = iovec_ptr, a2 = iovec_count → sender_id.</p>
+</div><section id="variant.NotifyOnExit" class="variant"><a href="#variant.NotifyOnExit" class="anchor">§</a><h3 class="code-header">NotifyOnExit = 204</h3></section><div class="docblock"><p>Register the caller as a watcher of <code>watched_tid</code>. When that task exits OR
+faults, the kernel delivers a death notification to the caller’s pending
+<code>Recv</code> (<code>sender_id</code> = the dead tid, payload = the exit/fault reason), so a
+supervisor can wait-any across many children with a single recv loop.
+Requires <code>SpawnCap</code>. ABI: a0 = watched_tid → 0 on success, usize::MAX on error.</p>
+</div><section id="variant.RegisterService" class="variant"><a href="#variant.RegisterService" class="anchor">§</a><h3 class="code-header">RegisterService = 205</h3></section><div class="docblock"><p>Register <code>tid</code> as the current provider of well-known <code>service_id</code>. SpawnCap-gated:
+the supervisor owns the service namespace (prevents a cell from hijacking, say, the
+VFS endpoint). On respawn the supervisor re-registers the new tid, so clients
+reconnect transparently. ABI: a0 = service_id (u16), a1 = tid → 0 / usize::MAX.</p>
+</div><section id="variant.LookupService" class="variant"><a href="#variant.LookupService" class="anchor">§</a><h3 class="code-header">LookupService = 206</h3></section><div class="docblock"><p>Resolve a well-known <code>service_id</code> to its current provider tid. Open to all cells so
+any client can reconnect after a service restart. ABI: a0 = service_id (u16) →
+provider tid (&gt; 0), or 0 if no live provider is currently registered.</p>
+</div><section id="variant.Heartbeat" class="variant"><a href="#variant.Heartbeat" class="anchor">§</a><h3 class="code-header">Heartbeat = 207</h3></section><div class="docblock"><p>Liveness heartbeat: the caller asserts it is alive and will call again within
+<code>interval_ticks</code> 10 ms scheduler ticks. If it misses that deadline the kernel
+terminates it as HUNG — catching a silent hang (deadlock / stuck loop) that the
+CPU-monopoly watchdog cannot see — so the supervisor restarts it. <code>interval_ticks = 0</code> disables the heartbeat. Open to all cells. ABI: a0 = interval_ticks → 0.</p>
+</div><section id="variant.GrantAlloc" class="variant"><a href="#variant.GrantAlloc" class="anchor">§</a><h3 class="code-header">GrantAlloc = 208</h3></section><div class="docblock"><p>Allocate a kernel-managed Grant region of up to 4096 pages (16 MB).
+ABI: a0 = size (rounded up to pages, max 16777216) → base_paddr (&gt; 0) on success, 0 on OOM.
+Requires GrantCap (allowlist bit 39).</p>
+</div><section id="variant.GrantShare" class="variant"><a href="#variant.GrantShare" class="anchor">§</a><h3 class="code-header">GrantShare = 209</h3></section><div class="docblock"><p>Share Grant access with <code>target_task</code>.
+ABI: a0 = grant_id, a1 = target_task_id, a2 = GrantPerm (0=RO, 1=WO, 2=RW) → 0 on success.
+Requires GrantCap (bit 39).</p>
+</div><section id="variant.GrantSlice" class="variant"><a href="#variant.GrantSlice" class="anchor">§</a><h3 class="code-header">GrantSlice = 210</h3></section><div class="docblock"><p>Return the raw pointer to a Grant region the caller has access to.
+ABI: a0 = grant_id → ptr (usize, same as grant_id for identity-mapped SAS) on success.
+Returns usize::MAX on permission denied or not found.</p>
+</div><section id="variant.GrantFree" class="variant"><a href="#variant.GrantFree" class="anchor">§</a><h3 class="code-header">GrantFree = 211</h3></section><div class="docblock"><p>Release a Grant region: unmaps its pages and frees its frames.
+ABI: a0 = grant_id → 0 on success.</p>
+</div><section id="variant.BlkReadAsync" class="variant"><a href="#variant.BlkReadAsync" class="anchor">§</a><h3 class="code-header">BlkReadAsync = 212</h3></section><div class="docblock"><p>Start an async sector read into a Grant buffer (poll-based stub; Phase 04 for true async).
+ABI: a0 = sector, a1 = grant_id → async_id (1 = immediately complete) on success.
+Requires BlockIoCap (bit 36) — same gate as raw block-I/O opcodes 500/501.</p>
+</div><section id="variant.RequestMmio" class="variant"><a href="#variant.RequestMmio" class="anchor">§</a><h3 class="code-header">RequestMmio = 213</h3></section><div class="docblock"><p>Request exclusive MMIO ownership for a peripheral Driver Cell.
+ABI: a0 = base (physical MMIO address), a1 = len → 0 on success.
+Requires the corresponding manifest flag (GPIO or UART) to be set.
+The kernel checks the Resource Registry allowlist; rejects unknown ranges.</p>
+</div><section id="variant.GetRandom" class="variant"><a href="#variant.GetRandom" class="anchor">§</a><h3 class="code-header">GetRandom = 214</h3></section><div class="docblock"><p>Fill caller buffer with VirtIO-RNG entropy (true hardware randomness).
+Required for TLS key generation — mtime-seeded PRNG is cryptographically broken.
+ABI: a0 = buf_ptr, a1 = len (max 64 per call, one VirtIO descriptor) → bytes written.
+Returns 0 if no VirtIO-RNG device is present.</p>
+</div><section id="variant.GrantRegister" class="variant"><a href="#variant.GrantRegister" class="anchor">§</a><h3 class="code-header">GrantRegister = 215</h3></section><div class="docblock"><p>Allocate a persistent, pre-pinned Grant buffer for the cell’s lifetime.
+Unlike GrantAlloc, the buffer is not freed until GrantUnregister or cell exit.
+ABI: a0 = size → reg_id (physical base, &gt; 0) on success, 0 on OOM.
+Requires GrantCap (allowlist bit 39).</p>
+</div><section id="variant.GrantUnregister" class="variant"><a href="#variant.GrantUnregister" class="anchor">§</a><h3 class="code-header">GrantUnregister = 216</h3></section><div class="docblock"><p>Release a registered buffer allocated via GrantRegister.
+ABI: a0 = reg_id → 0 on success.
+Requires GrantCap (allowlist bit 39).</p>
+</div><section id="variant.WaitForEvent" class="variant"><a href="#variant.WaitForEvent" class="anchor">§</a><h3 class="code-header">WaitForEvent = 217</h3></section><div class="docblock"><p>Block until one or more bits in <code>mask</code> fire, or <code>timeout_ticks</code> 10ms ticks elapse.
+<code>timeout_ticks = 0</code> means block indefinitely.
+Returns the fired event bits (&gt;0) on wake, or 0 on timeout.
+Bit 0 = NET_RX (NIC frame available). See <code>api::syscall::events</code>.
+ABI: a0 = mask (u32), a1 = timeout_ticks (u64 lo, a2 = hi) → fired_mask (usize).
+Allowlist-gated (bit 42). Requires <code>WaitForEvent</code> in <code>declare_syscalls!</code>.</p>
+</div><section id="variant.AudioPlay" class="variant"><a href="#variant.AudioPlay" class="anchor">§</a><h3 class="code-header">AudioPlay = 218</h3></section><div class="docblock"><p>Play raw PCM frames on the VirtIO sound device’s output stream (blocking).
+PCM format is fixed: signed 16-bit LE, 2 channels, 44100 Hz (frame = 4 bytes).
+The kernel configures + starts the output stream on first use.
+ABI: a0 = pcm_ptr, a1 = pcm_len (bytes) → frames written (0 on no device/error).
+Allowlist-gated (bit 47). Requires <code>AudioPlay</code> in <code>declare_syscalls!</code>.</p>
+</div><section id="variant.CapRevoke" class="variant"><a href="#variant.CapRevoke" class="anchor">§</a><h3 class="code-header">CapRevoke = 219</h3></section><div class="docblock"><p>Revoke one or more capabilities from a live running cell (runtime revocation).</p>
+<p>The caller must hold <code>SpawnCap</code>.  System cells (<code>block_io_cap</code> / <code>network_cap</code>
+holders) are protected — revoking I/O caps from a running service mid-flight
+would corrupt driver state; use <code>HotSwap</code> to replace them safely.</p>
+<p><code>cap_mask</code> bit layout (see <code>cap_mask</code> module constants):
+bit 0 → block_io · bit 1 → network · bit 2 → spawn · bit 3 → hypervisor
+bits  8-15 → mmio_devices sub-mask (matches resource_registry::DEV_*)
+bits 16-23 → block_regions sub-mask (partition access bits)</p>
+<p>ABI: a0 = target_tid, a1 = cap_mask (u32) → 0 on success.
+Returns <code>PermissionDenied</code> if caller lacks SpawnCap or target is a system cell.
+Always permitted past the syscall allowlist (SpawnCap is the authority gate).</p>
+</div><section id="variant.CreateVm" class="variant"><a href="#variant.CreateVm" class="anchor">§</a><h3 class="code-header">CreateVm = 220</h3></section><div class="docblock"><p>Allocate guest RAM and a Stage-2 table; returns opaque <code>vm_id</code>.
+ABI: a0 = guest_pages → vm_id (&gt;0) on success, 0 on OOM / unsupported.</p>
+</div><section id="variant.CreateVcpu" class="variant"><a href="#variant.CreateVcpu" class="anchor">§</a><h3 class="code-header">CreateVcpu = 221</h3></section><div class="docblock"><p>Create a vCPU in <code>vm_id</code> with initial PC <code>entry_pc</code>; returns <code>vcpu_id</code>.
+ABI: a0 = vm_id, a1 = entry_pc → vcpu_id (&gt;0).</p>
+</div><section id="variant.MapGuestMemory" class="variant"><a href="#variant.MapGuestMemory" class="anchor">§</a><h3 class="code-header">MapGuestMemory = 222</h3></section><div class="docblock"><p>Map guest IPA range <code>[ipa, ipa+size)</code> to kernel-managed frames in <code>vm_id</code>.
+ABI: a0 = vm_id, a1 = ipa, a2 = size (bytes), a3 = writable:bool → 0.</p>
+</div><section id="variant.RunVcpu" class="variant"><a href="#variant.RunVcpu" class="anchor">§</a><h3 class="code-header">RunVcpu = 223</h3></section><div class="docblock"><p>World-switch into vCPU until exit or <code>budget_ns</code> ns expire; write <code>ViVmExit</code>.
+ABI: a0 = vm_id, a1 = vcpu_id, a2 = budget_ns, a3 = out_ptr (*mut ViVmExit) → 0.</p>
+</div><section id="variant.VcpuRegs" class="variant"><a href="#variant.VcpuRegs" class="anchor">§</a><h3 class="code-header">VcpuRegs = 224</h3></section><div class="docblock"><p>Read (write=0) or write (write=1) vCPU registers x0-x30 + sp + pc (32×u64).
+ABI: a0 = vm_id, a1 = vcpu_id, a2 = buf_ptr, a3 = write:bool → 0.</p>
+</div><section id="variant.InjectIrq" class="variant"><a href="#variant.InjectIrq" class="anchor">§</a><h3 class="code-header">InjectIrq = 225</h3></section><div class="docblock"><p>Inject a GICv2 virtual interrupt into vCPU (0 ≤ intid ≤ 1019).
+ABI: a0 = vm_id, a1 = vcpu_id, a2 = intid → 0.</p>
+</div><section id="variant.WriteGuestMemory" class="variant"><a href="#variant.WriteGuestMemory" class="anchor">§</a><h3 class="code-header">WriteGuestMemory = 226</h3></section><div class="docblock"><p>Copy <code>len</code> bytes from caller’s <code>src_ptr</code> into guest physical RAM at <code>gpa</code>.
+Kernel validates <code>src_ptr + len</code> lies within the caller’s mapped address space
+and <code>gpa + len</code> lies within the VM’s carved guest-RAM region.
+ABI: a0 = vm_id, a1 = gpa, a2 = src_ptr, a3 = len → bytes_written.</p>
+</div><section id="variant.ReadGuestMemory" class="variant"><a href="#variant.ReadGuestMemory" class="anchor">§</a><h3 class="code-header">ReadGuestMemory = 227</h3></section><div class="docblock"><p>Copy <code>len</code> bytes from guest physical RAM at <code>gpa</code> into caller’s <code>dst_ptr</code>.
+Kernel bounds-checks both sides: <code>dst_ptr + len</code> within caller’s address space
+and <code>gpa + len</code> within the VM’s carved guest-RAM region.
+ABI: a0 = vm_id, a1 = gpa, a2 = dst_ptr, a3 = len → bytes_read.</p>
+</div><section id="variant.HotSwap" class="variant"><a href="#variant.HotSwap" class="anchor">§</a><h3 class="code-header">HotSwap = 400</h3></section><div class="docblock"><p>Live-replace a running Cell without message loss.
+ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.</p>
+</div><section id="variant.HotSwapReady" class="variant"><a href="#variant.HotSwapReady" class="anchor">§</a><h3 class="code-header">HotSwapReady = 401</h3></section><div class="docblock"><p>Signal to the kernel that this cell has finished deserializing state and
+is ready to receive IPC. Called by the new cell during hot-swap Step 4.
+ABI: (no args) → 0 on success.</p>
+</div><section id="variant.StateStash" class="variant"><a href="#variant.StateStash" class="anchor">§</a><h3 class="code-header">StateStash = 410</h3></section><div class="docblock"><p>Stash a Cell’s serialized state in the kernel under <code>key</code>, so a
+replacement instance can recover it across a hot-swap / respawn.
+ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes stored.</p>
+</div><section id="variant.StateRestore" class="variant"><a href="#variant.StateRestore" class="anchor">§</a><h3 class="code-header">StateRestore = 411</h3></section><div class="docblock"><p>Restore previously stashed state for <code>key</code> into the caller’s buffer.
+ABI: a0 = key, a1 = buf_ptr, a2 = buf_len → bytes written (0 if none).</p>
+</div><section id="variant.StateStashClear" class="variant"><a href="#variant.StateStashClear" class="anchor">§</a><h3 class="code-header">StateStashClear = 412</h3></section><div class="docblock"><p>Delete the stash entry for <code>key</code>, freeing its slot.
+Call after a successful <code>StateRestore</code> to release kernel memory.
+ABI: a0 = key → 0 on success (no-op when key is absent).</p>
+</div><section id="variant.FreezeCell" class="variant"><a href="#variant.FreezeCell" class="anchor">§</a><h3 class="code-header">FreezeCell = 413</h3></section><div class="docblock"><p>413: Freeze a Cell. Requires SupervisorCap.
+ABI: a0 = target_tid → 0 on success.</p>
+</div><section id="variant.ResumeCell" class="variant"><a href="#variant.ResumeCell" class="anchor">§</a><h3 class="code-header">ResumeCell = 414</h3></section><div class="docblock"><p>414: Resume a frozen Cell. Requires SupervisorCap.
+ABI: a0 = target_tid → 0 on success.</p>
+</div><section id="variant.KillCell" class="variant"><a href="#variant.KillCell" class="anchor">§</a><h3 class="code-header">KillCell = 415</h3></section><div class="docblock"><p>415: Forcibly terminate a Cell. Requires SupervisorCap.
+ABI: a0 = target_tid, a1 = exit_code: u32 → exit_code on success.</p>
+</div><section id="variant.RegisterBlockDriver" class="variant"><a href="#variant.RegisterBlockDriver" class="anchor">§</a><h3 class="code-header">RegisterBlockDriver = 416</h3></section><div class="docblock"><p>416: Register caller as the active block device driver.
+ABI: (no args) → 0 on success. Requires PcieDriverCap.</p>
+</div><section id="variant.RegisterNicDriver" class="variant"><a href="#variant.RegisterNicDriver" class="anchor">§</a><h3 class="code-header">RegisterNicDriver = 417</h3></section><div class="docblock"><p>417: Register caller as the active NIC driver.
+ABI: (no args) → 0 on success. Requires PcieDriverCap.</p>
+</div><section id="variant.FindPcieDevice" class="variant"><a href="#variant.FindPcieDevice" class="anchor">§</a><h3 class="code-header">FindPcieDevice = 418</h3></section><div class="docblock"><p>418: Find the first PCIe device matching (class, subclass, prog_if).
+ABI: a0=class(u8), a1=subclass(u8), a2=prog_if(u8), a3=out_ptr(*mut PcieDeviceInfo)
+→ 1 if found (out_ptr written), 0 if not found. Requires PcieDriverCap.</p>
+</div><section id="variant.QueryHotswapReady" class="variant"><a href="#variant.QueryHotswapReady" class="anchor">§</a><h3 class="code-header">QueryHotswapReady = 419</h3></section><div class="docblock"><p>419: Query whether a cell has called sys_hotswap_ready(). Requires SupervisorCap.
+ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.</p>
+</div><section id="variant.Unknown" class="variant"><a href="#variant.Unknown" class="anchor">§</a><h3 class="code-header">Unknown = 9_999</h3></section><section id="variant.GetProcs" class="variant"><a href="#variant.GetProcs" class="anchor">§</a><h3 class="code-header">GetProcs = 30</h3></section></div><h2 id="implementations" class="section-header">Implementations<a href="#implementations" class="anchor">§</a></h2><div id="implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-ViSyscall" class="impl"><a href="#impl-ViSyscall" class="anchor">§</a><h3 class="code-header">impl <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.allowlist_bit" class="method"><h4 class="code-header">pub const fn <a href="#method.allowlist_bit" class="fn">allowlist_bit</a>(self) -&gt; Option&lt;u8&gt;</h4></section></summary><div class="docblock"><p>Stable bit index (0-38) for the per-Cell syscall allowlist stored in
+<code>Task::syscall_allowlist</code>.</p>
+<p>Bit indices are independent of raw opcode values so they remain stable
+even if opcodes are renumbered.  Returns <code>None</code> for syscalls that are
+always permitted (Yield, Exit) — filtering them would prevent a Cell
+from ever yielding or cleanly shutting down.</p>
+<p>Bit 36 is reserved for raw block-I/O syscalls (opcodes 500-503) which
+bypass <code>ViSyscall::from()</code> and must be checked separately at dispatch.</p>
+</div></details></div></details></div><h2 id="trait-implementations" class="section-header">Trait Implementations<a href="#trait-implementations" class="anchor">§</a></h2><div id="trait-implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-Clone-for-ViSyscall" class="impl"><a href="#impl-Clone-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Clone for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.clone" class="method trait-impl"><a href="#method.clone" class="anchor">§</a><h4 class="code-header">fn <a class="fn">clone</a>(&amp;self) -&gt; <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h4></section></summary><div class='docblock'>Returns a duplicate of the value. <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.clone_from" class="method trait-impl"><span class="since rightside" title="Stable since Rust version 1.0.0">1.0.0</span><a href="#method.clone_from" class="anchor">§</a><h4 class="code-header">fn <a class="fn">clone_from</a>(&amp;mut self, source: &amp;Self)</h4></section></summary><div class='docblock'>Performs copy-assignment from <code>source</code>. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Debug-for-ViSyscall" class="impl"><a href="#impl-Debug-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Debug for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.fmt" class="method trait-impl"><a href="#method.fmt" class="anchor">§</a><h4 class="code-header">fn <a class="fn">fmt</a>(&amp;self, f: &amp;mut Formatter&lt;'_&gt;) -&gt; Result&lt;(), Error&gt;</h4></section></summary><div class='docblock'>Formats the value using the given formatter. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-From%3Cusize%3E-for-ViSyscall" class="impl"><a href="#impl-From%3Cusize%3E-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl From&lt;usize&gt; for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from" class="method trait-impl"><a href="#method.from" class="anchor">§</a><h4 class="code-header">fn <a class="fn">from</a>(id: usize) -&gt; <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h4></section></summary><div class='docblock'>Converts to this type from the input type.</div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-PartialEq-for-ViSyscall" class="impl"><a href="#impl-PartialEq-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl PartialEq for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.eq" class="method trait-impl"><a href="#method.eq" class="anchor">§</a><h4 class="code-header">fn <a class="fn">eq</a>(&amp;self, other: &amp;<a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a>) -&gt; bool</h4></section></summary><div class='docblock'>Tests for <code>self</code> and <code>other</code> values to be equal, and is used by <code>==</code>.</div></details><details class="toggle method-toggle" open><summary><section id="method.ne" class="method trait-impl"><span class="since rightside" title="Stable since Rust version 1.0.0">1.0.0</span><a href="#method.ne" class="anchor">§</a><h4 class="code-header">fn <a class="fn">ne</a>(&amp;self, other: &amp;Rhs) -&gt; bool</h4></section></summary><div class='docblock'>Tests for <code>!=</code>. The default implementation is almost always sufficient,
+and should not be overridden without very good reason.</div></details></div></details><section id="impl-Copy-for-ViSyscall" class="impl"><a href="#impl-Copy-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Copy for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-Eq-for-ViSyscall" class="impl"><a href="#impl-Eq-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Eq for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-StructuralPartialEq-for-ViSyscall" class="impl"><a href="#impl-StructuralPartialEq-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl StructuralPartialEq for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></div><h2 id="synthetic-implementations" class="section-header">Auto Trait Implementations<a href="#synthetic-implementations" class="anchor">§</a></h2><div id="synthetic-implementations-list"><section id="impl-Freeze-for-ViSyscall" class="impl"><a href="#impl-Freeze-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Freeze for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-RefUnwindSafe-for-ViSyscall" class="impl"><a href="#impl-RefUnwindSafe-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl RefUnwindSafe for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-Send-for-ViSyscall" class="impl"><a href="#impl-Send-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Send for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-Sync-for-ViSyscall" class="impl"><a href="#impl-Sync-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Sync for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-Unpin-for-ViSyscall" class="impl"><a href="#impl-Unpin-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl Unpin for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-UnsafeUnpin-for-ViSyscall" class="impl"><a href="#impl-UnsafeUnpin-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl UnsafeUnpin for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section><section id="impl-UnwindSafe-for-ViSyscall" class="impl"><a href="#impl-UnwindSafe-for-ViSyscall" class="anchor">§</a><h3 class="code-header">impl UnwindSafe for <a class="enum" href="enum.ViSyscall.html" title="enum ostd::ViSyscall">ViSyscall</a></h3></section></div><h2 id="blanket-implementations" class="section-header">Blanket Implementations<a href="#blanket-implementations" class="anchor">§</a></h2><div id="blanket-implementations-list"><details class="toggle implementors-toggle"><summary><section id="impl-Any-for-T" class="impl"><a href="#impl-Any-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; Any for T<div class="where">where
+    T: 'static + ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.type_id" class="method trait-impl"><a href="#method.type_id" class="anchor">§</a><h4 class="code-header">fn <a class="fn">type_id</a>(&amp;self) -&gt; TypeId</h4></section></summary><div class='docblock'>Gets the <code>TypeId</code> of <code>self</code>. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Borrow%3CT%3E-for-T" class="impl"><a href="#impl-Borrow%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; Borrow&lt;T&gt; for T<div class="where">where
+    T: ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow" class="method trait-impl"><a href="#method.borrow" class="anchor">§</a><h4 class="code-header">fn <a class="fn">borrow</a>(&amp;self) -&gt; &amp;T</h4></section></summary><div class='docblock'>Immutably borrows from an owned value. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-BorrowMut%3CT%3E-for-T" class="impl"><a href="#impl-BorrowMut%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; BorrowMut&lt;T&gt; for T<div class="where">where
+    T: ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow_mut" class="method trait-impl"><a href="#method.borrow_mut" class="anchor">§</a><h4 class="code-header">fn <a class="fn">borrow_mut</a>(&amp;mut self) -&gt; &amp;mut T</h4></section></summary><div class='docblock'>Mutably borrows from an owned value. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-CloneToUninit-for-T" class="impl"><a href="#impl-CloneToUninit-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; CloneToUninit for T<div class="where">where
+    T: Clone,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.clone_to_uninit" class="method trait-impl"><a href="#method.clone_to_uninit" class="anchor">§</a><h4 class="code-header">unsafe fn <a class="fn">clone_to_uninit</a>(&amp;self, dest: *mut u8)</h4></section></summary><span class="item-info"><div class="stab unstable"><span class="emoji">🔬</span><span>This is a nightly-only experimental API. (<code>clone_to_uninit</code>)</span></div></span><div class='docblock'>Performs copy-assignment from <code>self</code> to <code>dest</code>. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Equivalent%3CK%3E-for-Q" class="impl"><a href="#impl-Equivalent%3CK%3E-for-Q" class="anchor">§</a><h3 class="code-header">impl&lt;Q, K&gt; Equivalent&lt;K&gt; for Q<div class="where">where
+    Q: Eq + ?Sized,
+    K: Borrow&lt;Q&gt; + ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.equivalent" class="method trait-impl"><a href="#method.equivalent" class="anchor">§</a><h4 class="code-header">fn <a class="fn">equivalent</a>(&amp;self, key: &amp;K) -&gt; bool</h4></section></summary><div class='docblock'>Compare self to <code>key</code> and return <code>true</code> if they are equal.</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-From%3CT%3E-for-T" class="impl"><a href="#impl-From%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; From&lt;T&gt; for T</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from-1" class="method trait-impl"><a href="#method.from-1" class="anchor">§</a><h4 class="code-header">fn <a class="fn">from</a>(t: T) -&gt; T</h4></section></summary><div class="docblock"><p>Returns the argument unchanged.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Into%3CU%3E-for-T" class="impl"><a href="#impl-Into%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; Into&lt;U&gt; for T<div class="where">where
+    U: From&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.into" class="method trait-impl"><a href="#method.into" class="anchor">§</a><h4 class="code-header">fn <a class="fn">into</a>(self) -&gt; U</h4></section></summary><div class="docblock"><p>Calls <code>U::from(self)</code>.</p>
+<p>That is, this conversion is whatever the implementation of
+<code>[From]&lt;T&gt; for U</code> chooses to do.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-ToOwned-for-T" class="impl"><a href="#impl-ToOwned-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; ToOwned for T<div class="where">where
+    T: Clone,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Owned" class="associatedtype trait-impl"><a href="#associatedtype.Owned" class="anchor">§</a><h4 class="code-header">type <a class="associatedtype">Owned</a> = T</h4></section></summary><div class='docblock'>The resulting type after obtaining ownership.</div></details><details class="toggle method-toggle" open><summary><section id="method.to_owned" class="method trait-impl"><a href="#method.to_owned" class="anchor">§</a><h4 class="code-header">fn <a class="fn">to_owned</a>(&amp;self) -&gt; T</h4></section></summary><div class='docblock'>Creates owned data from borrowed data, usually by cloning. <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.clone_into" class="method trait-impl"><a href="#method.clone_into" class="anchor">§</a><h4 class="code-header">fn <a class="fn">clone_into</a>(&amp;self, target: &amp;mut T)</h4></section></summary><div class='docblock'>Uses borrowed data to replace owned data, usually by cloning. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryFrom%3CU%3E-for-T" class="impl"><a href="#impl-TryFrom%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; TryFrom&lt;U&gt; for T<div class="where">where
+    U: Into&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error-1" class="associatedtype trait-impl"><a href="#associatedtype.Error-1" class="anchor">§</a><h4 class="code-header">type <a class="associatedtype">Error</a> = Infallible</h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_from" class="method trait-impl"><a href="#method.try_from" class="anchor">§</a><h4 class="code-header">fn <a class="fn">try_from</a>(value: U) -&gt; Result&lt;T, &lt;T as TryFrom&lt;U&gt;&gt;::Error&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryInto%3CU%3E-for-T" class="impl"><a href="#impl-TryInto%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; TryInto&lt;U&gt; for T<div class="where">where
+    U: TryFrom&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error" class="associatedtype trait-impl"><a href="#associatedtype.Error" class="anchor">§</a><h4 class="code-header">type <a class="associatedtype">Error</a> = &lt;U as TryFrom&lt;T&gt;&gt;::Error</h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_into" class="method trait-impl"><a href="#method.try_into" class="anchor">§</a><h4 class="code-header">fn <a class="fn">try_into</a>(self) -&gt; Result&lt;U, &lt;U as TryFrom&lt;T&gt;&gt;::Error&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details></div></section></div></main></body></html>

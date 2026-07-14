@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PL011_BASE","PL011_SIZE"],"struct":["Pl011Uart"]};

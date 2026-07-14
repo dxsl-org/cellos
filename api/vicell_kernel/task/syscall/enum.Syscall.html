@@ -1,0 +1,555 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The Fundamental Verbs of ViCell IPC (Hubris ABI + Lease System)"><title>Syscall in vicell_kernel::task::syscall - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="vicell_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc enum"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Syscall</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../vicell_kernel/index.html">vicell_<wbr>kernel</a><span class="version">0.2.1</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Syscall</a></h2><h3><a href="#variants">Variants</a></h3><ul class="block variant"><li><a href="#variant.AudioPlay" title="AudioPlay">AudioPlay</a></li><li><a href="#variant.BlkFlush" title="BlkFlush">BlkFlush</a></li><li><a href="#variant.BlkRead" title="BlkRead">BlkRead</a></li><li><a href="#variant.BlkReadAsync" title="BlkReadAsync">BlkReadAsync</a></li><li><a href="#variant.BlkWrite" title="BlkWrite">BlkWrite</a></li><li><a href="#variant.BorrowRead" title="BorrowRead">BorrowRead</a></li><li><a href="#variant.BorrowWrite" title="BorrowWrite">BorrowWrite</a></li><li><a href="#variant.CapRevoke" title="CapRevoke">CapRevoke</a></li><li><a href="#variant.ChDir" title="ChDir">ChDir</a></li><li><a href="#variant.Close" title="Close">Close</a></li><li><a href="#variant.CloseCap" title="CloseCap">CloseCap</a></li><li><a href="#variant.Create" title="Create">Create</a></li><li><a href="#variant.CreateVcpu" title="CreateVcpu">CreateVcpu</a></li><li><a href="#variant.CreateVm" title="CreateVm">CreateVm</a></li><li><a href="#variant.Exec" title="Exec">Exec</a></li><li><a href="#variant.Exit" title="Exit">Exit</a></li><li><a href="#variant.FStat" title="FStat">FStat</a></li><li><a href="#variant.FileOp" title="FileOp">FileOp</a></li><li><a href="#variant.FindPcieDevice" title="FindPcieDevice">FindPcieDevice</a></li><li><a href="#variant.ForceExit" title="ForceExit">ForceExit</a></li><li><a href="#variant.FreezeCell" title="FreezeCell">FreezeCell</a></li><li><a href="#variant.FutexWait" title="FutexWait">FutexWait</a></li><li><a href="#variant.FutexWake" title="FutexWake">FutexWake</a></li><li><a href="#variant.GetCwd" title="GetCwd">GetCwd</a></li><li><a href="#variant.GetProcs" title="GetProcs">GetProcs</a></li><li><a href="#variant.GetRandom" title="GetRandom">GetRandom</a></li><li><a href="#variant.GetTime" title="GetTime">GetTime</a></li><li><a href="#variant.GpuCursor" title="GpuCursor">GpuCursor</a></li><li><a href="#variant.GpuFlush" title="GpuFlush">GpuFlush</a></li><li><a href="#variant.GpuGetResolution" title="GpuGetResolution">GpuGetResolution</a></li><li><a href="#variant.Grant" title="Grant">Grant</a></li><li><a href="#variant.GrantAlloc" title="GrantAlloc">GrantAlloc</a></li><li><a href="#variant.GrantDma" title="GrantDma">GrantDma</a></li><li><a href="#variant.GrantFree" title="GrantFree">GrantFree</a></li><li><a href="#variant.GrantRegister" title="GrantRegister">GrantRegister</a></li><li><a href="#variant.GrantShare" title="GrantShare">GrantShare</a></li><li><a href="#variant.GrantSlice" title="GrantSlice">GrantSlice</a></li><li><a href="#variant.GrantUnregister" title="GrantUnregister">GrantUnregister</a></li><li><a href="#variant.Heartbeat" title="Heartbeat">Heartbeat</a></li><li><a href="#variant.HotSwap" title="HotSwap">HotSwap</a></li><li><a href="#variant.HotSwapReady" title="HotSwapReady">HotSwapReady</a></li><li><a href="#variant.InjectIrq" title="InjectIrq">InjectIrq</a></li><li><a href="#variant.KillCell" title="KillCell">KillCell</a></li><li><a href="#variant.Lend" title="Lend">Lend</a></li><li><a href="#variant.Log" title="Log">Log</a></li><li><a href="#variant.LookupService" title="LookupService">LookupService</a></li><li><a href="#variant.Map" title="Map">Map</a></li><li><a href="#variant.MapGuestMemory" title="MapGuestMemory">MapGuestMemory</a></li><li><a href="#variant.MkDir" title="MkDir">MkDir</a></li><li><a href="#variant.NetRx" title="NetRx">NetRx</a></li><li><a href="#variant.NetTx" title="NetTx">NetTx</a></li><li><a href="#variant.NotifyOnExit" title="NotifyOnExit">NotifyOnExit</a></li><li><a href="#variant.Open" title="Open">Open</a></li><li><a href="#variant.OpenCap" title="OpenCap">OpenCap</a></li><li><a href="#variant.QueryHotswapReady" title="QueryHotswapReady">QueryHotswapReady</a></li><li><a href="#variant.Read" title="Read">Read</a></li><li><a href="#variant.ReadCap" title="ReadCap">ReadCap</a></li><li><a href="#variant.ReadDir" title="ReadDir">ReadDir</a></li><li><a href="#variant.ReadGuestMemory" title="ReadGuestMemory">ReadGuestMemory</a></li><li><a href="#variant.ReadLog" title="ReadLog">ReadLog</a></li><li><a href="#variant.Recv" title="Recv">Recv</a></li><li><a href="#variant.RecvScatter" title="RecvScatter">RecvScatter</a></li><li><a href="#variant.RecvTimeout" title="RecvTimeout">RecvTimeout</a></li><li><a href="#variant.RegisterBlockDriver" title="RegisterBlockDriver">RegisterBlockDriver</a></li><li><a href="#variant.RegisterNicDriver" title="RegisterNicDriver">RegisterNicDriver</a></li><li><a href="#variant.RegisterPciDevice" title="RegisterPciDevice">RegisterPciDevice</a></li><li><a href="#variant.RegisterPcieBar" title="RegisterPcieBar">RegisterPcieBar</a></li><li><a href="#variant.RegisterService" title="RegisterService">RegisterService</a></li><li><a href="#variant.Reply" title="Reply">Reply</a></li><li><a href="#variant.RequestMmio" title="RequestMmio">RequestMmio</a></li><li><a href="#variant.ResumeCell" title="ResumeCell">ResumeCell</a></li><li><a href="#variant.RunVcpu" title="RunVcpu">RunVcpu</a></li><li><a href="#variant.Seek" title="Seek">Seek</a></li><li><a href="#variant.SeekCap" title="SeekCap">SeekCap</a></li><li><a href="#variant.Send" title="Send">Send</a></li><li><a href="#variant.SendGather" title="SendGather">SendGather</a></li><li><a href="#variant.ServiceLookup" title="ServiceLookup">ServiceLookup</a></li><li><a href="#variant.SetTimer" title="SetTimer">SetTimer</a></li><li><a href="#variant.ShmAlloc" title="ShmAlloc">ShmAlloc</a></li><li><a href="#variant.ShmMap" title="ShmMap">ShmMap</a></li><li><a href="#variant.Shutdown" title="Shutdown">Shutdown</a></li><li><a href="#variant.Snapshot" title="Snapshot">Snapshot</a></li><li><a href="#variant.Spawn" title="Spawn">Spawn</a></li><li><a href="#variant.SpawnFromElf" title="SpawnFromElf">SpawnFromElf</a></li><li><a href="#variant.SpawnFromMem" title="SpawnFromMem">SpawnFromMem</a></li><li><a href="#variant.SpawnFromPath" title="SpawnFromPath">SpawnFromPath</a></li><li><a href="#variant.SpawnPinned" title="SpawnPinned">SpawnPinned</a></li><li><a href="#variant.StatCap" title="StatCap">StatCap</a></li><li><a href="#variant.StateRestore" title="StateRestore">StateRestore</a></li><li><a href="#variant.StateStash" title="StateStash">StateStash</a></li><li><a href="#variant.StateStashClear" title="StateStashClear">StateStashClear</a></li><li><a href="#variant.SyncCap" title="SyncCap">SyncCap</a></li><li><a href="#variant.TruncateCap" title="TruncateCap">TruncateCap</a></li><li><a href="#variant.TryRecv" title="TryRecv">TryRecv</a></li><li><a href="#variant.TrySend" title="TrySend">TrySend</a></li><li><a href="#variant.VcpuRegs" title="VcpuRegs">VcpuRegs</a></li><li><a href="#variant.Wait" title="Wait">Wait</a></li><li><a href="#variant.WaitForEvent" title="WaitForEvent">WaitForEvent</a></li><li><a href="#variant.WaitIrq" title="WaitIrq">WaitIrq</a></li><li><a href="#variant.Write" title="Write">Write</a></li><li><a href="#variant.WriteCap" title="WriteCap">WriteCap</a></li><li><a href="#variant.WriteGuestMemory" title="WriteGuestMemory">WriteGuestMemory</a></li><li><a href="#variant.Yield" title="Yield">Yield</a></li></ul><h3><a href="#trait-implementations">Trait Implementations</a></h3><ul class="block trait-implementation"><li><a href="#impl-Clone-for-Syscall" title="Clone">Clone</a></li><li><a href="#impl-Copy-for-Syscall" title="Copy">Copy</a></li><li><a href="#impl-Debug-for-Syscall" title="Debug">Debug</a></li></ul><h3><a href="#synthetic-implementations">Auto Trait Implementations</a></h3><ul class="block synthetic-implementation"><li><a href="#impl-Freeze-for-Syscall" title="Freeze">Freeze</a></li><li><a href="#impl-RefUnwindSafe-for-Syscall" title="RefUnwindSafe">RefUnwindSafe</a></li><li><a href="#impl-Send-for-Syscall" title="Send">Send</a></li><li><a href="#impl-Sync-for-Syscall" title="Sync">Sync</a></li><li><a href="#impl-Unpin-for-Syscall" title="Unpin">Unpin</a></li><li><a href="#impl-UnsafeUnpin-for-Syscall" title="UnsafeUnpin">UnsafeUnpin</a></li><li><a href="#impl-UnwindSafe-for-Syscall" title="UnwindSafe">UnwindSafe</a></li></ul><h3><a href="#blanket-implementations">Blanket Implementations</a></h3><ul class="block blanket-implementation"><li><a href="#impl-Any-for-T" title="Any">Any</a></li><li><a href="#impl-Borrow%3CT%3E-for-T" title="Borrow&#60;T&#62;">Borrow&#60;T&#62;</a></li><li><a href="#impl-BorrowMut%3CT%3E-for-T" title="BorrowMut&#60;T&#62;">BorrowMut&#60;T&#62;</a></li><li><a href="#impl-CloneToUninit-for-T" title="CloneToUninit">CloneToUninit</a></li><li><a href="#impl-From%3CT%3E-for-T" title="From&#60;T&#62;">From&#60;T&#62;</a></li><li><a href="#impl-Into%3CU%3E-for-T" title="Into&#60;U&#62;">Into&#60;U&#62;</a></li><li><a href="#impl-ToOwned-for-T" title="ToOwned">ToOwned</a></li><li><a href="#impl-TryFrom%3CU%3E-for-T" title="TryFrom&#60;U&#62;">TryFrom&#60;U&#62;</a></li><li><a href="#impl-TryInto%3CU%3E-for-T" title="TryInto&#60;U&#62;">TryInto&#60;U&#62;</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In vicell_<wbr>kernel::<wbr>task::<wbr>syscall</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">vicell_kernel</a>::<wbr><a href="../index.html">task</a>::<wbr><a href="index.html">syscall</a></div><h1>Enum <span class="enum">Syscall</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/vicell_kernel/task/syscall.rs.html#385-769">Source</a> </span></div><pre class="rust item-decl"><code>pub enum Syscall {
+<details class="toggle type-contents-toggle"><summary class="hideme"><span>Show 103 variants</span></summary>    Send {
+        target: usize,
+        msg_ptr: usize,
+        msg_len: usize,
+    },
+    TrySend {
+        target: usize,
+        msg_ptr: usize,
+        msg_len: usize,
+    },
+    Recv {
+        mask: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    SendGather {
+        target: usize,
+        iovec_ptr: usize,
+        iovec_count: usize,
+    },
+    RecvScatter {
+        mask: usize,
+        iovec_ptr: usize,
+        iovec_count: usize,
+    },
+    RecvTimeout {
+        mask: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+        deadline: u64,
+    },
+    Reply {
+        caller: usize,
+        result: usize,
+    },
+    SetTimer {
+        deadline: usize,
+    },
+    BorrowRead {
+        lease_id: usize,
+        offset: usize,
+        ptr: usize,
+        len: usize,
+    },
+    BorrowWrite {
+        lease_id: usize,
+        offset: usize,
+        ptr: usize,
+        len: usize,
+    },
+    Lend {
+        target: usize,
+        ptr: usize,
+        len: usize,
+        flags: usize,
+    },
+    TryRecv {
+        mask: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    Spawn {
+        entry: usize,
+        arg: usize,
+    },
+    FutexWait {
+        addr: usize,
+        val: u32,
+    },
+    FutexWake {
+        addr: usize,
+        count: usize,
+    },
+    Log {
+        msg_ptr: usize,
+        msg_len: usize,
+    },
+    Grant {
+        target: usize,
+        ptr: usize,
+        len: usize,
+        flags: usize,
+    },
+    Map {
+        grant_id: usize,
+    },
+    Exit {
+        code: usize,
+    },
+    ForceExit {
+        tid: usize,
+    },
+    NotifyOnExit {
+        watched: usize,
+    },
+    RegisterService {
+        service_id: u16,
+        tid: usize,
+    },
+    LookupService {
+        service_id: u16,
+    },
+    Heartbeat {
+        interval: usize,
+    },
+    Exec {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    SpawnFromMem {
+        args_ptr: usize,
+    },
+    SpawnFromPath {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    SpawnFromElf {
+        grant_id: usize,
+        len: usize,
+        path_ptr: usize,
+        path_len: usize,
+    },
+    SpawnPinned {
+        path_ptr: usize,
+        path_len: usize,
+        priority: u8,
+        core_id: usize,
+    },
+    OpenCap {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    ReadCap {
+        cap_id: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    CloseCap {
+        cap_id: usize,
+    },
+    SeekCap {
+        cap_id: usize,
+        offset: usize,
+        whence: usize,
+    },
+    WriteCap {
+        cap_id: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    StatCap {
+        cap_id: usize,
+    },
+    TruncateCap {
+        cap_id: usize,
+        len: usize,
+    },
+    SyncCap {
+        cap_id: usize,
+    },
+    GrantDma {
+        bdf: u32,
+        phys: u64,
+        size: usize,
+    },
+    Wait {
+        pid: usize,
+    },
+    ShmAlloc {
+        size: usize,
+    },
+    ShmMap {
+        handle: usize,
+        target_pid: usize,
+    },
+    GetProcs {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    ServiceLookup {
+        name_ptr: usize,
+        name_len: usize,
+    },
+    Open {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    Read {
+        fd: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    Close {
+        fd: usize,
+    },
+    ReadDir {
+        fd: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    FStat {
+        fd: usize,
+        stat_ptr: usize,
+    },
+    ChDir {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    GetCwd {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    Write {
+        fd: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    MkDir {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    Create {
+        path_ptr: usize,
+        path_len: usize,
+    },
+    Yield,
+    Seek {
+        fd: usize,
+        offset: isize,
+        whence: usize,
+    },
+    FileOp {
+        op: usize,
+        arg1: usize,
+        arg2: usize,
+    },
+    GetTime {
+        op: usize,
+    },
+    GpuFlush {
+        data_ptr: usize,
+        data_len: usize,
+        xy: usize,
+        wh: usize,
+    },
+    AudioPlay {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    CapRevoke {
+        target_tid: usize,
+        cap_mask: u32,
+    },
+    GpuCursor {
+        op: usize,
+        data_ptr: usize,
+        xy: usize,
+        hot: usize,
+    },
+    GpuGetResolution,
+    NetTx {
+        frame_ptr: usize,
+        frame_len: usize,
+    },
+    NetRx {
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    StateStash {
+        key: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    StateRestore {
+        key: usize,
+        buf_ptr: usize,
+        buf_len: usize,
+    },
+    StateStashClear {
+        key: usize,
+    },
+    FreezeCell {
+        target_tid: usize,
+    },
+    ResumeCell {
+        target_tid: usize,
+    },
+    KillCell {
+        target_tid: usize,
+        exit_code: u32,
+    },
+    RegisterBlockDriver,
+    RegisterNicDriver,
+    FindPcieDevice {
+        class: u8,
+        subclass: u8,
+        prog_if: u8,
+        out_ptr: usize,
+    },
+    QueryHotswapReady {
+        target_tid: usize,
+    },
+    HotSwap {
+        cell_id: usize,
+        path_ptr: usize,
+        path_len: usize,
+    },
+    HotSwapReady,
+    Snapshot,
+    BlkRead {
+        sector: u64,
+        buf_ptr: usize,
+    },
+    BlkWrite {
+        sector: u64,
+        buf_ptr: usize,
+    },
+    Shutdown,
+    BlkFlush,
+    GrantAlloc {
+        size: usize,
+    },
+    GrantShare {
+        grant_id: usize,
+        target_cell: usize,
+        perm: usize,
+    },
+    GrantSlice {
+        grant_id: usize,
+    },
+    GrantFree {
+        grant_id: usize,
+    },
+    BlkReadAsync {
+        sector: u64,
+        grant_id: usize,
+    },
+    RequestMmio {
+        base: usize,
+        len: usize,
+    },
+    GetRandom {
+        buf_ptr: usize,
+        len: usize,
+    },
+    GrantRegister {
+        size: usize,
+    },
+    GrantUnregister {
+        reg_id: usize,
+    },
+    WaitForEvent {
+        mask: u32,
+        deadline: Option&lt;u64&gt;,
+    },
+    CreateVm {
+        guest_pages: usize,
+    },
+    CreateVcpu {
+        vm_id: usize,
+        entry_pc: u64,
+    },
+    MapGuestMemory {
+        vm_id: usize,
+        ipa: u64,
+        size: usize,
+        writable: bool,
+    },
+    RunVcpu {
+        vm_id: usize,
+        vcpu_id: usize,
+        budget_ns: u64,
+        out_ptr: usize,
+    },
+    VcpuRegs {
+        vm_id: usize,
+        vcpu_id: usize,
+        buf_ptr: usize,
+        write: bool,
+    },
+    InjectIrq {
+        vm_id: usize,
+        vcpu_id: usize,
+        intid: u32,
+    },
+    WriteGuestMemory {
+        vm_id: usize,
+        gpa: u64,
+        src_ptr: usize,
+        len: usize,
+    },
+    ReadGuestMemory {
+        vm_id: usize,
+        gpa: u64,
+        dst_ptr: usize,
+        len: usize,
+    },
+    WaitIrq {
+        irq: u8,
+        mmio_base: usize,
+    },
+    RegisterPcieBar {
+        bdf: u32,
+        base: usize,
+        len: usize,
+    },
+    RegisterPciDevice {
+        bdf: u32,
+        cls: u32,
+        bar0_base: usize,
+        bar0_size: usize,
+    },
+    ReadLog {
+        buf_ptr: usize,
+        max: usize,
+    },
+</details>}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The Fundamental Verbs of ViCell IPC (Hubris ABI + Lease System)</p>
+</div></details><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Send" class="variant"><a href="#variant.Send" class="anchor">§</a><h3 class="code-header">Send</h3></section><div class="docblock"><p>0: Send (Blocking Message Send)</p>
+</div><div class="sub-variant" id="variant.Send.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Send.field.target" class="section-header"><a href="#variant.Send.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.Send.field.msg_ptr" class="section-header"><a href="#variant.Send.field.msg_ptr" class="anchor field">§</a><code>msg_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Send.field.msg_len" class="section-header"><a href="#variant.Send.field.msg_len" class="anchor field">§</a><code>msg_len: usize</code></span></div></div><section id="variant.TrySend" class="variant"><a href="#variant.TrySend" class="anchor">§</a><h3 class="code-header">TrySend</h3></section><div class="docblock"><p>4: TrySend (Non-blocking send — drops if target not in Recv)</p>
+</div><div class="sub-variant" id="variant.TrySend.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.TrySend.field.target" class="section-header"><a href="#variant.TrySend.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.TrySend.field.msg_ptr" class="section-header"><a href="#variant.TrySend.field.msg_ptr" class="anchor field">§</a><code>msg_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.TrySend.field.msg_len" class="section-header"><a href="#variant.TrySend.field.msg_len" class="anchor field">§</a><code>msg_len: usize</code></span></div></div><section id="variant.Recv" class="variant"><a href="#variant.Recv" class="anchor">§</a><h3 class="code-header">Recv</h3></section><div class="docblock"><p>1: Recv (Blocking Message Receive)</p>
+</div><div class="sub-variant" id="variant.Recv.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Recv.field.mask" class="section-header"><a href="#variant.Recv.field.mask" class="anchor field">§</a><code>mask: usize</code></span></div><div class="sub-variant-field"><span id="variant.Recv.field.buf_ptr" class="section-header"><a href="#variant.Recv.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Recv.field.buf_len" class="section-header"><a href="#variant.Recv.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.SendGather" class="variant"><a href="#variant.SendGather" class="anchor">§</a><h3 class="code-header">SendGather</h3></section><div class="docblock"><p>202: SendGather — send one IPC message from multiple non-contiguous buffers.</p>
+</div><div class="sub-variant" id="variant.SendGather.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SendGather.field.target" class="section-header"><a href="#variant.SendGather.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.SendGather.field.iovec_ptr" class="section-header"><a href="#variant.SendGather.field.iovec_ptr" class="anchor field">§</a><code>iovec_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.SendGather.field.iovec_count" class="section-header"><a href="#variant.SendGather.field.iovec_count" class="anchor field">§</a><code>iovec_count: usize</code></span></div></div><section id="variant.RecvScatter" class="variant"><a href="#variant.RecvScatter" class="anchor">§</a><h3 class="code-header">RecvScatter</h3></section><div class="docblock"><p>203: RecvScatter — receive one IPC message into multiple non-contiguous buffers.</p>
+</div><div class="sub-variant" id="variant.RecvScatter.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RecvScatter.field.mask" class="section-header"><a href="#variant.RecvScatter.field.mask" class="anchor field">§</a><code>mask: usize</code></span></div><div class="sub-variant-field"><span id="variant.RecvScatter.field.iovec_ptr" class="section-header"><a href="#variant.RecvScatter.field.iovec_ptr" class="anchor field">§</a><code>iovec_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.RecvScatter.field.iovec_count" class="section-header"><a href="#variant.RecvScatter.field.iovec_count" class="anchor field">§</a><code>iovec_count: usize</code></span></div></div><section id="variant.RecvTimeout" class="variant"><a href="#variant.RecvTimeout" class="anchor">§</a><h3 class="code-header">RecvTimeout</h3></section><div class="docblock"><p>201: RecvTimeout — Recv with a monotonic-tick deadline (Phase 20).</p>
+</div><div class="sub-variant" id="variant.RecvTimeout.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RecvTimeout.field.mask" class="section-header"><a href="#variant.RecvTimeout.field.mask" class="anchor field">§</a><code>mask: usize</code></span></div><div class="sub-variant-field"><span id="variant.RecvTimeout.field.buf_ptr" class="section-header"><a href="#variant.RecvTimeout.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.RecvTimeout.field.buf_len" class="section-header"><a href="#variant.RecvTimeout.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div><div class="sub-variant-field"><span id="variant.RecvTimeout.field.deadline" class="section-header"><a href="#variant.RecvTimeout.field.deadline" class="anchor field">§</a><code>deadline: u64</code></span><div class="docblock"><p>Deadline in kernel monotonic ticks from boot.  0 = non-blocking.</p>
+</div></div></div><section id="variant.Reply" class="variant"><a href="#variant.Reply" class="anchor">§</a><h3 class="code-header">Reply</h3></section><div class="docblock"><p>2: Reply (Unblocking Reply to Caller)</p>
+</div><div class="sub-variant" id="variant.Reply.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Reply.field.caller" class="section-header"><a href="#variant.Reply.field.caller" class="anchor field">§</a><code>caller: usize</code></span></div><div class="sub-variant-field"><span id="variant.Reply.field.result" class="section-header"><a href="#variant.Reply.field.result" class="anchor field">§</a><code>result: usize</code></span></div></div><section id="variant.SetTimer" class="variant"><a href="#variant.SetTimer" class="anchor">§</a><h3 class="code-header">SetTimer</h3></section><div class="docblock"><p>3: SetTimer (Wake up after ticks)</p>
+</div><div class="sub-variant" id="variant.SetTimer.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SetTimer.field.deadline" class="section-header"><a href="#variant.SetTimer.field.deadline" class="anchor field">§</a><code>deadline: usize</code></span></div></div><section id="variant.BorrowRead" class="variant"><a href="#variant.BorrowRead" class="anchor">§</a><h3 class="code-header">BorrowRead</h3></section><div class="docblock"><p>4: BorrowRead (Copy from Lease to Caller)</p>
+</div><div class="sub-variant" id="variant.BorrowRead.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.BorrowRead.field.lease_id" class="section-header"><a href="#variant.BorrowRead.field.lease_id" class="anchor field">§</a><code>lease_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.BorrowRead.field.offset" class="section-header"><a href="#variant.BorrowRead.field.offset" class="anchor field">§</a><code>offset: usize</code></span></div><div class="sub-variant-field"><span id="variant.BorrowRead.field.ptr" class="section-header"><a href="#variant.BorrowRead.field.ptr" class="anchor field">§</a><code>ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.BorrowRead.field.len" class="section-header"><a href="#variant.BorrowRead.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.BorrowWrite" class="variant"><a href="#variant.BorrowWrite" class="anchor">§</a><h3 class="code-header">BorrowWrite</h3></section><div class="docblock"><p>5: BorrowWrite (Copy from Caller to Lease)</p>
+</div><div class="sub-variant" id="variant.BorrowWrite.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.BorrowWrite.field.lease_id" class="section-header"><a href="#variant.BorrowWrite.field.lease_id" class="anchor field">§</a><code>lease_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.BorrowWrite.field.offset" class="section-header"><a href="#variant.BorrowWrite.field.offset" class="anchor field">§</a><code>offset: usize</code></span></div><div class="sub-variant-field"><span id="variant.BorrowWrite.field.ptr" class="section-header"><a href="#variant.BorrowWrite.field.ptr" class="anchor field">§</a><code>ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.BorrowWrite.field.len" class="section-header"><a href="#variant.BorrowWrite.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.Lend" class="variant"><a href="#variant.Lend" class="anchor">§</a><h3 class="code-header">Lend</h3></section><div class="docblock"><p>6: Lend (Create a Lease for Target Task)</p>
+</div><div class="sub-variant" id="variant.Lend.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Lend.field.target" class="section-header"><a href="#variant.Lend.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.Lend.field.ptr" class="section-header"><a href="#variant.Lend.field.ptr" class="anchor field">§</a><code>ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Lend.field.len" class="section-header"><a href="#variant.Lend.field.len" class="anchor field">§</a><code>len: usize</code></span></div><div class="sub-variant-field"><span id="variant.Lend.field.flags" class="section-header"><a href="#variant.Lend.field.flags" class="anchor field">§</a><code>flags: usize</code></span></div></div><section id="variant.TryRecv" class="variant"><a href="#variant.TryRecv" class="anchor">§</a><h3 class="code-header">TryRecv</h3></section><div class="docblock"><p>7: TryRecv (Non-blocking Receive)</p>
+</div><div class="sub-variant" id="variant.TryRecv.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.TryRecv.field.mask" class="section-header"><a href="#variant.TryRecv.field.mask" class="anchor field">§</a><code>mask: usize</code></span></div><div class="sub-variant-field"><span id="variant.TryRecv.field.buf_ptr" class="section-header"><a href="#variant.TryRecv.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.TryRecv.field.buf_len" class="section-header"><a href="#variant.TryRecv.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.Spawn" class="variant"><a href="#variant.Spawn" class="anchor">§</a><h3 class="code-header">Spawn</h3></section><div class="docblock"><p>8: Spawn (Create new Task/Thread) - Returns Task ID</p>
+</div><div class="sub-variant" id="variant.Spawn.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Spawn.field.entry" class="section-header"><a href="#variant.Spawn.field.entry" class="anchor field">§</a><code>entry: usize</code></span></div><div class="sub-variant-field"><span id="variant.Spawn.field.arg" class="section-header"><a href="#variant.Spawn.field.arg" class="anchor field">§</a><code>arg: usize</code></span></div></div><section id="variant.FutexWait" class="variant"><a href="#variant.FutexWait" class="anchor">§</a><h3 class="code-header">FutexWait</h3></section><div class="docblock"><p>9: FutexWait (Wait for value at address)</p>
+</div><div class="sub-variant" id="variant.FutexWait.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.FutexWait.field.addr" class="section-header"><a href="#variant.FutexWait.field.addr" class="anchor field">§</a><code>addr: usize</code></span></div><div class="sub-variant-field"><span id="variant.FutexWait.field.val" class="section-header"><a href="#variant.FutexWait.field.val" class="anchor field">§</a><code>val: u32</code></span></div></div><section id="variant.FutexWake" class="variant"><a href="#variant.FutexWake" class="anchor">§</a><h3 class="code-header">FutexWake</h3></section><div class="docblock"><p>10: FutexWake (Wake up waiting tasks)</p>
+</div><div class="sub-variant" id="variant.FutexWake.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.FutexWake.field.addr" class="section-header"><a href="#variant.FutexWake.field.addr" class="anchor field">§</a><code>addr: usize</code></span></div><div class="sub-variant-field"><span id="variant.FutexWake.field.count" class="section-header"><a href="#variant.FutexWake.field.count" class="anchor field">§</a><code>count: usize</code></span></div></div><section id="variant.Log" class="variant"><a href="#variant.Log" class="anchor">§</a><h3 class="code-header">Log</h3></section><div class="docblock"><p>11: Log (Debug Print)</p>
+</div><div class="sub-variant" id="variant.Log.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Log.field.msg_ptr" class="section-header"><a href="#variant.Log.field.msg_ptr" class="anchor field">§</a><code>msg_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Log.field.msg_len" class="section-header"><a href="#variant.Log.field.msg_len" class="anchor field">§</a><code>msg_len: usize</code></span></div></div><section id="variant.Grant" class="variant"><a href="#variant.Grant" class="anchor">§</a><h3 class="code-header">Grant</h3></section><div class="docblock"><p>12: Grant (Zero Copy)</p>
+</div><div class="sub-variant" id="variant.Grant.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Grant.field.target" class="section-header"><a href="#variant.Grant.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.Grant.field.ptr" class="section-header"><a href="#variant.Grant.field.ptr" class="anchor field">§</a><code>ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Grant.field.len" class="section-header"><a href="#variant.Grant.field.len" class="anchor field">§</a><code>len: usize</code></span></div><div class="sub-variant-field"><span id="variant.Grant.field.flags" class="section-header"><a href="#variant.Grant.field.flags" class="anchor field">§</a><code>flags: usize</code></span></div></div><section id="variant.Map" class="variant"><a href="#variant.Map" class="anchor">§</a><h3 class="code-header">Map</h3></section><div class="docblock"><p>13: Map (Zero Copy)</p>
+</div><div class="sub-variant" id="variant.Map.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Map.field.grant_id" class="section-header"><a href="#variant.Map.field.grant_id" class="anchor field">§</a><code>grant_id: usize</code></span></div></div><section id="variant.Exit" class="variant"><a href="#variant.Exit" class="anchor">§</a><h3 class="code-header">Exit</h3></section><div class="docblock"><p>14: Exit (Terminate Process)</p>
+</div><div class="sub-variant" id="variant.Exit.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Exit.field.code" class="section-header"><a href="#variant.Exit.field.code" class="anchor field">§</a><code>code: usize</code></span></div></div><section id="variant.ForceExit" class="variant"><a href="#variant.ForceExit" class="anchor">§</a><h3 class="code-header">ForceExit</h3></section><div class="docblock"><p>61: ForceExit — terminate another task by TID; non-blocking return to caller.</p>
+</div><div class="sub-variant" id="variant.ForceExit.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ForceExit.field.tid" class="section-header"><a href="#variant.ForceExit.field.tid" class="anchor field">§</a><code>tid: usize</code></span></div></div><section id="variant.NotifyOnExit" class="variant"><a href="#variant.NotifyOnExit" class="anchor">§</a><h3 class="code-header">NotifyOnExit</h3></section><div class="docblock"><p>204: NotifyOnExit — register the caller to be notified when <code>watched</code> dies.</p>
+</div><div class="sub-variant" id="variant.NotifyOnExit.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.NotifyOnExit.field.watched" class="section-header"><a href="#variant.NotifyOnExit.field.watched" class="anchor field">§</a><code>watched: usize</code></span></div></div><section id="variant.RegisterService" class="variant"><a href="#variant.RegisterService" class="anchor">§</a><h3 class="code-header">RegisterService</h3></section><div class="docblock"><p>205: RegisterService — register <code>tid</code> as the current provider of <code>service_id</code>
+(SpawnCap-gated; the supervisor owns the namespace).</p>
+</div><div class="sub-variant" id="variant.RegisterService.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RegisterService.field.service_id" class="section-header"><a href="#variant.RegisterService.field.service_id" class="anchor field">§</a><code>service_id: u16</code></span></div><div class="sub-variant-field"><span id="variant.RegisterService.field.tid" class="section-header"><a href="#variant.RegisterService.field.tid" class="anchor field">§</a><code>tid: usize</code></span></div></div><section id="variant.LookupService" class="variant"><a href="#variant.LookupService" class="anchor">§</a><h3 class="code-header">LookupService</h3></section><div class="docblock"><p>206: LookupService — resolve <code>service_id</code> to its live provider tid (open; 0 = none).</p>
+</div><div class="sub-variant" id="variant.LookupService.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.LookupService.field.service_id" class="section-header"><a href="#variant.LookupService.field.service_id" class="anchor field">§</a><code>service_id: u16</code></span></div></div><section id="variant.Heartbeat" class="variant"><a href="#variant.Heartbeat" class="anchor">§</a><h3 class="code-header">Heartbeat</h3></section><div class="docblock"><p>207: Heartbeat — caller asserts liveness; (re)arm the hung-detection deadline
+<code>interval</code> ticks ahead (0 = disable).</p>
+</div><div class="sub-variant" id="variant.Heartbeat.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Heartbeat.field.interval" class="section-header"><a href="#variant.Heartbeat.field.interval" class="anchor field">§</a><code>interval: usize</code></span></div></div><section id="variant.Exec" class="variant"><a href="#variant.Exec" class="anchor">§</a><h3 class="code-header">Exec</h3></section><div class="docblock"><p>6: Exec (Spawn from file)</p>
+</div><div class="sub-variant" id="variant.Exec.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Exec.field.path_ptr" class="section-header"><a href="#variant.Exec.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Exec.field.path_len" class="section-header"><a href="#variant.Exec.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.SpawnFromMem" class="variant"><a href="#variant.SpawnFromMem" class="anchor">§</a><h3 class="code-header">SpawnFromMem</h3></section><div class="docblock"><p>10: SpawnFromMem (Spawn from Memory buffer via Struct)</p>
+</div><div class="sub-variant" id="variant.SpawnFromMem.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SpawnFromMem.field.args_ptr" class="section-header"><a href="#variant.SpawnFromMem.field.args_ptr" class="anchor field">§</a><code>args_ptr: usize</code></span></div></div><section id="variant.SpawnFromPath" class="variant"><a href="#variant.SpawnFromPath" class="anchor">§</a><h3 class="code-header">SpawnFromPath</h3></section><div class="docblock"><p>12: SpawnFromPath (Spawn cell by filesystem path)
+ABI: path_ptr in a0, path_len in a1.</p>
+</div><div class="sub-variant" id="variant.SpawnFromPath.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SpawnFromPath.field.path_ptr" class="section-header"><a href="#variant.SpawnFromPath.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.SpawnFromPath.field.path_len" class="section-header"><a href="#variant.SpawnFromPath.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.SpawnFromElf" class="variant"><a href="#variant.SpawnFromElf" class="anchor">§</a><h3 class="code-header">SpawnFromElf</h3></section><div class="docblock"><p>238: SpawnFromElf (Spawn cell from ELF bytes in a caller-owned Grant).
+ABI: a0=grant_id, a1=len, a2=path_hint_ptr, a3=path_hint_len.</p>
+</div><div class="sub-variant" id="variant.SpawnFromElf.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SpawnFromElf.field.grant_id" class="section-header"><a href="#variant.SpawnFromElf.field.grant_id" class="anchor field">§</a><code>grant_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.SpawnFromElf.field.len" class="section-header"><a href="#variant.SpawnFromElf.field.len" class="anchor field">§</a><code>len: usize</code></span></div><div class="sub-variant-field"><span id="variant.SpawnFromElf.field.path_ptr" class="section-header"><a href="#variant.SpawnFromElf.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.SpawnFromElf.field.path_len" class="section-header"><a href="#variant.SpawnFromElf.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.SpawnPinned" class="variant"><a href="#variant.SpawnPinned" class="anchor">§</a><h3 class="code-header">SpawnPinned</h3></section><div class="docblock"><p>16: SpawnPinned — spawn cell pinned to a core (single-core: core_id must be 0).
+ABI: a0=path_ptr, a1=path_len, a2=priority: u8, a3=core_id: usize.</p>
+</div><div class="sub-variant" id="variant.SpawnPinned.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SpawnPinned.field.path_ptr" class="section-header"><a href="#variant.SpawnPinned.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.SpawnPinned.field.path_len" class="section-header"><a href="#variant.SpawnPinned.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div><div class="sub-variant-field"><span id="variant.SpawnPinned.field.priority" class="section-header"><a href="#variant.SpawnPinned.field.priority" class="anchor field">§</a><code>priority: u8</code></span></div><div class="sub-variant-field"><span id="variant.SpawnPinned.field.core_id" class="section-header"><a href="#variant.SpawnPinned.field.core_id" class="anchor field">§</a><code>core_id: usize</code></span></div></div><section id="variant.OpenCap" class="variant"><a href="#variant.OpenCap" class="anchor">§</a><h3 class="code-header">OpenCap</h3></section><div class="docblock"><p>13: OpenCap — open a file and return a CapId.</p>
+</div><div class="sub-variant" id="variant.OpenCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.OpenCap.field.path_ptr" class="section-header"><a href="#variant.OpenCap.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.OpenCap.field.path_len" class="section-header"><a href="#variant.OpenCap.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.ReadCap" class="variant"><a href="#variant.ReadCap" class="anchor">§</a><h3 class="code-header">ReadCap</h3></section><div class="docblock"><p>14: ReadCap — read bytes from a cap-backed file.</p>
+</div><div class="sub-variant" id="variant.ReadCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ReadCap.field.cap_id" class="section-header"><a href="#variant.ReadCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadCap.field.buf_ptr" class="section-header"><a href="#variant.ReadCap.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadCap.field.buf_len" class="section-header"><a href="#variant.ReadCap.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.CloseCap" class="variant"><a href="#variant.CloseCap" class="anchor">§</a><h3 class="code-header">CloseCap</h3></section><div class="docblock"><p>15: CloseCap — revoke a capability.</p>
+</div><div class="sub-variant" id="variant.CloseCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.CloseCap.field.cap_id" class="section-header"><a href="#variant.CloseCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div></div><section id="variant.SeekCap" class="variant"><a href="#variant.SeekCap" class="anchor">§</a><h3 class="code-header">SeekCap</h3></section><div class="docblock"><p>228: SeekCap — seek a cap-backed file cursor.
+offset is transmitted as a raw i64 bit-pattern via usize (reinterpret_cast).</p>
+</div><div class="sub-variant" id="variant.SeekCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SeekCap.field.cap_id" class="section-header"><a href="#variant.SeekCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.SeekCap.field.offset" class="section-header"><a href="#variant.SeekCap.field.offset" class="anchor field">§</a><code>offset: usize</code></span></div><div class="sub-variant-field"><span id="variant.SeekCap.field.whence" class="section-header"><a href="#variant.SeekCap.field.whence" class="anchor field">§</a><code>whence: usize</code></span></div></div><section id="variant.WriteCap" class="variant"><a href="#variant.WriteCap" class="anchor">§</a><h3 class="code-header">WriteCap</h3></section><div class="docblock"><p>229: WriteCap — write bytes into a cap-backed file at the current cursor.</p>
+</div><div class="sub-variant" id="variant.WriteCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.WriteCap.field.cap_id" class="section-header"><a href="#variant.WriteCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.WriteCap.field.buf_ptr" class="section-header"><a href="#variant.WriteCap.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.WriteCap.field.buf_len" class="section-header"><a href="#variant.WriteCap.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.StatCap" class="variant"><a href="#variant.StatCap" class="anchor">§</a><h3 class="code-header">StatCap</h3></section><div class="docblock"><p>230: StatCap — query file size via cap (cursor unchanged).</p>
+</div><div class="sub-variant" id="variant.StatCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.StatCap.field.cap_id" class="section-header"><a href="#variant.StatCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div></div><section id="variant.TruncateCap" class="variant"><a href="#variant.TruncateCap" class="anchor">§</a><h3 class="code-header">TruncateCap</h3></section><div class="docblock"><p>231: TruncateCap — truncate file to len bytes via cap.</p>
+</div><div class="sub-variant" id="variant.TruncateCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.TruncateCap.field.cap_id" class="section-header"><a href="#variant.TruncateCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.TruncateCap.field.len" class="section-header"><a href="#variant.TruncateCap.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.SyncCap" class="variant"><a href="#variant.SyncCap" class="anchor">§</a><h3 class="code-header">SyncCap</h3></section><div class="docblock"><p>232: SyncCap — flush dirty pages to block device via cap.</p>
+</div><div class="sub-variant" id="variant.SyncCap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.SyncCap.field.cap_id" class="section-header"><a href="#variant.SyncCap.field.cap_id" class="anchor field">§</a><code>cap_id: usize</code></span></div></div><section id="variant.GrantDma" class="variant"><a href="#variant.GrantDma" class="anchor">§</a><h3 class="code-header">GrantDma</h3></section><div class="docblock"><p>233: GrantDma — map PCIe DMA range into IOMMU for calling Cell.
+a0 = bdf: u32, a1 = phys: u64, a2 = size: usize.</p>
+</div><div class="sub-variant" id="variant.GrantDma.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantDma.field.bdf" class="section-header"><a href="#variant.GrantDma.field.bdf" class="anchor field">§</a><code>bdf: u32</code></span></div><div class="sub-variant-field"><span id="variant.GrantDma.field.phys" class="section-header"><a href="#variant.GrantDma.field.phys" class="anchor field">§</a><code>phys: u64</code></span></div><div class="sub-variant-field"><span id="variant.GrantDma.field.size" class="section-header"><a href="#variant.GrantDma.field.size" class="anchor field">§</a><code>size: usize</code></span></div></div><section id="variant.Wait" class="variant"><a href="#variant.Wait" class="anchor">§</a><h3 class="code-header">Wait</h3></section><div class="docblock"><p>8: Wait (Wait for task)</p>
+</div><div class="sub-variant" id="variant.Wait.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Wait.field.pid" class="section-header"><a href="#variant.Wait.field.pid" class="anchor field">§</a><code>pid: usize</code></span></div></div><section id="variant.ShmAlloc" class="variant"><a href="#variant.ShmAlloc" class="anchor">§</a><h3 class="code-header">ShmAlloc</h3></section><div class="docblock"><p>20: ShmAlloc</p>
+</div><div class="sub-variant" id="variant.ShmAlloc.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ShmAlloc.field.size" class="section-header"><a href="#variant.ShmAlloc.field.size" class="anchor field">§</a><code>size: usize</code></span></div></div><section id="variant.ShmMap" class="variant"><a href="#variant.ShmMap" class="anchor">§</a><h3 class="code-header">ShmMap</h3></section><div class="docblock"><p>21: ShmMap</p>
+</div><div class="sub-variant" id="variant.ShmMap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ShmMap.field.handle" class="section-header"><a href="#variant.ShmMap.field.handle" class="anchor field">§</a><code>handle: usize</code></span></div><div class="sub-variant-field"><span id="variant.ShmMap.field.target_pid" class="section-header"><a href="#variant.ShmMap.field.target_pid" class="anchor field">§</a><code>target_pid: usize</code></span></div></div><section id="variant.GetProcs" class="variant"><a href="#variant.GetProcs" class="anchor">§</a><h3 class="code-header">GetProcs</h3></section><div class="docblock"><p>30: GetProcs</p>
+</div><div class="sub-variant" id="variant.GetProcs.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GetProcs.field.buf_ptr" class="section-header"><a href="#variant.GetProcs.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.GetProcs.field.buf_len" class="section-header"><a href="#variant.GetProcs.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.ServiceLookup" class="variant"><a href="#variant.ServiceLookup" class="anchor">§</a><h3 class="code-header">ServiceLookup</h3></section><div class="docblock"><p>100: Service Lookup (Find driver ID by name)</p>
+</div><div class="sub-variant" id="variant.ServiceLookup.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ServiceLookup.field.name_ptr" class="section-header"><a href="#variant.ServiceLookup.field.name_ptr" class="anchor field">§</a><code>name_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.ServiceLookup.field.name_len" class="section-header"><a href="#variant.ServiceLookup.field.name_len" class="anchor field">§</a><code>name_len: usize</code></span></div></div><section id="variant.Open" class="variant"><a href="#variant.Open" class="anchor">§</a><h3 class="code-header">Open</h3></section><div class="docblock"><p>101: Open (Path -&gt; FD)</p>
+</div><div class="sub-variant" id="variant.Open.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Open.field.path_ptr" class="section-header"><a href="#variant.Open.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Open.field.path_len" class="section-header"><a href="#variant.Open.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.Read" class="variant"><a href="#variant.Read" class="anchor">§</a><h3 class="code-header">Read</h3></section><div class="docblock"><p>102: Read (FD, Buffer -&gt; Bytes Read)</p>
+</div><div class="sub-variant" id="variant.Read.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Read.field.fd" class="section-header"><a href="#variant.Read.field.fd" class="anchor field">§</a><code>fd: usize</code></span></div><div class="sub-variant-field"><span id="variant.Read.field.buf_ptr" class="section-header"><a href="#variant.Read.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Read.field.buf_len" class="section-header"><a href="#variant.Read.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.Close" class="variant"><a href="#variant.Close" class="anchor">§</a><h3 class="code-header">Close</h3></section><div class="docblock"><p>103: Close (FD)</p>
+</div><div class="sub-variant" id="variant.Close.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Close.field.fd" class="section-header"><a href="#variant.Close.field.fd" class="anchor field">§</a><code>fd: usize</code></span></div></div><section id="variant.ReadDir" class="variant"><a href="#variant.ReadDir" class="anchor">§</a><h3 class="code-header">ReadDir</h3></section><div class="docblock"><p>105: ReadDir (Read Directory Entries)</p>
+</div><div class="sub-variant" id="variant.ReadDir.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ReadDir.field.fd" class="section-header"><a href="#variant.ReadDir.field.fd" class="anchor field">§</a><code>fd: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadDir.field.buf_ptr" class="section-header"><a href="#variant.ReadDir.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadDir.field.buf_len" class="section-header"><a href="#variant.ReadDir.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.FStat" class="variant"><a href="#variant.FStat" class="anchor">§</a><h3 class="code-header">FStat</h3></section><div class="docblock"><p>106: FStat (Get File Info)</p>
+</div><div class="sub-variant" id="variant.FStat.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.FStat.field.fd" class="section-header"><a href="#variant.FStat.field.fd" class="anchor field">§</a><code>fd: usize</code></span></div><div class="sub-variant-field"><span id="variant.FStat.field.stat_ptr" class="section-header"><a href="#variant.FStat.field.stat_ptr" class="anchor field">§</a><code>stat_ptr: usize</code></span></div></div><section id="variant.ChDir" class="variant"><a href="#variant.ChDir" class="anchor">§</a><h3 class="code-header">ChDir</h3></section><div class="docblock"><p>107: ChDir (Change Directory)</p>
+</div><div class="sub-variant" id="variant.ChDir.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ChDir.field.path_ptr" class="section-header"><a href="#variant.ChDir.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.ChDir.field.path_len" class="section-header"><a href="#variant.ChDir.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.GetCwd" class="variant"><a href="#variant.GetCwd" class="anchor">§</a><h3 class="code-header">GetCwd</h3></section><div class="docblock"><p>108: GetCwd (Get Current Directory)</p>
+</div><div class="sub-variant" id="variant.GetCwd.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GetCwd.field.buf_ptr" class="section-header"><a href="#variant.GetCwd.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.GetCwd.field.buf_len" class="section-header"><a href="#variant.GetCwd.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.Write" class="variant"><a href="#variant.Write" class="anchor">§</a><h3 class="code-header">Write</h3></section><div class="docblock"><p>109: Write (FD, Buffer -&gt; Bytes Written)</p>
+</div><div class="sub-variant" id="variant.Write.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Write.field.fd" class="section-header"><a href="#variant.Write.field.fd" class="anchor field">§</a><code>fd: usize</code></span></div><div class="sub-variant-field"><span id="variant.Write.field.buf_ptr" class="section-header"><a href="#variant.Write.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Write.field.buf_len" class="section-header"><a href="#variant.Write.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.MkDir" class="variant"><a href="#variant.MkDir" class="anchor">§</a><h3 class="code-header">MkDir</h3></section><div class="docblock"><p>110: MkDir (Path)</p>
+</div><div class="sub-variant" id="variant.MkDir.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.MkDir.field.path_ptr" class="section-header"><a href="#variant.MkDir.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.MkDir.field.path_len" class="section-header"><a href="#variant.MkDir.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.Create" class="variant"><a href="#variant.Create" class="anchor">§</a><h3 class="code-header">Create</h3></section><div class="docblock"><p>111: Create (Path -&gt; FD)
+111: Create (Path -&gt; FD)</p>
+</div><div class="sub-variant" id="variant.Create.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Create.field.path_ptr" class="section-header"><a href="#variant.Create.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.Create.field.path_len" class="section-header"><a href="#variant.Create.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.Yield" class="variant"><a href="#variant.Yield" class="anchor">§</a><h3 class="code-header">Yield</h3></section><div class="docblock"><p>104: Yield (Legacy)</p>
+</div><section id="variant.Seek" class="variant"><a href="#variant.Seek" class="anchor">§</a><h3 class="code-header">Seek</h3></section><div class="docblock"><p>106: Seek (FD, Offset, Whence)</p>
+</div><div class="sub-variant" id="variant.Seek.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Seek.field.fd" class="section-header"><a href="#variant.Seek.field.fd" class="anchor field">§</a><code>fd: usize</code></span></div><div class="sub-variant-field"><span id="variant.Seek.field.offset" class="section-header"><a href="#variant.Seek.field.offset" class="anchor field">§</a><code>offset: isize</code></span></div><div class="sub-variant-field"><span id="variant.Seek.field.whence" class="section-header"><a href="#variant.Seek.field.whence" class="anchor field">§</a><code>whence: usize</code></span></div></div><section id="variant.FileOp" class="variant"><a href="#variant.FileOp" class="anchor">§</a><h3 class="code-header">FileOp</h3></section><div class="docblock"><p>107: FileOp (Op, Arg1, Arg2)</p>
+</div><div class="sub-variant" id="variant.FileOp.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.FileOp.field.op" class="section-header"><a href="#variant.FileOp.field.op" class="anchor field">§</a><code>op: usize</code></span></div><div class="sub-variant-field"><span id="variant.FileOp.field.arg1" class="section-header"><a href="#variant.FileOp.field.arg1" class="anchor field">§</a><code>arg1: usize</code></span></div><div class="sub-variant-field"><span id="variant.FileOp.field.arg2" class="section-header"><a href="#variant.FileOp.field.arg2" class="anchor field">§</a><code>arg2: usize</code></span></div></div><section id="variant.GetTime" class="variant"><a href="#variant.GetTime" class="anchor">§</a><h3 class="code-header">GetTime</h3></section><div class="docblock"><p>120: GetTime (Op)</p>
+</div><div class="sub-variant" id="variant.GetTime.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GetTime.field.op" class="section-header"><a href="#variant.GetTime.field.op" class="anchor field">§</a><code>op: usize</code></span></div></div><section id="variant.GpuFlush" class="variant"><a href="#variant.GpuFlush" class="anchor">§</a><h3 class="code-header">GpuFlush</h3></section><div class="docblock"><p>300: GpuFlush — copy cell pixel buffer to VirtIO GPU framebuffer.</p>
+</div><div class="sub-variant" id="variant.GpuFlush.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GpuFlush.field.data_ptr" class="section-header"><a href="#variant.GpuFlush.field.data_ptr" class="anchor field">§</a><code>data_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.GpuFlush.field.data_len" class="section-header"><a href="#variant.GpuFlush.field.data_len" class="anchor field">§</a><code>data_len: usize</code></span></div><div class="sub-variant-field"><span id="variant.GpuFlush.field.xy" class="section-header"><a href="#variant.GpuFlush.field.xy" class="anchor field">§</a><code>xy: usize</code></span></div><div class="sub-variant-field"><span id="variant.GpuFlush.field.wh" class="section-header"><a href="#variant.GpuFlush.field.wh" class="anchor field">§</a><code>wh: usize</code></span></div></div><section id="variant.AudioPlay" class="variant"><a href="#variant.AudioPlay" class="anchor">§</a><h3 class="code-header">AudioPlay</h3></section><div class="docblock"><p>218: AudioPlay — write raw PCM (S16LE/2ch/44100) to the VirtIO sound output.</p>
+</div><div class="sub-variant" id="variant.AudioPlay.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.AudioPlay.field.buf_ptr" class="section-header"><a href="#variant.AudioPlay.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.AudioPlay.field.buf_len" class="section-header"><a href="#variant.AudioPlay.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.CapRevoke" class="variant"><a href="#variant.CapRevoke" class="anchor">§</a><h3 class="code-header">CapRevoke</h3></section><div class="docblock"><p>219: CapRevoke — strip capabilities from a live cell at runtime.</p>
+</div><div class="sub-variant" id="variant.CapRevoke.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.CapRevoke.field.target_tid" class="section-header"><a href="#variant.CapRevoke.field.target_tid" class="anchor field">§</a><code>target_tid: usize</code></span></div><div class="sub-variant-field"><span id="variant.CapRevoke.field.cap_mask" class="section-header"><a href="#variant.CapRevoke.field.cap_mask" class="anchor field">§</a><code>cap_mask: u32</code></span></div></div><section id="variant.GpuCursor" class="variant"><a href="#variant.GpuCursor" class="anchor">§</a><h3 class="code-header">GpuCursor</h3></section><div class="docblock"><p>301: GpuCursor — set sprite (op=0) or move (op=1) the VirtIO GPU hardware cursor.</p>
+</div><div class="sub-variant" id="variant.GpuCursor.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GpuCursor.field.op" class="section-header"><a href="#variant.GpuCursor.field.op" class="anchor field">§</a><code>op: usize</code></span></div><div class="sub-variant-field"><span id="variant.GpuCursor.field.data_ptr" class="section-header"><a href="#variant.GpuCursor.field.data_ptr" class="anchor field">§</a><code>data_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.GpuCursor.field.xy" class="section-header"><a href="#variant.GpuCursor.field.xy" class="anchor field">§</a><code>xy: usize</code></span></div><div class="sub-variant-field"><span id="variant.GpuCursor.field.hot" class="section-header"><a href="#variant.GpuCursor.field.hot" class="anchor field">§</a><code>hot: usize</code></span></div></div><section id="variant.GpuGetResolution" class="variant"><a href="#variant.GpuGetResolution" class="anchor">§</a><h3 class="code-header">GpuGetResolution</h3></section><div class="docblock"><p>302: GpuGetResolution — return current GPU scanout (width, height) packed as (w&lt;&lt;32)|h.</p>
+</div><section id="variant.NetTx" class="variant"><a href="#variant.NetTx" class="anchor">§</a><h3 class="code-header">NetTx</h3></section><div class="docblock"><p>310: NetTx — transmit one Ethernet frame via the kernel VirtIO NIC.</p>
+</div><div class="sub-variant" id="variant.NetTx.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.NetTx.field.frame_ptr" class="section-header"><a href="#variant.NetTx.field.frame_ptr" class="anchor field">§</a><code>frame_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.NetTx.field.frame_len" class="section-header"><a href="#variant.NetTx.field.frame_len" class="anchor field">§</a><code>frame_len: usize</code></span></div></div><section id="variant.NetRx" class="variant"><a href="#variant.NetRx" class="anchor">§</a><h3 class="code-header">NetRx</h3></section><div class="docblock"><p>311: NetRx — receive one pending Ethernet frame from the VirtIO NIC.</p>
+</div><div class="sub-variant" id="variant.NetRx.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.NetRx.field.buf_ptr" class="section-header"><a href="#variant.NetRx.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.NetRx.field.buf_len" class="section-header"><a href="#variant.NetRx.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.StateStash" class="variant"><a href="#variant.StateStash" class="anchor">§</a><h3 class="code-header">StateStash</h3></section><div class="docblock"><p>410: StateStash — save serialized cell state under <code>key</code> for hot-swap.</p>
+</div><div class="sub-variant" id="variant.StateStash.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.StateStash.field.key" class="section-header"><a href="#variant.StateStash.field.key" class="anchor field">§</a><code>key: usize</code></span></div><div class="sub-variant-field"><span id="variant.StateStash.field.buf_ptr" class="section-header"><a href="#variant.StateStash.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.StateStash.field.buf_len" class="section-header"><a href="#variant.StateStash.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.StateRestore" class="variant"><a href="#variant.StateRestore" class="anchor">§</a><h3 class="code-header">StateRestore</h3></section><div class="docblock"><p>411: StateRestore — recover stashed state for <code>key</code> into the buffer.</p>
+</div><div class="sub-variant" id="variant.StateRestore.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.StateRestore.field.key" class="section-header"><a href="#variant.StateRestore.field.key" class="anchor field">§</a><code>key: usize</code></span></div><div class="sub-variant-field"><span id="variant.StateRestore.field.buf_ptr" class="section-header"><a href="#variant.StateRestore.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.StateRestore.field.buf_len" class="section-header"><a href="#variant.StateRestore.field.buf_len" class="anchor field">§</a><code>buf_len: usize</code></span></div></div><section id="variant.StateStashClear" class="variant"><a href="#variant.StateStashClear" class="anchor">§</a><h3 class="code-header">StateStashClear</h3></section><div class="docblock"><p>412: StateStashClear — delete the stash entry for <code>key</code>, freeing its slot.</p>
+</div><div class="sub-variant" id="variant.StateStashClear.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.StateStashClear.field.key" class="section-header"><a href="#variant.StateStashClear.field.key" class="anchor field">§</a><code>key: usize</code></span></div></div><section id="variant.FreezeCell" class="variant"><a href="#variant.FreezeCell" class="anchor">§</a><h3 class="code-header">FreezeCell</h3></section><div class="docblock"><p>413: FreezeCell — freeze a running Cell. Requires SupervisorCap.</p>
+</div><div class="sub-variant" id="variant.FreezeCell.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.FreezeCell.field.target_tid" class="section-header"><a href="#variant.FreezeCell.field.target_tid" class="anchor field">§</a><code>target_tid: usize</code></span></div></div><section id="variant.ResumeCell" class="variant"><a href="#variant.ResumeCell" class="anchor">§</a><h3 class="code-header">ResumeCell</h3></section><div class="docblock"><p>414: ResumeCell — resume a frozen Cell. Requires SupervisorCap.</p>
+</div><div class="sub-variant" id="variant.ResumeCell.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ResumeCell.field.target_tid" class="section-header"><a href="#variant.ResumeCell.field.target_tid" class="anchor field">§</a><code>target_tid: usize</code></span></div></div><section id="variant.KillCell" class="variant"><a href="#variant.KillCell" class="anchor">§</a><h3 class="code-header">KillCell</h3></section><div class="docblock"><p>415: KillCell — forcibly terminate a Cell. Requires SupervisorCap.</p>
+</div><div class="sub-variant" id="variant.KillCell.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.KillCell.field.target_tid" class="section-header"><a href="#variant.KillCell.field.target_tid" class="anchor field">§</a><code>target_tid: usize</code></span></div><div class="sub-variant-field"><span id="variant.KillCell.field.exit_code" class="section-header"><a href="#variant.KillCell.field.exit_code" class="anchor field">§</a><code>exit_code: u32</code></span></div></div><section id="variant.RegisterBlockDriver" class="variant"><a href="#variant.RegisterBlockDriver" class="anchor">§</a><h3 class="code-header">RegisterBlockDriver</h3></section><div class="docblock"><p>416: RegisterBlockDriver — announce caller as the active block driver.</p>
+</div><section id="variant.RegisterNicDriver" class="variant"><a href="#variant.RegisterNicDriver" class="anchor">§</a><h3 class="code-header">RegisterNicDriver</h3></section><div class="docblock"><p>417: RegisterNicDriver — announce caller as the active NIC driver.</p>
+</div><section id="variant.FindPcieDevice" class="variant"><a href="#variant.FindPcieDevice" class="anchor">§</a><h3 class="code-header">FindPcieDevice</h3></section><div class="docblock"><p>418: FindPcieDevice — locate a PCIe device by class/subclass/prog_if.</p>
+</div><div class="sub-variant" id="variant.FindPcieDevice.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.FindPcieDevice.field.class" class="section-header"><a href="#variant.FindPcieDevice.field.class" class="anchor field">§</a><code>class: u8</code></span></div><div class="sub-variant-field"><span id="variant.FindPcieDevice.field.subclass" class="section-header"><a href="#variant.FindPcieDevice.field.subclass" class="anchor field">§</a><code>subclass: u8</code></span></div><div class="sub-variant-field"><span id="variant.FindPcieDevice.field.prog_if" class="section-header"><a href="#variant.FindPcieDevice.field.prog_if" class="anchor field">§</a><code>prog_if: u8</code></span></div><div class="sub-variant-field"><span id="variant.FindPcieDevice.field.out_ptr" class="section-header"><a href="#variant.FindPcieDevice.field.out_ptr" class="anchor field">§</a><code>out_ptr: usize</code></span></div></div><section id="variant.QueryHotswapReady" class="variant"><a href="#variant.QueryHotswapReady" class="anchor">§</a><h3 class="code-header">QueryHotswapReady</h3></section><div class="docblock"><p>419: QueryHotswapReady — check whether <code>target_tid</code> has called sys_hotswap_ready().
+Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.</p>
+</div><div class="sub-variant" id="variant.QueryHotswapReady.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.QueryHotswapReady.field.target_tid" class="section-header"><a href="#variant.QueryHotswapReady.field.target_tid" class="anchor field">§</a><code>target_tid: usize</code></span></div></div><section id="variant.HotSwap" class="variant"><a href="#variant.HotSwap" class="anchor">§</a><h3 class="code-header">HotSwap</h3></section><div class="docblock"><p>400: HotSwap — live-replace a Cell with a new ELF from disk.</p>
+</div><div class="sub-variant" id="variant.HotSwap.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.HotSwap.field.cell_id" class="section-header"><a href="#variant.HotSwap.field.cell_id" class="anchor field">§</a><code>cell_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.HotSwap.field.path_ptr" class="section-header"><a href="#variant.HotSwap.field.path_ptr" class="anchor field">§</a><code>path_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.HotSwap.field.path_len" class="section-header"><a href="#variant.HotSwap.field.path_len" class="anchor field">§</a><code>path_len: usize</code></span></div></div><section id="variant.HotSwapReady" class="variant"><a href="#variant.HotSwapReady" class="anchor">§</a><h3 class="code-header">HotSwapReady</h3></section><div class="docblock"><p>401: HotSwapReady — signal that the new cell has finished deserializing
+state and is ready to receive IPC.  No arguments.</p>
+</div><section id="variant.Snapshot" class="variant"><a href="#variant.Snapshot" class="anchor">§</a><h3 class="code-header">Snapshot</h3></section><div class="docblock"><p>420: Snapshot — serialize all allocated physical frames to disk for warm boot.</p>
+</div><section id="variant.BlkRead" class="variant"><a href="#variant.BlkRead" class="anchor">§</a><h3 class="code-header">BlkRead</h3></section><div class="docblock"><p>500: BlkRead — read one 512-byte sector from the VirtIO block device.
+Not in <code>ViSyscall</code> enum to preserve <code>libs/api</code> stability (raw dispatch).</p>
+</div><div class="sub-variant" id="variant.BlkRead.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.BlkRead.field.sector" class="section-header"><a href="#variant.BlkRead.field.sector" class="anchor field">§</a><code>sector: u64</code></span></div><div class="sub-variant-field"><span id="variant.BlkRead.field.buf_ptr" class="section-header"><a href="#variant.BlkRead.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div></div><section id="variant.BlkWrite" class="variant"><a href="#variant.BlkWrite" class="anchor">§</a><h3 class="code-header">BlkWrite</h3></section><div class="docblock"><p>501: BlkWrite — write one 512-byte sector to the VirtIO block device.</p>
+</div><div class="sub-variant" id="variant.BlkWrite.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.BlkWrite.field.sector" class="section-header"><a href="#variant.BlkWrite.field.sector" class="anchor field">§</a><code>sector: u64</code></span></div><div class="sub-variant-field"><span id="variant.BlkWrite.field.buf_ptr" class="section-header"><a href="#variant.BlkWrite.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div></div><section id="variant.Shutdown" class="variant"><a href="#variant.Shutdown" class="anchor">§</a><h3 class="code-header">Shutdown</h3></section><div class="docblock"><p>502: Shutdown — trigger SBI SRST system shutdown (S-mode → OpenSBI). No return.</p>
+</div><section id="variant.BlkFlush" class="variant"><a href="#variant.BlkFlush" class="anchor">§</a><h3 class="code-header">BlkFlush</h3></section><div class="docblock"><p>503: BlkFlush — flush the VirtIO block device write cache to the backing image.</p>
+</div><section id="variant.GrantAlloc" class="variant"><a href="#variant.GrantAlloc" class="anchor">§</a><h3 class="code-header">GrantAlloc</h3></section><div class="docblock"><p>208: GrantAlloc — allocate n pages as a zero-copy Grant region.</p>
+</div><div class="sub-variant" id="variant.GrantAlloc.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantAlloc.field.size" class="section-header"><a href="#variant.GrantAlloc.field.size" class="anchor field">§</a><code>size: usize</code></span></div></div><section id="variant.GrantShare" class="variant"><a href="#variant.GrantShare" class="anchor">§</a><h3 class="code-header">GrantShare</h3></section><div class="docblock"><p>209: GrantShare — share a Grant region with <code>target_cell</code> under <code>perm</code>.</p>
+</div><div class="sub-variant" id="variant.GrantShare.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantShare.field.grant_id" class="section-header"><a href="#variant.GrantShare.field.grant_id" class="anchor field">§</a><code>grant_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.GrantShare.field.target_cell" class="section-header"><a href="#variant.GrantShare.field.target_cell" class="anchor field">§</a><code>target_cell: usize</code></span></div><div class="sub-variant-field"><span id="variant.GrantShare.field.perm" class="section-header"><a href="#variant.GrantShare.field.perm" class="anchor field">§</a><code>perm: usize</code></span></div></div><section id="variant.GrantSlice" class="variant"><a href="#variant.GrantSlice" class="anchor">§</a><h3 class="code-header">GrantSlice</h3></section><div class="docblock"><p>210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.</p>
+</div><div class="sub-variant" id="variant.GrantSlice.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantSlice.field.grant_id" class="section-header"><a href="#variant.GrantSlice.field.grant_id" class="anchor field">§</a><code>grant_id: usize</code></span></div></div><section id="variant.GrantFree" class="variant"><a href="#variant.GrantFree" class="anchor">§</a><h3 class="code-header">GrantFree</h3></section><div class="docblock"><p>211: GrantFree — unmap + deallocate a Grant region.</p>
+</div><div class="sub-variant" id="variant.GrantFree.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantFree.field.grant_id" class="section-header"><a href="#variant.GrantFree.field.grant_id" class="anchor field">§</a><code>grant_id: usize</code></span></div></div><section id="variant.BlkReadAsync" class="variant"><a href="#variant.BlkReadAsync" class="anchor">§</a><h3 class="code-header">BlkReadAsync</h3></section><div class="docblock"><p>212: BlkReadAsync — synchronous-but-zero-copy sector read into a Grant buffer.</p>
+</div><div class="sub-variant" id="variant.BlkReadAsync.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.BlkReadAsync.field.sector" class="section-header"><a href="#variant.BlkReadAsync.field.sector" class="anchor field">§</a><code>sector: u64</code></span></div><div class="sub-variant-field"><span id="variant.BlkReadAsync.field.grant_id" class="section-header"><a href="#variant.BlkReadAsync.field.grant_id" class="anchor field">§</a><code>grant_id: usize</code></span></div></div><section id="variant.RequestMmio" class="variant"><a href="#variant.RequestMmio" class="anchor">§</a><h3 class="code-header">RequestMmio</h3></section><div class="docblock"><p>213: RequestMmio — claim exclusive MMIO range for a peripheral Driver Cell.</p>
+</div><div class="sub-variant" id="variant.RequestMmio.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RequestMmio.field.base" class="section-header"><a href="#variant.RequestMmio.field.base" class="anchor field">§</a><code>base: usize</code></span></div><div class="sub-variant-field"><span id="variant.RequestMmio.field.len" class="section-header"><a href="#variant.RequestMmio.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.GetRandom" class="variant"><a href="#variant.GetRandom" class="anchor">§</a><h3 class="code-header">GetRandom</h3></section><div class="docblock"><p>214: GetRandom — fill a caller buffer with VirtIO-RNG entropy bytes.</p>
+</div><div class="sub-variant" id="variant.GetRandom.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GetRandom.field.buf_ptr" class="section-header"><a href="#variant.GetRandom.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.GetRandom.field.len" class="section-header"><a href="#variant.GetRandom.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.GrantRegister" class="variant"><a href="#variant.GrantRegister" class="anchor">§</a><h3 class="code-header">GrantRegister</h3></section><div class="docblock"><p>215: GrantRegister — allocate a persistent pre-pinned Grant buffer (lifetime = cell exit).</p>
+</div><div class="sub-variant" id="variant.GrantRegister.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantRegister.field.size" class="section-header"><a href="#variant.GrantRegister.field.size" class="anchor field">§</a><code>size: usize</code></span></div></div><section id="variant.GrantUnregister" class="variant"><a href="#variant.GrantUnregister" class="anchor">§</a><h3 class="code-header">GrantUnregister</h3></section><div class="docblock"><p>216: GrantUnregister — explicitly release a registered buffer.</p>
+</div><div class="sub-variant" id="variant.GrantUnregister.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.GrantUnregister.field.reg_id" class="section-header"><a href="#variant.GrantUnregister.field.reg_id" class="anchor field">§</a><code>reg_id: usize</code></span></div></div><section id="variant.WaitForEvent" class="variant"><a href="#variant.WaitForEvent" class="anchor">§</a><h3 class="code-header">WaitForEvent</h3></section><div class="docblock"><p>217: WaitForEvent — block until <code>mask</code> bits fire or <code>deadline</code> ticks pass.
+<code>deadline = None</code> means block indefinitely.</p>
+</div><div class="sub-variant" id="variant.WaitForEvent.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.WaitForEvent.field.mask" class="section-header"><a href="#variant.WaitForEvent.field.mask" class="anchor field">§</a><code>mask: u32</code></span></div><div class="sub-variant-field"><span id="variant.WaitForEvent.field.deadline" class="section-header"><a href="#variant.WaitForEvent.field.deadline" class="anchor field">§</a><code>deadline: Option&lt;u64&gt;</code></span></div></div><section id="variant.CreateVm" class="variant"><a href="#variant.CreateVm" class="anchor">§</a><h3 class="code-header">CreateVm</h3></section><div class="docblock"><p>220: CreateVm — allocate guest RAM + Stage-2 table → vm_id.</p>
+</div><div class="sub-variant" id="variant.CreateVm.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.CreateVm.field.guest_pages" class="section-header"><a href="#variant.CreateVm.field.guest_pages" class="anchor field">§</a><code>guest_pages: usize</code></span></div></div><section id="variant.CreateVcpu" class="variant"><a href="#variant.CreateVcpu" class="anchor">§</a><h3 class="code-header">CreateVcpu</h3></section><div class="docblock"><p>221: CreateVcpu — create a vCPU with <code>entry_pc</code> in <code>vm_id</code> → vcpu_id.</p>
+</div><div class="sub-variant" id="variant.CreateVcpu.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.CreateVcpu.field.vm_id" class="section-header"><a href="#variant.CreateVcpu.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.CreateVcpu.field.entry_pc" class="section-header"><a href="#variant.CreateVcpu.field.entry_pc" class="anchor field">§</a><code>entry_pc: u64</code></span></div></div><section id="variant.MapGuestMemory" class="variant"><a href="#variant.MapGuestMemory" class="anchor">§</a><h3 class="code-header">MapGuestMemory</h3></section><div class="docblock"><p>222: MapGuestMemory — map guest IPA range in <code>vm_id</code> Stage-2 table.</p>
+</div><div class="sub-variant" id="variant.MapGuestMemory.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.MapGuestMemory.field.vm_id" class="section-header"><a href="#variant.MapGuestMemory.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.MapGuestMemory.field.ipa" class="section-header"><a href="#variant.MapGuestMemory.field.ipa" class="anchor field">§</a><code>ipa: u64</code></span></div><div class="sub-variant-field"><span id="variant.MapGuestMemory.field.size" class="section-header"><a href="#variant.MapGuestMemory.field.size" class="anchor field">§</a><code>size: usize</code></span></div><div class="sub-variant-field"><span id="variant.MapGuestMemory.field.writable" class="section-header"><a href="#variant.MapGuestMemory.field.writable" class="anchor field">§</a><code>writable: bool</code></span></div></div><section id="variant.RunVcpu" class="variant"><a href="#variant.RunVcpu" class="anchor">§</a><h3 class="code-header">RunVcpu</h3></section><div class="docblock"><p>223: RunVcpu — world-switch into vCPU; write <code>ViVmExit</code> to <code>out_ptr</code>.</p>
+</div><div class="sub-variant" id="variant.RunVcpu.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RunVcpu.field.vm_id" class="section-header"><a href="#variant.RunVcpu.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.RunVcpu.field.vcpu_id" class="section-header"><a href="#variant.RunVcpu.field.vcpu_id" class="anchor field">§</a><code>vcpu_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.RunVcpu.field.budget_ns" class="section-header"><a href="#variant.RunVcpu.field.budget_ns" class="anchor field">§</a><code>budget_ns: u64</code></span></div><div class="sub-variant-field"><span id="variant.RunVcpu.field.out_ptr" class="section-header"><a href="#variant.RunVcpu.field.out_ptr" class="anchor field">§</a><code>out_ptr: usize</code></span></div></div><section id="variant.VcpuRegs" class="variant"><a href="#variant.VcpuRegs" class="anchor">§</a><h3 class="code-header">VcpuRegs</h3></section><div class="docblock"><p>224: VcpuRegs — read (write=false) or write (write=true) GP registers.</p>
+</div><div class="sub-variant" id="variant.VcpuRegs.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.VcpuRegs.field.vm_id" class="section-header"><a href="#variant.VcpuRegs.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.VcpuRegs.field.vcpu_id" class="section-header"><a href="#variant.VcpuRegs.field.vcpu_id" class="anchor field">§</a><code>vcpu_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.VcpuRegs.field.buf_ptr" class="section-header"><a href="#variant.VcpuRegs.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.VcpuRegs.field.write" class="section-header"><a href="#variant.VcpuRegs.field.write" class="anchor field">§</a><code>write: bool</code></span></div></div><section id="variant.InjectIrq" class="variant"><a href="#variant.InjectIrq" class="anchor">§</a><h3 class="code-header">InjectIrq</h3></section><div class="docblock"><p>225: InjectIrq — inject GICv2 virtual interrupt (0 ≤ intid ≤ 1019).</p>
+</div><div class="sub-variant" id="variant.InjectIrq.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.InjectIrq.field.vm_id" class="section-header"><a href="#variant.InjectIrq.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.InjectIrq.field.vcpu_id" class="section-header"><a href="#variant.InjectIrq.field.vcpu_id" class="anchor field">§</a><code>vcpu_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.InjectIrq.field.intid" class="section-header"><a href="#variant.InjectIrq.field.intid" class="anchor field">§</a><code>intid: u32</code></span></div></div><section id="variant.WriteGuestMemory" class="variant"><a href="#variant.WriteGuestMemory" class="anchor">§</a><h3 class="code-header">WriteGuestMemory</h3></section><div class="docblock"><p>226: WriteGuestMemory — copy <code>len</code> bytes from <code>src_ptr</code> to guest GPA.</p>
+</div><div class="sub-variant" id="variant.WriteGuestMemory.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.WriteGuestMemory.field.vm_id" class="section-header"><a href="#variant.WriteGuestMemory.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.WriteGuestMemory.field.gpa" class="section-header"><a href="#variant.WriteGuestMemory.field.gpa" class="anchor field">§</a><code>gpa: u64</code></span></div><div class="sub-variant-field"><span id="variant.WriteGuestMemory.field.src_ptr" class="section-header"><a href="#variant.WriteGuestMemory.field.src_ptr" class="anchor field">§</a><code>src_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.WriteGuestMemory.field.len" class="section-header"><a href="#variant.WriteGuestMemory.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.ReadGuestMemory" class="variant"><a href="#variant.ReadGuestMemory" class="anchor">§</a><h3 class="code-header">ReadGuestMemory</h3></section><div class="docblock"><p>227: ReadGuestMemory — copy <code>len</code> bytes from guest GPA into <code>dst_ptr</code>.</p>
+</div><div class="sub-variant" id="variant.ReadGuestMemory.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ReadGuestMemory.field.vm_id" class="section-header"><a href="#variant.ReadGuestMemory.field.vm_id" class="anchor field">§</a><code>vm_id: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadGuestMemory.field.gpa" class="section-header"><a href="#variant.ReadGuestMemory.field.gpa" class="anchor field">§</a><code>gpa: u64</code></span></div><div class="sub-variant-field"><span id="variant.ReadGuestMemory.field.dst_ptr" class="section-header"><a href="#variant.ReadGuestMemory.field.dst_ptr" class="anchor field">§</a><code>dst_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadGuestMemory.field.len" class="section-header"><a href="#variant.ReadGuestMemory.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.WaitIrq" class="variant"><a href="#variant.WaitIrq" class="anchor">§</a><h3 class="code-header">WaitIrq</h3></section><div class="docblock"><p>234: WaitIrq — block until hardware IRQ <code>irq</code> fires (Driver Cell).
+ISR sets IRQ_PENDING[irq] (atomic, no lock); scheduler sweep wakes the task.
+<code>mmio_base</code>: VirtIO MMIO slot base for InterruptACK write, or 0 for non-VirtIO.</p>
+</div><div class="sub-variant" id="variant.WaitIrq.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.WaitIrq.field.irq" class="section-header"><a href="#variant.WaitIrq.field.irq" class="anchor field">§</a><code>irq: u8</code></span></div><div class="sub-variant-field"><span id="variant.WaitIrq.field.mmio_base" class="section-header"><a href="#variant.WaitIrq.field.mmio_base" class="anchor field">§</a><code>mmio_base: usize</code></span></div></div><section id="variant.RegisterPcieBar" class="variant"><a href="#variant.RegisterPcieBar" class="anchor">§</a><h3 class="code-header">RegisterPcieBar</h3></section><div class="docblock"><p>235: RegisterPcieBar — Platform Cell announces a discovered PCIe BAR.
+Populates the kernel BAR allowlist used by <code>sys_request_mmio</code>.
+Requires singleton PlatformCap.</p>
+</div><div class="sub-variant" id="variant.RegisterPcieBar.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RegisterPcieBar.field.bdf" class="section-header"><a href="#variant.RegisterPcieBar.field.bdf" class="anchor field">§</a><code>bdf: u32</code></span></div><div class="sub-variant-field"><span id="variant.RegisterPcieBar.field.base" class="section-header"><a href="#variant.RegisterPcieBar.field.base" class="anchor field">§</a><code>base: usize</code></span></div><div class="sub-variant-field"><span id="variant.RegisterPcieBar.field.len" class="section-header"><a href="#variant.RegisterPcieBar.field.len" class="anchor field">§</a><code>len: usize</code></span></div></div><section id="variant.RegisterPciDevice" class="variant"><a href="#variant.RegisterPciDevice" class="anchor">§</a><h3 class="code-header">RegisterPciDevice</h3></section><div class="docblock"><p>236: RegisterPciDevice — Platform Cell announces a PCI device with class/BAR info.
+Populates kernel PCI_DEVICES so find_class() works without a kernel ECAM scan.
+Requires singleton PlatformCap (allowlist bit 53).</p>
+</div><div class="sub-variant" id="variant.RegisterPciDevice.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.RegisterPciDevice.field.bdf" class="section-header"><a href="#variant.RegisterPciDevice.field.bdf" class="anchor field">§</a><code>bdf: u32</code></span></div><div class="sub-variant-field"><span id="variant.RegisterPciDevice.field.cls" class="section-header"><a href="#variant.RegisterPciDevice.field.cls" class="anchor field">§</a><code>cls: u32</code></span></div><div class="sub-variant-field"><span id="variant.RegisterPciDevice.field.bar0_base" class="section-header"><a href="#variant.RegisterPciDevice.field.bar0_base" class="anchor field">§</a><code>bar0_base: usize</code></span></div><div class="sub-variant-field"><span id="variant.RegisterPciDevice.field.bar0_size" class="section-header"><a href="#variant.RegisterPciDevice.field.bar0_size" class="anchor field">§</a><code>bar0_size: usize</code></span></div></div><section id="variant.ReadLog" class="variant"><a href="#variant.ReadLog" class="anchor">§</a><h3 class="code-header">ReadLog</h3></section><div class="docblock"><p>237: ReadLog — drain up to <code>max</code> bytes from the kernel user-log ring.
+ABI: a0 = buf_ptr, a1 = max → bytes_copied.
+Gated by allowlist bit 54 (ReadLog).</p>
+</div><div class="sub-variant" id="variant.ReadLog.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.ReadLog.field.buf_ptr" class="section-header"><a href="#variant.ReadLog.field.buf_ptr" class="anchor field">§</a><code>buf_ptr: usize</code></span></div><div class="sub-variant-field"><span id="variant.ReadLog.field.max" class="section-header"><a href="#variant.ReadLog.field.max" class="anchor field">§</a><code>max: usize</code></span></div></div></div><h2 id="trait-implementations" class="section-header">Trait Implementations<a href="#trait-implementations" class="anchor">§</a></h2><div id="trait-implementations-list"><details class="toggle implementors-toggle" open><summary><section id="impl-Clone-for-Syscall" class="impl"><a class="src rightside" href="../../../src/vicell_kernel/task/syscall.rs.html#384">Source</a><a href="#impl-Clone-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Clone for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.clone" class="method trait-impl"><a class="src rightside" href="../../../src/vicell_kernel/task/syscall.rs.html#384">Source</a><a href="#method.clone" class="anchor">§</a><h4 class="code-header">fn <a class="fn">clone</a>(&amp;self) -&gt; <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h4></section></summary><div class='docblock'>Returns a duplicate of the value. <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.clone_from" class="method trait-impl"><span class="since rightside" title="Stable since Rust version 1.0.0">1.0.0</span><a href="#method.clone_from" class="anchor">§</a><h4 class="code-header">fn <a class="fn">clone_from</a>(&amp;mut self, source: &amp;Self)</h4></section></summary><div class='docblock'>Performs copy-assignment from <code>source</code>. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle" open><summary><section id="impl-Debug-for-Syscall" class="impl"><a class="src rightside" href="../../../src/vicell_kernel/task/syscall.rs.html#384">Source</a><a href="#impl-Debug-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Debug for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.fmt" class="method trait-impl"><a class="src rightside" href="../../../src/vicell_kernel/task/syscall.rs.html#384">Source</a><a href="#method.fmt" class="anchor">§</a><h4 class="code-header">fn <a class="fn">fmt</a>(&amp;self, f: &amp;mut Formatter&lt;'_&gt;) -&gt; Result</h4></section></summary><div class='docblock'>Formats the value using the given formatter. <a>Read more</a></div></details></div></details><section id="impl-Copy-for-Syscall" class="impl"><a class="src rightside" href="../../../src/vicell_kernel/task/syscall.rs.html#384">Source</a><a href="#impl-Copy-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Copy for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section></div><h2 id="synthetic-implementations" class="section-header">Auto Trait Implementations<a href="#synthetic-implementations" class="anchor">§</a></h2><div id="synthetic-implementations-list"><section id="impl-Freeze-for-Syscall" class="impl"><a href="#impl-Freeze-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Freeze for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section><section id="impl-RefUnwindSafe-for-Syscall" class="impl"><a href="#impl-RefUnwindSafe-for-Syscall" class="anchor">§</a><h3 class="code-header">impl RefUnwindSafe for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section><section id="impl-Send-for-Syscall" class="impl"><a href="#impl-Send-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Send for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section><section id="impl-Sync-for-Syscall" class="impl"><a href="#impl-Sync-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Sync for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section><section id="impl-Unpin-for-Syscall" class="impl"><a href="#impl-Unpin-for-Syscall" class="anchor">§</a><h3 class="code-header">impl Unpin for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section><section id="impl-UnsafeUnpin-for-Syscall" class="impl"><a href="#impl-UnsafeUnpin-for-Syscall" class="anchor">§</a><h3 class="code-header">impl UnsafeUnpin for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section><section id="impl-UnwindSafe-for-Syscall" class="impl"><a href="#impl-UnwindSafe-for-Syscall" class="anchor">§</a><h3 class="code-header">impl UnwindSafe for <a class="enum" href="enum.Syscall.html" title="enum vicell_kernel::task::syscall::Syscall">Syscall</a></h3></section></div><h2 id="blanket-implementations" class="section-header">Blanket Implementations<a href="#blanket-implementations" class="anchor">§</a></h2><div id="blanket-implementations-list"><details class="toggle implementors-toggle"><summary><section id="impl-Any-for-T" class="impl"><a href="#impl-Any-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; Any for T<div class="where">where
+    T: 'static + ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.type_id" class="method trait-impl"><a href="#method.type_id" class="anchor">§</a><h4 class="code-header">fn <a class="fn">type_id</a>(&amp;self) -&gt; TypeId</h4></section></summary><div class='docblock'>Gets the <code>TypeId</code> of <code>self</code>. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Borrow%3CT%3E-for-T" class="impl"><a href="#impl-Borrow%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; Borrow&lt;T&gt; for T<div class="where">where
+    T: ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow" class="method trait-impl"><a href="#method.borrow" class="anchor">§</a><h4 class="code-header">fn <a class="fn">borrow</a>(&amp;self) -&gt; &amp;T</h4></section></summary><div class='docblock'>Immutably borrows from an owned value. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-BorrowMut%3CT%3E-for-T" class="impl"><a href="#impl-BorrowMut%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; BorrowMut&lt;T&gt; for T<div class="where">where
+    T: ?Sized,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.borrow_mut" class="method trait-impl"><a href="#method.borrow_mut" class="anchor">§</a><h4 class="code-header">fn <a class="fn">borrow_mut</a>(&amp;mut self) -&gt; &amp;mut T</h4></section></summary><div class='docblock'>Mutably borrows from an owned value. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-CloneToUninit-for-T" class="impl"><a href="#impl-CloneToUninit-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; CloneToUninit for T<div class="where">where
+    T: Clone,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.clone_to_uninit" class="method trait-impl"><a href="#method.clone_to_uninit" class="anchor">§</a><h4 class="code-header">unsafe fn <a class="fn">clone_to_uninit</a>(&amp;self, dest: *mut u8)</h4></section></summary><span class="item-info"><div class="stab unstable"><span class="emoji">🔬</span><span>This is a nightly-only experimental API. (<code>clone_to_uninit</code>)</span></div></span><div class='docblock'>Performs copy-assignment from <code>self</code> to <code>dest</code>. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-From%3CT%3E-for-T" class="impl"><a href="#impl-From%3CT%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; From&lt;T&gt; for T</h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.from" class="method trait-impl"><a href="#method.from" class="anchor">§</a><h4 class="code-header">fn <a class="fn">from</a>(t: T) -&gt; T</h4></section></summary><div class="docblock"><p>Returns the argument unchanged.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-Into%3CU%3E-for-T" class="impl"><a href="#impl-Into%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; Into&lt;U&gt; for T<div class="where">where
+    U: From&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle method-toggle" open><summary><section id="method.into" class="method trait-impl"><a href="#method.into" class="anchor">§</a><h4 class="code-header">fn <a class="fn">into</a>(self) -&gt; U</h4></section></summary><div class="docblock"><p>Calls <code>U::from(self)</code>.</p>
+<p>That is, this conversion is whatever the implementation of
+<code>[From]&lt;T&gt; for U</code> chooses to do.</p>
+</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-ToOwned-for-T" class="impl"><a href="#impl-ToOwned-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T&gt; ToOwned for T<div class="where">where
+    T: Clone,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Owned" class="associatedtype trait-impl"><a href="#associatedtype.Owned" class="anchor">§</a><h4 class="code-header">type <a class="associatedtype">Owned</a> = T</h4></section></summary><div class='docblock'>The resulting type after obtaining ownership.</div></details><details class="toggle method-toggle" open><summary><section id="method.to_owned" class="method trait-impl"><a href="#method.to_owned" class="anchor">§</a><h4 class="code-header">fn <a class="fn">to_owned</a>(&amp;self) -&gt; T</h4></section></summary><div class='docblock'>Creates owned data from borrowed data, usually by cloning. <a>Read more</a></div></details><details class="toggle method-toggle" open><summary><section id="method.clone_into" class="method trait-impl"><a href="#method.clone_into" class="anchor">§</a><h4 class="code-header">fn <a class="fn">clone_into</a>(&amp;self, target: &amp;mut T)</h4></section></summary><div class='docblock'>Uses borrowed data to replace owned data, usually by cloning. <a>Read more</a></div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryFrom%3CU%3E-for-T" class="impl"><a href="#impl-TryFrom%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; TryFrom&lt;U&gt; for T<div class="where">where
+    U: Into&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error-1" class="associatedtype trait-impl"><a href="#associatedtype.Error-1" class="anchor">§</a><h4 class="code-header">type <a class="associatedtype">Error</a> = Infallible</h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_from" class="method trait-impl"><a href="#method.try_from" class="anchor">§</a><h4 class="code-header">fn <a class="fn">try_from</a>(value: U) -&gt; Result&lt;T, &lt;T as TryFrom&lt;U&gt;&gt;::Error&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details><details class="toggle implementors-toggle"><summary><section id="impl-TryInto%3CU%3E-for-T" class="impl"><a href="#impl-TryInto%3CU%3E-for-T" class="anchor">§</a><h3 class="code-header">impl&lt;T, U&gt; TryInto&lt;U&gt; for T<div class="where">where
+    U: TryFrom&lt;T&gt;,</div></h3></section></summary><div class="impl-items"><details class="toggle" open><summary><section id="associatedtype.Error" class="associatedtype trait-impl"><a href="#associatedtype.Error" class="anchor">§</a><h4 class="code-header">type <a class="associatedtype">Error</a> = &lt;U as TryFrom&lt;T&gt;&gt;::Error</h4></section></summary><div class='docblock'>The type returned in the event of a conversion error.</div></details><details class="toggle method-toggle" open><summary><section id="method.try_into" class="method trait-impl"><a href="#method.try_into" class="anchor">§</a><h4 class="code-header">fn <a class="fn">try_into</a>(self) -&gt; Result&lt;U, &lt;U as TryFrom&lt;T&gt;&gt;::Error&gt;</h4></section></summary><div class='docblock'>Performs the conversion.</div></details></div></details></div></section></div></main></body></html>

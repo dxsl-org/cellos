@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HEARTBEAT_MS","MAX_SESSIONS","NOISE_MSG_BUF","NOISE_TAG"],"enum":["Phase"],"fn":["tcp_read_msg","tcp_write_msg"],"struct":["ConnectionPool","NoiseSession","StaticKeypair","VfsFileKeySource"],"trait":["ClusterKeySource"],"type":["Hs","Ts"]};

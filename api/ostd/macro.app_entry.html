@@ -1,0 +1,56 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Ergonomic cell entry point — generates `declare_manifest!`, syscall allowlist, and `main()` from a capability declaration."><title>app_entry in ostd - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="ostd" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc macro"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">app_entry</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../ostd/index.html">ostd</a><span class="version">0.2.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">app_<wbr>entry</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#forms" title="Forms">Forms</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="index.html">In crate ostd</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="index.html">ostd</a></div><h1>Macro <span class="macro">app_<wbr>entry</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/ostd/runtime.rs.html#216-358">Source</a> </span></div><pre class="rust item-decl"><code>macro_rules! app_entry {
+    (
+        block_io = $bio:literal,
+        network  = $net:literal,
+        spawn    = $spawn:literal,
+        handler  = $handler:expr $(,)?
+    ) =&gt; { ... };
+    (
+        block_io = $bio:literal,
+        network  = $net:literal,
+        spawn    = $spawn:literal,
+        help     = $help:literal,
+        handler  = $handler:expr $(,)?
+    ) =&gt; { ... };
+    (
+        block_io = $bio:literal,
+        network  = $net:literal,
+        spawn    = $spawn:literal,
+        tier     = $tier:expr,
+        handler  = $handler:expr $(,)?
+    ) =&gt; { ... };
+    (spawn = $spawn:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (spawn = $spawn:literal, help = $help:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (network = $net:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (network = $net:literal, help = $help:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (block_io = $bio:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (block_io = $bio:literal, help = $help:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (help = $help:literal, handler = $handler:expr $(,)?) =&gt; { ... };
+    (handler = $handler:expr $(,)?) =&gt; { ... };
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Ergonomic cell entry point — generates <code>declare_manifest!</code>, syscall allowlist,
+and <code>main()</code> from a capability declaration.</p>
+<h2 id="forms"><a class="doc-anchor" href="#forms">§</a>Forms</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// No caps (minimal app)
+</span><span class="macro">ostd::app_entry!</span>(handler = my_fn);
+
+<span class="comment">// With automatic --help handling
+</span><span class="macro">ostd::app_entry!</span>(help = <span class="string">"Usage: foo &lt;file&gt;"</span>, handler = my_fn);
+
+<span class="comment">// Single cap shorthands
+</span><span class="macro">ostd::app_entry!</span>(spawn = <span class="bool-val">true</span>, handler = my_fn);
+<span class="macro">ostd::app_entry!</span>(network = <span class="bool-val">true</span>, handler = my_fn);
+<span class="macro">ostd::app_entry!</span>(block_io = <span class="bool-val">true</span>, handler = my_fn);
+
+<span class="comment">// Cap + help
+</span><span class="macro">ostd::app_entry!</span>(block_io = <span class="bool-val">true</span>, help = <span class="string">"Usage: cat &lt;file&gt;"</span>, handler = my_fn);
+
+<span class="comment">// Full explicit form
+</span><span class="macro">ostd::app_entry!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>, handler = my_fn);
+
+<span class="comment">// Full form with help
+</span><span class="macro">ostd::app_entry!</span>(block_io = <span class="bool-val">false</span>, network = <span class="bool-val">false</span>, spawn = <span class="bool-val">true</span>,
+                 help = <span class="string">"Usage: ..."</span>, handler = my_fn);</code></pre></div>
+<p>The generated <code>main()</code> arms the heartbeat watchdog, checks for <code>-h</code>/<code>--help</code>
+when a <code>help</code> string is provided, and fires <a href="app/enum.AppEvent.html#variant.Init" title="variant ostd::app::AppEvent::Init"><code>AppEvent::Init</code></a> once before
+entering the message loop.</p>
+</div></details></section></div></main></body></html>

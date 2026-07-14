@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VFS_ENDPOINT"],"fn":["load_from_vfs","main"],"static":["VICELL_SYSCALLS"]};

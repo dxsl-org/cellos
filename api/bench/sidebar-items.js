@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LOAD_CELLS","SELF_PATH","TARGET_CTX_SWITCH_NS","TARGET_FOOTPRINT_BYTES","TARGET_IPC_NS","TARGET_SYSCALL_NS"],"fn":["kill_all","main","print_under_load","run_rt_control_loop","run_rt_preempt","run_rt_under_load","spawn_load","spawn_role"],"mod":["framework","scenarios"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

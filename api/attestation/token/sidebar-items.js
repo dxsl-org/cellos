@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["TOKEN_LEN","TOKEN_MAGIC","TOKEN_VERSION"],"enum":["AttestError"],"fn":["encode","parse_and_verify"],"struct":["AttestBody"]};

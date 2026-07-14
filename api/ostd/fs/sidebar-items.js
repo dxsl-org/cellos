@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["read_all","read_dir","read_full_via_grant","write_all"],"struct":["File","ReadDir"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["CanError"],"struct":["CanFrame"],"trait":["ViCan"]};

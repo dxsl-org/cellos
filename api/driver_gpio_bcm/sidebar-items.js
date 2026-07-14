@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BCM_GPIO_BASE","BCM_GPIO_SIZE"],"struct":["BcmGpio"]};

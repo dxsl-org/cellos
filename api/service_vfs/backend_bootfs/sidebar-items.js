@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["dir_lookup","open"],"struct":["BootFsProxy","Fd"]};

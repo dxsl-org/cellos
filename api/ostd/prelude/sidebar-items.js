@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ViError"],"struct":["Box","HashMap","HashSet","String","Vec"],"trait":["ToString"],"type":["Mutex","ViResult"]};

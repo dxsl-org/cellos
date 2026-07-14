@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BLK_T_FLUSH","BLK_T_IN","BLK_T_OUT","DISK_SIZE","DISK_SPI","NUM_SECTORS","SECTOR_SIZE"],"fn":["blk_read","blk_write","handle_blk_request","write_status"],"struct":["BlkDisk"]};

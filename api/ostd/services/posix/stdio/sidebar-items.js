@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["clearerr","fclose","feof","ferror","fflush","fgetc","fgets","fileno","fopen","fprintf","fputc","fputs","fread","fseek","ftell","fwrite","printf","putchar","puts","rewind","snprintf","sprintf","vfprintf","vprintf","vsnprintf","vsprintf"],"static":["stderr","stdin","stdout"],"struct":["FILE"]};

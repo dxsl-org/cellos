@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FR_BUSY","FR_RXFE","FR_TXFE","FR_TXFF","PL011_BASE_IPA","PL011_SIZE"],"mod":["reg"],"struct":["Pl011"]};

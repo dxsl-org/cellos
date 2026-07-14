@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EVDEV_ABS","EVDEV_KEY","EVDEV_REL","EV_ASCII","EV_KEY","HEARTBEAT_TICKS","POLL_SCHED_TICKS"],"fn":["drain_virtio","handle_kernel_event","handle_message","handle_typed_request","main"],"mod":["dispatcher","layout_us_qwerty","modifier_state","mouse_state","virtio_device"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

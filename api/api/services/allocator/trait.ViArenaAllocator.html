@@ -1,0 +1,70 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Arena allocator for trait objects and temporary allocations."><title>ViArenaAllocator in api::services::allocator - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="api" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">ViArenaAllocator</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../api/index.html">api</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">ViArena<wbr>Allocator</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#purpose" title="Purpose">Purpose</a></li><li><a href="#performance-guarantees" title="Performance Guarantees">Performance Guarantees</a></li><li><a href="#benchmarks-target" title="Benchmarks (Target)">Benchmarks (Target)</a></li><li><a href="#use-cases" title="Use Cases">Use Cases</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.alloc" title="alloc">alloc</a></li><li><a href="#tymethod.capacity" title="capacity">capacity</a></li><li><a href="#tymethod.reset" title="reset">reset</a></li><li><a href="#tymethod.used_bytes" title="used_bytes">used_bytes</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.alloc_trait_object" title="alloc_trait_object">alloc_trait_object</a></li><li><a href="#method.can_alloc" title="can_alloc">can_alloc</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In api::<wbr>services::<wbr>allocator</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">api</a>::<wbr><a href="../index.html">services</a>::<wbr><a href="index.html">allocator</a></div><h1>Trait <span class="trait">ViArena<wbr>Allocator</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/api/services/allocator.rs.html#40-100">Source</a> </span></div><pre class="rust item-decl"><code>pub trait ViArenaAllocator: Send + Sync {
+    // Required methods
+    fn <a href="#tymethod.alloc" class="fn">alloc</a>(&amp;mut self, size: usize, align: usize) -&gt; <a class="type" href="../../type.ViResult.html" title="type api::ViResult">ViResult</a>&lt;*mut u8&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.reset" class="fn">reset</a>(&amp;mut self);
+<span class="item-spacer"></span>    fn <a href="#tymethod.used_bytes" class="fn">used_bytes</a>(&amp;self) -&gt; usize;
+<span class="item-spacer"></span>    fn <a href="#tymethod.capacity" class="fn">capacity</a>(&amp;self) -&gt; usize;
+
+    // Provided methods
+    fn <a href="#method.alloc_trait_object" class="fn">alloc_trait_object</a>(&amp;mut self) -&gt; <a class="type" href="../../type.ViResult.html" title="type api::ViResult">ViResult</a>&lt;*mut u8&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.can_alloc" class="fn">can_alloc</a>(&amp;self, size: usize, align: usize) -&gt; bool { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Arena allocator for trait objects and temporary allocations.</p>
+<h2 id="purpose"><a class="doc-anchor" href="#purpose">§</a>Purpose</h2>
+<p>Reduce allocation overhead and fragmentation by:</p>
+<ul>
+<li>Batch allocation (bump pointer)</li>
+<li>Batch deallocation (reset entire arena)</li>
+<li>Thread-local arenas (no contention)</li>
+</ul>
+<h2 id="performance-guarantees"><a class="doc-anchor" href="#performance-guarantees">§</a>Performance Guarantees</h2>
+<ul>
+<li><code>alloc()</code>: O(1) - bump pointer increment + alignment</li>
+<li><code>reset()</code>: O(1) - single pointer write</li>
+<li><code>used_bytes()</code>: O(1) - field access</li>
+<li><code>capacity()</code>: O(1) - constant</li>
+<li><code>can_alloc()</code>: O(1) - arithmetic check</li>
+</ul>
+<h2 id="benchmarks-target"><a class="doc-anchor" href="#benchmarks-target">§</a>Benchmarks (Target)</h2>
+<ul>
+<li>Allocation: &lt;50 cycles (vs ~500 for malloc)</li>
+<li>Batch deallocation: &lt;5 cycles (vs O(n) for individual frees)</li>
+<li>Memory overhead: &lt;1% (vs ~10% for general allocator)</li>
+</ul>
+<h2 id="use-cases"><a class="doc-anchor" href="#use-cases">§</a>Use Cases</h2>
+<ul>
+<li>Allocating multiple trait objects during request handling</li>
+<li>Temporary buffers for I/O operations</li>
+<li>Per-task scratch space</li>
+</ul>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.alloc" class="method"><a class="src rightside" href="../../../src/api/services/allocator.rs.html#55">Source</a><h4 class="code-header">fn <a href="#tymethod.alloc" class="fn">alloc</a>(&amp;mut self, size: usize, align: usize) -&gt; <a class="type" href="../../type.ViResult.html" title="type api::ViResult">ViResult</a>&lt;*mut u8&gt;</h4></section></summary><div class="docblock"><p>Allocate memory with specified size and alignment.</p>
+<h5 id="arguments"><a class="doc-anchor" href="#arguments">§</a>Arguments</h5>
+<ul>
+<li><code>size</code> - Size in bytes</li>
+<li><code>align</code> - Alignment requirement (power of 2)</li>
+</ul>
+<h5 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h5>
+<p>Pointer to allocated memory, or error if arena is full.</p>
+<h5 id="safety"><a class="doc-anchor" href="#safety">§</a>Safety</h5>
+<p>Caller must ensure proper deallocation via <code>reset()</code>.</p>
+<h5 id="performance"><a class="doc-anchor" href="#performance">§</a>Performance</h5>
+<p>O(1) - bump pointer increment</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.reset" class="method"><a class="src rightside" href="../../../src/api/services/allocator.rs.html#78">Source</a><h4 class="code-header">fn <a href="#tymethod.reset" class="fn">reset</a>(&amp;mut self)</h4></section></summary><div class="docblock"><p>Reset arena, deallocating all allocations at once.</p>
+<h5 id="performance-1"><a class="doc-anchor" href="#performance-1">§</a>Performance</h5>
+<p>O(1) - Just resets bump pointer.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.used_bytes" class="method"><a class="src rightside" href="../../../src/api/services/allocator.rs.html#84">Source</a><h4 class="code-header">fn <a href="#tymethod.used_bytes" class="fn">used_bytes</a>(&amp;self) -&gt; usize</h4></section></summary><div class="docblock"><p>Get current memory usage.</p>
+<h5 id="performance-2"><a class="doc-anchor" href="#performance-2">§</a>Performance</h5>
+<p>O(1) - field access</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.capacity" class="method"><a class="src rightside" href="../../../src/api/services/allocator.rs.html#90">Source</a><h4 class="code-header">fn <a href="#tymethod.capacity" class="fn">capacity</a>(&amp;self) -&gt; usize</h4></section></summary><div class="docblock"><p>Get total arena capacity.</p>
+<h5 id="performance-3"><a class="doc-anchor" href="#performance-3">§</a>Performance</h5>
+<p>O(1) - constant</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.alloc_trait_object" class="method"><a class="src rightside" href="../../../src/api/services/allocator.rs.html#67-72">Source</a><h4 class="code-header">fn <a href="#method.alloc_trait_object" class="fn">alloc_trait_object</a>(&amp;mut self) -&gt; <a class="type" href="../../type.ViResult.html" title="type api::ViResult">ViResult</a>&lt;*mut u8&gt;</h4></section></summary><div class="docblock"><p>Allocate space for a trait object.</p>
+<h5 id="returns-1"><a class="doc-anchor" href="#returns-1">§</a>Returns</h5>
+<p>Pointer suitable for trait object construction.</p>
+<h5 id="note"><a class="doc-anchor" href="#note">§</a>Note</h5>
+<p>Allocates space for a fat pointer (2 * pointer size).</p>
+<h5 id="performance-4"><a class="doc-anchor" href="#performance-4">§</a>Performance</h5>
+<p>O(1) - same as alloc()</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.can_alloc" class="method"><a class="src rightside" href="../../../src/api/services/allocator.rs.html#96-99">Source</a><h4 class="code-header">fn <a href="#method.can_alloc" class="fn">can_alloc</a>(&amp;self, size: usize, align: usize) -&gt; bool</h4></section></summary><div class="docblock"><p>Check if arena has space for allocation.</p>
+<h5 id="performance-5"><a class="doc-anchor" href="#performance-5">§</a>Performance</h5>
+<p>O(1) - arithmetic check</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../../trait.impl/api/services/allocator/trait.ViArenaAllocator.js" async></script></section></div></main></body></html>

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["plic","pmp","rtc","sbi","timer","uart_ns16550a"]};

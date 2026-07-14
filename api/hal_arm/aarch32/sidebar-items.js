@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["PAGE_SIZE","SECTION_SIZE"],"mod":["uart_pl011"],"static":["ARCH"],"struct":["AArch32Arch"],"type":["PlatformArch"]};

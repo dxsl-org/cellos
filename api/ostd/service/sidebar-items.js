@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["lookup","register"],"mod":["service"],"struct":["ServiceRef"],"type":["CompositorRef","ConfigRef","InputRef","NetRef","VfsRef"]};

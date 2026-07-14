@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ARCH"],"fn":["api_cells","api_files","api_restart","api_status","index","mime_from_ext","not_found","send_json","send_response","serve_file","status_page"]};

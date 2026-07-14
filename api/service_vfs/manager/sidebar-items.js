@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["VFS_SCHEMA_VERSION"],"struct":["VfsManager"]};

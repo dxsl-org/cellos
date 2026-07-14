@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KERNEL_GIT_SHA","SNAPSHOT_BASE_LBA","SNAPSHOT_FORMAT_VERSION","SNAPSHOT_MAGIC"],"fn":["invalidate_snapshot","kernel_hash","serialize_snapshot","try_restore","validate_header"],"struct":["SnapshotHeader"]};

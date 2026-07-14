@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["OpenMode","SeekFrom"],"struct":["FileHandle","Lease","Stat","ViFileHandle"],"trait":["ViFile","ViFileSystem"],"type":["BoxFuture","FileResult"]};

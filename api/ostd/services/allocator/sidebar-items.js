@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["AllocStats"],"trait":["ViArenaAllocator","ViGlobalAllocator","ViStatAllocator"]};

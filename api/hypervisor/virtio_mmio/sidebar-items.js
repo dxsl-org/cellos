@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_QUEUES","QUEUE_SIZE_MAX","VIRTIO_F_VERSION_1_HI","VIRTIO_MMIO_BASE","VIRTIO_MMIO_SLOTS","VIRTIO_MMIO_STRIDE"],"fn":["owns","set_hi","set_lo","slot_and_offset"],"struct":["QueueCfg","VirtioMmio"],"trait":["VirtioDevice"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CLAIMS","MAX_PENDING","TYPE_TASK_CLAIM","TYPE_TASK_RELEASE","WIRE_LEN"],"enum":["GossipType"],"struct":["ClaimRecord","GossipMessage","GossipTable","PendingGossip"]};

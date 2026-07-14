@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_GRANT_DEPTH"],"enum":["CapResource"],"static":["CAP_TABLE"],"struct":["CapEntry","CapId","CapTable"]};

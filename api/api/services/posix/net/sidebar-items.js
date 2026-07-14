@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["_close","connect","recv","send","socket"],"struct":["sockaddr_in"]};

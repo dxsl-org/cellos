@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ABS_X","ABS_Y","BTN_LEFT","BTN_MIDDLE","BTN_RIGHT","REL_WHEEL","REL_X","REL_Y"],"fn":["btn_to_mouse_button"],"struct":["MouseState"]};

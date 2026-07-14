@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_CACHE_BYTES"],"struct":["CachedSector","PageCache"]};

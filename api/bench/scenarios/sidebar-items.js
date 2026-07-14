@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["context_switch","control_loop","ipc_send_recv","memory_footprint","preempt_latency","rt_load","smp","syscall_yield"]};

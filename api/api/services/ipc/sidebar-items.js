@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IPC_BUF_SIZE"],"enum":["ConfigRequest","ConfigResponse","InputRequest","InputResponse","NetRequest","NetResponse","VfsRequest","VfsResponse"],"fn":["decode","encode"]};

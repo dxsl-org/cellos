@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["COMPOSITOR_ENDPOINT","FALLBACK_HEIGHT","FALLBACK_WIDTH"],"enum":["PixelFormat"],"mod":["compositor_ops"],"struct":["AttachGrant","DamageNotify","Rect","SurfaceCap"]};

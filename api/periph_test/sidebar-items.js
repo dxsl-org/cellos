@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main","scenario_cap_reject","scenario_gpio_direction_input","scenario_gpio_output_readback","scenario_uart_loopback"],"macro":["fail","pass"],"static":["FAIL","PASS","VICELL_MANIFEST"]};

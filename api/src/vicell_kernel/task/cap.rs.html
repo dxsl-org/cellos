@@ -1,0 +1,429 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/task/cap.rs`."><title>cap.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="vicell_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">vicell_kernel/task/</div>cap.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Kernel-internal capability tokens.
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! Each token is a zero-sized type (ZST).  Constructors are `pub(crate)` so
+<a href=#4 id=4 data-nosnippet>4</a>//! only kernel code can create them — Cell crates are separate Rust
+<a href=#5 id=5 data-nosnippet>5</a>//! compilation units and cannot call `pub(crate)` items from this crate.
+<a href=#6 id=6 data-nosnippet>6</a>//!
+<a href=#7 id=7 data-nosnippet>7</a>//! `Option&lt;ZST&gt;` uses Rust's niche optimization: exactly 1 byte on the wire.
+<a href=#8 id=8 data-nosnippet>8</a>//! Three caps together are 3 bytes, smaller than the previous `KernelPerms(u32)`.
+<a href=#9 id=9 data-nosnippet>9</a>
+<a href=#10 id=10 data-nosnippet>10</a>/// Permits raw block-device syscalls (BlkRead, BlkWrite, BlkFlush).
+<a href=#11 id=11 data-nosnippet>11</a>/// Granted to `/bin/vfs` at spawn.
+<a href=#12 id=12 data-nosnippet>12</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">pub struct </span>BlockIoCap(());
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a><span class="doccomment">/// Permits network transmit and receive syscalls (NetTx, NetRx).
+<a href=#16 id=16 data-nosnippet>16</a>/// Granted to `/bin/net` at spawn.
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#18 id=18 data-nosnippet>18</a></span><span class="kw">pub struct </span>NetworkCap(());
+<a href=#19 id=19 data-nosnippet>19</a>
+<a href=#20 id=20 data-nosnippet>20</a><span class="doccomment">/// Permits spawning new Cells (SpawnFromPath, SpawnPinned) and hot-swapping (HotSwap).
+<a href=#21 id=21 data-nosnippet>21</a>/// Granted to `/bin/init` and `/bin/shell` at spawn.
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">pub struct </span>SpawnCap(());
+<a href=#24 id=24 data-nosnippet>24</a>
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">impl </span>BlockIoCap {
+<a href=#26 id=26 data-nosnippet>26</a>    <span class="doccomment">/// Create a `BlockIoCap` token.  Only callable within the kernel crate.
+<a href=#27 id=27 data-nosnippet>27</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#28 id=28 data-nosnippet>28</a>        <span class="self">Self</span>(())
+<a href=#29 id=29 data-nosnippet>29</a>    }
+<a href=#30 id=30 data-nosnippet>30</a>}
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="kw">impl </span>NetworkCap {
+<a href=#33 id=33 data-nosnippet>33</a>    <span class="doccomment">/// Create a `NetworkCap` token.  Only callable within the kernel crate.
+<a href=#34 id=34 data-nosnippet>34</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#35 id=35 data-nosnippet>35</a>        <span class="self">Self</span>(())
+<a href=#36 id=36 data-nosnippet>36</a>    }
+<a href=#37 id=37 data-nosnippet>37</a>}
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="kw">impl </span>SpawnCap {
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="doccomment">/// Create a `SpawnCap` token.  Only callable within the kernel crate.
+<a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="self">Self</span>(())
+<a href=#43 id=43 data-nosnippet>43</a>    }
+<a href=#44 id=44 data-nosnippet>44</a>}
+<a href=#45 id=45 data-nosnippet>45</a>
+<a href=#46 id=46 data-nosnippet>46</a><span class="doccomment">/// Permits use of RISC-V H-extension CSRs (`hstatus`, `hgatp`, `vsatp`, etc.).
+<a href=#47 id=47 data-nosnippet>47</a>///
+<a href=#48 id=48 data-nosnippet>48</a>/// Granted only when BOTH the ELF manifest declares `hypervisor = true` AND
+<a href=#49 id=49 data-nosnippet>49</a>/// `cpu_features::has_h_ext()` confirms the firmware reported H-ext at boot.
+<a href=#50 id=50 data-nosnippet>50</a>/// Always absent on non-riscv64 targets.
+<a href=#51 id=51 data-nosnippet>51</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#52 id=52 data-nosnippet>52</a></span><span class="kw">pub struct </span>HypervisorCap(());
+<a href=#53 id=53 data-nosnippet>53</a>
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">impl </span>HypervisorCap {
+<a href=#55 id=55 data-nosnippet>55</a>    <span class="doccomment">/// Create a `HypervisorCap` token.  Only callable within the kernel crate.
+<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#57 id=57 data-nosnippet>57</a>        <span class="self">Self</span>(())
+<a href=#58 id=58 data-nosnippet>58</a>    }
+<a href=#59 id=59 data-nosnippet>59</a>}
+<a href=#60 id=60 data-nosnippet>60</a>
+<a href=#61 id=61 data-nosnippet>61</a><span class="doccomment">/// Permits `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell`.
+<a href=#62 id=62 data-nosnippet>62</a>///
+<a href=#63 id=63 data-nosnippet>63</a>/// Carried in `CapSet` (P-TRUST) and gated by the spawn-time ceiling: the
+<a href=#64 id=64 data-nosnippet>64</a>/// `/bin/supervisor` install path *requests* it (`with_path_caps`), and the
+<a href=#65 id=65 data-nosnippet>65</a>/// request is intersected against the spawner's ceiling like every other cap, so
+<a href=#66 id=66 data-nosnippet>66</a>/// a cell can only receive it if its spawner (ultimately init) holds it. A
+<a href=#67 id=67 data-nosnippet>67</a>/// supervisor cell still cannot forge it into a child beyond its own authority
+<a href=#68 id=68 data-nosnippet>68</a>/// (monotonic downgrade). init also holds it directly (root authority) so it can
+<a href=#69 id=69 data-nosnippet>69</a>/// unfreeze orphaned targets if the Supervisor Cell crashes.
+<a href=#70 id=70 data-nosnippet>70</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#71 id=71 data-nosnippet>71</a></span><span class="kw">pub struct </span>SupervisorCap(());
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a><span class="kw">impl </span>SupervisorCap {
+<a href=#74 id=74 data-nosnippet>74</a>    <span class="doccomment">/// Create a `SupervisorCap` token.  Only callable within the kernel crate.
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="self">Self</span>(())
+<a href=#77 id=77 data-nosnippet>77</a>    }
+<a href=#78 id=78 data-nosnippet>78</a>}
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="doccomment">/// Permits claiming PCIe BAR MMIO ranges and authorising DMA via `GrantDma`.
+<a href=#81 id=81 data-nosnippet>81</a>///
+<a href=#82 id=82 data-nosnippet>82</a>/// Granted by exact path match in `loader.rs` (`/bin/nvme`, `/bin/e1000`).
+<a href=#83 id=83 data-nosnippet>83</a>/// The v1 manifest has no free flag bits for this cap — it is NOT manifest-based.
+<a href=#84 id=84 data-nosnippet>84</a>/// Required before `RequestMmio` can claim a PCIe BAR range.
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#86 id=86 data-nosnippet>86</a></span><span class="kw">pub struct </span>PcieDriverCap(());
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="kw">impl </span>PcieDriverCap {
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Create a `PcieDriverCap` token.  Only callable within the kernel crate.
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="self">Self</span>(())
+<a href=#92 id=92 data-nosnippet>92</a>    }
+<a href=#93 id=93 data-nosnippet>93</a>}
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a><span class="doccomment">/// Permits PCIe ECAM enumeration and BAR registration via `sys_register_pcie_bar`.
+<a href=#96 id=96 data-nosnippet>96</a>///
+<a href=#97 id=97 data-nosnippet>97</a>/// Granted by exact path match in `loader.rs` to `/bin/platform` ONLY, and is a
+<a href=#98 id=98 data-nosnippet>98</a>/// singleton — the kernel refuses to grant it a second time (second `/bin/platform`
+<a href=#99 id=99 data-nosnippet>99</a>/// spawn is rejected). This prevents any cell other than the one trusted Platform
+<a href=#100 id=100 data-nosnippet>100</a>/// Cell from declaring fake BARs in the allowlist.
+<a href=#101 id=101 data-nosnippet>101</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#102 id=102 data-nosnippet>102</a></span><span class="kw">pub struct </span>PlatformCap(());
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a><span class="kw">use </span>core::sync::atomic::{AtomicBool, Ordering};
+<a href=#105 id=105 data-nosnippet>105</a>
+<a href=#106 id=106 data-nosnippet>106</a><span class="doccomment">/// Singleton latch: set when PlatformCap has been granted to any task.
+<a href=#107 id=107 data-nosnippet>107</a>/// Once true, `try_grant_platform()` returns `None` for all future callers.
+<a href=#108 id=108 data-nosnippet>108</a></span><span class="kw">static </span>PLATFORM_CAP_GRANTED: AtomicBool = AtomicBool::new(<span class="bool-val">false</span>);
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a><span class="kw">impl </span>PlatformCap {
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// Create a `PlatformCap` token.  Only callable within the kernel crate.
+<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>new() -&gt; <span class="self">Self </span>{
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="self">Self</span>(())
+<a href=#114 id=114 data-nosnippet>114</a>    }
+<a href=#115 id=115 data-nosnippet>115</a>}
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a><span class="doccomment">/// Attempt to grant `PlatformCap`.
+<a href=#118 id=118 data-nosnippet>118</a>///
+<a href=#119 id=119 data-nosnippet>119</a>/// Returns `Some(PlatformCap)` on the first call, `None` on all subsequent calls
+<a href=#120 id=120 data-nosnippet>120</a>/// (singleton enforcement). The compare_exchange is sequentially consistent to
+<a href=#121 id=121 data-nosnippet>121</a>/// avoid races on SMP (even though Cellos is currently UP, the invariant must hold
+<a href=#122 id=122 data-nosnippet>122</a>/// under future SMP enablement).
+<a href=#123 id=123 data-nosnippet>123</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>try_grant_platform() -&gt; <span class="prelude-ty">Option</span>&lt;PlatformCap&gt; {
+<a href=#124 id=124 data-nosnippet>124</a>    PLATFORM_CAP_GRANTED
+<a href=#125 id=125 data-nosnippet>125</a>        .compare_exchange(<span class="bool-val">false</span>, <span class="bool-val">true</span>, Ordering::SeqCst, Ordering::SeqCst)
+<a href=#126 id=126 data-nosnippet>126</a>        .ok()
+<a href=#127 id=127 data-nosnippet>127</a>        .map(|<span class="kw">_</span>| PlatformCap::new())
+<a href=#128 id=128 data-nosnippet>128</a>}
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a><span class="comment">// ─── Capability set + spawn-delegation (P2 — monotonic downgrade) ────────────
+<a href=#131 id=131 data-nosnippet>131</a>
+<a href=#132 id=132 data-nosnippet>132</a></span><span class="doccomment">/// A plain-data snapshot of a Task's capabilities, used to enforce spawn-time
+<a href=#133 id=133 data-nosnippet>133</a>/// **intersection**: a child is granted `manifest ∩ spawner`, so no cell can
+<a href=#134 id=134 data-nosnippet>134</a>/// hand a child a capability it does not itself hold (Fuchsia/Genode monotonic
+<a href=#135 id=135 data-nosnippet>135</a>/// downgrade). Single source of truth for "what caps does X hold".
+<a href=#136 id=136 data-nosnippet>136</a></span><span class="attr">#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+<a href=#137 id=137 data-nosnippet>137</a></span><span class="kw">pub struct </span>CapSet {
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">pub </span>block_io: bool,
+<a href=#139 id=139 data-nosnippet>139</a>    <span class="kw">pub </span>network: bool,
+<a href=#140 id=140 data-nosnippet>140</a>    <span class="kw">pub </span>spawn: bool,
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">pub </span>hypervisor: bool,
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="kw">pub </span>mmio_devices: u8,  <span class="comment">// bitmask of resource_registry::DEV_*
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub </span>block_regions: u8, <span class="comment">// P03 partition bitmask
+<a href=#144 id=144 data-nosnippet>144</a>    // P-TRUST: the privileged path-triggered caps now live in the CapSet so the
+<a href=#145 id=145 data-nosnippet>145</a>    // SAME spawn-time intersection that bounds every other cap also bounds them.
+<a href=#146 id=146 data-nosnippet>146</a>    // Before this, they were minted by a raw `path ==` match AFTER (and blind to)
+<a href=#147 id=147 data-nosnippet>147</a>    // the ceiling intersection — reachable via sys_spawn_from_elf to hand any
+<a href=#148 id=148 data-nosnippet>148</a>    // SpawnCap holder PcieDriverCap → DMA-anywhere (LBI bypass). They have no
+<a href=#149 id=149 data-nosnippet>149</a>    // manifest flag bit (v1 manifest is full); the install path is the request
+<a href=#150 id=150 data-nosnippet>150</a>    // signal, but the request is now `∩ ceiling` like everything else.
+<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">pub </span>pcie_driver: bool,
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">pub </span>platform: bool,
+<a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">pub </span>supervisor: bool,
+<a href=#154 id=154 data-nosnippet>154</a>}
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a><span class="kw">impl </span>CapSet {
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="doccomment">/// No capabilities (used for an unknown spawner — fail-safe).
+<a href=#158 id=158 data-nosnippet>158</a>    </span><span class="kw">pub const </span>EMPTY: CapSet = CapSet {
+<a href=#159 id=159 data-nosnippet>159</a>        block_io: <span class="bool-val">false</span>,
+<a href=#160 id=160 data-nosnippet>160</a>        network: <span class="bool-val">false</span>,
+<a href=#161 id=161 data-nosnippet>161</a>        spawn: <span class="bool-val">false</span>,
+<a href=#162 id=162 data-nosnippet>162</a>        hypervisor: <span class="bool-val">false</span>,
+<a href=#163 id=163 data-nosnippet>163</a>        mmio_devices: <span class="number">0</span>,
+<a href=#164 id=164 data-nosnippet>164</a>        block_regions: <span class="number">0</span>,
+<a href=#165 id=165 data-nosnippet>165</a>        pcie_driver: <span class="bool-val">false</span>,
+<a href=#166 id=166 data-nosnippet>166</a>        platform: <span class="bool-val">false</span>,
+<a href=#167 id=167 data-nosnippet>167</a>        supervisor: <span class="bool-val">false</span>,
+<a href=#168 id=168 data-nosnippet>168</a>    };
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Full capability authority — granted ONLY to `init` (the root authority,
+<a href=#171 id=171 data-nosnippet>171</a>    /// like seL4's initial task holds the root CNode). Direct-write in `main.rs`;
+<a href=#172 id=172 data-nosnippet>172</a>    /// never reached via the manifest path. `hypervisor` is set unconditionally
+<a href=#173 id=173 data-nosnippet>173</a>    /// here (init never exercises H-ext CSRs; a child's H-ext gate lives in
+<a href=#174 id=174 data-nosnippet>174</a>    /// `from_manifest`, and intersection preserves it).
+<a href=#175 id=175 data-nosnippet>175</a>    </span><span class="kw">pub const </span>ALL: CapSet = CapSet {
+<a href=#176 id=176 data-nosnippet>176</a>        block_io: <span class="bool-val">true</span>,
+<a href=#177 id=177 data-nosnippet>177</a>        network: <span class="bool-val">true</span>,
+<a href=#178 id=178 data-nosnippet>178</a>        spawn: <span class="bool-val">true</span>,
+<a href=#179 id=179 data-nosnippet>179</a>        hypervisor: <span class="bool-val">true</span>,
+<a href=#180 id=180 data-nosnippet>180</a>        mmio_devices: <span class="kw">crate</span>::resource_registry::DEV_GPIO | <span class="kw">crate</span>::resource_registry::DEV_UART,
+<a href=#181 id=181 data-nosnippet>181</a>        block_regions: <span class="number">0b111</span>,
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="comment">// init is root authority, so its ceiling permits delegating the privileged
+<a href=#183 id=183 data-nosnippet>183</a>        // path-caps to the driver/supervisor cells it spawns. `platform` is inert
+<a href=#184 id=184 data-nosnippet>184</a>        // in practice — the Platform Cell is Root-spawned by the kernel, and
+<a href=#185 id=185 data-nosnippet>185</a>        // `apply_to` never writes `platform_cap` (the singleton latch owns it).
+<a href=#186 id=186 data-nosnippet>186</a>        </span>pcie_driver: <span class="bool-val">true</span>,
+<a href=#187 id=187 data-nosnippet>187</a>        platform: <span class="bool-val">true</span>,
+<a href=#188 id=188 data-nosnippet>188</a>        supervisor: <span class="bool-val">true</span>,
+<a href=#189 id=189 data-nosnippet>189</a>    };
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>    <span class="doccomment">/// Snapshot a (running) Task's current capabilities.
+<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">pub fn </span>of_task(t: <span class="kw-2">&amp;</span><span class="kw">super</span>::tcb::Task) -&gt; CapSet {
+<a href=#193 id=193 data-nosnippet>193</a>        CapSet {
+<a href=#194 id=194 data-nosnippet>194</a>            block_io: t.block_io_cap.is_some(),
+<a href=#195 id=195 data-nosnippet>195</a>            network: t.network_cap.is_some(),
+<a href=#196 id=196 data-nosnippet>196</a>            spawn: t.spawn_cap.is_some(),
+<a href=#197 id=197 data-nosnippet>197</a>            hypervisor: t.hypervisor_cap.is_some(),
+<a href=#198 id=198 data-nosnippet>198</a>            mmio_devices: t.mmio_devices,
+<a href=#199 id=199 data-nosnippet>199</a>            block_regions: t.block_regions,
+<a href=#200 id=200 data-nosnippet>200</a>            pcie_driver: t.pcie_driver_cap.is_some(),
+<a href=#201 id=201 data-nosnippet>201</a>            platform: t.platform_cap.is_some(),
+<a href=#202 id=202 data-nosnippet>202</a>            supervisor: t.supervisor_cap.is_some(),
+<a href=#203 id=203 data-nosnippet>203</a>        }
+<a href=#204 id=204 data-nosnippet>204</a>    }
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="doccomment">/// Derive the caps a manifest *requests*. Mirrors the historical loader grant
+<a href=#207 id=207 data-nosnippet>207</a>    /// logic exactly — in particular `block_regions` replicates the SRV-bit
+<a href=#208 id=208 data-nosnippet>208</a>    /// co-grant `data | (lfs&lt;&lt;1) | (lfs&lt;&lt;2)` (NOT a 1:1 copy) so the VFS service
+<a href=#209 id=209 data-nosnippet>209</a>    /// keeps its P5 range after intersection. The H-ext gate is baked in here so
+<a href=#210 id=210 data-nosnippet>210</a>    /// `hypervisor` can never be held on a CPU lacking H-ext.
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">pub fn </span>from_manifest(m: <span class="kw-2">&amp;</span>api::manifest::CellManifest) -&gt; CapSet {
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">let </span>hv = m.has_hypervisor()
+<a href=#213 id=213 data-nosnippet>213</a>            &amp;&amp; (<span class="kw">crate</span>::cpu_features::has_h_ext() || <span class="kw">crate</span>::cpu_features::has_el2());
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span><span class="kw-2">mut </span>mmio = <span class="number">0u8</span>;
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">if </span>m.has_gpio() {
+<a href=#216 id=216 data-nosnippet>216</a>            mmio |= <span class="kw">crate</span>::resource_registry::DEV_GPIO;
+<a href=#217 id=217 data-nosnippet>217</a>        }
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">if </span>m.has_uart() {
+<a href=#219 id=219 data-nosnippet>219</a>            mmio |= <span class="kw">crate</span>::resource_registry::DEV_UART;
+<a href=#220 id=220 data-nosnippet>220</a>        }
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">if </span>m.has_can() {
+<a href=#222 id=222 data-nosnippet>222</a>            mmio |= <span class="kw">crate</span>::resource_registry::DEV_CAN;
+<a href=#223 id=223 data-nosnippet>223</a>        }
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">if </span>m.has_adc() {
+<a href=#225 id=225 data-nosnippet>225</a>            mmio |= <span class="kw">crate</span>::resource_registry::DEV_ADC;
+<a href=#226 id=226 data-nosnippet>226</a>        }
+<a href=#227 id=227 data-nosnippet>227</a>        CapSet {
+<a href=#228 id=228 data-nosnippet>228</a>            block_io: m.has_block_io(),
+<a href=#229 id=229 data-nosnippet>229</a>            network: m.has_network(),
+<a href=#230 id=230 data-nosnippet>230</a>            spawn: m.has_spawn(),
+<a href=#231 id=231 data-nosnippet>231</a>            hypervisor: hv,
+<a href=#232 id=232 data-nosnippet>232</a>            mmio_devices: mmio,
+<a href=#233 id=233 data-nosnippet>233</a>            block_regions: (m.has_part_data() <span class="kw">as </span>u8)
+<a href=#234 id=234 data-nosnippet>234</a>                | ((m.has_part_lfs() <span class="kw">as </span>u8) &lt;&lt; <span class="number">1</span>)
+<a href=#235 id=235 data-nosnippet>235</a>                | ((m.has_part_lfs() <span class="kw">as </span>u8) &lt;&lt; <span class="number">2</span>),
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="comment">// The manifest never requests the privileged path-caps (no flag bits);
+<a href=#237 id=237 data-nosnippet>237</a>            // they are layered on by `with_path_caps` from the install path.
+<a href=#238 id=238 data-nosnippet>238</a>            </span>pcie_driver: <span class="bool-val">false</span>,
+<a href=#239 id=239 data-nosnippet>239</a>            platform: <span class="bool-val">false</span>,
+<a href=#240 id=240 data-nosnippet>240</a>            supervisor: <span class="bool-val">false</span>,
+<a href=#241 id=241 data-nosnippet>241</a>        }
+<a href=#242 id=242 data-nosnippet>242</a>    }
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a>    <span class="doccomment">/// Layer the path-triggered privileged authority onto a requested CapSet.
+<a href=#245 id=245 data-nosnippet>245</a>    /// These caps have no manifest flag bit (v1 manifest is full), so the install
+<a href=#246 id=246 data-nosnippet>246</a>    /// path is the request signal — but the resulting request is still run through
+<a href=#247 id=247 data-nosnippet>247</a>    /// the same `∩ ceiling` intersection as every other cap. This is the P-TRUST
+<a href=#248 id=248 data-nosnippet>248</a>    /// fix: the loader used to mint these by raw `path ==` AFTER the intersection,
+<a href=#249 id=249 data-nosnippet>249</a>    /// so `sys_spawn_from_elf(bytes, "/bin/nvme")` handed any SpawnCap holder
+<a href=#250 id=250 data-nosnippet>250</a>    /// `PcieDriverCap` regardless of its ceiling → DMA-anywhere.
+<a href=#251 id=251 data-nosnippet>251</a>    ///
+<a href=#252 id=252 data-nosnippet>252</a>    /// The cell-store block region for `/bin/vfs` is intentionally NOT folded here:
+<a href=#253 id=253 data-nosnippet>253</a>    /// the `/bin/vfs` operator-policy entry grants `block_regions = 0b111`, so
+<a href=#254 id=254 data-nosnippet>254</a>    /// folding `0b1000` into the request would be zeroed by the policy `∩` and
+<a href=#255 id=255 data-nosnippet>255</a>    /// break VFS. It stays a post-policy raw grant in the loader until a POLICY.BIN
+<a href=#256 id=256 data-nosnippet>256</a>    /// re-bake lets it be folded (documented follow-up).
+<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">pub fn </span>with_path_caps(<span class="kw-2">mut </span><span class="self">self</span>, path: <span class="kw-2">&amp;</span>str) -&gt; CapSet {
+<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">if </span><span class="macro">matches!</span>(
+<a href=#259 id=259 data-nosnippet>259</a>            path,
+<a href=#260 id=260 data-nosnippet>260</a>            <span class="string">"/bin/nvme"
+<a href=#261 id=261 data-nosnippet>261</a>                </span>| <span class="string">"/bin/e1000"
+<a href=#262 id=262 data-nosnippet>262</a>                </span>| <span class="string">"/bin/virtio-net"
+<a href=#263 id=263 data-nosnippet>263</a>                </span>| <span class="string">"/bin/block"
+<a href=#264 id=264 data-nosnippet>264</a>                </span>| <span class="string">"/bin/input"
+<a href=#265 id=265 data-nosnippet>265</a>                </span>| <span class="string">"/bin/virtio-gpu"
+<a href=#266 id=266 data-nosnippet>266</a>        </span>) {
+<a href=#267 id=267 data-nosnippet>267</a>            <span class="self">self</span>.pcie_driver = <span class="bool-val">true</span>;
+<a href=#268 id=268 data-nosnippet>268</a>        }
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">if </span>path == <span class="string">"/bin/platform" </span>{
+<a href=#270 id=270 data-nosnippet>270</a>            <span class="self">self</span>.platform = <span class="bool-val">true</span>;
+<a href=#271 id=271 data-nosnippet>271</a>        }
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">if </span>path == <span class="string">"/bin/supervisor" </span>{
+<a href=#273 id=273 data-nosnippet>273</a>            <span class="self">self</span>.supervisor = <span class="bool-val">true</span>;
+<a href=#274 id=274 data-nosnippet>274</a>        }
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="self">self
+<a href=#276 id=276 data-nosnippet>276</a>    </span>}
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a>    <span class="doccomment">/// Field-wise minimum (bool AND, bitmask AND). The monotonic-downgrade core.
+<a href=#279 id=279 data-nosnippet>279</a>    </span><span class="kw">pub fn </span>intersect(<span class="self">self</span>, o: CapSet) -&gt; CapSet {
+<a href=#280 id=280 data-nosnippet>280</a>        CapSet {
+<a href=#281 id=281 data-nosnippet>281</a>            block_io: <span class="self">self</span>.block_io &amp;&amp; o.block_io,
+<a href=#282 id=282 data-nosnippet>282</a>            network: <span class="self">self</span>.network &amp;&amp; o.network,
+<a href=#283 id=283 data-nosnippet>283</a>            spawn: <span class="self">self</span>.spawn &amp;&amp; o.spawn,
+<a href=#284 id=284 data-nosnippet>284</a>            hypervisor: <span class="self">self</span>.hypervisor &amp;&amp; o.hypervisor,
+<a href=#285 id=285 data-nosnippet>285</a>            mmio_devices: <span class="self">self</span>.mmio_devices &amp; o.mmio_devices,
+<a href=#286 id=286 data-nosnippet>286</a>            block_regions: <span class="self">self</span>.block_regions &amp; o.block_regions,
+<a href=#287 id=287 data-nosnippet>287</a>            pcie_driver: <span class="self">self</span>.pcie_driver &amp;&amp; o.pcie_driver,
+<a href=#288 id=288 data-nosnippet>288</a>            platform: <span class="self">self</span>.platform &amp;&amp; o.platform,
+<a href=#289 id=289 data-nosnippet>289</a>            supervisor: <span class="self">self</span>.supervisor &amp;&amp; o.supervisor,
+<a href=#290 id=290 data-nosnippet>290</a>        }
+<a href=#291 id=291 data-nosnippet>291</a>    }
+<a href=#292 id=292 data-nosnippet>292</a>
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="doccomment">/// Write the granted caps into a child Task's TCB fields. Pure data — block-IO
+<a href=#294 id=294 data-nosnippet>294</a>    /// VFS-handler registration and any other side effects stay in the loader,
+<a href=#295 id=295 data-nosnippet>295</a>    /// keyed off the *granted* (not requested) bits.
+<a href=#296 id=296 data-nosnippet>296</a>    </span><span class="kw">pub fn </span>apply_to(<span class="self">self</span>, t: <span class="kw-2">&amp;mut </span><span class="kw">super</span>::tcb::Task) {
+<a href=#297 id=297 data-nosnippet>297</a>        t.block_io_cap = <span class="self">self</span>.block_io.then(BlockIoCap::new);
+<a href=#298 id=298 data-nosnippet>298</a>        t.network_cap = <span class="self">self</span>.network.then(NetworkCap::new);
+<a href=#299 id=299 data-nosnippet>299</a>        t.spawn_cap = <span class="self">self</span>.spawn.then(SpawnCap::new);
+<a href=#300 id=300 data-nosnippet>300</a>        t.hypervisor_cap = <span class="self">self</span>.hypervisor.then(HypervisorCap::new);
+<a href=#301 id=301 data-nosnippet>301</a>        t.mmio_devices = <span class="self">self</span>.mmio_devices;
+<a href=#302 id=302 data-nosnippet>302</a>        t.block_regions = <span class="self">self</span>.block_regions;
+<a href=#303 id=303 data-nosnippet>303</a>        t.pcie_driver_cap = <span class="self">self</span>.pcie_driver.then(PcieDriverCap::new);
+<a href=#304 id=304 data-nosnippet>304</a>        t.supervisor_cap = <span class="self">self</span>.supervisor.then(SupervisorCap::new);
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="comment">// NOTE: `platform_cap` is deliberately NOT written here. It is a singleton
+<a href=#306 id=306 data-nosnippet>306</a>        // (`try_grant_platform` enforces one-holder-ever); the loader consults the
+<a href=#307 id=307 data-nosnippet>307</a>        // latch when `granted.platform` is set. Writing it from a plain bool would
+<a href=#308 id=308 data-nosnippet>308</a>        // bypass the latch and allow two holders.
+<a href=#309 id=309 data-nosnippet>309</a>    </span>}
+<a href=#310 id=310 data-nosnippet>310</a>}
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a><span class="doccomment">/// Compute the granted x86 PKU isolation tier from the granted caps and the
+<a href=#313 id=313 data-nosnippet>313</a>/// manifest's requested tier (Manifest v2). Pure logic, host/target-agnostic —
+<a href=#314 id=314 data-nosnippet>314</a>/// extracted so it is unit-testable independent of the loader's spawn plumbing.
+<a href=#315 id=315 data-nosnippet>315</a>///
+<a href=#316 id=316 data-nosnippet>316</a>/// `tier` is a FLOOR, not a ceiling — the inverse of a capability. A higher tier
+<a href=#317 id=317 data-nosnippet>317</a>/// number means MORE isolation / LESS authority. A cell may always RAISE its own
+<a href=#318 id=318 data-nosnippet>318</a>/// tier (self-restrict further); it may NEVER lower it below the floor derived
+<a href=#319 id=319 data-nosnippet>319</a>/// from its granted caps (that would be a privilege escalation). Hence
+<a href=#320 id=320 data-nosnippet>320</a>/// `max(requested_tier, floor)`, not a plain assignment.
+<a href=#321 id=321 data-nosnippet>321</a>///
+<a href=#322 id=322 data-nosnippet>322</a>/// `floor`: cells holding real system authority (block_io/network/spawn/
+<a href=#323 id=323 data-nosnippet>323</a>/// hypervisor — the pre-v2 "is_trusted" set) may run at `TIER_TRUSTED_CORE` (0,
+<a href=#324 id=324 data-nosnippet>324</a>/// unfenced). Everything else has a floor of `TIER_STANDARD` (1) — it can never
+<a href=#325 id=325 data-nosnippet>325</a>/// claim tier 0 no matter what it asks for.
+<a href=#326 id=326 data-nosnippet>326</a>///
+<a href=#327 id=327 data-nosnippet>327</a>/// `TIER_LEGACY` (manifest absent, or a tier-less manifest) means "no explicit
+<a href=#328 id=328 data-nosnippet>328</a>/// request" — the granted tier is exactly the floor, reproducing the pre-v2
+<a href=#329 id=329 data-nosnippet>329</a>/// behaviour byte-for-byte (NOT `max(0xFF, floor)`, which would wrongly force
+<a href=#330 id=330 data-nosnippet>330</a>/// every such cell to the most-isolated tier).
+<a href=#331 id=331 data-nosnippet>331</a></span><span class="kw">pub fn </span>granted_tier(granted: <span class="kw-2">&amp;</span>CapSet, requested_tier: u8) -&gt; u8 {
+<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">use </span>api::manifest::{TIER_LEGACY, TIER_STANDARD, TIER_TRUSTED_CORE};
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">let </span>is_trusted = granted.block_io || granted.network || granted.spawn || granted.hypervisor;
+<a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span>floor: u8 = <span class="kw">if </span>is_trusted {
+<a href=#335 id=335 data-nosnippet>335</a>        TIER_TRUSTED_CORE
+<a href=#336 id=336 data-nosnippet>336</a>    } <span class="kw">else </span>{
+<a href=#337 id=337 data-nosnippet>337</a>        TIER_STANDARD
+<a href=#338 id=338 data-nosnippet>338</a>    };
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">if </span>requested_tier == TIER_LEGACY {
+<a href=#340 id=340 data-nosnippet>340</a>        floor
+<a href=#341 id=341 data-nosnippet>341</a>    } <span class="kw">else </span>{
+<a href=#342 id=342 data-nosnippet>342</a>        core::cmp::max(requested_tier, floor)
+<a href=#343 id=343 data-nosnippet>343</a>    }
+<a href=#344 id=344 data-nosnippet>344</a>}
+<a href=#345 id=345 data-nosnippet>345</a>
+<a href=#346 id=346 data-nosnippet>346</a><span class="doccomment">/// Who initiated a spawn — determines the capability ceiling for the new cell.
+<a href=#347 id=347 data-nosnippet>347</a></span><span class="attr">#[derive(Copy, Clone, Debug)]
+<a href=#348 id=348 data-nosnippet>348</a></span><span class="kw">pub enum </span>Spawner {
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="doccomment">/// Kernel/boot-initiated (only `init`). No intersection — grant full manifest.
+<a href=#350 id=350 data-nosnippet>350</a>    </span>Root,
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="doccomment">/// User-cell-initiated via syscall. Child caps = `manifest ∩ caps_of(tid)`.
+<a href=#352 id=352 data-nosnippet>352</a>    </span>User(usize),
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="doccomment">/// Kernel-internal re-spawn (HotSwap) bounded by an explicit ceiling
+<a href=#354 id=354 data-nosnippet>354</a>    /// (the replaced cell's caps) — NOT the `Root` exemption.
+<a href=#355 id=355 data-nosnippet>355</a>    </span>Ceiling(CapSet),
+<a href=#356 id=356 data-nosnippet>356</a>}
+<a href=#357 id=357 data-nosnippet>357</a>
+<a href=#358 id=358 data-nosnippet>358</a><span class="attr">#[cfg(test)]
+<a href=#359 id=359 data-nosnippet>359</a></span><span class="kw">mod </span>tests {
+<a href=#360 id=360 data-nosnippet>360</a>    <span class="kw">use </span><span class="kw">super</span>::CapSet;
+<a href=#361 id=361 data-nosnippet>361</a>
+<a href=#362 id=362 data-nosnippet>362</a>    <span class="attr">#[test]
+<a href=#363 id=363 data-nosnippet>363</a>    </span><span class="kw">fn </span>intersect_is_monotonic_downgrade() {
+<a href=#364 id=364 data-nosnippet>364</a>        <span class="kw">let </span>spawner = CapSet {
+<a href=#365 id=365 data-nosnippet>365</a>            block_io: <span class="bool-val">false</span>,
+<a href=#366 id=366 data-nosnippet>366</a>            network: <span class="bool-val">true</span>,
+<a href=#367 id=367 data-nosnippet>367</a>            spawn: <span class="bool-val">true</span>,
+<a href=#368 id=368 data-nosnippet>368</a>            hypervisor: <span class="bool-val">false</span>,
+<a href=#369 id=369 data-nosnippet>369</a>            mmio_devices: <span class="number">0b01</span>,
+<a href=#370 id=370 data-nosnippet>370</a>            block_regions: <span class="number">0b010</span>,
+<a href=#371 id=371 data-nosnippet>371</a>            ..CapSet::EMPTY
+<a href=#372 id=372 data-nosnippet>372</a>        };
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">let </span>child = CapSet {
+<a href=#374 id=374 data-nosnippet>374</a>            block_io: <span class="bool-val">true</span>,
+<a href=#375 id=375 data-nosnippet>375</a>            network: <span class="bool-val">true</span>,
+<a href=#376 id=376 data-nosnippet>376</a>            spawn: <span class="bool-val">false</span>,
+<a href=#377 id=377 data-nosnippet>377</a>            hypervisor: <span class="bool-val">true</span>,
+<a href=#378 id=378 data-nosnippet>378</a>            mmio_devices: <span class="number">0b11</span>,
+<a href=#379 id=379 data-nosnippet>379</a>            block_regions: <span class="number">0b111</span>,
+<a href=#380 id=380 data-nosnippet>380</a>            ..CapSet::EMPTY
+<a href=#381 id=381 data-nosnippet>381</a>        };
+<a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">let </span>g = child.intersect(spawner);
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="macro">assert!</span>(!g.block_io, <span class="string">"child cannot gain block_io its spawner lacks"</span>);
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">assert!</span>(g.network);
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="macro">assert!</span>(!g.spawn);
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="macro">assert!</span>(!g.hypervisor);
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="macro">assert_eq!</span>(g.mmio_devices, <span class="number">0b01</span>);
+<a href=#388 id=388 data-nosnippet>388</a>        <span class="macro">assert_eq!</span>(g.block_regions, <span class="number">0b010</span>);
+<a href=#389 id=389 data-nosnippet>389</a>    }
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a>    <span class="attr">#[test]
+<a href=#392 id=392 data-nosnippet>392</a>    </span><span class="kw">fn </span>all_intersect_child_is_child() {
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span>child = CapSet {
+<a href=#394 id=394 data-nosnippet>394</a>            block_io: <span class="bool-val">true</span>,
+<a href=#395 id=395 data-nosnippet>395</a>            network: <span class="bool-val">false</span>,
+<a href=#396 id=396 data-nosnippet>396</a>            spawn: <span class="bool-val">true</span>,
+<a href=#397 id=397 data-nosnippet>397</a>            hypervisor: <span class="bool-val">false</span>,
+<a href=#398 id=398 data-nosnippet>398</a>            mmio_devices: <span class="number">0b10</span>,
+<a href=#399 id=399 data-nosnippet>399</a>            block_regions: <span class="number">0b101</span>,
+<a href=#400 id=400 data-nosnippet>400</a>            ..CapSet::EMPTY
+<a href=#401 id=401 data-nosnippet>401</a>        };
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="comment">// init (ALL) spawning a child must leave the child's requested caps intact.
+<a href=#403 id=403 data-nosnippet>403</a>        </span><span class="macro">assert_eq!</span>(child.intersect(CapSet::ALL), child);
+<a href=#404 id=404 data-nosnippet>404</a>    }
+<a href=#405 id=405 data-nosnippet>405</a>
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="attr">#[test]
+<a href=#407 id=407 data-nosnippet>407</a>    </span><span class="kw">fn </span>privileged_path_cap_bounded_by_ceiling() {
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="comment">// P-TRUST: a /bin/nvme request carries pcie_driver, but a spawner whose
+<a href=#409 id=409 data-nosnippet>409</a>        // ceiling lacks it must NOT be able to hand it to the child (the closed
+<a href=#410 id=410 data-nosnippet>410</a>        // DMA-anywhere hole). EMPTY.with_path_caps sets the request bits.
+<a href=#411 id=411 data-nosnippet>411</a>        </span><span class="kw">let </span>requested = CapSet::EMPTY.with_path_caps(<span class="string">"/bin/nvme"</span>);
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="macro">assert!</span>(requested.pcie_driver, <span class="string">"path request sets pcie_driver"</span>);
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="comment">// Non-privileged spawner (no pcie_driver in its ceiling).
+<a href=#414 id=414 data-nosnippet>414</a>        </span><span class="kw">let </span>ceiling = CapSet {
+<a href=#415 id=415 data-nosnippet>415</a>            spawn: <span class="bool-val">true</span>,
+<a href=#416 id=416 data-nosnippet>416</a>            ..CapSet::EMPTY
+<a href=#417 id=417 data-nosnippet>417</a>        };
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="macro">assert!</span>(
+<a href=#419 id=419 data-nosnippet>419</a>            !requested.intersect(ceiling).pcie_driver,
+<a href=#420 id=420 data-nosnippet>420</a>            <span class="string">"child cannot gain pcie_driver its spawner lacks"
+<a href=#421 id=421 data-nosnippet>421</a>        </span>);
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="comment">// init (ALL) as ceiling → the legitimate driver spawn keeps it.
+<a href=#423 id=423 data-nosnippet>423</a>        </span><span class="macro">assert!</span>(
+<a href=#424 id=424 data-nosnippet>424</a>            requested.intersect(CapSet::ALL).pcie_driver,
+<a href=#425 id=425 data-nosnippet>425</a>            <span class="string">"init's Root ceiling permits the real driver cell"
+<a href=#426 id=426 data-nosnippet>426</a>        </span>);
+<a href=#427 id=427 data-nosnippet>427</a>    }
+<a href=#428 id=428 data-nosnippet>428</a>}
+</code></pre></div></section></main></body></html>

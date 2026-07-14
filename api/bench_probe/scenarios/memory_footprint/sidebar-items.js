@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["APPROX_BOOT_BYTES"],"struct":["MemoryFootprintBench"]};

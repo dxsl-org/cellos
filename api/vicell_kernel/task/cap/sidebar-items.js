@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Spawner"],"fn":["granted_tier","try_grant_platform"],"static":["PLATFORM_CAP_GRANTED"],"struct":["BlockIoCap","CapSet","HypervisorCap","NetworkCap","PcieDriverCap","PlatformCap","SpawnCap","SupervisorCap"]};

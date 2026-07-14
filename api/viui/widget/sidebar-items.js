@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["PaintCx","WidgetId","WidgetTree"],"trait":["ViWidget"]};

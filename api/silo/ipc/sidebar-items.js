@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IPC_MSG_SIZE","MAILBOX_SIZE","MB_OFF_CMD","MB_OFF_DATA","MB_OFF_RESP","MB_OFF_SEQ","REQ_DATA_LEN","REQ_OFF_DATA","REQ_OFF_OPCODE","RESP_DATA_LEN","RESP_OFF_DATA","RESP_OFF_LEN","RESP_OFF_STATUS"],"fn":["build_response_data","run","send_error_response"]};

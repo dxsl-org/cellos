@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SURFACES"],"enum":["PixelSource"],"struct":["SurfaceState","SurfaceTable"]};

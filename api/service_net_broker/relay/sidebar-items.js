@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FT_CLIENT_REGISTER","FT_PING","FT_PONG","FT_RECV_PACKET","FT_SEND_PACKET","FT_SERVER_ACK","HEARTBEAT_MS","MAX_FRAME"],"fn":["recv_frame_into","tcp_read_exact"],"struct":["RelayClient"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["HYPHA_LLM_SERVICE"],"enum":["AgentToolRequest","AgentToolResponse","LlmReply","LlmRequest"],"struct":["ToolCall"]};

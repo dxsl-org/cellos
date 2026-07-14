@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["aliases","async_utils","cmd_fs","cmd_sys","commands","config_client","executor","history","jobs","parser","shell","state_transfer"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

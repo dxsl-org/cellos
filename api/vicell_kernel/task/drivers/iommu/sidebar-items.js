@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["activate_isolation","cleanup_cell","init","is_active","map_dma","map_dma_for_cell","set_active","set_deferred_init_pending","try_deferred_init","unmap_dma"],"static":["IOMMU_DEFERRED","IOMMU_ISOLATED"]};

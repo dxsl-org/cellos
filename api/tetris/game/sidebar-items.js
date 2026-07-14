@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BG_COLOR","BORDER_COLOR","COLS","GHOST_COLOR","PANEL_COLOR","PIECE_COLORS","ROWS","SHAPES","TEXT_COLOR"],"fn":["can_fit","piece_cells"],"struct":["Game"]};

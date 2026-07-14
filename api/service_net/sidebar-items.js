@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IPC_BUF_SIZE","MAC","POLL_TICKS"],"fn":["main","next_ephemeral_port","now_instant"],"mod":["dhcp","handlers","interface","poll_driver","socket_state","socket_table","tls"],"static":["NEXT_PORT","VICELL_MANIFEST","VICELL_SYSCALLS"]};

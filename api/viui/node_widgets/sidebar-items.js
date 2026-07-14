@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["bar_chart","button","card","checkbox","column","dialog","divider","dropdown","flex_box","image","label","line_chart","list_view","progress_bar","row","scroll_area","slider","space","text_edit","toast","touch_area"]};

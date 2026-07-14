@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["SPRITE_LEN"],"fn":["move_to","set_sprite"]};

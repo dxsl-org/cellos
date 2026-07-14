@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALLOWED","DEV_ADC","DEV_CAN","DEV_GPIO","DEV_PCIE","DEV_UART"],"fn":["force_unlock_bdf_locks","force_unlock_locks","is_pcie_bar","lookup_mmio_owner","owner_of_bdf","region_count","register_bdf_owner","register_pcie_bar","release_bdfs_for","release_for","request_mmio","request_mmio_unchecked"],"static":["BDF_OWNERS","PCIE_BARS","REGISTRY"]};

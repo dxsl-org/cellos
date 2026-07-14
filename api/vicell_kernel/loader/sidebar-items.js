@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["legacy_path_caps","spawn_from_path","spawn_gated"],"mod":["disk_layout","early","elf","elf_tests","reloc","va_alloc"],"static":["BLOCK_IO_REGISTERED"],"struct":["ElfHeader"],"trait":["ElfParser","Linker"]};

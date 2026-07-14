@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CELL_SIGNER_PUBKEY","DEV_CELL_SIGNER_PUBKEY"],"fn":["extract_sig","self_test","signing_required","verify_cell","verify_cell_with_key"]};

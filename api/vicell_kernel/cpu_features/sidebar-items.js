@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["detect","detect_riscv","has_el2","has_h_ext","isa_string_has_h"],"static":["HAS_EL2","HAS_H_EXT"]};

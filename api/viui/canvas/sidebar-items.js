@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":["Color","FramebufferCanvas","TextStyle"],"trait":["ViCanvas"]};

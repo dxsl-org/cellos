@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BEACON_PORT","HEARTBEAT_MS","MAGIC","MULTICAST_GROUP","NONCE_LEN","PLAIN_LEN","VERSION","WIRE_LEN","_SIZE_CHECK"],"fn":["decrypt_beacon","derive_gossip_key","encrypt_beacon"],"struct":["BeaconChannel","BeaconPlain","PeerEntry","PeerTable"]};

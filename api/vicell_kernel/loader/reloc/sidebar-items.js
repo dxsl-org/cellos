@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_RELA_ENTRIES"],"fn":["apply_relocations"],"mod":["aarch64_reloc_type","riscv_reloc_type","x86_64_reloc_type"],"struct":["Rela64"]};
