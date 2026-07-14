@@ -94,18 +94,32 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # cells_args: what the "Build cells + libs" step compiles.
+          # rv64/aarch64 build the whole workspace minus crates that need
+          # artifacts CI can't have (see the step comment). x86_64 mirrors
+          # scripts/build-x86_64-cells.ps1's curated set instead — several
+          # cells (c-math-smoke, posix shims) are riscv/aarch64-only.
           - target: riscv64gc-unknown-none-elf
             short: rv64
             cc_pkg: gcc-riscv64-unknown-elf
             cc_bin: riscv64-unknown-elf-gcc
+            cells_args: >-
+              --workspace --exclude vicell-kernel --exclude app-mlibc-smoke
+              --exclude doom --exclude tetris-c --exclude lua --exclude tetris-lua
           - target: aarch64-unknown-none-softfloat
             short: aarch64
             cc_pkg: gcc-aarch64-linux-gnu
             cc_bin: aarch64-linux-gnu-gcc
+            cells_args: >-
+              --workspace --exclude vicell-kernel --exclude app-mlibc-smoke
+              --exclude doom --exclude tetris-c --exclude lua --exclude tetris-lua
           - target: x86_64-unknown-none
             short: x86_64
             cc_pkg: ""
             cc_bin: cc
+            cells_args: >-
+              -p app-init -p app-shell -p service-vfs -p service-config
+              -p service-platform -p driver-nvme -p driver-e1000 -p app-sys-tools
     steps:
       - uses: actions/checkout@v4
 
@@ -184,13 +198,7 @@ jobs:
         run: >
           cargo build
           --release
-          --workspace
-          --exclude vicell-kernel
-          --exclude app-mlibc-smoke
-          --exclude doom
-          --exclude tetris-c
-          --exclude lua
-          --exclude tetris-lua
+          ${{ matrix.cells_args }}
           --target ${{ matrix.target }}
           -Z build-std=core,alloc
 
@@ -715,7 +723,7 @@ jobs:
             vfs_write_large_content vfs_fat16_unlink vfs_fat16_subdir \
             block_io_denied_non_vfs vfs_fat16_subdir_persistence vfs_fat16_recursive_rmdir \
             vfs_fat16_append \
-            network_httpd_serves_file network_httpd_dynamic_content \
+            network_httpd_dynamic_content \
             shell_while_loop shell_function_positional_args shell_case_statement \
             shell_echo_e shell_redirect_append network_wget_downloads_to_vfs \
             mqtt_publish mqtt_subscribe shell_test_builtin shell_function_define_and_call \
