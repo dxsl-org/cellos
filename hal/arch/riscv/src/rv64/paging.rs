@@ -38,7 +38,7 @@ impl PageTableEntry {
         rwx != 0
     }
 
-    fn to_phys(&self) -> PhysAddr {
+    fn to_phys(self) -> PhysAddr {
         ((self.0 >> 10) & 0x003F_FFFF_FFFF_FFFF) << 12
     }
 

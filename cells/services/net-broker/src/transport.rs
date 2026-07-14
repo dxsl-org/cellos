@@ -124,6 +124,7 @@ impl NoiseSession {
     /// `local_node_id` and `remote_node_id` are bound into the Noise prologue so
     /// both machines must agree on each other's identity during the handshake.
     /// This prevents routing spoofing even when the K1 PSK is shared (FATAL-1).
+    #[allow(clippy::too_many_arguments)] // reason: Noise prologue binds every identity input explicitly (FATAL-1); collapsing into a struct is deferred
     pub fn new(
         rng: &mut BrokerRng,
         psk: &[u8; 32],

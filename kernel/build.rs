@@ -62,6 +62,20 @@ fn main() {
     for cell in &cells {
         let src = embedded_src.join(cell);
         if !src.exists() {
+            // kernel_fs.img is a build artifact (gitignored: 4-36 MB) that
+            // gen_disk.ps1 / build-*-ci.sh assemble before a bootable build.
+            // For compile-only contexts (clippy, CI lint) emit an empty stub so
+            // include_bytes! in ramdisk.rs resolves — a kernel built from the
+            // stub compiles but has no VIFS1, so it must never be booted.
+            if *cell == "kernel_fs.img" {
+                fs::write(embedded_out.join(cell), []).expect("write kernel_fs.img stub");
+                println!(
+                    "cargo:warning={} missing — embedded an EMPTY VIFS1 stub. \
+                     This kernel is compile-only; assemble the real image \
+                     (gen_disk.ps1 / scripts/build-*-ci.sh) before booting.",
+                    src.display()
+                );
+            }
             continue;
         }
         let dst = embedded_out.join(cell);

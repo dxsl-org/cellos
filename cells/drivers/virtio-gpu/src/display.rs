@@ -122,10 +122,10 @@ impl GpuDevice {
     /// `data_len` is the compositor's byte count; if it's smaller than `w*h*4`
     /// the call is silently ignored to prevent out-of-bounds reads.
     pub fn flush_rect(&mut self, src_ptr: usize, data_len: usize, xy: u32, wh: u32) {
-        let x = ((xy >> 16) & 0xFFFF) as u32;
-        let y = (xy & 0xFFFF) as u32;
-        let w = ((wh >> 16) & 0xFFFF) as u32;
-        let h = (wh & 0xFFFF) as u32;
+        let x = (xy >> 16) & 0xFFFF;
+        let y = xy & 0xFFFF;
+        let w = (wh >> 16) & 0xFFFF;
+        let h = wh & 0xFFFF;
         if w == 0 || h == 0 {
             return;
         }

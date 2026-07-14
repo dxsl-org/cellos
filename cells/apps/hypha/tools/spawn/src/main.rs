@@ -118,7 +118,7 @@ fn args_extract_str<'a>(json: &'a str, key: &str) -> Option<&'a str> {
 fn args_extract_usize(json: &str, key: &str) -> Option<usize> {
     let search = alloc::format!("\"{}\"", key);
     let idx = json.find(search.as_str())? + search.len();
-    let rest = json[idx..].trim_start_matches(|c: char| matches!(c, ' ' | '\t' | ':'));
+    let rest = json[idx..].trim_start_matches([' ', '\t', ':']);
     let end = rest
         .find(|c: char| !c.is_ascii_digit())
         .unwrap_or(rest.len());

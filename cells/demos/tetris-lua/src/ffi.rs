@@ -2,6 +2,7 @@
 //!
 //! Only the minimal subset needed by the ViCell Lua cell.  See lua.h and
 //! lauxlib.h in `src/c/src/` for the full API.
+#![allow(dead_code)] // reason: FFI binding surface — keep the coherent lua.h subset even where the game doesn't call every shim
 
 use core::ffi::{c_char, c_int};
 

@@ -7,7 +7,11 @@ pub struct Ns16550a {
 }
 
 impl Ns16550a {
-    /// Unsafe because the caller must ensure base_addr is valid MMIO
+    /// Create a UART handle over raw MMIO registers.
+    ///
+    /// # Safety
+    /// `base_addr` must be the base of a mapped NS16550A MMIO region, valid
+    /// for volatile reads/writes for the lifetime of the returned handle.
     pub unsafe fn new(base_addr: usize) -> Self {
         Self { base_addr }
     }

@@ -64,20 +64,8 @@ impl VirtioMmio {
                 }
             }
             0x034 => QUEUE_SIZE_MAX as u64, // QueueNumMax
-            0x038 => {
-                if q < MAX_QUEUES {
-                    self.queues[q].num as u64
-                } else {
-                    0
-                }
-            }
-            0x044 => {
-                if q < MAX_QUEUES && self.queues[q].ready {
-                    1
-                } else {
-                    0
-                }
-            }
+            0x038 if q < MAX_QUEUES => self.queues[q].num as u64,
+            0x044 if q < MAX_QUEUES && self.queues[q].ready => 1,
             0x060 => self.intr_status as u64,
             0x070 => self.status as u64,
             o if o >= 0x100 => dev.config_read((o - 0x100) as usize) as u64,
@@ -104,20 +92,14 @@ impl VirtioMmio {
                 }
             }
             0x024 => self.drv_feat_sel = val,
-            0x030 => {
-                if (val as usize) < MAX_QUEUES {
-                    self.queue_sel = val as usize;
-                }
+            0x030 if (val as usize) < MAX_QUEUES => {
+                self.queue_sel = val as usize;
             }
-            0x038 => {
-                if q < MAX_QUEUES {
-                    self.queues[q].num = val.min(QUEUE_SIZE_MAX as u32) as u16;
-                }
+            0x038 if q < MAX_QUEUES => {
+                self.queues[q].num = val.min(QUEUE_SIZE_MAX as u32) as u16;
             }
-            0x044 => {
-                if q < MAX_QUEUES {
-                    self.queues[q].ready = val == 1;
-                }
+            0x044 if q < MAX_QUEUES => {
+                self.queues[q].ready = val == 1;
             }
             0x050 => {
                 // QueueNotify: val = queue index signalled by the driver.
@@ -144,35 +126,23 @@ impl VirtioMmio {
                     self.status |= 0x40;
                 } // FAILED → NEEDS_RESET
             }
-            0x080 => {
-                if q < MAX_QUEUES {
-                    set_lo(&mut self.queues[q].desc_gpa, val);
-                }
+            0x080 if q < MAX_QUEUES => {
+                set_lo(&mut self.queues[q].desc_gpa, val);
             }
-            0x084 => {
-                if q < MAX_QUEUES {
-                    set_hi(&mut self.queues[q].desc_gpa, val);
-                }
+            0x084 if q < MAX_QUEUES => {
+                set_hi(&mut self.queues[q].desc_gpa, val);
             }
-            0x090 => {
-                if q < MAX_QUEUES {
-                    set_lo(&mut self.queues[q].avail_gpa, val);
-                }
+            0x090 if q < MAX_QUEUES => {
+                set_lo(&mut self.queues[q].avail_gpa, val);
             }
-            0x094 => {
-                if q < MAX_QUEUES {
-                    set_hi(&mut self.queues[q].avail_gpa, val);
-                }
+            0x094 if q < MAX_QUEUES => {
+                set_hi(&mut self.queues[q].avail_gpa, val);
             }
-            0x0a0 => {
-                if q < MAX_QUEUES {
-                    set_lo(&mut self.queues[q].used_gpa, val);
-                }
+            0x0a0 if q < MAX_QUEUES => {
+                set_lo(&mut self.queues[q].used_gpa, val);
             }
-            0x0a4 => {
-                if q < MAX_QUEUES {
-                    set_hi(&mut self.queues[q].used_gpa, val);
-                }
+            0x0a4 if q < MAX_QUEUES => {
+                set_hi(&mut self.queues[q].used_gpa, val);
             }
             _ => {}
         }
@@ -203,7 +173,7 @@ pub const VIRTIO_MMIO_STRIDE: u64 = 0x200;
 pub const VIRTIO_MMIO_SLOTS: u64 = 32;
 
 pub fn owns(ipa: u64) -> bool {
-    ipa >= VIRTIO_MMIO_BASE && ipa < VIRTIO_MMIO_BASE + VIRTIO_MMIO_SLOTS * VIRTIO_MMIO_STRIDE
+    (VIRTIO_MMIO_BASE..VIRTIO_MMIO_BASE + VIRTIO_MMIO_SLOTS * VIRTIO_MMIO_STRIDE).contains(&ipa)
 }
 
 pub fn slot_and_offset(ipa: u64) -> (usize, u64) {

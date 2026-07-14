@@ -55,7 +55,7 @@ impl Pl011Uart {
         // baud_div × 64 (avoids float): uart_clk × 4 / baud = baud_div × 64
         let div64 = uart_clk / baud * 4 + (uart_clk % baud * 4) / baud;
         let ibrd = div64 / 64;
-        let fbrd = (div64 % 64 + 1) / 2; // round to nearest
+        let fbrd = (div64 % 64).div_ceil(2); // round to nearest
         (ibrd, fbrd)
     }
 

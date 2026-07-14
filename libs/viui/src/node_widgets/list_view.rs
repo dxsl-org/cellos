@@ -465,10 +465,13 @@ pub trait ListDataProvider: 'static {
 ///
 /// The builder is called with a reference to each item and its list index.
 /// Cloning the signal is cheap — all clones share the same underlying cell.
+/// Row constructor: (item, index) → widget subtree.
+type RowBuilder<T> = Box<dyn Fn(&T, usize) -> Box<dyn crate::node::ViNode>>;
+
 pub struct VecProvider<T: Clone + 'static> {
     items: Signal<Vec<T>>,
     height: f32,
-    builder: Box<dyn Fn(&T, usize) -> Box<dyn crate::node::ViNode>>,
+    builder: RowBuilder<T>,
 }
 
 impl<T: Clone + 'static> VecProvider<T> {
@@ -608,8 +611,7 @@ impl VirtualListView {
                 self.provider.build_item(i)
             } else {
                 // Placeholder for out-of-range slots — never painted.
-                self.provider
-                    .build_item(0.min(count.saturating_sub(1)).max(0))
+                self.provider.build_item(0)
             };
             self.slots.push(VirtualSlot {
                 widget,

@@ -13,6 +13,7 @@
 #![no_main]
 #![allow(unsafe_code)]
 #![allow(static_mut_refs)] // single-task cell — no data race on SURFACE / KEY_QUEUE
+#![allow(clippy::missing_safety_doc)] // reason: DG_* hooks are C callbacks; their contract lives in doomgeneric's headers, all single-task
 
 extern crate alloc;
 
@@ -104,9 +105,13 @@ struct KeyQueueEntry {
 #[no_mangle]
 pub extern "C" fn main() {
     // Pass `-iwad /doom1.wad` so D_DoomMain can find the WAD on the ViFS.
-    let iwad = b"-iwad\0";
-    let wpath = b"/doom1.wad\0";
-    let argv: [*const u8; 3] = [b"doom\0".as_ptr(), iwad.as_ptr(), wpath.as_ptr()];
+    let iwad = c"-iwad";
+    let wpath = c"/doom1.wad";
+    let argv: [*const u8; 3] = [
+        c"doom".as_ptr().cast(),
+        iwad.as_ptr().cast(),
+        wpath.as_ptr().cast(),
+    ];
 
     // Initialize engine + start game loop (doomgeneric_Tick never returns).
     unsafe {
@@ -168,8 +173,8 @@ pub unsafe extern "C" fn DG_DrawFrame() {
     let dst = core::slice::from_raw_parts_mut(dst_ptr, (SCREEN_W * SCREEN_H) as usize);
 
     if !COLMAP_READY {
-        for dx in 0..SCREEN_W as usize {
-            COLMAP[dx] = (dx as u32 * DOOM_W / SCREEN_W) as u16;
+        for (dx, col) in COLMAP.iter_mut().enumerate().take(SCREEN_W as usize) {
+            *col = (dx as u32 * DOOM_W / SCREEN_W) as u16;
         }
         COLMAP_READY = true;
     }
@@ -178,8 +183,8 @@ pub unsafe extern "C" fn DG_DrawFrame() {
         let sy = (dy as u32 * DOOM_H / SCREEN_H) as usize;
         let src_row = &src[sy * DOOM_W as usize..(sy + 1) * DOOM_W as usize];
         let dst_row = &mut dst[dy * SCREEN_W as usize..(dy + 1) * SCREEN_W as usize];
-        for dx in 0..SCREEN_W as usize {
-            dst_row[dx] = src_row[COLMAP[dx] as usize];
+        for (dst_px, &col) in dst_row.iter_mut().zip(COLMAP.iter()) {
+            *dst_px = src_row[col as usize];
         }
     }
 

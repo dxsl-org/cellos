@@ -39,9 +39,9 @@ static VFS_HANDLER_CELL: AtomicUsize = AtomicUsize::new(0);
 /// complete handler function.
 pub fn register_vfs(handler: VfsFastHandler) {
     VFS_HANDLER_PTR.store(
-        // SAFETY: transmuting fn pointer to *mut () for atomic storage;
-        // the pointer is recovered with the same type in call_vfs.
-        unsafe { core::mem::transmute(handler) },
+        // fn pointer → *mut () for atomic storage; recovered with the same
+        // type in call_vfs.
+        handler as *mut (),
         Ordering::Release,
     );
 }

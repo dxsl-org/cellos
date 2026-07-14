@@ -103,6 +103,6 @@ impl Pl011 {
 
     /// True if `ipa` falls within this device's MMIO window.
     pub fn owns(ipa: u64) -> bool {
-        ipa >= PL011_BASE_IPA && ipa < PL011_BASE_IPA + PL011_SIZE
+        (PL011_BASE_IPA..PL011_BASE_IPA + PL011_SIZE).contains(&ipa)
     }
 }

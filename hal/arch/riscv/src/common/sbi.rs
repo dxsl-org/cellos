@@ -32,7 +32,7 @@ fn sbi_call(eid: usize, fid: usize, arg0: usize, arg1: usize, arg2: usize) -> (u
 
 /// Write a character to debug console (DBCN)
 pub fn console_putchar(c: u8) -> Result<(), usize> {
-    let byte = c as u8;
+    let byte = c;
     let ptr = &byte as *const u8 as usize;
     // console_write(num_bytes=1, base_addr_lo=ptr, base_addr_hi=0)
     let (error, _value) = sbi_call(SBI_EID_DBCN, SBI_FID_DBCN_WRITE, 1, ptr, 0);

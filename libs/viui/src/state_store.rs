@@ -76,7 +76,7 @@ impl WidgetStateStore {
 
     /// Get or create default state for `id`.
     pub fn entry(&mut self, id: WidgetId) -> &mut WidgetState {
-        self.inner.entry(id).or_insert_with(WidgetState::default)
+        self.inner.entry(id).or_default()
     }
 
     pub fn get(&self, id: WidgetId) -> Option<&WidgetState> {

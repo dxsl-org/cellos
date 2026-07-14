@@ -8,8 +8,11 @@ use crate::node::ViNode;
 ///
 /// `K` must be `Clone + PartialEq + 'static` (e.g., `&'static str` or a custom enum).
 /// Pages are built lazily — each `push` / `pop` / `replace` invokes the builder fresh.
+/// Lazy page constructor registered per route key.
+type PageBuilder = Box<dyn Fn() -> Box<dyn ViNode>>;
+
 pub struct Router<K: Clone + PartialEq + 'static> {
-    routes: Vec<(K, Box<dyn Fn() -> Box<dyn ViNode>>)>,
+    routes: Vec<(K, PageBuilder)>,
     history: Vec<K>,
 }
 

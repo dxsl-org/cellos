@@ -88,7 +88,7 @@ fn main() {
         // headers so the full POSIX subset is visible (not just freestanding).
         let sysroot = run_gcc(&["--print-sysroot"]);
         if !sysroot.is_empty() && sysroot != "." {
-            build.flag(&format!("-I{}/include", sysroot));
+            build.flag(format!("-I{}/include", sysroot));
         }
     }
 

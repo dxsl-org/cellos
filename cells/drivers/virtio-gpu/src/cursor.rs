@@ -19,10 +19,10 @@ const SPRITE_LEN: usize = 64 * 64 * 4;
 /// `hot` packs `(hot_x << 16) | hot_y` (hotspot within sprite).
 /// `data_ptr` points to the sprite bytes in the compositor's SAS address space.
 pub fn set_sprite(dev: &mut GpuDevice, data_ptr: usize, xy: u32, hot: u32) {
-    let x = ((xy >> 16) & 0xFFFF) as u32;
-    let y = (xy & 0xFFFF) as u32;
-    let hot_x = ((hot >> 16) & 0xFFFF) as u32;
-    let hot_y = (hot & 0xFFFF) as u32;
+    let x = (xy >> 16) & 0xFFFF;
+    let y = xy & 0xFFFF;
+    let hot_x = (hot >> 16) & 0xFFFF;
+    let hot_y = hot & 0xFFFF;
     // SAFETY: data_ptr is a compositor user-space pointer valid in SAS;
     // SPRITE_LEN is constant and bounds-checked by the VirtIO cursor spec.
     let image = unsafe { core::slice::from_raw_parts(data_ptr as *const u8, SPRITE_LEN) };
@@ -35,7 +35,7 @@ pub fn set_sprite(dev: &mut GpuDevice, data_ptr: usize, xy: u32, hot: u32) {
 ///
 /// `xy` packs `(x << 16) | y`.  Cheap: issues MOVE_CURSOR only (no DMA).
 pub fn move_to(dev: &mut GpuDevice, xy: u32) {
-    let x = ((xy >> 16) & 0xFFFF) as u32;
-    let y = (xy & 0xFFFF) as u32;
+    let x = (xy >> 16) & 0xFFFF;
+    let y = xy & 0xFFFF;
     let _ = dev.gpu.move_cursor(x, y);
 }

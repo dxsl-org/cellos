@@ -24,9 +24,7 @@ fn test_api_usage() {
 // Compile error expected:
 // "error[E0432]: unresolved import `kernel`"
 
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    loop {}
-}
+// NOTE: no local `_start` — ostd::startup already exports one, and a
+// staticlib bundling both fails with "symbol '_start' is already defined".
 
 // ✅ VALIDATION: If this compiles, layer isolation works!

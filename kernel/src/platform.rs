@@ -305,7 +305,7 @@ fn collect_virtio(fdt: &fdt::Fdt) -> [Option<VirtioEntry>; 8] {
         }
         let is_v = node
             .compatible()
-            .map_or(false, |c| c.all().any(|s| s == "virtio,mmio"));
+            .is_some_and(|c| c.all().any(|s| s == "virtio,mmio"));
         if !is_v {
             continue;
         }

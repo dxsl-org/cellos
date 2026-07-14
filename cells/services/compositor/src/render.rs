@@ -107,9 +107,9 @@ impl ScreenFb {
                     continue;
                 }
                 // Straight-alpha blend over destination (BGRA channel order).
-                for ch in 0..3usize {
+                for (ch, &s_byte) in src.iter().enumerate().take(3) {
                     let d = self.pixels[dst_off + ch] as u32;
-                    let s = src[ch] as u32;
+                    let s = s_byte as u32;
                     self.pixels[dst_off + ch] = ((s * alpha + d * (255 - alpha)) / 255) as u8;
                 }
                 self.pixels[dst_off + 3] = 255; // opaque result

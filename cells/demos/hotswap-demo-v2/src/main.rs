@@ -131,7 +131,7 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
 fn parse_key_to_swap_id(key: &[u8; 64]) -> u64 {
     let mut val = 0u64;
     for &b in key.iter() {
-        if b == 0 || !(b'0'..=b'9').contains(&b) {
+        if b == 0 || !b.is_ascii_digit() {
             break;
         }
         val = val.saturating_mul(10).saturating_add((b - b'0') as u64);

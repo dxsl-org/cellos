@@ -10,7 +10,7 @@ use ostd::io::println;
 ///
 /// Sorts `samples` in-place, converts each tick delta to nanoseconds, then
 /// builds percentile stats.
-pub fn build_report(name: &'static str, samples: &mut Vec<u64>) -> BenchReport {
+pub fn build_report(name: &'static str, samples: &mut [u64]) -> BenchReport {
     samples.sort_unstable();
     let ns: Vec<u64> = samples.iter().map(|&t| ticks_to_ns(t)).collect();
     BenchReport::from_sorted(name, &ns)

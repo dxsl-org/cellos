@@ -8,24 +8,22 @@ fn main() {
     // On Windows + MSVC the cc crate defaults to cl.exe (COFF output) which is
     // incompatible with rust-lld for bare-metal ELF targets. Detect and handle
     // this case gracefully before attempting compilation.
-    if target.contains("x86_64") || target.contains("aarch64") {
-        if !has_elf_compiler(&target) {
-            // Emit a cfg flag so Rust code can compile a stub instead of the real
-            // Lua runtime. The cell will link and run but print a "not available"
-            // message. This keeps workspace builds green on Windows dev machines.
-            println!("cargo:rustc-cfg=lua_c_unavailable");
-            println!("cargo:warning=Lua cell: no ELF-capable C compiler found for {target}.");
-            println!("cargo:warning=  Install LLVM/Clang (https://releases.llvm.org) and ensure");
-            println!("cargo:warning=  `clang --target={target}-elf` is in PATH, or set:");
-            if target.contains("aarch64") {
-                println!("cargo:warning=  CC_aarch64_unknown_none=aarch64-none-elf-gcc");
-            } else {
-                println!("cargo:warning=  CC_x86_64_unknown_none=x86_64-elf-gcc");
-            }
-            println!("cargo:warning=  Lua cell will build as a no-op stub for this target.");
-            cell_build::emit_linker_script();
-            return;
+    if (target.contains("x86_64") || target.contains("aarch64")) && !has_elf_compiler(&target) {
+        // Emit a cfg flag so Rust code can compile a stub instead of the real
+        // Lua runtime. The cell will link and run but print a "not available"
+        // message. This keeps workspace builds green on Windows dev machines.
+        println!("cargo:rustc-cfg=lua_c_unavailable");
+        println!("cargo:warning=Lua cell: no ELF-capable C compiler found for {target}.");
+        println!("cargo:warning=  Install LLVM/Clang (https://releases.llvm.org) and ensure");
+        println!("cargo:warning=  `clang --target={target}-elf` is in PATH, or set:");
+        if target.contains("aarch64") {
+            println!("cargo:warning=  CC_aarch64_unknown_none=aarch64-none-elf-gcc");
+        } else {
+            println!("cargo:warning=  CC_x86_64_unknown_none=x86_64-elf-gcc");
         }
+        println!("cargo:warning=  Lua cell will build as a no-op stub for this target.");
+        cell_build::emit_linker_script();
+        return;
     }
 
     compile_lua_c(&target);
@@ -102,6 +100,10 @@ fn compile_lua_c(target: &str) {
 
     // Silence warnings from upstream Lua (we don't own these sources).
     build.warnings(false);
+
+    // Cells link as -pie (cell.ld): C objects must be position-independent or
+    // rust-lld rejects the absolute R_RISCV_64/.LC* relocations gcc emits.
+    build.pic(true);
 
     // Compile as C99 — Lua 5.4 uses C99 features.
     build.flag_if_supported("-std=c99");
@@ -198,7 +200,7 @@ fn configure_elf_compiler(build: &mut cc::Build, target: &str) {
                 } else {
                     "x86_64-unknown-none-elf"
                 };
-                build.flag(&format!("--target={elf_triple}"));
+                build.flag(format!("--target={elf_triple}"));
                 return;
             }
         }

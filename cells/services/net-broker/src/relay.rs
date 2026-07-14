@@ -41,39 +41,54 @@ use ostd::{ViError, ViResult};
 const HEARTBEAT_MS: u64 = 500;
 
 const FT_CLIENT_REGISTER: u8 = 0x01;
-const FT_SERVER_ACK:      u8 = 0x02;
-const FT_SEND_PACKET:     u8 = 0x08;
-const FT_RECV_PACKET:     u8 = 0x09;
-const FT_PING:            u8 = 0x0b;
-const FT_PONG:            u8 = 0x0c;
+const FT_SERVER_ACK: u8 = 0x02;
+const FT_SEND_PACKET: u8 = 0x08;
+const FT_RECV_PACKET: u8 = 0x09;
+const FT_PING: u8 = 0x0b;
+const FT_PONG: u8 = 0x0c;
 
 const MAX_FRAME: usize = api::ipc::IPC_BUF_SIZE - 32; // leave room for NodeId header
 
 /// Cellos relay client. Holds one persistent TCP connection to a relay server.
 pub struct RelayClient {
-    pub node_id:    CellNetId,
-    relay_ip:       [u8; 4],
-    relay_port:     u16,
-    tcp_cap:        Option<u32>,
+    pub node_id: CellNetId,
+    relay_ip: [u8; 4],
+    relay_port: u16,
+    tcp_cap: Option<u32>,
 }
 
 impl RelayClient {
     pub fn new(node_id: CellNetId, relay_ip: [u8; 4], relay_port: u16) -> Self {
-        Self { node_id, relay_ip, relay_port, tcp_cap: None }
+        Self {
+            node_id,
+            relay_ip,
+            relay_port,
+            tcp_cap: None,
+        }
     }
 
-    pub fn is_connected(&self) -> bool { self.tcp_cap.is_some() }
+    pub fn is_connected(&self) -> bool {
+        self.tcp_cap.is_some()
+    }
 
     /// Connect to the relay and register our NodeId.
     pub fn connect(&mut self, net: &mut NetRef) -> ViResult<()> {
-        if self.tcp_cap.is_some() { return Ok(()); }
+        if self.tcp_cap.is_some() {
+            return Ok(());
+        }
 
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
-        let cap = match net.call::<NetRequest, NetResponse>(
-            &NetRequest::TcpConnect { addr: self.relay_ip, port: self.relay_port },
-            &mut resp,
-        ).map_err(|_| ViError::IO)? {
+        let cap = match net
+            .call::<NetRequest, NetResponse>(
+                &NetRequest::TcpConnect {
+                    addr: self.relay_ip,
+                    port: self.relay_port,
+                },
+                &mut resp,
+            )
+            .map_err(|_| ViError::IO)?
+        {
             NetResponse::CapId(id) => id,
             _ => return Err(ViError::IO),
         };
@@ -81,20 +96,24 @@ impl RelayClient {
         // CLIENT_REGISTER: [4B len=33][0x01][node_id(32)]
         let mut reg = [0u8; 37];
         reg[0..4].copy_from_slice(&33u32.to_be_bytes());
-        reg[4]  = FT_CLIENT_REGISTER;
+        reg[4] = FT_CLIENT_REGISTER;
         reg[5..37].copy_from_slice(&self.node_id.0);
         sys_heartbeat(HEARTBEAT_MS);
         net.call::<NetRequest, NetResponse>(
-            &NetRequest::TcpSend { cap_id: cap, data: &reg }, &mut resp,
-        ).map_err(|_| ViError::IO)?;
+            &NetRequest::TcpSend {
+                cap_id: cap,
+                data: &reg,
+            },
+            &mut resp,
+        )
+        .map_err(|_| ViError::IO)?;
 
         // Read SERVER_ACK frame (2 bytes body: type + status).
         let mut frame_buf = [0u8; api::ipc::IPC_BUF_SIZE];
         let n = recv_frame_into(net, cap, &mut frame_buf)?;
         if n < 2 || frame_buf[0] != FT_SERVER_ACK || frame_buf[1] != 0x00 {
-            let _ = net.call::<NetRequest, NetResponse>(
-                &NetRequest::TcpClose { cap_id: cap }, &mut resp,
-            );
+            let _ = net
+                .call::<NetRequest, NetResponse>(&NetRequest::TcpClose { cap_id: cap }, &mut resp);
             return Err(ViError::IO);
         }
 
@@ -105,23 +124,35 @@ impl RelayClient {
     /// Send a Noise-encrypted payload to `dest` via the relay.
     pub fn send(&mut self, net: &mut NetRef, dest: &CellNetId, payload: &[u8]) -> ViResult<()> {
         let cap = self.tcp_cap.ok_or(ViError::IO)?;
-        if payload.len() > MAX_FRAME { return Err(ViError::InvalidArgument); }
+        if payload.len() > MAX_FRAME {
+            return Err(ViError::InvalidArgument);
+        }
 
         // Header: [4B len = 1 + 32 + payload_len][0x08][dest(32)]
         let data_len: u32 = (1 + 32 + payload.len()) as u32;
         let mut hdr = [0u8; 37];
         hdr[0..4].copy_from_slice(&data_len.to_be_bytes());
-        hdr[4]  = FT_SEND_PACKET;
+        hdr[4] = FT_SEND_PACKET;
         hdr[5..37].copy_from_slice(&dest.0);
 
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         sys_heartbeat(HEARTBEAT_MS);
         net.call::<NetRequest, NetResponse>(
-            &NetRequest::TcpSend { cap_id: cap, data: &hdr }, &mut resp,
-        ).map_err(|_| ViError::IO)?;
+            &NetRequest::TcpSend {
+                cap_id: cap,
+                data: &hdr,
+            },
+            &mut resp,
+        )
+        .map_err(|_| ViError::IO)?;
         net.call::<NetRequest, NetResponse>(
-            &NetRequest::TcpSend { cap_id: cap, data: payload }, &mut resp,
-        ).map_err(|_| ViError::IO)?;
+            &NetRequest::TcpSend {
+                cap_id: cap,
+                data: payload,
+            },
+            &mut resp,
+        )
+        .map_err(|_| ViError::IO)?;
         Ok(())
     }
 
@@ -140,10 +171,16 @@ impl RelayClient {
         let cap = self.tcp_cap.ok_or(ViError::IO)?;
         sys_heartbeat(HEARTBEAT_MS);
         let n = match recv_frame_into(net, cap, buf) {
-            Ok(n)  => n,
-            Err(e) => { self.tcp_cap = None; return Err(e); }
+            Ok(n) => n,
+            Err(e) => {
+                self.tcp_cap = None;
+                return Err(e);
+            }
         };
-        if n == 0 { self.tcp_cap = None; return Err(ViError::IO); }
+        if n == 0 {
+            self.tcp_cap = None;
+            return Err(ViError::IO);
+        }
 
         match buf[0] {
             FT_RECV_PACKET if n >= 33 => {
@@ -163,10 +200,16 @@ impl RelayClient {
 
     /// Check TCP connection state (0x03 = Established).
     pub fn check_connected(&mut self, net: &mut NetRef) -> bool {
-        let cap = match self.tcp_cap { Some(c) => c, None => return false };
+        let cap = match self.tcp_cap {
+            Some(c) => c,
+            None => return false,
+        };
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
         matches!(
-            net.call::<NetRequest, NetResponse>(&NetRequest::SocketState { cap_id: cap }, &mut resp),
+            net.call::<NetRequest, NetResponse>(
+                &NetRequest::SocketState { cap_id: cap },
+                &mut resp
+            ),
             Ok(NetResponse::State(0x03))
         )
     }
@@ -174,9 +217,8 @@ impl RelayClient {
     pub fn disconnect(&mut self, net: &mut NetRef) {
         if let Some(cap) = self.tcp_cap.take() {
             let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
-            let _ = net.call::<NetRequest, NetResponse>(
-                &NetRequest::TcpClose { cap_id: cap }, &mut resp,
-            );
+            let _ = net
+                .call::<NetRequest, NetResponse>(&NetRequest::TcpClose { cap_id: cap }, &mut resp);
         }
     }
 
@@ -188,7 +230,11 @@ impl RelayClient {
             frame[5..13].copy_from_slice(data);
             let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
             let _ = net.call::<NetRequest, NetResponse>(
-                &NetRequest::TcpSend { cap_id: cap, data: &frame }, &mut resp,
+                &NetRequest::TcpSend {
+                    cap_id: cap,
+                    data: &frame,
+                },
+                &mut resp,
             );
         }
     }
@@ -206,13 +252,22 @@ fn tcp_read_exact(net: &mut NetRef, cap_id: u32, dest: &mut [u8], n: usize) -> V
         sys_heartbeat(HEARTBEAT_MS);
         let want = (n - received) as u32;
         let mut tmp = [0u8; api::ipc::IPC_BUF_SIZE];
-        let chunk = match net.call::<NetRequest, NetResponse>(
-            &NetRequest::TcpRecv { cap_id, buf_len: want }, &mut tmp,
-        ).map_err(|_| ViError::IO)? {
+        let chunk = match net
+            .call::<NetRequest, NetResponse>(
+                &NetRequest::TcpRecv {
+                    cap_id,
+                    buf_len: want,
+                },
+                &mut tmp,
+            )
+            .map_err(|_| ViError::IO)?
+        {
             NetResponse::Data(d) => d,
             _ => return Err(ViError::IO),
         };
-        if chunk.is_empty() { return Err(ViError::IO); } // connection closed
+        if chunk.is_empty() {
+            return Err(ViError::IO);
+        } // connection closed
         let len = chunk.len().min(n - received);
         dest[received..received + len].copy_from_slice(&chunk[..len]);
         received += len;
@@ -224,15 +279,17 @@ fn tcp_read_exact(net: &mut NetRef, cap_id: u32, dest: &mut [u8], n: usize) -> V
 /// Returns the number of bytes written (= frame body length, including type byte).
 /// `out[0]` = frame type; `out[1..]` = frame data.
 fn recv_frame_into(
-    net:    &mut NetRef,
+    net: &mut NetRef,
     cap_id: u32,
-    out:    &mut [u8; api::ipc::IPC_BUF_SIZE],
+    out: &mut [u8; api::ipc::IPC_BUF_SIZE],
 ) -> ViResult<usize> {
     // Read 4-byte big-endian length prefix.
     let mut hdr = [0u8; 4];
     tcp_read_exact(net, cap_id, &mut hdr, 4)?;
     let frame_len = u32::from_be_bytes(hdr) as usize;
-    if frame_len == 0 || frame_len > MAX_FRAME { return Err(ViError::IO); }
+    if frame_len == 0 || frame_len > MAX_FRAME {
+        return Err(ViError::IO);
+    }
 
     // Read frame body (type + data) directly into `out`.
     tcp_read_exact(net, cap_id, &mut out[..frame_len], frame_len)?;

@@ -57,7 +57,7 @@ pub fn cmd_uptime<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 ///
 /// Routes through raw kernel syscall 502 (SBI System Reset Extension) which
 /// calls OpenSBI from S-mode, powering off the machine.
-pub fn cmd_shutdown<'a>() -> ViResult<()> {
+pub fn cmd_shutdown() -> ViResult<()> {
     ostd::io::println("System shutting down...");
     syscall::sys_shutdown()
 }
@@ -71,7 +71,7 @@ pub fn cmd_sleep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let secs: u64 = match args.next().and_then(|s| {
         let mut n = 0u64;
         for ch in s.bytes() {
-            if ch < b'0' || ch > b'9' {
+            if !ch.is_ascii_digit() {
                 return None;
             }
             n = n.saturating_mul(10).saturating_add((ch - b'0') as u64);

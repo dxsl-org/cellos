@@ -152,7 +152,7 @@ pub fn main() {
                     Ok(shared_a) => {
                         // Compute expected shared secret locally:
                         // shared_b = ECDH(ephemeral_sk, silo_pub)
-                        let silo_pt = match EncodedPoint::from_bytes(&pub_key) {
+                        let silo_pt = match EncodedPoint::from_bytes(pub_key) {
                             Ok(p) => p,
                             Err(_) => {
                                 println("[silo-test] T4 FAIL: silo pub key parse failed");

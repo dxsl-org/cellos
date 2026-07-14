@@ -52,6 +52,7 @@ const MAX_FILE_READ: usize = 64 * 1024;
 /// once it processes the next request. Copies up to `out.len()` bytes.
 ///
 /// For reads where the file size is unknown in advance, prefer `vfs_get_file_vec`.
+#[allow(dead_code)] // reason: fixed-buffer variant kept beside vfs_get_file_vec for no-alloc callers
 pub fn vfs_get_file(path: &str, out: &mut [u8]) -> usize {
     let req = api::ipc::VfsRequest::GetFile(path);
     let mut buf = [0u8; 512];
@@ -170,7 +171,7 @@ unsafe fn lua_arg_bytes<'a>(L: *mut LuaState, idx: c_int) -> Option<&'a [u8]> {
         return None;
     }
     // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-    Some(unsafe { core::slice::from_raw_parts(ptr as *const u8, len) })
+    Some(unsafe { core::slice::from_raw_parts(ptr, len) })
 }
 
 /// Extract a path `&str` from Lua arg at `idx`. Returns `None` on error.

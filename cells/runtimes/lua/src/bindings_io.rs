@@ -24,7 +24,7 @@ pub unsafe extern "C" fn ViCell_io_write(L: *mut LuaState) -> c_int {
     let ptr = unsafe { crate::ffi::lua_tolstring(L, 1, &mut len as *mut _) };
     if !ptr.is_null() && len > 0 {
         // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-        let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+        let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
         if let Ok(s) = core::str::from_utf8(bytes) {
             ostd::io::print(s);
         }
@@ -52,7 +52,7 @@ pub unsafe extern "C" fn ViCell_os_execute(L: *mut LuaState) -> c_int {
     }
     len = len.min(511);
     // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-    let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
     path_buf[..len].copy_from_slice(bytes);
     let cmd = core::str::from_utf8(&path_buf[..len]).unwrap_or("");
 

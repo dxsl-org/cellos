@@ -7,7 +7,7 @@ pub const HEIGHT: usize = 8;
 /// Return the 8-row bitmap for ASCII `c`.  Falls back to a solid block for
 /// characters outside 32–126.
 pub fn glyph(c: u8) -> &'static [u8] {
-    let idx = if c >= 32 && c <= 126 {
+    let idx = if (32..=126).contains(&c) {
         (c - 32) as usize
     } else {
         94

@@ -95,13 +95,9 @@ impl ViNode for Button {
             Event::MousePress {
                 pos,
                 button: MouseButton::Left,
-            } => {
-                if self.bounds.contains(*pos) {
-                    self.pressed = true;
-                    true
-                } else {
-                    false
-                }
+            } if self.bounds.contains(*pos) => {
+                self.pressed = true;
+                true
             }
             Event::MouseRelease {
                 pos,
@@ -116,13 +112,9 @@ impl ViNode for Button {
                     false
                 }
             }
-            Event::TouchBegin { pos, .. } => {
-                if self.bounds.contains(*pos) {
-                    self.pressed = true;
-                    true
-                } else {
-                    false
-                }
+            Event::TouchBegin { pos, .. } if self.bounds.contains(*pos) => {
+                self.pressed = true;
+                true
             }
             Event::TouchEnd { pos, .. } => {
                 let was_pressed = self.pressed;

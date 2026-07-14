@@ -15,6 +15,12 @@ ignore = [
   # skrifa is a different API surface — migrating ViUI's font rendering is a
   # real engineering task, not a CI fix. Revisit when skrifa is evaluated.
   { id = "RUSTSEC-2026-0192", reason = "no safe upgrade available; migration to skrifa is a separate task" },
+  # rsa (Marvin timing sidechannel) comes in via embedded-tls for TLS
+  # certificate SIGNATURE VERIFICATION only — a public-key operation. The
+  # Marvin attack requires an RSA private-key decryption timing oracle, which
+  # Cellos never exposes (no RSA private keys, no RSA decryption service).
+  # No fixed rsa release exists; revisit when RustCrypto ships one.
+  { id = "RUSTSEC-2023-0071", reason = "rsa used only for TLS cert signature verification (public-key op); no private-key decryption oracle exists in Cellos; no fixed release available" },
 ]
 
 [licenses]

@@ -16,14 +16,14 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use api::ipc::{NetRequest, NetResponse};
 use chacha20poly1305::{
     aead::{Aead, KeyInit, Payload},
     XChaCha20Poly1305, XNonce,
 };
-use rand_core::RngCore;
 use ostd::service::NetRef;
 use ostd::syscall::{sys_get_time, sys_heartbeat};
-use api::ipc::{NetRequest, NetResponse};
+use rand_core::RngCore;
 
 use crate::rng::BrokerRng;
 
@@ -47,7 +47,9 @@ const HEARTBEAT_MS: u64 = 500;
 pub fn derive_gossip_key(k1: &[u8; 32]) -> [u8; 32] {
     const DOM: [u8; 32] = *b"cellos-gossip-xc20p1305-v1-00000";
     let mut k = [0u8; 32];
-    for i in 0..32 { k[i] = k1[i] ^ DOM[i]; }
+    for i in 0..32 {
+        k[i] = k1[i] ^ DOM[i];
+    }
     k
 }
 
@@ -112,7 +114,14 @@ pub fn encrypt_beacon(
     // G1: empty AAD (machine_id + cluster_id are in the encrypted payload).
     // G2 TODO: move to 96B frame with 16B outer unencrypted header for AAD binding.
     let cipher = XChaCha20Poly1305::new(gossip_key.into());
-    let ct: Vec<u8> = cipher.encrypt(nonce, Payload { msg: &plain_bytes, aad: &[] })
+    let ct: Vec<u8> = cipher
+        .encrypt(
+            nonce,
+            Payload {
+                msg: &plain_bytes,
+                aad: &[],
+            },
+        )
         .expect("[beacon] encrypt failed");
 
     let mut wire = [0u8; WIRE_LEN];
@@ -127,9 +136,13 @@ pub fn decrypt_beacon(gossip_key: &[u8; 32], wire: &[u8; WIRE_LEN]) -> Option<Be
     let ct = &wire[NONCE_LEN..];
     let cipher = XChaCha20Poly1305::new(gossip_key.into());
     let plain_vec = cipher.decrypt(nonce, Payload { msg: ct, aad: &[] }).ok()?;
-    if plain_vec.len() != PLAIN_LEN { return None; }
+    if plain_vec.len() != PLAIN_LEN {
+        return None;
+    }
     let plain = BeaconPlain::decode(plain_vec[..PLAIN_LEN].try_into().ok()?);
-    if plain.magic != MAGIC || plain.version != VERSION { return None; }
+    if plain.magic != MAGIC || plain.version != VERSION {
+        return None;
+    }
     Some(plain)
 }
 
@@ -144,17 +157,26 @@ impl BeaconChannel {
     /// Create, bind, and join multicast. Call at Init; first RECV goes in dispatch loop.
     pub fn init(net: &mut NetRef) -> Option<Self> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
-        let cap_id = match net.call::<NetRequest, NetResponse>(
-            &NetRequest::UdpCreate, &mut resp,
-        ).ok()? {
+        let cap_id = match net
+            .call::<NetRequest, NetResponse>(&NetRequest::UdpCreate, &mut resp)
+            .ok()?
+        {
             NetResponse::CapId(id) => id,
             _ => return None,
         };
         let _ = net.call::<NetRequest, NetResponse>(
-            &NetRequest::UdpBind { cap_id, port: BEACON_PORT }, &mut resp,
+            &NetRequest::UdpBind {
+                cap_id,
+                port: BEACON_PORT,
+            },
+            &mut resp,
         );
         let _ = net.call::<NetRequest, NetResponse>(
-            &NetRequest::MulticastJoin { cap_id, group: MULTICAST_GROUP }, &mut resp,
+            &NetRequest::MulticastJoin {
+                cap_id,
+                group: MULTICAST_GROUP,
+            },
+            &mut resp,
         );
         Some(Self { cap_id })
     }
@@ -176,10 +198,16 @@ impl BeaconChannel {
     /// Non-blocking: returns None if no frame is available.
     pub fn try_recv_frame(&self, net: &mut NetRef) -> Option<[u8; WIRE_LEN]> {
         let mut resp = [0u8; api::ipc::IPC_BUF_SIZE];
-        match net.call::<NetRequest, NetResponse>(
-            &NetRequest::UdpRecv { cap_id: self.cap_id, buf_len: WIRE_LEN as u32 },
-            &mut resp,
-        ).ok()? {
+        match net
+            .call::<NetRequest, NetResponse>(
+                &NetRequest::UdpRecv {
+                    cap_id: self.cap_id,
+                    buf_len: WIRE_LEN as u32,
+                },
+                &mut resp,
+            )
+            .ok()?
+        {
             NetResponse::Data(d) if d.len() == WIRE_LEN => d.try_into().ok(),
             _ => None,
         }
@@ -204,7 +232,9 @@ pub struct PeerTable {
 
 impl PeerTable {
     pub const fn new() -> Self {
-        Self { entries: [const { None }; 8] }
+        Self {
+            entries: [const { None }; 8],
+        }
     }
 
     /// Update from a verified beacon. Returns true if this is a NEW peer.
@@ -215,7 +245,7 @@ impl PeerTable {
                 if plain.boot_epoch == e.last_epoch && plain.mono_counter <= e.last_counter {
                     return false; // anti-replay: reject non-increasing counter
                 }
-                e.last_epoch   = plain.boot_epoch;
+                e.last_epoch = plain.boot_epoch;
                 e.last_counter = plain.mono_counter;
                 e.last_heard_mono = now;
                 return false;
@@ -239,7 +269,9 @@ impl PeerTable {
 
     pub fn timed_out_count(&self, timeout_ms: u64) -> usize {
         let now = sys_get_time();
-        self.entries.iter().flatten()
+        self.entries
+            .iter()
+            .flatten()
             .filter(|e| now.wrapping_sub(e.last_heard_mono) > timeout_ms)
             .count()
     }

@@ -5,7 +5,7 @@ extern crate ostd;
 /// Convert Unix epoch seconds to (year, month, day, hour, min, sec) in UTC.
 fn epoch_to_datetime(mut secs: u64) -> (u64, u8, u8, u8, u8, u8) {
     fn is_leap(y: u64) -> bool {
-        (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+        (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
     }
     fn days_in_month(m: u8, y: u64) -> u64 {
         match m {

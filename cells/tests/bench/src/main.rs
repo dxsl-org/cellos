@@ -161,11 +161,10 @@ fn run_rt_under_load() {
 
 /// Print idle vs under-load p99 plus the integer ratio (×100 → fixed-point x.xx).
 fn print_under_load(name: &str, idle_p99: u64, load_p99: u64) {
-    let ratio = if idle_p99 > 0 {
-        load_p99.saturating_mul(100) / idle_p99
-    } else {
-        0
-    };
+    let ratio = load_p99
+        .saturating_mul(100)
+        .checked_div(idle_p99)
+        .unwrap_or(0);
     println(&alloc::format!(
         "[rt] {:14} idle_p99={}ns load_p99={}ns ratio={}.{:02}x",
         name,

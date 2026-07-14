@@ -35,7 +35,7 @@ impl Storage for LfsDisk {
     type LOOKAHEAD_SIZE = U16;
 
     fn read(&mut self, off: usize, buf: &mut [u8]) -> Result<usize> {
-        debug_assert!(off % SECTOR == 0 && buf.len() % SECTOR == 0);
+        debug_assert!(off.is_multiple_of(SECTOR) && buf.len().is_multiple_of(SECTOR));
         let base = api::disk::PART_LFS_BASE_LBA + (off / SECTOR) as u64;
         let mut sec = [0u8; SECTOR];
         for (i, chunk) in buf.chunks_mut(SECTOR).enumerate() {
@@ -48,7 +48,7 @@ impl Storage for LfsDisk {
     }
 
     fn write(&mut self, off: usize, data: &[u8]) -> Result<usize> {
-        debug_assert!(off % SECTOR == 0 && data.len() % SECTOR == 0);
+        debug_assert!(off.is_multiple_of(SECTOR) && data.len().is_multiple_of(SECTOR));
         let base = api::disk::PART_LFS_BASE_LBA + (off / SECTOR) as u64;
         let mut sec = [0u8; SECTOR];
         for (i, chunk) in data.chunks(SECTOR).enumerate() {

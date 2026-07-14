@@ -47,7 +47,7 @@ pub fn start_secondaries() {
         fn _secondary_entry();
     }
 
-    for hart_id in 1..MAX_HARTS {
+    for (hart_id, online) in HART_ONLINE.iter().enumerate().skip(1) {
         // Allocate a dedicated kernel stack for this hart.  Leak it — it lives
         // for the entire lifetime of the hart.
         let stack = match Stack::new_kernel(STACK_PAGES) {
@@ -85,7 +85,7 @@ pub fn start_secondaries() {
         // Bounded spin: wait for the secondary to signal it is online.
         let deadline = crate::task::system_ticks() + SECONDARY_BOOT_TIMEOUT_TICKS;
         loop {
-            if HART_ONLINE[hart_id].load(Ordering::Acquire) {
+            if online.load(Ordering::Acquire) {
                 log::info!("[smp] hart {} online, parked", hart_id);
                 break;
             }

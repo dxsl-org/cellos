@@ -29,7 +29,7 @@ fn parse_u16(s: &str) -> Option<u16> {
         return None;
     }
     for ch in s.bytes() {
-        if !(b'0'..=b'9').contains(&ch) {
+        if !ch.is_ascii_digit() {
             return None;
         }
         n = n * 10 + (ch - b'0') as u32;

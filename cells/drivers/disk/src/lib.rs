@@ -16,6 +16,12 @@ pub struct RamDisk {
     data: Mutex<Vec<u8>>,
 }
 
+impl Default for RamDisk {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RamDisk {
     pub fn new() -> Self {
         Self {

@@ -555,13 +555,13 @@ fn parse_pipeline(tokens: &[Tok]) -> Ast {
 
     let cmds: Vec<Cmd> = pipe_segs
         .iter()
-        .filter_map(|seg| {
+        .map(|seg| {
             // Ignore the per-segment `bg` flag here — the trailing `&` check on
             // `tokens.last()` below is the authoritative background detector.
             // Filtering out `bg=true` segments caused single-command background
             // jobs (`httpd 9091 /path &`) to be parsed as Ast::Empty.
             let (cmd, _bg) = parse_cmd(seg);
-            Some(cmd)
+            cmd
         })
         .filter(|c| !c.is_empty())
         .collect();
@@ -617,7 +617,7 @@ fn parse_cmd(tokens: &[Tok]) -> (Cmd, bool) {
 }
 
 /// Split a token slice on positions where `pred` returns true.
-fn split_on<'a, F>(tokens: &'a [Tok], pred: F) -> Vec<&'a [Tok]>
+fn split_on<F>(tokens: &[Tok], pred: F) -> Vec<&[Tok]>
 where
     F: Fn(&Tok) -> bool,
 {

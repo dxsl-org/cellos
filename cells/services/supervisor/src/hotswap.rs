@@ -30,7 +30,7 @@ const DISC_RESTORE: u8 = 0xF1; // AppEvent::Restore  { key[64] }
 // ── Hotswap stash key (must match ostd::hotswap::hotswap_key) ────────────────
 
 fn stash_key_for(swap_id: u64) -> u64 {
-    0x_A3_0000_0000_0000_u64 | (swap_id & 0xFFFF_FFFF_FFFF)
+    0x00A3_0000_0000_0000_u64 | (swap_id & 0xFFFF_FFFF_FFFF)
 }
 
 // ── Decimal formatter (no std) ────────────────────────────────────────────────
@@ -170,7 +170,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     let new_tid = {
         let result = sys_spawn_from_path(new_elf_path);
         match result {
-            ostd::syscall::SyscallResult::Ok(tid) => tid as usize,
+            ostd::syscall::SyscallResult::Ok(tid) => tid,
             ostd::syscall::SyscallResult::Err(_) => {
                 sys_resume_cell(old_tid).ok();
                 return Err(HotswapError::SpawnFailed);
@@ -179,14 +179,9 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     };
 
     // ── Step 4: DESERIALIZE ───────────────────────────────────────────────────
-    if let Err(e) = send_restore_event(new_tid, swap_id) {
-        // Old cell stays frozen — split-brain risk; do NOT resume two instances.
-        return Err(e);
-    }
+    send_restore_event(new_tid, swap_id)?;
 
-    if let Err(e) = wait_for_hotswap_ready(new_tid) {
-        return Err(e);
-    }
+    wait_for_hotswap_ready(new_tid)?;
 
     // ── Step 5: COMMIT ────────────────────────────────────────────────────────
     // Re-register the service registry entry with the new tid.

@@ -41,7 +41,7 @@ pub fn request_input_focus() -> bool {
 pub fn collect_input_events(max_events: usize) -> Vec<Event> {
     ostd::input::poll_events(max_events)
         .iter()
-        .flat_map(|ev| input_event_to_viui(ev))
+        .flat_map(input_event_to_viui)
         .collect()
 }
 

@@ -434,8 +434,13 @@ pub fn yield_cpu() {
                 // at spawn) so CPU_LOCAL.kernel_rsp never drifts to the deep
                 // cooperative-switch RSP saved inside a blocked yield_cpu frame.
                 let next_ref = &*next;
-                #[cfg(not(target_arch = "x86_64"))]
+                // aarch64 context stores sp as u64 (register-width field);
+                // riscv64 already uses usize — keep it cast-free so clippy's
+                // same-type-cast lint stays quiet on that target.
+                #[cfg(target_arch = "aarch64")]
                 crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
+                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                crate::hal::arch::set_kernel_stack(next_ref.sp);
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
             }

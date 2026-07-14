@@ -122,7 +122,7 @@ unsafe fn draw_glyph(px: i32, py: i32, c: u8, bgra: u32, scale: u32) {
     let sh = s.height() as i32;
     let pixels = s.pixels_mut();
     let [b, g, r, a] = bgra.to_le_bytes();
-    let idx = if c >= 0x20 && c <= 0x7E {
+    let idx = if (0x20..=0x7E).contains(&c) {
         (c - 0x20) as usize
     } else {
         0
@@ -176,7 +176,7 @@ mod lua_fns {
         let ci = lua_tointegerx(L, 4, core::ptr::null_mut()) as usize;
         let scale = lua_tointegerx(L, 5, core::ptr::null_mut()).max(1) as u32;
         if !ptr.is_null() {
-            let text = core::slice::from_raw_parts(ptr as *const u8, n);
+            let text = core::slice::from_raw_parts(ptr, n);
             let color = PALETTE[ci.min(15)];
             for (i, &c) in text.iter().enumerate() {
                 draw_glyph(x + i as i32 * 8 * scale as i32, y, c, color, scale);
@@ -322,7 +322,7 @@ extern "C" fn main() -> usize {
             let mut len = 0usize;
             let ptr = lua_tolstring(L, -1, &mut len);
             if !ptr.is_null() {
-                let s = core::slice::from_raw_parts(ptr as *const u8, len);
+                let s = core::slice::from_raw_parts(ptr, len);
                 if let Ok(msg) = core::str::from_utf8(s) {
                     ostd::io::println(msg);
                 }

@@ -44,11 +44,7 @@ pub fn run_control_loop() -> ! {
         let _ = sys_recv_timeout(0, &mut buf, PERIOD_TICKS);
         let now = sys_get_time();
         let actual = now.saturating_sub(prev);
-        let err = if actual > PERIOD_TICKS {
-            actual - PERIOD_TICKS
-        } else {
-            PERIOD_TICKS - actual
-        };
+        let err = actual.abs_diff(PERIOD_TICKS);
         errors.push(err);
         if actual > PERIOD_TICKS + SLACK_TICKS {
             miss += 1;

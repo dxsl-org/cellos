@@ -282,7 +282,7 @@ extern "C" fn main() -> usize {
                 let ptr = unsafe { ffi::lua_tolstring(L, -1, &mut len as *mut _) };
                 if !ptr.is_null() {
                     // SAFETY: Lua guarantees `len` valid bytes at `ptr`.
-                    let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+                    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
                     if let Ok(s) = core::str::from_utf8(bytes) {
                         ostd::io::println(s);
                     }

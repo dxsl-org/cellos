@@ -165,7 +165,7 @@ fn draw_char(surf: &mut ViSurface, x: u32, y: u32, c: u8, bgra: u32, scale: u32)
     let sh = surf.height() as i32;
     let pixels = surf.pixels_mut();
     let [b, g, r, a] = bgra.to_le_bytes();
-    let idx = if c >= 0x20 && c <= 0x7E {
+    let idx = if (0x20..=0x7E).contains(&c) {
         (c - 0x20) as usize
     } else {
         0

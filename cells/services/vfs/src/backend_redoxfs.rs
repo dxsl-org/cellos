@@ -139,10 +139,8 @@ impl RedoxFsBackend {
                 Err(_) => continue,
             };
             let mode = child.data().mode();
-            if child.data().is_dir() {
-                if !Self::remove_recursive(tx, *child_ptr) {
-                    return false;
-                }
+            if child.data().is_dir() && !Self::remove_recursive(tx, *child_ptr) {
+                return false;
             }
             let _ = tx.remove_node(dir_ptr, name, mode);
         }

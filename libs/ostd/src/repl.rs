@@ -58,6 +58,11 @@ impl History {
         self.entries.len()
     }
 
+    /// True when there is no history yet.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     /// Access entry by 0-based index (0 = oldest).
     pub fn get(&self, idx: usize) -> Option<&str> {
         self.entries.get(idx).map(String::as_str)

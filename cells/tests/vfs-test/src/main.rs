@@ -262,7 +262,7 @@ fn test_edge_cases() {
     }
 
     match vfs_req(&api::ipc::VfsRequest::ListDir("/tmp/nonexistent_dir")) {
-        api::ipc::VfsResponse::Data(b) if b.is_empty() => pass("listdir nonexistent = empty"),
+        api::ipc::VfsResponse::Data([]) => pass("listdir nonexistent = empty"),
         api::ipc::VfsResponse::Err(_) => pass("listdir nonexistent = Err"),
         _ => fail("listdir nonexistent unexpected response"),
     }

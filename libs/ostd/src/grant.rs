@@ -68,7 +68,7 @@ impl<T> GrantHandle<T> {
     ///
     /// # Safety
     /// `id` must be a valid grant owned by this cell (e.g. via `sys_grant_share`
-    /// + the receiver's confirmation). `len` must equal the byte length returned
+    /// and the receiver's confirmation). `len` must equal the byte length returned
     /// by the original `sys_grant_alloc`. Calling this twice with the same `id`
     /// creates two owners and will double-free on drop — undefined behaviour.
     pub unsafe fn from_raw(id: usize, len: usize) -> Self {
@@ -102,6 +102,13 @@ impl<T> GrantHandle<T> {
     #[inline]
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    /// True when the grant region has zero length (never the case for a
+    /// successful `sys_grant_alloc`, but clippy requires `is_empty` beside `len`).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Get an exclusive byte slice over the entire grant region.

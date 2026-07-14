@@ -66,13 +66,13 @@ impl<'a> ViShell<'a> {
                     if trim_line.starts_with('#') {
                         continue;
                     }
-                    if !trim_line.is_empty() {
-                        if self.history.back().map(|s| s.as_str()) != Some(trim_line) {
-                            if self.history.len() >= 32 {
-                                self.history.pop_front();
-                            }
-                            self.history.push_back(String::from(trim_line));
+                    if !trim_line.is_empty()
+                        && self.history.back().map(|s| s.as_str()) != Some(trim_line)
+                    {
+                        if self.history.len() >= 32 {
+                            self.history.pop_front();
                         }
+                        self.history.push_back(String::from(trim_line));
                     }
 
                     let _ = self.dispatch(line).await;
