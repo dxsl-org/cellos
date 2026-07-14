@@ -353,6 +353,13 @@ jobs:
     # continue-on-error: alpine fetch or TCG timeout should not block other CI jobs.
     continue-on-error: true
     needs: build
+    # Job-level: make-hypervisor-fs.sh runs its own cargo builds, so the
+    # littlefs cross-compile env must cover every step, not just the explicit
+    # cells step.
+    env:
+      CC_aarch64_unknown_none_softfloat: clang
+      CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+      BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
     steps:
       - uses: actions/checkout@v4
 
@@ -384,10 +391,6 @@ jobs:
           bash scripts/fetch-alpine-artifacts.sh .alpine-cache
 
       - name: Build aarch64 cells (core + hypervisor)
-        env:
-          CC_aarch64_unknown_none_softfloat: clang
-          CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
-          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
         run: >
           cargo build --release
           --target aarch64-unknown-none-softfloat
