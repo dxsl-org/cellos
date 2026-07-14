@@ -45,8 +45,11 @@ if [[ ! -f "$ALPINE_CACHE/vmlinuz-virt" || ! -f "$ALPINE_CACHE/initramfs-virt" ]
 fi
 
 # ── Step 2: Build aarch64 cells (including service-hypervisor) ──────────────
+# No RUSTFLAGS here: the env var REPLACES the per-target relocation-model=pic
+# + BTI/PAC flags (config.toml locally, CARGO_TARGET_* env on CI) and the
+# cells then fail to link -pie. Warnings are gated by the clippy CI jobs.
 echo "[make-hv-fs] Building aarch64 cells (service-hypervisor + core cells)..."
-RUSTFLAGS="-D warnings" cargo build --release \
+cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
     -p app-init -p app-shell -p service-vfs -p service-config \

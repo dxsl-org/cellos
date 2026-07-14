@@ -26,18 +26,22 @@ jobs:
         with:
           cache-on-failure: true
 
+      # deny MUST run before audit: Cargo.lock is not committed, and
+      # cargo-deny generates it as a side effect — audit-check only reads an
+      # existing ./Cargo.lock and dies with "Couldn't load ./Cargo.lock"
+      # otherwise. (ci.yml's Security Scan has the same ordering.)
+      - name: cargo-deny
+        # v2 for the same CVSS 4.0 reason (matches ci.yml Security Scan).
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: --all-features
+
       - name: cargo-audit
         # v2: v1.4.1 bundles a cargo-audit that can't parse CVSS 4.0 entries
         # now present in the RustSec advisory DB. Ignore list: .cargo/audit.toml.
         uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: cargo-deny
-        # v2 for the same CVSS 4.0 reason (matches ci.yml Security Scan).
-        uses: EmbarkStudios/cargo-deny-action@v2
-        with:
-          arguments: --all-features
 
   unsafe-ratchet:
     # Replaces the cargo-geiger scan: geiger cannot analyse `-Z build-std`
