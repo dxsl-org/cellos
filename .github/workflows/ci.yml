@@ -8,13 +8,29 @@ on:
   workflow_dispatch:
 
 # ⚠ Do NOT add a workflow-level RUSTFLAGS here. The RUSTFLAGS env var REPLACES
-# (does not merge with) the per-target rustflags in .cargo/config.toml — a
-# global "-D warnings" silently dropped relocation-model=pic (riscv64),
-# code-model=kernel/static (x86_64) and +bti,+paca,+pacg (aarch64), breaking
-# every link. Warnings are gated by the clippy jobs (`-- -D warnings`) instead.
+# (does not merge with) per-target rustflags — a global "-D warnings" silently
+# dropped relocation-model=pic (riscv64), code-model=kernel/static (x86_64)
+# and +bti,+paca,+pacg (aarch64), breaking every link. Warnings are gated by
+# the clippy jobs (`-- -D warnings`) instead.
+#
+# The CARGO_TARGET_*_RUSTFLAGS below mirror .cargo/config.toml, which is
+# GITIGNORED (it carries machine-specific [env] paths) and therefore never
+# reaches CI. Target-scoped env vars affect only their own triple, and a
+# step-level RUSTFLAGS (e.g. the test-hooks kernel build) still overrides
+# them — same precedence as the local config file. Keep the three values in
+# sync with .cargo/config.toml.
 env:
   CARGO_INCREMENTAL: 0
   CARGO_TERM_COLOR: always
+  # riscv64: pic for kernel (la→GOT self-relocation) AND cells (avoids
+  # absolute R_RISCV_64 relocations that -pie linking rejects).
+  CARGO_TARGET_RISCV64GC_UNKNOWN_NONE_ELF_RUSTFLAGS: "-C relocation-model=pic"
+  # x86_64: Limine panics on PIE kernels (permission-split LOAD pages);
+  # kernel code model + no red zone + CET landing pads.
+  CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C code-model=kernel -C target-feature=-red-zone,+cet-shstk -C relocation-model=static"
+  # aarch64: pic for kernel and cells (matches run-arm-virt.ps1 /
+  # build-aarch64-cells.ps1) + BTI/PAC codegen.
+  CARGO_TARGET_AARCH64_UNKNOWN_NONE_SOFTFLOAT_RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
 
 jobs:
   lint:
@@ -56,9 +72,17 @@ jobs:
           # -I …/freestanding-include: Ubuntu's bare-metal gcc ships no libc
           # headers; littlefs includes <string.h>, served by the vendored set.
           CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+        # Same exclusions as the Build job: these crates' build scripts compile
+        # vendored C that needs toolchain pieces CI does not have (lua needs
+        # signal.h/stdio.h — a full libc, not just the vendored string.h).
         run: >
           cargo clippy
           --workspace
+          --exclude app-mlibc-smoke
+          --exclude doom
+          --exclude tetris-c
+          --exclude lua
+          --exclude tetris-lua
           --target riscv64gc-unknown-none-elf
           -Z build-std=core,alloc
           -- -D warnings
@@ -131,7 +155,12 @@ jobs:
           # ships no libc headers and littlefs includes <string.h>.
           CFLAGS_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && format('-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I{0}/third_party/freestanding-include', github.workspace) || '' }}
           CC_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && matrix.cc_bin || '' }}
+          # x86_64 littlefs must be freestanding too: the host cc defaults to
+          # stack-protector + libc builtins (__stack_chk_fail / __popcountdi2)
+          # that a bare-metal link cannot resolve. Mirrors
+          # scripts/build-x86_64-cells.ps1.
           CC_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && matrix.cc_bin || '' }}
+          CFLAGS_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && format('-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I{0}/third_party/freestanding-include', github.workspace) || '' }}
         # --exclude app-mlibc-smoke: links a pre-built mlibc libc.a
         #   (scripts/setup-mlibc.ps1 / build-mlibc.sh) that CI does not have —
         #   without it the link dies on undefined puts/printf/clock_gettime.

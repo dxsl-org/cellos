@@ -1,0 +1,14 @@
+# cargo-audit configuration (Security Scan CI job, rustsec/audit-check).
+# Keep ignore entries in sync with deny.toml [advisories].ignore — cargo-deny
+# and cargo-audit both scan the RustSec DB and must agree.
+
+[advisories]
+ignore = [
+    # ttf-parser unmaintained — no safe upgrade; skrifa migration is a separate task.
+    "RUSTSEC-2026-0192",
+    # rsa Marvin timing sidechannel — pulled by embedded-tls for TLS cert
+    # signature verification only (public-key op). The attack needs a
+    # private-key decryption timing oracle Cellos never exposes. No fixed
+    # rsa release exists yet.
+    "RUSTSEC-2023-0071",
+]
