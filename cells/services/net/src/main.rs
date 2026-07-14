@@ -15,10 +15,21 @@ api::declare_manifest!(block_io = false, network = true, spawn = false);
 
 // Narrow syscall allowlist -- kernel enforces this at dispatch (Phase 27).
 api::declare_syscalls![
-    Send, Recv, TryRecv, RecvTimeout, Reply, Log, Heartbeat, LookupService,
-    NetTx, NetRx, GetTime,
-    StateStash, StateRestore,
-    GetRandom, WaitForEvent,
+    Send,
+    Recv,
+    TryRecv,
+    RecvTimeout,
+    Reply,
+    Log,
+    Heartbeat,
+    LookupService,
+    NetTx,
+    NetRx,
+    GetTime,
+    StateStash,
+    StateRestore,
+    GetRandom,
+    WaitForEvent,
 ];
 
 mod dhcp;
@@ -29,11 +40,12 @@ mod socket_state;
 mod socket_table;
 mod tls;
 
+use crate::tls::socket::TlsSocketEntry;
 use alloc::collections::BTreeMap;
+use api::syscall::events::NET_RX;
 use core::sync::atomic::{AtomicU16, Ordering};
 use dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use interface::VirtioNetDevice;
-use api::syscall::events::NET_RX;
 use ostd::io::println;
 use ostd::syscall::{sys_get_time, sys_try_recv, sys_wait_for_event, SyscallResult};
 use poll_driver::POLL_INTERVAL_MS;
@@ -43,7 +55,6 @@ use smoltcp::{
     wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr},
 };
 use socket_table::{SocketTable, MAX_SOCKETS};
-use crate::tls::socket::TlsSocketEntry;
 
 /// IPC receive buffer — must hold the largest request, including L2Send (1514-byte frame).
 const IPC_BUF_SIZE: usize = 4096;
@@ -99,16 +110,25 @@ pub fn main() {
         device.pump_rx_split();
 
         if dhcp_state == DhcpState::Pending {
-            dhcp_state =
-                poll_dhcp(dhcp_handle, &mut iface, &mut sockets, &mut device, now_instant());
+            dhcp_state = poll_dhcp(
+                dhcp_handle,
+                &mut iface,
+                &mut sockets,
+                &mut device,
+                now_instant(),
+            );
             if dhcp_state == DhcpState::Acquired {
-                if let Some(smoltcp::wire::IpCidr::Ipv4(cidr)) =
-                    iface.ip_addrs().iter().find(|a| matches!(a, smoltcp::wire::IpCidr::Ipv4(_)))
+                if let Some(smoltcp::wire::IpCidr::Ipv4(cidr)) = iface
+                    .ip_addrs()
+                    .iter()
+                    .find(|a| matches!(a, smoltcp::wire::IpCidr::Ipv4(_)))
                 {
                     local_ip.copy_from_slice(cidr.address().as_bytes());
                     let mut s = alloc::string::String::from("[net] IP address: ");
                     for (i, oct) in local_ip.iter().enumerate() {
-                        if i > 0 { s.push('.'); }
+                        if i > 0 {
+                            s.push('.');
+                        }
                         let mut n = *oct as u32;
                         let mut digits = [0u8; 3];
                         let mut di = 3;
@@ -116,9 +136,13 @@ pub fn main() {
                             di -= 1;
                             digits[di] = b'0' + (n % 10) as u8;
                             n /= 10;
-                            if n == 0 { break; }
+                            if n == 0 {
+                                break;
+                            }
                         }
-                        for d in &digits[di..] { s.push(*d as char); }
+                        for d in &digits[di..] {
+                            s.push(*d as char);
+                        }
                     }
                     println(&s);
                 }

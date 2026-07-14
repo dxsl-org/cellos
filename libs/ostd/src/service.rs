@@ -114,8 +114,7 @@ impl<const ID: u16> ServiceRef<ID> {
     {
         let tid = self.resolve().ok_or(ViError::NotFound)?;
         let mut req_buf = [0u8; IPC_BUF_SIZE];
-        let encoded = api::ipc::encode(req, &mut req_buf)
-            .map_err(|_| ViError::InvalidArgument)?;
+        let encoded = api::ipc::encode(req, &mut req_buf).map_err(|_| ViError::InvalidArgument)?;
         if let syscall::SyscallResult::Err(_) = syscall::sys_send(tid, encoded) {
             self.invalidate();
             return Err(ViError::IO);
@@ -130,16 +129,18 @@ impl<const ID: u16> ServiceRef<ID> {
 }
 
 impl<const ID: u16> Default for ServiceRef<ID> {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Convenience type alias — VFS service handle.
-pub type VfsRef     = ServiceRef<{ service::VFS }>;
+pub type VfsRef = ServiceRef<{ service::VFS }>;
 /// Convenience type alias — net service handle.
-pub type NetRef     = ServiceRef<{ service::NET }>;
+pub type NetRef = ServiceRef<{ service::NET }>;
 /// Convenience type alias — input service handle.
-pub type InputRef   = ServiceRef<{ service::INPUT }>;
+pub type InputRef = ServiceRef<{ service::INPUT }>;
 /// Convenience type alias — config service handle.
-pub type ConfigRef  = ServiceRef<{ service::CONFIG }>;
+pub type ConfigRef = ServiceRef<{ service::CONFIG }>;
 /// Convenience type alias — compositor service handle.
 pub type CompositorRef = ServiceRef<{ service::COMPOSITOR }>;

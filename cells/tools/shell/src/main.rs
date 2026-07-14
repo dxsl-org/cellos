@@ -11,27 +11,56 @@ extern crate ostd;
 // sensor-demo, …) would otherwise lose their gpio/uart caps and fail with
 // PermissionDenied. The interactive operator at the shell IS the robot
 // operator, so shell-level peripheral delegation matches the trust model.
-api::declare_manifest!(block_io = false, network = false, spawn = true, gpio = true, uart = true);
+api::declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = true,
+    gpio = true,
+    uart = true
+);
 
 // Narrow syscall allowlist — kernel enforces this at dispatch (Phase 27).
 // ForceExit is always-permitted (SpawnCap-gated at dispatch).
 api::declare_syscalls![
-    Send, Recv, TryRecv, RecvTimeout, Reply, Log, Heartbeat, LookupService,
-    SpawnFromPath, SpawnFromMem, SpawnPinned, Wait, GetTime, GetProcs, SetTimer,
-    HotSwap, StateStash, StateRestore,
-    OpenCap, ReadCap, CloseCap,
-    GrantAlloc, GrantShare, GrantSlice, GrantFree,
+    Send,
+    Recv,
+    TryRecv,
+    RecvTimeout,
+    Reply,
+    Log,
+    Heartbeat,
+    LookupService,
+    SpawnFromPath,
+    SpawnFromMem,
+    SpawnPinned,
+    Wait,
+    GetTime,
+    GetProcs,
+    SetTimer,
+    HotSwap,
+    StateStash,
+    StateRestore,
+    OpenCap,
+    ReadCap,
+    CloseCap,
+    GrantAlloc,
+    GrantShare,
+    GrantSlice,
+    GrantFree,
     // Read = stdin readline; Open/Close (+Read) = `cat` over the kernel FS;
     // ReadDir = the `ls` built-in (reads the kernel FS directly, not VFS IPC);
     // Snapshot = the `snapshot` built-in. Omitting Read silently bricked the
     // shell's serial input once dispatch-level allowlist enforcement landed
     // (Phase 31b check_allowlist denies without logging).
-    Read, Open, Close, ReadDir, Snapshot,
+    Read,
+    Open,
+    Close,
+    ReadDir,
+    Snapshot,
 ];
 
 mod aliases;
 mod async_utils;
-mod state_transfer;
 mod cmd_fs;
 mod cmd_sys;
 mod commands;
@@ -41,6 +70,7 @@ mod history;
 mod jobs;
 mod parser;
 mod shell;
+mod state_transfer;
 
 #[cfg(feature = "shell_test")]
 mod shell_test;
@@ -61,7 +91,9 @@ pub fn main() {
         // Don't spin indefinitely — attempt up to 50 times (~25 seconds),
         // then proceed without focus (UART fallback still works).
         for _ in 0..50 {
-            if ostd::input::request_focus() { break; }
+            if ostd::input::request_focus() {
+                break;
+            }
             ostd::task::yield_now();
         }
         let _ = ostd::syscall::sys_log("DEBUG: Shell focus acquired (or timed out)\n");

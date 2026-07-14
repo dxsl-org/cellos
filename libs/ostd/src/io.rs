@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use crate::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
 use crate::*;
 use alloc::string::String;
 use api::input::{decode_event, InputEvent, KeyState, KeySym, INPUT_EVENT_OPCODE};
 use api::ipc::IPC_BUF_SIZE;
 use api::syscall::service;
-use crate::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
 
 // ─── embedded-io glue ────────────────────────────────────────────────────────
 
@@ -27,11 +27,11 @@ impl core::error::Error for OstdError {}
 impl embedded_io::Error for OstdError {
     fn kind(&self) -> embedded_io::ErrorKind {
         match self.0 {
-            ViError::NotFound         => embedded_io::ErrorKind::NotFound,
+            ViError::NotFound => embedded_io::ErrorKind::NotFound,
             ViError::PermissionDenied => embedded_io::ErrorKind::PermissionDenied,
-            ViError::OutOfMemory      => embedded_io::ErrorKind::OutOfMemory,
-            ViError::WouldBlock       => embedded_io::ErrorKind::Other,
-            _                         => embedded_io::ErrorKind::Other,
+            ViError::OutOfMemory => embedded_io::ErrorKind::OutOfMemory,
+            ViError::WouldBlock => embedded_io::ErrorKind::Other,
+            _ => embedded_io::ErrorKind::Other,
         }
     }
 }
@@ -51,18 +51,18 @@ pub fn print_usize(n: usize) {
     let mut buf = [0u8; 20];
     let mut i = 0;
     let mut num = n;
-    
+
     if num == 0 {
         print("0");
         return;
     }
-    
+
     while num > 0 {
         buf[i] = (num % 10) as u8 + b'0';
         num /= 10;
         i += 1;
     }
-    
+
     // Reverse
     let mut start = 0;
     let mut end = i - 1;
@@ -73,7 +73,7 @@ pub fn print_usize(n: usize) {
         start += 1;
         end -= 1;
     }
-    
+
     if let Ok(s) = core::str::from_utf8(&buf[..i]) {
         print(s);
     }
@@ -128,10 +128,16 @@ impl Stdin {
                         // sys_send dead zone on every 200ms timeout, causing dropped chars.
                     }
                     SyscallResult::Ok(sender) if sender == input_tid => {
-                        if frame[0] != INPUT_EVENT_OPCODE { continue; }
-                        let Some(ev) = decode_event(&frame[1..]) else { continue };
+                        if frame[0] != INPUT_EVENT_OPCODE {
+                            continue;
+                        }
+                        let Some(ev) = decode_event(&frame[1..]) else {
+                            continue;
+                        };
                         if let InputEvent::Key(k) = ev {
-                            if k.state != KeyState::Pressed { continue; }
+                            if k.state != KeyState::Pressed {
+                                continue;
+                            }
                             match k.keysym {
                                 KeySym::Return => {
                                     print("\n");

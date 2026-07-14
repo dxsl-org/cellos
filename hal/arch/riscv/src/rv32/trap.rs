@@ -56,12 +56,18 @@ pub extern "C" fn vi_trap_handler32(frame: &mut ViTrapFrame32) {
             1 => {
                 // S-mode software interrupt (SSIP) — zero-latency RT preemption.
                 // SAFETY: csrci on sip.SSIP is valid from S-mode (priv spec §4.1.3).
-                unsafe { core::arch::asm!("csrci sip, 0x2", options(nomem, nostack)); }
-                unsafe { vi_timer_tick(); }
+                unsafe {
+                    core::arch::asm!("csrci sip, 0x2", options(nomem, nostack));
+                }
+                unsafe {
+                    vi_timer_tick();
+                }
             }
             5 => {
                 // S-mode timer interrupt (STIP) — scheduler preemption point.
-                unsafe { vi_timer_tick(); }
+                unsafe {
+                    vi_timer_tick();
+                }
             }
             _ => {
                 // Unknown interrupt — ignore silently to avoid nested fault.
@@ -79,7 +85,9 @@ pub extern "C" fn vi_trap_handler32(frame: &mut ViTrapFrame32) {
                 // If a Cell is running, kill it; otherwise panic.
                 let cell_id = unsafe { vi_current_cell_id() };
                 if cell_id != 0 {
-                    unsafe { vi_terminate_on_fault(code as usize, frame.sepc as usize); }
+                    unsafe {
+                        vi_terminate_on_fault(code as usize, frame.sepc as usize);
+                    }
                     // vi_terminate_on_fault calls yield_cpu() — we should not reach here.
                 } else {
                     panic!(
@@ -97,7 +105,9 @@ fn vi_handle_syscall(frame: &mut ViTrapFrame32) {
         // Same symbol name as riscv64; kernel provides this via cfg-gated stub.
         fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame32);
     }
-    unsafe { ViCell_syscall_dispatch(frame); }
+    unsafe {
+        ViCell_syscall_dispatch(frame);
+    }
 }
 
 extern "Rust" {

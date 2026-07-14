@@ -5,4 +5,4 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-types = { path = "../../../libs/types" }
+types = { path = "../../../libs/types", version = "0.1.0" }

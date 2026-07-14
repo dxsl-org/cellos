@@ -19,7 +19,9 @@ pub fn read_mtime() -> u64 {
     {
         let time: u64;
         // SAFETY: reads the read-only `time` CSR (0xC01), no side effects.
-        unsafe { core::arch::asm!("csrr {0}, time", out(reg) time, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("csrr {0}, time", out(reg) time, options(nomem, nostack));
+        }
         time
     }
     #[cfg(target_arch = "riscv32")]

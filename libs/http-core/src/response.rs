@@ -118,7 +118,10 @@ pub fn parse_response_headers(buf: &[u8]) -> Result<ParsedHeaders, HttpError> {
         if hdr.name.eq_ignore_ascii_case("transfer-encoding") {
             // The value may be comma-separated; "chunked" is the interesting token.
             if let Ok(val) = core::str::from_utf8(hdr.value) {
-                if val.split(',').any(|t| t.trim().eq_ignore_ascii_case("chunked")) {
+                if val
+                    .split(',')
+                    .any(|t| t.trim().eq_ignore_ascii_case("chunked"))
+                {
                     is_chunked = true;
                 }
             }
@@ -133,7 +136,11 @@ pub fn parse_response_headers(buf: &[u8]) -> Result<ParsedHeaders, HttpError> {
     }
 
     // Transfer-Encoding: chunked overrides Content-Length (RFC 9112 §6.1).
-    let framing = if is_chunked { Framing::Chunked } else { Framing::ContentLength };
+    let framing = if is_chunked {
+        Framing::Chunked
+    } else {
+        Framing::ContentLength
+    };
 
     Ok(ParsedHeaders {
         status,

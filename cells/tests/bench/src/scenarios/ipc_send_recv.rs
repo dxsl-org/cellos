@@ -5,8 +5,8 @@
 //! dependency on VFS TID, which can vary depending on the boot sequence.
 //! PDR target: < 50 µs per round-trip.
 
-use api::{benchmark::ViBenchmark, TaskPriority};
-use ostd::syscall::{sys_send, sys_recv, sys_set_spawn_args, sys_spawn_pinned, SyscallResult};
+use api::benchmark::ViBenchmark;
+use ostd::syscall::{sys_recv, sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult};
 
 // Use bench-probe (VA 0x19000000) so the echo peer doesn't collide with the
 // orchestrator's pages (VA 0x18000000) in the shared SAS page table.
@@ -27,20 +27,28 @@ impl IpcSendRecvBench {
             SyscallResult::Ok(tid) => tid,
             _ => {
                 ostd::io::println("FATAL: Failed to spawn bench-probe. Missing in disk image?");
+                // sys_exit diverges (-> !); no trailing value needed to satisfy the match arm type.
                 ostd::syscall::sys_exit(1);
-                0
             }
         };
         // Yield a few times so the echo peer reaches its recv loop.
-        for _ in 0..20 { ostd::task::yield_now(); }
+        for _ in 0..20 {
+            ostd::task::yield_now();
+        }
         let mut msg = [0u8; 64];
         msg[0] = 0x42; // ping
-        Self { echo_tid, msg, buf: [0u8; 64] }
+        Self {
+            echo_tid,
+            msg,
+            buf: [0u8; 64],
+        }
     }
 }
 
 impl ViBenchmark for IpcSendRecvBench {
-    fn name(&self) -> &'static str { "ipc_send_recv" }
+    fn name(&self) -> &'static str {
+        "ipc_send_recv"
+    }
 
     fn run_once(&mut self) -> api::ViResult<u64> {
         if self.echo_tid == 0 {
@@ -48,7 +56,9 @@ impl ViBenchmark for IpcSendRecvBench {
         }
         let r1 = sys_send(self.echo_tid, &self.msg);
         let r2 = sys_recv(0, &mut self.buf);
-        if !matches!(r1, ostd::syscall::SyscallResult::Ok(_)) || !matches!(r2, ostd::syscall::SyscallResult::Ok(_)) {
+        if !matches!(r1, ostd::syscall::SyscallResult::Ok(_))
+            || !matches!(r2, ostd::syscall::SyscallResult::Ok(_))
+        {
             ostd::io::println(&alloc::format!("IPC err: send={:?} recv={:?}", r1, r2));
         }
         Ok(0)
@@ -67,5 +77,7 @@ impl Drop for IpcSendRecvBench {
 }
 
 impl Default for IpcSendRecvBench {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

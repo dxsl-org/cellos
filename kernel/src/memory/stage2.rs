@@ -29,15 +29,15 @@ use super::paging::PAGE_SIZE;
 
 // ── S2 descriptor constants ─────────────────────────────────────────────────
 
-const DESC_VALID:  u64 = 1 << 0;
-const DESC_TABLE:  u64 = 1 << 1; // At L1/L2 → table pointer; at L3 → page descriptor
+const DESC_VALID: u64 = 1 << 0;
+const DESC_TABLE: u64 = 1 << 1; // At L1/L2 → table pointer; at L3 → page descriptor
 
 // Stage-2 MemAttr bits[5:2] — inline, not a MAIR index.
 const S2_MEMATTR_NORMAL: u64 = 0b1111 << 2; // Normal Inner+Outer WB-WA
-const S2_S2AP_RW:        u64 = 0b11   << 6; // Read-write
-const S2_S2AP_RO:        u64 = 0b01   << 6; // Read-only
-const S2_SH_INNER:       u64 = 0b11   << 8; // Inner-shareable
-const S2_AF:             u64 =    1   << 10; // Access Flag (suppress fault)
+const S2_S2AP_RW: u64 = 0b11 << 6; // Read-write
+const S2_S2AP_RO: u64 = 0b01 << 6; // Read-only
+const S2_SH_INNER: u64 = 0b11 << 8; // Inner-shareable
+const S2_AF: u64 = 1 << 10; // Access Flag (suppress fault)
 
 // Base flags for a Normal-WB-IS entry (MemAttr | S2AP_RW | SH | AF).
 const S2_BASE_RW: u64 = S2_MEMATTR_NORMAL | S2_S2AP_RW | S2_SH_INNER | S2_AF;
@@ -76,17 +76,27 @@ pub const MMIO_HOLES: &[(u64, u64)] = &[
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 #[inline]
-fn l1_idx(ipa: u64) -> usize { ((ipa >> L1_SHIFT) & L1_CONC_MASK) as usize }
+fn l1_idx(ipa: u64) -> usize {
+    ((ipa >> L1_SHIFT) & L1_CONC_MASK) as usize
+}
 #[inline]
-fn l2_idx(ipa: u64) -> usize { ((ipa >> L2_SHIFT) & IDX_MASK) as usize }
+fn l2_idx(ipa: u64) -> usize {
+    ((ipa >> L2_SHIFT) & IDX_MASK) as usize
+}
 #[inline]
-fn l3_idx(ipa: u64) -> usize { ((ipa >> L3_SHIFT) & IDX_MASK) as usize }
+fn l3_idx(ipa: u64) -> usize {
+    ((ipa >> L3_SHIFT) & IDX_MASK) as usize
+}
 
 #[inline]
-fn desc_pa(desc: u64) -> usize { (desc & PA_MASK) as usize }
+fn desc_pa(desc: u64) -> usize {
+    (desc & PA_MASK) as usize
+}
 
 #[inline]
-fn table_desc(next_pa: u64) -> u64 { (next_pa & PA_MASK) | DESC_TABLE | DESC_VALID }
+fn table_desc(next_pa: u64) -> u64 {
+    (next_pa & PA_MASK) | DESC_TABLE | DESC_VALID
+}
 
 #[inline]
 fn page_desc(pa: u64, writable: bool) -> u64 {
@@ -139,7 +149,7 @@ pub struct Stage2Table {
     sub_frames: Vec<usize>, // physical addresses
 
     // Carved guest-RAM region used for SAS-isolation assertion in map().
-    guest_ram_pa:    u64,
+    guest_ram_pa: u64,
     guest_ram_pages: usize,
 }
 
@@ -161,12 +171,18 @@ impl Stage2Table {
             let mut g = FRAME_ALLOCATOR.lock();
             g.as_mut()?.allocate_contiguous(2)? as u64
         };
-        debug_assert_eq!(root_pa % (2 * PAGE_SIZE as u64), 0, "S2 root not 8KB-aligned");
+        debug_assert_eq!(
+            root_pa % (2 * PAGE_SIZE as u64),
+            0,
+            "S2 root not 8KB-aligned"
+        );
 
         let root_va = phys_to_virt(root_pa as usize) as *mut u64;
         // Zero both L1 frames (1024 entries).
         // SAFETY: we just allocated these frames; they are ours exclusively.
-        unsafe { core::ptr::write_bytes(root_va, 0, 1024); }
+        unsafe {
+            core::ptr::write_bytes(root_va, 0, 1024);
+        }
 
         Some(Self {
             root_pa,
@@ -179,7 +195,9 @@ impl Stage2Table {
 
     /// Physical address of the root frame (for VTTBR_EL2.BADDR).
     #[inline]
-    pub fn root_pa(&self) -> u64 { self.root_pa }
+    pub fn root_pa(&self) -> u64 {
+        self.root_pa
+    }
 
     /// Carve `n_pages` contiguous physical frames for guest RAM.
     ///
@@ -203,7 +221,9 @@ impl Stage2Table {
         };
         let va = phys_to_virt(pa) as *mut u64;
         // SAFETY: freshly allocated frame is exclusively ours.
-        unsafe { core::ptr::write_bytes(va, 0, 512); }
+        unsafe {
+            core::ptr::write_bytes(va, 0, 512);
+        }
         self.sub_frames.push(pa);
         Some((va, pa as u64))
     }
@@ -235,8 +255,12 @@ impl Stage2Table {
         let ipa_end = ipa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
         let hpa_end = hpa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
 
-        if ipa_end > IPA_LIMIT { return Err(S2MapError::OutOfBounds); }
-        if hpa_end > IPA_LIMIT { return Err(S2MapError::OutOfBounds); }
+        if ipa_end > IPA_LIMIT {
+            return Err(S2MapError::OutOfBounds);
+        }
+        if hpa_end > IPA_LIMIT {
+            return Err(S2MapError::OutOfBounds);
+        }
 
         // M3: reject any mapping that touches a reserved MMIO hole.
         for &(hole_base, hole_end) in MMIO_HOLES {
@@ -247,8 +271,7 @@ impl Stage2Table {
 
         // SAS isolation: if guest RAM is known, HPA must stay within it.
         if self.guest_ram_pages > 0 {
-            let guest_end = self.guest_ram_pa
-                + (self.guest_ram_pages as u64 * PAGE_SIZE as u64);
+            let guest_end = self.guest_ram_pa + (self.guest_ram_pages as u64 * PAGE_SIZE as u64);
             if hpa < self.guest_ram_pa || hpa_end > guest_end {
                 return Err(S2MapError::SasViolation);
             }
@@ -294,8 +317,12 @@ impl Stage2Table {
         let page_bytes = n_pages as u64 * PAGE_SIZE as u64;
         let ipa_end = ipa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
         let hpa_end = hpa.checked_add(page_bytes).ok_or(S2MapError::Overflow)?;
-        if ipa_end > IPA_LIMIT { return Err(S2MapError::OutOfBounds); }
-        if hpa_end > IPA_LIMIT { return Err(S2MapError::OutOfBounds); }
+        if ipa_end > IPA_LIMIT {
+            return Err(S2MapError::OutOfBounds);
+        }
+        if hpa_end > IPA_LIMIT {
+            return Err(S2MapError::OutOfBounds);
+        }
         let mut cur_ipa = ipa;
         let mut cur_hpa = hpa;
         for _ in 0..n_pages {
@@ -322,7 +349,9 @@ impl Stage2Table {
             // Allocate a fresh L2 table.
             let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
             // SAFETY: l1_ptr valid; DESC_TABLE|DESC_VALID cannot overlap PA bits.
-            unsafe { *l1_ptr = table_desc(pa); }
+            unsafe {
+                *l1_ptr = table_desc(pa);
+            }
             va
         } else {
             return Err(S2MapError::BlockConflict); // L1 block — refuse to split
@@ -339,7 +368,9 @@ impl Stage2Table {
         } else if l2e & DESC_VALID == 0 {
             let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
             // SAFETY: l2_ptr valid.
-            unsafe { *l2_ptr = table_desc(pa); }
+            unsafe {
+                *l2_ptr = table_desc(pa);
+            }
             va
         } else {
             return Err(S2MapError::BlockConflict); // L2 block
@@ -350,7 +381,9 @@ impl Stage2Table {
             // SAFETY: l3_va valid for 512 entries; l3_idx < 512.
             unsafe { l3_va.add(l3_idx(ipa)) };
         // SAFETY: writing a well-formed page descriptor.
-        unsafe { *l3_ptr = page_desc(hpa, writable); }
+        unsafe {
+            *l3_ptr = page_desc(hpa, writable);
+        }
 
         Ok(())
     }
@@ -363,7 +396,9 @@ impl Stage2Table {
             phys_to_virt(desc_pa(l1e)) as *mut u64
         } else if l1e & DESC_VALID == 0 {
             let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
-            unsafe { *l1_ptr = table_desc(pa); }
+            unsafe {
+                *l1_ptr = table_desc(pa);
+            }
             va
         } else {
             return Err(S2MapError::BlockConflict);
@@ -374,31 +409,41 @@ impl Stage2Table {
             phys_to_virt(desc_pa(l2e)) as *mut u64
         } else if l2e & DESC_VALID == 0 {
             let (va, pa) = self.alloc_subtable().ok_or(S2MapError::OutOfMemory)?;
-            unsafe { *l2_ptr = table_desc(pa); }
+            unsafe {
+                *l2_ptr = table_desc(pa);
+            }
             va
         } else {
             return Err(S2MapError::BlockConflict);
         };
         let l3_ptr: *mut u64 = unsafe { l3_va.add(l3_idx(ipa)) };
         // SAFETY: writing a Device-nGnRnE page descriptor for MMIO passthrough.
-        unsafe { *l3_ptr = page_desc_device(hpa, writable); }
+        unsafe {
+            *l3_ptr = page_desc_device(hpa, writable);
+        }
         Ok(())
     }
 
     fn unmap_single(&mut self, ipa: u64) {
         let l1_ptr: *mut u64 = unsafe { self.root_va.add(l1_idx(ipa)) };
         let l1e = unsafe { *l1_ptr };
-        if l1e & (DESC_VALID | DESC_TABLE) != (DESC_VALID | DESC_TABLE) { return; }
+        if l1e & (DESC_VALID | DESC_TABLE) != (DESC_VALID | DESC_TABLE) {
+            return;
+        }
 
         let l2_va: *mut u64 = phys_to_virt(desc_pa(l1e)) as *mut u64;
         let l2_ptr: *mut u64 = unsafe { l2_va.add(l2_idx(ipa)) };
         let l2e = unsafe { *l2_ptr };
-        if l2e & (DESC_VALID | DESC_TABLE) != (DESC_VALID | DESC_TABLE) { return; }
+        if l2e & (DESC_VALID | DESC_TABLE) != (DESC_VALID | DESC_TABLE) {
+            return;
+        }
 
         let l3_va: *mut u64 = phys_to_virt(desc_pa(l2e)) as *mut u64;
         let l3_ptr: *mut u64 = unsafe { l3_va.add(l3_idx(ipa)) };
         // Clear the page descriptor.
-        unsafe { *l3_ptr = 0; }
+        unsafe {
+            *l3_ptr = 0;
+        }
     }
 }
 
@@ -445,16 +490,23 @@ pub fn probe_stage2_table() {
     let guest_pa = tbl.carve_guest_ram(2).expect("carve_guest_ram failed");
 
     // Map guest IPA 0x40000000 → carved PA.
-    tbl.map(0x40000000, guest_pa, 2, true).expect("Stage2Table::map failed");
+    tbl.map(0x40000000, guest_pa, 2, true)
+        .expect("Stage2Table::map failed");
 
     // Verify the L3 descriptor was written correctly.
     let l1_ptr: *mut u64 = unsafe { tbl.root_va.add(l1_idx(0x40000000)) };
     let l1e = unsafe { *l1_ptr };
-    assert!(l1e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE), "L1 table entry invalid");
+    assert!(
+        l1e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE),
+        "L1 table entry invalid"
+    );
 
     let l2_va: *mut u64 = phys_to_virt(desc_pa(l1e)) as *mut u64;
     let l2e = unsafe { *l2_va.add(l2_idx(0x40000000)) };
-    assert!(l2e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE), "L2 table entry invalid");
+    assert!(
+        l2e & (DESC_VALID | DESC_TABLE) == (DESC_VALID | DESC_TABLE),
+        "L2 table entry invalid"
+    );
 
     let l3_va: *mut u64 = phys_to_virt(desc_pa(l2e)) as *mut u64;
     let l3e = unsafe { *l3_va.add(l3_idx(0x40000000)) };

@@ -10,13 +10,20 @@
 #![allow(unsafe_code)]
 #![allow(unused_variables)]
 #![allow(non_upper_case_globals)]
-#![cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "wasm32", doc))]
+#![cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "wasm32",
+    doc
+))]
 
 // When the `mlibc` feature is active, all C symbols are provided by mlibc's
 // libc.a (via the mlibc-shim crate).  Emitting them here too would cause
 // duplicate-symbol link errors.  Gate every submodule and re-export off.
 #[cfg(not(feature = "mlibc"))]
 pub mod alloc;
+#[cfg(not(feature = "mlibc"))]
+pub mod cxxabi;
 #[cfg(not(feature = "mlibc"))]
 pub mod entropy;
 #[cfg(not(feature = "mlibc"))]
@@ -26,22 +33,20 @@ pub mod net;
 #[cfg(not(feature = "mlibc"))]
 pub mod setjmp;
 #[cfg(not(feature = "mlibc"))]
-pub mod stdio_fmt;
-#[cfg(not(feature = "mlibc"))]
 pub mod stdio;
+#[cfg(not(feature = "mlibc"))]
+pub mod stdio_fmt;
 #[cfg(not(feature = "mlibc"))]
 pub mod strings;
 #[cfg(not(feature = "mlibc"))]
 pub mod sysio;
-#[cfg(not(feature = "mlibc"))]
-pub mod cxxabi;
 
 // Re-export the public API that was previously in the monolithic posix.rs,
 // so existing callers (api::posix::getentropy, api::posix::socket, etc.) still compile.
 #[cfg(not(feature = "mlibc"))]
-pub use entropy::{getentropy, arc4random_buf};
+pub use entropy::{arc4random_buf, getentropy};
 #[cfg(not(feature = "mlibc"))]
-pub use net::{sockaddr_in, socket, connect, send, recv, _close};
+pub use net::{_close, connect, recv, send, sockaddr_in, socket};
 #[cfg(not(feature = "mlibc"))]
 pub use stdio::FILE;
 #[cfg(not(feature = "mlibc"))]

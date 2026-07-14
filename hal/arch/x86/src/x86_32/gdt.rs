@@ -16,7 +16,10 @@ static mut GDT: [GdtEntry; 3] = [
 ];
 
 #[repr(C, packed)]
-struct GdtPointer { limit: u16, base: u32 }
+struct GdtPointer {
+    limit: u16,
+    base: u32,
+}
 
 /// Load the 32-bit GDT and reload segment registers.
 ///
@@ -26,7 +29,7 @@ pub fn init() {
     unsafe {
         let ptr = GdtPointer {
             limit: (core::mem::size_of_val(&GDT) - 1) as u16,
-            base:  GDT.as_ptr() as u32,
+            base: GDT.as_ptr() as u32,
         };
 
         core::arch::asm!(

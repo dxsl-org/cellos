@@ -8,20 +8,22 @@
 
 extern crate alloc;
 
-mod game;
 mod draw;
+mod game;
 
 use api::declare_manifest;
-use api::input::{InputEvent, KeyState, KeySym};
 use api::display::PixelFormat;
-use ostd::display::{ViSurface, wait_for_compositor};
+use api::input::{InputEvent, KeyState, KeySym};
+use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
 
 declare_manifest!(block_io = false, network = false, spawn = false);
 
-fn ticks_ms() -> u32 { (sys_get_time() / 10_000) as u32 }
+fn ticks_ms() -> u32 {
+    (sys_get_time() / 10_000) as u32
+}
 
 #[no_mangle]
 pub extern "C" fn main() {
@@ -33,11 +35,15 @@ pub extern "C" fn main() {
         PixelFormat::Bgra8888,
     ) {
         Ok(s) => s,
-        Err(_) => { sys_exit(1); }
+        Err(_) => {
+            sys_exit(1);
+        }
     };
     surf.raise();
 
-    while !request_focus() { yield_now(); }
+    while !request_focus() {
+        yield_now();
+    }
 
     let mut game = game::Game::new(ticks_ms());
     draw::render(&mut surf, &game);
@@ -80,30 +86,62 @@ pub extern "C" fn main() {
                         let first = ke.state == KeyState::Pressed;
                         if first || can_repeat {
                             // Space (char ' ') or Return = hard drop; Up = rotate
-                        let ch = ke.char();
-                        let is_space = ch == Some(' ');
-                        match ke.keysym {
-                                KeySym::Left   => { game.move_left();  redraw = true; }
-                                KeySym::Right  => { game.move_right(); redraw = true; }
-                                KeySym::Up     => { game.rotate();     redraw = true; }
-                                KeySym::Down   => { game.soft_drop();  redraw = true; }
-                                KeySym::Return => { game.hard_drop();  redraw = true; }
-                                KeySym::Escape => { sys_exit(0); }
-                                KeySym::Printable => match ch {
-                                    Some(' ')                     => { game.hard_drop();  redraw = true; }
-                                    Some('a') | Some('A')
-                                    | Some('j') | Some('J')       => { game.move_left();  redraw = true; }
-                                    Some('d') | Some('D')
-                                    | Some('l') | Some('L')       => { game.move_right(); redraw = true; }
-                                    Some('w') | Some('W')
-                                    | Some('i') | Some('I')       => { game.rotate();     redraw = true; }
-                                    Some('s') | Some('S')
-                                    | Some('k') | Some('K')       => { game.soft_drop();  redraw = true; }
-                                    _ => { let _ = is_space; }
+                            let ch = ke.char();
+                            let is_space = ch == Some(' ');
+                            match ke.keysym {
+                                KeySym::Left => {
+                                    game.move_left();
+                                    redraw = true;
                                 }
+                                KeySym::Right => {
+                                    game.move_right();
+                                    redraw = true;
+                                }
+                                KeySym::Up => {
+                                    game.rotate();
+                                    redraw = true;
+                                }
+                                KeySym::Down => {
+                                    game.soft_drop();
+                                    redraw = true;
+                                }
+                                KeySym::Return => {
+                                    game.hard_drop();
+                                    redraw = true;
+                                }
+                                KeySym::Escape => {
+                                    sys_exit(0);
+                                }
+                                KeySym::Printable => match ch {
+                                    Some(' ') => {
+                                        game.hard_drop();
+                                        redraw = true;
+                                    }
+                                    Some('a') | Some('A') | Some('j') | Some('J') => {
+                                        game.move_left();
+                                        redraw = true;
+                                    }
+                                    Some('d') | Some('D') | Some('l') | Some('L') => {
+                                        game.move_right();
+                                        redraw = true;
+                                    }
+                                    Some('w') | Some('W') | Some('i') | Some('I') => {
+                                        game.rotate();
+                                        redraw = true;
+                                    }
+                                    Some('s') | Some('S') | Some('k') | Some('K') => {
+                                        game.soft_drop();
+                                        redraw = true;
+                                    }
+                                    _ => {
+                                        let _ = is_space;
+                                    }
+                                },
                                 _ => {}
                             }
-                            if redraw { last_key_time = now; }
+                            if redraw {
+                                last_key_time = now;
+                            }
                         }
                     }
                     _ => {}
@@ -115,10 +153,15 @@ pub extern "C" fn main() {
             let was_over = game.over;
             game.tick(dt);
             last_tick = now;
-            if game.over != was_over || dt >= 16 { redraw = true; }
+            if game.over != was_over || dt >= 16 {
+                redraw = true;
+            }
         }
 
-        if redraw { draw::render(&mut surf, &game); }
-        else { yield_now(); }
+        if redraw {
+            draw::render(&mut surf, &game);
+        } else {
+            yield_now();
+        }
     }
 }

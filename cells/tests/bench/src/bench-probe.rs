@@ -8,7 +8,17 @@ mod framework;
 mod scenarios;
 
 // Probe/load roles do not spawn further children.
-api::declare_syscalls![Send, Recv, Log, GetTime, Heartbeat, SetTimer, StateRestore, Exit, Yield];
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    GetTime,
+    Heartbeat,
+    SetTimer,
+    StateRestore,
+    Exit,
+    Yield
+];
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
 #[no_mangle]
@@ -16,9 +26,12 @@ pub fn main() {
     let mut argbuf = [0u8; 32];
     let an = ostd::syscall::sys_spawn_args(&mut argbuf);
     let role = core::str::from_utf8(&argbuf[..an]).unwrap_or("");
-    ostd::io::println(&alloc::format!("[bench-probe] Started with role: '{}'", role));
+    ostd::io::println(&alloc::format!(
+        "[bench-probe] Started with role: '{}'",
+        role
+    ));
     match role {
-        "load"     => scenarios::rt_load::run_load(),
+        "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
         "ipc-echo" => {

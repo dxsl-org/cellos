@@ -49,9 +49,9 @@ pub struct ElfHeader {
 /// - `ViError::NotFound` — path absent from the bootstrap table.
 /// - `ViError::InvalidInput` — malformed ELF or unsupported relocation.
 /// - `ViError::OutOfMemory` — cannot allocate frames for segments.
-/// Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
-/// Mirrors the pre-manifest behavior; only `/bin/` paths gain privilege. The
-/// returned set is still subject to spawner intersection in `spawn_from_path`.
+///   Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
+///   Mirrors the pre-manifest behavior; only `/bin/` paths gain privilege. The
+///   returned set is still subject to spawner intersection in `spawn_from_path`.
 fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
     let mut c = crate::task::cap::CapSet::EMPTY;
     if path.starts_with("/bin/") {
@@ -59,8 +59,12 @@ fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
             c.block_io = true;
             c.block_regions = 0b11; // legacy: P1 + P4 (pre-P03, no SRV bit)
         }
-        if path.ends_with("/bin/net") { c.network = true; }
-        if path.ends_with("/bin/shell") || path.ends_with("/bin/init") { c.spawn = true; }
+        if path.ends_with("/bin/net") {
+            c.network = true;
+        }
+        if path.ends_with("/bin/shell") || path.ends_with("/bin/init") {
+            c.spawn = true;
+        }
     }
     c
 }
@@ -127,7 +131,10 @@ pub fn spawn_gated(
             );
         }
         None if crate::signing::signing_required() => {
-            log::warn!("[loader] DENY {:?}: no __ViCell_sig (signing-required)", path);
+            log::warn!(
+                "[loader] DENY {:?}: no __ViCell_sig (signing-required)",
+                path
+            );
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellSignatureFailed,
                 &crate::audit::encode_u32x2(0, 0),
@@ -146,7 +153,7 @@ pub fn spawn_gated(
     let manifest_opt: Option<api::manifest::CellManifest> =
         match elf_loader.get_section(elf_bytes, "__ViCell_manifest") {
             Ok(bytes) => api::manifest::CellManifest::from_bytes(bytes),
-            Err(_)    => None,
+            Err(_) => None,
         };
 
     // Privilege gate: a user Cell (path NOT under /bin/) may NOT declare any
@@ -156,7 +163,8 @@ pub fn spawn_gated(
         if !path.starts_with("/bin/") && m.declares_any_privilege() {
             log::error!(
                 "[loader] DENY spawn {:?}: user cell over-declares caps (flags={:#04x})",
-                path, m.flags
+                path,
+                m.flags
             );
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellSpawnDenied,
@@ -171,8 +179,9 @@ pub fn spawn_gated(
 
     // Spawn via the in-memory path.  spawn_from_mem now applies .rela.dyn
     // relocations internally, so no separate apply_relocations call is needed.
-    let (tid, _load_base) = crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())
-        .map_err(|_| ViError::OutOfMemory)?;
+    let (tid, _load_base) =
+        crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())
+            .map_err(|_| ViError::OutOfMemory)?;
 
     // Assign a unique CellId based on the task ID so per-cell quota and
     // capability checks are correctly scoped.  `spawn_from_mem` defaults to
@@ -201,7 +210,11 @@ pub fn spawn_gated(
         let allowlist = match ElfLoader.get_section(elf_bytes, "__ViCell_syscalls") {
             Ok(bytes) if bytes.len() >= 8 => {
                 // SAFETY: bytes slice is valid data from the loaded ELF.
-                u64::from_le_bytes(bytes[..8].try_into().expect("8-byte __ViCell_syscalls section"))
+                u64::from_le_bytes(
+                    bytes[..8]
+                        .try_into()
+                        .expect("8-byte __ViCell_syscalls section"),
+                )
             }
             _ => u64::MAX, // no section → permit-all (backwards compatible)
         };
@@ -220,7 +233,7 @@ pub fn spawn_gated(
             Ok(bytes) if bytes.len() >= 16 => {
                 // SAFETY: bytes slice is valid data from the loaded ELF.
                 let mode = bytes[0];
-                let cid  = u64::from_le_bytes(bytes[8..16].try_into().expect("8-byte cluster_id"));
+                let cid = u64::from_le_bytes(bytes[8..16].try_into().expect("8-byte cluster_id"));
                 (mode, cid)
             }
             _ => (0u8, 0u64), // no section → Isolated, no cluster
@@ -228,7 +241,7 @@ pub fn spawn_gated(
         if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
             if let Some(task) = sched.tasks.get_mut(&tid) {
                 task.cluster_mode = mode;
-                task.cluster_id   = cid;
+                task.cluster_id = cid;
             }
         }
     }
@@ -249,15 +262,18 @@ pub fn spawn_gated(
     // after (and blind to) the intersection.
     let requested: CapSet = match manifest_opt {
         Some(ref m) => CapSet::from_manifest(m),
-        None        => legacy_path_caps(path),
-    }.with_path_caps(path);
+        None => legacy_path_caps(path),
+    }
+    .with_path_caps(path);
     // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
     // before the child-mutation lock below (the Spinlock is non-reentrant).
     let after_spawner: CapSet = match spawner {
-        Spawner::Root          => requested,
+        Spawner::Root => requested,
         Spawner::Ceiling(ceil) => requested.intersect(ceil),
-        Spawner::User(stid)    => {
-            let ceil = crate::task::SCHEDULER.lock().as_ref()
+        Spawner::User(stid) => {
+            let ceil = crate::task::SCHEDULER
+                .lock()
+                .as_ref()
                 .and_then(|s| s.tasks.get(&stid))
                 .map(|t| CapSet::of_task(t))
                 .unwrap_or(CapSet::EMPTY); // unknown spawner → no caps (fail-safe)
@@ -285,10 +301,12 @@ pub fn spawn_gated(
             // On non-x86_64 targets these fields default to 0 and are never consulted.
             #[cfg(target_arch = "x86_64")]
             {
-                let requested_tier = manifest_opt.as_ref().map(|m| m.tier())
+                let requested_tier = manifest_opt
+                    .as_ref()
+                    .map(|m| m.tier())
                     .unwrap_or(api::manifest::TIER_LEGACY);
                 let key: u8 = crate::task::cap::granted_tier(&granted, requested_tier);
-                task.pku_key   = key;
+                task.pku_key = key;
                 task.pku_value = crate::hal::pku::pkru_for_key(key);
             }
 

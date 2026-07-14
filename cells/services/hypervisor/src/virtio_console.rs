@@ -16,18 +16,25 @@ const CONSOLE_SPI: u32 = 16;
 pub struct Console {
     last_avail_rx: u16,
     last_avail_tx: u16,
-    used_rx:       u16,
-    used_tx:       u16,
+    used_rx: u16,
+    used_tx: u16,
 }
 
 impl Console {
     pub const fn new() -> Self {
-        Self { last_avail_rx: 0, last_avail_tx: 0, used_rx: 0, used_tx: 0 }
+        Self {
+            last_avail_rx: 0,
+            last_avail_tx: 0,
+            used_rx: 0,
+            used_tx: 0,
+        }
     }
 }
 
 impl VirtioDevice for Console {
-    fn device_id(&self) -> u32 { 3 }
+    fn device_id(&self) -> u32 {
+        3
+    }
 
     fn notify(&mut self, q: usize, qcfg: &QueueCfg, vm_id: usize, vcpu_id: usize) {
         match q {
@@ -46,11 +53,15 @@ impl VirtioDevice for Console {
                     |bufs: &[DescBuf]| {
                         let mut total = 0u32;
                         for buf in bufs {
-                            if buf.writable { continue; } // TX bufs are driver-readable
+                            if buf.writable {
+                                continue;
+                            } // TX bufs are driver-readable
                             let cap = buf.len.min(4096) as usize;
                             let mut data = vec![0u8; cap];
                             let n = crate::vmm::read_guest_memory(vm_id, buf.gpa, &mut data);
-                            if n == 0 || n == usize::MAX { continue; }
+                            if n == 0 || n == usize::MAX {
+                                continue;
+                            }
                             if let Ok(s) = core::str::from_utf8(&data[..n]) {
                                 print(s);
                             }

@@ -40,8 +40,8 @@ pub unsafe extern "C" fn _start() -> ! {
         "j    1b",
         "2:",
         "call main",
-        "li a7, 60",   // ViSyscall::Exit
-        "li a0, 0",    // exit code = 0 in a0 (ViCell ABI: syscall nr in a7, arg in a0)
+        "li a7, 60", // ViSyscall::Exit
+        "li a0, 0",  // exit code = 0 in a0 (ViCell ABI: syscall nr in a7, arg in a0)
         "ecall",
         "1: j 1b"
     );
@@ -67,8 +67,8 @@ pub unsafe extern "C" fn _start() -> ! {
         "b    1b",
         "2:",
         "bl   main",
-        "mov  x0, #60",   // ViSyscall::Exit
-        "mov  x1, #0",    // exit code = 0
+        "mov  x0, #60", // ViSyscall::Exit
+        "mov  x1, #0",  // exit code = 0
         "svc  #0",
         "1: b 1b"
     );
@@ -89,8 +89,8 @@ pub unsafe extern "C" fn _start() -> ! {
         "jmp 1b",
         "2:",
         "call main",
-        "mov rax, 60",    // ViSyscall::Exit
-        "xor rdi, rdi",   // exit code = 0
+        "mov rax, 60",  // ViSyscall::Exit
+        "xor rdi, rdi", // exit code = 0
         "syscall",
         "2: jmp 2b",
     );

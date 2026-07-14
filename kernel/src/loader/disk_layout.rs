@@ -30,12 +30,9 @@
 // Partition constants live in `api::disk` (the Law-1 contract shared with
 // cells and image tools); re-exported here so kernel code keeps short paths.
 pub use api::disk::{
-    PART_FAT32_BASE_LBA, PART_FAT32_SECTORS,
-    PART_CELLTBL_SECTORS,
-    PART_SNAPSHOT_BASE_LBA, PART_SNAPSHOT_SECTORS,
-    PART_LFS_BASE_LBA, PART_LFS_SECTORS,
-    PART_SRV_BASE_LBA, PART_SRV_SECTORS,
-    PART_CELLSTORE_BASE_LBA, PART_CELLSTORE_SECTORS,
+    PART_CELLSTORE_BASE_LBA, PART_CELLSTORE_SECTORS, PART_CELLTBL_SECTORS, PART_FAT32_BASE_LBA,
+    PART_FAT32_SECTORS, PART_LFS_BASE_LBA, PART_LFS_SECTORS, PART_SNAPSHOT_BASE_LBA,
+    PART_SNAPSHOT_SECTORS, PART_SRV_BASE_LBA, PART_SRV_SECTORS,
 };
 
 /// Sector offset (from LBA 0) where the cell bootstrap section (P2) begins.
@@ -94,10 +91,10 @@ const _: () = assert!(core::mem::size_of::<CellEntry>() == SECTOR_SIZE);
 /// P5 (SRV/RedoxFS) is outside the legacy 4-partition MBR limit — verified
 /// separately by the VFS service's partition constants.
 const EXPECTED_PARTS: [(usize, u8, u64, u64); 4] = [
-    (0, 0x0C, PART_FAT32_BASE_LBA,    PART_FAT32_SECTORS),
-    (1, 0x7F, CELL_TABLE_BASE_LBA,    PART_CELLTBL_SECTORS),
+    (0, 0x0C, PART_FAT32_BASE_LBA, PART_FAT32_SECTORS),
+    (1, 0x7F, CELL_TABLE_BASE_LBA, PART_CELLTBL_SECTORS),
     (2, 0x7D, PART_SNAPSHOT_BASE_LBA, PART_SNAPSHOT_SECTORS),
-    (3, 0x7E, PART_LFS_BASE_LBA,      PART_LFS_SECTORS),
+    (3, 0x7E, PART_LFS_BASE_LBA, PART_LFS_SECTORS),
 ];
 
 /// Parse LBA 0 and compare the MBR against the compiled-in layout.
@@ -119,15 +116,28 @@ pub fn verify_mbr() {
     for (slot, ptype, start, size) in EXPECTED_PARTS {
         let e = 446 + slot * 16;
         let found_type = sector[e + 4];
-        let found_start = u32::from_le_bytes([sector[e+8], sector[e+9], sector[e+10], sector[e+11]]) as u64;
-        let found_size  = u32::from_le_bytes([sector[e+12], sector[e+13], sector[e+14], sector[e+15]]) as u64;
+        let found_start =
+            u32::from_le_bytes([sector[e + 8], sector[e + 9], sector[e + 10], sector[e + 11]])
+                as u64;
+        let found_size = u32::from_le_bytes([
+            sector[e + 12],
+            sector[e + 13],
+            sector[e + 14],
+            sector[e + 15],
+        ]) as u64;
         if found_type != ptype || found_start != start || found_size != size {
             log::warn!(
                 "[mbr] P{} mismatch: image type={:#04x} start={} size={} — kernel expects type={:#04x} start={} size={}",
                 slot + 1, found_type, found_start, found_size, ptype, start, size
             );
         } else {
-            log::info!("[mbr] P{} ok: type={:#04x} start={} sectors={}", slot + 1, ptype, start, size);
+            log::info!(
+                "[mbr] P{} ok: type={:#04x} start={} sectors={}",
+                slot + 1,
+                ptype,
+                start,
+                size
+            );
         }
     }
 }

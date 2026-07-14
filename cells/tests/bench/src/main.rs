@@ -9,24 +9,35 @@ extern crate alloc;
 mod framework;
 mod scenarios;
 
-api::declare_syscalls![Send, Recv, TryRecv, Log, Heartbeat, GetTime, SetTimer, SpawnPinned, StateStash, StateRestore, Exit, Yield];
+api::declare_syscalls![
+    Send,
+    Recv,
+    TryRecv,
+    Log,
+    Heartbeat,
+    GetTime,
+    SetTimer,
+    SpawnPinned,
+    StateStash,
+    StateRestore,
+    Exit,
+    Yield
+];
 api::declare_manifest!(block_io = false, network = false, spawn = true);
 
 use api::benchmark::ViBenchmark;
 use framework::{report, runner};
 use ostd::io::println;
 use scenarios::{
-    context_switch::ContextSwitchBench,
-    ipc_send_recv::IpcSendRecvBench,
-    memory_footprint::MemoryFootprintBench,
-    syscall_yield::SyscallYieldBench,
+    context_switch::ContextSwitchBench, ipc_send_recv::IpcSendRecvBench,
+    memory_footprint::MemoryFootprintBench, syscall_yield::SyscallYieldBench,
 };
 
 /// PDR performance targets (nanoseconds).  All checked against p99.
-const TARGET_CTX_SWITCH_NS:  u64 = 100_000; //  100 µs
-const TARGET_IPC_NS:         u64 =  50_000; //   50 µs
-// QEMU TCG target (real hardware target is 10 µs; TCG adds 2-4× overhead).
-const TARGET_SYSCALL_NS:     u64 =  40_000; //   40 µs (QEMU TCG; real-HW target: 10 µs)
+const TARGET_CTX_SWITCH_NS: u64 = 100_000; //  100 µs
+const TARGET_IPC_NS: u64 = 50_000; //   50 µs
+                                   // QEMU TCG target (real hardware target is 10 µs; TCG adds 2-4× overhead).
+const TARGET_SYSCALL_NS: u64 = 40_000; //   40 µs (QEMU TCG; real-HW target: 10 µs)
 const TARGET_FOOTPRINT_BYTES: u64 = 10 * 1024 * 1024; // 10 MB
 
 /// Path for probe/load child cells.  A separate binary (bench-probe) is used
@@ -63,19 +74,26 @@ fn run_rt_preempt() {
         return;
     };
     // Let cells reach their loops before measuring.
-    for _ in 0..100 { ostd::task::yield_now(); }
+    for _ in 0..100 {
+        ostd::task::yield_now();
+    }
 
     let r = scenarios::preempt_latency::measure(probe_tid);
     r.print();
     r.print_json();
     // PDR-ish placeholder target (200 µs p99); first real run calibrates baseline.
-    if r.meets(200_000) { println("[rt] preempt_latency PASS"); }
-    else { println("[rt] preempt_latency FAIL (p99 over 200µs or deadline miss)"); }
+    if r.meets(200_000) {
+        println("[rt] preempt_latency PASS");
+    } else {
+        println("[rt] preempt_latency FAIL (p99 over 200µs or deadline miss)");
+    }
 
     // Tear down spawned cells.
     let _ = ostd::syscall::sys_force_exit(probe_tid);
     for &tid in &load_tids {
-        if tid != 0 { let _ = ostd::syscall::sys_force_exit(tid); }
+        if tid != 0 {
+            let _ = ostd::syscall::sys_force_exit(tid);
+        }
     }
 }
 
@@ -84,7 +102,9 @@ fn spawn_load() -> [usize; LOAD_CELLS] {
     use api::task::TaskPriority;
     let mut tids = [0usize; LOAD_CELLS];
     for slot in tids.iter_mut() {
-        if let Some(tid) = spawn_role("load", TaskPriority::Normal as u8) { *slot = tid; }
+        if let Some(tid) = spawn_role("load", TaskPriority::Normal as u8) {
+            *slot = tid;
+        }
     }
     tids
 }
@@ -92,7 +112,9 @@ fn spawn_load() -> [usize; LOAD_CELLS] {
 /// Force-exit every non-zero tid in `tids`.
 fn kill_all(tids: &[usize]) {
     for &tid in tids {
-        if tid != 0 { let _ = ostd::syscall::sys_force_exit(tid); }
+        if tid != 0 {
+            let _ = ostd::syscall::sys_force_exit(tid);
+        }
     }
 }
 
@@ -106,11 +128,13 @@ fn run_rt_control_loop() {
         kill_all(&load_tids);
         return;
     };
-    for _ in 0..100 { ostd::task::yield_now(); }
-    let _ = ostd::syscall::sys_send(probe_tid, &[0u8]);      // start ping
+    for _ in 0..100 {
+        ostd::task::yield_now();
+    }
+    let _ = ostd::syscall::sys_send(probe_tid, &[0u8]); // start ping
     let mut done = [0u8; 8];
-    let _ = ostd::syscall::sys_recv(0, &mut done);            // wait for completion
-    // The probe sys_exit's itself; only the load cells need teardown.
+    let _ = ostd::syscall::sys_recv(0, &mut done); // wait for completion
+                                                   // The probe sys_exit's itself; only the load cells need teardown.
     kill_all(&load_tids);
 }
 
@@ -124,7 +148,9 @@ fn run_rt_under_load() {
         println("[rt] under_load SKIP — load spawn failed (bench not at /bin/bench yet)");
         return;
     }
-    for _ in 0..100 { ostd::task::yield_now(); }
+    for _ in 0..100 {
+        ostd::task::yield_now();
+    }
 
     let ipc_load = runner::run_default(&mut IpcSendRecvBench::new());
     let sys_load = runner::run_default(&mut SyscallYieldBench);
@@ -135,10 +161,18 @@ fn run_rt_under_load() {
 
 /// Print idle vs under-load p99 plus the integer ratio (×100 → fixed-point x.xx).
 fn print_under_load(name: &str, idle_p99: u64, load_p99: u64) {
-    let ratio = if idle_p99 > 0 { load_p99.saturating_mul(100) / idle_p99 } else { 0 };
+    let ratio = if idle_p99 > 0 {
+        load_p99.saturating_mul(100) / idle_p99
+    } else {
+        0
+    };
     println(&alloc::format!(
         "[rt] {:14} idle_p99={}ns load_p99={}ns ratio={}.{:02}x",
-        name, idle_p99, load_p99, ratio / 100, ratio % 100
+        name,
+        idle_p99,
+        load_p99,
+        ratio / 100,
+        ratio % 100
     ));
 }
 
@@ -149,7 +183,7 @@ pub fn main() {
     let mut argbuf = [0u8; 32];
     let an = ostd::syscall::sys_spawn_args(&mut argbuf);
     match core::str::from_utf8(&argbuf[..an]).unwrap_or("") {
-        "load"     => scenarios::rt_load::run_load(),
+        "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
         "ipc-echo" => {
@@ -212,7 +246,9 @@ pub fn main() {
             println("[bench] syscall_yield PASS");
         } else {
             failed += 1;
-            println("[bench] syscall_yield FAIL (p99 exceeds 40µs QEMU target; real-HW target: 10µs)");
+            println(
+                "[bench] syscall_yield FAIL (p99 exceeds 40µs QEMU target; real-HW target: 10µs)",
+            );
         }
     }
 
@@ -250,7 +286,10 @@ pub fn main() {
     println("");
     println(&alloc::format!(
         "[bench] Results: {}/{} PASS  {}/{} FAIL",
-        passed, passed + failed, failed, passed + failed
+        passed,
+        passed + failed,
+        failed,
+        passed + failed
     ));
 
     // Completion marker — printed unconditionally, BEFORE the threshold verdict.
@@ -260,7 +299,8 @@ pub fn main() {
     // "ALL BENCHMARKS PASS" below remains the real-hardware acceptance gate.
     println(&alloc::format!(
         "[bench] BENCHMARK SUITE COMPLETE ({}/{} within target)",
-        passed, passed + failed
+        passed,
+        passed + failed
     ));
 
     if failed == 0 {

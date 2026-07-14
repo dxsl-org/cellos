@@ -9,14 +9,14 @@ use crate::node::ViNode;
 /// `K` must be `Clone + PartialEq + 'static` (e.g., `&'static str` or a custom enum).
 /// Pages are built lazily — each `push` / `pop` / `replace` invokes the builder fresh.
 pub struct Router<K: Clone + PartialEq + 'static> {
-    routes:  Vec<(K, Box<dyn Fn() -> Box<dyn ViNode>>)>,
+    routes: Vec<(K, Box<dyn Fn() -> Box<dyn ViNode>>)>,
     history: Vec<K>,
 }
 
 impl<K: Clone + PartialEq + 'static> Router<K> {
     pub fn new(initial: K) -> Self {
         Self {
-            routes:  Vec::new(),
+            routes: Vec::new(),
             history: alloc::vec![initial],
         }
     }
@@ -44,7 +44,9 @@ impl<K: Clone + PartialEq + 'static> Router<K> {
     /// History is only mutated when the build succeeds, so a missing-builder
     /// failure leaves history unchanged (no silent corruption).
     pub fn pop(&mut self) -> Option<(K, Box<dyn ViNode>)> {
-        if self.history.len() <= 1 { return None; }
+        if self.history.len() <= 1 {
+            return None;
+        }
         // Peek at the destination key before touching history.
         let key = self.history[self.history.len() - 2].clone();
         let widget = self.build(&key)?;
@@ -64,12 +66,17 @@ impl<K: Clone + PartialEq + 'static> Router<K> {
         Some(widget)
     }
 
-    pub fn can_pop(&self) -> bool { self.history.len() > 1 }
+    pub fn can_pop(&self) -> bool {
+        self.history.len() > 1
+    }
 
-    pub fn current_key(&self) -> &K { self.history.last().unwrap() }
+    pub fn current_key(&self) -> &K {
+        self.history.last().unwrap()
+    }
 
     fn build(&self, key: &K) -> Option<Box<dyn ViNode>> {
-        self.routes.iter()
+        self.routes
+            .iter()
             .find(|(k, _)| k == key)
             .map(|(_, builder)| builder())
     }

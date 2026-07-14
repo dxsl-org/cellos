@@ -56,7 +56,7 @@ impl ClusterId {
     /// Stable and deterministic across architectures.
     pub const fn from_name(name: &str) -> ClusterId {
         const FNV_OFFSET: u64 = 14_695_981_039_346_656_037;
-        const FNV_PRIME:  u64 = 1_099_511_628_211;
+        const FNV_PRIME: u64 = 1_099_511_628_211;
         let bytes = name.as_bytes();
         let mut hash = FNV_OFFSET;
         let mut i = 0;
@@ -121,8 +121,12 @@ pub struct CellNetId(pub [u8; 32]);
 
 impl CellNetId {
     pub const ZERO: Self = Self([0u8; 32]);
-    pub const fn from_bytes(b: [u8; 32]) -> Self { Self(b) }
-    pub fn as_bytes(&self) -> &[u8; 32] { &self.0 }
+    pub const fn from_bytes(b: [u8; 32]) -> Self {
+        Self(b)
+    }
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
 }
 
 // ── PeerTicket ────────────────────────────────────────────────────────────────
@@ -133,12 +137,12 @@ impl CellNetId {
 /// Max encoded size: 57 bytes (fits comfortably in IPC_BUF_SIZE).
 #[derive(Debug, Clone, Copy)]
 pub struct PeerTicket {
-    pub node_id:    CellNetId,
-    pub relay_ip:   [u8; 4],
+    pub node_id: CellNetId,
+    pub relay_ip: [u8; 4],
     pub relay_port: u16,
     /// Direct IPv4:port addrs (LAN address + STUN reflexive, up to 3).
-    pub addrs:      [([u8; 4], u16); 3],
-    pub addrs_len:  u8,
+    pub addrs: [([u8; 4], u16); 3],
+    pub addrs_len: u8,
 }
 
 impl PeerTicket {
@@ -147,36 +151,52 @@ impl PeerTicket {
     pub fn encode(&self, out: &mut [u8]) -> usize {
         assert!(out.len() >= Self::ENCODED_MAX);
         let mut p = 0;
-        out[p..p + 32].copy_from_slice(&self.node_id.0);             p += 32;
-        out[p..p + 4].copy_from_slice(&self.relay_ip);               p += 4;
-        out[p..p + 2].copy_from_slice(&self.relay_port.to_le_bytes()); p += 2;
-        out[p] = self.addrs_len;                                      p += 1;
+        out[p..p + 32].copy_from_slice(&self.node_id.0);
+        p += 32;
+        out[p..p + 4].copy_from_slice(&self.relay_ip);
+        p += 4;
+        out[p..p + 2].copy_from_slice(&self.relay_port.to_le_bytes());
+        p += 2;
+        out[p] = self.addrs_len;
+        p += 1;
         for i in 0..self.addrs_len as usize {
-            out[p..p + 4].copy_from_slice(&self.addrs[i].0);         p += 4;
-            out[p..p + 2].copy_from_slice(&self.addrs[i].1.to_le_bytes()); p += 2;
+            out[p..p + 4].copy_from_slice(&self.addrs[i].0);
+            p += 4;
+            out[p..p + 2].copy_from_slice(&self.addrs[i].1.to_le_bytes());
+            p += 2;
         }
         p
     }
 
     pub fn decode(data: &[u8]) -> Option<Self> {
-        if data.len() < 39 { return None; }
+        if data.len() < 39 {
+            return None;
+        }
         let mut node_id = [0u8; 32];
         node_id.copy_from_slice(&data[0..32]);
         let mut relay_ip = [0u8; 4];
         relay_ip.copy_from_slice(&data[32..36]);
         let relay_port = u16::from_le_bytes([data[36], data[37]]);
-        let addrs_len  = (data[38] as usize).min(3) as u8;
-        let mut addrs  = [([0u8; 4], 0u16); 3];
+        let addrs_len = (data[38] as usize).min(3) as u8;
+        let mut addrs = [([0u8; 4], 0u16); 3];
         let mut p = 39;
-        for i in 0..addrs_len as usize {
-            if p + 6 > data.len() { break; }
+        for addr in addrs.iter_mut().take(addrs_len as usize) {
+            if p + 6 > data.len() {
+                break;
+            }
             let mut ip = [0u8; 4];
             ip.copy_from_slice(&data[p..p + 4]);
             let port = u16::from_le_bytes([data[p + 4], data[p + 5]]);
-            addrs[i] = (ip, port);
+            *addr = (ip, port);
             p += 6;
         }
-        Some(Self { node_id: CellNetId(node_id), relay_ip, relay_port, addrs, addrs_len })
+        Some(Self {
+            node_id: CellNetId(node_id),
+            relay_ip,
+            relay_port,
+            addrs,
+            addrs_len,
+        })
     }
 }
 

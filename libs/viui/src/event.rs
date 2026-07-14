@@ -13,13 +13,27 @@ use crate::widget::WidgetId;
 // ─── Input types ─────────────────────────────────────────────────────────────
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum MouseButton { Left, Right, Middle }
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum KeyCode {
-    Backspace, Delete, Enter, Tab, Escape,
-    Left, Right, Up, Down,
-    Home, End, PageUp, PageDown,
+    Backspace,
+    Delete,
+    Enter,
+    Tab,
+    Escape,
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
     F(u8),
 }
 
@@ -36,23 +50,48 @@ pub struct Modifiers {
 #[derive(Clone, Debug)]
 pub enum Event {
     // BottomUp — dispatched by hit-testing, bubbles from leaf to root
-    MouseMove   { pos: Point },
-    MousePress  { pos: Point, button: MouseButton },
+    MouseMove {
+        pos: Point,
+    },
+    MousePress {
+        pos: Point,
+        button: MouseButton,
+    },
     /// Also dispatched globally (GlobalRelease strategy) to clear PRESSED state.
-    MouseRelease { pos: Point, button: MouseButton },
-    Scroll      { pos: Point, delta_y: f32 },
+    MouseRelease {
+        pos: Point,
+        button: MouseButton,
+    },
+    Scroll {
+        pos: Point,
+        delta_y: f32,
+    },
 
     // Touch — same BottomUp routing as mouse. `finger_id` disambiguates contacts.
     /// First contact of a new touch (maps to MousePress for non-touch widgets).
-    TouchBegin   { pos: Point, finger_id: u32 },
+    TouchBegin {
+        pos: Point,
+        finger_id: u32,
+    },
     /// Contact moved while touching (maps to MouseMove for non-touch widgets).
-    TouchMove    { pos: Point, finger_id: u32 },
+    TouchMove {
+        pos: Point,
+        finger_id: u32,
+    },
     /// Contact lifted (maps to MouseRelease for non-touch widgets).
-    TouchEnd     { pos: Point, finger_id: u32 },
+    TouchEnd {
+        pos: Point,
+        finger_id: u32,
+    },
 
     // Direct — dispatched only to the focused widget
-    KeyPress   { key: KeyCode, modifiers: Modifiers },
-    KeyRelease { key: KeyCode },
+    KeyPress {
+        key: KeyCode,
+        modifiers: Modifiers,
+    },
+    KeyRelease {
+        key: KeyCode,
+    },
     Char(char),
 
     // Lifecycle events (Direct, fired on focus change)
@@ -69,8 +108,8 @@ impl Event {
             | Self::MouseRelease { pos, .. }
             | Self::Scroll { pos, .. }
             | Self::TouchBegin { pos, .. }
-            | Self::TouchMove  { pos, .. }
-            | Self::TouchEnd   { pos, .. } => Some(*pos),
+            | Self::TouchMove { pos, .. }
+            | Self::TouchEnd { pos, .. } => Some(*pos),
             _ => None,
         }
     }
@@ -109,10 +148,14 @@ pub struct EventCx<'a> {
 
 impl<'a> EventCx<'a> {
     /// Screen-space bounds of the current widget.
-    pub fn bounds(&self) -> Rect { self.layout.bounds() }
+    pub fn bounds(&self) -> Rect {
+        self.layout.bounds()
+    }
 
     /// Request a repaint this frame.
-    pub fn mark_dirty(&mut self) { self.needs_repaint = true; }
+    pub fn mark_dirty(&mut self) {
+        self.needs_repaint = true;
+    }
 
     /// True if `id` currently holds keyboard focus.
     pub fn is_focused(&self, id: WidgetId) -> bool {
@@ -120,10 +163,14 @@ impl<'a> EventCx<'a> {
     }
 
     /// Give keyboard focus to `id`.
-    pub fn set_focus(&mut self, id: WidgetId) { self.focus.set_focus(id); }
+    pub fn set_focus(&mut self, id: WidgetId) {
+        self.focus.set_focus(id);
+    }
 
     /// Release keyboard focus.
-    pub fn release_focus(&mut self) { self.focus.clear_focus(); }
+    pub fn release_focus(&mut self) {
+        self.focus.clear_focus();
+    }
 
     /// True if the pointer event position lies within this widget's bounds.
     pub fn hit_test(&self, pos: Point) -> bool {

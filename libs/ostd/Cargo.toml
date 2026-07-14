@@ -6,8 +6,8 @@ license = "MPL-2.0"
 # Cells may link against ostd under any license — see LICENSE-EXCEPTION.
 
 [dependencies]
-types   = { path = "../types" }
-api     = { path = "../api" }
+types   = { path = "../types", version = "0.1.0" }
+api     = { path = "../api", version = "0.1.0" }
 spin    = { workspace = true }
 fontdue = { workspace = true }
 linked_list_allocator = "0.10"
@@ -22,7 +22,7 @@ serde        = { version = "1",    default-features = false }
 # features so non-networked Cells (the vast majority) pay ZERO binary cost — no
 # serde_json, no httparse linked unless a Cell opts in. Default features below
 # enable NEITHER, so adding this dep is purely additive for existing cells.
-http-core   = { path = "../http-core", optional = true }
+http-core   = { path = "../http-core", version = "0.1.0", optional = true }
 
 [features]
 default = []

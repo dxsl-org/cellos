@@ -26,7 +26,10 @@ fn parse_200_chunked_framing() {
 #[test]
 fn truncated_headers_need_more_data() {
     let partial = b"HTTP/1.1 200 OK\r\nContent-Type: text/";
-    assert_eq!(parse_response_headers(partial), Err(HttpError::NeedMoreData));
+    assert_eq!(
+        parse_response_headers(partial),
+        Err(HttpError::NeedMoreData)
+    );
 }
 
 #[test]
@@ -39,7 +42,10 @@ fn malformed_status_line() {
     let bad = b"NOTHTTP\r\n\r\n";
     let err = parse_response_headers(bad);
     assert!(
-        matches!(err, Err(HttpError::MalformedStatus) | Err(HttpError::MalformedHeader)),
+        matches!(
+            err,
+            Err(HttpError::MalformedStatus) | Err(HttpError::MalformedHeader)
+        ),
         "expected malformed error, got {err:?}"
     );
 }
@@ -54,8 +60,7 @@ fn non_200_status_code() {
 #[test]
 fn chunked_overrides_content_length() {
     // RFC 9112 §6.1: Transfer-Encoding wins when both headers are present.
-    let resp =
-        b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nTransfer-Encoding: chunked\r\n\r\n";
+    let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\nTransfer-Encoding: chunked\r\n\r\n";
     let h = parse_response_headers(resp).unwrap();
     assert_eq!(h.framing, Framing::Chunked);
     assert_eq!(h.content_length, Some(100));

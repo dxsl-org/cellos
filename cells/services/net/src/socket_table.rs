@@ -6,10 +6,10 @@
 
 extern crate alloc;
 
+use crate::socket_state::SocketState;
 use alloc::collections::{BTreeMap, BTreeSet};
 use smoltcp::iface::SocketHandle;
 use types::ViError;
-use crate::socket_state::SocketState;
 
 /// Maximum simultaneous sockets (including the DHCP management socket).
 pub const MAX_SOCKETS: usize = 18; // 16 user + 1 DHCP + 1 ARP
@@ -18,7 +18,7 @@ pub const MAX_SOCKETS: usize = 18; // 16 user + 1 DHCP + 1 ARP
 #[derive(Default)]
 pub struct SocketTable {
     entries: BTreeMap<u64, SocketHandle>,
-    states:  BTreeMap<u64, SocketState>,
+    states: BTreeMap<u64, SocketState>,
     /// Bound listen port per cap — needed so ACCEPT can renew the listener on
     /// the same port after the original socket transitions to Established.
     listen_ports: BTreeMap<u64, u16>,

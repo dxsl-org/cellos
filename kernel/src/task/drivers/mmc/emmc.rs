@@ -25,8 +25,11 @@ impl EmmcBlock {
         if info.card_type != CardType::Emmc {
             return Err(ViError::NotFound);
         }
-        log::info!("[emmc] eMMC probed: {} sectors (~{} MiB)",
-            info.sector_count, info.sector_count / 2048);
+        log::info!(
+            "[emmc] eMMC probed: {} sectors (~{} MiB)",
+            info.sector_count,
+            info.sector_count / 2048
+        );
         Ok(Self { core, info })
     }
 
@@ -54,7 +57,9 @@ impl EmmcBlock {
         self.core.host.write_block(buf)
     }
 
-    pub fn sector_count(&self) -> u64 { self.info.sector_count }
+    pub fn sector_count(&self) -> u64 {
+        self.info.sector_count
+    }
 }
 
 impl Drop for EmmcBlock {

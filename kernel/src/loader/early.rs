@@ -18,8 +18,7 @@ use types::{ViError, ViResult};
 /// Cached cell table loaded from disk at boot.
 ///
 /// `None` until `EarlyLoader::probe()` is called successfully.
-static CELL_TABLE: crate::sync::Spinlock<Option<EarlyTable>> =
-    crate::sync::Spinlock::new(None);
+static CELL_TABLE: crate::sync::Spinlock<Option<EarlyTable>> = crate::sync::Spinlock::new(None);
 
 struct EarlyTable {
     entries: Vec<CellEntry>,
@@ -58,9 +57,6 @@ impl EarlyLoader {
     /// Returns `ViError::InvalidInput` if the magic bytes do not match
     /// (disk image was not generated with `gen_disk.ps1`).
     pub fn probe() -> ViResult<()> {
-        
-        
-
         // Idempotent: skip if already probed.
         if CELL_TABLE.lock().is_some() {
             return Ok(());
@@ -72,9 +68,7 @@ impl EarlyLoader {
 
         // SAFETY: header_buf is SECTOR_SIZE bytes aligned to u8; CellTableHeader
         // is repr(C) and also SECTOR_SIZE bytes.  Transmute is safe here.
-        let header: CellTableHeader = unsafe {
-            core::mem::transmute(header_buf)
-        };
+        let header: CellTableHeader = unsafe { core::mem::transmute(header_buf) };
 
         if header.magic != CELL_TABLE_MAGIC {
             log::warn!(
@@ -87,7 +81,10 @@ impl EarlyLoader {
 
         let count = header.count as usize;
         if count > MAX_CELL_ENTRIES {
-            log::error!("[early] cell table count {} exceeds MAX_CELL_ENTRIES", count);
+            log::error!(
+                "[early] cell table count {} exceeds MAX_CELL_ENTRIES",
+                count
+            );
             return Err(ViError::InvalidInput);
         }
 
@@ -107,7 +104,12 @@ impl EarlyLoader {
             let path = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
                 .unwrap_or("?")
                 .trim_end_matches('\0');
-            log::debug!("[early]   {} @ LBA {} ({} bytes)", path, e.data_lba, e.data_size);
+            log::debug!(
+                "[early]   {} @ LBA {} ({} bytes)",
+                path,
+                e.data_lba,
+                e.data_size
+            );
         }
 
         *CELL_TABLE.lock() = Some(EarlyTable { entries });
@@ -123,16 +125,22 @@ impl EarlyLoader {
         let (data_lba, size) = {
             let guard = CELL_TABLE.lock();
             let table = guard.as_ref().ok_or(ViError::NotFound)?;
-            let entry = table.entries.iter().find(|e| {
-                let stored = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
-                    .unwrap_or("")
-                    .trim_end_matches('\0');
-                stored == path
-            }).ok_or(ViError::NotFound)?;
+            let entry = table
+                .entries
+                .iter()
+                .find(|e| {
+                    let stored = core::str::from_utf8(&e.path[..CELL_PATH_LEN])
+                        .unwrap_or("")
+                        .trim_end_matches('\0');
+                    stored == path
+                })
+                .ok_or(ViError::NotFound)?;
             (entry.data_lba, entry.data_size as usize)
         };
-        if size == 0 { return Err(ViError::InvalidInput); }
-        let sector_count = (size + SECTOR_SIZE - 1) / SECTOR_SIZE;
+        if size == 0 {
+            return Err(ViError::InvalidInput);
+        }
+        let sector_count = size.div_ceil(SECTOR_SIZE);
         let mut buf = alloc::vec![0u8; sector_count * SECTOR_SIZE];
         for i in 0..sector_count {
             let lba = data_lba + i as u64;
@@ -165,11 +173,18 @@ impl EarlyLoader {
                     // migration is verified across arches — one-time boot output,
                     // suppressed for vfs/config/shell (spawned by init after the log
                     // level drops to Warn, main.rs) during normal operation.
-                    log::info!("[early] bootstrap {} <- VIFS1 ramdisk ({} bytes)", path, buf.len());
+                    log::info!(
+                        "[early] bootstrap {} <- VIFS1 ramdisk ({} bytes)",
+                        path,
+                        buf.len()
+                    );
                     return Ok(buf);
                 }
                 Err(_) => {
-                    log::warn!("[early] bootstrap {:?} not in VIFS1 — falling back to block table", path);
+                    log::warn!(
+                        "[early] bootstrap {:?} not in VIFS1 — falling back to block table",
+                        path
+                    );
                     return Self::read_from_block_table(path);
                 }
             }

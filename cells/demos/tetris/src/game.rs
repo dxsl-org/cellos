@@ -27,11 +27,11 @@ pub const PIECE_COLORS: [u32; 7] = [
     0xFFFF5555, // Z: bright red
 ];
 
-pub const BG_COLOR:     u32 = 0xFF000000;
+pub const BG_COLOR: u32 = 0xFF000000;
 pub const BORDER_COLOR: u32 = 0xFF333333;
-pub const TEXT_COLOR:   u32 = 0xFFFFFFFF;
-pub const PANEL_COLOR:  u32 = 0xFF111111;
-pub const GHOST_COLOR:  u32 = 0xFF2A2A2A;
+pub const TEXT_COLOR: u32 = 0xFFFFFFFF;
+pub const PANEL_COLOR: u32 = 0xFF111111;
+pub const GHOST_COLOR: u32 = 0xFF2A2A2A;
 
 /// Extract the 4 occupied (col, row) positions from a piece shape.
 /// `col` / `row` are the board coordinates of the 4×4 grid's top-left corner.
@@ -52,35 +52,46 @@ pub fn piece_cells(kind: usize, rot: usize, col: i32, row: i32) -> [(i32, i32); 
 
 pub fn can_fit(board: &[[u8; COLS]; ROWS], kind: usize, rot: usize, col: i32, row: i32) -> bool {
     for (x, y) in piece_cells(kind, rot, col, row) {
-        if x < 0 || x >= COLS as i32 || y >= ROWS as i32 { return false; }
-        if y >= 0 && board[y as usize][x as usize] != 0 { return false; }
+        if x < 0 || x >= COLS as i32 || y >= ROWS as i32 {
+            return false;
+        }
+        if y >= 0 && board[y as usize][x as usize] != 0 {
+            return false;
+        }
     }
     true
 }
 
 pub struct Game {
-    pub board:     [[u8; COLS]; ROWS], // 0=empty, 1-7=piece kind+1
-    pub kind:      usize,
-    pub rot:       usize,
-    pub col:       i32,
-    pub row:       i32,
+    pub board: [[u8; COLS]; ROWS], // 0=empty, 1-7=piece kind+1
+    pub kind: usize,
+    pub rot: usize,
+    pub col: i32,
+    pub row: i32,
     pub next_kind: usize,
-    pub score:     u32,
-    pub lines:     u32,
-    pub level:     u32,
-    pub over:      bool,
-    drop_accum:    u32,
+    pub score: u32,
+    pub lines: u32,
+    pub level: u32,
+    pub over: bool,
+    drop_accum: u32,
     // Deterministic pseudo-random state (xorshift32)
-    rng:           u32,
+    rng: u32,
 }
 
 impl Game {
     pub fn new(seed: u32) -> Self {
         let mut g = Self {
             board: [[0; COLS]; ROWS],
-            kind: 0, rot: 0, col: 3, row: 0,
-            next_kind: 0, score: 0, lines: 0, level: 1,
-            over: false, drop_accum: 0,
+            kind: 0,
+            rot: 0,
+            col: 3,
+            row: 0,
+            next_kind: 0,
+            score: 0,
+            lines: 0,
+            level: 1,
+            over: false,
+            drop_accum: 0,
             rng: if seed == 0 { 1 } else { seed },
         };
         g.next_kind = g.rand7();
@@ -147,7 +158,9 @@ impl Game {
     fn lock(&mut self) {
         let color = (self.kind + 1) as u8;
         for (x, y) in piece_cells(self.kind, self.rot, self.col, self.row) {
-            if y >= 0 { self.board[y as usize][x as usize] = color; }
+            if y >= 0 {
+                self.board[y as usize][x as usize] = color;
+            }
         }
         self.clear_lines();
         self.spawn();
@@ -185,16 +198,28 @@ impl Game {
 
     fn drop_interval(&self) -> u32 {
         match self.level {
-            1 => 800, 2 => 720, 3 => 630, 4 => 550, 5 => 470,
-            6 => 380, 7 => 300, 8 => 220, 9 => 130, 10 => 100,
-            11..=19 => 80, 20..=28 => 50, _ => 30,
+            1 => 800,
+            2 => 720,
+            3 => 630,
+            4 => 550,
+            5 => 470,
+            6 => 380,
+            7 => 300,
+            8 => 220,
+            9 => 130,
+            10 => 100,
+            11..=19 => 80,
+            20..=28 => 50,
+            _ => 30,
         }
     }
 
     /// Ghost row: how far down the piece would fall.
     pub fn ghost_row(&self) -> i32 {
         let mut r = self.row;
-        while can_fit(&self.board, self.kind, self.rot, self.col, r + 1) { r += 1; }
+        while can_fit(&self.board, self.kind, self.rot, self.col, r + 1) {
+            r += 1;
+        }
         r
     }
 }

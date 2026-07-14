@@ -8,41 +8,56 @@ use ostd::io::print;
 
 /// PL011 base IPA in the guest address space.
 pub const PL011_BASE_IPA: u64 = 0x0900_0000;
-pub const PL011_SIZE: u64     = 0x1000; // 4 KiB MMIO window
+pub const PL011_SIZE: u64 = 0x1000; // 4 KiB MMIO window
 
 /// PL011 register offsets (byte addresses from base).
+///
+/// Registers below that are never matched in `write`/`read` (RSR, IBRD, FBRD,
+/// IFLS, DMACR) document the full PL011 map so the next person extending this
+/// emulation to baud/FIFO-level trapping doesn't have to re-derive the offsets.
 mod reg {
-    pub const UARTDR:   u64 = 0x00; // Data register: TX byte on write
-    pub const UARTRSR:  u64 = 0x04; // Receive status / error clear
-    pub const UARTFR:   u64 = 0x18; // Flag register: read → TX empty/ready bits
+    pub const UARTDR: u64 = 0x00; // Data register: TX byte on write
+    #[allow(dead_code)] // documents full register map; not trapped (RX status unsupported)
+    pub const UARTRSR: u64 = 0x04; // Receive status / error clear
+    pub const UARTFR: u64 = 0x18; // Flag register: read → TX empty/ready bits
+    #[allow(dead_code)] // documents full register map; baud rate not modeled (bytes forwarded synchronously)
     pub const UARTIBRD: u64 = 0x24; // Integer baud rate
+    #[allow(dead_code)] // documents full register map; baud rate not modeled (bytes forwarded synchronously)
     pub const UARTFBRD: u64 = 0x28; // Fractional baud rate
-    pub const UARTLCR:  u64 = 0x2C; // Line control (8N1)
-    pub const UARTCR:   u64 = 0x30; // Control: UARTEN|TXE|RXE
+    pub const UARTLCR: u64 = 0x2C; // Line control (8N1)
+    pub const UARTCR: u64 = 0x30; // Control: UARTEN|TXE|RXE
+    #[allow(dead_code)] // documents full register map; FIFO level select not modeled (no interrupt delivery yet)
     pub const UARTIFLS: u64 = 0x34; // FIFO level select
     pub const UARTIMSC: u64 = 0x38; // Interrupt mask
-    pub const UARTRIS:  u64 = 0x3C; // Raw interrupt status
-    pub const UARTMIS:  u64 = 0x40; // Masked interrupt status
-    pub const UARTICR:  u64 = 0x44; // Interrupt clear
+    pub const UARTRIS: u64 = 0x3C; // Raw interrupt status
+    pub const UARTMIS: u64 = 0x40; // Masked interrupt status
+    pub const UARTICR: u64 = 0x44; // Interrupt clear
+    #[allow(dead_code)] // documents full register map; DMA not modeled
     pub const UARTDMACR: u64 = 0x48; // DMA control
 }
 
 /// UARTFR bits.
+#[allow(dead_code)] // documents the real PL011 flag bit; TX-full backpressure not modeled (synchronous forwarding)
 const FR_TXFF: u64 = 1 << 5; // TX FIFO full
 const FR_RXFE: u64 = 1 << 4; // RX FIFO empty
 const FR_TXFE: u64 = 1 << 7; // TX FIFO empty (all data shifted out)
+#[allow(dead_code)] // documents the real PL011 flag bit; busy-state not modeled (synchronous forwarding)
 const FR_BUSY: u64 = 1 << 3; // UART busy
 
 /// Minimal PL011 state.
 pub struct Pl011 {
-    cr: u64,    // control register shadow
-    lcr: u64,   // line control register shadow
-    imsc: u64,  // interrupt mask shadow
+    cr: u64,   // control register shadow
+    lcr: u64,  // line control register shadow
+    imsc: u64, // interrupt mask shadow
 }
 
 impl Pl011 {
     pub const fn new() -> Self {
-        Self { cr: 0x300, lcr: 0, imsc: 0 }
+        Self {
+            cr: 0x300,
+            lcr: 0,
+            imsc: 0,
+        }
     }
 
     /// Handle a guest MMIO write to `offset` (relative to PL011_BASE_IPA) with `val`.
@@ -52,12 +67,20 @@ impl Pl011 {
                 // Forward TX byte to ViCell serial output.
                 let byte = (val & 0xFF) as u8;
                 let buf = [byte];
-                if let Ok(s) = core::str::from_utf8(&buf) { print(s); }
+                if let Ok(s) = core::str::from_utf8(&buf) {
+                    print(s);
+                }
             }
-            reg::UARTCR   => { self.cr   = val; }
-            reg::UARTLCR  => { self.lcr  = val; }
-            reg::UARTIMSC => { self.imsc = val; }
-            reg::UARTICR  => { /* clear interrupts — no interrupt delivery yet */ }
+            reg::UARTCR => {
+                self.cr = val;
+            }
+            reg::UARTLCR => {
+                self.lcr = val;
+            }
+            reg::UARTIMSC => {
+                self.imsc = val;
+            }
+            reg::UARTICR => { /* clear interrupts — no interrupt delivery yet */ }
             _ => { /* ignore: IBRD, FBRD, IFLS, DMACR etc. */ }
         }
     }
@@ -69,11 +92,11 @@ impl Pl011 {
                 // TX always ready (we forward bytes synchronously), RX FIFO empty.
                 FR_TXFE | FR_RXFE
             }
-            reg::UARTCR   => self.cr,
-            reg::UARTLCR  => self.lcr,
+            reg::UARTCR => self.cr,
+            reg::UARTLCR => self.lcr,
             reg::UARTIMSC => self.imsc,
-            reg::UARTRIS  => 0, // no raw interrupts
-            reg::UARTMIS  => 0, // no masked interrupts
+            reg::UARTRIS => 0, // no raw interrupts
+            reg::UARTMIS => 0, // no masked interrupts
             _ => 0,
         }
     }

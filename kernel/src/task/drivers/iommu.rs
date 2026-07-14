@@ -40,11 +40,15 @@ pub fn map_dma(phys: u64, size: usize) -> u64 {
 /// Creates a per-Cell IOMMU domain on first call. Writes a DDT/context entry for `bdf`.
 /// Returns IOVA (identity == phys in SAS).
 pub fn map_dma_for_cell(tid: u64, bdf: u32, phys: u64, size: usize) -> u64 {
-    if size == 0 { return phys; }
+    if size == 0 {
+        return phys;
+    }
     #[cfg(target_arch = "riscv64")]
     super::iommu_riscv::map_range_for_cell(tid, bdf, phys, size);
     #[cfg(target_arch = "x86_64")]
     super::iommu_x86::map_range_for_cell(tid, bdf, phys, size);
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+    let _ = (tid, bdf); // no IOMMU backend on this arch yet
     phys
 }
 
@@ -60,6 +64,8 @@ pub fn cleanup_cell(tid: u64) {
     super::iommu_riscv::unmap_cell(tid);
     #[cfg(target_arch = "x86_64")]
     super::iommu_x86::unmap_cell_domain(tid); // Phase 02 will implement
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+    let _ = tid; // no IOMMU backend on this arch yet
 }
 
 /// Phase 3: switch IOMMU from passthrough to page-table enforcement.
@@ -83,6 +89,7 @@ pub fn is_active() -> bool {
 }
 
 /// Mark DMA isolation as active. Called by arch backends on successful activation.
+#[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
 pub(super) fn set_active() {
     IOMMU_ISOLATED.store(true, Ordering::Relaxed);
 }
@@ -106,8 +113,12 @@ pub fn set_deferred_init_pending() {
 /// (Driver Cells spawn after Platform Cell completes enumeration). Subsequent
 /// `map_dma_for_cell` calls add DDT entries lazily and take effect immediately.
 pub fn try_deferred_init() {
-    if !IOMMU_DEFERRED.load(Ordering::Relaxed) { return; }
-    if IOMMU_ISOLATED.load(Ordering::Relaxed)  { return; }
+    if !IOMMU_DEFERRED.load(Ordering::Relaxed) {
+        return;
+    }
+    if IOMMU_ISOLATED.load(Ordering::Relaxed) {
+        return;
+    }
 
     // init() calls arch init_hw() which calls find_class() — succeeds only once
     // the IOMMU device has been registered in PCI_DEVICES.

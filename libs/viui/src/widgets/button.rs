@@ -5,16 +5,16 @@ use alloc::string::String;
 use crate::canvas::TextStyle;
 use crate::event::{Event, EventCx, EventStatus, MouseButton};
 use crate::layout::{Constraints, LayoutNode, Padding, Point, Rect, Size};
-use crate::widget::{PaintCx, WidgetId, ViWidget};
+use crate::widget::{PaintCx, ViWidget, WidgetId};
 use crate::widgets::label::Label;
 
 pub struct Button {
-    pub id:      WidgetId,
-    label:       Label,
+    pub id: WidgetId,
+    label: Label,
     pub padding: Padding,
     // Direct-field state (OrbTK pattern: event() writes, paint() reads)
-    hovered:     bool,
-    pressed:     bool,
+    hovered: bool,
+    pressed: bool,
     /// True for exactly one frame after a completed click. Reset each dispatch cycle.
     pub just_clicked: bool,
 }
@@ -58,32 +58,46 @@ impl ViWidget for Button {
 
     fn paint(&self, cx: &mut PaintCx) {
         let ts = self.label.measure();
-        let bounds = Rect::from_origin_size(cx.origin, Size {
-            w: ts.w + self.padding.h_total(),
-            h: ts.h + self.padding.v_total(),
-        });
+        let bounds = Rect::from_origin_size(
+            cx.origin,
+            Size {
+                w: ts.w + self.padding.h_total(),
+                h: ts.h + self.padding.v_total(),
+            },
+        );
 
-        let bg = if self.pressed { cx.theme.button_pressed() }
-                 else if self.hovered { cx.theme.button_hovered() }
-                 else { cx.theme.button_normal() };
+        let bg = if self.pressed {
+            cx.theme.button_pressed()
+        } else if self.hovered {
+            cx.theme.button_hovered()
+        } else {
+            cx.theme.button_normal()
+        };
         cx.canvas.fill_rect(bounds, bg);
 
         let border = cx.theme.border();
         let b = bounds;
         for (a, bb) in [
-            (Point::new(b.x, b.y),         Point::new(b.x + b.w, b.y)),
-            (Point::new(b.x + b.w, b.y),   Point::new(b.x + b.w, b.y + b.h)),
+            (Point::new(b.x, b.y), Point::new(b.x + b.w, b.y)),
+            (Point::new(b.x + b.w, b.y), Point::new(b.x + b.w, b.y + b.h)),
             (Point::new(b.x + b.w, b.y + b.h), Point::new(b.x, b.y + b.h)),
-            (Point::new(b.x, b.y + b.h),   Point::new(b.x, b.y)),
+            (Point::new(b.x, b.y + b.h), Point::new(b.x, b.y)),
         ] {
             cx.canvas.draw_line(a, bb, border);
         }
 
-        let text_pos = Point::new(cx.origin.x + self.padding.left, cx.origin.y + self.padding.top);
-        cx.canvas.draw_text(text_pos, &self.label.text, TextStyle {
-            color: cx.theme.text_primary(),
-            size_px: cx.theme.font_size_body(),
-        });
+        let text_pos = Point::new(
+            cx.origin.x + self.padding.left,
+            cx.origin.y + self.padding.top,
+        );
+        cx.canvas.draw_text(
+            text_pos,
+            &self.label.text,
+            TextStyle {
+                color: cx.theme.text_primary(),
+                size_px: cx.theme.font_size_body(),
+            },
+        );
     }
 
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> EventStatus {
@@ -97,7 +111,10 @@ impl ViWidget for Button {
                 }
                 EventStatus::Ignored
             }
-            Event::MousePress { pos, button: MouseButton::Left } => {
+            Event::MousePress {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 if bounds.contains(*pos) {
                     self.pressed = true;
                     cx.mark_dirty();
@@ -106,7 +123,10 @@ impl ViWidget for Button {
                     EventStatus::Ignored
                 }
             }
-            Event::MouseRelease { pos, button: MouseButton::Left } => {
+            Event::MouseRelease {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 let was_pressed = self.pressed;
                 self.pressed = false;
                 if was_pressed {

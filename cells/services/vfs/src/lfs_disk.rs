@@ -13,10 +13,10 @@
 //! kernel's dead null device on QEMU, so every `/data` write failed until this
 //! was routed through `blk_router` like the FAT backend.
 
+use crate::blk_router::{blk_read, blk_write};
 use littlefs2::consts::{U16, U512};
 use littlefs2::driver::Storage;
 use littlefs2::io::{Error, Result};
-use crate::blk_router::{blk_read, blk_write};
 
 const SECTOR: usize = 512;
 

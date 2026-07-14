@@ -32,7 +32,9 @@ impl BinOverlay {
 
 impl FsBackend for BinOverlay {
     fn get_file_ptr(&self, path: &str) -> Option<(usize, usize)> {
-        self.boot.get_file_ptr(path).or_else(|| self.store.get_file_ptr(path))
+        self.boot
+            .get_file_ptr(path)
+            .or_else(|| self.store.get_file_ptr(path))
     }
 
     fn list(&self, path: &str, out: &mut [u8]) -> usize {
@@ -52,18 +54,38 @@ impl FsBackend for BinOverlay {
 
     fn file_size(&self, path: &str) -> u64 {
         let s = self.boot.file_size(path);
-        if s > 0 { s } else { self.store.file_size(path) }
+        if s > 0 {
+            s
+        } else {
+            self.store.file_size(path)
+        }
     }
 
     fn read_to_vec(&self, path: &str) -> Vec<u8> {
         let v = self.boot.read_to_vec(path);
-        if !v.is_empty() { v } else { self.store.read_to_vec(path) }
+        if !v.is_empty() {
+            v
+        } else {
+            self.store.read_to_vec(path)
+        }
     }
 
-    fn write(&mut self, _path: &str, _content: &[u8]) -> bool { false }
-    fn append(&mut self, _path: &str, _content: &[u8]) -> bool { false }
-    fn mkdir(&mut self, _path: &str) -> bool { false }
-    fn rmdir(&mut self, _path: &str) -> bool { false }
-    fn unlink(&mut self, _path: &str) -> bool { false }
-    fn rmdir_recursive(&mut self, _path: &str) -> bool { false }
+    fn write(&mut self, _path: &str, _content: &[u8]) -> bool {
+        false
+    }
+    fn append(&mut self, _path: &str, _content: &[u8]) -> bool {
+        false
+    }
+    fn mkdir(&mut self, _path: &str) -> bool {
+        false
+    }
+    fn rmdir(&mut self, _path: &str) -> bool {
+        false
+    }
+    fn unlink(&mut self, _path: &str) -> bool {
+        false
+    }
+    fn rmdir_recursive(&mut self, _path: &str) -> bool {
+        false
+    }
 }

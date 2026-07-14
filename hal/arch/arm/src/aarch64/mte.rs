@@ -16,6 +16,7 @@
 //! - 0b0001 = MTE1 (store-only tagging, no load check)
 //! - 0b0010 = MTE2 (full load+store tag checking)
 //! - 0b0011 = MTE3 (+ async mode w/ precise tagging option)
+//!
 //! Value ≥ 2 is required for useful `TCF` enforcement.
 
 use hal_mte::ViMte;
@@ -135,7 +136,7 @@ pub fn init() {
         | (1u64 << 43)      // ATA:  allow tag access at EL1
         | (1u64 << 42)      // ATA0: allow tag access at EL0
         | (0b10u64 << 40)   // TCF:  synchronous fault at EL1
-        | (0b10u64 << 38);  // TCF0: synchronous fault at EL0
+        | (0b10u64 << 38); // TCF0: synchronous fault at EL0
 
     // SAFETY: SCTLR_EL1 write from EL1 to set MTE control bits.
     // ATA/ATA0 enable tag-memory access; TCF/TCF0 choose fault delivery.

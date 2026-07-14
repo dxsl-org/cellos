@@ -29,15 +29,15 @@ const MASK: usize = BUF_SIZE - 1;
 #[repr(u8)]
 #[allow(dead_code)] // reason: variants logged by different kernel subsystems
 pub enum AuditEvent {
-    IpcSend   = 1,
-    IpcRecv   = 2,
-    FileOpen  = 3,
+    IpcSend = 1,
+    IpcRecv = 2,
+    FileOpen = 3,
     FileWrite = 4,
-    NetTx     = 5,
-    NetRx     = 6,
-    CellSpawn      = 7,
-    CellFault      = 8,
-    CellExit       = 9,
+    NetTx = 5,
+    NetRx = 6,
+    CellSpawn = 7,
+    CellFault = 8,
+    CellExit = 9,
     CellSpawnDenied = 10,
     /// An RT-priority cell's `RecvTimeout` deadline elapsed before its awaited
     /// message arrived — a missed control-loop cycle. Payload: `encode_u32x2(cell_id,
@@ -85,9 +85,9 @@ pub enum AuditEvent {
 }
 
 struct AuditRing {
-    buf:     UnsafeCell<[u8; BUF_SIZE]>,
-    head:    AtomicUsize,
-    tail:    AtomicUsize,
+    buf: UnsafeCell<[u8; BUF_SIZE]>,
+    head: AtomicUsize,
+    tail: AtomicUsize,
     dropped: AtomicUsize,
 }
 
@@ -97,9 +97,9 @@ unsafe impl Sync for AuditRing {}
 
 static RING: AuditRing = AuditRing {
     // SAFETY: UnsafeCell<[u8; N]> in a static is always zero-initialised.
-    buf:     UnsafeCell::new([0u8; BUF_SIZE]),
-    head:    AtomicUsize::new(0),
-    tail:    AtomicUsize::new(0),
+    buf: UnsafeCell::new([0u8; BUF_SIZE]),
+    head: AtomicUsize::new(0),
+    tail: AtomicUsize::new(0),
     dropped: AtomicUsize::new(0),
 };
 
@@ -122,7 +122,9 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
             v & 0x2 != 0
         }
         #[cfg(not(target_arch = "riscv64"))]
-        { false }
+        {
+            false
+        }
     };
 
     let head = RING.head.load(Ordering::Relaxed);
@@ -141,7 +143,8 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
     let mtime = 0u64.to_le_bytes();
     let buf = unsafe { &mut *RING.buf.get() };
     let mut pos = head;
-    for &b in mtime.iter()
+    for &b in mtime
+        .iter()
         .chain(core::slice::from_ref(&(event as u8)))
         .chain(core::slice::from_ref(&plen))
         .chain(&payload[..plen as usize])
@@ -151,7 +154,8 @@ pub fn log_event(event: AuditEvent, payload: &[u8]) {
     }
 
     // Publish the write — consumer sees it only after this Release store.
-    RING.head.store(head.wrapping_add(record_len), Ordering::Release);
+    RING.head
+        .store(head.wrapping_add(record_len), Ordering::Release);
 
     restore_sie(sie_was_set);
 }
@@ -161,7 +165,9 @@ fn restore_sie(was_set: bool) {
     if was_set {
         #[cfg(target_arch = "riscv64")]
         // SAFETY: restoring SIE to its prior state.
-        unsafe { core::arch::asm!("csrsi sstatus, 0x2"); }
+        unsafe {
+            core::arch::asm!("csrsi sstatus, 0x2");
+        }
     }
 }
 
@@ -172,14 +178,17 @@ pub fn drain(out: &mut [u8]) -> usize {
     let head = RING.head.load(Ordering::Acquire);
     let tail = RING.tail.load(Ordering::Relaxed);
     let available = head.wrapping_sub(tail);
-    if available == 0 { return 0; }
+    if available == 0 {
+        return 0;
+    }
 
     let to_copy = available.min(out.len());
     let buf = unsafe { &*RING.buf.get() };
     for (i, byte) in out[..to_copy].iter_mut().enumerate() {
         *byte = buf[(tail.wrapping_add(i)) & MASK];
     }
-    RING.tail.store(tail.wrapping_add(to_copy), Ordering::Release);
+    RING.tail
+        .store(tail.wrapping_add(to_copy), Ordering::Release);
     to_copy
 }
 

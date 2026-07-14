@@ -31,11 +31,21 @@ impl MouseState {
         match code {
             REL_X => {
                 self.x = self.x.saturating_add(value);
-                Some(InputEvent::MouseMove { x: self.x, y: self.y, dx: value, dy: 0 })
+                Some(InputEvent::MouseMove {
+                    x: self.x,
+                    y: self.y,
+                    dx: value,
+                    dy: 0,
+                })
             }
             REL_Y => {
                 self.y = self.y.saturating_add(value);
-                Some(InputEvent::MouseMove { x: self.x, y: self.y, dx: 0, dy: value })
+                Some(InputEvent::MouseMove {
+                    x: self.x,
+                    y: self.y,
+                    dx: 0,
+                    dy: value,
+                })
             }
             REL_WHEEL => Some(InputEvent::MouseScroll { dx: 0, dy: value }),
             _ => None,
@@ -49,12 +59,22 @@ impl MouseState {
             ABS_X => {
                 let dx = value.wrapping_sub(self.x);
                 self.x = value;
-                Some(InputEvent::MouseMove { x: self.x, y: self.y, dx, dy: 0 })
+                Some(InputEvent::MouseMove {
+                    x: self.x,
+                    y: self.y,
+                    dx,
+                    dy: 0,
+                })
             }
             ABS_Y => {
                 let dy = value.wrapping_sub(self.y);
                 self.y = value;
-                Some(InputEvent::MouseMove { x: self.x, y: self.y, dx: 0, dy })
+                Some(InputEvent::MouseMove {
+                    x: self.x,
+                    y: self.y,
+                    dx: 0,
+                    dy,
+                })
             }
             _ => None,
         }
@@ -64,9 +84,9 @@ impl MouseState {
 /// Map a BTN_* scancode to a `MouseButton`, or `None` if not a recognised button.
 pub fn btn_to_mouse_button(code: u32) -> Option<MouseButton> {
     match code {
-        BTN_LEFT   => Some(MouseButton::Left),
-        BTN_RIGHT  => Some(MouseButton::Right),
+        BTN_LEFT => Some(MouseButton::Left),
+        BTN_RIGHT => Some(MouseButton::Right),
         BTN_MIDDLE => Some(MouseButton::Middle),
-        _          => None,
+        _ => None,
     }
 }

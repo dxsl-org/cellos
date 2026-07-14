@@ -7,6 +7,12 @@ pub struct viConsole {
     pub buffer: VecDeque<u8>,
 }
 
+impl Default for viConsole {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl viConsole {
     pub fn new() -> Self {
         Self {
@@ -23,8 +29,7 @@ impl viConsole {
     /// Polls input sources and pushes available characters to the buffer.
     /// Returns true if a character was received.
     pub fn poll(&mut self) -> bool {
-        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
-            .load(Ordering::Relaxed);
+        let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID.load(Ordering::Relaxed);
 
         // When input service is online, bytes are relayed via IPC — never buffered.
         // Only apply the buffer-full early-out when operating in fallback buffered mode.
@@ -85,7 +90,9 @@ impl viConsole {
         // returns garbage (0xFF), causing continuous `?` spam.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::poll_rhr() else { break };
+            let Some(c) = crate::task::drivers::uart::poll_rhr() else {
+                break;
+            };
             route_byte!(c);
         }
 
@@ -94,7 +101,9 @@ impl viConsole {
         // chars come through the PL011 path below.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::getchar() else { break };
+            let Some(c) = crate::task::drivers::uart::getchar() else {
+                break;
+            };
             route_byte!(c);
         }
 
@@ -103,7 +112,9 @@ impl viConsole {
         // TX/RX to the TCP socket used by the integration-test harness.
         #[cfg(target_arch = "aarch64")]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::hal::uart_pl011::poll_rx() else { break };
+            let Some(c) = crate::hal::uart_pl011::poll_rx() else {
+                break;
+            };
             route_byte!(c);
         }
 
@@ -113,7 +124,9 @@ impl viConsole {
         // so the blocking file_read(fd=0) loop eventually finds a byte.
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
-            let Some(c) = crate::task::drivers::uart::getchar() else { break };
+            let Some(c) = crate::task::drivers::uart::getchar() else {
+                break;
+            };
             route_byte!(c);
         }
 
@@ -178,7 +191,9 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
     #[cfg(target_arch = "riscv64")]
     if !sum_was_set {
         // SAFETY: SUM allows S-mode writes to U-mode pages; cleared on return.
-        unsafe { core::arch::asm!("csrs sstatus, {0}", in(reg) 0x4_0000usize); }
+        unsafe {
+            core::arch::asm!("csrs sstatus, {0}", in(reg) 0x4_0000usize);
+        }
     }
 
     // Use isize::MAX as sender_id — distinguishes kernel UART messages from
@@ -199,7 +214,9 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
     #[cfg(target_arch = "riscv64")]
     if !sum_was_set {
         // SAFETY: restore SUM to its pre-call value.
-        unsafe { core::arch::asm!("csrc sstatus, {0}", in(reg) 0x4_0000usize); }
+        unsafe {
+            core::arch::asm!("csrc sstatus, {0}", in(reg) 0x4_0000usize);
+        }
     }
     press_ok
 }

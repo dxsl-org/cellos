@@ -4,54 +4,54 @@
 //! Every `unsafe` block carries a `// SAFETY:` comment.
 
 use core::sync::atomic::{compiler_fence, Ordering};
-use ostd::mmio::MmioRegion;
 use ostd::dma::DmaBuf;
+use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
 // ── Register offsets (BAR0 MMIO) ─────────────────────────────────────────────
 
-const CTRL:  usize = 0x0000;
-const ICR:   usize = 0x00C0;
-const IMC:   usize = 0x00D8;
-const RCTL:  usize = 0x0100;
-const TCTL:  usize = 0x0400;
-const TIPG:  usize = 0x0410;
+const CTRL: usize = 0x0000;
+const ICR: usize = 0x00C0;
+const IMC: usize = 0x00D8;
+const RCTL: usize = 0x0100;
+const TCTL: usize = 0x0400;
+const TIPG: usize = 0x0410;
 const RDBAL: usize = 0x2800;
 const RDBAH: usize = 0x2804;
 const RDLEN: usize = 0x2808;
-const RDH:   usize = 0x2810;
-const RDT:   usize = 0x2818;
+const RDH: usize = 0x2810;
+const RDT: usize = 0x2818;
 const TDBAL: usize = 0x3800;
 const TDBAH: usize = 0x3804;
 const TDLEN: usize = 0x3808;
-const TDH:   usize = 0x3810;
-const TDT:   usize = 0x3818;
-const RAL0:  usize = 0x5400;
-const RAH0:  usize = 0x5404;
-const MTA:   usize = 0x5200;
-const EERD:  usize = 0x0014;
+const TDH: usize = 0x3810;
+const TDT: usize = 0x3818;
+const RAL0: usize = 0x5400;
+const RAH0: usize = 0x5404;
+const MTA: usize = 0x5200;
+const EERD: usize = 0x0014;
 
 // ── Register constants ────────────────────────────────────────────────────────
 
-const CTRL_RST:  u32 = 1 << 26;
-const CTRL_SLU:  u32 = 1 << 6;
+const CTRL_RST: u32 = 1 << 26;
+const CTRL_SLU: u32 = 1 << 6;
 const CTRL_ASDE: u32 = 1 << 5;
-const RCTL_EN:   u32 = 1 << 1;
-const RCTL_UPE:  u32 = 1 << 3;
-const RCTL_MPE:  u32 = 1 << 4;
-const RCTL_BAM:  u32 = 1 << 15;
-const RCTL_SECRC:u32 = 1 << 26;
-const TCTL_EN:   u32 = 1 << 1;
-const TCTL_PSP:  u32 = 1 << 3;
-const TCTL_CT:   u32 = 0x0F << 4;
+const RCTL_EN: u32 = 1 << 1;
+const RCTL_UPE: u32 = 1 << 3;
+const RCTL_MPE: u32 = 1 << 4;
+const RCTL_BAM: u32 = 1 << 15;
+const RCTL_SECRC: u32 = 1 << 26;
+const TCTL_EN: u32 = 1 << 1;
+const TCTL_PSP: u32 = 1 << 3;
+const TCTL_CT: u32 = 0x0F << 4;
 const TCTL_COLD: u32 = 0x40 << 12;
-const CMD_EOP:   u8  = 0x01;
-const CMD_IFCS:  u8  = 0x02;
-const CMD_RS:    u8  = 0x08;
-const STATUS_DD: u8  = 0x01;
-const EERD_START:u32 = 1;
+const CMD_EOP: u8 = 0x01;
+const CMD_IFCS: u8 = 0x02;
+const CMD_RS: u8 = 0x08;
+const STATUS_DD: u8 = 0x01;
+const EERD_START: u32 = 1;
 const EERD_DONE: u32 = 1 << 4;
-const RAH_AV:    u32 = 1 << 31;
+const RAH_AV: u32 = 1 << 31;
 
 const N_TX: usize = 16;
 const N_RX: usize = 16;
@@ -62,22 +62,22 @@ pub const BUF_SIZE: usize = 2048;
 #[repr(C)]
 struct TxDesc {
     buf_addr: u64,
-    length:   u16,
-    cso:      u8,
-    cmd:      u8,
-    status:   u8,
-    css:      u8,
-    special:  u16,
+    length: u16,
+    cso: u8,
+    cmd: u8,
+    status: u8,
+    css: u8,
+    special: u16,
 }
 
 #[repr(C)]
 struct RxDesc {
     buf_addr: u64,
-    length:   u16,
+    length: u16,
     checksum: u16,
-    status:   u8,
-    errors:   u8,
-    special:  u16,
+    status: u8,
+    errors: u8,
+    special: u16,
 }
 
 const _: () = assert!(core::mem::size_of::<TxDesc>() == 16);
@@ -86,7 +86,7 @@ const _: () = assert!(core::mem::size_of::<RxDesc>() == 16);
 // ── Controller state ──────────────────────────────────────────────────────────
 
 pub struct E1000Controller {
-    mmio:    MmioRegion,
+    mmio: MmioRegion,
     tx_ring: DmaBuf,
     rx_ring: DmaBuf,
     tx_bufs: [DmaBuf; N_TX],
@@ -115,9 +115,13 @@ impl E1000Controller {
         let mut n = 0u32;
         loop {
             let v = self.rd32(EERD);
-            if v & EERD_DONE != 0 { return (v >> 16) as u16; }
+            if v & EERD_DONE != 0 {
+                return (v >> 16) as u16;
+            }
             n += 1;
-            if n > 1_000_000 { break; }
+            if n > 1_000_000 {
+                break;
+            }
             core::hint::spin_loop();
         }
         0
@@ -128,14 +132,21 @@ impl E1000Controller {
         // Soft-reset.
         // SAFETY: CTRL is at offset 0 in the granted BAR0 MMIO region.
         unsafe { core::ptr::write_volatile((mmio.base() + CTRL) as *mut u32, CTRL_RST) };
-        for _ in 0..10_000 { core::hint::spin_loop(); }
+        for _ in 0..10_000 {
+            core::hint::spin_loop();
+        }
         let mut n = 0u32;
         loop {
             // SAFETY: CTRL is within the granted BAR0 region.
-            if unsafe { core::ptr::read_volatile((mmio.base() + CTRL) as *const u32) }
-                & CTRL_RST == 0 { break; }
+            if unsafe { core::ptr::read_volatile((mmio.base() + CTRL) as *const u32) } & CTRL_RST
+                == 0
+            {
+                break;
+            }
             n += 1;
-            if n > 1_000_000 { return Err(ViError::IO); }
+            if n > 1_000_000 {
+                return Err(ViError::IO);
+            }
             core::hint::spin_loop();
         }
 
@@ -162,8 +173,14 @@ impl E1000Controller {
         });
 
         let mut ctrl = E1000Controller {
-            mmio, tx_ring, rx_ring, tx_bufs, rx_bufs,
-            tx_next: 0, rx_head: 0, mac: [0u8; 6],
+            mmio,
+            tx_ring,
+            rx_ring,
+            tx_bufs,
+            rx_bufs,
+            tx_next: 0,
+            rx_head: 0,
+            mac: [0u8; 6],
         };
 
         // Link-up + disable interrupts.
@@ -176,15 +193,20 @@ impl E1000Controller {
         let mac_hi = ctrl.eeprom_read(1);
         let mac_ex = ctrl.eeprom_read(2);
         ctrl.mac = [
-            mac_lo as u8, (mac_lo >> 8) as u8,
-            mac_hi as u8, (mac_hi >> 8) as u8,
-            mac_ex as u8, (mac_ex >> 8) as u8,
+            mac_lo as u8,
+            (mac_lo >> 8) as u8,
+            mac_hi as u8,
+            (mac_hi >> 8) as u8,
+            mac_ex as u8,
+            (mac_ex >> 8) as u8,
         ];
         ctrl.wr32(RAL0, (mac_hi as u32) << 16 | mac_lo as u32);
         ctrl.wr32(RAH0, RAH_AV | mac_ex as u32);
 
         // Zero multicast table.
-        for i in 0..128 { ctrl.wr32(MTA + i * 4, 0); }
+        for i in 0..128 {
+            ctrl.wr32(MTA + i * 4, 0);
+        }
 
         // Program TX ring.
         let tx_phys = ctrl.tx_ring.phys() as u64;
@@ -223,7 +245,9 @@ impl E1000Controller {
     ///
     /// Blocks (polled) until the descriptor's DD bit is set.
     pub fn send_frame(&mut self, frame: &[u8]) -> ViResult<()> {
-        if frame.len() > BUF_SIZE { return Err(ViError::InvalidInput); }
+        if frame.len() > BUF_SIZE {
+            return Err(ViError::InvalidInput);
+        }
 
         let slot = self.tx_next;
         self.tx_next = (slot + 1) % N_TX;
@@ -231,9 +255,7 @@ impl E1000Controller {
         // Copy into DMA buffer.
         // SAFETY: tx_bufs[slot].virt() is valid DMA memory of size BUF_SIZE.
         unsafe {
-            core::ptr::copy_nonoverlapping(
-                frame.as_ptr(), self.tx_bufs[slot].virt(), frame.len(),
-            );
+            core::ptr::copy_nonoverlapping(frame.as_ptr(), self.tx_bufs[slot].virt(), frame.len());
         }
         let phys = self.tx_bufs[slot].phys() as u64;
 
@@ -256,11 +278,17 @@ impl E1000Controller {
         loop {
             // SAFETY: tx_ring[slot] is valid DMA memory.
             let dd = unsafe {
-                core::ptr::read_volatile(&(*((self.tx_ring.virt() as *const TxDesc).add(slot))).status)
+                core::ptr::read_volatile(
+                    &(*((self.tx_ring.virt() as *const TxDesc).add(slot))).status,
+                )
             };
-            if dd & STATUS_DD != 0 { break; }
+            if dd & STATUS_DD != 0 {
+                break;
+            }
             iters += 1;
-            if iters > 1_000_000 { return Err(ViError::IO); }
+            if iters > 1_000_000 {
+                return Err(ViError::IO);
+            }
             core::hint::spin_loop();
         }
         Ok(())
@@ -278,13 +306,17 @@ impl E1000Controller {
             let length = core::ptr::read_volatile(&(*desc).length);
             (status & STATUS_DD != 0, length as usize)
         };
-        if !dd { return 0; }
+        if !dd {
+            return 0;
+        }
 
         let copy_len = len.min(out_buf.len()).min(BUF_SIZE);
         // SAFETY: rx_bufs[head].virt() holds `len` bytes of received frame data.
         unsafe {
             core::ptr::copy_nonoverlapping(
-                self.rx_bufs[head].virt(), out_buf.as_mut_ptr(), copy_len,
+                self.rx_bufs[head].virt(),
+                out_buf.as_mut_ptr(),
+                copy_len,
             );
         }
 

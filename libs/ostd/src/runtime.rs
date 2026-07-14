@@ -26,8 +26,8 @@
 //! }
 //! ```
 
-use api::syscall::{SyscallSet, ViSyscall};
 use crate::app::{AppContext, AppEvent};
+use api::syscall::{SyscallSet, ViSyscall};
 
 // ── SyscallSet profiles ───────────────────────────────────────────────────────
 
@@ -65,7 +65,9 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
             .with(ViSyscall::GrantRegister)
             .with(ViSyscall::GrantUnregister)
             .with(ViSyscall::BlkReadAsync)
-    } else { SyscallSet::EMPTY };
+    } else {
+        SyscallSet::EMPTY
+    };
 
     let net_extra = if network {
         SyscallSet::EMPTY
@@ -73,7 +75,9 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
             .with(ViSyscall::NetRx)
             .with(ViSyscall::WaitForEvent)
             .with(ViSyscall::GetRandom)
-    } else { SyscallSet::EMPTY };
+    } else {
+        SyscallSet::EMPTY
+    };
 
     let spawn_extra = if spawn {
         SyscallSet::EMPTY
@@ -89,7 +93,9 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
             .with(ViSyscall::Snapshot)
             .with(ViSyscall::StateStash)
             .with(ViSyscall::StateRestore)
-    } else { SyscallSet::EMPTY };
+    } else {
+        SyscallSet::EMPTY
+    };
 
     SyscallSet(base.0 | bio_extra.0 | net_extra.0 | spawn_extra.0).bits()
 }
@@ -122,7 +128,10 @@ pub struct CellRuntime {
 impl CellRuntime {
     /// Create a builder with a 5-second heartbeat default (500 ticks × 10 ms).
     pub const fn new() -> Self {
-        Self { heartbeat_ticks: 500, help_text: None }
+        Self {
+            heartbeat_ticks: 500,
+            help_text: None,
+        }
     }
 
     /// Override the watchdog interval.  `ticks` × 10 ms before the kernel kills
@@ -166,7 +175,9 @@ impl CellRuntime {
 }
 
 impl Default for CellRuntime {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Entry-point macros ────────────────────────────────────────────────────────
@@ -214,8 +225,7 @@ macro_rules! app_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
-        pub static VICELL_SYSCALLS: u64 =
-            $crate::runtime::app_syscall_set($bio, $net, $spawn);
+        pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
         #[no_mangle]
         pub fn main() {
@@ -234,12 +244,13 @@ macro_rules! app_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
-        pub static VICELL_SYSCALLS: u64 =
-            $crate::runtime::app_syscall_set($bio, $net, $spawn);
+        pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
         #[no_mangle]
         pub fn main() {
-            $crate::runtime::CellRuntime::new().help($help).run($handler);
+            $crate::runtime::CellRuntime::new()
+                .help($help)
+                .run($handler);
         }
     };
     // Full explicit 3-cap form + explicit tier (Manifest v2 opt-in) — e.g. a
@@ -252,12 +263,16 @@ macro_rules! app_entry {
         tier     = $tier:expr,
         handler  = $handler:expr $(,)?
     ) => {
-        api::declare_manifest!(block_io = $bio, network = $net, spawn = $spawn, tier = $tier);
+        api::declare_manifest!(
+            block_io = $bio,
+            network = $net,
+            spawn = $spawn,
+            tier = $tier
+        );
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
-        pub static VICELL_SYSCALLS: u64 =
-            $crate::runtime::app_syscall_set($bio, $net, $spawn);
+        pub static VICELL_SYSCALLS: u64 = $crate::runtime::app_syscall_set($bio, $net, $spawn);
 
         #[no_mangle]
         pub fn main() {
@@ -266,35 +281,79 @@ macro_rules! app_entry {
     };
     // Shorthand — only spawn
     (spawn = $spawn:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = false, network = false, spawn = $spawn, handler = $handler);
+        $crate::app_entry!(
+            block_io = false,
+            network = false,
+            spawn = $spawn,
+            handler = $handler
+        );
     };
     // Shorthand — only spawn with help
     (spawn = $spawn:literal, help = $help:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = false, network = false, spawn = $spawn, help = $help, handler = $handler);
+        $crate::app_entry!(
+            block_io = false,
+            network = false,
+            spawn = $spawn,
+            help = $help,
+            handler = $handler
+        );
     };
     // Shorthand — only network
     (network = $net:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = false, network = $net, spawn = false, handler = $handler);
+        $crate::app_entry!(
+            block_io = false,
+            network = $net,
+            spawn = false,
+            handler = $handler
+        );
     };
     // Shorthand — only network with help
     (network = $net:literal, help = $help:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = false, network = $net, spawn = false, help = $help, handler = $handler);
+        $crate::app_entry!(
+            block_io = false,
+            network = $net,
+            spawn = false,
+            help = $help,
+            handler = $handler
+        );
     };
     // Shorthand — only block_io
     (block_io = $bio:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = $bio, network = false, spawn = false, handler = $handler);
+        $crate::app_entry!(
+            block_io = $bio,
+            network = false,
+            spawn = false,
+            handler = $handler
+        );
     };
     // Shorthand — only block_io with help
     (block_io = $bio:literal, help = $help:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = $bio, network = false, spawn = false, help = $help, handler = $handler);
+        $crate::app_entry!(
+            block_io = $bio,
+            network = false,
+            spawn = false,
+            help = $help,
+            handler = $handler
+        );
     };
     // No caps with help
     (help = $help:literal, handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = false, network = false, spawn = false, help = $help, handler = $handler);
+        $crate::app_entry!(
+            block_io = false,
+            network = false,
+            spawn = false,
+            help = $help,
+            handler = $handler
+        );
     };
     // No caps
     (handler = $handler:expr $(,)?) => {
-        $crate::app_entry!(block_io = false, network = false, spawn = false, handler = $handler);
+        $crate::app_entry!(
+            block_io = false,
+            network = false,
+            spawn = false,
+            handler = $handler
+        );
     };
 }
 
@@ -320,8 +379,7 @@ macro_rules! service_entry {
 
         #[used]
         #[link_section = "__ViCell_syscalls"]
-        pub static VICELL_SYSCALLS: u64 =
-            $crate::runtime::service_syscall_set($bio, $net, $spawn);
+        pub static VICELL_SYSCALLS: u64 = $crate::runtime::service_syscall_set($bio, $net, $spawn);
 
         #[no_mangle]
         pub fn main() {
@@ -330,14 +388,29 @@ macro_rules! service_entry {
     };
     // Shorthand — only network (most common for network services)
     (network = $net:literal, handler = $handler:expr $(,)?) => {
-        $crate::service_entry!(block_io = false, network = $net, spawn = false, handler = $handler);
+        $crate::service_entry!(
+            block_io = false,
+            network = $net,
+            spawn = false,
+            handler = $handler
+        );
     };
     // Shorthand — only block_io (storage services)
     (block_io = $bio:literal, handler = $handler:expr $(,)?) => {
-        $crate::service_entry!(block_io = $bio, network = false, spawn = false, handler = $handler);
+        $crate::service_entry!(
+            block_io = $bio,
+            network = false,
+            spawn = false,
+            handler = $handler
+        );
     };
     // No extra caps
     (handler = $handler:expr $(,)?) => {
-        $crate::service_entry!(block_io = false, network = false, spawn = false, handler = $handler);
+        $crate::service_entry!(
+            block_io = false,
+            network = false,
+            spawn = false,
+            handler = $handler
+        );
     };
 }

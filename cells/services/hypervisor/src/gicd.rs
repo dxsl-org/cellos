@@ -11,25 +11,25 @@
 
 /// GICD base IPA.
 pub const GICD_BASE_IPA: u64 = 0x0800_0000;
-pub const GICD_SIZE: u64     = 0x0001_0000; // 64 KiB
+pub const GICD_SIZE: u64 = 0x0001_0000; // 64 KiB
 
 /// GICC base IPA (virtual CPU interface — also emulated as pass-through silent).
 pub const GICC_BASE_IPA: u64 = 0x0801_0000;
-pub const GICC_SIZE: u64     = 0x0001_0000;
+pub const GICC_SIZE: u64 = 0x0001_0000;
 
 /// GICD register offsets.
 mod reg {
-    pub const GICD_CTLR:      u64 = 0x000;
-    pub const GICD_TYPER:     u64 = 0x004; // read: (ITLinesNumber-1) | ...
-    pub const GICD_IIDR:      u64 = 0x008; // implementer ID
+    pub const GICD_CTLR: u64 = 0x000;
+    pub const GICD_TYPER: u64 = 0x004; // read: (ITLinesNumber-1) | ...
+    pub const GICD_IIDR: u64 = 0x008; // implementer ID
     pub const GICD_ISENABLER: u64 = 0x100; // [0..31]: enable-set per IRQ word
     pub const GICD_ICENABLER: u64 = 0x180; // clear-enable
-    pub const GICD_ISPENDR:   u64 = 0x200; // set-pending
-    pub const GICD_ICPENDR:   u64 = 0x280; // clear-pending
+    pub const GICD_ISPENDR: u64 = 0x200; // set-pending
+    pub const GICD_ICPENDR: u64 = 0x280; // clear-pending
     pub const GICD_IPRIORITYR: u64 = 0x400; // priority byte per IRQ
     pub const GICD_ITARGETSR: u64 = 0x800; // target CPU mask byte per IRQ
-    pub const GICD_ICFGR:     u64 = 0xC00; // level/edge config
-    pub const GICD_SGIR:      u64 = 0xF00; // software generated IRQ
+    pub const GICD_ICFGR: u64 = 0xC00; // level/edge config
+    pub const GICD_SGIR: u64 = 0xF00; // software generated IRQ
 }
 
 /// Maximum IRQ lines emulated (GICv2 supports up to 1020).
@@ -40,11 +40,16 @@ const WORD_COUNT: usize = MAX_IRQS / 32; // 8 words for enable/pending
 pub struct Gicd {
     ctlr: u32,
     isenabler: [u32; WORD_COUNT],
-    icenabler:  [u32; WORD_COUNT],
-    ispendr:    [u32; WORD_COUNT],
+    // ICENABLER writes clear bits directly in `isenabler` (matching real GICv2
+    // semantics: ISENABLER/ICENABLER are two write-only views onto the same
+    // underlying enable-bit state). This field is therefore write-only shadow
+    // state at the current emulation depth — never read back.
+    #[allow(dead_code)]
+    icenabler: [u32; WORD_COUNT],
+    ispendr: [u32; WORD_COUNT],
     ipriorityr: [u8; MAX_IRQS],
-    itargetsr:  [u8; MAX_IRQS],
-    icfgr:      [u32; MAX_IRQS / 16],
+    itargetsr: [u8; MAX_IRQS],
+    icfgr: [u32; MAX_IRQS / 16],
 }
 
 impl Gicd {
@@ -52,11 +57,11 @@ impl Gicd {
         Self {
             ctlr: 0,
             isenabler: [0u32; WORD_COUNT],
-            icenabler:  [0u32; WORD_COUNT],
-            ispendr:    [0u32; WORD_COUNT],
+            icenabler: [0u32; WORD_COUNT],
+            ispendr: [0u32; WORD_COUNT],
             ipriorityr: [0xa0u8; MAX_IRQS], // default: low priority
-            itargetsr:  [0x01u8; MAX_IRQS], // default: CPU 0
-            icfgr:      [0u32; MAX_IRQS / 16],
+            itargetsr: [0x01u8; MAX_IRQS],  // default: CPU 0
+            icfgr: [0u32; MAX_IRQS / 16],
         }
     }
 
@@ -64,22 +69,32 @@ impl Gicd {
     pub fn write(&mut self, offset: u64, val: u64, size: u8) {
         let val32 = val as u32;
         match offset {
-            reg::GICD_CTLR => { self.ctlr = val32; }
+            reg::GICD_CTLR => {
+                self.ctlr = val32;
+            }
             o if o >= reg::GICD_ISENABLER && o < reg::GICD_ICENABLER => {
                 let idx = ((o - reg::GICD_ISENABLER) / 4) as usize;
-                if idx < WORD_COUNT { self.isenabler[idx] |= val32; }
+                if idx < WORD_COUNT {
+                    self.isenabler[idx] |= val32;
+                }
             }
             o if o >= reg::GICD_ICENABLER && o < reg::GICD_ISPENDR => {
                 let idx = ((o - reg::GICD_ICENABLER) / 4) as usize;
-                if idx < WORD_COUNT { self.isenabler[idx] &= !val32; }
+                if idx < WORD_COUNT {
+                    self.isenabler[idx] &= !val32;
+                }
             }
             o if o >= reg::GICD_ISPENDR && o < reg::GICD_ICPENDR => {
                 let idx = ((o - reg::GICD_ISPENDR) / 4) as usize;
-                if idx < WORD_COUNT { self.ispendr[idx] |= val32; }
+                if idx < WORD_COUNT {
+                    self.ispendr[idx] |= val32;
+                }
             }
             o if o >= reg::GICD_ICPENDR && o < reg::GICD_IPRIORITYR => {
                 let idx = ((o - reg::GICD_ICPENDR) / 4) as usize;
-                if idx < WORD_COUNT { self.ispendr[idx] &= !val32; }
+                if idx < WORD_COUNT {
+                    self.ispendr[idx] &= !val32;
+                }
             }
             o if o >= reg::GICD_IPRIORITYR && o < reg::GICD_ITARGETSR => {
                 let base = (o - reg::GICD_IPRIORITYR) as usize;
@@ -88,7 +103,9 @@ impl Gicd {
                 let bytes = val.to_le_bytes();
                 let count = size as usize;
                 for i in 0..count {
-                    if base + i < MAX_IRQS { self.ipriorityr[base + i] = bytes[i]; }
+                    if base + i < MAX_IRQS {
+                        self.ipriorityr[base + i] = bytes[i];
+                    }
                 }
             }
             o if o >= reg::GICD_ITARGETSR && o < reg::GICD_ICFGR => {
@@ -96,12 +113,16 @@ impl Gicd {
                 let bytes = val.to_le_bytes();
                 let count = size as usize;
                 for i in 0..count {
-                    if base + i < MAX_IRQS { self.itargetsr[base + i] = bytes[i]; }
+                    if base + i < MAX_IRQS {
+                        self.itargetsr[base + i] = bytes[i];
+                    }
                 }
             }
             o if o >= reg::GICD_ICFGR && o < reg::GICD_SGIR => {
                 let idx = ((o - reg::GICD_ICFGR) / 4) as usize;
-                if idx < self.icfgr.len() { self.icfgr[idx] = val32; }
+                if idx < self.icfgr.len() {
+                    self.icfgr[idx] = val32;
+                }
             }
             _ => {} // SGIR and unknown: accept silently
         }
@@ -110,14 +131,18 @@ impl Gicd {
     /// Handle a GICD MMIO read. Returns a plausible value.
     pub fn read(&self, offset: u64, size: u8) -> u64 {
         match offset {
-            reg::GICD_CTLR  => self.ctlr as u64,
+            reg::GICD_CTLR => self.ctlr as u64,
             // TYPER: ITLinesNumber=7 → (7+1)*32=256 IRQs; 1 CPU; SecurityExtn=0.
             reg::GICD_TYPER => 0x0000_0007u64,
             // IIDR: ARM implementer, GICv2 product.
-            reg::GICD_IIDR  => 0x0200_143Bu64,
+            reg::GICD_IIDR => 0x0200_143Bu64,
             o if o >= reg::GICD_ISENABLER && o < reg::GICD_ICENABLER => {
                 let idx = ((o - reg::GICD_ISENABLER) / 4) as usize;
-                if idx < WORD_COUNT { self.isenabler[idx] as u64 } else { 0 }
+                if idx < WORD_COUNT {
+                    self.isenabler[idx] as u64
+                } else {
+                    0
+                }
             }
             o if o >= reg::GICD_IPRIORITYR && o < reg::GICD_ITARGETSR => {
                 self.read_bytes(&self.ipriorityr, (o - reg::GICD_IPRIORITYR) as usize, size)

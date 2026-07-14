@@ -31,8 +31,8 @@ pub struct SubscriptionHandle {
 // ─── SignalInner<T> ───────────────────────────────────────────────────────────
 
 struct SignalInner<T: 'static> {
-    value:     RefCell<T>,
-    subs:      RefCell<Vec<Rc<dyn Fn()>>>,
+    value: RefCell<T>,
+    subs: RefCell<Vec<Rc<dyn Fn()>>>,
     notifying: Cell<bool>,
 }
 
@@ -47,22 +47,28 @@ pub struct Signal<T: 'static> {
 }
 
 impl<T: 'static> Clone for Signal<T> {
-    fn clone(&self) -> Self { Self { inner: Rc::clone(&self.inner) } }
+    fn clone(&self) -> Self {
+        Self {
+            inner: Rc::clone(&self.inner),
+        }
+    }
 }
 
 impl<T: 'static> Signal<T> {
     pub fn new(value: T) -> Self {
         Self {
             inner: Rc::new(SignalInner {
-                value:     RefCell::new(value),
-                subs:      RefCell::new(Vec::new()),
+                value: RefCell::new(value),
+                subs: RefCell::new(Vec::new()),
                 notifying: Cell::new(false),
             }),
         }
     }
 
     /// Borrow the current value. Do not hold across a `set()` call.
-    pub fn get(&self) -> Ref<'_, T> { self.inner.value.borrow() }
+    pub fn get(&self) -> Ref<'_, T> {
+        self.inner.value.borrow()
+    }
 
     /// Replace the value and notify all live subscribers.
     pub fn set(&self, value: T) {
@@ -94,30 +100,46 @@ impl<T: 'static> Signal<T> {
             let new_val = f(&self_clone.inner.value.borrow());
             out_clone.set(new_val);
         });
-        Computed { signal: out, _handle: handle }
+        Computed {
+            signal: out,
+            _handle: handle,
+        }
     }
 
     fn notify(&self) {
-        if self.inner.notifying.get() { return; }
+        if self.inner.notifying.get() {
+            return;
+        }
         self.inner.notifying.set(true);
         let len = self.inner.subs.borrow().len();
         let mut any_dead = false;
         for i in 0..len {
             // Check liveness before cloning so strong_count is unmodified by us.
             // count == 1 → only subs Vec holds a ref → handle was dropped.
-            let is_live = self.inner.subs.borrow()
+            let is_live = self
+                .inner
+                .subs
+                .borrow()
                 .get(i)
                 .map(|rc| Rc::strong_count(rc) > 1)
                 .unwrap_or(false);
-            if !is_live { any_dead = true; continue; }
+            if !is_live {
+                any_dead = true;
+                continue;
+            }
             // Borrow again to clone and call — previous borrow already released.
             let sub = self.inner.subs.borrow().get(i).cloned();
-            if let Some(rc) = sub { rc(); }
+            if let Some(rc) = sub {
+                rc();
+            }
         }
         // Prune dead entries only when a handle was actually dropped.
         // In steady state (all handles alive), retain() is never called — zero O(n) scan.
         if any_dead {
-            self.inner.subs.borrow_mut().retain(|rc| Rc::strong_count(rc) > 1);
+            self.inner
+                .subs
+                .borrow_mut()
+                .retain(|rc| Rc::strong_count(rc) > 1);
         }
         self.inner.notifying.set(false);
     }
@@ -129,13 +151,15 @@ impl<T: 'static> Signal<T> {
 ///
 /// Alive as long as this struct exists; drop to stop tracking.
 pub struct Computed<T: 'static> {
-    signal:  Signal<T>,
+    signal: Signal<T>,
     // Keeps the source → out subscription alive for the lifetime of this Computed.
     _handle: SubscriptionHandle,
 }
 
 impl<T: 'static> Computed<T> {
-    pub fn get(&self) -> Ref<'_, T> { self.signal.get() }
+    pub fn get(&self) -> Ref<'_, T> {
+        self.signal.get()
+    }
 
     /// Subscribe to changes in the computed output.
     pub fn subscribe<F: Fn() + 'static>(&self, f: F) -> SubscriptionHandle {
@@ -156,9 +180,9 @@ impl<T: 'static> Computed<T> {
 #[cfg(test)]
 mod tests {
     extern crate alloc;
+    use super::*;
     use alloc::rc::Rc;
     use core::cell::Cell;
-    use super::*;
 
     #[test]
     fn set_notifies_subscriber() {
@@ -198,7 +222,9 @@ mod tests {
         let sig = Signal::<i32>::new(0);
         let sig2 = sig.clone();
         // Subscriber calls set() on the same signal → must not recurse
-        let _h = sig.subscribe(move || { sig2.set(99); });
+        let _h = sig.subscribe(move || {
+            sig2.set(99);
+        });
         sig.set(1); // should return without hanging
         assert_eq!(*sig.get(), 99); // second set took effect after first notify
     }

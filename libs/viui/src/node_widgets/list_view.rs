@@ -53,7 +53,11 @@ fn prefix_sum(heights: &[f32]) -> alloc::vec::Vec<f32> {
 /// Precondition: `prefix` is sorted ascending (guaranteed by `prefix_sum`).
 fn row_at_offset(prefix: &[f32], offset: f32) -> usize {
     let pos = prefix.partition_point(|&p| p <= offset);
-    if pos == 0 { 0 } else { pos - 1 }
+    if pos == 0 {
+        0
+    } else {
+        pos - 1
+    }
 }
 
 // ── Widget ─────────────────────────────────────────────────────────────────
@@ -155,13 +159,21 @@ impl ListView {
             None => {
                 let idx = (rel_y / self.item_height) as usize;
                 let len = self.items.get().len();
-                if idx < len { Some(idx) } else { None }
+                if idx < len {
+                    Some(idx)
+                } else {
+                    None
+                }
             }
             Some(heights_sig) => {
                 let heights = heights_sig.get();
                 let prefix = prefix_sum(&heights);
                 let idx = row_at_offset(&prefix, rel_y);
-                if idx < self.items.get().len() { Some(idx) } else { None }
+                if idx < self.items.get().len() {
+                    Some(idx)
+                } else {
+                    None
+                }
             }
         }
     }
@@ -171,8 +183,12 @@ impl ViNode for ListView {
     fn layout(&mut self, constraints: Constraints) -> Size {
         // Constrain height to a reasonable maximum; full width.
         let desired_h = constraints.max.h.min(200.0);
-        let size = constraints.constrain(Size { w: constraints.max.w, h: desired_h });
-        self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+        let size = constraints.constrain(Size {
+            w: constraints.max.w,
+            h: desired_h,
+        });
+        self.bounds_cache
+            .set(Rect::from_origin_size(constraints.origin, size));
         size
     }
 
@@ -205,7 +221,12 @@ impl ViNode for ListView {
 
                     for i in first..last {
                         let item_y = b.y + i as f32 * self.item_height - scroll;
-                        let item_rect = Rect { x: b.x, y: item_y, w: b.w, h: self.item_height };
+                        let item_rect = Rect {
+                            x: b.x,
+                            y: item_y,
+                            w: b.w,
+                            h: self.item_height,
+                        };
 
                         if sel == Some(i) {
                             cx.canvas.fill_rect(item_rect, cx.theme.list_selected_bg());
@@ -237,10 +258,7 @@ impl ViNode for ListView {
                     let last = {
                         let bottom = scroll + b.h;
                         let mut end = first;
-                        while end < items.len()
-                            && end + 1 < prefix.len()
-                            && prefix[end] < bottom
-                        {
+                        while end < items.len() && end + 1 < prefix.len() && prefix[end] < bottom {
                             end += 1;
                         }
                         end.min(items.len())
@@ -252,7 +270,12 @@ impl ViNode for ListView {
                         }
                         let item_y = b.y + prefix[i] - scroll;
                         let item_h = heights.get(i).copied().unwrap_or(DEFAULT_ITEM_H);
-                        let item_rect = Rect { x: b.x, y: item_y, w: b.w, h: item_h };
+                        let item_rect = Rect {
+                            x: b.x,
+                            y: item_y,
+                            w: b.w,
+                            h: item_h,
+                        };
 
                         if sel == Some(i) {
                             cx.canvas.fill_rect(item_rect, cx.theme.list_selected_bg());
@@ -296,11 +319,21 @@ impl ViNode for ListView {
             let thumb_y = thumb_y.min(b.y + b.h - thumb_h);
 
             cx.canvas.fill_rect(
-                Rect { x: bar_x, y: b.y, w: bar_w, h: b.h },
+                Rect {
+                    x: bar_x,
+                    y: b.y,
+                    w: bar_w,
+                    h: b.h,
+                },
                 cx.theme.surface(),
             );
             cx.canvas.fill_rect(
-                Rect { x: bar_x, y: thumb_y, w: bar_w, h: thumb_h },
+                Rect {
+                    x: bar_x,
+                    y: thumb_y,
+                    w: bar_w,
+                    h: thumb_h,
+                },
                 cx.theme.border(),
             );
         }
@@ -330,7 +363,10 @@ impl ViNode for ListView {
                 self.hovered_index.set(self.item_at(*pos));
                 false
             }
-            Event::MousePress { pos, button: MouseButton::Left } => {
+            Event::MousePress {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 if let Some(idx) = self.item_at(*pos) {
                     self.selected.set(Some(idx));
                     if let Some(cb) = &self.on_select {
@@ -364,8 +400,7 @@ impl ViNode for ListView {
                 // Exponential moving average keeps velocity smooth across jittery input.
                 // Only update velocity after the first sample (last_y != 0.0).
                 if last_y != 0.0 {
-                    let new_v = (-delta * 0.6 + self.touch_velocity.get() * 0.4)
-                        .clamp(-50.0, 50.0);
+                    let new_v = (-delta * 0.6 + self.touch_velocity.get() * 0.4).clamp(-50.0, 50.0);
                     self.touch_velocity.set(new_v);
                 }
 
@@ -431,8 +466,8 @@ pub trait ListDataProvider: 'static {
 /// The builder is called with a reference to each item and its list index.
 /// Cloning the signal is cheap — all clones share the same underlying cell.
 pub struct VecProvider<T: Clone + 'static> {
-    items:   Signal<Vec<T>>,
-    height:  f32,
+    items: Signal<Vec<T>>,
+    height: f32,
     builder: Box<dyn Fn(&T, usize) -> Box<dyn crate::node::ViNode>>,
 }
 
@@ -442,13 +477,21 @@ impl<T: Clone + 'static> VecProvider<T> {
         item_height: f32,
         builder: impl Fn(&T, usize) -> Box<dyn crate::node::ViNode> + 'static,
     ) -> Self {
-        Self { items, height: item_height, builder: Box::new(builder) }
+        Self {
+            items,
+            height: item_height,
+            builder: Box::new(builder),
+        }
     }
 }
 
 impl<T: Clone + 'static> ListDataProvider for VecProvider<T> {
-    fn item_count(&self) -> usize       { self.items.get().len() }
-    fn item_height(&self) -> f32        { self.height }
+    fn item_count(&self) -> usize {
+        self.items.get().len()
+    }
+    fn item_height(&self) -> f32 {
+        self.height
+    }
     fn build_item(&self, index: usize) -> Box<dyn crate::node::ViNode> {
         let items = self.items.get();
         (self.builder)(&items[index], index)
@@ -458,7 +501,7 @@ impl<T: Clone + 'static> ListDataProvider for VecProvider<T> {
 /// One recycled display slot inside [`VirtualListView`].
 struct VirtualSlot {
     /// The widget currently occupying this slot.
-    widget:    Box<dyn crate::node::ViNode>,
+    widget: Box<dyn crate::node::ViNode>,
     /// Which data index the widget is currently rendering, or `None` if empty.
     bound_idx: Option<usize>,
 }
@@ -477,14 +520,14 @@ struct VirtualSlot {
 /// A 6 px thumb-and-track scrollbar is drawn on the right edge when total content
 /// height exceeds the viewport height.
 pub struct VirtualListView {
-    provider:   Box<dyn ListDataProvider>,
-    scroll_y:   f32,
+    provider: Box<dyn ListDataProvider>,
+    scroll_y: f32,
     scroll_vel: f32,
     last_touch_y: f32,
     slot_count: usize,
-    slots:      Vec<VirtualSlot>,
-    selected:   Signal<Option<usize>>,
-    on_select:  Option<Box<dyn Fn(usize)>>,
+    slots: Vec<VirtualSlot>,
+    selected: Signal<Option<usize>>,
+    on_select: Option<Box<dyn Fn(usize)>>,
     bounds_cache: Cell<Rect>,
 }
 
@@ -493,13 +536,13 @@ impl VirtualListView {
     pub fn new(provider: Box<dyn ListDataProvider>) -> Self {
         Self {
             provider,
-            scroll_y:     0.0,
-            scroll_vel:   0.0,
+            scroll_y: 0.0,
+            scroll_vel: 0.0,
             last_touch_y: 0.0,
-            slot_count:   0,
-            slots:        Vec::new(),
-            selected:     Signal::new(None),
-            on_select:    None,
+            slot_count: 0,
+            slots: Vec::new(),
+            selected: Signal::new(None),
+            on_select: None,
             bounds_cache: Cell::new(Rect::ZERO),
         }
     }
@@ -519,7 +562,9 @@ impl VirtualListView {
 
     fn first_visible_idx(&self) -> usize {
         let h = self.provider.item_height();
-        if h <= 0.0 { return 0; }
+        if h <= 0.0 {
+            return 0;
+        }
         (self.scroll_y / h) as usize
     }
 
@@ -541,11 +586,16 @@ impl VirtualListView {
     /// Called from `layout()` — only resizes if slot count changed.
     fn ensure_slots(&mut self, viewport_h: f32) {
         let item_h = self.provider.item_height();
-        if item_h <= 0.0 { return; }
+        if item_h <= 0.0 {
+            return;
+        }
         // +2: one partially visible slot at each edge.
         // No f32::ceil in no_std — compute ceiling via integer division.
-        let needed = (viewport_h as usize + item_h as usize).saturating_sub(1) / item_h as usize + 2;
-        if self.slot_count == needed { return; }
+        let needed =
+            (viewport_h as usize + item_h as usize).saturating_sub(1) / item_h as usize + 2;
+        if self.slot_count == needed {
+            return;
+        }
 
         self.slot_count = needed;
         self.slots.clear();
@@ -558,9 +608,13 @@ impl VirtualListView {
                 self.provider.build_item(i)
             } else {
                 // Placeholder for out-of-range slots — never painted.
-                self.provider.build_item(0.min(count.saturating_sub(1)).max(0))
+                self.provider
+                    .build_item(0.min(count.saturating_sub(1)).max(0))
             };
-            self.slots.push(VirtualSlot { widget, bound_idx: idx });
+            self.slots.push(VirtualSlot {
+                widget,
+                bound_idx: idx,
+            });
         }
     }
 
@@ -578,7 +632,7 @@ impl VirtualListView {
                 continue;
             }
             if slot.bound_idx != Some(target) {
-                slot.widget    = self.provider.build_item(target);
+                slot.widget = self.provider.build_item(target);
                 slot.bound_idx = Some(target);
             }
         }
@@ -587,7 +641,10 @@ impl VirtualListView {
 
 impl crate::node::ViNode for VirtualListView {
     fn layout(&mut self, constraints: Constraints) -> Size {
-        let size = constraints.constrain(Size { w: constraints.max.w, h: constraints.max.h });
+        let size = constraints.constrain(Size {
+            w: constraints.max.w,
+            h: constraints.max.h,
+        });
         let b = Rect::from_origin_size(constraints.origin, size);
         self.bounds_cache.set(b);
 
@@ -596,21 +653,23 @@ impl crate::node::ViNode for VirtualListView {
 
         // Position each slot at its absolute screen-space Y coordinate.
         let item_h = self.provider.item_height();
-        let first  = self.first_visible_idx();
+        let first = self.first_visible_idx();
         for (i, slot) in self.slots.iter_mut().enumerate() {
-            if slot.bound_idx.is_none() { continue; }
+            if slot.bound_idx.is_none() {
+                continue;
+            }
             let slot_y = b.y + (first + i) as f32 * item_h - self.scroll_y;
-            let slot_constraints = Constraints::new(
-                Point::new(b.x, slot_y),
-                Size::new(b.w, item_h),
-            );
+            let slot_constraints =
+                Constraints::new(Point::new(b.x, slot_y), Size::new(b.w, item_h));
             slot.widget.layout(slot_constraints);
         }
 
         size
     }
 
-    fn bounds(&self) -> Rect { self.bounds_cache.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds_cache.get()
+    }
 
     fn paint(&self, cx: &mut crate::render_ctx::RenderCtx<'_>) {
         let b = self.bounds_cache.get();
@@ -624,11 +683,13 @@ impl crate::node::ViNode for VirtualListView {
         for slot in &self.slots {
             let idx = match slot.bound_idx {
                 Some(i) => i,
-                None    => continue,
+                None => continue,
             };
             let sb = slot.widget.bounds();
             // Skip slots scrolled fully outside the viewport.
-            if sb.y + sb.h < b.y || sb.y > b.y + b.h { continue; }
+            if sb.y + sb.h < b.y || sb.y > b.y + b.h {
+                continue;
+            }
 
             if sel == Some(idx) {
                 cx.canvas.fill_rect(sb, cx.theme.list_selected_bg());
@@ -641,11 +702,11 @@ impl crate::node::ViNode for VirtualListView {
         // Scrollbar — drawn outside clip so it appears on top of content.
         let total_h = self.total_content_height();
         if total_h > b.h {
-            let bar_w     = 6.0_f32;
-            let bar_x     = b.x + b.w - bar_w;
-            let thumb_h   = (b.h / total_h * b.h).max(20.0);
+            let bar_w = 6.0_f32;
+            let bar_x = b.x + b.w - bar_w;
+            let thumb_h = (b.h / total_h * b.h).max(20.0);
             let scroll_range = total_h - b.h;
-            let thumb_y   = if scroll_range > 0.0 {
+            let thumb_y = if scroll_range > 0.0 {
                 b.y + (self.scroll_y / scroll_range) * (b.h - thumb_h)
             } else {
                 b.y
@@ -654,12 +715,22 @@ impl crate::node::ViNode for VirtualListView {
 
             // Track
             cx.canvas.fill_rect(
-                Rect { x: bar_x, y: b.y, w: bar_w, h: b.h },
+                Rect {
+                    x: bar_x,
+                    y: b.y,
+                    w: bar_w,
+                    h: b.h,
+                },
                 cx.theme.surface(),
             );
             // Thumb
             cx.canvas.fill_rect(
-                Rect { x: bar_x, y: thumb_y, w: bar_w, h: thumb_h },
+                Rect {
+                    x: bar_x,
+                    y: thumb_y,
+                    w: bar_w,
+                    h: thumb_h,
+                },
                 cx.theme.border(),
             );
         }
@@ -682,36 +753,49 @@ impl crate::node::ViNode for VirtualListView {
                 self.rebind_slots();
                 true
             }
-            crate::event::Event::MousePress { pos, button: crate::event::MouseButton::Left } => {
-                if !b.contains(*pos) { return false; }
+            crate::event::Event::MousePress {
+                pos,
+                button: crate::event::MouseButton::Left,
+            } => {
+                if !b.contains(*pos) {
+                    return false;
+                }
                 let item_h = self.provider.item_height();
                 if item_h > 0.0 {
                     let clicked = ((pos.y - b.y + self.scroll_y) / item_h) as usize;
                     if clicked < self.provider.item_count() {
                         self.selected.set(Some(clicked));
-                        if let Some(cb) = &self.on_select { cb(clicked); }
+                        if let Some(cb) = &self.on_select {
+                            cb(clicked);
+                        }
                     }
                 }
                 true
             }
             crate::event::Event::TouchBegin { pos, .. } => {
-                if !b.contains(*pos) { return false; }
-                self.scroll_vel  = 0.0;
+                if !b.contains(*pos) {
+                    return false;
+                }
+                self.scroll_vel = 0.0;
                 self.last_touch_y = pos.y;
                 let item_h = self.provider.item_height();
                 if item_h > 0.0 {
                     let clicked = ((pos.y - b.y + self.scroll_y) / item_h) as usize;
                     if clicked < self.provider.item_count() {
                         self.selected.set(Some(clicked));
-                        if let Some(cb) = &self.on_select { cb(clicked); }
+                        if let Some(cb) = &self.on_select {
+                            cb(clicked);
+                        }
                     }
                 }
                 true
             }
             crate::event::Event::TouchMove { pos, finger_id: 0 } => {
-                if !b.contains(*pos) { return false; }
+                if !b.contains(*pos) {
+                    return false;
+                }
                 let last_y = self.last_touch_y;
-                let delta  = pos.y - last_y;
+                let delta = pos.y - last_y;
                 self.last_touch_y = pos.y;
                 if last_y != 0.0 {
                     self.scroll_vel = (-delta * 0.6 + self.scroll_vel * 0.4).clamp(-50.0, 50.0);

@@ -23,7 +23,19 @@ use ostd::io::{print, println, stdin};
 use ostd::syscall::{sys_exit, sys_recv, sys_send, sys_spawn_from_path, SyscallResult};
 
 api::declare_manifest!(block_io = false, network = false, spawn = true);
-api::declare_syscalls![Send, Recv, RecvTimeout, Read, Log, SpawnFromPath, LookupService];
+// GrantAlloc: sys_spawn_from_path's VFS-Grant route (read_full_via_grant) needs
+// GrantAlloc/Share/Free — the whole Grant family shares bit 39, so declaring
+// one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
+api::declare_syscalls![
+    Send,
+    Recv,
+    RecvTimeout,
+    Read,
+    Log,
+    SpawnFromPath,
+    LookupService,
+    GrantAlloc
+];
 
 const GATEWAY_PATH: &str = "/bin/llm-gateway";
 const TOOL_FS_PATH: &str = "/bin/tool-fs";
@@ -109,14 +121,20 @@ pub fn main() {
         }
     };
 
-    let tools = Tools { fs: tool_fs, sys: tool_sys, spawn: tool_spawn };
+    let tools = Tools {
+        fs: tool_fs,
+        sys: tool_sys,
+        spawn: tool_spawn,
+    };
     let mut conversation: Vec<(&'static str, String)> = Vec::new();
     let sin = stdin();
 
     // Register with the input service before entering the readline loop.
     // Retry a few times in case of a boot race where input service is still starting.
     for _ in 0..10 {
-        if request_focus() { break; }
+        if request_focus() {
+            break;
+        }
     }
 
     loop {
@@ -182,7 +200,9 @@ fn run_turn(gw: usize, tools: &Tools, prompt: &str) -> Result<String, String> {
             LlmReply::Error(e) => return Err(e),
         }
     }
-    Err(String::from("[tool limit reached — too many sequential calls]"))
+    Err(String::from(
+        "[tool limit reached — too many sequential calls]",
+    ))
 }
 
 /// One IPC round-trip with the gateway: send `LlmRequest`, receive `LlmReply`.
@@ -221,7 +241,10 @@ fn ask(gw: usize, prompt: &str) -> Result<LlmReply, String> {
 fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
     let cell_tid = tools.route(&call.name);
     if cell_tid == 0 {
-        return Err(alloc::format!("tool '{}' not available (cell not spawned)", call.name));
+        return Err(alloc::format!(
+            "tool '{}' not available (cell not spawned)",
+            call.name
+        ));
     }
 
     let req = AgentToolRequest::Invoke {
@@ -229,8 +252,8 @@ fn dispatch_tool(tools: &Tools, call: &ToolCall) -> Result<String, String> {
         args_json: &call.args_json,
     };
     let mut out = [0u8; 4096];
-    let encoded = postcard::to_slice(&req, &mut out)
-        .map_err(|_| String::from("tool request too large"))?;
+    let encoded =
+        postcard::to_slice(&req, &mut out).map_err(|_| String::from("tool request too large"))?;
 
     match sys_send(cell_tid, encoded) {
         SyscallResult::Ok(_) => {}

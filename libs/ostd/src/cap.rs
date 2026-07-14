@@ -10,8 +10,8 @@
 //! revoked cap is denied with `PermissionDenied`.  For system cells (`block_io` /
 //! `network` holders) revocation is blocked — use `sys_hotswap` instead.
 
-use api::syscall::cap_mask;
 use crate::syscall::{sys_cap_revoke, SyscallError};
+use api::syscall::cap_mask;
 
 /// A handle representing a revocable capability delegation to another cell.
 ///
@@ -31,7 +31,7 @@ use crate::syscall::{sys_cap_revoke, SyscallError};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CapHandle {
     target_tid: usize,
-    cap_mask:   u32,
+    cap_mask: u32,
 }
 
 impl CapHandle {
@@ -42,7 +42,10 @@ impl CapHandle {
     ///
     /// [`revoke`]: Self::revoke
     pub const fn new(target_tid: usize, cap_mask: u32) -> Self {
-        Self { target_tid, cap_mask }
+        Self {
+            target_tid,
+            cap_mask,
+        }
     }
 
     /// Revoke all capabilities this handle represents from the live target cell.
@@ -63,14 +66,22 @@ impl CapHandle {
     }
 
     /// Task ID of the cell this handle controls.
-    pub const fn target_tid(&self) -> usize { self.target_tid }
+    pub const fn target_tid(&self) -> usize {
+        self.target_tid
+    }
 
     /// The full capability mask this handle can revoke.
-    pub const fn cap_mask(&self) -> u32 { self.cap_mask }
+    pub const fn cap_mask(&self) -> u32 {
+        self.cap_mask
+    }
 
     /// Return `true` if this handle controls the network capability.
-    pub const fn has_network(&self) -> bool { self.cap_mask & cap_mask::NETWORK != 0 }
+    pub const fn has_network(&self) -> bool {
+        self.cap_mask & cap_mask::NETWORK != 0
+    }
 
     /// Return `true` if this handle controls the spawn capability.
-    pub const fn has_spawn(&self) -> bool { self.cap_mask & cap_mask::SPAWN != 0 }
+    pub const fn has_spawn(&self) -> bool {
+        self.cap_mask & cap_mask::SPAWN != 0
+    }
 }

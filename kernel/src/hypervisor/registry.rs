@@ -8,18 +8,27 @@
 //! produces a complete match for the hypervisor Syscall arms on every target.
 
 extern crate alloc;
-use alloc::{collections::{BTreeMap, VecDeque}, vec::Vec};
-use types::{ViError, ViResult};
+#[cfg(target_arch = "aarch64")]
 use crate::sync::Spinlock;
+#[cfg(target_arch = "aarch64")]
+use alloc::{
+    collections::{BTreeMap, VecDeque},
+    vec::Vec,
+};
+use types::{ViError, ViResult};
 
 // ── AArch64-only concrete types ───────────────────────────────────────────────
 
 #[cfg(target_arch = "aarch64")]
 use crate::memory::stage2::Stage2Table;
 #[cfg(target_arch = "aarch64")]
-use hal::aarch64::{stage2_regs::{enable_stage2, disable_stage2}, vcpu::{AArch64Vcpu, run_vcpu_impl}, vgic};
-#[cfg(target_arch = "aarch64")]
 use api::hypervisor::ViVmExit as ApiVmExit;
+#[cfg(target_arch = "aarch64")]
+use hal::aarch64::{
+    stage2_regs::{disable_stage2, enable_stage2},
+    vcpu::{run_vcpu_impl, AArch64Vcpu},
+    vgic,
+};
 #[cfg(target_arch = "aarch64")]
 use hal::ViVmExit as HalVmExit;
 
@@ -27,14 +36,17 @@ use hal::ViVmExit as HalVmExit;
 
 #[cfg(target_arch = "aarch64")]
 struct Vm {
-    stage2:  Stage2Table,
+    stage2: Stage2Table,
     guest_pa: u64,
     guest_pages: usize,
-    vcpus:   Vec<AArch64Vcpu>,
+    vcpus: Vec<AArch64Vcpu>,
     /// Per-vCPU pending virtual IRQ queue; intids written by inject_irq, drained
     /// into GICH LRs just before each run_vcpu_impl call (Phase 09).
     vcpu_irqs: Vec<VecDeque<u32>>,
-    vmid:    u16,
+    // reason: retained for future VM introspection/debug tooling (e.g. listing
+    // active Stage-2 VMIDs); written at creation, not yet consumed by any reader.
+    #[allow(dead_code)]
+    vmid: u16,
 }
 
 // VM_REGISTRY is keyed by (owner_tid, vm_id).
@@ -54,12 +66,15 @@ fn registry_lock() -> &'static Spinlock<Option<BTreeMap<(usize, usize), Vm>>> {
 
 /// Per-owner sequential VM-id counter, stored alongside each owner's first VM.
 /// Simple: we just use the total registered VM count + 1 as the next id.
+// reason: kept for near-future VM lifecycle refactor (currently `create_vm`
+// inlines equivalent logic); not yet wired up as a callable helper.
+#[allow(dead_code)]
 #[cfg(target_arch = "aarch64")]
 fn next_vm_id_for(owner: usize) -> usize {
     let guard = registry_lock().lock();
-    let count = guard.as_ref().map_or(0, |m| {
-        m.keys().filter(|(o, _)| *o == owner).count()
-    });
+    let count = guard
+        .as_ref()
+        .map_or(0, |m| m.keys().filter(|(o, _)| *o == owner).count());
     count + 1
 }
 
@@ -72,33 +87,50 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         use crate::memory::paging::PAGE_SIZE;
 
         let mut table = Stage2Table::new().ok_or(ViError::OutOfMemory)?;
-        let guest_pa  = table.carve_guest_ram(guest_pages).ok_or(ViError::OutOfMemory)?;
+        let guest_pa = table
+            .carve_guest_ram(guest_pages)
+            .ok_or(ViError::OutOfMemory)?;
         // Map all guest RAM at IPA 0x40000000.
-        table.map(0x4000_0000, guest_pa, guest_pages, true)
-             .map_err(|_| ViError::OutOfMemory)?;
+        table
+            .map(0x4000_0000, guest_pa, guest_pages, true)
+            .map_err(|_| ViError::OutOfMemory)?;
         // Phase 09: GICV Stage-2 passthrough — map GICC IPA (0x0801_0000) → GICV HPA
         // (0x0804_0000) so guest GICC accesses hit real GICV hardware, removing the
         // GICC trap path.  64 KiB = 16 pages.  Read-only from guest (CPU interface
         // writes go via GICC_EOIR which GICV handles natively).
-        table.map_mmio_passthrough(0x0801_0000, 0x0804_0000, 16, false)
-             .map_err(|_| ViError::OutOfMemory)?;
+        table
+            .map_mmio_passthrough(0x0801_0000, 0x0804_0000, 16, false)
+            .map_err(|_| ViError::OutOfMemory)?;
 
         let vmid = NEXT_VMID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         // SAFETY: table built and flushed; vmid ≥ 1; not yet active (enable later).
-        unsafe { enable_stage2(vmid, table.root_pa()); }
+        unsafe {
+            enable_stage2(vmid, table.root_pa());
+        }
         // Phase 09: enable GICH (virtual CPU interface control) for LR-based injection.
         // SAFETY: kernel runs at EL2; GICH MMIO at 0x0803_0000 is EL2-accessible.
-        unsafe { vgic::enable(); }
+        unsafe {
+            vgic::enable();
+        }
 
         let vm_id = {
             let mut guard = registry_lock().lock();
-            if guard.is_none() { *guard = Some(BTreeMap::new()); }
+            if guard.is_none() {
+                *guard = Some(BTreeMap::new());
+            }
             let map = guard.as_mut().unwrap();
             let id = map.keys().filter(|(o, _)| *o == owner).count() + 1;
-            map.insert((owner, id), Vm {
-                stage2: table, guest_pa, guest_pages,
-                vcpus: Vec::new(), vcpu_irqs: Vec::new(), vmid,
-            });
+            map.insert(
+                (owner, id),
+                Vm {
+                    stage2: table,
+                    guest_pa,
+                    guest_pages,
+                    vcpus: Vec::new(),
+                    vcpu_irqs: Vec::new(),
+                    vmid,
+                },
+            );
             let _ = PAGE_SIZE; // suppress unused warning
             id
         };
@@ -128,8 +160,8 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
         #[cfg(feature = "test-hooks")]
         {
             const MOVZ_X0_42: u32 = 0xD280_0540; // MOVZ X0, #42
-            const HVC_0:      u32 = 0xD400_0002; // HVC #0
-            const B_DOT:      u32 = 0x1400_0000; // B .
+            const HVC_0: u32 = 0xD400_0002; // HVC #0
+            const B_DOT: u32 = 0x1400_0000; // B .
             const GUEST_IPA_BASE: u64 = 0x4000_0000;
             let offset = (entry_pc - GUEST_IPA_BASE) as usize;
             let blob_pa = vm.guest_pa as usize + offset;
@@ -154,7 +186,13 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
 }
 
 /// Map guest IPA range in `vm_id`'s Stage-2.
-pub fn map_guest_memory(owner: usize, vm_id: usize, ipa: u64, size: usize, writable: bool) -> ViResult<()> {
+pub fn map_guest_memory(
+    owner: usize,
+    vm_id: usize,
+    ipa: u64,
+    size: usize,
+    writable: bool,
+) -> ViResult<()> {
     #[cfg(target_arch = "aarch64")]
     {
         use crate::memory::paging::PAGE_SIZE;
@@ -163,7 +201,8 @@ pub fn map_guest_memory(owner: usize, vm_id: usize, ipa: u64, size: usize, writa
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
         let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
         // Extend guest RAM mapping to cover the requested IPA range.
-        vm.stage2.map(ipa, vm.guest_pa, pages, writable)
+        vm.stage2
+            .map(ipa, vm.guest_pa, pages, writable)
             .map_err(|_| ViError::OutOfMemory)?;
         Ok(())
     }
@@ -179,8 +218,13 @@ pub fn map_guest_memory(owner: usize, vm_id: usize, ipa: u64, size: usize, writa
 /// # Safety
 /// `exit_out` must point to a valid, writable `ViVmExit`-sized buffer in the
 /// caller's address space.  Validated by the syscall layer before this call.
-pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
-                exit_out: *mut api::hypervisor::ViVmExit) -> ViResult<usize> {
+pub unsafe fn run_vcpu(
+    owner: usize,
+    vm_id: usize,
+    vcpu_id: usize,
+    _budget_ns: u64,
+    exit_out: *mut api::hypervisor::ViVmExit,
+) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
         let hal_exit = {
@@ -191,7 +235,8 @@ pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
 
             // ── Phase 09: drain IRQ queue → load into GICH LRs ──────────────────
             // Collect pending intids (borrow of vcpu_irqs ends after collect()).
-            let pending: Vec<u32> = vm.vcpu_irqs
+            let pending: Vec<u32> = vm
+                .vcpu_irqs
                 .get_mut(vcpu_idx)
                 .map(|q| q.drain(..).collect())
                 .unwrap_or_default();
@@ -199,13 +244,17 @@ pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
             // Re-queue IRQs that overflow the LR count.
             if pending.len() > vgic::MAX_LRS {
                 if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
-                    for &intid in &pending[vgic::MAX_LRS..] { q.push_back(intid); }
+                    for &intid in &pending[vgic::MAX_LRS..] {
+                        q.push_back(intid);
+                    }
                 }
             }
             // Load up to MAX_LRS pending IRQs into GICH list registers.
             for (n, &intid) in pending[..num_loaded].iter().enumerate() {
                 // SAFETY: EL2; GICH MMIO at 0x0803_0000; n < MAX_LRS.
-                unsafe { vgic::load_lr(n, intid); }
+                unsafe {
+                    vgic::load_lr(n, intid);
+                }
             }
 
             // ── World-switch into guest ──────────────────────────────────────────
@@ -231,7 +280,9 @@ pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
                             }
                         }
                     }
-                    unsafe { vgic::clear_lr(n); }
+                    unsafe {
+                        vgic::clear_lr(n);
+                    }
                 }
             }
 
@@ -240,18 +291,35 @@ pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
 
         // Convert HAL ViVmExit → API ViVmExit (same fields, different crate paths).
         let api_exit = match hal_exit {
-            HalVmExit::MmioRead  { ipa, size, reg } => ApiVmExit::MmioRead  { ipa, size, reg },
+            HalVmExit::MmioRead { ipa, size, reg } => ApiVmExit::MmioRead { ipa, size, reg },
             HalVmExit::MmioWrite { ipa, size, val } => ApiVmExit::MmioWrite { ipa, size, val },
-            HalVmExit::Hvc      { imm, regs }       => ApiVmExit::Hvc      { imm, regs },
-            HalVmExit::Wfi                           => ApiVmExit::Wfi,
-            HalVmExit::SysReg   { op0, op1, crn, crm, op2, rt, is_write }
-                                                     => ApiVmExit::SysReg  { op0, op1, crn, crm, op2, rt, is_write },
-            HalVmExit::Preempted                     => ApiVmExit::Preempted,
-            HalVmExit::Shutdown                      => ApiVmExit::Shutdown,
-            HalVmExit::Unknown  { ec, iss }          => ApiVmExit::Unknown  { ec, iss },
+            HalVmExit::Hvc { imm, regs } => ApiVmExit::Hvc { imm, regs },
+            HalVmExit::Wfi => ApiVmExit::Wfi,
+            HalVmExit::SysReg {
+                op0,
+                op1,
+                crn,
+                crm,
+                op2,
+                rt,
+                is_write,
+            } => ApiVmExit::SysReg {
+                op0,
+                op1,
+                crn,
+                crm,
+                op2,
+                rt,
+                is_write,
+            },
+            HalVmExit::Preempted => ApiVmExit::Preempted,
+            HalVmExit::Shutdown => ApiVmExit::Shutdown,
+            HalVmExit::Unknown { ec, iss } => ApiVmExit::Unknown { ec, iss },
         };
         // SAFETY: exit_out validated by syscall layer.
-        unsafe { core::ptr::write(exit_out, api_exit); }
+        unsafe {
+            core::ptr::write(exit_out, api_exit);
+        }
         Ok(0)
     }
     #[cfg(not(target_arch = "aarch64"))]
@@ -262,22 +330,35 @@ pub fn run_vcpu(owner: usize, vm_id: usize, vcpu_id: usize, _budget_ns: u64,
 }
 
 /// Read or write vCPU general-purpose registers (x0-x30 + sp + pc = 32×u64).
-pub fn vcpu_regs(owner: usize, vm_id: usize, vcpu_id: usize, buf_ptr: usize, write: bool) -> ViResult<usize> {
+pub fn vcpu_regs(
+    owner: usize,
+    vm_id: usize,
+    vcpu_id: usize,
+    buf_ptr: usize,
+    write: bool,
+) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
         let mut guard = registry_lock().lock();
         let map = guard.as_mut().ok_or(ViError::NotFound)?;
         let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
-        let vcpu = vm.vcpus.get_mut(vcpu_id.saturating_sub(1)).ok_or(ViError::NotFound)?;
+        let vcpu = vm
+            .vcpus
+            .get_mut(vcpu_id.saturating_sub(1))
+            .ok_or(ViError::NotFound)?;
         // buf_ptr points to 32×u64 (256 bytes), validated by syscall layer.
         // SAFETY: buf_ptr validated; SAS — same VA in kernel and cell.
         let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u64, 32) };
         if write {
             // Write x0-x30 from buf[0..31]; buf[31] = pc (g_elr_el2).
-            for (i, v) in buf[..31].iter().enumerate() { vcpu.gp[i] = *v; }
+            for (i, v) in buf[..31].iter().enumerate() {
+                vcpu.gp[i] = *v;
+            }
             vcpu.g_elr_el2 = buf[31];
         } else {
-            for (i, v) in vcpu.gp.iter().enumerate() { buf[i] = *v; }
+            for (i, v) in vcpu.gp.iter().enumerate() {
+                buf[i] = *v;
+            }
             buf[31] = vcpu.g_elr_el2;
         }
         Ok(0)
@@ -298,7 +379,13 @@ pub fn vcpu_regs(owner: usize, vm_id: usize, vcpu_id: usize, buf_ptr: usize, wri
 /// # Safety (kernel-internal)
 /// `src_ptr` is a valid cell VA; in SAS, VA == PA for kernel-managed regions, but
 /// the copy uses `copy_nonoverlapping` which only reads the source — no guest access.
-pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src_ptr: usize, len: usize) -> ViResult<usize> {
+pub fn write_guest_memory(
+    owner: usize,
+    vm_id: usize,
+    gpa: u64,
+    src_ptr: usize,
+    len: usize,
+) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
         use crate::memory::paging::PAGE_SIZE;
@@ -306,10 +393,11 @@ pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src_ptr: usize, 
 
         let guard = registry_lock().lock();
         let map = guard.as_ref().ok_or(ViError::NotFound)?;
-        let vm  = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+        let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
 
         // Validate gpa is within the mapped guest-RAM window.
-        let offset = gpa.checked_sub(GUEST_IPA_BASE)
+        let offset = gpa
+            .checked_sub(GUEST_IPA_BASE)
             .ok_or(ViError::InvalidInput)? as usize;
         let end = offset.checked_add(len).ok_or(ViError::InvalidInput)?;
         if end > vm.guest_pages * PAGE_SIZE {
@@ -345,7 +433,13 @@ pub fn write_guest_memory(owner: usize, vm_id: usize, gpa: u64, src_ptr: usize, 
 /// `dst_ptr` is a valid cell VA; in SAS, VA == PA for kernel-managed regions.
 /// Guest RAM is kernel-allocated identity-mapped memory — never freed while a vCPU
 /// is alive (teardown requires the VM to be destroyed first).
-pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst_ptr: usize, len: usize) -> ViResult<usize> {
+pub fn read_guest_memory(
+    owner: usize,
+    vm_id: usize,
+    gpa: u64,
+    dst_ptr: usize,
+    len: usize,
+) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
         use crate::memory::paging::PAGE_SIZE;
@@ -353,10 +447,11 @@ pub fn read_guest_memory(owner: usize, vm_id: usize, gpa: u64, dst_ptr: usize, l
 
         let guard = registry_lock().lock();
         let map = guard.as_ref().ok_or(ViError::NotFound)?;
-        let vm  = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
+        let vm = map.get(&(owner, vm_id)).ok_or(ViError::NotFound)?;
 
         // Validate gpa is within the mapped guest-RAM window.
-        let offset = gpa.checked_sub(GUEST_IPA_BASE)
+        let offset = gpa
+            .checked_sub(GUEST_IPA_BASE)
             .ok_or(ViError::InvalidInput)? as usize;
         let end = offset.checked_add(len).ok_or(ViError::InvalidInput)?;
         if end > vm.guest_pages * PAGE_SIZE {
@@ -429,7 +524,9 @@ pub fn reap_vms_for_task(dead_tid: usize) {
         // Disable Stage-2 for each dying VM before dropping the table.
         for vm in dead_vms {
             // SAFETY: no vCPU is running (task is dead); safe to disable Stage-2.
-            unsafe { disable_stage2(); }
+            unsafe {
+                disable_stage2();
+            }
             drop(vm); // Stage2Table::drop frees all frames
         }
     }

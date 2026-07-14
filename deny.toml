@@ -10,6 +10,12 @@ version = 2
 # yanked crates are denied by default in 0.15+
 # unmaintained/unsound: "all" = check all deps, "workspace" = workspace only
 unmaintained = "all"
+ignore = [
+  # ttf-parser: author declared it unmaintained, no safe upgrade exists yet.
+  # skrifa is a different API surface — migrating ViUI's font rendering is a
+  # real engineering task, not a CI fix. Revisit when skrifa is evaluated.
+  { id = "RUSTSEC-2026-0192", reason = "no safe upgrade available; migration to skrifa is a separate task" },
+]
 
 [licenses]
 confidence-threshold = 0.93

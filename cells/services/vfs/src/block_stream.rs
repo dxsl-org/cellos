@@ -12,8 +12,8 @@
 //! builds the NVMe Driver Cell exits early (no PCIe NVMe device), so `nvme_tid()`
 //! always returns `None` there and the VirtIO path is unchanged.
 
-use crate::page_cache::PageCache;
 use crate::blk_router::{blk_read, blk_write};
+use crate::page_cache::PageCache;
 use ostd::syscall::sys_blk_flush;
 
 const SECTOR_SIZE: u64 = 512;
@@ -44,7 +44,7 @@ impl fatfs::Read for BlockStream {
             return Ok(0);
         }
         let sector = self.pos / SECTOR_SIZE;
-        let off    = (self.pos % SECTOR_SIZE) as usize;
+        let off = (self.pos % SECTOR_SIZE) as usize;
         let mut sec = [0u8; 512];
         if !blk_read(self.base_lba + sector, &mut sec) {
             return Err(());
@@ -61,8 +61,8 @@ impl fatfs::Write for BlockStream {
         let mut written = 0usize;
         while written < buf.len() {
             let sector = self.pos / SECTOR_SIZE;
-            let off    = (self.pos % SECTOR_SIZE) as usize;
-            let chunk  = core::cmp::min(buf.len() - written, SECTOR_SIZE as usize - off);
+            let off = (self.pos % SECTOR_SIZE) as usize;
+            let chunk = core::cmp::min(buf.len() - written, SECTOR_SIZE as usize - off);
 
             if off == 0 && chunk == SECTOR_SIZE as usize {
                 // Full-sector write — no need to read first.
@@ -83,28 +83,34 @@ impl fatfs::Write for BlockStream {
                 }
             }
 
-            written    += chunk;
-            self.pos   += chunk as u64;
+            written += chunk;
+            self.pos += chunk as u64;
         }
         Ok(written)
     }
 
     /// Issue a flush command so prior writes reach the backing disk image.
     fn flush(&mut self) -> Result<(), ()> {
-        if sys_blk_flush() { Ok(()) } else { Err(()) }
+        if sys_blk_flush() {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }
 
 impl fatfs::Seek for BlockStream {
     fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, ()> {
         self.pos = match pos {
-            fatfs::SeekFrom::Start(n)   => n,
+            fatfs::SeekFrom::Start(n) => n,
             fatfs::SeekFrom::Current(n) => {
                 let result = self.pos as i64 + n;
-                if result < 0 { return Err(()); }
+                if result < 0 {
+                    return Err(());
+                }
                 result as u64
             }
-            fatfs::SeekFrom::End(_)     => return Err(()),
+            fatfs::SeekFrom::End(_) => return Err(()),
         };
         Ok(self.pos)
     }
@@ -155,7 +161,7 @@ impl fatfs::Read for CachedBlockStream {
             return Ok(0);
         }
         let sector = self.inner.pos / SECTOR_SIZE;
-        let off    = (self.inner.pos % SECTOR_SIZE) as usize;
+        let off = (self.inner.pos % SECTOR_SIZE) as usize;
         let mut sec = [0u8; 512];
         if !self.cache.read_sector(&mut self.inner, sector, &mut sec) {
             return Err(());
@@ -172,8 +178,8 @@ impl fatfs::Write for CachedBlockStream {
         let mut written = 0usize;
         while written < buf.len() {
             let sector = self.inner.pos / SECTOR_SIZE;
-            let off    = (self.inner.pos % SECTOR_SIZE) as usize;
-            let chunk  = core::cmp::min(buf.len() - written, SECTOR_SIZE as usize - off);
+            let off = (self.inner.pos % SECTOR_SIZE) as usize;
+            let chunk = core::cmp::min(buf.len() - written, SECTOR_SIZE as usize - off);
 
             if off == 0 && chunk == SECTOR_SIZE as usize {
                 // Full-sector write: no read-before-write needed.
@@ -194,14 +200,18 @@ impl fatfs::Write for CachedBlockStream {
                 }
             }
 
-            written        += chunk;
+            written += chunk;
             self.inner.pos += chunk as u64;
         }
         Ok(written)
     }
 
     fn flush(&mut self) -> Result<(), ()> {
-        if sys_blk_flush() { Ok(()) } else { Err(()) }
+        if sys_blk_flush() {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }
 

@@ -17,7 +17,7 @@ fn main() {
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let workspace_root = manifest_dir
-        .parent()   // libs/
+        .parent() // libs/
         .and_then(|p| p.parent())
         .expect("mlibc-shim: could not find workspace root from CARGO_MANIFEST_DIR");
 

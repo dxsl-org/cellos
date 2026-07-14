@@ -24,7 +24,12 @@ struct MockRead {
 
 impl MockRead {
     fn new(data: &[u8]) -> Self {
-        MockRead { data: data.to_vec(), pos: 0, fragments: Vec::new(), frag_idx: 0 }
+        MockRead {
+            data: data.to_vec(),
+            pos: 0,
+            fragments: Vec::new(),
+            frag_idx: 0,
+        }
     }
 
     /// Force each successive read to yield exactly the given counts.
@@ -97,7 +102,10 @@ fn drain_until_err(reader: &mut BodyReader, t: &mut MockRead, out_len: usize) ->
     let mut guard = 0;
     loop {
         guard += 1;
-        assert!(guard < 100_000, "decoder spun without terminating on EOF (FIN-spin regression)");
+        assert!(
+            guard < 100_000,
+            "decoder spun without terminating on EOF (FIN-spin regression)"
+        );
         match reader.read(t, &mut out) {
             Ok(0) => panic!("expected truncation error, got clean completion"),
             Ok(_) => { /* partial bytes delivered before the EOF surfaces */ }
@@ -158,7 +166,10 @@ fn content_length_truncated_then_eof_is_unexpected_eof() {
     // must return UnexpectedEof, NOT spin on NeedMoreData (the FIN-spin bug).
     let mut t = MockRead::new(b"Hello");
     let mut r = BodyReader::new(Framing::ContentLength, Some(13), b"");
-    assert_eq!(drain_until_err(&mut r, &mut t, 64), HttpError::UnexpectedEof);
+    assert_eq!(
+        drain_until_err(&mut r, &mut t, 64),
+        HttpError::UnexpectedEof
+    );
 }
 
 #[test]
@@ -167,7 +178,10 @@ fn content_length_truncated_leftover_only_then_eof() {
     // empty → after draining leftover the next read EOFs → UnexpectedEof.
     let mut t = MockRead::new(b"");
     let mut r = BodyReader::new(Framing::ContentLength, Some(13), b"Hello");
-    assert_eq!(drain_until_err(&mut r, &mut t, 64), HttpError::UnexpectedEof);
+    assert_eq!(
+        drain_until_err(&mut r, &mut t, 64),
+        HttpError::UnexpectedEof
+    );
 }
 
 // Chunked-decoder tests live in their own file but share this module's mock

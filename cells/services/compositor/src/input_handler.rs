@@ -71,11 +71,13 @@ fn wait_for_service(id: u16) -> usize {
 /// TID are registered in the service table (init does both before yielding).
 pub fn connect_to_input(state: &mut InputState) {
     let input_tid = wait_for_service(service::INPUT);
-    let own_tid   = wait_for_service(service::COMPOSITOR);
+    let own_tid = wait_for_service(service::COMPOSITOR);
     state.input_tid = input_tid;
 
     let mut req_buf = [0u8; IPC_BUF_SIZE];
-    let req = InputRequest::SetFocus { cell_tid: own_tid as u32 };
+    let req = InputRequest::SetFocus {
+        cell_tid: own_tid as u32,
+    };
     if let Ok(encoded) = api::ipc::encode(&req, &mut req_buf) {
         sys_send(input_tid, encoded);
         // Drain the InputResponse::Ok so input service is not left blocked.
@@ -98,7 +100,9 @@ pub fn handle_input_event(
     z_order: &ZOrder,
     pending_dirty: &mut Option<Rect>,
 ) {
-    if buf[0] != INPUT_EVENT_OPCODE { return; }
+    if buf[0] != INPUT_EVENT_OPCODE {
+        return;
+    }
     match buf[1] {
         0 => forward_key(buf, state),
         1 => update_cursor(buf, state, pending_dirty),
@@ -117,7 +121,12 @@ fn forward_key(buf: &[u8; 512], state: &InputState) {
 /// Build a screen-space rect covering the cursor sprite at `(x, y)`.
 #[inline]
 fn cursor_rect(x: i32, y: i32) -> Rect {
-    Rect { x, y, w: CURSOR_W, h: CURSOR_H }
+    Rect {
+        x,
+        y,
+        w: CURSOR_W,
+        h: CURSOR_H,
+    }
 }
 
 /// Update logical mouse position from a MouseMove payload.
@@ -141,12 +150,23 @@ fn update_cursor(buf: &[u8; 512], state: &mut InputState, pending_dirty: &mut Op
     state.mouse_y = i32::from_le_bytes([buf[6], buf[7], buf[8], buf[9]]);
 
     // One-line probe consumed by the Phase 04 integration test.
-    ostd::io::println(&alloc::format!("[compositor] cursor at {},{}", state.mouse_x, state.mouse_y));
+    ostd::io::println(&alloc::format!(
+        "[compositor] cursor at {},{}",
+        state.mouse_x,
+        state.mouse_y
+    ));
 
     if state.hw_cursor {
         // Hardware cursor: issue GpuCursor(move) — GPU scans out the cursor at
         // the new position without a full framebuffer repaint.
-        let _ = sys_gpu_cursor(1, core::ptr::null(), state.mouse_x as u32, state.mouse_y as u32, 0, 0);
+        let _ = sys_gpu_cursor(
+            1,
+            core::ptr::null(),
+            state.mouse_x as u32,
+            state.mouse_y as u32,
+            0,
+            0,
+        );
     } else {
         // Software fallback: repaint the cursor area.
         let new_rect = cursor_rect(state.mouse_x, state.mouse_y);
@@ -167,7 +187,9 @@ fn on_mouse_button(
     table: &SurfaceTable,
     z_order: &ZOrder,
 ) {
-    if buf[2] != 0 || buf[3] != 1 { return; } // only left-press
+    if buf[2] != 0 || buf[3] != 1 {
+        return;
+    } // only left-press
     if let Some(owner) = hit_test(state.mouse_x, state.mouse_y, table, z_order) {
         state.focused_owner = owner;
     }

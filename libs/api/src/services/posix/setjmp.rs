@@ -153,6 +153,16 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
 }
 
 // Softfloat aarch64 (NEON disabled): no FP callee-saved registers to preserve.
+///
+/// Save the calling environment (x19–x30, sp) into `env` for a later `longjmp`.
+///
+/// # Safety
+/// `env` must be non-null, properly aligned, and point to a writable
+/// `JmpBuf` for the duration of the call. The saved environment is only
+/// valid for `longjmp` while the stack frame that invoked `setjmp` is still
+/// live on the call stack — jumping back after that frame has returned (or
+/// been unwound) is undefined behavior, per the C standard `setjmp`/`longjmp`
+/// contract.
 #[cfg(all(target_arch = "aarch64", not(target_feature = "neon")))]
 #[unsafe(naked)]
 #[no_mangle]
@@ -172,6 +182,16 @@ pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
     )
 }
 
+/// Restore the environment saved by a prior `setjmp(env)` and resume
+/// execution there, making that `setjmp` call return `val` (or 1 if `val == 0`).
+///
+/// # Safety
+/// `env` must be non-null, properly aligned, and point to a `JmpBuf`
+/// previously populated by `setjmp` on **this same call stack**, and the
+/// stack frame that called that `setjmp` must still be live (not returned
+/// or unwound) — restoring `sp`/`x19`–`x30` to a dead frame corrupts the
+/// stack and is undefined behavior. This function never returns to its
+/// caller; control transfers directly to the `setjmp` call site.
 #[cfg(all(target_arch = "aarch64", not(target_feature = "neon")))]
 #[unsafe(naked)]
 #[no_mangle]
@@ -212,9 +232,9 @@ pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
         "mov [rdi + 24], r13",
         "mov [rdi + 32], r14",
         "mov [rdi + 40], r15",
-        "lea rax, [rsp + 8]",   // caller rsp (setjmp will have ret'd)
+        "lea rax, [rsp + 8]", // caller rsp (setjmp will have ret'd)
         "mov [rdi + 48], rax",
-        "mov rax, [rsp]",       // return address
+        "mov rax, [rsp]", // return address
         "mov [rdi + 56], rax",
         "xor eax, eax",
         "ret",
@@ -234,13 +254,13 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
         "mov r14, [rdi + 32]",
         "mov r15, [rdi + 40]",
         "mov rsp, [rdi + 48]",
-        "mov rdx, [rdi + 56]",  // saved rip
-        "mov eax, esi",          // return value = val
+        "mov rdx, [rdi + 56]", // saved rip
+        "mov eax, esi",        // return value = val
         "test eax, eax",
         "jnz 2f",
-        "inc eax",               // val == 0 → return 1
+        "inc eax", // val == 0 → return 1
         "2:",
-        "jmp rdx",               // indirect jump to saved rip
+        "jmp rdx", // indirect jump to saved rip
     )
 }
 
@@ -248,11 +268,21 @@ pub unsafe extern "C" fn longjmp(env: *const JmpBuf, val: i32) -> ! {
 // wasm32 + other arches: stub only
 // ---------------------------------------------------------------------------
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 #[no_mangle]
-pub unsafe extern "C" fn setjmp(_env: *mut JmpBuf) -> i32 { 0 }
+pub unsafe extern "C" fn setjmp(_env: *mut JmpBuf) -> i32 {
+    0
+}
 
-#[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64")))]
+#[cfg(not(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+)))]
 #[no_mangle]
 pub unsafe extern "C" fn longjmp(_env: *const JmpBuf, val: i32) -> ! {
     let _ = val;

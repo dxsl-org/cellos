@@ -139,9 +139,13 @@ pub fn sys_blk_flush() -> bool {
 pub fn sys_shutdown() -> ! {
     // SAFETY: raw syscall 502 invokes the kernel SBI SRST shutdown; the kernel's
     // ecall to OpenSBI terminates QEMU and never returns to us.
-    unsafe { syscall_raw(502, 0, 0, 0, 0); }
+    unsafe {
+        syscall_raw(502, 0, 0, 0, 0);
+    }
     // Unreachable: the kernel never returns from shutdown. Spin to satisfy `-> !`.
-    loop { sys_yield(); }
+    loop {
+        sys_yield();
+    }
 }
 
 /// Write one 512-byte sector to the VirtIO block device. Returns `true` on success.
@@ -167,7 +171,13 @@ pub fn sys_log(msg: &str) -> SyscallResult {
 /// Requires the `ReadLog` capability declared in the cell manifest.
 pub fn sys_read_log(buf: &mut [u8]) -> usize {
     let n = unsafe {
-        syscall(ViSyscall::ReadLog, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
+        syscall(
+            ViSyscall::ReadLog,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+            0,
+        )
     };
     n as usize
 }
@@ -202,7 +212,11 @@ pub fn sys_exit(code: usize) -> ! {
 /// the check and cleanup, returns `Ok(0)` (task is already gone).
 pub fn sys_force_exit(tid: usize) -> SyscallResult {
     let ret = unsafe { syscall(ViSyscall::ForceExit, tid, 0, 0, 0) };
-    if ret == 0 { SyscallResult::Ok(0) } else { SyscallResult::Err(SyscallError::Unknown) }
+    if ret == 0 {
+        SyscallResult::Ok(0)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
 }
 
 pub fn sys_exec(path: &str) -> SyscallResult {
@@ -369,9 +383,7 @@ pub fn sys_spawn_pinned(path: &str, priority: u8, core_id: usize) -> SyscallResu
 /// Returns `SyscallError::FileNotFound` if the path does not exist.
 pub fn sys_open_cap(path: &str) -> Result<u64, SyscallError> {
     // SAFETY: path is a valid UTF-8 str; kernel copies it before returning.
-    let ret = unsafe {
-        syscall(ViSyscall::OpenCap, path.as_ptr() as usize, path.len(), 0, 0)
-    };
+    let ret = unsafe { syscall(ViSyscall::OpenCap, path.as_ptr() as usize, path.len(), 0, 0) };
     if ret > 0 {
         Ok(ret as u64)
     } else {
@@ -456,10 +468,12 @@ pub fn sys_stat_cap(cap_id: u64) -> Result<u64, SyscallError> {
 /// Returns `SyscallError::Unknown` on permission denied, invalid cap, or unsupported backend.
 pub fn sys_truncate_cap(cap_id: u64, len: u64) -> Result<(), SyscallError> {
     // SAFETY: no memory access; integers only.
-    let ret = unsafe {
-        syscall(ViSyscall::TruncateCap, cap_id as usize, len as usize, 0, 0)
-    };
-    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+    let ret = unsafe { syscall(ViSyscall::TruncateCap, cap_id as usize, len as usize, 0, 0) };
+    if ret >= 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::Unknown)
+    }
 }
 
 /// Flush all dirty pages for a cap-backed file to the underlying block device.
@@ -472,7 +486,11 @@ pub fn sys_truncate_cap(cap_id: u64, len: u64) -> Result<(), SyscallError> {
 pub fn sys_sync_cap(cap_id: u64) -> Result<(), SyscallError> {
     // SAFETY: no memory access; integers only.
     let ret = unsafe { syscall(ViSyscall::SyncCap, cap_id as usize, 0, 0, 0) };
-    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+    if ret >= 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::Unknown)
+    }
 }
 
 /// Map `[phys, phys+size)` into the IOMMU for the calling Cell, authorising DMA for device `bdf`.
@@ -487,7 +505,11 @@ pub fn sys_sync_cap(cap_id: u64) -> Result<(), SyscallError> {
 pub fn sys_grant_dma(bdf: u32, phys: u64, size: usize) -> Result<u64, SyscallError> {
     // SAFETY: no memory access; all arguments are plain integers.
     let ret = unsafe { syscall(ViSyscall::GrantDma, bdf as usize, phys as usize, size, 0) };
-    if ret >= 0 { Ok(ret as u64) } else { Err(SyscallError::Unknown) }
+    if ret >= 0 {
+        Ok(ret as u64)
+    } else {
+        Err(SyscallError::Unknown)
+    }
 }
 
 /// Seek a cap-backed file to `offset` from `whence` (0=Start, 1=Current, 2=End).
@@ -503,7 +525,7 @@ pub fn sys_seek_cap(cap_id: u64, offset: i64, whence: u8) -> Result<u64, Syscall
         syscall(
             ViSyscall::SeekCap,
             cap_id as usize,
-            offset as usize,  // bit-pattern reinterpret; kernel casts back via `as isize`
+            offset as usize, // bit-pattern reinterpret; kernel casts back via `as isize`
             whence as usize,
             0,
         )
@@ -552,7 +574,11 @@ pub fn sys_notify_on_exit(tid: usize) -> SyscallResult {
 pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
     unsafe {
         let ret = syscall(ViSyscall::RegisterService, service_id as usize, tid, 0, 0);
-        if ret == 0 { SyscallResult::Ok(0) } else { SyscallResult::Err(SyscallError::Unknown) }
+        if ret == 0 {
+            SyscallResult::Ok(0)
+        } else {
+            SyscallResult::Err(SyscallError::Unknown)
+        }
     }
 }
 
@@ -564,7 +590,11 @@ pub fn sys_lookup_service(service_id: u16) -> Option<usize> {
     unsafe {
         let ret = syscall(ViSyscall::LookupService, service_id as usize, 0, 0, 0);
         // ABI: provider tid (> 0), or 0 when no live provider is registered.
-        if ret > 0 { Some(ret as usize) } else { None }
+        if ret > 0 {
+            Some(ret as usize)
+        } else {
+            None
+        }
     }
 }
 
@@ -686,7 +716,13 @@ pub fn sys_send(target: usize, msg: &[u8]) -> SyscallResult {
 pub fn sys_try_send(target: usize, msg: &[u8]) -> SyscallResult {
     // SAFETY: msg is a valid slice; kernel copies before returning.
     let ret = unsafe {
-        syscall(ViSyscall::TrySend, target, msg.as_ptr() as usize, msg.len(), 0)
+        syscall(
+            ViSyscall::TrySend,
+            target,
+            msg.as_ptr() as usize,
+            msg.len(),
+            0,
+        )
     };
     SyscallResult::Ok(ret as usize)
 }
@@ -708,12 +744,10 @@ pub struct IoVec {
 /// # Errors
 /// Returns `Err` if `target` is not found or more than 8 segments are passed.
 pub fn sys_send_gather(target: usize, segments: &[IoVec]) -> SyscallResult {
-    let iovec_ptr  = segments.as_ptr() as usize;
+    let iovec_ptr = segments.as_ptr() as usize;
     let iovec_count = segments.len();
     // SAFETY: segments is a valid slice; kernel reads iovec_count * 2 * sizeof(usize) bytes.
-    let ret = unsafe {
-        syscall(ViSyscall::SendGather, target, iovec_ptr, iovec_count, 0)
-    };
+    let ret = unsafe { syscall(ViSyscall::SendGather, target, iovec_ptr, iovec_count, 0) };
     SyscallResult::Ok(ret as usize)
 }
 
@@ -726,12 +760,10 @@ pub fn sys_send_gather(target: usize, segments: &[IoVec]) -> SyscallResult {
 /// `Ok(sender_id)` on success.  `Ok(0)` means the task is now blocked waiting
 /// for a message (non-blocking fast path returned no sender).
 pub fn sys_recv_scatter(mask: usize, segments: &mut [IoVec]) -> SyscallResult {
-    let iovec_ptr   = segments.as_mut_ptr() as usize;
+    let iovec_ptr = segments.as_mut_ptr() as usize;
     let iovec_count = segments.len();
     // SAFETY: segments is a valid mutable slice; kernel writes into the pointed-to buffers.
-    let ret = unsafe {
-        syscall(ViSyscall::RecvScatter, mask, iovec_ptr, iovec_count, 0)
-    };
+    let ret = unsafe { syscall(ViSyscall::RecvScatter, mask, iovec_ptr, iovec_count, 0) };
     SyscallResult::Ok(ret as usize)
 }
 
@@ -827,7 +859,13 @@ pub fn sys_grant(_target: usize, _ptr: usize, _len: usize, _flags: usize) -> Sys
 
 pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, SyscallError> {
     unsafe {
-        let ret = syscall(ViSyscall::GetProcs, buffer.as_mut_ptr() as usize, buffer.len(), 0, 0);
+        let ret = syscall(
+            ViSyscall::GetProcs,
+            buffer.as_mut_ptr() as usize,
+            buffer.len(),
+            0,
+            0,
+        );
         if ret >= 0 {
             Ok(ret as usize)
         } else {
@@ -855,7 +893,11 @@ pub fn sys_hotswap(cell_id: usize, new_elf_path: &str) -> SyscallResult {
             0,
         )
     };
-    if ret > 0 { SyscallResult::Ok(ret as usize) } else { SyscallResult::Err(SyscallError::Unknown) }
+    if ret > 0 {
+        SyscallResult::Ok(ret as usize)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
 }
 
 /// Signal to the kernel that this cell has finished deserializing hot-swap state
@@ -881,9 +923,19 @@ pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<()
     let wh = ((w as usize & 0xFFFF) << 16) | (h as usize & 0xFFFF);
     // SAFETY: pixels is a valid immutable slice; kernel validates length against w*h*4.
     let ret = unsafe {
-        syscall(ViSyscall::GpuFlush, pixels.as_ptr() as usize, pixels.len(), xy, wh)
+        syscall(
+            ViSyscall::GpuFlush,
+            pixels.as_ptr() as usize,
+            pixels.len(),
+            xy,
+            wh,
+        )
     };
-    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+    if ret >= 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::Unknown)
+    }
 }
 
 /// Play raw PCM frames on the VirtIO sound output device (blocking).
@@ -895,10 +947,12 @@ pub fn sys_gpu_flush(pixels: &[u8], x: u32, y: u32, w: u32, h: u32) -> Result<()
 pub fn sys_audio_play(pcm: &[u8]) -> usize {
     // SAFETY: pcm is a valid immutable slice; the kernel validates the pointer and
     // length, and reads exactly `pcm.len()` bytes from it.
-    let ret = unsafe {
-        syscall(ViSyscall::AudioPlay, pcm.as_ptr() as usize, pcm.len(), 0, 0)
-    };
-    if ret > 0 { ret as usize } else { 0 }
+    let ret = unsafe { syscall(ViSyscall::AudioPlay, pcm.as_ptr() as usize, pcm.len(), 0, 0) };
+    if ret > 0 {
+        ret as usize
+    } else {
+        0
+    }
 }
 
 /// Set or move the VirtIO GPU hardware cursor.
@@ -921,15 +975,17 @@ pub fn sys_gpu_cursor(
     hot_x: u32,
     hot_y: u32,
 ) -> Result<(), SyscallError> {
-    let xy  = (((x as usize)     & 0xFFFF) << 16) | ((y     as usize) & 0xFFFF);
+    let xy = (((x as usize) & 0xFFFF) << 16) | ((y as usize) & 0xFFFF);
     let hot = (((hot_x as usize) & 0xFFFF) << 16) | ((hot_y as usize) & 0xFFFF);
     // SAFETY: for op=0 sprite must point to a 64*64*4-byte BGRA buffer owned by the
     // caller; the kernel validates the length and reads exactly that many bytes.
     // For op=1 sprite is ignored; passing null or a valid pointer are both safe.
-    let ret = unsafe {
-        syscall(ViSyscall::GpuCursor, op, sprite as usize, xy, hot)
-    };
-    if ret >= 0 { Ok(()) } else { Err(SyscallError::Unknown) }
+    let ret = unsafe { syscall(ViSyscall::GpuCursor, op, sprite as usize, xy, hot) };
+    if ret >= 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::Unknown)
+    }
 }
 
 /// Query the VirtIO GPU's current scanout resolution.
@@ -941,7 +997,11 @@ pub fn sys_get_resolution() -> (u32, u32) {
     let ret = unsafe { syscall(ViSyscall::GpuGetResolution, 0, 0, 0, 0) } as usize;
     let w = (ret >> 32) as u32;
     let h = (ret & 0xFFFF_FFFF) as u32;
-    if w == 0 || h == 0 { (1280, 800) } else { (w, h) }
+    if w == 0 || h == 0 {
+        (1280, 800)
+    } else {
+        (w, h)
+    }
 }
 
 /// Transmit one Ethernet frame through the kernel VirtIO NIC.
@@ -955,9 +1015,7 @@ pub fn sys_get_resolution() -> (u32, u32) {
 pub fn sys_net_tx(frame: &[u8]) -> bool {
     // SAFETY: frame is a valid immutable slice; the kernel reads exactly
     // frame.len() bytes after validating the buffer.
-    let ret = unsafe {
-        syscall(ViSyscall::NetTx, frame.as_ptr() as usize, frame.len(), 0, 0)
-    };
+    let ret = unsafe { syscall(ViSyscall::NetTx, frame.as_ptr() as usize, frame.len(), 0, 0) };
     ret == 1
 }
 
@@ -968,10 +1026,12 @@ pub fn sys_net_tx(frame: &[u8]) -> bool {
 pub fn sys_net_rx(buf: &mut [u8]) -> usize {
     // SAFETY: buf is a valid mutable slice; the kernel writes at most buf.len()
     // bytes and returns the count.
-    let ret = unsafe {
-        syscall(ViSyscall::NetRx, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
-    };
-    if ret > 0 { ret as usize } else { 0 }
+    let ret = unsafe { syscall(ViSyscall::NetRx, buf.as_mut_ptr() as usize, buf.len(), 0, 0) };
+    if ret > 0 {
+        ret as usize
+    } else {
+        0
+    }
 }
 
 /// Stash serialized cell state in the kernel under `key`.
@@ -981,9 +1041,19 @@ pub fn sys_net_rx(buf: &mut [u8]) -> usize {
 pub fn sys_state_stash(key: u64, bytes: &[u8]) -> usize {
     // SAFETY: bytes is a valid immutable slice; the kernel copies it out.
     let ret = unsafe {
-        syscall(ViSyscall::StateStash, key as usize, bytes.as_ptr() as usize, bytes.len(), 0)
+        syscall(
+            ViSyscall::StateStash,
+            key as usize,
+            bytes.as_ptr() as usize,
+            bytes.len(),
+            0,
+        )
     };
-    if ret > 0 { ret as usize } else { 0 }
+    if ret > 0 {
+        ret as usize
+    } else {
+        0
+    }
 }
 
 /// Restore previously stashed state for `key` into `buf`.
@@ -992,9 +1062,19 @@ pub fn sys_state_stash(key: u64, bytes: &[u8]) -> usize {
 pub fn sys_state_restore(key: u64, buf: &mut [u8]) -> usize {
     // SAFETY: buf is a valid mutable slice; the kernel writes at most buf.len().
     let ret = unsafe {
-        syscall(ViSyscall::StateRestore, key as usize, buf.as_mut_ptr() as usize, buf.len(), 0)
+        syscall(
+            ViSyscall::StateRestore,
+            key as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
     };
-    if ret > 0 { ret as usize } else { 0 }
+    if ret > 0 {
+        ret as usize
+    } else {
+        0
+    }
 }
 
 /// Delete the kernel stash entry for `key`, freeing its slot toward the MAX_ENTRIES cap.
@@ -1051,21 +1131,33 @@ pub fn sys_heartbeat(interval_ticks: u64) {
 pub fn sys_get_time() -> u64 {
     // SAFETY: no memory is read or written; the kernel returns a register-size integer.
     let ret = unsafe { syscall(ViSyscall::GetTime, 0, 0, 0, 0) };
-    if ret >= 0 { ret as u64 } else { 0 }
+    if ret >= 0 {
+        ret as u64
+    } else {
+        0
+    }
 }
 
 /// Nanoseconds since Unix epoch from the hardware RTC; 0 if no RTC is present.
 pub fn sys_get_wall_time() -> u64 {
     // SAFETY: register-only syscall.
     let ret = unsafe { syscall(ViSyscall::GetTime, 2, 0, 0, 0) };
-    if ret >= 0 { ret as u64 } else { 0 }
+    if ret >= 0 {
+        ret as u64
+    } else {
+        0
+    }
 }
 
 /// Seconds since Unix epoch from the hardware RTC; 0 if no RTC is present.
 pub fn sys_get_wall_secs() -> u64 {
     // SAFETY: register-only syscall.
     let ret = unsafe { syscall(ViSyscall::GetTime, 3, 0, 0, 0) };
-    if ret >= 0 { ret as u64 } else { 0 }
+    if ret >= 0 {
+        ret as u64
+    } else {
+        0
+    }
 }
 
 // ── Zero-Copy Grant API (Storage 2.0, Phase 01) ───────────────────────────────
@@ -1080,7 +1172,11 @@ pub fn sys_grant_alloc(size: usize) -> Option<usize> {
     let ret = unsafe { syscall(ViSyscall::GrantAlloc, size, 0, 0, 0) };
     // Kernel returns 0 on OOM (F10); compare as usize to avoid signed-bit issues
     // on targets where RAM could place a grant above the isize sign boundary.
-    if (ret as usize) != 0 { Some(ret as usize) } else { None }
+    if (ret as usize) != 0 {
+        Some(ret as usize)
+    } else {
+        None
+    }
 }
 
 /// Share a Grant region with another task under the given permission.
@@ -1091,7 +1187,15 @@ pub fn sys_grant_alloc(size: usize) -> Option<usize> {
 /// `true` on success (caller must own the grant).
 pub fn sys_grant_share(grant_id: usize, target_tid: usize, perm: u8) -> bool {
     // SAFETY: register-only; no memory pointers.
-    let ret = unsafe { syscall(ViSyscall::GrantShare, grant_id, target_tid, perm as usize, 0) };
+    let ret = unsafe {
+        syscall(
+            ViSyscall::GrantShare,
+            grant_id,
+            target_tid,
+            perm as usize,
+            0,
+        )
+    };
     ret == 0
 }
 
@@ -1104,7 +1208,11 @@ pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
     let ret = unsafe { syscall(ViSyscall::GrantSlice, grant_id, 0, 0, 0) };
     // Kernel returns usize::MAX on permission denied / not found. Cast through usize
     // to avoid the signed isize ambiguity with usize::MAX == -1i64 on 64-bit targets.
-    if (ret as usize) != usize::MAX { Some(ret as usize as *mut u8) } else { None }
+    if (ret as usize) != usize::MAX {
+        Some(ret as usize as *mut u8)
+    } else {
+        None
+    }
 }
 
 /// Release a Grant region (owner-only): unmaps its pages and frees the frames.
@@ -1130,7 +1238,11 @@ pub fn sys_grant_free(grant_id: usize) -> bool {
 pub fn sys_grant_register(size: usize) -> Option<usize> {
     // SAFETY: register-only; kernel allocates memory on our behalf.
     let ret = unsafe { syscall(ViSyscall::GrantRegister, size, 0, 0, 0) };
-    if (ret as usize) != 0 { Some(ret as usize) } else { None }
+    if (ret as usize) != 0 {
+        Some(ret as usize)
+    } else {
+        None
+    }
 }
 
 /// Release a registered buffer allocated via `sys_grant_register` (owner-only).
@@ -1177,7 +1289,11 @@ pub fn sys_request_mmio(base: usize, len: usize) -> usize {
 pub fn sys_wait_irq(irq_num: u8, mmio_base: usize) -> Result<(), SyscallError> {
     // SAFETY: kernel validates caller capability at dispatch.
     let ret = unsafe { syscall(ViSyscall::WaitIrq, irq_num as usize, mmio_base, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Register a PCIe device BAR in the kernel BAR allowlist table.
@@ -1188,7 +1304,11 @@ pub fn sys_wait_irq(irq_num: u8, mmio_base: usize) -> Result<(), SyscallError> {
 pub fn sys_register_pcie_bar(bdf: u32, base: usize, len: usize) -> Result<(), SyscallError> {
     // SAFETY: kernel validates PlatformCap at dispatch.
     let ret = unsafe { syscall(ViSyscall::RegisterPcieBar, bdf as usize, base, len, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Register a discovered PCI device with class and BAR0 info.
@@ -1209,9 +1329,19 @@ pub fn sys_register_pci_device(
 ) -> Result<(), SyscallError> {
     // SAFETY: kernel validates PlatformCap at dispatch.
     let ret = unsafe {
-        syscall(ViSyscall::RegisterPciDevice, bdf as usize, cls as usize, bar0_base, bar0_size)
+        syscall(
+            ViSyscall::RegisterPciDevice,
+            bdf as usize,
+            cls as usize,
+            bar0_base,
+            bar0_size,
+        )
     };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Fill `buf` with VirtIO-RNG entropy (true hardware randomness).
@@ -1225,9 +1355,19 @@ pub fn sys_get_random(buf: &mut [u8]) -> usize {
     // SAFETY: buf is a valid mutable slice; the kernel validates the pointer and writes
     // exactly min(len, 64) bytes into it before returning the count.
     let ret = unsafe {
-        syscall(ViSyscall::GetRandom, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
+        syscall(
+            ViSyscall::GetRandom,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+            0,
+        )
     };
-    if ret > 0 { ret as usize } else { 0 }
+    if ret > 0 {
+        ret as usize
+    } else {
+        0
+    }
 }
 
 /// Strip capabilities from a live running cell (runtime revocation).
@@ -1245,7 +1385,11 @@ pub fn sys_get_random(buf: &mut [u8]) -> usize {
 pub fn sys_cap_revoke(target_tid: usize, cap_mask: u32) -> Result<(), SyscallError> {
     // SAFETY: pure register syscall; no raw memory pointers involved.
     let ret = unsafe { syscall(ViSyscall::CapRevoke, target_tid, cap_mask as usize, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Block until one or more bits in `mask` fire, or `timeout_ticks` 10ms ticks elapse.
@@ -1281,7 +1425,11 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
 pub fn sys_freeze_cell(target_tid: usize) -> Result<(), SyscallError> {
     // SAFETY: pure register syscall.
     let ret = unsafe { syscall(ViSyscall::FreezeCell, target_tid, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Resume a frozen Cell so it can be scheduled again.
@@ -1290,7 +1438,11 @@ pub fn sys_freeze_cell(target_tid: usize) -> Result<(), SyscallError> {
 pub fn sys_resume_cell(target_tid: usize) -> Result<(), SyscallError> {
     // SAFETY: pure register syscall.
     let ret = unsafe { syscall(ViSyscall::ResumeCell, target_tid, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Forcibly terminate a Cell and reclaim all its resources.
@@ -1301,7 +1453,11 @@ pub fn sys_resume_cell(target_tid: usize) -> Result<(), SyscallError> {
 pub fn sys_kill_cell(target_tid: usize, exit_code: u32) -> Result<(), SyscallError> {
     // SAFETY: pure register syscall.
     let ret = unsafe { syscall(ViSyscall::KillCell, target_tid, exit_code as usize, 0, 0) };
-    if ret as usize == exit_code as usize { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret as usize == exit_code as usize {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 // ── Driver Cell Registration (P00) ───────────────────────────────────────────
@@ -1314,7 +1470,11 @@ pub fn sys_kill_cell(target_tid: usize, exit_code: u32) -> Result<(), SyscallErr
 pub fn sys_register_block_driver() -> Result<(), SyscallError> {
     // SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
     let ret = unsafe { syscall(ViSyscall::RegisterBlockDriver, 0, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Register the calling cell as the active NIC driver.
@@ -1323,7 +1483,11 @@ pub fn sys_register_block_driver() -> Result<(), SyscallError> {
 pub fn sys_register_nic_driver() -> Result<(), SyscallError> {
     // SAFETY: pure register syscall; kernel validates PcieDriverCap at dispatch.
     let ret = unsafe { syscall(ViSyscall::RegisterNicDriver, 0, 0, 0, 0) };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// Register the calling cell as the active GPU driver.
@@ -1343,7 +1507,11 @@ pub fn sys_register_gpu_driver() -> Result<(), SyscallError> {
             0,
         )
     };
-    if ret == 0 { Ok(()) } else { Err(SyscallError::PermissionDenied) }
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::PermissionDenied)
+    }
 }
 
 /// PCIe device descriptor written by `sys_find_pcie_device`.
@@ -1353,19 +1521,24 @@ pub fn sys_register_gpu_driver() -> Result<(), SyscallError> {
 #[repr(C)]
 pub struct PcieDeviceInfo {
     /// PCIe Requester ID: `bus<<8 | dev<<3 | fn`. Zero means not populated.
-    pub bdf:       u32,
+    pub bdf: u32,
     /// 1 if the device was found, 0 otherwise.
-    pub found:     u32,
+    pub found: u32,
     /// BAR0 physical base address (= virtual address in SAS).
     pub bar0_base: u64,
     /// BAR0 size in bytes.  At least 0x4000 (16 KiB) for NVMe controllers.
-    pub bar0_len:  u64,
+    pub bar0_len: u64,
 }
 
 impl PcieDeviceInfo {
     /// Returns a zeroed-out placeholder; pass `&mut info` to `sys_find_pcie_device`.
     pub const fn zeroed() -> Self {
-        Self { bdf: 0, found: 0, bar0_base: 0, bar0_len: 0 }
+        Self {
+            bdf: 0,
+            found: 0,
+            bar0_base: 0,
+            bar0_len: 0,
+        }
     }
 }
 
@@ -1380,7 +1553,9 @@ impl PcieDeviceInfo {
 ///
 /// Returns `Ok(false)` if no matching device is present (VirtIO fallback case).
 pub fn sys_find_pcie_device(
-    class: u8, subclass: u8, prog_if: u8,
+    class: u8,
+    subclass: u8,
+    prog_if: u8,
     info: &mut PcieDeviceInfo,
 ) -> Result<bool, SyscallError> {
     // SAFETY: `info` is a valid mutable reference; kernel writes exactly 24 bytes.
@@ -1388,9 +1563,9 @@ pub fn sys_find_pcie_device(
     let ret = unsafe {
         syscall(
             ViSyscall::FindPcieDevice,
-            class    as usize,
+            class as usize,
             subclass as usize,
-            prog_if  as usize,
+            prog_if as usize,
             info as *mut PcieDeviceInfo as usize,
         )
     };

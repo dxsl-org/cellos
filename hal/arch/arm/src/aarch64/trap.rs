@@ -16,10 +16,10 @@ use core::arch::global_asm;
 #[repr(C)]
 pub struct TrapFrame {
     pub regs: [u64; 31],
-    pub elr_el1:  u64,  // offset 248 — holds ELR_EL2 at runtime when EL2 active
-    pub spsr_el1: u64,  // offset 256
-    pub far_el1:  u64,  // offset 264
-    pub esr_el1:  u64,  // offset 272
+    pub elr_el1: u64,  // offset 248 — holds ELR_EL2 at runtime when EL2 active
+    pub spsr_el1: u64, // offset 256
+    pub far_el1: u64,  // offset 264
+    pub esr_el1: u64,  // offset 272
 }
 
 /// Mirror of `hal_riscv::rv64::trap::ViTrapFrame` — same `#[repr(C)]` layout.
@@ -28,11 +28,11 @@ pub struct TrapFrame {
 #[derive(Default, Clone, Copy)]
 #[repr(C)]
 struct ViTrapFrameBridge {
-    pub regs:    [usize; 32],
+    pub regs: [usize; 32],
     pub sstatus: usize,
-    pub sepc:    usize,
-    pub stval:   usize,
-    pub scause:  usize,
+    pub sepc: usize,
+    pub stval: usize,
+    pub scause: usize,
 }
 
 /// Bridge ARM64 SVC registers into the kernel's generic syscall dispatcher.
@@ -46,13 +46,15 @@ fn svc_dispatch(frame: &mut TrapFrame) {
     vtf.regs[11] = frame.regs[2] as usize; // a1 (x2)
     vtf.regs[12] = frame.regs[3] as usize; // a2 (x3)
     vtf.regs[13] = frame.regs[4] as usize; // a3 (x4)
-    // elr_el1 holds ELR_EL1 at EL1, or ELR_EL2 at EL2 — both are the
-    // return address past the SVC instruction that the kernel needs.
-    vtf.sepc     = frame.elr_el1 as usize;
+                                           // elr_el1 holds ELR_EL1 at EL1, or ELR_EL2 at EL2 — both are the
+                                           // return address past the SVC instruction that the kernel needs.
+    vtf.sepc = frame.elr_el1 as usize;
     // SAFETY: ViTrapFrameBridge is layout-identical to hal_riscv::ViTrapFrame
     // (both #[repr(C)], same fields and order). The kernel side is #[no_mangle]
     // extern "Rust" and will be resolved to the same symbol at link time.
-    unsafe { ViCell_syscall_dispatch(&mut vtf); }
+    unsafe {
+        ViCell_syscall_dispatch(&mut vtf);
+    }
     frame.regs[0] = vtf.regs[10] as u64; // return value → x0
 }
 
@@ -69,11 +71,15 @@ pub fn init() {
         let vbar = unsafe { &__vectors_el2 as *const u8 as u64 };
         // SAFETY: VBAR_EL2 is EL2-private; address is 2048-byte aligned
         // (enforced by `.balign 2048` in el2.rs global_asm).
-        unsafe { core::arch::asm!("msr vbar_el2, {}", in(reg) vbar, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("msr vbar_el2, {}", in(reg) vbar, options(nomem, nostack));
+        }
     } else {
         let vbar = unsafe { &__vectors as *const u8 as u64 };
         // SAFETY: VBAR_EL1 is EL1-private; address is 2048-byte aligned.
-        unsafe { core::arch::asm!("msr vbar_el1, {}", in(reg) vbar, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("msr vbar_el1, {}", in(reg) vbar, options(nomem, nostack));
+        }
     }
 }
 
@@ -81,14 +87,20 @@ pub fn init() {
 #[no_mangle]
 pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
     let esr = frame.esr_el1; // field holds ESR_EL2 at EL2; naming is irrelevant here
-    let ec  = (esr >> 26) & 0x3F;
+    let ec = (esr >> 26) & 0x3F;
     // Debug probe: confirm trap handler was entered (rpi3 only).
     // Writes "T<hi><lo>" where hi/lo are hex nibbles of EC — visible even if
     // the log subsystem is broken; uses identity-mapped BCM mini UART directly.
     #[cfg(feature = "board-rpi3")]
     {
         super::uart_bcm_mini::probe_put(b'T');
-        let hex = |n: u64| if n < 10 { b'0' + n as u8 } else { b'a' + n as u8 - 10 };
+        let hex = |n: u64| {
+            if n < 10 {
+                b'0' + n as u8
+            } else {
+                b'a' + n as u8 - 10
+            }
+        };
         super::uart_bcm_mini::probe_put(hex((ec >> 4) & 0xF));
         super::uart_bcm_mini::probe_put(hex(ec & 0xF));
     }
@@ -119,8 +131,10 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
             }
         }
         _ => {
-            panic!("[aarch64] trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X}",
-                ec, esr, frame.elr_el1, frame.far_el1);
+            panic!(
+                "[aarch64] trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X}",
+                ec, esr, frame.elr_el1, frame.far_el1
+            );
         }
     }
 }
@@ -149,8 +163,8 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
     {
         let src = super::bcm2836_irq::irq_source();
         // Timer: non-secure physical (EL1) or hypervisor physical (EL2).
-        let timer_bits = super::bcm2836_irq::IRQ_SRC_TIMER_NS
-            | super::bcm2836_irq::IRQ_SRC_TIMER_HP;
+        let timer_bits =
+            super::bcm2836_irq::IRQ_SRC_TIMER_NS | super::bcm2836_irq::IRQ_SRC_TIMER_HP;
         // Fallback: check ARM generic timer ISTATUS directly.
         // QEMU raspi3b may not update CORE0_IRQ_SOURCE even when the timer fires,
         // routing the interrupt directly to the CPU IRQ line.  The timer CTL ISTATUS
@@ -176,7 +190,9 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             super::uart_bcm_mini::probe_put(b'M');
             super::timer::reset();
             // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
-            unsafe { vi_timer_tick(); }
+            unsafe {
+                vi_timer_tick();
+            }
             return;
         }
         // GPU pass-through: BCM2835 peripheral interrupts (system timer, GPIO, …).
@@ -190,8 +206,10 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             // IRQ never delivered to CPU.
             super::uart_bcm_mini::probe_put(b'M');
             super::timer::reset(); // ack C1 + re-arm
-            // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
-            unsafe { vi_timer_tick(); }
+                                   // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
+            unsafe {
+                vi_timer_tick();
+            }
             return;
         }
         // GPU peripheral IRQs that are not the systimer.
@@ -199,7 +217,9 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             // GPIO banks via BCM2835 IRQ controller.
             if super::bcm2835_legacy_irq::identify_gpio_irq().is_some() {
                 // SAFETY: vi_gpio_notify_irq is #[no_mangle] in kernel/src/task/drivers/gpio_irq.rs.
-                unsafe { vi_gpio_notify_irq(); }
+                unsafe {
+                    vi_gpio_notify_irq();
+                }
                 return;
             }
             // Other GPU sources (UART, SPI, I2C) — fall through to spurious.
@@ -222,21 +242,29 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             // EOI first → priority drop → new timer ticks can fire on any task.
             super::gic::complete(irq);
             // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
-            unsafe { vi_timer_tick(); }
+            unsafe {
+                vi_timer_tick();
+            }
             return;
         } else if irq == GPIO_GIC_ID {
             // GPIO PL061 edge: EOI before notify so the next GPIO edge can fire
             // as soon as the cell re-enables it (GPIOIE write from userspace).
             super::gic::complete(irq);
             // SAFETY: vi_gpio_notify_irq is #[no_mangle] in kernel/src/task/drivers/gpio_irq.rs.
-            unsafe { vi_gpio_notify_irq(); }
+            unsafe {
+                vi_gpio_notify_irq();
+            }
             return;
         } else if irq >= 32 && irq != 0x3FF {
             // SPI range (GIC ID ≥ 32): dispatch VirtIO; convert GIC ID → SPI number.
             // SAFETY: vi_handle_virtio_irq is #[no_mangle] in kernel/src/task/drivers.
-            unsafe { vi_handle_virtio_irq(irq - 32); }
+            unsafe {
+                vi_handle_virtio_irq(irq - 32);
+            }
         }
-        if irq != 0x3FF { super::gic::complete(irq); }
+        if irq != 0x3FF {
+            super::gic::complete(irq);
+        }
     }
 }
 
@@ -246,13 +274,18 @@ pub fn set_kernel_stack(_top: usize) {}
 /// Unmask IRQs by clearing DAIF.I.
 pub fn enable_interrupts() {
     // SAFETY: msr daifclr from EL1/EL2 is always permitted.
-    unsafe { core::arch::asm!("msr daifclr, #2", options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("msr daifclr, #2", options(nomem, nostack));
+    }
 }
 
 /// ARM64 has no GP/TP registers — return zeroes so kernel spawn paths compile.
-pub fn get_gp_tp() -> (usize, usize) { (0, 0) }
+pub fn get_gp_tp() -> (usize, usize) {
+    (0, 0)
+}
 
-global_asm!(r#"
+global_asm!(
+    r#"
     .section .text
     .global thread_trampoline
     .balign 4
@@ -260,9 +293,11 @@ thread_trampoline:
     msr daifclr, #2          // enable IRQ (I bit cleared)
     mov x0, x19              // arg  (s0-equiv stored in x19 by spawn setup)
     br  x20                  // entry (s1-equiv stored in x20 by spawn setup)
-"#);
+"#
+);
 
-global_asm!(r#"
+global_asm!(
+    r#"
     // __trap_exit — restore ViTrapFrame from the kernel stack and eret to EL0.
     //
     // Called when a spawned task runs for the first time (context.x30 = __trap_exit).
@@ -340,10 +375,11 @@ __trap_exit:
     ldr  x30,       [sp, #240]
     add  sp, sp, #288
     eret
-"#);
+"#
+);
 
 global_asm!(
-r#"
+    r#"
     // AArch64 EL1 vector table — ARM spec requires each entry at VBAR + N*0x80.
     // SAVE_REGS + branch + RESTORE_REGS + eret = ~188 bytes which overflows the
     // 128-byte (0x80) slot.  Use a single `b` per slot branching to out-of-line

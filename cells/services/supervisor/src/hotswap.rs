@@ -11,23 +11,21 @@
 
 extern crate alloc;
 
-use ostd::syscall::{
-    sys_freeze_cell, sys_resume_cell, sys_kill_cell,
-    sys_send, sys_spawn_from_path,
-    sys_state_restore, sys_state_stash_clear,
-    sys_query_hotswap_ready, sys_lookup_service,
-    sys_yield, sys_register_service,
-};
 use crate::error::HotswapError;
+use ostd::syscall::{
+    sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_query_hotswap_ready,
+    sys_register_service, sys_resume_cell, sys_send, sys_spawn_from_path, sys_state_restore,
+    sys_state_stash_clear, sys_yield,
+};
 
 /// Maximum poll iterations while waiting for stash/ready (≈ 5 s at 10 ms/tick).
 const MAX_ITERS: u32 = 500;
 
 // ── IPC envelope byte constants (must match kernel hotswap.rs) ───────────────
 
-const APP_MSG_MAGIC:  u8 = 0xAC;
-const DISC_SNAPSHOT:  u8 = 0xF0; // AppEvent::Snapshot { swap_id }
-const DISC_RESTORE:   u8 = 0xF1; // AppEvent::Restore  { key[64] }
+const APP_MSG_MAGIC: u8 = 0xAC;
+const DISC_SNAPSHOT: u8 = 0xF0; // AppEvent::Snapshot { swap_id }
+const DISC_RESTORE: u8 = 0xF1; // AppEvent::Restore  { key[64] }
 
 // ── Hotswap stash key (must match ostd::hotswap::hotswap_key) ────────────────
 
@@ -38,7 +36,10 @@ fn stash_key_for(swap_id: u64) -> u64 {
 // ── Decimal formatter (no std) ────────────────────────────────────────────────
 
 fn fmt_u64_decimal(mut val: u64, buf: &mut [u8; 20]) -> usize {
-    if val == 0 { buf[0] = b'0'; return 1; }
+    if val == 0 {
+        buf[0] = b'0';
+        return 1;
+    }
     let mut end = 20usize;
     while val > 0 {
         end -= 1;
@@ -62,7 +63,9 @@ fn fmt_u64_decimal(mut val: u64, buf: &mut [u8; 20]) -> usize {
 fn wait_for_stash_key(key: u64) -> Result<(), HotswapError> {
     let mut probe = [0u8; 1];
     for _ in 0..MAX_ITERS {
-        if sys_state_restore(key, &mut probe) > 0 { return Ok(()); }
+        if sys_state_restore(key, &mut probe) > 0 {
+            return Ok(());
+        }
         sys_yield();
     }
     Err(HotswapError::SnapshotTimeout)
@@ -75,9 +78,9 @@ fn wait_for_stash_key(key: u64) -> Result<(), HotswapError> {
 fn wait_for_hotswap_ready(new_tid: usize) -> Result<(), HotswapError> {
     for _ in 0..MAX_ITERS {
         match sys_query_hotswap_ready(new_tid) {
-            Ok(true)  => return Ok(()),
+            Ok(true) => return Ok(()),
             Ok(false) => {}
-            Err(_)    => break, // tid vanished — treat as timeout
+            Err(_) => break, // tid vanished — treat as timeout
         }
         sys_yield();
     }
@@ -117,7 +120,9 @@ fn send_restore_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
 
 use core::sync::atomic::{AtomicU64, Ordering};
 static SWAP_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
-fn next_swap_id() -> u64 { SWAP_ID_COUNTER.fetch_add(1, Ordering::Relaxed) }
+fn next_swap_id() -> u64 {
+    SWAP_ID_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -135,10 +140,9 @@ fn next_swap_id() -> u64 { SWAP_ID_COUNTER.fetch_add(1, Ordering::Relaxed) }
 /// 6. UNFREEZE + RE-REGISTER — kill old cell, register new service tid
 pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapError> {
     // ── Resolve target tid ────────────────────────────────────────────────────
-    let old_tid = sys_lookup_service(service_id)
-        .ok_or(HotswapError::ServiceNotFound)?;
+    let old_tid = sys_lookup_service(service_id).ok_or(HotswapError::ServiceNotFound)?;
 
-    let swap_id   = next_swap_id();
+    let swap_id = next_swap_id();
     let stash_key = stash_key_for(swap_id);
 
     // ── Step 1a: FREEZE (soft) ────────────────────────────────────────────────

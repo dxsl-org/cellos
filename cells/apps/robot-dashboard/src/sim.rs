@@ -30,11 +30,11 @@ pub struct SimState {
 impl SimState {
     pub fn new() -> Self {
         Self {
-            t:          0,
-            battery:    1.0,
-            cpu:        0.2,
+            t: 0,
+            battery: 1.0,
+            cpu: 0.2,
             motor_temp: 0.2,
-            log_queue:  Vec::new(),
+            log_queue: Vec::new(),
         }
     }
 
@@ -69,11 +69,8 @@ impl SimState {
             ));
         }
         if self.t % 7 == 0 {
-            self.log_queue.push(format!(
-                "t={}s  CPU {:.0}%",
-                self.t / 2,
-                self.cpu * 100.0,
-            ));
+            self.log_queue
+                .push(format!("t={}s  CPU {:.0}%", self.t / 2, self.cpu * 100.0,));
         }
         if self.t % 15 == 0 {
             self.log_queue.push(format!(

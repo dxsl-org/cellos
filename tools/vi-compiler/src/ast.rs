@@ -1,11 +1,11 @@
-use std::prelude::v1::*;
 use crate::token::Span;
+use std::prelude::v1::*;
 
 // ─── Top-level ───────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub struct ViFile {
-    pub imports:    Vec<Import>,
+    pub imports: Vec<Import>,
     pub components: Vec<Component>,
 }
 
@@ -19,11 +19,11 @@ pub struct Import {
 
 #[derive(Debug)]
 pub struct Component {
-    pub name:       String,
+    pub name: String,
     pub properties: Vec<PropertyDecl>,
-    pub callbacks:  Vec<CallbackDecl>,
-    pub children:   Vec<Child>,
-    pub span:       Span,
+    pub callbacks: Vec<CallbackDecl>,
+    pub children: Vec<Child>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,28 +37,28 @@ pub enum Visibility {
 #[derive(Debug)]
 pub struct PropertyDecl {
     pub visibility: Option<Visibility>,
-    pub ty:         String,
-    pub name:       String,
-    pub default:    Option<Expr>,
-    pub span:       Span,
+    pub ty: String,
+    pub name: String,
+    pub default: Option<Expr>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct CallbackDecl {
-    pub name:   String,
+    pub name: String,
     pub params: Vec<(String, String)>, // (param_name, type_name)
-    pub span:   Span,
+    pub span: Span,
 }
 
 // ─── Element ─────────────────────────────────────────────────────────────────
 
 #[derive(Debug)]
 pub struct Element {
-    pub name:      String,
-    pub bindings:  Vec<Binding>,
+    pub name: String,
+    pub bindings: Vec<Binding>,
     pub callbacks: Vec<CallbackBinding>,
-    pub children:  Vec<Child>,
-    pub span:      Span,
+    pub children: Vec<Child>,
+    pub span: Span,
 }
 
 /// A child within a component or element body — either a concrete element
@@ -76,7 +76,7 @@ pub enum Child {
     },
     /// Loop rendering: `for var in iter { ... }`
     For {
-        var:  String,
+        var: String,
         iter: String,
         body: Vec<Child>,
         span: Span,
@@ -97,9 +97,9 @@ pub enum BindingMode {
 #[derive(Debug)]
 pub struct Binding {
     pub property: String,
-    pub mode:     BindingMode,
-    pub value:    Expr,
-    pub span:     Span,
+    pub mode: BindingMode,
+    pub value: Expr,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -130,28 +130,47 @@ pub enum Literal {
 /// Binary operator kinds.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinOpKind {
-    Add, Sub, Mul, Div, Rem,
-    Eq, Ne, Lt, Le, Gt, Ge,
-    And, Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    And,
+    Or,
 }
 
 impl BinOpKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            BinOpKind::Add => "+",  BinOpKind::Sub => "-",
-            BinOpKind::Mul => "*",  BinOpKind::Div => "/",
-            BinOpKind::Rem => "%",  BinOpKind::Eq  => "==",
-            BinOpKind::Ne  => "!=", BinOpKind::Lt  => "<",
-            BinOpKind::Le  => "<=", BinOpKind::Gt  => ">",
-            BinOpKind::Ge  => ">=", BinOpKind::And => "&&",
-            BinOpKind::Or  => "||",
+            BinOpKind::Add => "+",
+            BinOpKind::Sub => "-",
+            BinOpKind::Mul => "*",
+            BinOpKind::Div => "/",
+            BinOpKind::Rem => "%",
+            BinOpKind::Eq => "==",
+            BinOpKind::Ne => "!=",
+            BinOpKind::Lt => "<",
+            BinOpKind::Le => "<=",
+            BinOpKind::Gt => ">",
+            BinOpKind::Ge => ">=",
+            BinOpKind::And => "&&",
+            BinOpKind::Or => "||",
         }
     }
 }
 
 /// Unary operator kinds.
 #[derive(Debug, Clone, PartialEq)]
-pub enum UnaryOp { Not, Neg }
+pub enum UnaryOp {
+    Not,
+    Neg,
+}
 
 /// Part of a string interpolation like `"Speed: \{speed} rpm"`.
 #[derive(Debug)]

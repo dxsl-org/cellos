@@ -60,7 +60,9 @@ global_asm!(
 /// Bridge from 32-bit ARM `_start` to the architecture-neutral `kmain`.
 #[no_mangle]
 pub extern "C" fn kmain_arm32(hartid: usize, dtb: usize) -> ! {
-    extern "C" { fn kmain(hartid: usize, dtb: usize) -> !; }
+    extern "C" {
+        fn kmain(hartid: usize, dtb: usize) -> !;
+    }
     // SAFETY: kmain is the kernel entry; hartid/dtb forwarded from QEMU entry state.
     unsafe { kmain(hartid, dtb) }
 }

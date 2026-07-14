@@ -10,16 +10,16 @@
 //! from responding to MMIO accesses during the transient probe window.
 
 use ostd::mmio::MmioRegion;
-use ostd::syscall::{sys_register_pcie_bar, sys_register_pci_device};
+use ostd::syscall::{sys_register_pci_device, sys_register_pcie_bar};
 
 // PCI type-0 config space offsets.
-const CFG_VENDOR_ID:   usize = 0x00;
-const CFG_COMMAND:     usize = 0x04;
-const CFG_CLASS_PROG:  usize = 0x09;
-const CFG_SUBCLASS:    usize = 0x0A;
-const CFG_CLASS_CODE:  usize = 0x0B;
+const CFG_VENDOR_ID: usize = 0x00;
+const CFG_COMMAND: usize = 0x04;
+const CFG_CLASS_PROG: usize = 0x09;
+const CFG_SUBCLASS: usize = 0x0A;
+const CFG_CLASS_CODE: usize = 0x0B;
 const CFG_HEADER_TYPE: usize = 0x0E;
-const CFG_BAR0:        usize = 0x10;
+const CFG_BAR0: usize = 0x10;
 
 // Command register bit — disable MMIO decode during BAR size probe.
 const CMD_MEM_SPACE: u16 = 1 << 1;
@@ -67,7 +67,11 @@ fn probe32(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u32 {
     w32(r, dev, fun, off, orig_bar);
     w16(r, dev, fun, CFG_COMMAND, orig_cmd);
     let mask = rb & 0xFFFF_FFF0;
-    if mask == 0 { 0 } else { (!mask).wrapping_add(1) }
+    if mask == 0 {
+        0
+    } else {
+        (!mask).wrapping_add(1)
+    }
 }
 
 /// Probe size of a 64-bit MMIO BAR (low + high dword pair).
@@ -75,8 +79,8 @@ fn probe64(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u64 {
     let off_lo = CFG_BAR0 + bar_idx * 4;
     let off_hi = CFG_BAR0 + (bar_idx + 1) * 4;
     let orig_cmd = r16(r, dev, fun, CFG_COMMAND);
-    let orig_lo  = r32(r, dev, fun, off_lo);
-    let orig_hi  = r32(r, dev, fun, off_hi);
+    let orig_lo = r32(r, dev, fun, off_lo);
+    let orig_hi = r32(r, dev, fun, off_hi);
     w16(r, dev, fun, CFG_COMMAND, orig_cmd & !CMD_MEM_SPACE);
     w32(r, dev, fun, off_lo, 0xFFFF_FFFF);
     w32(r, dev, fun, off_hi, 0xFFFF_FFFF);
@@ -86,7 +90,11 @@ fn probe64(r: &MmioRegion, dev: u8, fun: u8, bar_idx: usize) -> u64 {
     w32(r, dev, fun, off_hi, orig_hi);
     w16(r, dev, fun, CFG_COMMAND, orig_cmd);
     let mask64 = ((rb_hi as u64) << 32) | ((rb_lo & 0xFFFF_FFF0) as u64);
-    if mask64 == 0 { 0 } else { (!mask64).wrapping_add(1) }
+    if mask64 == 0 {
+        0
+    } else {
+        (!mask64).wrapping_add(1)
+    }
 }
 
 // ── Public scanner entry point ────────────────────────────────────────────────
@@ -101,18 +109,22 @@ pub fn scan_and_register(region: &MmioRegion) {
         if r16(region, dev, 0, CFG_VENDOR_ID) == 0xFFFF {
             continue; // slot empty
         }
-        let hdr   = r8(region, dev, 0, CFG_HEADER_TYPE);
+        let hdr = r8(region, dev, 0, CFG_HEADER_TYPE);
         let max_f = if hdr & 0x80 != 0 { 8u8 } else { 1u8 };
 
         for fun in 0u8..max_f {
-            if r16(region, dev, fun, CFG_VENDOR_ID) == 0xFFFF { continue; }
+            if r16(region, dev, fun, CFG_VENDOR_ID) == 0xFFFF {
+                continue;
+            }
             // Skip PCI-to-PCI bridges (header type 1) — they have no BARs.
-            if r8(region, dev, fun, CFG_HEADER_TYPE) & 0x7F != 0 { continue; }
+            if r8(region, dev, fun, CFG_HEADER_TYPE) & 0x7F != 0 {
+                continue;
+            }
 
             let bdf: u32 = ((dev as u32) << 3) | (fun as u32);
-            let class    = r8(region, dev, fun, CFG_CLASS_CODE);
+            let class = r8(region, dev, fun, CFG_CLASS_CODE);
             let subclass = r8(region, dev, fun, CFG_SUBCLASS);
-            let prog_if  = r8(region, dev, fun, CFG_CLASS_PROG);
+            let prog_if = r8(region, dev, fun, CFG_CLASS_PROG);
             let cls: u32 = ((class as u32) << 16) | ((subclass as u32) << 8) | (prog_if as u32);
 
             let mut bar0_base: usize = 0;
@@ -134,7 +146,10 @@ pub fn scan_and_register(region: &MmioRegion) {
                     let size = probe64(region, dev, fun, i);
                     if base != 0 && size != 0 {
                         let _ = sys_register_pcie_bar(bdf, base as usize, size as usize);
-                        if i == 0 { bar0_base = base as usize; bar0_size = size as usize; }
+                        if i == 0 {
+                            bar0_base = base as usize;
+                            bar0_size = size as usize;
+                        }
                     }
                     i += 2;
                 } else {
@@ -143,7 +158,10 @@ pub fn scan_and_register(region: &MmioRegion) {
                     let size = probe32(region, dev, fun, i) as usize;
                     if base != 0 && size != 0 {
                         let _ = sys_register_pcie_bar(bdf, base, size);
-                        if i == 0 { bar0_base = base; bar0_size = size; }
+                        if i == 0 {
+                            bar0_base = base;
+                            bar0_size = size;
+                        }
                     }
                     i += 1;
                 }

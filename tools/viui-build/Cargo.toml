@@ -15,4 +15,4 @@ name = "viui_build"
 path = "src/lib.rs"
 
 [dependencies]
-vi-compiler = { path = "../vi-compiler" }
+vi-compiler = { path = "../vi-compiler", version = "0.1.0" }

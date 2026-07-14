@@ -8,14 +8,14 @@ use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
 
-const PTE_VALID:   u64 = 1 << 0;
-const PTE_TABLE:   u64 = 1 << 1;
-const PTE_PAGE:    u64 = 1 << 1;
-const PTE_AF:      u64 = 1 << 10;
-const PTE_SH_IS:   u64 = 3 << 8;
-const PTE_AP_EL0:  u64 = 1 << 6;
-const PTE_UXN:     u64 = 1 << 54;
-const PTE_PXN:     u64 = 1 << 53;
+const PTE_VALID: u64 = 1 << 0;
+const PTE_TABLE: u64 = 1 << 1;
+const PTE_PAGE: u64 = 1 << 1;
+const PTE_AF: u64 = 1 << 10;
+const PTE_SH_IS: u64 = 3 << 8;
+const PTE_AP_EL0: u64 = 1 << 6;
+const PTE_UXN: u64 = 1 << 54;
+const PTE_PXN: u64 = 1 << 53;
 /// MAIR index 1 = Normal WB-WA-RA — for RAM regions.
 const ATTR_NORMAL: u64 = 1 << 2;
 /// MAIR index 0 = Device-nGnRnE — for MMIO device registers.
@@ -33,7 +33,11 @@ pub struct PageTable {
 }
 
 impl PageTable {
-    pub const fn zero() -> Self { Self { entries: [0u64; 512] } }
+    pub const fn zero() -> Self {
+        Self {
+            entries: [0u64; 512],
+        }
+    }
 }
 
 impl PageTableTrait for PageTable {
@@ -76,12 +80,16 @@ impl PageTableTrait for PageTable {
         }
 
         // SAFETY: l3_table is a valid page table frame; l3_idx is in [0..512).
-        unsafe { core::ptr::write_volatile(&mut l3_table.entries[l3_idx], entry); }
+        unsafe {
+            core::ptr::write_volatile(&mut l3_table.entries[l3_idx], entry);
+        }
         // DSB ISH ensures all PTE writes (L1/L2 intermediates from get_or_alloc +
         // L3 leaf above) are visible to the page-table walker before any translation
         // that uses this mapping proceeds (Arm ARM §D8.11).
         // No `nomem` — the compiler must not reorder Rust stores past this barrier.
-        unsafe { core::arch::asm!("dsb ish", options(nostack)); }
+        unsafe {
+            core::arch::asm!("dsb ish", options(nostack));
+        }
         Ok(())
     }
 
@@ -91,14 +99,22 @@ impl PageTableTrait for PageTable {
         let l3_idx = (virt >> 12) & 0x1FF;
 
         let l1_entry = self.entries[l1_idx];
-        if l1_entry & PTE_VALID == 0 { return Err(ViError::NotFound); }
+        if l1_entry & PTE_VALID == 0 {
+            return Err(ViError::NotFound);
+        }
         let l2: &mut PageTable = unsafe { &mut *((l1_entry & !0xFFF) as *mut PageTable) };
         let l2_entry = l2.entries[l2_idx];
-        if l2_entry & PTE_VALID == 0 { return Err(ViError::NotFound); }
+        if l2_entry & PTE_VALID == 0 {
+            return Err(ViError::NotFound);
+        }
         let l3: &mut PageTable = unsafe { &mut *((l2_entry & !0xFFF) as *mut PageTable) };
         l3.entries[l3_idx] = 0;
-        unsafe { core::arch::asm!("tlbi vaae1is, {}", in(reg) (virt >> 12) as u64, options(nomem)); }
-        unsafe { core::arch::asm!("dsb sy", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("tlbi vaae1is, {}", in(reg) (virt >> 12) as u64, options(nomem));
+        }
+        unsafe {
+            core::arch::asm!("dsb sy", options(nomem, nostack));
+        }
         Ok(())
     }
 
@@ -107,13 +123,19 @@ impl PageTableTrait for PageTable {
         let l2_idx = (virt >> 21) & 0x1FF;
         let l3_idx = (virt >> 12) & 0x1FF;
         let l1_entry = self.entries[l1_idx];
-        if l1_entry & PTE_VALID == 0 { return None; }
+        if l1_entry & PTE_VALID == 0 {
+            return None;
+        }
         let l2: &PageTable = unsafe { &*((l1_entry & !0xFFF) as *const PageTable) };
         let l2_entry = l2.entries[l2_idx];
-        if l2_entry & PTE_VALID == 0 { return None; }
+        if l2_entry & PTE_VALID == 0 {
+            return None;
+        }
         let l3: &PageTable = unsafe { &*((l2_entry & !0xFFF) as *const PageTable) };
         let l3_entry = l3.entries[l3_idx];
-        if l3_entry & PTE_VALID == 0 { return None; }
+        if l3_entry & PTE_VALID == 0 {
+            return None;
+        }
         // AArch64 L3 output address is bits [47:12]; bits [63:52] hold upper
         // attributes (UXN=54, PXN=53, Contiguous=52) that must be stripped.
         Some(((l3_entry & 0x0000_FFFF_FFFF_F000) as PhysAddr) | (virt & 0xFFF))
@@ -125,20 +147,22 @@ impl PageTableTrait for PageTable {
         // Dispatch to the EL2 MMU activation path when booted with virtualization=on.
         if super::el2::is_el2() {
             // SAFETY: identity-covering table required; EL2_ACTIVE guarantees EL2.
-            unsafe { super::el2::el2_mmu_init(ttbr0); }
+            unsafe {
+                super::el2::el2_mmu_init(ttbr0);
+            }
             return;
         }
 
         // ── EL1 path (unchanged) ─────────────────────────────────────────────
         let mair: u64 = 0x0000_0000_0000_FF00; // index0=Device-nGnRnE(0x00), index1=Normal-WB-WA(0xFF)
+                                               // TG0=4KB (bits 15:14 = 0b00, already zero at reset — no term needed)
         let tcr: u64 = 25      // T0SZ=25 (39-bit VA)
                      | (1 << 8)  // IRGN0=WB-WA
                      | (1 << 10) // ORGN0=WB-WA
                      | (3 << 12) // SH0=Inner-shareable
-                     | (0 << 14) // TG0=4KB
                      | (1 << 23); // EPD1=disable TTBR1
-        // SAFETY: MMU activation sequence per AArch64 Architecture Reference Manual.
-        // Order: write MAIR/TCR, then TTBR0, then barriers, then enable in SCTLR.
+                                  // SAFETY: MMU activation sequence per AArch64 Architecture Reference Manual.
+                                  // Order: write MAIR/TCR, then TTBR0, then barriers, then enable in SCTLR.
         unsafe {
             core::arch::asm!(
                 "msr mair_el1, {mair}",
@@ -181,7 +205,12 @@ impl PageTable {
             // SAFETY: frame is a freshly allocated 4KB frame; identity-mapped pre-MMU.
             unsafe { core::ptr::write_bytes(frame as *mut u8, 0, PAGE_SIZE) };
             // SAFETY: self.entries[idx] is a PTE slot in a valid page table frame.
-            unsafe { core::ptr::write_volatile(&mut self.entries[idx], (frame as u64) | PTE_VALID | PTE_TABLE); }
+            unsafe {
+                core::ptr::write_volatile(
+                    &mut self.entries[idx],
+                    (frame as u64) | PTE_VALID | PTE_TABLE,
+                );
+            }
         }
         let next_phys = (self.entries[idx] & !0xFFF) as PhysAddr;
         // SAFETY: identity-mapped; next_phys is a valid page table frame.

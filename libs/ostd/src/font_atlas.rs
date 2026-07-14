@@ -52,7 +52,7 @@ struct CachedGlyph {
 /// let (metrics, bitmap) = atlas.rasterize('A', 16.0);
 /// ```
 pub struct GlyphAtlas {
-    font:  Font,
+    font: Font,
     cache: BTreeMap<(u32, u32), CachedGlyph>,
 }
 
@@ -63,7 +63,10 @@ impl GlyphAtlas {
     pub fn new(font_bytes: &[u8]) -> Option<Self> {
         Font::from_bytes(font_bytes, FontSettings::default())
             .ok()
-            .map(|font| Self { font, cache: BTreeMap::new() })
+            .map(|font| Self {
+                font,
+                cache: BTreeMap::new(),
+            })
     }
 
     /// Rasterize `c` at `px` pixels tall.
@@ -75,16 +78,19 @@ impl GlyphAtlas {
         let key = (c as u32, px.to_bits());
         if !self.cache.contains_key(&key) {
             let (m, bitmap) = self.font.rasterize(c, px);
-            self.cache.insert(key, CachedGlyph {
-                metrics: GlyphMetrics {
-                    xmin: m.xmin,
-                    ymin: m.ymin,
-                    width: m.width,
-                    height: m.height,
-                    advance_width: m.advance_width,
+            self.cache.insert(
+                key,
+                CachedGlyph {
+                    metrics: GlyphMetrics {
+                        xmin: m.xmin,
+                        ymin: m.ymin,
+                        width: m.width,
+                        height: m.height,
+                        advance_width: m.advance_width,
+                    },
+                    bitmap,
                 },
-                bitmap,
-            });
+            );
         }
         let g = self.cache.get(&key).unwrap();
         (g.metrics, &g.bitmap)
@@ -94,8 +100,10 @@ impl GlyphAtlas {
     pub fn metrics(&self, c: char, px: f32) -> GlyphMetrics {
         let m = self.font.metrics(c, px);
         GlyphMetrics {
-            xmin: m.xmin, ymin: m.ymin,
-            width: m.width, height: m.height,
+            xmin: m.xmin,
+            ymin: m.ymin,
+            width: m.width,
+            height: m.height,
             advance_width: m.advance_width,
         }
     }
@@ -104,14 +112,16 @@ impl GlyphAtlas {
     ///
     /// Use as: `baseline_screen_y = origin_y + atlas.ascender(px)`.
     pub fn ascender(&self, px: f32) -> f32 {
-        self.font.horizontal_line_metrics(px)
+        self.font
+            .horizontal_line_metrics(px)
             .map(|lm| lm.ascent)
             .unwrap_or(px * 0.8)
     }
 
     /// Total line height (ascent − descent + line_gap) in pixels.
     pub fn line_height(&self, px: f32) -> f32 {
-        self.font.horizontal_line_metrics(px)
+        self.font
+            .horizontal_line_metrics(px)
             .map(|lm| lm.ascent - lm.descent + lm.line_gap)
             .unwrap_or(px * 1.2)
     }

@@ -25,38 +25,43 @@ use crate::quota::QuotaTracker;
 pub struct VfsManager {
     mounts: MountTable,
     pub handles: HandleTable,
-    pub quota:   QuotaTracker,
-    pub access:  AccessTable,
+    pub quota: QuotaTracker,
+    pub access: AccessTable,
     pub pending: PendingTable,
 }
 
 impl VfsManager {
     pub fn new() -> Self {
         let mut mounts = MountTable::new();
-        let ram  = mounts.add_backend(Box::new(RamFsBackend::new()));
+        let ram = mounts.add_backend(Box::new(RamFsBackend::new()));
         // FAT32 (P1) is the SD-card/PC interop volume since P04 — /data moved
         // to littlefs (P4), which survives power cuts (FAT has no journal).
-        let fat  = mounts.add_backend(Box::new(FatBackend::mount("/mnt/sd", api::disk::PART_FAT32_BASE_LBA)));
+        let fat = mounts.add_backend(Box::new(FatBackend::mount(
+            "/mnt/sd",
+            api::disk::PART_FAT32_BASE_LBA,
+        )));
         // /data (littlefs, P4) is gated on the `littlefs` feature: builds without a
         // bare-metal C toolchain (x86_64/aarch64) omit it — the persistent /data
         // volume is simply absent there, which boot-to-shell does not require.
         #[cfg(feature = "littlefs")]
-        let lfs  = mounts.add_backend(Box::new(LittlefsBackend::mount("/data")));
+        let lfs = mounts.add_backend(Box::new(LittlefsBackend::mount("/data")));
         // /bin overlay: VIFS1 ramdisk (bootstrap cells) unioned with the on-disk
         // FAT cell-store (non-bootstrap cells migrated off the raw P2 table).
-        let binov = mounts.add_backend(Box::new(BinOverlay::new(api::disk::PART_CELLSTORE_BASE_LBA)));
+        let binov = mounts.add_backend(Box::new(BinOverlay::new(
+            api::disk::PART_CELLSTORE_BASE_LBA,
+        )));
         // Longest prefix wins: the specific mounts shadow the read-only root.
-        mounts.mount("/",       ram,   false);
-        mounts.mount("/tmp",    ram,   true);
+        mounts.mount("/", ram, false);
+        mounts.mount("/tmp", ram, true);
         #[cfg(feature = "littlefs")]
-        mounts.mount("/data",   lfs,   true);
-        mounts.mount("/mnt/sd", fat,   true);
-        mounts.mount("/bin",    binov, false);
+        mounts.mount("/data", lfs, true);
+        mounts.mount("/mnt/sd", fat, true);
+        mounts.mount("/bin", binov, false);
         // /srv: RedoxFS CoW B-tree filesystem on MBR partition P5.
         // Degrades gracefully to empty/false if P5 is unformatted (see
         // docs/specs/09b-vfs-native-fs-adr.md and scripts/mksrv-img.sh).
-        let srv  = mounts.add_backend(Box::new(RedoxFsBackend::mount("/srv")));
-        mounts.mount("/srv",    srv,  true);
+        let srv = mounts.add_backend(Box::new(RedoxFsBackend::mount("/srv")));
+        mounts.mount("/srv", srv, true);
 
         Self {
             mounts,
@@ -64,10 +69,10 @@ impl VfsManager {
             // test-hooks: 1.1 KiB quota so vfs-test can hit the limit with
             // 400-byte chunks (must fit within the 512-byte IPC buffer).
             #[cfg(feature = "test-hooks")]
-            quota:   QuotaTracker::with_limit(1100),
+            quota: QuotaTracker::with_limit(1100),
             #[cfg(not(feature = "test-hooks"))]
-            quota:   QuotaTracker::new(),
-            access:  AccessTable::new(),
+            quota: QuotaTracker::new(),
+            access: AccessTable::new(),
             pending: PendingTable::new(),
         }
     }
@@ -77,7 +82,10 @@ impl VfsManager {
     }
 
     pub fn list_dir(&self, path: &str, out: &mut [u8]) -> usize {
-        self.mounts.backend(path).map(|b| b.list(path, out)).unwrap_or(0)
+        self.mounts
+            .backend(path)
+            .map(|b| b.list(path, out))
+            .unwrap_or(0)
     }
 
     pub fn stat(&self, path: &str) -> Option<(u64, bool)> {
@@ -85,35 +93,59 @@ impl VfsManager {
     }
 
     pub fn file_size(&self, path: &str) -> u64 {
-        self.mounts.backend(path).map(|b| b.file_size(path)).unwrap_or(0)
+        self.mounts
+            .backend(path)
+            .map(|b| b.file_size(path))
+            .unwrap_or(0)
     }
 
     pub fn read_to_vec(&self, path: &str) -> Vec<u8> {
-        self.mounts.backend(path).map(|b| b.read_to_vec(path)).unwrap_or_default()
+        self.mounts
+            .backend(path)
+            .map(|b| b.read_to_vec(path))
+            .unwrap_or_default()
     }
 
     pub fn write(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.write(path, content)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.write(path, content))
+            .unwrap_or(false)
     }
 
     pub fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.append(path, content)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.append(path, content))
+            .unwrap_or(false)
     }
 
     pub fn mkdir(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.mkdir(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.mkdir(path))
+            .unwrap_or(false)
     }
 
     pub fn rmdir(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.rmdir(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.rmdir(path))
+            .unwrap_or(false)
     }
 
     pub fn unlink(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.unlink(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.unlink(path))
+            .unwrap_or(false)
     }
 
     pub fn rmdir_recursive(&mut self, path: &str) -> bool {
-        self.mounts.backend_mut(path).map(|b| b.rmdir_recursive(path)).unwrap_or(false)
+        self.mounts
+            .backend_mut(path)
+            .map(|b| b.rmdir_recursive(path))
+            .unwrap_or(false)
     }
 }
 
@@ -136,27 +168,45 @@ impl ViStateTransfer for VfsManager {
 
     fn serialize_state(&self, buf: &mut [u8]) -> ViResult<usize> {
         let needed = self.state_size();
-        if buf.len() < needed { return Err(ViError::InvalidArgument); }
+        if buf.len() < needed {
+            return Err(ViError::InvalidArgument);
+        }
         let mut pos = 0;
-        buf[pos..pos+4].copy_from_slice(&VFS_SCHEMA_VERSION.to_le_bytes()); pos += 4;
+        buf[pos..pos + 4].copy_from_slice(&VFS_SCHEMA_VERSION.to_le_bytes());
+        pos += 4;
         let entries = self.quota.all_entries();
-        buf[pos..pos+4].copy_from_slice(&(entries.len() as u32).to_le_bytes()); pos += 4;
+        buf[pos..pos + 4].copy_from_slice(&(entries.len() as u32).to_le_bytes());
+        pos += 4;
         for (id, used) in &entries {
-            buf[pos..pos+8].copy_from_slice(&id.to_le_bytes());   pos += 8;
-            buf[pos..pos+8].copy_from_slice(&used.to_le_bytes()); pos += 8;
+            buf[pos..pos + 8].copy_from_slice(&id.to_le_bytes());
+            pos += 8;
+            buf[pos..pos + 8].copy_from_slice(&used.to_le_bytes());
+            pos += 8;
         }
         Ok(pos)
     }
 
     fn deserialize_state(&mut self, buf: &[u8]) -> ViResult<()> {
-        if buf.len() < 8 { return Err(ViError::InvalidInput); }
-        let _version   = u32::from_le_bytes([buf[0],buf[1],buf[2],buf[3]]);
-        let count      = u32::from_le_bytes([buf[4],buf[5],buf[6],buf[7]]) as usize;
-        let mut pos    = 8;
+        if buf.len() < 8 {
+            return Err(ViError::InvalidInput);
+        }
+        let _version = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
+        let count = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
+        let mut pos = 8;
         for _ in 0..count {
-            if pos + 16 > buf.len() { return Err(ViError::InvalidInput); }
-            let id   = u64::from_le_bytes(buf[pos..pos+8].try_into().map_err(|_| ViError::InvalidInput)?);
-            let used = u64::from_le_bytes(buf[pos+8..pos+16].try_into().map_err(|_| ViError::InvalidInput)?);
+            if pos + 16 > buf.len() {
+                return Err(ViError::InvalidInput);
+            }
+            let id = u64::from_le_bytes(
+                buf[pos..pos + 8]
+                    .try_into()
+                    .map_err(|_| ViError::InvalidInput)?,
+            );
+            let used = u64::from_le_bytes(
+                buf[pos + 8..pos + 16]
+                    .try_into()
+                    .map_err(|_| ViError::InvalidInput)?,
+            );
             self.quota.restore(types::CellId(id), used);
             pos += 16;
         }

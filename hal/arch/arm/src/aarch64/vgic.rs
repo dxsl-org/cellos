@@ -13,9 +13,9 @@
 //! causing a VM exit.  Phase 09 implements both: GICH LR injection + GICV passthrough.
 
 const GICH_BASE: usize = 0x0803_0000;
-const GICH_HCR:    usize = GICH_BASE;          // +0x000
-const GICH_VTR:    usize = GICH_BASE + 0x004;  // +0x004
-const GICH_ELRSR0: usize = GICH_BASE + 0x030;  // +0x030
+const GICH_HCR: usize = GICH_BASE; // +0x000
+const GICH_VTR: usize = GICH_BASE + 0x004; // +0x004
+const GICH_ELRSR0: usize = GICH_BASE + 0x030; // +0x030
 const GICH_LR_BASE: usize = GICH_BASE + 0x100; // +0x100, LR[n] at +n*4
 
 /// Maximum list registers to use; QEMU GICv2 typically has 4.

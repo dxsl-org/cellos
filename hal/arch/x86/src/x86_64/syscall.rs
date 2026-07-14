@@ -30,14 +30,14 @@
 //! Note: regs[10..15] hold syscall args in this path, NOT the x86-specific
 //! register assignment from the exception-path doc in trap.rs (which is only
 //! authoritative for `__trap_exit` context restoration, not for SYSCALL entry).
+use super::trap::ViTrapFrame;
 use core::arch::asm;
 use core::arch::global_asm;
-use super::trap::ViTrapFrame;
 
-const IA32_EFER:        u32 = 0xC000_0080;
-const IA32_STAR:        u32 = 0xC000_0081;
-const IA32_LSTAR:       u32 = 0xC000_0082;
-const IA32_FMASK:       u32 = 0xC000_0084;
+const IA32_EFER: u32 = 0xC000_0080;
+const IA32_STAR: u32 = 0xC000_0081;
+const IA32_LSTAR: u32 = 0xC000_0082;
+const IA32_FMASK: u32 = 0xC000_0084;
 const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 
 /// Per-CPU storage used by the `swapgs`-based stack swap in syscall_entry.
@@ -52,23 +52,34 @@ const IA32_KERNEL_GSBASE: u32 = 0xC000_0102; // Swapped into GS_BASE by swapgs
 /// `set_task_pku` updates slot [16].
 #[repr(C, align(16))]
 struct CpuLocal {
-    kernel_rsp: u64,   // offset 0  — gs:0
-    user_rsp:   u64,   // offset 8  — gs:8
-    pku_value:  u32,   // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
-    _pad:       u32,   // offset 20 — alignment padding
+    kernel_rsp: u64, // offset 0  — gs:0
+    user_rsp: u64,   // offset 8  — gs:8
+    pku_value: u32,  // offset 16 — gs:16 (restored to PKRU on ring-3 re-entry)
+    _pad: u32,       // offset 20 — alignment padding
 }
-static mut CPU_LOCAL: CpuLocal = CpuLocal { kernel_rsp: 0, user_rsp: 0, pku_value: 0, _pad: 0 };
+static mut CPU_LOCAL: CpuLocal = CpuLocal {
+    kernel_rsp: 0,
+    user_rsp: 0,
+    pku_value: 0,
+    _pad: 0,
+};
 
 fn rdmsr(msr: u32) -> u64 {
-    let lo:u32; let hi:u32;
+    let lo: u32;
+    let hi: u32;
     // SAFETY: rdmsr from Ring 0 does not affect memory safety.
-    unsafe { asm!("rdmsr", in("ecx") msr, out("eax") lo, out("edx") hi, options(nomem,nostack)); }
-    (hi as u64)<<32 | lo as u64
+    unsafe {
+        asm!("rdmsr", in("ecx") msr, out("eax") lo, out("edx") hi, options(nomem,nostack));
+    }
+    (hi as u64) << 32 | lo as u64
 }
 fn wrmsr(msr: u32, val: u64) {
-    let lo=val as u32; let hi=(val>>32) as u32;
+    let lo = val as u32;
+    let hi = (val >> 32) as u32;
     // SAFETY: wrmsr to a valid MSR from Ring 0 does not affect memory safety.
-    unsafe { asm!("wrmsr", in("ecx") msr, in("eax") lo, in("edx") hi, options(nomem,nostack)); }
+    unsafe {
+        asm!("wrmsr", in("ecx") msr, in("eax") lo, in("edx") hi, options(nomem,nostack));
+    }
 }
 
 /// Initialise SYSCALL/SYSRET path and per-CPU GS area.
@@ -79,14 +90,16 @@ fn wrmsr(msr: u32, val: u64) {
 /// - KERNEL_GS_BASE pointing at `CPU_LOCAL` so `swapgs` in the syscall
 ///   entry stub can load the kernel stack without touching user memory
 pub fn init() {
-    wrmsr(IA32_EFER, rdmsr(IA32_EFER)|1); // SCE=1
-    // STAR[47:32] = kernel CS (syscall: CS=0x08, SS=0x10).
-    // STAR[63:48] = user_CS_base for sysretq: CS = (base+16)|3, SS = (base+8)|3.
-    // Our GDT: uCS=0x20 (GDT[4]), uDS=0x18 (GDT[3]).
-    // To get sysretq CS=0x23, SS=0x1B: base = 0x20-16 = 0x10.
-    // NOTE: using 0x0020 here gives CS=0x0033 (TSS high!), breaking iretq from ISR.
-    wrmsr(IA32_STAR, (0x0010_u64<<48)|(0x0008_u64<<32));
-    extern "C" { fn syscall_entry(); }
+    wrmsr(IA32_EFER, rdmsr(IA32_EFER) | 1); // SCE=1
+                                            // STAR[47:32] = kernel CS (syscall: CS=0x08, SS=0x10).
+                                            // STAR[63:48] = user_CS_base for sysretq: CS = (base+16)|3, SS = (base+8)|3.
+                                            // Our GDT: uCS=0x20 (GDT[4]), uDS=0x18 (GDT[3]).
+                                            // To get sysretq CS=0x23, SS=0x1B: base = 0x20-16 = 0x10.
+                                            // NOTE: using 0x0020 here gives CS=0x0033 (TSS high!), breaking iretq from ISR.
+    wrmsr(IA32_STAR, (0x0010_u64 << 48) | (0x0008_u64 << 32));
+    extern "C" {
+        fn syscall_entry();
+    }
     wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
     wrmsr(IA32_FMASK, 0x0300); // clear IF + DF on syscall entry
 
@@ -134,7 +147,9 @@ pub fn set_task_pku(val: u32) {
     // SAFETY: CPU_LOCAL is a static; access is single-threaded (single-core SAS).
     // The asm paths read gs:16 — this write is sequenced before the ring-3 entry
     // by the scheduler lock that also surrounds set_kernel_stack.
-    unsafe { CPU_LOCAL.pku_value = val; }
+    unsafe {
+        CPU_LOCAL.pku_value = val;
+    }
 }
 
 extern "Rust" {
@@ -142,6 +157,13 @@ extern "Rust" {
     // with `#[no_mangle] pub extern "Rust"`.  It is called only from
     // `syscall_entry` below, which has already built the full ViTrapFrame on
     // the kernel stack and passes a valid `&mut ViTrapFrame` pointer in RDI.
+    //
+    // allow(dead_code): this declaration is never referenced from Rust — the
+    // `global_asm!` stub below calls it directly by symbol name (`call
+    // ViCell_syscall_dispatch`), so the linker resolves it even though rustc
+    // sees no caller. The `extern "Rust"` block exists solely to assert the
+    // ABI/signature contract with kernel/src/task/syscall.rs at compile time.
+    #[allow(dead_code)]
     fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame);
 }
 
@@ -188,7 +210,8 @@ extern "Rust" {
 // RDI/RSI/RDX/R10/R8/R9 ← original argument values (preserve-all contract —
 // user code may cache live values, even the next syscall number, in any of
 // them; only RAX/RCX/R11 are clobbered, matching the ostd stub's asm! decl).
-global_asm!(r#"
+global_asm!(
+    r#"
     .section .text
     .global syscall_entry
     .balign 16
@@ -344,4 +367,6 @@ syscall_entry:
     sysretq
 1:  # Non-canonical RCX: trap — caller has a bug or is malicious.
     ud2
-"#, options(att_syntax));
+"#,
+    options(att_syntax)
+);

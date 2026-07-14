@@ -71,33 +71,33 @@ pub const KERNEL_PMP_REGIONS: &[PmpRegion] = &[
     // Kernel .text + .rodata: read + execute, locked.
     // Prevents Cells from writing to kernel code via a wild physical pointer.
     PmpRegion {
-        base:  0x8020_0000,
-        size:  4 * 1024 * 1024, // 4 MiB — covers typical kernel binary
+        base: 0x8020_0000,
+        size: 4 * 1024 * 1024, // 4 MiB — covers typical kernel binary
         perms: perm::RX | perm::A_NAPOT | perm::L,
     },
     // Kernel .data + .bss + stack: read + write, locked.
     // W^X: data region is not executable.
     PmpRegion {
-        base:  0x8060_0000,
-        size:  4 * 1024 * 1024,
+        base: 0x8060_0000,
+        size: 4 * 1024 * 1024,
         perms: perm::RW | perm::A_NAPOT | perm::L,
     },
     // VirtIO MMIO range (UART, VirtIO block/net/keyboard/gpu).
     PmpRegion {
-        base:  0x1000_0000,
-        size:  65536, // 64 KiB — covers UART + 8 VirtIO MMIO slots
+        base: 0x1000_0000,
+        size: 65536, // 64 KiB — covers UART + 8 VirtIO MMIO slots
         perms: perm::RW | perm::A_NAPOT,
     },
     // PLIC (Platform-Level Interrupt Controller).
     PmpRegion {
-        base:  0x0C00_0000,
-        size:  16 * 1024 * 1024, // 16 MiB
+        base: 0x0C00_0000,
+        size: 16 * 1024 * 1024, // 16 MiB
         perms: perm::RW | perm::A_NAPOT,
     },
     // CLINT (Core-Local Interrupt: mtime, msip).
     PmpRegion {
-        base:  0x0200_0000,
-        size:  65536,
+        base: 0x0200_0000,
+        size: 65536,
         perms: perm::RW | perm::A_NAPOT,
     },
 ];

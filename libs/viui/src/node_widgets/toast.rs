@@ -33,8 +33,8 @@ pub enum ToastKind {
 /// Parameters for a transient toast notification.
 #[derive(Clone)]
 pub struct ToastConfig {
-    pub message:     String,
-    pub kind:        ToastKind,
+    pub message: String,
+    pub kind: ToastKind,
     /// Auto-dismiss after this many milliseconds. `0` = manual dismiss only.
     pub duration_ms: u32,
 }
@@ -44,10 +44,10 @@ pub struct ToastConfig {
 /// Live toast tracked by `ViApp` — wraps the config with timer state and a
 /// pre-built widget so `paint()` does not need to allocate each frame.
 pub struct ToastEntry {
-    pub config:     ToastConfig,
+    pub config: ToastConfig,
     pub elapsed_ms: u32,
     /// Pre-built widget. Laid out every frame by `ViApp` in Path A.
-    pub widget:     Toast,
+    pub widget: Toast,
 }
 
 // ─── Toast ───────────────────────────────────────────────────────────────────
@@ -58,8 +58,8 @@ pub struct ToastEntry {
 /// non-interactive: all events pass through.
 pub struct Toast {
     message: String,
-    kind:    ToastKind,
-    bounds:  Cell<Rect>,
+    kind: ToastKind,
+    bounds: Cell<Rect>,
 }
 
 impl Toast {
@@ -67,17 +67,17 @@ impl Toast {
     pub fn new(config: &ToastConfig) -> Self {
         Self {
             message: config.message.clone(),
-            kind:    config.kind.clone(),
-            bounds:  Cell::new(Rect::ZERO),
+            kind: config.kind.clone(),
+            bounds: Cell::new(Rect::ZERO),
         }
     }
 
     fn bg_color(&self) -> Color {
         match self.kind {
-            ToastKind::Info    => Color::rgb(40, 80, 160),
+            ToastKind::Info => Color::rgb(40, 80, 160),
             ToastKind::Success => Color::rgb(30, 120, 60),
             ToastKind::Warning => Color::rgb(160, 120, 20),
-            ToastKind::Error   => Color::rgb(160, 40, 40),
+            ToastKind::Error => Color::rgb(160, 40, 40),
         }
     }
 }
@@ -93,19 +93,30 @@ impl ViNode for Toast {
         Size::new(w, h)
     }
 
-    fn bounds(&self) -> Rect { self.bounds.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
         cx.canvas.fill_rect(b, self.bg_color());
         // 12 px left pad, vertical centre of 44 px = ~14 px from top (8 px glyph).
-        cx.draw_text(Point::new(b.x + 12.0, b.y + 14.0), &self.message, Color::WHITE);
+        cx.draw_text(
+            Point::new(b.x + 12.0, b.y + 14.0),
+            &self.message,
+            Color::WHITE,
+        );
     }
 
     /// Toasts are non-interactive — never consume events.
-    fn event(&mut self, _event: &Event) -> bool { false }
+    fn event(&mut self, _event: &Event) -> bool {
+        false
+    }
 
-    fn collect_dirty_handles(&mut self, _region: DirtyRegion) -> alloc::vec::Vec<SubscriptionHandle> {
+    fn collect_dirty_handles(
+        &mut self,
+        _region: DirtyRegion,
+    ) -> alloc::vec::Vec<SubscriptionHandle> {
         alloc::vec::Vec::new()
     }
 }

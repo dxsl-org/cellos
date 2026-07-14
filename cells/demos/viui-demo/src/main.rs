@@ -11,14 +11,16 @@ include!(concat!(env!("OUT_DIR"), "/counter.rs"));
 // ── Path 2: inline proc macro ────────────────────────────────────────────────
 // Hello component declared directly; vi_design! runs vi-compiler at compile time.
 use viui::vi_design;
-vi_design!(r#"
+vi_design!(
+    r#"
 component Hello {
     VerticalLayout {
         padding: 8px;
         Text { text: "Hello, ViUI!"; color: #aaffaa; }
     }
 }
-"#);
+"#
+);
 
 api::declare_syscalls![Log];
 

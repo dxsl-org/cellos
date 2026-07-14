@@ -79,14 +79,14 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
     //   TG0=4 KB (bits 15:14 = 0b00)
     //   bit23 = RES1 (ARMv8.0 non-VHE requirement)
     //   bit31 = RES1 (ARMv8.0 non-VHE requirement)
+    // TG0 = 4 KB (bits 15:14 = 0b00, already zero at reset — no term needed)
     let tcr: u64 = 25_u64
         | (1 << 8)       // IRGN0 = WB-WA-RA
         | (1 << 10)      // ORGN0 = WB-WA-RA
         | (3 << 12)      // SH0   = Inner-shareable
-        | (0 << 14)      // TG0   = 4 KB
         | (1 << 23)      // RES1
         | (1_u64 << 31); // RES1
-    // SAFETY: EL2-private registers; identity-map covers current PC; caller verified EL2.
+                         // SAFETY: EL2-private registers; identity-map covers current PC; caller verified EL2.
     unsafe {
         core::arch::asm!(
             "msr mair_el2, {mair}",
@@ -128,14 +128,14 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
     //
     // TCR_EL1 bit[23] = EPD1 (disable TTBR1_EL1, upper-half unused).
     // TCR_EL2 bit[23] = RES1 (non-VHE ARMv8.0 requirement) — same bit, different semantics.
+    // TG0 = 4 KB (bits 15:14 = 0b00, already zero at reset — no term needed)
     let tcr_el1: u64 = 25_u64
         | (1 << 8)   // IRGN0 = WB-WA-RA
         | (1 << 10)  // ORGN0 = WB-WA-RA
         | (3 << 12)  // SH0   = Inner-shareable
-        | (0 << 14)  // TG0   = 4 KB
         | (1 << 23); // EPD1  = disable TTBR1_EL1
-    // SAFETY: EL2 has full access to EL1 system registers; page table covers
-    // all kernel and cell VAs; called after EL2 MMU is live.
+                     // SAFETY: EL2 has full access to EL1 system registers; page table covers
+                     // all kernel and cell VAs; called after EL2 MMU is live.
     unsafe {
         core::arch::asm!(
             "msr mair_el1,  {mair}",
@@ -171,7 +171,8 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
 // CpuContext offsets (see context.rs):
 //   x19-x30: 0..88   sp: 96   elr: 104   spsr: 112   sp_el0: 120   daif: 128
 
-global_asm!(r#"
+global_asm!(
+    r#"
     .section .text
     .global __switch_el2
     .balign 4
@@ -210,7 +211,8 @@ __switch_el2:
     ldr  x9,       [x1, #128]
     msr  daif,     x9
     ret
-"#);
+"#
+);
 
 // ── EL2 vector table ─────────────────────────────────────────────────────────
 //
@@ -227,7 +229,8 @@ __switch_el2:
 // The field names are "wrong" at EL2 but the struct is just a bag of u64 — the
 // Rust handler reads frame.esr_el1 which holds ESR_EL2's value at runtime.
 
-global_asm!(r#"
+global_asm!(
+    r#"
     .section .text.vectors
     .global __vectors_el2
     .balign 2048
@@ -383,4 +386,5 @@ vt_irq_el2_lower:
     ldr  x30,       [sp, #240]
     add  sp, sp, #(35 * 8)
     eret
-"#);
+"#
+);

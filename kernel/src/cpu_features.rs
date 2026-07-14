@@ -83,12 +83,16 @@ fn detect_riscv(dtb: usize) {
 /// Stops at `_` (start of the multi-char extension zone).
 #[cfg(target_arch = "riscv64")]
 fn isa_string_has_h(isa: &str) -> bool {
-    let after_prefix = if isa.len() >= 4 { &isa[4..] } else { return false };
+    let after_prefix = if isa.len() >= 4 {
+        &isa[4..]
+    } else {
+        return false;
+    };
     for c in after_prefix.chars() {
         match c {
             'h' => return true,
-            '_' => return false,             // multi-char zone; no more single-letter exts
-            'a'..='z' | '0'..='9' => {}     // extension letter or version component
+            '_' => return false, // multi-char zone; no more single-letter exts
+            'a'..='z' | '0'..='9' => {} // extension letter or version component
             _ => return false,
         }
     }

@@ -17,14 +17,18 @@ use crate::signal::{Signal, SubscriptionHandle};
 
 /// One data series: reactive data, draw color, and display label.
 pub struct Series {
-    pub data:  Signal<Vec<f32>>,
+    pub data: Signal<Vec<f32>>,
     pub color: Color,
     pub label: String,
 }
 
 impl Series {
     pub fn new(data: Signal<Vec<f32>>, color: Color, label: impl Into<String>) -> Self {
-        Self { data, color, label: label.into() }
+        Self {
+            data,
+            color,
+            label: label.into(),
+        }
     }
 }
 
@@ -33,12 +37,12 @@ impl Series {
 /// Margins: left=40, bottom=24, top=8, right=8 pixels.
 /// Grid: 5 horizontal lines at 0%, 25%, 50%, 75%, 100% of Y range.
 pub struct LineChart {
-    series:     Vec<Series>,
-    y_min:      Option<f32>,
-    y_max:      Option<f32>,
+    series: Vec<Series>,
+    y_min: Option<f32>,
+    y_max: Option<f32>,
     grid_lines: bool,
-    bounds:     Rect,
-    subs:       Vec<SubscriptionHandle>,
+    bounds: Rect,
+    subs: Vec<SubscriptionHandle>,
 }
 
 impl LineChart {
@@ -75,13 +79,21 @@ fn downsample(data: &[f32], target_len: usize) -> Vec<f32> {
         return data.to_vec();
     }
     let bucket = data.len() / target_len;
-    (0..target_len).map(|i| {
-        let start = i * bucket;
-        let end   = if i == target_len - 1 { data.len() } else { (i + 1) * bucket };
-        let count = end - start;
-        if count == 0 { return 0.0; }   // guard: empty bucket → 0 rather than NaN
-        data[start..end].iter().sum::<f32>() / count as f32
-    }).collect()
+    (0..target_len)
+        .map(|i| {
+            let start = i * bucket;
+            let end = if i == target_len - 1 {
+                data.len()
+            } else {
+                (i + 1) * bucket
+            };
+            let count = end - start;
+            if count == 0 {
+                return 0.0;
+            } // guard: empty bucket → 0 rather than NaN
+            data[start..end].iter().sum::<f32>() / count as f32
+        })
+        .collect()
 }
 
 impl ViNode for LineChart {
@@ -90,7 +102,9 @@ impl ViNode for LineChart {
         constraints.max
     }
 
-    fn bounds(&self) -> Rect { self.bounds }
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds;
@@ -110,8 +124,12 @@ impl ViNode for LineChart {
         for s in &self.series {
             let d = s.data.get();
             for &v in d.iter() {
-                if v < data_min { data_min = v; }
-                if v > data_max { data_max = v; }
+                if v < data_min {
+                    data_min = v;
+                }
+                if v > data_max {
+                    data_max = v;
+                }
             }
         }
         if data_min == f32::MAX {
@@ -126,19 +144,22 @@ impl ViNode for LineChart {
         if self.grid_lines {
             let grid_color = Color::rgb(40, 44, 60);
             for i in 0..=4 {
-                let t  = i as f32 / 4.0;
+                let t = i as f32 / 4.0;
                 let gy = plot.y + plot.h * (1.0 - t);
                 cx.canvas.draw_line(
                     Point::new(plot.x, gy),
                     Point::new(plot.x + plot.w, gy),
                     grid_color,
                 );
-                let val   = y_lo + t * y_range;
+                let val = y_lo + t * y_range;
                 let label = format_f32_label(val);
                 cx.canvas.draw_text(
                     Point::new(b.x + 2.0, gy - 6.0),
                     &label,
-                    TextStyle { color: Color::rgb(120, 130, 150), size_px: 0 },
+                    TextStyle {
+                        color: Color::rgb(120, 130, 150),
+                        size_px: 0,
+                    },
                 );
             }
         }
@@ -160,20 +181,25 @@ impl ViNode for LineChart {
         let plot_w_px = plot.w as usize;
         for s in &self.series {
             let data = s.data.get();
-            if data.is_empty() { continue; }
+            if data.is_empty() {
+                continue;
+            }
             let pts = downsample(&data, plot_w_px.max(2));
-            let n   = pts.len();
+            let n = pts.len();
             for i in 1..n {
                 let x0 = plot.x + (i - 1) as f32 / (n - 1) as f32 * plot.w;
-                let x1 = plot.x + i         as f32 / (n - 1) as f32 * plot.w;
+                let x1 = plot.x + i as f32 / (n - 1) as f32 * plot.w;
                 let y0 = plot.y + plot.h * (1.0 - (pts[i - 1] - y_lo) / y_range);
-                let y1 = plot.y + plot.h * (1.0 - (pts[i]     - y_lo) / y_range);
-                cx.canvas.draw_line(Point::new(x0, y0), Point::new(x1, y1), s.color);
+                let y1 = plot.y + plot.h * (1.0 - (pts[i] - y_lo) / y_range);
+                cx.canvas
+                    .draw_line(Point::new(x0, y0), Point::new(x1, y1), s.color);
             }
         }
     }
 
-    fn event(&mut self, _event: &Event) -> bool { false }
+    fn event(&mut self, _event: &Event) -> bool {
+        false
+    }
 
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         self.subs.clear();

@@ -1,10 +1,10 @@
 //! Expression evaluator — converts `Expr::Raw` text into `TypedExpr` variants,
 //! and `compile_expr()` for typed `Expr` → Rust source code.
 
-use std::prelude::v1::*;
 use crate::ast::{Expr, InterpPart, Literal, UnaryOp};
 use crate::lexer::tokenize;
 use crate::token::TokenKind;
+use std::prelude::v1::*;
 
 // ─── ExprCtx + compile_expr ──────────────────────────────────────────────────
 
@@ -35,16 +35,16 @@ pub fn compile_expr(expr: &Expr, ctx: ExprCtx) -> String {
     match expr {
         Expr::Raw(r) => r.text.clone(),
 
-        Expr::Literal(Literal::Bool(b))  => b.to_string(),
-        Expr::Literal(Literal::Int(n))   => n.to_string(),
+        Expr::Literal(Literal::Bool(b)) => b.to_string(),
+        Expr::Literal(Literal::Int(n)) => n.to_string(),
         Expr::Literal(Literal::Float(f)) => format!("{}_f32", f),
-        Expr::Literal(Literal::Str(s))   => format!("{:?}", s),
+        Expr::Literal(Literal::Str(s)) => format!("{:?}", s),
 
         Expr::Ident(name) => name.clone(),
 
         Expr::SelfProp(name) => match ctx {
             // In build(): properties are local Signal<T> vars — deref to get the value.
-            ExprCtx::BuildFn  => format!("*{}.get()", name),
+            ExprCtx::BuildFn => format!("*{}.get()", name),
             // In a map closure: the closure argument already holds the dereferenced value.
             ExprCtx::Reactive => name.clone(),
         },
@@ -68,13 +68,23 @@ pub fn compile_expr(expr: &Expr, ctx: ExprCtx) -> String {
 
         Expr::Interpolated(parts) => {
             // Build a format! string from the parts.
-            let fmt: String = parts.iter().map(|p| match p {
-                InterpPart::Lit(s) => s.replace('{', "{{").replace('}', "}}"),
-                InterpPart::Expr(_) => "{}".to_string(),
-            }).collect();
-            let args: Vec<String> = parts.iter().filter_map(|p| {
-                if let InterpPart::Expr(e) = p { Some(compile_expr(e, ctx)) } else { None }
-            }).collect();
+            let fmt: String = parts
+                .iter()
+                .map(|p| match p {
+                    InterpPart::Lit(s) => s.replace('{', "{{").replace('}', "}}"),
+                    InterpPart::Expr(_) => "{}".to_string(),
+                })
+                .collect();
+            let args: Vec<String> = parts
+                .iter()
+                .filter_map(|p| {
+                    if let InterpPart::Expr(e) = p {
+                        Some(compile_expr(e, ctx))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
             if args.is_empty() {
                 format!("alloc::string::String::from({:?})", fmt)
             } else {
@@ -122,7 +132,11 @@ pub enum TypedExpr {
     /// Length with unit: `16px`, `8em` → numeric value only
     LengthLit(f32),
     /// Augmented assignment in callback body: `count += 1`
-    AugAssign { name: String, op: AugOp, rhs: Box<TypedExpr> },
+    AugAssign {
+        name: String,
+        op: AugOp,
+        rhs: Box<TypedExpr>,
+    },
     /// Bare identifier or unrecognised expression — emitted as-is.
     Ident(String),
 }
@@ -156,13 +170,17 @@ pub fn eval_property(raw: &str, ty_hint: &str) -> TypedExpr {
 /// e.g. `eval_binding("16px", "padding", "VerticalLayout")` → `TypedExpr::LengthLit(16.0)`
 pub fn eval_binding(raw: &str, _prop_name: &str, _elem_type: &str) -> TypedExpr {
     let raw = raw.trim();
-    if raw.is_empty() { return TypedExpr::Ident(String::new()); }
+    if raw.is_empty() {
+        return TypedExpr::Ident(String::new());
+    }
 
     let first = raw.as_bytes()[0];
 
     // Color: #rrggbb or #rgb
     if first == b'#' {
-        if let Some(c) = parse_color(&raw[1..]) { return c; }
+        if let Some(c) = parse_color(&raw[1..]) {
+            return c;
+        }
     }
 
     // String literal (with or without interpolation)
@@ -173,7 +191,9 @@ pub fn eval_binding(raw: &str, _prop_name: &str, _elem_type: &str) -> TypedExpr 
     }
 
     // Number (possibly with unit suffix)
-    if first.is_ascii_digit() || (first == b'-' && raw.len() > 1 && raw.as_bytes()[1].is_ascii_digit()) {
+    if first.is_ascii_digit()
+        || (first == b'-' && raw.len() > 1 && raw.as_bytes()[1].is_ascii_digit())
+    {
         return parse_number_or_length(raw);
     }
 
@@ -194,12 +214,9 @@ pub fn eval_callback(raw: &str) -> TypedExpr {
     let toks: Vec<_> = tokens.iter().filter(|t| t.kind != TokenKind::Eof).collect();
 
     // Pattern: Ident  AugOp  IntLit
-    if toks.len() == 3
-        && toks[0].kind == TokenKind::Ident
-        && toks[2].kind == TokenKind::IntLit
-    {
+    if toks.len() == 3 && toks[0].kind == TokenKind::Ident && toks[2].kind == TokenKind::IntLit {
         let op = match toks[1].kind {
-            TokenKind::PlusEq  => Some(AugOp::Add),
+            TokenKind::PlusEq => Some(AugOp::Add),
             TokenKind::MinusEq => Some(AugOp::Sub),
             // *=, /= not yet in lexer — fall through to Ident
             _ => None,
@@ -249,9 +266,13 @@ fn parse_string_content(s: &str) -> TypedExpr {
             i += 2; // skip `\{`
             let var_start = i;
             // Collect until `}`
-            while i < bytes.len() && bytes[i] != b'}' { i += 1; }
+            while i < bytes.len() && bytes[i] != b'}' {
+                i += 1;
+            }
             parts.push(InterpolPart::Var(s[var_start..i].trim().to_string()));
-            if i < bytes.len() { i += 1; } // skip `}`
+            if i < bytes.len() {
+                i += 1;
+            } // skip `}`
             lit_start = i;
             has_interp = true;
         } else {
@@ -296,19 +317,29 @@ fn parse_number_or_length(s: &str) -> TypedExpr {
     // Find where digits (and optional decimal point / minus) end
     let mut end = 0;
     let bytes = s.as_bytes();
-    if !bytes.is_empty() && bytes[0] == b'-' { end = 1; }
-    while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b'.') { end += 1; }
+    if !bytes.is_empty() && bytes[0] == b'-' {
+        end = 1;
+    }
+    while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
+        end += 1;
+    }
 
     let num_str = &s[..end];
-    let suffix  = s[end..].trim();
+    let suffix = s[end..].trim();
 
     if suffix.is_empty() {
         // Plain integer
-        if let Ok(n) = num_str.parse::<i64>() { return TypedExpr::IntLit(n); }
-        if let Ok(f) = num_str.parse::<f32>() { return TypedExpr::LengthLit(f); }
+        if let Ok(n) = num_str.parse::<i64>() {
+            return TypedExpr::IntLit(n);
+        }
+        if let Ok(f) = num_str.parse::<f32>() {
+            return TypedExpr::LengthLit(f);
+        }
     } else {
         // Has unit suffix → LengthLit
-        if let Ok(f) = num_str.parse::<f32>() { return TypedExpr::LengthLit(f); }
+        if let Ok(f) = num_str.parse::<f32>() {
+            return TypedExpr::LengthLit(f);
+        }
     }
 
     TypedExpr::Ident(s.to_string())
@@ -322,29 +353,43 @@ mod tests {
 
     #[test]
     fn int_property_default() {
-        assert_eq!(eval_property("0", "int"),  TypedExpr::IntLit(0));
+        assert_eq!(eval_property("0", "int"), TypedExpr::IntLit(0));
         assert_eq!(eval_property("42", "int"), TypedExpr::IntLit(42));
     }
 
     #[test]
     fn length_px() {
-        assert_eq!(eval_binding("16px", "padding", "VerticalLayout"), TypedExpr::LengthLit(16.0));
+        assert_eq!(
+            eval_binding("16px", "padding", "VerticalLayout"),
+            TypedExpr::LengthLit(16.0)
+        );
     }
 
     #[test]
     fn length_em() {
-        assert_eq!(eval_binding("8em", "spacing", "VerticalLayout"), TypedExpr::LengthLit(8.0));
+        assert_eq!(
+            eval_binding("8em", "spacing", "VerticalLayout"),
+            TypedExpr::LengthLit(8.0)
+        );
     }
 
     #[test]
     fn color_rrggbb() {
         assert_eq!(
             eval_binding("#ffffff", "color", "Text"),
-            TypedExpr::ColorLit { r: 255, g: 255, b: 255 }
+            TypedExpr::ColorLit {
+                r: 255,
+                g: 255,
+                b: 255
+            }
         );
         assert_eq!(
             eval_binding("#1a2b3c", "color", "Text"),
-            TypedExpr::ColorLit { r: 0x1a, g: 0x2b, b: 0x3c }
+            TypedExpr::ColorLit {
+                r: 0x1a,
+                g: 0x2b,
+                b: 0x3c
+            }
         );
     }
 
@@ -352,17 +397,24 @@ mod tests {
     fn color_rgb_shorthand() {
         assert_eq!(
             eval_binding("#fff", "color", "Text"),
-            TypedExpr::ColorLit { r: 255, g: 255, b: 255 }
+            TypedExpr::ColorLit {
+                r: 255,
+                g: 255,
+                b: 255
+            }
         );
     }
 
     #[test]
     fn string_with_interpolation() {
         let result = eval_binding(r#""Count: \{count}""#, "text", "Text");
-        assert_eq!(result, TypedExpr::Interpolated(vec![
-            InterpolPart::Literal("Count: ".into()),
-            InterpolPart::Var("count".into()),
-        ]));
+        assert_eq!(
+            result,
+            TypedExpr::Interpolated(vec![
+                InterpolPart::Literal("Count: ".into()),
+                InterpolPart::Var("count".into()),
+            ])
+        );
     }
 
     #[test]
@@ -374,11 +426,14 @@ mod tests {
     #[test]
     fn callback_augmented_assignment() {
         let result = eval_callback("count += 1 ;");
-        assert_eq!(result, TypedExpr::AugAssign {
-            name: "count".into(),
-            op:   AugOp::Add,
-            rhs:  Box::new(TypedExpr::IntLit(1)),
-        });
+        assert_eq!(
+            result,
+            TypedExpr::AugAssign {
+                name: "count".into(),
+                op: AugOp::Add,
+                rhs: Box::new(TypedExpr::IntLit(1)),
+            }
+        );
     }
 
     #[test]

@@ -10,8 +10,8 @@
 // DG_DrawFrame, DG_GetKey, DG_GetTicksMs, DG_SleepMs, DG_Quit) are implemented
 // as #[no_mangle] extern "C" functions in src/main.rs — no doomgeneric_*.c needed.
 
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
 // The ozkl/doomgeneric repo nests the C sources one level deeper:
 // cells/games/doom/src/c/doomgeneric/  ← git repo root (has README, .sln)
@@ -42,18 +42,26 @@ fn main() {
     //  - i_sdlmusic.c / i_sdlsound.c         : SDL sound backends (require SDL headers)
     // Keep doomgeneric.c itself (owns DG_ScreenBuffer + doomgeneric_Create).
     const EXCLUDED: &[&str] = &[
-        "i_allegromusic", "i_allegrosound",
-        "i_sdlmusic",     "i_sdlsound",
+        "i_allegromusic",
+        "i_allegrosound",
+        "i_sdlmusic",
+        "i_sdlsound",
     ];
     let c_files: Vec<_> = fs::read_dir(dg_path)
         .expect("read doomgeneric dir")
         .filter_map(|e| {
             let e = e.ok()?;
             let name = e.file_name().into_string().ok()?;
-            if !name.ends_with(".c") { return None; }
+            if !name.ends_with(".c") {
+                return None;
+            }
             let stem = name.trim_end_matches(".c");
-            if stem.starts_with("doomgeneric_") { return None; }
-            if EXCLUDED.contains(&stem) { return None; }
+            if stem.starts_with("doomgeneric_") {
+                return None;
+            }
+            if EXCLUDED.contains(&stem) {
+                return None;
+            }
             Some(e.path())
         })
         .collect();
@@ -123,7 +131,7 @@ fn main() {
 }
 
 fn link_picolibc() {
-    let libc   = run_gcc(&["--print-file-name=libc.a"]);
+    let libc = run_gcc(&["--print-file-name=libc.a"]);
     let libgcc = run_gcc(&["--print-libgcc-file-name"]);
     for p in [&libc, &libgcc] {
         if let Some(dir) = std::path::Path::new(p).parent() {

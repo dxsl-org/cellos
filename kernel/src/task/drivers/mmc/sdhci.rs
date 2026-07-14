@@ -24,7 +24,11 @@ impl SdhciController {
     /// `base` must be a valid kernel-mapped MMIO address for the SDHCI register block.
     /// The address must remain valid for the lifetime of `Self`.
     pub unsafe fn new(base: usize) -> Self {
-        let mut c = Self { base, is_sdhc: false, spec_ver: 0 };
+        let mut c = Self {
+            base,
+            is_sdhc: false,
+            spec_ver: 0,
+        };
         // SAFETY: base is the validated MMIO address passed by the caller.
         c.spec_ver = (c.read16(SDHCI_HOST_VERSION) & 0xFF) as u8;
         c
@@ -95,7 +99,7 @@ impl SdhciController {
     /// Reset the controller (all lines).
     pub fn reset_all(&mut self) -> ViResult<()> {
         self.write8(SDHCI_SOFT_RESET, RESET_ALL);
-        self.poll_clear(SDHCI_SOFT_RESET as usize, RESET_ALL as u32, POLL_TIMEOUT_US)?;
+        self.poll_clear(SDHCI_SOFT_RESET, RESET_ALL as u32, POLL_TIMEOUT_US)?;
         Ok(())
     }
 
@@ -113,8 +117,8 @@ impl SdhciController {
 
         let clk = if self.spec_ver >= SPEC_V3 {
             // 10-bit divider: bits[7:0] in bits[15:8], bits[9:8] in bits[7:6].
-            let lo = (div & 0xFF) as u16;
-            let hi = ((div >> 8) & 0x03) as u16;
+            let lo = div & 0xFF;
+            let hi = (div >> 8) & 0x03;
             (lo << 8) | (hi << 6) | CLK_INT_EN
         } else {
             // 8-bit divider (spec v1/v2): bits[7:0] in bits[15:8].
@@ -123,11 +127,7 @@ impl SdhciController {
 
         self.write16(SDHCI_CLOCK_CONTROL, clk);
         // Wait for internal clock to stabilise.
-        let _ = self.poll_set(
-            SDHCI_CLOCK_CONTROL as usize,
-            CLK_INT_STABLE as u32,
-            POLL_TIMEOUT_US,
-        );
+        let _ = self.poll_set(SDHCI_CLOCK_CONTROL, CLK_INT_STABLE as u32, POLL_TIMEOUT_US);
         // Enable SD clock to card.
         self.write16(SDHCI_CLOCK_CONTROL, clk | CLK_SD_EN);
     }
@@ -167,12 +167,12 @@ impl ViMmcHost for SdhciController {
         // Build response flag bits for the COMMAND register.
         let resp_flags: u16 = match cmd.resp_type {
             RespType::None => RESP_NONE,
-            RespType::R1   => RESP_R1,
-            RespType::R1b  => RESP_R1B,
-            RespType::R2   => RESP_R2,
-            RespType::R3   => RESP_R3,
-            RespType::R6   => RESP_R6,
-            RespType::R7   => RESP_R7,
+            RespType::R1 => RESP_R1,
+            RespType::R1b => RESP_R1B,
+            RespType::R2 => RESP_R2,
+            RespType::R3 => RESP_R3,
+            RespType::R6 => RESP_R6,
+            RespType::R7 => RESP_R7,
         };
 
         self.write32(SDHCI_ARGUMENT, cmd.arg);
@@ -180,13 +180,21 @@ impl ViMmcHost for SdhciController {
         self.write16(SDHCI_COMMAND, cmd_reg(cmd.index, resp_flags, cmd.has_data));
 
         // Wait for CMD_COMPLETE (bit 0) or an error.
-        self.poll_set(SDHCI_INT_STATUS, INT_CMD_COMPLETE | INT_ERROR, POLL_TIMEOUT_US)?;
+        self.poll_set(
+            SDHCI_INT_STATUS,
+            INT_CMD_COMPLETE | INT_ERROR,
+            POLL_TIMEOUT_US,
+        )?;
 
         let status = self.read32(SDHCI_INT_STATUS);
         self.clear_int(INT_CMD_COMPLETE | INT_ALL_ERROR);
 
         if status & INT_ERROR != 0 {
-            log::warn!("[sdhci] cmd{} error, INT_STATUS=0x{:08x}", cmd.index, status);
+            log::warn!(
+                "[sdhci] cmd{} error, INT_STATUS=0x{:08x}",
+                cmd.index,
+                status
+            );
             return Err(ViError::IO);
         }
 
@@ -215,7 +223,7 @@ impl ViMmcHost for SdhciController {
         for i in 0..chunks {
             let word = self.read32(SDHCI_BUFFER);
             let off = i * 4;
-            buf[off]     = (word & 0xFF) as u8;
+            buf[off] = (word & 0xFF) as u8;
             buf[off + 1] = ((word >> 8) & 0xFF) as u8;
             buf[off + 2] = ((word >> 16) & 0xFF) as u8;
             buf[off + 3] = ((word >> 24) & 0xFF) as u8;
@@ -256,7 +264,7 @@ impl ViMmcHost for SdhciController {
         // We assume 200 MHz; the divider is rounded up to the nearest power-of-2 (spec v1/v2)
         // or any value (spec v3). For boot-time use we target either 400 kHz (ID) or 25 MHz (DS).
         const BASE_HZ: u32 = 200_000_000;
-        let div = if hz == 0 { 0 } else { (BASE_HZ / hz / 2).max(1) as u16 };
+        let div = BASE_HZ.checked_div(hz).map_or(0, |q| (q / 2).max(1) as u16);
         self.set_clock_div(div);
         Ok(())
     }
@@ -265,7 +273,7 @@ impl ViMmcHost for SdhciController {
         let mut hc = self.read32(SDHCI_HOST_CONTROL) as u8;
         hc &= !0x26; // clear 4-bit (bit1) and 8-bit (bit5) fields
         match width {
-            BusWidth::One  => {}
+            BusWidth::One => {}
             BusWidth::Four => hc |= 1 << 1,
             BusWidth::Eight => hc |= 1 << 5,
         }
@@ -280,7 +288,12 @@ impl ViMmcHost for SdhciController {
 
 impl SdhciController {
     /// Configure BLOCK_SIZE, BLOCK_COUNT, and TRANSFER_MODE for an upcoming data command.
-    pub(super) fn setup_data_transfer(&mut self, block_size: u16, block_count: u16, transfer_mode: u16) {
+    pub(super) fn setup_data_transfer(
+        &mut self,
+        block_size: u16,
+        block_count: u16,
+        transfer_mode: u16,
+    ) {
         self.write16(SDHCI_BLOCK_SIZE, block_size);
         self.write16(SDHCI_BLOCK_COUNT, block_count);
         self.write16(SDHCI_TRANSFER_MODE, transfer_mode);

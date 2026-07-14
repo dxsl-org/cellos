@@ -64,46 +64,84 @@ impl CellManifest {
     ///
     /// Evaluates at compile time; safe to use as a `static` initializer.
     pub const fn new(
-        block_io: bool, network: bool, spawn: bool,
-        gpio: bool, uart: bool, hypervisor: bool,
+        block_io: bool,
+        network: bool,
+        spawn: bool,
+        gpio: bool,
+        uart: bool,
+        hypervisor: bool,
     ) -> Self {
-        Self::with_all(block_io, network, spawn, gpio, uart, hypervisor,
-            false, false, false, false, TIER_LEGACY)
+        Self::with_all(
+            block_io,
+            network,
+            spawn,
+            gpio,
+            uart,
+            hypervisor,
+            false,
+            false,
+            false,
+            false,
+            TIER_LEGACY,
+        )
     }
 
     /// Construct a manifest including block-I/O partition range grants.
     #[allow(clippy::too_many_arguments)]
     pub const fn with_parts(
-        block_io: bool, network: bool, spawn: bool,
-        gpio: bool, uart: bool, hypervisor: bool,
-        part_data: bool, part_lfs: bool,
+        block_io: bool,
+        network: bool,
+        spawn: bool,
+        gpio: bool,
+        uart: bool,
+        hypervisor: bool,
+        part_data: bool,
+        part_lfs: bool,
     ) -> Self {
-        Self::with_all(block_io, network, spawn, gpio, uart, hypervisor,
-            part_data, part_lfs, false, false, TIER_LEGACY)
+        Self::with_all(
+            block_io,
+            network,
+            spawn,
+            gpio,
+            uart,
+            hypervisor,
+            part_data,
+            part_lfs,
+            false,
+            false,
+            TIER_LEGACY,
+        )
     }
 
     /// Full constructor — all flags + tier.  The macro is the public face.
     #[allow(clippy::too_many_arguments)]
     pub const fn with_all(
-        block_io: bool, network: bool, spawn: bool,
-        gpio: bool, uart: bool, hypervisor: bool,
-        part_data: bool, part_lfs: bool,
-        can: bool, adc: bool, tier: u8,
+        block_io: bool,
+        network: bool,
+        spawn: bool,
+        gpio: bool,
+        uart: bool,
+        hypervisor: bool,
+        part_data: bool,
+        part_lfs: bool,
+        can: bool,
+        adc: bool,
+        tier: u8,
     ) -> Self {
         Self {
-            magic:   MANIFEST_MAGIC,
+            magic: MANIFEST_MAGIC,
             version: MANIFEST_VERSION,
             tier,
-            flags:   (block_io   as u16 * MANIFEST_FLAG_BLOCK_IO)
-                   | (network    as u16 * MANIFEST_FLAG_NETWORK)
-                   | (spawn      as u16 * MANIFEST_FLAG_SPAWN)
-                   | (gpio       as u16 * MANIFEST_FLAG_GPIO)
-                   | (uart       as u16 * MANIFEST_FLAG_UART)
-                   | (hypervisor as u16 * MANIFEST_FLAG_HYPERVISOR)
-                   | (part_data  as u16 * MANIFEST_FLAG_PART_DATA)
-                   | (part_lfs   as u16 * MANIFEST_FLAG_PART_LFS)
-                   | (can        as u16 * MANIFEST_FLAG_CAN)
-                   | (adc        as u16 * MANIFEST_FLAG_ADC),
+            flags: (block_io as u16 * MANIFEST_FLAG_BLOCK_IO)
+                | (network as u16 * MANIFEST_FLAG_NETWORK)
+                | (spawn as u16 * MANIFEST_FLAG_SPAWN)
+                | (gpio as u16 * MANIFEST_FLAG_GPIO)
+                | (uart as u16 * MANIFEST_FLAG_UART)
+                | (hypervisor as u16 * MANIFEST_FLAG_HYPERVISOR)
+                | (part_data as u16 * MANIFEST_FLAG_PART_DATA)
+                | (part_lfs as u16 * MANIFEST_FLAG_PART_LFS)
+                | (can as u16 * MANIFEST_FLAG_CAN)
+                | (adc as u16 * MANIFEST_FLAG_ADC),
             cap_args_off: 0,
             reserved: 0,
         }
@@ -113,32 +151,56 @@ impl CellManifest {
     // module — see that file for the v1-upcast / v2-parse logic.
 
     /// Returns `true` if the cell declared raw block-device access.
-    pub fn has_block_io(&self) -> bool { self.flags & MANIFEST_FLAG_BLOCK_IO != 0 }
+    pub fn has_block_io(&self) -> bool {
+        self.flags & MANIFEST_FLAG_BLOCK_IO != 0
+    }
     /// Returns `true` if the cell declared network transmit/receive.
-    pub fn has_network(&self) -> bool { self.flags & MANIFEST_FLAG_NETWORK != 0 }
+    pub fn has_network(&self) -> bool {
+        self.flags & MANIFEST_FLAG_NETWORK != 0
+    }
     /// Returns `true` if the cell declared cell-spawning and hot-swap.
-    pub fn has_spawn(&self) -> bool { self.flags & MANIFEST_FLAG_SPAWN != 0 }
+    pub fn has_spawn(&self) -> bool {
+        self.flags & MANIFEST_FLAG_SPAWN != 0
+    }
     /// Returns `true` if the cell declared GPIO pin-control access.
-    pub fn has_gpio(&self) -> bool { self.flags & MANIFEST_FLAG_GPIO != 0 }
+    pub fn has_gpio(&self) -> bool {
+        self.flags & MANIFEST_FLAG_GPIO != 0
+    }
     /// Returns `true` if the cell declared UART serial access.
-    pub fn has_uart(&self) -> bool { self.flags & MANIFEST_FLAG_UART != 0 }
+    pub fn has_uart(&self) -> bool {
+        self.flags & MANIFEST_FLAG_UART != 0
+    }
     /// Returns `true` if the cell declared H-extension hypervisor CSR access.
-    pub fn has_hypervisor(&self) -> bool { self.flags & MANIFEST_FLAG_HYPERVISOR != 0 }
+    pub fn has_hypervisor(&self) -> bool {
+        self.flags & MANIFEST_FLAG_HYPERVISOR != 0
+    }
     /// Returns `true` if the cell's block I/O is granted the P1 (FAT32) range.
-    pub fn has_part_data(&self) -> bool { self.flags & MANIFEST_FLAG_PART_DATA != 0 }
+    pub fn has_part_data(&self) -> bool {
+        self.flags & MANIFEST_FLAG_PART_DATA != 0
+    }
     /// Returns `true` if the cell's block I/O is granted the P4 (littlefs) range.
-    pub fn has_part_lfs(&self) -> bool { self.flags & MANIFEST_FLAG_PART_LFS != 0 }
+    pub fn has_part_lfs(&self) -> bool {
+        self.flags & MANIFEST_FLAG_PART_LFS != 0
+    }
     /// Returns `true` if the cell declared CAN controller MMIO access (v2).
-    pub fn has_can(&self) -> bool { self.flags & MANIFEST_FLAG_CAN != 0 }
+    pub fn has_can(&self) -> bool {
+        self.flags & MANIFEST_FLAG_CAN != 0
+    }
     /// Returns `true` if the cell declared ADC controller MMIO access (v2).
-    pub fn has_adc(&self) -> bool { self.flags & MANIFEST_FLAG_ADC != 0 }
+    pub fn has_adc(&self) -> bool {
+        self.flags & MANIFEST_FLAG_ADC != 0
+    }
 
     /// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from v1).
-    pub fn tier(&self) -> u8 { self.tier }
+    pub fn tier(&self) -> u8 {
+        self.tier
+    }
 
     /// Returns `true` if any privileged capability bit is set.  Used by
     /// `spawn_from_path` to reject over-declaring user Cells (non-`/bin/` paths).
-    pub fn declares_any_privilege(&self) -> bool { self.flags != 0 }
+    pub fn declares_any_privilege(&self) -> bool {
+        self.flags != 0
+    }
 }
 
 // `declare_manifest!` (embeds a CellManifest into the current Cell's ELF binary)

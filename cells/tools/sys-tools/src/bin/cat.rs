@@ -23,7 +23,7 @@ pub fn main() {
     }
 
     let fd = match syscall::sys_open(path) {
-        Ok(f)  => f,
+        Ok(f) => f,
         Err(_) => {
             io::print("cat: ");
             io::print(path);

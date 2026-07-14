@@ -33,7 +33,9 @@ impl LittlefsBackend {
         if !ok {
             match Filesystem::format(&mut disk) {
                 Ok(()) => ostd::io::println("[vfs] littlefs: P4 blank — formatted"),
-                Err(_) => ostd::io::println("[vfs] WARNING: littlefs format failed — /data unavailable"),
+                Err(_) => {
+                    ostd::io::println("[vfs] WARNING: littlefs format failed — /data unavailable")
+                }
             }
         } else {
             ostd::io::println("[vfs] littlefs /data volume mounted");
@@ -45,7 +47,9 @@ impl LittlefsBackend {
     fn rel_path(&self, path: &str) -> Option<PathBuf> {
         let r = path.strip_prefix(self.prefix).unwrap_or(path);
         let lfs = if r.is_empty() { "/" } else { r };
-        if lfs.split('/').any(|c| c == "..") { return None; }
+        if lfs.split('/').any(|c| c == "..") {
+            return None;
+        }
         PathBuf::try_from(lfs).ok()
     }
 
@@ -66,18 +70,29 @@ impl FsBackend for LittlefsBackend {
         // `list` takes &self but mounting needs &mut storage — LfsDisk is a ZST
         // with no state, so a scratch instance is equivalent.
         let mut disk = LfsDisk;
-        let rel = match self.rel_path(path) { Some(p) => p, None => return 0 };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return 0,
+        };
         let mut pos = 0;
         let _ = Filesystem::mount_and_then(&mut disk, |fs| {
             fs.read_dir_and_then(&rel, |iter| {
                 for entry in iter.flatten() {
                     let name = entry.file_name().as_str_ref_with_trailing_nul();
                     let name = name.trim_end_matches('\0');
-                    if name.is_empty() || name == "." || name == ".." { continue; }
-                    let prefix: &[u8] = if entry.metadata().is_dir() { b"d:" } else { b"f:" };
+                    if name.is_empty() || name == "." || name == ".." {
+                        continue;
+                    }
+                    let prefix: &[u8] = if entry.metadata().is_dir() {
+                        b"d:"
+                    } else {
+                        b"f:"
+                    };
                     let nb = name.as_bytes();
                     let entry_len = 2 + nb.len() + 1;
-                    if pos + entry_len > out.len() { break; }
+                    if pos + entry_len > out.len() {
+                        break;
+                    }
                     out[pos..pos + 2].copy_from_slice(prefix);
                     out[pos + 2..pos + 2 + nb.len()].copy_from_slice(nb);
                     out[pos + 2 + nb.len()] = b'\n';
@@ -105,7 +120,10 @@ impl FsBackend for LittlefsBackend {
 
     fn read_to_vec(&self, path: &str) -> Vec<u8> {
         let mut disk = LfsDisk;
-        let rel = match self.rel_path(path) { Some(p) => p, None => return Vec::new() };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return Vec::new(),
+        };
         Filesystem::mount_and_then(&mut disk, |fs| {
             fs.open_file_and_then(&rel, |file| {
                 let mut buf = [0u8; 512];
@@ -123,7 +141,10 @@ impl FsBackend for LittlefsBackend {
     }
 
     fn write(&mut self, path: &str, content: &[u8]) -> bool {
-        let rel = match self.rel_path(path) { Some(p) => p, None => return false };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return false,
+        };
         self.with_fs(|fs| {
             OpenOptions::new()
                 .write(true)
@@ -138,7 +159,10 @@ impl FsBackend for LittlefsBackend {
     }
 
     fn append(&mut self, path: &str, content: &[u8]) -> bool {
-        let rel = match self.rel_path(path) { Some(p) => p, None => return false };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return false,
+        };
         self.with_fs(|fs| {
             OpenOptions::new()
                 .write(true)
@@ -155,7 +179,10 @@ impl FsBackend for LittlefsBackend {
     /// Single-level create (mkdir -p callers walk components themselves; the
     /// pre-existing FAT backend did mkdir -p, so mirror that for /data users).
     fn mkdir(&mut self, path: &str) -> bool {
-        let rel = match self.rel_path(path) { Some(p) => p, None => return false };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return false,
+        };
         self.with_fs(|fs| {
             // create_dir_all = mkdir -p semantics, matching the FAT backend.
             fs.create_dir_all(&rel)
@@ -164,29 +191,42 @@ impl FsBackend for LittlefsBackend {
     }
 
     fn rmdir(&mut self, path: &str) -> bool {
-        let rel = match self.rel_path(path) { Some(p) => p, None => return false };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return false,
+        };
         self.with_fs(|fs| {
             // Type guard: only directories; littlefs remove_dir errors on files.
             let md = fs.metadata(&rel)?;
-            if !md.is_dir() { return Err(littlefs2::io::Error::INVALID); }
+            if !md.is_dir() {
+                return Err(littlefs2::io::Error::INVALID);
+            }
             fs.remove_dir(&rel)
         })
         .is_some()
     }
 
     fn unlink(&mut self, path: &str) -> bool {
-        let rel = match self.rel_path(path) { Some(p) => p, None => return false };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return false,
+        };
         self.with_fs(|fs| {
             // Type guard: only regular files (POSIX unlink semantics).
             let md = fs.metadata(&rel)?;
-            if md.is_dir() { return Err(littlefs2::io::Error::INVALID); }
+            if md.is_dir() {
+                return Err(littlefs2::io::Error::INVALID);
+            }
             fs.remove(&rel)
         })
         .is_some()
     }
 
     fn rmdir_recursive(&mut self, path: &str) -> bool {
-        let rel = match self.rel_path(path) { Some(p) => p, None => return false };
+        let rel = match self.rel_path(path) {
+            Some(p) => p,
+            None => return false,
+        };
         self.with_fs(|fs| fs.remove_dir_all(&rel)).is_some()
     }
 }

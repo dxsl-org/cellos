@@ -1,8 +1,13 @@
+// This module's Result<_, ()> IPC/task-management functions predate a proper
+// kernel error-type design; redesigning ~20 signatures (and every call site
+// matching Err(())) is out of scope for a lint cleanup — tracked separately.
+#![allow(clippy::result_unit_err)]
+
 pub mod cap;
 pub mod hart_local;
-pub mod smp;
 pub mod manifest_v2_selftest;
 pub mod p_trust_selftest;
+pub mod smp;
 pub mod syscall;
 pub mod tcb;
 pub mod thread_cap_selftest;
@@ -31,7 +36,7 @@ extern "C" {
 }
 
 // use alloc::vec::Vec;
-use tcb::{SyscallFuture, TaskState};
+use tcb::TaskState;
 use types::*;
 
 // Global Scheduler Instance
@@ -43,34 +48,102 @@ static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize:
 // Helper context to save the initial boot/kernel state during first task switch
 #[cfg(target_arch = "riscv64")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    ra: 0, sp: 0, s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0,
-    s6: 0, s7: 0, s8: 0, s9: 0, s10: 0, s11: 0,
-    sepc: 0, sstatus: 0x102, gp: 0, tp: 0, sscratch: 0,
+    ra: 0,
+    sp: 0,
+    s0: 0,
+    s1: 0,
+    s2: 0,
+    s3: 0,
+    s4: 0,
+    s5: 0,
+    s6: 0,
+    s7: 0,
+    s8: 0,
+    s9: 0,
+    s10: 0,
+    s11: 0,
+    sepc: 0,
+    sstatus: 0x102,
+    gp: 0,
+    tp: 0,
+    sscratch: 0,
 };
 #[cfg(target_arch = "aarch64")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    x19: 0, x20: 0, x21: 0, x22: 0, x23: 0, x24: 0, x25: 0,
-    x26: 0, x27: 0, x28: 0, x29: 0, x30: 0, sp: 0,
-    elr_el1: 0, spsr_el1: 0x305, sp_el0: 0,
+    x19: 0,
+    x20: 0,
+    x21: 0,
+    x22: 0,
+    x23: 0,
+    x24: 0,
+    x25: 0,
+    x26: 0,
+    x27: 0,
+    x28: 0,
+    x29: 0,
+    x30: 0,
+    sp: 0,
+    elr_el1: 0,
+    spsr_el1: 0x305,
+    sp_el0: 0,
     daif: 0, // saved/restored by __switch_el1; 0 = no DAIF masking (IRQs enabled)
 };
 #[cfg(target_arch = "riscv32")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    ra: 0, sp: 0, s0: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0,
-    s6: 0, s7: 0, s8: 0, s9: 0, s10: 0, s11: 0,
-    sepc: 0, sstatus: 0x102, gp: 0, tp: 0, sscratch: 0,
+    ra: 0,
+    sp: 0,
+    s0: 0,
+    s1: 0,
+    s2: 0,
+    s3: 0,
+    s4: 0,
+    s5: 0,
+    s6: 0,
+    s7: 0,
+    s8: 0,
+    s9: 0,
+    s10: 0,
+    s11: 0,
+    sepc: 0,
+    sstatus: 0x102,
+    gp: 0,
+    tp: 0,
+    sscratch: 0,
 };
 #[cfg(target_arch = "x86_64")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    r15: 0, r14: 0, r13: 0, r12: 0, rbx: 0, rbp: 0, sp: 0, rip: 0, kernel_trap_sp: 0,
+    r15: 0,
+    r14: 0,
+    r13: 0,
+    r12: 0,
+    rbx: 0,
+    rbp: 0,
+    sp: 0,
+    rip: 0,
+    kernel_trap_sp: 0,
 };
 #[cfg(target_arch = "arm")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    r4: 0, r5: 0, r6: 0, r7: 0, r8: 0, r9: 0, r10: 0, r11: 0, sp: 0, lr: 0, cpsr: 0x13,
+    r4: 0,
+    r5: 0,
+    r6: 0,
+    r7: 0,
+    r8: 0,
+    r9: 0,
+    r10: 0,
+    r11: 0,
+    sp: 0,
+    lr: 0,
+    cpsr: 0x13,
 };
 #[cfg(target_arch = "x86")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    ebx: 0, esi: 0, edi: 0, ebp: 0, sp: 0, eip: 0,
+    ebx: 0,
+    esi: 0,
+    edi: 0,
+    ebp: 0,
+    sp: 0,
+    eip: 0,
 };
 
 // Trampoline for Thread Spawning
@@ -114,13 +187,14 @@ pub fn init() {
         // SAFETY: sets STIE (bit 5 = mask 0x20) in sie from S-mode. Must use the
         // register form of csrs — csrsi's immediate is only 5 bits (0..=31), so a
         // 0x20 mask cannot be encoded as an immediate.
-        unsafe { core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize); }
+        unsafe {
+            core::arch::asm!("csrs sie, {stie}", stie = in(reg) 0x20usize);
+        }
         let next = hal::common::timer::read_mtime() + hal::common::timer::TICKS_PER_10MS;
         hal::common::sbi::set_timer(next);
         info!("Timer preemption enabled (10 ms timeslice)");
     }
 }
-
 
 /// Exposes `terminate_current_cell_on_fault` to the HAL trap handler via
 /// `extern "Rust"` linkage.
@@ -220,7 +294,10 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize)
     let cell_id_raw = hart_local::current_cell_id();
     log::error!(
         "[fault] Cell {} terminated: scause={:#x} sepc={:#x} stval={:#x}",
-        cell_id_raw, scause, sepc, stval
+        cell_id_raw,
+        scause,
+        sepc,
+        stval
     );
     crate::audit::log_event(
         crate::audit::AuditEvent::CellFault,
@@ -232,10 +309,16 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize)
     // re-acquire anything, else the next acquirer deadlocks forever.
     // SAFETY: single-hart kernel, interrupts disabled here; no other context
     // holds these, and force-unlocking a free lock is a no-op.
-    unsafe { force_unlock_all_kernel_locks(); }
+    unsafe {
+        force_unlock_all_kernel_locks();
+    }
 
     let current_tid = hart_local::ready::current_task_id_for(hart_local::current_hart_id());
-    let task_id = if current_tid > 0 { Some(current_tid) } else { None };
+    let task_id = if current_tid > 0 {
+        Some(current_tid)
+    } else {
+        None
+    };
 
     if let Some(tid) = task_id {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
@@ -274,7 +357,9 @@ pub fn yield_cpu() {
     // RISC-V/AArch64 automatically clear the interrupt-enable bit on trap entry,
     // so they don't have this problem when called from vi_timer_tick.
     #[cfg(target_arch = "x86_64")]
-    unsafe { core::arch::asm!("cli", options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("cli", options(nomem, nostack));
+    }
 
     // Reap zombies already switched away from. Take them under the lock (cheap
     // pointer moves), then drop OUTSIDE it so Stack::drop's frame-free + unmap
@@ -430,8 +515,11 @@ pub fn spawn_from_mem(
     // Ensure alignment (xmas-elf requires it)
     use alloc::vec::Vec;
     let mut _aligned_storage: Option<Vec<u8>> = None;
-    let elf_data = if (data.as_ptr() as usize) % 8 != 0 {
-        log::warn!("Spawn: Unaligned ELF data (0x{:X}). Copying to aligned buffer...", data.as_ptr() as usize);
+    let elf_data = if !(data.as_ptr() as usize).is_multiple_of(8) {
+        log::warn!(
+            "Spawn: Unaligned ELF data (0x{:X}). Copying to aligned buffer...",
+            data.as_ptr() as usize
+        );
         let mut v = Vec::with_capacity(data.len());
         v.extend_from_slice(data);
         _aligned_storage = Some(v);
@@ -459,14 +547,14 @@ pub fn spawn_from_mem(
     let seg_pages = {
         let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
         let frame_allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-        loader.load_segments(elf_data, frame_allocator, load_base)
-            .map_err(|e| {
+        loader
+            .load_segments(elf_data, frame_allocator, load_base)
+            .inspect_err(|_| {
                 // If segment loading fails after allocating a PIE VA slot,
                 // return the slot so it can be reused.
                 if load_base != 0 {
                     crate::loader::va_alloc::free_cell_va(load_base);
                 }
-                e
             })?
     };
 
@@ -474,13 +562,13 @@ pub fn spawn_from_mem(
     //    Rust Drop ensures cleanup on any error path — no manual free needed here.
     //    load_base is transferred into CellSegments (pie_va_base field), so after
     //    this point the VA slot is freed by segments.drop(), not manually.
-    let entry_va       = header.entry.wrapping_add(load_base);
-    let segments       = crate::task::stack::CellSegments::new(seg_pages, load_base);
-    let kstack         = crate::task::stack::Stack::new_kernel(STACK_PAGES)
-        .map_err(|_| ViError::OutOfMemory)?;
-    let ustack         = crate::task::stack::Stack::new_user(STACK_PAGES)
-        .map_err(|_| ViError::OutOfMemory)?;
-    let kstack_top     = kstack.top;
+    let entry_va = header.entry.wrapping_add(load_base);
+    let segments = crate::task::stack::CellSegments::new(seg_pages, load_base);
+    let kstack =
+        crate::task::stack::Stack::new_kernel(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
+    let ustack =
+        crate::task::stack::Stack::new_user(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
+    let kstack_top = kstack.top;
     let user_stack_top = ustack.top;
 
     // 6. Spawn Task — creates scheduler entry.  Resources above drop on failure.
@@ -493,15 +581,15 @@ pub fn spawn_from_mem(
     // 7. Wire pre-allocated resources into the task under the scheduler lock.
     //    Option::take() transfers ownership; untaken Somes drop at end of scope.
     let mut segments_o = Some(segments);
-    let mut kstack_o   = Some(kstack);
-    let mut ustack_o   = Some(ustack);
-    let mut setup_ok   = false;
+    let mut kstack_o = Some(kstack);
+    let mut ustack_o = Some(ustack);
+    let mut setup_ok = false;
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             log::info!("Spawn: Setting up context for Task {}...", tid);
-            task.segment_mem  = segments_o.take();
+            task.segment_mem = segments_o.take();
             task.kernel_stack = kstack_o.take();
-            task.user_stack   = ustack_o.take();
+            task.user_stack = ustack_o.take();
             task.trap_frame.sepc = entry_va as _;
             task.trap_frame.sstatus = 0x20; // placeholder; overwritten per-arch below
 
@@ -513,9 +601,13 @@ pub fn spawn_from_mem(
 
             // CRITICAL: Set User Mode Status in TrapFrame!
             #[cfg(not(target_arch = "x86_64"))]
-            { task.trap_frame.sstatus = 0x6020; }
+            {
+                task.trap_frame.sstatus = 0x6020;
+            }
             #[cfg(target_arch = "x86_64")]
-            { task.trap_frame.sstatus = 0x202; } // RFLAGS: IF=1, reserved=1
+            {
+                task.trap_frame.sstatus = 0x202;
+            } // RFLAGS: IF=1, reserved=1
 
             // Copy TrapFrame to Kernel Stack
             unsafe {
@@ -533,7 +625,7 @@ pub fn spawn_from_mem(
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
             unsafe {
                 let lsr = 0x3F21_5054 as *const u32;
-                let io  = 0x3F21_5040 as *mut u32;
+                let io = 0x3F21_5040 as *mut u32;
                 macro_rules! fifo_put {
                     ($byte:expr) => {{
                         while core::ptr::read_volatile(lsr) & (1 << 5) == 0 {}
@@ -568,26 +660,32 @@ pub fn spawn_from_mem(
             // Point Context to Kernel Stack (sp field exists on all Context types)
             task.context.sp = tf_ptr as _;
             #[cfg(target_arch = "riscv64")]
-            { task.context.ra = __trap_exit as *const () as usize;
-              task.context.sstatus = 0x42120; } // SUM=1, FS=1, SPP=1, SPIE=1
+            {
+                task.context.ra = __trap_exit as *const () as usize;
+                task.context.sstatus = 0x42120;
+            } // SUM=1, FS=1, SPP=1, SPIE=1
             #[cfg(target_arch = "riscv32")]
-            { task.context.ra = __trap_exit as *const () as u32;
-              task.context.sstatus = 0x120_u32; } // SPP=1, SPIE=1
+            {
+                task.context.ra = __trap_exit as *const () as u32;
+                task.context.sstatus = 0x120_u32;
+            } // SPP=1, SPIE=1
             #[cfg(target_arch = "aarch64")]
             {
-                task.context.x30   = __trap_exit as *const () as u64;
+                task.context.x30 = __trap_exit as *const () as u64;
                 // SP_EL0 is banked and not auto-saved by hardware on exception entry.
                 // __switch saves/restores it explicitly; seed it here so the first
                 // context switch loads the correct user SP before __trap_exit also sets it.
                 task.context.sp_el0 = user_stack_top as u64;
             }
             #[cfg(target_arch = "x86_64")]
-            { task.context.rip = __trap_exit as *const () as u64;
-              // kernel_trap_sp = fixed syscall-entry RSP; never changes after spawn.
-              // yield_cpu uses this (not context.sp) for set_kernel_stack so that
-              // CPU_LOCAL.kernel_rsp stays at the top of a fresh syscall frame even
-              // after the task has blocked and context.sp has moved deeper.
-              task.context.kernel_trap_sp = tf_ptr as u64; }
+            {
+                task.context.rip = __trap_exit as *const () as u64;
+                // kernel_trap_sp = fixed syscall-entry RSP; never changes after spawn.
+                // yield_cpu uses this (not context.sp) for set_kernel_stack so that
+                // CPU_LOCAL.kernel_rsp stays at the top of a fresh syscall frame even
+                // after the task has blocked and context.sp has moved deeper.
+                task.context.kernel_trap_sp = tf_ptr as u64;
+            }
 
             info!(
                 "Spawned ELF task '{}' (ID {}) from memory at entry 0x{:X} (load_base=0x{:X})",
@@ -611,7 +709,7 @@ pub fn spawn_from_mem(
     if load_base != 0 {
         use crate::loader::ElfParser;
         if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
-            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, &rela) {
+            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
                 log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
                 if let Some(sched) = SCHEDULER.lock().as_mut() {
                     sched.exit_task(tid, 0xff);
@@ -634,7 +732,7 @@ pub fn spawn_from_file(path: &str) -> core::result::Result<usize, ViError> {
     let mut req = [0u8; 256];
     req[0] = 1; // OpCode: GetFile
     req[1] = path_bytes.len() as u8;
-    req[2..2+path_bytes.len()].copy_from_slice(path_bytes);
+    req[2..2 + path_bytes.len()].copy_from_slice(path_bytes);
 
     // Caller ID? We are in kernel context.
     // We impersonate the current task? Or use Kernel ID (0)?
@@ -647,21 +745,21 @@ pub fn spawn_from_file(path: &str) -> core::result::Result<usize, ViError> {
     // We cannot block in Syscall Handler waiting for IPC easily unless we yield/sleep.
     // BUT syscalls must be atomic-ish or handle blocking.
     // If we block, we set state to Waiting/Recv?
-    
+
     // Simpler approach: Use "Synchronous" IPC via busy-wait or special kernel privilege?
     // Or just spawn from memory in `init` and avoid this complexity in kernel.
     // But `shell` needs it.
-    
+
     // Let's rely on standard IPC mechanisms.
     // We need to send, then wait for reply.
     // This is hard inside a syscall handler without async/await or state machine.
-    
+
     // Hack: Busy loop/Yield loop waiting for VFS reply?
     // Since VFS is on another core or time-sliced, we must yield.
-    
+
     // For now, let's implement a blocking IPC exchange using polling?
     // We can't easily pollute the task state machine.
-    
+
     log::error!("spawn_from_file: Kernel-side VFS request not fully implemented due to blocking complexity.");
     Err(ViError::NotSupported)
 }
@@ -838,7 +936,7 @@ pub fn file_seek(fd: usize, offset: isize, whence: usize) -> core::result::Resul
                     2 => api::fs::SeekFrom::End(offset as i64),
                     _ => return Err(()), // Invalid whence
                 };
-                
+
                 if let Ok(new_pos) = handle.seek(pos) {
                     return Ok(new_pos as usize);
                 }
@@ -872,14 +970,13 @@ pub fn file_remove(path: &str) -> core::result::Result<usize, ()> {
 
 pub fn file_rename(_old: &str, _new: &str) -> core::result::Result<usize, ()> {
     // TODO: Implement rename in ViFileSystem trait first
-    Err(()) 
+    Err(())
 }
 
 pub fn file_getcwd(_buf: &mut [u8]) -> core::result::Result<usize, ()> {
     Err(())
 }
 use crate::task::tcb::LeaseAttributes;
-use log::warn;
 
 pub fn ipc_lend(
     _lender_id: usize,
@@ -925,7 +1022,8 @@ pub fn ipc_send(
                     // Queue saturated — tell caller to back off and retry.
                     log::warn!(
                         "[hotswap] pending_msgs full for frozen tid={} (caller={}); dropping",
-                        target_id, caller_id
+                        target_id,
+                        caller_id
                     );
                     // Return Err(()) so the syscall layer maps this to TryAgain.
                     return Err(());
@@ -935,9 +1033,8 @@ pub fn ipc_send(
                 // its stack is alive).  We copy immediately to an owned buffer so
                 // the bytes survive after this stack frame and the caller's
                 // execution resumes.
-                let bytes: alloc::vec::Vec<u8> = unsafe {
-                    core::slice::from_raw_parts(msg_ptr as *const u8, msg_len).to_vec()
-                };
+                let bytes: alloc::vec::Vec<u8> =
+                    unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len).to_vec() };
                 let tick = crate::task::system_ticks() as u64;
                 target.pending_msgs.push(tcb::PendingMsg {
                     sender_tid: caller_id,
@@ -946,7 +1043,9 @@ pub fn ipc_send(
                 });
                 log::debug!(
                     "[hotswap] queued msg ({} bytes) from tid={} to frozen tid={}",
-                    msg_len, caller_id, target_id
+                    msg_len,
+                    caller_id,
+                    target_id
                 );
                 // Return Ok(0): immediate "delivery" from caller's perspective;
                 // do NOT put caller in Sending state.
@@ -1026,11 +1125,11 @@ pub fn ipc_post_nonblock(
             return Err(());
         }
 
-        let target_ready = sched.tasks.get(&target_id).and_then(|t| {
-            match t.state {
-                TaskState::Recv { buf_ptr, buf_len, .. } => Some((buf_ptr, buf_len)),
-                _ => None,
-            }
+        let target_ready = sched.tasks.get(&target_id).and_then(|t| match t.state {
+            TaskState::Recv {
+                buf_ptr, buf_len, ..
+            } => Some((buf_ptr, buf_len)),
+            _ => None,
         });
 
         if let Some((dest_ptr, dest_len)) = target_ready {
@@ -1137,8 +1236,7 @@ pub fn send_to(target: usize, msg: &[u8]) -> types::ViResult<()> {
 pub fn recv_from(_source: usize, buf: &mut [u8]) -> types::ViResult<usize> {
     let caller = current_task_id();
     // mask = 0 → accept from any sender (hotswap waits for the target cell's reply).
-    ipc_recv(caller, 0, buf.as_mut_ptr() as usize, buf.len())
-        .map_err(|_| types::ViError::IO)
+    ipc_recv(caller, 0, buf.as_mut_ptr() as usize, buf.len()).map_err(|_| types::ViError::IO)
 }
 
 pub fn ipc_try_recv(
@@ -1210,8 +1308,12 @@ pub fn ipc_try_send(
         }
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
             match target.state {
-                TaskState::Recv { mask, buf_ptr, buf_len, .. }
-                    if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
+                TaskState::Recv {
+                    mask,
+                    buf_ptr,
+                    buf_len,
+                    ..
+                } if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
                 _ => None,
             }
         } else {
@@ -1222,11 +1324,7 @@ pub fn ipc_try_send(
             // SAFETY: msg_ptr is a valid user-space buffer for this syscall's
             // duration (SAS, single address space, caller is mid-syscall).
             unsafe {
-                core::ptr::copy_nonoverlapping(
-                    msg_ptr as *const u8,
-                    dest_ptr as *mut u8,
-                    copy_len,
-                );
+                core::ptr::copy_nonoverlapping(msg_ptr as *const u8, dest_ptr as *mut u8, copy_len);
             }
             if let Some(target) = sched.tasks.get_mut(&target_id) {
                 target.state = TaskState::Ready;
@@ -1253,9 +1351,10 @@ pub fn ipc_try_send(
                 if t.pending_msgs.len() < tcb::INPUT_EVENT_QUEUE_DEPTH {
                     // SAFETY: copy the message bytes out of the caller's user buffer
                     // (SAS identity mapping; caller is mid-syscall) into an owned box.
-                    let data = unsafe {
-                        core::slice::from_raw_parts(msg_ptr as *const u8, msg_len)
-                    }.to_vec().into_boxed_slice();
+                    let data =
+                        unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) }
+                            .to_vec()
+                            .into_boxed_slice();
                     t.pending_msgs.push(tcb::PendingMsg {
                         sender_tid: caller_id,
                         data,
@@ -1312,11 +1411,7 @@ pub fn ipc_borrow_read(
                 }
                 let src = lease.ptr.checked_add(offset).ok_or(())?;
                 unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        src as *const u8,
-                        dst_ptr as *mut u8,
-                        len,
-                    );
+                    core::ptr::copy_nonoverlapping(src as *const u8, dst_ptr as *mut u8, len);
                 }
                 return Ok(len);
             }
@@ -1344,11 +1439,7 @@ pub fn ipc_borrow_write(
                 }
                 let dst = lease.ptr.checked_add(offset).ok_or(())?;
                 unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        src_ptr as *const u8,
-                        dst as *mut u8,
-                        len,
-                    );
+                    core::ptr::copy_nonoverlapping(src_ptr as *const u8, dst as *mut u8, len);
                 }
                 return Ok(len);
             }
@@ -1386,7 +1477,11 @@ pub fn ipc_map(caller_id: usize, grant_id: usize) -> core::result::Result<usize,
 
 /// Get scheduler statistics
 pub fn scheduler_stats() -> (usize, usize) {
-    let task_count = if let Some(sched) = SCHEDULER.lock().as_ref() { sched.tasks.len() } else { 0 };
+    let task_count = if let Some(sched) = SCHEDULER.lock().as_ref() {
+        sched.tasks.len()
+    } else {
+        0
+    };
     (task_count, hart_local::ready::total_ready_count())
 }
 
@@ -1454,7 +1549,11 @@ struct LogRing {
 
 impl LogRing {
     const fn new() -> Self {
-        Self { buf: [0u8; LOG_RING_CAP], head: 0, tail: 0 }
+        Self {
+            buf: [0u8; LOG_RING_CAP],
+            head: 0,
+            tail: 0,
+        }
     }
 
     /// Append bytes, overwriting oldest data when full.
@@ -1474,8 +1573,8 @@ impl LogRing {
         let max = out.len();
         let avail = self.head.wrapping_sub(self.tail).min(LOG_RING_CAP);
         let n = avail.min(max);
-        for i in 0..n {
-            out[i] = self.buf[(self.tail.wrapping_add(i)) & (LOG_RING_CAP - 1)];
+        for (i, slot) in out.iter_mut().enumerate().take(n) {
+            *slot = self.buf[(self.tail.wrapping_add(i)) & (LOG_RING_CAP - 1)];
         }
         self.tail = self.tail.wrapping_add(n);
         n
@@ -1641,18 +1740,24 @@ pub fn spawn_synthetic(
 
             task.context.sp = tf_ptr as _;
             #[cfg(target_arch = "riscv64")]
-            { task.context.ra = __trap_exit as *const () as usize;
-              task.context.sstatus = 0x40120; } // SUM=1
+            {
+                task.context.ra = __trap_exit as *const () as usize;
+                task.context.sstatus = 0x40120;
+            } // SUM=1
             #[cfg(target_arch = "riscv32")]
-            { task.context.ra = __trap_exit as *const () as u32;
-              task.context.sstatus = 0x120_u32; } // SPP=1, SPIE=1
+            {
+                task.context.ra = __trap_exit as *const () as u32;
+                task.context.sstatus = 0x120_u32;
+            } // SPP=1, SPIE=1
             #[cfg(target_arch = "aarch64")]
             {
-                task.context.x30   = __trap_exit as *const () as u64;
+                task.context.x30 = __trap_exit as *const () as u64;
                 task.context.sp_el0 = user_stack_top as u64;
             }
             #[cfg(target_arch = "x86_64")]
-            { task.context.rip = __trap_exit as *const () as u64; }
+            {
+                task.context.rip = __trap_exit as *const () as u64;
+            }
 
             info!(
                 "Spawned Synthetic task '{}' (ID {}) at entry 0x{:X}",

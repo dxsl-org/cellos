@@ -24,9 +24,9 @@ use crate::signal::{Signal, SubscriptionHandle};
 /// `data` must contain at least `height * width * 4` bytes when `Some`.
 /// Out-of-bounds reads are silently skipped by `FramebufferCanvas::draw_image`.
 pub struct Image {
-    pub data:     Signal<Option<Arc<[u8]>>>,
-    width:        u32,
-    height:       u32,
+    pub data: Signal<Option<Arc<[u8]>>>,
+    width: u32,
+    height: u32,
     bounds_cache: Cell<Rect>,
 }
 
@@ -50,14 +50,17 @@ impl Image {
 impl ViNode for Image {
     fn layout(&mut self, constraints: Constraints) -> Size {
         let size = constraints.constrain(Size {
-            w: self.width  as f32,
+            w: self.width as f32,
             h: self.height as f32,
         });
-        self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+        self.bounds_cache
+            .set(Rect::from_origin_size(constraints.origin, size));
         size
     }
 
-    fn bounds(&self) -> Rect { self.bounds_cache.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds_cache.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         // canvas.draw_image(dest: Rect, pixels: &[u8], src_stride: u32)
@@ -69,11 +72,15 @@ impl ViNode for Image {
     }
 
     // Images are non-interactive by default.
-    fn event(&mut self, _event: &Event) -> bool { false }
+    fn event(&mut self, _event: &Event) -> bool {
+        false
+    }
 
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
         let bounds = self.bounds_cache.get();
-        let h = self.data.subscribe(move || { region.borrow_mut().mark(bounds); });
+        let h = self.data.subscribe(move || {
+            region.borrow_mut().mark(bounds);
+        });
         alloc::vec![h]
     }
 }

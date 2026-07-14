@@ -28,6 +28,7 @@ const HEAP_SIZE: usize = 8 * 1024 * 1024;
 /// Backing arena for the cell heap. 16-byte aligned so the allocator can satisfy
 /// the largest natural alignment without wasting the first bytes.
 #[repr(align(16))]
+#[allow(dead_code)] // reason: backing bytes are accessed via addr_of_mut!(HEAP_MEM) raw-pointer cast, not field syntax
 struct HeapArena([u8; HEAP_SIZE]);
 static mut HEAP_MEM: HeapArena = HeapArena([0; HEAP_SIZE]);
 
@@ -52,7 +53,8 @@ unsafe impl GlobalAlloc for CellAllocator {
             heap.init(addr_of_mut!(HEAP_MEM) as *mut u8, HEAP_SIZE);
             HEAP_INIT = true;
         }
-        heap.allocate_first_fit(layout).map_or(null_mut(), |p| p.as_ptr())
+        heap.allocate_first_fit(layout)
+            .map_or(null_mut(), |p| p.as_ptr())
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {

@@ -85,7 +85,12 @@ impl AttestBody {
         alias_pubkey.copy_from_slice(&buf[off..off + ALIAS_PUBKEY_LEN]);
         off += ALIAS_PUBKEY_LEN;
         nonce.copy_from_slice(&buf[off..off + NONCE_LEN]);
-        Self { node_id, measurement_aggregate, alias_pubkey, nonce }
+        Self {
+            node_id,
+            measurement_aggregate,
+            alias_pubkey,
+            nonce,
+        }
     }
 }
 
@@ -109,7 +114,10 @@ pub enum AttestError {
 /// with that digest to obtain the raw 64-byte P-256 signature. P00 does not sign
 /// on its own — later phases pass `|digest| silo_handle.sign(digest)` here
 /// unchanged (the seam this phase exists to define).
-pub fn encode(body: &AttestBody, sign_fn: impl FnOnce(&[u8; 32]) -> [u8; SIG_LEN]) -> [u8; TOKEN_LEN] {
+pub fn encode(
+    body: &AttestBody,
+    sign_fn: impl FnOnce(&[u8; 32]) -> [u8; SIG_LEN],
+) -> [u8; TOKEN_LEN] {
     let mut buf = [0u8; TOKEN_LEN];
     buf[0..4].copy_from_slice(&TOKEN_MAGIC);
     buf[4] = TOKEN_VERSION;
@@ -125,7 +133,10 @@ pub fn encode(body: &AttestBody, sign_fn: impl FnOnce(&[u8; 32]) -> [u8; SIG_LEN
 /// mirrored exactly): the signature is checked over `header || body` BEFORE any
 /// field is interpreted as structured data. Fail-closed and panic-free — a
 /// malformed or truncated blob returns `Err`, never panics.
-pub fn parse_and_verify(blob: &[u8], verifying_key: &VerifyingKey) -> Result<AttestBody, AttestError> {
+pub fn parse_and_verify(
+    blob: &[u8],
+    verifying_key: &VerifyingKey,
+) -> Result<AttestBody, AttestError> {
     if blob.len() != TOKEN_LEN {
         return Err(AttestError::BadLength);
     }

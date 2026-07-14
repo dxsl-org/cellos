@@ -13,13 +13,13 @@
 extern crate alloc;
 
 use core::ptr::NonNull;
+use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_wait_irq};
 use virtio_drivers::{
-    BufferDirection, Hal, PhysAddr,
     device::net::VirtIONet,
     transport::mmio::{MmioTransport, VirtIOHeader},
     transport::{DeviceType, Transport},
+    BufferDirection, Hal, PhysAddr,
 };
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_wait_irq};
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -95,11 +95,7 @@ unsafe impl Hal for CellHal {
             // SAFETY: paddr is the grant page returned by share() (still mapped);
             // buffer is the same slice passed to share(), valid for len bytes.
             unsafe {
-                core::ptr::copy_nonoverlapping(
-                    paddr as *const u8,
-                    buffer.as_ptr() as *mut u8,
-                    len,
-                );
+                core::ptr::copy_nonoverlapping(paddr as *const u8, buffer.as_ptr() as *mut u8, len);
             }
         }
         sys_grant_free(paddr);
@@ -113,8 +109,13 @@ pub(crate) type CellNet = VirtIONet<CellHal, MmioTransport, NET_QUEUE_SIZE>;
 /// Runtime state for the active VirtIO NIC.
 pub struct NetDevice {
     pub(crate) net: CellNet,
-    pub irq:        u8,
-    pub mmio_base:  usize,
+    // reason: consumed by wait_recv()'s IRQ-wake path below; the cell's current
+    // main loop uses try_recv() polling instead, so both this field pair and
+    // wait_recv() are dormant until the IRQ-driven path is wired in.
+    #[allow(dead_code)]
+    pub irq: u8,
+    #[allow(dead_code)]
+    pub mmio_base: usize,
 }
 
 impl NetDevice {
@@ -149,6 +150,8 @@ impl NetDevice {
     /// Block until an RX IRQ fires, then try to receive a frame.
     ///
     /// Returns byte count written to `buf` (0 = still nothing after IRQ wake).
+    // reason: not called by the current polling main loop — see irq/mmio_base above.
+    #[allow(dead_code)]
     pub fn wait_recv(&mut self, buf: &mut [u8]) -> usize {
         // Lost-wakeup guard: sys_wait_irq checks take_pending before parking,
         // so an IRQ that fired after try_recv but before this call is not lost.
@@ -166,13 +169,13 @@ impl NetDevice {
 fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
     #[cfg(target_arch = "aarch64")]
     {
-        const BASE:   usize = 0x0a00_0000;
+        const BASE: usize = 0x0a00_0000;
         const STRIDE: usize = 0x200;
         (0..32_usize).map(|i| (BASE + i * STRIDE, 16 + i as u32))
     }
     #[cfg(target_arch = "riscv64")]
     {
-        const BASE:   usize = 0x1000_1000;
+        const BASE: usize = 0x1000_1000;
         const STRIDE: usize = 0x1000;
         (0..8_usize).map(|i| (BASE + i * STRIDE, 1 + i as u32))
     }
@@ -227,15 +230,20 @@ pub fn find_and_init_net() -> Option<NetDevice> {
         };
 
         // Initialise virtqueues and allocate RX buffers.
-        let net = match VirtIONet::<CellHal, MmioTransport, NET_QUEUE_SIZE>::new(transport, RX_BUF_LEN) {
-            Ok(n)  => n,
-            Err(e) => {
-                let _ = e;
-                continue;
-            }
-        };
+        let net =
+            match VirtIONet::<CellHal, MmioTransport, NET_QUEUE_SIZE>::new(transport, RX_BUF_LEN) {
+                Ok(n) => n,
+                Err(e) => {
+                    let _ = e;
+                    continue;
+                }
+            };
 
-        return Some(NetDevice { net, irq: irq as u8, mmio_base: base });
+        return Some(NetDevice {
+            net,
+            irq: irq as u8,
+            mmio_base: base,
+        });
     }
     None
 }

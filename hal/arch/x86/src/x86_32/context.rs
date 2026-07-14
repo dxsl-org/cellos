@@ -20,7 +20,7 @@ pub struct CpuContext32 {
     pub esi: u32,
     pub edi: u32,
     pub ebp: u32,
-    pub sp:  u32, // saved stack pointer (ESP)
+    pub sp: u32,  // saved stack pointer (ESP)
     pub eip: u32, // resume address (return address from switch call)
 }
 
@@ -29,8 +29,8 @@ global_asm!(
     ".global __switch_x86_32",
     "__switch_x86_32:",
     // cdecl: [esp+4] = old_ptr, [esp+8] = new_ptr
-    "mov eax, [esp+4]",     // eax = old CpuContext32*
-    "mov ecx, [esp+8]",     // ecx = new CpuContext32*
+    "mov eax, [esp+4]", // eax = old CpuContext32*
+    "mov ecx, [esp+8]", // ecx = new CpuContext32*
     // Save old callee-saved registers.
     "mov [eax+0],  ebx",
     "mov [eax+4],  esi",

@@ -5,9 +5,9 @@
 //! `gc()` removes stale entries after each view-rebuild cycle.
 
 extern crate alloc;
-use alloc::collections::BTreeMap;
-use crate::widget::WidgetId;
 use crate::layout::Point;
+use crate::widget::WidgetId;
+use alloc::collections::BTreeMap;
 
 // ─── WidgetFlags ─────────────────────────────────────────────────────────────
 
@@ -23,9 +23,15 @@ impl WidgetFlags {
     pub const PRESSED: u8 = 0b010;
     pub const FOCUSED: u8 = 0b100;
 
-    pub fn has(self, flag: u8) -> bool { self.0 & flag != 0 }
-    pub fn set(&mut self, flag: u8) { self.0 |= flag; }
-    pub fn clear(&mut self, flag: u8) { self.0 &= !flag; }
+    pub fn has(self, flag: u8) -> bool {
+        self.0 & flag != 0
+    }
+    pub fn set(&mut self, flag: u8) {
+        self.0 |= flag;
+    }
+    pub fn clear(&mut self, flag: u8) {
+        self.0 &= !flag;
+    }
 }
 
 // ─── WidgetState ─────────────────────────────────────────────────────────────
@@ -44,9 +50,15 @@ pub struct WidgetState {
 }
 
 impl WidgetState {
-    pub fn hovered(self) -> bool  { self.flags.has(WidgetFlags::HOVERED) }
-    pub fn pressed(self) -> bool  { self.flags.has(WidgetFlags::PRESSED) }
-    pub fn focused(self) -> bool  { self.flags.has(WidgetFlags::FOCUSED) }
+    pub fn hovered(self) -> bool {
+        self.flags.has(WidgetFlags::HOVERED)
+    }
+    pub fn pressed(self) -> bool {
+        self.flags.has(WidgetFlags::PRESSED)
+    }
+    pub fn focused(self) -> bool {
+        self.flags.has(WidgetFlags::FOCUSED)
+    }
 }
 
 // ─── WidgetStateStore ────────────────────────────────────────────────────────
@@ -58,7 +70,9 @@ pub struct WidgetStateStore {
 }
 
 impl WidgetStateStore {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Get or create default state for `id`.
     pub fn entry(&mut self, id: WidgetId) -> &mut WidgetState {
@@ -91,24 +105,34 @@ pub struct FocusManager {
 }
 
 impl FocusManager {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn focused(&self) -> Option<WidgetId> { self.focused }
+    pub fn focused(&self) -> Option<WidgetId> {
+        self.focused
+    }
 
     pub fn set_focus(&mut self, id: WidgetId) {
         self.focused = Some(id);
     }
 
-    pub fn clear_focus(&mut self) { self.focused = None; }
+    pub fn clear_focus(&mut self) {
+        self.focused = None;
+    }
 
     /// Register a widget in tab order.
     pub fn register_tab(&mut self, id: WidgetId) {
-        if !self.tab_order.contains(&id) { self.tab_order.push(id); }
+        if !self.tab_order.contains(&id) {
+            self.tab_order.push(id);
+        }
     }
 
     /// Advance focus to the next widget in tab order.
     pub fn tab_next(&mut self) {
-        if self.tab_order.is_empty() { return; }
+        if self.tab_order.is_empty() {
+            return;
+        }
         let next = match self.focused {
             None => 0,
             Some(cur) => {

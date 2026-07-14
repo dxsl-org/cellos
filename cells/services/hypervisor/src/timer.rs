@@ -12,20 +12,32 @@
 //! This is the "2 exits per timer IRQ" model: WFI → check → inject VI → re-enter →
 //! guest IRQ handler runs → clears CNTV_CTL.ISTATUS → next WFI fires normally.
 
+#[cfg(target_arch = "aarch64")]
 use api::syscall::ViSyscall;
 
 /// GICv2 PPI 27 = virtual timer interrupt.
+///
+/// Only referenced from the `target_arch = "aarch64"` branch of
+/// `inject_timer_irq` below; on other build targets (e.g. this riscv64gc
+/// build) it is unused, so allow dead_code rather than cfg-gating the
+/// constant itself out of the public API.
+#[allow(dead_code)]
 pub const VIRT_TIMER_PPI: u32 = 27;
 
 /// Check if the guest virtual timer has fired (CNTV_CTL.ENABLE && CNTV_CVAL ≤ now).
 ///
 /// `cntv_ctl` and `cntv_cval` are the guest shadow values read from vcpu registers
 /// via `sys_vcpu_regs`. `cntpct` is the host physical counter value from `sys_get_time`.
+///
+/// Not yet wired to a caller — scaffolding ahead of full vCPU timer
+/// virtualization (the WFI-trap → check-deadline → inject-VI loop described
+/// in the module doc above is not yet assembled into a driving loop).
+#[allow(dead_code)]
 pub fn is_timer_due(cntv_ctl: u64, cntv_cval: u64, cntpct: u64) -> bool {
     const ENABLE: u64 = 1 << 0;
-    const IMASK:  u64 = 1 << 1;
-    let enabled    = cntv_ctl & ENABLE != 0;
-    let not_masked = cntv_ctl & IMASK  == 0;
+    const IMASK: u64 = 1 << 1;
+    let enabled = cntv_ctl & ENABLE != 0;
+    let not_masked = cntv_ctl & IMASK == 0;
     enabled && not_masked && cntpct >= cntv_cval
 }
 

@@ -52,7 +52,9 @@ pub fn run_mte_selftest() {
     // Tag both granules with colour 0x5.
     // SAFETY: ptr is 16-byte aligned (static alignment), len is a multiple of
     // 16, and the region is valid Normal-Tagged kernel memory.
-    unsafe { tag_region(ptr, 32, 0x5); }
+    unsafe {
+        tag_region(ptr, 32, 0x5);
+    }
 
     // SAFETY: ptr points into the freshly tagged region.
     let tag0 = unsafe { get_tag(ptr) };
@@ -65,7 +67,9 @@ pub fn run_mte_selftest() {
 
     // Re-tag with colour 0xA (simulates allocation-tag change on "free").
     // SAFETY: same constraints as above.
-    unsafe { tag_region(ptr, 32, 0xA); }
+    unsafe {
+        tag_region(ptr, 32, 0xA);
+    }
     let new_tag = unsafe { get_tag(ptr) };
     if new_tag != 0xA {
         puts_aa64("[SELFTEST] MTE-SELFTEST: FAIL: re-tag (0xA) failed\n");

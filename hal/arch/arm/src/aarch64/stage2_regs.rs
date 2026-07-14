@@ -31,6 +31,7 @@
 /// Normal-WB-WA Inner+Outer-shareable, bit[31]=RES1.
 ///
 /// T0SZ=24 | SL0=1 | IRGN0=01 | ORGN0=01 | SH0=11 | PS=010 | RES1
+#[cfg(target_arch = "aarch64")]
 const VTCR_VALUE: u64 = 0x8002_3558;
 
 /// Enable Stage-2 translation for the given `vmid` and root page-table at `root_pa`.
@@ -131,7 +132,7 @@ pub unsafe fn s2_tlb_flush_all() {
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
     let encoded = ipa >> 12; // TLBI IPAS2E1IS encodes IPA[47:12] in Xt
-    // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
+                             // SAFETY: EL2 TLB maintenance; encoded IPA operand is correct per ARM DDI.
     unsafe {
         core::arch::asm!(
             "tlbi ipas2e1is, {x}",  // invalidate Stage-2 entry for this IPA

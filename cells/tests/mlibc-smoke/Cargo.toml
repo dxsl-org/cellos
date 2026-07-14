@@ -12,9 +12,9 @@ path = "src/main.rs"
 [dependencies]
 # Enable mlibc feature: suppresses posix.rs C symbols so mlibc's libc.a can link.
 # CRITICAL: if you add api without this feature, you will get duplicate-symbol errors.
-api       = { path = "../../../libs/api", features = ["mlibc"] }
-ostd      = { path = "../../../libs/ostd" }
-mlibc-shim = { path = "../../../libs/mlibc-shim" }
+api       = { path = "../../../libs/api", version = "0.1.0", features = ["mlibc"] }
+ostd      = { path = "../../../libs/ostd", version = "0.2.0" }
+mlibc-shim = { path = "../../../libs/mlibc-shim", version = "0.1.0" }
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

@@ -13,12 +13,17 @@ pub enum LexError {
 impl fmt::Display for LexError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnexpectedChar { ch, span } =>
-                write!(f, "{}:{}: unexpected character '{}'", span.line, span.col, ch),
-            Self::UnterminatedString { span } =>
-                write!(f, "{}:{}: unterminated string literal", span.line, span.col),
-            Self::UnterminatedComment { span } =>
-                write!(f, "{}:{}: unterminated block comment", span.line, span.col),
+            Self::UnexpectedChar { ch, span } => write!(
+                f,
+                "{}:{}: unexpected character '{}'",
+                span.line, span.col, ch
+            ),
+            Self::UnterminatedString { span } => {
+                write!(f, "{}:{}: unterminated string literal", span.line, span.col)
+            }
+            Self::UnterminatedComment { span } => {
+                write!(f, "{}:{}: unterminated block comment", span.line, span.col)
+            }
         }
     }
 }
@@ -29,18 +34,32 @@ impl std::error::Error for LexError {}
 
 #[derive(Debug)]
 pub enum ParseError {
-    UnexpectedToken { got: String, expected: &'static str, span: Span },
-    UnexpectedEof   { expected: &'static str },
+    UnexpectedToken {
+        got: String,
+        expected: &'static str,
+        span: Span,
+    },
+    UnexpectedEof {
+        expected: &'static str,
+    },
     Lex(LexError),
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::UnexpectedToken { got, expected, span } =>
-                write!(f, "{}:{}: expected {} but got '{}'", span.line, span.col, expected, got),
-            Self::UnexpectedEof { expected } =>
-                write!(f, "unexpected end of file, expected {}", expected),
+            Self::UnexpectedToken {
+                got,
+                expected,
+                span,
+            } => write!(
+                f,
+                "{}:{}: expected {} but got '{}'",
+                span.line, span.col, expected, got
+            ),
+            Self::UnexpectedEof { expected } => {
+                write!(f, "unexpected end of file, expected {}", expected)
+            }
             Self::Lex(e) => write!(f, "lex error: {}", e),
         }
     }
@@ -49,5 +68,7 @@ impl fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 impl From<LexError> for ParseError {
-    fn from(e: LexError) -> Self { Self::Lex(e) }
+    fn from(e: LexError) -> Self {
+        Self::Lex(e)
+    }
 }

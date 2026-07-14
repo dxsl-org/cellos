@@ -12,15 +12,15 @@
 #![no_std]
 #![no_main]
 #![allow(unsafe_code)]
-#![allow(static_mut_refs)]   // single-task cell — no data race on SURFACE / KEY_QUEUE
+#![allow(static_mut_refs)] // single-task cell — no data race on SURFACE / KEY_QUEUE
 
 extern crate alloc;
 
 use alloc::vec::Vec;
 use api::declare_manifest;
-use api::input::{InputEvent, KeyState, KeySym};
 use api::display::PixelFormat;
-use ostd::display::{ViSurface, wait_for_compositor};
+use api::input::{InputEvent, KeyState, KeySym};
+use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
 use ostd::task::yield_now;
@@ -33,7 +33,7 @@ const DOOM_H: u32 = 200;
 // no scaling, so DOOM scales its own 320×200 framebuffer up into a screen-sized
 // surface (nearest-neighbour). Stretching 320×200 → 1024×768 (both 4:3) yields
 // DOOM's intended 4:3 aspect (its pixels are non-square by design).
-const SCREEN_W: u32 = api::display::FALLBACK_WIDTH;  // 1024
+const SCREEN_W: u32 = api::display::FALLBACK_WIDTH; // 1024
 const SCREEN_H: u32 = api::display::FALLBACK_HEIGHT; // 768
 
 // Source-column lookup (dst-x → src-x), filled once on the first frame so the
@@ -57,8 +57,8 @@ static mut DOOM_C_HEAP_END: usize = 0;
 pub unsafe extern "C" fn __wrap__sbrk(incr: i32) -> *mut u8 {
     let start = DOOM_C_HEAP.as_mut_ptr() as usize;
     let limit = DOOM_C_HEAP.len();
-    let cur   = DOOM_C_HEAP_END;
-    let new   = if incr < 0 {
+    let cur = DOOM_C_HEAP_END;
+    let new = if incr < 0 {
         cur.saturating_sub((-incr) as usize)
     } else {
         cur + incr as usize
@@ -86,7 +86,10 @@ static mut SURFACE: Option<ViSurface> = None;
 static mut FIRST_FRAME_LOGGED: bool = false;
 
 // Ring buffer for pending DOOM key events: (pressed: bool, doomkey: u8)
-static mut KEY_QUEUE: [KeyQueueEntry; 32] = [KeyQueueEntry { pressed: false, doomkey: 0 }; 32];
+static mut KEY_QUEUE: [KeyQueueEntry; 32] = [KeyQueueEntry {
+    pressed: false,
+    doomkey: 0,
+}; 32];
 static mut KEY_HEAD: usize = 0;
 static mut KEY_TAIL: usize = 0;
 
@@ -101,18 +104,16 @@ struct KeyQueueEntry {
 #[no_mangle]
 pub extern "C" fn main() {
     // Pass `-iwad /doom1.wad` so D_DoomMain can find the WAD on the ViFS.
-    let iwad  = b"-iwad\0";
+    let iwad = b"-iwad\0";
     let wpath = b"/doom1.wad\0";
-    let argv: [*const u8; 3] = [
-        b"doom\0".as_ptr(),
-        iwad.as_ptr(),
-        wpath.as_ptr(),
-    ];
+    let argv: [*const u8; 3] = [b"doom\0".as_ptr(), iwad.as_ptr(), wpath.as_ptr()];
 
     // Initialize engine + start game loop (doomgeneric_Tick never returns).
     unsafe {
         doomgeneric_Create(3, argv.as_ptr());
-        loop { doomgeneric_Tick(); }
+        loop {
+            doomgeneric_Tick();
+        }
     }
 }
 
@@ -129,7 +130,9 @@ pub unsafe extern "C" fn DG_Init() {
             surf.raise(); // own the top of the z-order
             SURFACE = Some(surf);
         }
-        Err(_)   => { sys_exit(1); }
+        Err(_) => {
+            sys_exit(1);
+        }
     }
     // Spin until input service is registered and grants focus.
     // During boot race this can take a few ticks.
@@ -155,7 +158,7 @@ pub unsafe extern "C" fn DG_DrawFrame() {
     }
     let surf = match SURFACE.as_mut() {
         Some(s) => s,
-        None    => return,
+        None => return,
     };
 
     let src = core::slice::from_raw_parts(DG_ScreenBuffer, (DOOM_W * DOOM_H) as usize);
@@ -199,12 +202,17 @@ pub unsafe extern "C" fn DG_GetKey(pressed: *mut i32, doomkey: *mut u8) -> i32 {
     for ev in events {
         if let InputEvent::Key(ke) = ev {
             let dk = keysym_to_doom(ke.keysym, ke.character);
-            if dk == 0 { continue; }
+            if dk == 0 {
+                continue;
+            }
             let p = ke.state == KeyState::Pressed || ke.state == KeyState::Repeated;
             let tail = KEY_TAIL;
             let next = (tail + 1) % 32;
             if next != KEY_HEAD {
-                KEY_QUEUE[tail] = KeyQueueEntry { pressed: p, doomkey: dk };
+                KEY_QUEUE[tail] = KeyQueueEntry {
+                    pressed: p,
+                    doomkey: dk,
+                };
                 KEY_TAIL = next;
             }
         }
@@ -267,72 +275,76 @@ pub unsafe extern "C" fn mkdir(_path: *const u8, _mode: u32) -> i32 {
 // DOOM key constants (from doomgeneric.h / doomkeys.h).
 // dead_code: STRAFE/FIRE/PAUSE become active once Modifier key mapping is wired.
 const DOOM_KEY_RIGHTARROW: u8 = 0xae;
-const DOOM_KEY_LEFTARROW:  u8 = 0xac;
-const DOOM_KEY_UPARROW:    u8 = 0xad;
-const DOOM_KEY_DOWNARROW:  u8 = 0xaf;
-#[allow(dead_code)] const DOOM_KEY_STRAFE_L:   u8 = 0xa0;
-#[allow(dead_code)] const DOOM_KEY_STRAFE_R:   u8 = 0xa1;
-const DOOM_KEY_USE:        u8 = 0xa2;  // Space / Enter
-#[allow(dead_code)] const DOOM_KEY_FIRE:       u8 = 0xa3;  // Ctrl
-const DOOM_KEY_ESCAPE:     u8 = 27;
-const DOOM_KEY_ENTER:      u8 = 13;
-const DOOM_KEY_TAB:        u8 = 9;
-const DOOM_KEY_F1:         u8 = 0x80 + 0x3b;
-const DOOM_KEY_F2:         u8 = 0x80 + 0x3c;
-const DOOM_KEY_F3:         u8 = 0x80 + 0x3d;
-const DOOM_KEY_F4:         u8 = 0x80 + 0x3e;
-const DOOM_KEY_F5:         u8 = 0x80 + 0x3f;
-const DOOM_KEY_F6:         u8 = 0x80 + 0x40;
-const DOOM_KEY_F7:         u8 = 0x80 + 0x41;
-const DOOM_KEY_F8:         u8 = 0x80 + 0x42;
-const DOOM_KEY_F9:         u8 = 0x80 + 0x43;
-const DOOM_KEY_F10:        u8 = 0x80 + 0x44;
-const DOOM_KEY_F11:        u8 = 0x80 + 0x57;
-const DOOM_KEY_F12:        u8 = 0x80 + 0x58;
-#[allow(dead_code)] const DOOM_KEY_PAUSE:      u8 = 0xff;
+const DOOM_KEY_LEFTARROW: u8 = 0xac;
+const DOOM_KEY_UPARROW: u8 = 0xad;
+const DOOM_KEY_DOWNARROW: u8 = 0xaf;
+#[allow(dead_code)]
+const DOOM_KEY_STRAFE_L: u8 = 0xa0;
+#[allow(dead_code)]
+const DOOM_KEY_STRAFE_R: u8 = 0xa1;
+const DOOM_KEY_USE: u8 = 0xa2; // Space / Enter
+#[allow(dead_code)]
+const DOOM_KEY_FIRE: u8 = 0xa3; // Ctrl
+const DOOM_KEY_ESCAPE: u8 = 27;
+const DOOM_KEY_ENTER: u8 = 13;
+const DOOM_KEY_TAB: u8 = 9;
+const DOOM_KEY_F1: u8 = 0x80 + 0x3b;
+const DOOM_KEY_F2: u8 = 0x80 + 0x3c;
+const DOOM_KEY_F3: u8 = 0x80 + 0x3d;
+const DOOM_KEY_F4: u8 = 0x80 + 0x3e;
+const DOOM_KEY_F5: u8 = 0x80 + 0x3f;
+const DOOM_KEY_F6: u8 = 0x80 + 0x40;
+const DOOM_KEY_F7: u8 = 0x80 + 0x41;
+const DOOM_KEY_F8: u8 = 0x80 + 0x42;
+const DOOM_KEY_F9: u8 = 0x80 + 0x43;
+const DOOM_KEY_F10: u8 = 0x80 + 0x44;
+const DOOM_KEY_F11: u8 = 0x80 + 0x57;
+const DOOM_KEY_F12: u8 = 0x80 + 0x58;
+#[allow(dead_code)]
+const DOOM_KEY_PAUSE: u8 = 0xff;
 
 fn keysym_to_doom(sym: KeySym, character: u32) -> u8 {
     match sym {
-        KeySym::Escape    => DOOM_KEY_ESCAPE,
-        KeySym::Return    => DOOM_KEY_USE,
-        KeySym::Tab       => DOOM_KEY_TAB,
-        KeySym::Up        => DOOM_KEY_UPARROW,
-        KeySym::Down      => DOOM_KEY_DOWNARROW,
-        KeySym::Left      => DOOM_KEY_LEFTARROW,
-        KeySym::Right     => DOOM_KEY_RIGHTARROW,
-        KeySym::F1        => DOOM_KEY_F1,
-        KeySym::F2        => DOOM_KEY_F2,
-        KeySym::F3        => DOOM_KEY_F3,
-        KeySym::F4        => DOOM_KEY_F4,
-        KeySym::F5        => DOOM_KEY_F5,
-        KeySym::F6        => DOOM_KEY_F6,
-        KeySym::F7        => DOOM_KEY_F7,
-        KeySym::F8        => DOOM_KEY_F8,
-        KeySym::F9        => DOOM_KEY_F9,
-        KeySym::F10       => DOOM_KEY_F10,
-        KeySym::F11       => DOOM_KEY_F11,
-        KeySym::F12       => DOOM_KEY_F12,
+        KeySym::Escape => DOOM_KEY_ESCAPE,
+        KeySym::Return => DOOM_KEY_USE,
+        KeySym::Tab => DOOM_KEY_TAB,
+        KeySym::Up => DOOM_KEY_UPARROW,
+        KeySym::Down => DOOM_KEY_DOWNARROW,
+        KeySym::Left => DOOM_KEY_LEFTARROW,
+        KeySym::Right => DOOM_KEY_RIGHTARROW,
+        KeySym::F1 => DOOM_KEY_F1,
+        KeySym::F2 => DOOM_KEY_F2,
+        KeySym::F3 => DOOM_KEY_F3,
+        KeySym::F4 => DOOM_KEY_F4,
+        KeySym::F5 => DOOM_KEY_F5,
+        KeySym::F6 => DOOM_KEY_F6,
+        KeySym::F7 => DOOM_KEY_F7,
+        KeySym::F8 => DOOM_KEY_F8,
+        KeySym::F9 => DOOM_KEY_F9,
+        KeySym::F10 => DOOM_KEY_F10,
+        KeySym::F11 => DOOM_KEY_F11,
+        KeySym::F12 => DOOM_KEY_F12,
         KeySym::Printable => {
             // Map printable to ASCII doom key.
             // DOOM checks lowercase keys; space=use, ctrl=fire(mapped via Modifiers),
             // alt=strafe (not yet handled — use as STRAFE_L for now).
             match character as u8 {
-                b' '           => DOOM_KEY_USE,
-                b'\r' | b'\n'  => DOOM_KEY_ENTER,
-                b'\t'          => DOOM_KEY_TAB,
+                b' ' => DOOM_KEY_USE,
+                b'\r' | b'\n' => DOOM_KEY_ENTER,
+                b'\t' => DOOM_KEY_TAB,
                 c @ b'a'..=b'z' => c,
                 c @ b'A'..=b'Z' => c + 32, // DOOM expects lowercase
                 c @ b'0'..=b'9' => c,
-                c              => c,
+                c => c,
             }
         }
-        KeySym::Unknown  |
-        KeySym::Backspace |
-        KeySym::Delete    |
-        KeySym::Insert    |
-        KeySym::Home      |
-        KeySym::End       |
-        KeySym::PageUp    |
-        KeySym::PageDown  => 0,
+        KeySym::Unknown
+        | KeySym::Backspace
+        | KeySym::Delete
+        | KeySym::Insert
+        | KeySym::Home
+        | KeySym::End
+        | KeySym::PageUp
+        | KeySym::PageDown => 0,
     }
 }

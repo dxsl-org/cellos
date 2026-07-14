@@ -19,8 +19,8 @@
 
 extern crate alloc;
 
-use types::silo::{SiloCmd, SILO_SERVICE_ID};
 use crate::{syscall, task};
+use types::silo::{SiloCmd, SILO_SERVICE_ID};
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -163,7 +163,10 @@ impl SiloHandle {
         if len == 0 || len > 72 {
             return Err(SiloError::GuestFault);
         }
-        let mut sig = SigDer { bytes: [0u8; 72], len: len as u8 };
+        let mut sig = SigDer {
+            bytes: [0u8; 72],
+            len: len as u8,
+        };
         sig.bytes[..len].copy_from_slice(&resp[4..4 + len]);
         Ok(sig)
     }

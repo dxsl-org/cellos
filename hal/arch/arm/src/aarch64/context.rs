@@ -37,8 +37,8 @@ pub struct CpuContext {
     pub x28: u64,      // offset 72
     pub x29: u64,      // offset 80  — frame pointer
     pub x30: u64,      // offset 88  — link register (return address)
-    pub sp:  u64,      // offset 96  — EL1/EL2 kernel stack pointer
-    pub elr_el1:  u64, // offset 104 — holds ELR_EL2 at EL2
+    pub sp: u64,       // offset 96  — EL1/EL2 kernel stack pointer
+    pub elr_el1: u64,  // offset 104 — holds ELR_EL2 at EL2
     pub spsr_el1: u64, // offset 112 — holds SPSR_EL2 at EL2
     pub sp_el0: u64,   // offset 120 — EL0 user-space stack pointer (banked, not auto-saved)
     /// PSTATE.DAIF mask bits (offset 128).
@@ -48,7 +48,7 @@ pub struct CpuContext {
     /// boot idle context leaves DAIF.I=1, causing WFI to sleep forever.
     ///
     /// Saved via `mrs x9, daif`, restored via `msr daif, x9`.
-    pub daif: u64,     // offset 128
+    pub daif: u64, // offset 128
 }
 
 impl CpuContext {
@@ -62,10 +62,14 @@ impl CpuContext {
     pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
         if super::el2::is_el2() {
             // SAFETY: same preconditions as __switch_el1; uses EL2 sysregs.
-            unsafe { __switch_el2(old, new); }
+            unsafe {
+                __switch_el2(old, new);
+            }
         } else {
             // SAFETY: delegated to the assembly stub below.
-            unsafe { __switch_el1(old, new); }
+            unsafe {
+                __switch_el1(old, new);
+            }
         }
     }
 }
@@ -77,10 +81,14 @@ impl CpuContext {
 pub unsafe fn switch(old: *mut CpuContext, new: *const CpuContext) {
     if super::el2::is_el2() {
         // SAFETY: same preconditions; uses EL2 sysregs.
-        unsafe { __switch_el2(old, new); }
+        unsafe {
+            __switch_el2(old, new);
+        }
     } else {
         // SAFETY: delegated to the assembly stub below.
-        unsafe { __switch_el1(old, new); }
+        unsafe {
+            __switch_el1(old, new);
+        }
     }
 }
 

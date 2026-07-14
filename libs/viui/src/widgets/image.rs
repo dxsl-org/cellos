@@ -8,8 +8,8 @@ use crate::widget::{PaintCx, ViWidget};
 
 pub struct Image {
     pixels: Vec<u8>,
-    w:      u32,
-    h:      u32,
+    w: u32,
+    h: u32,
 }
 
 impl Image {
@@ -21,13 +21,22 @@ impl Image {
 
 impl ViWidget for Image {
     fn layout(&self, constraints: Constraints) -> LayoutNode {
-        let desired = Size { w: self.w as f32, h: self.h as f32 };
+        let desired = Size {
+            w: self.w as f32,
+            h: self.h as f32,
+        };
         let size = constraints.constrain(desired);
         LayoutNode::leaf(Rect::from_origin_size(constraints.origin, size))
     }
 
     fn paint(&self, cx: &mut PaintCx) {
-        let dest = Rect::from_origin_size(cx.origin, Size { w: self.w as f32, h: self.h as f32 });
+        let dest = Rect::from_origin_size(
+            cx.origin,
+            Size {
+                w: self.w as f32,
+                h: self.h as f32,
+            },
+        );
         cx.canvas.draw_image(dest, &self.pixels, self.w * 4);
     }
 

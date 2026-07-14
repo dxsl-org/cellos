@@ -6,21 +6,29 @@
 const GICD_BASE: usize = 0x0800_0000;
 const GICC_BASE: usize = 0x0801_0000;
 
-fn gicd(offset: usize) -> *mut u32 { (GICD_BASE + offset) as *mut u32 }
-fn gicc(offset: usize) -> *mut u32 { (GICC_BASE + offset) as *mut u32 }
+fn gicd(offset: usize) -> *mut u32 {
+    (GICD_BASE + offset) as *mut u32
+}
+fn gicc(offset: usize) -> *mut u32 {
+    (GICC_BASE + offset) as *mut u32
+}
 
-fn wr(ptr: *mut u32, val: u32) { unsafe { core::ptr::write_volatile(ptr, val) } }
-fn rd(ptr: *mut u32) -> u32    { unsafe { core::ptr::read_volatile(ptr) } }
+fn wr(ptr: *mut u32, val: u32) {
+    unsafe { core::ptr::write_volatile(ptr, val) }
+}
+fn rd(ptr: *mut u32) -> u32 {
+    unsafe { core::ptr::read_volatile(ptr) }
+}
 
-const GICD_CTLR:   usize = 0x000;
+const GICD_CTLR: usize = 0x000;
 const GICD_ISENABLER: usize = 0x100; // +4*n
 const GICD_IPRIORITYR: usize = 0x400;
 const GICD_ITARGETSR: usize = 0x800;
-const GICD_ICFGR:  usize = 0xC00;
-const GICC_CTLR:   usize = 0x000;
-const GICC_PMR:    usize = 0x004;
-const GICC_IAR:    usize = 0x00C;
-const GICC_EOIR:   usize = 0x010;
+const GICD_ICFGR: usize = 0xC00;
+const GICC_CTLR: usize = 0x000;
+const GICC_PMR: usize = 0x004;
+const GICC_IAR: usize = 0x00C;
+const GICC_EOIR: usize = 0x010;
 
 /// Initialise GIC distributor and CPU interface.
 pub fn init() {
@@ -31,7 +39,7 @@ pub fn init() {
     let lines = (((rd(gicd(0x004)) & 0x1F) + 1) * 32) as usize; // GICD_TYPER
     for i in 0..(lines / 4) {
         wr(gicd(GICD_IPRIORITYR + i * 4), 0xA0A0_A0A0);
-        wr(gicd(GICD_ITARGETSR  + i * 4), 0x0101_0101); // CPU 0
+        wr(gicd(GICD_ITARGETSR + i * 4), 0x0101_0101); // CPU 0
     }
     for i in 0..(lines / 16) {
         wr(gicd(GICD_ICFGR + i * 4), 0); // level-triggered

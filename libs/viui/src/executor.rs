@@ -35,10 +35,14 @@ pub struct CpuExecutor {
 }
 
 impl CpuExecutor {
-    pub fn new(surf: ViSurface) -> Self { Self { surf } }
+    pub fn new(surf: ViSurface) -> Self {
+        Self { surf }
+    }
 
     /// Unwrap the inner `ViSurface` (e.g. for IPC cleanup after app exit).
-    pub fn into_surf(self) -> ViSurface { self.surf }
+    pub fn into_surf(self) -> ViSurface {
+        self.surf
+    }
 }
 
 impl CommandExecutor for CpuExecutor {
@@ -58,15 +62,20 @@ impl CommandExecutor for CpuExecutor {
                 }
             }
             match cmd {
-                GpuCmd::FillRect { rect, color } =>
-                    canvas.fill_rect(*rect, *color),
-                GpuCmd::DrawLine { a, b, color } =>
-                    canvas.draw_line(*a, *b, *color),
-                GpuCmd::DrawText { pos, text, style } =>
-                    canvas.draw_text(*pos, text, *style),
-                GpuCmd::DrawImage { dest, pixels, src_stride } =>
-                    canvas.draw_image(*dest, pixels, *src_stride),
-                GpuCmd::DrawTextShort { pos, bytes, len, style } => {
+                GpuCmd::FillRect { rect, color } => canvas.fill_rect(*rect, *color),
+                GpuCmd::DrawLine { a, b, color } => canvas.draw_line(*a, *b, *color),
+                GpuCmd::DrawText { pos, text, style } => canvas.draw_text(*pos, text, *style),
+                GpuCmd::DrawImage {
+                    dest,
+                    pixels,
+                    src_stride,
+                } => canvas.draw_image(*dest, pixels, *src_stride),
+                GpuCmd::DrawTextShort {
+                    pos,
+                    bytes,
+                    len,
+                    style,
+                } => {
                     let text = core::str::from_utf8(&bytes[..*len as usize]).unwrap_or("");
                     canvas.draw_text(*pos, text, *style);
                 }

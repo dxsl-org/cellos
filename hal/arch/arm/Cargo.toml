@@ -5,11 +5,11 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-hal-arch-trait  = { path = "../../traits/arch" }
-hal-mte         = { path = "../../traits/mte" }
-hal-paging      = { path = "../../traits/paging" }
-hal-hypervisor  = { path = "../../traits/hypervisor" }
-types = { path = "../../../libs/types" }
+hal-arch-trait  = { path = "../../traits/arch", version = "0.1.0" }
+hal-mte         = { path = "../../traits/mte", version = "0.1.0" }
+hal-paging      = { path = "../../traits/paging", version = "0.1.0" }
+hal-hypervisor  = { path = "../../traits/hypervisor", version = "0.1.0" }
+types = { path = "../../../libs/types", version = "0.1.0" }
 critical-section = { version = "1", optional = true, features = ["restore-state-usize"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]

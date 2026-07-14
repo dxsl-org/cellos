@@ -7,6 +7,13 @@
 //! Config: /etc/cellos/cluster.cfg, simple key=value format.
 //! See doc-comment on `load_config` for the expected layout.
 
+// reason: BrokerIdentity itself is constructed and driven from main.rs, but
+// several accessors (peer_count, get_peer_by_node_id, update_reflexive) exist
+// for callers that aren't wired yet — connection_manager::reflexive_or_direct
+// reads `reflexive_addr` but nothing ever calls `update_reflexive` because
+// stun::query_reflexive_addr is itself unwired from the dispatch loop.
+#![allow(dead_code)]
+
 extern crate alloc;
 
 use api::cluster::{CellNetId, PeerTicket};
@@ -62,8 +69,12 @@ impl BrokerIdentity {
 
         for line in data.split(|&b| b == b'\n') {
             let line = trim_ascii(line);
-            if line.is_empty() || line[0] == b'#' { continue; }
-            let Some(eq) = line.iter().position(|&b| b == b'=') else { continue };
+            if line.is_empty() || line[0] == b'#' {
+                continue;
+            }
+            let Some(eq) = line.iter().position(|&b| b == b'=') else {
+                continue;
+            };
             let key = trim_ascii(&line[..eq]);
             let val = trim_ascii(&line[eq + 1..]);
             parse_cfg_kv(key, val, &mut builders);
@@ -82,14 +93,17 @@ impl BrokerIdentity {
         println("");
     }
 
-    pub fn peer_count(&self) -> usize { self.peers_len }
+    pub fn peer_count(&self) -> usize {
+        self.peers_len
+    }
 
     pub fn get_peer(&self, idx: usize) -> Option<&PeerTicket> {
         self.peers.get(idx)?.as_ref()
     }
 
     pub fn get_peer_by_node_id(&self, node_id: &CellNetId) -> Option<&PeerTicket> {
-        self.peers[..self.peers_len].iter()
+        self.peers[..self.peers_len]
+            .iter()
             .find_map(|p| p.as_ref().filter(|t| &t.node_id == node_id))
     }
 
@@ -102,24 +116,32 @@ impl BrokerIdentity {
 
 #[derive(Clone, Copy)]
 struct PeerBuilder {
-    valid:       bool,
-    node_id:     Option<[u8; 32]>,
-    relay_ip:    Option<[u8; 4]>,
-    relay_port:  Option<u16>,
-    direct_ip:   Option<[u8; 4]>,
+    valid: bool,
+    node_id: Option<[u8; 32]>,
+    relay_ip: Option<[u8; 4]>,
+    relay_port: Option<u16>,
+    direct_ip: Option<[u8; 4]>,
     direct_port: Option<u16>,
 }
 
 impl PeerBuilder {
     const fn new() -> Self {
-        Self { valid: false, node_id: None, relay_ip: None, relay_port: None,
-               direct_ip: None, direct_port: None }
+        Self {
+            valid: false,
+            node_id: None,
+            relay_ip: None,
+            relay_port: None,
+            direct_ip: None,
+            direct_port: None,
+        }
     }
 
     fn build(&self) -> Option<PeerTicket> {
-        if !self.valid { return None; }
-        let node_id    = self.node_id?;
-        let relay_ip   = self.relay_ip?;
+        if !self.valid {
+            return None;
+        }
+        let node_id = self.node_id?;
+        let relay_ip = self.relay_ip?;
         let relay_port = self.relay_port?;
         let mut addrs = [([0u8; 4], 0u16); 3];
         let mut addrs_len = 0u8;
@@ -127,21 +149,35 @@ impl PeerBuilder {
             addrs[0] = (ip, port);
             addrs_len = 1;
         }
-        Some(PeerTicket { node_id: CellNetId::from_bytes(node_id), relay_ip, relay_port, addrs, addrs_len })
+        Some(PeerTicket {
+            node_id: CellNetId::from_bytes(node_id),
+            relay_ip,
+            relay_port,
+            addrs,
+            addrs_len,
+        })
     }
 }
 
 /// Dispatch a key=value pair into the peer builder array.
 /// Key format: `peer_N_field` where N is 0–7.
 fn parse_cfg_kv(key: &[u8], val: &[u8], builders: &mut [PeerBuilder; MAX_PEERS]) {
-    if !starts_with(key, b"peer_") { return; }
+    if !starts_with(key, b"peer_") {
+        return;
+    }
     let rest = &key[5..];
     // Parse index digit
-    if rest.is_empty() || !rest[0].is_ascii_digit() { return; }
+    if rest.is_empty() || !rest[0].is_ascii_digit() {
+        return;
+    }
     let idx = (rest[0] - b'0') as usize;
-    if idx >= MAX_PEERS { return; }
+    if idx >= MAX_PEERS {
+        return;
+    }
     let after_idx = &rest[1..];
-    if !starts_with(after_idx, b"_") { return; }
+    if !starts_with(after_idx, b"_") {
+        return;
+    }
     let field = &after_idx[1..];
 
     builders[idx].valid = true;
@@ -153,7 +189,7 @@ fn parse_cfg_kv(key: &[u8], val: &[u8], builders: &mut [PeerBuilder; MAX_PEERS])
         builders[idx].relay_port = parse_u16_ascii(val);
     } else if eq_slice(field, b"direct") {
         if let Some((ip, port)) = parse_addr(val) {
-            builders[idx].direct_ip   = Some(ip);
+            builders[idx].direct_ip = Some(ip);
             builders[idx].direct_port = Some(port);
         }
     }
@@ -164,11 +200,11 @@ fn parse_cfg_kv(key: &[u8], val: &[u8], builders: &mut [PeerBuilder; MAX_PEERS])
 fn trim_ascii(s: &[u8]) -> &[u8] {
     let s = match s.iter().position(|b| !b.is_ascii_whitespace()) {
         Some(i) => &s[i..],
-        None    => return &[],
+        None => return &[],
     };
     match s.iter().rposition(|b| !b.is_ascii_whitespace()) {
         Some(i) => &s[..=i],
-        None    => s,
+        None => s,
     }
 }
 
@@ -176,7 +212,9 @@ fn starts_with(s: &[u8], prefix: &[u8]) -> bool {
     s.len() >= prefix.len() && &s[..prefix.len()] == prefix
 }
 
-fn eq_slice(a: &[u8], b: &[u8]) -> bool { a == b }
+fn eq_slice(a: &[u8], b: &[u8]) -> bool {
+    a == b
+}
 
 fn parse_ipv4(s: &[u8]) -> Option<[u8; 4]> {
     let mut parts = [0u8; 4];
@@ -185,18 +223,26 @@ fn parse_ipv4(s: &[u8]) -> Option<[u8; 4]> {
     let mut any = false;
     for &b in s {
         if b == b'.' {
-            if idx >= 3 { return None; }
+            if idx >= 3 {
+                return None;
+            }
             parts[idx] = cur as u8;
             idx += 1;
             cur = 0;
             any = false;
         } else if b.is_ascii_digit() {
             cur = cur * 10 + (b - b'0') as u16;
-            if cur > 255 { return None; }
+            if cur > 255 {
+                return None;
+            }
             any = true;
-        } else { return None; }
+        } else {
+            return None;
+        }
     }
-    if !any || idx != 3 { return None; }
+    if !any || idx != 3 {
+        return None;
+    }
     parts[3] = cur as u8;
     Some(parts)
 }
@@ -204,23 +250,29 @@ fn parse_ipv4(s: &[u8]) -> Option<[u8; 4]> {
 fn parse_u16_ascii(s: &[u8]) -> Option<u16> {
     let mut n: u32 = 0;
     for &b in s {
-        if !b.is_ascii_digit() { return None; }
+        if !b.is_ascii_digit() {
+            return None;
+        }
         n = n * 10 + (b - b'0') as u32;
-        if n > 65535 { return None; }
+        if n > 65535 {
+            return None;
+        }
     }
     Some(n as u16)
 }
 
 fn parse_addr(s: &[u8]) -> Option<([u8; 4], u16)> {
     let colon = s.iter().rposition(|&b| b == b':')?;
-    let ip   = parse_ipv4(&s[..colon])?;
+    let ip = parse_ipv4(&s[..colon])?;
     let port = parse_u16_ascii(&s[colon + 1..])?;
     Some((ip, port))
 }
 
 /// Parse 64 hex chars into 32 bytes. Returns None on invalid input.
 fn parse_hex32(s: &[u8]) -> Option<[u8; 32]> {
-    if s.len() != 64 { return None; }
+    if s.len() != 64 {
+        return None;
+    }
     let mut out = [0u8; 32];
     for (i, chunk) in s.chunks_exact(2).enumerate() {
         let hi = hex_nibble(chunk[0])?;
@@ -235,6 +287,6 @@ fn hex_nibble(b: u8) -> Option<u8> {
         b'0'..=b'9' => Some(b - b'0'),
         b'a'..=b'f' => Some(b - b'a' + 10),
         b'A'..=b'F' => Some(b - b'A' + 10),
-        _            => None,
+        _ => None,
     }
 }

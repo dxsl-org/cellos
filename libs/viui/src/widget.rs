@@ -67,17 +67,29 @@ pub struct PaintCx<'a> {
 impl<'a> PaintCx<'a> {
     /// Root PaintCx with `DarkTheme` default and origin at (0, 0).
     pub fn root(canvas: &'a mut dyn ViCanvas) -> Self {
-        Self { canvas, origin: Point::ZERO, theme: &DARK_THEME }
+        Self {
+            canvas,
+            origin: Point::ZERO,
+            theme: &DARK_THEME,
+        }
     }
 
     /// Root PaintCx with an explicit theme.
     pub fn with_theme(canvas: &'a mut dyn ViCanvas, theme: &'a dyn ViTheme) -> Self {
-        Self { canvas, origin: Point::ZERO, theme }
+        Self {
+            canvas,
+            origin: Point::ZERO,
+            theme,
+        }
     }
 
     /// Create a child PaintCx at `child_origin`, inheriting canvas and theme.
     pub fn child_at(&mut self, child_origin: Point) -> PaintCx<'_> {
-        PaintCx { canvas: self.canvas, origin: child_origin, theme: self.theme }
+        PaintCx {
+            canvas: self.canvas,
+            origin: child_origin,
+            theme: self.theme,
+        }
     }
 
     /// Translate a widget-local rect to screen-space.
@@ -180,7 +192,13 @@ impl WidgetTree {
     /// Returns `true` if any widget requested a repaint.
     pub fn dispatch_event(&mut self, e: &Event) -> bool {
         // Struct destructuring lets the borrow checker see separate field borrows.
-        let Self { root, layout_cache, state, dirty, focus } = self;
+        let Self {
+            root,
+            layout_cache,
+            state,
+            dirty,
+            focus,
+        } = self;
         let mut cx = EventCx {
             state,
             focus,
@@ -192,19 +210,29 @@ impl WidgetTree {
         let needs_repaint = cx.needs_repaint;
         if needs_repaint {
             let bounds = layout_cache.bounds;
-            *dirty = Some(match dirty.take() { Some(acc) => acc.union(bounds), None => bounds });
+            *dirty = Some(match dirty.take() {
+                Some(acc) => acc.union(bounds),
+                None => bounds,
+            });
         }
         needs_repaint
     }
 
     /// Take and clear the accumulated dirty rect.
-    pub fn take_dirty(&mut self) -> Option<Rect> { self.dirty.take() }
+    pub fn take_dirty(&mut self) -> Option<Rect> {
+        self.dirty.take()
+    }
 
     /// Mark a screen-space rect as needing repaint.
     pub fn mark_dirty(&mut self, rect: Rect) {
-        self.dirty = Some(match self.dirty { Some(acc) => acc.union(rect), None => rect });
+        self.dirty = Some(match self.dirty {
+            Some(acc) => acc.union(rect),
+            None => rect,
+        });
     }
 
     /// Root bounds (valid after calling `layout()`).
-    pub fn root_bounds(&self) -> Rect { self.layout_cache.bounds }
+    pub fn root_bounds(&self) -> Rect {
+        self.layout_cache.bounds
+    }
 }

@@ -51,10 +51,14 @@ pub struct FramebufferRenderer {
 }
 
 impl FramebufferRenderer {
-    pub fn new(surf: ViSurface) -> Self { Self { surf } }
+    pub fn new(surf: ViSurface) -> Self {
+        Self { surf }
+    }
 
     /// Unwrap the inner `ViSurface` (e.g. for IPC cleanup after app exit).
-    pub fn into_surf(self) -> ViSurface { self.surf }
+    pub fn into_surf(self) -> ViSurface {
+        self.surf
+    }
 }
 
 impl ViRenderer for FramebufferRenderer {
@@ -69,5 +73,7 @@ impl ViRenderer for FramebufferRenderer {
         self.surf.damage_all();
     }
 
-    fn size(&self) -> (u32, u32) { (self.surf.width(), self.surf.height()) }
+    fn size(&self) -> (u32, u32) {
+        (self.surf.width(), self.surf.height())
+    }
 }

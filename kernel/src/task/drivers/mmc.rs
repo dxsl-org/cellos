@@ -71,16 +71,32 @@ pub struct MmcBlock;
 
 impl ViBlockDevice for MmcBlock {
     fn read_sector(&self, sector: u64, buf: &mut [u8]) -> ViResult<()> {
-        MMC_DEVICE.lock().as_mut().ok_or(ViError::NotFound)?.read_sector(sector, buf)
+        MMC_DEVICE
+            .lock()
+            .as_mut()
+            .ok_or(ViError::NotFound)?
+            .read_sector(sector, buf)
     }
     fn write_sector(&self, sector: u64, buf: &[u8]) -> ViResult<()> {
-        MMC_DEVICE.lock().as_mut().ok_or(ViError::NotFound)?.write_sector(sector, buf)
+        MMC_DEVICE
+            .lock()
+            .as_mut()
+            .ok_or(ViError::NotFound)?
+            .write_sector(sector, buf)
     }
     fn sector_count(&self) -> u64 {
-        MMC_DEVICE.lock().as_ref().map(|d| d.sector_count()).unwrap_or(0)
+        MMC_DEVICE
+            .lock()
+            .as_ref()
+            .map(|d| d.sector_count())
+            .unwrap_or(0)
     }
-    fn sector_size(&self) -> usize { 512 }
-    fn flush(&self) -> ViResult<()> { Ok(()) }
+    fn sector_size(&self) -> usize {
+        512
+    }
+    fn flush(&self) -> ViResult<()> {
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

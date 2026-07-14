@@ -70,9 +70,7 @@ fn main() {
     if tetris_c.exists() {
         build.file(&tetris_c);
     } else {
-        println!(
-            "cargo:warning=tetris.c not found in {TETRIS_OS_DIR} — check repo structure."
-        );
+        println!("cargo:warning=tetris.c not found in {TETRIS_OS_DIR} — check repo structure.");
         return;
     }
 
@@ -94,7 +92,7 @@ fn main() {
 }
 
 fn link_picolibc() {
-    let libc   = run_riscv_gcc(&["--print-file-name=libc.a"]);
+    let libc = run_riscv_gcc(&["--print-file-name=libc.a"]);
     let libgcc = run_riscv_gcc(&["--print-libgcc-file-name"]);
     for p in [&libc, &libgcc] {
         if let Some(dir) = std::path::Path::new(p).parent() {

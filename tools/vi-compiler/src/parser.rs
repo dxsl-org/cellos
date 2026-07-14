@@ -1,6 +1,6 @@
 use crate::ast::{
-    Binding, BindingMode, BinOpKind, CallbackBinding, Child, Component, Element,
-    Expr, InterpPart, Literal, RawExpr, UnaryOp, ViFile,
+    BinOpKind, Binding, BindingMode, CallbackBinding, Child, Component, Element, Expr, InterpPart,
+    Literal, RawExpr, UnaryOp, ViFile,
 };
 use crate::error::ParseError;
 use crate::token::{Span, Token, TokenKind};
@@ -10,28 +10,40 @@ use std::prelude::v1::*;
 
 pub struct Parser {
     tokens: Vec<Token>,
-    pos:    usize,
+    pos: usize,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self { Self { tokens, pos: 0 } }
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, pos: 0 }
+    }
 
     // ── Token navigation ─────────────────────────────────────────────────────
 
-    fn peek(&self) -> &Token          { &self.tokens[self.pos.min(self.tokens.len() - 1)] }
-    fn peek_kind(&self) -> &TokenKind { &self.peek().kind }
+    fn peek(&self) -> &Token {
+        &self.tokens[self.pos.min(self.tokens.len() - 1)]
+    }
+    fn peek_kind(&self) -> &TokenKind {
+        &self.peek().kind
+    }
 
     fn peek_at(&self, offset: usize) -> &Token {
         let idx = (self.pos + offset).min(self.tokens.len() - 1);
         &self.tokens[idx]
     }
-    fn peek_kind_at(&self, offset: usize) -> &TokenKind { &self.peek_at(offset).kind }
+    fn peek_kind_at(&self, offset: usize) -> &TokenKind {
+        &self.peek_at(offset).kind
+    }
 
-    fn at_eof(&self) -> bool { *self.peek_kind() == TokenKind::Eof }
+    fn at_eof(&self) -> bool {
+        *self.peek_kind() == TokenKind::Eof
+    }
 
     fn advance(&mut self) -> &Token {
         let tok = &self.tokens[self.pos.min(self.tokens.len() - 1)];
-        if self.pos < self.tokens.len() - 1 { self.pos += 1; }
+        if self.pos < self.tokens.len() - 1 {
+            self.pos += 1;
+        }
         tok
     }
 
@@ -46,28 +58,33 @@ impl Parser {
     fn unexpected(&self, expected: &'static str) -> ParseError {
         let tok = self.peek();
         ParseError::UnexpectedToken {
-            got:      format!("{:?}({})", tok.kind, tok.text),
+            got: format!("{:?}({})", tok.kind, tok.text),
             expected,
-            span:     tok.span,
+            span: tok.span,
         }
     }
 
-    fn current_span(&self) -> Span { self.peek().span }
+    fn current_span(&self) -> Span {
+        self.peek().span
+    }
 
     // ── parse_file ───────────────────────────────────────────────────────────
 
     pub fn parse_file(&mut self) -> Result<ViFile, ParseError> {
-        let mut imports    = Vec::new();
+        let mut imports = Vec::new();
         let mut components = Vec::new();
 
         while !self.at_eof() {
             match self.peek_kind() {
-                TokenKind::KwImport    => imports.push(self.parse_import()?),
+                TokenKind::KwImport => imports.push(self.parse_import()?),
                 TokenKind::KwComponent => components.push(self.parse_component()?),
                 _ => return Err(self.unexpected("import or component")),
             }
         }
-        Ok(ViFile { imports, components })
+        Ok(ViFile {
+            imports,
+            components,
+        })
     }
 
     // ── parse_import ─────────────────────────────────────────────────────────
@@ -77,7 +94,10 @@ impl Parser {
         self.expect(TokenKind::KwImport, "'import'")?;
         let path_tok = self.expect(TokenKind::StringLit, "file path string")?;
         self.expect(TokenKind::Semicolon, "';'")?;
-        Ok(Import { path: path_tok.text, span: span_start })
+        Ok(Import {
+            path: path_tok.text,
+            span: span_start,
+        })
     }
 
     // ── parse_component ──────────────────────────────────────────────────────
@@ -89,8 +109,8 @@ impl Parser {
         self.expect(TokenKind::LBrace, "'{'")?;
 
         let mut properties = Vec::new();
-        let mut callbacks  = Vec::new();
-        let mut children   = Vec::new();
+        let mut callbacks = Vec::new();
+        let mut children = Vec::new();
 
         while !matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
             // Property declaration: visibility? 'property' ...
@@ -110,17 +130,23 @@ impl Parser {
             }
         }
         self.expect(TokenKind::RBrace, "'}'")?;
-        Ok(Component { name, properties, callbacks, children, span: span_start })
+        Ok(Component {
+            name,
+            properties,
+            callbacks,
+            children,
+            span: span_start,
+        })
     }
 
     fn is_visibility_or_property(&self) -> bool {
         matches!(
             self.peek_kind(),
             TokenKind::KwIn
-            | TokenKind::KwOut
-            | TokenKind::KwPrivate
-            | TokenKind::KwProperty
-            | TokenKind::KwCallback
+                | TokenKind::KwOut
+                | TokenKind::KwPrivate
+                | TokenKind::KwProperty
+                | TokenKind::KwCallback
         )
     }
 
@@ -141,9 +167,15 @@ impl Parser {
                     Some(Visibility::In)
                 }
             }
-            TokenKind::KwOut     => { self.advance(); Some(Visibility::Out)     }
-            TokenKind::KwPrivate => { self.advance(); Some(Visibility::Private) }
-            _                    => None,
+            TokenKind::KwOut => {
+                self.advance();
+                Some(Visibility::Out)
+            }
+            TokenKind::KwPrivate => {
+                self.advance();
+                Some(Visibility::Private)
+            }
+            _ => None,
         }
     }
 
@@ -169,7 +201,13 @@ impl Parser {
         };
         self.expect(TokenKind::Semicolon, "';'")?;
 
-        Ok(PropertyDecl { visibility, ty, name, default, span: span_start })
+        Ok(PropertyDecl {
+            visibility,
+            ty,
+            name,
+            default,
+            span: span_start,
+        })
     }
 
     // ── parse_callback_decl ──────────────────────────────────────────────────
@@ -187,12 +225,18 @@ impl Parser {
                 self.expect(TokenKind::Colon, "':'")?;
                 let pty = self.expect(TokenKind::Ident, "param type")?.text;
                 params.push((pname, pty));
-                if *self.peek_kind() == TokenKind::Comma { self.advance(); }
+                if *self.peek_kind() == TokenKind::Comma {
+                    self.advance();
+                }
             }
             self.expect(TokenKind::RParen, "')'")?;
         }
         self.expect(TokenKind::Semicolon, "';'")?;
-        Ok(CallbackDecl { name, params, span: span_start })
+        Ok(CallbackDecl {
+            name,
+            params,
+            span: span_start,
+        })
     }
 
     // ── parse_child ──────────────────────────────────────────────────────────
@@ -200,9 +244,9 @@ impl Parser {
     /// Parse one child — either a concrete element or a control-flow node.
     fn parse_child(&mut self) -> Result<Child, ParseError> {
         match self.peek_kind().clone() {
-            TokenKind::KwIf  => self.parse_if_child(),
+            TokenKind::KwIf => self.parse_if_child(),
             TokenKind::KwFor => self.parse_for_child(),
-            _                => Ok(Child::Element(self.parse_element()?)),
+            _ => Ok(Child::Element(self.parse_element()?)),
         }
     }
 
@@ -233,7 +277,12 @@ impl Parser {
             body.push(self.parse_child()?);
         }
         self.expect(TokenKind::RBrace, "'}'")?;
-        Ok(Child::For { var, iter, body, span })
+        Ok(Child::For {
+            var,
+            iter,
+            body,
+            span,
+        })
     }
 
     /// Collect token texts until `{` at paren/bracket-depth 0, returning them space-joined.
@@ -273,9 +322,9 @@ impl Parser {
         let name = self.expect(TokenKind::Ident, "element name")?.text;
         self.expect(TokenKind::LBrace, "'{'")?;
 
-        let mut bindings  = Vec::new();
+        let mut bindings = Vec::new();
         let mut callbacks = Vec::new();
-        let mut children  = Vec::new();
+        let mut children = Vec::new();
 
         while !matches!(self.peek_kind(), TokenKind::RBrace | TokenKind::Eof) {
             match (self.peek_kind().clone(), self.peek_kind_at(1).clone()) {
@@ -305,7 +354,13 @@ impl Parser {
             }
         }
         self.expect(TokenKind::RBrace, "'}'")?;
-        Ok(Element { name, bindings, callbacks, children, span: span_start })
+        Ok(Element {
+            name,
+            bindings,
+            callbacks,
+            children,
+            span: span_start,
+        })
     }
 
     // ── parse_binding ────────────────────────────────────────────────────────
@@ -316,15 +371,29 @@ impl Parser {
 
         // Determine binding mode from the operator token.
         let mode = match self.peek_kind() {
-            TokenKind::Colon       => { self.advance(); BindingMode::OneWay  }
-            TokenKind::TwoWayBind  => { self.advance(); BindingMode::TwoWay  }
-            TokenKind::ComputedBind => { self.advance(); BindingMode::Computed }
+            TokenKind::Colon => {
+                self.advance();
+                BindingMode::OneWay
+            }
+            TokenKind::TwoWayBind => {
+                self.advance();
+                BindingMode::TwoWay
+            }
+            TokenKind::ComputedBind => {
+                self.advance();
+                BindingMode::Computed
+            }
             _ => return Err(self.unexpected("':', '@=', or '#='")),
         };
 
         let value = self.parse_expr();
         self.expect(TokenKind::Semicolon, "';'")?;
-        Ok(Binding { property, mode, value, span: span_start })
+        Ok(Binding {
+            property,
+            mode,
+            value,
+            span: span_start,
+        })
     }
 
     // ── parse_callback_binding ───────────────────────────────────────────────
@@ -337,8 +406,14 @@ impl Parser {
         let body = self.parse_raw_body();
         self.expect(TokenKind::RBrace, "'}'")?;
         // Optional trailing semicolon
-        if *self.peek_kind() == TokenKind::Semicolon { self.advance(); }
-        Ok(CallbackBinding { name, body, span: span_start })
+        if *self.peek_kind() == TokenKind::Semicolon {
+            self.advance();
+        }
+        Ok(CallbackBinding {
+            name,
+            body,
+            span: span_start,
+        })
     }
 
     // ── Typed expression parser ──────────────────────────────────────────────
@@ -365,11 +440,7 @@ impl Parser {
                 self.advance(); // consume ':'
             }
             let else_expr = self.parse_or();
-            return Expr::Ternary(
-                Box::new(cond),
-                Box::new(then_expr),
-                Box::new(else_expr),
-            );
+            return Expr::Ternary(Box::new(cond), Box::new(then_expr), Box::new(else_expr));
         }
         cond
     }
@@ -398,9 +469,9 @@ impl Parser {
         let mut lhs = self.parse_cmp();
         loop {
             let op = match self.peek_kind() {
-                TokenKind::EqEq   => BinOpKind::Eq,
+                TokenKind::EqEq => BinOpKind::Eq,
                 TokenKind::BangEq => BinOpKind::Ne,
-                _                 => break,
+                _ => break,
             };
             self.advance();
             let rhs = self.parse_cmp();
@@ -413,11 +484,11 @@ impl Parser {
         let mut lhs = self.parse_add();
         loop {
             let op = match self.peek_kind() {
-                TokenKind::Lt   => BinOpKind::Lt,
-                TokenKind::Gt   => BinOpKind::Gt,
+                TokenKind::Lt => BinOpKind::Lt,
+                TokenKind::Gt => BinOpKind::Gt,
                 TokenKind::LtEq => BinOpKind::Le,
                 TokenKind::GtEq => BinOpKind::Ge,
-                _               => break,
+                _ => break,
             };
             // Peek further: '<' and '>' are also used in property type angles.
             // Heuristic: if the token after '<'/'>' is an Ident followed by '>', it's
@@ -434,9 +505,9 @@ impl Parser {
         let mut lhs = self.parse_mul();
         loop {
             let op = match self.peek_kind() {
-                TokenKind::Plus  => BinOpKind::Add,
+                TokenKind::Plus => BinOpKind::Add,
                 TokenKind::Minus => BinOpKind::Sub,
-                _                => break,
+                _ => break,
             };
             self.advance();
             let rhs = self.parse_mul();
@@ -449,10 +520,10 @@ impl Parser {
         let mut lhs = self.parse_unary_expr();
         loop {
             let op = match self.peek_kind() {
-                TokenKind::Star  => BinOpKind::Mul,
+                TokenKind::Star => BinOpKind::Mul,
                 TokenKind::Slash => BinOpKind::Div,
                 // '%' is not in TokenKind yet; skip Rem
-                _                => break,
+                _ => break,
             };
             self.advance();
             let rhs = self.parse_unary_expr();
@@ -463,13 +534,16 @@ impl Parser {
 
     fn parse_unary_expr(&mut self) -> Expr {
         match self.peek_kind() {
-            TokenKind::Bang  => {
+            TokenKind::Bang => {
                 self.advance();
                 Expr::Unary(UnaryOp::Not, Box::new(self.parse_unary_expr()))
             }
             TokenKind::Minus => {
                 // Disambiguate: `-` before a digit is part of a negative literal.
-                if matches!(self.peek_kind_at(1), TokenKind::IntLit | TokenKind::FloatLit) {
+                if matches!(
+                    self.peek_kind_at(1),
+                    TokenKind::IntLit | TokenKind::FloatLit
+                ) {
                     self.advance(); // consume '-'
                     match self.peek_kind().clone() {
                         TokenKind::IntLit => {
@@ -499,8 +573,14 @@ impl Parser {
     /// as a primary-expression start.
     fn parse_primary(&mut self) -> Expr {
         match self.peek_kind().clone() {
-            TokenKind::KwTrue  => { self.advance(); Expr::Literal(Literal::Bool(true))  }
-            TokenKind::KwFalse => { self.advance(); Expr::Literal(Literal::Bool(false)) }
+            TokenKind::KwTrue => {
+                self.advance();
+                Expr::Literal(Literal::Bool(true))
+            }
+            TokenKind::KwFalse => {
+                self.advance();
+                Expr::Literal(Literal::Bool(false))
+            }
 
             TokenKind::IntLit => {
                 let tok = self.advance().clone();
@@ -543,11 +623,18 @@ impl Parser {
                 if *self.peek_kind() == TokenKind::LParen {
                     self.advance(); // consume '('
                     let mut args = Vec::new();
-                    while !matches!(self.peek_kind(), TokenKind::RParen | TokenKind::Eof | TokenKind::Semicolon) {
+                    while !matches!(
+                        self.peek_kind(),
+                        TokenKind::RParen | TokenKind::Eof | TokenKind::Semicolon
+                    ) {
                         args.push(self.parse_expr());
-                        if *self.peek_kind() == TokenKind::Comma { self.advance(); }
+                        if *self.peek_kind() == TokenKind::Comma {
+                            self.advance();
+                        }
                     }
-                    if *self.peek_kind() == TokenKind::RParen { self.advance(); }
+                    if *self.peek_kind() == TokenKind::RParen {
+                        self.advance();
+                    }
                     return Expr::FnCall(name, args);
                 }
 
@@ -567,7 +654,9 @@ impl Parser {
             TokenKind::LParen => {
                 self.advance(); // consume '('
                 let inner = self.parse_expr();
-                if *self.peek_kind() == TokenKind::RParen { self.advance(); }
+                if *self.peek_kind() == TokenKind::RParen {
+                    self.advance();
+                }
                 inner
             }
 
@@ -601,9 +690,13 @@ impl Parser {
                 }
                 i += 2; // skip `\{`
                 let var_start = i;
-                while i < bytes.len() && bytes[i] != b'}' { i += 1; }
+                while i < bytes.len() && bytes[i] != b'}' {
+                    i += 1;
+                }
                 let var_name = content[var_start..i].trim().to_string();
-                if i < bytes.len() { i += 1; } // skip `}`
+                if i < bytes.len() {
+                    i += 1;
+                } // skip `}`
                 lit_start = i;
                 // Emit a SelfProp or Ident depending on the var name content
                 let expr = if var_name.starts_with("self.") {
@@ -644,7 +737,9 @@ impl Parser {
                     parts.push(self.advance().text.clone());
                 }
                 TokenKind::RBrace | TokenKind::RParen | TokenKind::RBracket => {
-                    if depth == 0 { break; }
+                    if depth == 0 {
+                        break;
+                    }
                     depth -= 1;
                     parts.push(self.advance().text.clone());
                 }
@@ -665,8 +760,8 @@ impl Parser {
     #[allow(dead_code)]
     fn parse_expr_raw_until_semi(&mut self) -> Expr {
         let span_start = self.current_span();
-        let mut parts  = Vec::<String>::new();
-        let mut depth  = 0i32;
+        let mut parts = Vec::<String>::new();
+        let mut depth = 0i32;
         loop {
             match self.peek_kind().clone() {
                 TokenKind::LBrace | TokenKind::LParen | TokenKind::LBracket => {
@@ -674,7 +769,9 @@ impl Parser {
                     parts.push(self.advance().text.clone());
                 }
                 TokenKind::RBrace | TokenKind::RParen | TokenKind::RBracket => {
-                    if depth == 0 { break; }
+                    if depth == 0 {
+                        break;
+                    }
                     depth -= 1;
                     parts.push(self.advance().text.clone());
                 }
@@ -685,7 +782,10 @@ impl Parser {
                 _ => parts.push(self.advance().text.clone()),
             }
         }
-        Expr::Raw(RawExpr { text: parts.join(" "), span: span_start })
+        Expr::Raw(RawExpr {
+            text: parts.join(" "),
+            span: span_start,
+        })
     }
 
     /// Collect tokens until the closing '}' at depth 0 (does NOT consume '}'.
@@ -694,9 +794,14 @@ impl Parser {
         let mut depth = 0i32;
         loop {
             match self.peek_kind().clone() {
-                TokenKind::LBrace => { depth += 1; parts.push(self.advance().text.clone()); }
+                TokenKind::LBrace => {
+                    depth += 1;
+                    parts.push(self.advance().text.clone());
+                }
                 TokenKind::RBrace => {
-                    if depth == 0 { break; }
+                    if depth == 0 {
+                        break;
+                    }
                     depth -= 1;
                     parts.push(self.advance().text.clone());
                 }
@@ -717,4 +822,3 @@ pub fn parse(tokens: Vec<Token>) -> Result<ViFile, ParseError> {
 
 // Re-export ast types used in parser for import hygiene
 use crate::ast::{CallbackDecl, Import, PropertyDecl, Visibility};
-

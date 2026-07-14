@@ -14,7 +14,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyState {
     Released = 0,
-    Pressed  = 1,
+    Pressed = 1,
     /// Key auto-repeat fired by the keyboard hardware.
     Repeated = 2,
 }
@@ -27,12 +27,12 @@ pub enum KeyState {
 pub struct Modifiers(pub u8);
 
 impl Modifiers {
-    pub const SHIFT:       Modifiers = Modifiers(0b0000_0001);
-    pub const CTRL:        Modifiers = Modifiers(0b0000_0010);
-    pub const ALT:         Modifiers = Modifiers(0b0000_0100);
-    pub const META:        Modifiers = Modifiers(0b0000_1000);
-    pub const CAPS_LOCK:   Modifiers = Modifiers(0b0001_0000);
-    pub const NUM_LOCK:    Modifiers = Modifiers(0b0010_0000);
+    pub const SHIFT: Modifiers = Modifiers(0b0000_0001);
+    pub const CTRL: Modifiers = Modifiers(0b0000_0010);
+    pub const ALT: Modifiers = Modifiers(0b0000_0100);
+    pub const META: Modifiers = Modifiers(0b0000_1000);
+    pub const CAPS_LOCK: Modifiers = Modifiers(0b0001_0000);
+    pub const NUM_LOCK: Modifiers = Modifiers(0b0010_0000);
     pub const SCROLL_LOCK: Modifiers = Modifiers(0b0100_0000);
 
     pub fn contains(self, other: Modifiers) -> bool {
@@ -62,39 +62,39 @@ impl Modifiers {
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeySym {
-    Unknown    = 0,
+    Unknown = 0,
     // Control keys
-    Escape     = 0x0001,
-    Return     = 0x0002,
-    Backspace  = 0x0003,
-    Tab        = 0x0004,
-    Delete     = 0x0005,
-    Insert     = 0x0006,
+    Escape = 0x0001,
+    Return = 0x0002,
+    Backspace = 0x0003,
+    Tab = 0x0004,
+    Delete = 0x0005,
+    Insert = 0x0006,
     // Arrow keys
-    Up         = 0x0010,
-    Down       = 0x0011,
-    Left       = 0x0012,
-    Right      = 0x0013,
+    Up = 0x0010,
+    Down = 0x0011,
+    Left = 0x0012,
+    Right = 0x0013,
     // Page navigation
-    Home       = 0x0020,
-    End        = 0x0021,
-    PageUp     = 0x0022,
-    PageDown   = 0x0023,
+    Home = 0x0020,
+    End = 0x0021,
+    PageUp = 0x0022,
+    PageDown = 0x0023,
     // Function keys
-    F1         = 0x0101,
-    F2         = 0x0102,
-    F3         = 0x0103,
-    F4         = 0x0104,
-    F5         = 0x0105,
-    F6         = 0x0106,
-    F7         = 0x0107,
-    F8         = 0x0108,
-    F9         = 0x0109,
-    F10        = 0x010A,
-    F11        = 0x010B,
-    F12        = 0x010C,
+    F1 = 0x0101,
+    F2 = 0x0102,
+    F3 = 0x0103,
+    F4 = 0x0104,
+    F5 = 0x0105,
+    F6 = 0x0106,
+    F7 = 0x0107,
+    F8 = 0x0108,
+    F9 = 0x0109,
+    F10 = 0x010A,
+    F11 = 0x010B,
+    F12 = 0x010C,
     // Printable (the u32 value = Unicode code point)
-    Printable  = 0x8000,
+    Printable = 0x8000,
 }
 
 // ─── Key event ───────────────────────────────────────────────────────────────
@@ -121,14 +121,19 @@ pub struct KeyEvent {
 impl KeyEvent {
     /// Return `Some(char)` if the event carries a printable Unicode character.
     pub fn char(&self) -> Option<char> {
-        if self.character == 0 { return None; }
+        if self.character == 0 {
+            return None;
+        }
         char::from_u32(self.character)
     }
 
     /// Return true if Ctrl+<letter> was pressed (e.g. Ctrl+C → true for 'C').
     pub fn is_ctrl(&self, letter: char) -> bool {
         self.modifiers.contains(Modifiers::CTRL)
-            && self.char().map(|c| c.eq_ignore_ascii_case(&letter)).unwrap_or(false)
+            && self
+                .char()
+                .map(|c| c.eq_ignore_ascii_case(&letter))
+                .unwrap_or(false)
     }
 }
 
@@ -137,7 +142,13 @@ impl KeyEvent {
 /// A mouse button identifier.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MouseButton { Left = 0, Right = 1, Middle = 2, Back = 3, Forward = 4 }
+pub enum MouseButton {
+    Left = 0,
+    Right = 1,
+    Middle = 2,
+    Back = 3,
+    Forward = 4,
+}
 
 // ─── Top-level event ─────────────────────────────────────────────────────────
 
@@ -146,9 +157,20 @@ pub enum MouseButton { Left = 0, Right = 1, Middle = 2, Back = 3, Forward = 4 }
 #[derive(Debug, Clone, Copy)]
 pub enum InputEvent {
     Key(KeyEvent),
-    MouseMove { x: i32, y: i32, dx: i32, dy: i32 },
-    MouseButton { button: MouseButton, state: KeyState },
-    MouseScroll { dx: i32, dy: i32 },
+    MouseMove {
+        x: i32,
+        y: i32,
+        dx: i32,
+        dy: i32,
+    },
+    MouseButton {
+        button: MouseButton,
+        state: KeyState,
+    },
+    MouseScroll {
+        dx: i32,
+        dy: i32,
+    },
 }
 
 // ─── IPC wire format ─────────────────────────────────────────────────────────
@@ -165,15 +187,20 @@ pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 ///
 /// Returns `None` for unknown discriminants or truncated payloads.
 pub fn decode_event(buf: &[u8]) -> Option<InputEvent> {
-    if buf.is_empty() { return None; }
+    if buf.is_empty() {
+        return None;
+    }
     match buf[0] {
-        0 => { // Key
+        0 => {
+            // Key
             let p = buf.get(1..)?;
-            if p.len() < 22 { return None; }
-            let ts  = u64::from_le_bytes([p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7]]);
-            let sc  = u32::from_le_bytes([p[8],p[9],p[10],p[11]]);
-            let ksv = u32::from_le_bytes([p[12],p[13],p[14],p[15]]);
-            let ch  = u32::from_le_bytes([p[16],p[17],p[18],p[19]]);
+            if p.len() < 22 {
+                return None;
+            }
+            let ts = u64::from_le_bytes([p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]]);
+            let sc = u32::from_le_bytes([p[8], p[9], p[10], p[11]]);
+            let ksv = u32::from_le_bytes([p[12], p[13], p[14], p[15]]);
+            let ch = u32::from_le_bytes([p[16], p[17], p[18], p[19]]);
             let mods = Modifiers(p[20]);
             let state = match p[21] {
                 0 => KeyState::Released,
@@ -192,18 +219,24 @@ pub fn decode_event(buf: &[u8]) -> Option<InputEvent> {
                 _pad: [0; 2],
             }))
         }
-        1 => { // MouseMove
+        1 => {
+            // MouseMove
             let p = buf.get(1..)?;
-            if p.len() < 16 { return None; }
-            let x  = i32::from_le_bytes([p[0],p[1],p[2],p[3]]);
-            let y  = i32::from_le_bytes([p[4],p[5],p[6],p[7]]);
-            let dx = i32::from_le_bytes([p[8],p[9],p[10],p[11]]);
-            let dy = i32::from_le_bytes([p[12],p[13],p[14],p[15]]);
+            if p.len() < 16 {
+                return None;
+            }
+            let x = i32::from_le_bytes([p[0], p[1], p[2], p[3]]);
+            let y = i32::from_le_bytes([p[4], p[5], p[6], p[7]]);
+            let dx = i32::from_le_bytes([p[8], p[9], p[10], p[11]]);
+            let dy = i32::from_le_bytes([p[12], p[13], p[14], p[15]]);
             Some(InputEvent::MouseMove { x, y, dx, dy })
         }
-        2 => { // MouseButton
+        2 => {
+            // MouseButton
             let p = buf.get(1..)?;
-            if p.len() < 2 { return None; }
+            if p.len() < 2 {
+                return None;
+            }
             let button = match p[0] {
                 0 => MouseButton::Left,
                 1 => MouseButton::Right,
@@ -219,11 +252,14 @@ pub fn decode_event(buf: &[u8]) -> Option<InputEvent> {
             };
             Some(InputEvent::MouseButton { button, state })
         }
-        3 => { // MouseScroll
+        3 => {
+            // MouseScroll
             let p = buf.get(1..)?;
-            if p.len() < 8 { return None; }
-            let dx = i32::from_le_bytes([p[0],p[1],p[2],p[3]]);
-            let dy = i32::from_le_bytes([p[4],p[5],p[6],p[7]]);
+            if p.len() < 8 {
+                return None;
+            }
+            let dx = i32::from_le_bytes([p[0], p[1], p[2], p[3]]);
+            let dy = i32::from_le_bytes([p[4], p[5], p[6], p[7]]);
             Some(InputEvent::MouseScroll { dx, dy })
         }
         _ => None,
@@ -260,7 +296,7 @@ fn keysym_from_u32(v: u32) -> KeySym {
         0x010B => KeySym::F11,
         0x010C => KeySym::F12,
         0x8000 => KeySym::Printable,
-        _      => KeySym::Unknown,
+        _ => KeySym::Unknown,
     }
 }
 

@@ -1,9 +1,9 @@
+use api::input::{decode_event, INPUT_EVENT_OPCODE};
+use api::syscall::service;
 use ostd::executor::yield_now;
 use ostd::input::{InputEvent, KeyState, KeySym};
 use ostd::prelude::*;
 use ostd::syscall::{sys_lookup_service, sys_recv_timeout, SyscallResult};
-use api::input::{INPUT_EVENT_OPCODE, decode_event};
-use api::syscall::service;
 
 pub struct AsyncStdin;
 
@@ -45,7 +45,9 @@ impl AsyncStdin {
                     SyscallResult::Ok(sender) if sender == input_tid => {
                         if frame[0] == INPUT_EVENT_OPCODE {
                             if let Some(ev) = decode_event(&frame[1..]) {
-                                let InputEvent::Key(k) = ev else { continue 'read; };
+                                let InputEvent::Key(k) = ev else {
+                                    continue 'read;
+                                };
                                 if !matches!(k.state, KeyState::Pressed | KeyState::Repeated) {
                                     continue 'read;
                                 }
@@ -92,7 +94,9 @@ impl AsyncStdin {
                                             let cp = ch as u32;
                                             if cp >= 0x20 && cp <= 0x7E && buffer.len() < max_len {
                                                 let byte = ch as u8;
-                                                if let Ok(s) = core::str::from_utf8(core::slice::from_ref(&byte)) {
+                                                if let Ok(s) = core::str::from_utf8(
+                                                    core::slice::from_ref(&byte),
+                                                ) {
                                                     ostd::io::print(s);
                                                 }
                                                 buffer.push(byte);

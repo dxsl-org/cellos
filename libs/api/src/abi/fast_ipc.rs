@@ -33,7 +33,9 @@ impl<T> TrustedHandle<T> {
 }
 
 impl<T> Default for TrustedHandle<T> {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ── Marker types for each fast-IPC service ────────────────────────────────────

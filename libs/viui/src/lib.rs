@@ -36,22 +36,21 @@ extern crate alloc;
 
 pub mod animation;
 pub mod app_runner;
-pub mod input_bridge;
-pub mod surface_renderer;
 pub mod canvas;
 pub mod dirty;
 pub mod elm;
-pub mod executor;
 pub mod event;
+pub mod executor;
 pub mod font_context;
+#[cfg(feature = "gles2")]
+pub mod gles2_canvas;
 pub mod gpu_canvas;
 pub mod gpu_cmd;
 pub mod gpu_renderer;
-#[cfg(feature = "gles2")]
-pub mod gles2_canvas;
+pub mod input_bridge;
 pub mod layout;
-pub mod node;
 pub mod navigation;
+pub mod node;
 pub mod node_widgets;
 pub mod overlay;
 pub mod prelude;
@@ -60,6 +59,7 @@ pub mod renderer;
 pub mod response;
 pub mod signal;
 pub mod state_store;
+pub mod surface_renderer;
 pub mod theme;
 pub mod widget;
 pub mod widgets;
@@ -74,7 +74,6 @@ pub use gpu_renderer::GpuRenderer;
 // vi_design! proc macro: inline .vi DSL component declaration.
 // Re-exported from viui-macros so callers need only depend on viui.
 pub use viui_macros::vi_design;
-
 
 /// Create a `Column` (vertical stack) from widget expressions.
 ///

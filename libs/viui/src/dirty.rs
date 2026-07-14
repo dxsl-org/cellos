@@ -6,9 +6,9 @@
 //! that region, skipping the rest of the surface entirely.
 
 extern crate alloc;
+use crate::layout::Rect;
 use alloc::rc::Rc;
 use core::cell::RefCell;
-use crate::layout::Rect;
 
 /// Shared handle to a `DirtyRect` — passed to widget Signal subscriptions.
 ///
@@ -27,13 +27,15 @@ pub struct DirtyRect {
 }
 
 impl DirtyRect {
-    pub const fn new() -> Self { Self { region: None } }
+    pub const fn new() -> Self {
+        Self { region: None }
+    }
 
     /// Union `rect` into the accumulated damage region.
     pub fn mark(&mut self, rect: Rect) {
         self.region = Some(match self.region {
             Some(acc) => acc.union(rect),
-            None      => rect,
+            None => rect,
         });
     }
 
@@ -45,11 +47,17 @@ impl DirtyRect {
     /// Take the accumulated region and reset to clean.
     ///
     /// Returns `None` if nothing was marked dirty since the last call.
-    pub fn take(&mut self) -> Option<Rect> { self.region.take() }
+    pub fn take(&mut self) -> Option<Rect> {
+        self.region.take()
+    }
 
-    pub fn is_dirty(&self) -> bool { self.region.is_some() }
+    pub fn is_dirty(&self) -> bool {
+        self.region.is_some()
+    }
 }
 
 impl Default for DirtyRect {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

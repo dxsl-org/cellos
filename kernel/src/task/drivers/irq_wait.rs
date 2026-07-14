@@ -35,6 +35,11 @@ const NO_WAITER: usize = 0;
 /// Cleared by `clear_waiter` (scheduler sweep after task transitions to Ready).
 static IRQ_WAITERS: [AtomicUsize; MAX_IRQ] = {
     // `AtomicUsize::new(0)` is const; arrays of const-init atomics are safe.
+    // `ZERO` is consumed exactly once, by `[ZERO; MAX_IRQ]` below — rustc evaluates
+    // a `const` operand fresh per array slot, so each IRQ line gets its OWN
+    // independent atomic, not a shared one. Switching to `static` would break the
+    // repeat expression (needs a `const` for non-`Copy` element types).
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: AtomicUsize = AtomicUsize::new(NO_WAITER);
     [ZERO; MAX_IRQ]
 };
@@ -44,6 +49,8 @@ static IRQ_WAITERS: [AtomicUsize; MAX_IRQ] = {
 /// Set by `signal_irq` (ISR, Release ordering).
 /// Cleared by `take_pending` (scheduler sweep or lost-wakeup guard, AcqRel swap).
 static IRQ_PENDING: [AtomicBool; MAX_IRQ] = {
+    // Same independent-per-slot rationale as `IRQ_WAITERS` above.
+    #[allow(clippy::declare_interior_mutable_const)]
     const FALSE: AtomicBool = AtomicBool::new(false);
     [FALSE; MAX_IRQ]
 };
@@ -52,6 +59,8 @@ static IRQ_PENDING: [AtomicBool; MAX_IRQ] = {
 /// (offset 0x64) and prevent interrupt storms on level-triggered VirtIO devices.
 /// 0 = non-VirtIO device (PCIe MSI, GPIO, …) — ISR skips the ack write.
 static IRQ_MMIO_BASE: [AtomicUsize; MAX_IRQ] = {
+    // Same independent-per-slot rationale as `IRQ_WAITERS` above.
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: AtomicUsize = AtomicUsize::new(0);
     [ZERO; MAX_IRQ]
 };
@@ -65,11 +74,12 @@ static IRQ_MMIO_BASE: [AtomicUsize; MAX_IRQ] = {
 /// `register_waiter` returns will always see the new TID.
 pub fn register_waiter(irq: u8, tid: usize, mmio_base: usize) -> bool {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return false; }
+    if idx >= MAX_IRQ {
+        return false;
+    }
     // compare_exchange: only register if slot is empty.
-    let result = IRQ_WAITERS[idx].compare_exchange(
-        NO_WAITER, tid, Ordering::SeqCst, Ordering::SeqCst,
-    );
+    let result =
+        IRQ_WAITERS[idx].compare_exchange(NO_WAITER, tid, Ordering::SeqCst, Ordering::SeqCst);
     if result.is_ok() {
         IRQ_MMIO_BASE[idx].store(mmio_base, Ordering::Release);
         true
@@ -84,7 +94,9 @@ pub fn register_waiter(irq: u8, tid: usize, mmio_base: usize) -> bool {
 /// Used as both the lost-wakeup guard in `sys_wait_irq` AND the scheduler sweep.
 pub fn take_pending(irq: u8) -> bool {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return false; }
+    if idx >= MAX_IRQ {
+        return false;
+    }
     // swap(false): clears the flag and returns the old value in one atomic op.
     IRQ_PENDING[idx].swap(false, Ordering::AcqRel)
 }
@@ -100,7 +112,9 @@ pub fn take_pending(irq: u8) -> bool {
 /// The actual task state transition (WaitIrq → Ready) happens in `pick_next`.
 pub fn signal_irq(irq: u8) {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return; }
+    if idx >= MAX_IRQ {
+        return;
+    }
 
     let mmio_base = IRQ_MMIO_BASE[idx].load(Ordering::Acquire);
     if mmio_base != 0 {
@@ -128,7 +142,9 @@ pub fn signal_irq(irq: u8) {
 /// the next iteration.
 pub fn clear_waiter(irq: u8) {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return; }
+    if idx >= MAX_IRQ {
+        return;
+    }
     IRQ_WAITERS[idx].store(NO_WAITER, Ordering::Release);
     IRQ_MMIO_BASE[idx].store(0, Ordering::Release);
 }
@@ -139,13 +155,17 @@ pub fn clear_waiter(irq: u8) {
 /// (Cell-claimed) or the kernel-internal VirtIO driver (not yet migrated).
 pub fn has_waiter(irq: u8) -> bool {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return false; }
+    if idx >= MAX_IRQ {
+        return false;
+    }
     IRQ_WAITERS[idx].load(Ordering::Acquire) != NO_WAITER
 }
 
 /// Return the MMIO base stored for `irq`, or 0 if none.
 pub fn get_mmio_base(irq: u8) -> usize {
     let idx = irq as usize;
-    if idx >= MAX_IRQ { return 0; }
+    if idx >= MAX_IRQ {
+        return 0;
+    }
     IRQ_MMIO_BASE[idx].load(Ordering::Acquire)
 }

@@ -12,46 +12,46 @@ mod tests {
 
     /// All (id, expected_variant) pairs that must round-trip correctly.
     const CASES: &[(usize, ViSyscall)] = &[
-        (0,    ViSyscall::Send),
-        (1,    ViSyscall::Recv),
-        (2,    ViSyscall::Call),
-        (3,    ViSyscall::Reply),
-        (4,    ViSyscall::TrySend),
-        (5,    ViSyscall::Spawn),
-        (7,    ViSyscall::TryRecv),
-        (8,    ViSyscall::Wait),
-        (10,   ViSyscall::SpawnFromMem),
-        (11,   ViSyscall::Log),
-        (12,   ViSyscall::SpawnFromPath),
-        (13,   ViSyscall::OpenCap),
-        (14,   ViSyscall::ReadCap),
-        (15,   ViSyscall::CloseCap),
-        (228,  ViSyscall::SeekCap),
-        (229,  ViSyscall::WriteCap),
-        (230,  ViSyscall::StatCap),
-        (231,  ViSyscall::TruncateCap),
-        (232,  ViSyscall::SyncCap),
-        (233,  ViSyscall::GrantDma),
-        (20,   ViSyscall::ShmAlloc),
-        (21,   ViSyscall::ShmMap),
-        (30,   ViSyscall::GetProcs),
-        (35,   ViSyscall::SetTimer),
-        (60,   ViSyscall::Exit),
-        (61,   ViSyscall::ForceExit),
-        (101,  ViSyscall::Open),
-        (102,  ViSyscall::Read),
-        (103,  ViSyscall::Close),
-        (104,  ViSyscall::Yield),
-        (105,  ViSyscall::ReadDir),
-        (106,  ViSyscall::Seek),
-        (107,  ViSyscall::FileOp),
-        (109,  ViSyscall::Write),
-        (120,  ViSyscall::GetTime),
-        (218,  ViSyscall::AudioPlay),
-        (219,  ViSyscall::CapRevoke),
-        (237,  ViSyscall::ReadLog),
-        (310,  ViSyscall::NetTx),
-        (311,  ViSyscall::NetRx),
+        (0, ViSyscall::Send),
+        (1, ViSyscall::Recv),
+        (2, ViSyscall::Call),
+        (3, ViSyscall::Reply),
+        (4, ViSyscall::TrySend),
+        (5, ViSyscall::Spawn),
+        (7, ViSyscall::TryRecv),
+        (8, ViSyscall::Wait),
+        (10, ViSyscall::SpawnFromMem),
+        (11, ViSyscall::Log),
+        (12, ViSyscall::SpawnFromPath),
+        (13, ViSyscall::OpenCap),
+        (14, ViSyscall::ReadCap),
+        (15, ViSyscall::CloseCap),
+        (228, ViSyscall::SeekCap),
+        (229, ViSyscall::WriteCap),
+        (230, ViSyscall::StatCap),
+        (231, ViSyscall::TruncateCap),
+        (232, ViSyscall::SyncCap),
+        (233, ViSyscall::GrantDma),
+        (20, ViSyscall::ShmAlloc),
+        (21, ViSyscall::ShmMap),
+        (30, ViSyscall::GetProcs),
+        (35, ViSyscall::SetTimer),
+        (60, ViSyscall::Exit),
+        (61, ViSyscall::ForceExit),
+        (101, ViSyscall::Open),
+        (102, ViSyscall::Read),
+        (103, ViSyscall::Close),
+        (104, ViSyscall::Yield),
+        (105, ViSyscall::ReadDir),
+        (106, ViSyscall::Seek),
+        (107, ViSyscall::FileOp),
+        (109, ViSyscall::Write),
+        (120, ViSyscall::GetTime),
+        (218, ViSyscall::AudioPlay),
+        (219, ViSyscall::CapRevoke),
+        (237, ViSyscall::ReadLog),
+        (310, ViSyscall::NetTx),
+        (311, ViSyscall::NetRx),
     ];
 
     #[test]
@@ -70,17 +70,17 @@ mod tests {
     fn known_variants_have_stable_discriminants() {
         // Discriminants are part of the ABI between kernel and cells — they
         // must never change without a coordinated version bump.
-        assert_eq!(ViSyscall::Send      as usize,   0);
-        assert_eq!(ViSyscall::Recv      as usize,   1);
-        assert_eq!(ViSyscall::Call      as usize,   2);
-        assert_eq!(ViSyscall::Reply     as usize,   3);
-        assert_eq!(ViSyscall::Spawn     as usize,   5);
+        assert_eq!(ViSyscall::Send as usize, 0);
+        assert_eq!(ViSyscall::Recv as usize, 1);
+        assert_eq!(ViSyscall::Call as usize, 2);
+        assert_eq!(ViSyscall::Reply as usize, 3);
+        assert_eq!(ViSyscall::Spawn as usize, 5);
         assert_eq!(ViSyscall::SpawnFromPath as usize, 12);
-        assert_eq!(ViSyscall::Log       as usize,  11);
-        assert_eq!(ViSyscall::Exit      as usize,  60);
-        assert_eq!(ViSyscall::Open      as usize, 101);
-        assert_eq!(ViSyscall::Read      as usize, 102);
-        assert_eq!(ViSyscall::Close     as usize, 103);
+        assert_eq!(ViSyscall::Log as usize, 11);
+        assert_eq!(ViSyscall::Exit as usize, 60);
+        assert_eq!(ViSyscall::Open as usize, 101);
+        assert_eq!(ViSyscall::Read as usize, 102);
+        assert_eq!(ViSyscall::Close as usize, 103);
     }
 
     #[test]
@@ -180,7 +180,7 @@ mod allowlist {
         // will produce a different allowlist mask — a breaking ABI change.
         assert_eq!(ViSyscall::Send.allowlist_bit(), Some(0));
         assert_eq!(ViSyscall::Recv.allowlist_bit(), Some(1));
-        assert_eq!(ViSyscall::Log.allowlist_bit(),  Some(10));
+        assert_eq!(ViSyscall::Log.allowlist_bit(), Some(10));
 
         let mask = SyscallSet::EMPTY
             .with(ViSyscall::Send)

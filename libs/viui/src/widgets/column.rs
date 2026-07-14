@@ -9,16 +9,26 @@ use crate::widget::{PaintCx, ViWidget};
 
 pub struct Column {
     children: Vec<Box<dyn ViWidget>>,
-    spacing:  f32,
-    padding:  Padding,
+    spacing: f32,
+    padding: Padding,
 }
 
 impl Column {
     pub fn new(children: Vec<Box<dyn ViWidget>>) -> Self {
-        Self { children, spacing: 4.0, padding: Padding::ZERO }
+        Self {
+            children,
+            spacing: 4.0,
+            padding: Padding::ZERO,
+        }
     }
-    pub fn spacing(mut self, px: f32) -> Self { self.spacing = px; self }
-    pub fn padding(mut self, p: Padding) -> Self { self.padding = p; self }
+    pub fn spacing(mut self, px: f32) -> Self {
+        self.spacing = px;
+        self
+    }
+    pub fn padding(mut self, p: Padding) -> Self {
+        self.padding = p;
+        self
+    }
 }
 
 impl ViWidget for Column {
@@ -31,7 +41,13 @@ impl ViWidget for Column {
 
         for child in &self.children {
             let remaining = (constraints.origin.y + inner_h - oy).max(0.0);
-            let child_c = Constraints::new(Point::new(ox, oy), Size { w: inner_w, h: remaining });
+            let child_c = Constraints::new(
+                Point::new(ox, oy),
+                Size {
+                    w: inner_w,
+                    h: remaining,
+                },
+            );
             let node = child.layout(child_c);
             let h = node.bounds.h;
             child_nodes.push(node);
@@ -51,12 +67,17 @@ impl ViWidget for Column {
     fn paint(&self, cx: &mut PaintCx) {
         // Each child's origin is already baked into layout bounds (absolute).
         // PaintCx origin = parent origin; child paints at its own absolute origin.
-        for child in &self.children { child.paint(cx); }
+        for child in &self.children {
+            child.paint(cx);
+        }
     }
 
     fn event(&mut self, cx: &mut EventCx, e: &Event) -> EventStatus {
         for (i, child) in self.children.iter_mut().enumerate() {
-            let child_layout = match cx.layout.child(i) { Some(l) => l, None => break };
+            let child_layout = match cx.layout.child(i) {
+                Some(l) => l,
+                None => break,
+            };
             let mut child_cx = EventCx {
                 state: cx.state,
                 focus: cx.focus,
@@ -65,8 +86,12 @@ impl ViWidget for Column {
                 needs_repaint: false,
             };
             let status = child.event(&mut child_cx, e);
-            if child_cx.needs_repaint { cx.mark_dirty(); }
-            if status == EventStatus::Consumed { return EventStatus::Consumed; }
+            if child_cx.needs_repaint {
+                cx.mark_dirty();
+            }
+            if status == EventStatus::Consumed {
+                return EventStatus::Consumed;
+            }
         }
         EventStatus::Ignored
     }

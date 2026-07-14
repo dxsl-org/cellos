@@ -66,8 +66,8 @@ fn test_sequential_alloc_free() {
         boxes.push(Box::new(i));
     }
     // Verify all values intact while they are all live.
-    for i in 0..N {
-        assert_eq!(*boxes[i], i, "live-batch value[{}] mismatch", i);
+    for (i, b) in boxes.iter().enumerate() {
+        assert_eq!(**b, i, "live-batch value[{}] mismatch", i);
     }
     // Drop in reverse order.
     while let Some(b) = boxes.pop() {

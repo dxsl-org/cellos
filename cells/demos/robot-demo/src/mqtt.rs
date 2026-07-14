@@ -5,7 +5,7 @@
 
 extern crate alloc;
 
-use api::ipc::{IPC_BUF_SIZE, NetRequest, NetResponse};
+use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::println;
 use ostd::syscall::{sys_lookup_service, sys_recv_timeout, sys_send, SyscallResult};
@@ -34,7 +34,10 @@ pub fn publish_telemetry(payload: &str) {
     let mut buf = [0u8; IPC_BUF_SIZE];
     let cap: u32 = {
         let len = api::ipc::encode(
-            &NetRequest::TcpConnect { addr: MQTT_ADDR, port: MQTT_PORT },
+            &NetRequest::TcpConnect {
+                addr: MQTT_ADDR,
+                port: MQTT_PORT,
+            },
             &mut buf,
         )
         .map(|b| b.len())
@@ -76,8 +79,8 @@ pub fn publish_telemetry(payload: &str) {
 fn mqtt_handshake(net_ep: usize, cap: u32) -> bool {
     const PKTLEN: usize = 18;
     let connect_pkt: [u8; PKTLEN] = [
-        0x10, 0x10, 0x00, 0x04, b'M', b'Q', b'T', b'T', 0x04, 0x02, 0x00, 0x3C, 0x00, 0x04,
-        b'v', b'i', b'o', b's',
+        0x10, 0x10, 0x00, 0x04, b'M', b'Q', b'T', b'T', 0x04, 0x02, 0x00, 0x3C, 0x00, 0x04, b'v',
+        b'i', b'o', b's',
     ];
     let mut connect_sent = false;
     let mut connack = [0u8; 64];
@@ -163,7 +166,10 @@ fn tcp_send_raw(net_ep: usize, cap: u32, data: &[u8]) {
 fn tcp_recv_once(net_ep: usize, cap: u32, out: &mut [u8; 64]) -> usize {
     let mut buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(
-        &NetRequest::TcpRecv { cap_id: cap, buf_len: 64 },
+        &NetRequest::TcpRecv {
+            cap_id: cap,
+            buf_len: 64,
+        },
         &mut buf,
     )
     .map(|b| b.len())

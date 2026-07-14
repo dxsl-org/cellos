@@ -45,10 +45,15 @@ pub fn build_dtb(
     let mem = fdt.begin_node(&alloc::format!("memory@{:x}", ram_base))?;
     fdt.property_string("device_type", "memory")?;
     // reg = <base_hi base_lo size_hi size_lo>
-    fdt.property_array_u32("reg", &[
-        (ram_base >> 32) as u32, (ram_base & 0xFFFF_FFFF) as u32,
-        (ram_size >> 32) as u32, (ram_size & 0xFFFF_FFFF) as u32,
-    ])?;
+    fdt.property_array_u32(
+        "reg",
+        &[
+            (ram_base >> 32) as u32,
+            (ram_base & 0xFFFF_FFFF) as u32,
+            (ram_size >> 32) as u32,
+            (ram_size & 0xFFFF_FFFF) as u32,
+        ],
+    )?;
     fdt.end_node(mem)?;
 
     // ── 2. /cpus ─────────────────────────────────────────────────────────────
@@ -67,34 +72,49 @@ pub fn build_dtb(
     // ── 3. /psci ─────────────────────────────────────────────────────────────
     let psci = fdt.begin_node("psci")?;
     // arm,psci-1.0 compatible — must use "hvc" method (not "smc").
-    fdt.property_string_list("compatible", vec![
-        alloc::string::String::from("arm,psci-1.0"),
-        alloc::string::String::from("arm,psci-0.2"),
-        alloc::string::String::from("arm,psci"),
-    ])?;
+    fdt.property_string_list(
+        "compatible",
+        vec![
+            alloc::string::String::from("arm,psci-1.0"),
+            alloc::string::String::from("arm,psci-0.2"),
+            alloc::string::String::from("arm,psci"),
+        ],
+    )?;
     fdt.property_string("method", "hvc")?;
     // PSCI 1.0 function IDs (for SMCCC 32-bit / hvc call convention).
     fdt.property_u32("cpu_suspend", 0x8400_0001)?;
-    fdt.property_u32("cpu_off",     0x8400_0002)?;
-    fdt.property_u32("cpu_on",      0x8400_0003)?;
-    fdt.property_u32("migrate",     0x8400_0005)?;
+    fdt.property_u32("cpu_off", 0x8400_0002)?;
+    fdt.property_u32("cpu_on", 0x8400_0003)?;
+    fdt.property_u32("migrate", 0x8400_0005)?;
     fdt.end_node(psci)?;
 
     // ── 4. /intc — GICv2 ─────────────────────────────────────────────────────
     // reg: GICD base (64KiB) + GICC base (64KiB).
     // arm,cortex-a15-gic is the compatible string for GICv2 used by QEMU virt.
     let intc = fdt.begin_node("intc@8000000")?;
-    fdt.property_string_list("compatible", vec![
-        alloc::string::String::from("arm,cortex-a15-gic"),
-        alloc::string::String::from("arm,gic-400"),
-    ])?;
+    fdt.property_string_list(
+        "compatible",
+        vec![
+            alloc::string::String::from("arm,cortex-a15-gic"),
+            alloc::string::String::from("arm,gic-400"),
+        ],
+    )?;
     fdt.property_null("interrupt-controller")?;
     fdt.property_u32("#interrupt-cells", 3)?;
     fdt.property_u32("#address-cells", 0)?;
-    fdt.property_array_u32("reg", &[
-        0x0, 0x0800_0000, 0x0, 0x0001_0000,  // GICD
-        0x0, 0x0801_0000, 0x0, 0x0001_0000,  // GICC
-    ])?;
+    fdt.property_array_u32(
+        "reg",
+        &[
+            0x0,
+            0x0800_0000,
+            0x0,
+            0x0001_0000, // GICD
+            0x0,
+            0x0801_0000,
+            0x0,
+            0x0001_0000, // GICC
+        ],
+    )?;
     let intc_phandle = fdt.property_phandle(1)?;
     let _ = intc_phandle; // phandle=1 for interrupt-parent references
     fdt.end_node(intc)?;
@@ -105,13 +125,16 @@ pub fn build_dtb(
     let timer = fdt.begin_node("timer")?;
     fdt.property_string("compatible", "arm,armv8-timer")?;
     fdt.property_u32("interrupt-parent", 1)?; // phandle of /intc
-    // Each PPI = <GIC_PPI irq flags>; GIC_PPI=1, flags=0x8=IRQ_TYPE_LEVEL_LOW.
-    fdt.property_array_u32("interrupts", &[
-        1, 13, 0x8,  // secure EL1 PPI 13
-        1, 14, 0x8,  // non-secure EL1 PPI 14
-        1, 11, 0x8,  // virtual PPI 11
-        1, 10, 0x8,  // hypervisor PPI 10
-    ])?;
+                                              // Each PPI = <GIC_PPI irq flags>; GIC_PPI=1, flags=0x8=IRQ_TYPE_LEVEL_LOW.
+    fdt.property_array_u32(
+        "interrupts",
+        &[
+            1, 13, 0x8, // secure EL1 PPI 13
+            1, 14, 0x8, // non-secure EL1 PPI 14
+            1, 11, 0x8, // virtual PPI 11
+            1, 10, 0x8, // hypervisor PPI 10
+        ],
+    )?;
     fdt.property_null("always-on")?;
     fdt.end_node(timer)?;
 
@@ -120,15 +143,18 @@ pub fn build_dtb(
     fdt.property_string("bootargs", BOOTARGS)?;
     fdt.property_string("stdout-path", "pl011@9000000")?;
     fdt.property_u64("linux,initrd-start", initrd_start)?;
-    fdt.property_u64("linux,initrd-end",   initrd_end)?;
+    fdt.property_u64("linux,initrd-end", initrd_end)?;
     fdt.end_node(chosen)?;
 
     // ── 7. /pl011@9000000 ────────────────────────────────────────────────────
     let uart = fdt.begin_node("pl011@9000000")?;
-    fdt.property_string_list("compatible", vec![
-        alloc::string::String::from("arm,pl011"),
-        alloc::string::String::from("arm,primecell"),
-    ])?;
+    fdt.property_string_list(
+        "compatible",
+        vec![
+            alloc::string::String::from("arm,pl011"),
+            alloc::string::String::from("arm,primecell"),
+        ],
+    )?;
     fdt.property_u32("interrupt-parent", 1)?;
     // UART0 SPI 1 level-high = <0 1 4> (GIC_SPI=0, irq=1, IRQ_TYPE_LEVEL_HIGH=4).
     fdt.property_array_u32("interrupts", &[0, 1, 4])?;

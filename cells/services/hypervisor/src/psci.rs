@@ -6,25 +6,25 @@
 
 /// PSCI function IDs (SMCCC 32/64-bit forms where applicable).
 pub mod fid {
-    pub const VERSION:      u64 = 0x8400_0000;
-    pub const CPU_SUSPEND:  u64 = 0x8400_0001;
-    pub const CPU_OFF:      u64 = 0x8400_0002;
-    pub const CPU_ON:       u64 = 0x8400_0003;
+    pub const VERSION: u64 = 0x8400_0000;
+    pub const CPU_SUSPEND: u64 = 0x8400_0001;
+    pub const CPU_OFF: u64 = 0x8400_0002;
+    pub const CPU_ON: u64 = 0x8400_0003;
     pub const AFFINITY_INFO: u64 = 0x8400_0004;
-    pub const SYSTEM_OFF:   u64 = 0x8400_0008;
+    pub const SYSTEM_OFF: u64 = 0x8400_0008;
     pub const SYSTEM_RESET: u64 = 0x8400_0009;
-    pub const FEATURES:     u64 = 0x8400_000A;
+    pub const FEATURES: u64 = 0x8400_000A;
     // 64-bit variants (bit 30 set).
     pub const CPU_SUSPEND_64: u64 = 0xC400_0001;
-    pub const CPU_ON_64:       u64 = 0xC400_0003;
+    pub const CPU_ON_64: u64 = 0xC400_0003;
     pub const AFFINITY_INFO_64: u64 = 0xC400_0004;
 }
 
 /// PSCI return codes.
 pub mod ret {
-    pub const SUCCESS:       u64 = 0;
+    pub const SUCCESS: u64 = 0;
     pub const NOT_SUPPORTED: u64 = u64::MAX; // -1 as u64
-    pub const DENIED:        u64 = u64::MAX - 2; // -3 as u64
+    pub const DENIED: u64 = u64::MAX - 2; // -3 as u64
 }
 
 /// Outcome of a PSCI HVC call.
@@ -56,7 +56,11 @@ pub fn dispatch(regs: &mut [u64; 8]) -> PsciAction {
                 target,
                 fid::VERSION | fid::CPU_OFF | fid::SYSTEM_OFF | fid::SYSTEM_RESET | fid::FEATURES
             );
-            let result = if supported { ret::SUCCESS } else { ret::NOT_SUPPORTED };
+            let result = if supported {
+                ret::SUCCESS
+            } else {
+                ret::NOT_SUPPORTED
+            };
             regs[0] = result;
             PsciAction::Return(result)
         }

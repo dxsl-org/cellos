@@ -26,7 +26,9 @@ impl Arch for AArch32Arch {
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
-    fn interrupts_enabled(&self) -> bool { false }
+    fn interrupts_enabled(&self) -> bool {
+        false
+    }
 }
 
 // ── Full Arch implementation for AArch32 ─────────────────────────────────────
@@ -44,23 +46,31 @@ impl Arch for AArch32Arch {
 
     fn enable_interrupts(&self) {
         // SAFETY: cpsie i — enables IRQ in CPSR; standard ARMv7 SVC-mode instruction.
-        unsafe { core::arch::asm!("cpsie i", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("cpsie i", options(nomem, nostack));
+        }
     }
 
     fn disable_interrupts(&self) {
         // SAFETY: cpsid i — disables IRQ in CPSR.
-        unsafe { core::arch::asm!("cpsid i", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("cpsid i", options(nomem, nostack));
+        }
     }
 
     fn wait_for_interrupt(&self) {
         // SAFETY: wfi is a standard ARMv7 idle instruction.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("wfi", options(nomem, nostack));
+        }
     }
 
     fn interrupts_enabled(&self) -> bool {
         let cpsr: u32;
         // SAFETY: mrs reads CPSR without modifying any state.
-        unsafe { core::arch::asm!("mrs {}, cpsr", out(reg) cpsr, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("mrs {}, cpsr", out(reg) cpsr, options(nomem, nostack));
+        }
         cpsr & (1 << 7) == 0 // I bit clear = IRQ enabled
     }
 }
@@ -88,9 +98,9 @@ pub mod arch {
     #[derive(Debug, Clone, Copy, Default)]
     pub struct ViTrapFrame {
         /// General-purpose register file (r0-r15 + padding to 32 slots).
-        pub regs:    [usize; 32],
+        pub regs: [usize; 32],
         /// Program counter (equiv. of RV64 sepc / ELR_EL1).
-        pub sepc:    usize,
+        pub sepc: usize,
         /// Status register (equiv. of RV64 sstatus / SPSR).
         pub sstatus: usize,
     }
@@ -99,7 +109,9 @@ pub mod arch {
     pub use super::context::Arm32Context as Context;
 
     /// GP and TP registers (RISC-V concept; ARM has neither → (0, 0)).
-    pub fn get_gp_tp() -> (usize, usize) { (0, 0) }
+    pub fn get_gp_tp() -> (usize, usize) {
+        (0, 0)
+    }
 
     /// Set kernel stack (ARM uses banked registers; stub for nano profile).
     pub fn set_kernel_stack(_kernel_stack_top: usize) {}
@@ -110,9 +122,13 @@ pub mod arch {
     /// Enable IRQs in CPSR (cpsie i).
     pub fn enable_interrupts() {
         // SAFETY: standard ARMv7 SVC-mode instruction; only called after boot init.
-        unsafe { core::arch::asm!("cpsie i", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("cpsie i", options(nomem, nostack));
+        }
     }
 
     // Thread trampoline — symbol provided by boot.rs global_asm.
-    extern "C" { pub fn thread_trampoline(); }
+    extern "C" {
+        pub fn thread_trampoline();
+    }
 }

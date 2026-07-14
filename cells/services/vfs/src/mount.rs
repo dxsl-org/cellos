@@ -26,7 +26,10 @@ pub struct MountTable {
 
 impl MountTable {
     pub fn new() -> Self {
-        Self { backends: Vec::new(), entries: Vec::new() }
+        Self {
+            backends: Vec::new(),
+            entries: Vec::new(),
+        }
     }
 
     /// Register a backend; returns its index for use in `mount()`.
@@ -36,13 +39,19 @@ impl MountTable {
     }
 
     pub fn mount(&mut self, prefix: &'static str, backend: usize, writable: bool) {
-        self.entries.push(MountEntry { prefix, backend, writable });
+        self.entries.push(MountEntry {
+            prefix,
+            backend,
+            writable,
+        });
     }
 
     /// Boundary-aware prefix match: the next char after the prefix must be `/`
     /// (or the path equals the prefix). Root `/` matches every absolute path.
     fn prefix_matches(prefix: &str, path: &str) -> bool {
-        if prefix == "/" { return path.starts_with('/'); }
+        if prefix == "/" {
+            return path.starts_with('/');
+        }
         match path.strip_prefix(prefix) {
             Some("") => true,
             Some(rest) => rest.starts_with('/'),

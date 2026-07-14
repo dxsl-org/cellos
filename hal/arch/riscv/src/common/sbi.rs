@@ -71,8 +71,8 @@ pub fn set_timer(stime_value: u64) {
     sbi_call(SBI_EID_TIMER, SBI_FID_SET_TIMER, stime_value as usize, 0, 0);
     #[cfg(target_arch = "riscv32")]
     {
-        let lo = stime_value as usize;           // bits 31:0
-        let hi = (stime_value >> 32) as usize;   // bits 63:32
+        let lo = stime_value as usize; // bits 31:0
+        let hi = (stime_value >> 32) as usize; // bits 63:32
         sbi_call(SBI_EID_TIMER, SBI_FID_SET_TIMER, lo, hi, 0);
     }
 }
@@ -91,7 +91,13 @@ pub const SBI_RESET_COLD_REBOOT: usize = 0x1;
 /// On success the machine resets and this never returns; it returns only if the
 /// firmware does not implement SRST, letting the caller fall back to a halt loop.
 pub fn system_reset(reset_type: usize, reset_reason: usize) {
-    sbi_call(SBI_EID_SRST, SBI_FID_SYSTEM_RESET, reset_type, reset_reason, 0);
+    sbi_call(
+        SBI_EID_SRST,
+        SBI_FID_SYSTEM_RESET,
+        reset_type,
+        reset_reason,
+        0,
+    );
 }
 
 // --- SBI Hart State Management (HSM) extension  SBI spec v2.0 §9 ---
@@ -110,7 +116,11 @@ const SBI_FID_HART_GET_STATUS: usize = 2;
 /// `start_addr` must be a valid, aligned physical address reachable without paging.
 pub fn sbi_hart_start(hart_id: usize, start_addr: usize, opaque: usize) -> Result<(), usize> {
     let (error, _) = sbi_call(SBI_EID_HSM, SBI_FID_HART_START, hart_id, start_addr, opaque);
-    if error == 0 { Ok(()) } else { Err(error) }
+    if error == 0 {
+        Ok(())
+    } else {
+        Err(error)
+    }
 }
 
 /// Query the current HSM state of a hart.
@@ -119,7 +129,11 @@ pub fn sbi_hart_start(hart_id: usize, start_addr: usize, opaque: usize) -> Resul
 /// 4 = Suspended, 5 = Suspend Pending, 6 = Resume Pending.
 pub fn sbi_hart_get_status(hart_id: usize) -> Result<usize, usize> {
     let (error, value) = sbi_call(SBI_EID_HSM, SBI_FID_HART_GET_STATUS, hart_id, 0, 0);
-    if error == 0 { Ok(value) } else { Err(error) }
+    if error == 0 {
+        Ok(value)
+    } else {
+        Err(error)
+    }
 }
 
 // --- SBI IPI (Send Inter-Processor Interrupt) extension  SBI spec v2.0 §4 ---
@@ -133,5 +147,9 @@ const SBI_FID_SEND_IPI: usize = 0;
 /// The IPI sets SSIP on each target; the target's trap handler sees scause=1.
 pub fn sbi_send_ipi(hart_mask: usize, hart_mask_base: usize) -> Result<(), usize> {
     let (error, _) = sbi_call(SBI_EID_IPI, SBI_FID_SEND_IPI, hart_mask, hart_mask_base, 0);
-    if error == 0 { Ok(()) } else { Err(error) }
+    if error == 0 {
+        Ok(())
+    } else {
+        Err(error)
+    }
 }

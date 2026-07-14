@@ -14,7 +14,13 @@ use ostd::mmio::request_region;
 use types::ViError;
 
 // Declare gpio + uart caps so the kernel grants MMIO access.
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = true, uart = true);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = true,
+    uart = true
+);
 
 static PASS: AtomicU32 = AtomicU32::new(0);
 static FAIL: AtomicU32 = AtomicU32::new(0);
@@ -60,9 +66,7 @@ pub fn main() {
 
     let pass = PASS.load(Ordering::Relaxed);
     let fail = FAIL.load(Ordering::Relaxed);
-    let summary = alloc::format!(
-        "[periph-test] Results: {}/{} passed", pass, pass + fail
-    );
+    let summary = alloc::format!("[periph-test] Results: {}/{} passed", pass, pass + fail);
     println(&summary);
 
     if fail == 0 {
@@ -88,16 +92,16 @@ fn scenario_gpio_output_readback(gpio: &mut Pl061Gpio) {
 
     let _ = gpio.write_pin(0, true);
     match gpio.read_pin(0) {
-        Ok(true)  => pass!("pin 0 HIGH read-back correct"),
+        Ok(true) => pass!("pin 0 HIGH read-back correct"),
         Ok(false) => fail!("pin 0 HIGH: read-back returned LOW"),
-        Err(e)    => fail!(alloc::format!("read_pin after HIGH: {:?}", e)),
+        Err(e) => fail!(alloc::format!("read_pin after HIGH: {:?}", e)),
     }
 
     let _ = gpio.write_pin(0, false);
     match gpio.read_pin(0) {
         Ok(false) => pass!("pin 0 LOW read-back correct"),
-        Ok(true)  => fail!("pin 0 LOW: read-back returned HIGH"),
-        Err(e)    => fail!(alloc::format!("read_pin after LOW: {:?}", e)),
+        Ok(true) => fail!("pin 0 LOW: read-back returned HIGH"),
+        Err(e) => fail!(alloc::format!("read_pin after LOW: {:?}", e)),
     }
 }
 
@@ -114,14 +118,14 @@ fn scenario_gpio_direction_input(gpio: &mut Pl061Gpio) {
     }
 
     match gpio.read_pin(1) {
-        Ok(_)  => pass!("read_pin on input pin returned (no crash)"),
+        Ok(_) => pass!("read_pin on input pin returned (no crash)"),
         Err(e) => fail!(alloc::format!("read_pin on input pin: {:?}", e)),
     }
 
     match gpio.write_pin(1, true) {
         Err(ViError::InvalidInput) => pass!("write_pin to input pin → InvalidInput"),
-        Ok(())                     => fail!("write_pin to input pin unexpectedly OK"),
-        Err(e)                     => fail!(alloc::format!("write_pin to input: wrong error {:?}", e)),
+        Ok(()) => fail!("write_pin to input pin unexpectedly OK"),
+        Err(e) => fail!(alloc::format!("write_pin to input: wrong error {:?}", e)),
     }
 }
 
@@ -167,7 +171,10 @@ fn scenario_uart_loopback() {
     for _ in 0..10_000 {
         if uart.rx_ready() {
             match uart.receive() {
-                Ok(b)  => { received = Some(b); break; }
+                Ok(b) => {
+                    received = Some(b);
+                    break;
+                }
                 Err(e) => {
                     fail!(alloc::format!("UART receive error: {:?}", e));
                     let _ = uart.disable_loopback();
@@ -181,8 +188,11 @@ fn scenario_uart_loopback() {
 
     match received {
         Some(0xA5) => pass!("UART loopback 0xA5 → 0xA5 correct"),
-        Some(b)    => fail!(alloc::format!("UART loopback: expected 0xA5, got 0x{:02X}", b)),
-        None       => fail!("UART loopback: rx_ready never asserted within spin limit"),
+        Some(b) => fail!(alloc::format!(
+            "UART loopback: expected 0xA5, got 0x{:02X}",
+            b
+        )),
+        None => fail!("UART loopback: rx_ready never asserted within spin limit"),
     }
 }
 
@@ -195,7 +205,7 @@ fn scenario_cap_reject() {
 
     match request_region(0x0800_0000, 0x1000) {
         Err(ViError::PermissionDenied) => pass!("out-of-allowlist → PermissionDenied"),
-        Ok(_)  => fail!("out-of-allowlist unexpectedly granted"),
+        Ok(_) => fail!("out-of-allowlist unexpectedly granted"),
         Err(e) => fail!(alloc::format!("unexpected error: {:?}", e)),
     }
 }

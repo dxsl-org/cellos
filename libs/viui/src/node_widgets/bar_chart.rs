@@ -20,25 +20,25 @@ use crate::signal::{Signal, SubscriptionHandle};
 /// Bar width scales to fill available width with 4-pixel gaps between bars.
 /// Y axis is scaled to the maximum data value unless overridden with `y_max`.
 pub struct BarChart {
-    data:        Signal<Vec<f32>>,
-    labels:      Vec<String>,
-    bar_color:   Color,
-    y_max:       Option<f32>,
+    data: Signal<Vec<f32>>,
+    labels: Vec<String>,
+    bar_color: Color,
+    y_max: Option<f32>,
     show_values: bool,
-    bounds:      Rect,
-    sub:         Option<SubscriptionHandle>,
+    bounds: Rect,
+    sub: Option<SubscriptionHandle>,
 }
 
 impl BarChart {
     pub fn new(data: Signal<Vec<f32>>) -> Self {
         Self {
             data,
-            labels:      Vec::new(),
-            bar_color:   Color::rgb(80, 120, 220),
-            y_max:       None,
+            labels: Vec::new(),
+            bar_color: Color::rgb(80, 120, 220),
+            y_max: None,
             show_values: true,
-            bounds:      Rect::ZERO,
-            sub:         None,
+            bounds: Rect::ZERO,
+            sub: None,
         }
     }
 
@@ -64,7 +64,9 @@ impl ViNode for BarChart {
         constraints.max
     }
 
-    fn bounds(&self) -> Rect { self.bounds }
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds;
@@ -73,25 +75,32 @@ impl ViNode for BarChart {
         let plot_y = b.y + mt;
 
         let data = self.data.get();
-        if data.is_empty() { return; }
+        if data.is_empty() {
+            return;
+        }
 
-        let effective_max = self.y_max.unwrap_or_else(|| {
-            data.iter().cloned().fold(f32::MIN, f32::max).max(0.001)
-        });
+        let effective_max = self
+            .y_max
+            .unwrap_or_else(|| data.iter().cloned().fold(f32::MIN, f32::max).max(0.001));
 
         cx.canvas.fill_rect(b, Color::rgb(14, 16, 24));
 
-        let n     = data.len();
-        let gap   = 4.0f32;
+        let n = data.len();
+        let gap = 4.0f32;
         let bar_w = ((b.w - gap * (n + 1) as f32) / n as f32).max(1.0);
 
         for (i, &v) in data.iter().enumerate() {
             let bar_h = (v / effective_max * plot_h).max(0.0);
-            let bx    = b.x + gap + i as f32 * (bar_w + gap);
-            let by    = plot_y + plot_h - bar_h;
+            let bx = b.x + gap + i as f32 * (bar_w + gap);
+            let by = plot_y + plot_h - bar_h;
 
             cx.canvas.fill_rect(
-                Rect { x: bx, y: by, w: bar_w, h: bar_h },
+                Rect {
+                    x: bx,
+                    y: by,
+                    w: bar_w,
+                    h: bar_h,
+                },
                 self.bar_color,
             );
 
@@ -99,7 +108,10 @@ impl ViNode for BarChart {
                 cx.canvas.draw_text(
                     Point::new(bx, b.y + b.h - mb + 4.0),
                     label,
-                    TextStyle { color: Color::rgb(120, 130, 150), size_px: 0 },
+                    TextStyle {
+                        color: Color::rgb(120, 130, 150),
+                        size_px: 0,
+                    },
                 );
             }
 
@@ -108,17 +120,22 @@ impl ViNode for BarChart {
                 cx.canvas.draw_text(
                     Point::new(bx, by - 14.0),
                     &label,
-                    TextStyle { color: Color::WHITE, size_px: 0 },
+                    TextStyle {
+                        color: Color::WHITE,
+                        size_px: 0,
+                    },
                 );
             }
         }
     }
 
-    fn event(&mut self, _event: &Event) -> bool { false }
+    fn event(&mut self, _event: &Event) -> bool {
+        false
+    }
 
     fn collect_dirty_handles(&mut self, region: DirtyRegion) -> Vec<SubscriptionHandle> {
-        let b   = self.bounds;
-        let r   = Rc::clone(&region);
+        let b = self.bounds;
+        let r = Rc::clone(&region);
         let sub = self.data.subscribe(move || {
             r.borrow_mut().mark(b);
         });

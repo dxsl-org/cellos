@@ -27,7 +27,10 @@ pub struct SimChannel {
 
 impl SimChannel {
     pub const fn new(ramp_period_steps: u32, noise_bits: u8) -> Self {
-        Self { ramp_period_steps, noise_bits }
+        Self {
+            ramp_period_steps,
+            noise_bits,
+        }
     }
 }
 
@@ -40,7 +43,10 @@ pub struct SimAdc {
 
 impl SimAdc {
     pub fn new() -> Self {
-        Self { channels: [None; MAX_CHANNELS], tick: 0 }
+        Self {
+            channels: [None; MAX_CHANNELS],
+            tick: 0,
+        }
     }
 
     /// Configure a channel. Replaces any prior configuration.

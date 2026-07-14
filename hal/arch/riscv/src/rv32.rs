@@ -21,7 +21,9 @@ impl Arch for RiscV32Arch {
     fn enable_interrupts(&self) {}
     fn disable_interrupts(&self) {}
     fn wait_for_interrupt(&self) {}
-    fn interrupts_enabled(&self) -> bool { false }
+    fn interrupts_enabled(&self) -> bool {
+        false
+    }
 }
 
 // ── RV32-specific sub-modules ─────────────────────────────────────────────────
@@ -76,11 +78,11 @@ pub use crate::common::sbi;
 #[cfg(target_arch = "riscv32")]
 pub use crate::common::timer;
 #[cfg(target_arch = "riscv32")]
+mod asm;
+#[cfg(target_arch = "riscv32")]
 pub mod context;
 #[cfg(target_arch = "riscv32")]
 pub mod trap;
-#[cfg(target_arch = "riscv32")]
-mod asm;
 
 // ── Full implementation for RV32 ──────────────────────────────────────────────
 #[cfg(target_arch = "riscv32")]
@@ -94,7 +96,9 @@ impl Arch for RiscV32Arch {
         // Enable S-mode software interrupt (SSIE) for zero-latency RT preemption
         // (same as RV64: kernel asserts sip.SSIP to force a yield on RT cells).
         // SAFETY: csrsi sie bit 1 (SSIE) is valid in S-mode.
-        unsafe { core::arch::asm!("csrsi sie, 0x2", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("csrsi sie, 0x2", options(nomem, nostack));
+        }
     }
 
     unsafe fn switch_context(&self, old: *mut Self::Context, new: *const Self::Context) {
@@ -103,23 +107,31 @@ impl Arch for RiscV32Arch {
 
     fn enable_interrupts(&self) {
         // SAFETY: csrsi sstatus SIE (bit 1) — standard S-mode interrupt enable.
-        unsafe { core::arch::asm!("csrsi sstatus, 0x2", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("csrsi sstatus, 0x2", options(nomem, nostack));
+        }
     }
 
     fn disable_interrupts(&self) {
         // SAFETY: csrci sstatus SIE (bit 1) — standard S-mode interrupt disable.
-        unsafe { core::arch::asm!("csrci sstatus, 0x2", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("csrci sstatus, 0x2", options(nomem, nostack));
+        }
     }
 
     fn wait_for_interrupt(&self) {
         // SAFETY: wfi is safe and available in RV32 S-mode.
-        unsafe { core::arch::asm!("wfi", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("wfi", options(nomem, nostack));
+        }
     }
 
     fn interrupts_enabled(&self) -> bool {
         let sstatus: u32;
         // SAFETY: csrr sstatus reads the current status without any side effects.
-        unsafe { core::arch::asm!("csrr {}, sstatus", out(reg) sstatus, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("csrr {}, sstatus", out(reg) sstatus, options(nomem, nostack));
+        }
         sstatus & (1 << 1) != 0 // SIE bit
     }
 }
@@ -134,9 +146,18 @@ impl Arch for RiscV32Arch {
 pub struct Rv32Context {
     pub ra: u32,
     pub sp: u32,
-    pub s0: u32, pub s1: u32, pub s2: u32, pub s3: u32,
-    pub s4: u32, pub s5: u32, pub s6: u32, pub s7: u32,
-    pub s8: u32, pub s9: u32, pub s10: u32, pub s11: u32,
+    pub s0: u32,
+    pub s1: u32,
+    pub s2: u32,
+    pub s3: u32,
+    pub s4: u32,
+    pub s5: u32,
+    pub s6: u32,
+    pub s7: u32,
+    pub s8: u32,
+    pub s9: u32,
+    pub s10: u32,
+    pub s11: u32,
     /// Saved program counter (for tasks resumed via sret after pre-emption).
     pub sepc: u32,
     /// Saved interrupt enable state.

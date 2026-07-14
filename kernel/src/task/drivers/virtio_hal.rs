@@ -27,7 +27,11 @@ unsafe impl Hal for VirtioHal {
             // halts, whereas an infinite spin looks like an unexplained hang
             // (this was exactly the symptom when the GPU framebuffer alloc
             // outgrew the heap).
-            panic!("[virtio] DMA alloc OOM: {} pages ({} KB) requested", pages, pages * 4);
+            panic!(
+                "[virtio] DMA alloc OOM: {} pages ({} KB) requested",
+                pages,
+                pages * 4
+            );
         }
 
         // SAFETY: ptr is non-null and points to `pages * 4096` bytes — safe to zero.
@@ -35,7 +39,12 @@ unsafe impl Hal for VirtioHal {
 
         // Identity mapping: physical address == virtual address.
         let paddr = ptr as usize;
-        log::trace!("[virtio] DMA alloc {} pages at V:{:p} P:0x{:X}", pages, ptr, paddr);
+        log::trace!(
+            "[virtio] DMA alloc {} pages at V:{:p} P:0x{:X}",
+            pages,
+            ptr,
+            paddr
+        );
 
         // SAFETY: ptr is non-null (checked above).
         (paddr, unsafe { NonNull::new_unchecked(ptr) })

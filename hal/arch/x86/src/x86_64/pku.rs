@@ -135,7 +135,9 @@ pub fn init() {
     // CR4.PKE is set (which would trap with #GP on CPUs without PKU).
     // SAFETY: PKU_ACTIVE is only written here (single-core init path), then
     // treated as read-only. No concurrent Rust references exist.
-    unsafe { PKU_ACTIVE = 1; }
+    unsafe {
+        PKU_ACTIVE = 1;
+    }
 
     log_str("[INFO] PKU: enabled (key 0=trusted key 1=cell key 2=ffi)\n");
 

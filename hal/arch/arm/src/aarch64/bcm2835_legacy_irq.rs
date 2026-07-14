@@ -11,10 +11,10 @@
 //! P04: Init (disable all) + GPIO bank enable/disable + pending identify.
 //! P05: GPIO bank IRQs enabled when gpio-bcm cell claims the MMIO region.
 
-const IRQ_BASE:    usize = 0x3F00_B200;
+const IRQ_BASE: usize = 0x3F00_B200;
 const IRQ_PENDING2: usize = IRQ_BASE + 0x08;
-const IRQ_ENABLE1:  usize = IRQ_BASE + 0x10;
-const IRQ_ENABLE2:  usize = IRQ_BASE + 0x14;
+const IRQ_ENABLE1: usize = IRQ_BASE + 0x10;
+const IRQ_ENABLE2: usize = IRQ_BASE + 0x14;
 const IRQ_DISABLE1: usize = IRQ_BASE + 0x1C;
 const IRQ_DISABLE2: usize = IRQ_BASE + 0x20;
 
@@ -66,7 +66,11 @@ pub fn disable_irq(irq: u32) {
 /// Called from `vi_aarch64_irq_handler` when `IRQ_SRC_GPU` is set.
 pub fn identify_gpio_irq() -> Option<u32> {
     let p2 = rd(IRQ_PENDING2);
-    if p2 & (1 << 17) != 0 { return Some(GPIO_BANK0_IRQ); }
-    if p2 & (1 << 18) != 0 { return Some(GPIO_BANK1_IRQ); }
+    if p2 & (1 << 17) != 0 {
+        return Some(GPIO_BANK0_IRQ);
+    }
+    if p2 & (1 << 18) != 0 {
+        return Some(GPIO_BANK1_IRQ);
+    }
     None
 }

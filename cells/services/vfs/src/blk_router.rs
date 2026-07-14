@@ -13,7 +13,9 @@
 //! block device is kernel-resident and no Driver Cell registers.
 
 use core::sync::atomic::{AtomicUsize, Ordering};
-use ostd::syscall::{sys_blk_read, sys_blk_write, sys_lookup_service, sys_recv, sys_send, SyscallResult};
+use ostd::syscall::{
+    sys_blk_read, sys_blk_write, sys_lookup_service, sys_recv, sys_send, SyscallResult,
+};
 
 const SECTOR_SIZE: usize = 512;
 
@@ -29,8 +31,12 @@ static DRIVER_TID: AtomicUsize = AtomicUsize::new(NOT_PROBED);
 /// Caches the result so only the first call performs the lookup syscall.
 fn driver_tid() -> Option<usize> {
     let cached = DRIVER_TID.load(Ordering::Relaxed);
-    if cached == ABSENT { return None; }
-    if cached != NOT_PROBED { return Some(cached); }
+    if cached == ABSENT {
+        return None;
+    }
+    if cached != NOT_PROBED {
+        return Some(cached);
+    }
 
     match sys_lookup_service(api::syscall::service::BLOCK_DRIVER) {
         Some(tid) if tid != 0 => {
@@ -61,7 +67,9 @@ pub fn blk_read(abs_lba: u64, buf: &mut [u8; SECTOR_SIZE]) -> bool {
         // from another cell (while we are blocked here) is never mistaken for it.
         let mut reply = [0u8; 1 + SECTOR_SIZE];
         sys_recv(tid, &mut reply);
-        if reply[0] != 0 { return false; }
+        if reply[0] != 0 {
+            return false;
+        }
         buf.copy_from_slice(&reply[1..1 + SECTOR_SIZE]);
         true
     } else {

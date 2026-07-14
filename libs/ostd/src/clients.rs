@@ -54,17 +54,17 @@ pub use vfs::VfsClient;
 pub(crate) fn vierr_from_code(code: u8) -> crate::ViError {
     use crate::ViError;
     match code {
-        0  => ViError::OutOfMemory,
-        1  => ViError::InvalidArgument,
-        2  => ViError::NotFound,
-        3  => ViError::PermissionDenied,
-        4  => ViError::AlreadyExists,
-        5  => ViError::WouldBlock,
-        6  => ViError::NotSupported,
-        7  => ViError::IO,
-        8  => ViError::InvalidInput,
-        9  => ViError::IsADirectory,
+        0 => ViError::OutOfMemory,
+        1 => ViError::InvalidArgument,
+        2 => ViError::NotFound,
+        3 => ViError::PermissionDenied,
+        4 => ViError::AlreadyExists,
+        5 => ViError::WouldBlock,
+        6 => ViError::NotSupported,
+        7 => ViError::IO,
+        8 => ViError::InvalidInput,
+        9 => ViError::IsADirectory,
         10 => ViError::NotADirectory,
-        _  => ViError::Unknown,
+        _ => ViError::Unknown,
     }
 }

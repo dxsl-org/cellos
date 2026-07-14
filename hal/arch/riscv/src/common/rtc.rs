@@ -28,7 +28,7 @@ pub fn now_epoch_ns() -> u64 {
     // Reading TIME_LOW (offset 0) first causes the hardware to latch TIME_HIGH.
     // SAFETY: base is a valid MMIO window set by init(); volatile reads are non-aliasing.
     unsafe {
-        let low  = core::ptr::read_volatile(base as *const u32);
+        let low = core::ptr::read_volatile(base as *const u32);
         let high = core::ptr::read_volatile((base + 4) as *const u32);
         (high as u64) << 32 | low as u64
     }

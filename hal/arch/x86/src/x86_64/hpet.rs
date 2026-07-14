@@ -12,14 +12,20 @@
 use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 // PIT port I/O helpers (needed for PIT-based calibration fallback).
-#[inline] unsafe fn outb(port: u16, val: u8) {
+#[inline]
+unsafe fn outb(port: u16, val: u8) {
     // SAFETY: port I/O is always valid at Ring 0.
-    unsafe { core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("out dx, al", in("dx") port, in("al") val, options(nomem, nostack));
+    }
 }
-#[inline] unsafe fn inb(port: u16) -> u8 {
+#[inline]
+unsafe fn inb(port: u16) -> u8 {
     let v: u8;
     // SAFETY: port I/O is always valid at Ring 0.
-    unsafe { core::arch::asm!("in al, dx", out("al") v, in("dx") port, options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("in al, dx", out("al") v, in("dx") port, options(nomem, nostack));
+    }
     v
 }
 
@@ -29,9 +35,9 @@ static HPET_BASE: AtomicUsize = AtomicUsize::new(0);
 static HPET_PERIOD_FS: AtomicU64 = AtomicU64::new(0);
 
 /// HPET register offsets.
-const GCAP_ID:       usize = 0x00; // General Capabilities and ID
-const GEN_CONF:      usize = 0x10; // General Configuration
-const MAIN_COUNTER:  usize = 0xF0; // Main Counter Value
+const GCAP_ID: usize = 0x00; // General Capabilities and ID
+const GEN_CONF: usize = 0x10; // General Configuration
+const MAIN_COUNTER: usize = 0xF0; // Main Counter Value
 
 fn read64(off: usize) -> u64 {
     let base = HPET_BASE.load(Ordering::Relaxed);
@@ -62,7 +68,9 @@ pub unsafe fn init(virt_base: usize) {
 pub fn now_ns() -> u64 {
     let count = read64(MAIN_COUNTER);
     let period_fs = HPET_PERIOD_FS.load(Ordering::Relaxed);
-    if period_fs == 0 { return 0; }
+    if period_fs == 0 {
+        return 0;
+    }
     // count * period_fs / 1_000_000 converts fs ticks → ns.
     // Use u128 to avoid overflow on long uptimes.
     ((count as u128 * period_fs as u128) / 1_000_000) as u64
@@ -73,7 +81,9 @@ pub fn now_ns() -> u64 {
 /// Returns immediately if HPET was not initialised (`period_fs == 0`).
 /// Callers that need a real delay when HPET is absent must use PIT.
 pub fn spin_ns(ns: u64) {
-    if HPET_PERIOD_FS.load(Ordering::Relaxed) == 0 { return; }
+    if HPET_PERIOD_FS.load(Ordering::Relaxed) == 0 {
+        return;
+    }
     let start = now_ns();
     while now_ns().wrapping_sub(start) < ns {
         core::hint::spin_loop();
@@ -89,11 +99,11 @@ pub fn spin_ns(ns: u64) {
 /// Must be called from Ring 0. 8254 PIT is always present on x86/x86_64.
 unsafe fn calibrate_lapic_pit() -> u64 {
     use super::apic;
-    const PIT_CMD:    u16 = 0x43;
-    const PIT_CH2:    u16 = 0x42;
-    const SPKR_CTRL:  u16 = 0x61;
-    const PIT_TICKS:  u16 = 11932; // 10 ms @ 1.193182 MHz
-    const CAL_COUNT:  u32 = 0xFFFF_FFFF;
+    const PIT_CMD: u16 = 0x43;
+    const PIT_CH2: u16 = 0x42;
+    const SPKR_CTRL: u16 = 0x61;
+    const PIT_TICKS: u16 = 11932; // 10 ms @ 1.193182 MHz
+    const CAL_COUNT: u32 = 0xFFFF_FFFF;
 
     unsafe {
         let orig = inb(SPKR_CTRL);
@@ -132,7 +142,9 @@ pub fn calibrate_lapic() -> u64 {
         use super::apic;
         const CALIBRATION_COUNT: u32 = 0xFFFF_FFFF;
         // SAFETY: LAPIC is identity-mapped at 0xFEE0_0000 after init_kernel_paging_x86.
-        unsafe { apic::start_oneshot(CALIBRATION_COUNT); }
+        unsafe {
+            apic::start_oneshot(CALIBRATION_COUNT);
+        }
         spin_ns(10_000_000); // 10 ms HPET window
         let remaining = apic::read_current_count();
         let elapsed_ticks = CALIBRATION_COUNT - remaining;

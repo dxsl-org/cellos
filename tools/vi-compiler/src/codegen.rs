@@ -15,12 +15,12 @@
 //! let rust_src = gen.generate(&file);
 //! ```
 
-use std::prelude::v1::*;
 use crate::ast::{Binding, BindingMode, CallbackBinding, Child, Component, Element, Expr, ViFile};
 use crate::eval::{
-    compile_expr, eval_binding, eval_callback, eval_property,
-    AugOp, ExprCtx, InterpolPart, TypedExpr,
+    compile_expr, eval_binding, eval_callback, eval_property, AugOp, ExprCtx, InterpolPart,
+    TypedExpr,
 };
+use std::prelude::v1::*;
 
 // ─── Element → Widget mapping ────────────────────────────────────────────────
 
@@ -30,27 +30,27 @@ use crate::eval::{
 fn map_element(name: &str) -> Option<(&'static str, &'static str)> {
     match name {
         // Layout
-        "VerticalLayout" | "VBox" | "Column" => Some(("Column",      "column")),
-        "HorizontalLayout" | "HBox" | "Row"  => Some(("Row",         "row")),
-        "FlexBox" | "HFlex" | "VFlex"        => Some(("FlexBox",     "flex_box")),
+        "VerticalLayout" | "VBox" | "Column" => Some(("Column", "column")),
+        "HorizontalLayout" | "HBox" | "Row" => Some(("Row", "row")),
+        "FlexBox" | "HFlex" | "VFlex" => Some(("FlexBox", "flex_box")),
         // Text
-        "Text" | "Label"                     => Some(("Label",       "label")),
+        "Text" | "Label" => Some(("Label", "label")),
         // Interactive
-        "Button"                             => Some(("Button",      "button")),
-        "Slider"                             => Some(("Slider",      "slider")),
-        "CheckBox" | "Checkbox"              => Some(("CheckBox",    "checkbox")),
+        "Button" => Some(("Button", "button")),
+        "Slider" => Some(("Slider", "slider")),
+        "CheckBox" | "Checkbox" => Some(("CheckBox", "checkbox")),
         // Display
-        "ProgressBar" | "Progress"           => Some(("ProgressBar", "progress_bar")),
-        "Image"                              => Some(("Image",       "image")),
+        "ProgressBar" | "Progress" => Some(("ProgressBar", "progress_bar")),
+        "Image" => Some(("Image", "image")),
         // Input
-        "TextInput" | "TextEdit"             => Some(("TextEdit",    "text_edit")),
+        "TextInput" | "TextEdit" => Some(("TextEdit", "text_edit")),
         // Container
-        "TouchArea"                          => Some(("TouchArea",   "touch_area")),
-        "ListView" | "List"                  => Some(("ListView",    "list_view")),
-        "ScrollArea" | "ScrollView"          => Some(("ScrollArea",  "scroll_area")),
+        "TouchArea" => Some(("TouchArea", "touch_area")),
+        "ListView" | "List" => Some(("ListView", "list_view")),
+        "ScrollArea" | "ScrollView" => Some(("ScrollArea", "scroll_area")),
         // Overlay widgets — constructed imperatively; codegen emits a placeholder.
-        "Dialog"                             => Some(("Dialog",      "dialog")),
-        "DropDown" | "Dropdown"              => Some(("DropDown",    "dropdown")),
+        "Dialog" => Some(("Dialog", "dialog")),
+        "DropDown" | "Dropdown" => Some(("DropDown", "dropdown")),
         _ => None,
     }
 }
@@ -81,19 +81,19 @@ enum CtorStyle {
 fn widget_ctor_style(rust_type: &str) -> CtorStyle {
     match rust_type {
         "Column" | "Row" | "FlexBox" => CtorStyle::Container,
-        "TouchArea" | "ScrollArea"   => CtorStyle::ChildBox,
-        "Label"                      => CtorStyle::SignalFirst,
-        "Button"                     => CtorStyle::SignalCallback,
-        "ProgressBar" | "Slider"     => CtorStyle::SignalFirst,
+        "TouchArea" | "ScrollArea" => CtorStyle::ChildBox,
+        "Label" => CtorStyle::SignalFirst,
+        "Button" => CtorStyle::SignalCallback,
+        "ProgressBar" | "Slider" => CtorStyle::SignalFirst,
         // CheckBox::new(checked: Signal<bool>) — confirmed from source
-        "CheckBox"                   => CtorStyle::SignalFirst,
+        "CheckBox" => CtorStyle::SignalFirst,
         // TextEdit::new(text: Signal<String>) — confirmed from source
-        "TextEdit"                   => CtorStyle::SignalFirst,
-        "ListView"                   => CtorStyle::ItemsSignal,
+        "TextEdit" => CtorStyle::SignalFirst,
+        "ListView" => CtorStyle::ItemsSignal,
         // Dialog / DropDown require runtime queue — emit imperative placeholder
-        "Dialog" | "DropDown"        => CtorStyle::NoArg,
+        "Dialog" | "DropDown" => CtorStyle::NoArg,
         // Image::new(data, width, height) — too complex; emit empty placeholder
-        _                            => CtorStyle::NoArg,
+        _ => CtorStyle::NoArg,
     }
 }
 
@@ -107,7 +107,7 @@ fn emit_builder_call(prop: &str, expr: &str) -> Option<String> {
         // These are consumed by the constructor — not builder calls.
         "text" | "value" | "items" | "checked" => None,
         // Known builder methods.
-        "color"       => Some(format!(".color({})", expr)),
+        "color" => Some(format!(".color({})", expr)),
         "item_height" => Some(format!(".item_height({}f32)", expr)),
         // padding / spacing handled by layout containers directly.
         "padding" | "spacing" => None,
@@ -119,26 +119,26 @@ fn emit_builder_call(prop: &str, expr: &str) -> Option<String> {
 /// Maps a `.vi` property type string to a Rust type string.
 fn rust_type(ty: &str) -> &str {
     match ty {
-        "int"    => "i32",
-        "float"  => "f32",
+        "int" => "i32",
+        "float" => "f32",
         "string" => "String",
-        "bool"   => "bool",
-        "color"  => "viui::canvas::Color",
+        "bool" => "bool",
+        "color" => "viui::canvas::Color",
         "length" => "f32",
-        _        => "i32",
+        _ => "i32",
     }
 }
 
 /// Default Rust expression for initialising a `Signal<T>` with a given type.
 fn default_signal_init(ty: &str) -> &str {
     match ty {
-        "int"    => "Signal::new(0i32)",
-        "float"  => "Signal::new(0.0f32)",
+        "int" => "Signal::new(0i32)",
+        "float" => "Signal::new(0.0f32)",
         "string" => "Signal::new(String::new())",
-        "bool"   => "Signal::new(false)",
-        "color"  => "Signal::new(viui::canvas::Color::TRANSPARENT)",
+        "bool" => "Signal::new(false)",
+        "color" => "Signal::new(viui::canvas::Color::TRANSPARENT)",
         "length" => "Signal::new(0.0f32)",
-        _        => "Signal::new(0i32)",
+        _ => "Signal::new(0i32)",
     }
 }
 
@@ -146,14 +146,18 @@ fn default_signal_init(ty: &str) -> &str {
 
 /// Per-component state carried during emission.
 struct CompState {
-    clone_counter:  usize,
-    sub_counter:    usize,
+    clone_counter: usize,
+    sub_counter: usize,
     widget_counter: usize,
 }
 
 impl CompState {
     fn new() -> Self {
-        Self { clone_counter: 0, sub_counter: 0, widget_counter: 0 }
+        Self {
+            clone_counter: 0,
+            sub_counter: 0,
+            widget_counter: 0,
+        }
     }
 
     fn next_clone(&mut self, base: &str) -> String {
@@ -179,11 +183,15 @@ impl CompState {
 pub struct CodeGen;
 
 impl Default for CodeGen {
-    fn default() -> Self { Self }
+    fn default() -> Self {
+        Self
+    }
 }
 
 impl CodeGen {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     /// Generate Rust source for all components in `file`.
     ///
@@ -246,7 +254,7 @@ impl CodeGen {
     fn gen_component(&mut self, comp: &Component) -> String {
         let mut st = CompState::new();
 
-        let mut sub_fields:  Vec<String> = Vec::new();
+        let mut sub_fields: Vec<String> = Vec::new();
         let mut build_stmts: Vec<String> = Vec::new();
 
         // 1. Emit Signal declarations for in/out/in-out properties.
@@ -263,24 +271,30 @@ impl CodeGen {
             };
             build_stmts.push(format!("        let {} = {};", prop.name, init));
         }
-        if !comp.properties.is_empty() { build_stmts.push(String::new()); }
+        if !comp.properties.is_empty() {
+            build_stmts.push(String::new());
+        }
 
         // 2. Walk element tree.
         let root_widget = if let Some(root_child) = comp.children.first() {
-            let prop_name_list: Vec<&str> = comp.properties.iter()
-                .map(|p| p.name.as_str())
-                .collect();
-            let (stmts, subs, var_name) =
-                self.gen_child(root_child, &prop_name_list, &mut st);
-            for s in stmts  { build_stmts.push(s); }
-            for sub in &subs { sub_fields.push(sub.clone()); }
+            let prop_name_list: Vec<&str> =
+                comp.properties.iter().map(|p| p.name.as_str()).collect();
+            let (stmts, subs, var_name) = self.gen_child(root_child, &prop_name_list, &mut st);
+            for s in stmts {
+                build_stmts.push(s);
+            }
+            for sub in &subs {
+                sub_fields.push(sub.clone());
+            }
             var_name
         } else {
             "Column::new(alloc::vec![])".to_string()
         };
 
         // 3. Root widget type for return signature.
-        let root_ty = comp.children.first()
+        let root_ty = comp
+            .children
+            .first()
             .and_then(|c| {
                 if let Child::Element(e) = c {
                     map_element(&e.name).map(|(t, _)| t)
@@ -296,9 +310,17 @@ impl CodeGen {
         out.push_str(&format!("/// Generated component: {}\n", comp.name));
         out.push_str(&format!("pub struct {} {{\n", comp.name));
         for prop in &comp.properties {
-            let vis = prop.visibility.as_ref().map(|v| format!("{:?}", v)).unwrap_or_default();
+            let vis = prop
+                .visibility
+                .as_ref()
+                .map(|v| format!("{:?}", v))
+                .unwrap_or_default();
             if vis != "Private" {
-                out.push_str(&format!("    pub {}: Signal<{}>,\n", prop.name, rust_type(&prop.ty)));
+                out.push_str(&format!(
+                    "    pub {}: Signal<{}>,\n",
+                    prop.name,
+                    rust_type(&prop.ty)
+                ));
             }
         }
         for sub_name in &sub_fields {
@@ -309,9 +331,14 @@ impl CodeGen {
         // ── Emit impl ─────────────────────────────────────────────────────────
         out.push_str(&format!("impl {} {{\n", comp.name));
         out.push_str(&format!("    pub fn build() -> (Self, {}) {{\n", root_ty));
-        for s in &build_stmts { out.push_str(s); out.push('\n'); }
+        for s in &build_stmts {
+            out.push_str(s);
+            out.push('\n');
+        }
 
-        let fields_str = comp.properties.iter()
+        let fields_str = comp
+            .properties
+            .iter()
             .map(|p| p.name.clone())
             .chain(sub_fields.iter().cloned())
             .collect::<Vec<_>>()
@@ -339,7 +366,7 @@ impl CodeGen {
 
             Child::If { cond, body, .. } => {
                 let mut stmts: Vec<String> = Vec::new();
-                let mut subs:  Vec<String> = Vec::new();
+                let mut subs: Vec<String> = Vec::new();
                 let var = st.next_widget("if");
 
                 // Generate body children
@@ -351,11 +378,14 @@ impl CodeGen {
                     child_vars.push(v);
                 }
 
-                let items_str: String = child_vars.iter()
-                    .map(|v| format!(
-                        "alloc::boxed::Box::new({}) as alloc::boxed::Box<dyn ViNode>",
-                        v
-                    ))
+                let items_str: String = child_vars
+                    .iter()
+                    .map(|v| {
+                        format!(
+                            "alloc::boxed::Box::new({}) as alloc::boxed::Box<dyn ViNode>",
+                            v
+                        )
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
 
@@ -365,15 +395,17 @@ impl CodeGen {
                     "        let {}_items = if {} {{ alloc::vec![{}] }} else {{ alloc::vec![] }};",
                     var, desugared, items_str
                 ));
-                stmts.push(format!(
-                    "        let {} = Column::new({}_items);",
-                    var, var
-                ));
+                stmts.push(format!("        let {} = Column::new({}_items);", var, var));
                 stmts.push(String::new());
                 (stmts, subs, var)
             }
 
-            Child::For { var: loop_var, iter, body, .. } => {
+            Child::For {
+                var: loop_var,
+                iter,
+                body,
+                ..
+            } => {
                 let mut stmts: Vec<String> = Vec::new();
                 let subs: Vec<String> = Vec::new();
                 let container = st.next_widget("for");
@@ -384,7 +416,9 @@ impl CodeGen {
                 let inner_item_expr = if let Some(Child::Element(e)) = body.first() {
                     match e.name.as_str() {
                         "Text" | "Label" => {
-                            let text_val = e.bindings.iter()
+                            let text_val = e
+                                .bindings
+                                .iter()
                                 .find(|b| b.property == "text")
                                 .map(|b| expr_as_raw_text(&b.value))
                                 .unwrap_or_else(|| loop_var.clone());
@@ -394,14 +428,14 @@ impl CodeGen {
                                 desugar_prop_refs(&text_val)
                             )
                         }
-                        _ => {
-                            "alloc::boxed::Box::new(Column::new(alloc::vec![])) \
-                             as alloc::boxed::Box<dyn ViNode>".to_string()
-                        }
+                        _ => "alloc::boxed::Box::new(Column::new(alloc::vec![])) \
+                             as alloc::boxed::Box<dyn ViNode>"
+                            .to_string(),
                     }
                 } else {
                     "alloc::boxed::Box::new(Column::new(alloc::vec![])) \
-                     as alloc::boxed::Box<dyn ViNode>".to_string()
+                     as alloc::boxed::Box<dyn ViNode>"
+                        .to_string()
                 };
 
                 // `enumerate()` is present for parity with future indexed templates.
@@ -436,12 +470,12 @@ impl CodeGen {
         st: &mut CompState,
     ) -> (Vec<String>, Vec<String>, String) {
         let mut stmts: Vec<String> = Vec::new();
-        let mut subs:  Vec<String> = Vec::new();
+        let mut subs: Vec<String> = Vec::new();
 
         match elem.name.as_str() {
             "VerticalLayout" | "VBox" | "Column" | "HorizontalLayout" | "HBox" | "Row" => {
-                let is_vertical = matches!(elem.name.as_str(),
-                    "VerticalLayout" | "VBox" | "Column");
+                let is_vertical =
+                    matches!(elem.name.as_str(), "VerticalLayout" | "VBox" | "Column");
                 let container_ty = if is_vertical { "Column" } else { "Row" };
 
                 let mut child_vars: Vec<String> = Vec::new();
@@ -453,10 +487,14 @@ impl CodeGen {
                     child_vars.push(child_var);
                 }
 
-                let vec_items: Vec<String> = child_vars.iter()
-                    .map(|v| format!(
-                        "alloc::boxed::Box::new({}) as alloc::boxed::Box<dyn ViNode>", v
-                    ))
+                let vec_items: Vec<String> = child_vars
+                    .iter()
+                    .map(|v| {
+                        format!(
+                            "alloc::boxed::Box::new({}) as alloc::boxed::Box<dyn ViNode>",
+                            v
+                        )
+                    })
                     .collect();
                 let vec_expr = format!("alloc::vec![{}]", vec_items.join(", "));
                 let var = st.next_widget(container_ty);
@@ -465,8 +503,12 @@ impl CodeGen {
                 let spacing = find_binding_f32(&elem.bindings, "spacing");
 
                 let mut init = format!("{}::new({})", container_ty, vec_expr);
-                if let Some(p) = padding { init = format!("{}.with_padding({}f32)", init, p); }
-                if let Some(s) = spacing { init = format!("{}.with_spacing({}f32)", init, s); }
+                if let Some(p) = padding {
+                    init = format!("{}.with_padding({}f32)", init, p);
+                }
+                if let Some(s) = spacing {
+                    init = format!("{}.with_spacing({}f32)", init, s);
+                }
 
                 stmts.push(format!("        let {} = {};", var, init));
                 stmts.push(String::new());
@@ -476,7 +518,8 @@ impl CodeGen {
             "Text" | "Label" => {
                 let var = st.next_widget("Label");
 
-                let text_expr = if let Some(b) = elem.bindings.iter().find(|b| b.property == "text") {
+                let text_expr = if let Some(b) = elem.bindings.iter().find(|b| b.property == "text")
+                {
                     match &b.value {
                         Expr::Raw(r) => eval_binding(&r.text, "text", "Text"),
                         Expr::Literal(crate::ast::Literal::Str(s)) => {
@@ -486,19 +529,24 @@ impl CodeGen {
                         Expr::Interpolated(parts) => {
                             // Convert ast::InterpPart → eval::InterpolPart for the
                             // existing .into_parts() codegen path.
-                            let eval_parts: Vec<InterpolPart> = parts.iter().map(|p| {
-                                match p {
-                                    crate::ast::InterpPart::Lit(s) => InterpolPart::Literal(s.clone()),
-                                    crate::ast::InterpPart::Expr(e) => {
-                                        // Extract the variable name from the expression.
-                                        let var = match e.as_ref() {
-                                            Expr::Ident(n) | Expr::SelfProp(n) => n.clone(),
-                                            other_e => compile_expr(other_e, ExprCtx::BuildFn),
-                                        };
-                                        InterpolPart::Var(var)
+                            let eval_parts: Vec<InterpolPart> = parts
+                                .iter()
+                                .map(|p| {
+                                    match p {
+                                        crate::ast::InterpPart::Lit(s) => {
+                                            InterpolPart::Literal(s.clone())
+                                        }
+                                        crate::ast::InterpPart::Expr(e) => {
+                                            // Extract the variable name from the expression.
+                                            let var = match e.as_ref() {
+                                                Expr::Ident(n) | Expr::SelfProp(n) => n.clone(),
+                                                other_e => compile_expr(other_e, ExprCtx::BuildFn),
+                                            };
+                                            InterpolPart::Var(var)
+                                        }
                                     }
-                                }
-                            }).collect();
+                                })
+                                .collect();
                             TypedExpr::Interpolated(eval_parts)
                         }
                         Expr::SelfProp(prop) => {
@@ -522,36 +570,47 @@ impl CodeGen {
 
                 let text_sig_var = match &text_expr {
                     TypedExpr::Interpolated(parts) => {
-                        let var_names: Vec<&str> = parts.iter()
-                            .filter_map(|p| if let InterpolPart::Var(v) = p { Some(v.as_str()) } else { None })
+                        let var_names: Vec<&str> = parts
+                            .iter()
+                            .filter_map(|p| {
+                                if let InterpolPart::Var(v) = p {
+                                    Some(v.as_str())
+                                } else {
+                                    None
+                                }
+                            })
                             .collect();
                         if var_names.is_empty() {
                             // Pure literal parts, no reactive variable — emit a static Signal.
                             // build_format_string escapes braces; the format! call is safe with
                             // zero arguments when all InterpolParts are Literal.
-                            let literal_text: String = parts.iter().map(|p| match p {
-                                InterpolPart::Literal(s) => s.clone(),
-                                InterpolPart::Var(_)     => String::new(), // unreachable; var_names is empty
-                            }).collect();
+                            let literal_text: String = parts
+                                .iter()
+                                .map(|p| match p {
+                                    InterpolPart::Literal(s) => s.clone(),
+                                    InterpolPart::Var(_) => String::new(), // unreachable; var_names is empty
+                                })
+                                .collect();
                             let sig_var = format!("text_sig_{}", st.sub_counter);
                             stmts.push(format!(
                                 "        let {} = Signal::new(String::from(\"{}\"));",
-                                sig_var, escape_str(&literal_text)
+                                sig_var,
+                                escape_str(&literal_text)
                             ));
                             sig_var
                         } else {
-                        let src_sig = var_names.first().copied().expect("var_names non-empty");
-                        let fmt_str  = build_format_string(parts);
-                        let fmt_args = build_format_args(parts);
-                        let sub_name = st.next_sub();
-                        let text_sig = format!("text_sig_{}", st.sub_counter - 1);
-                        stmts.push(format!(
+                            let src_sig = var_names.first().copied().expect("var_names non-empty");
+                            let fmt_str = build_format_string(parts);
+                            let fmt_args = build_format_args(parts);
+                            let sub_name = st.next_sub();
+                            let text_sig = format!("text_sig_{}", st.sub_counter - 1);
+                            stmts.push(format!(
                             "        let ({}, {}) = {}.map(|n| alloc::format!(\"{}\", {})).into_parts();",
                             text_sig, sub_name, src_sig, fmt_str, fmt_args
                         ));
-                        stmts.push(String::new());
-                        subs.push(sub_name);
-                        text_sig
+                            stmts.push(String::new());
+                            subs.push(sub_name);
+                            text_sig
                         }
                     }
                     TypedExpr::StringLit(s) => {
@@ -559,7 +618,8 @@ impl CodeGen {
                         let sig_var = format!("text_sig_{}", st.sub_counter);
                         stmts.push(format!(
                             "        let {} = Signal::new(String::from(\"{}\"));",
-                            sig_var, escape_str(s)
+                            sig_var,
+                            escape_str(s)
                         ));
                         sig_var
                     }
@@ -567,16 +627,21 @@ impl CodeGen {
                         let sig_var = format!("text_sig_{}", st.sub_counter);
                         stmts.push(format!(
                             "        let {} = Signal::new(alloc::format!(\"{{}}\", {}));",
-                            sig_var, typed_expr_raw(other)
+                            sig_var,
+                            typed_expr_raw(other)
                         ));
                         sig_var
                     }
                 };
 
-                let color_expr = elem.bindings.iter()
+                let color_expr = elem
+                    .bindings
+                    .iter()
                     .find(|b| b.property == "color")
                     .map(|b| match &b.value {
-                        Expr::Raw(r) => color_typed_to_rust(&eval_binding(&r.text, "color", "Text")),
+                        Expr::Raw(r) => {
+                            color_typed_to_rust(&eval_binding(&r.text, "color", "Text"))
+                        }
                         other => compile_expr(other, ExprCtx::BuildFn),
                     });
 
@@ -604,7 +669,9 @@ impl CodeGen {
             "Button" => {
                 let var = st.next_widget("Button");
 
-                let label_str = elem.bindings.iter()
+                let label_str = elem
+                    .bindings
+                    .iter()
                     .find(|b| b.property == "text")
                     .map(|b| match &b.value {
                         Expr::Raw(r) => match eval_binding(&r.text, "text", "Button") {
@@ -617,7 +684,11 @@ impl CodeGen {
                     .unwrap_or_default();
 
                 let callback_body = gen_callback_body(&elem.callbacks, prop_names, st, &mut stmts);
-                let init = format!("Button::new(\"{}\", {})", escape_str(&label_str), callback_body);
+                let init = format!(
+                    "Button::new(\"{}\", {})",
+                    escape_str(&label_str),
+                    callback_body
+                );
                 stmts.push(format!("        let {} = {};", var, init));
                 stmts.push(String::new());
                 (stmts, subs, var)
@@ -626,29 +697,28 @@ impl CodeGen {
             // ── ProgressBar / Slider / CheckBox / TextEdit ───────────────────
             // All use SignalFirst: Widget::new(signal) where the signal comes
             // from the first relevant binding ("value", "checked", "text").
-            "ProgressBar" | "Progress"
-            | "Slider"
-            | "CheckBox" | "Checkbox"
-            | "TextInput" | "TextEdit" => {
-                let (rust_ty, _) = map_element(elem.name.as_str())
-                    .expect("map_element covers these arms");
+            "ProgressBar" | "Progress" | "Slider" | "CheckBox" | "Checkbox" | "TextInput"
+            | "TextEdit" => {
+                let (rust_ty, _) =
+                    map_element(elem.name.as_str()).expect("map_element covers these arms");
                 let var = st.next_widget(rust_ty);
 
                 // Determine which binding name is the signal-first argument.
                 let signal_prop = match rust_ty {
-                    "CheckBox"  => "checked",
-                    "TextEdit"  => "text",
-                    _           => "value",   // ProgressBar, Slider
+                    "CheckBox" => "checked",
+                    "TextEdit" => "text",
+                    _ => "value", // ProgressBar, Slider
                 };
 
-                let sig_var = find_signal_binding(
-                    &elem.bindings, signal_prop, rust_ty, &mut stmts, st,
-                );
+                let sig_var =
+                    find_signal_binding(&elem.bindings, signal_prop, rust_ty, &mut stmts, st);
 
                 // Remaining bindings become builder calls.
                 let mut init = format!("{}::new({})", rust_ty, sig_var);
                 for b in &elem.bindings {
-                    if b.property == signal_prop { continue; }
+                    if b.property == signal_prop {
+                        continue;
+                    }
                     let expr_str = expr_as_raw_text(&b.value);
                     if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
                         init.push_str(&chain);
@@ -668,7 +738,10 @@ impl CodeGen {
                                     other => expr_as_raw_text(other),
                                 };
                                 let clone_var = format!("_{}_tw", src_sig);
-                                stmts.push(format!("        let {} = {}.clone();", clone_var, src_sig));
+                                stmts.push(format!(
+                                    "        let {} = {}.clone();",
+                                    clone_var, src_sig
+                                ));
                                 init = format!(
                                     "{}.on_change(move |new_val: String| {{ {}.set(new_val); }})",
                                     init, clone_var
@@ -708,13 +781,14 @@ impl CodeGen {
             "ListView" | "List" => {
                 let var = st.next_widget("ListView");
 
-                let sig_var = find_signal_binding(
-                    &elem.bindings, "items", "ListView", &mut stmts, st,
-                );
+                let sig_var =
+                    find_signal_binding(&elem.bindings, "items", "ListView", &mut stmts, st);
 
                 let mut init = format!("ListView::new({})", sig_var);
                 for b in &elem.bindings {
-                    if b.property == "items" { continue; }
+                    if b.property == "items" {
+                        continue;
+                    }
                     let expr_str = expr_as_raw_text(&b.value);
                     if let Some(chain) = emit_builder_call(&b.property, &expr_str) {
                         init.push_str(&chain);
@@ -729,8 +803,8 @@ impl CodeGen {
             // ── TouchArea / ScrollArea ─────────────────────────────────────────
             // These wrap a single child; children vec is flattened into the first child.
             "TouchArea" | "ScrollArea" | "ScrollView" => {
-                let (rust_ty, _) = map_element(elem.name.as_str())
-                    .expect("map_element covers these arms");
+                let (rust_ty, _) =
+                    map_element(elem.name.as_str()).expect("map_element covers these arms");
                 let var = st.next_widget(rust_ty);
 
                 // Emit first child (or empty Column as placeholder).
@@ -745,10 +819,14 @@ impl CodeGen {
                     )
                 } else {
                     "alloc::boxed::Box::new(Column::new(alloc::vec![])) \
-                     as alloc::boxed::Box<dyn ViNode>".to_string()
+                     as alloc::boxed::Box<dyn ViNode>"
+                        .to_string()
                 };
 
-                stmts.push(format!("        let {} = {}::new({});", var, rust_ty, child_expr));
+                stmts.push(format!(
+                    "        let {} = {}::new({});",
+                    var, rust_ty, child_expr
+                ));
                 stmts.push(String::new());
                 (stmts, subs, var)
             }
@@ -759,7 +837,8 @@ impl CodeGen {
             "Image" => {
                 let var = st.next_widget("Image");
                 stmts.push(format!(
-                    "        // Image: set data/width/height on {} after build()", var
+                    "        // Image: set data/width/height on {} after build()",
+                    var
                 ));
                 stmts.push(format!(
                     "        let {} = Image::new(\
@@ -774,7 +853,11 @@ impl CodeGen {
             // Builder pattern: FlexBox::row()|column() + .child() chain.
             "FlexBox" | "HFlex" | "VFlex" => {
                 let is_row = !matches!(elem.name.as_str(), "VFlex");
-                let ctor = if is_row { "FlexBox::row()" } else { "FlexBox::column()" };
+                let ctor = if is_row {
+                    "FlexBox::row()"
+                } else {
+                    "FlexBox::column()"
+                };
                 let var = st.next_widget("FlexBox");
 
                 let mut child_vars: Vec<String> = Vec::new();
@@ -786,15 +869,20 @@ impl CodeGen {
                     child_vars.push(child_var);
                 }
 
-                let chain: String = child_vars.iter()
+                let chain: String = child_vars
+                    .iter()
                     .map(|v| format!(".child({})", v))
                     .collect::<Vec<_>>()
                     .join("");
-                let gap     = find_binding_f32(&elem.bindings, "gap");
+                let gap = find_binding_f32(&elem.bindings, "gap");
                 let padding = find_binding_f32(&elem.bindings, "padding");
                 let mut init = format!("{}{}", ctor, chain);
-                if let Some(g) = gap     { init = format!("{}.gap({}f32)", init, g); }
-                if let Some(p) = padding { init = format!("{}.padding({}f32)", init, p); }
+                if let Some(g) = gap {
+                    init = format!("{}.gap({}f32)", init, g);
+                }
+                if let Some(p) = padding {
+                    init = format!("{}.padding({}f32)", init, p);
+                }
 
                 // New FlexBox v2 builder properties.
                 if let Some(wrap_val) = find_binding_str(&elem.bindings, "wrap") {
@@ -803,7 +891,10 @@ impl CodeGen {
                             init = format!("{}.wrap()", init);
                         }
                         "wrap_reverse" | "WrapReverse" => {
-                            init = format!("{}.wrap_mode(viui::node_widgets::flex_box::FlexWrap::WrapReverse)", init);
+                            init = format!(
+                                "{}.wrap_mode(viui::node_widgets::flex_box::FlexWrap::WrapReverse)",
+                                init
+                            );
                         }
                         _ => {} // "none" / "NoWrap" → leave as default
                     }
@@ -811,19 +902,28 @@ impl CodeGen {
                 if let Some(ac) = find_binding_str(&elem.bindings, "align_content") {
                     let variant = flex_align_content_variant(ac.trim());
                     if !variant.is_empty() {
-                        init = format!("{}.align_content(viui::node_widgets::flex_box::AlignContent::{})", init, variant);
+                        init = format!(
+                            "{}.align_content(viui::node_widgets::flex_box::AlignContent::{})",
+                            init, variant
+                        );
                     }
                 }
                 if let Some(ai) = find_binding_str(&elem.bindings, "align_items") {
                     let variant = flex_align_items_variant(ai.trim());
                     if !variant.is_empty() {
-                        init = format!("{}.align_items(viui::node_widgets::flex_box::AlignItems::{})", init, variant);
+                        init = format!(
+                            "{}.align_items(viui::node_widgets::flex_box::AlignItems::{})",
+                            init, variant
+                        );
                     }
                 }
                 if let Some(j) = find_binding_str(&elem.bindings, "justify") {
                     let variant = flex_justify_variant(j.trim());
                     if !variant.is_empty() {
-                        init = format!("{}.justify(viui::node_widgets::flex_box::Justify::{})", init, variant);
+                        init = format!(
+                            "{}.justify(viui::node_widgets::flex_box::Justify::{})",
+                            init, variant
+                        );
                     }
                 }
 
@@ -840,10 +940,14 @@ impl CodeGen {
                     let (cs, ss, cv) = self.gen_child(first, prop_names, st);
                     stmts.extend(cs);
                     subs.extend(ss);
-                    format!("alloc::boxed::Box::new({}) as alloc::boxed::Box<dyn ViNode>", cv)
+                    format!(
+                        "alloc::boxed::Box::new({}) as alloc::boxed::Box<dyn ViNode>",
+                        cv
+                    )
                 } else {
                     "alloc::boxed::Box::new(Column::new(alloc::vec![])) \
-                     as alloc::boxed::Box<dyn ViNode>".to_string()
+                     as alloc::boxed::Box<dyn ViNode>"
+                        .to_string()
                 };
                 stmts.push(format!("        let {} = Card::new({});", var, child_expr));
                 stmts.push(String::new());
@@ -864,7 +968,10 @@ impl CodeGen {
                 let var = st.next_widget("Space");
                 let w = find_binding_f32(&elem.bindings, "width").unwrap_or(0.0);
                 let h = find_binding_f32(&elem.bindings, "height").unwrap_or(0.0);
-                stmts.push(format!("        let {} = Space::new({}f32, {}f32);", var, w, h));
+                stmts.push(format!(
+                    "        let {} = Space::new({}f32, {}f32);",
+                    var, w, h
+                ));
                 stmts.push(String::new());
                 (stmts, subs, var)
             }
@@ -875,11 +982,15 @@ impl CodeGen {
             // compiles; the caller replaces it with the appropriate constructor.
             "Dialog" => {
                 let var = st.next_widget("Dialog");
-                let title_str = elem.bindings.iter()
+                let title_str = elem
+                    .bindings
+                    .iter()
                     .find(|b| b.property == "title")
                     .map(|b| expr_as_raw_text(&b.value))
                     .unwrap_or_else(|| "Dialog".to_string());
-                let msg_str = elem.bindings.iter()
+                let msg_str = elem
+                    .bindings
+                    .iter()
                     .find(|b| b.property == "message")
                     .map(|b| expr_as_raw_text(&b.value))
                     .unwrap_or_default();
@@ -889,9 +1000,9 @@ impl CodeGen {
                 stmts.push(format!(
                     "        let {var} = Dialog::alert(\"{title}\", \"{msg}\", \
                      viui::overlay::new_action_queue(), || {{}});",
-                    var   = var,
+                    var = var,
                     title = escape_str(&title_str),
-                    msg   = escape_str(&msg_str),
+                    msg = escape_str(&msg_str),
                 ));
                 stmts.push(String::new());
                 (stmts, subs, var)
@@ -902,9 +1013,8 @@ impl CodeGen {
             // Emit a placeholder with an empty items list; the caller fills it in.
             "DropDown" | "Dropdown" => {
                 let var = st.next_widget("DropDown");
-                let sig_var = find_signal_binding(
-                    &elem.bindings, "selected", "DropDown", &mut stmts, st,
-                );
+                let sig_var =
+                    find_signal_binding(&elem.bindings, "selected", "DropDown", &mut stmts, st);
                 stmts.push(format!(
                     "        // DropDown: replace queue placeholder with app.action_queue()"
                 ));
@@ -991,7 +1101,10 @@ fn aug_op_to_method_body(op: &AugOp, rhs: &TypedExpr) -> String {
 fn typed_expr_to_rust(expr: &TypedExpr, ty: &str) -> String {
     match expr {
         TypedExpr::IntLit(n) => {
-            let suffix = match ty { "float" | "length" => "f32", _ => "i32" };
+            let suffix = match ty {
+                "float" | "length" => "f32",
+                _ => "i32",
+            };
             format!("Signal::new({}{suffix})", n)
         }
         TypedExpr::StringLit(s) => {
@@ -999,8 +1112,8 @@ fn typed_expr_to_rust(expr: &TypedExpr, ty: &str) -> String {
         }
         TypedExpr::Ident(s) => match ty {
             // `true`/`false` are valid Rust bool literals — no String wrapping.
-            "bool"            => format!("Signal::new({})", s),
-            _                 => format!("Signal::new(String::from({}))", s),
+            "bool" => format!("Signal::new({})", s),
+            _ => format!("Signal::new(String::from({}))", s),
         },
         _ => default_signal_init(ty).to_string(),
     }
@@ -1008,10 +1121,10 @@ fn typed_expr_to_rust(expr: &TypedExpr, ty: &str) -> String {
 
 fn typed_expr_raw(expr: &TypedExpr) -> String {
     match expr {
-        TypedExpr::IntLit(n)            => n.to_string(),
-        TypedExpr::StringLit(s)         => format!("\"{}\"", escape_str(s)),
-        TypedExpr::LengthLit(f)         => format!("{}f32", f),
-        TypedExpr::Ident(s)             => s.clone(),
+        TypedExpr::IntLit(n) => n.to_string(),
+        TypedExpr::StringLit(s) => format!("\"{}\"", escape_str(s)),
+        TypedExpr::LengthLit(f) => format!("{}f32", f),
+        TypedExpr::Ident(s) => s.clone(),
         TypedExpr::ColorLit { r, g, b } => format!("Color::rgb({}, {}, {})", r, g, b),
         _ => "()".to_string(),
     }
@@ -1020,21 +1133,31 @@ fn typed_expr_raw(expr: &TypedExpr) -> String {
 fn color_typed_to_rust(expr: &TypedExpr) -> String {
     match expr {
         TypedExpr::ColorLit { r, g, b } => format!("Color::rgb({}, {}, {})", r, g, b),
-        TypedExpr::Ident(s)             => s.clone(),
+        TypedExpr::Ident(s) => s.clone(),
         _ => "Color::WHITE".to_string(),
     }
 }
 
 fn build_format_string(parts: &[InterpolPart]) -> String {
-    parts.iter().map(|p| match p {
-        InterpolPart::Literal(s) => s.replace('{', "{{").replace('}', "}}"),
-        InterpolPart::Var(_)     => "{}".to_string(),
-    }).collect()
+    parts
+        .iter()
+        .map(|p| match p {
+            InterpolPart::Literal(s) => s.replace('{', "{{").replace('}', "}}"),
+            InterpolPart::Var(_) => "{}".to_string(),
+        })
+        .collect()
 }
 
 fn build_format_args(parts: &[InterpolPart]) -> String {
-    let vars: Vec<&str> = parts.iter()
-        .filter_map(|p| if let InterpolPart::Var(v) = p { Some(v.as_str()) } else { None })
+    let vars: Vec<&str> = parts
+        .iter()
+        .filter_map(|p| {
+            if let InterpolPart::Var(v) = p {
+                Some(v.as_str())
+            } else {
+                None
+            }
+        })
         .collect();
     vars.iter().map(|_| "n").collect::<Vec<_>>().join(", ")
 }
@@ -1090,10 +1213,10 @@ fn find_signal_binding(
     } else {
         // No binding found — determine a sensible zero-value default for the widget.
         let default_val = match (widget_ty, prop_name) {
-            ("CheckBox", "checked")  => "false".to_string(),
-            ("TextEdit", "text")     => "String::new()".to_string(),
-            ("ListView", "items")    => "alloc::vec::Vec::<String>::new()".to_string(),
-            _                        => "0.0f32".to_string(),
+            ("CheckBox", "checked") => "false".to_string(),
+            ("TextEdit", "text") => "String::new()".to_string(),
+            ("ListView", "items") => "alloc::vec::Vec::<String>::new()".to_string(),
+            _ => "0.0f32".to_string(),
         };
         stmts.push(format!(
             "        let {} = Signal::new({});",
@@ -1108,18 +1231,21 @@ fn find_signal_binding(
 ///
 /// Returns `None` if no binding with that name is found.
 fn find_binding_str<'a>(bindings: &'a [Binding], prop: &str) -> Option<String> {
-    bindings.iter().find(|b| b.property == prop).map(|b| expr_as_raw_text(&b.value))
+    bindings
+        .iter()
+        .find(|b| b.property == prop)
+        .map(|b| expr_as_raw_text(&b.value))
 }
 
 /// Map a `.vi` `wrap` / `align_content` string to a Rust `AlignContent` variant name.
 fn flex_align_content_variant(s: &str) -> &'static str {
     match s {
-        "start"  | "Start"        => "Start",
-        "end"    | "End"          => "End",
-        "center" | "Center"       => "Center",
-        "stretch"| "Stretch"      => "Stretch",
+        "start" | "Start" => "Start",
+        "end" | "End" => "End",
+        "center" | "Center" => "Center",
+        "stretch" | "Stretch" => "Stretch",
         "space_between" | "SpaceBetween" | "space-between" => "SpaceBetween",
-        "space_around"  | "SpaceAround"  | "space-around"  => "SpaceAround",
+        "space_around" | "SpaceAround" | "space-around" => "SpaceAround",
         _ => "",
     }
 }
@@ -1127,9 +1253,9 @@ fn flex_align_content_variant(s: &str) -> &'static str {
 /// Map a `.vi` `align_items` string to a Rust `AlignItems` variant name.
 fn flex_align_items_variant(s: &str) -> &'static str {
     match s {
-        "start"   | "Start"   => "Start",
-        "end"     | "End"     => "End",
-        "center"  | "Center"  => "Center",
+        "start" | "Start" => "Start",
+        "end" | "End" => "End",
+        "center" | "Center" => "Center",
         "stretch" | "Stretch" => "Stretch",
         _ => "",
     }
@@ -1138,29 +1264,30 @@ fn flex_align_items_variant(s: &str) -> &'static str {
 /// Map a `.vi` `justify` string to a Rust `Justify` variant name.
 fn flex_justify_variant(s: &str) -> &'static str {
     match s {
-        "start"  | "Start"  => "Start",
-        "end"    | "End"    => "End",
+        "start" | "Start" => "Start",
+        "end" | "End" => "End",
         "center" | "Center" => "Center",
         "space_between" | "SpaceBetween" | "space-between" => "SpaceBetween",
-        "space_around"  | "SpaceAround"  | "space-around"  => "SpaceAround",
-        "space_evenly"  | "SpaceEvenly"  | "space-evenly"  => "SpaceEvenly",
+        "space_around" | "SpaceAround" | "space-around" => "SpaceAround",
+        "space_evenly" | "SpaceEvenly" | "space-evenly" => "SpaceEvenly",
         _ => "",
     }
 }
 
 fn find_binding_f32(bindings: &[Binding], prop: &str) -> Option<f32> {
-    bindings.iter().find(|b| b.property == prop).and_then(|b| {
-        match &b.value {
+    bindings
+        .iter()
+        .find(|b| b.property == prop)
+        .and_then(|b| match &b.value {
             Expr::Raw(r) => match eval_binding(&r.text, prop, "") {
                 TypedExpr::LengthLit(f) => Some(f),
-                TypedExpr::IntLit(n)    => Some(n as f32),
+                TypedExpr::IntLit(n) => Some(n as f32),
                 _ => None,
             },
-            Expr::Literal(crate::ast::Literal::Int(n))   => Some(*n as f32),
+            Expr::Literal(crate::ast::Literal::Int(n)) => Some(*n as f32),
             Expr::Literal(crate::ast::Literal::Float(f)) => Some(*f as f32),
             _ => None,
-        }
-    })
+        })
 }
 
 fn escape_str(s: &str) -> String {
@@ -1208,7 +1335,7 @@ fn expr_to_typed(expr: &Expr, ty_hint: &str) -> TypedExpr {
 /// Does not handle `self.` inside string literals. Use P10 proper AST desugaring
 /// when that matters.
 fn desugar_prop_refs(s: &str) -> String {
-    let mut result    = String::new();
+    let mut result = String::new();
     let mut remaining = s;
 
     while !remaining.is_empty() {
@@ -1227,7 +1354,7 @@ fn desugar_prop_refs(s: &str) -> String {
 
         // Skip any stray leading spaces before the identifier.
         let after_trimmed = after.trim_start_matches(' ');
-        let trim_offset   = after.len() - after_trimmed.len();
+        let trim_offset = after.len() - after_trimmed.len();
 
         let ident_end = after_trimmed
             .char_indices()

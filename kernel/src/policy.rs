@@ -23,7 +23,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 /// Magic "VPOL" as a little-endian u32 (bytes V,P,O,L).
-const MAGIC: u32 = u32::from_le_bytes([b'V', b'P', b'O', b'L']);
+const MAGIC: u32 = u32::from_le_bytes(*b"VPOL");
 const VERSION: u8 = 1;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)
@@ -94,7 +94,10 @@ pub fn load_from_vifs1() {
         Ok(b) if !b.is_empty() => b,
         _ => {
             log::info!("[policy] no {} in VIFS1 — absent", POLICY_PATH);
-            crate::audit::log_event(crate::audit::AuditEvent::PolicyAbsent, &crate::audit::encode_u32x2(0, 0));
+            crate::audit::log_event(
+                crate::audit::AuditEvent::PolicyAbsent,
+                &crate::audit::encode_u32x2(0, 0),
+            );
             *POLICY.lock() = Some(PolicyState::Absent);
             return;
         }
@@ -117,7 +120,10 @@ pub fn load_from_vifs1() {
         Some(entries) => {
             let n = entries.len() as u32;
             log::info!("[policy] loaded + verified ({} entries)", n);
-            crate::audit::log_event(crate::audit::AuditEvent::PolicyLoaded, &crate::audit::encode_u32x2(n, 0));
+            crate::audit::log_event(
+                crate::audit::AuditEvent::PolicyLoaded,
+                &crate::audit::encode_u32x2(n, 0),
+            );
             *POLICY.lock() = Some(PolicyState::Loaded(entries));
         }
         None => {
@@ -128,7 +134,10 @@ pub fn load_from_vifs1() {
 }
 
 fn mark_invalid(reason: u32) {
-    crate::audit::log_event(crate::audit::AuditEvent::PolicyInvalid, &crate::audit::encode_u32x2(reason, 0));
+    crate::audit::log_event(
+        crate::audit::AuditEvent::PolicyInvalid,
+        &crate::audit::encode_u32x2(reason, 0),
+    );
     *POLICY.lock() = Some(PolicyState::Invalid);
 }
 
@@ -190,15 +199,15 @@ fn parse(body: &[u8]) -> Option<Vec<PolicyEntry>> {
 pub fn self_test() -> bool {
     // 135-byte dev-signed blob (4 entries) emitted by scripts/sign-policy.py.
     const BLOB: [u8; 135] = [
-        0x56, 0x50, 0x4f, 0x4c, 0x01, 0x00, 0x04, 0x00, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x76, 0x66,
-        0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x6e, 0x65, 0x74,
-        0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x73, 0x68, 0x65, 0x6c,
-        0x6c, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x69, 0x6e, 0x69,
-        0x74, 0x01, 0x01, 0x01, 0x00, 0x03, 0x07, 0x44, 0x17, 0x69, 0xc2, 0xc9, 0x40, 0x3a, 0x1f, 0x67,
-        0xcf, 0xfa, 0x4d, 0xa1, 0x23, 0x15, 0x29, 0xa1, 0xa6, 0x62, 0x9f, 0xb4, 0xde, 0x48, 0xe1, 0x61,
-        0x00, 0x0f, 0x83, 0x98, 0x01, 0x00, 0x46, 0x06, 0x6d, 0x20, 0xa8, 0xa5, 0xff, 0xd9, 0x05, 0x4f,
-        0x51, 0x12, 0x46, 0xc6, 0x45, 0x59, 0x7b, 0x15, 0xae, 0x1e, 0x22, 0xb6, 0x33, 0xb4, 0x2b, 0xc8,
-        0x84, 0x28, 0x2d, 0x83, 0x7f, 0xde, 0x00,
+        0x56, 0x50, 0x4f, 0x4c, 0x01, 0x00, 0x04, 0x00, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x76,
+        0x66, 0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x6e,
+        0x65, 0x74, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x0a, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x73,
+        0x68, 0x65, 0x6c, 0x6c, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09, 0x2f, 0x62, 0x69, 0x6e,
+        0x2f, 0x69, 0x6e, 0x69, 0x74, 0x01, 0x01, 0x01, 0x00, 0x03, 0x07, 0x44, 0x17, 0x69, 0xc2,
+        0xc9, 0x40, 0x3a, 0x1f, 0x67, 0xcf, 0xfa, 0x4d, 0xa1, 0x23, 0x15, 0x29, 0xa1, 0xa6, 0x62,
+        0x9f, 0xb4, 0xde, 0x48, 0xe1, 0x61, 0x00, 0x0f, 0x83, 0x98, 0x01, 0x00, 0x46, 0x06, 0x6d,
+        0x20, 0xa8, 0xa5, 0xff, 0xd9, 0x05, 0x4f, 0x51, 0x12, 0x46, 0xc6, 0x45, 0x59, 0x7b, 0x15,
+        0xae, 0x1e, 0x22, 0xb6, 0x33, 0xb4, 0x2b, 0xc8, 0x84, 0x28, 0x2d, 0x83, 0x7f, 0xde, 0x00,
     ];
     if BLOB.len() < HEADER_LEN + SIG_LEN {
         return false;
@@ -211,8 +220,12 @@ pub fn self_test() -> bool {
     if !crate::ed25519::verify(&DEV_FLEET_PUBKEY, body, &s) {
         return false;
     }
-    let Some(entries) = parse(body) else { return false; };
-    let Some(vfs) = entries.iter().find(|e| e.path == "/bin/vfs") else { return false; };
+    let Some(entries) = parse(body) else {
+        return false;
+    };
+    let Some(vfs) = entries.iter().find(|e| e.path == "/bin/vfs") else {
+        return false;
+    };
     if !vfs.caps.block_io || vfs.caps.block_regions != 0b111 {
         return false;
     }
@@ -225,9 +238,19 @@ pub fn self_test() -> bool {
     }
 
     // 3. Phase 04 narrowing rule (decision_to_caps) — default (dev-permissive) posture.
-    let full = CapSet { block_io: true, network: true, spawn: true,
-        hypervisor: false, mmio_devices: 0, block_regions: 0, ..CapSet::EMPTY };
-    let net_only = CapSet { network: true, ..CapSet::EMPTY };
+    let full = CapSet {
+        block_io: true,
+        network: true,
+        spawn: true,
+        hypervisor: false,
+        mmio_devices: 0,
+        block_regions: 0,
+        ..CapSet::EMPTY
+    };
+    let net_only = CapSet {
+        network: true,
+        ..CapSet::EMPTY
+    };
     // Permit narrows: full ∩ {network} = {network}.
     if decision_to_caps("/bin/app", full, PolicyDecision::Permit(net_only)) != net_only {
         return false;
@@ -282,13 +305,25 @@ fn decision_to_caps(path: &str, caps: CapSet, decision: PolicyDecision) -> CapSe
     match decision {
         PolicyDecision::Permit(p) => caps.intersect(p),
         PolicyDecision::DenyAll => {
-            if is_trusted_core(path) { caps } else { CapSet::EMPTY }
+            if is_trusted_core(path) {
+                caps
+            } else {
+                CapSet::EMPTY
+            }
         }
         PolicyDecision::NoEntry => {
             #[cfg(feature = "policy-required")]
-            { if is_trusted_core(path) { caps } else { CapSet::EMPTY } }
+            {
+                if is_trusted_core(path) {
+                    caps
+                } else {
+                    CapSet::EMPTY
+                }
+            }
             #[cfg(not(feature = "policy-required"))]
-            { caps }
+            {
+                caps
+            }
         }
     }
 }

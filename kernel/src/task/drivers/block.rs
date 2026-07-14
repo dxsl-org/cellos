@@ -1,8 +1,8 @@
-use api::block::ViBlockDevice;
 use super::mmc::MmcBlock;
+use api::block::ViBlockDevice;
 use types::{ViError, ViResult};
 
-static MMC_ZST:  MmcBlock  = MmcBlock;
+static MMC_ZST: MmcBlock = MmcBlock;
 static NULL_ZST: NullBlock = NullBlock;
 
 /// Placeholder block device used when no kernel-resident block driver is present.

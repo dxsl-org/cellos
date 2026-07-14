@@ -23,9 +23,15 @@
 //! `FROZEN` (leaf) is always acquired **before** `SCHEDULER` is dropped, never
 //! while holding it.  SCHEDULER → FROZEN ordering is safe (one-way dependency).
 
-use core::sync::atomic::{AtomicU64, Ordering};
-use types::{CellId, ViError, ViResult};
+// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+// via the critical-section impl hal/arch/riscv registers.
 use crate::sync::Spinlock;
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
+use types::{CellId, ViError, ViResult};
 
 // ─── Swap-ID counter ─────────────────────────────────────────────────────────
 
@@ -114,9 +120,11 @@ pub fn set_task_hotswap_ready(tid: usize) {
 /// Resolve the task-id for a live cell, or `ViError::NotFound`.
 fn find_tid_for_cell(cell_id: CellId) -> ViResult<usize> {
     let guard = crate::task::SCHEDULER.lock();
-    guard.as_ref()
+    guard
+        .as_ref()
         .and_then(|s| {
-            s.tasks.values()
+            s.tasks
+                .values()
                 .find(|t| t.cell_id == cell_id)
                 .map(|t| t.id)
         })
@@ -164,7 +172,9 @@ pub(crate) fn unfreeze_task(tid: usize) {
 /// Mirrors the cleanup sequence from the `ForceExit` handler — must remain in sync.
 pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
     // Resource cleanup (same order as ForceExit handler).
-    crate::cell::cap_registry::CAP_TABLE.lock().revoke_all_for(cell_id);
+    crate::cell::cap_registry::CAP_TABLE
+        .lock()
+        .revoke_all_for(cell_id);
     crate::memory::cell_quota::deregister(cell_id);
     crate::resource_registry::release_for(cell_id);
     crate::resource_registry::release_bdfs_for(tid);
@@ -277,7 +287,8 @@ fn wait_for_hotswap_ready(tid: usize) -> ViResult<()> {
     loop {
         {
             let guard = crate::task::SCHEDULER.lock();
-            if guard.as_ref()
+            if guard
+                .as_ref()
                 .and_then(|s| s.tasks.get(&tid))
                 .map(|t| t.hotswap_ready)
                 .unwrap_or(false)
@@ -320,14 +331,19 @@ fn wait_for_hotswap_ready(tid: usize) -> ViResult<()> {
 pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> ViResult<usize> {
     log::info!(
         "[hotswap] starting swap: cell {} → {} (caller_tid={})",
-        old_cell_id.0, new_elf_path, caller_tid
+        old_cell_id.0,
+        new_elf_path,
+        caller_tid
     );
 
     // ── Snapshot caller's capability ceiling for the new cell ─────────────
     // The replacement must not receive caps the replaced cell didn't hold.
-    let ceiling = crate::task::SCHEDULER.lock().as_ref()
+    let ceiling = crate::task::SCHEDULER
+        .lock()
+        .as_ref()
         .and_then(|s| {
-            s.tasks.values()
+            s.tasks
+                .values()
                 .find(|t| t.cell_id == old_cell_id)
                 .map(|t| crate::task::cap::CapSet::of_task(t))
         })
@@ -344,7 +360,11 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
     // Clear service registry so new callers retry instead of stale-delivering.
     freeze(old_cell_id);
     crate::cell::service_registry::clear_tid(old_tid);
-    log::info!("[hotswap] step 1 done: old_tid={} FROZEN set (swap_id={})", old_tid, swap_id);
+    log::info!(
+        "[hotswap] step 1 done: old_tid={} FROZEN set (swap_id={})",
+        old_tid,
+        swap_id
+    );
 
     // ── Step 2: SERIALIZE ────────────────────────────────────────────────
     // Send AppEvent::Snapshot to the old cell.  The cell must be in Recv state
@@ -363,10 +383,15 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
     // continues with an empty stash (new cell starts with a cold state).
     match wait_for_stash_key(stash_key) {
         Ok(()) => {
-            log::info!("[hotswap] step 2 done: state stashed (key={:#x})", stash_key);
+            log::info!(
+                "[hotswap] step 2 done: state stashed (key={:#x})",
+                stash_key
+            );
         }
         Err(ViError::WouldBlock) => {
-            log::warn!("[hotswap] step 2 timeout: old cell did not stash (continuing with empty stash)");
+            log::warn!(
+                "[hotswap] step 2 timeout: old cell did not stash (continuing with empty stash)"
+            );
         }
         Err(e) => {
             unfreeze(old_cell_id);
@@ -385,7 +410,10 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
         // with no old-cell cleanup needed.
         log::warn!("[hotswap] step 1b: old task gone ({:?}); continuing", e);
     }
-    log::info!("[hotswap] step 1b done: old_tid={} TaskState::Frozen", old_tid);
+    log::info!(
+        "[hotswap] step 1b done: old_tid={} TaskState::Frozen",
+        old_tid
+    );
 
     // ── Step 3: SPAWN ────────────────────────────────────────────────────
     let new_tid = match crate::loader::spawn_from_path(
@@ -414,7 +442,10 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
 
     // Wait for the new cell to call sys_hotswap_ready() (syscall 401).
     if let Err(e) = wait_for_hotswap_ready(new_tid) {
-        log::error!("[hotswap] step 4 timeout: new cell did not signal ready: {:?}", e);
+        log::error!(
+            "[hotswap] step 4 timeout: new cell did not signal ready: {:?}",
+            e
+        );
         return Err(e);
     }
     log::info!("[hotswap] step 4 done: new cell {} is ready", new_tid);
@@ -466,7 +497,8 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
         // returning.
         let new_cell_in_recv = {
             let guard = crate::task::SCHEDULER.lock();
-            guard.as_ref()
+            guard
+                .as_ref()
                 .and_then(|s| s.tasks.get(&new_tid))
                 .map(|t| matches!(t.state, crate::task::tcb::TaskState::Recv { .. }))
                 .unwrap_or(false)
@@ -475,7 +507,8 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
         if !new_cell_in_recv {
             log::warn!(
                 "[hotswap] new cell {} not in Recv during drain; dropping msg from tid={}",
-                new_tid, msg.sender_tid
+                new_tid,
+                msg.sender_tid
             );
             continue;
         }
@@ -488,13 +521,15 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
     if queued_count > 0 {
         log::info!(
             "[hotswap] step 5: drained {} buffered msgs to new_tid={}",
-            queued_count, new_tid
+            queued_count,
+            new_tid
         );
     }
 
     log::info!(
         "[hotswap] step 5 done: old_tid={} → new_tid={}; terminating old cell",
-        old_tid, new_tid
+        old_tid,
+        new_tid
     );
 
     // Terminate the old cell via the internal path (bypasses Frozen kill-guard).
@@ -503,6 +538,10 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
     // Free the stash slot so it does not count toward MAX_ENTRIES.
     crate::cell::state_stash::remove(stash_key);
 
-    log::info!("[hotswap] complete: cell {} is now task {}", old_cell_id.0, new_tid);
+    log::info!(
+        "[hotswap] complete: cell {} is now task {}",
+        old_cell_id.0,
+        new_tid
+    );
     Ok(new_tid)
 }

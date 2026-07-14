@@ -22,13 +22,16 @@ pub struct PendingRead {
 
 /// Table of pending reads keyed by opaque handle ID.
 pub struct PendingTable {
-    slots:   BTreeMap<u32, PendingRead>,
+    slots: BTreeMap<u32, PendingRead>,
     next_id: u32,
 }
 
 impl PendingTable {
     pub fn new() -> Self {
-        Self { slots: BTreeMap::new(), next_id: 1 }
+        Self {
+            slots: BTreeMap::new(),
+            next_id: 1,
+        }
     }
 
     /// Insert pre-read data and return the handle.
@@ -47,5 +50,7 @@ impl PendingTable {
 }
 
 impl Default for PendingTable {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

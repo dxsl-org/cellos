@@ -26,8 +26,7 @@ type RtTlsf = rlsf::Tlsf<'static, u32, u16, FLLEN, SLLEN>;
 #[repr(C, align(8))]
 struct RtPoolMem([core::mem::MaybeUninit<u8>; 256 * 1024]);
 
-static mut RT_POOL_MEM: RtPoolMem =
-    RtPoolMem([core::mem::MaybeUninit::uninit(); 256 * 1024]);
+static mut RT_POOL_MEM: RtPoolMem = RtPoolMem([core::mem::MaybeUninit::uninit(); 256 * 1024]);
 
 static RT_HEAP: Spinlock<Option<RtTlsf>> = Spinlock::new(None);
 

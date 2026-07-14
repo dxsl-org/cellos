@@ -32,12 +32,10 @@ pub use checkbox::CheckBox;
 pub use dialog::Dialog;
 pub use divider::Divider;
 pub use dropdown::DropDown;
-pub use flex_box::{
-    AlignContent, AlignItems, FlexBox, FlexDirection, FlexItem, FlexWrap, Justify,
-};
+pub use flex_box::{AlignContent, AlignItems, FlexBox, FlexDirection, FlexItem, FlexWrap, Justify};
 pub use image::Image;
 pub use line_chart::{LineChart, Series};
-pub use list_view::{ListView, ListDataProvider, VecProvider, VirtualListView};
+pub use list_view::{ListDataProvider, ListView, VecProvider, VirtualListView};
 pub use scroll_area::ScrollArea;
 pub use space::Space;
 pub use text_edit::TextEdit;

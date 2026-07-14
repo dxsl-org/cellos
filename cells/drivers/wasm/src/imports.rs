@@ -4,8 +4,8 @@
 //! linear memory and the host state (cell task ID).  Register them into
 //! a `Linker` before instantiating any module that imports from `vi`.
 
-use wasmi::{Caller, Linker};
 use crate::HostState;
+use wasmi::{Caller, Linker};
 
 /// Register all `vi.*` host imports into `linker`.
 ///
@@ -13,7 +13,7 @@ use crate::HostState;
 pub fn register_vi_imports(linker: &mut Linker<HostState>) {
     linker.func_wrap("vi", "send", vi_send).expect("vi.send");
     linker.func_wrap("vi", "recv", vi_recv).expect("vi.recv");
-    linker.func_wrap("vi", "log",  vi_log).expect("vi.log");
+    linker.func_wrap("vi", "log", vi_log).expect("vi.log");
     linker.func_wrap("vi", "exit", vi_exit).expect("vi.exit");
 }
 
@@ -25,7 +25,9 @@ pub fn register_vi_imports(linker: &mut Linker<HostState>) {
 /// to kernel task `target` via `sys_send`.  Returns 0 on success, -1
 /// on invalid arguments (negative values, out-of-bounds ptr+len).
 fn vi_send(caller: Caller<'_, HostState>, target: i32, ptr: i32, len: i32) -> i32 {
-    if target < 0 || ptr < 0 || len < 0 { return -1; }
+    if target < 0 || ptr < 0 || len < 0 {
+        return -1;
+    }
     let mem = match caller.get_export("memory").and_then(|e| e.into_memory()) {
         Some(m) => m,
         None => return -1,
@@ -33,7 +35,9 @@ fn vi_send(caller: Caller<'_, HostState>, target: i32, ptr: i32, len: i32) -> i3
     let data = mem.data(&caller);
     let start = ptr as usize;
     let end = start.saturating_add(len as usize);
-    if end > data.len() { return -1; }
+    if end > data.len() {
+        return -1;
+    }
     ostd::syscall::sys_send(target as usize, &data[start..end]);
     0
 }
@@ -48,13 +52,10 @@ fn vi_send(caller: Caller<'_, HostState>, target: i32, ptr: i32, len: i32) -> i3
 /// use postcard `take_from_bytes` to find the true message boundary).
 ///
 /// Returns -1 on invalid arguments or receive error.
-fn vi_recv(
-    mut caller: Caller<'_, HostState>,
-    ptr: i32,
-    max_len: i32,
-    sender_out: i32,
-) -> i32 {
-    if ptr < 0 || max_len <= 0 { return -1; }
+fn vi_recv(mut caller: Caller<'_, HostState>, ptr: i32, max_len: i32, sender_out: i32) -> i32 {
+    if ptr < 0 || max_len <= 0 {
+        return -1;
+    }
     let capacity = max_len as usize;
     let mut recv_buf = alloc::vec![0u8; capacity];
 
@@ -73,7 +74,9 @@ fn vi_recv(
                 let data = mem.data_mut(&mut caller);
                 let start = ptr as usize;
                 let end = start.saturating_add(capacity);
-                if end > data.len() { return -1; }
+                if end > data.len() {
+                    return -1;
+                }
                 data[start..end].copy_from_slice(&recv_buf);
             }
             // Write sender task-id as LE u32 at sender_out.
@@ -97,7 +100,9 @@ fn vi_recv(
 /// Writes a UTF-8 string from WASM linear memory to the kernel serial log.
 /// Silently ignores invalid UTF-8 or out-of-bounds pointers.
 fn vi_log(caller: Caller<'_, HostState>, ptr: i32, len: i32) {
-    if ptr < 0 || len <= 0 { return; }
+    if ptr < 0 || len <= 0 {
+        return;
+    }
     let mem = match caller.get_export("memory").and_then(|e| e.into_memory()) {
         Some(m) => m,
         None => return,
@@ -105,7 +110,9 @@ fn vi_log(caller: Caller<'_, HostState>, ptr: i32, len: i32) {
     let data = mem.data(&caller);
     let start = ptr as usize;
     let end = start.saturating_add(len as usize);
-    if end > data.len() { return; }
+    if end > data.len() {
+        return;
+    }
     if let Ok(s) = core::str::from_utf8(&data[start..end]) {
         ostd::io::print(s);
     }

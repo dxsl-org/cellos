@@ -22,18 +22,25 @@ use crate::renderer::ViRenderer;
 /// Swap `E` for a hardware GPU executor in G2+ without touching widget code.
 pub struct GpuRenderer<E: CommandExecutor> {
     executor: E,
-    width:    u32,
-    height:   u32,
-    buf:      GpuCommandBuffer,
+    width: u32,
+    height: u32,
+    buf: GpuCommandBuffer,
 }
 
 impl<E: CommandExecutor> GpuRenderer<E> {
     pub fn new(executor: E, width: u32, height: u32) -> Self {
-        Self { executor, width, height, buf: GpuCommandBuffer::new() }
+        Self {
+            executor,
+            width,
+            height,
+            buf: GpuCommandBuffer::new(),
+        }
     }
 
     /// Unwrap the executor (e.g. to reclaim the inner `ViSurface`).
-    pub fn into_executor(self) -> E { self.executor }
+    pub fn into_executor(self) -> E {
+        self.executor
+    }
 }
 
 impl<E: CommandExecutor> ViRenderer for GpuRenderer<E> {
@@ -47,5 +54,7 @@ impl<E: CommandExecutor> ViRenderer for GpuRenderer<E> {
         self.executor.execute(&self.buf, damage);
     }
 
-    fn size(&self) -> (u32, u32) { (self.width, self.height) }
+    fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
 }

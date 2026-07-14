@@ -75,14 +75,18 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 // SAFETY: csrci on sip.SSIP is permitted from S-mode (priv spec §4.1.3).
                 unsafe { core::arch::asm!("csrci sip, 0x2") };
                 // Reuse the timer tick path: just run the scheduler.
-                unsafe { vi_timer_tick(); }
+                unsafe {
+                    vi_timer_tick();
+                }
             }
             5 => {
                 // S-mode timer interrupt — preemption point.
                 // SAFETY: vi_timer_tick is defined in kernel::task and linked
                 // via extern "Rust".  It increments the tick counter, rearmed
                 // the timer, and calls yield_cpu() to preempt if needed.
-                unsafe { vi_timer_tick(); }
+                unsafe {
+                    vi_timer_tick();
+                }
             }
             9 => {
                 // S-mode external interrupt (PLIC)
@@ -91,10 +95,14 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                     if irq >= 1 && irq <= 8 {
                         // SAFETY: vi_handle_virtio_irq is defined in kernel/src/task/drivers/virtio_blk.rs
                         // and linked via extern "Rust". The irq argument is a valid PLIC claim value (1-8).
-                        unsafe { vi_handle_virtio_irq(irq); }
+                        unsafe {
+                            vi_handle_virtio_irq(irq);
+                        }
                     } else if irq == 10 {
                         // SAFETY: vi_handle_uart_irq is defined in the kernel and linked via extern "Rust".
-                        unsafe { vi_handle_uart_irq(); }
+                        unsafe {
+                            vi_handle_uart_irq();
+                        }
                     }
                     // PLIC complete must come AFTER the device handler has run.
                     plic_complete(irq);
@@ -134,7 +142,9 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 let cell_id = unsafe { vi_current_cell_id() };
                 if from_user && cell_id != 0 {
                     // Genuine U-mode Cell fault — terminate the Cell, let kernel continue.
-                    unsafe { vi_terminate_on_fault(code, frame.sepc, frame.stval); }
+                    unsafe {
+                        vi_terminate_on_fault(code, frame.sepc, frame.stval);
+                    }
                     // vi_terminate_on_fault calls yield_cpu() which switches away.
                     // We should not reach here, but return safely if we do.
                 } else {
@@ -155,7 +165,11 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
 fn plic_claim() -> Option<u32> {
     use crate::common::plic::PLIC;
     let irq = PLIC.claim(1);
-    if irq != 0 { Some(irq) } else { None }
+    if irq != 0 {
+        Some(irq)
+    } else {
+        None
+    }
 }
 
 /// Notify PLIC that IRQ handling is complete (S-mode context 1).

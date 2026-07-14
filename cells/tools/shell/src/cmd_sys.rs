@@ -15,7 +15,11 @@ pub fn cmd_pwd<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 /// `uname [-a]` — print system identification.
 pub fn cmd_uname<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let all = args.any(|a| a == "-a");
-    crate::executor::shell_println(if all { "ViCell vicell-kernel 0.2.1 riscv64 ViCell" } else { "ViCell" });
+    crate::executor::shell_println(if all {
+        "ViCell vicell-kernel 0.2.1 riscv64 ViCell"
+    } else {
+        "ViCell"
+    });
     Ok(())
 }
 
@@ -25,7 +29,9 @@ pub fn cmd_uname<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 /// values until a proper MemInfo syscall is wired.
 pub fn cmd_free<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     crate::executor::shell_println("              total        used        free");
-    crate::executor::shell_println("Mem:        131072        ~4096      ~127000 (KB approx, no MemInfo yet)");
+    crate::executor::shell_println(
+        "Mem:        131072        ~4096      ~127000 (KB approx, no MemInfo yet)",
+    );
     Ok(())
 }
 
@@ -65,7 +71,9 @@ pub fn cmd_sleep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     let secs: u64 = match args.next().and_then(|s| {
         let mut n = 0u64;
         for ch in s.bytes() {
-            if ch < b'0' || ch > b'9' { return None; }
+            if ch < b'0' || ch > b'9' {
+                return None;
+            }
             n = n.saturating_mul(10).saturating_add((ch - b'0') as u64);
         }
         Some(n)

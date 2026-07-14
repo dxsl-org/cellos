@@ -431,11 +431,11 @@ impl Transport for MmioTransport {
                     volwrite!(self.header, queue_sel, queue.into());
                     volwrite!(self.header, queue_num, size);
                     volwrite!(self.header, queue_desc_low, descriptors as u32);
-                    volwrite!(self.header, queue_desc_high, (descriptors >> 32) as u32);
+                    volwrite!(self.header, queue_desc_high, ((descriptors as u64) >> 32) as u32);
                     volwrite!(self.header, queue_driver_low, driver_area as u32);
-                    volwrite!(self.header, queue_driver_high, (driver_area >> 32) as u32);
+                    volwrite!(self.header, queue_driver_high, ((driver_area as u64) >> 32) as u32);
                     volwrite!(self.header, queue_device_low, device_area as u32);
-                    volwrite!(self.header, queue_device_high, (device_area >> 32) as u32);
+                    volwrite!(self.header, queue_device_high, ((device_area as u64) >> 32) as u32);
                     volwrite!(self.header, queue_ready, 1);
                 }
             }

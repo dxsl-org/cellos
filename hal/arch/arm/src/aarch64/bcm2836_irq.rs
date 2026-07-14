@@ -22,13 +22,13 @@ const CORE0_FIQ_SOURCE: usize = LOCAL_CTRL_BASE + 0x70; // FIQ source (should be
 
 // Bits in CORE0_TIMERS_IRQ
 const TIMER_NS_PHYS_IRQ: u32 = 1 << 1; // nCNTPNSIRQ (EL1 Non-secure physical, PPI 30)
-const TIMER_HP_IRQ:      u32 = 1 << 2; // nCNTHPIRQ  (EL2 Hypervisor physical,  PPI 26)
+const TIMER_HP_IRQ: u32 = 1 << 2; // nCNTHPIRQ  (EL2 Hypervisor physical,  PPI 26)
 
 // Bits in CORE0_IRQ_SOURCE (exported for trap.rs dispatch)
-pub const IRQ_SRC_TIMER_NS:  u32 = 1 << 1; // Non-secure physical timer fired
-pub const IRQ_SRC_TIMER_HP:  u32 = 1 << 2; // Hypervisor physical timer fired
+pub const IRQ_SRC_TIMER_NS: u32 = 1 << 1; // Non-secure physical timer fired
+pub const IRQ_SRC_TIMER_HP: u32 = 1 << 2; // Hypervisor physical timer fired
 /// GPU (peripheral) IRQ: routes BCM2835 legacy controller pending IRQs.
-pub const IRQ_SRC_GPU:        u32 = 1 << 8;
+pub const IRQ_SRC_GPU: u32 = 1 << 8;
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {

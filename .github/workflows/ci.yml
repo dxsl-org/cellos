@@ -56,10 +56,16 @@ jobs:
         include:
           - target: riscv64gc-unknown-none-elf
             short: rv64
+            cc_pkg: gcc-riscv64-unknown-elf
+            cc_bin: riscv64-unknown-elf-gcc
           - target: aarch64-unknown-none-softfloat
             short: aarch64
+            cc_pkg: gcc-aarch64-linux-gnu
+            cc_bin: aarch64-linux-gnu-gcc
           - target: x86_64-unknown-none
             short: x86_64
+            cc_pkg: ""
+            cc_bin: cc
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +80,15 @@ jobs:
           cache-on-failure: true
           key: ${{ matrix.short }}
 
+      # littlefs2-sys (pulled in via redoxfs) compiles a vendored C shim for
+      # whatever target `-Z build-std` is cross-compiling to; cc-rs looks for a
+      # <target>-gcc by convention and finds nothing on a bare `-none` target
+      # unless we install and point it at a matching cross compiler.
+      - name: Install cross C compiler for littlefs2-sys
+        if: matrix.cc_pkg != ''
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q ${{ matrix.cc_pkg }}
+
       - name: Build (release)
         # The rv64 kernel links as -pie (build.rs, for Limine KASLR); rustc must
         # emit position-independent code or the linker rejects absolute R_RISCV_64
@@ -81,6 +96,22 @@ jobs:
         # and a workspace-wide pic would also miscompile Cells (GOT-indirect .data).
         env:
           RUSTFLAGS: ${{ matrix.short == 'rv64' && '-D warnings -C relocation-model=pic' || '-D warnings' }}
+          CC_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && matrix.cc_bin || '' }}
+          # littlefs2-sys also runs bindgen (for the LFS C struct layout), which
+          # uses libclang independently of the CC_* override above and derives
+          # its --target from the Rust target triple — pointing it at a bare
+          # `-none` OS makes libclang hunt for a nonexistent sysroot instead of
+          # the host's real glibc headers. Force it back to a real Linux target
+          # (a header-only binding pass doesn't need the bare-metal ABI).
+          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && '--target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu' || '' }}
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && '--target=x86_64-linux-gnu' || '' }}
+          # littlefs2-sys's C shim needs freestanding flags + LFS_NO_INTRINSICS to
+          # avoid pulling in libc headers the bare-elf cross-gcc doesn't ship
+          # (matches scripts/build-test-hooks-ci.sh, which already builds this
+          # cleanly for riscv64).
+          CFLAGS_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && '-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS' || '' }}
+          CC_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && matrix.cc_bin || '' }}
+          CC_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && matrix.cc_bin || '' }}
         run: >
           cargo build
           --release
@@ -119,6 +150,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install QEMU
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc
 
       - name: Download kernel artifact
@@ -181,6 +213,7 @@ jobs:
           key: aarch64-boot
 
       - name: Install QEMU and libclang
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev
 
       - name: Build aarch64 kernel
@@ -228,6 +261,7 @@ jobs:
           key: hypervisor-smoke
 
       - name: Install QEMU
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm
 
       - name: Cache Alpine artifacts
@@ -320,6 +354,7 @@ jobs:
           key: x86_64-boot
 
       - name: Install QEMU and xorriso
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
 
       - name: Build x86_64 kernel
@@ -355,6 +390,7 @@ jobs:
           key: vfs-quota
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       - name: Build test-hooks kernel
@@ -383,6 +419,7 @@ jobs:
           key: redoxfs-srv
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
@@ -445,15 +482,28 @@ jobs:
         with:
           cache-on-failure: true
 
+      # littlefs2-sys (pulled in via redoxfs) compiles a vendored C shim for the
+      # cross-compiled target; cc-rs needs a matching <target>-gcc on PATH.
+      - name: Install cross C compiler for littlefs2-sys
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
+
       - name: Install cargo-geiger
         run: cargo install --locked cargo-geiger
 
       - name: Assert zero unsafe in cells/
+        env:
+          CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
         run: |
           cargo geiger --workspace --output-format json \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
-            > geiger.json 2>&1 || true
+            > geiger.json 2>&1
+          if ! python3 -c "import json; json.load(open('geiger.json'))" 2>/dev/null; then
+            echo "::error::cargo geiger did not produce valid JSON — dumping output:"
+            cat geiger.json
+            exit 1
+          fi
           python3 - << 'PYEOF'
           import json, sys
           with open("geiger.json") as f:
@@ -489,6 +539,7 @@ jobs:
           key: shell-utils
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
@@ -509,14 +560,20 @@ jobs:
   # regress again. prerequisites use ci_guard(): a missing kernel/disk FAILS
   # this job instead of silently skipping every test.
   #
-  # ⚠ Scoped to an ALLOWLIST, not the full `boot` suite: ~20 other boot.rs
-  # tests currently fail on drifted assertions (e.g. boots_to_shell_prompt
-  # reaches the shell but asserts on a "user_hello"/"U-mode" marker the kernel
-  # no longer emits; several /tmp-RamFS-write tests; mqtt_subscribe). The
-  # system boots and works — the ASSERTIONS rot because the suite lived outside
-  # CI. De-rotting the full suite is tracked as the next Bước-1 sub-task in
-  # .agents/260706-0952-system-analysis-g1-g3; expand this allowlist as tests
-  # are reconciled to current boot output.
+  # ⚠ Scoped to an ALLOWLIST, not an unfiltered `boot` suite run — so any
+  # FUTURE new test starts excluded until proven 2/2, same discipline as
+  # always. UPDATE (2026-07-13, .agents/260712-0901-suite-green-3arch/
+  # reports/truth-matrix.md): the "~20 tests fail on drifted assertions" note
+  # this used to carry is STALE — two independent fresh-image full-suite runs
+  # (54 tests, --test-threads=2) both passed 53-54/54, with exactly one test
+  # timing out per run (always one of network_tcp_send_recv /
+  # network_curl_http_get) under TCG contention from running the whole suite
+  # at once; each passed 100% in isolation and across both full runs overall.
+  # The allowlist below was expanded to the full current test list on that
+  # evidence. Verified only on local QEMU 10.2.0/Windows, not yet on this
+  # job's ubuntu-24.04 QEMU build — first CI run after this change is the
+  # verification; if a test proves flaky here that wasn't locally, remove it
+  # and note why, don't silently retry until green.
   boot-suite:
     name: Network Data-Path Integration (riscv64)
     runs-on: ubuntu-24.04
@@ -536,6 +593,7 @@ jobs:
           key: boot-suite
 
       - name: Install dependencies
+        timeout-minutes: 10
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
@@ -548,27 +606,39 @@ jobs:
         run: pwsh ./gen_disk.ps1
 
       - name: Run boot + network + shell + VFS tests
-        # Allowlist by substring (OR semantics). --test-threads=2: each test
-        # boots its own QEMU and TCG is CPU-bound. Only tests that passed 2/2
-        # consecutive full runs are listed — expand as more are stabilized.
-        # Remaining red (2026-07-07, 46/53 pass): 3 input_* tests needing
-        # live-input markers, gpu marker drift, bench 180s timeout under
-        # contention, mqtt_subscribe (SUBACK never received — net recv path),
-        # httpd_dynamic (GET path) — see the analysis plan triage.
+        # Allowlist by exact test-fn name (OR semantics). --test-threads=2: each
+        # test boots its own QEMU and TCG is CPU-bound. 2026-07-13: expanded from
+        # a 22-test subset to the full current 54-test list — two independent
+        # fresh-image full-suite runs both passed 53-54/54 (see the job comment
+        # above). Includes the P02 input-delivery fixes (input_keyboard_e2e,
+        # input_bare_cell) and the P03 char-8-stall regression guard
+        # (console_long_line_with_backspace_no_stall). Any NEW test added to
+        # boot.rs after this point starts excluded until it passes 2/2
+        # consecutive full runs, per the existing discipline.
         run: |
           cd tests/integration
           cargo test --test boot -- --test-threads=2 \
-            boots_to_shell_prompt \
-            network_dhcp network_tcp_send network_curl network_tcp_listen \
-            network_wget_downloads_to_vfs network_httpd_serves_file \
-            network_httpd_dynamic_content \
-            shell_or_operator shell_and_operator shell_exit_code_var shell_echo_e \
-            shell_function_positional_args shell_variable_persists \
-            shell_source_script shell_source_multi_command \
-            shell_case_statement shell_while_loop shell_if_else_branch \
-            shell_test_builtin \
-            vfs_fat16_reboot_persistence vfs_fat16_append vfs_fat16_subdir_persistence \
-            input_service_registered_at_boot compositor_input_routing_active
+            boots_to_shell_prompt fat_filesystem_mounts shell_executes_echo \
+            hot_migration_state_transfer_works gpu_framebuffer_initialises \
+            network_dhcp_acquires_ip network_tcp_send_recv network_curl_http_get \
+            network_tcp_listen_accept \
+            vfs_write_echo_redirect vfs_fat16_write_read vfs_fat16_reboot_persistence \
+            vfs_write_large_content vfs_fat16_unlink vfs_fat16_subdir \
+            block_io_denied_non_vfs vfs_fat16_subdir_persistence vfs_fat16_recursive_rmdir \
+            vfs_fat16_append \
+            network_httpd_serves_file network_httpd_dynamic_content \
+            shell_while_loop shell_function_positional_args shell_case_statement \
+            shell_echo_e shell_redirect_append network_wget_downloads_to_vfs \
+            mqtt_publish mqtt_subscribe shell_test_builtin shell_function_define_and_call \
+            shell_midtoken_var_expansion shell_unset_var shell_exit_code_var \
+            shell_break_loop shell_and_operator shell_or_operator shell_for_loop \
+            shell_if_true_branch shell_if_else_branch shell_variable_assignment \
+            shell_variable_persists shell_source_script shell_sleep_returns \
+            shell_source_multi_command shell_cmd_substitution \
+            console_long_line_with_backspace_no_stall \
+            input_service_registered_at_boot compositor_input_routing_active \
+            bench_all_pass input_keyboard_e2e input_bare_cell \
+            posix_shim_getentropy posix_shim_net
 
   security:
     name: Security Scan
@@ -577,11 +647,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v1
+        # v1's bundled cargo-deny can't parse CVSS 4.0 entries now present in
+        # the RustSec advisory DB ("unsupported CVSS version: 4.0"); v2 ships
+        # a current cargo-deny that supports it.
+        uses: EmbarkStudios/cargo-deny-action@v2
         with:
           arguments: --all-features
 
       - name: cargo-audit
-        uses: rustsec/audit-check@v1.4.1
+        uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

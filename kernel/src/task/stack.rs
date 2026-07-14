@@ -5,7 +5,6 @@
 
 use crate::memory::frame::FRAME_ALLOCATOR;
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
-use alloc::vec::Vec;
 use log::{error, trace};
 use types::{VAddr, ViError};
 
@@ -80,8 +79,10 @@ impl Stack {
         // Then we hope subsequent calls are contiguous. If not, we panic/fail for now
         // (until VMA is implemented).
 
-        let base_frame = allocator.allocate_contiguous(total_pages).ok_or(ViError::OutOfMemory)?;
-        
+        let base_frame = allocator
+            .allocate_contiguous(total_pages)
+            .ok_or(ViError::OutOfMemory)?;
+
         let base_addr = base_frame; // Identity Map
 
         // 2. Map Pages
@@ -128,7 +129,10 @@ impl Stack {
             if paging::unmap_page(base_addr).is_err() {
                 // Non-fatal: stack is still usable, just unguarded. Loud so a
                 // silently-unprotected stack is never mistaken for a guarded one.
-                error!("Stack guard NOT active: unmap of guard frame 0x{:X} failed", base_addr);
+                error!(
+                    "Stack guard NOT active: unmap of guard frame 0x{:X} failed",
+                    base_addr
+                );
             } else {
                 paging::tlb_flush_all();
             }
@@ -213,7 +217,10 @@ pub struct CellSegments {
 }
 
 impl CellSegments {
-    pub fn new(pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>, pie_va_base: usize) -> Self {
+    pub fn new(
+        pages: alloc::vec::Vec<(types::VAddr, types::PhysAddr)>,
+        pie_va_base: usize,
+    ) -> Self {
         Self { pages, pie_va_base }
     }
 

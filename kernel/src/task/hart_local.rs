@@ -24,14 +24,14 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 #[repr(C)]
 pub struct ViHartLocal {
     /// This hart's id (0 = boot hart).
-    pub hart_id: usize,              // offset 0
+    pub hart_id: usize, // offset 0
     /// Cell ID currently running on this hart.  0 = kernel (no quota limit).
     pub current_cell_id: AtomicUsize, // offset 8  (AtomicUsize is transparent over usize)
     /// Value of `gp` captured at `install()` time — handed to new cells.
-    pub kernel_gp: usize,            // offset 16
+    pub kernel_gp: usize, // offset 16
     /// Value of `tp` that cells inherit on context switch.  Currently 0 (cells
     /// have no TLS); Phase 05 may give each cell a private tp.
-    pub kernel_tp_for_cells: usize,  // offset 24
+    pub kernel_tp_for_cells: usize, // offset 24
     /// Per-hart ready queues keyed by priority (`u8`; higher = higher priority).
     /// Leaf lock: may be locked while holding SCHEDULER, never the reverse.
     pub ready: crate::sync::Spinlock<BTreeMap<u8, VecDeque<usize>>>,
@@ -45,6 +45,14 @@ pub struct ViHartLocal {
 /// SAFETY: interior mutability via AtomicUsize; the `usize` fields are only
 /// written during `install()` before the hart handles any interrupt.
 pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
+    // `ZERO` is consumed exactly once below, by the `[ZERO; MAX_HARTS]` array-repeat
+    // expression — rustc evaluates a `const` operand fresh per array slot, so each
+    // hart gets its OWN independent `AtomicUsize`/`Spinlock`, not a shared instance.
+    // That is the desired behaviour here (see module doc: hart N only touches slot N),
+    // so this is not the aliasing footgun `declare_interior_mutable_const` warns about;
+    // switching to `static` would break the repeat expression (requires a `const` for
+    // non-`Copy` element types).
+    #[allow(clippy::declare_interior_mutable_const)]
     const ZERO: ViHartLocal = ViHartLocal {
         hart_id: 0,
         current_cell_id: AtomicUsize::new(0),
@@ -74,7 +82,12 @@ pub static HART_LOCAL_TP_ADDR: AtomicUsize = AtomicUsize::new(0);
 /// Hart 0 calls this as the first action of `task::init()`.
 /// Secondary harts call this from `smp_hart_entry`, after installing stvec.
 pub fn install(hart_id: usize) {
-    assert!(hart_id < MAX_HARTS, "hart_id {} >= MAX_HARTS {}", hart_id, MAX_HARTS);
+    assert!(
+        hart_id < MAX_HARTS,
+        "hart_id {} >= MAX_HARTS {}",
+        hart_id,
+        MAX_HARTS
+    );
 
     // Capture the current gp and tp so we can hand them to cells unchanged.
     let (gp, tp) = crate::hal::arch::get_gp_tp();
@@ -121,7 +134,9 @@ pub unsafe fn current_hart() -> &'static ViHartLocal {
         &*(tp as *const ViHartLocal)
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    { &HART_LOCALS[0] }
+    {
+        &HART_LOCALS[0]
+    }
 }
 
 /// Return the calling hart's id.
@@ -135,11 +150,15 @@ pub fn current_hart_id() -> usize {
         unsafe {
             core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
         }
-        if tp == 0 { return 0; }
+        if tp == 0 {
+            return 0;
+        }
         unsafe { (*(tp as *const ViHartLocal)).hart_id }
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    { 0 }
+    {
+        0
+    }
 }
 
 /// Cell ID currently running on this hart (0 = kernel, no quota).
@@ -153,11 +172,19 @@ pub fn current_cell_id() -> usize {
         unsafe {
             core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
         }
-        if tp == 0 { return 0; }
-        unsafe { (*(tp as *const ViHartLocal)).current_cell_id.load(Ordering::Relaxed) }
+        if tp == 0 {
+            return 0;
+        }
+        unsafe {
+            (*(tp as *const ViHartLocal))
+                .current_cell_id
+                .load(Ordering::Relaxed)
+        }
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    { HART_LOCALS[0].current_cell_id.load(Ordering::Relaxed) }
+    {
+        HART_LOCALS[0].current_cell_id.load(Ordering::Relaxed)
+    }
 }
 
 /// Update the cell-id attribution for the calling hart.
@@ -169,11 +196,19 @@ pub fn set_current_cell_id(id: usize) {
         unsafe {
             core::arch::asm!("mv {}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
         }
-        if tp == 0 { return; }
-        unsafe { (*(tp as *const ViHartLocal)).current_cell_id.store(id, Ordering::Relaxed) };
+        if tp == 0 {
+            return;
+        }
+        unsafe {
+            (*(tp as *const ViHartLocal))
+                .current_cell_id
+                .store(id, Ordering::Relaxed)
+        };
     }
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
-    { HART_LOCALS[0].current_cell_id.store(id, Ordering::Relaxed); }
+    {
+        HART_LOCALS[0].current_cell_id.store(id, Ordering::Relaxed);
+    }
 }
 
 /// Write the `tp` register.
@@ -190,5 +225,9 @@ pub unsafe fn write_tp(val: usize) {
     core::arch::asm!("mv tp, {}", in(reg) val, options(nomem, nostack, preserves_flags));
 }
 
+/// No-op on non-RISC-V targets (no `tp`-based hart-local addressing).
+///
+/// # Safety
+/// No preconditions on these targets — `_val` is unused and no state is written.
 #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
 pub unsafe fn write_tp(_val: usize) {}

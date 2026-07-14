@@ -10,7 +10,7 @@ use core::cmp;
 use crate::sync::Spinlock;
 use crate::task::drivers::ramdisk::ViRamDisk; // Use RAM disk instead of VirtIO
 use api::block::ViBlockDevice;
-use api::fs::{BoxFuture, FileResult, OpenMode, ViFileSystem, ViFile};
+use api::fs::{BoxFuture, FileResult, OpenMode, ViFile, ViFileSystem};
 use types::{ViError, ViResult}; // Using Spinlock for kernel level sync
 
 // Import io traits from fatfs (0.4)
@@ -31,6 +31,12 @@ impl BlockStream {
     }
 }
 
+impl Default for BlockStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // Implement fatfs IO traits
 // fatfs 0.4 Read/Write/Seek traits inherit from IoBase
 
@@ -42,7 +48,7 @@ impl Read for BlockStream {
     // type Error is in IoBase
 
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Ok(0);
         }
 
@@ -81,30 +87,39 @@ impl Write for BlockStream {
         while buf_offset < buf.len() {
             let start_sector = self.pos / sector_size;
             let offset = (self.pos % sector_size) as usize;
-            
+
             // Optimization: If writing full sector, skip read-modify-write
             let bytes_left = buf.len() - buf_offset;
             let current_chunk = cmp::min(bytes_left, (sector_size as usize) - offset);
 
             if offset == 0 && current_chunk == (sector_size as usize) {
-                 // Full sector write
-                 if self.device.write_sector(start_sector, &buf[buf_offset..buf_offset + current_chunk]).is_err() {
-                     return Err(());
-                 }
+                // Full sector write
+                if self
+                    .device
+                    .write_sector(start_sector, &buf[buf_offset..buf_offset + current_chunk])
+                    .is_err()
+                {
+                    return Err(());
+                }
             } else {
-                 // Read-Modify-Write
-                 let mut sector_buf = [0u8; 512];
-                 if self.device.read_sector(start_sector, &mut sector_buf).is_err() {
-                     return Err(());
-                 }
-                 
-                 sector_buf[offset..offset + current_chunk].copy_from_slice(&buf[buf_offset..buf_offset + current_chunk]);
-                 
-                 if self.device.write_sector(start_sector, &sector_buf).is_err() {
-                     return Err(());
-                 }
+                // Read-Modify-Write
+                let mut sector_buf = [0u8; 512];
+                if self
+                    .device
+                    .read_sector(start_sector, &mut sector_buf)
+                    .is_err()
+                {
+                    return Err(());
+                }
+
+                sector_buf[offset..offset + current_chunk]
+                    .copy_from_slice(&buf[buf_offset..buf_offset + current_chunk]);
+
+                if self.device.write_sector(start_sector, &sector_buf).is_err() {
+                    return Err(());
+                }
             }
-            
+
             buf_offset += current_chunk;
             self.pos += current_chunk as u64;
         }
@@ -208,19 +223,16 @@ impl ViFileSystem for ViFatFS {
         let rel_path = path.trim_start_matches('/');
         let fs_lock = self.inner.lock();
         let root = fs_lock.root_dir();
-        
+
         // Determine intent
-        let can_create = match mode {
-             OpenMode::Write | OpenMode::ReadWrite => true,
-             _ => false,
-        };
+        let can_create = matches!(mode, OpenMode::Write | OpenMode::ReadWrite);
 
         let mut is_dir = false;
 
         // Try opening as file first
         if rel_path.is_empty() {
-             // Root directory
-             is_dir = true;
+            // Root directory
+            is_dir = true;
         } else if root.open_file(rel_path).is_err() {
             // Try opening as directory
             if root.open_dir(rel_path).is_ok() {
@@ -228,19 +240,19 @@ impl ViFileSystem for ViFatFS {
             } else {
                 // Not found. Create if allowed?
                 if can_create && !rel_path.is_empty() {
-                     // Try create file
-                     if root.create_file(rel_path).is_ok() {
-                         // Created successfully
-                     } else {
-                         return Err(ViError::NotFound);
-                     }
+                    // Try create file
+                    if root.create_file(rel_path).is_ok() {
+                        // Created successfully
+                    } else {
+                        return Err(ViError::NotFound);
+                    }
                 } else {
-                     return Err(ViError::NotFound);
+                    return Err(ViError::NotFound);
                 }
             }
         }
-        
-        // If we just created it, open it again? 
+
+        // If we just created it, open it again?
         // create_file returns File object, but we dropped it.
         // Re-open in FatFile is handled lazily in read/write?
         // No, current `FatFile` re-opens on every read/write call?!
@@ -248,7 +260,7 @@ impl ViFileSystem for ViFatFS {
         // read() calls `root.open_file(rel_path)`.
         // This is inefficient (Stateless), but works.
         // So successful creation here is enough.
-        
+
         Ok(Box::new(FatFile {
             path: String::from(path),
             pos: 0,
@@ -310,7 +322,9 @@ impl ViFile for FatFile {
             let mut total = 0usize;
             while total < buf.len() {
                 let r = file.read(&mut buf[total..]).map_err(|_| ViError::IO)?;
-                if r == 0 { break; } // EOF
+                if r == 0 {
+                    break;
+                } // EOF
                 total += r;
             }
             total
@@ -321,21 +335,22 @@ impl ViFile for FatFile {
 
     fn write(&mut self, buf: &[u8]) -> ViResult<usize> {
         if self.is_dir {
-             return Err(ViError::IsADirectory);
+            return Err(ViError::IsADirectory);
         }
         let n = {
-             let fs_lock = self.fs.lock();
-             let root = fs_lock.root_dir();
-             let rel_path = self.path.trim_start_matches('/');
-             // For write, the file must exist or have been created by open()
-             let res = match root.open_file(rel_path) {
-                 Ok(mut file) => {
-                     file.seek(SeekFrom::Start(self.pos)).map_err(|_| ViError::IO)?;
-                     file.write(buf).map_err(|_| ViError::IO)?
-                 }
-                 Err(_) => return Err(ViError::NotFound),
-             };
-             res
+            let fs_lock = self.fs.lock();
+            let root = fs_lock.root_dir();
+            let rel_path = self.path.trim_start_matches('/');
+            // For write, the file must exist or have been created by open()
+            let res = match root.open_file(rel_path) {
+                Ok(mut file) => {
+                    file.seek(SeekFrom::Start(self.pos))
+                        .map_err(|_| ViError::IO)?;
+                    file.write(buf).map_err(|_| ViError::IO)?
+                }
+                Err(_) => return Err(ViError::NotFound),
+            };
+            res
         };
         self.pos += n as u64;
         Ok(n)

@@ -30,18 +30,24 @@ static mut FAILED: u32 = 0;
 
 fn pass(name: &str) {
     // SAFETY: single shell task; no concurrent access.
-    unsafe { PASSED += 1; }
+    unsafe {
+        PASSED += 1;
+    }
     ostd::io::print("[shell-test] PASS  ");
     ostd::io::println(name);
 }
 
 fn fail(name: &str, got: &str, want: &str) {
     // SAFETY: single shell task; no concurrent access.
-    unsafe { FAILED += 1; }
+    unsafe {
+        FAILED += 1;
+    }
     ostd::io::print("[shell-test] FAIL  ");
     ostd::io::println(name);
-    ostd::io::print("  got:  "); ostd::io::println(got);
-    ostd::io::print("  want: "); ostd::io::println(want);
+    ostd::io::print("  got:  ");
+    ostd::io::println(got);
+    ostd::io::print("  want: ");
+    ostd::io::println(want);
 }
 
 /// Assert that captured output (as UTF-8) contains `needle`.
@@ -80,7 +86,11 @@ fn run(jobs: &mut Jobs, line: &str) {
 
 fn test_stdout_redirect(jobs: &mut Jobs) {
     run(jobs, "echo REDIR_OUT > /tmp/st_redir.txt");
-    assert_file_contains("stdout redirect writes file", "/tmp/st_redir.txt", "REDIR_OUT");
+    assert_file_contains(
+        "stdout redirect writes file",
+        "/tmp/st_redir.txt",
+        "REDIR_OUT",
+    );
 }
 
 fn test_append_redirect(jobs: &mut Jobs) {
@@ -93,27 +103,35 @@ fn test_append_redirect(jobs: &mut Jobs) {
 fn test_stderr_redirect(jobs: &mut Jobs) {
     // Phase 1: 2> routes output to file (single-channel shell, stderr==stdout).
     run(jobs, "echo STDERR_OUT 2> /tmp/st_stderr.txt");
-    assert_file_contains("stderr redirect writes file", "/tmp/st_stderr.txt", "STDERR_OUT");
+    assert_file_contains(
+        "stderr redirect writes file",
+        "/tmp/st_stderr.txt",
+        "STDERR_OUT",
+    );
 }
 
 fn test_pipe_grep(jobs: &mut Jobs) {
     // Pipeline: echo multi-line | grep pattern.
-    assert_contains(jobs, "pipe grep matches lines",
+    assert_contains(
+        jobs,
+        "pipe grep matches lines",
         "echo -e ax\\nby\\ncx | grep x",
-        "ax");
+        "ax",
+    );
 }
 
 fn test_wc_l(jobs: &mut Jobs) {
     // wc -l on 3-line input via pipeline.
-    assert_contains(jobs, "wc -l counts 3 lines",
-        "echo -e a\\nb\\nc | wc",
-        "3");
+    assert_contains(jobs, "wc -l counts 3 lines", "echo -e a\\nb\\nc | wc", "3");
 }
 
 fn test_sort(jobs: &mut Jobs) {
-    assert_contains(jobs, "sort produces first line 'a'",
+    assert_contains(
+        jobs,
+        "sort produces first line 'a'",
         "echo -e c\\na\\nb | sort",
-        "a");
+        "a",
+    );
 }
 
 fn test_tee(jobs: &mut Jobs) {
@@ -130,23 +148,25 @@ fn test_tee(jobs: &mut Jobs) {
 
 fn test_sed(jobs: &mut Jobs) {
     // Phase 2: sed substitution (first occurrence).
-    assert_contains(jobs, "sed first-occurrence substitution",
+    assert_contains(
+        jobs,
+        "sed first-occurrence substitution",
         "echo foo bar | sed s/foo/baz/",
-        "baz bar");
+        "baz bar",
+    );
     // Global substitution.
-    assert_contains(jobs, "sed global substitution",
+    assert_contains(
+        jobs,
+        "sed global substitution",
         "echo foo foo | sed s/foo/baz/g",
-        "baz baz");
+        "baz baz",
+    );
 }
 
 fn test_fg_bg(jobs: &mut Jobs) {
     // Phase 3: fg/bg print limitation message, not "command not found".
-    assert_contains(jobs, "fg prints limitation message",
-        "fg",
-        "no job control");
-    assert_contains(jobs, "bg prints limitation message",
-        "bg",
-        "no job control");
+    assert_contains(jobs, "fg prints limitation message", "fg", "no job control");
+    assert_contains(jobs, "bg prints limitation message", "bg", "no job control");
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────

@@ -15,7 +15,12 @@ use ostd::syscall::sys_exit;
 // `network = false` is correct: this cell never makes a direct network syscall.
 // All net access is via IPC (Send/Recv) to the net service, which holds the
 // network capability. The cap lives on the service, not on this client cell.
-ostd::app_entry!(block_io = false, network = false, spawn = false, handler = smoke_handler);
+ostd::app_entry!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    handler = smoke_handler
+);
 
 // Host-side mock LLM, reachable from the QEMU guest via SLIRP (host = 10.0.2.2).
 // Run `python tools/hypha-mock-llm/mock_proxy.py --plain` (port 8080) for HTTP
@@ -29,7 +34,8 @@ const PATH: &str = "/v1/chat/completions";
 const CONTENT_TYPE: &str = "application/json";
 // The mock echoes choices[0].message.content back from the prompt, so a >503-B
 // body also exercises the TlsStream write-all loop (plan success criterion).
-const PROMPT: &[u8] = br#"{"model":"mock","messages":[{"role":"user","content":"ping-roundtrip"}]}"#;
+const PROMPT: &[u8] =
+    br#"{"model":"mock","messages":[{"role":"user","content":"ping-roundtrip"}]}"#;
 
 /// Drive one full request/response over `client`, drain the body, parse JSON,
 /// and return the extracted `choices[0].message.content` string.
@@ -37,7 +43,9 @@ fn run_exchange<T>(mut client: HttpClient<T>) -> Result<alloc::string::String, (
 where
     T: ostd::embedded_io::Read + ostd::embedded_io::Write,
 {
-    let (headers, mut body) = client.post(HOSTNAME, PATH, CONTENT_TYPE, PROMPT).map_err(|_| ())?;
+    let (headers, mut body) = client
+        .post(HOSTNAME, PATH, CONTENT_TYPE, PROMPT)
+        .map_err(|_| ())?;
     if headers.status != 200 {
         println("[http-smoke] non-200 status");
         return Err(());
@@ -102,7 +110,9 @@ fn run_smoke() {
             }
             Err(()) => println("[http-smoke] HTTP FAIL: exchange/parse error"),
         },
-        Err(_) => println("[http-smoke] HTTP FAIL: connect (is the mock running on :8080 --plain?)"),
+        Err(_) => {
+            println("[http-smoke] HTTP FAIL: connect (is the mock running on :8080 --plain?)")
+        }
     }
 
     // ── HTTPS over TlsStream ───────────────────────────────────────────────

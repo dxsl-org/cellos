@@ -57,7 +57,9 @@ pub trait ViNode: 'static {
     ///
     /// Leaf interactive widgets (Button, CheckBox, Slider, TextEdit) override
     /// this to return `true`. Containers and decorative widgets leave the default.
-    fn is_focusable(&self) -> bool { false }
+    fn is_focusable(&self) -> bool {
+        false
+    }
 
     /// Collect screen rects of all focusable descendants (and self, if focusable).
     ///
@@ -76,7 +78,9 @@ pub trait ViNode: 'static {
     ///
     /// Returns `true` if the activation was consumed (triggers layout re-check).
     /// Button: fires `on_click`. CheckBox: toggles state. Default: no-op → false.
-    fn activate(&mut self) -> bool { false }
+    fn activate(&mut self) -> bool {
+        false
+    }
 
     /// Walk the tree and activate the widget whose bounds exactly match `target`.
     ///

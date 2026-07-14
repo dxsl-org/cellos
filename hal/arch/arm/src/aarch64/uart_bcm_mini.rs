@@ -7,20 +7,20 @@
 //! available on GPIO14/15 once `enable_uart=1` is set in `config.txt`
 //! (VideoCore pre-configures the pin-mux; `init()` also does it explicitly).
 
-const AUX_BASE:    usize = 0x3F21_5000;
+const AUX_BASE: usize = 0x3F21_5000;
 const AUX_ENABLES: usize = AUX_BASE + 0x004;
-const AUX_MU_IO:   usize = AUX_BASE + 0x040;
-const AUX_MU_IER:  usize = AUX_BASE + 0x044;
-const AUX_MU_IIR:  usize = AUX_BASE + 0x048;
-const AUX_MU_LCR:  usize = AUX_BASE + 0x04C;
-const AUX_MU_MCR:  usize = AUX_BASE + 0x050;
-const AUX_MU_LSR:  usize = AUX_BASE + 0x054;
+const AUX_MU_IO: usize = AUX_BASE + 0x040;
+const AUX_MU_IER: usize = AUX_BASE + 0x044;
+const AUX_MU_IIR: usize = AUX_BASE + 0x048;
+const AUX_MU_LCR: usize = AUX_BASE + 0x04C;
+const AUX_MU_MCR: usize = AUX_BASE + 0x050;
+const AUX_MU_LSR: usize = AUX_BASE + 0x054;
 const AUX_MU_CNTL: usize = AUX_BASE + 0x060;
 const AUX_MU_BAUD: usize = AUX_BASE + 0x068;
 
 // BCM GPIO base for pin-mux setup.
-const GPIO_BASE:  usize = 0x3F20_0000;
-const GPFSEL1:    usize = GPIO_BASE + 0x004; // function select for GPIO 10-19
+const GPIO_BASE: usize = 0x3F20_0000;
+const GPFSEL1: usize = GPIO_BASE + 0x004; // function select for GPIO 10-19
 
 // LSR bit 5: TX FIFO has space.  Bit 0: RX data ready.
 const LSR_TX_EMPTY: u32 = 1 << 5;
@@ -45,10 +45,10 @@ fn init_gpio_mux() {
     let mut v = rd(GPFSEL1);
     // GPIO14: bits [14:12] = 010 = Alt5
     v &= !(7 << 12);
-    v |=   2 << 12;
+    v |= 2 << 12;
     // GPIO15: bits [17:15] = 010 = Alt5
     v &= !(7 << 15);
-    v |=   2 << 15;
+    v |= 2 << 15;
     wr(GPFSEL1, v);
 }
 
@@ -93,7 +93,9 @@ pub fn putchar(byte: u8) {
 
 /// Blocking write of a string — calls `putchar` for each byte.
 pub fn puts(s: &str) {
-    for b in s.bytes() { putchar(b); }
+    for b in s.bytes() {
+        putchar(b);
+    }
 }
 
 /// FIFO-safe probe write — waits for TX FIFO space then sends one byte.

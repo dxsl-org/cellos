@@ -3,30 +3,34 @@
 
 extern crate alloc;
 
-use alloc::vec;
-use api::display::Rect;
-use ostd::syscall::{sys_gpu_flush, sys_get_resolution};
-use crate::cursor_sprite::{CURSOR_H, CURSOR_W, cursor_pixel};
+use crate::cursor_sprite::{cursor_pixel, CURSOR_H, CURSOR_W};
 use crate::surface_table::SurfaceTable;
 use crate::z_order::ZOrder;
+use alloc::vec;
+use api::display::Rect;
+use ostd::syscall::{sys_get_resolution, sys_gpu_flush};
 
 /// Screen framebuffer owned by the compositor (BGRA8888).
 pub struct ScreenFb {
-    pixels:  alloc::vec::Vec<u8>,
+    pixels: alloc::vec::Vec<u8>,
     /// Reusable staging buffer for GPU flush — pre-allocated to avoid per-frame heap churn.
     staging: alloc::vec::Vec<u8>,
-    pub width:  u32,
+    pub width: u32,
     pub height: u32,
 }
 
 impl ScreenFb {
     /// Allocate a zeroed framebuffer of the given dimensions.
     pub fn new(width: u32, height: u32) -> Self {
-        assert!(width > 0 && height > 0 && width <= 4096 && height <= 4096,
-            "ScreenFb dimensions out of range: {}x{}", width, height);
+        assert!(
+            width > 0 && height > 0 && width <= 4096 && height <= 4096,
+            "ScreenFb dimensions out of range: {}x{}",
+            width,
+            height
+        );
         let full = (width * height * 4) as usize;
         Self {
-            pixels:  vec![0u8; full],
+            pixels: vec![0u8; full],
             staging: vec![0u8; full],
             width,
             height,
@@ -44,11 +48,13 @@ impl ScreenFb {
         let clip_y = (-s.y).max(0) as u32;
         let w = (s.w.saturating_sub(clip_x)).min(self.width.saturating_sub(sx));
         let h = (s.h.saturating_sub(clip_y)).min(self.height.saturating_sub(sy));
-        if w == 0 || h == 0 { return; }
+        if w == 0 || h == 0 {
+            return;
+        }
 
         let screen_stride = self.width as usize * 4;
-        let surf_stride   = s.w as usize * 4;
-        let surf_pixels   = s.pixels();
+        let surf_stride = s.w as usize * 4;
+        let surf_pixels = s.pixels();
 
         for row in 0..h as usize {
             let dst_off = (sy as usize + row) * screen_stride + sx as usize * 4;
@@ -73,27 +79,38 @@ impl ScreenFb {
         let stride = self.width as usize * 4;
         for row in 0..CURSOR_H {
             let sy = cy + row as i32;
-            if sy < 0 || sy >= self.height as i32 { continue; }
+            if sy < 0 || sy >= self.height as i32 {
+                continue;
+            }
             for col in 0..CURSOR_W {
                 let sx = cx + col as i32;
-                if sx < 0 || sx >= self.width as i32 { continue; }
+                if sx < 0 || sx >= self.width as i32 {
+                    continue;
+                }
                 // Skip pixels outside the dirty region (won't be flushed).
-                if sx < dirty.x || sx >= dirty.x + dirty.w as i32
-                    || sy < dirty.y || sy >= dirty.y + dirty.h as i32
+                if sx < dirty.x
+                    || sx >= dirty.x + dirty.w as i32
+                    || sy < dirty.y
+                    || sy >= dirty.y + dirty.h as i32
                 {
                     continue;
                 }
-                let Some(src) = cursor_pixel(row, col) else { continue };
+                let Some(src) = cursor_pixel(row, col) else {
+                    continue;
+                };
                 let alpha = src[3] as u32;
-                if alpha == 0 { continue; }
+                if alpha == 0 {
+                    continue;
+                }
                 let dst_off = sy as usize * stride + sx as usize * 4;
-                if dst_off + 4 > self.pixels.len() { continue; }
+                if dst_off + 4 > self.pixels.len() {
+                    continue;
+                }
                 // Straight-alpha blend over destination (BGRA channel order).
                 for ch in 0..3usize {
                     let d = self.pixels[dst_off + ch] as u32;
                     let s = src[ch] as u32;
-                    self.pixels[dst_off + ch] =
-                        ((s * alpha + d * (255 - alpha)) / 255) as u8;
+                    self.pixels[dst_off + ch] = ((s * alpha + d * (255 - alpha)) / 255) as u8;
                 }
                 self.pixels[dst_off + 3] = 255; // opaque result
             }
@@ -109,14 +126,16 @@ impl ScreenFb {
         let y = dirty.y.max(0) as u32;
         let w = dirty.w.min(self.width.saturating_sub(x));
         let h = dirty.h.min(self.height.saturating_sub(y));
-        if w == 0 || h == 0 { return; }
+        if w == 0 || h == 0 {
+            return;
+        }
 
-        let stride  = self.width as usize * 4;
+        let stride = self.width as usize * 4;
         let sub_len = (w * h * 4) as usize;
         for row in 0..h as usize {
             let src = (y as usize + row) * stride + x as usize * 4;
             let dst = row * w as usize * 4;
-            let n   = w as usize * 4;
+            let n = w as usize * 4;
             if src + n <= self.pixels.len() && dst + n <= self.staging.len() {
                 self.staging[dst..dst + n].copy_from_slice(&self.pixels[src..src + n]);
             }

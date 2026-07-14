@@ -10,8 +10,8 @@
 //! drains the queue and executes the deferred actions.
 
 extern crate alloc;
-use alloc::{boxed::Box, vec::Vec};
 use alloc::rc::Rc;
+use alloc::{boxed::Box, vec::Vec};
 use core::cell::RefCell;
 
 use crate::layout::Rect;

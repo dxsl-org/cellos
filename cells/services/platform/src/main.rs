@@ -27,9 +27,9 @@
 mod scan;
 
 use ostd::app::{AppContext, AppEvent};
+use ostd::io::println;
 use ostd::mmio::request_region;
 use ostd::syscall::sys_exit;
-use ostd::io::println;
 
 /// ECAM bus-0 window size: 1 MiB (32 devices × 8 functions × 4 KiB).
 const ECAM_BUS0_SIZE: usize = 0x10_0000;
@@ -41,8 +41,12 @@ api::declare_syscalls![Log, RequestMmio, RegisterPcieBar, RegisterPciDevice];
 
 // No privileged manifest flags: PlatformCap is granted by path match, not here.
 api::declare_manifest!(
-    block_io = false, network = false, spawn = false,
-    gpio = false, uart = false, hypervisor = false
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = false,
+    uart = false,
+    hypervisor = false
 );
 
 // One-shot cell: scan ECAM in Init, then exit before the recv loop starts.
@@ -74,7 +78,7 @@ fn scan_ecam() {
     // Claim the ECAM bus-0 window. This call goes through the PlatformCap bypass
     // in the kernel RequestMmio handler (no allowlist check, overlap check only).
     let region = match request_region(ECAM_BASE, ECAM_BUS0_SIZE) {
-        Ok(r)  => r,
+        Ok(r) => r,
         Err(_) => {
             println("[platform] ECAM MMIO claim failed — kernel fallback active");
             return;

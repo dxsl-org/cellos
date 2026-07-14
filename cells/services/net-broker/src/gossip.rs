@@ -1,3 +1,9 @@
+// reason: this module implements the P08 task-claiming gossip protocol for the
+// net-broker robot-swarm feature. `main.rs` only declares `mod gossip;` (main.rs:64)
+// and never references `gossip::` — the dispatch loop's lease-renewal/peer-loss
+// tick is still a TODO (main.rs:136). Not wired yet.
+#![allow(dead_code)]
+
 /// P08 — Task-claiming gossip over the encrypted cluster channel.
 ///
 /// ## Protocol (binary, all fields LE)

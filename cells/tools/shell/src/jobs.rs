@@ -4,30 +4,42 @@ extern crate alloc;
 use alloc::{string::String, vec::Vec};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum JobState { Running, Done }
+pub enum JobState {
+    Running,
+    Done,
+}
 
 /// One job entry.
 struct Job {
-    id:    usize,
+    id: usize,
     state: JobState,
-    name:  String,
+    name: String,
 }
 
 /// Active job registry.
 #[derive(Default)]
 pub struct Jobs {
-    jobs:    Vec<Job>,
+    jobs: Vec<Job>,
     next_id: usize,
 }
 
 impl Jobs {
-    pub fn new() -> Self { Self { jobs: Vec::new(), next_id: 1 } }
+    pub fn new() -> Self {
+        Self {
+            jobs: Vec::new(),
+            next_id: 1,
+        }
+    }
 
     /// Add a new running job and return its job ID.
     pub fn add(&mut self, name: &str) -> usize {
         let id = self.next_id;
         self.next_id += 1;
-        self.jobs.push(Job { id, state: JobState::Running, name: String::from(name) });
+        self.jobs.push(Job {
+            id,
+            state: JobState::Running,
+            name: String::from(name),
+        });
         id
     }
 

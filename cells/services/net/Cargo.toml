@@ -29,9 +29,9 @@ tls-ca-letsencrypt  = ["embedded-tls/p384"]      # ISRG Root X2, ECDSA P-384, +1
 tls-ca-rsa          = ["embedded-tls/rsa"]       # RSA heavyweight opt-in, +135 KB
 
 [dependencies]
-types  = { path = "../../../libs/types" }
-api    = { path = "../../../libs/api" }
-ostd   = { path = "../../../libs/ostd" }
+types  = { path = "../../../libs/types", version = "0.1.0" }
+api    = { path = "../../../libs/api", version = "0.1.0" }
+ostd   = { path = "../../../libs/ostd", version = "0.2.0" }
 embedded-tls      = { version = "0.19", default-features = false, features = ["alloc"] }
 embedded-io       = { version = "0.7",  default-features = false }
 embedded-io-async = { version = "0.7",  default-features = false }
@@ -53,4 +53,4 @@ name = "service-net"
 path = "src/main.rs"
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

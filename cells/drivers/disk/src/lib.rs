@@ -16,7 +16,6 @@ pub struct RamDisk {
     data: Mutex<Vec<u8>>,
 }
 
-
 impl RamDisk {
     pub fn new() -> Self {
         Self {
@@ -56,7 +55,7 @@ impl ViBlockDevice for RamDisk {
     }
 
     fn sector_count(&self) -> u64 {
-        (DISK_SIZE / SECTOR_SIZE) as u64  // constant, no lock needed
+        (DISK_SIZE / SECTOR_SIZE) as u64 // constant, no lock needed
     }
 
     fn sector_size(&self) -> usize {

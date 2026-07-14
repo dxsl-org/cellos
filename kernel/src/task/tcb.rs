@@ -145,7 +145,6 @@ pub enum SyscallFuture {
                                                             // Add other syscall futures here (FileWrite, Connect, etc.)
 }
 
-
 /// Task Control Block (TCB)
 #[allow(dead_code)]
 pub struct Task {
@@ -206,10 +205,10 @@ pub struct Task {
     /// Raw block-device access (BlkRead/BlkWrite/BlkFlush).  Granted at spawn for `/bin/vfs`.
     pub block_io_cap: Option<super::cap::BlockIoCap>,
     /// Network transmit/receive (NetTx/NetRx).  Granted at spawn for `/bin/net`.
-    pub network_cap:  Option<super::cap::NetworkCap>,
+    pub network_cap: Option<super::cap::NetworkCap>,
     /// Cell spawning + hot-swap (SpawnFromPath/SpawnPinned/HotSwap).
     /// Granted at spawn for `/bin/init` and `/bin/shell`.
-    pub spawn_cap:    Option<super::cap::SpawnCap>,
+    pub spawn_cap: Option<super::cap::SpawnCap>,
     /// RISC-V H-extension CSR access for VMM cells.
     /// Granted when manifest declares `hypervisor = true` AND the firmware reported H-ext.
     pub hypervisor_cap: Option<super::cap::HypervisorCap>,
@@ -242,7 +241,7 @@ pub struct Task {
     /// Key assignment: 0 = trusted-core cells (block_io/network/spawn/hypervisor),
     ///                 1 = standard Tier-1 Rust cells,
     ///                 2 = Tier-1b C/FFI cells (mlibc, DOOM).
-    pub pku_key:   u8,
+    pub pku_key: u8,
 
     /// Precomputed PKRU register value for this cell's key domain.
     /// Written to CPU_LOCAL.pku_value by the scheduler before ring-3 re-entry,
@@ -349,17 +348,17 @@ impl Task {
             pending_deaths: Vec::new(),
             pending_exit_reason: None,
             pending_future: None,
-            block_io_cap:   None,
-            network_cap:    None,
-            spawn_cap:      None,
-            hypervisor_cap:  None,
-            supervisor_cap:  None,
+            block_io_cap: None,
+            network_cap: None,
+            spawn_cap: None,
+            hypervisor_cap: None,
+            supervisor_cap: None,
             pcie_driver_cap: None,
-            platform_cap:    None,
-            mmio_devices:   0,
-            block_regions:  0,
-            pku_key:        0,
-            pku_value:      0,
+            platform_cap: None,
+            mmio_devices: 0,
+            block_regions: 0,
+            pku_key: 0,
+            pku_value: 0,
             priority: api::TaskPriority::Normal as u8,
             cluster_mode: 0,
             cluster_id: 0,

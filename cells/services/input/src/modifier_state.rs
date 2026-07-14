@@ -4,8 +4,8 @@
 //! Sticky keys (Caps/Num/Scroll Lock) toggle on press; shift/ctrl/alt/meta
 //! track press/release symmetrically.
 
-use api::input::{KeyState, Modifiers};
 use crate::layout_us_qwerty::{modifier_for_scancode, toggle_modifier_for_scancode};
+use api::input::{KeyState, Modifiers};
 
 /// Tracks the current state of all modifier keys.
 #[derive(Debug, Default, Clone, Copy)]

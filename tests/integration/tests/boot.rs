@@ -1413,6 +1413,35 @@ fn shell_cmd_substitution() {
         .unwrap_or_else(|e| panic!("mid-token: {e}\n{}", qemu.dump()));
 }
 
+/// Regression guard for the historical "C′ stall char-8" symptom
+/// (`.agents/260707-…` IPC wildcard-recv poisoning notes) — never a named test,
+/// so this is the first `#[test]` to cover it directly.
+///
+/// Types a command longer than 8 characters (past any single-byte queue depth)
+/// WITH a mid-line backspace correction (`HELLX` → backspace → `HELLO`), so a
+/// dropped 9th+ byte or a swallowed backspace both surface as a wrong result:
+/// a stall would miss `WROTE0`; a dropped backspace would echo `HELLXO` instead
+/// of `HELLO`.
+#[test]
+fn console_long_line_with_backspace_no_stall() {
+    if !prerequisites_ok() { return; }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    qemu.send_bytes(b"echo HELLX");
+    std::thread::sleep(Duration::from_millis(150));
+    qemu.send_bytes(b"\x08"); // backspace — erases the typo'd X
+    std::thread::sleep(Duration::from_millis(150));
+    qemu.send_bytes(b"O && echo WROTE$?\n");
+
+    qemu.wait_for("WROTE0", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("long line + backspace stalled: {e}\n--- output ---\n{}", qemu.dump()));
+    assert!(qemu.output_contains("HELLO"),
+        "backspace correction did not take effect (expected HELLO)\n--- output ---\n{}", qemu.dump());
+}
+
 // ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────
 
 /// Input M2.2 (Phase 01): kernel must register the input service at spawn time.

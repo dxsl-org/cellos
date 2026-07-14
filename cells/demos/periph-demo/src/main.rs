@@ -9,12 +9,18 @@ use api::declare_manifest;
 use driver_gpio::Pl061Gpio;
 use driver_serial::Pl011Uart;
 use hal_gpio::{Edge, PinDir, ViGpio};
-use types::ViError;
 use hal_uart::SerialPort;
 use ostd::io::println;
 use ostd::syscall::{sys_get_wall_secs, sys_recv_timeout, sys_spawn_pinned, SyscallResult};
+use types::ViError;
 
-declare_manifest!(block_io = false, network = false, spawn = false, gpio = true, uart = true);
+declare_manifest!(
+    block_io = false,
+    network = false,
+    spawn = false,
+    gpio = true,
+    uart = true
+);
 
 const SELF_PATH: &str = "/bin/periph-demo";
 const POLL_PRIORITY: u8 = 200;
@@ -30,7 +36,8 @@ pub fn main() {
         let msg = if epoch_secs > 1_577_836_800 {
             alloc::format!(
                 "[periph-demo] RTC OK: epoch={} (~year {})",
-                epoch_secs, year_approx
+                epoch_secs,
+                year_approx
             )
         } else {
             alloc::format!(
@@ -65,15 +72,15 @@ pub fn main() {
             let _ = gpio.set_direction(0, PinDir::Output);
             let _ = gpio.write_pin(0, true);
             match gpio.read_pin(0) {
-                Ok(true)  => println("[periph-demo] GPIO pin 0: HIGH OK"),
+                Ok(true) => println("[periph-demo] GPIO pin 0: HIGH OK"),
                 Ok(false) => println("[periph-demo] GPIO pin 0: LOW (unexpected)"),
-                Err(_)    => println("[periph-demo] GPIO read_pin error"),
+                Err(_) => println("[periph-demo] GPIO read_pin error"),
             }
             let _ = gpio.write_pin(0, false);
             match gpio.read_pin(0) {
                 Ok(false) => println("[periph-demo] GPIO pin 0: LOW OK"),
-                Ok(true)  => println("[periph-demo] GPIO pin 0: HIGH (unexpected)"),
-                Err(_)    => println("[periph-demo] GPIO read_pin error"),
+                Ok(true) => println("[periph-demo] GPIO pin 0: HIGH (unexpected)"),
+                Err(_) => println("[periph-demo] GPIO read_pin error"),
             }
 
             // ── GPIO IRQ self-test (output-pin loopback) ───────────────────
@@ -86,9 +93,9 @@ pub fn main() {
             // But GPIOMIS is a sticky HW register — it persists until we clear it,
             // so we can read it directly to confirm the edge was detected.
             let _ = gpio.enable_edge_irq(0, Edge::Rising); // enable on pin 0
-            let _ = gpio.write_pin(0, true);               // 0 → 1 : rising edge
-            // At this point vi_gpio_notify_irq was called by the kernel (see kernel
-            // log "[gpio-irq] IRQ fired") even though the IPC was dropped.
+            let _ = gpio.write_pin(0, true); // 0 → 1 : rising edge
+                                             // At this point vi_gpio_notify_irq was called by the kernel (see kernel
+                                             // log "[gpio-irq] IRQ fired") even though the IPC was dropped.
             let mis = gpio.read_mis().unwrap_or(0xFF);
             let _ = gpio.clear_irq(mis);
             let _ = gpio.disable_irq(0);

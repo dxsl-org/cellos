@@ -49,7 +49,6 @@ pub fn init() {
     if let Some(r) = reg.as_mut() {
         r.name_to_id.insert("console", 1);
     }
-
 }
 
 pub fn resolve(name: &str) -> Option<usize> {

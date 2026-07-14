@@ -11,7 +11,7 @@ pub struct LuaState {
     _opaque: [u8; 0],
 }
 
-pub const LUA_OK:      c_int = 0;
+pub const LUA_OK: c_int = 0;
 pub const LUA_MULTRET: c_int = -1;
 
 extern "C" {
@@ -69,11 +69,7 @@ extern "C" {
 
     /// Return the string at stack index `idx` (negative = from top).
     /// Sets `*len` to the byte length.  Returns NULL if not a string.
-    pub fn lua_tolstring(
-        L: *mut LuaState,
-        idx: c_int,
-        len: *mut usize,
-    ) -> *const c_char;
+    pub fn lua_tolstring(L: *mut LuaState, idx: c_int, len: *mut usize) -> *const c_char;
 
     /// Return the number of elements on the stack.
     pub fn lua_gettop(L: *mut LuaState) -> c_int;

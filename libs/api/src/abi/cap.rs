@@ -30,9 +30,9 @@ impl CapId {
 pub struct CapPerms(pub u32);
 
 impl CapPerms {
-    pub const READ:  Self = Self(1 << 0);
+    pub const READ: Self = Self(1 << 0);
     pub const WRITE: Self = Self(1 << 1);
-    pub const SEEK:  Self = Self(1 << 2);
+    pub const SEEK: Self = Self(1 << 2);
 
     /// Read + Seek (standard file-read access).
     pub const FILE_READ: Self = Self(Self::READ.0 | Self::SEEK.0);

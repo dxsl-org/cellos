@@ -5,12 +5,12 @@
 
 const PL011_BASE: u32 = 0x0900_0000; // QEMU ARM virt machine PL011
 
-const UARTDR:   u32 = PL011_BASE;          // Data Register (TX/RX)
-const UARTFR:   u32 = PL011_BASE + 0x018;  // Flag Register
-const UARTIBRD: u32 = PL011_BASE + 0x024;  // Integer Baud Rate Divisor
-const UARTFBRD: u32 = PL011_BASE + 0x028;  // Fractional Baud Rate Divisor
-const UARTLCR:  u32 = PL011_BASE + 0x02C;  // Line Control Register
-const UARTCR:   u32 = PL011_BASE + 0x030;  // Control Register
+const UARTDR: u32 = PL011_BASE; // Data Register (TX/RX)
+const UARTFR: u32 = PL011_BASE + 0x018; // Flag Register
+const UARTIBRD: u32 = PL011_BASE + 0x024; // Integer Baud Rate Divisor
+const UARTFBRD: u32 = PL011_BASE + 0x028; // Fractional Baud Rate Divisor
+const UARTLCR: u32 = PL011_BASE + 0x02C; // Line Control Register
+const UARTCR: u32 = PL011_BASE + 0x030; // Control Register
 
 #[inline(always)]
 unsafe fn mmio_write(addr: u32, val: u32) {
@@ -28,11 +28,11 @@ unsafe fn mmio_read(addr: u32) -> u32 {
 pub fn init() {
     // SAFETY: MMIO addresses are fixed QEMU virt device addresses.
     unsafe {
-        mmio_write(UARTCR,   0);        // disable UART
-        mmio_write(UARTIBRD, 26);       // integer divisor  (115200 baud @ 48 MHz)
-        mmio_write(UARTFBRD, 3);        // fractional divisor
-        mmio_write(UARTLCR,  0x70);    // 8N1 + FIFO enable (FEN bit)
-        mmio_write(UARTCR,   0x301);   // TXE | RXE | UARTEN
+        mmio_write(UARTCR, 0); // disable UART
+        mmio_write(UARTIBRD, 26); // integer divisor  (115200 baud @ 48 MHz)
+        mmio_write(UARTFBRD, 3); // fractional divisor
+        mmio_write(UARTLCR, 0x70); // 8N1 + FIFO enable (FEN bit)
+        mmio_write(UARTCR, 0x301); // TXE | RXE | UARTEN
     }
 }
 

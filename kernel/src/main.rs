@@ -15,18 +15,18 @@ pub mod audit;
 pub mod boot;
 pub mod cell;
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
-pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
-pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
-pub mod resource_registry;
 pub mod fast_ipc; // Kernel-owned fast-IPC dispatch table (canonical instance)
 pub mod fs; // Filesystem
+pub mod hypervisor; // EL2 VMM kernel support (Phase 03+)
+pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod loader;
 pub mod measurement_log; // Per-Cell integrity measurement (IMA-style, TPM-free)
 pub mod memory;
 pub mod policy; // Signed operator policy (P5b) — headless consent
+pub mod resource_registry;
 pub mod sha256; // Self-contained SHA-256 for measurement
+pub mod signing; // Cell binary signing (Ed25519) — verification gate at spawn time
 pub mod snapshot;
-pub mod layer2_selftest; // Layer-2 hardware security self-tests (test-hooks only)
 pub mod task; // Renamed from 'process'
               // pub mod arch; // Moved to HAL
 pub extern crate hal; // HAL (Architecture specific)
@@ -35,8 +35,8 @@ use hal::Arch;
 
 // Internal utilities
 mod cpu_features;
-mod sync;
 pub mod platform;
+mod sync;
 
 /// Signal QEMU to exit with a success (0) or failure (1) code.
 ///
@@ -50,11 +50,17 @@ pub mod platform;
 pub fn qemu_exit(success: bool) -> ! {
     use qemu_exit::QEMUExit;
     #[cfg(target_arch = "riscv64")]
-    { qemu_exit::RISCV64::new(0x100000).exit(if success { 0 } else { 1 }); }
+    {
+        qemu_exit::RISCV64::new(0x100000).exit(if success { 0 } else { 1 });
+    }
     #[cfg(target_arch = "aarch64")]
-    { qemu_exit::AArch64Semihosting::default().exit(if success { 0 } else { 1 }); }
+    {
+        qemu_exit::AArch64Semihosting::default().exit(if success { 0 } else { 1 });
+    }
     #[cfg(target_arch = "x86_64")]
-    { qemu_exit::X86::new(0xF4, 0).exit(if success { 0 } else { 1 }); }
+    {
+        qemu_exit::X86::new(0xF4, 0).exit(if success { 0 } else { 1 });
+    }
     // Fallback for other arches: spin forever so the test times out clearly.
     #[allow(clippy::empty_loop)]
     loop {}
@@ -65,7 +71,11 @@ pub use types::*;
 
 // Embed Init Binary (stripped by build.rs, served from EMBEDDED_OUT_DIR).
 // RV32 Nano (Phase 31) has no init ELF; x86_64 is now included (Phase 04).
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init"));
 
 /// Kernel entry point called from HAL boot code
@@ -107,7 +117,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // page table. ACPI RSDP is typically there (~0xf52e0 on q35).
         // Map it now so phys_to_virt(rsdp) doesn't triple-fault before IDT is up.
         // SAFETY: called after set_hhdm_offset; PML4 walker uses HHDM-mapped RAM.
-        unsafe { crate::hal::paging::map_bios_area(); }
+        unsafe {
+            crate::hal::paging::map_bios_area();
+        }
         // Initialise KASLR seed from HHDM entropy + RDTSC.
         crate::memory::kaslr::init_kaslr(hhdm);
     }
@@ -122,7 +134,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let acpi_info = {
         use crate::memory::frame::phys_to_virt;
         let early_puts = |s: &str| {
-            for c in s.bytes() { crate::hal::uart_16550::putchar(c); }
+            for c in s.bytes() {
+                crate::hal::uart_16550::putchar(c);
+            }
         };
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
         // Limine 8.x maps only usable e820 RAM in its HHDM.  The BIOS ROM area
@@ -133,7 +147,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Use hardcoded q35 defaults here; TODO: re-parse after init_kernel_paging
         // creates a full physical window that covers all e820 regions.
         if rsdp != 0 && rsdp >= 0x10_0000 {
-            let info = crate::acpi::parse(rsdp, |p| phys_to_virt(p));
+            let info = crate::acpi::parse(rsdp, phys_to_virt);
             early_puts("[INFO] ACPI tables parsed\n");
             info
         } else {
@@ -154,7 +168,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         crate::hal::gdt::init();
         crate::hal::idt::init();
         crate::hal::cet::init_kernel_cet(); // LAYER2-CET-INIT
-        crate::hal::pku::init();            // LAYER2-PKU-INIT (requires IBT, checked inside)
+        crate::hal::pku::init(); // LAYER2-PKU-INIT (requires IBT, checked inside)
         crate::hal::syscall::init();
         // apic::init_lapic() deferred — needs MMIO mapped via custom PML4
     }
@@ -169,15 +183,25 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let puts = |s: &str| {
         for c in s.bytes() {
             #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-            { let _ = crate::hal::sbi::console_putchar(c); }
+            {
+                let _ = crate::hal::sbi::console_putchar(c);
+            }
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            { crate::hal::uart_bcm_mini::putchar(c); }
+            {
+                crate::hal::uart_bcm_mini::putchar(c);
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-            { crate::hal::uart_pl011::putchar(c); }
+            {
+                crate::hal::uart_pl011::putchar(c);
+            }
             #[cfg(target_arch = "arm")]
-            { crate::hal::uart_pl011::putchar(c); }
+            {
+                crate::hal::uart_pl011::putchar(c);
+            }
             #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-            { crate::hal::uart_16550::putchar(c); }
+            {
+                crate::hal::uart_16550::putchar(c);
+            }
         }
     };
 
@@ -273,7 +297,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         drop(locked_frame_allocator);
         log_info("Paging initialized");
         log_info("Activating paging...");
-        unsafe { memory::paging::activate_paging(root_table_phys); }
+        unsafe {
+            memory::paging::activate_paging(root_table_phys);
+        }
         log_info("Paging activated");
         // Set sstatus.SUM=1 so S-mode (kernel) can access USER-mapped pages throughout
         // the kernel lifetime. VirtIO/peripheral MMIO is mapped USER=1 for Driver Cells
@@ -282,7 +308,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // hardware USER-bit separation for kernel-vs-cell — SUM=1 is safe and intentional.
         #[cfg(target_arch = "riscv64")]
         // SAFETY: csrs modifies sstatus.SUM (bit 18). Safe to set for kernel S-mode code.
-        unsafe { core::arch::asm!("csrs sstatus, {sum}", sum = in(reg) 0x40000_usize, options(nostack)); }
+        unsafe {
+            core::arch::asm!("csrs sstatus, {sum}", sum = in(reg) 0x40000_usize, options(nostack));
+        }
     }
     #[cfg(target_arch = "x86_64")]
     {
@@ -308,7 +336,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // SAFETY: init_kernel_paging_x86 copied higher-half entries from Limine's PML4
         // (preserving kernel text/data/HHDM) and identity-mapped MMIO, so the kernel
         // continues executing after this CR3 switch without a triple-fault.
-        unsafe { memory::paging::activate_paging(root_table_phys); }
+        unsafe {
+            memory::paging::activate_paging(root_table_phys);
+        }
         // Immediate port-I/O probe after activate_paging — if 'Q' appears on serial,
         // the CR3 switch succeeded and execution reached kmain.  Uses direct out instruction
         // (no Rust function call) so it cannot be affected by any post-switch state issue.
@@ -353,7 +383,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     const HEAP_FRAMES: usize = 4_096;
     let heap_start = {
         let mut allocator_guard = memory::frame::FRAME_ALLOCATOR.lock();
-        let allocator = allocator_guard.as_mut().expect("Frame allocator not initialized");
+        let allocator = allocator_guard
+            .as_mut()
+            .expect("Frame allocator not initialized");
         let start = allocator.allocate_frame().expect("OOM: Heap start");
         for _ in 1..HEAP_FRAMES {
             allocator.allocate_frame().expect("OOM: Heap continuation");
@@ -364,7 +396,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // On x86_64, phys_to_virt adds HHDM offset (Limine maps RAM at HHDM+phys).
     // On RISC-V, phys_to_virt returns phys unchanged (identity-mapped before paging).
     let heap_virt = memory::frame::phys_to_virt(heap_start);
-    unsafe { memory::heap::init_heap(heap_virt, heap_size); }
+    unsafe {
+        memory::heap::init_heap(heap_virt, heap_size);
+    }
     log_info("Heap initialized");
 
     memory::rt_heap::init();
@@ -436,18 +470,28 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     match crate::loader::early::EarlyLoader::probe() {
         Ok(()) => puts("[loader] cell bootstrap table loaded\n"),
-        Err(_) => puts("[loader] WARN: cell table not found — disk image may lack bootstrap section\n"),
+        Err(_) => {
+            puts("[loader] WARN: cell table not found — disk image may lack bootstrap section\n")
+        }
     }
 
     // RV32 Nano: no FAT32 FS in bring-up.
     // x86_64 uses the ramdisk-backed embedded FS to serve cell ELFs via VIFS1.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     fs::init();
 
     // Load + verify the signed operator policy (P5b) NOW: after VIFS1 is mounted,
     // before any cap-bearing cell spawns. Absent → dev-permissive (this G1 build);
     // invalid → fail-closed. Phase 04 folds policy::lookup into the spawn grant.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     policy::load_from_vifs1();
 
     // Phase 20: hot-migration state-transfer self-test.
@@ -464,7 +508,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
     // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the
     // synthetic thread it spawns cannot be raced onto another hart before teardown.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     {
         if task::thread_cap_selftest::self_test() {
             log_info("thread-cap self-test PASS (thread-inherit + honest-revoke)");
@@ -482,7 +530,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
     // x86_64 now included (Phase 04): embedded init ELF at embedded-x86_64/init.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64", target_arch = "x86_64"))]
+    #[cfg(any(
+        target_arch = "riscv64",
+        target_arch = "aarch64",
+        target_arch = "x86_64"
+    ))]
     {
         log_info("Spawning Embedded Init...");
 
@@ -549,10 +601,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
         // that rely on sys_find_pcie_device will simply not find their device.
         #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
-        match crate::loader::spawn_from_path(
-            "/bin/platform",
-            crate::task::cap::Spawner::Root,
-        ) {
+        match crate::loader::spawn_from_path("/bin/platform", crate::task::cap::Spawner::Root) {
             Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
             Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
         }
@@ -615,8 +664,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             let mut buf = [0u8; 20];
             let mut n = tid;
             let mut i = 20usize;
-            if n == 0 { i -= 1; buf[i] = b'0'; } else {
-                while n > 0 { i -= 1; buf[i] = b'0' + (n % 10) as u8; n /= 10; }
+            if n == 0 {
+                i -= 1;
+                buf[i] = b'0';
+            } else {
+                while n > 0 {
+                    i -= 1;
+                    buf[i] = b'0' + (n % 10) as u8;
+                    n /= 10;
+                }
             }
             let _ = core::str::from_utf8(&buf[i..]).map(|s| puts(s));
             puts("\n");
@@ -666,8 +722,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(feature = "board-rpi3")]
     {
         let src_raw = unsafe { core::ptr::read_volatile(0x4000_0060usize as *const u32) };
-        let pend    = unsafe { core::ptr::read_volatile(0x3F00_B204usize as *const u32) };
-        let hex = |n: u32| -> u8 { if n < 10 { b'0' + n as u8 } else { b'a' + n as u8 - 10 } };
+        let pend = unsafe { core::ptr::read_volatile(0x3F00_B204usize as *const u32) };
+        let hex = |n: u32| -> u8 {
+            if n < 10 {
+                b'0' + n as u8
+            } else {
+                b'a' + n as u8 - 10
+            }
+        };
         crate::hal::uart_bcm_mini::probe_put(b'K');
         crate::hal::uart_bcm_mini::probe_put(if src_raw & (1 << 8) != 0 { b'1' } else { b'0' });
         crate::hal::uart_bcm_mini::probe_put(if pend & (1 << 1) != 0 { b'1' } else { b'0' });
@@ -714,20 +776,32 @@ fn panic(info: &PanicInfo) -> ! {
             #[inline(always)]
             fn cell_panic_putchar(c: u8) {
                 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-                { let _ = crate::hal::sbi::console_putchar(c); }
+                {
+                    let _ = crate::hal::sbi::console_putchar(c);
+                }
                 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-                { crate::hal::uart_bcm_mini::putchar(c); }
+                {
+                    crate::hal::uart_bcm_mini::putchar(c);
+                }
                 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-                { crate::hal::uart_pl011::putchar(c); }
+                {
+                    crate::hal::uart_pl011::putchar(c);
+                }
                 #[cfg(target_arch = "arm")]
-                { crate::hal::uart_pl011::putchar(c); }
+                {
+                    crate::hal::uart_pl011::putchar(c);
+                }
                 #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-                { crate::hal::uart_16550::putchar(c); }
+                {
+                    crate::hal::uart_16550::putchar(c);
+                }
             }
             struct CellPanicWriter;
             impl core::fmt::Write for CellPanicWriter {
                 fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                    for c in s.bytes() { cell_panic_putchar(c); }
+                    for c in s.bytes() {
+                        cell_panic_putchar(c);
+                    }
                     Ok(())
                 }
             }
@@ -739,45 +813,77 @@ fn panic(info: &PanicInfo) -> ! {
         // terminate_current_cell_on_fault calls yield_cpu() which switches away.
         // In abort mode we never return here, but placate the compiler:
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
+        loop {
+            unsafe {
+                core::arch::asm!("cli; hlt", options(nomem, nostack));
+            }
+        }
         #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-        loop { unsafe { core::arch::asm!("wfi"); } }
+        loop {
+            unsafe {
+                core::arch::asm!("wfi");
+            }
+        }
     }
 
     // True kernel panic: print diagnostics and halt.
     #[inline(always)]
     fn panic_putchar(c: u8) {
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-        { let _ = crate::hal::sbi::console_putchar(c); }
+        {
+            let _ = crate::hal::sbi::console_putchar(c);
+        }
         #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        { crate::hal::uart_bcm_mini::putchar(c); }
+        {
+            crate::hal::uart_bcm_mini::putchar(c);
+        }
         #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-        { crate::hal::uart_pl011::putchar(c); }
+        {
+            crate::hal::uart_pl011::putchar(c);
+        }
         #[cfg(target_arch = "arm")]
-        { crate::hal::uart_pl011::putchar(c); }
+        {
+            crate::hal::uart_pl011::putchar(c);
+        }
         #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        { crate::hal::uart_16550::putchar(c); }
+        {
+            crate::hal::uart_16550::putchar(c);
+        }
     }
-    let puts = |s: &str| { for c in s.bytes() { panic_putchar(c); } };
+    let puts = |s: &str| {
+        for c in s.bytes() {
+            panic_putchar(c);
+        }
+    };
     puts("\n[KERNEL PANIC] ");
     puts("Critical failure.\n");
     use core::fmt::Write;
     struct PanicWriter;
     impl core::fmt::Write for PanicWriter {
         fn write_str(&mut self, s: &str) -> core::fmt::Result {
-            for c in s.bytes() { panic_putchar(c); }
+            for c in s.bytes() {
+                panic_putchar(c);
+            }
             Ok(())
         }
     }
-    let _ = write!(PanicWriter, "{}\n", info);
+    let _ = writeln!(PanicWriter, "{}", info);
 
     // Reboot or spin: RISC-V uses SBI SRST; ARM64 / x86_64 spin.
     puts("[KERNEL PANIC] halting...\n");
     #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
     crate::hal::sbi::system_reset(crate::hal::sbi::SBI_RESET_COLD_REBOOT, 0);
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-    loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack)); } }
+    loop {
+        unsafe {
+            core::arch::asm!("cli; hlt", options(nomem, nostack));
+        }
+    }
     // Fallback halt for all non-x86 arches (including riscv — unreachable after system_reset).
     #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-    loop { unsafe { core::arch::asm!("wfi", options(nomem, nostack)); } }
+    loop {
+        unsafe {
+            core::arch::asm!("wfi", options(nomem, nostack));
+        }
+    }
 }

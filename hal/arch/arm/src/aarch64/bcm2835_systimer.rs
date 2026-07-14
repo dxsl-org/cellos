@@ -14,16 +14,16 @@
 //! Interrupt number: IRQ 1 → Enable1 bit 1 in BCM2835 interrupt controller.
 
 const SYSTIMER_BASE: usize = 0x3F00_3000;
-const SYSTIMER_CS:   usize = SYSTIMER_BASE;        // control/status (w1c bits 0–3)
-const SYSTIMER_CLO:  usize = SYSTIMER_BASE + 0x04; // free-running counter, lower 32 bits
-const SYSTIMER_C1:   usize = SYSTIMER_BASE + 0x10; // compare register 1
+const SYSTIMER_CS: usize = SYSTIMER_BASE; // control/status (w1c bits 0–3)
+const SYSTIMER_CLO: usize = SYSTIMER_BASE + 0x04; // free-running counter, lower 32 bits
+const SYSTIMER_C1: usize = SYSTIMER_BASE + 0x10; // compare register 1
 
 /// 10 ms @ 1 MHz = 10 000 ticks.
 const PERIOD: u32 = 10_000;
 
-const IRQ_BASE:    usize = 0x3F00_B200;
+const IRQ_BASE: usize = 0x3F00_B200;
 const IRQ_PENDING1: usize = IRQ_BASE + 0x04; // pending bits for IRQs 0–31
-const IRQ_ENABLE1:  usize = IRQ_BASE + 0x10; // enable  bits for IRQs 0–31
+const IRQ_ENABLE1: usize = IRQ_BASE + 0x10; // enable  bits for IRQs 0–31
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {

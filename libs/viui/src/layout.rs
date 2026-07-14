@@ -20,7 +20,9 @@ pub struct Size {
 
 impl Size {
     pub const ZERO: Self = Self { w: 0.0, h: 0.0 };
-    pub const fn new(w: f32, h: f32) -> Self { Self { w, h } }
+    pub const fn new(w: f32, h: f32) -> Self {
+        Self { w, h }
+    }
 }
 
 #[derive(Copy, Clone, Default, PartialEq, Debug)]
@@ -31,8 +33,15 @@ pub struct Point {
 
 impl Point {
     pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
-    pub const fn new(x: f32, y: f32) -> Self { Self { x, y } }
-    pub fn offset(self, dx: f32, dy: f32) -> Self { Self { x: self.x + dx, y: self.y + dy } }
+    pub const fn new(x: f32, y: f32) -> Self {
+        Self { x, y }
+    }
+    pub fn offset(self, dx: f32, dy: f32) -> Self {
+        Self {
+            x: self.x + dx,
+            y: self.y + dy,
+        }
+    }
 }
 
 /// Axis-aligned rectangle with float coordinates for layout precision.
@@ -45,13 +54,35 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, w: 0.0, h: 0.0 };
-    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self { Self { x, y, w, h } }
-    pub fn from_origin_size(origin: Point, size: Size) -> Self {
-        Self { x: origin.x, y: origin.y, w: size.w, h: size.h }
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        w: 0.0,
+        h: 0.0,
+    };
+    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+        Self { x, y, w, h }
     }
-    pub fn origin(self) -> Point { Point { x: self.x, y: self.y } }
-    pub fn size(self) -> Size { Size { w: self.w, h: self.h } }
+    pub fn from_origin_size(origin: Point, size: Size) -> Self {
+        Self {
+            x: origin.x,
+            y: origin.y,
+            w: size.w,
+            h: size.h,
+        }
+    }
+    pub fn origin(self) -> Point {
+        Point {
+            x: self.x,
+            y: self.y,
+        }
+    }
+    pub fn size(self) -> Size {
+        Size {
+            w: self.w,
+            h: self.h,
+        }
+    }
 
     pub fn contains(self, p: Point) -> bool {
         p.x >= self.x && p.x < self.x + self.w && p.y >= self.y && p.y < self.y + self.h
@@ -71,7 +102,12 @@ impl Rect {
         let x2 = (self.x + self.w).min(other.x + other.w);
         let y2 = (self.y + self.h).min(other.y + other.h);
         if x2 > x && y2 > y {
-            Some(Rect { x, y, w: x2 - x, h: y2 - y })
+            Some(Rect {
+                x,
+                y,
+                w: x2 - x,
+                h: y2 - y,
+            })
         } else {
             None
         }
@@ -83,16 +119,30 @@ impl Rect {
         let y = self.y.min(other.y);
         let x2 = (self.x + self.w).max(other.x + other.w);
         let y2 = (self.y + self.h).max(other.y + other.h);
-        Rect { x, y, w: (x2 - x).max(0.0), h: (y2 - y).max(0.0) }
+        Rect {
+            x,
+            y,
+            w: (x2 - x).max(0.0),
+            h: (y2 - y).max(0.0),
+        }
     }
 
     pub fn translate(self, dx: f32, dy: f32) -> Rect {
-        Rect { x: self.x + dx, y: self.y + dy, ..self }
+        Rect {
+            x: self.x + dx,
+            y: self.y + dy,
+            ..self
+        }
     }
 
     /// Shrink rect by uniform inset on all sides.
     pub fn inset(self, v: f32) -> Rect {
-        Rect { x: self.x + v, y: self.y + v, w: (self.w - 2.0 * v).max(0.0), h: (self.h - 2.0 * v).max(0.0) }
+        Rect {
+            x: self.x + v,
+            y: self.y + v,
+            w: (self.w - 2.0 * v).max(0.0),
+            h: (self.h - 2.0 * v).max(0.0),
+        }
     }
 }
 
@@ -112,7 +162,11 @@ pub enum Length {
     FillPortion(u16),
 }
 
-impl Default for Length { fn default() -> Self { Self::Shrink } }
+impl Default for Length {
+    fn default() -> Self {
+        Self::Shrink
+    }
+}
 
 // ─── Constraints ─────────────────────────────────────────────────────────────
 
@@ -130,11 +184,19 @@ pub struct Constraints {
 
 impl Constraints {
     pub fn new(origin: Point, max: Size) -> Self {
-        Self { origin, min: Size::ZERO, max }
+        Self {
+            origin,
+            min: Size::ZERO,
+            max,
+        }
     }
 
     pub fn root(screen: Size) -> Self {
-        Self { origin: Point::ZERO, min: Size::ZERO, max: screen }
+        Self {
+            origin: Point::ZERO,
+            min: Size::ZERO,
+            max: screen,
+        }
     }
 
     /// Clamp `desired` to fit within these constraints.
@@ -150,14 +212,20 @@ impl Constraints {
         Self {
             origin: self.origin,
             min: Size::ZERO,
-            max: Size { w: (self.max.w - dw).max(0.0), h: (self.max.h - dh).max(0.0) },
+            max: Size {
+                w: (self.max.w - dw).max(0.0),
+                h: (self.max.h - dh).max(0.0),
+            },
         }
     }
 
     /// Constraints for a child at `offset` within this slot.
     pub fn child(self, offset: Point, max: Size) -> Self {
         Self {
-            origin: Point { x: self.origin.x + offset.x, y: self.origin.y + offset.y },
+            origin: Point {
+                x: self.origin.x + offset.x,
+                y: self.origin.y + offset.y,
+            },
             min: Size::ZERO,
             max,
         }
@@ -176,7 +244,12 @@ pub struct LayoutNode {
 }
 
 impl LayoutNode {
-    pub fn leaf(bounds: Rect) -> Self { Self { bounds, children: Vec::new() } }
+    pub fn leaf(bounds: Rect) -> Self {
+        Self {
+            bounds,
+            children: Vec::new(),
+        }
+    }
     pub fn with_children(bounds: Rect, children: Vec<LayoutNode>) -> Self {
         Self { bounds, children }
     }
@@ -187,26 +260,52 @@ impl LayoutNode {
 pub struct LayoutView<'a>(pub &'a LayoutNode);
 
 impl<'a> LayoutView<'a> {
-    pub fn bounds(self) -> Rect { self.0.bounds }
+    pub fn bounds(self) -> Rect {
+        self.0.bounds
+    }
     pub fn child(self, i: usize) -> Option<LayoutView<'a>> {
         self.0.children.get(i).map(LayoutView)
     }
-    pub fn children_count(self) -> usize { self.0.children.len() }
+    pub fn children_count(self) -> usize {
+        self.0.children.len()
+    }
 }
 
 // ─── Padding / Axis ──────────────────────────────────────────────────────────
 
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Padding {
-    pub top: f32, pub right: f32, pub bottom: f32, pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
 }
 
 impl Padding {
-    pub const ZERO: Self = Self { top: 0.0, right: 0.0, bottom: 0.0, left: 0.0 };
-    pub fn all(v: f32) -> Self { Self { top: v, right: v, bottom: v, left: v } }
-    pub fn h_total(self) -> f32 { self.left + self.right }
-    pub fn v_total(self) -> f32 { self.top + self.bottom }
+    pub const ZERO: Self = Self {
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+        left: 0.0,
+    };
+    pub fn all(v: f32) -> Self {
+        Self {
+            top: v,
+            right: v,
+            bottom: v,
+            left: v,
+        }
+    }
+    pub fn h_total(self) -> f32 {
+        self.left + self.right
+    }
+    pub fn v_total(self) -> f32 {
+        self.top + self.bottom
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Axis { Horizontal, Vertical }
+pub enum Axis {
+    Horizontal,
+    Vertical,
+}

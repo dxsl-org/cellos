@@ -40,12 +40,16 @@ pub fn register_nic_driver(tid: usize) {
 
 /// Clear the block driver registration (called on cell exit/kill).
 pub fn deregister_block_driver(tid: usize) {
-    BLOCK_DRIVER_CELL.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
+    BLOCK_DRIVER_CELL
+        .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+        .ok();
 }
 
 /// Clear the NIC driver registration (called on cell exit/kill).
 pub fn deregister_nic_driver(tid: usize) {
-    NIC_DRIVER_CELL.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
+    NIC_DRIVER_CELL
+        .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+        .ok();
 }
 
 /// Record `tid` as the active GPU driver.  Overwrites any previous registration.
@@ -56,7 +60,9 @@ pub fn register_gpu_driver(tid: usize) {
 
 /// Clear the GPU driver registration (called on cell exit/kill).
 pub fn deregister_gpu_driver(tid: usize) {
-    GPU_DRIVER_CELL.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
+    GPU_DRIVER_CELL
+        .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+        .ok();
 }
 
 /// TID of the registered input service Cell (0 = unregistered).
@@ -77,5 +83,7 @@ pub fn set_input_cell(tid: usize) {
 
 /// Clear the input service registration if it matches `tid` (called on cell death).
 pub fn clear_input_cell_if(tid: usize) {
-    INPUT_CELL_TID.compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed).ok();
+    INPUT_CELL_TID
+        .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
+        .ok();
 }

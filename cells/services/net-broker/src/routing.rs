@@ -1,3 +1,9 @@
+// reason: this module implements the RemoteServiceProxy routing-matrix wire
+// protocol (P06) for the net-broker robot-swarm feature. `main.rs` only declares
+// `mod routing;` (main.rs:66) and never references `routing::` — the dispatch
+// loop's RemoteServiceProxy routing is still a TODO (main.rs:152). Not wired yet.
+#![allow(dead_code)]
+
 /// RemoteServiceProxy — broker-side routing table + cluster-RPC dispatch.
 ///
 /// ## Protocol (matches libs/ostd/src/cluster.rs byte layout)
@@ -24,7 +30,6 @@
 ///
 /// P06 ships the data structures and LookupRemote dispatch; P08 wires gossip
 /// announcements into insert_route / remove_routes_for_peer.
-#[allow(dead_code)] // Wired into dispatch loop in P08
 
 use ostd::syscall::sys_lookup_service;
 use api::syscall::service;

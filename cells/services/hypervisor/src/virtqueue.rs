@@ -12,15 +12,15 @@ use crate::virtio_mmio::QueueCfg;
 
 /// One segment from a virtqueue descriptor chain.
 pub struct DescBuf {
-    pub gpa:      u64,
-    pub len:      u32,
+    pub gpa: u64,
+    pub len: u32,
     /// true = device writes into this buffer (VRING_DESC_F_WRITE); false = device reads.
     pub writable: bool,
 }
 
-const FLAGS_NEXT:  u16 = 1;
+const FLAGS_NEXT: u16 = 1;
 const FLAGS_WRITE: u16 = 2;
-const MAX_CHAIN:   usize = 64; // guard against infinite chains
+const MAX_CHAIN: usize = 64; // guard against infinite chains
 
 /// Process one QueueNotify: drain avail ring → walk desc chains → call `handle` → update used ring.
 ///
@@ -36,11 +36,15 @@ pub fn process_notify<F>(
     F: FnMut(&[DescBuf]) -> u32,
 {
     let q_size = qcfg.num as usize;
-    if q_size == 0 { return; }
+    if q_size == 0 {
+        return;
+    }
 
     // Read avail.idx (u16 at avail_ring + 2).
     let mut b2 = [0u8; 2];
-    if crate::vmm::read_guest_memory(vm_id, qcfg.avail_gpa + 2, &mut b2) != 2 { return; }
+    if crate::vmm::read_guest_memory(vm_id, qcfg.avail_gpa + 2, &mut b2) != 2 {
+        return;
+    }
     let avail_idx = u16::from_le_bytes(b2);
 
     while *last_avail_idx != avail_idx {
@@ -58,16 +62,25 @@ pub fn process_notify<F>(
         for _ in 0..MAX_CHAIN {
             let mut raw = [0u8; 16]; // VirtqDesc = 16 bytes
             let desc_gpa = qcfg.desc_gpa + (cur as u64) * 16;
-            if crate::vmm::read_guest_memory(vm_id, desc_gpa, &mut raw) != 16 { break; }
+            if crate::vmm::read_guest_memory(vm_id, desc_gpa, &mut raw) != 16 {
+                break;
+            }
 
-            let addr  = u64::from_le_bytes([raw[0], raw[1], raw[2], raw[3],
-                                            raw[4], raw[5], raw[6], raw[7]]);
-            let len   = u32::from_le_bytes([raw[8],  raw[9],  raw[10], raw[11]]);
+            let addr = u64::from_le_bytes([
+                raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7],
+            ]);
+            let len = u32::from_le_bytes([raw[8], raw[9], raw[10], raw[11]]);
             let flags = u16::from_le_bytes([raw[12], raw[13]]);
-            let next  = u16::from_le_bytes([raw[14], raw[15]]) as usize;
+            let next = u16::from_le_bytes([raw[14], raw[15]]) as usize;
 
-            bufs.push(DescBuf { gpa: addr, len, writable: flags & FLAGS_WRITE != 0 });
-            if flags & FLAGS_NEXT == 0 { break; }
+            bufs.push(DescBuf {
+                gpa: addr,
+                len,
+                writable: flags & FLAGS_WRITE != 0,
+            });
+            if flags & FLAGS_NEXT == 0 {
+                break;
+            }
             cur = next;
         }
 

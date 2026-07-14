@@ -24,6 +24,14 @@
 //! Call `recv_one` only when the dispatch loop has a free slot — not on every
 //! iteration. See `main.rs` for the recommended polling cadence.
 
+// reason: this module implements the raw-TCP relay fallback protocol for the
+// net-broker robot-swarm feature (internet relay when peers aren't LAN-reachable).
+// `main.rs` imports and calls only `RelayClient::new` + `is_connected` (main.rs:71,
+// 122, 132) as a liveness stub; the frame types, `recv_one`, and send/register paths
+// are unused because inbound relay frames are not yet wired into dispatch
+// (main.rs:131 TODO). Partially connected, not fully wired.
+#![allow(dead_code)]
+
 use api::cluster::CellNetId;
 use api::ipc::{NetRequest, NetResponse};
 use ostd::service::NetRef;

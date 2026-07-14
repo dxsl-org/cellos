@@ -41,13 +41,38 @@ fn main() {
 fn compile_lua_c(target: &str) {
     // List all Lua 5.4.x C source files (excludes lua.c / luac.c which define main).
     let lua_src = [
-        "lapi.c", "lcode.c", "lctype.c", "ldebug.c", "ldo.c", "ldump.c",
-        "lfunc.c", "lgc.c", "llex.c", "lmem.c", "lobject.c", "lopcodes.c",
-        "lparser.c", "lstate.c", "lstring.c", "ltable.c", "ltm.c",
-        "lundump.c", "lvm.c", "lzio.c",
-        "lauxlib.c", "lbaselib.c", "lcorolib.c", "ldblib.c", "liolib.c",
-        "lmathlib.c", "loadlib.c", "loslib.c", "lstrlib.c", "ltablib.c",
-        "lutf8lib.c", "linit.c",
+        "lapi.c",
+        "lcode.c",
+        "lctype.c",
+        "ldebug.c",
+        "ldo.c",
+        "ldump.c",
+        "lfunc.c",
+        "lgc.c",
+        "llex.c",
+        "lmem.c",
+        "lobject.c",
+        "lopcodes.c",
+        "lparser.c",
+        "lstate.c",
+        "lstring.c",
+        "ltable.c",
+        "ltm.c",
+        "lundump.c",
+        "lvm.c",
+        "lzio.c",
+        "lauxlib.c",
+        "lbaselib.c",
+        "lcorolib.c",
+        "ldblib.c",
+        "liolib.c",
+        "lmathlib.c",
+        "loadlib.c",
+        "loslib.c",
+        "lstrlib.c",
+        "ltablib.c",
+        "lutf8lib.c",
+        "linit.c",
     ];
 
     let src_dir = "src/c/src";
@@ -119,9 +144,23 @@ fn has_elf_compiler(target: &str) -> bool {
 
     // On MSVC: look for clang (any version) or arch-specific cross-gcc.
     let candidates: &[&str] = if target.contains("aarch64") {
-        &["clang", "clang-18", "clang-17", "clang-16", "aarch64-none-elf-gcc", "aarch64-linux-gnu-gcc"]
+        &[
+            "clang",
+            "clang-18",
+            "clang-17",
+            "clang-16",
+            "aarch64-none-elf-gcc",
+            "aarch64-linux-gnu-gcc",
+        ]
     } else {
-        &["clang", "clang-18", "clang-17", "clang-16", "x86_64-elf-gcc", "x86_64-linux-gnu-gcc"]
+        &[
+            "clang",
+            "clang-18",
+            "clang-17",
+            "clang-16",
+            "x86_64-elf-gcc",
+            "x86_64-linux-gnu-gcc",
+        ]
     };
 
     candidates.iter().any(|c| {
@@ -147,7 +186,11 @@ fn configure_elf_compiler(build: &mut cc::Build, target: &str) {
     if host.contains("msvc") {
         let clang_names = ["clang", "clang-18", "clang-17", "clang-16"];
         for name in &clang_names {
-            if std::process::Command::new(name).arg("--version").output().is_ok() {
+            if std::process::Command::new(name)
+                .arg("--version")
+                .output()
+                .is_ok()
+            {
                 build.compiler(*name);
                 // Tell clang to emit ELF for the bare-metal target.
                 let elf_triple = if target.contains("aarch64") {

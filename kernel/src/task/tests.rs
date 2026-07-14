@@ -221,7 +221,7 @@ fn test_scheduler_current_task() {
 
     // Spawn and schedule
     let id = sched.spawn("test", CellId(0), Vec::new());
-    
+
     // Sched::pick_next would be called by yield/interrupt.
     // We simulate it here.
     let _ = sched.pick_next();
@@ -262,10 +262,17 @@ fn test_blocked_then_ready_transition() {
 
     // Simulate the task blocking on Send.
     if let Some(task) = sched.tasks.get_mut(&id) {
-        task.state = TaskState::Sending { target: 99, msg_ptr: 0x1000, msg_len: 16 };
+        task.state = TaskState::Sending {
+            target: 99,
+            msg_ptr: 0x1000,
+            msg_len: 16,
+        };
     }
     // Task should be removed from the ready queue.
-    assert!(!sched.ready_queues.values().any(|q| q.contains(&id)), "blocked task should not be in ready queue");
+    assert!(
+        !sched.ready_queues.values().any(|q| q.contains(&id)),
+        "blocked task should not be in ready queue"
+    );
 
     // Resolve: move back to Ready (simulates IPC delivery).
     if let Some(task) = sched.tasks.get_mut(&id) {
@@ -275,7 +282,11 @@ fn test_blocked_then_ready_transition() {
 
     // Now pick_next should select it.
     let picked = sched.pick_next();
-    assert_eq!(sched.current_task_id, Some(id), "unblocked task should be scheduled next");
+    assert_eq!(
+        sched.current_task_id,
+        Some(id),
+        "unblocked task should be scheduled next"
+    );
     log::info!("  [ok] blocked → Sending → Ready → scheduled");
 }
 
@@ -296,7 +307,11 @@ fn test_waiting_task_not_scheduled() {
 
     // Schedule: should pick `target`, not `waiter`.
     sched.pick_next();
-    assert_eq!(sched.current_task_id, Some(target), "waiting task must not be selected");
+    assert_eq!(
+        sched.current_task_id,
+        Some(target),
+        "waiting task must not be selected"
+    );
     log::info!("  [ok] Waiting task not scheduled");
 }
 
@@ -307,10 +322,19 @@ fn test_task_state_recv_deadline() {
 
     // Assign Recv with a deadline.
     let dl: u64 = 999_999;
-    task.state = TaskState::Recv { mask: 0, buf_ptr: 0x2000, buf_len: 256, deadline: Some(dl) };
+    task.state = TaskState::Recv {
+        mask: 0,
+        buf_ptr: 0x2000,
+        buf_len: 256,
+        deadline: Some(dl),
+    };
 
     match task.state {
-        TaskState::Recv { deadline: Some(d), buf_len, .. } => {
+        TaskState::Recv {
+            deadline: Some(d),
+            buf_len,
+            ..
+        } => {
             assert_eq!(d, dl);
             assert_eq!(buf_len, 256);
         }
@@ -318,7 +342,12 @@ fn test_task_state_recv_deadline() {
     }
 
     // Assign without a deadline — must default to None.
-    task.state = TaskState::Recv { mask: 0, buf_ptr: 0, buf_len: 0, deadline: None };
+    task.state = TaskState::Recv {
+        mask: 0,
+        buf_ptr: 0,
+        buf_len: 0,
+        deadline: None,
+    };
     match task.state {
         TaskState::Recv { deadline: None, .. } => {}
         _ => panic!("Expected Recv with no deadline"),

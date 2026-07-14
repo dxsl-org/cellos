@@ -7,54 +7,58 @@
 //! Every `unsafe` block is annotated with `// SAFETY:`.
 
 use core::sync::atomic::{fence, Ordering};
-use ostd::mmio::MmioRegion;
 use ostd::dma::DmaBuf;
+use ostd::mmio::MmioRegion;
 use types::{ViError, ViResult};
 
 use crate::queue::{Queue, SqEntry};
 
 // ── BAR0 register offsets (NVMe 1.x §3.1) ─────────────────────────────────────
 
-const REG_CAP:  usize = 0x00;
-const REG_CC:   usize = 0x14;
+const REG_CAP: usize = 0x00;
+const REG_CC: usize = 0x14;
 const REG_CSTS: usize = 0x1C;
-const REG_AQA:  usize = 0x24;
-const REG_ASQ:  usize = 0x28;
-const REG_ACQ:  usize = 0x30;
+const REG_AQA: usize = 0x24;
+const REG_ASQ: usize = 0x28;
+const REG_ACQ: usize = 0x30;
 const REG_DB_BASE: usize = 0x1000;
 
-const CC_EN:      u32 = 1 << 0;
+const CC_EN: u32 = 1 << 0;
 const CC_CSS_NVM: u32 = 0;
-const CC_MPS_4K:  u32 = 0;
-const CC_AMS_RR:  u32 = 0;
-const CC_IOSQES:  u32 = 6 << 16;
-const CC_IOCQES:  u32 = 4 << 20;
+const CC_MPS_4K: u32 = 0;
+const CC_AMS_RR: u32 = 0;
+const CC_IOSQES: u32 = 6 << 16;
+const CC_IOCQES: u32 = 4 << 20;
 
 const CSTS_RDY: u32 = 1 << 0;
 const CSTS_CFS: u32 = 1 << 1;
 
 const ADMIN_QUEUE_DEPTH: u16 = 64;
-const IO_QUEUE_DEPTH:    u16 = 64;
+const IO_QUEUE_DEPTH: u16 = 64;
 
 const ADMIN_OPC_CREATE_SQ: u8 = 0x01;
 const ADMIN_OPC_CREATE_CQ: u8 = 0x05;
-const ADMIN_OPC_IDENTIFY:  u8 = 0x06;
-const CNS_IDENTIFY_NS:     u32 = 0;
-const CNS_IDENTIFY_CTRL:   u32 = 1;
-const NVM_OPC_WRITE:       u8 = 0x01;
-const NVM_OPC_READ:        u8 = 0x02;
+const ADMIN_OPC_IDENTIFY: u8 = 0x06;
+const CNS_IDENTIFY_NS: u32 = 0;
+const CNS_IDENTIFY_CTRL: u32 = 1;
+const NVM_OPC_WRITE: u8 = 0x01;
+const NVM_OPC_READ: u8 = 0x02;
 
 const POLL_WARN_ITERS: u64 = 1_000_000;
 
 pub struct NvmeController {
-    mmio:      MmioRegion,
-    admin:     Queue,
-    io:        Queue,
+    mmio: MmioRegion,
+    admin: Queue,
+    io: Queue,
     db_stride: usize,
     pub n_sectors: u64,
     pub lba_bytes: u32,
-    pub vwc:   bool,
-    bdf:       u32,
+    pub vwc: bool,
+    // reason: only read at construction (to authorize admin/IO queue DMA);
+    // kept on the struct for a planned re-authorization path if read/write_sector
+    // start allocating DmaBufs directly on the controller instead of via Queue.
+    #[allow(dead_code)]
+    bdf: u32,
 }
 
 impl NvmeController {
@@ -77,9 +81,13 @@ impl NvmeController {
         let mut spin = 0u64;
         loop {
             let csts = Self::read32(&mmio, REG_CSTS)?;
-            if csts & CSTS_RDY == 0 { break; }
+            if csts & CSTS_RDY == 0 {
+                break;
+            }
             spin += 1;
-            if spin > POLL_WARN_ITERS { return Err(ViError::IO); }
+            if spin > POLL_WARN_ITERS {
+                return Err(ViError::IO);
+            }
             fence(Ordering::SeqCst);
         }
 
@@ -100,10 +108,16 @@ impl NvmeController {
         let mut spin = 0u64;
         loop {
             let csts = Self::read32(&mmio, REG_CSTS)?;
-            if csts & CSTS_CFS != 0 { return Err(ViError::IO); }
-            if csts & CSTS_RDY != 0 { break; }
+            if csts & CSTS_CFS != 0 {
+                return Err(ViError::IO);
+            }
+            if csts & CSTS_RDY != 0 {
+                break;
+            }
             spin += 1;
-            if spin > POLL_WARN_ITERS { return Err(ViError::IO); }
+            if spin > POLL_WARN_ITERS {
+                return Err(ViError::IO);
+            }
             fence(Ordering::SeqCst);
         }
 
@@ -123,7 +137,18 @@ impl NvmeController {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
             let _ = id_buf.authorize(bdf);
             let id_phys = id_buf.phys() as u64;
-            ctrl.admin_cmd(ADMIN_OPC_IDENTIFY, 0, id_phys, 0, CNS_IDENTIFY_CTRL, 0, 0, 0, 0, 0)?;
+            ctrl.admin_cmd(
+                ADMIN_OPC_IDENTIFY,
+                0,
+                id_phys,
+                0,
+                CNS_IDENTIFY_CTRL,
+                0,
+                0,
+                0,
+                0,
+                0,
+            )?;
             // SAFETY: id_buf is DMA memory we own; VWC is byte 525 in the Identify Controller data.
             let vwc_byte = unsafe { *(id_buf.virt().add(525)) };
             ctrl.vwc = vwc_byte & 1 != 0;
@@ -135,7 +160,18 @@ impl NvmeController {
             let id_buf = DmaBuf::alloc(1).ok_or(ViError::OutOfMemory)?;
             let _ = id_buf.authorize(bdf);
             let id_phys = id_buf.phys() as u64;
-            ctrl.admin_cmd(ADMIN_OPC_IDENTIFY, 1, id_phys, 0, CNS_IDENTIFY_NS, 0, 0, 0, 0, 0)?;
+            ctrl.admin_cmd(
+                ADMIN_OPC_IDENTIFY,
+                1,
+                id_phys,
+                0,
+                CNS_IDENTIFY_NS,
+                0,
+                0,
+                0,
+                0,
+                0,
+            )?;
             // SAFETY: id_buf is a valid 4-KiB Identify Namespace response.
             unsafe {
                 let ptr = id_buf.virt();
@@ -154,19 +190,31 @@ impl NvmeController {
         // CQ with QID=63 and Create-SQ failed with Invalid CQID (CQ 1 absent).
         let io_cq_phys = ctrl.io.cq_phys();
         ctrl.admin_cmd(
-            ADMIN_OPC_CREATE_CQ, 0, io_cq_phys, 0,
+            ADMIN_OPC_CREATE_CQ,
+            0,
+            io_cq_phys,
+            0,
             ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
             0x1, // CDW11: IEN=0 (polled), PC=1 (physically contiguous)
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
         )?;
 
         // 10. Create I/O SQ (admin opcode 0x01).
         let io_sq_phys = ctrl.io.sq_phys();
         ctrl.admin_cmd(
-            ADMIN_OPC_CREATE_SQ, 0, io_sq_phys, 0,
+            ADMIN_OPC_CREATE_SQ,
+            0,
+            io_sq_phys,
+            0,
             ((IO_QUEUE_DEPTH as u32 - 1) << 16) | 1, // CDW10: QSIZE | QID=1
-            (1 << 16) | 0x1, // CDW11: CQID=1 | PC=1
-            0, 0, 0, 0,
+            (1 << 16) | 0x1,                         // CDW11: CQID=1 | PC=1
+            0,
+            0,
+            0,
+            0,
         )?;
 
         Ok(ctrl)
@@ -207,21 +255,29 @@ impl NvmeController {
 
     #[allow(clippy::too_many_arguments)]
     fn admin_cmd(
-        &mut self, opc: u8, nsid: u32,
-        prp1: u64, prp2: u64,
-        cdw10: u32, cdw11: u32, cdw12: u32, cdw13: u32, cdw14: u32, cdw15: u32,
+        &mut self,
+        opc: u8,
+        nsid: u32,
+        prp1: u64,
+        prp2: u64,
+        cdw10: u32,
+        cdw11: u32,
+        cdw12: u32,
+        cdw13: u32,
+        cdw14: u32,
+        cdw15: u32,
     ) -> ViResult<()> {
-        let depth  = self.admin.depth as usize;
-        let tail   = self.admin.sq_tail as usize;
-        let cid    = self.admin.next_cid();
+        let depth = self.admin.depth as usize;
+        let tail = self.admin.sq_tail as usize;
+        let cid = self.admin.next_cid();
 
         // SAFETY: tail < depth; sq_buf holds depth SqEntry slots.
         let sqe = unsafe { &mut *self.admin.sq_entry(tail) };
         *sqe = SqEntry::default();
-        sqe.cdw0  = (opc as u32) | ((cid as u32) << 16);
-        sqe.nsid  = nsid;
-        sqe.prp1  = prp1;
-        sqe.prp2  = prp2;
+        sqe.cdw0 = (opc as u32) | ((cid as u32) << 16);
+        sqe.nsid = nsid;
+        sqe.prp1 = prp1;
+        sqe.prp2 = prp2;
         sqe.cdw10 = cdw10;
         sqe.cdw11 = cdw11;
         sqe.cdw12 = cdw12;
@@ -238,20 +294,25 @@ impl NvmeController {
         let mut iters = 0u64;
         loop {
             // SAFETY: cq_head < depth; cq_buf holds depth CqEntry slots.
-            let phase_status = unsafe {
-                core::ptr::read_volatile(&(*self.admin.cq_entry(cq_head)).phase_status)
-            };
+            let phase_status =
+                unsafe { core::ptr::read_volatile(&(*self.admin.cq_entry(cq_head)).phase_status) };
             if (phase_status & 1 != 0) == expected_phase {
                 let status = phase_status >> 1;
                 let new_head = (cq_head + 1) % depth;
-                if new_head == 0 { self.admin.cq_phase = !self.admin.cq_phase; }
+                if new_head == 0 {
+                    self.admin.cq_phase = !self.admin.cq_phase;
+                }
                 self.admin.cq_head = new_head as u16;
                 self.ring_cq_head(0, self.admin.cq_head);
-                if status != 0 { return Err(ViError::IO); }
+                if status != 0 {
+                    return Err(ViError::IO);
+                }
                 return Ok(());
             }
             iters += 1;
-            if iters == POLL_WARN_ITERS { return Err(ViError::IO); }
+            if iters == POLL_WARN_ITERS {
+                return Err(ViError::IO);
+            }
             fence(Ordering::Acquire);
         }
     }
@@ -260,15 +321,15 @@ impl NvmeController {
 
     fn submit_io(&mut self, opc: u8, nsid: u32, lba: u64, nlb: u16, prp1: u64) -> ViResult<()> {
         let depth = self.io.depth as usize;
-        let tail  = self.io.sq_tail as usize;
-        let cid   = self.io.next_cid();
+        let tail = self.io.sq_tail as usize;
+        let cid = self.io.next_cid();
 
         // SAFETY: tail < depth; sq_buf holds depth SqEntry slots.
         let sqe = unsafe { &mut *self.io.sq_entry(tail) };
         *sqe = SqEntry::default();
-        sqe.cdw0  = (opc as u32) | ((cid as u32) << 16);
-        sqe.nsid  = nsid;
-        sqe.prp1  = prp1;
+        sqe.cdw0 = (opc as u32) | ((cid as u32) << 16);
+        sqe.nsid = nsid;
+        sqe.prp1 = prp1;
         sqe.cdw10 = (lba & 0xFFFF_FFFF) as u32;
         sqe.cdw11 = (lba >> 32) as u32;
         sqe.cdw12 = nlb as u32;
@@ -282,20 +343,25 @@ impl NvmeController {
         let mut iters = 0u64;
         loop {
             // SAFETY: cq_head < depth; cq_buf holds depth CqEntry slots.
-            let phase_status = unsafe {
-                core::ptr::read_volatile(&(*self.io.cq_entry(cq_head)).phase_status)
-            };
+            let phase_status =
+                unsafe { core::ptr::read_volatile(&(*self.io.cq_entry(cq_head)).phase_status) };
             if (phase_status & 1 != 0) == expected_phase {
                 let status = phase_status >> 1;
                 let new_head = (cq_head + 1) % depth;
-                if new_head == 0 { self.io.cq_phase = !self.io.cq_phase; }
+                if new_head == 0 {
+                    self.io.cq_phase = !self.io.cq_phase;
+                }
                 self.io.cq_head = new_head as u16;
                 self.ring_cq_head(1, self.io.cq_head);
-                if status != 0 { return Err(ViError::IO); }
+                if status != 0 {
+                    return Err(ViError::IO);
+                }
                 return Ok(());
             }
             iters += 1;
-            if iters == POLL_WARN_ITERS { return Err(ViError::IO); }
+            if iters == POLL_WARN_ITERS {
+                return Err(ViError::IO);
+            }
             fence(Ordering::Acquire);
         }
     }

@@ -18,13 +18,13 @@ use ostd::dma::DmaBuf;
 #[repr(C, align(64))]
 #[derive(Clone, Copy, Default)]
 pub struct SqEntry {
-    pub cdw0:  u32,
-    pub nsid:  u32,
-    pub cdw2:  u32,
-    pub cdw3:  u32,
-    pub mptr:  u64,
-    pub prp1:  u64,
-    pub prp2:  u64,
+    pub cdw0: u32,
+    pub nsid: u32,
+    pub cdw2: u32,
+    pub cdw3: u32,
+    pub mptr: u64,
+    pub prp1: u64,
+    pub prp2: u64,
     pub cdw10: u32,
     pub cdw11: u32,
     pub cdw12: u32,
@@ -37,29 +37,38 @@ pub struct SqEntry {
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Default)]
 pub struct CqEntry {
-    pub dw0:          u32,
-    pub dw1:          u32,
-    pub sq_hd:        u16,
-    pub sq_id:        u16,
-    pub cid:          u16,
+    pub dw0: u32,
+    pub dw1: u32,
+    pub sq_hd: u16,
+    pub sq_id: u16,
+    pub cid: u16,
     pub phase_status: u16, // phase bit[0], status[15:1]
 }
 
 impl CqEntry {
+    // reason: phase()/status_field() decode the CQE per NVMe 1.x §4.4 but the
+    // current completion poll reads phase_status directly inline; kept as the
+    // documented accessor pair for callers that decode a CqEntry outside that loop.
     #[inline]
-    pub fn phase(&self) -> bool { self.phase_status & 1 != 0 }
+    #[allow(dead_code)]
+    pub fn phase(&self) -> bool {
+        self.phase_status & 1 != 0
+    }
     #[inline]
-    pub fn status_field(&self) -> u16 { self.phase_status >> 1 }
+    #[allow(dead_code)]
+    pub fn status_field(&self) -> u16 {
+        self.phase_status >> 1
+    }
 }
 
 pub struct Queue {
-    pub sq_buf:  DmaBuf,
-    pub cq_buf:  DmaBuf,
-    pub depth:   u16,
+    pub sq_buf: DmaBuf,
+    pub cq_buf: DmaBuf,
+    pub depth: u16,
     pub sq_tail: u16,
     pub cq_head: u16,
     pub cq_phase: bool,
-    pub cid:     u16,
+    pub cid: u16,
 }
 
 impl Queue {
@@ -86,20 +95,24 @@ impl Queue {
             sq_buf,
             cq_buf,
             depth,
-            sq_tail:  0,
-            cq_head:  0,
+            sq_tail: 0,
+            cq_head: 0,
             cq_phase: true, // initial phase = 1 after reset
-            cid:      0,
+            cid: 0,
         })
     }
 
     /// Physical base address of the SQ (to program into controller registers).
     #[inline]
-    pub fn sq_phys(&self) -> u64 { self.sq_buf.phys() as u64 }
+    pub fn sq_phys(&self) -> u64 {
+        self.sq_buf.phys() as u64
+    }
 
     /// Physical base address of the CQ.
     #[inline]
-    pub fn cq_phys(&self) -> u64 { self.cq_buf.phys() as u64 }
+    pub fn cq_phys(&self) -> u64 {
+        self.cq_buf.phys() as u64
+    }
 
     /// Mutable pointer to the SQ entry at `idx`.
     ///

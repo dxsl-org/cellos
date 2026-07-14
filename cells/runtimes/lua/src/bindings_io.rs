@@ -8,8 +8,8 @@
 // `L` is the universal Lua C API convention for `lua_State*`.
 #![allow(non_snake_case)] // reason: L is the Lua C API convention for lua_State pointers
 
-use core::ffi::c_int;
 use crate::ffi::LuaState;
+use core::ffi::c_int;
 
 // ─── io.write primitive ───────────────────────────────────────────────────────
 

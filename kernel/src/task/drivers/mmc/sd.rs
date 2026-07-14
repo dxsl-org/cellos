@@ -25,8 +25,12 @@ impl SdBlock {
         if info.card_type == CardType::Emmc {
             return Err(ViError::NotFound);
         }
-        log::info!("[sd] SD card probed: {} sectors (~{} MiB), block_addr={}",
-            info.sector_count, info.sector_count / 2048, info.is_block_addressed);
+        log::info!(
+            "[sd] SD card probed: {} sectors (~{} MiB), block_addr={}",
+            info.sector_count,
+            info.sector_count / 2048,
+            info.is_block_addressed
+        );
         Ok(Self { core, info })
     }
 
@@ -67,7 +71,9 @@ impl SdBlock {
         self.core.host.write_block(buf)
     }
 
-    pub fn sector_count(&self) -> u64 { self.info.sector_count }
+    pub fn sector_count(&self) -> u64 {
+        self.info.sector_count
+    }
 }
 
 impl Drop for SdBlock {

@@ -11,10 +11,7 @@
 //! let phys = buf.phys();                         // program into NVMe/e1000 regs
 //! ```
 
-use crate::syscall::{
-    sys_grant_alloc, sys_grant_dma, sys_grant_free,
-    sys_register_block_driver, sys_register_nic_driver, SyscallError,
-};
+use crate::syscall::{sys_grant_alloc, sys_grant_dma, sys_grant_free, SyscallError};
 
 /// A physically-contiguous, page-aligned DMA buffer backed by a Grant region.
 ///
@@ -25,7 +22,7 @@ use crate::syscall::{
 /// Driver Cells typically hold DMA buffers for their entire lifetime.
 pub struct DmaBuf {
     grant_id: usize, // physical base == virtual base in SAS
-    n_pages:  usize,
+    n_pages: usize,
 }
 
 impl DmaBuf {
@@ -37,15 +34,21 @@ impl DmaBuf {
 
     /// Physical base address — program this into DMA descriptor registers.
     #[inline]
-    pub fn phys(&self) -> usize { self.grant_id }
+    pub fn phys(&self) -> usize {
+        self.grant_id
+    }
 
     /// Virtual address — identical to `phys()` in SAS.
     #[inline]
-    pub fn virt(&self) -> *mut u8 { self.grant_id as *mut u8 }
+    pub fn virt(&self) -> *mut u8 {
+        self.grant_id as *mut u8
+    }
 
     /// Total size in bytes.
     #[inline]
-    pub fn size(&self) -> usize { self.n_pages * 4096 }
+    pub fn size(&self) -> usize {
+        self.n_pages * 4096
+    }
 
     /// Authorise DMA for the PCIe device at `bdf` covering this buffer.
     ///
@@ -62,5 +65,7 @@ impl DmaBuf {
     }
 }
 
-pub use crate::syscall::{sys_register_block_driver as register_block_driver,
-                         sys_register_nic_driver   as register_nic_driver};
+pub use crate::syscall::{
+    sys_register_block_driver as register_block_driver,
+    sys_register_nic_driver as register_nic_driver,
+};

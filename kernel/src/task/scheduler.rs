@@ -64,7 +64,11 @@ static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
 
 /// Register `watcher` to be notified when `watched` exits or faults.
 pub fn subscribe_death(watched: usize, watcher: usize) {
-    DEATH_SUBSCRIBERS.lock().entry(watched).or_default().push(watcher);
+    DEATH_SUBSCRIBERS
+        .lock()
+        .entry(watched)
+        .or_default()
+        .push(watcher);
 }
 
 /// Central task table (Hubris-like).
@@ -111,7 +115,9 @@ impl Scheduler {
     ///
     /// Call while holding SCHEDULER (lock order: SCHEDULER → per-hart ready).
     pub fn push_ready(&mut self, id: usize) -> u8 {
-        let priority = self.tasks.get(&id)
+        let priority = self
+            .tasks
+            .get(&id)
             .map(|t| t.priority)
             .unwrap_or(api::TaskPriority::Normal as u8);
         // RT tasks target the dedicated RT hart when it is online; fall back to
@@ -141,8 +147,13 @@ impl Scheduler {
         let hart_id = super::hart_local::current_hart_id();
         let current_tid = super::hart_local::ready::current_task_id_for(hart_id);
         let current_priority = if current_tid > 0 {
-            self.tasks.get(&current_tid).map(|t| t.priority).unwrap_or(0)
-        } else { 0 };
+            self.tasks
+                .get(&current_tid)
+                .map(|t| t.priority)
+                .unwrap_or(0)
+        } else {
+            0
+        };
 
         if new_priority > current_priority {
             // RT tasks land on HART_RT when online; fall back to current hart on single-hart systems.
@@ -203,7 +214,7 @@ impl Scheduler {
         }
 
         let entry = task_entry_point as *const () as usize;
-        let (gp, tp) = crate::task::get_kernel_gp_tp();
+        let (_gp, _tp) = crate::task::get_kernel_gp_tp();
 
         // Allocate User Stack
         let ustack = crate::task::stack::Stack::new_user(STACK_FRAMES).expect("OOM User Stack");
@@ -211,15 +222,23 @@ impl Scheduler {
 
         task.context.sp = stack_top as _;
         task.trap_frame.sepc = entry as _;
-        task.trap_frame.sstatus = 0x20_u64 as _;  // SPIE enabled, SPP=0 (User Mode)
+        task.trap_frame.sstatus = 0x20_u64 as _; // SPIE enabled, SPP=0 (User Mode)
         task.trap_frame.regs[2] = ustack_top as _; // sp = x2
         #[cfg(target_arch = "riscv64")]
-        { task.context.ra = entry; task.context.gp = gp; task.context.tp = tp; }
+        {
+            task.context.ra = entry;
+            task.context.gp = _gp;
+            task.context.tp = _tp;
+        }
         #[cfg(target_arch = "aarch64")]
-        { task.context.x30 = entry as u64; }
+        {
+            task.context.x30 = entry as u64;
+        }
         #[cfg(target_arch = "x86_64")]
-        { task.context.rip = entry as u64;
-          task.context.kernel_trap_sp = stack_top as u64; }
+        {
+            task.context.rip = entry as u64;
+            task.context.kernel_trap_sp = stack_top as u64;
+        }
         task.kernel_stack = Some(kstack);
         task.user_stack = Some(ustack);
 
@@ -265,31 +284,42 @@ impl Scheduler {
                 STACK_FRAMES * crate::memory::paging::PAGE_SIZE,
             );
 
-            let (gp, tp) = crate::task::get_kernel_gp_tp();
+            let (_gp, _tp) = crate::task::get_kernel_gp_tp();
             let trampoline = crate::hal::arch::thread_trampoline as *const () as usize;
 
             task.context.sp = stack_top as _;
             task.trap_frame.sepc = trampoline as _;
             task.trap_frame.sstatus = 0x120;
             #[cfg(target_arch = "riscv64")]
-            { task.context.ra = trampoline; task.context.s0 = arg; task.context.s1 = entry;
-              task.context.gp = gp; task.context.tp = tp; }
+            {
+                task.context.ra = trampoline;
+                task.context.s0 = arg;
+                task.context.s1 = entry;
+                task.context.gp = _gp;
+                task.context.tp = _tp;
+            }
             #[cfg(target_arch = "riscv32")]
-            { task.context.ra = trampoline as u32; task.context.s0 = arg as u32;
-              task.context.s1 = entry as u32; task.context.gp = gp as u32;
-              task.context.tp = tp as u32; }
+            {
+                task.context.ra = trampoline as u32;
+                task.context.s0 = arg as u32;
+                task.context.s1 = entry as u32;
+                task.context.gp = _gp as u32;
+                task.context.tp = _tp as u32;
+            }
             #[cfg(target_arch = "aarch64")]
-            { task.context.x30 = trampoline as u64;
-              task.context.x19 = arg as u64;
-              task.context.x20 = entry as u64; }
+            {
+                task.context.x30 = trampoline as u64;
+                task.context.x19 = arg as u64;
+                task.context.x20 = entry as u64;
+            }
             #[cfg(target_arch = "x86_64")]
             {
                 // thread_trampoline reads entry from RBX and arg from R12.
                 // CpuContext::switch restores all callee-saved fields before
                 // jumping to context.rip, so store entry/arg there.
                 task.context.rip = trampoline as u64;
-                task.context.rbx = entry as u64;    // thread body fn ptr
-                task.context.r12 = arg as u64;      // argument
+                task.context.rbx = entry as u64; // thread body fn ptr
+                task.context.r12 = arg as u64; // argument
                 task.context.kernel_trap_sp = stack_top as u64;
             }
             task.kernel_stack = Some(kstack);
@@ -433,7 +463,9 @@ impl Scheduler {
     /// largest per-cell allocation) — without it, zombies accumulate forever and
     /// `Stack::drop` never runs (every cell death leaked its stacks).
     pub fn take_reapable_zombies(&mut self) -> Vec<Box<super::tcb::Task>> {
-        if self.zombies.is_empty() { return Vec::new(); }
+        if self.zombies.is_empty() {
+            return Vec::new();
+        }
         let mut keep = Vec::new();
         let mut reap = Vec::new();
         for z in core::mem::take(&mut self.zombies) {
@@ -473,7 +505,9 @@ impl Scheduler {
         let now = crate::task::system_ticks();
         // Global sweep (timer wakes, heartbeat, async-poll, watchdog) runs on hart 0 only
         // to prevent double-wake races on multihart setups.
-        if hart_id != 0 { return self.pick_next_local(hart_id, now); }
+        if hart_id != 0 {
+            return self.pick_next_local(hart_id, now);
+        }
 
         let time_advanced = now > self.last_global_sweep_tick;
         let events_pending = crate::task::waker::has_any_pending();
@@ -493,24 +527,22 @@ impl Scheduler {
                 let mut should_wake = false;
                 let mut timed_out = false;
                 match &task.state {
-                    TaskState::Sleeping { until } => {
-                        if now >= *until {
-                            should_wake = true;
-                        }
+                    TaskState::Sleeping { until } if now >= *until => {
+                        should_wake = true;
                     }
-                    TaskState::Recv { deadline: Some(d), .. } => {
-                        // `deadline` is u64 (mtime-domain field); `now` is usize system
-                        // ticks. On rv64 usize == u64, so the cast is lossless.
-                        if now as u64 >= *d {
-                            should_wake = true;
-                            timed_out = true;
-                        }
+                    // `deadline` is u64 (mtime-domain field); `now` is usize system
+                    // ticks. On rv64 usize == u64, so the cast is lossless.
+                    TaskState::Recv {
+                        deadline: Some(d), ..
+                    } if now as u64 >= *d => {
+                        should_wake = true;
+                        timed_out = true;
                     }
                     TaskState::WaitEvent { mask, deadline } => {
                         let fired = super::waker::consume_pending(*mask);
                         if fired != 0 {
                             // Return fired mask as the syscall result.
-                            task.trap_frame.regs[10] = fired as usize;
+                            task.trap_frame.regs[10] = fired as _;
                             should_wake = true;
                         } else if deadline.map(|d| now as u64 >= d).unwrap_or(false) {
                             task.trap_frame.regs[10] = 0; // timeout — return 0
@@ -521,11 +553,11 @@ impl Scheduler {
                     // WaitIrq: IRQ-only wake — no deadline, no timeout.
                     // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).
                     // This sweep is the only place that transitions WaitIrq → Ready.
-                    TaskState::WaitIrq { irq } => {
-                        if crate::task::drivers::irq_wait::take_pending(*irq) {
-                            crate::task::drivers::irq_wait::clear_waiter(*irq);
-                            should_wake = true;
-                        }
+                    TaskState::WaitIrq { irq }
+                        if crate::task::drivers::irq_wait::take_pending(*irq) =>
+                    {
+                        crate::task::drivers::irq_wait::clear_waiter(*irq);
+                        should_wake = true;
                     }
                     _ => {}
                 }
@@ -550,7 +582,10 @@ impl Scheduler {
                         if task.priority >= api::TaskPriority::RealTime as u8 {
                             crate::audit::log_event(
                                 crate::audit::AuditEvent::RtDeadlineMiss,
-                                &crate::audit::encode_u32x2(task.cell_id.0 as u32, task.deadline_misses),
+                                &crate::audit::encode_u32x2(
+                                    task.cell_id.0 as u32,
+                                    task.deadline_misses,
+                                ),
                             );
                         }
                     }
@@ -578,7 +613,8 @@ impl Scheduler {
             for (tid, cell_raw) in hung {
                 log::error!(
                     "[heartbeat] task {} (cell {}) missed liveness deadline — terminating (hung)",
-                    tid, cell_raw
+                    tid,
+                    cell_raw
                 );
                 // Dump the hung task's park point (Sending{target}/Recv{mask}/…) —
                 // a silent kill costs hours of triage; the blocked-on peer's state
@@ -587,8 +623,12 @@ impl Scheduler {
                     log::error!("[heartbeat] task {} state at kill: {:?}", tid, t.state);
                     if let TaskState::Sending { target, .. } = t.state {
                         if let Some(tt) = self.tasks.get(&target) {
-                            log::error!("[heartbeat] send target {} state: {:?} pending_msgs={}",
-                                target, tt.state, tt.pending_msgs.len());
+                            log::error!(
+                                "[heartbeat] send target {} state: {:?} pending_msgs={}",
+                                target,
+                                tt.state,
+                                tt.pending_msgs.len()
+                            );
                         } else {
                             log::error!("[heartbeat] send target {} no longer exists", target);
                         }
@@ -641,21 +681,21 @@ impl Scheduler {
                                             // Set return value (a0 / regs[10]); errors use the
                                             // syscall ABI sentinel usize::MAX (same encoding as
                                             // ViCell_syscall_dispatch), not a fake 0-byte success.
-                                            task.trap_frame.regs[10] = res.unwrap_or(usize::MAX) as _;
+                                            task.trap_frame.regs[10] =
+                                                res.unwrap_or(usize::MAX) as _;
 
-
-                                        // Wake task
-                                        task.state = TaskState::Ready;
-                                        task.pending_future = None;
-                                        polled_tasks.push(id);
+                                            // Wake task
+                                            task.state = TaskState::Ready;
+                                            task.pending_future = None;
+                                            polled_tasks.push(id);
+                                        }
+                                        Poll::Pending => {
+                                            // Still waiting
+                                        } //
                                     }
-                                    Poll::Pending => {
-                                        // Still waiting
-                                    } //
                                 }
                             }
                         }
-                    }
                     }
                 }
             }
@@ -683,9 +723,17 @@ impl Scheduler {
 
         // 3. Decide if the current task yields, and run the CPU-monopoly watchdog.
         let current_id_raw = rl::current_task_id_for(hart_id);
-        let current_id: Option<usize> = if current_id_raw > 0 { Some(current_id_raw) } else { None };
+        let current_id: Option<usize> = if current_id_raw > 0 {
+            Some(current_id_raw)
+        } else {
+            None
+        };
         if let Some(cid) = current_id {
-            enum WdAction { None, Requeue, Kill(u64) }
+            enum WdAction {
+                None,
+                Requeue,
+                Kill(u64),
+            }
             let mut action = WdAction::None;
             if let Some(task) = self.tasks.get_mut(&cid) {
                 if task.state == TaskState::Running {
@@ -715,7 +763,9 @@ impl Scheduler {
                 }
             }
             match action {
-                WdAction::Requeue => { self.push_ready(cid); }
+                WdAction::Requeue => {
+                    self.push_ready(cid);
+                }
                 WdAction::Kill(cell_raw) => {
                     log::error!(
                         "[watchdog] task {} (cell {}) monopolized CPU >{} ticks (~{}s) — terminating",
@@ -760,16 +810,22 @@ impl Scheduler {
                 return None; // No switch needed
             }
             // SAFETY: Box<Task> pins the Task on the heap; pointer is valid until reap.
-            let next_ctx: *const crate::hal::arch::Context = self.tasks
-                .get(&nid).map(|t| &t.context as *const _)
-                .unwrap_or(core::ptr::null());
+            let next_ctx: *const crate::hal::arch::Context = self
+                .tasks
+                .get(&nid)
+                .map(|t| &t.context as *const _)
+                .unwrap_or_default();
             rl::set_current_task_id(hart_id, nid);
 
             if let Some(cid) = current_id {
                 let curr_ctx: *mut crate::hal::arch::Context =
-                    if let Some(t) = self.tasks.get_mut(&cid) { &mut t.context as *mut _ }
-                    else if let Some(t) = self.zombies.iter_mut().find(|t| t.id == cid) { &mut t.context as *mut _ }
-                    else { core::ptr::null_mut() };
+                    if let Some(t) = self.tasks.get_mut(&cid) {
+                        &mut t.context as *mut _
+                    } else if let Some(t) = self.zombies.iter_mut().find(|t| t.id == cid) {
+                        &mut t.context as *mut _
+                    } else {
+                        core::ptr::null_mut()
+                    };
                 if !curr_ctx.is_null() && !next_ctx.is_null() {
                     return Some((curr_ctx, next_ctx));
                 }
@@ -782,7 +838,9 @@ impl Scheduler {
                 if self.zombies.iter().any(|t| t.id == cid) {
                     // Zombie with no successor: switch to the idle boot context so
                     // it can be reaped without holding the SCHEDULER lock.
-                    let curr_ctx = self.zombies.iter_mut()
+                    let curr_ctx = self
+                        .zombies
+                        .iter_mut()
                         .find(|t| t.id == cid)
                         .map(|t| &mut t.context as *mut _);
                     if let Some(c) = curr_ctx {
@@ -816,13 +874,23 @@ impl Scheduler {
     }
 
     pub fn current_task_mut(&mut self) -> Option<&mut Task> {
-        let tid = super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
-        if tid > 0 { self.tasks.get_mut(&tid).map(|b| &mut **b) } else { None }
+        let tid =
+            super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
+        if tid > 0 {
+            self.tasks.get_mut(&tid).map(|b| &mut **b)
+        } else {
+            None
+        }
     }
 
     pub fn current_task_ref(&self) -> Option<&Task> {
-        let tid = super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
-        if tid > 0 { self.tasks.get(&tid).map(|b| &**b) } else { None }
+        let tid =
+            super::hart_local::ready::current_task_id_for(super::hart_local::current_hart_id());
+        if tid > 0 {
+            self.tasks.get(&tid).map(|b| &**b)
+        } else {
+            None
+        }
     }
 
     pub fn has_ready_tasks(&self) -> bool {

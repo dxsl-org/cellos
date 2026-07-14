@@ -16,12 +16,12 @@ const GPIO_BASE: usize = 0x1001_2000;
 const GPIO_SIZE: usize = 0x1000;
 
 // Register offsets (byte addresses, 32-bit wide).
-const INPUT_VAL:  usize = 0x00;
-const INPUT_EN:   usize = 0x04;
-const OUTPUT_EN:  usize = 0x08;
+const INPUT_VAL: usize = 0x00;
+const INPUT_EN: usize = 0x04;
+const OUTPUT_EN: usize = 0x08;
 const OUTPUT_VAL: usize = 0x0C;
-const RISE_IE:    usize = 0x18;
-const FALL_IE:    usize = 0x20;
+const RISE_IE: usize = 0x18;
+const FALL_IE: usize = 0x20;
 
 /// SiFive GPIO controller (32-pin bank, QEMU `sifive_u` machine).
 pub struct SiFiveGpio {
@@ -57,10 +57,10 @@ impl ViGpio for SiFiveGpio {
             PinDir::Input => {
                 // Disable output first to avoid glitch, then enable input.
                 Self::rw_bit(&self.mmio, OUTPUT_EN, pin, false)?;
-                Self::rw_bit(&self.mmio, INPUT_EN,  pin, true)
+                Self::rw_bit(&self.mmio, INPUT_EN, pin, true)
             }
             PinDir::Output => {
-                Self::rw_bit(&self.mmio, INPUT_EN,  pin, false)?;
+                Self::rw_bit(&self.mmio, INPUT_EN, pin, false)?;
                 Self::rw_bit(&self.mmio, OUTPUT_EN, pin, true)
             }
         }

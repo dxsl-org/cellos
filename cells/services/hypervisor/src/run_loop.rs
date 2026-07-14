@@ -5,17 +5,21 @@
 
 extern crate alloc;
 
-use api::hypervisor::ViVmExit;
-use api::syscall::service;
-use ostd::io::println;
-use ostd::syscall::sys_lookup_service;
 use crate::{
-    gicd::Gicd, net_backend, pl011::Pl011, psci, timer, vmm,
+    gicd::Gicd,
+    net_backend,
+    pl011::Pl011,
+    psci, timer,
     virtio_blk::BlkDisk,
     virtio_console::Console,
     virtio_mmio::{self, VirtioMmio},
     virtio_net::NetDev,
+    vmm,
 };
+use api::hypervisor::ViVmExit;
+use api::syscall::service;
+use ostd::io::println;
+use ostd::syscall::sys_lookup_service;
 
 pub enum RunOutcome {
     Shutdown,
@@ -26,15 +30,15 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
     // Resolve Net Cell TID for L2 frame bridging (0 = unavailable, bridging disabled).
     let net_tid = sys_lookup_service(service::NET).unwrap_or(0);
 
-    let mut pl011    = Pl011::new();
-    let mut gicd     = Gicd::new();
-    let mut console  = Console::new();
-    let mut vmio     = VirtioMmio::default();
-    let mut blk      = BlkDisk::new();
+    let mut pl011 = Pl011::new();
+    let mut gicd = Gicd::new();
+    let mut console = Console::new();
+    let mut vmio = VirtioMmio::default();
+    let mut blk = BlkDisk::new();
     let mut blk_vmio = VirtioMmio::default();
-    let mut net      = NetDev::new(net_tid);
+    let mut net = NetDev::new(net_tid);
     let mut net_vmio = VirtioMmio::default();
-    let mut exit     = ViVmExit::Unknown { ec: 0, iss: 0 };
+    let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
 
     loop {
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
@@ -45,20 +49,18 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
         match exit {
             // ── HVC (PSCI + unknown) ──────────────────────────────────────────
-            ViVmExit::Hvc { imm: 0, mut regs } => {
-                match psci::dispatch(&mut regs) {
-                    psci::PsciAction::Return(result) => {
-                        let mut rb = [0u64; 32];
-                        vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
-                        rb[0] = result;
-                        vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
-                    }
-                    psci::PsciAction::SystemOff | psci::PsciAction::SystemReset => {
-                        println("[hv] PSCI SYSTEM_OFF");
-                        return RunOutcome::Shutdown;
-                    }
+            ViVmExit::Hvc { imm: 0, mut regs } => match psci::dispatch(&mut regs) {
+                psci::PsciAction::Return(result) => {
+                    let mut rb = [0u64; 32];
+                    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
+                    rb[0] = result;
+                    vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, true);
                 }
-            }
+                psci::PsciAction::SystemOff | psci::PsciAction::SystemReset => {
+                    println("[hv] PSCI SYSTEM_OFF");
+                    return RunOutcome::Shutdown;
+                }
+            },
             ViVmExit::Hvc { imm, regs: _ } => {
                 // Non-PSCI HVC — return NOT_SUPPORTED in x0 and advance past it.
                 println(&alloc::format!("[hv] unknown HVC imm={}", imm));
@@ -85,7 +87,11 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
                         _ => {}
                     }
                 } else {
-                    println(&alloc::format!("[hv] unknown MMIO write ipa=0x{:x} val=0x{:x}", ipa, val));
+                    println(&alloc::format!(
+                        "[hv] unknown MMIO write ipa=0x{:x} val=0x{:x}",
+                        ipa,
+                        val
+                    ));
                 }
                 advance_pc(vm_id, vcpu_id);
             }
@@ -153,7 +159,11 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── Unknown exit ─────────────────────────────────────────────────
             ViVmExit::Unknown { ec, iss } => {
-                println(&alloc::format!("[hv] unknown vmexit ec=0x{:x} iss=0x{:x}", ec, iss));
+                println(&alloc::format!(
+                    "[hv] unknown vmexit ec=0x{:x} iss=0x{:x}",
+                    ec,
+                    iss
+                ));
                 return RunOutcome::Shutdown;
             }
         }

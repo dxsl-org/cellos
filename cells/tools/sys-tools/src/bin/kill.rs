@@ -2,8 +2,8 @@
 #![no_main]
 extern crate ostd;
 
-use ostd::{io, syscall};
 use api::syscall::ProcessInfo;
+use ostd::{io, syscall};
 
 /// Read the spawn-args stash into `buf` and return the trimmed content.
 fn spawn_args<'a>(buf: &'a mut [u8]) -> &'a str {
@@ -29,7 +29,7 @@ pub fn main() {
     }
 
     let tid: usize = match tid_str.parse() {
-        Ok(n)  => n,
+        Ok(n) => n,
         Err(_) => {
             io::print("kill: invalid tid: ");
             io::println(tid_str);
@@ -41,9 +41,7 @@ pub fn main() {
     let mut buf = [ProcessInfo::default(); 32];
     let count = syscall::sys_get_procs(&mut buf).unwrap_or(0);
 
-    let state = (0..count)
-        .find(|&i| buf[i].id == tid)
-        .map(|i| buf[i].state);
+    let state = (0..count).find(|&i| buf[i].id == tid).map(|i| buf[i].state);
 
     match state {
         Some(2) => {

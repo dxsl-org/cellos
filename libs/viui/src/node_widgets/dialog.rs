@@ -27,13 +27,13 @@ use crate::signal::SubscriptionHandle;
 // ─── DialogButton ────────────────────────────────────────────────────────────
 
 struct DialogButton {
-    label:      String,
+    label: String,
     is_primary: bool,
     /// Called on confirmed click (MouseRelease inside bounds after MousePress).
-    action:     Box<dyn Fn()>,
-    bounds:     Cell<Rect>,
-    hovered:    bool,
-    pressed:    bool,
+    action: Box<dyn Fn()>,
+    bounds: Cell<Rect>,
+    hovered: bool,
+    pressed: bool,
 }
 
 // ─── Dialog ──────────────────────────────────────────────────────────────────
@@ -44,12 +44,12 @@ struct DialogButton {
 /// out during `ViApp`'s layout pass, so its bounds are always screen-centred
 /// regardless of the window size.
 pub struct Dialog {
-    title:   String,
+    title: String,
     message: String,
     buttons: Vec<DialogButton>,
-    bounds:  Cell<Rect>,
+    bounds: Cell<Rect>,
     /// Used by `event()` to push `Pop` after a button action executes.
-    queue:   OverlayActionQueue,
+    queue: OverlayActionQueue,
 }
 
 impl Dialog {
@@ -57,23 +57,23 @@ impl Dialog {
     ///
     /// `on_ok` is called before the dialog pops itself.
     pub fn alert(
-        title:   impl Into<String>,
+        title: impl Into<String>,
         message: impl Into<String>,
-        queue:   OverlayActionQueue,
-        on_ok:   impl Fn() + 'static,
+        queue: OverlayActionQueue,
+        on_ok: impl Fn() + 'static,
     ) -> Self {
         let q = queue.clone();
         Self {
-            title:   title.into(),
+            title: title.into(),
             message: message.into(),
             buttons: alloc::vec![DialogButton {
-                label:      "OK".into(),
+                label: "OK".into(),
                 is_primary: true,
-                action:     Box::new(move || {
+                action: Box::new(move || {
                     on_ok();
                     q.borrow_mut().push(OverlayAction::Pop);
                 }),
-                bounds:  Cell::new(Rect::ZERO),
+                bounds: Cell::new(Rect::ZERO),
                 hovered: false,
                 pressed: false,
             }],
@@ -86,37 +86,37 @@ impl Dialog {
     ///
     /// `on_confirm` / `on_cancel` are called before the dialog pops itself.
     pub fn confirm(
-        title:      impl Into<String>,
-        message:    impl Into<String>,
-        queue:      OverlayActionQueue,
+        title: impl Into<String>,
+        message: impl Into<String>,
+        queue: OverlayActionQueue,
         on_confirm: impl Fn() + 'static,
-        on_cancel:  impl Fn() + 'static,
+        on_cancel: impl Fn() + 'static,
     ) -> Self {
         let q1 = queue.clone();
         let q2 = queue.clone();
         Self {
-            title:   title.into(),
+            title: title.into(),
             message: message.into(),
             buttons: alloc::vec![
                 DialogButton {
-                    label:      "Cancel".into(),
+                    label: "Cancel".into(),
                     is_primary: false,
-                    action:     Box::new(move || {
+                    action: Box::new(move || {
                         on_cancel();
                         q1.borrow_mut().push(OverlayAction::Pop);
                     }),
-                    bounds:  Cell::new(Rect::ZERO),
+                    bounds: Cell::new(Rect::ZERO),
                     hovered: false,
                     pressed: false,
                 },
                 DialogButton {
-                    label:      "Confirm".into(),
+                    label: "Confirm".into(),
                     is_primary: true,
-                    action:     Box::new(move || {
+                    action: Box::new(move || {
                         on_confirm();
                         q2.borrow_mut().push(OverlayAction::Pop);
                     }),
-                    bounds:  Cell::new(Rect::ZERO),
+                    bounds: Cell::new(Rect::ZERO),
                     hovered: false,
                     pressed: false,
                 },
@@ -145,13 +145,20 @@ impl ViNode for Dialog {
             // Stack right-to-left: primary button is rightmost.
             let slot = n - 1.0 - i as f32;
             let btn_x = x + w - 12.0 - (slot + 1.0) * (btn_w + 8.0) + 8.0;
-            btn.bounds.set(Rect { x: btn_x, y: btn_y, w: btn_w, h: btn_h });
+            btn.bounds.set(Rect {
+                x: btn_x,
+                y: btn_y,
+                w: btn_w,
+                h: btn_h,
+            });
         }
 
         Size::new(w, h)
     }
 
-    fn bounds(&self) -> Rect { self.bounds.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         let b = self.bounds.get();
@@ -162,26 +169,42 @@ impl ViNode for Dialog {
         cx.canvas.draw_rect_border(b, Color::rgb(70, 72, 100), 1.0);
 
         // Title text.
-        cx.draw_text(Point::new(b.x + 16.0, b.y + 16.0), &self.title, Color::WHITE);
+        cx.draw_text(
+            Point::new(b.x + 16.0, b.y + 16.0),
+            &self.title,
+            Color::WHITE,
+        );
         // Message text — slightly dimmed.
-        cx.draw_text(Point::new(b.x + 16.0, b.y + 48.0), &self.message, Color::rgb(180, 180, 200));
+        cx.draw_text(
+            Point::new(b.x + 16.0, b.y + 48.0),
+            &self.message,
+            Color::rgb(180, 180, 200),
+        );
 
         // Buttons.
         for btn in &self.buttons {
             let bb = btn.bounds.get();
             let bg = if btn.is_primary {
-                if btn.pressed      { Color::rgb(60, 100, 200) }
-                else if btn.hovered { Color::rgb(100, 140, 240) }
-                else                { Color::rgb(80, 120, 220) }
+                if btn.pressed {
+                    Color::rgb(60, 100, 200)
+                } else if btn.hovered {
+                    Color::rgb(100, 140, 240)
+                } else {
+                    Color::rgb(80, 120, 220)
+                }
             } else {
-                if btn.pressed      { Color::rgb(50, 52, 70) }
-                else if btn.hovered { Color::rgb(70, 72, 90) }
-                else                { Color::rgb(55, 57, 75) }
+                if btn.pressed {
+                    Color::rgb(50, 52, 70)
+                } else if btn.hovered {
+                    Color::rgb(70, 72, 90)
+                } else {
+                    Color::rgb(55, 57, 75)
+                }
             };
             cx.canvas.fill_rect(bb, bg);
 
             // Centre label in button (approx: 8 px/char, 8 px glyph height).
-            let chars  = btn.label.chars().count() as f32;
+            let chars = btn.label.chars().count() as f32;
             let text_x = bb.x + (bb.w - chars * 8.0) / 2.0;
             let text_y = bb.y + (bb.h - 8.0) / 2.0;
             cx.draw_text(Point::new(text_x, text_y), &btn.label, Color::WHITE);
@@ -201,7 +224,10 @@ impl ViNode for Dialog {
                 // Consume: prevent the root from acting on mouse moves over the dim.
                 true
             }
-            Event::MousePress { pos, button: MouseButton::Left } => {
+            Event::MousePress {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 if self.bounds.get().contains(*pos) {
                     for btn in &mut self.buttons {
                         if btn.bounds.get().contains(*pos) {
@@ -214,7 +240,10 @@ impl ViNode for Dialog {
                 }
                 true // always consume
             }
-            Event::MouseRelease { pos, button: MouseButton::Left } => {
+            Event::MouseRelease {
+                pos,
+                button: MouseButton::Left,
+            } => {
                 for btn in &mut self.buttons {
                     let was_pressed = btn.pressed;
                     btn.pressed = false;
@@ -234,5 +263,7 @@ impl ViNode for Dialog {
         Vec::new()
     }
 
-    fn is_focusable(&self) -> bool { false }
+    fn is_focusable(&self) -> bool {
+        false
+    }
 }

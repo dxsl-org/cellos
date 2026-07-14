@@ -67,7 +67,10 @@ fn wrong_key_is_rejected() {
     let other_vk = VerifyingKey::from(&other_key);
     let blob = encode_signed(&key, &test_body());
 
-    assert_eq!(parse_and_verify(&blob, &other_vk), Err(AttestError::BadSignature));
+    assert_eq!(
+        parse_and_verify(&blob, &other_vk),
+        Err(AttestError::BadSignature)
+    );
 }
 
 #[test]
@@ -76,7 +79,10 @@ fn truncated_blob_returns_err_not_panic() {
     let vk = VerifyingKey::from(&key);
     let blob = encode_signed(&key, &test_body());
 
-    assert_eq!(parse_and_verify(&blob[..10], &vk), Err(AttestError::BadLength));
+    assert_eq!(
+        parse_and_verify(&blob[..10], &vk),
+        Err(AttestError::BadLength)
+    );
     assert_eq!(parse_and_verify(&[], &vk), Err(AttestError::BadLength));
 }
 

@@ -24,7 +24,7 @@ use ostd::font_atlas::GlyphAtlas;
 /// Widgets that do not need scalable text ignore the `atlas` field entirely.
 pub struct FontContext {
     /// Cached glyph rasterizer. `None` = bitmap 8×8 fallback.
-    pub atlas:   Option<GlyphAtlas>,
+    pub atlas: Option<GlyphAtlas>,
     /// Default font size in pixels used by text widgets.
     pub size_px: f32,
 }
@@ -32,14 +32,20 @@ pub struct FontContext {
 impl FontContext {
     /// No scalable font — all text widgets use the 8×8 bitmap fallback.
     pub fn no_font() -> Self {
-        Self { atlas: None, size_px: 16.0 }
+        Self {
+            atlas: None,
+            size_px: 16.0,
+        }
     }
 
     /// Load a TrueType / OpenType font from raw bytes.
     ///
     /// Returns `None` when the font data is invalid.
     pub fn with_font(font_bytes: &[u8], size_px: f32) -> Option<Self> {
-        GlyphAtlas::new(font_bytes).map(|atlas| Self { atlas: Some(atlas), size_px })
+        GlyphAtlas::new(font_bytes).map(|atlas| Self {
+            atlas: Some(atlas),
+            size_px,
+        })
     }
 
     /// Convenience: `with_font()` with a fallback to `no_font()`.
@@ -50,5 +56,7 @@ impl FontContext {
     }
 
     /// True when a scalable atlas is loaded.
-    pub fn has_font(&self) -> bool { self.atlas.is_some() }
+    pub fn has_font(&self) -> bool {
+        self.atlas.is_some()
+    }
 }

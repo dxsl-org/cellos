@@ -23,7 +23,7 @@ extern crate alloc;
 use alloc::boxed::Box;
 use api::ViError;
 use ostd::app::{AppContext, AppEvent};
-use ostd::hotswap::{hotswap_key, stash_transfer, restore_transfer, ViStateTransfer};
+use ostd::hotswap::{hotswap_key, restore_transfer, stash_transfer, ViStateTransfer};
 use ostd::io::println;
 use ostd::sync::Mutex;
 use ostd::syscall::sys_hotswap_ready;

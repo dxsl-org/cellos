@@ -5,10 +5,10 @@
 
 extern crate alloc;
 
-use api::hypervisor::ViVmExit;
-use types::silo::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
-use ostd::io::println;
 use crate::vmm;
+use api::hypervisor::ViVmExit;
+use ostd::io::println;
+use types::silo::{HVC_SILO_DONE, HVC_SILO_FAULT, HVC_SILO_READY};
 
 /// Result of running the silo guest for one mailbox operation.
 pub enum SiloRunResult {
@@ -42,7 +42,10 @@ pub fn run_until_done(vm_id: usize, vcpu_id: usize) -> SiloRunResult {
                     return SiloRunResult::Fault(regs[1] as u8);
                 } else {
                     // Unknown HVC — log and re-enter so the guest can continue.
-                    println(&alloc::format!("[silo] unknown HVC func_id=0x{:x}", func_id));
+                    println(&alloc::format!(
+                        "[silo] unknown HVC func_id=0x{:x}",
+                        func_id
+                    ));
                 }
             }
             ViVmExit::Wfi => {
@@ -56,7 +59,8 @@ pub fn run_until_done(vm_id: usize, vcpu_id: usize) -> SiloRunResult {
             ViVmExit::Unknown { ec, iss } => {
                 println(&alloc::format!(
                     "[silo] unknown VmExit ec=0x{:x} iss=0x{:x} — aborting",
-                    ec, iss
+                    ec,
+                    iss
                 ));
                 return SiloRunResult::GuestError;
             }

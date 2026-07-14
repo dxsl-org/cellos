@@ -78,8 +78,7 @@ impl<T: Read + Write> HttpClient<T> {
             match parse_response_headers(&buf) {
                 Ok(headers) => {
                     let body = &buf[headers.body_offset..];
-                    let reader =
-                        BodyReader::new(headers.framing, headers.content_length, body);
+                    let reader = BodyReader::new(headers.framing, headers.content_length, body);
                     return Ok((headers, reader));
                 }
                 Err(HttpError::NeedMoreData) => { /* fall through to read more */ }
@@ -92,10 +91,9 @@ impl<T: Read + Write> HttpClient<T> {
                 )));
             }
 
-            let n = self
-                .transport
-                .read(&mut tmp)
-                .map_err(|_| HttpError::Other(alloc::string::String::from("transport read failed")))?;
+            let n = self.transport.read(&mut tmp).map_err(|_| {
+                HttpError::Other(alloc::string::String::from("transport read failed"))
+            })?;
             if n == 0 {
                 // Transport reported EOF before headers completed. For TLS this
                 // is also "no data yet"; TlsStream::read already spins+bounds,

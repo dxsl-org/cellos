@@ -12,7 +12,9 @@ pub struct ZOrder {
 }
 
 impl ZOrder {
-    pub fn new() -> Self { Self { caps: Vec::new() } }
+    pub fn new() -> Self {
+        Self { caps: Vec::new() }
+    }
 
     /// Add a new surface at the top of the stack.
     pub fn push(&mut self, cap: u64) {
@@ -44,5 +46,7 @@ impl ZOrder {
 }
 
 impl Default for ZOrder {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

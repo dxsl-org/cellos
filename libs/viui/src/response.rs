@@ -23,5 +23,7 @@ pub struct Response {
 
 impl Response {
     /// True if the user triggered an interaction: click, change, or any input.
-    pub fn interacted(&self) -> bool { self.clicked || self.changed }
+    pub fn interacted(&self) -> bool {
+        self.clicked || self.changed
+    }
 }

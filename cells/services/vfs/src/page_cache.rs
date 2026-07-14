@@ -3,15 +3,15 @@
 //! Lives entirely inside the VFS cell — one owner, no lock contention.
 //! Cache budget is a compile-time constant; change and recompile for G2.
 
-use alloc::collections::{BTreeMap, VecDeque};
 use crate::block_stream::BlockStream;
+use alloc::collections::{BTreeMap, VecDeque};
 
 /// Sector cache budget — 4 MB = 8192 512-byte sectors.
 /// G2 deployments: change this const and recompile. No feature flag needed.
 const MAX_CACHE_BYTES: usize = 4 * 1024 * 1024;
 
 struct CachedSector {
-    data:  [u8; 512],
+    data: [u8; 512],
     dirty: bool,
 }
 
@@ -21,19 +21,19 @@ struct CachedSector {
 /// flushes dirty entries to disk immediately. Switch to write-back when
 /// viFS2 (WAL) becomes the backend.
 pub struct PageCache {
-    entries:     BTreeMap<u64, CachedSector>,
-    lru_order:   VecDeque<u64>,
+    entries: BTreeMap<u64, CachedSector>,
+    lru_order: VecDeque<u64>,
     total_bytes: usize,
-    max_bytes:   usize,
+    max_bytes: usize,
 }
 
 impl PageCache {
     pub fn new() -> Self {
         Self {
-            entries:     BTreeMap::new(),
-            lru_order:   VecDeque::new(),
+            entries: BTreeMap::new(),
+            lru_order: VecDeque::new(),
             total_bytes: 0,
-            max_bytes:   MAX_CACHE_BYTES,
+            max_bytes: MAX_CACHE_BYTES,
         }
     }
 
@@ -100,7 +100,8 @@ impl PageCache {
                 break;
             }
         }
-        self.entries.insert(sector, CachedSector { data: *data, dirty });
+        self.entries
+            .insert(sector, CachedSector { data: *data, dirty });
         self.lru_order.push_front(sector);
         self.total_bytes += 512;
     }

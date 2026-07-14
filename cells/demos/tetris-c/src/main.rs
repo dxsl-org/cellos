@@ -15,15 +15,15 @@
 #![no_std]
 #![no_main]
 #![allow(unsafe_code)]
-#![allow(static_mut_refs)]  // single-task cell — no data race on SURFACE / KEY_QUEUE
+#![allow(static_mut_refs)] // single-task cell — no data race on SURFACE / KEY_QUEUE
 
 extern crate alloc;
 
 use alloc::vec::Vec;
 use api::declare_manifest;
-use api::input::{InputEvent, KeyState, KeySym};
 use api::display::PixelFormat;
-use ostd::display::{ViSurface, wait_for_compositor};
+use api::input::{InputEvent, KeyState, KeySym};
+use ostd::display::{wait_for_compositor, ViSurface};
 use ostd::font::FONT8X8;
 use ostd::input::{poll_events, request_focus};
 use ostd::syscall::{sys_exit, sys_get_time};
@@ -32,9 +32,9 @@ use ostd::task::yield_now;
 // ── Screen geometry ───────────────────────────────────────────────────────
 // VGA canvas: 320×200.  3× nearest-neighbour scale → 960×600.
 // Centred in 1024×768: X offset = (1024-960)/2 = 32, Y = (768-600)/2 = 84.
-const SURF_W: u32 = api::display::FALLBACK_WIDTH;   // 1024
-const SURF_H: u32 = api::display::FALLBACK_HEIGHT;  // 768
-const SCALE:  u32 = 3;
+const SURF_W: u32 = api::display::FALLBACK_WIDTH; // 1024
+const SURF_H: u32 = api::display::FALLBACK_HEIGHT; // 768
+const SCALE: u32 = 3;
 
 declare_manifest!(block_io = false, network = false, spawn = false);
 
@@ -44,17 +44,17 @@ static mut SURFACE: Option<ViSurface> = None;
 // ── Key event ring buffer ─────────────────────────────────────────────────
 // KEY_* codes must match keyboard.h from Banaxi-Tech/Tetris-OS.
 // If the _Static_asserts in vicell_platform.c fail, update these constants.
-const KEY_NONE:   i32 = 0;
-const KEY_LEFT:   i32 = 1;
-const KEY_RIGHT:  i32 = 2;
-const KEY_UP:     i32 = 3;
-const KEY_DOWN:   i32 = 4;
-const KEY_ENTER:  i32 = 5;
+const KEY_NONE: i32 = 0;
+const KEY_LEFT: i32 = 1;
+const KEY_RIGHT: i32 = 2;
+const KEY_UP: i32 = 3;
+const KEY_DOWN: i32 = 4;
+const KEY_ENTER: i32 = 5;
 const KEY_ESCAPE: i32 = 6;
 
 static mut KEY_QUEUE: [i32; 16] = [KEY_NONE; 16];
-static mut KEY_HEAD:  usize = 0;
-static mut KEY_TAIL:  usize = 0;
+static mut KEY_HEAD: usize = 0;
+static mut KEY_TAIL: usize = 0;
 
 unsafe fn enqueue_key(k: i32) {
     let tail = KEY_TAIL;
@@ -76,7 +76,9 @@ pub extern "C" fn main() {
                 surf.raise();
                 SURFACE = Some(surf);
             }
-            Err(_) => { sys_exit(1); }
+            Err(_) => {
+                sys_exit(1);
+            }
         }
         while !request_focus() {
             yield_now();
@@ -131,7 +133,7 @@ pub unsafe extern "C" fn vicell_poll_key() -> i32 {
 pub unsafe extern "C" fn vicell_surface_ptr() -> *mut u32 {
     match SURFACE.as_mut() {
         Some(s) => s.pixels_mut().as_mut_ptr() as *mut u32,
-        None    => core::ptr::null_mut(),
+        None => core::ptr::null_mut(),
     }
 }
 
@@ -155,14 +157,18 @@ pub unsafe extern "C" fn vicell_flush() {
 pub unsafe extern "C" fn vicell_draw_char(x: u32, y: u32, c: u8, bgra: u32) {
     let surf = match SURFACE.as_mut() {
         Some(s) => s,
-        None    => return,
+        None => return,
     };
-    let sw    = surf.width() as i32;
-    let sh    = surf.height() as i32;
+    let sw = surf.width() as i32;
+    let sh = surf.height() as i32;
     let stride = surf.stride(); // bytes per row
     let pixels = surf.pixels_mut();
 
-    let idx = if c >= 0x20 && c <= 0x7E { (c - 0x20) as usize } else { 0 };
+    let idx = if c >= 0x20 && c <= 0x7E {
+        (c - 0x20) as usize
+    } else {
+        0
+    };
     let glyph = &FONT8X8[idx];
 
     // Unpack BGRA bytes to write into the pixel buffer
@@ -173,18 +179,26 @@ pub unsafe extern "C" fn vicell_draw_char(x: u32, y: u32, c: u8, bgra: u32) {
 
     for row in 0..8_i32 {
         let mask = glyph[row as usize];
-        if mask == 0 { continue; }
+        if mask == 0 {
+            continue;
+        }
         for col in 0..8_i32 {
-            if mask & (0x80u8 >> col as u32) == 0 { continue; }
+            if mask & (0x80u8 >> col as u32) == 0 {
+                continue;
+            }
             for dy in 0..SCALE as i32 {
                 let py = y as i32 + row * SCALE as i32 + dy;
-                if py < 0 || py >= sh { continue; }
+                if py < 0 || py >= sh {
+                    continue;
+                }
                 for dx in 0..SCALE as i32 {
                     let px = x as i32 + col * SCALE as i32 + dx;
-                    if px < 0 || px >= sw { continue; }
+                    if px < 0 || px >= sw {
+                        continue;
+                    }
                     let off = py as usize * stride + px as usize * 4;
                     if off + 4 <= pixels.len() {
-                        pixels[off]     = pb;
+                        pixels[off] = pb;
                         pixels[off + 1] = pg;
                         pixels[off + 2] = pr;
                         pixels[off + 3] = pa;
@@ -199,13 +213,13 @@ pub unsafe extern "C" fn vicell_draw_char(x: u32, y: u32, c: u8, bgra: u32) {
 
 fn keysym_to_tetris(sym: KeySym) -> i32 {
     match sym {
-        KeySym::Left     => KEY_LEFT,
-        KeySym::Right    => KEY_RIGHT,
-        KeySym::Up       => KEY_UP,
-        KeySym::Down     => KEY_DOWN,
-        KeySym::Return   => KEY_ENTER,
-        KeySym::Escape   => KEY_ESCAPE,
+        KeySym::Left => KEY_LEFT,
+        KeySym::Right => KEY_RIGHT,
+        KeySym::Up => KEY_UP,
+        KeySym::Down => KEY_DOWN,
+        KeySym::Return => KEY_ENTER,
+        KeySym::Escape => KEY_ESCAPE,
         KeySym::Printable => KEY_NONE, // letter keys not used in Tetris
-        _                => KEY_NONE,
+        _ => KEY_NONE,
     }
 }

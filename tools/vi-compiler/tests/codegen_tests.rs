@@ -106,15 +106,18 @@ fn gen_counter() -> String {
 #[test]
 fn counter_emits_struct_and_impl() {
     let out = gen_counter();
-    assert!(out.contains("pub struct Counter"),     "missing struct Counter");
-    assert!(out.contains("impl Counter"),            "missing impl Counter");
-    assert!(out.contains("pub fn build()"),          "missing build() fn");
+    assert!(out.contains("pub struct Counter"), "missing struct Counter");
+    assert!(out.contains("impl Counter"), "missing impl Counter");
+    assert!(out.contains("pub fn build()"), "missing build() fn");
 }
 
 #[test]
 fn counter_emits_signal_new() {
     let out = gen_counter();
-    assert!(out.contains("Signal::new(0i32)"), "missing Signal::new(0i32) for count property");
+    assert!(
+        out.contains("Signal::new(0i32)"),
+        "missing Signal::new(0i32) for count property"
+    );
 }
 
 #[test]
@@ -138,25 +141,37 @@ fn counter_emits_column_new() {
 #[test]
 fn counter_emits_into_parts() {
     let out = gen_counter();
-    assert!(out.contains(".into_parts()"), "missing .into_parts() for computed text");
+    assert!(
+        out.contains(".into_parts()"),
+        "missing .into_parts() for computed text"
+    );
 }
 
 #[test]
 fn counter_emits_update_closure() {
     let out = gen_counter();
-    assert!(out.contains(".update(|n|"), "missing .update(|n| ...) in button callback");
+    assert!(
+        out.contains(".update(|n|"),
+        "missing .update(|n| ...) in button callback"
+    );
 }
 
 #[test]
 fn counter_emits_subscription_handle_field() {
     let out = gen_counter();
-    assert!(out.contains("SubscriptionHandle"), "missing SubscriptionHandle field");
+    assert!(
+        out.contains("SubscriptionHandle"),
+        "missing SubscriptionHandle field"
+    );
 }
 
 #[test]
 fn counter_has_pub_count_field() {
     let out = gen_counter();
-    assert!(out.contains("pub count: Signal<i32>"), "missing pub count: Signal<i32>");
+    assert!(
+        out.contains("pub count: Signal<i32>"),
+        "missing pub count: Signal<i32>"
+    );
 }
 
 #[test]
@@ -208,9 +223,21 @@ component ItemList {
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let mut gen = vi_compiler::codegen::CodeGen::new();
     let rust = gen.generate(&file);
-    assert!(rust.contains("iter()"),      "for loop iter() missing: {}", &rust[..rust.len().min(500)]);
-    assert!(rust.contains("enumerate()"), "enumerate missing: {}",        &rust[..rust.len().min(500)]);
-    assert!(rust.contains("Column::new"), "Column wrapper missing: {}",   &rust[..rust.len().min(500)]);
+    assert!(
+        rust.contains("iter()"),
+        "for loop iter() missing: {}",
+        &rust[..rust.len().min(500)]
+    );
+    assert!(
+        rust.contains("enumerate()"),
+        "enumerate missing: {}",
+        &rust[..rust.len().min(500)]
+    );
+    assert!(
+        rust.contains("Column::new"),
+        "Column wrapper missing: {}",
+        &rust[..rust.len().min(500)]
+    );
     // build() is static — iter expression is a local variable ref, not self.
     assert!(
         rust.contains("*items.get()"),
@@ -319,8 +346,9 @@ fn test_interpolated_text_into_parts() {
 #[test]
 fn counter_generates_valid_rust_syntax() {
     let rust = gen_counter();
-    syn::parse_str::<syn::File>(&rust)
-        .unwrap_or_else(|e| panic!("counter.vi codegen produced invalid Rust: {e}\n--- generated ---\n{rust}"));
+    syn::parse_str::<syn::File>(&rust).unwrap_or_else(|e| {
+        panic!("counter.vi codegen produced invalid Rust: {e}\n--- generated ---\n{rust}")
+    });
 }
 
 /// A component with all primitive property types must produce valid Rust.
@@ -337,8 +365,9 @@ component AllTypes {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    syn::parse_str::<syn::File>(&rust)
-        .unwrap_or_else(|e| panic!("all-types codegen invalid Rust: {e}\n--- generated ---\n{rust}"));
+    syn::parse_str::<syn::File>(&rust).unwrap_or_else(|e| {
+        panic!("all-types codegen invalid Rust: {e}\n--- generated ---\n{rust}")
+    });
 }
 
 // ─── Missing widget codegen tests ────────────────────────────────────────────
@@ -355,7 +384,11 @@ component Flex {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("FlexBox::"), "FlexBox ctor missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("FlexBox::"),
+        "FlexBox ctor missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -369,7 +402,11 @@ component VFlexComp {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("FlexBox::"), "VFlex → FlexBox ctor missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("FlexBox::"),
+        "VFlex → FlexBox ctor missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -384,8 +421,16 @@ component Check {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("CheckBox::new("), "CheckBox::new missing: {}", &rust[..rust.len().min(600)]);
-    assert!(rust.contains("checked"),        "checked signal missing: {}",  &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("CheckBox::new("),
+        "CheckBox::new missing: {}",
+        &rust[..rust.len().min(600)]
+    );
+    assert!(
+        rust.contains("checked"),
+        "checked signal missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -399,7 +444,11 @@ component Tap {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("TouchArea::new("), "TouchArea::new missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("TouchArea::new("),
+        "TouchArea::new missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -413,7 +462,11 @@ component C {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("Card::"), "Card ctor missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("Card::"),
+        "Card ctor missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -427,7 +480,11 @@ component D {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("Divider::horizontal("), "Divider::horizontal missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("Divider::horizontal("),
+        "Divider::horizontal missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -441,7 +498,11 @@ component S {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("Space::new("), "Space::new missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("Space::new("),
+        "Space::new missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -455,7 +516,11 @@ component Img {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("Image::new("), "Image::new missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("Image::new("),
+        "Image::new missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 #[test]
@@ -469,7 +534,11 @@ component Scroll {
 "#;
     let file = vi_compiler::compile_str(src).expect("parse failed");
     let rust = vi_compiler::codegen::CodeGen::new().generate(&file);
-    assert!(rust.contains("ScrollArea::"), "ScrollArea ctor missing: {}", &rust[..rust.len().min(600)]);
+    assert!(
+        rust.contains("ScrollArea::"),
+        "ScrollArea ctor missing: {}",
+        &rust[..rust.len().min(600)]
+    );
 }
 
 /// `text: self.name` on a Label must produce a reactive .map().into_parts() chain,
@@ -646,8 +715,12 @@ mod compile_expr_tests {
     use vi_compiler::eval::{compile_expr, ExprCtx};
     use vi_compiler::token::Span;
 
-    fn build_fn() -> ExprCtx { ExprCtx::BuildFn }
-    fn reactive() -> ExprCtx { ExprCtx::Reactive }
+    fn build_fn() -> ExprCtx {
+        ExprCtx::BuildFn
+    }
+    fn reactive() -> ExprCtx {
+        ExprCtx::Reactive
+    }
 
     #[test]
     fn bool_literal_true() {
@@ -721,9 +794,21 @@ mod compile_expr_tests {
             InterpPart::Expr(Box::new(Expr::Ident("count".to_string()))),
         ]);
         let out = compile_expr(&e, build_fn());
-        assert!(out.contains("alloc::format!"), "should use alloc::format!: {}", out);
-        assert!(out.contains("Count: {}"), "format string should contain 'Count: {{}}': {}", out);
-        assert!(out.contains("count"), "format args should include 'count': {}", out);
+        assert!(
+            out.contains("alloc::format!"),
+            "should use alloc::format!: {}",
+            out
+        );
+        assert!(
+            out.contains("Count: {}"),
+            "format string should contain 'Count: {{}}': {}",
+            out
+        );
+        assert!(
+            out.contains("count"),
+            "format args should include 'count': {}",
+            out
+        );
     }
 
     #[test]
@@ -812,7 +897,8 @@ fn lexer_two_way_bind_token() {
     let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
     assert!(
         kinds.contains(&&TokenKind::TwoWayBind),
-        "Expected TwoWayBind token for '@=': {:?}", kinds
+        "Expected TwoWayBind token for '@=': {:?}",
+        kinds
     );
 }
 
@@ -825,12 +911,14 @@ fn lexer_computed_bind_token() {
     let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
     assert!(
         kinds.contains(&&TokenKind::ComputedBind),
-        "Expected ComputedBind token for '#=': {:?}", kinds
+        "Expected ComputedBind token for '#=': {:?}",
+        kinds
     );
     // Must NOT be parsed as a ColorLit.
     assert!(
         !kinds.contains(&&TokenKind::ColorLit),
-        "ColorLit must not be emitted for '#=': {:?}", kinds
+        "ColorLit must not be emitted for '#=': {:?}",
+        kinds
     );
 }
 
@@ -850,10 +938,22 @@ component Cond {
 "#;
     let output = vi_compiler::compile(src).expect("compile");
     // The then branch ("yes") must appear in output
-    assert!(output.contains("\"yes\""), "then branch missing from ternary output:\n{}", &output[..output.len().min(800)]);
-    assert!(output.contains("\"no\""),  "else branch missing from ternary output:\n{}", &output[..output.len().min(800)]);
+    assert!(
+        output.contains("\"yes\""),
+        "then branch missing from ternary output:\n{}",
+        &output[..output.len().min(800)]
+    );
+    assert!(
+        output.contains("\"no\""),
+        "else branch missing from ternary output:\n{}",
+        &output[..output.len().min(800)]
+    );
     // Must not contain the broken form `? :` with nothing between
-    assert!(!output.contains("? :"), "ternary produced broken '? :' — then branch still dropped:\n{}", &output[..output.len().min(800)]);
+    assert!(
+        !output.contains("? :"),
+        "ternary produced broken '? :' — then branch still dropped:\n{}",
+        &output[..output.len().min(800)]
+    );
 }
 
 /// Color literals like #fff still lex as ColorLit (not ComputedBind).
@@ -865,6 +965,7 @@ fn lexer_color_lit_still_works() {
     let kinds: Vec<&TokenKind> = tokens.iter().map(|t| &t.kind).collect();
     assert!(
         kinds.contains(&&TokenKind::ColorLit),
-        "Expected ColorLit for '#fff': {:?}", kinds
+        "Expected ColorLit for '#fff': {:?}",
+        kinds
     );
 }

@@ -97,10 +97,8 @@ pub fn spawn() -> Result<usize, ViError> {
             // Matches spawn_from_mem convention so FP state is consistent.
             task.trap_frame.sstatus = 0x6020_u64 as _;
 
-            let kstack = Stack::new_kernel(STACK_PAGES)
-                .map_err(|_| ViError::OutOfMemory)?;
-            let ustack = Stack::new_user(STACK_PAGES)
-                .map_err(|_| ViError::OutOfMemory)?;
+            let kstack = Stack::new_kernel(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
+            let ustack = Stack::new_user(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
 
             let kstack_top = kstack.top;
             task.trap_frame.regs[2] = ustack.top as _; // sp = user stack top
@@ -118,10 +116,14 @@ pub fn spawn() -> Result<usize, ViError> {
             // First context switch "returns" to __trap_exit.
             task.context.sp = tf_ptr as _;
             #[cfg(target_arch = "riscv64")]
-            { task.context.ra = __trap_exit as *const () as usize;
-              task.context.sstatus = 0x42120; } // SUM=1, FS=Initial, SPP=1, SPIE=1
+            {
+                task.context.ra = __trap_exit as *const () as usize;
+                task.context.sstatus = 0x42120;
+            } // SUM=1, FS=Initial, SPP=1, SPIE=1
             #[cfg(target_arch = "aarch64")]
-            { task.context.x30 = __trap_exit as *const () as u64; }
+            {
+                task.context.x30 = __trap_exit as *const () as u64;
+            }
         }
     }
 

@@ -11,13 +11,16 @@ const GLYPH_W: f32 = 8.0;
 const GLYPH_H: f32 = 8.0;
 
 pub struct Label {
-    pub text:  String,
+    pub text: String,
     pub style: TextStyle,
 }
 
 impl Label {
     pub fn new(text: impl Into<String>) -> Self {
-        Self { text: text.into(), style: TextStyle::DEFAULT }
+        Self {
+            text: text.into(),
+            style: TextStyle::DEFAULT,
+        }
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
@@ -29,7 +32,10 @@ impl Label {
     pub fn measure(&self) -> Size {
         // Simple single-line measurement: no line wrapping.
         let chars = self.text.chars().count();
-        Size { w: chars as f32 * GLYPH_W, h: GLYPH_H }
+        Size {
+            w: chars as f32 * GLYPH_W,
+            h: GLYPH_H,
+        }
     }
 }
 

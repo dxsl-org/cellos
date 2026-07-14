@@ -15,7 +15,10 @@ use super::router::Router;
 /// Slide direction used internally to know which prev/current offset to apply
 /// once canvas transform support is added.
 #[derive(Clone, Copy, PartialEq)]
-pub enum SlideDir { Forward, Backward }
+pub enum SlideDir {
+    Forward,
+    Backward,
+}
 
 /// Stack navigator — displays one page at a time.
 ///
@@ -27,14 +30,14 @@ pub enum SlideDir { Forward, Backward }
 /// `pop()` directly on the navigator (the inner `Router` is also pub for key
 /// inspection via `router.current_key()`).
 pub struct StackNavigator<K: Clone + PartialEq + 'static> {
-    pub router:  Router<K>,
-    current:     Box<dyn ViNode>,
-    prev:        Option<Box<dyn ViNode>>,
+    pub router: Router<K>,
+    current: Box<dyn ViNode>,
+    prev: Option<Box<dyn ViNode>>,
     /// Animation progress: 0.0 = transition start, 1.0 = complete.
-    slide_t:     f32,
-    slide_dir:   SlideDir,
-    animating:   bool,
-    bounds:      Cell<Rect>,
+    slide_t: f32,
+    slide_dir: SlideDir,
+    animating: bool,
+    bounds: Cell<Rect>,
 }
 
 impl<K: Clone + PartialEq + 'static> StackNavigator<K> {
@@ -79,14 +82,18 @@ impl<K: Clone + PartialEq + 'static> StackNavigator<K> {
         }
     }
 
-    pub fn can_pop(&self) -> bool { self.router.can_pop() }
+    pub fn can_pop(&self) -> bool {
+        self.router.can_pop()
+    }
 
     /// Advance slide animation by `dt_ms` milliseconds (200 ms total transition).
     ///
     /// Returns `true` while animating; returns `false` once complete and the
     /// previous page has been dropped. Call from the app's animation loop.
     pub fn tick_animation(&mut self, dt_ms: u32) -> bool {
-        if !self.animating { return false; }
+        if !self.animating {
+            return false;
+        }
         self.slide_t += dt_ms as f32 / 200.0;
         if self.slide_t >= 1.0 {
             self.slide_t = 1.0;
@@ -103,11 +110,14 @@ impl<K: Clone + PartialEq + 'static> ViNode for StackNavigator<K> {
         if let Some(prev) = &mut self.prev {
             prev.layout(constraints);
         }
-        self.bounds.set(Rect::from_origin_size(constraints.origin, size));
+        self.bounds
+            .set(Rect::from_origin_size(constraints.origin, size));
         size
     }
 
-    fn bounds(&self) -> Rect { self.bounds.get() }
+    fn bounds(&self) -> Rect {
+        self.bounds.get()
+    }
 
     fn paint(&self, cx: &mut RenderCtx<'_>) {
         // Canvas has no transform support — paint current page only.
@@ -117,7 +127,9 @@ impl<K: Clone + PartialEq + 'static> ViNode for StackNavigator<K> {
 
     fn event(&mut self, event: &Event) -> bool {
         // Block input during transitions to avoid double-firing on both pages.
-        if self.animating { return true; }
+        if self.animating {
+            return true;
+        }
         self.current.event(event)
     }
 
@@ -129,10 +141,14 @@ impl<K: Clone + PartialEq + 'static> ViNode for StackNavigator<K> {
         handles
     }
 
-    fn is_focusable(&self) -> bool { false }
+    fn is_focusable(&self) -> bool {
+        false
+    }
 
     fn collect_focusable_bounds(&mut self) -> Vec<Rect> {
-        if self.animating { return Vec::new(); }
+        if self.animating {
+            return Vec::new();
+        }
         self.current.collect_focusable_bounds()
     }
 

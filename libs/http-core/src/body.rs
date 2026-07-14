@@ -137,11 +137,7 @@ impl BodyReader {
     /// body is complete per its framing.  A transport 0-read on an incomplete
     /// body yields `Err(HttpError::UnexpectedEof)` (truncated).  See the module
     /// doc for the precise completion-vs-EOF contract.
-    pub fn read<R: Read>(
-        &mut self,
-        transport: &mut R,
-        out: &mut [u8],
-    ) -> Result<usize, HttpError> {
+    pub fn read<R: Read>(&mut self, transport: &mut R, out: &mut [u8]) -> Result<usize, HttpError> {
         if out.is_empty() {
             return Ok(0);
         }
@@ -166,12 +162,12 @@ impl BodyReader {
     }
 }
 
-#[path = "body_source.rs"]
-mod source;
-#[path = "body_content_length.rs"]
-mod content_length;
 #[path = "body_chunked.rs"]
 mod chunked;
+#[path = "body_content_length.rs"]
+mod content_length;
+#[path = "body_source.rs"]
+mod source;
 
 #[cfg(test)]
 #[path = "body_tests.rs"]

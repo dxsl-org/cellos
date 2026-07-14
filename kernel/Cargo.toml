@@ -5,17 +5,17 @@ edition = "2021"
 license = "MPL-2.0"
 
 [dependencies]
-types = { path = "../libs/types" }
-api = { path = "../libs/api" }
+types = { path = "../libs/types", version = "0.1.0" }
+api = { path = "../libs/api", version = "0.1.0" }
 qemu-exit = { version = "4", optional = true }
-hal-traits-mmc = { path = "../hal/traits/mmc" }
+hal-traits-mmc = { path = "../hal/traits/mmc", version = "0.1.0" }
 log = { version = "0.4", default-features = false }
 virtio-drivers = "0.7.0"
 linked_list_allocator = "0.10"
 rlsf = { version = "0.2", default-features = false }
 async-trait = "0.1.89"
-fatfs = { git = "https://github.com/rafalh/rust-fatfs", default-features = false, features = ["alloc", "lfn"] }
-xmas-elf = "0.9"
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", version = "0.4.0", default-features = false, features = ["alloc", "lfn"] }
+xmas-elf = "0.10"
 crc32fast = { version = "1", default-features = false }
 # Ed25519 signature VERIFY (no_std, verify-only) for signed operator policy (P5).
 # Spike: pure-Rust embedded-oriented impl chosen over ed25519-dalek to maximise
@@ -23,25 +23,29 @@ crc32fast = { version = "1", default-features = false }
 ed25519-compact = { version = "2", default-features = false }
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv32", "critical-section-impl"] }
+hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["riscv32", "critical-section-impl"] }
 riscv = "0.16.0"
+# RV32 has no native 64-bit atomics (max_atomic_width = 32) — core::sync::atomic::AtomicU64
+# does not exist on this target. portable-atomic polyfills it via the critical-section
+# impl hal/arch/riscv already registers (hal/arch/riscv/src/critical_section.rs).
+portable-atomic = { version = "1", features = ["critical-section"] }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["riscv64", "critical-section-impl"] }
+hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["riscv64", "critical-section-impl"] }
 riscv = "0.16.0"
 fdt = "0.1"
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["aarch64", "critical-section-impl"] }
+hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["aarch64", "critical-section-impl"] }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86_64", "critical-section-impl"] }
+hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["x86_64", "critical-section-impl"] }
 
 [target.'cfg(target_arch = "arm")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["arm", "critical-section-impl"] }
+hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["arm", "critical-section-impl"] }
 
 [target.'cfg(target_arch = "x86")'.dependencies]
-hal = { path = "../hal/core", package = "hal-core", default-features = false, features = ["x86", "critical-section-impl"] }
+hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["x86", "critical-section-impl"] }
 
 [build-dependencies]
 vergen-gitcl = { version = "1", default-features = false, features = ["build", "cargo"] }

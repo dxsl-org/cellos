@@ -1,1 +1,3 @@
-fn main() { cell_build::emit_linker_script(); }
+fn main() {
+    cell_build::emit_linker_script();
+}

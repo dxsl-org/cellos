@@ -17,8 +17,8 @@
 
 use crate::controller::{E1000Controller, BUF_SIZE};
 
-const OP_TX:     u8 = 0;
-const OP_RX:     u8 = 1;
+const OP_TX: u8 = 0;
+const OP_RX: u8 = 1;
 const OP_GETMAC: u8 = 2;
 
 /// Total output buffer size: 2-byte length header + full frame payload.
@@ -38,23 +38,27 @@ pub enum NicReply<'a> {
 /// `out_buf` must be exactly `REPLY_BUF` bytes (2-byte header + frame).
 /// Returns a `NicReply` describing what to send back.
 pub fn handle<'a>(
-    ctrl:    &mut E1000Controller,
-    data:    &[u8],
+    ctrl: &mut E1000Controller,
+    data: &[u8],
     out_buf: &'a mut [u8; REPLY_BUF],
 ) -> NicReply<'a> {
-    if data.is_empty() { return NicReply::Status(1); }
+    if data.is_empty() {
+        return NicReply::Status(1);
+    }
     match data[0] {
         OP_TX => {
             // [op, len_lo, len_hi, frame...] — length header bounds the frame
             // inside the (padded) IPC buffer.
-            if data.len() < 3 { return NicReply::Status(1); }
+            if data.len() < 3 {
+                return NicReply::Status(1);
+            }
             let len = u16::from_le_bytes([data[1], data[2]]) as usize;
             if len == 0 || len > BUF_SIZE || 3 + len > data.len() {
                 return NicReply::Status(1);
             }
             let frame = &data[3..3 + len];
             match ctrl.send_frame(frame) {
-                Ok(_)  => NicReply::Status(0),
+                Ok(_) => NicReply::Status(0),
                 Err(_) => NicReply::Status(1),
             }
         }
@@ -63,11 +67,12 @@ pub fn handle<'a>(
             let n = ctrl.recv_frame(&mut out_buf[2..]);
             out_buf[0] = (n & 0xFF) as u8;
             out_buf[1] = ((n >> 8) & 0xFF) as u8;
-            NicReply::Frame { len: n, buf: out_buf }
+            NicReply::Frame {
+                len: n,
+                buf: out_buf,
+            }
         }
-        OP_GETMAC => {
-            NicReply::Raw(ctrl.mac)
-        }
+        OP_GETMAC => NicReply::Raw(ctrl.mac),
         _ => NicReply::Status(1),
     }
 }

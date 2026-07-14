@@ -10,13 +10,13 @@
 
 extern crate alloc;
 
+use crate::interface::VirtioNetDevice;
+use crate::tls::rng::ViRng;
+use crate::tls::transport::{set_tls_context, SmoltcpTlsTransport};
 use alloc::boxed::Box;
 use embedded_tls::blocking::{TlsConfig, TlsConnection, TlsContext};
 use embedded_tls::{Aes128GcmSha256, TlsError};
 use smoltcp::iface::{Interface, SocketHandle};
-use crate::interface::VirtioNetDevice;
-use crate::tls::rng::ViRng;
-use crate::tls::transport::{set_tls_context, SmoltcpTlsTransport};
 
 // Verifying path — default build.
 #[cfg(feature = "tls-roots-embedded")]
@@ -46,6 +46,9 @@ const TLS_BUF: usize = 16640;
 /// transport can drive smoltcp.
 pub struct TlsSocketEntry {
     pub conn: TlsConnection<'static, SmoltcpTlsTransport, Aes128GcmSha256>,
+    // reason: socket teardown goes through the separate SocketTable (by cap_id),
+    // not through this field — kept for API completeness / future direct-close use.
+    #[allow(dead_code)]
     pub handle: SocketHandle,
 }
 
@@ -60,16 +63,13 @@ impl TlsSocketEntry {
     ///
     /// # Safety
     /// `set_tls_context()` must have been called with valid pointers before this.
-    pub unsafe fn handshake(
-        handle:   SocketHandle,
-        hostname: &str,
-    ) -> Result<Self, TlsError> {
+    pub unsafe fn handshake(handle: SocketHandle, hostname: &str) -> Result<Self, TlsError> {
         // Leak 32 KiB for TLS record buffers — intentional, documented cost.
-        let read_buf:  &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));
+        let read_buf: &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));
         let write_buf: &'static mut [u8] = Box::leak(Box::new([0u8; TLS_BUF]));
 
         let transport = SmoltcpTlsTransport::new(handle);
-        let mut conn  = TlsConnection::new(transport, read_buf, write_buf);
+        let mut conn = TlsConnection::new(transport, read_buf, write_buf);
 
         let config = if hostname.is_empty() {
             TlsConfig::new()
@@ -108,7 +108,7 @@ impl TlsSocketEntry {
                 // The message is intentionally alarming — it must not be missed.
                 // sys_log is best-effort; we don't propagate errors.
                 let _ = ostd::syscall::sys_log(
-                    "[net/tls] !!! INSECURE TLS BUILD - server certs NOT verified !!!"
+                    "[net/tls] !!! INSECURE TLS BUILD - server certs NOT verified !!!",
                 );
             }
 
@@ -126,9 +126,9 @@ impl TlsSocketEntry {
     /// Same as `set_tls_context`.
     pub unsafe fn send(
         &mut self,
-        data:    &[u8],
-        iface:   *mut Interface,
-        device:  *mut VirtioNetDevice,
+        data: &[u8],
+        iface: *mut Interface,
+        device: *mut VirtioNetDevice,
         sockets: *mut (),
     ) -> Result<usize, TlsError> {
         set_tls_context(iface, device, sockets);
@@ -148,9 +148,9 @@ impl TlsSocketEntry {
     /// Same as `set_tls_context`.
     pub unsafe fn recv(
         &mut self,
-        buf:     &mut [u8],
-        iface:   *mut Interface,
-        device:  *mut VirtioNetDevice,
+        buf: &mut [u8],
+        iface: *mut Interface,
+        device: *mut VirtioNetDevice,
         sockets: *mut (),
     ) -> Result<usize, TlsError> {
         set_tls_context(iface, device, sockets);

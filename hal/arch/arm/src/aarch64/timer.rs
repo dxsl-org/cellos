@@ -16,8 +16,12 @@ const TICKS_PER_QUANTUM_QEMU: u64 = 625_000;
 fn ticks_per_quantum() -> u64 {
     let freq: u64;
     // SAFETY: CNTFRQ_EL0 is read-only from EL1/EL2; no state modified.
-    unsafe { core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack)); }
-    if freq == 0 { return TICKS_PER_QUANTUM_QEMU; }
+    unsafe {
+        core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack));
+    }
+    if freq == 0 {
+        return TICKS_PER_QUANTUM_QEMU;
+    }
     freq / 100 // 10 ms = 1/100 s
 }
 
@@ -42,10 +46,12 @@ pub fn init() {
         // BCM2835 GPU IRQ.  CORE0_TIMERS_IRQ bit 1 routes nCNTPNSIRQ to Core 0 IRQ.
         let freq: u64;
         // SAFETY: CNTFRQ_EL0 read-only; safe at EL1.
-        unsafe { core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack));
+        }
         if freq > 0 {
             let ticks = freq / 100; // 10 ms quantum
-            // SAFETY: CNTP_* are EL1 non-secure physical timer registers (EL1-accessible).
+                                    // SAFETY: CNTP_* are EL1 non-secure physical timer registers (EL1-accessible).
             unsafe {
                 core::arch::asm!(
                     "msr cntp_tval_el0, {val}",
@@ -134,11 +140,15 @@ fn rpi3_timer_diagnostic() {
     // SAFETY: 0x3F003004 = SYSTIMER_CLO; identity-mapped MMIO.
     let t0 = unsafe { core::ptr::read_volatile(0x3F00_3004 as *const u32) };
     for _ in 0..5_000u32 {
-        unsafe { core::arch::asm!("nop", options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("nop", options(nomem, nostack));
+        }
     }
     let t1 = unsafe { core::ptr::read_volatile(0x3F00_3004 as *const u32) };
     // SAFETY: 0x3F215040 is BCM AUX mini UART, identity-mapped IO.
-    unsafe { core::ptr::write_volatile(uart, if t1 > t0 { b'C' } else { b'J' } as u32); }
+    unsafe {
+        core::ptr::write_volatile(uart, if t1 > t0 { b'C' } else { b'J' } as u32);
+    }
 
     // --- Test 2: does SYSTIMER_CS bit 1 (C1 match) become set? ---
     // bcm2835_systimer::init() set C1 = CLO + 10_000 (10 ms at 1 MHz).
@@ -153,7 +163,9 @@ fn rpi3_timer_diagnostic() {
         }
     }
     // SAFETY: same UART address.
-    unsafe { core::ptr::write_volatile(uart, if c1_fired { b'I' } else { b'O' } as u32); }
+    unsafe {
+        core::ptr::write_volatile(uart, if c1_fired { b'I' } else { b'O' } as u32);
+    }
 
     // --- Test 3: is IRQ 1 visible in BCM2835 IRQ_PENDING1? ---
     // After C1 fires the BCM2835 sets bit 1 of IRQ_PENDING1 (0x3F00B204).
@@ -179,7 +191,9 @@ pub fn reset() {
         // Reload CNTP so it doesn't keep firing continuously after the first tick.
         let freq: u64;
         // SAFETY: read-only CSR.
-        unsafe { core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack)); }
+        unsafe {
+            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) freq, options(nomem, nostack));
+        }
         if freq > 0 {
             let ticks = freq / 100;
             // SAFETY: EL1 CNTP register, reload countdown.
@@ -222,6 +236,8 @@ pub fn reset() {
 pub fn read_ticks() -> u64 {
     let val: u64;
     // SAFETY: CNTPCT_EL0 is read-only; no state modified.
-    unsafe { core::arch::asm!("mrs {}, cntpct_el0", out(reg) val, options(nomem, nostack)); }
+    unsafe {
+        core::arch::asm!("mrs {}, cntpct_el0", out(reg) val, options(nomem, nostack));
+    }
     val
 }

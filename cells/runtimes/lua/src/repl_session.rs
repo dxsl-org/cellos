@@ -5,14 +5,14 @@
 
 extern crate alloc;
 
+use crate::ffi::{LuaState, LUA_OK};
 use alloc::string::String;
 use core::ffi::c_char;
-use crate::ffi::{LuaState, LUA_OK};
 use ostd::repl::{ReadResult, Repl};
 
 /// Prompt strings.
-const PROMPT1: &str = "> ";      // first line of an expression
-const PROMPT2: &str = ">> ";     // continuation line
+const PROMPT1: &str = "> "; // first line of an expression
+const PROMPT2: &str = ">> "; // continuation line
 
 /// Run an interactive Lua REPL until the user presses Ctrl+D.
 ///
@@ -32,7 +32,9 @@ pub unsafe fn run_repl(L: *mut LuaState) {
                 continue;
             }
             ReadResult::Line(line) => {
-                if !buf.is_empty() { buf.push('\n'); }
+                if !buf.is_empty() {
+                    buf.push('\n');
+                }
                 buf.push_str(&line);
 
                 // Try to compile as a complete chunk.
@@ -104,7 +106,9 @@ unsafe fn is_incomplete(L: *mut LuaState) -> bool {
     let mut len = 0usize;
     // SAFETY: -1 is the top of stack; L is non-null.
     let ptr = unsafe { crate::ffi::lua_tolstring(L, -1, &mut len as *mut _) };
-    if ptr.is_null() { return false; }
+    if ptr.is_null() {
+        return false;
+    }
     // SAFETY: ptr points to `len` valid bytes (Lua-managed string).
     let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
     // Lua reports incomplete chunks with "<eof>" in the error message.

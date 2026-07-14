@@ -5,8 +5,8 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-hal-gpio = { path = "../../../hal/traits/gpio" }
-hal-i2c  = { path = "../../../hal/traits/i2c" }
+hal-gpio = { path = "../../../hal/traits/gpio", version = "0.1.0" }
+hal-i2c  = { path = "../../../hal/traits/i2c", version = "0.1.0" }
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

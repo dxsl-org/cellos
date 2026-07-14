@@ -25,13 +25,13 @@ pub type FileResult<T> = (Box<dyn ViFile + Send + Sync>, ViResult<T>);
 #[repr(C)]
 pub struct Stat {
     /// Total size in bytes (0 for directories).
-    pub size:    u64,
+    pub size: u64,
     /// True if this is a directory.
-    pub is_dir:  bool,
+    pub is_dir: bool,
     /// True if the path exists.
-    pub exists:  bool,
+    pub exists: bool,
     /// Padding to reach 16-byte size for IPC serialisation.
-    pub _pad:    [u8; 6],
+    pub _pad: [u8; 6],
 }
 
 /// Filesystem interface.

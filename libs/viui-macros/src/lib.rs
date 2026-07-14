@@ -33,8 +33,8 @@ use proc_macro::{TokenStream, TokenTree};
 #[proc_macro]
 pub fn vi_design(input: TokenStream) -> TokenStream {
     let src = extract_string_literal(input);
-    let vi_file = vi_compiler::compile_str(&src)
-        .unwrap_or_else(|e| panic!("vi_design!: parse error: {e}"));
+    let vi_file =
+        vi_compiler::compile_str(&src).unwrap_or_else(|e| panic!("vi_design!: parse error: {e}"));
     let rust_src = vi_compiler::codegen::CodeGen::new().generate(&vi_file);
     rust_src
         .parse()

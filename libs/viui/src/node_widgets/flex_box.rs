@@ -176,20 +176,20 @@ impl FlexItem {
 /// Supports row/column direction, flex grow+shrink, gap, padding,
 /// justify-content, align-items, flex-wrap, and align-content.
 pub struct FlexBox {
-    direction:     FlexDirection,
-    children:      Vec<FlexItem>,
+    direction: FlexDirection,
+    children: Vec<FlexItem>,
     /// Inner padding applied uniformly to all four sides.
-    pub padding:   f32,
+    pub padding: f32,
     /// Gap along the main axis between items within a line.
-    pub gap_main:  f32,
+    pub gap_main: f32,
     /// Gap along the cross axis between lines (only relevant with wrap).
     pub gap_cross: f32,
     /// How free main-axis space is distributed within a line.
-    justify:       Justify,
+    justify: Justify,
     /// Default cross-axis alignment for items within a line.
-    align_items:   AlignItems,
+    align_items: AlignItems,
     /// Whether items wrap to new lines.
-    wrap:          FlexWrap,
+    wrap: FlexWrap,
     /// Alignment of multiple lines within the container.
     align_content: AlignContent,
 
@@ -338,13 +338,17 @@ impl FlexBox {
     /// Returns per-item `ItemLayout` in index order (parallel to `indices`).
     fn measure_line(
         &mut self,
-        indices:      &[usize],
+        indices: &[usize],
         available_main: f32,
         cross_budget: f32,
-        is_row:       bool,
+        is_row: bool,
     ) -> Vec<ItemLayout> {
         let n = indices.len();
-        let gap_total = if n > 1 { self.gap_main * (n - 1) as f32 } else { 0.0 };
+        let gap_total = if n > 1 {
+            self.gap_main * (n - 1) as f32
+        } else {
+            0.0
+        };
         let inner_main = (available_main - gap_total).max(0.0);
 
         let dummy = Point::new(99_999.0, 99_999.0);
@@ -357,9 +361,11 @@ impl FlexBox {
             let item = &mut self.children[ci];
             if item.flex_grow == 0.0 {
                 let sz = if is_row {
-                    item.node.layout(Constraints::new(dummy, Size::new(inner_main, cross_budget)))
+                    item.node
+                        .layout(Constraints::new(dummy, Size::new(inner_main, cross_budget)))
                 } else {
-                    item.node.layout(Constraints::new(dummy, Size::new(cross_budget, inner_main)))
+                    item.node
+                        .layout(Constraints::new(dummy, Size::new(cross_budget, inner_main)))
                 };
                 let m = if is_row { sz.w } else { sz.h };
                 // Apply max_size cap to fixed children too.
@@ -371,8 +377,11 @@ impl FlexBox {
 
         // Pass 2: resolve flex (grow / shrink) children.
         let free = inner_main - fixed_sum;
-        let total_grow:   f32 = indices.iter().map(|&ci| self.children[ci].flex_grow).sum();
-        let flex_count = indices.iter().filter(|&&ci| self.children[ci].flex_grow > 0.0).count();
+        let total_grow: f32 = indices.iter().map(|&ci| self.children[ci].flex_grow).sum();
+        let flex_count = indices
+            .iter()
+            .filter(|&&ci| self.children[ci].flex_grow > 0.0)
+            .count();
 
         if free > 0.0 && total_grow > 0.0 {
             // Distribute positive free space proportional to flex_grow.
@@ -397,10 +406,14 @@ impl FlexBox {
         } else if free < 0.0 {
             // Distribute shrinkage proportional to flex_shrink * base_size.
             // Fixed children (flex_grow=0) can still shrink via flex_shrink.
-            let shrink_total: f32 = indices.iter().zip(base_sizes.iter()).map(|(&ci, bs)| {
-                let sz = bs.unwrap_or(0.0);
-                self.children[ci].flex_shrink * sz
-            }).sum();
+            let shrink_total: f32 = indices
+                .iter()
+                .zip(base_sizes.iter())
+                .map(|(&ci, bs)| {
+                    let sz = bs.unwrap_or(0.0);
+                    self.children[ci].flex_shrink * sz
+                })
+                .sum();
 
             if shrink_total > 0.0 {
                 let deficit = -free; // positive amount to remove
@@ -423,7 +436,13 @@ impl FlexBox {
 
         // Return layouts (cross sizes come from the real layout pass below,
         // but we need a dummy cross for now — cross will be filled later).
-        base_sizes.into_iter().map(|m| ItemLayout { main: m.unwrap(), cross: 0.0 }).collect()
+        base_sizes
+            .into_iter()
+            .map(|m| ItemLayout {
+                main: m.unwrap(),
+                cross: 0.0,
+            })
+            .collect()
     }
 
     // ── Justify offsets ───────────────────────────────────────────────────────
@@ -435,20 +454,25 @@ impl FlexBox {
     /// - `between_spacing` = additional space added between each pair of items
     ///   (on top of `gap_main`)
     fn justify_offsets(&self, free: f32, n: usize) -> (f32, f32) {
-        if n == 0 { return (0.0, 0.0); }
+        if n == 0 {
+            return (0.0, 0.0);
+        }
         match self.justify {
-            Justify::Start        => (0.0, 0.0),
-            Justify::End          => (free.max(0.0), 0.0),
-            Justify::Center       => (free.max(0.0) / 2.0, 0.0),
+            Justify::Start => (0.0, 0.0),
+            Justify::End => (free.max(0.0), 0.0),
+            Justify::Center => (free.max(0.0) / 2.0, 0.0),
             Justify::SpaceBetween => {
-                if n <= 1 { (0.0, 0.0) }
-                else { (0.0, free.max(0.0) / (n - 1) as f32) }
+                if n <= 1 {
+                    (0.0, 0.0)
+                } else {
+                    (0.0, free.max(0.0) / (n - 1) as f32)
+                }
             }
-            Justify::SpaceAround  => {
+            Justify::SpaceAround => {
                 let slot = free.max(0.0) / n as f32;
                 (slot / 2.0, slot)
             }
-            Justify::SpaceEvenly  => {
+            Justify::SpaceEvenly => {
                 let slot = free.max(0.0) / (n + 1) as f32;
                 (slot, slot)
             }
@@ -460,9 +484,9 @@ impl FlexBox {
     /// Compute the cross-axis offset for one item given the line's cross size.
     fn cross_offset(&self, item_cross: f32, line_cross: f32, effective_align: AlignItems) -> f32 {
         match effective_align {
-            AlignItems::Start   => 0.0,
-            AlignItems::End     => (line_cross - item_cross).max(0.0),
-            AlignItems::Center  => ((line_cross - item_cross) / 2.0).max(0.0),
+            AlignItems::Start => 0.0,
+            AlignItems::End => (line_cross - item_cross).max(0.0),
+            AlignItems::Center => ((line_cross - item_cross) / 2.0).max(0.0),
             AlignItems::Stretch => 0.0, // item was already sized to line_cross
         }
     }
@@ -475,9 +499,15 @@ impl FlexBox {
     /// `available_cross` — total cross space (after padding).
     fn align_content_offsets(&self, lines_cross: &[f32], available_cross: f32) -> Vec<f32> {
         let n = lines_cross.len();
-        if n == 0 { return Vec::new(); }
+        if n == 0 {
+            return Vec::new();
+        }
 
-        let total_gap = if n > 1 { self.gap_cross * (n - 1) as f32 } else { 0.0 };
+        let total_gap = if n > 1 {
+            self.gap_cross * (n - 1) as f32
+        } else {
+            0.0
+        };
         let total_lines: f32 = lines_cross.iter().sum::<f32>() + total_gap;
         let free = (available_cross - total_lines).max(0.0);
 
@@ -528,7 +558,7 @@ impl FlexBox {
     // ── Row layout ────────────────────────────────────────────────────────────
 
     fn layout_row(&mut self, constraints: Constraints) -> Size {
-        let available_main  = (constraints.max.w - 2.0 * self.padding).max(0.0);
+        let available_main = (constraints.max.w - 2.0 * self.padding).max(0.0);
         let available_cross = (constraints.max.h - 2.0 * self.padding).max(0.0);
 
         // Group children into lines.
@@ -536,8 +566,12 @@ impl FlexBox {
         let n_lines = line_groups.len();
 
         if n_lines == 0 {
-            let size = constraints.constrain(Size { w: constraints.max.w, h: 2.0 * self.padding });
-            self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+            let size = constraints.constrain(Size {
+                w: constraints.max.w,
+                h: 2.0 * self.padding,
+            });
+            self.bounds_cache
+                .set(Rect::from_origin_size(constraints.origin, size));
             return size;
         }
 
@@ -565,9 +599,9 @@ impl FlexBox {
             let mut max_cross = 0.0f32;
             for (slot, &ci) in indices.iter().enumerate() {
                 let main_w = il[slot].main;
-                let sz = self.children[ci].node.layout(
-                    Constraints::new(dummy, Size::new(main_w, available_cross))
-                );
+                let sz = self.children[ci]
+                    .node
+                    .layout(Constraints::new(dummy, Size::new(main_w, available_cross)));
                 max_cross = max_cross.max(sz.h);
             }
             line_cross_sizes[li] = max_cross;
@@ -591,7 +625,11 @@ impl FlexBox {
 
             // Compute main-axis positions with justify_content.
             let items_main_total: f32 = il.iter().map(|i| i.main).sum::<f32>()
-                + if n > 1 { self.gap_main * (n - 1) as f32 } else { 0.0 };
+                + if n > 1 {
+                    self.gap_main * (n - 1) as f32
+                } else {
+                    0.0
+                };
             let free_main = (available_main - items_main_total).max(0.0);
             // For justify: free = actual free (may be negative handled by shrink already)
             let justify_free = available_main - items_main_total;
@@ -610,21 +648,20 @@ impl FlexBox {
                     available_cross
                 };
 
-                let sz = self.children[ci].node.layout(
-                    Constraints::new(Point::new(x, cross_y), Size::new(main_w, child_cross))
-                );
+                let sz = self.children[ci].node.layout(Constraints::new(
+                    Point::new(x, cross_y),
+                    Size::new(main_w, child_cross),
+                ));
 
                 // Cross-axis positioning.
                 let real_item_cross = sz.h;
                 let cy_off = self.cross_offset(real_item_cross, line_cross, eff_align);
                 if cy_off.abs() > 0.01 {
                     // Re-layout at corrected y (cross offset inside line).
-                    self.children[ci].node.layout(
-                        Constraints::new(
-                            Point::new(x, cross_y + cy_off),
-                            Size::new(main_w, child_cross),
-                        )
-                    );
+                    self.children[ci].node.layout(Constraints::new(
+                        Point::new(x, cross_y + cy_off),
+                        Size::new(main_w, child_cross),
+                    ));
                 }
 
                 x += main_w + self.gap_main + between;
@@ -633,30 +670,38 @@ impl FlexBox {
         }
 
         // Total cross extent.
-        let total_cross: f32 = if n_lines == 0 { 0.0 } else {
-            cross_offsets.last().copied().unwrap_or(0.0) + line_cross_out.last().copied().unwrap_or(0.0)
+        let total_cross: f32 = if n_lines == 0 {
+            0.0
+        } else {
+            cross_offsets.last().copied().unwrap_or(0.0)
+                + line_cross_out.last().copied().unwrap_or(0.0)
         };
 
         let size = constraints.constrain(Size {
             w: constraints.max.w,
             h: (total_cross + 2.0 * self.padding).max(0.0),
         });
-        self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+        self.bounds_cache
+            .set(Rect::from_origin_size(constraints.origin, size));
         size
     }
 
     // ── Column layout ─────────────────────────────────────────────────────────
 
     fn layout_column(&mut self, constraints: Constraints) -> Size {
-        let available_main  = (constraints.max.h - 2.0 * self.padding).max(0.0);
+        let available_main = (constraints.max.h - 2.0 * self.padding).max(0.0);
         let available_cross = (constraints.max.w - 2.0 * self.padding).max(0.0);
 
         let line_groups = self.compute_lines(available_main, false);
         let n_lines = line_groups.len();
 
         if n_lines == 0 {
-            let size = constraints.constrain(Size { w: 2.0 * self.padding, h: constraints.max.h });
-            self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+            let size = constraints.constrain(Size {
+                w: 2.0 * self.padding,
+                h: constraints.max.h,
+            });
+            self.bounds_cache
+                .set(Rect::from_origin_size(constraints.origin, size));
             return size;
         }
 
@@ -671,9 +716,9 @@ impl FlexBox {
             let mut max_cross = 0.0f32;
             for (slot, &ci) in indices.iter().enumerate() {
                 let main_h = layouts[slot].main;
-                let sz = self.children[ci].node.layout(
-                    Constraints::new(dummy, Size::new(available_cross, main_h))
-                );
+                let sz = self.children[ci]
+                    .node
+                    .layout(Constraints::new(dummy, Size::new(available_cross, main_h)));
                 max_cross = max_cross.max(sz.w);
             }
             line_cross_sizes[li] = max_cross;
@@ -681,7 +726,7 @@ impl FlexBox {
         }
 
         let line_cross_out = self.effective_line_cross_sizes(&line_cross_sizes, available_cross);
-        let cross_offsets  = self.align_content_offsets(&line_cross_out, available_cross);
+        let cross_offsets = self.align_content_offsets(&line_cross_out, available_cross);
 
         let origin_x = constraints.origin.x + self.padding;
         let origin_y = constraints.origin.y + self.padding;
@@ -693,7 +738,11 @@ impl FlexBox {
             let cross_x = origin_x + cross_offsets[li];
 
             let items_main_total: f32 = il.iter().map(|i| i.main).sum::<f32>()
-                + if n > 1 { self.gap_main * (n - 1) as f32 } else { 0.0 };
+                + if n > 1 {
+                    self.gap_main * (n - 1) as f32
+                } else {
+                    0.0
+                };
             let justify_free = available_main - items_main_total;
             let (start_off, between) = self.justify_offsets(justify_free, n);
 
@@ -709,34 +758,37 @@ impl FlexBox {
                     available_cross
                 };
 
-                let sz = self.children[ci].node.layout(
-                    Constraints::new(Point::new(cross_x, y), Size::new(child_cross, main_h))
-                );
+                let sz = self.children[ci].node.layout(Constraints::new(
+                    Point::new(cross_x, y),
+                    Size::new(child_cross, main_h),
+                ));
 
                 let real_item_cross = sz.w;
                 let cx_off = self.cross_offset(real_item_cross, line_cross, eff_align);
                 if cx_off.abs() > 0.01 {
-                    self.children[ci].node.layout(
-                        Constraints::new(
-                            Point::new(cross_x + cx_off, y),
-                            Size::new(child_cross, main_h),
-                        )
-                    );
+                    self.children[ci].node.layout(Constraints::new(
+                        Point::new(cross_x + cx_off, y),
+                        Size::new(child_cross, main_h),
+                    ));
                 }
 
                 y += main_h + self.gap_main + between;
             }
         }
 
-        let total_cross: f32 = if n_lines == 0 { 0.0 } else {
-            cross_offsets.last().copied().unwrap_or(0.0) + line_cross_out.last().copied().unwrap_or(0.0)
+        let total_cross: f32 = if n_lines == 0 {
+            0.0
+        } else {
+            cross_offsets.last().copied().unwrap_or(0.0)
+                + line_cross_out.last().copied().unwrap_or(0.0)
         };
 
         let size = constraints.constrain(Size {
             w: (total_cross + 2.0 * self.padding).max(0.0),
             h: constraints.max.h,
         });
-        self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+        self.bounds_cache
+            .set(Rect::from_origin_size(constraints.origin, size));
         size
     }
 
@@ -748,7 +800,9 @@ impl FlexBox {
     /// Items that cannot fit alone on a line are placed on their own line anyway.
     fn compute_lines(&mut self, available_main: f32, is_row: bool) -> Vec<Vec<usize>> {
         let n = self.children.len();
-        if n == 0 { return Vec::new(); }
+        if n == 0 {
+            return Vec::new();
+        }
 
         if self.wrap == FlexWrap::NoWrap {
             return vec![(0..n).collect()];
@@ -762,13 +816,13 @@ impl FlexBox {
         for i in 0..n {
             // Measure natural size for this item.
             let sz = if is_row {
-                self.children[i].node.layout(
-                    Constraints::new(dummy, Size::new(available_main, f32::MAX))
-                )
+                self.children[i]
+                    .node
+                    .layout(Constraints::new(dummy, Size::new(available_main, f32::MAX)))
             } else {
-                self.children[i].node.layout(
-                    Constraints::new(dummy, Size::new(f32::MAX, available_main))
-                )
+                self.children[i]
+                    .node
+                    .layout(Constraints::new(dummy, Size::new(f32::MAX, available_main)))
             };
             let item_main = if is_row { sz.w } else { sz.h };
 
@@ -780,13 +834,21 @@ impl FlexBox {
 
             // Recompute gap AFTER the break so the first item on a fresh line
             // gets 0 gap, not the gap that was valid for the now-flushed line.
-            let gap_needed = if current.is_empty() { 0.0 } else { self.gap_main };
+            let gap_needed = if current.is_empty() {
+                0.0
+            } else {
+                self.gap_main
+            };
             current.push(i);
             current_main += gap_needed + item_main;
         }
-        if !current.is_empty() { lines.push(current); }
+        if !current.is_empty() {
+            lines.push(current);
+        }
 
-        if self.wrap == FlexWrap::WrapReverse { lines.reverse(); }
+        if self.wrap == FlexWrap::WrapReverse {
+            lines.reverse();
+        }
 
         lines
     }
@@ -800,7 +862,11 @@ impl FlexBox {
             return natural.to_vec();
         }
         let n = natural.len();
-        let gap_total = if n > 1 { self.gap_cross * (n - 1) as f32 } else { 0.0 };
+        let gap_total = if n > 1 {
+            self.gap_cross * (n - 1) as f32
+        } else {
+            0.0
+        };
         let total_natural: f32 = natural.iter().sum();
         let free = (available_cross - total_natural - gap_total).max(0.0);
         let bonus = free / n as f32;
@@ -817,12 +883,13 @@ impl ViNode for FlexBox {
                 w: constraints.max.w,
                 h: 2.0 * self.padding,
             });
-            self.bounds_cache.set(Rect::from_origin_size(constraints.origin, size));
+            self.bounds_cache
+                .set(Rect::from_origin_size(constraints.origin, size));
             return size;
         }
 
         match self.direction {
-            FlexDirection::Row    => self.layout_row(constraints),
+            FlexDirection::Row => self.layout_row(constraints),
             FlexDirection::Column => self.layout_column(constraints),
         }
     }
@@ -847,7 +914,8 @@ impl ViNode for FlexBox {
     }
 
     fn collect_focusable_bounds(&mut self) -> alloc::vec::Vec<crate::layout::Rect> {
-        self.children.iter_mut()
+        self.children
+            .iter_mut()
             .flat_map(|c| c.node.collect_focusable_bounds())
             .collect()
     }
@@ -881,7 +949,11 @@ mod tests {
 
     impl FixedLeaf {
         fn new(w: f32, h: f32) -> Self {
-            Self { w, h, bounds: Rect::ZERO }
+            Self {
+                w,
+                h,
+                bounds: Rect::ZERO,
+            }
         }
     }
 
@@ -891,9 +963,13 @@ mod tests {
             self.bounds = Rect::from_origin_size(constraints.origin, size);
             size
         }
-        fn bounds(&self) -> Rect { self.bounds }
+        fn bounds(&self) -> Rect {
+            self.bounds
+        }
         fn paint(&self, _cx: &mut RenderCtx<'_>) {}
-        fn event(&mut self, _event: &Event) -> bool { false }
+        fn event(&mut self, _event: &Event) -> bool {
+            false
+        }
     }
 
     fn root(w: f32, h: f32) -> Constraints {
@@ -920,7 +996,8 @@ mod tests {
         let flex_bounds = fb.children[2].node.bounds();
         assert!(
             (flex_bounds.w - 140.0).abs() < 0.01,
-            "flex child w = {}, expected 140", flex_bounds.w
+            "flex child w = {}, expected 140",
+            flex_bounds.w
         );
         assert_eq!(flex_bounds.x, 60.0, "flex child should start at x=60");
     }
@@ -1036,9 +1113,7 @@ mod tests {
 
     #[test]
     fn single_child_no_gap() {
-        let mut fb = FlexBox::row()
-            .gap(10.0)
-            .child(FixedLeaf::new(50.0, 30.0));
+        let mut fb = FlexBox::row().gap(10.0).child(FixedLeaf::new(50.0, 30.0));
 
         fb.layout(root(200.0, 100.0));
         // Single child — no gap should be applied.
@@ -1058,13 +1133,20 @@ mod tests {
         fb.layout(root(100.0, 50.0));
 
         let b1 = fb.children[1].node.bounds();
-        assert!(b1.w >= 80.0, "flex child should get at least min_size=80, got {}", b1.w);
+        assert!(
+            b1.w >= 80.0,
+            "flex child should get at least min_size=80, got {}",
+            b1.w
+        );
     }
 
     #[test]
     fn row_bounds_cache_set_correctly() {
         let mut fb = FlexBox::row().child(FixedLeaf::new(50.0, 30.0));
-        fb.layout(Constraints::new(Point::new(10.0, 20.0), Size::new(200.0, 100.0)));
+        fb.layout(Constraints::new(
+            Point::new(10.0, 20.0),
+            Size::new(200.0, 100.0),
+        ));
         let b = fb.bounds();
         assert_eq!(b.x, 10.0);
         assert_eq!(b.y, 20.0);
@@ -1156,7 +1238,11 @@ mod tests {
 
         assert_eq!(b0.y, 0.0, "item0 y={}", b0.y);
         assert_eq!(b1.y, 0.0, "item1 y={}", b1.y);
-        assert!((b2.y - 20.0).abs() < 0.01, "item2 should be on second line y={}", b2.y);
+        assert!(
+            (b2.y - 20.0).abs() < 0.01,
+            "item2 should be on second line y={}",
+            b2.y
+        );
     }
 
     #[test]

@@ -4,6 +4,22 @@
 
 ---
 
+## [2026-07-13] RV32/Cellos-Nano compile break fixed; Hypha + init auto-restart Grant-syscall denial fixed
+
+### RV32 Nano was silently un-buildable since virtio_drivers joined the always-linked kernel path
+`kernel/third_party/virtio_drivers/src/transport/mmio.rs` shifted a `PhysAddr` (=`usize`) right by 32 to split a descriptor address into hi/lo halves — a compile-time overflow on the 32-bit RV32 target (`riscv32imac-unknown-none-elf`), where the shift amount equals the full type width. Fixed by casting through `u64` first. Four more RV32-only breaks surfaced once that cleared: `AtomicU64` doesn't exist on a target with `max_atomic_width=32` (polyfilled via `portable-atomic` + the existing `critical-section` impl in `hal/arch/riscv`), a 4 GiB `usize` constant in `loader/va_alloc.rs` (dead on RV32 — Nano boots SATP=0, bare physical, never spawns PIE cells), a packed `(width<<32)|height` `GpuGetResolution` fallback (no GPU cell exists on Nano), and two `WaitForEvent` sites that hardcoded `as usize` for a `trap_frame.regs[10]` field that's actually `[u32;32]` on RV32 (fixed to match the existing `as _` idiom used everywhere else in scheduler.rs/task.rs). The stale prebuilt RV32 binary (pre-dating the 2026-06-22 Cellos rename) still booted and passed 2/3 handoff tests, which is why this had gone unnoticed. Threatened G1 graduation criterion #7 (Cellos-Nano sub-track).
+
+### Hypha and init's auto-restart-on-crash denied GrantAlloc/GrantShare/GrantFree
+`ostd::sys_spawn_from_path` now routes through a VFS-backed Grant (`read_full_via_grant`) whenever VFS is already registered — a G2-loader-redesign change (2026-07-07) — but `hypha-core`, `hypha-tool-spawn`, and `init`'s own restart-on-crash loop all declare a restrictive compile-time syscall allowlist that included `SpawnFromPath` but never the Grant family (Alloc/Share/Slice/Free/Register/Unregister — one shared allowlist bit, 39). Hypha could never spawn `llm-gateway`; more importantly, `init`'s post-boot service-restart path (`cells/tools/init/src/main.rs`, "auto-restart on crash") would have failed the same way for ANY crashed service, since it calls `sys_spawn_from_path` well after VFS registers — unlike the early-boot spawns, which fall back to the raw bootstrap syscall before VFS is looked up. This was never caught because no integration test kills a service to exercise the restart path. Fixed by adding `GrantAlloc` to all three `declare_syscalls!` lists (`cells/tools/shell` already had it). Threatened G1 graduation criterion #1 (never-die).
+
+### Lesson
+Both bugs were "silently correct on a stale build" — the RV32 binary and the never-exercised restart path both looked fine because nothing had rebuilt/re-triggered them recently. Found during a full 3-arch suite-green pass (`.agents/260712-0901-suite-green-3arch/reports/truth-matrix.md`) that regenerated every image in-session before trusting any result.
+
+### Suite-green plan closed — CI allowlist expanded 22 → 54 tests
+The two long-carried "input reds" (`input_keyboard_e2e`, `input_bare_cell`) and the historical "char-8 stall" symptom are all confirmed resolved on a fresh image (3/3 and 2/2 green respectively) — no kernel fix was needed for either; a new regression guard (`console_long_line_with_backspace_no_stall`) was added for the char-8 case. On the strength of two independent full-suite runs (54 tests, `--test-threads=2`) passing 53-54/54 — the sole flake alternates between `network_tcp_send_recv`/`network_curl_http_get` under TCG contention and passes 100% in isolation — the `boot-suite` CI job's allowlist (`.github/workflows/ci.yml`) was expanded from its stale 22-test subset (dated 2026-07-07, describing ~20 tests as broken — no longer true) to the full current 54-test list. Verified green locally 3× at the full list; not yet verified on GitHub Actions (ubuntu-24.04) — deferred to a future branch push. See `.agents/260712-0901-suite-green-3arch/` (now closed) for the full investigation.
+
+---
+
 ## [2026-07-11] VT-d per-Cell DMA isolation actually translates — FAT32-on-NVMe works with intel-iommu enforced
 
 ### Root cause of "NVMe DMA times out under VT-d"

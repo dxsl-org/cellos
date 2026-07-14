@@ -4,21 +4,29 @@
 //! (0x80..=0xFF, prefixed with 0xE0 on hardware) are handled separately via
 //! `EXTENDED_TABLE`.
 
-use api::input::{KeySym, KeyState, Modifiers};
+use api::input::{KeyState, KeySym, Modifiers};
 
 /// One entry in the layout table.
 pub struct LayoutEntry {
-    pub keysym:    KeySym,
+    pub keysym: KeySym,
     pub unshifted: u32, // Unicode code point, 0 = non-printable
-    pub shifted:   u32,
+    pub shifted: u32,
 }
 
 impl LayoutEntry {
     const fn new(keysym: KeySym, u: u32, s: u32) -> Self {
-        Self { keysym, unshifted: u, shifted: s }
+        Self {
+            keysym,
+            unshifted: u,
+            shifted: s,
+        }
     }
     const fn ctrl(keysym: KeySym) -> Self {
-        Self { keysym, unshifted: 0, shifted: 0 }
+        Self {
+            keysym,
+            unshifted: 0,
+            shifted: 0,
+        }
     }
 }
 
@@ -80,7 +88,8 @@ pub static LAYOUT: [LayoutEntry; 128] = [
     /* 0x34 */ LayoutEntry::new(KeySym::Printable, b'.' as u32, b'>' as u32),
     /* 0x35 */ LayoutEntry::new(KeySym::Printable, b'/' as u32, b'?' as u32),
     /* 0x36 */ LayoutEntry::ctrl(KeySym::Unknown), // Right Shift
-    /* 0x37 */ LayoutEntry::new(KeySym::Printable, b'*' as u32, b'*' as u32), // Keypad *
+    /* 0x37 */
+    LayoutEntry::new(KeySym::Printable, b'*' as u32, b'*' as u32), // Keypad *
     /* 0x38 */ LayoutEntry::ctrl(KeySym::Unknown), // Left Alt
     /* 0x39 */ LayoutEntry::new(KeySym::Printable, b' ' as u32, b' ' as u32),
     /* 0x3A */ LayoutEntry::ctrl(KeySym::Unknown), // Caps Lock
@@ -97,7 +106,8 @@ pub static LAYOUT: [LayoutEntry; 128] = [
     /* 0x45 */ LayoutEntry::ctrl(KeySym::Unknown), // Num Lock
     /* 0x46 */ LayoutEntry::ctrl(KeySym::Unknown), // Scroll Lock
     // 0x47..=0x53: keypad keys (treated as regular digits when NumLock on)
-    /* 0x47 */ LayoutEntry::ctrl(KeySym::Home),
+    /* 0x47 */
+    LayoutEntry::ctrl(KeySym::Home),
     /* 0x48 */ LayoutEntry::ctrl(KeySym::Up),
     /* 0x49 */ LayoutEntry::ctrl(KeySym::PageUp),
     /* 0x4A */ LayoutEntry::new(KeySym::Printable, b'-' as u32, b'-' as u32),
@@ -130,13 +140,13 @@ pub static LAYOUT: [LayoutEntry; 128] = [
     /* 0x63 */ LayoutEntry::ctrl(KeySym::Unknown),
     /* 0x64 */ LayoutEntry::ctrl(KeySym::Unknown),
     /* 0x65 */ LayoutEntry::ctrl(KeySym::Unknown),
-    /* 0x66 */ LayoutEntry::ctrl(KeySym::Home),     // evdev KEY_HOME     (102)
-    /* 0x67 */ LayoutEntry::ctrl(KeySym::Up),       // evdev KEY_UP       (103)
-    /* 0x68 */ LayoutEntry::ctrl(KeySym::PageUp),   // evdev KEY_PAGEUP   (104)
-    /* 0x69 */ LayoutEntry::ctrl(KeySym::Left),     // evdev KEY_LEFT     (105)
-    /* 0x6A */ LayoutEntry::ctrl(KeySym::Right),    // evdev KEY_RIGHT    (106)
-    /* 0x6B */ LayoutEntry::ctrl(KeySym::End),      // evdev KEY_END      (107)
-    /* 0x6C */ LayoutEntry::ctrl(KeySym::Down),     // evdev KEY_DOWN     (108)
+    /* 0x66 */ LayoutEntry::ctrl(KeySym::Home), // evdev KEY_HOME     (102)
+    /* 0x67 */ LayoutEntry::ctrl(KeySym::Up), // evdev KEY_UP       (103)
+    /* 0x68 */ LayoutEntry::ctrl(KeySym::PageUp), // evdev KEY_PAGEUP   (104)
+    /* 0x69 */ LayoutEntry::ctrl(KeySym::Left), // evdev KEY_LEFT     (105)
+    /* 0x6A */ LayoutEntry::ctrl(KeySym::Right), // evdev KEY_RIGHT    (106)
+    /* 0x6B */ LayoutEntry::ctrl(KeySym::End), // evdev KEY_END      (107)
+    /* 0x6C */ LayoutEntry::ctrl(KeySym::Down), // evdev KEY_DOWN     (108)
     /* 0x6D */ LayoutEntry::ctrl(KeySym::PageDown), // evdev KEY_PAGEDOWN (109)
     /* 0x6E */ LayoutEntry::ctrl(KeySym::Unknown),
     /* 0x6F */ LayoutEntry::ctrl(KeySym::Unknown),
@@ -162,11 +172,11 @@ pub static LAYOUT: [LayoutEntry; 128] = [
 /// Returns `Some(Modifiers)` for the modifier this scancode controls.
 pub fn modifier_for_scancode(code: u32) -> Option<Modifiers> {
     match code {
-        0x2A | 0x36 => Some(Modifiers::SHIFT),       // Left/Right Shift
-        0x1D | 0x61 => Some(Modifiers::CTRL),         // Left/Right Ctrl
-        0x38 | 0x64 => Some(Modifiers::ALT),          // Left/Right Alt
-        0x7D | 0x7E => Some(Modifiers::META),         // Left/Right Meta
-        _           => None,
+        0x2A | 0x36 => Some(Modifiers::SHIFT), // Left/Right Shift
+        0x1D | 0x61 => Some(Modifiers::CTRL),  // Left/Right Ctrl
+        0x38 | 0x64 => Some(Modifiers::ALT),   // Left/Right Alt
+        0x7D | 0x7E => Some(Modifiers::META),  // Left/Right Meta
+        _ => None,
     }
 }
 
@@ -176,7 +186,7 @@ pub fn toggle_modifier_for_scancode(code: u32) -> Option<Modifiers> {
         0x3A => Some(Modifiers::CAPS_LOCK),
         0x45 => Some(Modifiers::NUM_LOCK),
         0x46 => Some(Modifiers::SCROLL_LOCK),
-        _    => None,
+        _ => None,
     }
 }
 
@@ -190,8 +200,13 @@ pub fn translate(code: u32, modifiers: Modifiers) -> (KeySym, u32) {
     }
     let entry = &LAYOUT[idx];
     // Effective shift = Shift XOR CapsLock (for letters only; digits unaffected by CapsLock)
-    let shift_active = modifiers.contains(Modifiers::SHIFT) ^ modifiers.contains(Modifiers::CAPS_LOCK);
-    let ch = if shift_active { entry.shifted } else { entry.unshifted };
+    let shift_active =
+        modifiers.contains(Modifiers::SHIFT) ^ modifiers.contains(Modifiers::CAPS_LOCK);
+    let ch = if shift_active {
+        entry.shifted
+    } else {
+        entry.unshifted
+    };
     (entry.keysym, ch)
 }
 

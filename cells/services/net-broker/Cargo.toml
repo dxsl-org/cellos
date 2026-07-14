@@ -5,8 +5,8 @@ edition = "2021"
 license.workspace = true
 
 [dependencies]
-ostd = { path = "../../../libs/ostd" }
-api  = { path = "../../../libs/api" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0" }
+api  = { path = "../../../libs/api", version = "0.1.0" }
 
 # P04: Noise KKpsk0 p2p transport (clatter) — CELL-LEVEL DEPS, NOT Law 1
 # use-25519 pulls x25519-dalek; use-chacha20poly1305 + use-sha configure cipher/hash suite.
@@ -18,4 +18,4 @@ rand_core        = { version = "0.6",  default-features = false }
 rand_chacha      = { version = "0.3",  default-features = false }
 
 [build-dependencies]
-cell-build = { path = "../../../libs/cell-build" }
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

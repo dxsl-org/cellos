@@ -4,8 +4,12 @@ use core::arch::asm;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct CpuContext {
-    pub r15: u64, pub r14: u64, pub r13: u64, pub r12: u64,
-    pub rbx: u64, pub rbp: u64,
+    pub r15: u64,
+    pub r14: u64,
+    pub r13: u64,
+    pub r12: u64,
+    pub rbx: u64,
+    pub rbp: u64,
     /// Kernel stack pointer (mapped to RSP; offset 6*8 in the switch asm).
     pub sp: u64,
     /// Resume instruction pointer (mapped to RIP via `jmp`; offset 7*8).

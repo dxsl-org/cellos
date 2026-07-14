@@ -5,4 +5,6 @@
 /// zero-bytes case gracefully and fall back to a PRNG seeded from the timer.
 pub fn init_driver() {}
 
-pub fn get_random(_buf: &mut [u8]) -> usize { 0 }
+pub fn get_random(_buf: &mut [u8]) -> usize {
+    0
+}

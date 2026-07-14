@@ -26,6 +26,12 @@ pub struct viUART {
 
 impl viUART {
     /// Create a new viUART instance (unsafe because base_addr must be valid)
+    ///
+    /// # Safety
+    /// `base_addr` must be either 0 (sentinel meaning "no NS16550 MMIO on this
+    /// board" — all I/O methods on this instance check for it and fall back to
+    /// SBI DBCN/port-I/O) or a valid, identity-mapped 16550 UART MMIO base that
+    /// remains mapped for the lifetime of the returned `viUART`.
     pub const unsafe fn new(base_addr: usize) -> Self {
         Self { base_addr }
     }
@@ -78,13 +84,21 @@ impl fmt::Write for DirectWriter {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.bytes() {
             #[cfg(target_arch = "riscv64")]
-            { let _ = crate::hal::sbi::console_putchar(c); }
+            {
+                let _ = crate::hal::sbi::console_putchar(c);
+            }
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            { crate::hal::uart_bcm_mini::putchar(c); }
+            {
+                crate::hal::uart_bcm_mini::putchar(c);
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-            { crate::hal::uart_pl011::putchar(c); }
+            {
+                crate::hal::uart_pl011::putchar(c);
+            }
             #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-            { crate::hal::uart_16550::putchar(c); }
+            {
+                crate::hal::uart_16550::putchar(c);
+            }
         }
         Ok(())
     }
@@ -113,7 +127,7 @@ impl log::Log for SimpleLogger {
         if self.enabled(record.metadata()) {
             use fmt::Write;
             let mut writer = DirectWriter;
-            let _ = write!(writer, "[{:>5}] {}\n", record.level(), record.args());
+            let _ = writeln!(writer, "[{:>5}] {}", record.level(), record.args());
         }
     }
 
@@ -216,7 +230,7 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                         );
                         v
                     };
-                    let byte = if lsr & (_LSR_RX_READY as u8) != 0 {
+                    let byte = if lsr & _LSR_RX_READY != 0 {
                         let c: u8;
                         unsafe {
                             core::arch::asm!(
@@ -238,10 +252,12 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                     let serial = SERIAL.lock();
                     let ptr = serial.base_addr as *mut u8;
                     // No MMIO UART on this board (e.g. Pioneer SG2042): bail out.
-                    if ptr.is_null() { break; }
+                    if ptr.is_null() {
+                        break;
+                    }
                     // SAFETY: MMIO region is identity-mapped and valid.
                     let lsr_val = unsafe { ptr.add(LSR).read_volatile() };
-                    let byte = if lsr_val & (_LSR_RX_READY as u8) != 0 {
+                    let byte = if lsr_val & _LSR_RX_READY != 0 {
                         Some(unsafe { ptr.add(_RHR).read_volatile() })
                     } else {
                         None

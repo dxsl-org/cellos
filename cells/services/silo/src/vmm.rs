@@ -7,8 +7,8 @@
 //! All other modules in this crate use `#![forbid(unsafe_code)]`.
 #![allow(unsafe_code)]
 
-use api::syscall::ViSyscall;
 use api::hypervisor::ViVmExit;
+use api::syscall::ViSyscall;
 
 /// Scheduler tick budget for each RunVcpu call (~10ms in 10 MHz ticks = 100_000 ticks).
 pub const SCHED_TICK_BUDGET_NS: u64 = 10_000_000; // 10ms in nanoseconds
@@ -31,7 +31,10 @@ unsafe fn syscall4(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) ->
         options(nostack, preserves_flags),
     );
     #[cfg(not(target_arch = "aarch64"))]
-    { let _ = (id, a0, a1, a2, a3); ret = ERR; }
+    {
+        let _ = (id, a0, a1, a2, a3);
+        ret = ERR;
+    }
     ret
 }
 
@@ -47,7 +50,15 @@ pub fn create_vcpu(vm_id: usize, entry_pc: u64) -> usize {
 
 /// Map guest IPA range in `vm_id`; returns 0 on success.
 pub fn map_guest_memory(vm_id: usize, ipa: u64, size: usize, writable: bool) -> usize {
-    unsafe { syscall4(ViSyscall::MapGuestMemory, vm_id, ipa as usize, size, writable as usize) }
+    unsafe {
+        syscall4(
+            ViSyscall::MapGuestMemory,
+            vm_id,
+            ipa as usize,
+            size,
+            writable as usize,
+        )
+    }
 }
 
 /// Copy `src` bytes into guest RAM at `gpa`; returns bytes written or ERR.

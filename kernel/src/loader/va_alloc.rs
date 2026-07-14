@@ -11,7 +11,13 @@
 //! free list (atomic bitset) for slots returned by `free_cell_va`.  Allocations
 //! are O(n_freed) in the worst case, O(1) when the free list is empty.
 
-use core::sync::atomic::{AtomicU64, Ordering};
+// RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
+// via the critical-section impl hal/arch/riscv registers.
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
 
 /// Cell VA region start — 4 GiB (0x1_0000_0000).
 ///
@@ -20,11 +26,18 @@ use core::sync::atomic::{AtomicU64, Ordering};
 ///   - PCIe ECAM at 0x3000_0000 (1 MiB); VirtIO BAR below 0x8000_0000
 ///   - RAM identity map: 256 MB at 0x8000_0000 → ends at 0x8FFF_FFFF
 ///   - QEMU virt AArch64: GIC/peripheral MMIO below 0x1000_0000
-/// 4 GiB clears all of the above with room to spare and remains well inside
-/// the SV39 user-half (256 GiB = 0x40_0000_0000).
+///     4 GiB clears all of the above with room to spare and remains well inside
+///     the SV39 user-half (256 GiB = 0x40_0000_0000).
 ///
 /// RISC-V medany: intra-cell refs are ≤32 MiB apart → always within ±2 GiB.
+///
+/// RV32 Nano boots with SATP=0 (bare physical, no paging — see specs/04), so
+/// PIE cells never occur there and `alloc_cell_va` is never actually called;
+/// this constant only needs to type-check as a 32-bit `usize` on that target.
+#[cfg(not(target_arch = "riscv32"))]
 const CELL_VA_START: usize = 0x1_0000_0000;
+#[cfg(target_arch = "riscv32")]
+const CELL_VA_START: usize = 0x2000_0000;
 
 /// Each cell slot is 32 MiB — same spacing as the old static VA assignments,
 /// large enough for code + data + stack for any current cell.
@@ -35,19 +48,19 @@ const CELL_VA_STRIDE: usize = 0x200_0000;
 const MAX_SLOTS: usize = 512;
 
 /// Number of AtomicU64 words needed to cover MAX_SLOTS bits.
-const BITMAP_WORDS: usize = (MAX_SLOTS + 63) / 64;
+const BITMAP_WORDS: usize = MAX_SLOTS.div_ceil(64);
 
 /// Bump index: the first slot that has NEVER been allocated.
-static BUMP: core::sync::atomic::AtomicUsize =
-    core::sync::atomic::AtomicUsize::new(0);
+static BUMP: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 /// Free-list bitmap: bit N = 1 means slot N is available for reuse.
 /// Uses relaxed CAS loops — no ordering guarantee needed beyond the CAS itself.
-static FREE: [AtomicU64; BITMAP_WORDS] = {
-    // const-init an array of AtomicU64::new(0)
-    const ZERO: AtomicU64 = AtomicU64::new(0);
-    [ZERO; BITMAP_WORDS]
-};
+// Each repeat evaluates the inline `const` block independently, giving
+// BITMAP_WORDS distinct AtomicU64 instances (not one instance aliased across
+// slots) — an inline const sidesteps `clippy::declare_interior_mutable_const`,
+// which would otherwise flag a *named* const of this type, without changing
+// the initialization semantics.
+static FREE: [AtomicU64; BITMAP_WORDS] = [const { AtomicU64::new(0) }; BITMAP_WORDS];
 
 /// Allocate a 32 MiB VA base for a new PIE cell.
 ///
@@ -60,9 +73,12 @@ pub fn alloc_cell_va() -> Option<usize> {
         while val != 0 {
             let bit = val.trailing_zeros() as usize;
             let slot = word_idx * 64 + bit;
-            if slot >= MAX_SLOTS { break; }
+            if slot >= MAX_SLOTS {
+                break;
+            }
             let mask = 1u64 << bit;
-            match word.compare_exchange_weak(val, val & !mask, Ordering::AcqRel, Ordering::Relaxed) {
+            match word.compare_exchange_weak(val, val & !mask, Ordering::AcqRel, Ordering::Relaxed)
+            {
                 Ok(_) => return Some(CELL_VA_START + slot * CELL_VA_STRIDE),
                 Err(cur) => val = cur, // retry with updated value
             }
@@ -83,11 +99,17 @@ pub fn alloc_cell_va() -> Option<usize> {
 /// `base` must be a value previously returned by `alloc_cell_va`.
 /// Silently ignores invalid values (out of range or misaligned).
 pub fn free_cell_va(base: usize) {
-    if base < CELL_VA_START { return; }
+    if base < CELL_VA_START {
+        return;
+    }
     let offset = base - CELL_VA_START;
-    if offset % CELL_VA_STRIDE != 0 { return; }
+    if !offset.is_multiple_of(CELL_VA_STRIDE) {
+        return;
+    }
     let slot = offset / CELL_VA_STRIDE;
-    if slot >= MAX_SLOTS { return; }
+    if slot >= MAX_SLOTS {
+        return;
+    }
     let word = &FREE[slot / 64];
     let mask = 1u64 << (slot % 64);
     word.fetch_or(mask, Ordering::Release);
