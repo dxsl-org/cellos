@@ -67,9 +67,7 @@ pub fn print_usize(n: usize) {
     let mut start = 0;
     let mut end = i - 1;
     while start < end {
-        let tmp = buf[start];
-        buf[start] = buf[end];
-        buf[end] = tmp;
+        buf.swap(start, end);
         start += 1;
         end -= 1;
     }
@@ -103,13 +101,9 @@ impl Stdin {
             const TIMEOUT_TICKS: u64 = 20; // ~200ms between TID-change checks
             let mut bytes_read: usize = 0;
             let mut focused_on_tid: usize = 0; // 0 = no focus yet
-            loop {
-                // Re-check input service TID on each iteration — it may have restarted.
-                let Some(input_tid) = sys_lookup_service(service::INPUT) else {
-                    // Input service gone entirely — fall through to sys_read path.
-                    break;
-                };
-
+                                               // Re-check the input service TID on each iteration — it may have
+                                               // restarted. If it disappears entirely, fall through to sys_read.
+            while let Some(input_tid) = sys_lookup_service(service::INPUT) {
                 // Request focus only on startup or when input service restarted (TID changed).
                 if focused_on_tid != input_tid {
                     if !crate::input::request_focus() {
@@ -144,12 +138,10 @@ impl Stdin {
                                     buf.push('\n');
                                     return Ok(bytes_read + 1);
                                 }
-                                KeySym::Backspace => {
-                                    if !buf.is_empty() {
-                                        print("\x08 \x08");
-                                        buf.pop();
-                                        bytes_read = bytes_read.saturating_sub(1);
-                                    }
+                                KeySym::Backspace if !buf.is_empty() => {
+                                    print("\x08 \x08");
+                                    buf.pop();
+                                    bytes_read = bytes_read.saturating_sub(1);
                                 }
                                 KeySym::Printable if k.character > 0 => {
                                     if let Some(ch) = char::from_u32(k.character) {

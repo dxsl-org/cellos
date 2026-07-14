@@ -64,6 +64,7 @@ impl QuotaTracker {
     }
 
     /// Return bytes used by `owner`.
+    #[allow(dead_code)] // reason: consumed by the quota-report shell builtin planned in M2.1 follow-up; exercised by test-hooks builds
     pub fn used(&self, owner: CellId) -> u64 {
         self.used.get(&owner.0).copied().unwrap_or(0)
     }

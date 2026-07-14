@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['docs/**', 'libs/**', 'kernel/**', 'cells/**', 'hal/**']
+  workflow_dispatch:
 
 env:
   CARGO_INCREMENTAL: 0
@@ -24,9 +25,24 @@ jobs:
           components: rust-src
       - uses: Swatinem/rust-cache@v2
         with: { cache-on-failure: true }
+      # rustdoc executes build scripts: littlefs2-sys compiles its vendored C
+      # core, so the cross gcc + freestanding headers are required (same as
+      # the CI lint job); the excluded crates need toolchain pieces CI does
+      # not have (prebuilt mlibc, doomgeneric clone, a full libc for lua).
+      - name: Install cross C compiler for littlefs2-sys
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
       - name: Build rustdoc
+        env:
+          CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
         run: >
           cargo doc --workspace --no-deps
+          --exclude app-mlibc-smoke
+          --exclude doom
+          --exclude tetris-c
+          --exclude lua
+          --exclude tetris-lua
           --target riscv64gc-unknown-none-elf
           -Z build-std=core,alloc
       - name: Generate llms.txt

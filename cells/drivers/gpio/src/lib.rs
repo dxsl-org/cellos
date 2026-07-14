@@ -6,10 +6,11 @@
 //! Base address: 0x0903_0000 (ARM virt machine, 4 KiB region).
 //!
 //! PL061 GPIODATA uses address-masked access:
-//!   - Read all 8 pins:  offset 0x3FC (mask = 0xFF in addr[9:2])
-//!   - Write pin N:      offset = 1 << (N+2), value = bit_N_high_or_zero
-//! GPIODIR:             offset 0x400 (bit = 1 → output)
-//! Interrupt registers: 0x404–0x41C (deferred to v2)
+//! - Read all 8 pins: offset 0x3FC (mask = 0xFF in addr\[9:2\])
+//! - Write pin N: offset = 1 << (N+2), value = bit_N_high_or_zero
+//!
+//! GPIODIR: offset 0x400 (bit = 1 → output).
+//! Interrupt registers: 0x404–0x41C (deferred to v2).
 
 extern crate alloc;
 

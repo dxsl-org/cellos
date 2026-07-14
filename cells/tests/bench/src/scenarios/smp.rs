@@ -91,11 +91,10 @@ fn measure_spawn_rate() -> Option<bool> {
     let dt_ns = sys_get_time()
         .saturating_sub(t0)
         .saturating_mul(NS_PER_TICK);
-    let per_sec = if dt_ns > 0 {
-        N.saturating_mul(1_000_000_000) / dt_ns
-    } else {
-        u64::MAX
-    };
+    let per_sec = N
+        .saturating_mul(1_000_000_000)
+        .checked_div(dt_ns)
+        .unwrap_or(u64::MAX);
     let pass = per_sec >= TARGET;
     println(&format!(
         "[smp] spawn_rate {}: {}/sec (target ≥{}/sec){}",
@@ -138,11 +137,10 @@ fn measure_ipc_throughput() -> Option<bool> {
         .saturating_mul(NS_PER_TICK);
     let _ = sys_force_exit(echo_tid);
 
-    let per_sec = if dt_ns > 0 {
-        MSGS.saturating_mul(1_000_000_000) / dt_ns
-    } else {
-        u64::MAX
-    };
+    let per_sec = MSGS
+        .saturating_mul(1_000_000_000)
+        .checked_div(dt_ns)
+        .unwrap_or(u64::MAX);
     let pass = per_sec >= TARGET;
     println(&format!(
         "[smp] ipc_throughput {}: {}/sec (target ≥{}/sec){}",
@@ -184,11 +182,11 @@ fn measure_work_distribution() -> Option<bool> {
     let t_parallel = sys_get_time().saturating_sub(t1);
 
     // scale_x100 = 2 × T_single × 100 / T_parallel
-    let scale_x100 = if t_parallel > 0 {
-        t_single.saturating_mul(200) / t_parallel
-    } else {
-        200 // guard against zero denominator → report 2.00×
-    };
+    // (zero denominator → report 2.00×)
+    let scale_x100 = t_single
+        .saturating_mul(200)
+        .checked_div(t_parallel)
+        .unwrap_or(200);
     let pass = scale_x100 >= 140;
     println(&format!(
         "[smp] work_distribution {}: scale={}.{:02}x T1={}t Tp={}t (target ≥1.40x){}",

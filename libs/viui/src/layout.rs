@@ -150,22 +150,17 @@ impl Rect {
 
 /// How a widget declares its preferred size along one axis.
 /// Mirrors `iced_core::Length` for API compatibility.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Default)]
 pub enum Length {
     /// Expand to fill all remaining available space.
     Fill,
     /// Shrink to minimum content size.
+    #[default]
     Shrink,
     /// Exact pixel size.
     Fixed(f32),
     /// Proportional fill: `FillPortion(n)` takes `n×` the unit share.
     FillPortion(u16),
-}
-
-impl Default for Length {
-    fn default() -> Self {
-        Self::Shrink
-    }
 }
 
 // ─── Constraints ─────────────────────────────────────────────────────────────

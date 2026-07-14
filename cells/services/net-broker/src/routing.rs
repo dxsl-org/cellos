@@ -4,6 +4,7 @@
 // loop's RemoteServiceProxy routing is still a TODO (main.rs:152). Not wired yet.
 #![allow(dead_code)]
 
+use api::syscall::service;
 /// RemoteServiceProxy — broker-side routing table + cluster-RPC dispatch.
 ///
 /// ## Protocol (matches libs/ostd/src/cluster.rs byte layout)
@@ -30,17 +31,15 @@
 ///
 /// P06 ships the data structures and LookupRemote dispatch; P08 wires gossip
 /// announcements into insert_route / remove_routes_for_peer.
-
 use ostd::syscall::sys_lookup_service;
-use api::syscall::service;
 
 // ── Opcodes ────────────────────────────────────────────────────────────────────
 
 const OP_LOOKUP_REMOTE: u8 = 0x01;
 
-const RESP_FOUND:     u8 = 0x00;
+const RESP_FOUND: u8 = 0x00;
 const RESP_NOT_FOUND: u8 = 0x01;
-const RESP_ERR:       u8 = 0x02;
+const RESP_ERR: u8 = 0x02;
 
 // ── RoutingTable ───────────────────────────────────────────────────────────────
 
@@ -63,7 +62,9 @@ pub struct RoutingTable {
 
 impl RoutingTable {
     pub const fn new() -> Self {
-        Self { routes: [None; MAX_ROUTES] }
+        Self {
+            routes: [None; MAX_ROUTES],
+        }
     }
 
     /// Add or overwrite a route for `(service_id, machine_id)`.
@@ -78,12 +79,18 @@ impl RoutingTable {
         // Insert in first free slot.
         for slot in self.routes.iter_mut() {
             if slot.is_none() {
-                *slot = Some(ServiceRoute { service_id, machine_id });
+                *slot = Some(ServiceRoute {
+                    service_id,
+                    machine_id,
+                });
                 return;
             }
         }
         // Table full — evict oldest by scanning from the start (simple FIFO).
-        self.routes[0] = Some(ServiceRoute { service_id, machine_id });
+        self.routes[0] = Some(ServiceRoute {
+            service_id,
+            machine_id,
+        });
     }
 
     /// Remove all routes belonging to a peer that has timed out.
@@ -97,7 +104,9 @@ impl RoutingTable {
 
     /// Find which machine provides `service_id`. Returns `None` if unknown.
     pub fn lookup(&self, service_id: u16) -> Option<u64> {
-        self.routes.iter().flatten()
+        self.routes
+            .iter()
+            .flatten()
             .find(|r| r.service_id == service_id)
             .map(|r| r.machine_id)
     }

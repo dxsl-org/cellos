@@ -115,8 +115,7 @@ pub fn build_dtb(
             0x0001_0000, // GICC
         ],
     )?;
-    let intc_phandle = fdt.property_phandle(1)?;
-    let _ = intc_phandle; // phandle=1 for interrupt-parent references
+    fdt.property_phandle(1)?; // phandle=1 for interrupt-parent references
     fdt.end_node(intc)?;
 
     // ── 5. /timer — armv8-timer ──────────────────────────────────────────────

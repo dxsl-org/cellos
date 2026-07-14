@@ -53,11 +53,11 @@ fn run_pwm_demo(gpio: Pl061Gpio) {
     let mut pwm = BitBangPwm::new(gpio);
 
     // BitBangPwm maps channel N to GPIO pin N; channel 6 → pin 6.
-    if let Err(_) = pwm.set_frequency(CHANNEL, PWM_HZ) {
+    if pwm.set_frequency(CHANNEL, PWM_HZ).is_err() {
         println("[pwm-demo] set_frequency failed");
         return;
     }
-    if let Err(_) = pwm.enable(CHANNEL) {
+    if pwm.enable(CHANNEL).is_err() {
         println("[pwm-demo] enable failed");
         return;
     }

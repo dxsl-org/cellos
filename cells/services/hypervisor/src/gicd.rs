@@ -72,53 +72,53 @@ impl Gicd {
             reg::GICD_CTLR => {
                 self.ctlr = val32;
             }
-            o if o >= reg::GICD_ISENABLER && o < reg::GICD_ICENABLER => {
+            o if (reg::GICD_ISENABLER..reg::GICD_ICENABLER).contains(&o) => {
                 let idx = ((o - reg::GICD_ISENABLER) / 4) as usize;
                 if idx < WORD_COUNT {
                     self.isenabler[idx] |= val32;
                 }
             }
-            o if o >= reg::GICD_ICENABLER && o < reg::GICD_ISPENDR => {
+            o if (reg::GICD_ICENABLER..reg::GICD_ISPENDR).contains(&o) => {
                 let idx = ((o - reg::GICD_ICENABLER) / 4) as usize;
                 if idx < WORD_COUNT {
                     self.isenabler[idx] &= !val32;
                 }
             }
-            o if o >= reg::GICD_ISPENDR && o < reg::GICD_ICPENDR => {
+            o if (reg::GICD_ISPENDR..reg::GICD_ICPENDR).contains(&o) => {
                 let idx = ((o - reg::GICD_ISPENDR) / 4) as usize;
                 if idx < WORD_COUNT {
                     self.ispendr[idx] |= val32;
                 }
             }
-            o if o >= reg::GICD_ICPENDR && o < reg::GICD_IPRIORITYR => {
+            o if (reg::GICD_ICPENDR..reg::GICD_IPRIORITYR).contains(&o) => {
                 let idx = ((o - reg::GICD_ICPENDR) / 4) as usize;
                 if idx < WORD_COUNT {
                     self.ispendr[idx] &= !val32;
                 }
             }
-            o if o >= reg::GICD_IPRIORITYR && o < reg::GICD_ITARGETSR => {
+            o if (reg::GICD_IPRIORITYR..reg::GICD_ITARGETSR).contains(&o) => {
                 let base = (o - reg::GICD_IPRIORITYR) as usize;
                 self.write_bytes(&mut self.ipriorityr.clone(), base, val, size);
                 // Workaround: update in place
                 let bytes = val.to_le_bytes();
                 let count = size as usize;
-                for i in 0..count {
+                for (i, &b) in bytes.iter().enumerate().take(count) {
                     if base + i < MAX_IRQS {
-                        self.ipriorityr[base + i] = bytes[i];
+                        self.ipriorityr[base + i] = b;
                     }
                 }
             }
-            o if o >= reg::GICD_ITARGETSR && o < reg::GICD_ICFGR => {
+            o if (reg::GICD_ITARGETSR..reg::GICD_ICFGR).contains(&o) => {
                 let base = (o - reg::GICD_ITARGETSR) as usize;
                 let bytes = val.to_le_bytes();
                 let count = size as usize;
-                for i in 0..count {
+                for (i, &b) in bytes.iter().enumerate().take(count) {
                     if base + i < MAX_IRQS {
-                        self.itargetsr[base + i] = bytes[i];
+                        self.itargetsr[base + i] = b;
                     }
                 }
             }
-            o if o >= reg::GICD_ICFGR && o < reg::GICD_SGIR => {
+            o if (reg::GICD_ICFGR..reg::GICD_SGIR).contains(&o) => {
                 let idx = ((o - reg::GICD_ICFGR) / 4) as usize;
                 if idx < self.icfgr.len() {
                     self.icfgr[idx] = val32;
@@ -136,7 +136,7 @@ impl Gicd {
             reg::GICD_TYPER => 0x0000_0007u64,
             // IIDR: ARM implementer, GICv2 product.
             reg::GICD_IIDR => 0x0200_143Bu64,
-            o if o >= reg::GICD_ISENABLER && o < reg::GICD_ICENABLER => {
+            o if (reg::GICD_ISENABLER..reg::GICD_ICENABLER).contains(&o) => {
                 let idx = ((o - reg::GICD_ISENABLER) / 4) as usize;
                 if idx < WORD_COUNT {
                     self.isenabler[idx] as u64
@@ -144,10 +144,10 @@ impl Gicd {
                     0
                 }
             }
-            o if o >= reg::GICD_IPRIORITYR && o < reg::GICD_ITARGETSR => {
+            o if (reg::GICD_IPRIORITYR..reg::GICD_ITARGETSR).contains(&o) => {
                 self.read_bytes(&self.ipriorityr, (o - reg::GICD_IPRIORITYR) as usize, size)
             }
-            o if o >= reg::GICD_ITARGETSR && o < reg::GICD_ICFGR => {
+            o if (reg::GICD_ITARGETSR..reg::GICD_ICFGR).contains(&o) => {
                 self.read_bytes(&self.itargetsr, (o - reg::GICD_ITARGETSR) as usize, size)
             }
             _ => 0,
@@ -156,12 +156,12 @@ impl Gicd {
 
     /// True if `ipa` falls within the GICD MMIO window.
     pub fn owns_gicd(ipa: u64) -> bool {
-        ipa >= GICD_BASE_IPA && ipa < GICD_BASE_IPA + GICD_SIZE
+        (GICD_BASE_IPA..GICD_BASE_IPA + GICD_SIZE).contains(&ipa)
     }
 
     /// True if `ipa` falls within the GICC MMIO window.
     pub fn owns_gicc(ipa: u64) -> bool {
-        ipa >= GICC_BASE_IPA && ipa < GICC_BASE_IPA + GICC_SIZE
+        (GICC_BASE_IPA..GICC_BASE_IPA + GICC_SIZE).contains(&ipa)
     }
 
     fn write_bytes(&self, _buf: &mut [u8], _base: usize, _val: u64, _size: u8) {}

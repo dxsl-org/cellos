@@ -110,7 +110,7 @@ unsafe fn is_incomplete(L: *mut LuaState) -> bool {
         return false;
     }
     // SAFETY: ptr points to `len` valid bytes (Lua-managed string).
-    let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+    let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
     // Lua reports incomplete chunks with "<eof>" in the error message.
     bytes.windows(5).any(|w| w == b"<eof>")
 }
@@ -126,7 +126,7 @@ unsafe fn print_error(L: *mut LuaState) {
     let ptr = unsafe { crate::ffi::lua_tolstring(L, -1, &mut len as *mut _) };
     if !ptr.is_null() {
         // SAFETY: ptr is a valid Lua-managed byte slice of length `len`.
-        let bytes = unsafe { core::slice::from_raw_parts(ptr as *const u8, len) };
+        let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
         if let Ok(s) = core::str::from_utf8(bytes) {
             ostd::io::println(s);
         }

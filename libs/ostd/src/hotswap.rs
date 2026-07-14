@@ -133,7 +133,7 @@ pub fn hotswap_key(swap_id: u64) -> u64 {
     // FNV-1a of "hotswap-{swap_id}". We embed the swap_id directly in the upper
     // 32 bits and use the literal value 0xA3_0000_0000 as the namespace tag
     // (avoids collisions with the ARGV_STASH_KEY and per-TID personal slots).
-    0x_A3_0000_0000_0000_u64 | (swap_id & 0xFFFF_FFFF_FFFF)
+    0x00A3_0000_0000_0000_u64 | (swap_id & 0xFFFF_FFFF_FFFF)
 }
 
 /// Human-readable form of the hotswap key (for logging / diagnostics).

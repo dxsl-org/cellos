@@ -38,12 +38,12 @@ pub fn main() {
     let cell_id = match syscall::sys_get_procs(&mut buf) {
         Ok(count) => {
             let mut found = None;
-            for i in 0..count {
-                let name = core::str::from_utf8(&buf[i].name)
+            for info in buf.iter().take(count) {
+                let name = core::str::from_utf8(&info.name)
                     .unwrap_or("")
                     .trim_matches('\0');
                 if name == cell_name.as_str() {
-                    found = Some(buf[i].id);
+                    found = Some(info.id);
                     break;
                 }
             }

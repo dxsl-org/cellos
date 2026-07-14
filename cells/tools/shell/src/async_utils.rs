@@ -92,7 +92,8 @@ impl AsyncStdin {
                                     _ => {
                                         if let Some(ch) = k.char() {
                                             let cp = ch as u32;
-                                            if cp >= 0x20 && cp <= 0x7E && buffer.len() < max_len {
+                                            if (0x20..=0x7E).contains(&cp) && buffer.len() < max_len
+                                            {
                                                 let byte = ch as u8;
                                                 if let Ok(s) = core::str::from_utf8(
                                                     core::slice::from_ref(&byte),
@@ -143,26 +144,22 @@ impl AsyncStdin {
                     } else if escape_state == 2 {
                         escape_state = 0;
                         match ch {
-                            b'A' => {
-                                if history_idx > 0 {
-                                    history_idx -= 1;
-                                    Self::clear_line(&buffer);
-                                    buffer.clear();
-                                    if let Some(cmd) = history.get(history_idx) {
-                                        ostd::io::print(cmd);
-                                        buffer.extend_from_slice(cmd.as_bytes());
-                                    }
+                            b'A' if history_idx > 0 => {
+                                history_idx -= 1;
+                                Self::clear_line(&buffer);
+                                buffer.clear();
+                                if let Some(cmd) = history.get(history_idx) {
+                                    ostd::io::print(cmd);
+                                    buffer.extend_from_slice(cmd.as_bytes());
                                 }
                             }
-                            b'B' => {
-                                if history_idx < history.len() {
-                                    history_idx += 1;
-                                    Self::clear_line(&buffer);
-                                    buffer.clear();
-                                    if let Some(cmd) = history.get(history_idx) {
-                                        ostd::io::print(cmd);
-                                        buffer.extend_from_slice(cmd.as_bytes());
-                                    }
+                            b'B' if history_idx < history.len() => {
+                                history_idx += 1;
+                                Self::clear_line(&buffer);
+                                buffer.clear();
+                                if let Some(cmd) = history.get(history_idx) {
+                                    ostd::io::print(cmd);
+                                    buffer.extend_from_slice(cmd.as_bytes());
                                 }
                             }
                             _ => {}

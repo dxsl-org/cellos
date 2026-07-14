@@ -130,13 +130,9 @@ impl ViNode for DropDown {
             Event::MousePress {
                 pos,
                 button: MouseButton::Left,
-            } => {
-                if self.bounds.get().contains(*pos) {
-                    self.open_popup();
-                    true
-                } else {
-                    false
-                }
+            } if self.bounds.get().contains(*pos) => {
+                self.open_popup();
+                true
             }
             _ => false,
         }
@@ -262,28 +258,19 @@ impl ViNode for DropDownPopup {
             Event::MousePress {
                 pos,
                 button: MouseButton::Left,
-            } => {
-                if b.contains(*pos) {
-                    true // inside popup — consume to prevent root from acting
-                } else {
-                    // Outside click — dismiss_outside in OverlayEntry handles pop.
-                    false
-                }
+            } if b.contains(*pos) => {
+                true // inside popup — consume to prevent root from acting
             }
             Event::MouseRelease {
                 pos,
                 button: MouseButton::Left,
-            } => {
-                if b.contains(*pos) {
-                    let idx = ((pos.y - b.y) / item_h) as usize;
-                    if idx < self.items.len() {
-                        self.selected.set(self.items[idx].clone());
-                    }
-                    self.queue.borrow_mut().push(OverlayAction::Pop);
-                    true
-                } else {
-                    false
+            } if b.contains(*pos) => {
+                let idx = ((pos.y - b.y) / item_h) as usize;
+                if idx < self.items.len() {
+                    self.selected.set(self.items[idx].clone());
                 }
+                self.queue.borrow_mut().push(OverlayAction::Pop);
+                true
             }
             _ => false,
         }

@@ -19,13 +19,17 @@ REL="target/riscv64gc-unknown-none-elf/release"
 SRV_DIR="kernel/src/embedded-srv-test"
 
 export CC_riscv64gc_unknown_none_elf="riscv64-unknown-elf-gcc"
-export CFLAGS_riscv64gc_unknown_none_elf="-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS"
+export CFLAGS_riscv64gc_unknown_none_elf="-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include"
 
-echo "==> Building base cells (init, shell, config)..."
+echo "==> Building base cells (init, shell, config, platform, block)..."
+# platform + virtio-blk are REQUIRED: the /srv tests attach a disk, and
+# without /bin/platform + /bin/block in VIFS1 the VFS has no block driver —
+# every sector read fails and RedoxFS P5 can never open.
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p app-init -p app-shell -p service-config
+    -p app-init -p app-shell -p service-config \
+    -p service-platform -p driver-virtio-blk
 
 echo "==> Building service-vfs (full — no test-hooks, full quota, RedoxFS enabled)..."
 cargo build --release \
@@ -40,7 +44,7 @@ cargo build --release \
     -p app-srv-test
 
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config srv-test; do
+for bin in app-init app-shell service-vfs service-config srv-test platform driver-virtio-blk; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -57,6 +61,8 @@ python3 tools/mkfat32.py \
     "$REL/app-shell"      /bin/shell \
     "$REL/service-vfs"    /bin/vfs \
     "$REL/service-config" /bin/config \
+    "$REL/platform"       /bin/platform \
+    "$REL/driver-virtio-blk" /bin/block \
     "$REL/srv-test"       /bin/srv-test \
     "$TMPDIR_KFS/hostname" /etc/hostname
 

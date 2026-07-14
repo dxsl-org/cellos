@@ -39,7 +39,7 @@ pub fn parse(buf: &[u8; 6]) -> Option<Reading> {
 pub fn synthetic(tick: u32) -> Reading {
     Reading {
         temp_cx10: 240 + (tick % 50) as i32, // 24.0 → 28.9 °C
-        hum_px10: 590 + (tick % 50) as u32,  // 59.0 → 63.9 %
+        hum_px10: 590 + (tick % 50),         // 59.0 → 63.9 %
         simulated: true,
     }
 }

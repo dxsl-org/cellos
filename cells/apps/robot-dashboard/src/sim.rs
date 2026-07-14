@@ -61,18 +61,18 @@ impl SimState {
         self.motor_temp = (0.2 + self.t as f32 * 0.003).clamp(0.2, 0.8);
 
         // Periodic log events.
-        if self.t % 10 == 0 {
+        if self.t.is_multiple_of(10) {
             self.log_queue.push(format!(
                 "t={}s  Battery {:.0}%",
                 self.t / 2,
                 self.battery * 100.0,
             ));
         }
-        if self.t % 7 == 0 {
+        if self.t.is_multiple_of(7) {
             self.log_queue
                 .push(format!("t={}s  CPU {:.0}%", self.t / 2, self.cpu * 100.0,));
         }
-        if self.t % 15 == 0 {
+        if self.t.is_multiple_of(15) {
             self.log_queue.push(format!(
                 "t={}s  Motor {:.0}C",
                 self.t / 2,

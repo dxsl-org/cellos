@@ -92,7 +92,7 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 // S-mode external interrupt (PLIC)
                 // Claim first, dispatch handler, complete AFTER handler per PLIC spec.
                 if let Some(irq) = plic_claim() {
-                    if irq >= 1 && irq <= 8 {
+                    if (1..=8).contains(&irq) {
                         // SAFETY: vi_handle_virtio_irq is defined in kernel/src/task/drivers/virtio_blk.rs
                         // and linked via extern "Rust". The irq argument is a valid PLIC claim value (1-8).
                         unsafe {
@@ -126,7 +126,7 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 // Environment call from S-mode (should not happen normally)
                 frame.sepc += 4;
             }
-            2 | 12 | 13 | 15 | _ => {
+            _ => {
                 // Illegal instruction, page faults, or other unhandled exception.
                 //
                 // Distinguish U-mode Cell faults from S-mode kernel faults using SPP

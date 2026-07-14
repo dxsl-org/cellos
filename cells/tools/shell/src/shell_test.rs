@@ -78,14 +78,14 @@ fn assert_file_contains(name: &str, path: &str, needle: &str) {
 }
 
 /// Execute `line` (captures output, discards it). Used for setup steps.
-fn run(jobs: &mut Jobs, line: &str) {
+fn exec(jobs: &mut Jobs, line: &str) {
     crate::executor::capture_line(line, jobs);
 }
 
 // ── Test scenarios ────────────────────────────────────────────────────────────
 
 fn test_stdout_redirect(jobs: &mut Jobs) {
-    run(jobs, "echo REDIR_OUT > /tmp/st_redir.txt");
+    exec(jobs, "echo REDIR_OUT > /tmp/st_redir.txt");
     assert_file_contains(
         "stdout redirect writes file",
         "/tmp/st_redir.txt",
@@ -94,15 +94,15 @@ fn test_stdout_redirect(jobs: &mut Jobs) {
 }
 
 fn test_append_redirect(jobs: &mut Jobs) {
-    run(jobs, "echo APPEND_A > /tmp/st_append.txt");
-    run(jobs, "echo APPEND_B >> /tmp/st_append.txt");
+    exec(jobs, "echo APPEND_A > /tmp/st_append.txt");
+    exec(jobs, "echo APPEND_B >> /tmp/st_append.txt");
     assert_file_contains("append redirect line A", "/tmp/st_append.txt", "APPEND_A");
     assert_file_contains("append redirect line B", "/tmp/st_append.txt", "APPEND_B");
 }
 
 fn test_stderr_redirect(jobs: &mut Jobs) {
     // Phase 1: 2> routes output to file (single-channel shell, stderr==stdout).
-    run(jobs, "echo STDERR_OUT 2> /tmp/st_stderr.txt");
+    exec(jobs, "echo STDERR_OUT 2> /tmp/st_stderr.txt");
     assert_file_contains(
         "stderr redirect writes file",
         "/tmp/st_stderr.txt",

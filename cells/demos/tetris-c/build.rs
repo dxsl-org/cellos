@@ -46,7 +46,7 @@ fn main() {
         }
         let sysroot = run_riscv_gcc(&["--print-sysroot"]);
         if !sysroot.is_empty() && sysroot != "." {
-            build.flag(&format!("-I{}/include", sysroot));
+            build.flag(format!("-I{}/include", sysroot));
         }
     }
 

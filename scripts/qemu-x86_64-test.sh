@@ -33,7 +33,6 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -cdrom "$ISO" \
     -boot d \
     -no-reboot \
-    -serial stdio \
     < /dev/null > qemu-x86_64.raw.log 2>&1 || true
 
 # Strip NULs and ANSI escape sequences so patterns match cleanly.

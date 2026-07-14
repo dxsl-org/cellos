@@ -28,7 +28,7 @@ pub struct RtReport {
 impl RtReport {
     /// Build from a raw (unsorted) tick-delta buffer; `deadline_miss` is supplied
     /// by periodic scenarios (else 0). Sorts in place and converts ticks → ns.
-    pub fn build(name: &'static str, samples: &mut Vec<u64>, deadline_miss: u32) -> Self {
+    pub fn build(name: &'static str, samples: &mut [u64], deadline_miss: u32) -> Self {
         samples.sort_unstable();
         let ns: Vec<u64> = samples.iter().map(|&t| ticks_to_ns(t)).collect();
         let n = ns.len();

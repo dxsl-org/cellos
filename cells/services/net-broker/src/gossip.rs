@@ -28,10 +28,9 @@
 /// gate on a local hardware safety interlock, NOT solely on holding a lease.
 /// A claim reaching 100% of peers does NOT prove that a physical resource is
 /// exclusive — only that the cluster agrees on *intent*.
-
 use ostd::syscall::sys_get_time;
 
-const TYPE_TASK_CLAIM:   u8 = 0x01;
+const TYPE_TASK_CLAIM: u8 = 0x01;
 const TYPE_TASK_RELEASE: u8 = 0x02;
 
 const WIRE_LEN: usize = 40;
@@ -47,25 +46,40 @@ pub enum GossipType {
 /// A single gossip message (claim or release of a task_id by a machine).
 #[derive(Clone, Copy, Debug)]
 pub struct GossipMessage {
-    pub kind:       GossipType,
-    pub task_id:    u64,
+    pub kind: GossipType,
+    pub task_id: u64,
     pub machine_id: u64,
-    pub epoch:      u64,
-    pub mono_ts:    u64,
+    pub epoch: u64,
+    pub mono_ts: u64,
 }
 
 impl GossipMessage {
     pub fn claim(task_id: u64, machine_id: u64, epoch: u64) -> Self {
-        Self { kind: GossipType::TaskClaim, task_id, machine_id, epoch, mono_ts: sys_get_time() }
+        Self {
+            kind: GossipType::TaskClaim,
+            task_id,
+            machine_id,
+            epoch,
+            mono_ts: sys_get_time(),
+        }
     }
 
     pub fn release(task_id: u64, machine_id: u64, epoch: u64) -> Self {
-        Self { kind: GossipType::TaskRelease, task_id, machine_id, epoch, mono_ts: sys_get_time() }
+        Self {
+            kind: GossipType::TaskRelease,
+            task_id,
+            machine_id,
+            epoch,
+            mono_ts: sys_get_time(),
+        }
     }
 
     pub fn encode(&self) -> [u8; WIRE_LEN] {
         let mut w = [0u8; WIRE_LEN];
-        w[0] = match self.kind { GossipType::TaskClaim => TYPE_TASK_CLAIM, GossipType::TaskRelease => TYPE_TASK_RELEASE };
+        w[0] = match self.kind {
+            GossipType::TaskClaim => TYPE_TASK_CLAIM,
+            GossipType::TaskRelease => TYPE_TASK_RELEASE,
+        };
         w[2..10].copy_from_slice(&self.task_id.to_le_bytes());
         w[10..18].copy_from_slice(&self.machine_id.to_le_bytes());
         w[18..26].copy_from_slice(&self.epoch.to_le_bytes());
@@ -75,16 +89,16 @@ impl GossipMessage {
 
     pub fn decode(w: &[u8; WIRE_LEN]) -> Option<Self> {
         let kind = match w[0] {
-            TYPE_TASK_CLAIM   => GossipType::TaskClaim,
+            TYPE_TASK_CLAIM => GossipType::TaskClaim,
             TYPE_TASK_RELEASE => GossipType::TaskRelease,
             _ => return None,
         };
         Some(Self {
             kind,
-            task_id:    u64::from_le_bytes(w[2..10].try_into().ok()?),
+            task_id: u64::from_le_bytes(w[2..10].try_into().ok()?),
             machine_id: u64::from_le_bytes(w[10..18].try_into().ok()?),
-            epoch:      u64::from_le_bytes(w[18..26].try_into().ok()?),
-            mono_ts:    u64::from_le_bytes(w[26..34].try_into().ok()?),
+            epoch: u64::from_le_bytes(w[18..26].try_into().ok()?),
+            mono_ts: u64::from_le_bytes(w[26..34].try_into().ok()?),
         })
     }
 }
@@ -94,10 +108,10 @@ impl GossipMessage {
 /// One active (or recently seen) task claim.
 #[derive(Clone, Copy)]
 pub struct ClaimRecord {
-    pub task_id:    u64,
+    pub task_id: u64,
     pub machine_id: u64,
     /// Monotonically increasing per (task_id, machine_id) pair — anti-replay.
-    pub epoch:      u64,
+    pub epoch: u64,
     pub last_heard: u64,
 }
 
@@ -132,20 +146,18 @@ impl GossipTable {
         match msg.kind {
             GossipType::TaskClaim => {
                 // Upsert: accept if epoch is newer or no existing claim for this task.
-                for rec in self.claims.iter_mut() {
-                    if let Some(r) = rec {
-                        if r.task_id == msg.task_id {
-                            if msg.epoch > r.epoch {
-                                *r = ClaimRecord {
-                                    task_id: msg.task_id,
-                                    machine_id: msg.machine_id,
-                                    epoch: msg.epoch,
-                                    last_heard: now,
-                                };
-                                return true;
-                            }
-                            return false; // older epoch — ignore
+                for r in self.claims.iter_mut().flatten() {
+                    if r.task_id == msg.task_id {
+                        if msg.epoch > r.epoch {
+                            *r = ClaimRecord {
+                                task_id: msg.task_id,
+                                machine_id: msg.machine_id,
+                                epoch: msg.epoch,
+                                last_heard: now,
+                            };
+                            return true;
                         }
+                        return false; // older epoch — ignore
                     }
                 }
                 // No existing claim for this task_id — insert in first free slot.
@@ -165,7 +177,8 @@ impl GossipTable {
             GossipType::TaskRelease => {
                 for slot in self.claims.iter_mut() {
                     if let Some(r) = slot {
-                        if r.task_id == msg.task_id && r.machine_id == msg.machine_id
+                        if r.task_id == msg.task_id
+                            && r.machine_id == msg.machine_id
                             && msg.epoch >= r.epoch
                         {
                             *slot = None;
@@ -205,7 +218,10 @@ impl GossipTable {
 
     /// Construct a TaskRelease for this node and remove the claim locally.
     pub fn release(&mut self, task_id: u64) -> Option<GossipMessage> {
-        let epoch = self.claims.iter().flatten()
+        let epoch = self
+            .claims
+            .iter()
+            .flatten()
             .find(|r| r.task_id == task_id && r.machine_id == self.my_machine_id)
             .map(|r| r.epoch)?;
         let msg = GossipMessage::release(task_id, self.my_machine_id, epoch);
@@ -215,7 +231,9 @@ impl GossipTable {
 
     /// Does this node currently hold the claim for `task_id`?
     pub fn is_claimed_by_me(&self, task_id: u64) -> bool {
-        self.claims.iter().flatten()
+        self.claims
+            .iter()
+            .flatten()
             .any(|r| r.task_id == task_id && r.machine_id == self.my_machine_id)
     }
 
@@ -236,12 +254,17 @@ pub struct PendingGossip {
 
 impl PendingGossip {
     pub const fn new() -> Self {
-        Self { msgs: [const { None }; MAX_PENDING] }
+        Self {
+            msgs: [const { None }; MAX_PENDING],
+        }
     }
 
     pub fn push(&mut self, msg: GossipMessage) {
         for slot in self.msgs.iter_mut() {
-            if slot.is_none() { *slot = Some(msg); return; }
+            if slot.is_none() {
+                *slot = Some(msg);
+                return;
+            }
         }
         // Queue full — overwrite oldest (slot 0).
         self.msgs[0] = Some(msg);
@@ -249,7 +272,9 @@ impl PendingGossip {
 
     pub fn pop(&mut self) -> Option<GossipMessage> {
         for slot in self.msgs.iter_mut() {
-            if slot.is_some() { return slot.take(); }
+            if slot.is_some() {
+                return slot.take();
+            }
         }
         None
     }

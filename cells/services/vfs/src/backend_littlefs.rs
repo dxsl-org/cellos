@@ -10,11 +10,9 @@
 //! First mount auto-formats: a blank P4 fails `mount`, gets one `format`,
 //! and is retried (scoped to P4 — FAT and the cell table are untouched).
 
-use alloc::string::String;
 use alloc::vec::Vec;
 
 use littlefs2::fs::{Filesystem, OpenOptions};
-use littlefs2::io::Read as _;
 use littlefs2::path::PathBuf;
 
 use crate::backend::FsBackend;

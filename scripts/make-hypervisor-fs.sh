@@ -45,8 +45,11 @@ if [[ ! -f "$ALPINE_CACHE/vmlinuz-virt" || ! -f "$ALPINE_CACHE/initramfs-virt" ]
 fi
 
 # ── Step 2: Build aarch64 cells (including service-hypervisor) ──────────────
+# No RUSTFLAGS here: the env var REPLACES the per-target relocation-model=pic
+# + BTI/PAC flags (config.toml locally, CARGO_TARGET_* env on CI) and the
+# cells then fail to link -pie. Warnings are gated by the clippy CI jobs.
 echo "[make-hv-fs] Building aarch64 cells (service-hypervisor + core cells)..."
-RUSTFLAGS="-D warnings" cargo build --release \
+cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
     -p app-init -p app-shell -p service-vfs -p service-config \
@@ -87,6 +90,11 @@ echo "  /initrd.gz <- $INITRD ($(du -sh "$INITRD" | cut -f1))"
 MKFAT_ARGS+=("$INITRD" "/initrd.gz")
 
 python3 tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+
+# INIT_ELF (include_bytes! in kernel main.rs) is embedded separately from
+# kernel_fs.img — the EMBEDDED_OVERRIDE dir must also carry the init binary.
+cp "$BIN_DIR/app-init" "$EMBEDDED_HV/init"
+echo "[make-hv-fs] init <- $BIN_DIR/app-init"
 
 echo ""
 echo "[make-hv-fs] kernel_fs.img created at $EMBEDDED_HV/kernel_fs.img"

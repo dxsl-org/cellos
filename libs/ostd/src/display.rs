@@ -82,16 +82,14 @@ impl ViSurface {
         })?;
 
         // 4. Ask compositor to create a surface slot → get cap.
-        let cap = ipc_create_surface(comp_tid, width, height).map_err(|e| {
+        let cap = ipc_create_surface(comp_tid, width, height).inspect_err(|_e| {
             sys_grant_unregister(reg_id);
-            e
         })?;
 
         // 5. Tell compositor to attach our Grant to that slot.
-        ipc_attach_grant(comp_tid, cap, reg_id, width, height, fmt).map_err(|e| {
+        ipc_attach_grant(comp_tid, cap, reg_id, width, height, fmt).inspect_err(|_e| {
             let _ = ipc_destroy_surface(comp_tid, cap);
             sys_grant_unregister(reg_id);
-            e
         })?;
 
         Ok(Self {

@@ -147,15 +147,32 @@ pub unsafe fn s2_tlb_flush_ipa(ipa: u64) {
 }
 
 // ── Non-AArch64 stubs (keeps workspace compiling on RISC-V / x86_64) ────────
+// `unsafe` mirrors the aarch64 signatures so call sites are identical.
 
+/// No-op stub for non-AArch64 targets.
+///
+/// # Safety
+/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
 #[cfg(not(target_arch = "aarch64"))]
 pub unsafe fn enable_stage2(_vmid: u16, _root_pa: u64) {}
 
+/// No-op stub for non-AArch64 targets.
+///
+/// # Safety
+/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
 #[cfg(not(target_arch = "aarch64"))]
 pub unsafe fn disable_stage2() {}
 
+/// No-op stub for non-AArch64 targets.
+///
+/// # Safety
+/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
 #[cfg(not(target_arch = "aarch64"))]
 pub unsafe fn s2_tlb_flush_all() {}
 
+/// No-op stub for non-AArch64 targets.
+///
+/// # Safety
+/// Always safe — does nothing; kept `unsafe` to match the aarch64 signature.
 #[cfg(not(target_arch = "aarch64"))]
 pub unsafe fn s2_tlb_flush_ipa(_ipa: u64) {}

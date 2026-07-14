@@ -224,7 +224,7 @@ pub fn draw_text(pixels: &mut [u8], stride: usize, x: i32, y: i32, text: &str, c
 
     let mut cx = x;
     for byte in text.bytes() {
-        let idx = if byte >= 0x20 && byte <= 0x7E {
+        let idx = if (0x20..=0x7E).contains(&byte) {
             (byte - 0x20) as usize
         } else {
             0 // render as space

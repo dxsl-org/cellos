@@ -98,6 +98,9 @@ extern "C" {
 // ── Platform callbacks (called from vicell_platform.c) ────────────────────
 
 /// Monotonic millisecond counter.  sys_get_time() returns 10 MHz ticks.
+///
+/// # Safety
+/// C callback — must only be called from the single-threaded tetris C core.
 #[no_mangle]
 pub unsafe extern "C" fn vicell_get_ticks_ms() -> u32 {
     (sys_get_time() / 10_000) as u32
@@ -105,6 +108,9 @@ pub unsafe extern "C" fn vicell_get_ticks_ms() -> u32 {
 
 /// Dequeue one pending key event.  Drains new ViCell input events first.
 /// Returns KEY_NONE (0) when the queue is empty.
+///
+/// # Safety
+/// C callback — touches the global key queue; single-threaded C core only.
 #[no_mangle]
 pub unsafe extern "C" fn vicell_poll_key() -> i32 {
     let events: Vec<InputEvent> = poll_events(8);
@@ -129,6 +135,10 @@ pub unsafe extern "C" fn vicell_poll_key() -> i32 {
 
 /// Raw pointer to the live BGRA compositor surface buffer.
 /// Returns null if the surface is not yet initialised (should not happen during gameplay).
+///
+/// # Safety
+/// C callback — returned pointer is only valid while SURFACE stays alive;
+/// single-threaded C core only.
 #[no_mangle]
 pub unsafe extern "C" fn vicell_surface_ptr() -> *mut u32 {
     match SURFACE.as_mut() {
@@ -138,6 +148,9 @@ pub unsafe extern "C" fn vicell_surface_ptr() -> *mut u32 {
 }
 
 /// Signal full-surface damage to the compositor (triggers a repaint).
+///
+/// # Safety
+/// C callback — reads the global SURFACE; single-threaded C core only.
 #[no_mangle]
 pub unsafe extern "C" fn vicell_flush() {
     if let Some(ref s) = SURFACE {
@@ -153,6 +166,9 @@ pub unsafe extern "C" fn vicell_flush() {
 ///
 /// Each VGA pixel is expanded to SCALE×SCALE surface pixels (nearest-neighbour).
 /// Font bit order: MSB = leftmost column (mask & (0x80 >> col) tests column col).
+///
+/// # Safety
+/// C callback — writes into the global SURFACE; single-threaded C core only.
 #[no_mangle]
 pub unsafe extern "C" fn vicell_draw_char(x: u32, y: u32, c: u8, bgra: u32) {
     let surf = match SURFACE.as_mut() {
@@ -164,7 +180,7 @@ pub unsafe extern "C" fn vicell_draw_char(x: u32, y: u32, c: u8, bgra: u32) {
     let stride = surf.stride(); // bytes per row
     let pixels = surf.pixels_mut();
 
-    let idx = if c >= 0x20 && c <= 0x7E {
+    let idx = if (0x20..=0x7E).contains(&c) {
         (c - 0x20) as usize
     } else {
         0

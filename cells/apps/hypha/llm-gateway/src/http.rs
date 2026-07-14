@@ -61,9 +61,9 @@ pub fn http_body(resp: &[u8]) -> Option<&[u8]> {
 /// Expected format (LLM must emit ONLY this, nothing else):
 /// `TOOL_CALL: {"name":"tool_name","args":{...}}`
 pub fn extract_tool_call(content: &str) -> Option<ToolCall> {
-    let s = content.trim_start_matches(|c: char| c == ' ' || c == '\t' || c == '\n' || c == '\r');
+    let s = content.trim_start_matches([' ', '\t', '\n', '\r']);
     let rest = s.strip_prefix("TOOL_CALL:")?;
-    let json = rest.trim_start_matches(|c: char| c == ' ' || c == '\t');
+    let json = rest.trim_start_matches([' ', '\t']);
     let name = json_extract_str(json, "name")?;
     let args_json = json_extract_obj(json, "args").unwrap_or("{}");
     Some(ToolCall {

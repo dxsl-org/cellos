@@ -29,7 +29,11 @@ static mut TONE: [u8; BUF_LEN] = [0u8; BUF_LEN];
 unsafe fn gen_square(freq: usize) {
     let half = (RATE / (freq * 2)).max(1); // samples per half period
     for i in 0..FRAMES {
-        let s: i16 = if (i / half) % 2 == 0 { AMP } else { -AMP };
+        let s: i16 = if (i / half).is_multiple_of(2) {
+            AMP
+        } else {
+            -AMP
+        };
         let b = s.to_le_bytes();
         let off = i * 4;
         TONE[off] = b[0];

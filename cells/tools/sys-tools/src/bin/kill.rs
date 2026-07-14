@@ -6,7 +6,7 @@ use api::syscall::ProcessInfo;
 use ostd::{io, syscall};
 
 /// Read the spawn-args stash into `buf` and return the trimmed content.
-fn spawn_args<'a>(buf: &'a mut [u8]) -> &'a str {
+fn spawn_args(buf: &mut [u8]) -> &str {
     let n = syscall::sys_spawn_args(buf);
     core::str::from_utf8(&buf[..n]).unwrap_or("").trim()
 }

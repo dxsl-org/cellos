@@ -26,67 +26,32 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: cargo-audit
-        uses: rustsec/audit-check@v1.4.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
+      # deny MUST run before audit: Cargo.lock is not committed, and
+      # cargo-deny generates it as a side effect — audit-check only reads an
+      # existing ./Cargo.lock and dies with "Couldn't load ./Cargo.lock"
+      # otherwise. (ci.yml's Security Scan has the same ordering.)
       - name: cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v1
+        # v2 for the same CVSS 4.0 reason (matches ci.yml Security Scan).
+        uses: EmbarkStudios/cargo-deny-action@v2
         with:
           arguments: --all-features
 
-  geiger:
-    name: Unsafe Regression (cargo-geiger)
+      - name: cargo-audit
+        # v2: v1.4.1 bundles a cargo-audit that can't parse CVSS 4.0 entries
+        # now present in the RustSec advisory DB. Ignore list: .cargo/audit.toml.
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  unsafe-ratchet:
+    # Replaces the cargo-geiger scan: geiger cannot analyse `-Z build-std`
+    # bare-metal targets, and Driver Cells legitimately contain unsafe for
+    # MMIO/DMA. The ratchet enforces the real invariant — no unsafe outside
+    # the audited allowlist (scripts/check-cells-unsafe-ratchet.py).
+    name: Unsafe ratchet (cells/ allowlist must not grow)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2026-05-01
-          components: rust-src
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-
-      - name: Install cargo-geiger
-        run: cargo install --locked cargo-geiger
-
-      - name: Run geiger scan
-        run: >
-          cargo geiger
-          --workspace
-          --output-format json
-          --target riscv64gc-unknown-none-elf
-          -Z build-std=core,alloc
-          > geiger.json 2>&1 || true
-
-      - name: Assert no unsafe in cells/
-        run: |
-          python3 - << 'PYEOF'
-          import json, sys
-          with open("geiger.json") as f:
-              data = json.load(f)
-          violations = []
-          for pkg in data.get("packages", []):
-              src = pkg.get("package", {}).get("manifest_path", "")
-              if "cells/" in src:
-                  used = pkg.get("unsafety", {}).get("used", {})
-                  if used.get("unsafe_used", 0) > 0:
-                      violations.append(src)
-          if violations:
-              print("FAIL: unsafe code found in cells/:")
-              for v in violations:
-                  print(f"  {v}")
-              sys.exit(1)
-          print("PASS: no unsafe in cells/")
-          PYEOF
-
-      - name: Upload geiger report
-        uses: actions/upload-artifact@v4
-        with:
-          name: geiger-report
-          path: geiger.json
+      - name: Check unsafe stays inside the audited allowlist
+        run: python3 scripts/check-cells-unsafe-ratchet.py

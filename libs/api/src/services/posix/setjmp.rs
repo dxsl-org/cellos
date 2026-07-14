@@ -26,6 +26,12 @@ pub struct JmpBuf(pub [u64; JMP_BUF_WORDS]);
 // RISC-V 64 (rv64gc)
 // ---------------------------------------------------------------------------
 
+/// C `setjmp` — saves callee-saved registers into `env`, returns 0.
+///
+/// # Safety
+/// `env` must point to a valid, writable [`JmpBuf`] that outlives every
+/// matching `longjmp`. Standard C setjmp/longjmp rules apply: the calling
+/// frame must still be live when `longjmp` restores it.
 #[cfg(target_arch = "riscv64")]
 #[unsafe(naked)]
 #[no_mangle]
@@ -59,6 +65,11 @@ pub unsafe extern "C" fn setjmp(env: *mut JmpBuf) -> i32 {
     )
 }
 
+/// C `longjmp` — restores the register state saved by `setjmp(env)`.
+///
+/// # Safety
+/// `env` must have been filled by a prior `setjmp` whose calling frame is
+/// still live; jumping into a returned frame is undefined behaviour.
 #[cfg(target_arch = "riscv64")]
 #[unsafe(naked)]
 #[no_mangle]

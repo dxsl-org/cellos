@@ -78,16 +78,15 @@ pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> ViResult<()> {
     // Read file into memory
     let mut data = Vec::new();
-    if let Err(_) = file.read_to_end(&mut data) {
+    if file.read_to_end(&mut data).is_err() {
         ostd::io::println("exec: failed to read file.");
         return Ok(());
     }
 
-    if data.len() >= 4 {
-        if data[0] != 0x7F || data[1] != 0x45 || data[2] != 0x4C || data[3] != 0x46 {
-            ostd::io::println("exec: Bad ELF magic.");
-            return Ok(());
-        }
+    if data.len() >= 4 && (data[0] != 0x7F || data[1] != 0x45 || data[2] != 0x4C || data[3] != 0x46)
+    {
+        ostd::io::println("exec: Bad ELF magic.");
+        return Ok(());
     }
 
     ostd::io::print("exec: spawning (");
@@ -462,7 +461,7 @@ pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     };
     let mut tid: usize = 0;
     for ch in tid_str.bytes() {
-        if !(b'0'..=b'9').contains(&ch) {
+        if !ch.is_ascii_digit() {
             crate::executor::shell_println("kill: invalid tid");
             return Ok(());
         }

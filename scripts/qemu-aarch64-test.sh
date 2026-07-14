@@ -44,7 +44,6 @@ QEMU_ARGS=(
     -netdev user,id=net0
     -device virtio-net-device,netdev=net0
     -no-reboot
-    -serial stdio
 )
 # Add VirtIO RNG only when /dev/random is available (Linux CI).
 # On Windows QEMU 10, rng-random is invalid; skip it — boot tests don't need RNG.

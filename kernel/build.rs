@@ -41,13 +41,22 @@ fn main() {
     let arch_embedded = PathBuf::from(format!("src/embedded-{}", target_arch));
     println!("cargo:rerun-if-env-changed=EMBEDDED_OVERRIDE");
     let embedded_src = if let Ok(ov) = std::env::var("EMBEDDED_OVERRIDE") {
+        // Build scripts run with CWD = kernel/, but callers (CI scripts,
+        // run.ps1) usually pass a workspace-root-relative path like
+        // "kernel/src/embedded-test-hooks" — try both. A misresolved override
+        // must FAIL the build: the old silent fallback shipped kernels with an
+        // empty VIFS1 stub that booted to "bootstrap not in VIFS1".
         let p = PathBuf::from(&ov);
+        let from_workspace = PathBuf::from("..").join(&p);
         if p.exists() {
             p
-        } else if arch_embedded.exists() {
-            arch_embedded
+        } else if from_workspace.exists() {
+            from_workspace
         } else {
-            PathBuf::from("src/embedded")
+            panic!(
+                "EMBEDDED_OVERRIDE={ov} does not exist (checked relative to \
+                 kernel/ and the workspace root)"
+            );
         }
     } else if arch_embedded.exists() {
         arch_embedded
@@ -62,6 +71,20 @@ fn main() {
     for cell in &cells {
         let src = embedded_src.join(cell);
         if !src.exists() {
+            // kernel_fs.img is a build artifact (gitignored: 4-36 MB) that
+            // gen_disk.ps1 / build-*-ci.sh assemble before a bootable build.
+            // For compile-only contexts (clippy, CI lint) emit an empty stub so
+            // include_bytes! in ramdisk.rs resolves — a kernel built from the
+            // stub compiles but has no VIFS1, so it must never be booted.
+            if *cell == "kernel_fs.img" {
+                fs::write(embedded_out.join(cell), []).expect("write kernel_fs.img stub");
+                println!(
+                    "cargo:warning={} missing — embedded an EMPTY VIFS1 stub. \
+                     This kernel is compile-only; assemble the real image \
+                     (gen_disk.ps1 / scripts/build-*-ci.sh) before booting.",
+                    src.display()
+                );
+            }
             continue;
         }
         let dst = embedded_out.join(cell);

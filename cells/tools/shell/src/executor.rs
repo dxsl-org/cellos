@@ -151,7 +151,7 @@ pub fn define_function(name: &str, body: &str) {
     let store = unsafe { &mut *core::ptr::addr_of_mut!(FUNS) };
     // Update existing.
     for slot in store.iter_mut() {
-        if slot.0 && &slot.1[..nlen] == &nb[..nlen] && slot.1[nlen] == 0 {
+        if slot.0 && slot.1[..nlen] == nb[..nlen] && slot.1[nlen] == 0 {
             slot.2[..blen].copy_from_slice(&bb[..blen]);
             slot.2[blen] = 0;
             return;
@@ -178,7 +178,7 @@ fn get_function(name: &str) -> Option<&'static str> {
     // path expression (satisfies `clippy::static_mut_refs`); single shell task.
     let store = unsafe { &*core::ptr::addr_of!(FUNS) };
     for slot in store.iter() {
-        if slot.0 && &slot.1[..nlen] == &nb[..nlen] && slot.1[nlen] == 0 {
+        if slot.0 && slot.1[..nlen] == nb[..nlen] && slot.1[nlen] == 0 {
             let blen = slot.2.iter().position(|&b| b == 0).unwrap_or(480);
             return core::str::from_utf8(&slot.2[..blen]).ok();
         }
@@ -914,7 +914,7 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
                 .and_then(|s| {
                     let mut n = 0i32;
                     for ch in s.bytes() {
-                        if !(b'0'..=b'9').contains(&ch) {
+                        if !ch.is_ascii_digit() {
                             return None;
                         }
                         n = n.saturating_mul(10).saturating_add((ch - b'0') as i32);

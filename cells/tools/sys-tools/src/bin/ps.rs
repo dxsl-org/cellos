@@ -11,8 +11,7 @@ pub fn main() {
         Ok(count) => {
             ostd::io::println("PID   STATE     NAME");
             ostd::io::println("------------------------");
-            for i in 0..count {
-                let info = &buf[i];
+            for info in buf.iter().take(count) {
                 let name = core::str::from_utf8(&info.name)
                     .unwrap_or("?")
                     .trim_matches('\0');

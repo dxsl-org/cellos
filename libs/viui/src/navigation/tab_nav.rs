@@ -29,6 +29,12 @@ pub struct TabNavigator {
     bounds: Cell<Rect>,
 }
 
+impl Default for TabNavigator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TabNavigator {
     pub fn new() -> Self {
         Self {

@@ -17,6 +17,8 @@ pub struct PathRule {
     /// The path prefix this rule applies to (e.g., `/data/`, `/bin/`).
     prefix: &'static str,
     /// True if any cell may read from this prefix.
+    #[allow(dead_code)]
+    // reason: read-gating lands with the per-cell ACL phase; field is part of the stable rule shape
     pub allow_read_all: bool,
     /// True if any cell may write to this prefix.
     /// False means only cells in `write_allowlist` (or nobody if the list is empty).
@@ -80,6 +82,7 @@ impl AccessTable {
     /// Check whether `cell` may read from `path`.
     ///
     /// Returns `false` if no matching rule is found (deny by default).
+    #[allow(dead_code)] // reason: read-gating lands with the per-cell ACL phase; kept beside can_write for API symmetry
     pub fn can_read(&self, _cell: CellId, path: &str) -> bool {
         for rule in self.rules {
             if path.starts_with(rule.prefix) {

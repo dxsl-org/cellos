@@ -97,7 +97,7 @@ impl ViNode for TouchArea {
         };
 
         let handle_end = |pos: Point| -> bool {
-            if let Some(start) = self.press_pos.get().take() {
+            if let Some(start) = self.press_pos.get() {
                 self.press_pos.set(None);
                 let dx = pos.x - start.x;
                 let dy = pos.y - start.y;

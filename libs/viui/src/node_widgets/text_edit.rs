@@ -26,12 +26,15 @@ const PADDING: f32 = 4.0;
 ///
 /// Cursor position is a byte offset into the UTF-8 string. Navigation
 /// (`Left`/`Right`/`Home`/`End`) advances by full Unicode scalar values.
+/// Callback invoked with the submitted line on Enter.
+type SubmitHandler = Box<dyn Fn(&str)>;
+
 pub struct TextEdit {
     /// Current text content.
     pub text: Signal<String>,
     /// Hint shown when the field is empty and unfocused.
     pub placeholder: Signal<String>,
-    on_submit: Option<Box<dyn Fn(&str)>>,
+    on_submit: Option<SubmitHandler>,
     /// Byte offset of the cursor in `text`.
     cursor_pos: Cell<usize>,
     focused: Cell<bool>,

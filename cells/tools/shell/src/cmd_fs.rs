@@ -51,15 +51,15 @@ fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
     // exchange) and surfaces failure as a typed IpcError rather than emptiness.
     let mut send_buf = [0u8; 512];
     let mut reply = [0u8; 64];
-    match ostd::ipc::service_call_typed::<_, api::ipc::VfsResponse>(
-        vfs_endpoint(),
-        req,
-        &mut send_buf,
-        &mut reply,
-    ) {
-        Ok(api::ipc::VfsResponse::Ok) => return true,
-        _ => return false,
-    }
+    matches!(
+        ostd::ipc::service_call_typed::<_, api::ipc::VfsResponse>(
+            vfs_endpoint(),
+            req,
+            &mut send_buf,
+            &mut reply,
+        ),
+        Ok(api::ipc::VfsResponse::Ok)
+    )
 }
 
 // ─── wc ───────────────────────────────────────────────────────────────────────
@@ -333,6 +333,7 @@ fn grep_recursive(
 
 const GREP_MAX_DEPTH: usize = 16;
 
+#[allow(clippy::too_many_arguments)] // reason: recursive walker threads all grep flags explicitly; an options struct is not worth it for a shell builtin
 fn grep_recursive_inner(
     dir: &str,
     pattern: &str,
@@ -359,41 +360,38 @@ fn grep_recursive_inner(
         ostd::syscall::SyscallResult::Ok(_) => &reply,
         _ => return,
     };
-    match api::ipc::decode::<VfsResponse>(raw) {
-        Ok(VfsResponse::Data(entries)) => {
-            let text = core::str::from_utf8(entries).unwrap_or("");
-            for entry in text.lines() {
-                let (kind, name) = if entry.starts_with("d:") {
-                    ("d", &entry[2..])
-                } else if entry.starts_with("f:") {
-                    ("f", &entry[2..])
-                } else {
-                    continue;
-                };
-                let mut full = alloc::string::String::from(dir);
-                if !full.ends_with('/') {
-                    full.push('/');
+    if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(raw) {
+        let text = core::str::from_utf8(entries).unwrap_or("");
+        for entry in text.lines() {
+            let (kind, name) = if let Some(rest) = entry.strip_prefix("d:") {
+                ("d", rest)
+            } else if let Some(rest) = entry.strip_prefix("f:") {
+                ("f", rest)
+            } else {
+                continue;
+            };
+            let mut full = alloc::string::String::from(dir);
+            if !full.ends_with('/') {
+                full.push('/');
+            }
+            full.push_str(name);
+            if kind == "f" {
+                if let Ok(data) = read_file_bytes(&full) {
+                    grep_data(&data, pattern, ci, invert, line_numbers, count_only, &full);
                 }
-                full.push_str(name);
-                if kind == "f" {
-                    if let Ok(data) = read_file_bytes(&full) {
-                        grep_data(&data, pattern, ci, invert, line_numbers, count_only, &full);
-                    }
-                } else {
-                    grep_recursive_inner(
-                        &full,
-                        pattern,
-                        ci,
-                        invert,
-                        line_numbers,
-                        count_only,
-                        depth + 1,
-                        vfs_tid,
-                    );
-                }
+            } else {
+                grep_recursive_inner(
+                    &full,
+                    pattern,
+                    ci,
+                    invert,
+                    line_numbers,
+                    count_only,
+                    depth + 1,
+                    vfs_tid,
+                );
             }
         }
-        _ => {}
     }
 }
 
@@ -408,7 +406,7 @@ fn contains_insensitive(haystack: &str, needle: &str) -> bool {
         if hb[i..i + hn]
             .iter()
             .zip(nb)
-            .all(|(h, n)| h.to_ascii_lowercase() == n.to_ascii_lowercase())
+            .all(|(h, n)| h.eq_ignore_ascii_case(n))
         {
             return true;
         }
@@ -711,35 +709,32 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
         ostd::syscall::SyscallResult::Ok(_) => &reply,
         _ => return,
     };
-    match api::ipc::decode::<VfsResponse>(raw) {
-        Ok(VfsResponse::Data(entries)) => {
-            let text = core::str::from_utf8(entries).unwrap_or("");
-            for entry in text.lines() {
-                let (kind, name) = if entry.starts_with("d:") {
-                    ("d", &entry[2..])
-                } else if entry.starts_with("f:") {
-                    ("f", &entry[2..])
-                } else {
-                    continue;
-                };
-                // Build the full path without heap format for depth-zero dirs.
-                let mut full = alloc::string::String::from(dir);
-                if !full.ends_with('/') {
-                    full.push('/');
-                }
-                full.push_str(name);
+    if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(raw) {
+        let text = core::str::from_utf8(entries).unwrap_or("");
+        for entry in text.lines() {
+            let (kind, name) = if let Some(rest) = entry.strip_prefix("d:") {
+                ("d", rest)
+            } else if let Some(rest) = entry.strip_prefix("f:") {
+                ("f", rest)
+            } else {
+                continue;
+            };
+            // Build the full path without heap format for depth-zero dirs.
+            let mut full = alloc::string::String::from(dir);
+            if !full.ends_with('/') {
+                full.push('/');
+            }
+            full.push_str(name);
 
-                if kind == "f" {
-                    let matches = pattern.map(|p| name.contains(p)).unwrap_or(true);
-                    if matches {
-                        crate::executor::shell_println(&full);
-                    }
-                } else {
-                    find_recursive(&full, pattern, depth + 1, vfs_tid);
+            if kind == "f" {
+                let matches = pattern.map(|p| name.contains(p)).unwrap_or(true);
+                if matches {
+                    crate::executor::shell_println(&full);
                 }
+            } else {
+                find_recursive(&full, pattern, depth + 1, vfs_tid);
             }
         }
-        _ => {}
     }
 }
 
@@ -990,7 +985,6 @@ pub fn cmd_sed<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     Ok(())
 }
 
-/// Replace the first occurrence of `pat` in `s` with `rep`.
 // ─── awk ─────────────────────────────────────────────────────────────────────
 
 /// `awk [-F sep] [/pattern/] [col,...] [file]` — field extractor and line filter.
@@ -1001,8 +995,8 @@ pub fn cmd_sed<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 ///
 /// - `-F sep`      — single-character field separator (default: whitespace).
 /// - `/pattern/`   — print only lines containing the literal pattern.
-/// - `col,...`     — comma-separated 1-based column indices to print (0 = full line).
-///                   Omit to print the entire matching line.
+/// - `col,...`     — comma-separated 1-based column indices to print (0 = full line;
+///   omit to print the entire matching line).
 /// - `file`        — path to read; reads `shell_stdin()` when absent.
 ///
 /// Examples:
@@ -1096,8 +1090,7 @@ pub fn cmd_awk<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
                 line.split_whitespace().collect()
             };
             let mut first_col = true;
-            for i in 0..ncols {
-                let col = cols[i];
+            for &col in cols.iter().take(ncols) {
                 let val: &str = if col == 0 {
                     line
                 } else {

@@ -37,30 +37,27 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 return;
             }
 
-            match data[0] {
-                OP_HOTSWAP => {
-                    let Some(req) = HotswapRequest::parse(data) else {
-                        let _ = sys_send(sender_tid, &encode_status(0, 0xFF));
-                        return;
-                    };
+            if data[0] == OP_HOTSWAP {
+                let Some(req) = HotswapRequest::parse(data) else {
+                    let _ = sys_send(sender_tid, &encode_status(0, 0xFF));
+                    return;
+                };
 
-                    let service_id = service_id_for_name(req.service_name());
-                    if service_id == 0 {
-                        let _ = sys_send(sender_tid, &encode_status(0, 0xFE));
-                        return;
+                let service_id = service_id_for_name(req.service_name());
+                if service_id == 0 {
+                    let _ = sys_send(sender_tid, &encode_status(0, 0xFE));
+                    return;
+                }
+
+                match hotswap::hotswap(service_id, req.elf_path()) {
+                    Ok(new_tid) => {
+                        let _ = sys_send(sender_tid, &encode_status(6, 0x00));
+                        let _ = new_tid;
                     }
-
-                    match hotswap::hotswap(service_id, req.elf_path()) {
-                        Ok(new_tid) => {
-                            let _ = sys_send(sender_tid, &encode_status(6, 0x00));
-                            let _ = new_tid;
-                        }
-                        Err(e) => {
-                            let _ = sys_send(sender_tid, &encode_status(0xFF, e.as_code()));
-                        }
+                    Err(e) => {
+                        let _ = sys_send(sender_tid, &encode_status(0xFF, e.as_code()));
                     }
                 }
-                _ => {}
             }
         }
 

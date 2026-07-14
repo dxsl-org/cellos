@@ -10,14 +10,12 @@ fn main() {
     let target = std::env::var("TARGET").unwrap_or_default();
     let manifest = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
-    if target.contains("x86_64") || target.contains("aarch64") {
-        if !has_elf_compiler(&target) {
-            println!("cargo:rustc-cfg=lua_c_unavailable");
-            println!("cargo:warning=Tetris-Lua: no ELF-capable C compiler found for {target}.");
-            println!("cargo:warning=  Install LLVM/Clang and ensure `clang --target={target}-elf` is in PATH.");
-            cell_build::emit_linker_script();
-            return;
-        }
+    if (target.contains("x86_64") || target.contains("aarch64")) && !has_elf_compiler(&target) {
+        println!("cargo:rustc-cfg=lua_c_unavailable");
+        println!("cargo:warning=Tetris-Lua: no ELF-capable C compiler found for {target}.");
+        println!("cargo:warning=  Install LLVM/Clang and ensure `clang --target={target}-elf` is in PATH.");
+        cell_build::emit_linker_script();
+        return;
     }
 
     compile_lua(&target, &manifest);
@@ -158,7 +156,7 @@ fn configure_elf_compiler(build: &mut cc::Build, target: &str) {
             } else {
                 "x86_64-unknown-none-elf"
             };
-            build.flag(&format!("--target={triple}"));
+            build.flag(format!("--target={triple}"));
             return;
         }
     }

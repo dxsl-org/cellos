@@ -125,7 +125,7 @@ pub fn main() {
 
     // Print summary via printf (tests the stdio shim)
     unsafe {
-        printf(b"C-MATH-SMOKE: %d/%d pass\n\0".as_ptr(), pass, total);
+        printf(c"C-MATH-SMOKE: %d/%d pass\n".as_ptr().cast(), pass, total);
     }
 
     // Test setjmp/longjmp

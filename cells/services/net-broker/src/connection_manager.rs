@@ -101,6 +101,7 @@ impl<'a> ConnectionManager<'a> {
         None
     }
 
+    #[allow(clippy::too_many_arguments)] // reason: Noise handshake needs the full key/identity set; a params struct is planned with the routing wiring
     fn try_direct_connect(
         &mut self,
         net: &mut NetRef,

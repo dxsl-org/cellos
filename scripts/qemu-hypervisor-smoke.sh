@@ -49,7 +49,6 @@ QEMU_ARGS=(
     -netdev user,id=net0
     -device virtio-net-device,netdev=net0
     -no-reboot
-    -serial stdio
 )
 
 timeout "$BOOT_WINDOW" qemu-system-aarch64 "${QEMU_ARGS[@]}" \

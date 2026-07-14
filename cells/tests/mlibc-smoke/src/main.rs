@@ -60,23 +60,23 @@ pub fn main() {
             *ptr = 0xAB;
             if *ptr == 0xAB {
                 pass += 1;
-                printf(b"MLIBC-SMOKE: malloc OK\n\0".as_ptr());
+                printf(c"MLIBC-SMOKE: malloc OK\n".as_ptr().cast());
             } else {
-                printf(b"MLIBC-SMOKE: malloc FAIL (bad read)\n\0".as_ptr());
+                printf(c"MLIBC-SMOKE: malloc FAIL (bad read)\n".as_ptr().cast());
             }
             free(ptr);
         } else {
-            printf(b"MLIBC-SMOKE: malloc FAIL (null)\n\0".as_ptr());
+            printf(c"MLIBC-SMOKE: malloc FAIL (null)\n".as_ptr().cast());
         }
     }
 
     // Test 2: printf via mlibc's Grisu3 formatter → sys_write sysdep
     unsafe {
-        let n = printf(b"MLIBC-SMOKE: printf OK (val=%d)\n\0".as_ptr(), 42i32);
+        let n = printf(c"MLIBC-SMOKE: printf OK (val=%d)\n".as_ptr().cast(), 42i32);
         if n > 0 {
             pass += 1;
         } else {
-            printf(b"MLIBC-SMOKE: printf FAIL\n\0".as_ptr());
+            printf(c"MLIBC-SMOKE: printf FAIL\n".as_ptr().cast());
         }
     }
 
@@ -90,10 +90,15 @@ pub fn main() {
         // Kernel always returns a positive tick count; tv_sec or tv_nsec must be > 0
         if ret == 0 && (ts.tv_sec > 0 || ts.tv_nsec > 0) {
             pass += 1;
-            printf(b"MLIBC-SMOKE: clock OK (sec=%lld)\n\0".as_ptr(), ts.tv_sec);
+            printf(
+                c"MLIBC-SMOKE: clock OK (sec=%lld)\n".as_ptr().cast(),
+                ts.tv_sec,
+            );
         } else {
             printf(
-                b"MLIBC-SMOKE: clock FAIL (ret=%d sec=%lld)\n\0".as_ptr(),
+                c"MLIBC-SMOKE: clock FAIL (ret=%d sec=%lld)\n"
+                    .as_ptr()
+                    .cast(),
                 ret,
                 ts.tv_sec,
             );
@@ -101,7 +106,7 @@ pub fn main() {
     }
 
     unsafe {
-        printf(b"MLIBC-SMOKE: %d/%d pass\n\0".as_ptr(), pass, total);
+        printf(c"MLIBC-SMOKE: %d/%d pass\n".as_ptr().cast(), pass, total);
     }
 
     sys_exit(if pass == total { 0 } else { 1 } as usize);

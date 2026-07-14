@@ -37,7 +37,7 @@ impl Iterator for ReadDir {
 
 impl Drop for ReadDir {
     fn drop(&mut self) {
-        let _ = syscall::sys_close(self.fd);
+        syscall::sys_close(self.fd);
     }
 }
 
@@ -362,9 +362,8 @@ fn grant_read(cap_id: u64, buf: &mut [u8], vfs_tid: usize) -> ViResult<usize> {
         grant: grant_id,
     };
     let mut resp_buf = [0u8; 512];
-    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).map_err(|e| {
+    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).inspect_err(|_e| {
         syscall::sys_grant_free(grant_id);
-        e
     })?;
 
     let bytes = match resp {
@@ -412,9 +411,8 @@ fn grant_write(cap_id: u64, data: &[u8], vfs_tid: usize) -> ViResult<usize> {
     };
     let mut resp_buf = [0u8; 512];
     // ipc_call blocks until VFS replies — F14 guarantees VFS drained the grant.
-    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).map_err(|e| {
+    let resp = vfs_call(vfs_tid, &req, &mut resp_buf).inspect_err(|_e| {
         syscall::sys_grant_free(grant_id);
-        e
     })?;
 
     syscall::sys_grant_free(grant_id);

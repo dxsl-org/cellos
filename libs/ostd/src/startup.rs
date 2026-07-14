@@ -13,6 +13,11 @@ use core::panic::PanicInfo;
 #[used]
 static _KEEP_START: unsafe extern "C" fn() -> ! = _start;
 
+/// Cell entry point — sets up gp/sp and jumps into the ostd runtime.
+///
+/// # Safety
+/// Never call from Rust: the kernel loader jumps here exactly once on a fresh
+/// stack; the naked asm assumes registers per the cell spawn ABI.
 #[no_mangle]
 #[unsafe(naked)]
 #[link_section = ".text.boot"]
