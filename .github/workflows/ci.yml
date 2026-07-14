@@ -136,11 +136,24 @@ jobs:
         if: matrix.short == 'rv64'
         run: bash scripts/build-boot-ramdisk-ci.sh
 
-      - name: Build (release)
-        # relocation-model / code-model / target-features come from
-        # .cargo/config.toml per-target rustflags — do NOT set RUSTFLAGS here,
-        # the env var would REPLACE those flags and break the link.
+      - name: Build kernel (release)
+        # Kernel codegen flags come from the workflow-level CARGO_TARGET_*
+        # mirrors of .cargo/config.toml — do NOT set RUSTFLAGS here, the env
+        # var would REPLACE those flags and break the link.
+        run: >
+          cargo build
+          --release
+          -p vicell-kernel
+          --target ${{ matrix.target }}
+          -Z build-std=core,alloc
+
+      - name: Build cells + libs (release)
         env:
+          # x86_64 CELLS use relocation-model=pic (build-x86_64-cells.ps1);
+          # only the kernel is static/code-model=kernel. This step-level var
+          # overrides the workflow-level kernel flags — harmless for the other
+          # matrix rows, which never build the x86_64 target.
+          CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
           CC_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && matrix.cc_bin || '' }}
           # littlefs2-sys also runs bindgen (for the LFS C struct layout), which
           # uses libclang independently of the CC_* override above and derives
@@ -150,15 +163,14 @@ jobs:
           # (a header-only binding pass doesn't need the bare-metal ABI).
           BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && '--target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu' || '' }}
           BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && '--target=x86_64-linux-gnu' || '' }}
-          # littlefs2-sys's C shim needs freestanding flags + LFS_NO_INTRINSICS,
-          # plus the vendored freestanding headers: Ubuntu's bare-elf cross gcc
-          # ships no libc headers and littlefs includes <string.h>.
+          # littlefs2-sys's C shim must build freestanding on every target:
+          # hosted compilers default to stack-protector / libc builtins
+          # (__stack_chk_fail, __popcountdi2) that a bare-metal link cannot
+          # resolve, and bare-elf cross gccs ship no <string.h> (vendored
+          # freestanding headers fill that). Mirrors scripts/build-*-cells.ps1.
           CFLAGS_riscv64gc_unknown_none_elf: ${{ matrix.short == 'rv64' && format('-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I{0}/third_party/freestanding-include', github.workspace) || '' }}
           CC_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && matrix.cc_bin || '' }}
-          # x86_64 littlefs must be freestanding too: the host cc defaults to
-          # stack-protector + libc builtins (__stack_chk_fail / __popcountdi2)
-          # that a bare-metal link cannot resolve. Mirrors
-          # scripts/build-x86_64-cells.ps1.
+          CFLAGS_aarch64_unknown_none_softfloat: ${{ matrix.short == 'aarch64' && format('-ffreestanding -fno-stack-protector -mgeneral-regs-only -DLFS_NO_INTRINSICS -I{0}/third_party/freestanding-include', github.workspace) || '' }}
           CC_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && matrix.cc_bin || '' }}
           CFLAGS_x86_64_unknown_none: ${{ matrix.short == 'x86_64' && format('-ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I{0}/third_party/freestanding-include', github.workspace) || '' }}
         # --exclude app-mlibc-smoke: links a pre-built mlibc libc.a
@@ -173,6 +185,7 @@ jobs:
           cargo build
           --release
           --workspace
+          --exclude vicell-kernel
           --exclude app-mlibc-smoke
           --exclude doom
           --exclude tetris-c
@@ -658,6 +671,10 @@ jobs:
 
       - name: Build cells + kernel + disk images (gen_disk)
         env:
+          # gen_disk's cargo builds pass no --target: locally the gitignored
+          # .cargo/config.toml supplies the riscv64 default; without this the
+          # cells silently build for the HOST and fail to link.
+          CARGO_BUILD_TARGET: riscv64gc-unknown-none-elf
           CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
           # Ubuntu's bare-elf cross gcc ships no libc headers; littlefs (via
           # service-vfs) includes <string.h> — vendored freestanding set.

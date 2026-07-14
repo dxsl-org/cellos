@@ -41,13 +41,22 @@ fn main() {
     let arch_embedded = PathBuf::from(format!("src/embedded-{}", target_arch));
     println!("cargo:rerun-if-env-changed=EMBEDDED_OVERRIDE");
     let embedded_src = if let Ok(ov) = std::env::var("EMBEDDED_OVERRIDE") {
+        // Build scripts run with CWD = kernel/, but callers (CI scripts,
+        // run.ps1) usually pass a workspace-root-relative path like
+        // "kernel/src/embedded-test-hooks" — try both. A misresolved override
+        // must FAIL the build: the old silent fallback shipped kernels with an
+        // empty VIFS1 stub that booted to "bootstrap not in VIFS1".
         let p = PathBuf::from(&ov);
+        let from_workspace = PathBuf::from("..").join(&p);
         if p.exists() {
             p
-        } else if arch_embedded.exists() {
-            arch_embedded
+        } else if from_workspace.exists() {
+            from_workspace
         } else {
-            PathBuf::from("src/embedded")
+            panic!(
+                "EMBEDDED_OVERRIDE={ov} does not exist (checked relative to \
+                 kernel/ and the workspace root)"
+            );
         }
     } else if arch_embedded.exists() {
         arch_embedded
