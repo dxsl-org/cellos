@@ -296,9 +296,12 @@ jobs:
           cache-on-failure: true
           key: aarch64-boot
 
-      - name: Install QEMU and libclang
+      - name: Install QEMU, libclang and aarch64 sysroot
         timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev
+        # gcc-aarch64-linux-gnu supplies /usr/aarch64-linux-gnu — the sysroot
+        # bindgen needs for aarch64 struct layouts (host glibc headers 404 on
+        # bits/libc-header-start.h under --target=aarch64-linux-gnu).
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
 
       - name: Build aarch64 cells
         # clang cross-compiles the littlefs C core for the bare-metal target
@@ -307,7 +310,7 @@ jobs:
         env:
           CC_aarch64_unknown_none_softfloat: clang
           CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
-          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu
+          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
         run: >
           cargo build --release
           --target aarch64-unknown-none-softfloat
@@ -365,9 +368,9 @@ jobs:
           cache-on-failure: true
           key: hypervisor-smoke
 
-      - name: Install QEMU
+      - name: Install QEMU and aarch64 sysroot
         timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
 
       - name: Cache Alpine artifacts
         uses: actions/cache@v4
@@ -384,7 +387,7 @@ jobs:
         env:
           CC_aarch64_unknown_none_softfloat: clang
           CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
-          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu
+          BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
         run: >
           cargo build --release
           --target aarch64-unknown-none-softfloat
@@ -467,6 +470,41 @@ jobs:
       - name: Install QEMU and xorriso
         timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-x86 xorriso
+
+      - name: Build x86_64 cells
+        # Cells use relocation-model=pic (mirrors build-x86_64-cells.ps1);
+        # freestanding CFLAGS keep host-cc builtins out of the bare-metal link.
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_NONE_RUSTFLAGS: "-C relocation-model=pic"
+          CC_x86_64_unknown_none: cc
+          CFLAGS_x86_64_unknown_none: -ffreestanding -fno-stack-protector -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+          BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none: --target=x86_64-linux-gnu
+        run: >
+          cargo build --release
+          --target x86_64-unknown-none
+          -Z build-std=core,alloc
+          -p app-init -p app-shell -p service-vfs -p service-config
+          -p service-platform -p driver-nvme -p driver-e1000 -p app-sys-tools
+
+      # kernel_fs.img is a gitignored build artifact; the committed copy goes
+      # stale against the kernel ABI — assemble a fresh one (mirrors
+      # scripts/build-x86_64-cells.ps1's image layout).
+      - name: Assemble x86_64 kernel_fs.img
+        run: |
+          REL=target/x86_64-unknown-none/release
+          python3 tools/mkfat32.py \
+            kernel/src/embedded-x86_64/kernel_fs.img \
+            "$REL/app-shell"      /bin/shell \
+            "$REL/service-vfs"    /bin/vfs \
+            "$REL/service-config" /bin/config \
+            "$REL/platform"       /bin/platform \
+            "$REL/driver-nvme"    /bin/nvme \
+            "$REL/driver-e1000"   /bin/e1000 \
+            "$REL/ls"             /bin/ls \
+            "$REL/cat"            /bin/cat \
+            "$REL/echo"           /bin/echo \
+            "$REL/ps"             /bin/ps
+          cp "$REL/app-init" kernel/src/embedded-x86_64/init
 
       - name: Build x86_64 kernel
         run: >
@@ -708,13 +746,18 @@ jobs:
         # QEMU 8.2, so these are CI-environment gaps, tracked for follow-up):
         #   input_keyboard_e2e        — QEMU produced no serial at all in 40s
         #                               (QMP VirtIO-keyboard path differs on 8.2)
-        #   network_httpd_serves_file — timing flake class (dynamic_content
-        #                               variant passed in the same run)
         #   posix_shim_getentropy / posix_shim_net — no output within 10s
         #                               (VirtIO-RNG / shim spawn path on 8.2)
+        # (network_httpd_serves_file was also pulled in that pass but restored
+        # once --test-threads=1 removed the TCG-contention flake class.)
+        # --test-threads=1: each test boots its own TCG QEMU (CPU-bound); at
+        # threads=2 on the 4-vCPU runner exactly one network test times out
+        # per run from contention (listen_accept / serves_file / send_recv
+        # rotated across runs). Serial execution trades ~3 min of wall time
+        # for determinism.
         run: |
           cd tests/integration
-          cargo test --test boot -- --test-threads=2 \
+          cargo test --test boot -- --test-threads=1 \
             boots_to_shell_prompt fat_filesystem_mounts shell_executes_echo \
             hot_migration_state_transfer_works gpu_framebuffer_initialises \
             network_dhcp_acquires_ip network_tcp_send_recv network_curl_http_get \
@@ -723,7 +766,7 @@ jobs:
             vfs_write_large_content vfs_fat16_unlink vfs_fat16_subdir \
             block_io_denied_non_vfs vfs_fat16_subdir_persistence vfs_fat16_recursive_rmdir \
             vfs_fat16_append \
-            network_httpd_dynamic_content \
+            network_httpd_serves_file network_httpd_dynamic_content \
             shell_while_loop shell_function_positional_args shell_case_statement \
             shell_echo_e shell_redirect_append network_wget_downloads_to_vfs \
             mqtt_publish mqtt_subscribe shell_test_builtin shell_function_define_and_call \

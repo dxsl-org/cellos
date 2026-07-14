@@ -239,6 +239,7 @@ pub extern "C" fn main() {
     // Auto-spawning floods the terminal for ~270 s and obscures the shell prompt.
     let _ = sys_spawn_from_path("/bin/silo-test"); // Security Silo end-to-end tests
     let _ = sys_spawn_from_path("/bin/vfs-test"); // VFS integration test suite
+    let _ = sys_spawn_from_path("/bin/srv-test"); // RedoxFS /srv integration suite
 
     // ── Demos: all run on-demand from the shell ───────────────────────────────
     // Philosophy: demos should not pollute boot output or steal focus.
