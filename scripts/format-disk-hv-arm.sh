@@ -23,7 +23,9 @@ declare -A CELLS=(
     [service-net]=net
     [service-input]=input
     [service-compositor]=compositor
-    [service-hypervisor]=hypervisor
+    # The service-hypervisor package names its [[bin]] "hypervisor" — key on the
+    # artifact name, not the package name, or the cell is silently skipped.
+    [hypervisor]=hypervisor
 )
 
 MKFAT_ARGS=()
@@ -37,6 +39,13 @@ for src_name in "${!CELLS[@]}"; do
         echo "  WARNING: $src not found, skipping /bin/$dst_name"
     fi
 done
+
+# The entire disk exists to carry the hypervisor cell — a silent skip here
+# produces a "successful" build whose smoke test can never pass.
+if [[ ! -f "$BIN_DIR/hypervisor" ]]; then
+    echo "ERROR: $BIN_DIR/hypervisor not built — /bin/hypervisor would be missing" >&2
+    exit 1
+fi
 
 HOSTNAME_TMP=$(mktemp)
 echo "ViCell-HV" > "$HOSTNAME_TMP"

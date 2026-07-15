@@ -61,9 +61,11 @@ pub unsafe fn el2_hcr_init() {
 /// TCR_EL2 non-VHE encoding: bit31 and bit23 are RES1 (ARMv8.0 requirement).
 /// MAIR_EL2 mirrors the EL1 layout (index0=Device, index1=Normal-WB).
 ///
-/// A UART sentinel byte `'M'` (0x4D) is written to PL011 at 0x09000000 just
-/// before `SCTLR_EL2.M` is set, confirming the instruction stream reached that
-/// point even if the MMU-on fault prevents any subsequent UART traffic.
+/// UART sentinel bytes are written to PL011 at 0x09000000: `'M'` (0x4D) just
+/// before `SCTLR_EL2.M` is set and `'N'` (0x4E) immediately after. "M" alone
+/// on the console means the very first post-MMU instruction fetch aborted —
+/// check that no PTE in the active table sets bit 54 on kernel pages (it is
+/// UXN at EL1 but the ONLY XN bit in the EL2 non-VHE regime).
 ///
 /// # Safety
 /// - `ttbr0_phys` must identity-cover the current PC and all page-table frames.
@@ -110,6 +112,9 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
             "msr sctlr_el2, {scr}",
             "dsb sy",
             "isb",
+            // Sentinel 'N' after MMU-on — proves the first post-MMU fetch succeeded.
+            "mov {b}, #0x4E",      // ASCII 'N'
+            "strb {b:w}, [{uart}]",
             mair  = in(reg) mair,
             tcr   = in(reg) tcr,
             ttbr0 = in(reg) ttbr0_phys,
@@ -315,16 +320,6 @@ vt_sync_el2_cur:
     // ── Lower-EL sync: Cell SVC or guest EL1 trap ────────────────────────────
     .balign 4
 vt_sync_el2_lower:
-    // Debug probe: write 'V' to BCM mini UART to confirm vector entry.
-    // Saves/restores x9+x10 before any other stack usage.
-    sub  sp, sp, #32
-    stp  x9, x10, [sp]
-    movz x9, #0x5040
-    movk x9, #0x3F21, lsl #16
-    mov  w10, #0x56             // 'V'
-    str  w10, [x9]
-    ldp  x9, x10, [sp]
-    add  sp, sp, #32
     // Temporarily save x0 and x1 to the host stack (16-byte aligned scratch area).
     sub  sp, sp, #16
     stp  x0, x1, [sp]

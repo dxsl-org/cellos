@@ -89,34 +89,24 @@ pub fn main() {
         return;
     }
 
-    // ── 3. Read Alpine kernel and initramfs from VIFS1 ───────────────────────
-    let kernel_bytes = match loader_image::read_file_from_vfs(VMLINUZ_PATH) {
-        Ok(b) => b,
+    // ── 3. Parse the ARM64 Image header + compute guest RAM layout ──────────
+    // Layout math needs only the header, so the images are streamed straight
+    // into guest RAM afterwards — buffering either file whole exceeds the
+    // 8 MiB cell heap and OOM-kills the cell.
+    let (text_offset, image_size) = match loader_image::read_image_header(VMLINUZ_PATH) {
+        Ok(h) => h,
         Err(e) => {
             println(&alloc::format!(
-                "[hv] read {} failed: {:?}",
+                "[hv] read {} header failed: {:?}",
                 VMLINUZ_PATH,
                 e
             ));
             return;
         }
     };
-    let initrd_bytes = match loader_image::read_file_from_vfs(INITRD_PATH) {
-        Ok(b) => b,
-        Err(e) => {
-            println(&alloc::format!("[hv] read {} failed: {:?}", INITRD_PATH, e));
-            return;
-        }
-    };
-    println(&alloc::format!(
-        "[hv] kernel={} B  initrd={} B",
-        kernel_bytes.len(),
-        initrd_bytes.len()
-    ));
+    let mut guest = loader_image::compute_layout(text_offset, image_size, GUEST_IPA_BASE);
 
-    // ── 4. Two-pass image placement ───────────────────────────────────────────
-    // Pass 1: write a placeholder DTB to discover initrd_gpa from place_images.
-    let placeholder = alloc::vec![0u8; 4096];
+    // ── 4. Stream kernel + initramfs into guest RAM ──────────────────────────
     let write_guest = |gpa: u64, bytes: &[u8]| -> types::ViResult<()> {
         let r = vmm::write_guest_memory(vm_id, gpa, bytes);
         if r == usize::MAX {
@@ -125,21 +115,39 @@ pub fn main() {
             Ok(())
         }
     };
-    let guest = match loader_image::place_images(
-        &kernel_bytes,
-        &initrd_bytes,
-        &placeholder,
-        GUEST_IPA_BASE,
-        write_guest,
-    ) {
-        Ok(g) => g,
-        Err(e) => {
-            println(&alloc::format!("[hv] place_images failed: {:?}", e));
-            return;
-        }
-    };
+    let kernel_size =
+        match loader_image::stream_file_to_guest(VMLINUZ_PATH, guest.kernel_entry_gpa, write_guest)
+        {
+            Ok(n) => n,
+            Err(e) => {
+                println(&alloc::format!(
+                    "[hv] stream {} failed: {:?}",
+                    VMLINUZ_PATH,
+                    e
+                ));
+                return;
+            }
+        };
+    let initrd_size =
+        match loader_image::stream_file_to_guest(INITRD_PATH, guest.initrd_gpa, write_guest) {
+            Ok(n) => n,
+            Err(e) => {
+                println(&alloc::format!(
+                    "[hv] stream {} failed: {:?}",
+                    INITRD_PATH,
+                    e
+                ));
+                return;
+            }
+        };
+    guest.initrd_size = initrd_size;
+    println(&alloc::format!(
+        "[hv] kernel={} B  initrd={} B (streamed)",
+        kernel_size,
+        initrd_size
+    ));
 
-    // Pass 2: build real DTB now that we know initrd_gpa and overwrite the slot.
+    // Build the DTB now that initrd_gpa/size are known and write it in place.
     let dtb_bytes = match dtb::build_dtb(
         GUEST_IPA_BASE,
         GUEST_RAM_SIZE,

@@ -64,24 +64,54 @@ echo "[make-hv-fs] Building hypervisor kernel_fs.img..."
 MKFAT_ARGS=()
 
 # Copy embedded cells from existing aarch64 embedded dir or fresh build.
+# Bootstrap lookup expects the standard VIFS1 layout (/bin/<cell>) — cells at
+# the FAT root are invisible to it ("bootstrap /bin/shell not in VIFS1").
 for cell in init shell vfs config; do
     src="$BIN_DIR/app-$cell"
     [[ ! -f "$src" ]] && src="$BIN_DIR/service-$cell"
     [[ ! -f "$src" ]] && src="$EMBEDDED_SRC/$cell"
     if [[ -f "$src" ]]; then
-        echo "  /$cell <- $src"
-        MKFAT_ARGS+=("$src" "/$cell")
+        echo "  /bin/$cell <- $src"
+        MKFAT_ARGS+=("$src" "/bin/$cell")
     else
         echo "  WARNING: $cell not found — skipping"
     fi
 done
 
-# Hypervisor cell itself (loaded from FAT32 disk by init, not from kernel_fs).
-# kernel_fs only needs the base cells + Alpine images.
+# Hypervisor cell itself. It MUST ride in VIFS1: the aarch64 image ships no
+# block Driver Cell, so the on-disk FAT /bin store never mounts and a
+# disk-only /bin/hypervisor is unreachable (init's spawn probes VIFS1 first).
+if [[ -f "$BIN_DIR/hypervisor" ]]; then
+    echo "  /bin/hypervisor <- $BIN_DIR/hypervisor"
+    MKFAT_ARGS+=("$BIN_DIR/hypervisor" "/bin/hypervisor")
+else
+    echo "ERROR: $BIN_DIR/hypervisor not built — the smoke test cannot pass without it" >&2
+    exit 1
+fi
 
 # Alpine kernel and initrd (FAT16 paths are uppercased by the kernel; store as-is).
 VMLINUZ="$ALPINE_CACHE/vmlinuz-virt"
 INITRD="$ALPINE_CACHE/initramfs-virt"
+
+# Alpine ≥3.20 ships vmlinuz-virt as an EFI zboot wrapper ("MZ" + "zimg" +
+# gzip payload), NOT the raw ARM64 Image the VMM boot protocol needs (magic
+# "ARM\x64" at 0x38). Extract the gzip payload (u32-LE offset at 0x08, size at
+# 0x0C) into a raw Image. The initrd stays gzipped — Linux inflates initramfs
+# itself; nobody inflates the kernel for us at this boot level.
+if [[ "$(dd if="$VMLINUZ" bs=1 skip=4 count=4 2>/dev/null)" == "zimg" ]]; then
+    IMAGE="$ALPINE_CACHE/Image-virt"
+    if [[ ! -f "$IMAGE" || "$VMLINUZ" -nt "$IMAGE" ]]; then
+        echo "[make-hv-fs] vmlinuz-virt is EFI zboot — extracting raw ARM64 Image..."
+        off=$(od -An -tu4 -j8 -N4 "$VMLINUZ" | tr -d ' ')
+        size=$(od -An -tu4 -j12 -N4 "$VMLINUZ" | tr -d ' ')
+        tail -c +$((off + 1)) "$VMLINUZ" | head -c "$size" | gunzip > "$IMAGE"
+    fi
+    if [[ "$(dd if="$IMAGE" bs=1 skip=56 count=4 2>/dev/null)" != $'ARMd' ]]; then
+        echo "ERROR: extracted Image lacks the ARM64 magic — zboot layout changed?" >&2
+        exit 1
+    fi
+    VMLINUZ="$IMAGE"
+fi
 
 echo "  /vmlinuz   <- $VMLINUZ ($(du -sh "$VMLINUZ" | cut -f1))"
 MKFAT_ARGS+=("$VMLINUZ" "/vmlinuz")

@@ -20,7 +20,6 @@
 //! ```
 
 extern crate alloc;
-use alloc::vec::Vec;
 use types::{ViError, ViResult};
 
 /// ARM64 Image header magic.
@@ -54,7 +53,7 @@ pub fn parse_image_header(kernel_bytes: &[u8]) -> ViResult<(u64, u64)> {
     Ok((text_offset, image_size))
 }
 
-/// Place vmlinuz, initramfs, and DTB into guest RAM by writing via the VMM.
+/// Compute the guest RAM layout from the ARM64 Image header fields.
 ///
 /// # Layout
 /// ```text
@@ -64,54 +63,81 @@ pub fn parse_image_header(kernel_bytes: &[u8]) -> ViResult<(u64, u64)> {
 ///   initrd_gpa     = kernel_gpa + round_up(image_size, 2MB) [within 1GB of kernel]
 /// ```
 ///
-/// All writes go through `write_fn(gpa, bytes)` which calls `sys_write_guest_memory`.
-pub fn place_images<W>(
-    kernel_bytes: &[u8],
-    initrd_bytes: &[u8],
-    dtb_bytes: &[u8],
-    guest_ram_base: u64,
-    mut write_fn: W,
-) -> ViResult<LoadedGuest>
+/// `image_size` is the header's effective size (text+data+bss), so the initrd
+/// lands past the kernel's runtime footprint, not just past the file bytes.
+pub fn compute_layout(text_offset: u64, image_size: u64, guest_ram_base: u64) -> LoadedGuest {
+    const MB2: u64 = 2 * 1024 * 1024;
+    let aligned_offset = (text_offset + MB2 - 1) & !(MB2 - 1);
+    let kernel_gpa = guest_ram_base + aligned_offset;
+    let initrd_offset = aligned_offset + ((image_size + MB2 - 1) & !(MB2 - 1));
+    LoadedGuest {
+        kernel_entry_gpa: kernel_gpa,
+        initrd_gpa: guest_ram_base + initrd_offset,
+        initrd_size: 0, // filled in after the initrd stream completes
+        dtb_gpa: guest_ram_base,
+    }
+}
+
+/// Read the 64-byte ARM64 Image header of a VIFS1 file.
+///
+/// Returns `(text_offset, image_size)`.
+///
+/// # Errors
+/// [`ViError::NotFound`] if the file cannot be opened; [`ViError::InvalidInput`]
+/// if it is shorter than 64 bytes or the magic is wrong.
+pub fn read_image_header(path: &str) -> ViResult<(u64, u64)> {
+    let cap = ostd::syscall::sys_open_cap(path).map_err(|_| ViError::NotFound)?;
+    let mut hdr = [0u8; 0x40];
+    let mut got = 0;
+    while got < hdr.len() {
+        match ostd::syscall::sys_read_cap(cap, &mut hdr[got..]) {
+            Ok(0) => break,
+            Ok(n) => got += n,
+            Err(_) => {
+                ostd::syscall::sys_close_cap(cap);
+                return Err(ViError::IO);
+            }
+        }
+    }
+    ostd::syscall::sys_close_cap(cap);
+    if got < hdr.len() {
+        return Err(ViError::InvalidInput);
+    }
+    parse_image_header(&hdr)
+}
+
+/// Stream a VIFS1 file into guest RAM at `gpa`; returns total bytes written.
+///
+/// The raw Alpine Image (34+ MiB) and initramfs (8+ MiB) together exceed the
+/// 8 MiB cell heap, so the images must never be buffered whole (the previous
+/// read-to-`Vec` approach OOM-killed the cell). Peak memory is one 256 KiB
+/// heap chunk regardless of file size. The chunk is deliberately large:
+/// every ReadCap re-seeks the FAT16 cluster chain from the start (stateless
+/// kernel file handles), so per-file wall time is quadratic in call count —
+/// small chunks ground a 35 MiB stream for hours under TCG.
+pub fn stream_file_to_guest<W>(path: &str, gpa: u64, mut write_fn: W) -> ViResult<u64>
 where
     W: FnMut(u64, &[u8]) -> ViResult<()>,
 {
-    let (text_offset, image_size) = parse_image_header(kernel_bytes)?;
-
-    // Align text_offset up to 2MB boundary (ARM64 boot protocol requirement).
-    const MB2: u64 = 2 * 1024 * 1024;
-    let aligned_offset = (text_offset + MB2 - 1) & !(MB2 - 1);
-
-    let kernel_gpa = guest_ram_base + aligned_offset;
-
-    // DTB: 8-byte-aligned, placed at guest_ram_base (before the kernel).
-    // Must be within 2MB of start of RAM per ARM64 boot spec.
-    let dtb_gpa = guest_ram_base; // 0x4000_0000
-
-    // initramfs: after kernel, 2MB-aligned, within 1GB window.
-    let initrd_offset = aligned_offset + ((image_size + MB2 - 1) & !(MB2 - 1));
-    let initrd_gpa = guest_ram_base + initrd_offset;
-
-    // Write DTB first (small, fits before kernel).
-    write_fn(dtb_gpa, dtb_bytes)?;
-
-    // Write kernel.
-    write_fn(kernel_gpa, kernel_bytes)?;
-
-    // Write initramfs.
-    write_fn(initrd_gpa, initrd_bytes)?;
-
-    Ok(LoadedGuest {
-        kernel_entry_gpa: kernel_gpa,
-        initrd_gpa,
-        initrd_size: initrd_bytes.len() as u64,
-        dtb_gpa,
-    })
-}
-
-/// Read a file from the ViCell VFS into a `Vec<u8>`.
-pub fn read_file_from_vfs(path: &str) -> ViResult<Vec<u8>> {
-    let mut f = ostd::fs::File::open(path)?;
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf)?;
-    Ok(buf)
+    let cap = ostd::syscall::sys_open_cap(path).map_err(|_| ViError::NotFound)?;
+    let mut chunk = alloc::vec![0u8; 256 * 1024];
+    let mut off = 0u64;
+    loop {
+        match ostd::syscall::sys_read_cap(cap, &mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                if let Err(e) = write_fn(gpa + off, &chunk[..n]) {
+                    ostd::syscall::sys_close_cap(cap);
+                    return Err(e);
+                }
+                off += n as u64;
+            }
+            Err(_) => {
+                ostd::syscall::sys_close_cap(cap);
+                return Err(ViError::IO);
+            }
+        }
+    }
+    ostd::syscall::sys_close_cap(cap);
+    Ok(off)
 }

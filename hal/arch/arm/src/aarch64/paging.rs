@@ -70,10 +70,14 @@ impl PageTableTrait for PageTable {
         };
         let mut entry = phys_to_pte_addr(phys) | PTE_VALID | PTE_PAGE | PTE_AF | sh | attr;
 
+        // Bit 54 is UXN in the EL1&0 regime but the ONLY XN bit in the EL2
+        // (non-VHE) regime — the same table is live in both when the kernel
+        // runs as EL2 host (virtualization=on / raspi3b). Kernel pages must
+        // therefore leave bit 54 clear or EL2 instruction fetch aborts the
+        // moment SCTLR_EL2.M is set. Nothing is lost at EL1: non-USER pages
+        // have AP[1]=0, so EL0 cannot fetch from them regardless of UXN.
         if flags.bits() & PageFlags::USER != 0 {
             entry |= PTE_AP_EL0 | PTE_PXN;
-        } else {
-            entry |= PTE_UXN;
         }
         if flags.bits() & PageFlags::EXECUTE == 0 {
             entry |= PTE_UXN | PTE_PXN;
