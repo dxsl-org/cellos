@@ -159,10 +159,17 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── Unknown exit ─────────────────────────────────────────────────
             ViVmExit::Unknown { ec, iss } => {
+                // Guest PC pinpoints WHERE the guest faulted — without it an
+                // ec=0x20 (guest instruction abort) is undebuggable.
+                let mut rb = [0u64; 32];
+                vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
                 println(&alloc::format!(
-                    "[hv] unknown vmexit ec=0x{:x} iss=0x{:x}",
+                    "[hv] unknown vmexit ec=0x{:x} iss=0x{:x} pc=0x{:x} x0=0x{:x} x30=0x{:x}",
                     ec,
-                    iss
+                    iss,
+                    rb[31],
+                    rb[0],
+                    rb[30],
                 ));
                 return RunOutcome::Shutdown;
             }

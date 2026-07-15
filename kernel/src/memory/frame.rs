@@ -287,6 +287,39 @@ impl FrameAllocator {
         }
         None
     }
+
+    /// Allocate `n` contiguous frames whose base address is `align_bytes`-aligned.
+    ///
+    /// Needed by hardware structures with alignment > one frame — e.g. the
+    /// Stage-2 concatenated root (VTTBR_EL2.BADDR requires 8 KB alignment).
+    /// `allocate_contiguous` returns the FIRST free run, whose parity depends
+    /// on every allocation made since boot — relying on it for alignment is a
+    /// latent misalignment bug, not a guarantee.
+    ///
+    /// `align_bytes` must be a power of two ≥ PAGE_SIZE.
+    pub fn allocate_contiguous_aligned(
+        &mut self,
+        n: usize,
+        align_bytes: usize,
+    ) -> Option<PhysAddr> {
+        debug_assert!(align_bytes.is_power_of_two() && align_bytes >= PAGE_SIZE);
+        let limit = self.total_frames.saturating_sub(n);
+        'outer: for start in 0..=limit {
+            if self.frame_index_to_addr(start) % align_bytes != 0 {
+                continue;
+            }
+            for i in 0..n {
+                if self.is_frame_allocated(start + i) {
+                    continue 'outer;
+                }
+            }
+            for i in 0..n {
+                self.mark_used(start + i);
+            }
+            return Some(self.frame_index_to_addr(start));
+        }
+        None
+    }
 }
 
 /// Global frame allocator

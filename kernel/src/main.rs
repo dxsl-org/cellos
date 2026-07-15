@@ -232,9 +232,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         Ok(info) => info,
         Err(_) => {
             log_info("Limine not found, using QEMU/OpenSBI fallback");
-            // Use fallback static instance (defined in boot.rs or created here)
-            // For now, let's just use the fallback function we will create
-            &boot::FALLBACK_BOOT_INFO
+            // aarch64-virt sizes the kernel region from the linker end symbol —
+            // EMBEDDED_OVERRIDE images make the binary size unbounded.
+            boot::fallback_boot_info()
         }
     };
     // Log physical base — non-default value confirms KASLR is active.

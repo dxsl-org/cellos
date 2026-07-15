@@ -12,7 +12,11 @@ use crate::virtio_mmio::{QueueCfg, VirtioDevice};
 use crate::virtqueue::{process_notify, DescBuf};
 use alloc::vec;
 
-const DISK_SIZE: usize = 16 * 1024 * 1024; // 16 MiB
+// Guest scratch volume backed by the cell heap. MUST stay well under the
+// fixed 8 MiB cell heap (ostd) — 16 MiB here OOM-killed the cell the moment
+// the run loop constructed BlkDisk. Alpine netboot runs from initramfs and
+// only needs this for ad-hoc writes.
+const DISK_SIZE: usize = 4 * 1024 * 1024; // 4 MiB
 const SECTOR_SIZE: usize = 512;
 const NUM_SECTORS: u64 = (DISK_SIZE / SECTOR_SIZE) as u64;
 

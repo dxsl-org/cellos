@@ -140,7 +140,7 @@ pub fn main() {
                 return;
             }
         };
-    guest.initrd_size = initrd_size;
+    guest.finalize_dtb_gpa(initrd_size);
     println(&alloc::format!(
         "[hv] kernel={} B  initrd={} B (streamed)",
         kernel_size,

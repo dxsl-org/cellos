@@ -58,15 +58,22 @@ pub fn parse_image_header(kernel_bytes: &[u8]) -> ViResult<(u64, u64)> {
 /// # Layout
 /// ```text
 ///   GUEST_RAM_BASE = 0x4000_0000
-///   dtb_gpa        = GUEST_RAM_BASE + 0x0000 (DTB at start, ≤ 2MB)
-///   kernel_gpa     = GUEST_RAM_BASE + 2MB-align(text_offset) [typically 0x4020_0000]
+///   kernel_gpa     = GUEST_RAM_BASE + 2MB-align(text_offset)
 ///   initrd_gpa     = kernel_gpa + round_up(image_size, 2MB) [within 1GB of kernel]
+///   dtb_gpa        = initrd_gpa + round_up(initrd_size, 2MB) — set by
+///                    finalize_dtb_gpa() once the initrd stream reports its size
 /// ```
+///
+/// The DTB must NOT sit at `guest_ram_base`: modern kernels ship
+/// `text_offset = 0`, so the kernel itself loads at the RAM base and a
+/// base-resident DTB overwrites its first bytes (observed as the vCPU
+/// executing garbage). Placing it past the initrd keeps it 2MB-aligned
+/// (satisfying the "must not cross a 2MB boundary" boot rule) and clear of
+/// everything else.
 ///
 /// `image_size` is the header's effective size (text+data+bss), so the initrd
 /// lands past the kernel's runtime footprint, not just past the file bytes.
 pub fn compute_layout(text_offset: u64, image_size: u64, guest_ram_base: u64) -> LoadedGuest {
-    const MB2: u64 = 2 * 1024 * 1024;
     let aligned_offset = (text_offset + MB2 - 1) & !(MB2 - 1);
     let kernel_gpa = guest_ram_base + aligned_offset;
     let initrd_offset = aligned_offset + ((image_size + MB2 - 1) & !(MB2 - 1));
@@ -74,7 +81,17 @@ pub fn compute_layout(text_offset: u64, image_size: u64, guest_ram_base: u64) ->
         kernel_entry_gpa: kernel_gpa,
         initrd_gpa: guest_ram_base + initrd_offset,
         initrd_size: 0, // filled in after the initrd stream completes
-        dtb_gpa: guest_ram_base,
+        dtb_gpa: 0,     // finalize_dtb_gpa() — needs the streamed initrd size
+    }
+}
+
+const MB2: u64 = 2 * 1024 * 1024;
+
+impl LoadedGuest {
+    /// Record the streamed initrd size and place the DTB just past it.
+    pub fn finalize_dtb_gpa(&mut self, initrd_size: u64) {
+        self.initrd_size = initrd_size;
+        self.dtb_gpa = self.initrd_gpa + ((initrd_size + MB2 - 1) & !(MB2 - 1));
     }
 }
 

@@ -163,13 +163,15 @@ impl Stage2Table {
     /// Returns `None` when the frame allocator has fewer than 2 contiguous
     /// free frames.
     pub fn new() -> Option<Self> {
-        // allocate_contiguous(2) guarantees contiguous and 4 KB alignment;
-        // for 8 KB alignment we rely on the allocator returning an even-indexed
-        // frame pair.  The FrameAllocator's memory_start is page-aligned, so
-        // every pair at an even index is 8 KB-aligned.
+        // VTTBR_EL2.BADDR requires the concatenated root 8 KB-aligned. The old
+        // allocate_contiguous(2) call returned the FIRST free pair — whose
+        // parity depends on every allocation since boot — so a 4 KB-misaligned
+        // root silently truncated in VTTBR and the guest died on a Stage-2
+        // level-1 translation fault at its very first instruction fetch.
         let root_pa = {
             let mut g = FRAME_ALLOCATOR.lock();
-            g.as_mut()?.allocate_contiguous(2)? as u64
+            g.as_mut()?
+                .allocate_contiguous_aligned(2, 2 * PAGE_SIZE)? as u64
         };
         debug_assert_eq!(
             root_pa % (2 * PAGE_SIZE as u64),
