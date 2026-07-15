@@ -348,7 +348,7 @@ jobs:
           BOOT_WINDOW=90 bash scripts/qemu-aarch64-test.sh
 
   qemu-hypervisor-smoke:
-    name: QEMU Hypervisor Smoke (Alpine / # in 180s)
+    name: QEMU Hypervisor Smoke (Alpine / # in 420s)
     runs-on: ubuntu-24.04
     # continue-on-error: alpine fetch or TCG timeout should not block other CI jobs.
     continue-on-error: true
@@ -423,7 +423,7 @@ jobs:
       - name: Run hypervisor smoke test (Alpine / # within 180s)
         run: |
           chmod +x scripts/qemu-hypervisor-smoke.sh
-          BOOT_WINDOW=180 bash scripts/qemu-hypervisor-smoke.sh
+          BOOT_WINDOW=420 bash scripts/qemu-hypervisor-smoke.sh
 
   x86_64-lint:
     name: Clippy (x86_64)
@@ -599,13 +599,11 @@ jobs:
       - name: Run RedoxFS /srv integration tests
         env:
           CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
-        # Scoped to the degrade test: srv_basic/srv_persistence exercise the
-        # RedoxFS WRITE path, which fails S2–S5 ("write failed") on its first
-        # real execution ever — redoxfs-ar (std) can't build on Windows, so
-        # this suite was never runnable locally and the write path is
-        # unverified product code, not a CI gap. Re-add the two tests when
-        # the /srv write path is fixed (mount S1 + reads already PASS here).
-        run: cd tests/integration && cargo test --test redoxfs-srv riscv64_redoxfs_srv_degrade_no_disk
+        # Full suite again: the S2–S5 write failures were the access table
+        # missing a /srv/ rule (writes fell through to the read-only "/"
+        # catch-all), fixed in cells/services/vfs/src/access.rs and verified
+        # 3/3 locally.
+        run: cd tests/integration && cargo test --test redoxfs-srv
 
   unit-tests:
     name: Host unit tests (types + api)
@@ -750,15 +748,16 @@ jobs:
         # boot.rs after this point starts excluded until it passes 2/2
         # consecutive full runs, per the existing discipline.
         #
-        # Removed 2026-07-14 after the first real CI execution (50/54 passed,
-        # all four pass locally on QEMU 10.2 / Windows — ubuntu-24.04 ships
-        # QEMU 8.2, so these are CI-environment gaps, tracked for follow-up):
-        #   input_keyboard_e2e        — QEMU produced no serial at all in 40s
-        #                               (QMP VirtIO-keyboard path differs on 8.2)
-        #   posix_shim_getentropy / posix_shim_net — no output within 10s
-        #                               (VirtIO-RNG / shim spawn path on 8.2)
-        # (network_httpd_serves_file was also pulled in that pass but restored
-        # once --test-threads=1 removed the TCG-contention flake class.)
+        # 2026-07-15: the three tests removed after the first CI execution are
+        # restored — none was a QEMU-8.2 gap after all:
+        #   input_keyboard_e2e        — empty-serial-in-40s was the threads=2
+        #                               TCG-contention flake (same class as
+        #                               network_httpd_serves_file); threads=1
+        #                               resolves it.
+        #   posix_shim_getentropy/net — "command not found": gen_disk never
+        #                               BUILT posix-shim-test (local runs leaned
+        #                               on a stale binary in target/); gen_disk
+        #                               now builds it.
         # --test-threads=1: each test boots its own TCG QEMU (CPU-bound); at
         # threads=2 on the 4-vCPU runner exactly one network test times out
         # per run from contention (listen_accept / serves_file / send_recv
@@ -786,7 +785,8 @@ jobs:
             shell_source_multi_command shell_cmd_substitution \
             console_long_line_with_backspace_no_stall \
             input_service_registered_at_boot compositor_input_routing_active \
-            bench_all_pass input_bare_cell
+            bench_all_pass input_keyboard_e2e input_bare_cell \
+            posix_shim_getentropy posix_shim_net
 
   security:
     name: Security Scan

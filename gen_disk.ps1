@@ -104,6 +104,10 @@ Build-Cargo -What "audio-demo"     -Packages @('audio-demo')      # VirtIO sound
 Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS server-auth e2e gate
 Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
 Build-Cargo -What "cfi-test" -Packages @('cfi-test')   # Layer-2 CFI violation test cell
+# posix-shim-test must be BUILT here, not just Test-Path'd below — CI runs
+# gen_disk on a fresh target/ and the posix_shim_* boot tests spawn it from
+# the shell ("command not found" on CI was exactly this gap).
+Build-Cargo -What "posix-shim-test" -Packages @('app-posix-shim-test')
 
 # DOOM — only if doomgeneric sources have been cloned. Custom --target + -Z so
 # it can't use Build-Cargo; capture the exit code BEFORE the pipe (see Build-Cargo).

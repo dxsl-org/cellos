@@ -1,10 +1,66 @@
 use std::fs;
 use std::io;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 use crate::{Disk, FileSystem, Node, Transaction, TreePtr, BLOCK_SIZE};
+
+/// Windows shim for the Unix `MetadataExt` accessors archive_at relies on.
+///
+/// Archiving on a non-Unix host only serves TEST-image seeding (ViCell's
+/// scripts/mksrv-img.sh); the host filesystem has no POSIX ownership or mode
+/// bits, so fixed defaults (root:root, 0755/0644) and mtime-derived
+/// timestamps are used instead.
+#[cfg(not(unix))]
+trait MetadataExt {
+    fn mode(&self) -> u32;
+    fn uid(&self) -> u32;
+    fn gid(&self) -> u32;
+    fn ctime(&self) -> i64;
+    fn ctime_nsec(&self) -> i64;
+    fn mtime(&self) -> i64;
+    fn mtime_nsec(&self) -> i64;
+}
+
+#[cfg(not(unix))]
+impl MetadataExt for fs::Metadata {
+    fn mode(&self) -> u32 {
+        if self.is_dir() {
+            0o755
+        } else {
+            0o644
+        }
+    }
+    fn uid(&self) -> u32 {
+        0
+    }
+    fn gid(&self) -> u32 {
+        0
+    }
+    fn ctime(&self) -> i64 {
+        self.mtime()
+    }
+    fn ctime_nsec(&self) -> i64 {
+        self.mtime_nsec()
+    }
+    fn mtime(&self) -> i64 {
+        self.modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+    }
+    fn mtime_nsec(&self) -> i64 {
+        self.modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.subsec_nanos() as i64)
+            .unwrap_or(0)
+    }
+}
 
 fn syscall_err(err: syscall::Error) -> io::Error {
     io::Error::from_raw_os_error(err.errno)
@@ -79,7 +135,17 @@ pub fn archive_at<D: Disk, P: AsRef<Path>>(
             }
         } else if file_type.is_symlink() {
             let destination = fs::read_link(path)?;
+            #[cfg(unix)]
             let data = destination.as_os_str().as_bytes();
+            // Non-Unix hosts (test-image seeding only): symlink targets must
+            // be UTF-8 — OsStr bytes are not exposed portably.
+            #[cfg(not(unix))]
+            let data = destination
+                .to_str()
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "symlink target is not UTF-8")
+                })?
+                .as_bytes();
             let count = tx
                 .write_node(
                     node_ptr,

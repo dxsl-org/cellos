@@ -31,7 +31,9 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly
+          # Pinned to the same nightly as ci.yml — an untagged `nightly` here
+          # drifted ahead of the workspace and broke independently.
+          toolchain: nightly-2026-05-01
           components: rust-src
 
       - name: Install QEMU
@@ -53,28 +55,41 @@ jobs:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build init + bench cells
+      # service-vfs pulls littlefs2-sys, which cross-compiles vendored C —
+      # same toolchain requirements as ci.yml's riscv64 jobs.
+      - name: Install cross C compiler for littlefs2-sys
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q gcc-riscv64-unknown-elf
+
+      - name: Build bootstrap + bench cells
+        env:
+          CC_riscv64gc_unknown_none_elf: riscv64-unknown-elf-gcc
+          CFLAGS_riscv64gc_unknown_none_elf: -march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
         run: |
           cargo build --release \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
-            -p app-init \
+            -p app-init -p app-shell -p service-vfs -p service-config \
+            -p service-platform -p driver-virtio-blk \
             -p app-bench
 
-      - name: Rebuild kernel with bench-aware init
-        env:
-          RUSTFLAGS: "-C relocation-model=pic"
+      - name: Rebuild kernel with bench-aware ramdisk
         run: |
           REL=target/riscv64gc-unknown-none-elf/release
-          # Refresh the embedded init binary from the just-built source so the kernel
-          # auto-spawns /bin/bench from the cell table on the bench disk.
+          # kernel_fs.img is a gitignored build artifact (only init is
+          # committed) — assemble the VIFS1 ramdisk from the cells built above.
+          # bench + bench-probe MUST live in VIFS1: sys_spawn_pinned resolves
+          # through the kernel loader (VIFS1/P2 only, no VFS).
           cp "$REL/app-init" kernel/src/embedded/init
-          # Regenerate kernel_fs.img with the fresh init.
           python3 tools/mkfat32.py kernel/src/embedded/kernel_fs.img \
-            kernel/src/embedded/init   /bin/init \
-            kernel/src/embedded/shell  /bin/shell \
-            kernel/src/embedded/vfs    /bin/vfs \
-            kernel/src/embedded/config /bin/config
+            "$REL/app-init"          /bin/init \
+            "$REL/app-shell"         /bin/shell \
+            "$REL/service-vfs"       /bin/vfs \
+            "$REL/service-config"    /bin/config \
+            "$REL/platform"          /bin/platform \
+            "$REL/driver-virtio-blk" /bin/block \
+            "$REL/bench"             /bin/bench \
+            "$REL/bench-probe"       /bin/bench-probe
           cargo build --release \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
@@ -85,7 +100,7 @@ jobs:
           # Cell-table-only disk: /bin/bench at CELL_TABLE_BASE_LBA.
           # Kernel is passed directly as -kernel; no Limine/FAT partition needed.
           bash scripts/gen-bench-disk.sh \
-            target/riscv64gc-unknown-none-elf/release/app-bench \
+            target/riscv64gc-unknown-none-elf/release/bench \
             bench-disk.img
 
       - name: Boot QEMU and capture bench output

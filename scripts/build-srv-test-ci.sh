@@ -18,8 +18,9 @@ set -euo pipefail
 REL="target/riscv64gc-unknown-none-elf/release"
 SRV_DIR="kernel/src/embedded-srv-test"
 
-export CC_riscv64gc_unknown_none_elf="riscv64-unknown-elf-gcc"
-export CFLAGS_riscv64gc_unknown_none_elf="-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include"
+# Honor a pre-set compiler (local xpack riscv-none-elf-gcc); default to the CI one.
+export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
+export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include}"
 
 echo "==> Building base cells (init, shell, config, platform, block)..."
 # platform + virtio-blk are REQUIRED: the /srv tests attach a disk, and

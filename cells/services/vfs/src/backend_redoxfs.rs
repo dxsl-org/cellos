@@ -271,6 +271,14 @@ impl FsBackend for RedoxFsBackend {
                 tx.write_node(node_ptr, 0, content, 0, 0)?;
                 Ok(())
             })
+            // Surface the errno instead of a silent bool — write failures on a
+            // mounted volume indicate a tx/allocator problem worth diagnosing.
+            .map_err(|e| {
+                ostd::io::println(&alloc::format!(
+                    "[vfs] redoxfs write '{rel}' failed: errno={}",
+                    e.errno
+                ));
+            })
             .ok()?;
             Some(true)
         })

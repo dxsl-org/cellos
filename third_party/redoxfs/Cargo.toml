@@ -58,7 +58,6 @@ parse-size = { version = "1", optional = true }
 range-tree = { version = "0.1", optional = true }
 redox_syscall = { version = "0.7.5", default-features = false }
 seahash = { version = "4.1.0", default-features = false }
-termion = { version = "4", optional = true }
 uuid = { version = "1.4", default-features = false }
 xts-mode = { version = "0.5", default-features = false }
 
@@ -77,7 +76,6 @@ std = [
     "libredox",
     "parse-size",
     "range-tree",
-    "termion",
     "uuid/v4",
     "redox_syscall/std",
     "redox-scheme",
@@ -85,6 +83,14 @@ std = [
 
 [target.'cfg(not(target_os = "redox"))'.dependencies]
 fuser = { version = "0.16", optional = true }
+
+# termion is Unix-only (termios); it serves the interactive passphrase prompt
+# in mkfs.rs/mount.rs. Scoping it to unix lets redoxfs-ar — which never
+# prompts — build on Windows hosts (needed to create /srv test images
+# locally; see scripts/mksrv-img.sh).
+[target.'cfg(unix)'.dependencies]
+termion = "4"
+
 
 [target.'cfg(target_os = "redox")'.dependencies]
 libredox = { version = "0.1.13", optional = true }
