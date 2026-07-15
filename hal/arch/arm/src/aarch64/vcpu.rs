@@ -260,6 +260,42 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
         vcpu_enter_guest(vcpu as *mut AArch64Vcpu);
     }
 
+    // ── 3b. Save the guest's LIVE EL1 sysregs before the host overwrites them ─
+    // The EL1 bank still holds the guest's state at trap time. Without this
+    // save, every re-entry restored the STALE g_* values captured at vCPU
+    // creation — the first benign exit (SysReg read, WFI, IRQ budget) silently
+    // reset the guest's SCTLR/TTBR/VBAR to reset values, and Linux then ran on
+    // with its MMU off and VBAR_EL1=0 until it took an exception and fetched a
+    // vector from IPA 0x200 (observed as ec=0x20 iss=0x6 pc=0x200). ESR/FAR
+    // are saved too: after a guest-internal exception they carry the original
+    // syndrome, which the vector-fetch S2 abort at EL2 does not.
+    // SAFETY: reading EL1 sysregs from EL2 is always permitted; the guest is
+    // stopped (TPIDR_EL2 cleared by vt_vcpu_trap).
+    unsafe {
+        core::arch::asm!(
+            "mrs {0}, sctlr_el1",  "mrs {1}, ttbr0_el1",
+            "mrs {2}, ttbr1_el1",  "mrs {3}, tcr_el1",
+            "mrs {4}, mair_el1",   "mrs {5}, vbar_el1",
+            "mrs {6}, tpidr_el0",  "mrs {7}, tpidr_el1",
+            out(reg) vcpu.g_sctlr_el1, out(reg) vcpu.g_ttbr0_el1,
+            out(reg) vcpu.g_ttbr1_el1, out(reg) vcpu.g_tcr_el1,
+            out(reg) vcpu.g_mair_el1,  out(reg) vcpu.g_vbar_el1,
+            out(reg) vcpu.g_tpidr_el0, out(reg) vcpu.g_tpidr_el1,
+            options(nomem, nostack),
+        );
+        core::arch::asm!(
+            "mrs {0}, cntv_ctl_el0",  "mrs {1}, cntv_cval_el0",
+            "mrs {2}, spsr_el1",      "mrs {3}, elr_el1",
+            "mrs {4}, sp_el1",
+            "mrs {5}, esr_el1",       "mrs {6}, far_el1",
+            out(reg) vcpu.g_cntv_ctl, out(reg) vcpu.g_cntv_cval,
+            out(reg) vcpu.g_spsr_el1, out(reg) vcpu.g_elr_el1,
+            out(reg) vcpu.g_sp_el1,
+            out(reg) vcpu.g_esr_el1,  out(reg) vcpu.g_far_el1,
+            options(nomem, nostack),
+        );
+    }
+
     // ── 4. Restore host EL1 sysregs ─────────────────────────────────────────
     // SAFETY: restoring our own host state; EL1 sysregs safe to write from EL2.
     unsafe {

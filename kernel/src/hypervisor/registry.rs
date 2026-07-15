@@ -261,7 +261,28 @@ pub unsafe fn run_vcpu(
             let exit = {
                 let vcpu = vm.vcpus.get_mut(vcpu_idx).ok_or(ViError::NotFound)?;
                 // SAFETY: Stage-2 is enabled for this VMID; vcpu exclusively owned.
-                unsafe { run_vcpu_impl(vcpu) }
+                let exit = unsafe { run_vcpu_impl(vcpu) };
+                // Unhandled guest trap: dump the guest's own EL1 exception bank.
+                // After a guest-internal exception these carry the ORIGINAL
+                // syndrome (the EL2 exit only sees the follow-on vector-fetch
+                // fault), which is the difference between a diagnosable failure
+                // and "unknown vmexit".
+                if let HalVmExit::Unknown { ec, iss } = exit {
+                    log::warn!(
+                        "[hv] unhandled guest trap ec={:#x} iss={:#x} | guest ELR_EL1={:#x} ESR_EL1={:#x} FAR_EL1={:#x} VBAR_EL1={:#x} SCTLR_EL1={:#x} SPSR_EL1={:#x}",
+                        ec, iss,
+                        vcpu.g_elr_el1, vcpu.g_esr_el1, vcpu.g_far_el1,
+                        vcpu.g_vbar_el1, vcpu.g_sctlr_el1, vcpu.g_spsr_el1,
+                    );
+                    log::warn!(
+                        "[hv]   guest TCR_EL1={:#x} TTBR0_EL1={:#x} TTBR1_EL1={:#x} MAIR_EL1={:#x}",
+                        vcpu.g_tcr_el1,
+                        vcpu.g_ttbr0_el1,
+                        vcpu.g_ttbr1_el1,
+                        vcpu.g_mair_el1,
+                    );
+                }
+                exit
                 // vcpu borrow ends here (NLL + nested block)
             };
 
