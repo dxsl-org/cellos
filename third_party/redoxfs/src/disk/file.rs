@@ -1,6 +1,9 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Seek, SeekFrom};
+#[cfg(unix)]
 use std::os::unix::fs::FileExt;
+#[cfg(windows)]
+use std::os::windows::fs::FileExt as WindowsFileExt;
 use std::path::Path;
 
 use syscall::error::{Error, Result, EIO};
@@ -64,12 +67,28 @@ impl DiskFile {
 }
 
 impl Disk for DiskFile {
+    #[cfg(unix)]
     unsafe fn read_at(&mut self, block: u64, buffer: &mut [u8]) -> Result<usize> {
         self.file.read_at(buffer, block * BLOCK_SIZE).or_eio()
     }
 
+    #[cfg(unix)]
     unsafe fn write_at(&mut self, block: u64, buffer: &[u8]) -> Result<usize> {
         self.file.write_at(buffer, block * BLOCK_SIZE).or_eio()
+    }
+
+    // Windows host-tool support (redoxfs-ar for test-image seeding):
+    // seek_read/seek_write are the positional-IO equivalents of the Unix
+    // read_at/write_at. They move the file cursor, which DiskFile never
+    // relies on between calls (size() always seeks explicitly).
+    #[cfg(windows)]
+    unsafe fn read_at(&mut self, block: u64, buffer: &mut [u8]) -> Result<usize> {
+        self.file.seek_read(buffer, block * BLOCK_SIZE).or_eio()
+    }
+
+    #[cfg(windows)]
+    unsafe fn write_at(&mut self, block: u64, buffer: &[u8]) -> Result<usize> {
+        self.file.seek_write(buffer, block * BLOCK_SIZE).or_eio()
     }
 
     fn size(&mut self) -> Result<u64> {

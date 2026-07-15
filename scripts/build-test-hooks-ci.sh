@@ -14,8 +14,9 @@ REL="target/riscv64gc-unknown-none-elf/release"
 TH_DIR="kernel/src/embedded-test-hooks"
 
 # riscv64 cross-compiler required by littlefs2 C FFI (Ubuntu: gcc-riscv64-unknown-elf).
-export CC_riscv64gc_unknown_none_elf="riscv64-unknown-elf-gcc"
-export CFLAGS_riscv64gc_unknown_none_elf="-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include"
+# Honor a pre-set compiler (local xpack riscv-none-elf-gcc); default to the CI one.
+export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
+export CFLAGS_riscv64gc_unknown_none_elf="${CFLAGS_riscv64gc_unknown_none_elf:--march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$(pwd)/third_party/freestanding-include}"
 
 echo "==> Building base cells (init, shell, config)..."
 cargo build --release \

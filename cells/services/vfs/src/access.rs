@@ -53,6 +53,13 @@ static DEFAULT_RULES: &[PathRule] = &[
         allow_write_all: true,
     }, // FAT32 interop (P04)
     PathRule {
+        prefix: "/srv/",
+        allow_read_all: true,
+        allow_write_all: true,
+    }, // RedoxFS P5 service volume — writable like /data (was missing: every
+    // /srv write fell through to the read-only "/" rule and died with
+    // PermissionDenied before ever reaching the RedoxFS backend)
+    PathRule {
         prefix: "/",
         allow_read_all: true,
         allow_write_all: false,

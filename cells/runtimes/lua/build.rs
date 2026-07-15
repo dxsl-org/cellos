@@ -63,10 +63,13 @@ fn compile_lua_c(target: &str) {
         "lbaselib.c",
         "lcorolib.c",
         "ldblib.c",
-        "liolib.c",
+        // liolib.c / loslib.c are EXCLUDED: they pull FILE* stdio and
+        // strftime/localtime from picolibc, whose locale.o/timelocal.o carry
+        // non-PIC R_RISCV_64 relocations that a -pie cell link rejects.
+        // glue/lua_stdlib_stubs.c registers empty io/os tables instead; the
+        // sandbox prelude (inject_io_setup) rebuilds io.* over VFS bindings.
         "lmathlib.c",
         "loadlib.c",
-        "loslib.c",
         "lstrlib.c",
         "ltablib.c",
         "lutf8lib.c",
@@ -119,6 +122,8 @@ fn compile_lua_c(target: &str) {
 
     // ViOS glue: vios_write/abort + safe POSIX stubs (system/getenv/tmpnam).
     build.file(format!("{glue_dir}/lua_vios_glue.c"));
+    // Empty io/os openers replacing the excluded liolib/loslib (see above).
+    build.file(format!("{glue_dir}/lua_stdlib_stubs.c"));
 
     build.compile("lua54");
 
