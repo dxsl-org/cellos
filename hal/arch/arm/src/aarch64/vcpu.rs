@@ -215,6 +215,31 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
         );
     }
 
+    // ── 2b. Virtualize CPU identity + allow FP/SVE ───────────────────────────
+    // Non-VHE: a guest MIDR_EL1/MPIDR_EL1 read at EL1 returns VPIDR_EL2/VMPIDR_EL2,
+    // whose reset value is 0 under QEMU. A zero MIDR makes Linux mis-run CPU
+    // errata/feature detection and take wrong early-boot code paths; mirror the
+    // real host values so the guest sees the physical CPU it runs on.
+    // CPTR_EL2 = RES1-only (0x33FF: bits[13:12] and [9:0] are RES1 in the non-VHE
+    // format) leaves TFP/TTA/TCPAC/TAM clear so guest FP/SIMD/trace do not trap to
+    // EL2 — writing 0 would clear the RES1 bits and is UNPREDICTABLE. Phase-05 lazy
+    // FP is not implemented; the single vCPU owns FP state exclusively.
+    // SAFETY: all four are EL2-private; reading MIDR/MPIDR at EL2 is unprivileged.
+    const CPTR_EL2_RES1: u64 = 0x33FF;
+    unsafe {
+        core::arch::asm!(
+            "mrs {tmp}, midr_el1",
+            "msr vpidr_el2, {tmp}",
+            "mrs {tmp}, mpidr_el1",
+            "msr vmpidr_el2, {tmp}",
+            "msr cptr_el2, {cptr}",
+            "isb",
+            tmp = out(reg) _,
+            cptr = in(reg) CPTR_EL2_RES1,
+            options(nomem, nostack),
+        );
+    }
+
     // ── 2. Restore guest EL1 sysregs + EL2 entry control ────────────────────
     // SAFETY: writing EL1/EL0 sysregs from EL2 is permitted; Cells are EL0
     // and protected by TGE routing — these writes only affect the guest bank.

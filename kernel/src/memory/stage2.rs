@@ -170,8 +170,7 @@ impl Stage2Table {
         // level-1 translation fault at its very first instruction fetch.
         let root_pa = {
             let mut g = FRAME_ALLOCATOR.lock();
-            g.as_mut()?
-                .allocate_contiguous_aligned(2, 2 * PAGE_SIZE)? as u64
+            g.as_mut()?.allocate_contiguous_aligned(2, 2 * PAGE_SIZE)? as u64
         };
         debug_assert_eq!(
             root_pa % (2 * PAGE_SIZE as u64),

@@ -82,10 +82,17 @@ pub fn decode_vmexit(esr: u64, _elr: u64, far: u64, hpfar: u64, gp: &[u64; 31]) 
         // EC 0x01 — WFI or WFE instruction (guest yielding).
         0x01 => ViVmExit::Wfi,
 
-        // EC 0x18 — MSR/MRS/SYS trapped at EL2.
-        0x18 => ViVmExit::Unknown {
-            ec,
-            iss: iss as u32,
+        // EC 0x18 — MSR/MRS/SYS trapped at EL2. ISS layout (ARM DDI 0487 D17.2.37):
+        //   Op0[21:20] Op2[19:17] Op1[16:14] CRn[13:10] Rt[9:5] CRm[4:1] Dir[0]
+        //   Dir=0 → MSR (write to sysreg), Dir=1 → MRS (read from sysreg).
+        0x18 => ViVmExit::SysReg {
+            op0: ((iss >> 20) & 0x3) as u8,
+            op2: ((iss >> 17) & 0x7) as u8,
+            op1: ((iss >> 14) & 0x7) as u8,
+            crn: ((iss >> 10) & 0xF) as u8,
+            crm: ((iss >> 1) & 0xF) as u8,
+            rt: ((iss >> 5) & 0x1F) as u8,
+            is_write: (iss & 1) == 0,
         },
 
         // Anything else is unhandled.
