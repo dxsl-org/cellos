@@ -305,7 +305,7 @@ impl FrameAllocator {
         debug_assert!(align_bytes.is_power_of_two() && align_bytes >= PAGE_SIZE);
         let limit = self.total_frames.saturating_sub(n);
         'outer: for start in 0..=limit {
-            if self.frame_index_to_addr(start) % align_bytes != 0 {
+            if !self.frame_index_to_addr(start).is_multiple_of(align_bytes) {
                 continue;
             }
             for i in 0..n {
