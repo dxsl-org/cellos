@@ -23,6 +23,8 @@ pub mod el2;
 #[cfg(target_arch = "aarch64")]
 pub mod gic;
 #[cfg(target_arch = "aarch64")]
+pub mod id_regs;
+#[cfg(target_arch = "aarch64")]
 pub mod mte;
 #[cfg(target_arch = "aarch64")]
 pub mod paging;

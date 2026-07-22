@@ -5,7 +5,7 @@
 //! **Entry (`vcpu_enter_guest` asm):**
 //! 1. Save host callee-saved (x19-x30) + SP_EL2 to `vcpu.h_*` fields.
 //! 2. Store `vcpu` ptr in `TPIDR_EL2` (the guest-trap trampoline reads this).
-//! 3. Set `HCR_EL2` to guest bits: `RW | VM | SWIO | AMO | IMO | FMO | TWI | TWE | TSC`.
+//! 3. Set `HCR_EL2` to guest bits: `RW | VM | SWIO | AMO | IMO | FMO | TWI | TWE | TSC | TID3`.
 //! 4. Restore guest GP (x1-x30), then x0 last (overwrites vcpu ptr).
 //! 5. `eret` → guest EL1.
 //!
@@ -432,10 +432,13 @@ vcpu_enter_guest:
     // SAFETY: TPIDR_EL2 is EL2-private; the guest cannot read or write it.
     msr  tpidr_el2, x0
 
-    // Set HCR_EL2 guest bits: RW|VM|SWIO|AMO|IMO|FMO|TWI|TWE|TSC.
+    // Set HCR_EL2 guest bits: RW|VM|SWIO|AMO|IMO|FMO|TWI|TWE|TSC|TID3.
     // RW(31)=AArch64 EL1, VM(0)=enable Stage-2, SWIO(1)=SW IRQ override,
     // AMO(3)/IMO(4)/FMO(5)=route physical async exceptions, TWI(12)/TWE(13)=trap
-    // WFI/WFE to EL2 (lets us emulate them), TSC(19)=trap SMC to EL2.
+    // WFI/WFE to EL2 (lets us emulate them), TSC(19)=trap SMC to EL2,
+    // TID3(18)=trap guest reads of the AArch64 ID-register group (Op0=3,Op1=0,
+    // CRn=0,CRm=1..7) to EL2 so the un-virtualized host PARange/feature bits
+    // are never handed to the guest raw — see `id_regs::read_trapped_id_reg`.
     // SAFETY: HCR_EL2 is EL2-private.
     mov  x9,  #(1 << 31)       // RW
     orr  x9,  x9,  #(1 << 0)   // VM
@@ -445,6 +448,7 @@ vcpu_enter_guest:
     orr  x9,  x9,  #(1 << 5)   // FMO
     orr  x9,  x9,  #(1 << 12)  // TWI
     orr  x9,  x9,  #(1 << 13)  // TWE
+    orr  x9,  x9,  #(1 << 18)  // TID3
     orr  x9,  x9,  #(1 << 19)  // TSC
     msr  hcr_el2, x9
     isb
