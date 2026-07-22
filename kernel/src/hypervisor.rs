@@ -5,6 +5,8 @@
 //! (Phase 05).  The public API here is intentionally kernel-internal; the
 //! stable VMM ABI (syscalls 220+) is exposed in Phase 04.
 
+#[cfg(target_arch = "aarch64")]
+pub mod pending_irqs;
 pub mod registry;
 
 #[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]

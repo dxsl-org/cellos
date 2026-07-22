@@ -11,11 +11,11 @@ extern crate alloc;
 #[cfg(target_arch = "aarch64")]
 use crate::sync::Spinlock;
 #[cfg(target_arch = "aarch64")]
-use alloc::{
-    collections::{BTreeMap, VecDeque},
-    vec::Vec,
-};
+use alloc::{collections::BTreeMap, vec::Vec};
 use types::{ViError, ViResult};
+
+#[cfg(target_arch = "aarch64")]
+use super::pending_irqs::PendingIrqs;
 
 // ── AArch64-only concrete types ───────────────────────────────────────────────
 
@@ -25,6 +25,7 @@ use crate::memory::stage2::Stage2Table;
 use api::hypervisor::ViVmExit as ApiVmExit;
 #[cfg(target_arch = "aarch64")]
 use hal::aarch64::{
+    id_regs::read_trapped_id_reg,
     stage2_regs::{disable_stage2, enable_stage2},
     vcpu::{run_vcpu_impl, AArch64Vcpu},
     vgic,
@@ -40,9 +41,11 @@ struct Vm {
     guest_pa: u64,
     guest_pages: usize,
     vcpus: Vec<AArch64Vcpu>,
-    /// Per-vCPU pending virtual IRQ queue; intids written by inject_irq, drained
-    /// into GICH LRs just before each run_vcpu_impl call (Phase 09).
-    vcpu_irqs: Vec<VecDeque<u32>>,
+    /// Per-vCPU pending virtual IRQ set; intids set by inject_irq, drained into
+    /// GICH LRs just before each run_vcpu_impl call (Phase 09). Fixed-size
+    /// coalescing bitset — see `pending_irqs::PendingIrqs` for why this isn't
+    /// a queue.
+    vcpu_irqs: Vec<PendingIrqs>,
     // reason: retained for future VM introspection/debug tooling (e.g. listing
     // active Stage-2 VMIDs); written at creation, not yet consumed by any reader.
     #[allow(dead_code)]
@@ -175,7 +178,7 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
         }
 
         vm.vcpus.push(AArch64Vcpu::new(entry_pc));
-        vm.vcpu_irqs.push(VecDeque::new());
+        vm.vcpu_irqs.push(PendingIrqs::new());
         Ok(vcpu_id)
     }
     #[cfg(not(target_arch = "aarch64"))]
@@ -233,35 +236,64 @@ pub unsafe fn run_vcpu(
             let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
             let vcpu_idx = vcpu_id.saturating_sub(1);
 
-            // ── Phase 09: drain IRQ queue → load into GICH LRs ──────────────────
-            // Collect pending intids (borrow of vcpu_irqs ends after collect()).
-            let pending: Vec<u32> = vm
-                .vcpu_irqs
-                .get_mut(vcpu_idx)
-                .map(|q| q.drain(..).collect())
-                .unwrap_or_default();
-            let num_loaded = pending.len().min(vgic::MAX_LRS);
-            // Re-queue IRQs that overflow the LR count.
-            if pending.len() > vgic::MAX_LRS {
-                if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
-                    for &intid in &pending[vgic::MAX_LRS..] {
-                        q.push_back(intid);
+            // ── Phase 09: drain pending-IRQ set → load into GICH LRs ────────────
+            // Ascending-INTID order is used as the load order (not a GIC-mandated
+            // priority — arrival order isn't guaranteed either). Bits still
+            // pending once LRs run out stay set and are picked up on the next
+            // entry, same as the old queue's overflow behavior.
+            let mut num_loaded = 0usize;
+            if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
+                while num_loaded < vgic::MAX_LRS {
+                    let Some(intid) = q.take_lowest() else {
+                        break;
+                    };
+                    // SAFETY: EL2; GICH MMIO at 0x0803_0000; num_loaded < MAX_LRS.
+                    unsafe {
+                        vgic::load_lr(num_loaded, intid);
                     }
-                }
-            }
-            // Load up to MAX_LRS pending IRQs into GICH list registers.
-            for (n, &intid) in pending[..num_loaded].iter().enumerate() {
-                // SAFETY: EL2; GICH MMIO at 0x0803_0000; n < MAX_LRS.
-                unsafe {
-                    vgic::load_lr(n, intid);
+                    num_loaded += 1;
                 }
             }
 
             // ── World-switch into guest ──────────────────────────────────────────
             let exit = {
                 let vcpu = vm.vcpus.get_mut(vcpu_idx).ok_or(ViError::NotFound)?;
-                // SAFETY: Stage-2 is enabled for this VMID; vcpu exclusively owned.
-                let exit = unsafe { run_vcpu_impl(vcpu) };
+
+                // Resolve guest ID_AA64* reads (trapped by HCR_EL2.TID3) entirely
+                // in-kernel: `ViVmExit::SysReg` carries no value field and
+                // `libs/api` is frozen (Law 1), so there is no ABI-compatible way
+                // to hand a resolved read back through the Cell — the kernel must
+                // write the guest GPR and resume here instead. Capped so a guest
+                // cannot spin this loop forever inside one syscall even though PC
+                // is always advanced past the trapping instruction below.
+                const MAX_ID_REG_RESOLVES: u32 = 64;
+                let mut resolved = 0u32;
+                let exit = loop {
+                    // SAFETY: Stage-2 is enabled for this VMID; vcpu exclusively owned.
+                    let exit = unsafe { run_vcpu_impl(vcpu) };
+                    if let HalVmExit::SysReg {
+                        op0,
+                        op1,
+                        crn,
+                        crm,
+                        op2,
+                        rt,
+                        is_write,
+                    } = exit
+                    {
+                        if !is_write && resolved < MAX_ID_REG_RESOLVES {
+                            if let Some(val) = read_trapped_id_reg(op0, op1, crn, crm, op2) {
+                                if (rt as usize) < 31 {
+                                    vcpu.gp[rt as usize] = val;
+                                }
+                                vcpu.g_elr_el2 = vcpu.exit_elr.wrapping_add(4);
+                                resolved += 1;
+                                continue;
+                            }
+                        }
+                    }
+                    break exit;
+                };
                 // Unhandled guest trap: dump the guest's own EL1 exception bank.
                 // After a guest-internal exception these carry the ORIGINAL
                 // syndrome (the EL2 exit only sees the follow-on vector-fetch
@@ -287,17 +319,17 @@ pub unsafe fn run_vcpu(
             };
 
             // ── Phase 09: drain GICH LRs after exit ─────────────────────────────
-            // Re-queue any LRs still in Active state (guest was preempted mid-handling).
-            // SAFETY: no vCPU running; EL2; GICH MMIO accessible.
+            // Re-mark pending any LRs still in Active state (guest was preempted
+            // mid-handling). SAFETY: no vCPU running; EL2; GICH MMIO accessible.
             if num_loaded > 0 {
                 let elrsr = unsafe { vgic::read_elrsr() };
                 for n in 0..num_loaded {
                     if (elrsr >> n) & 1 == 0 {
-                        // LR occupied — re-queue if Active or Pending+Active.
+                        // LR occupied — re-mark pending if Active or Pending+Active.
                         let lr_val = unsafe { vgic::read_lr(n) };
                         if (lr_val >> 28) & 3 != 0 {
                             if let Some(q) = vm.vcpu_irqs.get_mut(vcpu_idx) {
-                                q.push_front(lr_val & 0x3FF);
+                                q.set(lr_val & 0x3FF);
                             }
                         }
                     }
@@ -498,11 +530,15 @@ pub fn read_guest_memory(
     }
 }
 
-/// Enqueue a GICv2 virtual interrupt for delivery into vCPU via GICH LR on next entry.
+/// Mark a GICv2 virtual interrupt pending for delivery into vCPU via GICH LR on
+/// next entry.
 ///
-/// `intid` must be ≤ 1019 (validated by the syscall layer, m3).
-/// The intid is dequeued and loaded into a GICH List Register in `run_vcpu` before the
-/// next `run_vcpu_impl` call (Phase 09 GICH LR injection path).
+/// `intid` must be ≤ 1019 (validated by the syscall layer, m3). Pending state is
+/// a coalescing bitset (`PendingIrqs`), not a queue: re-injecting an intid that's
+/// already pending is a no-op, so a guest cannot grow kernel memory by masking an
+/// IRQ at the vGIC and repeatedly triggering this call for the same intid. The
+/// set bit is cleared and loaded into a GICH List Register in `run_vcpu` before
+/// the next `run_vcpu_impl` call (Phase 09 GICH LR injection path).
 pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViResult<usize> {
     #[cfg(target_arch = "aarch64")]
     {
@@ -511,7 +547,7 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViR
         let vm = map.get_mut(&(owner, vm_id)).ok_or(ViError::NotFound)?;
         let idx = vcpu_id.saturating_sub(1);
         if let Some(q) = vm.vcpu_irqs.get_mut(idx) {
-            q.push_back(intid);
+            q.set(intid);
         }
         Ok(0)
     }
