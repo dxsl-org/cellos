@@ -71,7 +71,9 @@ so the allocation is **global and must not collide**. Current owners:
 | `0x00`–`0x0F` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum |
 | `0x04` | `WIRE_ASCII` — kernel UART relay | kernel → input service | Overlaps the postcard range **but is disambiguated by sender** (kernel sender id `isize::MAX`), not by byte value |
 | `0x10` | `INPUT_EVENT_OPCODE` | input service → focused cell | |
-| `0x30`–`0x32` | legacy TLS raw ops (connect/send/recv) in the net service | client → net | Predates typed `NetRequest`; kept for `ostd::tls` |
+| `0x11` | `NET_READY` readiness edge (§10, G4 P2.5) | net service → interest-owner tid | Fixed 6-byte frame; safe: net→client byte-0 is otherwise postcard `NetResponse` ≤ `0x0F` (§10.2). **Numerically overlaps `NetRequest` variant 17 (`NotifyRegister`) — disambiguated by direction** (client→net vs net→client), same treatment as `0x04 WIRE_ASCII` |
+| `0x12` | `REACTOR_WAKE` (§10.5, G4 P2.5) | same-cell thread → reactor tid | Only byte-0 the kernel same-cell `pending_msgs` fallback accepts; coalesced. Numerically overlaps `NetRequest` variant 18 (`NotifyDeregister`) — disambiguated by direction |
+| `0x30`–`0x32` | legacy TLS raw ops (connect/send/recv) in the net service | client → net | Predates typed `NetRequest`; kept for `ostd::tls`. **Client→net only — the net service never emits these toward a client** (§10.2) |
 | `0xAC` | `APP_MSG_MAGIC` — App SDK envelope | any → `run_app!`/`app_entry!` cell | byte 1 = event type (`0x00` Message, `0xFF` Shutdown, `0xF0`/`0xF1` hotswap) |
 
 **Hazard:** the NIC Driver-Cell raw ops (`OP_TX=0`, `OP_RX=1`, `OP_GETMAC=2`)
@@ -204,3 +206,122 @@ A new or modified IPC path is compliant when:
 
 **Byte-0 registry amendments** must add a row to §3 with owner, direction, and
 the reason the value is safe against existing owners.
+
+**Amendment log:**
+- 2026-07-23 — **Ratified:** §3 rows `0x11 NET_READY` + `0x12 REACTOR_WAKE`;
+  new §10 "Readiness notifications" (G4 P2.5). Design + rationale:
+  `.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md`.
+  Includes user confirm #1 (of the Law-1 2×) for appending `NetRequest`
+  variants 17/18; confirm #2 happens at implementation time.
+
+---
+
+## 10. Readiness notifications (G4 P2.5) — Ratified 2026-07-23
+
+> How a cell learns "socket X is now readable/writable" without a kernel epoll.
+> Consumed by the G4 async reactor (`polling`/`mio` backends); implemented by the
+> net cell's readiness engine (G4 P2.6). Kernel stays multiplexing-free.
+
+### 10.1 `NET_READY` frame
+
+Fixed 6-byte raw frame, sender = net service tid, target = the **interest-owner
+tid** (10.3):
+
+```
+[0]      0x11  NET_READY
+[1]      events bitmask: READABLE 0x01 · WRITABLE 0x02 · ERROR 0x04 · HUP 0x08
+[2..6]   cap_id  u32 LE  (the provider-local socket handle from NetRequest)
+```
+
+Fixed length satisfies §4's explicit-boundary rule. Readiness is a **signal,
+never data**: the payload carries no bytes; the receiver re-fetches via
+`TcpRecv`/`UdpRecv` and must treat the frame as unforgeable only per 10.2.
+
+### 10.2 Collision-safety invariants (normative)
+
+1. `NetResponse` MUST NOT exceed 16 variants — its postcard byte-0 stays ≤
+   `0x0F`, disjoint from `0x11`/`0x12` forever.
+2. The net service never sends raw ops `0x30`–`0x32` toward a client; a reactor
+   receiving them logs and drops (§7).
+3. Attacker-controlled remote bytes exist only inside `NetResponse::Data`
+   payloads at offset ≥ 2 (postcard variant tag + length varint) — they can
+   never occupy byte-0, so `(sender_tid, byte0)` classification is unforgeable.
+4. `NetRequest` variants 17/18 postcard-encode to byte-0 `0x11`/`0x12` — the
+   same values as the two frames above. Safe **by direction only** (requests
+   flow client→net; the frames flow net→client / same-cell→reactor). Therefore:
+   the net service tid must never be a reactor's interest owner, and any
+   `NetRequest` growth past variant 18 (byte-0 `0x13`+) MUST re-check this
+   table before claiming the next index.
+
+### 10.3 Interest registration
+
+`NetRequest::NotifyRegister { cap_id: u32, interest: u8 }` (variant 17) and
+`NotifyDeregister { cap_id: u32 }` (variant 18) — **append-only**; discriminants
+0–16 are frozen. Interest bits: `READABLE 0x01 · WRITABLE 0x02` (ERROR/HUP are
+always-on, unmaskable). Rules:
+
+- Owner = the tid that sent `NotifyRegister`; edges go ONLY to that tid.
+  Re-register replaces the interest mask. `TcpClose`/UDP close imply deregister.
+- **Registration edge:** registering (or re-registering) immediately emits an
+  edge for every interest bit currently level-true — closes the
+  register-after-data race (mio semantics).
+- Non-owner `NotifyRegister`/ops on a cap → typed `Err(NOT_OWNER)` (fail-loud §7).
+
+### 10.4 Edge semantics + delivery
+
+- **Edge-triggered:** one edge per false→true transition per interest bit.
+  The client MUST drain until `WouldBlock`; an undrained level-true socket
+  produces no further edges.
+- Multiple transitions coalesce: the net cell keeps at most **one pending edge
+  slot per (owner, cap)**, OR-merging event bits.
+- Fan-out uses `sys_try_send` (§6 — never block on a client). A failed try_send
+  keeps the edge in its pending slot and retries next loop iteration until
+  delivered or deregistered — a dropped edge is **deferred, never lost**.
+  Bounded by construction (≤ 1 slot per interest).
+
+### 10.5 `REACTOR_WAKE` + the kernel same-cell fallback
+
+`notify()` (waking a reactor parked in recv, from another thread of the same
+cell or from itself before parking) sends the 1-byte frame `[0x12]` via
+`sys_try_send(reactor_tid, ..)`. The kernel's `pending_msgs` fallback (§6,
+previously input-service-only) is extended to queue a try_send **iff** the
+sender's cell == target's cell **and** byte-0 == `0x12` **and** no same-cell
+`0x12` is already queued (wakes are idempotent — coalesced to one slot). All
+other same-cell try_sends keep strict drop-if-not-ready.
+
+Because every recv path drains `pending_msgs` mask-honoring on entry, a wake
+queued while the reactor was not yet parked is returned at its next recv
+entry — no new syscall, and the wake is never *lost*. **SMP caveat:** the
+drain and the park take the scheduler lock separately, so a wake landing in
+the gap between them is seen only at the *next* recv entry — i.e. delivery
+may defer up to one timeout period. Consequently a reactor MUST park with
+`sys_recv_timeout` (bounded tick), NEVER bare `sys_recv` — with a bare recv
+the deferred wake would be a true lost wakeup.
+
+### 10.6 One recv consumer per tid + demux
+
+**Exactly one code path may recv on a given tid.** A reactor owns wildcard
+`sys_recv_timeout(0, ..)` on its own tid and classifies every message:
+
+| Match `(sender, byte0)` | Route |
+|---|---|
+| net tid, `0x11` | fire waker for the handle; unknown/closed handle → log+drop |
+| net tid, ≤ `0x0F` | postcard `NetResponse` → the reactor's in-flight request slot |
+| same cell, `0x12` | wake — return from wait (spurious-safe) |
+| `0xAC` / `0x10` | forward to the app queue (never dropped) |
+| anything else | log + drop (§7) — never decode-guess |
+
+`AppContext::run`/`run_with_lifecycle` on the same tid as a reactor is
+**forbidden** (two wildcard consumers = §8.2 poisoning); ostd enforces via a
+per-task recv-owner claim that panics at startup on double-claim. Blocking
+request/reply on *other* threads keeps the §2 masked-recv rule unchanged —
+delivery is tid-targeted, so a sibling's masked recv and the reactor's wildcard
+recv cannot steal each other's messages.
+
+### 10.7 Handle namespace (frozen)
+
+The `u32` socket handle is provider-local, allocated monotonically from 1,
+**never reused** within a provider's lifetime, `Err` on exhaustion — stale-edge
+handling is therefore drop-unknown-handle at the reactor. The std-layer
+`AsCellHandle` ABI over this value (class-tagged `u32`) is frozen in
+`.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md` §D7.
