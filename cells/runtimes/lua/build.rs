@@ -85,9 +85,17 @@ fn compile_lua_c(target: &str) {
     // (xpack release). The cc crate's auto-detection looks for
     // riscv64-unknown-elf-gcc which is not available; set it explicitly unless
     // the caller has already set CC_<target> in the environment.
-    if target.contains("riscv") && std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
-        build.compiler("riscv-none-elf-gcc");
-        // Required ABI flag for LP64D (64-bit ints/ptrs, double-precision FP).
+    if target.contains("riscv") {
+        // Compiler selection is conditional (CC_<target> in .cargo/config.toml
+        // wins), but the arch+ABI flags MUST apply unconditionally: without them
+        // a CC-env-provided riscv-none-elf-gcc inherits its soft-float default
+        // (rv64imac/lp64), and rust-lld rejects the float-ABI mismatch against
+        // the Rust target's lp64d hard-float objects ("different floating-point
+        // ABI"). Match riscv64gc-unknown-none-elf exactly: rv64gc + lp64d.
+        if std::env::var("CC_riscv64gc_unknown_none_elf").is_err() {
+            build.compiler("riscv-none-elf-gcc");
+        }
+        build.flag("-march=rv64gc");
         build.flag("-mabi=lp64d");
     }
 
