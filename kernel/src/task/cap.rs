@@ -210,7 +210,9 @@ impl CapSet {
     /// `hypervisor` can never be held on a CPU lacking H-ext.
     pub fn from_manifest(m: &api::manifest::CellManifest) -> CapSet {
         let hv = m.has_hypervisor()
-            && (crate::cpu_features::has_h_ext() || crate::cpu_features::has_el2());
+            && (crate::cpu_features::has_h_ext()
+                || crate::cpu_features::has_el2()
+                || crate::cpu_features::has_x86_virt());
         let mut mmio = 0u8;
         if m.has_gpio() {
             mmio |= crate::resource_registry::DEV_GPIO;

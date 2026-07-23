@@ -26,6 +26,10 @@ pub mod pku;
 #[cfg(target_arch = "x86_64")]
 pub mod rtc;
 #[cfg(target_arch = "x86_64")]
+pub mod svm;
+#[cfg(target_arch = "x86_64")]
+pub mod svm_vcpu;
+#[cfg(target_arch = "x86_64")]
 pub mod syscall;
 #[cfg(target_arch = "x86_64")]
 pub mod timer;
@@ -33,6 +37,14 @@ pub mod timer;
 pub mod trap;
 #[cfg(target_arch = "x86_64")]
 pub mod uart_16550;
+#[cfg(target_arch = "x86_64")]
+pub mod vmcb;
+#[cfg(target_arch = "x86_64")]
+pub mod vmexit_decode;
+#[cfg(target_arch = "x86_64")]
+pub mod vmx;
+#[cfg(target_arch = "x86_64")]
+pub mod world_switch;
 
 #[cfg(target_arch = "x86_64")]
 pub use context::CpuContext as Context;

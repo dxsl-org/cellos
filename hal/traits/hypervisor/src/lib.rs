@@ -33,6 +33,26 @@ pub enum ViVmExit {
         rt: u8,
         is_write: bool,
     },
+    // ── x86 (SVM/VT-x) exit variants (Tier 3b x86 VMM, P03) ─────────────────
+    /// Guest executed `IN` from an I/O port (x86 IOIO exit).
+    PortIn {
+        port: u16,
+        size: u8,
+    },
+    /// Guest executed `OUT` to an I/O port. `val` holds the low `size` bytes.
+    PortOut {
+        port: u16,
+        size: u8,
+        val: u32,
+    },
+    /// Guest executed `HLT`.
+    Hlt,
+    /// Guest RDMSR/WRMSR (x86). `index` = ECX; `value` = EDX:EAX on write.
+    Msr {
+        index: u32,
+        is_write: bool,
+        value: u64,
+    },
     Preempted,
     Shutdown,
     Unknown {

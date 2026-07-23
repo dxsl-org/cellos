@@ -59,10 +59,19 @@ pub fn qemu_exit(success: bool) -> ! {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        qemu_exit::X86::new(0xF4, 0).exit(if success { 0 } else { 1 });
+        // SAFETY: 0xF4 is the QEMU `isa-debug-exit` I/O port wired in the x86
+        // test harness (`-device isa-debug-exit,iobase=0xf4`); writing it exits
+        // QEMU. Constructing the port handle is `unsafe` (arbitrary port I/O).
+        unsafe {
+            qemu_exit::X86::new(0xF4, 0).exit(if success { 0 } else { 1 });
+        }
     }
     // Fallback for other arches: spin forever so the test times out clearly.
     #[allow(clippy::empty_loop)]
+    // reason: on riscv/aarch64/x86_64 the arch-specific `.exit()` above diverges,
+    // so this loop is unreachable there; it only executes on a hypothetical arch
+    // with no qemu_exit backend.
+    #[allow(unreachable_code)]
     loop {}
 }
 
@@ -369,6 +378,62 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // and LAPIC are identity-mapped in our new PML4 at the ACPI-parsed bases.
         crate::hal::init_timers();
         log_info("x86_64 timers initialized (HPET + LAPIC)");
+
+        // Tier 3b x86 VMM P01: enter root-of-virtualization on the BSP.
+        // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
+        // Failure is non-fatal — the kernel runs fine without virt; the
+        // HypervisorCap gate simply stays closed (has_x86_virt() == false).
+        match cpu_features::x86_virt_kind() {
+            Some(cpu_features::X86Virt::Svm) => {
+                let hsave_pa = {
+                    let mut guard = memory::frame::FRAME_ALLOCATOR.lock();
+                    guard
+                        .as_mut()
+                        .expect("Frame allocator not initialized")
+                        .allocate_frame()
+                };
+                match hsave_pa {
+                    // SAFETY: hsave frame is freshly allocated, exclusively
+                    // owned, never freed (root operation lasts until reset),
+                    // and never mapped into any guest NPT (P02 invariant).
+                    Some(pa) => match unsafe { hal::svm::enable(pa as u64) } {
+                        Ok(()) => {
+                            cpu_features::latch_x86_root_active();
+                            log_info("x86 virt: root operation active (SVM)");
+                        }
+                        Err(_) => log_info("x86 virt: SVM present but firmware-locked; cap closed"),
+                    },
+                    None => log_info("x86 virt: OOM allocating HSAVE frame; cap closed"),
+                }
+            }
+            Some(cpu_features::X86Virt::Vmx) => {
+                let vmxon_pa = {
+                    let mut guard = memory::frame::FRAME_ALLOCATOR.lock();
+                    guard
+                        .as_mut()
+                        .expect("Frame allocator not initialized")
+                        .allocate_frame()
+                };
+                match vmxon_pa {
+                    Some(pa) => {
+                        let va = memory::frame::phys_to_virt(pa) as *mut u32;
+                        // SAFETY: vmxon frame freshly allocated + exclusively
+                        // owned + alive forever; va is its HHDM mapping.
+                        match unsafe { hal::vmx::enter_root(pa as u64, va) } {
+                            Ok(()) => {
+                                cpu_features::latch_x86_root_active();
+                                log_info("x86 virt: root operation active (VMX)");
+                            }
+                            Err(_) => {
+                                log_info("x86 virt: VMX present but unavailable; cap closed")
+                            }
+                        }
+                    }
+                    None => log_info("x86 virt: OOM allocating VMXON frame; cap closed"),
+                }
+            }
+            None => log_info("x86 virt: not supported by CPU; cap closed"),
+        }
     }
     // Bare physical: RV32 Nano (SATP=0), x86_32 (CR0.PG=0), AArch32 (MMU off).
     #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
@@ -593,6 +658,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             crate::layer2_selftest::run_mte_selftest();
             #[cfg(target_arch = "x86_64")]
             crate::layer2_selftest::run_pku_selftest();
+            // Tier 3b x86 VMM P03 M1: SVM world-switch smoke (port-out 'K' + HLT).
+            // Only meaningful when SVM root operation was entered at boot.
+            #[cfg(target_arch = "x86_64")]
+            if cpu_features::has_x86_virt() {
+                crate::hypervisor::svm_registry::x86_smoke();
+            } else {
+                log_info("X86-VMM-SMOKE: SKIP (no SVM/VMX root)");
+            }
         }
 
         // Spawn Platform Cell (PCIe ECAM scanner) before init so PCI_DEVICES is

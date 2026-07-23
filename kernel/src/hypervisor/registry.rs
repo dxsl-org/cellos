@@ -12,6 +12,9 @@ extern crate alloc;
 use crate::sync::Spinlock;
 #[cfg(target_arch = "aarch64")]
 use alloc::{collections::BTreeMap, vec::Vec};
+// reason: ViError is used only by the aarch64 branch; x86_64/other arches
+// delegate to svm_registry and reference only ViResult here.
+#[allow(unused_imports)]
 use types::{ViError, ViResult};
 
 #[cfg(target_arch = "aarch64")]
@@ -139,7 +142,11 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         };
         Ok(vm_id)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        return super::svm_registry::create_vm(owner, guest_pages);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, guest_pages);
         Err(ViError::NotSupported)
@@ -181,7 +188,11 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
         vm.vcpu_irqs.push(PendingIrqs::new());
         Ok(vcpu_id)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        return super::svm_registry::create_vcpu(owner, vm_id, entry_pc);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, vm_id, entry_pc);
         Err(ViError::NotSupported)
@@ -209,7 +220,11 @@ pub fn map_guest_memory(
             .map_err(|_| ViError::OutOfMemory)?;
         Ok(())
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        return super::svm_registry::map_guest_memory(owner, vm_id, ipa, size, writable);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, vm_id, ipa, size, writable);
         Err(ViError::NotSupported)
@@ -368,6 +383,11 @@ pub unsafe fn run_vcpu(
             HalVmExit::Preempted => ApiVmExit::Preempted,
             HalVmExit::Shutdown => ApiVmExit::Shutdown,
             HalVmExit::Unknown { ec, iss } => ApiVmExit::Unknown { ec, iss },
+            // x86-only exits (SVM/VT-x) never arise on the aarch64 world-switch.
+            HalVmExit::PortIn { .. }
+            | HalVmExit::PortOut { .. }
+            | HalVmExit::Hlt
+            | HalVmExit::Msr { .. } => ApiVmExit::Unknown { ec: 0, iss: 0 },
         };
         // SAFETY: exit_out validated by syscall layer.
         unsafe {
@@ -375,7 +395,45 @@ pub unsafe fn run_vcpu(
         }
         Ok(0)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        use api::hypervisor::ViVmExit as ApiVmExit;
+        use hal::ViVmExit as HalVmExit;
+        let hal_exit = super::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id)?;
+        // The x86 PortIn/PortOut/Hlt/Msr HAL variants have no `libs/api` mirror
+        // until P04 (Law 1 ABI freeze); surface them as Unknown{ec=exitcode-ish}
+        // meanwhile. MMIO/Preempted/Shutdown/Unknown already have API mirrors.
+        let api_exit = match hal_exit {
+            HalVmExit::MmioRead { ipa, size, reg } => ApiVmExit::MmioRead { ipa, size, reg },
+            HalVmExit::MmioWrite { ipa, size, val } => ApiVmExit::MmioWrite { ipa, size, val },
+            HalVmExit::Preempted => ApiVmExit::Preempted,
+            HalVmExit::Shutdown => ApiVmExit::Shutdown,
+            HalVmExit::Unknown { ec, iss } => ApiVmExit::Unknown { ec, iss },
+            HalVmExit::PortIn { port, size } => ApiVmExit::Unknown {
+                ec: 0x7B,
+                iss: ((port as u32) << 8) | size as u32,
+            },
+            HalVmExit::PortOut { port, size, val } => ApiVmExit::Unknown {
+                ec: 0x7B,
+                iss: ((port as u32) << 8) | size as u32 | ((val & 0xFF) << 16),
+            },
+            HalVmExit::Hlt => ApiVmExit::Unknown { ec: 0x78, iss: 0 },
+            HalVmExit::Msr { index, .. } => ApiVmExit::Unknown {
+                ec: 0x7C,
+                iss: index,
+            },
+            // ARM-only HAL variants — unreachable on x86 (no aarch64 exits here).
+            HalVmExit::Hvc { .. } | HalVmExit::Wfi | HalVmExit::SysReg { .. } => {
+                ApiVmExit::Unknown { ec: 0, iss: 0 }
+            }
+        };
+        // SAFETY: exit_out validated by the syscall layer.
+        unsafe {
+            core::ptr::write(exit_out, api_exit);
+        }
+        return Ok(0);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, vm_id, vcpu_id, _budget_ns, exit_out);
         Err(ViError::NotSupported)
@@ -416,7 +474,11 @@ pub fn vcpu_regs(
         }
         Ok(0)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        return super::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, buf_ptr, write);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, vm_id, vcpu_id, buf_ptr, write);
         Err(ViError::NotSupported)
@@ -469,7 +531,11 @@ pub fn write_guest_memory(
         }
         Ok(len)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        return super::svm_registry::write_guest_memory(owner, vm_id, gpa, src_ptr, len);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, vm_id, gpa, src_ptr, len);
         Err(ViError::NotSupported)
@@ -523,7 +589,11 @@ pub fn read_guest_memory(
         }
         Ok(len)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        return super::svm_registry::read_guest_memory(owner, vm_id, gpa, dst_ptr, len);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = (owner, vm_id, gpa, dst_ptr, len);
         Err(ViError::NotSupported)
@@ -553,6 +623,7 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViR
     }
     #[cfg(not(target_arch = "aarch64"))]
     {
+        // x86 IRQ injection (EVENTINJ) lands in P05; accept as a no-op for now.
         let _ = (owner, vm_id, vcpu_id, intid);
         Ok(0)
     }
@@ -587,7 +658,11 @@ pub fn reap_vms_for_task(dead_tid: usize) {
             drop(vm); // Stage2Table::drop frees all frames
         }
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
+    {
+        super::svm_registry::reap_vms_for_task(dead_tid);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
         let _ = dead_tid;
     }
