@@ -400,27 +400,26 @@ pub unsafe fn run_vcpu(
         use api::hypervisor::ViVmExit as ApiVmExit;
         use hal::ViVmExit as HalVmExit;
         let hal_exit = super::svm_registry::run_vcpu_hal(owner, vm_id, vcpu_id)?;
-        // The x86 PortIn/PortOut/Hlt/Msr HAL variants have no `libs/api` mirror
-        // until P04 (Law 1 ABI freeze); surface them as Unknown{ec=exitcode-ish}
-        // meanwhile. MMIO/Preempted/Shutdown/Unknown already have API mirrors.
+        // HAL → API conversion (VERSION 2 ABI — the x86 variants are frozen at
+        // discriminants 8-11). `reg` is not decoded for PortIn (guest `IN`
+        // always targets (E)AX) → 0.
         let api_exit = match hal_exit {
             HalVmExit::MmioRead { ipa, size, reg } => ApiVmExit::MmioRead { ipa, size, reg },
             HalVmExit::MmioWrite { ipa, size, val } => ApiVmExit::MmioWrite { ipa, size, val },
             HalVmExit::Preempted => ApiVmExit::Preempted,
             HalVmExit::Shutdown => ApiVmExit::Shutdown,
             HalVmExit::Unknown { ec, iss } => ApiVmExit::Unknown { ec, iss },
-            HalVmExit::PortIn { port, size } => ApiVmExit::Unknown {
-                ec: 0x7B,
-                iss: ((port as u32) << 8) | size as u32,
-            },
-            HalVmExit::PortOut { port, size, val } => ApiVmExit::Unknown {
-                ec: 0x7B,
-                iss: ((port as u32) << 8) | size as u32 | ((val & 0xFF) << 16),
-            },
-            HalVmExit::Hlt => ApiVmExit::Unknown { ec: 0x78, iss: 0 },
-            HalVmExit::Msr { index, .. } => ApiVmExit::Unknown {
-                ec: 0x7C,
-                iss: index,
+            HalVmExit::PortIn { port, size } => ApiVmExit::PortIn { port, size, reg: 0 },
+            HalVmExit::PortOut { port, size, val } => ApiVmExit::PortOut { port, size, val },
+            HalVmExit::Hlt => ApiVmExit::Hlt,
+            HalVmExit::Msr {
+                index,
+                is_write,
+                value,
+            } => ApiVmExit::Msr {
+                index,
+                is_write,
+                val: value,
             },
             // ARM-only HAL variants — unreachable on x86 (no aarch64 exits here).
             HalVmExit::Hvc { .. } | HalVmExit::Wfi | HalVmExit::SysReg { .. } => {
@@ -621,9 +620,14 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViR
         }
         Ok(0)
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "x86_64")]
     {
-        // x86 IRQ injection (EVENTINJ) lands in P05; accept as a no-op for now.
+        // `intid` is reinterpreted as an x86 interrupt vector (8259 line remap).
+        super::svm_registry::inject_irq(owner, vm_id, vcpu_id, intid)?;
+        return Ok(0);
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
         let _ = (owner, vm_id, vcpu_id, intid);
         Ok(0)
     }

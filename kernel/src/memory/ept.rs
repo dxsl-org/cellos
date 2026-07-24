@@ -69,8 +69,10 @@ const NPT_USER: u64 = 1 << 2;
 /// I/O-exit path in P03 handles it). Frozen before the first VM-entry.
 pub const MMIO_HOLES: &[(u64, u64)] = &[
     (0xd000_0000, 0xd000_4000), // virtio-mmio bus: 4 slots × 0x1000 (P06/P07/P08)
-    (0xFEC0_0000, 0xFEC0_1000), // IOAPIC (defense-in-depth; MVP boots nolapic noapic)
-    (0xFEE0_0000, 0xFEE0_1000), // LAPIC  (defense-in-depth)
+    (0xFEC0_0000, 0xFEC0_1000), // IOAPIC (unmodelled; no MADT IOAPIC entry → guest uses virtual-wire PIC)
+    // LAPIC (0xFEE00000) is NOT a hole: it is RAM-backed via map_device_frame
+    // (TCG has no DecodeAssist, so trap-and-emulate is impossible). The timer is
+    // polled kernel-side on HLT (see hal svm_vcpu). Guest RAM never reaches it.
 ];
 
 // ── Errors (mirror S2MapError) ───────────────────────────────────────────────
@@ -275,6 +277,27 @@ impl NestedPageTable {
             cur_hpa += PAGE_SIZE as u64;
         }
         Ok(())
+    }
+
+    /// Map a single kernel-owned device frame at `gpa` → `hpa`, bypassing the
+    /// guest-RAM SAS carve check and the [`MMIO_HOLES`] reservation.
+    ///
+    /// Used only for hypervisor-owned emulated-device pages the kernel
+    /// allocates and frees itself — the RAM-backed xAPIC window (0xFEE00000),
+    /// where per-access trap-and-emulate is impossible under QEMU TCG (empty
+    /// DecodeAssist → no instruction bytes on the NPF). `hpa` must be a
+    /// kernel-allocated frame the caller tracks for teardown; it is deliberately
+    /// **not** guest RAM, so the SAS check that `map()` enforces does not apply.
+    pub fn map_device_frame(
+        &mut self,
+        gpa: u64,
+        hpa: u64,
+        writable: bool,
+    ) -> Result<(), EptMapError> {
+        if gpa >= GPA_LIMIT || hpa >= GPA_LIMIT {
+            return Err(EptMapError::OutOfBounds);
+        }
+        self.map_single(gpa, hpa, writable)
     }
 
     /// Unmap `n_pages` starting at `gpa`; silently skips unmapped pages.

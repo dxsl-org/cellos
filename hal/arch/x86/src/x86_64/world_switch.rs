@@ -13,7 +13,9 @@
 //!   guest exits. **This is the GS.base leak fence**: Cellos reads CPU-local via
 //!   `gs:`, so between `VMRUN` return and the host `VMLOAD` the code must touch
 //!   NO `gs:`-relative memory and interrupts must stay masked (the caller runs
-//!   with IF=0).
+//!   with IF=0; the stub's own `sti` sits in the STI shadow of `VMRUN` and
+//!   `#VMEXIT` clears IF in hardware, so no host handler ever runs inside the
+//!   fence — see the inline comment at the `sti`).
 //!
 //! # gpr[] index = x86 register number
 //! 0=RAX 1=RCX 2=RDX 3=RBX 4=RSP 5=RBP 6=RSI 7=RDI 8..15=R8..R15.
@@ -56,6 +58,10 @@ global_asm!(
     "push rdx",
     "push rdi",
     "push rsi",
+    // GIF=0: full fence (INTR/NMI/SMI) around host-state manipulation. #VMEXIT
+    // also leaves GIF=0, so without the STGI at the end of this stub the host
+    // would never take another interrupt after the first exit.
+    "clgi",
     // Save host FS/GS/KernelGSBase/syscall-MSRs/TR/LDTR → host-save VMCB.
     "mov rax, [rsp+16]",
     "vmsave", // implicit operand = rax
@@ -78,8 +84,26 @@ global_asm!(
     // Load guest FS/GS/... then run. rax must be guest_vmcb_pa for both.
     "mov rax, [rsp+8]",
     "vmload", // guest FS/GS/KernelGSBase/... ← guest VMCB
-    "vmrun",  // ── GUEST RUNS ── returns here on #VMEXIT
+    // STI directly before VMRUN: with V_INTR_MASKING set, the host RFLAGS.IF
+    // snapshot at VMRUN (HIF) gates whether a physical interrupt (the host
+    // scheduler tick) is recognised in the guest and forces a #VMEXIT_INTR.
+    // Without it, a guest spin loop containing no intercepted instruction
+    // (e.g. Linux's calibrate_delay `while (ticks == jiffies);`) runs
+    // unpreemptible forever and freezes the whole host. GIF is 0 here, so the
+    // STI delivers nothing; VMRUN sets GIF=1 for the guest.
+    "sti",
+    "vmrun", // ── GUEST RUNS ── returns here on #VMEXIT (GIF=0 again)
+    // Drop IF before anything else: #VMEXIT reloads host RFLAGS from the host
+    // save area (IF=1 from the STI above) but leaves GIF=0, so this CLI runs
+    // before any interrupt can be taken.
+    "cli",
     // On return: rax=host RAX (from HSAVE), rbx..r15=GUEST values, gs=GUEST base.
+    // FIRST persist the guest's VMSAVE-managed state (FS/GS/KernelGSBase, the
+    // syscall MSRs, TR/LDTR) back into the guest VMCB — VMRUN does NOT save these
+    // automatically, so without this the guest's `wrmsr GS_BASE` (per-CPU setup)
+    // is lost on the next VMLOAD and every GS-relative access faults at CR2=off.
+    "mov rax, [rsp+8]", // rax = guest_vmcb_pa
+    "vmsave",           // guest FS/GS/KernelGSBase/... → guest VMCB
     // Save guest GPRs back. rax := gpr_ptr (clobbering host RAX is fine — the
     // Rust caller reads guest RAX from the VMCB, not from here). NO gs: access
     // is permitted until the host VMLOAD below.
@@ -101,6 +125,10 @@ global_asm!(
     // Restore host FS/GS/KernelGSBase/syscall-MSRs ← host-save VMCB. gs: valid again.
     "mov rax, [rsp+16]",
     "vmload",
+    // GIF=1: re-open host interrupt recognition (IF is 0, so any pending host
+    // tick stays held until the caller — or the syscall return — re-enables IF
+    // outside the VM-registry lock).
+    "stgi",
     // Pop the arg slots + callee-saved and return.
     "add rsp, 24",
     "pop r15",

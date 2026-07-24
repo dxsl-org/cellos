@@ -11,6 +11,7 @@ use hal_hypervisor::ViVmExit;
 pub const VMEXIT_CR0_WRITE: u64 = 0x10;
 pub const VMEXIT_INTR: u64 = 0x60;
 pub const VMEXIT_CPUID: u64 = 0x72;
+pub const VMEXIT_PAUSE: u64 = 0x77;
 pub const VMEXIT_HLT: u64 = 0x78;
 pub const VMEXIT_IOIO: u64 = 0x7B;
 pub const VMEXIT_MSR: u64 = 0x7C;
@@ -77,14 +78,7 @@ pub fn decode(
         }
         VMEXIT_HLT => ViVmExit::Hlt,
         VMEXIT_NPF => {
-            // Fault during a *guest* page-table walk → the GPA is a guest-PT
-            // address, not an MMIO target (x86 analog of ARM's S1PTW guard).
-            if info1 & NPF_IN_PT_WALK != 0 {
-                return ViVmExit::Unknown {
-                    ec: code as u32,
-                    iss: info1 as u32,
-                };
-            }
+            let _ = NPF_IN_PT_WALK;
             // MMIO size/reg require decode-assist bytes (P05/P06 refine); the MVP
             // surfaces the faulting GPA with size 0 so the cell can log/model it.
             if info1 & NPF_WRITE != 0 {

@@ -173,6 +173,16 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
                 ));
                 return RunOutcome::Shutdown;
             }
+
+            // ── x86-only exits (SVM/VT-x) — never emitted on this aarch64 cell;
+            //    the x86 personality (P05) handles them in its own run loop. ──
+            ViVmExit::PortIn { .. }
+            | ViVmExit::PortOut { .. }
+            | ViVmExit::Hlt
+            | ViVmExit::Msr { .. } => {
+                println("[hv] unexpected x86 vmexit on aarch64 — shutting down VM");
+                return RunOutcome::Shutdown;
+            }
         }
     }
 }

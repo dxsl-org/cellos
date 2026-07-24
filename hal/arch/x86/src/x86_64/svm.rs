@@ -93,6 +93,76 @@ pub unsafe fn enable(hsave_pa: u64) -> ViResult<()> {
     Ok(())
 }
 
+/// Punch passthrough holes in an all-ones MSRPM so a booting guest touches its
+/// own context MSRs natively instead of round-tripping every access to the VMM.
+///
+/// The bitmap must already be filled with `0xFF` (intercept every MSR). This
+/// clears the intercept bits for MSRs the CPU saves/restores **per guest** —
+/// the `SYSCALL`/`SYSENTER` target MSRs and the segment-base MSRs, handled by
+/// `VMSAVE`/`VMLOAD` and the VMCB state-save area — so letting the guest read
+/// and write them directly is both correct and safe. `EFER` keeps its **write**
+/// intercept (so the run loop can re-assert `SVME`) but its read passes through.
+/// Every other MSR stays intercepted and is stubbed by the run loop.
+///
+/// # Safety
+/// `msrpm_va` must be the live kernel VA of the 8 KiB MSRPM frame, already
+/// zero-filled to `0xFF`, owned by the caller for the vCPU's lifetime.
+pub unsafe fn msrpm_passthrough_boot(msrpm_va: *mut u8) {
+    // Guest-context MSRs: passthrough read + write.
+    const PASSTHRU: [u32; 10] = [
+        0x174,        // IA32_SYSENTER_CS
+        0x175,        // IA32_SYSENTER_ESP
+        0x176,        // IA32_SYSENTER_EIP
+        0xC000_0081,  // STAR
+        0xC000_0082,  // LSTAR
+        0xC000_0083,  // CSTAR
+        0xC000_0084,  // SFMASK
+        0xC000_0100,  // FS_BASE
+        0xC000_0101,  // GS_BASE
+        0xC000_0102,  // KERNEL_GS_BASE
+    ];
+    for &m in &PASSTHRU {
+        // SAFETY: caller guarantees msrpm_va is the live 8 KiB MSRPM frame.
+        unsafe { msrpm_clear(msrpm_va, m, true, true) };
+    }
+    // EFER: read passthrough, write stays intercepted (SVME re-assert).
+    // SAFETY: as above.
+    unsafe { msrpm_clear(msrpm_va, MSR_EFER, true, false) };
+}
+
+/// Clear the read and/or write intercept bit of `msr` in the MSRPM at `base`.
+/// MSRs outside the three MSRPM-covered ranges are left intercepted.
+///
+/// # Safety
+/// `base` must be the live 8 KiB MSRPM frame VA (see [`msrpm_passthrough_boot`]).
+unsafe fn msrpm_clear(base: *mut u8, msr: u32, clr_read: bool, clr_write: bool) {
+    let (range_byte, idx) = if msr < 0x2000 {
+        (0usize, msr)
+    } else if (0xC000_0000..0xC000_2000).contains(&msr) {
+        (0x800usize, msr - 0xC000_0000)
+    } else if (0xC001_0000..0xC001_2000).contains(&msr) {
+        (0x1000usize, msr - 0xC001_0000)
+    } else {
+        return;
+    };
+    let bit = (idx as usize) * 2;
+    let byte_off = range_byte + bit / 8;
+    let read_mask = 1u8 << (bit % 8);
+    let write_mask = 1u8 << ((bit % 8) + 1);
+    // SAFETY: byte_off < 0x1800 < 8 KiB frame; caller owns the frame.
+    unsafe {
+        let p = base.add(byte_off);
+        let mut b = core::ptr::read_volatile(p);
+        if clr_read {
+            b &= !read_mask;
+        }
+        if clr_write {
+            b &= !write_mask;
+        }
+        core::ptr::write_volatile(p, b);
+    }
+}
+
 /// # Safety
 /// `msr` must be an architecturally-defined MSR present on this CPU, else #GP.
 unsafe fn rdmsr(msr: u32) -> u64 {

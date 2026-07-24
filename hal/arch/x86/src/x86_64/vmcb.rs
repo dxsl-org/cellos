@@ -24,6 +24,8 @@ pub const OFF_EXITCODE: usize = 0x070;
 pub const OFF_EXITINFO1: usize = 0x078;
 pub const OFF_EXITINFO2: usize = 0x080;
 pub const OFF_EXITINTINFO: usize = 0x088;
+/// Guest interrupt-shadow state (bit 0 set = in a STI/MOV-SS shadow).
+pub const OFF_INT_SHADOW: usize = 0x068;
 const OFF_NP_ENABLE: usize = 0x090;
 pub const OFF_EVENTINJ: usize = 0x0A8;
 const OFF_NCR3: usize = 0x0B0;
@@ -41,16 +43,16 @@ const OFF_EFER: usize = 0x4D0;
 const OFF_CR4: usize = 0x548;
 const OFF_CR3: usize = 0x550;
 const OFF_CR0: usize = 0x558;
-const OFF_RFLAGS: usize = 0x570;
+pub const OFF_RFLAGS: usize = 0x570;
 pub const OFF_RIP: usize = 0x578;
 const OFF_RSP: usize = 0x5D8;
 pub const OFF_RAX: usize = 0x5F8;
 const OFF_GPAT: usize = 0x680;
 
 // ── Intercept bits ───────────────────────────────────────────────────────────
-const CR0_WRITE_INTERCEPT: u32 = 1 << 16; // CR-intercept dword: high16 = writes
 const INT1_INTR: u32 = 1 << 0;
 const INT1_CPUID: u32 = 1 << 18;
+const INT1_PAUSE: u32 = 1 << 23;
 const INT1_HLT: u32 = 1 << 24;
 const INT1_IOIO: u32 = 1 << 27;
 const INT1_MSR: u32 = 1 << 28;
@@ -89,11 +91,17 @@ impl VmcbView {
     /// MSRPM at the given physical addresses (all-ones bitmaps → intercept all),
     /// and a flat GDT at `gdt_gpa` (0 for the M1 smoke blob).
     pub fn init(&mut self, entry_rip: u64, ncr3: u64, gdt_gpa: u64, iopm_pa: u64, msrpm_pa: u64) {
-        // Control area.
-        self.w32(OFF_CR_INTERCEPT, CR0_WRITE_INTERCEPT);
+        // Control area. No CR-write intercept: on SVM the guest drives its own
+        // paging/long-mode through NPT (CR0.PG trapping is a VMX-only need).
+        // CPUID IS intercepted so the run loop can clear the x2APIC feature bit
+        // (leaf 1 ECX[21]) — the guest then drives the LAPIC through the
+        // RAM-backed 0xFEE00000 xAPIC window instead of x2APIC MSRs. PAUSE is
+        // intercepted so guest busy-waits (jiffies calibration loops that spin
+        // on cpu_relax and never HLT) still receive paced timer ticks.
+        self.w32(OFF_CR_INTERCEPT, 0);
         self.w32(
             OFF_INTERCEPT1,
-            INT1_INTR | INT1_CPUID | INT1_HLT | INT1_IOIO | INT1_MSR,
+            INT1_INTR | INT1_CPUID | INT1_PAUSE | INT1_HLT | INT1_IOIO | INT1_MSR,
         );
         self.w32(OFF_INTERCEPT2, INT2_VMRUN);
         self.w64(OFF_IOPM_BASE, iopm_pa);

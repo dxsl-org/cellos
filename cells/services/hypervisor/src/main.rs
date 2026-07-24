@@ -29,6 +29,9 @@ api::declare_syscalls![
     OpenCap,
     ReadCap,
     CloseCap,
+    // Guest console input: drain the kernel UART RX ring (fd 0) into the
+    // emulated 16550 RX FIFO (x86) / future PL011 RX (aarch64)
+    Read,
     // Timer emulation
     GetTime,
     // VMM syscalls 220-227
@@ -42,36 +45,87 @@ api::declare_syscalls![
     ReadGuestMemory,
 ];
 
-mod dtb;
-mod gicd;
-mod loader_image;
-mod net_backend;
-mod pl011;
-mod psci;
-mod run_loop;
-mod timer;
-mod virtio_blk;
-mod virtio_console;
-mod virtio_mmio;
-mod virtio_net;
-mod virtqueue;
+// Arch-generic VMM syscall wrappers (used by both personalities).
 mod vmm;
 
-use ostd::io::println;
-use types::ViError;
+// ── aarch64 (EL2) personality ─────────────────────────────────────────────────
+#[cfg(target_arch = "aarch64")]
+mod dtb;
+#[cfg(target_arch = "aarch64")]
+mod gicd;
+#[cfg(target_arch = "aarch64")]
+mod loader_image;
+#[cfg(target_arch = "aarch64")]
+mod net_backend;
+#[cfg(target_arch = "aarch64")]
+mod pl011;
+#[cfg(target_arch = "aarch64")]
+mod psci;
+#[cfg(target_arch = "aarch64")]
+mod run_loop;
+#[cfg(target_arch = "aarch64")]
+mod timer;
+#[cfg(target_arch = "aarch64")]
+mod virtio_blk;
+#[cfg(target_arch = "aarch64")]
+mod virtio_console;
+#[cfg(target_arch = "aarch64")]
+mod virtio_mmio;
+#[cfg(target_arch = "aarch64")]
+mod virtio_net;
+#[cfg(target_arch = "aarch64")]
+mod virtqueue;
 
-/// Guest IPA base (1 GiB, must match registry.rs GUEST_IPA_BASE).
-const GUEST_IPA_BASE: u64 = 0x4000_0000;
-/// 128 MiB guest RAM.
-const GUEST_RAM_SIZE: u64 = 128 * 1024 * 1024;
-/// Page count for create_vm.
-const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;
+// ── x86_64 (SVM/VT-x) personality ──────────────────────────────────────────────
+#[cfg(target_arch = "x86_64")]
+mod acpi;
+#[cfg(target_arch = "x86_64")]
+mod boot_info;
+#[cfg(target_arch = "x86_64")]
+mod boot_x86;
+#[cfg(target_arch = "x86_64")]
+mod cmos_rtc;
+#[cfg(target_arch = "x86_64")]
+mod loader_image_x86;
+#[cfg(target_arch = "x86_64")]
+mod pic_8259;
+#[cfg(target_arch = "x86_64")]
+mod pit_8253;
+#[cfg(target_arch = "x86_64")]
+mod run_loop_x86;
+#[cfg(target_arch = "x86_64")]
+mod uart_16550;
 
-const VMLINUZ_PATH: &str = "/vmlinuz";
-const INITRD_PATH: &str = "/initrd.gz";
-
+/// Entry: dispatch to the arch personality that has a VMM backend.
 #[no_mangle]
 pub fn main() {
+    #[cfg(target_arch = "aarch64")]
+    boot_arm();
+    #[cfg(target_arch = "x86_64")]
+    boot_x86::run();
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    ostd::io::println("[hv] no VMM personality for this architecture");
+}
+
+/// Guest IPA base (1 GiB, must match registry.rs GUEST_IPA_BASE).
+#[cfg(target_arch = "aarch64")]
+const GUEST_IPA_BASE: u64 = 0x4000_0000;
+/// 128 MiB guest RAM.
+#[cfg(target_arch = "aarch64")]
+const GUEST_RAM_SIZE: u64 = 128 * 1024 * 1024;
+/// Page count for create_vm.
+#[cfg(target_arch = "aarch64")]
+const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;
+
+#[cfg(target_arch = "aarch64")]
+const VMLINUZ_PATH: &str = "/vmlinuz";
+#[cfg(target_arch = "aarch64")]
+const INITRD_PATH: &str = "/initrd.gz";
+
+#[cfg(target_arch = "aarch64")]
+fn boot_arm() {
+    use ostd::io::println;
+    use types::ViError;
     println("[hv] hypervisor service cell starting");
 
     // ── 1. Allocate guest VM ──────────────────────────────────────────────────
