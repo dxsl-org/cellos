@@ -33,6 +33,7 @@ pub trait VirtioDevice {
     fn config_read(&self, _offset: usize) -> u32 {
         0
     }
+    fn reset(&mut self) {}
 }
 
 /// Register state for one virtio-mmio slot.
@@ -113,6 +114,7 @@ impl VirtioMmio {
             0x064 => self.intr_status &= !val, // InterruptACK
             0x070 => {
                 if val == 0 {
+                    dev.reset();
                     *self = VirtioMmio::default();
                     return;
                 } // device reset

@@ -243,7 +243,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("Limine not found, using QEMU/OpenSBI fallback");
             // aarch64-virt sizes the kernel region from the linker end symbol —
             // EMBEDDED_OVERRIDE images make the binary size unbounded.
-            boot::fallback_boot_info()
+            boot::fallback_boot_info(dtb)
         }
     };
     // Log physical base — non-default value confirms KASLR is active.
@@ -477,6 +477,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 6. Logger & Drivers & FS
     task::drivers::uart::init(); // registers log backend on all arches
+    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+    {
+        let (start, end) = boot::fallback_dtb_ram_range();
+        log::info!("[boot] DTB RAM range {:#x}..{:#x}", start, end);
+    }
     #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init_input();
     // RV32 Nano / x86_64 bring-up: skip VirtIO MMIO probing (PCIe transport not yet ported).

@@ -92,21 +92,51 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     {
         use crate::memory::paging::PAGE_SIZE;
 
-        let mut table = Stage2Table::new().ok_or(ViError::OutOfMemory)?;
+        let mut table = Stage2Table::new().ok_or_else(|| {
+            log::error!("[hv] create_vm: stage-2 root allocation failed");
+            ViError::OutOfMemory
+        })?;
         let guest_pa = table
             .carve_guest_ram(guest_pages)
-            .ok_or(ViError::OutOfMemory)?;
+            .ok_or_else(|| {
+                let (total_mib, used_mib) = {
+                    let frames = crate::memory::frame::FRAME_ALLOCATOR.lock();
+                    frames
+                        .as_ref()
+                        .map(|allocator| {
+                            (
+                                allocator.total_memory() / (1024 * 1024),
+                                allocator.used_memory() / (1024 * 1024),
+                            )
+                        })
+                        .unwrap_or((0, 0))
+                };
+                log::error!(
+                    "[hv] create_vm: no contiguous guest run ({} pages, {} MiB; allocator {} MiB total, {} MiB used)",
+                    guest_pages,
+                    guest_pages / 256,
+                    total_mib,
+                    used_mib
+                );
+                ViError::OutOfMemory
+            })?;
         // Map all guest RAM at IPA 0x40000000.
         table
             .map(0x4000_0000, guest_pa, guest_pages, true)
-            .map_err(|_| ViError::OutOfMemory)?;
+            .map_err(|error| {
+                log::error!("[hv] create_vm: guest RAM stage-2 map failed: {:?}", error);
+                ViError::OutOfMemory
+            })?;
         // Phase 09: GICV Stage-2 passthrough — map GICC IPA (0x0801_0000) → GICV HPA
         // (0x0804_0000) so guest GICC accesses hit real GICV hardware, removing the
         // GICC trap path.  64 KiB = 16 pages.  Read-only from guest (CPU interface
         // writes go via GICC_EOIR which GICV handles natively).
         table
             .map_mmio_passthrough(0x0801_0000, 0x0804_0000, 16, false)
-            .map_err(|_| ViError::OutOfMemory)?;
+            .map_err(|error| {
+                log::error!("[hv] create_vm: GICV stage-2 map failed: {:?}", error);
+                ViError::OutOfMemory
+            })?;
 
         let vmid = NEXT_VMID.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         // SAFETY: table built and flushed; vmid ≥ 1; not yet active (enable later).

@@ -20,7 +20,7 @@ mod protocol;
 
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
-use ostd::syscall::sys_send;
+use ostd::syscall::{sys_lookup_service, sys_send};
 use protocol::{encode_status, HotswapRequest, OP_HOTSWAP};
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
@@ -58,6 +58,19 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                         let _ = sys_send(sender_tid, &encode_status(0xFF, e.as_code()));
                     }
                 }
+            }
+        }
+
+        AppEvent::RawMessage { sender_tid, data }
+            if sender_tid == 1
+                && data.len() == 1 + core::mem::size_of::<usize>()
+                && data[0] == 0xE1 =>
+        {
+            if let Some(compositor) = sys_lookup_service(service::COMPOSITOR) {
+                let mut relay = [0u8; 1 + core::mem::size_of::<usize>()];
+                relay[0] = 0xE2;
+                relay[1..].copy_from_slice(&data[1..]);
+                let _ = sys_send(compositor, &relay);
             }
         }
 

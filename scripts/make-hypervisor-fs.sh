@@ -16,11 +16,19 @@
 #   EMBEDDED_OVERRIDE="kernel/src/embedded-hv" \
 #   cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat
 #
-# Usage: bash scripts/make-hypervisor-fs.sh [--skip-fetch]
+# Usage: bash scripts/make-hypervisor-fs.sh [--skip-fetch] [--gpu-test]
 
 set -euo pipefail
 
-SKIP_FETCH="${1:-}"
+SKIP_FETCH=0
+GPU_TEST=0
+for arg in "$@"; do
+    case "$arg" in
+        --skip-fetch) SKIP_FETCH=1 ;;
+        --gpu-test) GPU_TEST=1 ;;
+        *) echo "ERROR: unknown argument: $arg" >&2; exit 1 ;;
+    esac
+done
 TARGET="aarch64-unknown-none-softfloat"
 PROFILE="release"
 BIN_DIR="target/$TARGET/$PROFILE"
@@ -33,7 +41,7 @@ cleanup() { rm -rf "$STAGING"; }
 trap cleanup EXIT
 
 # ── Step 1: Fetch Alpine artifacts ──────────────────────────────────────────
-if [[ "$SKIP_FETCH" != "--skip-fetch" ]]; then
+if [[ "$SKIP_FETCH" -eq 0 ]]; then
     echo "[make-hv-fs] Fetching Alpine artifacts..."
     bash scripts/fetch-alpine-artifacts.sh "$ALPINE_CACHE"
 fi
@@ -45,15 +53,24 @@ if [[ ! -f "$ALPINE_CACHE/vmlinuz-virt" || ! -f "$ALPINE_CACHE/initramfs-virt" ]
 fi
 
 # ── Step 2: Build aarch64 cells (including service-hypervisor) ──────────────
-# No RUSTFLAGS here: the env var REPLACES the per-target relocation-model=pic
-# + BTI/PAC flags (config.toml locally, CARGO_TARGET_* env on CI) and the
-# cells then fail to link -pie. Warnings are gated by the clippy CI jobs.
+# RUSTFLAGS replaces target rustflags, so keep every AArch64 codegen requirement
+# together. Bindgen needs a Clang-compatible triple because Rust's "softfloat"
+# suffix is not accepted by Clang.
+REPO_ROOT_WIN=$(pwd -W 2>/dev/null || pwd)
+export RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
+export CC_aarch64_unknown_none_softfloat="${CC_aarch64_unknown_none_softfloat:-C:/Program Files/LLVM/bin/clang.exe}"
+export CFLAGS_aarch64_unknown_none_softfloat="${CFLAGS_aarch64_unknown_none_softfloat:---target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${REPO_ROOT_WIN}/third_party/freestanding-include}"
+export BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat="${BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat:---target=aarch64-unknown-none-elf -I${REPO_ROOT_WIN}/third_party/freestanding-include}"
+if [[ -z "${LIBCLANG_PATH:-}" ]]; then
+    VS_LLVM="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
+    [[ -f "$VS_LLVM/libclang.dll" ]] && export LIBCLANG_PATH="$VS_LLVM"
+fi
 echo "[make-hv-fs] Building aarch64 cells (service-hypervisor + core cells)..."
 cargo build --release \
     --target "$TARGET" \
-    -Z build-std=core,alloc \
     -p app-init -p app-shell -p service-vfs -p service-config \
-    -p service-net -p service-hypervisor
+    -p service-net -p service-input -p service-compositor -p supervisor \
+    -p driver-virtio-gpu -p service-hypervisor
 
 # ── Step 3: Build hypervisor kernel_fs.img ──────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
@@ -66,13 +83,15 @@ MKFAT_ARGS=()
 # Copy embedded cells from existing aarch64 embedded dir or fresh build.
 # Bootstrap lookup expects the standard VIFS1 layout (/bin/<cell>) — cells at
 # the FAT root are invisible to it ("bootstrap /bin/shell not in VIFS1").
-for cell in init shell vfs config; do
+for cell in init shell vfs config net input compositor supervisor virtio-gpu; do
     src="$BIN_DIR/app-$cell"
     [[ ! -f "$src" ]] && src="$BIN_DIR/service-$cell"
+    [[ "$cell" == "supervisor" ]] && src="$BIN_DIR/supervisor"
+    [[ "$cell" == "virtio-gpu" ]] && src="$BIN_DIR/driver-virtio-gpu"
     [[ ! -f "$src" ]] && src="$EMBEDDED_SRC/$cell"
     if [[ -f "$src" ]]; then
         echo "  /bin/$cell <- $src"
-        MKFAT_ARGS+=("$src" "/bin/$cell")
+        MKFAT_ARGS+=("$src" "bin/$cell")
     else
         echo "  WARNING: $cell not found — skipping"
     fi
@@ -83,7 +102,7 @@ done
 # disk-only /bin/hypervisor is unreachable (init's spawn probes VIFS1 first).
 if [[ -f "$BIN_DIR/hypervisor" ]]; then
     echo "  /bin/hypervisor <- $BIN_DIR/hypervisor"
-    MKFAT_ARGS+=("$BIN_DIR/hypervisor" "/bin/hypervisor")
+    MKFAT_ARGS+=("$BIN_DIR/hypervisor" "bin/hypervisor")
 else
     echo "ERROR: $BIN_DIR/hypervisor not built — the smoke test cannot pass without it" >&2
     exit 1
@@ -92,6 +111,10 @@ fi
 # Alpine kernel and initrd (FAT16 paths are uppercased by the kernel; store as-is).
 VMLINUZ="$ALPINE_CACHE/vmlinuz-virt"
 INITRD="$ALPINE_CACHE/initramfs-virt"
+if [[ "$GPU_TEST" -eq 1 ]]; then
+    bash scripts/prepare-tier3b-gpu-initramfs.sh "$ALPINE_CACHE"
+    INITRD="$ALPINE_CACHE/initramfs-tier3b-gpu"
+fi
 
 # Alpine ≥3.20 ships vmlinuz-virt as an EFI zboot wrapper ("MZ" + "zimg" +
 # gzip payload), NOT the raw ARM64 Image the VMM boot protocol needs (magic
@@ -114,12 +137,13 @@ if [[ "$(dd if="$VMLINUZ" bs=1 skip=4 count=4 2>/dev/null)" == "zimg" ]]; then
 fi
 
 echo "  /vmlinuz   <- $VMLINUZ ($(du -sh "$VMLINUZ" | cut -f1))"
-MKFAT_ARGS+=("$VMLINUZ" "/vmlinuz")
+MKFAT_ARGS+=("$VMLINUZ" "vmlinuz")
 
 echo "  /initrd.gz <- $INITRD ($(du -sh "$INITRD" | cut -f1))"
-MKFAT_ARGS+=("$INITRD" "/initrd.gz")
+MKFAT_ARGS+=("$INITRD" "initrd.gz")
 
-python3 tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+PYTHON_BIN="${PYTHON_BIN:-python}"
+"$PYTHON_BIN" tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
 
 # INIT_ELF (include_bytes! in kernel main.rs) is embedded separately from
 # kernel_fs.img — the EMBEDDED_OVERRIDE dir must also carry the init binary.
@@ -131,9 +155,9 @@ echo "[make-hv-fs] kernel_fs.img created at $EMBEDDED_HV/kernel_fs.img"
 ls -lh "$EMBEDDED_HV/kernel_fs.img"
 echo ""
 echo "Next — build the hypervisor kernel:"
-echo "  export RUSTFLAGS='-C relocation-model=pic'"
+echo "  export RUSTFLAGS='-C relocation-model=pic -C target-feature=+bti,+paca,+pacg'"
 echo "  export EMBEDDED_OVERRIDE='$EMBEDDED_HV'"
-echo "  cargo build --release -p vicell-kernel --target $TARGET -Z build-std=core,alloc"
+echo "  cargo build --release -p vicell-kernel --features qemu-virt-1g --target $TARGET"
 echo "  unset RUSTFLAGS EMBEDDED_OVERRIDE"
 echo ""
 echo "Then build the hypervisor disk:"

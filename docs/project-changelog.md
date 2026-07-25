@@ -4,6 +4,13 @@
 
 ---
 
+## [2026-07-25] Tier 3b VirtIO-GPU host stack code-complete; strict Linux DRM/E2E remains hardware-gated
+
+### Status
+The Tier 3b VirtIO-GPU backend reached code-complete in the active plan: device wiring, bounded wire decoding, resource/cursor model, Grant-backed compositor bridge, teardown/reconnect handling, pinned Alpine guest image, and the dedicated serial-token lane are in place and compile/test cleanly. The dedicated guest E2E lane is still gated on ARM64 KVM or real hardware because local Windows QEMU-TCG can fault before the Linux DRM probe, so strict Linux DRM/E2E and interactive T4-T9 remain unverified.
+
+---
+
 ## [2026-07-13] RV32/Cellos-Nano compile break fixed; Hypha + init auto-restart Grant-syscall denial fixed
 
 ### RV32 Nano was silently un-buildable since virtio_drivers joined the always-linked kernel path
@@ -3545,4 +3552,3 @@ MicroPython (C) → modvfs.c extern calls → Cellos_vfs_*(vfs_bridge.rs) → ty
 - `scripts/dev-setup.sh`, `scripts/dev-setup.ps1`
 
 **Impact**: All 23 plan phases are at least `partial`; the system compiles clean with zero new errors.
-

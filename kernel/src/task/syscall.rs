@@ -70,9 +70,10 @@ const MAX_GRANT_PAGES: usize = 4096;
 ///
 /// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as `PageGrant`).
 struct RegGrant {
-    base: usize,                           // physical address of first allocated page
-    size: usize,                           // byte count (multiple of 4096)
-    owner: usize,                          // task id — only owner may call GrantUnregister
+    base: usize, // physical address of first allocated page
+    size: usize, // byte count (multiple of 4096)
+    // 0 means the owner exited while a grantee still held the mapping.
+    owner: usize,
     shared_to: Option<(usize, GrantPerm)>, // authorized grantee task id + permission
 }
 
@@ -234,11 +235,24 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
                 grant.shared_to = None;
             }
         }
-        let owned_keys: alloc::vec::Vec<usize> = map
-            .iter()
-            .filter(|(_, g)| g.owner == dead_tid)
-            .map(|(k, _)| *k)
-            .collect();
+        let mut owned_keys = alloc::vec::Vec::new();
+        let mut orphan_keys = alloc::vec::Vec::new();
+        for (&key, grant) in map.iter_mut() {
+            if grant.owner == dead_tid {
+                if let Some((grantee, _)) = grant.shared_to {
+                    // Transfer ownership to the sole grantee. The grantee's
+                    // owner-death cleanup drops its cached pointer before calling
+                    // GrantUnregister, allowing the pages to be reclaimed without
+                    // exposing an owner-dead, permanently leaked grant.
+                    grant.owner = grantee;
+                } else {
+                    owned_keys.push(key);
+                }
+            } else if grant.owner == 0 && grant.shared_to.is_none() {
+                orphan_keys.push(key);
+            }
+        }
+        owned_keys.extend(orphan_keys);
         owned_keys.iter().filter_map(|k| map.remove(k)).collect()
     }; // REG_GRANT_TABLE lock released
 
@@ -377,6 +391,16 @@ fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<(), SyscallEr
     if ptr.checked_add(len).is_none() {
         return Err(SyscallError::InvalidInput);
     }
+    Ok(())
+}
+
+fn write_optional_usize(ptr: usize, value: usize) -> Result<(), SyscallError> {
+    if ptr == 0 {
+        return Ok(());
+    }
+    validate_user_buf(ptr, core::mem::size_of::<usize>(), MAX_USER_BUF)?;
+    // SAFETY: the caller pointer and exact write size were validated above.
+    unsafe { (ptr as *mut usize).write(value) };
     Ok(())
 }
 
@@ -682,7 +706,10 @@ pub enum Syscall {
         perm: usize,
     },
     /// 210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.
-    GrantSlice { grant_id: usize },
+    GrantSlice {
+        grant_id: usize,
+        size_out_ptr: usize,
+    },
     /// 211: GrantFree — unmap + deallocate a Grant region.
     GrantFree { grant_id: usize },
     /// 212: BlkReadAsync — synchronous-but-zero-copy sector read into a Grant buffer.
@@ -3291,25 +3318,42 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
 
-        Syscall::GrantSlice { grant_id } => {
+        Syscall::GrantSlice {
+            grant_id,
+            size_out_ptr,
+        } => {
             // Check PAGE_GRANT_TABLE first.
-            {
+            let page_grant = {
                 let tbl = grant_table_lock().lock();
-                if let Some(grant) = tbl.as_ref().and_then(|m| m.get(&grant_id)) {
+                tbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
                     let allowed = grant.owner == caller_id
                         || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
-                    return Ok(if allowed { grant.base } else { usize::MAX });
+                    (allowed, grant.base, grant.size)
+                })
+            };
+            if let Some((allowed, base, size)) = page_grant {
+                if allowed {
+                    write_optional_usize(size_out_ptr, size)?;
+                    return Ok(base);
                 }
+                return Ok(usize::MAX);
             }
             // Fall back to REG_GRANT_TABLE.
-            let rtbl = reg_grant_table_lock().lock();
-            match rtbl.as_ref().and_then(|m| m.get(&grant_id)) {
-                None => Ok(usize::MAX),
-                Some(grant) => {
+            let reg_grant = {
+                let rtbl = reg_grant_table_lock().lock();
+                rtbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
                     let allowed = grant.owner == caller_id
                         || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
-                    Ok(if allowed { grant.base } else { usize::MAX })
+                    (allowed, grant.base, grant.size)
+                })
+            };
+            match reg_grant {
+                None => Ok(usize::MAX),
+                Some((true, base, size)) => {
+                    write_optional_usize(size_out_ptr, size)?;
+                    Ok(base)
                 }
+                Some((false, _, _)) => Ok(usize::MAX),
             }
         }
 
@@ -3914,7 +3958,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             target_cell: a1,
             perm: a2,
         },
-        ViSyscall::GrantSlice => Syscall::GrantSlice { grant_id: a0 },
+        ViSyscall::GrantSlice => Syscall::GrantSlice {
+            grant_id: a0,
+            size_out_ptr: a1,
+        },
         ViSyscall::GrantFree => Syscall::GrantFree { grant_id: a0 },
         ViSyscall::BlkReadAsync => Syscall::BlkReadAsync {
             sector: a0 as u64,

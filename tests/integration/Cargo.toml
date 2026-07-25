@@ -84,6 +84,22 @@ name = "hotswap-smoke"
 path = "tests/hotswap-smoke.rs"
 
 [[test]]
+name = "virtio-gpu-contract"
+path = "tests/virtio-gpu-contract.rs"
+
+[[test]]
+name = "virtqueue-guard"
+path = "tests/virtqueue-guard.rs"
+
+[[test]]
+name = "virtio-gpu-resource-rules"
+path = "tests/virtio-gpu-resource-rules.rs"
+
+[[test]]
+name = "tier3b-virtio-gpu"
+path = "tests/tier3b-virtio-gpu.rs"
+
+[[test]]
 name = "hypha-p3-boot"
 path = "tests/hypha-p3-boot.rs"
 

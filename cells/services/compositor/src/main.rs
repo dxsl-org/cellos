@@ -22,11 +22,12 @@ mod surface_table;
 mod z_order;
 
 use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect};
+use api::syscall::service;
 use input_handler::{connect_to_input, handle_input_event, InputState};
 use ostd::io::println;
 use ostd::syscall::{
-    sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_grant_slice, sys_recv, sys_send,
-    SyscallResult,
+    sys_get_resolution, sys_get_time, sys_gpu_cursor, sys_grant_slice_with_len,
+    sys_grant_unregister, sys_lookup_service, sys_recv, sys_send, SyscallResult,
 };
 use render::{render_frame, ScreenFb};
 use surface_table::SurfaceTable;
@@ -98,6 +99,15 @@ pub fn main() {
                     // On MouseMove, update_cursor sets pending_dirty = union(old, new)
                     // so the frame is repainted at the interval tick.
                     handle_input_event(&buf, &mut input, &table, &z_order, &mut pending_dirty);
+                } else if buf[0] == OWNER_EXITED_OPCODE
+                    && sender == sys_lookup_service(service::SUPERVISOR).unwrap_or(0)
+                {
+                    let dead_tid = usize::from_le_bytes(
+                        buf[1..1 + core::mem::size_of::<usize>()]
+                            .try_into()
+                            .unwrap_or([0; core::mem::size_of::<usize>()]),
+                    );
+                    cleanup_owner(dead_tid, &mut table, &mut z_order, &mut pending_dirty);
                 } else {
                     handle_message(&buf, sender, &mut table, &mut z_order, &mut pending_dirty);
                 }
@@ -141,6 +151,32 @@ pub fn main() {
     }
 }
 
+const OWNER_EXITED_OPCODE: u8 = 0xE2;
+
+fn cleanup_owner(
+    dead_tid: usize,
+    table: &mut SurfaceTable,
+    z_order: &mut ZOrder,
+    pending_dirty: &mut Option<Rect>,
+) {
+    for cap in table.caps_owned_by(dead_tid) {
+        let Some(surface) = table.get(cap) else {
+            continue;
+        };
+        let freed_rect = surface.screen_rect();
+        let grant_id = surface.grant_id();
+        z_order.remove(cap);
+        let _ = table.remove(cap);
+        if let Some(reg_id) = grant_id {
+            let _ = sys_grant_unregister(reg_id);
+        }
+        *pending_dirty = Some(match pending_dirty.take() {
+            Some(acc) => acc.union(&freed_rect),
+            None => freed_rect,
+        });
+    }
+}
+
 /// Dispatch one IPC message from a consumer cell.
 fn handle_message(
     buf: &[u8; 512],
@@ -181,7 +217,7 @@ fn handle_message(
             let y = i32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
             let pw = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
             let ph = u32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
-            if let Some(s) = table.get_mut(cap) {
+            if let Some(s) = table.get_mut(cap).filter(|s| s.owner == sender) {
                 s.write_pixels(x, y, pw, ph, &buf[25..]);
             }
         }
@@ -196,7 +232,7 @@ fn handle_message(
             let y = i32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
             let dw = u32::from_le_bytes([buf[17], buf[18], buf[19], buf[20]]);
             let dh = u32::from_le_bytes([buf[21], buf[22], buf[23], buf[24]]);
-            if let Some(s) = table.get_mut(cap) {
+            if let Some(s) = table.get_mut(cap).filter(|s| s.owner == sender) {
                 use api::display::Rect;
                 let new_dmg = Rect { x, y, w: dw, h: dh };
                 s.damage = Some(match s.damage {
@@ -214,7 +250,7 @@ fn handle_message(
             ]);
             let x = i32::from_le_bytes([buf[9], buf[10], buf[11], buf[12]]);
             let y = i32::from_le_bytes([buf[13], buf[14], buf[15], buf[16]]);
-            if let Some(s) = table.get_mut(cap) {
+            if let Some(s) = table.get_mut(cap).filter(|s| s.owner == sender) {
                 s.x = x;
                 s.y = y;
                 let (sw, sh) = (s.w, s.h);
@@ -233,6 +269,9 @@ fn handle_message(
             let cap = u64::from_le_bytes([
                 buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
             ]);
+            if !table.get(cap).is_some_and(|s| s.owner == sender) {
+                return;
+            }
             z_order.raise(cap);
             // Mark full-surface damage so the new z-order is visible on the next render.
             if let Some(s) = table.get_mut(cap) {
@@ -256,6 +295,10 @@ fn handle_message(
             let cap = u64::from_le_bytes([
                 buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8],
             ]);
+            if !table.get(cap).is_some_and(|s| s.owner == sender) {
+                sys_send(sender, b"\x01");
+                return;
+            }
             // Save the screen rect before removal so we can repaint the uncovered area.
             let freed_rect = table.get(cap).map(|s| s.screen_rect());
             z_order.remove(cap);
@@ -287,8 +330,15 @@ fn handle_message(
                     sys_send(sender, b"\x00");
                     return;
                 }
-                match sys_grant_slice(ag.reg_id as usize) {
-                    Some(ptr) => {
+                match sys_grant_slice_with_len(ag.reg_id as usize) {
+                    Some((ptr, grant_len))
+                        if (ag.width as usize)
+                            .checked_mul(ag.height as usize)
+                            .and_then(|pixels| {
+                                pixels.checked_mul(PixelFormat::from_u8(ag.fmt).bpp() as usize)
+                            })
+                            .is_some_and(|required| required <= grant_len) =>
+                    {
                         s.attach_grant(
                             ptr as *const u8,
                             ag.reg_id as usize,
@@ -298,8 +348,8 @@ fn handle_message(
                         );
                         sys_send(sender, b"\x01"); // OK
                     }
-                    None => {
-                        sys_send(sender, b"\x00"); // grant not shared or bad id
+                    _ => {
+                        sys_send(sender, b"\x00"); // bad grant, permissions, or dimensions
                     }
                 }
             } else {

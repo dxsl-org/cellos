@@ -11,6 +11,7 @@ use api::syscall::ViSyscall;
 pub const SCHED_TICK_BUDGET_NS: u64 = 10_000_000; // 10ms in nanoseconds
 
 /// Error sentinel returned by VMM syscalls on failure.
+#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
 const ERR: usize = usize::MAX;
 
 #[inline]

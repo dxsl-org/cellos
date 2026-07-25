@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fetch Alpine Linux aarch64 netboot artifacts for the ViCell hypervisor smoke test.
 #
-# Downloads vmlinuz-virt + initramfs-virt from the Alpine CDN, verifies SHA256
+# Downloads the pinned kernel, initramfs, and modloop from the Alpine CDN, verifies SHA256
 # checksums, and caches them in .alpine-cache/.
 #
 # Usage:
@@ -17,16 +17,18 @@ set -euo pipefail
 
 ALPINE_VERSION="${ALPINE_VERSION:-3.21.3}"
 DEST="${1:-.alpine-cache}"
-CDN="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION%.*}/releases/aarch64/netboot"
+CDN="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION%.*}/releases/aarch64/netboot-${ALPINE_VERSION}"
 
 # SHA256 checksums for Alpine 3.21.3 aarch64 netboot artifacts.
 # Update these when bumping ALPINE_VERSION:
 #   curl -s "$CDN/../SHA256SUMS" | grep -E "vmlinuz-virt|initramfs-virt"
-VMLINUZ_SHA256="${VMLINUZ_SHA256:-UPDATE_ME_FROM_SHA256SUMS}"
-INITRD_SHA256="${INITRD_SHA256:-UPDATE_ME_FROM_SHA256SUMS}"
+VMLINUZ_SHA256="${VMLINUZ_SHA256:-2a49ce5e4f525f3633295e7df03a80280bbc8f56a26ae8578d048f6e45d29efa}"
+INITRD_SHA256="${INITRD_SHA256:-c142c9c29d7e38bb1011fd87443410b91d08acfff21b6318ffb1ba6322854259}"
+MODLOOP_SHA256="${MODLOOP_SHA256:-9ef26b38fa53be1310368150f947beead9011ce8b9890224a36f6be73dc14d49}"
 
 VMLINUZ_URL="$CDN/vmlinuz-virt"
 INITRD_URL="$CDN/initramfs-virt"
+MODLOOP_URL="$CDN/modloop-virt"
 
 mkdir -p "$DEST"
 
@@ -73,9 +75,10 @@ fetch_and_verify() {
 
 fetch_and_verify "$VMLINUZ_URL" "$DEST/vmlinuz-virt"    "$VMLINUZ_SHA256" "vmlinuz-virt"
 fetch_and_verify "$INITRD_URL"  "$DEST/initramfs-virt"  "$INITRD_SHA256"  "initramfs-virt"
+fetch_and_verify "$MODLOOP_URL" "$DEST/modloop-virt"    "$MODLOOP_SHA256" "modloop-virt"
 
 echo ""
 echo "[fetch-alpine] Artifacts ready in $DEST/:"
-ls -lh "$DEST/vmlinuz-virt" "$DEST/initramfs-virt"
+ls -lh "$DEST/vmlinuz-virt" "$DEST/initramfs-virt" "$DEST/modloop-virt"
 echo ""
 echo "Next: run scripts/make-hypervisor-fs.sh to embed them into kernel_fs.img"

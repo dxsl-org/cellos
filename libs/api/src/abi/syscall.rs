@@ -204,7 +204,8 @@ pub enum ViSyscall {
     /// Requires GrantCap (bit 39).
     GrantShare = 209,
     /// Return the raw pointer to a Grant region the caller has access to.
-    /// ABI: a0 = grant_id → ptr (usize, same as grant_id for identity-mapped SAS) on success.
+    /// ABI: a0 = grant_id, a1 = optional size_out pointer → ptr (usize, same as
+    /// grant_id for identity-mapped SAS) on success.
     /// Returns usize::MAX on permission denied or not found.
     GrantSlice = 210,
     /// Release a Grant region: unmaps its pages and frees its frames.

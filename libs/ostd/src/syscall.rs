@@ -1215,6 +1215,26 @@ pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
     }
 }
 
+/// Return the accessible Grant pointer and its kernel-registered byte length.
+pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
+    let mut len = 0usize;
+    // SAFETY: `len` is a live writable stack slot for the duration of the call.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::GrantSlice,
+            grant_id,
+            (&mut len as *mut usize) as usize,
+            0,
+            0,
+        )
+    };
+    if (ret as usize) == usize::MAX || len == 0 {
+        None
+    } else {
+        Some((ret as usize as *mut u8, len))
+    }
+}
+
 /// Release a Grant region (owner-only): unmaps its pages and frees the frames.
 ///
 /// # Returns

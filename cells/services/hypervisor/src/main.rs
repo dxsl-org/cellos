@@ -22,7 +22,9 @@ api::declare_manifest!(
 api::declare_syscalls![
     // IPC / service discovery
     Send,
+    TrySend,
     Recv,
+    RecvTimeout,
     Log,
     LookupService,
     // Kernel filesystem access (read vmlinuz + initrd)
@@ -43,6 +45,13 @@ api::declare_syscalls![
     VcpuRegs,
     InjectIrq,
     ReadGuestMemory,
+    // Scanout backing shared read-only with the compositor.
+    GrantRegister,
+    GrantShare,
+    GrantSlice,
+    GrantUnregister,
+    GpuGetResolution,
+    WaitForEvent,
 ];
 
 // Arch-generic VMM syscall wrappers (used by both personalities).
@@ -70,11 +79,14 @@ mod virtio_blk;
 #[cfg(target_arch = "aarch64")]
 mod virtio_console;
 #[cfg(target_arch = "aarch64")]
+mod virtio_gpu;
+#[cfg(target_arch = "aarch64")]
 mod virtio_mmio;
 #[cfg(target_arch = "aarch64")]
 mod virtio_net;
 #[cfg(target_arch = "aarch64")]
 mod virtqueue;
+mod virtqueue_guard;
 
 // ── x86_64 (SVM/VT-x) personality ──────────────────────────────────────────────
 #[cfg(target_arch = "x86_64")]
@@ -98,13 +110,21 @@ mod uart_16550;
 
 /// Entry: dispatch to the arch personality that has a VMM backend.
 #[no_mangle]
-pub fn main() {
+pub fn main() -> ! {
     #[cfg(target_arch = "aarch64")]
     boot_arm();
     #[cfg(target_arch = "x86_64")]
     boot_x86::run();
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     ostd::io::println("[hv] no VMM personality for this architecture");
+    quiesce()
+}
+
+fn quiesce() -> ! {
+    ostd::io::println("[hv] service quiesced");
+    loop {
+        let _ = ostd::syscall::sys_wait_for_event(0, 0);
+    }
 }
 
 /// Guest IPA base (1 GiB, must match registry.rs GUEST_IPA_BASE).
@@ -252,4 +272,5 @@ fn boot_arm() {
     run_loop::run(vm_id, vcpu_id);
 
     println("[hv] guest exited");
+    quiesce()
 }
