@@ -1,8 +1,8 @@
 //! Shell utility integration test (Phase E — Shell M3.1).
 //!
 //! Boots a shell-test kernel (compiled with `app-shell --features shell_test`)
-//! and waits for the `[shell-test] ALL TESTS PASSED` marker.  The marker is
-//! printed by `cells/tools/shell/src/shell_test.rs` after all 9 scenarios pass.
+//! and waits for the `[shell-test] COMPLETE` marker before checking the final
+//! result printed by `cells/tools/shell/src/shell_test.rs`.
 //!
 //! Prerequisites:
 //!   bash scripts/build-shell-test-ci.sh
@@ -50,11 +50,11 @@ fn prerequisites_ok() -> bool {
     vicell_integration_tests::ci_guard(kernel_exists && qemu_ok)
 }
 
-/// Phase E: boot the shell-test kernel and wait for all scenario tests to pass.
+/// Phase E: boot the shell-test kernel and wait for all scenario tests to finish.
 ///
 /// The shell-test cell runs `shell_test::run()` on startup, exercises all
 /// Phase 1–3 shell features (stderr redirect, tee, sed, fg/bg, pipes), and
-/// prints `[shell-test] ALL TESTS PASSED` when everything passes.
+/// prints `[shell-test] COMPLETE` after the final success or failure marker.
 #[test]
 fn shell_utils_all_scenarios_pass() {
     if !prerequisites_ok() {
@@ -65,13 +65,18 @@ fn shell_utils_all_scenarios_pass() {
     // The shell-test kernel embeds init + vfs + shell-test in its kernel_fs.img.
     let qemu = QemuRunner::boot_rv64(&kernel);
 
-    qemu.wait_for("[shell-test] ALL TESTS PASSED", SUITE_TIMEOUT)
+    qemu.wait_for("[shell-test] COMPLETE", SUITE_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
-                "shell-test suite did not pass within {}s: {}\n--- serial output ---\n{}",
+                "shell-test suite did not complete within {}s: {}\n--- serial output ---\n{}",
                 SUITE_TIMEOUT,
                 e,
                 qemu.dump()
             )
         });
+    let output = qemu.dump();
+    assert!(
+        output.contains("[shell-test] ALL TESTS PASSED"),
+        "shell-test suite completed with failures\n--- serial output ---\n{output}"
+    );
 }

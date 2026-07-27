@@ -51,6 +51,7 @@ impl Jobs {
     }
 
     /// Remove all completed jobs.
+    #[cfg(not(feature = "shell_test"))] // reason: reaped by the REPL between prompts
     pub fn reap_done(&mut self) {
         self.jobs.retain(|j| j.state != JobState::Done);
     }

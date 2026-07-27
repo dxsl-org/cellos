@@ -6,13 +6,17 @@ license.workspace = true
 
 [features]
 # shell_test: replaces the interactive REPL with a deterministic scenario harness.
-# Build with `cargo build --release -p app-shell --features shell_test` and
-# embed the binary in a shell-test kernel image.  Never enabled in production.
+# Build with `cargo build --release --target riscv64gc-unknown-none-elf
+# -Z build-std=core,alloc -p app-shell --features shell_test` and embed the
+# binary in a shell-test kernel image. Never enabled in production.
 shell_test = []
 
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 api = { path = "../../../libs/api", version = "0.1.0" }
+# Pure argv/pattern/record/grep/sed/awk/top logic — a sibling crate rather than a
+# module so it can be host-tested without ostd's panic/alloc lang items.
+text-engine = { path = "../../../libs/text-engine", version = "0.1.0" }
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

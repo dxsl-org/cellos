@@ -157,6 +157,21 @@ impl Stack {
             top,
         })
     }
+
+    /// Total physical bytes reserved for this stack, including the guard page.
+    pub fn allocated_bytes(&self) -> usize {
+        let total_pages = if self.has_guard {
+            self.pages + 1
+        } else {
+            self.pages
+        };
+        total_pages * PAGE_SIZE
+    }
+
+    /// Task-owned usable stack bytes, excluding any kernel-only guard reservation.
+    pub fn usable_bytes(&self) -> usize {
+        self.pages * PAGE_SIZE
+    }
 }
 
 impl Drop for Stack {
@@ -222,6 +237,11 @@ impl CellSegments {
         pie_va_base: usize,
     ) -> Self {
         Self { pages, pie_va_base }
+    }
+
+    /// Total physical bytes reserved for this cell's ELF segment frames.
+    pub fn allocated_bytes(&self) -> usize {
+        self.pages.len() * PAGE_SIZE
     }
 
     /// Unmap this cell's segment VAs immediately at death — WITHOUT freeing the

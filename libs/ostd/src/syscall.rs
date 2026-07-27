@@ -874,6 +874,28 @@ pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, 
     }
 }
 
+/// Return extended process telemetry rows.
+///
+/// Each row reports a scheduler-tick sample timestamp, cumulative CPU run ticks,
+/// heap bytes, and owned bytes for one live task. Requires the `GetProcs2`
+/// syscall permission in the caller's embedded allowlist.
+pub fn sys_get_procs2(buffer: &mut [api::syscall::ProcessInfoV2]) -> Result<usize, SyscallError> {
+    unsafe {
+        let ret = syscall(
+            ViSyscall::GetProcs2,
+            buffer.as_mut_ptr() as usize,
+            buffer.len(),
+            0,
+            0,
+        );
+        if ret >= 0 {
+            Ok(ret as usize)
+        } else {
+            Err(SyscallError::Unknown)
+        }
+    }
+}
+
 /// Live-replace a running Cell with a new ELF version without message loss.
 ///
 /// `cell_id` is the task ID of the cell to replace; `new_elf_path` must be a

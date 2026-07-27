@@ -1,0 +1,21 @@
+[package]
+name = "text-engine"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+# HOST TESTS: the workspace pins a bare-metal default target, so run them with an
+# explicit host triple, e.g. `cargo test -p text-engine --target x86_64-pc-windows-msvc`.
+#
+# Like libs/http-core, this crate deliberately defines NO #[global_allocator] and
+# NO #[panic_handler]. app-shell cannot host-test its own modules because it links
+# ostd, which owns both lang items — that is the sole reason the pure argv/pattern/
+# record/grep/sed/awk/top logic lives here instead of inside the shell crate.
+
+[dependencies]
+# Bounded linear-time matching for ERE-lite. Versions and flags must match
+# cells/tools/shell/Cargo.toml exactly so cargo keeps one copy in the graph.
+regex-automata = { version = "0.4.16", default-features = false, features = ["meta", "hybrid"] }
+regex-syntax = { version = "0.8.8", default-features = false }
+# ProcessInfoV2 rows consumed by the pure `top` sampler/sorter.
+api = { path = "../api", version = "0.1.0" }

@@ -177,8 +177,7 @@ extern "C" fn main() -> usize {
     // ARGV_STASH_KEY is consumed before the shell overwrites it with the next
     // cell's args.  luaL_newstate + luaL_openlibs are slow; without this early
     // read a second rapid spawn races and both cells receive the later cell's args.
-    let mut argbuf_early = [0u8; 512];
-    let args_early_len = ostd::syscall::sys_spawn_args(&mut argbuf_early);
+    let argv = ostd::args();
 
     // Install bundled Lua libraries to /tmp so require() finds them.
     install_bundled_scripts();
@@ -228,14 +227,10 @@ extern "C" fn main() -> usize {
     // SAFETY: L is non-null; vfs and ViCell_io_write are already registered.
     unsafe { inject_io_setup(L) };
 
-    // Use the args captured before initialisation (avoids the ARGV_STASH_KEY race).
-    let args = core::str::from_utf8(&argbuf_early[..args_early_len]).unwrap_or("");
-
     // `lua -e <code>`: evaluate the chunk and exit (no REPL). The text after
-    // "-e " is the Lua source; the shell whitespace-joins argv, so a space-free
-    // expression survives intact.
-    if let Some(code) = args.strip_prefix("-e ").or_else(|| args.strip_prefix("-e")) {
-        let code = code.trim_start();
+    // `-e` is a distinct argument, so source containing spaces remains intact.
+    if argv.first().map(|arg| arg.as_str()) == Some("-e") {
+        let code = argv.get(1).map(|arg| arg.as_str()).unwrap_or("");
         // SAFETY: L is valid; eval upholds the Lua-state contract.
         let _ = unsafe { repl_session::eval(L, code) };
         // Park rather than return: the kernel's cell-exit path does not yet
@@ -248,10 +243,9 @@ extern "C" fn main() -> usize {
     }
 
     // `lua /path/to/script.lua` — read file from VFS and execute.
-    // Reached when args is non-empty and does not start with `-e` (the `-e` branch
+    // Reached when argv is non-empty and does not start with `-e` (the `-e` branch
     // parks before falling through). Empty args falls through to the REPL.
-    if !args.is_empty() {
-        let path = args.trim();
+    if let Some(path) = argv.first().map(|arg| arg.as_str()) {
         let file_buf = vfs_read_to_vec(path);
         if file_buf.is_empty() {
             ostd::io::print("lua: cannot open '");

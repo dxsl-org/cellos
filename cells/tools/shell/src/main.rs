@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 
 extern crate alloc;
 extern crate ostd;
@@ -36,6 +36,7 @@ api::declare_syscalls![
     Wait,
     GetTime,
     GetProcs,
+    GetProcs2,
     SetTimer,
     HotSwap,
     StateStash,
@@ -59,24 +60,42 @@ api::declare_syscalls![
     Snapshot,
 ];
 
-mod aliases;
-mod async_utils;
 mod cmd_fs;
 mod cmd_sys;
 mod commands;
-mod config_client;
 mod executor;
-mod history;
 mod jobs;
 mod parser;
+mod text_engine;
+mod text_tools;
+mod top;
+
+// Interactive REPL only: the shell_test harness drives `executor::capture_line`
+// directly, so the line editor, alias table, history and config client have no
+// caller there. Gating them keeps that build warning-free instead of carrying a
+// blanket #[allow(dead_code)].
+#[cfg(not(feature = "shell_test"))]
+mod aliases;
+#[cfg(not(feature = "shell_test"))]
+mod async_utils;
+#[cfg(not(feature = "shell_test"))]
+mod config_client;
+#[cfg(not(feature = "shell_test"))]
+mod history;
+#[cfg(not(feature = "shell_test"))]
 mod shell;
+// Hot-swap session transfer serialises the history + alias table, both of which
+// only exist in the interactive build.
+#[cfg(not(feature = "shell_test"))]
 mod state_transfer;
 
 #[cfg(feature = "shell_test")]
 mod shell_test;
 
+#[cfg(not(feature = "shell_test"))]
 use shell::ViShell;
 
+#[cfg(not(test))]
 #[no_mangle]
 pub fn main() {
     #[cfg(feature = "shell_test")]

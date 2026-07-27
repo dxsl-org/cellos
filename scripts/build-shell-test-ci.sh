@@ -16,6 +16,15 @@ set -euo pipefail
 REL="target/riscv64gc-unknown-none-elf/release"
 ST_DIR="kernel/src/embedded-shell-test"
 
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_BIN=python
+else
+    echo "FAIL: a working Python 3 interpreter is required" >&2
+    exit 1
+fi
+
 # riscv64 cross-compiler required by littlefs2 C FFI.
 # Honor a pre-set compiler (local xpack riscv-none-elf-gcc); default to the CI one.
 export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
@@ -48,10 +57,11 @@ done
 
 echo "==> Assembling kernel_fs.img (shell-test)..."
 mkdir -p "$ST_DIR"
-TMPDIR_KFS=$(mktemp -d)
+TMPDIR_KFS=$(mktemp -d "target/shell-test-tmp.XXXXXX")
+trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell-shell-test' > "$TMPDIR_KFS/hostname"
 
-python3 tools/mkfat32.py \
+MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$ST_DIR/kernel_fs.img" \
     "$REL/app-init"        /bin/init \
     "$REL/app-shell"       /bin/shell \
@@ -61,6 +71,12 @@ python3 tools/mkfat32.py \
 
 if [[ ! -f "$ST_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
+fi
+"$PYTHON_BIN" tools/inspect_fat.py "$ST_DIR/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
+if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- 'SFN SHELL' "$TMPDIR_KFS/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin/shell" >&2
+    exit 1
 fi
 echo "   kernel_fs.img: $(du -sh "$ST_DIR/kernel_fs.img" | cut -f1)"
 

@@ -113,6 +113,11 @@ pub enum ViSyscall {
     ///      privilege check, policy lookup, measurement label); a caller lying
     ///      about it can only LOSE privilege, never gain it.
     SpawnFromElf = 238,
+    /// Return extended process telemetry rows into a caller-owned buffer.
+    ///
+    /// ABI: a0 = buf_ptr, a1 = row_capacity. Returns rows written.
+    /// Preserves `GetProcs` v1 layout/opcode by exposing a separate v2 row type.
+    GetProcs2 = 239,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -461,7 +466,7 @@ macro_rules! declare_syscalls {
 }
 
 impl ViSyscall {
-    /// Stable bit index (0-38) for the per-Cell syscall allowlist stored in
+    /// Stable bit index for the per-Cell syscall allowlist stored in
     /// `Task::syscall_allowlist`.
     ///
     /// Bit indices are independent of raw opcode values so they remain stable
@@ -581,6 +586,8 @@ impl ViSyscall {
             // Gated so random cells cannot snoop on other cells' stdout.
             // Declare with `ReadLog` in the cell manifest to enable.
             Self::ReadLog => Some(54),
+            // GetProcs2 (bit 55): richer task telemetry, opt-in like ReadLog.
+            Self::GetProcs2 => Some(55),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -670,6 +677,7 @@ impl From<usize> for ViSyscall {
             236 => ViSyscall::RegisterPciDevice,
             237 => ViSyscall::ReadLog,
             238 => ViSyscall::SpawnFromElf,
+            239 => ViSyscall::GetProcs2,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -762,4 +770,17 @@ pub struct ProcessInfo {
     pub id: usize,
     pub state: usize, // 0=Ready, 1=Running, 2=Waiting, 3=Terminated
     pub name: [u8; 32],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProcessInfoV2 {
+    pub id: u64,
+    pub state: u32, // 0=Ready, 1=Running, 2=Waiting, 3=Terminated
+    pub reserved0: u32,
+    pub name: [u8; 32],
+    pub sample_ticks: u64,
+    pub cpu_run_ticks: u64,
+    pub heap_bytes: u64,
+    pub owned_bytes: u64,
 }

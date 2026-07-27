@@ -27,7 +27,7 @@ pub fn cmd_clear() -> ViResult<()> {
     Ok(())
 }
 
-pub fn cmd_exec<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next();
     if path.is_none() {
         ostd::io::println("Usage: exec <path> [args...]");
@@ -121,7 +121,7 @@ fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> 
 let vfs_cell_id = 3;
 */
 
-pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_ls(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next().unwrap_or("/");
     match fs::read_dir(path) {
         Ok(iter) => {
@@ -147,7 +147,7 @@ pub fn cmd_ls<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     }
 }
 
-pub fn cmd_cat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next();
     if path.is_none() {
         ostd::io::println("Usage: cat <filename>");
@@ -233,7 +233,7 @@ fn state_order(state: usize) -> usize {
     }
 }
 
-pub fn cmd_ps<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_ps(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut filter_tid: Option<usize> = None;
     let mut sort_by_state = false;
     loop {
@@ -329,7 +329,7 @@ fn expand_echo_escapes(s: &str) -> alloc::string::String {
 ///
 /// `-e` interprets escape sequences (`\n`, `\t`, `\\`, `\r`).
 /// `-n` suppresses the trailing newline.
-pub fn cmd_echo<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_echo(args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let parts: alloc::vec::Vec<&str> = args.collect();
     let mut escape = false;
     let mut no_newline = false;
@@ -364,80 +364,9 @@ pub fn cmd_echo<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 
 // ─── top ──────────────────────────────────────────────────────────────────────
 
-/// `top [-a]` — live process table, refreshed every second.
-///
-/// Dead tasks are hidden by default; pass `-a` to show all tasks.
-/// CPU% is not available without per-task tick counters in `ProcessInfo`.
-/// Press `q` or `Q` to exit.
-pub fn cmd_top<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
-    let show_all = args.any(|a| a == "-a");
-    loop {
-        // Clear screen and home — always bypasses OutputSink (console control).
-        ostd::io::print("\x1b[2J\x1b[1;1H");
-        let secs = syscall::sys_get_time() / 10_000_000;
-        let mut buf = [api::syscall::ProcessInfo::default(); 64];
-        let n = syscall::sys_get_procs(&mut buf).unwrap_or(0);
-        let visible = if show_all {
-            n
-        } else {
-            buf[..n].iter().filter(|p| p.state != 3).count()
-        };
-        ostd::io::print(&alloc::format!(
-            "uptime: {}s  tasks: {}  (q to quit)\n\n",
-            secs,
-            visible
-        ));
-        crate::executor::shell_println("  PID  STATE      NAME");
-        crate::executor::shell_println("  ---  ---------  ----------------");
-        for info in &buf[..n] {
-            if !show_all && info.state == 3 {
-                continue;
-            }
-            let name = core::str::from_utf8(&info.name)
-                .unwrap_or("???")
-                .trim_matches('\0');
-            let state = match info.state {
-                0 => "Ready",
-                1 => "Running",
-                2 => "Waiting",
-                3 => "Dead",
-                _ => "???",
-            };
-            crate::executor::shell_print(&alloc::format!(
-                "  {:<4} {:<10} {}\n",
-                info.id,
-                state,
-                name
-            ));
-        }
-
-        // Poll for 1 second; exit only on 'q' or 'Q'.
-        const HZ: u64 = 10_000_000;
-        let deadline = syscall::sys_get_time().saturating_add(HZ);
-        let mut quit = false;
-        while syscall::sys_get_time() < deadline {
-            let mut c = [0u8; 1];
-            if let Ok(n) = ostd::syscall::sys_read(0, &mut c) {
-                if n > 0 && (c[0] == b'q' || c[0] == b'Q') {
-                    quit = true;
-                    break;
-                }
-            }
-            ostd::task::yield_now();
-        }
-        if quit {
-            // Drain buffered bytes (key-repeat, escape sequences).
-            let mut drain = [0u8; 1];
-            while let Ok(n) = ostd::syscall::sys_read(0, &mut drain) {
-                if n == 0 {
-                    break;
-                }
-            }
-            break;
-        }
-    }
-    ostd::io::print("\x1b[2J\x1b[1;1H");
-    Ok(())
+/// `top` — process telemetry observer backed by `GetProcs2`.
+pub fn cmd_top<'a>(args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+    crate::top::cmd_top(args)
 }
 
 // ─── kill ─────────────────────────────────────────────────────────────────────
@@ -451,7 +380,7 @@ pub fn cmd_top<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 ///
 /// Limitation: cannot terminate tasks blocked inside VFS/net IPC.  A kernel-level
 /// `ForceExit` syscall is planned (see roadmap Phase X-6) to handle those cases.
-pub fn cmd_kill<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_kill(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let tid_str = match args.next() {
         Some(s) => s,
         None => {

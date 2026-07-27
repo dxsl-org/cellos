@@ -19,13 +19,11 @@ const VFS_ENDPOINT: usize = 3;
 #[no_mangle]
 pub fn main() {
     // 1. Read .wasm path from spawn-argv stash (set by shell before spawning).
-    let mut argv_buf = [0u8; 256];
-    let n = ostd::syscall::sys_spawn_args(&mut argv_buf);
-    let path = if n > 0 {
-        core::str::from_utf8(&argv_buf[..n]).unwrap_or("/data/apps/app.wasm")
-    } else {
-        "/data/apps/app.wasm"
-    };
+    let argv = ostd::args();
+    let path = argv
+        .first()
+        .map(|arg| arg.as_str())
+        .unwrap_or("/data/apps/app.wasm");
 
     // 2. Load .wasm binary from VFS.
     let wasm_bytes = load_from_vfs(path);

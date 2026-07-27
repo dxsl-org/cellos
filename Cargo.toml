@@ -24,6 +24,7 @@ members = [
     "libs/ostd",
     "libs/attestation",
     "libs/http-core",
+    "libs/text-engine",
     "libs/mlibc-shim",
     "libs/agent-proto",
     "libs/viui",

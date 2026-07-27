@@ -23,9 +23,8 @@ api::declare_manifest!(block_io = false, network = false, spawn = false);
 
 #[no_mangle]
 pub fn main() {
-    let mut argbuf = [0u8; 32];
-    let an = ostd::syscall::sys_spawn_args(&mut argbuf);
-    let role = core::str::from_utf8(&argbuf[..an]).unwrap_or("");
+    let argv = ostd::args();
+    let role = argv.first().map(|arg| arg.as_str()).unwrap_or("");
     ostd::io::println(&alloc::format!(
         "[bench-probe] Started with role: '{}'",
         role

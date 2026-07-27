@@ -5,9 +5,7 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{
-    sys_lookup_service, sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult,
-};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
 
 /// Payload sent and expected back from the echo server.
 const HELLO: &[u8] = b"HELLO_ViCell\n";
@@ -18,20 +16,12 @@ api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 #[no_mangle]
 pub fn main() {
     // ── Parse argv ───────────────────────────────────────────────────────────
-    let mut arg_buf = [0u8; 64];
-    let arg_len = sys_spawn_args(&mut arg_buf);
-    if arg_len == 0 {
+    let argv = ostd::args();
+    if argv.is_empty() {
         println("Usage: nc <host> <port>  |  nc -l <port>");
         return;
     }
-    let args_str = match core::str::from_utf8(&arg_buf[..arg_len]) {
-        Ok(s) => s,
-        Err(_) => {
-            println("nc: bad args");
-            return;
-        }
-    };
-    let mut parts = args_str.split_whitespace();
+    let mut parts = argv.iter().map(|arg| arg.as_str());
     let first = match parts.next() {
         Some(t) => t,
         None => {

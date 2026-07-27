@@ -8,7 +8,9 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::syscall::ViSyscall;
+    use core::mem::{align_of, size_of};
+
+    use crate::syscall::{ProcessInfo, ProcessInfoV2, ViSyscall};
 
     /// All (id, expected_variant) pairs that must round-trip correctly.
     const CASES: &[(usize, ViSyscall)] = &[
@@ -32,6 +34,7 @@ mod tests {
         (231, ViSyscall::TruncateCap),
         (232, ViSyscall::SyncCap),
         (233, ViSyscall::GrantDma),
+        (239, ViSyscall::GetProcs2),
         (20, ViSyscall::ShmAlloc),
         (21, ViSyscall::ShmMap),
         (30, ViSyscall::GetProcs),
@@ -50,6 +53,7 @@ mod tests {
         (218, ViSyscall::AudioPlay),
         (219, ViSyscall::CapRevoke),
         (237, ViSyscall::ReadLog),
+        (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
         (311, ViSyscall::NetRx),
     ];
@@ -81,6 +85,26 @@ mod tests {
         assert_eq!(ViSyscall::Open as usize, 101);
         assert_eq!(ViSyscall::Read as usize, 102);
         assert_eq!(ViSyscall::Close as usize, 103);
+        assert_eq!(ViSyscall::GetProcs as usize, 30);
+        assert_eq!(ViSyscall::GetProcs2 as usize, 239);
+    }
+
+    /// v1 must stay byte-for-byte identical for every existing `GetProcs`
+    /// caller; v2 is a separate fixed-width row so the two never alias.
+    #[test]
+    fn process_info_layouts_are_stable() {
+        // v1 predates the fixed-width rule: its id/state are `usize`, so the row
+        // is pointer-width dependent (40 bytes on rv32, 48 on the 64-bit targets).
+        // Pinned per width rather than relaxed — a silent field addition is the
+        // regression this guards against.
+        let v1_expected = 2 * size_of::<usize>() + 32;
+        assert_eq!(size_of::<ProcessInfo>(), v1_expected);
+        assert_eq!(align_of::<ProcessInfo>(), align_of::<usize>());
+
+        // v2 is fixed-width by construction, so it is identical on RV32, RV64,
+        // AArch64 and x86_64: u64 + u32 + u32 + [u8; 32] + 4 × u64.
+        assert_eq!(size_of::<ProcessInfoV2>(), 80);
+        assert_eq!(align_of::<ProcessInfoV2>(), 8);
     }
 
     #[test]
@@ -181,6 +205,8 @@ mod allowlist {
         assert_eq!(ViSyscall::Send.allowlist_bit(), Some(0));
         assert_eq!(ViSyscall::Recv.allowlist_bit(), Some(1));
         assert_eq!(ViSyscall::Log.allowlist_bit(), Some(10));
+        assert_eq!(ViSyscall::GetProcs.allowlist_bit(), Some(14));
+        assert_eq!(ViSyscall::GetProcs2.allowlist_bit(), Some(55));
 
         let mask = SyscallSet::EMPTY
             .with(ViSyscall::Send)

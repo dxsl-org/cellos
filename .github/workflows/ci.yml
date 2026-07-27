@@ -717,11 +717,14 @@ jobs:
           cache-on-failure: true
 
       - name: Run host-side unit tests
-        # libs/types and libs/api use cfg_attr(not(test), no_std) so they can
-        # run on the host without a bare-metal target.
+        # libs/types, libs/api and libs/text-engine use cfg_attr(not(test), no_std)
+        # and define no panic/alloc lang items, so they run on the host without a
+        # bare-metal target. text-engine holds the pure grep/sed/awk/top logic that
+        # app-shell cannot host-test itself (it links ostd, which owns those items).
         run: |
-          cargo test -p types --target x86_64-unknown-linux-gnu
-          cargo test -p api   --target x86_64-unknown-linux-gnu
+          cargo test -p types       --target x86_64-unknown-linux-gnu
+          cargo test -p api         --target x86_64-unknown-linux-gnu
+          cargo test -p text-engine --target x86_64-unknown-linux-gnu
 
   unsafe-ratchet:
     # Replaces the cargo-geiger gate: geiger cannot analyse `-Z build-std`
