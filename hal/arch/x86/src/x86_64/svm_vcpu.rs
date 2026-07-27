@@ -9,8 +9,8 @@
 use hal_hypervisor::ViVmExit;
 
 use super::vmcb::{
-    VmcbView, EFER_SVME, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1, OFF_EXITINFO2,
-    OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
+    VmcbView, EFER_SVME, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1, OFF_EXITINFO2, OFF_INT_SHADOW,
+    OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
 };
 use super::vmexit_decode::{
     decode, VMEXIT_CPUID, VMEXIT_HLT, VMEXIT_INTR, VMEXIT_INVALID, VMEXIT_IOIO, VMEXIT_MSR,
@@ -166,8 +166,7 @@ impl SvmVcpu {
     /// delivery bypasses the guest interrupt-enable check.
     pub fn inject_ext_irq(&mut self, vector: u8) {
         const EVENTINJ_VALID: u64 = 1 << 31; // type field 0 = external interrupt
-        self.vmcb
-            .w64(OFF_EVENTINJ, EVENTINJ_VALID | vector as u64);
+        self.vmcb.w64(OFF_EVENTINJ, EVENTINJ_VALID | vector as u64);
     }
 
     /// [`Self::inject_ext_irq`], but dropped when the guest cannot take a

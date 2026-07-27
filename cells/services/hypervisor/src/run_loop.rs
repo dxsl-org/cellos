@@ -143,9 +143,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
             // ── WFI — inject virtual timer; poll for guest RX frames ─────────
             ViVmExit::Wfi => {
                 timer::inject_timer_irq(vm_id, vcpu_id);
-                gpu.reconnect_compositor(
-                    sys_lookup_service(service::COMPOSITOR).unwrap_or(0),
-                );
+                gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
                 if let Some(frame) = net_backend::try_receive(net_tid) {
                     net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio);
                 }
@@ -153,9 +151,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
             ViVmExit::Preempted => {
-                gpu.reconnect_compositor(
-                    sys_lookup_service(service::COMPOSITOR).unwrap_or(0),
-                );
+                gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
                 if let Some(frame) = net_backend::try_receive(net_tid) {
                     net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio);
                 }

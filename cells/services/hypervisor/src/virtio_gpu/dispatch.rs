@@ -18,11 +18,9 @@ pub fn handle_control(
         return 0;
     };
     match header.command {
-        command::GET_DISPLAY_INFO => command::write_display_info(
-            bufs,
-            vm_id,
-            &command::display_info(header, width, height),
-        ),
+        command::GET_DISPLAY_INFO => {
+            command::write_display_info(bufs, vm_id, &command::display_info(header, width, height))
+        }
         command::RESOURCE_CREATE_2D => {
             let Some(cmd) = command::parse_create_2d(bufs, vm_id) else {
                 return command::write_error(bufs, vm_id, header, command::ERR_UNSPEC);

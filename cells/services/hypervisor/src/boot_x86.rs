@@ -128,13 +128,20 @@ pub fn run() {
     let initrd_size = match stream_file(INITRD_PATH, vm_id, initrd_gpa) {
         Ok(n) => n,
         Err(e) => {
-            println(&alloc::format!("[hv-x86] stream {} failed: {:?}", INITRD_PATH, e));
+            println(&alloc::format!(
+                "[hv-x86] stream {} failed: {:?}",
+                INITRD_PATH,
+                e
+            ));
             return;
         }
     };
     println(&alloc::format!(
         "[hv-x86] entry=0x{:x} kernel_end=0x{:x} initrd@0x{:x} ({} B)",
-        entry32, kernel_end, initrd_gpa, initrd_size
+        entry32,
+        kernel_end,
+        initrd_gpa,
+        initrd_size
     ));
 
     // ── ACPI tables (Alpine requires them; PVH passes rsdp via start_info) ────

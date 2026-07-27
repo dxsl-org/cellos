@@ -44,14 +44,12 @@ impl GpuDev {
     }
 
     pub fn reconnect_compositor(&mut self, compositor_tid: usize) {
-        self.scanout
-            .reconnect(compositor_tid, &mut self.resources);
+        self.scanout.reconnect(compositor_tid, &mut self.resources);
     }
 
     pub fn shutdown(&mut self) {
         self.scanout.reset(&mut self.resources);
     }
-
 }
 
 impl VirtioDevice for GpuDev {
@@ -77,14 +75,16 @@ impl VirtioDevice for GpuDev {
                 qcfg,
                 &mut self.last_avail[0],
                 &mut self.used_idx[0],
-                |bufs| dispatch::handle_control(
-                    &mut self.resources,
-                    &mut self.scanout,
-                    bufs,
-                    vm_id,
-                    self.width,
-                    self.height,
-                ),
+                |bufs| {
+                    dispatch::handle_control(
+                        &mut self.resources,
+                        &mut self.scanout,
+                        bufs,
+                        vm_id,
+                        self.width,
+                        self.height,
+                    )
+                },
             ),
             1 => process_notify(
                 vm_id,

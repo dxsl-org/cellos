@@ -54,7 +54,9 @@ api::declare_syscalls![
     WaitForEvent,
 ];
 
-// Arch-generic VMM syscall wrappers (used by both personalities).
+// VMM syscall wrappers — only the two arches with a kernel VMM backend have a
+// caller; on any other target every wrapper would be dead code.
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod vmm;
 
 // ── aarch64 (EL2) personality ─────────────────────────────────────────────────
@@ -86,6 +88,7 @@ mod virtio_mmio;
 mod virtio_net;
 #[cfg(target_arch = "aarch64")]
 mod virtqueue;
+#[cfg(target_arch = "aarch64")]
 mod virtqueue_guard;
 
 // ── x86_64 (SVM/VT-x) personality ──────────────────────────────────────────────

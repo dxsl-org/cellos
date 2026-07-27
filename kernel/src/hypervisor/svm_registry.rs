@@ -121,10 +121,9 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
         .is_err()
     {
         log::error!("[hv-x86] create_vm: xAPIC NPT map OOM");
-        FRAME_ALLOCATOR
-            .lock()
-            .as_mut()
-            .map(|a| a.deallocate_frame(apic_frame));
+        if let Some(allocator) = FRAME_ALLOCATOR.lock().as_mut() {
+            allocator.deallocate_frame(apic_frame);
+        }
         return Err(ViError::OutOfMemory);
     }
 

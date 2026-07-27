@@ -25,10 +25,7 @@ pub fn parse_set_scanout(bufs: &[DescBuf], vm_id: usize) -> Option<SetScanoutCmd
     super::wire::parse_set_scanout(&read_request_bytes(bufs, vm_id)?)
 }
 
-pub fn parse_transfer_to_host_2d(
-    bufs: &[DescBuf],
-    vm_id: usize,
-) -> Option<TransferToHost2dCmd> {
+pub fn parse_transfer_to_host_2d(bufs: &[DescBuf], vm_id: usize) -> Option<TransferToHost2dCmd> {
     super::wire::parse_transfer(&read_request_bytes(bufs, vm_id)?)
 }
 

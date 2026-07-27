@@ -174,7 +174,7 @@ pub fn create_vm(owner: usize, guest_pages: usize) -> ViResult<usize> {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        return super::svm_registry::create_vm(owner, guest_pages);
+        super::svm_registry::create_vm(owner, guest_pages)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -220,7 +220,7 @@ pub fn create_vcpu(owner: usize, vm_id: usize, entry_pc: u64) -> ViResult<usize>
     }
     #[cfg(target_arch = "x86_64")]
     {
-        return super::svm_registry::create_vcpu(owner, vm_id, entry_pc);
+        super::svm_registry::create_vcpu(owner, vm_id, entry_pc)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -252,7 +252,7 @@ pub fn map_guest_memory(
     }
     #[cfg(target_arch = "x86_64")]
     {
-        return super::svm_registry::map_guest_memory(owner, vm_id, ipa, size, writable);
+        super::svm_registry::map_guest_memory(owner, vm_id, ipa, size, writable)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -460,7 +460,7 @@ pub unsafe fn run_vcpu(
         unsafe {
             core::ptr::write(exit_out, api_exit);
         }
-        return Ok(0);
+        Ok(0)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -505,7 +505,7 @@ pub fn vcpu_regs(
     }
     #[cfg(target_arch = "x86_64")]
     {
-        return super::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, buf_ptr, write);
+        super::svm_registry::vcpu_regs(owner, vm_id, vcpu_id, buf_ptr, write)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -562,7 +562,7 @@ pub fn write_guest_memory(
     }
     #[cfg(target_arch = "x86_64")]
     {
-        return super::svm_registry::write_guest_memory(owner, vm_id, gpa, src_ptr, len);
+        super::svm_registry::write_guest_memory(owner, vm_id, gpa, src_ptr, len)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -620,7 +620,7 @@ pub fn read_guest_memory(
     }
     #[cfg(target_arch = "x86_64")]
     {
-        return super::svm_registry::read_guest_memory(owner, vm_id, gpa, dst_ptr, len);
+        super::svm_registry::read_guest_memory(owner, vm_id, gpa, dst_ptr, len)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {
@@ -654,7 +654,7 @@ pub fn inject_irq(owner: usize, vm_id: usize, vcpu_id: usize, intid: u32) -> ViR
     {
         // `intid` is reinterpreted as an x86 interrupt vector (8259 line remap).
         super::svm_registry::inject_irq(owner, vm_id, vcpu_id, intid)?;
-        return Ok(0);
+        Ok(0)
     }
     #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
     {

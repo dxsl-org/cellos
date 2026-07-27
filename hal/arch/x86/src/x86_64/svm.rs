@@ -110,16 +110,16 @@ pub unsafe fn enable(hsave_pa: u64) -> ViResult<()> {
 pub unsafe fn msrpm_passthrough_boot(msrpm_va: *mut u8) {
     // Guest-context MSRs: passthrough read + write.
     const PASSTHRU: [u32; 10] = [
-        0x174,        // IA32_SYSENTER_CS
-        0x175,        // IA32_SYSENTER_ESP
-        0x176,        // IA32_SYSENTER_EIP
-        0xC000_0081,  // STAR
-        0xC000_0082,  // LSTAR
-        0xC000_0083,  // CSTAR
-        0xC000_0084,  // SFMASK
-        0xC000_0100,  // FS_BASE
-        0xC000_0101,  // GS_BASE
-        0xC000_0102,  // KERNEL_GS_BASE
+        0x174,       // IA32_SYSENTER_CS
+        0x175,       // IA32_SYSENTER_ESP
+        0x176,       // IA32_SYSENTER_EIP
+        0xC000_0081, // STAR
+        0xC000_0082, // LSTAR
+        0xC000_0083, // CSTAR
+        0xC000_0084, // SFMASK
+        0xC000_0100, // FS_BASE
+        0xC000_0101, // GS_BASE
+        0xC000_0102, // KERNEL_GS_BASE
     ];
     for &m in &PASSTHRU {
         // SAFETY: caller guarantees msrpm_va is the live 8 KiB MSRPM frame.

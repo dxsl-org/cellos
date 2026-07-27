@@ -12,7 +12,7 @@
 struct Chip {
     vector_base: u8,
     mask: u8,
-    icw_step: u8,   // 0 = initialised (data port = OCW1); 1..=3 = expecting ICWn
+    icw_step: u8, // 0 = initialised (data port = OCW1); 1..=3 = expecting ICWn
     icw4_needed: bool,
 }
 

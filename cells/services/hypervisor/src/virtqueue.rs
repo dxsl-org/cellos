@@ -121,12 +121,7 @@ where
 
         // Advance used.idx with a store that the guest will see (TCG is SC).
         let next_used = used_idx.wrapping_add(1);
-        if crate::vmm::write_guest_memory(
-            vm_id,
-            qcfg.used_gpa + 2,
-            &next_used.to_le_bytes(),
-        ) != 2
-        {
+        if crate::vmm::write_guest_memory(vm_id, qcfg.used_gpa + 2, &next_used.to_le_bytes()) != 2 {
             break;
         }
         *used_idx = next_used;

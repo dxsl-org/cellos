@@ -1,9 +1,9 @@
 //! Non-blocking compositor bridge for the VMM-owned scanout Grant.
 
+use super::{command, resource::ResourceTable};
 use api::display::{compositor_ops, AttachGrant, DamageNotify, PixelFormat, Rect};
 use ostd::io::println;
 use ostd::syscall::{sys_grant_share, sys_recv_timeout, sys_try_send, sys_yield, SyscallResult};
-use super::{command, resource::ResourceTable};
 pub struct ScanoutBridge {
     compositor_tid: usize,
     surface_cap: u32,
@@ -135,7 +135,10 @@ impl ScanoutBridge {
             cap: self.surface_cap,
             rect,
         };
-        if matches!(sys_try_send(self.compositor_tid, &message.encode()), SyscallResult::Ok(0)) {
+        if matches!(
+            sys_try_send(self.compositor_tid, &message.encode()),
+            SyscallResult::Ok(0)
+        ) {
             self.pending_damage = None;
         }
     }
@@ -189,7 +192,9 @@ fn union_rect(a: command::Rect, b: command::Rect) -> command::Rect {
     let left = a.x.min(b.x);
     let top = a.y.min(b.y);
     let right = a.x.saturating_add(a.width).max(b.x.saturating_add(b.width));
-    let bottom = a.y.saturating_add(a.height).max(b.y.saturating_add(b.height));
+    let bottom =
+        a.y.saturating_add(a.height)
+            .max(b.y.saturating_add(b.height));
     command::Rect {
         x: left,
         y: top,

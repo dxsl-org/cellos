@@ -1,6 +1,6 @@
 extern crate alloc;
 
-use super::{copy_from_backing, full_rect, pixel_len, row_bytes, blend_cursor};
+use super::{blend_cursor, copy_from_backing, full_rect, pixel_len, row_bytes};
 use super::{ResourceError, ResourceTable, ScanoutGrant};
 use alloc::vec::Vec;
 
@@ -136,7 +136,10 @@ impl ResourceTable {
             .map_err(|_| ResourceError::OutOfMemory)?;
         pixels.resize(cursor_len, 0);
         copy_from_backing(vm_id, &cursor_resource.backing, 0, &mut pixels)?;
-        let scanout = self.scanout.as_mut().ok_or(ResourceError::InvalidResourceId)?;
+        let scanout = self
+            .scanout
+            .as_mut()
+            .ok_or(ResourceError::InvalidResourceId)?;
         blend_cursor(
             scanout,
             &pixels,

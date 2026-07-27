@@ -424,9 +424,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                                 cpu_features::latch_x86_root_active();
                                 log_info("x86 virt: root operation active (VMX)");
                             }
-                            Err(_) => {
-                                log_info("x86 virt: VMX present but unavailable; cap closed")
-                            }
+                            Err(_) => log_info("x86 virt: VMX present but unavailable; cap closed"),
                         }
                     }
                     None => log_info("x86 virt: OOM allocating VMXON frame; cap closed"),

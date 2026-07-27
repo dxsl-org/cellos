@@ -138,9 +138,21 @@ pub fn parse_cursor(raw: &[u8], with_resource: bool) -> Option<CursorCmd> {
         scanout_id: le32(raw, pos)?,
         x: le32(raw, pos + 4)?,
         y: le32(raw, pos + 8)?,
-        resource_id: if with_resource { le32(raw, pos + 16)? } else { 0 },
-        hot_x: if with_resource { le32(raw, pos + 20)? } else { 0 },
-        hot_y: if with_resource { le32(raw, pos + 24)? } else { 0 },
+        resource_id: if with_resource {
+            le32(raw, pos + 16)?
+        } else {
+            0
+        },
+        hot_x: if with_resource {
+            le32(raw, pos + 20)?
+        } else {
+            0
+        },
+        hot_y: if with_resource {
+            le32(raw, pos + 24)?
+        } else {
+            0
+        },
     })
 }
 

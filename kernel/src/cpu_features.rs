@@ -3,9 +3,9 @@
 //! Call `detect(dtb)` once at kernel boot before any Cell is spawned.
 //! All other callers use the read-only `has_*()` accessors.
 
-use core::sync::atomic::{AtomicBool, Ordering};
 #[cfg(target_arch = "x86_64")]
 use core::sync::atomic::AtomicU8;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
 

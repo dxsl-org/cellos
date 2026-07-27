@@ -70,9 +70,9 @@ const NPT_USER: u64 = 1 << 2;
 pub const MMIO_HOLES: &[(u64, u64)] = &[
     (0xd000_0000, 0xd000_4000), // virtio-mmio bus: 4 slots × 0x1000 (P06/P07/P08)
     (0xFEC0_0000, 0xFEC0_1000), // IOAPIC (unmodelled; no MADT IOAPIC entry → guest uses virtual-wire PIC)
-    // LAPIC (0xFEE00000) is NOT a hole: it is RAM-backed via map_device_frame
-    // (TCG has no DecodeAssist, so trap-and-emulate is impossible). The timer is
-    // polled kernel-side on HLT (see hal svm_vcpu). Guest RAM never reaches it.
+                                // LAPIC (0xFEE00000) is NOT a hole: it is RAM-backed via map_device_frame
+                                // (TCG has no DecodeAssist, so trap-and-emulate is impossible). The timer is
+                                // polled kernel-side on HLT (see hal svm_vcpu). Guest RAM never reaches it.
 ];
 
 // ── Errors (mirror S2MapError) ───────────────────────────────────────────────

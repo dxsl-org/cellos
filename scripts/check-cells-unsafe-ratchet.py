@@ -37,6 +37,11 @@ ALLOWLIST = {
     # Hypervisor / Silo — EL2/VMX world switch and guest mailboxes.
     "cells/services/hypervisor/src/timer.rs",
     "cells/services/hypervisor/src/vmm.rs",
+    # virtio-gpu backend — blits guest scanout pixels into the compositor Grant
+    # obtained from sys_grant_slice; the raw pointer is the Grant base and every
+    # write is bounds-checked against scanout.len before the slice is formed.
+    "cells/services/hypervisor/src/virtio_gpu/resource.rs",
+    "cells/services/hypervisor/src/virtio_gpu/resource/render.rs",
     "cells/services/silo/src/vmm.rs",
     "cells/guests/silo-guest/src/mailbox.rs",
     "cells/guests/silo-guest/src/main.rs",

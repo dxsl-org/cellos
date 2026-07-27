@@ -1,8 +1,8 @@
 extern crate alloc;
 
 use super::{
-    command, full_rect, pixel_len, rect_covers_resource, Resource, ResourceError,
-    ResourceTable, SCANOUT_ID, MAX_BACKING_ENTRIES, MAX_RESOURCES,
+    command, full_rect, pixel_len, rect_covers_resource, Resource, ResourceError, ResourceTable,
+    MAX_BACKING_ENTRIES, MAX_RESOURCES, SCANOUT_ID,
 };
 use alloc::vec::Vec;
 
@@ -61,7 +61,11 @@ impl ResourceTable {
     }
 
     pub fn unref(&mut self, resource_id: u32) -> Result<(), ResourceError> {
-        if self.cursor.as_ref().is_some_and(|cursor| cursor.resource_id == resource_id) {
+        if self
+            .cursor
+            .as_ref()
+            .is_some_and(|cursor| cursor.resource_id == resource_id)
+        {
             return Err(ResourceError::InvalidResourceId);
         }
         if self.scanout_resource_id == Some(resource_id) {
@@ -170,7 +174,10 @@ impl ResourceTable {
         vm_id: usize,
         cmd: command::CursorCmd,
     ) -> Result<(), ResourceError> {
-        let cursor = self.cursor.as_mut().ok_or(ResourceError::InvalidResourceId)?;
+        let cursor = self
+            .cursor
+            .as_mut()
+            .ok_or(ResourceError::InvalidResourceId)?;
         if cmd.scanout_id != SCANOUT_ID {
             return Err(ResourceError::InvalidParameter);
         }
@@ -178,5 +185,4 @@ impl ResourceTable {
         cursor.y = cmd.y;
         self.redraw_cursor(vm_id)
     }
-
 }

@@ -1,18 +1,13 @@
 //! Low-level VMM syscall wrappers (220-227) for the hypervisor service cell.
 //!
-//! Implemented for the two arches with a VMM backend — aarch64 (`svc #0`) and
-//! x86_64 (`syscall`). On other targets the stub returns a NotSupported
-//! sentinel so the code still compiles.
+//! Compiled only for the two arches with a kernel VMM backend — aarch64
+//! (`svc #0`) and x86_64 (`syscall`); `main.rs` gates the module accordingly.
 
 use api::hypervisor::ViVmExit;
 use api::syscall::ViSyscall;
 
 /// Scheduler tick budget for each RunVcpu call (~10ms in 10 MHz ticks = 100_000 ticks).
 pub const SCHED_TICK_BUDGET_NS: u64 = 10_000_000; // 10ms in nanoseconds
-
-/// Error sentinel returned by VMM syscalls on failure.
-#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-const ERR: usize = usize::MAX;
 
 #[inline]
 unsafe fn syscall4(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> usize {
@@ -34,11 +29,6 @@ unsafe fn syscall4(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) ->
         lateout("rcx") _, lateout("r11") _,
         options(nostack),
     );
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
-    {
-        let _ = (id, a0, a1, a2, a3);
-        ret = ERR;
-    }
     ret
 }
 

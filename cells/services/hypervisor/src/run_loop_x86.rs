@@ -149,7 +149,9 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── MSR — never surfaced anymore (the kernel emulates all MSR exits
             //    internally); fail loud if one arrives so a regression is seen. ─
-            ViVmExit::Msr { index, is_write, .. } => {
+            ViVmExit::Msr {
+                index, is_write, ..
+            } => {
                 println(&alloc::format!(
                     "[hv-x86] unexpected surfaced MSR idx=0x{:x} write={} — shutting down",
                     index,
@@ -160,7 +162,10 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── Unmodelled MMIO (NPT fault) — log; virtio window arrives P06 ──
             ViVmExit::MmioWrite { ipa, .. } | ViVmExit::MmioRead { ipa, .. } => {
-                println(&alloc::format!("[hv-x86] unhandled guest MMIO gpa=0x{:x}", ipa));
+                println(&alloc::format!(
+                    "[hv-x86] unhandled guest MMIO gpa=0x{:x}",
+                    ipa
+                ));
                 return RunOutcome::Shutdown;
             }
 
@@ -179,9 +184,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
             }
 
             // ── aarch64-only exits — never emitted on the x86 world-switch ────
-            ViVmExit::Hvc { .. }
-            | ViVmExit::Wfi
-            | ViVmExit::SysReg { .. } => {
+            ViVmExit::Hvc { .. } | ViVmExit::Wfi | ViVmExit::SysReg { .. } => {
                 println("[hv-x86] unexpected aarch64 vmexit — shutting down VM");
                 return RunOutcome::Shutdown;
             }
