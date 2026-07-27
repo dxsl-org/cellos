@@ -49,6 +49,51 @@ all three targets. Plan: `.agents/260726-full-utility-suite/`.
 
 ---
 
+## [2026-07-27] VFS destructive ops were unauthorized; `WriteGrant` reported success for discarded writes
+
+### `Unlink` / `Rmdir` / `RmdirRecursive` never consulted `AccessTable`
+`cells/services/vfs/src/dispatch.rs` gated `Write`, `Append`, and `Mkdir` behind
+`access.can_write()` but called straight into the backend for all three destructive ops, so the
+`/` rule (`allow_write_all: false`) was never evaluated on any delete path. `/readme.txt` — a real
+pre-seeded RamFS file under that read-only prefix, on a backend that does implement `unlink` — was
+genuinely deletable by any cell. `/bin/` was not exploitable: `BinOverlay` returns `false` from
+every mutating method, so deletes there already failed at the backend with `Err(1)` — a backend
+refusal, not an authorization one. Each op now authorizes before touching the backend, and
+deliberately before its auxiliary reads too: `Unlink` checks before `file_size`, and
+`RmdirRecursive` before `collect_dir_bytes`, so an unauthorized caller cannot use either as an
+existence or subtree-size probe.
+
+### `WriteGrant` was a stub that replied `GrantDone` for a write it threw away
+The arm drained the caller's grant, dropped the bytes, and reported success — with no authorization
+anywhere on the path, and no way to add one, since it cannot resolve a target path from `cap` and
+so cannot call `can_write`. It is now fail-closed (`Err(3)`), refusing before it touches the grant;
+the `unsafe` block that read the discarded buffer is gone. Reporting success for a write that never
+landed is worse than refusing: callers cannot distinguish it, and wiring cap→path routing later
+would have silently promoted the same unchecked path to real disk writes. No caller was affected —
+`ostd::fs::write_all` (the only route to this op) has no callers.
+
+### `MountEntry::writable` deleted rather than enforced
+The field was stored and never read (`#[allow(dead_code)]`, doc-commented as "informational"), and
+its values nearly duplicated the `AccessTable` prefix rules. A third half-wired authorization source
+can drift from the other two while still reading as enforcement, so it was removed along with
+`mount()`'s third parameter. Write authorization now has exactly two homes: policy in `AccessTable`
+(consulted in `dispatch`) and structure in the backend (e.g. `BinOverlay`).
+
+### Verification and what is still unproven
+VFS suite: 36 PASS / 0 FAIL on riscv64 QEMU, including five new assertions in the `vfs-test` cell
+(`/readme.txt` refused and surviving, `Rmdir`/`RmdirRecursive` under `/` refused before the backend,
+`WriteGrant` fail-closed); 31 pre-existing assertions unchanged. `cargo clippy -D warnings` clean on
+`service-vfs` and `app-vfs-test`. **Not proven**: that the new assertions fail without the fix.
+Reverting the gates and rebuilding produced an image the kernel could not read (`/bin/vfs not in
+VIFS1`) — and that reproduces with the fix restored, so it is a build-tooling fault, not a
+regression. Narrowed to: the kernel embeds the image correctly and VIFS1 mounts (it correctly reports
+`/POLICY.BIN` absent), the image carries all six files with UTF-16 LFN entries, yet `/bin/*` lookups
+fail. Tracked as a follow-up, along with two Windows blockers in `scripts/build-test-hooks-ci.sh`
+(it invokes `python3`, which is the Microsoft Store stub, and passes a POSIX `mktemp -d` path to a
+Windows Python).
+
+---
+
 ## [2026-07-25] Tier 3b VirtIO-GPU host stack code-complete; strict Linux DRM/E2E remains hardware-gated
 
 ### Status

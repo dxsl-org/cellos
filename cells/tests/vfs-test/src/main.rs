@@ -175,6 +175,63 @@ fn test_access_control() {
         "write /tmp/ still works"
     );
     let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/access_ok.txt"));
+
+    // ── Destructive-op authorization ─────────────────────────────────────────
+    //
+    // `Unlink`/`Rmdir`/`RmdirRecursive` used to skip `AccessTable` entirely: they
+    // called straight into the backend, so the `/` rule (allow_write_all: false)
+    // was never consulted on any delete path.
+    //
+    // `/readme.txt` is the decisive fixture — a real pre-seeded RamFS file under
+    // the read-only `/` prefix, on a backend that DOES implement `unlink`. Before
+    // the gate it was genuinely deleted (Ok); now it must be refused and survive.
+    // (`/bin/` is a weaker case: BinOverlay refuses every mutating call, so a
+    // delete there already failed at the backend with Err(1) — that arm proves
+    // ordering, not that a deletion was ever possible.)
+    assert_err!(
+        api::ipc::VfsRequest::Unlink("/readme.txt"),
+        3,
+        "unlink /readme.txt (read-only / prefix) → PermissionDenied"
+    );
+    match vfs_req(&api::ipc::VfsRequest::Stat("/readme.txt")) {
+        api::ipc::VfsResponse::Stat { is_dir: false, .. } => {
+            pass("/readme.txt survived the refused unlink")
+        }
+        _ => fail("/readme.txt survived the refused unlink"),
+    }
+
+    // Non-existent paths under `/`: the point is WHICH error comes back. Err(3)
+    // proves authorization ran BEFORE the backend; the pre-gate code reached the
+    // backend and reported Err(1) (not found). A non-existent target keeps this
+    // assertion non-destructive if it is ever run against an ungated build.
+    assert_err!(
+        api::ipc::VfsRequest::Rmdir("/no_such_dir"),
+        3,
+        "rmdir under / → PermissionDenied (authorized before backend)"
+    );
+    // Also proves the check precedes `collect_dir_bytes`, so an unauthorized
+    // caller cannot use this op to probe subtree sizes.
+    assert_err!(
+        api::ipc::VfsRequest::RmdirRecursive("/no_such_dir"),
+        3,
+        "rmdir_recursive under / → PermissionDenied (before subtree walk)"
+    );
+
+    // `WriteGrant` is fail-closed until cap→path routing exists: it cannot resolve
+    // a path, so it cannot authorize, so it refuses. It used to drain the grant,
+    // drop the bytes, and reply GrantDone — success for a write that never landed.
+    // grant id 0 is never valid; pre-change this reached sys_grant_slice and
+    // returned Err(1), so Err(3) proves the refusal happens first.
+    assert_err!(
+        api::ipc::VfsRequest::WriteGrant {
+            cap: 0,
+            offset: 0,
+            grant: 0,
+            bytes: 1
+        },
+        3,
+        "WriteGrant is fail-closed (no cap→path routing yet)"
+    );
 }
 
 /// 4. Async read protocol: ReadAsync → PendingHandle → Poll → Data.
