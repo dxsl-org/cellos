@@ -841,6 +841,10 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          # gen_disk.ps1 bakes a signed /POLICY.BIN; scripts/sign-policy.py needs
+          # Ed25519 from `cryptography` and exits 1 without it, which would fail
+          # gen_disk before any test runs.
+          python3 -m pip install --user --quiet cryptography
 
       - name: Build cells + kernel + disk images (gen_disk)
         env:
