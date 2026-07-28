@@ -155,20 +155,46 @@ if grep -qi "\[hv\] .*fail\|\[hv\] .*error" qemu-hv.log; then
     exit 1
 fi
 
-# The one tolerated signature: EL2 instruction-abort-from-lower-EL exit
-# (ec=0x20, iss=0x6, ELR_EL2=0x200 i.e. the guest's own VBAR+0x200 slot) paired
-# with the guest-side address-size fault at the documented ELR_EL1. Anything
-# narrower or wider than this exact pair is treated as a real regression, not
-# tolerated noise.
+# The one tolerated signature: an EL2 instruction-abort-from-lower-EL exit
+# (ec=0x20, iss=0x6, ELR_EL2=0x200 — the guest's own VBAR+0x200 slot) paired
+# with a guest-side ADDRESS SIZE fault. That is what TCG spuriously raises while
+# composing the guest's stage-1-over-Cellos-stage-2 walk partway through
+# Alpine's early boot relocation; a physical MMU doing the nested walk (KVM)
+# does not hit it.
+#
+# The fault CLASS is the invariant here, not the address. This check used to pin
+# `guest ELR_EL1=0x4115c46c`, captured from one local run on 2026-07-23, but the
+# guest PC where TCG trips carries no semantic meaning and moves with the QEMU
+# build (ubuntu-24.04 ships 8.2, local dev 10.2) and with any change to the
+# pinned Alpine artifact — the first CI execution of this lane reported
+# 0x4141f0b8 for an otherwise byte-identical exit. Decode ESR_EL1 instead. Note
+# this is strictly tighter than the old pair in one respect: ESR was previously
+# not examined at all.
 TOLERATED_VMEXIT='unknown vmexit ec=0x20 iss=0x6 pc=0x200'
-TOLERATED_GUEST_ELR='guest ELR_EL1=0x4115c46c'
 
-if grep -qF "$TOLERATED_VMEXIT" qemu-hv.log && grep -qF "$TOLERATED_GUEST_ELR" qemu-hv.log; then
-    echo "PASS: machinery ran — VMM entered the guest; only the documented TCG nested-translation fault occurred"
+# True when some guest trap in the log carries ESR_EL1 with EC=0x25 (data abort
+# taken without a change in exception level) and DFSC=0b0000xx (address size
+# fault, levels 0-3). Any other guest fault class is a real defect.
+guest_fault_is_address_size() {
+    local esr value
+    while read -r esr; do
+        value=$((esr))
+        (( (value >> 26 & 0x3f) == 0x25 )) || continue
+        (( (value & 0x3f) <= 0x03 )) || continue
+        return 0
+    done < <(grep -o 'ESR_EL1=0x[0-9a-fA-F]\+' qemu-hv.log | cut -d= -f2)
+    return 1
+}
+
+if grep -qF "$TOLERATED_VMEXIT" qemu-hv.log && guest_fault_is_address_size; then
+    echo "PASS: machinery ran — VMM entered the guest; only the documented TCG address-size fault occurred"
     exit 0
 fi
 
 echo "FAIL: guest did not reach a shell, and the fault seen (if any) does not match the documented TCG signature" >&2
+echo "  wanted vmexit:      $TOLERATED_VMEXIT" >&2
+echo "  wanted guest fault: ESR_EL1 with EC=0x25 and DFSC=0b0000xx (address size fault)" >&2
+echo "  guest ESR_EL1 seen: $(grep -o 'ESR_EL1=0x[0-9a-fA-F]\+' qemu-hv.log | sort -u | tr '\n' ' ')" >&2
 echo "--- last 50 lines of QEMU output ---" >&2
 tail -50 qemu-hv.log >&2
 exit 1
