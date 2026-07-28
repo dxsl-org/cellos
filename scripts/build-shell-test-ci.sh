@@ -67,13 +67,18 @@ TMPDIR_KFS=$(mktemp -d "target/shell-test-tmp.XXXXXX")
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell-shell-test' > "$TMPDIR_KFS/hostname"
 
+# shellcheck source=scripts/lib-bake-policy.sh
+source scripts/lib-bake-policy.sh
+bake_policy "$TMPDIR_KFS/POLICY.BIN"
+
 MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$ST_DIR/kernel_fs.img" \
     "$REL/app-init"        /bin/init \
     "$REL/app-shell"       /bin/shell \
     "$REL/service-vfs"     /bin/vfs \
     "$REL/service-config"  /bin/config \
-    "$TMPDIR_KFS/hostname" /etc/hostname
+    "$TMPDIR_KFS/hostname" /etc/hostname \
+    "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
 if [[ ! -f "$ST_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
@@ -84,6 +89,7 @@ if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
     echo "FAIL: kernel_fs.img does not contain /bin/shell" >&2
     exit 1
 fi
+assert_policy_in_image "$TMPDIR_KFS/fat-layout.txt" || exit 1
 echo "   kernel_fs.img: $(du -sh "$ST_DIR/kernel_fs.img" | cut -f1)"
 
 # INIT_ELF (include_bytes!) is embedded separately from kernel_fs.img.

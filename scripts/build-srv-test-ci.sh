@@ -77,6 +77,10 @@ TMPDIR_KFS=$(mktemp -d "target/srv-test-tmp.XXXXXX")
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell-srv-test' > "$TMPDIR_KFS/hostname"
 
+# shellcheck source=scripts/lib-bake-policy.sh
+source scripts/lib-bake-policy.sh
+bake_policy "$TMPDIR_KFS/POLICY.BIN"
+
 # MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every /bin/... DESTINATION
 # argument into a Windows path before Python sees it, and mkfat32.py silently
 # builds an image containing "C:/Program Files/Git/bin/..." instead of /bin/*.
@@ -90,7 +94,8 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$REL/platform"       /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$REL/srv-test"       /bin/srv-test \
-    "$TMPDIR_KFS/hostname" /etc/hostname
+    "$TMPDIR_KFS/hostname" /etc/hostname \
+    "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
 if [[ ! -f "$SRV_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
@@ -104,6 +109,7 @@ if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
     cat "$TMPDIR_KFS/fat-layout.txt" >&2
     exit 1
 fi
+assert_policy_in_image "$TMPDIR_KFS/fat-layout.txt" || exit 1
 echo "   kernel_fs.img: $(du -sh "$SRV_DIR/kernel_fs.img" | cut -f1)"
 
 cp "$REL/app-init" "$SRV_DIR/init"
