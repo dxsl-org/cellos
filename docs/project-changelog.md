@@ -4,6 +4,55 @@
 
 ---
 
+## [2026-07-28] Cell signing reached only one image lane out of five
+
+### What was wrong
+`gen_disk.ps1` signed its cells. `build-boot-ramdisk-ci.sh`, `build-test-hooks-ci.sh`,
+`build-shell-test-ci.sh` and `build-srv-test-ci.sh` did not. A cell with no
+`__ViCell_sig` section is denied by `loader::spawn_gated` under the `signing-required`
+feature, so four of the five lanes produced images that cannot boot in the posture
+`kernel/src/signing.rs` documents as "CI/prod". No CI job enables it, which is
+consistent with a posture that was never usable.
+
+The symptom is why this stayed hidden: init reports a denied spawn as
+`Init: cell not found — skipping:`, so the guest log blames a missing file. The only
+mention of signatures is a kernel-side `[loader] DENY` line, which a test asserting on
+guest output never sees.
+
+### What shipped
+`scripts/lib-sign-cells.sh`, sourced by all four scripts rather than copied into each.
+The four already carry duplicated `PYTHON_BIN` and `CC` probe blocks, and that
+duplication is precisely why one still defaults `CC` to a compiler name absent from a
+dev box while the others were fixed — four copies of a probe drift apart.
+
+`resolve_objcopy` honors a pre-set `$OBJCOPY`, else probes
+`riscv64-unknown-elf-objcopy` (the Ubuntu package name) then `riscv-none-elf-objcopy`
+(local xpack), and fails loudly. It deliberately does not fall back to plain `objcopy`:
+a host objcopy exits 1 with "Unable to recognise the architecture of the input file" on
+a riscv64 ELF, and `gen_disk.ps1` works only because it sets `OBJCOPY` explicitly.
+
+Every signed binary is re-read with `--verify`. objcopy can exit 0 having written a
+section the kernel's payload rules reject — the ELF header is deliberately outside the
+signed bytes, so a layout change invalidates the signature without failing the embed.
+`cryptography` is added to the remaining jobs that run these scripts.
+
+### Verified
+Same kernel built `--features signing-required`: against the unsigned test-hooks image
+it emitted `DENY` for vfs, config, shell and vfs-test and never reached a prompt; after
+the change, no `DENY` lines, `[vfs-test] Results: 36 PASS, 0 FAIL`, shell ready. Default
+posture unaffected: `vfs-quota` 1/1, `shell-utils` 1/1, `redoxfs-srv` 3/3, and the boot
+suite 54/54 on a signed, policy-baked image.
+
+### Left open — one tracked artifact, two build configurations
+The tracked `kernel/src/embedded*/init` blobs are not updated here. Signing changes
+them, but stripping the new signature back off does **not** reproduce the committed
+bytes: a further 1136 bytes differ, because `gen_disk.ps1` builds cells without
+`-Z build-std` (prebuilt `core`/`alloc`) while the CI scripts build with it. Two lanes
+produce two different `init` binaries and both write the same tracked file, so whichever
+ran last is what got committed. Choosing which flags are canonical is a separate
+decision from signing. The embedded copy is exempt from the gate regardless, since
+`spawn_from_mem` does not call `spawn_gated`.
+
 ## [2026-07-28] Spawn path: no duplicate stacks, no OOM panic, bounded thread spawn
 
 ### What was wrong
