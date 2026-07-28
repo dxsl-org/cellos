@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_FILE_OPERANDS","MAX_INPUT_BYTES","MAX_RECORDS","MAX_RECORD_BYTES"],"enum":["InputBufferError","RecordError"],"fn":["extend_input"],"struct":["RecordReader"]};

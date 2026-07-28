@@ -19,8 +19,8 @@ next <a href="struct.ServiceRef.html#method.call" title="method ostd::service::S
     req: &amp;Req,
     resp_buf: &amp;'b mut [u8; 4096],
 ) -&gt; <a class="type" href="../type.ViResult.html" title="type ostd::ViResult">ViResult</a>&lt;Resp&gt;<div class="where">where
-    Req: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize">Serialize</a>,
-    Resp: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/de/trait.Deserialize.html" title="trait serde_core::de::Deserialize">Deserialize</a>&lt;'b&gt;,</div></h4></section></summary><div class="docblock"><p>Send a postcard-encoded <code>req</code> to the service and decode the response into <code>resp_buf</code>.</p>
+    Req: <a class="trait" href="https://docs.rs/serde_core/1.0.229/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize">Serialize</a>,
+    Resp: <a class="trait" href="https://docs.rs/serde_core/1.0.229/serde_core/de/trait.Deserialize.html" title="trait serde_core::de::Deserialize">Deserialize</a>&lt;'b&gt;,</div></h4></section></summary><div class="docblock"><p>Send a postcard-encoded <code>req</code> to the service and decode the response into <code>resp_buf</code>.</p>
 <p>The decoded <code>Resp</code> may borrow bytes from <code>resp_buf</code> (e.g. <code>VfsResponse::Data(&amp;[u8])</code>).
 Keep <code>resp_buf</code> alive as long as you use the returned value.</p>
 <p>On send failure the TID cache is invalidated automatically.</p>

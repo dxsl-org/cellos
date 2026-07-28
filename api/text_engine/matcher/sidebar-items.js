@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PATTERN_BYTES"],"enum":["PatternError","PatternKind"],"struct":["CompiledPattern"]};

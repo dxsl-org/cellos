@@ -4,8 +4,8 @@
     send_buf: &amp;mut [u8],
     recv_buf: &amp;'r mut [u8],
 ) -&gt; Result&lt;Resp, <a class="enum" href="enum.IpcError.html" title="enum ostd::ipc::IpcError">IpcError</a>&gt;<div class="where">where
-    Req: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize">Serialize</a>,
-    Resp: <a class="trait" href="https://docs.rs/serde_core/1.0.228/serde_core/de/trait.Deserialize.html" title="trait serde_core::de::Deserialize">Deserialize</a>&lt;'r&gt;,</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><a href="fn.service_call.html" title="fn ostd::ipc::service_call"><code>service_call</code></a> that decodes the reply into <code>Resp</code>.</p>
+    Req: <a class="trait" href="https://docs.rs/serde_core/1.0.229/serde_core/ser/trait.Serialize.html" title="trait serde_core::ser::Serialize">Serialize</a>,
+    Resp: <a class="trait" href="https://docs.rs/serde_core/1.0.229/serde_core/de/trait.Deserialize.html" title="trait serde_core::de::Deserialize">Deserialize</a>&lt;'r&gt;,</div></code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><a href="fn.service_call.html" title="fn ostd::ipc::service_call"><code>service_call</code></a> that decodes the reply into <code>Resp</code>.</p>
 <p><code>Resp</code> borrows <code>recv_buf</code> for types with <code>&amp;str</code>/<code>&amp;[u8]</code> fields — consume it
 before reusing the buffer.</p>
 </div></details></section></div></main></body></html>

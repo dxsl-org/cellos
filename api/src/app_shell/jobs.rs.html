@@ -51,13 +51,14 @@
 <a href=#51 id=51 data-nosnippet>51</a>    }
 <a href=#52 id=52 data-nosnippet>52</a>
 <a href=#53 id=53 data-nosnippet>53</a>    <span class="doccomment">/// Remove all completed jobs.
-<a href=#54 id=54 data-nosnippet>54</a>    </span><span class="kw">pub fn </span>reap_done(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#55 id=55 data-nosnippet>55</a>        <span class="self">self</span>.jobs.retain(|j| j.state != JobState::Done);
-<a href=#56 id=56 data-nosnippet>56</a>    }
-<a href=#57 id=57 data-nosnippet>57</a>
-<a href=#58 id=58 data-nosnippet>58</a>    <span class="doccomment">/// Iterate (id, state, name) for all jobs.
-<a href=#59 id=59 data-nosnippet>59</a>    </span><span class="kw">pub fn </span>list(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (usize, JobState, <span class="kw-2">&amp;</span>str)&gt; {
-<a href=#60 id=60 data-nosnippet>60</a>        <span class="self">self</span>.jobs.iter().map(|j| (j.id, j.state, j.name.as_str()))
-<a href=#61 id=61 data-nosnippet>61</a>    }
-<a href=#62 id=62 data-nosnippet>62</a>}
+<a href=#54 id=54 data-nosnippet>54</a>    </span><span class="attr">#[cfg(not(feature = <span class="string">"shell_test"</span>))] </span><span class="comment">// reason: reaped by the REPL between prompts
+<a href=#55 id=55 data-nosnippet>55</a>    </span><span class="kw">pub fn </span>reap_done(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#56 id=56 data-nosnippet>56</a>        <span class="self">self</span>.jobs.retain(|j| j.state != JobState::Done);
+<a href=#57 id=57 data-nosnippet>57</a>    }
+<a href=#58 id=58 data-nosnippet>58</a>
+<a href=#59 id=59 data-nosnippet>59</a>    <span class="doccomment">/// Iterate (id, state, name) for all jobs.
+<a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">pub fn </span>list(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (usize, JobState, <span class="kw-2">&amp;</span>str)&gt; {
+<a href=#61 id=61 data-nosnippet>61</a>        <span class="self">self</span>.jobs.iter().map(|j| (j.id, j.state, j.name.as_str()))
+<a href=#62 id=62 data-nosnippet>62</a>    }
+<a href=#63 id=63 data-nosnippet>63</a>}
 </code></pre></div></section></main></body></html>

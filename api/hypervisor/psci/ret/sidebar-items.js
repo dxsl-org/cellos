@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DENIED","NOT_SUPPORTED","SUCCESS"]};

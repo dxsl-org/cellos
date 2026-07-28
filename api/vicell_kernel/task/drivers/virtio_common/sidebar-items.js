@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["vi_handle_virtio_irq","virtio_slots"],"struct":["VirtioSlot"]};
+window.SIDEBAR_ITEMS = {"fn":["ack_unclaimed","vi_handle_virtio_irq","virtio_slots"],"struct":["VirtioSlot"]};

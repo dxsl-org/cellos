@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_PROGRAM_BYTES"],"enum":["AwkError","Separator"],"fn":["execute","looks_like_program"]};

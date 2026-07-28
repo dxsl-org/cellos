@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BOOTARGS"],"fn":["build_dtb"]};

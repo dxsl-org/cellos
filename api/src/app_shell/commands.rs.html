@@ -27,7 +27,7 @@
 <a href=#27 id=27 data-nosnippet>27</a>    </span><span class="prelude-val">Ok</span>(())
 <a href=#28 id=28 data-nosnippet>28</a>}
 <a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a><span class="kw">pub fn </span>cmd_exec&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">mut </span>args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#30 id=30 data-nosnippet>30</a><span class="kw">pub fn </span>cmd_exec(<span class="kw-2">mut </span>args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
 <a href=#31 id=31 data-nosnippet>31</a>    <span class="kw">let </span>path = args.next();
 <a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">if </span>path.is_none() {
 <a href=#33 id=33 data-nosnippet>33</a>        ostd::io::println(<span class="string">"Usage: exec &lt;path&gt; [args...]"</span>);
@@ -121,7 +121,7 @@
 <a href=#121 id=121 data-nosnippet>121</a>let vfs_cell_id = 3;
 <a href=#122 id=122 data-nosnippet>122</a>*/
 <a href=#123 id=123 data-nosnippet>123</a>
-<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub fn </span>cmd_ls&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">mut </span>args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#124 id=124 data-nosnippet>124</a></span><span class="kw">pub fn </span>cmd_ls(<span class="kw-2">mut </span>args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
 <a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">let </span>path = args.next().unwrap_or(<span class="string">"/"</span>);
 <a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">match </span>fs::read_dir(path) {
 <a href=#127 id=127 data-nosnippet>127</a>        <span class="prelude-val">Ok</span>(iter) =&gt; {
@@ -147,7 +147,7 @@
 <a href=#147 id=147 data-nosnippet>147</a>    }
 <a href=#148 id=148 data-nosnippet>148</a>}
 <a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a><span class="kw">pub fn </span>cmd_cat&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">mut </span>args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#150 id=150 data-nosnippet>150</a><span class="kw">pub fn </span>cmd_cat(<span class="kw-2">mut </span>args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
 <a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">let </span>path = args.next();
 <a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">if </span>path.is_none() {
 <a href=#153 id=153 data-nosnippet>153</a>        ostd::io::println(<span class="string">"Usage: cat &lt;filename&gt;"</span>);
@@ -233,7 +233,7 @@
 <a href=#233 id=233 data-nosnippet>233</a>    }
 <a href=#234 id=234 data-nosnippet>234</a>}
 <a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a><span class="kw">pub fn </span>cmd_ps&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">mut </span>args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#236 id=236 data-nosnippet>236</a><span class="kw">pub fn </span>cmd_ps(<span class="kw-2">mut </span>args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
 <a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">let </span><span class="kw-2">mut </span>filter_tid: <span class="prelude-ty">Option</span>&lt;usize&gt; = <span class="prelude-val">None</span>;
 <a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">let </span><span class="kw-2">mut </span>sort_by_state = <span class="bool-val">false</span>;
 <a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">loop </span>{
@@ -329,7 +329,7 @@
 <a href=#329 id=329 data-nosnippet>329</a>///
 <a href=#330 id=330 data-nosnippet>330</a>/// `-e` interprets escape sequences (`\n`, `\t`, `\\`, `\r`).
 <a href=#331 id=331 data-nosnippet>331</a>/// `-n` suppresses the trailing newline.
-<a href=#332 id=332 data-nosnippet>332</a></span><span class="kw">pub fn </span>cmd_echo&lt;<span class="lifetime">'a</span>&gt;(args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#332 id=332 data-nosnippet>332</a></span><span class="kw">pub fn </span>cmd_echo(args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
 <a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">let </span>parts: alloc::vec::Vec&lt;<span class="kw-2">&amp;</span>str&gt; = args.collect();
 <a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span><span class="kw-2">mut </span>escape = <span class="bool-val">false</span>;
 <a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">let </span><span class="kw-2">mut </span>no_newline = <span class="bool-val">false</span>;
@@ -364,158 +364,87 @@
 <a href=#364 id=364 data-nosnippet>364</a>
 <a href=#365 id=365 data-nosnippet>365</a><span class="comment">// ─── top ──────────────────────────────────────────────────────────────────────
 <a href=#366 id=366 data-nosnippet>366</a>
-<a href=#367 id=367 data-nosnippet>367</a></span><span class="doccomment">/// `top [-a]` — live process table, refreshed every second.
-<a href=#368 id=368 data-nosnippet>368</a>///
-<a href=#369 id=369 data-nosnippet>369</a>/// Dead tasks are hidden by default; pass `-a` to show all tasks.
-<a href=#370 id=370 data-nosnippet>370</a>/// CPU% is not available without per-task tick counters in `ProcessInfo`.
-<a href=#371 id=371 data-nosnippet>371</a>/// Press `q` or `Q` to exit.
-<a href=#372 id=372 data-nosnippet>372</a></span><span class="kw">pub fn </span>cmd_top&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">mut </span>args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
-<a href=#373 id=373 data-nosnippet>373</a>    <span class="kw">let </span>show_all = args.any(|a| a == <span class="string">"-a"</span>);
-<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">loop </span>{
-<a href=#375 id=375 data-nosnippet>375</a>        <span class="comment">// Clear screen and home — always bypasses OutputSink (console control).
-<a href=#376 id=376 data-nosnippet>376</a>        </span>ostd::io::print(<span class="string">"\x1b[2J\x1b[1;1H"</span>);
-<a href=#377 id=377 data-nosnippet>377</a>        <span class="kw">let </span>secs = syscall::sys_get_time() / <span class="number">10_000_000</span>;
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">let </span><span class="kw-2">mut </span>buf = [api::syscall::ProcessInfo::default(); <span class="number">64</span>];
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>n = syscall::sys_get_procs(<span class="kw-2">&amp;mut </span>buf).unwrap_or(<span class="number">0</span>);
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span>visible = <span class="kw">if </span>show_all {
-<a href=#381 id=381 data-nosnippet>381</a>            n
-<a href=#382 id=382 data-nosnippet>382</a>        } <span class="kw">else </span>{
-<a href=#383 id=383 data-nosnippet>383</a>            buf[..n].iter().filter(|p| p.state != <span class="number">3</span>).count()
-<a href=#384 id=384 data-nosnippet>384</a>        };
-<a href=#385 id=385 data-nosnippet>385</a>        ostd::io::print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#386 id=386 data-nosnippet>386</a>            <span class="string">"uptime: {}s  tasks: {}  (q to quit)\n\n"</span>,
-<a href=#387 id=387 data-nosnippet>387</a>            secs,
-<a href=#388 id=388 data-nosnippet>388</a>            visible
-<a href=#389 id=389 data-nosnippet>389</a>        ));
-<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">crate</span>::executor::shell_println(<span class="string">"  PID  STATE      NAME"</span>);
-<a href=#391 id=391 data-nosnippet>391</a>        <span class="kw">crate</span>::executor::shell_println(<span class="string">"  ---  ---------  ----------------"</span>);
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">for </span>info <span class="kw">in </span><span class="kw-2">&amp;</span>buf[..n] {
-<a href=#393 id=393 data-nosnippet>393</a>            <span class="kw">if </span>!show_all &amp;&amp; info.state == <span class="number">3 </span>{
-<a href=#394 id=394 data-nosnippet>394</a>                <span class="kw">continue</span>;
-<a href=#395 id=395 data-nosnippet>395</a>            }
-<a href=#396 id=396 data-nosnippet>396</a>            <span class="kw">let </span>name = core::str::from_utf8(<span class="kw-2">&amp;</span>info.name)
-<a href=#397 id=397 data-nosnippet>397</a>                .unwrap_or(<span class="string">"???"</span>)
-<a href=#398 id=398 data-nosnippet>398</a>                .trim_matches(<span class="string">'\0'</span>);
-<a href=#399 id=399 data-nosnippet>399</a>            <span class="kw">let </span>state = <span class="kw">match </span>info.state {
-<a href=#400 id=400 data-nosnippet>400</a>                <span class="number">0 </span>=&gt; <span class="string">"Ready"</span>,
-<a href=#401 id=401 data-nosnippet>401</a>                <span class="number">1 </span>=&gt; <span class="string">"Running"</span>,
-<a href=#402 id=402 data-nosnippet>402</a>                <span class="number">2 </span>=&gt; <span class="string">"Waiting"</span>,
-<a href=#403 id=403 data-nosnippet>403</a>                <span class="number">3 </span>=&gt; <span class="string">"Dead"</span>,
-<a href=#404 id=404 data-nosnippet>404</a>                <span class="kw">_ </span>=&gt; <span class="string">"???"</span>,
-<a href=#405 id=405 data-nosnippet>405</a>            };
-<a href=#406 id=406 data-nosnippet>406</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#407 id=407 data-nosnippet>407</a>                <span class="string">"  {:&lt;4} {:&lt;10} {}\n"</span>,
-<a href=#408 id=408 data-nosnippet>408</a>                info.id,
-<a href=#409 id=409 data-nosnippet>409</a>                state,
-<a href=#410 id=410 data-nosnippet>410</a>                name
-<a href=#411 id=411 data-nosnippet>411</a>            ));
-<a href=#412 id=412 data-nosnippet>412</a>        }
-<a href=#413 id=413 data-nosnippet>413</a>
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="comment">// Poll for 1 second; exit only on 'q' or 'Q'.
-<a href=#415 id=415 data-nosnippet>415</a>        </span><span class="kw">const </span>HZ: u64 = <span class="number">10_000_000</span>;
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>deadline = syscall::sys_get_time().saturating_add(HZ);
-<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span><span class="kw-2">mut </span>quit = <span class="bool-val">false</span>;
-<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">while </span>syscall::sys_get_time() &lt; deadline {
-<a href=#419 id=419 data-nosnippet>419</a>            <span class="kw">let </span><span class="kw-2">mut </span>c = [<span class="number">0u8</span>; <span class="number">1</span>];
-<a href=#420 id=420 data-nosnippet>420</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(n) = ostd::syscall::sys_read(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>c) {
-<a href=#421 id=421 data-nosnippet>421</a>                <span class="kw">if </span>n &gt; <span class="number">0 </span>&amp;&amp; (c[<span class="number">0</span>] == <span class="string">b'q' </span>|| c[<span class="number">0</span>] == <span class="string">b'Q'</span>) {
-<a href=#422 id=422 data-nosnippet>422</a>                    quit = <span class="bool-val">true</span>;
-<a href=#423 id=423 data-nosnippet>423</a>                    <span class="kw">break</span>;
-<a href=#424 id=424 data-nosnippet>424</a>                }
-<a href=#425 id=425 data-nosnippet>425</a>            }
-<a href=#426 id=426 data-nosnippet>426</a>            ostd::task::yield_now();
+<a href=#367 id=367 data-nosnippet>367</a></span><span class="doccomment">/// `top` — process telemetry observer backed by `GetProcs2`.
+<a href=#368 id=368 data-nosnippet>368</a></span><span class="kw">pub fn </span>cmd_top&lt;<span class="lifetime">'a</span>&gt;(args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#369 id=369 data-nosnippet>369</a>    <span class="kw">crate</span>::top::cmd_top(args)
+<a href=#370 id=370 data-nosnippet>370</a>}
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a><span class="comment">// ─── kill ─────────────────────────────────────────────────────────────────────
+<a href=#373 id=373 data-nosnippet>373</a>
+<a href=#374 id=374 data-nosnippet>374</a></span><span class="doccomment">/// `kill &lt;tid&gt;` — send a cooperative shutdown request to the target task.
+<a href=#375 id=375 data-nosnippet>375</a>///
+<a href=#376 id=376 data-nosnippet>376</a>/// Checks task state via `sys_get_procs` before sending to avoid blocking the
+<a href=#377 id=377 data-nosnippet>377</a>/// shell.  `sys_send` to a non-Recv task would put the shell in
+<a href=#378 id=378 data-nosnippet>378</a>/// `TaskState::Sending` indefinitely — so we only send when the target is
+<a href=#379 id=379 data-nosnippet>379</a>/// confirmed to be in Waiting (Recv) state.
+<a href=#380 id=380 data-nosnippet>380</a>///
+<a href=#381 id=381 data-nosnippet>381</a>/// Limitation: cannot terminate tasks blocked inside VFS/net IPC.  A kernel-level
+<a href=#382 id=382 data-nosnippet>382</a>/// `ForceExit` syscall is planned (see roadmap Phase X-6) to handle those cases.
+<a href=#383 id=383 data-nosnippet>383</a></span><span class="kw">pub fn </span>cmd_kill(<span class="kw-2">mut </span>args: <span class="kw">crate</span>::text_engine::args::LegacyArgs&lt;<span class="lifetime">'_</span>&gt;) -&gt; ViResult&lt;()&gt; {
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="kw">let </span>tid_str = <span class="kw">match </span>args.next() {
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="prelude-val">Some</span>(s) =&gt; s,
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="prelude-val">None </span>=&gt; {
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="kw">crate</span>::executor::shell_println(<span class="string">"Usage: kill &lt;tid&gt;"</span>);
+<a href=#388 id=388 data-nosnippet>388</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#389 id=389 data-nosnippet>389</a>        }
+<a href=#390 id=390 data-nosnippet>390</a>    };
+<a href=#391 id=391 data-nosnippet>391</a>    <span class="kw">let </span><span class="kw-2">mut </span>tid: usize = <span class="number">0</span>;
+<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">for </span>ch <span class="kw">in </span>tid_str.bytes() {
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">if </span>!ch.is_ascii_digit() {
+<a href=#394 id=394 data-nosnippet>394</a>            <span class="kw">crate</span>::executor::shell_println(<span class="string">"kill: invalid tid"</span>);
+<a href=#395 id=395 data-nosnippet>395</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#396 id=396 data-nosnippet>396</a>        }
+<a href=#397 id=397 data-nosnippet>397</a>        tid = tid.saturating_mul(<span class="number">10</span>).saturating_add((ch - <span class="string">b'0'</span>) <span class="kw">as </span>usize);
+<a href=#398 id=398 data-nosnippet>398</a>    }
+<a href=#399 id=399 data-nosnippet>399</a>    <span class="kw">if </span>tid == <span class="number">0 </span>{
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">crate</span>::executor::shell_println(<span class="string">"kill: invalid tid (0)"</span>);
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#402 id=402 data-nosnippet>402</a>    }
+<a href=#403 id=403 data-nosnippet>403</a>
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="comment">// Safety check: only send to a task in Waiting (Recv-any) state.
+<a href=#405 id=405 data-nosnippet>405</a>    // Sending to a task in any other state blocks the shell indefinitely because
+<a href=#406 id=406 data-nosnippet>406</a>    // ipc_send puts the caller into TaskState::Sending until the target enters Recv.
+<a href=#407 id=407 data-nosnippet>407</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>procs = [api::syscall::ProcessInfo::default(); <span class="number">16</span>];
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">let </span>target_state = syscall::sys_get_procs(<span class="kw-2">&amp;mut </span>procs)
+<a href=#409 id=409 data-nosnippet>409</a>        .ok()
+<a href=#410 id=410 data-nosnippet>410</a>        .and_then(|n| procs[..n].iter().find(|p| p.id == tid).map(|p| p.state));
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">match </span>target_state {
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="prelude-val">None </span>=&gt; {
+<a href=#414 id=414 data-nosnippet>414</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"kill: no task with tid {}\n"</span>, tid));
+<a href=#415 id=415 data-nosnippet>415</a>        }
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="prelude-val">Some</span>(<span class="number">2</span>) =&gt; {
+<a href=#417 id=417 data-nosnippet>417</a>            <span class="comment">// Waiting state = task is in sys_recv — safe to send the signal.
+<a href=#418 id=418 data-nosnippet>418</a>            </span><span class="kw">let </span>msg = [<span class="number">0xFFu8</span>];
+<a href=#419 id=419 data-nosnippet>419</a>            syscall::sys_send(tid, <span class="kw-2">&amp;</span>msg);
+<a href=#420 id=420 data-nosnippet>420</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#421 id=421 data-nosnippet>421</a>                <span class="string">"kill: signal sent to task {} — run 'ps' to verify termination\n"</span>,
+<a href=#422 id=422 data-nosnippet>422</a>                tid
+<a href=#423 id=423 data-nosnippet>423</a>            ));
+<a href=#424 id=424 data-nosnippet>424</a>        }
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="prelude-val">Some</span>(<span class="number">3</span>) =&gt; {
+<a href=#426 id=426 data-nosnippet>426</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"kill: task {} is already Dead\n"</span>, tid));
 <a href=#427 id=427 data-nosnippet>427</a>        }
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">if </span>quit {
-<a href=#429 id=429 data-nosnippet>429</a>            <span class="comment">// Drain buffered bytes (key-repeat, escape sequences).
-<a href=#430 id=430 data-nosnippet>430</a>            </span><span class="kw">let </span><span class="kw-2">mut </span>drain = [<span class="number">0u8</span>; <span class="number">1</span>];
-<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">while let </span><span class="prelude-val">Ok</span>(n) = ostd::syscall::sys_read(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>drain) {
-<a href=#432 id=432 data-nosnippet>432</a>                <span class="kw">if </span>n == <span class="number">0 </span>{
-<a href=#433 id=433 data-nosnippet>433</a>                    <span class="kw">break</span>;
-<a href=#434 id=434 data-nosnippet>434</a>                }
-<a href=#435 id=435 data-nosnippet>435</a>            }
-<a href=#436 id=436 data-nosnippet>436</a>            <span class="kw">break</span>;
-<a href=#437 id=437 data-nosnippet>437</a>        }
-<a href=#438 id=438 data-nosnippet>438</a>    }
-<a href=#439 id=439 data-nosnippet>439</a>    ostd::io::print(<span class="string">"\x1b[2J\x1b[1;1H"</span>);
-<a href=#440 id=440 data-nosnippet>440</a>    <span class="prelude-val">Ok</span>(())
-<a href=#441 id=441 data-nosnippet>441</a>}
-<a href=#442 id=442 data-nosnippet>442</a>
-<a href=#443 id=443 data-nosnippet>443</a><span class="comment">// ─── kill ─────────────────────────────────────────────────────────────────────
-<a href=#444 id=444 data-nosnippet>444</a>
-<a href=#445 id=445 data-nosnippet>445</a></span><span class="doccomment">/// `kill &lt;tid&gt;` — send a cooperative shutdown request to the target task.
-<a href=#446 id=446 data-nosnippet>446</a>///
-<a href=#447 id=447 data-nosnippet>447</a>/// Checks task state via `sys_get_procs` before sending to avoid blocking the
-<a href=#448 id=448 data-nosnippet>448</a>/// shell.  `sys_send` to a non-Recv task would put the shell in
-<a href=#449 id=449 data-nosnippet>449</a>/// `TaskState::Sending` indefinitely — so we only send when the target is
-<a href=#450 id=450 data-nosnippet>450</a>/// confirmed to be in Waiting (Recv) state.
-<a href=#451 id=451 data-nosnippet>451</a>///
-<a href=#452 id=452 data-nosnippet>452</a>/// Limitation: cannot terminate tasks blocked inside VFS/net IPC.  A kernel-level
-<a href=#453 id=453 data-nosnippet>453</a>/// `ForceExit` syscall is planned (see roadmap Phase X-6) to handle those cases.
-<a href=#454 id=454 data-nosnippet>454</a></span><span class="kw">pub fn </span>cmd_kill&lt;<span class="lifetime">'a</span>&gt;(<span class="kw-2">mut </span>args: core::str::SplitWhitespace&lt;<span class="lifetime">'a</span>&gt;) -&gt; ViResult&lt;()&gt; {
-<a href=#455 id=455 data-nosnippet>455</a>    <span class="kw">let </span>tid_str = <span class="kw">match </span>args.next() {
-<a href=#456 id=456 data-nosnippet>456</a>        <span class="prelude-val">Some</span>(s) =&gt; s,
-<a href=#457 id=457 data-nosnippet>457</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#458 id=458 data-nosnippet>458</a>            <span class="kw">crate</span>::executor::shell_println(<span class="string">"Usage: kill &lt;tid&gt;"</span>);
-<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#460 id=460 data-nosnippet>460</a>        }
-<a href=#461 id=461 data-nosnippet>461</a>    };
-<a href=#462 id=462 data-nosnippet>462</a>    <span class="kw">let </span><span class="kw-2">mut </span>tid: usize = <span class="number">0</span>;
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">for </span>ch <span class="kw">in </span>tid_str.bytes() {
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">if </span>!ch.is_ascii_digit() {
-<a href=#465 id=465 data-nosnippet>465</a>            <span class="kw">crate</span>::executor::shell_println(<span class="string">"kill: invalid tid"</span>);
-<a href=#466 id=466 data-nosnippet>466</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#467 id=467 data-nosnippet>467</a>        }
-<a href=#468 id=468 data-nosnippet>468</a>        tid = tid.saturating_mul(<span class="number">10</span>).saturating_add((ch - <span class="string">b'0'</span>) <span class="kw">as </span>usize);
-<a href=#469 id=469 data-nosnippet>469</a>    }
-<a href=#470 id=470 data-nosnippet>470</a>    <span class="kw">if </span>tid == <span class="number">0 </span>{
-<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">crate</span>::executor::shell_println(<span class="string">"kill: invalid tid (0)"</span>);
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#473 id=473 data-nosnippet>473</a>    }
-<a href=#474 id=474 data-nosnippet>474</a>
-<a href=#475 id=475 data-nosnippet>475</a>    <span class="comment">// Safety check: only send to a task in Waiting (Recv-any) state.
-<a href=#476 id=476 data-nosnippet>476</a>    // Sending to a task in any other state blocks the shell indefinitely because
-<a href=#477 id=477 data-nosnippet>477</a>    // ipc_send puts the caller into TaskState::Sending until the target enters Recv.
-<a href=#478 id=478 data-nosnippet>478</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>procs = [api::syscall::ProcessInfo::default(); <span class="number">16</span>];
-<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">let </span>target_state = syscall::sys_get_procs(<span class="kw-2">&amp;mut </span>procs)
-<a href=#480 id=480 data-nosnippet>480</a>        .ok()
-<a href=#481 id=481 data-nosnippet>481</a>        .and_then(|n| procs[..n].iter().find(|p| p.id == tid).map(|p| p.state));
-<a href=#482 id=482 data-nosnippet>482</a>
-<a href=#483 id=483 data-nosnippet>483</a>    <span class="kw">match </span>target_state {
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#485 id=485 data-nosnippet>485</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"kill: no task with tid {}\n"</span>, tid));
-<a href=#486 id=486 data-nosnippet>486</a>        }
-<a href=#487 id=487 data-nosnippet>487</a>        <span class="prelude-val">Some</span>(<span class="number">2</span>) =&gt; {
-<a href=#488 id=488 data-nosnippet>488</a>            <span class="comment">// Waiting state = task is in sys_recv — safe to send the signal.
-<a href=#489 id=489 data-nosnippet>489</a>            </span><span class="kw">let </span>msg = [<span class="number">0xFFu8</span>];
-<a href=#490 id=490 data-nosnippet>490</a>            syscall::sys_send(tid, <span class="kw-2">&amp;</span>msg);
-<a href=#491 id=491 data-nosnippet>491</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#492 id=492 data-nosnippet>492</a>                <span class="string">"kill: signal sent to task {} — run 'ps' to verify termination\n"</span>,
-<a href=#493 id=493 data-nosnippet>493</a>                tid
-<a href=#494 id=494 data-nosnippet>494</a>            ));
-<a href=#495 id=495 data-nosnippet>495</a>        }
-<a href=#496 id=496 data-nosnippet>496</a>        <span class="prelude-val">Some</span>(<span class="number">3</span>) =&gt; {
-<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(<span class="string">"kill: task {} is already Dead\n"</span>, tid));
-<a href=#498 id=498 data-nosnippet>498</a>        }
-<a href=#499 id=499 data-nosnippet>499</a>        <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; {
-<a href=#500 id=500 data-nosnippet>500</a>            <span class="comment">// Task is Ready/Running/Sleeping — cooperative signal won't reach it.
-<a href=#501 id=501 data-nosnippet>501</a>            // Use ForceExit to terminate regardless of state.
-<a href=#502 id=502 data-nosnippet>502</a>            // Kernel rejects system cells (VFS=block_io_cap, net=network_cap); use hotswap for those.
-<a href=#503 id=503 data-nosnippet>503</a>            </span><span class="kw">match </span>syscall::sys_force_exit(tid) {
-<a href=#504 id=504 data-nosnippet>504</a>                syscall::SyscallResult::Ok(<span class="kw">_</span>) =&gt; {
-<a href=#505 id=505 data-nosnippet>505</a>                    <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#506 id=506 data-nosnippet>506</a>                        <span class="string">"kill: task {} force-terminated\n"</span>,
-<a href=#507 id=507 data-nosnippet>507</a>                        tid
-<a href=#508 id=508 data-nosnippet>508</a>                    ));
-<a href=#509 id=509 data-nosnippet>509</a>                }
-<a href=#510 id=510 data-nosnippet>510</a>                syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; {
-<a href=#511 id=511 data-nosnippet>511</a>                    <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
-<a href=#512 id=512 data-nosnippet>512</a>                        <span class="string">"kill: task {} not terminated (system cell — use hotswap; or no SpawnCap)\n"</span>,
-<a href=#513 id=513 data-nosnippet>513</a>                        tid
-<a href=#514 id=514 data-nosnippet>514</a>                    ));
-<a href=#515 id=515 data-nosnippet>515</a>                }
-<a href=#516 id=516 data-nosnippet>516</a>            }
-<a href=#517 id=517 data-nosnippet>517</a>        }
-<a href=#518 id=518 data-nosnippet>518</a>    }
-<a href=#519 id=519 data-nosnippet>519</a>    <span class="prelude-val">Ok</span>(())
-<a href=#520 id=520 data-nosnippet>520</a>}
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="prelude-val">Some</span>(<span class="kw">_</span>) =&gt; {
+<a href=#429 id=429 data-nosnippet>429</a>            <span class="comment">// Task is Ready/Running/Sleeping — cooperative signal won't reach it.
+<a href=#430 id=430 data-nosnippet>430</a>            // Use ForceExit to terminate regardless of state.
+<a href=#431 id=431 data-nosnippet>431</a>            // Kernel rejects system cells (VFS=block_io_cap, net=network_cap); use hotswap for those.
+<a href=#432 id=432 data-nosnippet>432</a>            </span><span class="kw">match </span>syscall::sys_force_exit(tid) {
+<a href=#433 id=433 data-nosnippet>433</a>                syscall::SyscallResult::Ok(<span class="kw">_</span>) =&gt; {
+<a href=#434 id=434 data-nosnippet>434</a>                    <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#435 id=435 data-nosnippet>435</a>                        <span class="string">"kill: task {} force-terminated\n"</span>,
+<a href=#436 id=436 data-nosnippet>436</a>                        tid
+<a href=#437 id=437 data-nosnippet>437</a>                    ));
+<a href=#438 id=438 data-nosnippet>438</a>                }
+<a href=#439 id=439 data-nosnippet>439</a>                syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; {
+<a href=#440 id=440 data-nosnippet>440</a>                    <span class="kw">crate</span>::executor::shell_print(<span class="kw-2">&amp;</span><span class="macro">alloc::format!</span>(
+<a href=#441 id=441 data-nosnippet>441</a>                        <span class="string">"kill: task {} not terminated (system cell — use hotswap; or no SpawnCap)\n"</span>,
+<a href=#442 id=442 data-nosnippet>442</a>                        tid
+<a href=#443 id=443 data-nosnippet>443</a>                    ));
+<a href=#444 id=444 data-nosnippet>444</a>                }
+<a href=#445 id=445 data-nosnippet>445</a>            }
+<a href=#446 id=446 data-nosnippet>446</a>        }
+<a href=#447 id=447 data-nosnippet>447</a>    }
+<a href=#448 id=448 data-nosnippet>448</a>    <span class="prelude-val">Ok</span>(())
+<a href=#449 id=449 data-nosnippet>449</a>}
 </code></pre></div></section></main></body></html>

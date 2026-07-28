@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/task/drivers/virtio_common.rs`."><title>virtio_common.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="vicell_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">vicell_kernel/task/drivers/</div>virtio_common.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Shared VirtIO MMIO slot enumeration.
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `kernel/src/task/drivers/virtio_common.rs`."><title>virtio_common.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="vicell_kernel" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">vicell_kernel/task/drivers/</div>virtio_common.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Shared VirtIO MMIO slot enumeration.
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! `virtio_blk`, `input_irq_ack`, and Driver Cells use `virtio_slots()` to
 <a href=#4 id=4 data-nosnippet>4</a>//! iterate all VirtIO MMIO slots for the current platform.
@@ -51,33 +51,72 @@
 <a href=#51 id=51 data-nosnippet>51</a>    }
 <a href=#52 id=52 data-nosnippet>52</a>}
 <a href=#53 id=53 data-nosnippet>53</a>
-<a href=#54 id=54 data-nosnippet>54</a><span class="doccomment">/// VirtIO MMIO IRQ dispatcher — called from the arch trap handlers (riscv64/aarch64)
-<a href=#55 id=55 data-nosnippet>55</a>/// when any VirtIO MMIO IRQ fires. Routes the IRQ to whichever Driver Cell registered
-<a href=#56 id=56 data-nosnippet>56</a>/// for it via `sys_wait_irq` (the block / net / gpu cells all rely on this), ACKs the
-<a href=#57 id=57 data-nosnippet>57</a>/// input slot when the input service Cell isn't up yet, and warns on an unclaimed slot.
-<a href=#58 id=58 data-nosnippet>58</a>///
-<a href=#59 id=59 data-nosnippet>59</a>/// Relocated here from the deleted kernel `virtio_blk` driver (G2 loader redesign
-<a href=#60 id=60 data-nosnippet>60</a>/// phase 06): it is VirtIO-common, not block-specific. The former kernel-block ACK
-<a href=#61 id=61 data-nosnippet>61</a>/// branch is gone — the virtio-blk Driver Cell now ACKs its own IRQ via the
-<a href=#62 id=62 data-nosnippet>62</a>/// `sys_wait_irq` path above.
-<a href=#63 id=63 data-nosnippet>63</a></span><span class="attr">#[no_mangle]
-<a href=#64 id=64 data-nosnippet>64</a></span><span class="kw">pub extern </span><span class="string">"Rust" </span><span class="kw">fn </span>vi_handle_virtio_irq(irq: u32) {
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="comment">// Driver Cell IRQ routing: a Cell registered for this IRQ via sys_wait_irq —
-<a href=#66 id=66 data-nosnippet>66</a>    // signal it (sets IRQ_PENDING + writes VirtIO InterruptACK) and return.
-<a href=#67 id=67 data-nosnippet>67</a>    </span><span class="kw">if </span><span class="kw">crate</span>::task::drivers::irq_wait::has_waiter(irq <span class="kw">as </span>u8) {
-<a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">crate</span>::task::drivers::irq_wait::signal_irq(irq <span class="kw">as </span>u8);
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">return</span>;
-<a href=#70 id=70 data-nosnippet>70</a>    }
-<a href=#71 id=71 data-nosnippet>71</a>    <span class="comment">// Input (keyboard) slot: ACK to prevent an interrupt storm before the input
-<a href=#72 id=72 data-nosnippet>72</a>    // service Cell is up; event routing lives entirely in that Cell.
-<a href=#73 id=73 data-nosnippet>73</a>    </span><span class="kw">if </span><span class="kw">crate</span>::task::drivers::input_irq_ack::ack_if_input(irq) {
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">return</span>;
-<a href=#75 id=75 data-nosnippet>75</a>    }
-<a href=#76 id=76 data-nosnippet>76</a>    <span class="comment">// Unknown VirtIO slot — no device registered. InterruptStatus is already cleared
-<a href=#77 id=77 data-nosnippet>77</a>    // by plic_complete in the trap handler.
-<a href=#78 id=78 data-nosnippet>78</a>    </span><span class="macro">log::warn!</span>(
-<a href=#79 id=79 data-nosnippet>79</a>        <span class="string">"[virtio] unhandled IRQ {} — no registered device for this slot"</span>,
-<a href=#80 id=80 data-nosnippet>80</a>        irq
-<a href=#81 id=81 data-nosnippet>81</a>    );
-<a href=#82 id=82 data-nosnippet>82</a>}
+<a href=#54 id=54 data-nosnippet>54</a><span class="doccomment">/// Acknowledge an interrupt from an as-yet unclaimed VirtIO MMIO slot.
+<a href=#55 id=55 data-nosnippet>55</a>///
+<a href=#56 id=56 data-nosnippet>56</a>/// Driver Cells may need several synchronous queue transactions to initialise
+<a href=#57 id=57 data-nosnippet>57</a>/// before they can enter `sys_wait_irq`. Leaving those level-triggered
+<a href=#58 id=58 data-nosnippet>58</a>/// interrupts asserted starves the Cell before registration completes.
+<a href=#59 id=59 data-nosnippet>59</a></span><span class="kw">fn </span>ack_unclaimed(irq: u32) -&gt; bool {
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="attr">#[cfg(target_arch = <span class="string">"aarch64"</span>)]
+<a href=#61 id=61 data-nosnippet>61</a>    </span><span class="kw">let </span>base = (<span class="number">16</span>..<span class="number">48</span>)
+<a href=#62 id=62 data-nosnippet>62</a>        .contains(<span class="kw-2">&amp;</span>irq)
+<a href=#63 id=63 data-nosnippet>63</a>        .then_some(<span class="number">0x0a00_0000usize </span>+ (irq <span class="kw">as </span>usize - <span class="number">16</span>) * <span class="number">0x200</span>);
+<a href=#64 id=64 data-nosnippet>64</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#65 id=65 data-nosnippet>65</a>    </span><span class="kw">let </span>base = (<span class="number">1</span>..<span class="number">9</span>)
+<a href=#66 id=66 data-nosnippet>66</a>        .contains(<span class="kw-2">&amp;</span>irq)
+<a href=#67 id=67 data-nosnippet>67</a>        .then_some(<span class="number">0x1000_1000usize </span>+ (irq <span class="kw">as </span>usize - <span class="number">1</span>) * <span class="number">0x1000</span>);
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="comment">// x86_64 routes VirtIO through PCI MSI-X, not a fixed MMIO IRQ window, so
+<a href=#69 id=69 data-nosnippet>69</a>    // there is no slot base to derive and nothing to acknowledge here.
+<a href=#70 id=70 data-nosnippet>70</a>    </span><span class="attr">#[cfg(not(any(target_arch = <span class="string">"aarch64"</span>, target_arch = <span class="string">"riscv64"</span>)))]
+<a href=#71 id=71 data-nosnippet>71</a>    </span><span class="kw">let </span>base: <span class="prelude-ty">Option</span>&lt;usize&gt; = {
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">let _ </span>= irq;
+<a href=#73 id=73 data-nosnippet>73</a>        <span class="prelude-val">None
+<a href=#74 id=74 data-nosnippet>74</a>    </span>};
+<a href=#75 id=75 data-nosnippet>75</a>
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="kw">let </span><span class="prelude-val">Some</span>(base) = base <span class="kw">else </span>{
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#78 id=78 data-nosnippet>78</a>    };
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="comment">// SAFETY: the architecture-specific ranges above are the identity-mapped
+<a href=#80 id=80 data-nosnippet>80</a>    // VirtIO MMIO windows. InterruptStatus is read-only and InterruptACK accepts
+<a href=#81 id=81 data-nosnippet>81</a>    // exactly the status bits returned by the device.
+<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">let </span>status = <span class="kw">unsafe </span>{ core::ptr::read_volatile((base + <span class="number">0x60</span>) <span class="kw">as </span><span class="kw-2">*const </span>u32) };
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="kw">if </span>status == <span class="number">0 </span>{
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">return </span><span class="bool-val">false</span>;
+<a href=#85 id=85 data-nosnippet>85</a>    }
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">unsafe </span>{ core::ptr::write_volatile((base + <span class="number">0x64</span>) <span class="kw">as </span><span class="kw-2">*mut </span>u32, status) };
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="bool-val">true
+<a href=#88 id=88 data-nosnippet>88</a></span>}
+<a href=#89 id=89 data-nosnippet>89</a>
+<a href=#90 id=90 data-nosnippet>90</a><span class="doccomment">/// VirtIO MMIO IRQ dispatcher — called from the arch trap handlers (riscv64/aarch64)
+<a href=#91 id=91 data-nosnippet>91</a>/// when any VirtIO MMIO IRQ fires. Routes the IRQ to whichever Driver Cell registered
+<a href=#92 id=92 data-nosnippet>92</a>/// for it via `sys_wait_irq` (the block / net / gpu cells all rely on this), ACKs the
+<a href=#93 id=93 data-nosnippet>93</a>/// input slot when the input service Cell isn't up yet, and warns on an unclaimed slot.
+<a href=#94 id=94 data-nosnippet>94</a>///
+<a href=#95 id=95 data-nosnippet>95</a>/// Relocated here from the deleted kernel `virtio_blk` driver (G2 loader redesign
+<a href=#96 id=96 data-nosnippet>96</a>/// phase 06): it is VirtIO-common, not block-specific. The former kernel-block ACK
+<a href=#97 id=97 data-nosnippet>97</a>/// branch is gone — the virtio-blk Driver Cell now ACKs its own IRQ via the
+<a href=#98 id=98 data-nosnippet>98</a>/// `sys_wait_irq` path above.
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="attr">#[no_mangle]
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">pub extern </span><span class="string">"Rust" </span><span class="kw">fn </span>vi_handle_virtio_irq(irq: u32) {
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="comment">// Driver Cell IRQ routing: a Cell registered for this IRQ via sys_wait_irq —
+<a href=#102 id=102 data-nosnippet>102</a>    // signal it (sets IRQ_PENDING + writes VirtIO InterruptACK) and return.
+<a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">if </span><span class="kw">crate</span>::task::drivers::irq_wait::has_waiter(irq <span class="kw">as </span>u8) {
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">crate</span>::task::drivers::irq_wait::signal_irq(irq <span class="kw">as </span>u8);
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">return</span>;
+<a href=#106 id=106 data-nosnippet>106</a>    }
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="comment">// Input (keyboard) slot: ACK to prevent an interrupt storm before the input
+<a href=#108 id=108 data-nosnippet>108</a>    // service Cell is up; event routing lives entirely in that Cell.
+<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="kw">if </span><span class="kw">crate</span>::task::drivers::input_irq_ack::ack_if_input(irq) {
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">return</span>;
+<a href=#111 id=111 data-nosnippet>111</a>    }
+<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">if </span>ack_unclaimed(irq) {
+<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">return</span>;
+<a href=#114 id=114 data-nosnippet>114</a>    }
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="comment">// Unknown VirtIO slot — no device registered. InterruptStatus is already cleared
+<a href=#116 id=116 data-nosnippet>116</a>    // by plic_complete in the trap handler.
+<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="macro">log::warn!</span>(
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="string">"[virtio] unhandled IRQ {} — no registered device for this slot"</span>,
+<a href=#119 id=119 data-nosnippet>119</a>        irq
+<a href=#120 id=120 data-nosnippet>120</a>    );
+<a href=#121 id=121 data-nosnippet>121</a>}
 </code></pre></div></section></main></body></html>

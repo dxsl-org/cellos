@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["ViSyscall"],"mod":["cap_mask","events","service"],"struct":["ProcessInfo","SyscallSet","ViSpawnArgs"]};
+window.SIDEBAR_ITEMS = {"enum":["ViSyscall"],"mod":["cap_mask","events","service"],"struct":["ProcessInfo","ProcessInfoV2","SyscallSet","ViSpawnArgs"]};

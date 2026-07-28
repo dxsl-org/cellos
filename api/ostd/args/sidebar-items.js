@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["args","check_help"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SPAWN_ARGV_BYTES"],"fn":["args","check_help","set_spawn_argv"]};

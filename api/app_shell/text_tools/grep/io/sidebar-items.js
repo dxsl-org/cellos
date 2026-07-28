@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["GREP_MAX_DEPTH"],"enum":["ReadError"],"fn":["load_inputs","read_text_file","walk_path"],"mod":["read","vfs"]};

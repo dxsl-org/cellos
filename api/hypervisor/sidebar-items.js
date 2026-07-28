@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["GUEST_IPA_BASE","GUEST_RAM_PAGES","GUEST_RAM_SIZE","INITRD_PATH","VMLINUZ_PATH"],"fn":["main"],"mod":["dtb","gicd","loader_image","net_backend","pl011","psci","run_loop","timer","virtio_blk","virtio_console","virtio_mmio","virtio_net","virtqueue","vmm"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["main","quiesce"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

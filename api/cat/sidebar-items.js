@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","spawn_args"]};
+window.SIDEBAR_ITEMS = {"fn":["main"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["FLAGS_NEXT","FLAGS_WRITE","MAX_CHAIN"],"fn":["process_notify"],"struct":["DescBuf"]};

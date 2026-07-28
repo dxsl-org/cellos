@@ -276,149 +276,155 @@
 <a href=#276 id=276 data-nosnippet>276</a>    /// budget and is terminated — preventing livelock ("alive but paralyzed").
 <a href=#277 id=277 data-nosnippet>277</a>    </span><span class="kw">pub </span>run_ticks: u32,
 <a href=#278 id=278 data-nosnippet>278</a>
-<a href=#279 id=279 data-nosnippet>279</a>    <span class="doccomment">/// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
-<a href=#280 id=280 data-nosnippet>280</a>    /// message did not arrive in time). For an RT control loop this is its missed-cycle
-<a href=#281 id=281 data-nosnippet>281</a>    /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
-<a href=#282 id=282 data-nosnippet>282</a>    /// scheduler does not act on it (RT enforcement is hardware-data-gated).
-<a href=#283 id=283 data-nosnippet>283</a>    </span><span class="kw">pub </span>deadline_misses: u32,
-<a href=#284 id=284 data-nosnippet>284</a>
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="doccomment">/// One-shot latch: set when this task has already emitted an `RtCpuOverrun` warning
-<a href=#286 id=286 data-nosnippet>286</a>    /// for the current non-yielding episode, so the early-warning audit fires once per
-<a href=#287 id=287 data-nosnippet>287</a>    /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
-<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">pub </span>rt_overrun_warned: bool,
+<a href=#279 id=279 data-nosnippet>279</a>    <span class="doccomment">/// Cumulative scheduler ticks charged to this task while it was the running
+<a href=#280 id=280 data-nosnippet>280</a>    /// task at a scheduler accounting point. This is the kernel-exported CPU
+<a href=#281 id=281 data-nosnippet>281</a>    /// sample source for `GetProcs2`; userspace computes percentages from deltas.
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">pub </span>cpu_run_ticks: u64,
+<a href=#283 id=283 data-nosnippet>283</a>
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="doccomment">/// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
+<a href=#285 id=285 data-nosnippet>285</a>    /// message did not arrive in time). For an RT control loop this is its missed-cycle
+<a href=#286 id=286 data-nosnippet>286</a>    /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
+<a href=#287 id=287 data-nosnippet>287</a>    /// scheduler does not act on it (RT enforcement is hardware-data-gated).
+<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">pub </span>deadline_misses: u32,
 <a href=#289 id=289 data-nosnippet>289</a>
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="doccomment">/// Liveness-heartbeat deadline (absolute `system_ticks`). `Some(d)` means the cell
-<a href=#291 id=291 data-nosnippet>291</a>    /// opted into heartbeating and must call `Heartbeat` again before tick `d`, else the
-<a href=#292 id=292 data-nosnippet>292</a>    /// scheduler terminates it as HUNG (silent-hang detection — see `pick_next`). `None`
-<a href=#293 id=293 data-nosnippet>293</a>    /// = heartbeat disabled (the default; most cells don't opt in).
-<a href=#294 id=294 data-nosnippet>294</a>    </span><span class="kw">pub </span>heartbeat_deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;,
-<a href=#295 id=295 data-nosnippet>295</a>
-<a href=#296 id=296 data-nosnippet>296</a>    <span class="doccomment">/// Per-cell virtual memory area list for demand-paging.
-<a href=#297 id=297 data-nosnippet>297</a>    ///
-<a href=#298 id=298 data-nosnippet>298</a>    /// Populated by the ELF loader (Phase 04) with one entry per ELF segment.
-<a href=#299 id=299 data-nosnippet>299</a>    /// The #PF handler consults this list when a user-mode page fault occurs to
-<a href=#300 id=300 data-nosnippet>300</a>    /// decide whether to map the page on demand or kill the cell.
-<a href=#301 id=301 data-nosnippet>301</a>    /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
-<a href=#302 id=302 data-nosnippet>302</a>    /// (those arches use identity-mapped segments today).
-<a href=#303 id=303 data-nosnippet>303</a>    </span><span class="kw">pub </span>vma: <span class="kw">crate</span>::memory::vma::VmaList,
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="doccomment">/// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
-<a href=#306 id=306 data-nosnippet>306</a>    /// finished deserializing state and is ready to receive IPC.
-<a href=#307 id=307 data-nosnippet>307</a>    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
-<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">pub </span>hotswap_ready: bool,
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="doccomment">/// One-shot latch: set when this task has already emitted an `RtCpuOverrun` warning
+<a href=#291 id=291 data-nosnippet>291</a>    /// for the current non-yielding episode, so the early-warning audit fires once per
+<a href=#292 id=292 data-nosnippet>292</a>    /// episode (not every tick). Reset to false whenever the task voluntarily blocks.
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">pub </span>rt_overrun_warned: bool,
+<a href=#294 id=294 data-nosnippet>294</a>
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="doccomment">/// Liveness-heartbeat deadline (absolute `system_ticks`). `Some(d)` means the cell
+<a href=#296 id=296 data-nosnippet>296</a>    /// opted into heartbeating and must call `Heartbeat` again before tick `d`, else the
+<a href=#297 id=297 data-nosnippet>297</a>    /// scheduler terminates it as HUNG (silent-hang detection — see `pick_next`). `None`
+<a href=#298 id=298 data-nosnippet>298</a>    /// = heartbeat disabled (the default; most cells don't opt in).
+<a href=#299 id=299 data-nosnippet>299</a>    </span><span class="kw">pub </span>heartbeat_deadline: <span class="prelude-ty">Option</span>&lt;u64&gt;,
+<a href=#300 id=300 data-nosnippet>300</a>
+<a href=#301 id=301 data-nosnippet>301</a>    <span class="doccomment">/// Per-cell virtual memory area list for demand-paging.
+<a href=#302 id=302 data-nosnippet>302</a>    ///
+<a href=#303 id=303 data-nosnippet>303</a>    /// Populated by the ELF loader (Phase 04) with one entry per ELF segment.
+<a href=#304 id=304 data-nosnippet>304</a>    /// The #PF handler consults this list when a user-mode page fault occurs to
+<a href=#305 id=305 data-nosnippet>305</a>    /// decide whether to map the page on demand or kill the cell.
+<a href=#306 id=306 data-nosnippet>306</a>    /// Empty until the ELF loader runs; demand-paging is inert on RISC-V/AArch64
+<a href=#307 id=307 data-nosnippet>307</a>    /// (those arches use identity-mapped segments today).
+<a href=#308 id=308 data-nosnippet>308</a>    </span><span class="kw">pub </span>vma: <span class="kw">crate</span>::memory::vma::VmaList,
 <a href=#309 id=309 data-nosnippet>309</a>
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="doccomment">/// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
-<a href=#311 id=311 data-nosnippet>311</a>    /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
-<a href=#312 id=312 data-nosnippet>312</a>    /// Prevents a compromised Supervisor Cell from disabling the restart tree.
-<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">pub </span>is_critical: bool,
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="doccomment">/// Set by `HotSwapReady` (syscall 401) to signal that the new cell has
+<a href=#311 id=311 data-nosnippet>311</a>    /// finished deserializing state and is ready to receive IPC.
+<a href=#312 id=312 data-nosnippet>312</a>    /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
+<a href=#313 id=313 data-nosnippet>313</a>    </span><span class="kw">pub </span>hotswap_ready: bool,
 <a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="doccomment">/// IPC messages buffered while this task is in `TaskState::Frozen` (hot-swap).
-<a href=#316 id=316 data-nosnippet>316</a>    ///
-<a href=#317 id=317 data-nosnippet>317</a>    /// Callers that `sys_send` to a Frozen task have their message copied here
-<a href=#318 id=318 data-nosnippet>318</a>    /// (owned buffer; Law 2) and return immediately with `Ok(0)` — they are NOT
-<a href=#319 id=319 data-nosnippet>319</a>    /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
-<a href=#320 id=320 data-nosnippet>320</a>    /// this queue to the new cell before the old cell is terminated.
-<a href=#321 id=321 data-nosnippet>321</a>    /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
-<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">pub </span>pending_msgs: Vec&lt;PendingMsg&gt;,
-<a href=#323 id=323 data-nosnippet>323</a>}
-<a href=#324 id=324 data-nosnippet>324</a>
-<a href=#325 id=325 data-nosnippet>325</a><span class="kw">impl </span>Task {
-<a href=#326 id=326 data-nosnippet>326</a>    <span class="kw">pub fn </span>new(id: usize, cell_id: CellId, name: <span class="kw-2">&amp;</span>str, allowed_drivers: Vec&lt;usize&gt;) -&gt; <span class="self">Self </span>{
-<a href=#327 id=327 data-nosnippet>327</a>        <span class="self">Self </span>{
-<a href=#328 id=328 data-nosnippet>328</a>            id,
-<a href=#329 id=329 data-nosnippet>329</a>            cell_id,
-<a href=#330 id=330 data-nosnippet>330</a>            name: String::from(name),
-<a href=#331 id=331 data-nosnippet>331</a>            state: TaskState::Ready,
-<a href=#332 id=332 data-nosnippet>332</a>            context: Context::default(),
-<a href=#333 id=333 data-nosnippet>333</a>            trap_frame: ViTrapFrame::default(),
-<a href=#334 id=334 data-nosnippet>334</a>            allowed_drivers,
-<a href=#335 id=335 data-nosnippet>335</a>            leases: alloc::collections::BTreeMap::new(),
-<a href=#336 id=336 data-nosnippet>336</a>            next_lease_id: <span class="number">1</span>, <span class="comment">// Start efficiently
-<a href=#337 id=337 data-nosnippet>337</a>            </span>grant_table: alloc::collections::BTreeMap::new(),
-<a href=#338 id=338 data-nosnippet>338</a>            next_grant_id: <span class="number">1</span>,
-<a href=#339 id=339 data-nosnippet>339</a>            open_files: alloc::collections::BTreeMap::new(),
-<a href=#340 id=340 data-nosnippet>340</a>            current_caller: <span class="prelude-val">None</span>,
-<a href=#341 id=341 data-nosnippet>341</a>            reply_value: <span class="prelude-val">None</span>,
-<a href=#342 id=342 data-nosnippet>342</a>            cwd: String::from(<span class="string">"/"</span>),
-<a href=#343 id=343 data-nosnippet>343</a>            kernel_stack: <span class="prelude-val">None</span>,
-<a href=#344 id=344 data-nosnippet>344</a>            user_stack: <span class="prelude-val">None</span>,
-<a href=#345 id=345 data-nosnippet>345</a>            segment_mem: <span class="prelude-val">None</span>,
-<a href=#346 id=346 data-nosnippet>346</a>            waiters: Vec::new(),
-<a href=#347 id=347 data-nosnippet>347</a>            exit_code: <span class="prelude-val">None</span>,
-<a href=#348 id=348 data-nosnippet>348</a>            pending_deaths: Vec::new(),
-<a href=#349 id=349 data-nosnippet>349</a>            pending_exit_reason: <span class="prelude-val">None</span>,
-<a href=#350 id=350 data-nosnippet>350</a>            pending_future: <span class="prelude-val">None</span>,
-<a href=#351 id=351 data-nosnippet>351</a>            block_io_cap: <span class="prelude-val">None</span>,
-<a href=#352 id=352 data-nosnippet>352</a>            network_cap: <span class="prelude-val">None</span>,
-<a href=#353 id=353 data-nosnippet>353</a>            spawn_cap: <span class="prelude-val">None</span>,
-<a href=#354 id=354 data-nosnippet>354</a>            hypervisor_cap: <span class="prelude-val">None</span>,
-<a href=#355 id=355 data-nosnippet>355</a>            supervisor_cap: <span class="prelude-val">None</span>,
-<a href=#356 id=356 data-nosnippet>356</a>            pcie_driver_cap: <span class="prelude-val">None</span>,
-<a href=#357 id=357 data-nosnippet>357</a>            platform_cap: <span class="prelude-val">None</span>,
-<a href=#358 id=358 data-nosnippet>358</a>            mmio_devices: <span class="number">0</span>,
-<a href=#359 id=359 data-nosnippet>359</a>            block_regions: <span class="number">0</span>,
-<a href=#360 id=360 data-nosnippet>360</a>            pku_key: <span class="number">0</span>,
-<a href=#361 id=361 data-nosnippet>361</a>            pku_value: <span class="number">0</span>,
-<a href=#362 id=362 data-nosnippet>362</a>            priority: api::TaskPriority::Normal <span class="kw">as </span>u8,
-<a href=#363 id=363 data-nosnippet>363</a>            cluster_mode: <span class="number">0</span>,
-<a href=#364 id=364 data-nosnippet>364</a>            cluster_id: <span class="number">0</span>,
-<a href=#365 id=365 data-nosnippet>365</a>            syscall_allowlist: u64::MAX, <span class="comment">// permit-all until ELF section is read
-<a href=#366 id=366 data-nosnippet>366</a>            </span>run_ticks: <span class="number">0</span>,
-<a href=#367 id=367 data-nosnippet>367</a>            deadline_misses: <span class="number">0</span>,
-<a href=#368 id=368 data-nosnippet>368</a>            rt_overrun_warned: <span class="bool-val">false</span>,
-<a href=#369 id=369 data-nosnippet>369</a>            heartbeat_deadline: <span class="prelude-val">None</span>,
-<a href=#370 id=370 data-nosnippet>370</a>            vma: <span class="kw">crate</span>::memory::vma::VmaList::new(),
-<a href=#371 id=371 data-nosnippet>371</a>            hotswap_ready: <span class="bool-val">false</span>,
-<a href=#372 id=372 data-nosnippet>372</a>            is_critical: <span class="bool-val">false</span>,
-<a href=#373 id=373 data-nosnippet>373</a>            pending_msgs: Vec::new(),
-<a href=#374 id=374 data-nosnippet>374</a>        }
-<a href=#375 id=375 data-nosnippet>375</a>    }
-<a href=#376 id=376 data-nosnippet>376</a>
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">pub fn </span>add_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, attributes: LeaseAttributes) -&gt; usize {
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_lease_id;
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="self">self</span>.next_lease_id += <span class="number">1</span>;
-<a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">let </span>lease = Lease {
-<a href=#382 id=382 data-nosnippet>382</a>            id,
-<a href=#383 id=383 data-nosnippet>383</a>            ptr,
-<a href=#384 id=384 data-nosnippet>384</a>            len,
-<a href=#385 id=385 data-nosnippet>385</a>            attributes,
-<a href=#386 id=386 data-nosnippet>386</a>        };
-<a href=#387 id=387 data-nosnippet>387</a>
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="self">self</span>.leases.insert(id, lease);
-<a href=#389 id=389 data-nosnippet>389</a>        id
-<a href=#390 id=390 data-nosnippet>390</a>    }
-<a href=#391 id=391 data-nosnippet>391</a>
-<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">pub fn </span>get_lease(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Lease&gt; {
-<a href=#393 id=393 data-nosnippet>393</a>        <span class="self">self</span>.leases.get(<span class="kw-2">&amp;</span>id)
-<a href=#394 id=394 data-nosnippet>394</a>    }
-<a href=#395 id=395 data-nosnippet>395</a>
-<a href=#396 id=396 data-nosnippet>396</a>    <span class="kw">pub fn </span>revoke_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) {
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="self">self</span>.leases.remove(<span class="kw-2">&amp;</span>id);
-<a href=#398 id=398 data-nosnippet>398</a>    }
-<a href=#399 id=399 data-nosnippet>399</a>
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="comment">// --- Grant Table Methods ---
-<a href=#401 id=401 data-nosnippet>401</a>    </span><span class="kw">pub fn </span>add_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -&gt; usize {
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_grant_id;
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="self">self</span>.next_grant_id += <span class="number">1</span>;
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="self">self</span>.grant_table.insert(
-<a href=#405 id=405 data-nosnippet>405</a>            id,
-<a href=#406 id=406 data-nosnippet>406</a>            GrantEntry {
-<a href=#407 id=407 data-nosnippet>407</a>                ptr,
-<a href=#408 id=408 data-nosnippet>408</a>                len,
-<a href=#409 id=409 data-nosnippet>409</a>                flags,
-<a href=#410 id=410 data-nosnippet>410</a>                sender_id,
-<a href=#411 id=411 data-nosnippet>411</a>            },
-<a href=#412 id=412 data-nosnippet>412</a>        );
-<a href=#413 id=413 data-nosnippet>413</a>        id
-<a href=#414 id=414 data-nosnippet>414</a>    }
-<a href=#415 id=415 data-nosnippet>415</a>
-<a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">pub fn </span>get_grant(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>GrantEntry&gt; {
-<a href=#417 id=417 data-nosnippet>417</a>        <span class="self">self</span>.grant_table.get(<span class="kw-2">&amp;</span>id)
-<a href=#418 id=418 data-nosnippet>418</a>    }
-<a href=#419 id=419 data-nosnippet>419</a>
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="kw">pub fn </span>remove_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;GrantEntry&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>        <span class="self">self</span>.grant_table.remove(<span class="kw-2">&amp;</span>id)
-<a href=#422 id=422 data-nosnippet>422</a>    }
-<a href=#423 id=423 data-nosnippet>423</a>}
+<a href=#315 id=315 data-nosnippet>315</a>    <span class="doccomment">/// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
+<a href=#316 id=316 data-nosnippet>316</a>    /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
+<a href=#317 id=317 data-nosnippet>317</a>    /// Prevents a compromised Supervisor Cell from disabling the restart tree.
+<a href=#318 id=318 data-nosnippet>318</a>    </span><span class="kw">pub </span>is_critical: bool,
+<a href=#319 id=319 data-nosnippet>319</a>
+<a href=#320 id=320 data-nosnippet>320</a>    <span class="doccomment">/// IPC messages buffered while this task is in `TaskState::Frozen` (hot-swap).
+<a href=#321 id=321 data-nosnippet>321</a>    ///
+<a href=#322 id=322 data-nosnippet>322</a>    /// Callers that `sys_send` to a Frozen task have their message copied here
+<a href=#323 id=323 data-nosnippet>323</a>    /// (owned buffer; Law 2) and return immediately with `Ok(0)` — they are NOT
+<a href=#324 id=324 data-nosnippet>324</a>    /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
+<a href=#325 id=325 data-nosnippet>325</a>    /// this queue to the new cell before the old cell is terminated.
+<a href=#326 id=326 data-nosnippet>326</a>    /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
+<a href=#327 id=327 data-nosnippet>327</a>    </span><span class="kw">pub </span>pending_msgs: Vec&lt;PendingMsg&gt;,
+<a href=#328 id=328 data-nosnippet>328</a>}
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a><span class="kw">impl </span>Task {
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">pub fn </span>new(id: usize, cell_id: CellId, name: <span class="kw-2">&amp;</span>str, allowed_drivers: Vec&lt;usize&gt;) -&gt; <span class="self">Self </span>{
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="self">Self </span>{
+<a href=#333 id=333 data-nosnippet>333</a>            id,
+<a href=#334 id=334 data-nosnippet>334</a>            cell_id,
+<a href=#335 id=335 data-nosnippet>335</a>            name: String::from(name),
+<a href=#336 id=336 data-nosnippet>336</a>            state: TaskState::Ready,
+<a href=#337 id=337 data-nosnippet>337</a>            context: Context::default(),
+<a href=#338 id=338 data-nosnippet>338</a>            trap_frame: ViTrapFrame::default(),
+<a href=#339 id=339 data-nosnippet>339</a>            allowed_drivers,
+<a href=#340 id=340 data-nosnippet>340</a>            leases: alloc::collections::BTreeMap::new(),
+<a href=#341 id=341 data-nosnippet>341</a>            next_lease_id: <span class="number">1</span>, <span class="comment">// Start efficiently
+<a href=#342 id=342 data-nosnippet>342</a>            </span>grant_table: alloc::collections::BTreeMap::new(),
+<a href=#343 id=343 data-nosnippet>343</a>            next_grant_id: <span class="number">1</span>,
+<a href=#344 id=344 data-nosnippet>344</a>            open_files: alloc::collections::BTreeMap::new(),
+<a href=#345 id=345 data-nosnippet>345</a>            current_caller: <span class="prelude-val">None</span>,
+<a href=#346 id=346 data-nosnippet>346</a>            reply_value: <span class="prelude-val">None</span>,
+<a href=#347 id=347 data-nosnippet>347</a>            cwd: String::from(<span class="string">"/"</span>),
+<a href=#348 id=348 data-nosnippet>348</a>            kernel_stack: <span class="prelude-val">None</span>,
+<a href=#349 id=349 data-nosnippet>349</a>            user_stack: <span class="prelude-val">None</span>,
+<a href=#350 id=350 data-nosnippet>350</a>            segment_mem: <span class="prelude-val">None</span>,
+<a href=#351 id=351 data-nosnippet>351</a>            waiters: Vec::new(),
+<a href=#352 id=352 data-nosnippet>352</a>            exit_code: <span class="prelude-val">None</span>,
+<a href=#353 id=353 data-nosnippet>353</a>            pending_deaths: Vec::new(),
+<a href=#354 id=354 data-nosnippet>354</a>            pending_exit_reason: <span class="prelude-val">None</span>,
+<a href=#355 id=355 data-nosnippet>355</a>            pending_future: <span class="prelude-val">None</span>,
+<a href=#356 id=356 data-nosnippet>356</a>            block_io_cap: <span class="prelude-val">None</span>,
+<a href=#357 id=357 data-nosnippet>357</a>            network_cap: <span class="prelude-val">None</span>,
+<a href=#358 id=358 data-nosnippet>358</a>            spawn_cap: <span class="prelude-val">None</span>,
+<a href=#359 id=359 data-nosnippet>359</a>            hypervisor_cap: <span class="prelude-val">None</span>,
+<a href=#360 id=360 data-nosnippet>360</a>            supervisor_cap: <span class="prelude-val">None</span>,
+<a href=#361 id=361 data-nosnippet>361</a>            pcie_driver_cap: <span class="prelude-val">None</span>,
+<a href=#362 id=362 data-nosnippet>362</a>            platform_cap: <span class="prelude-val">None</span>,
+<a href=#363 id=363 data-nosnippet>363</a>            mmio_devices: <span class="number">0</span>,
+<a href=#364 id=364 data-nosnippet>364</a>            block_regions: <span class="number">0</span>,
+<a href=#365 id=365 data-nosnippet>365</a>            pku_key: <span class="number">0</span>,
+<a href=#366 id=366 data-nosnippet>366</a>            pku_value: <span class="number">0</span>,
+<a href=#367 id=367 data-nosnippet>367</a>            priority: api::TaskPriority::Normal <span class="kw">as </span>u8,
+<a href=#368 id=368 data-nosnippet>368</a>            cluster_mode: <span class="number">0</span>,
+<a href=#369 id=369 data-nosnippet>369</a>            cluster_id: <span class="number">0</span>,
+<a href=#370 id=370 data-nosnippet>370</a>            syscall_allowlist: u64::MAX, <span class="comment">// permit-all until ELF section is read
+<a href=#371 id=371 data-nosnippet>371</a>            </span>run_ticks: <span class="number">0</span>,
+<a href=#372 id=372 data-nosnippet>372</a>            cpu_run_ticks: <span class="number">0</span>,
+<a href=#373 id=373 data-nosnippet>373</a>            deadline_misses: <span class="number">0</span>,
+<a href=#374 id=374 data-nosnippet>374</a>            rt_overrun_warned: <span class="bool-val">false</span>,
+<a href=#375 id=375 data-nosnippet>375</a>            heartbeat_deadline: <span class="prelude-val">None</span>,
+<a href=#376 id=376 data-nosnippet>376</a>            vma: <span class="kw">crate</span>::memory::vma::VmaList::new(),
+<a href=#377 id=377 data-nosnippet>377</a>            hotswap_ready: <span class="bool-val">false</span>,
+<a href=#378 id=378 data-nosnippet>378</a>            is_critical: <span class="bool-val">false</span>,
+<a href=#379 id=379 data-nosnippet>379</a>            pending_msgs: Vec::new(),
+<a href=#380 id=380 data-nosnippet>380</a>        }
+<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">pub fn </span>add_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, attributes: LeaseAttributes) -&gt; usize {
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_lease_id;
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="self">self</span>.next_lease_id += <span class="number">1</span>;
+<a href=#386 id=386 data-nosnippet>386</a>
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span>lease = Lease {
+<a href=#388 id=388 data-nosnippet>388</a>            id,
+<a href=#389 id=389 data-nosnippet>389</a>            ptr,
+<a href=#390 id=390 data-nosnippet>390</a>            len,
+<a href=#391 id=391 data-nosnippet>391</a>            attributes,
+<a href=#392 id=392 data-nosnippet>392</a>        };
+<a href=#393 id=393 data-nosnippet>393</a>
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="self">self</span>.leases.insert(id, lease);
+<a href=#395 id=395 data-nosnippet>395</a>        id
+<a href=#396 id=396 data-nosnippet>396</a>    }
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">pub fn </span>get_lease(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Lease&gt; {
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="self">self</span>.leases.get(<span class="kw-2">&amp;</span>id)
+<a href=#400 id=400 data-nosnippet>400</a>    }
+<a href=#401 id=401 data-nosnippet>401</a>
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">pub fn </span>revoke_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) {
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="self">self</span>.leases.remove(<span class="kw-2">&amp;</span>id);
+<a href=#404 id=404 data-nosnippet>404</a>    }
+<a href=#405 id=405 data-nosnippet>405</a>
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="comment">// --- Grant Table Methods ---
+<a href=#407 id=407 data-nosnippet>407</a>    </span><span class="kw">pub fn </span>add_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -&gt; usize {
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_grant_id;
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="self">self</span>.next_grant_id += <span class="number">1</span>;
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="self">self</span>.grant_table.insert(
+<a href=#411 id=411 data-nosnippet>411</a>            id,
+<a href=#412 id=412 data-nosnippet>412</a>            GrantEntry {
+<a href=#413 id=413 data-nosnippet>413</a>                ptr,
+<a href=#414 id=414 data-nosnippet>414</a>                len,
+<a href=#415 id=415 data-nosnippet>415</a>                flags,
+<a href=#416 id=416 data-nosnippet>416</a>                sender_id,
+<a href=#417 id=417 data-nosnippet>417</a>            },
+<a href=#418 id=418 data-nosnippet>418</a>        );
+<a href=#419 id=419 data-nosnippet>419</a>        id
+<a href=#420 id=420 data-nosnippet>420</a>    }
+<a href=#421 id=421 data-nosnippet>421</a>
+<a href=#422 id=422 data-nosnippet>422</a>    <span class="kw">pub fn </span>get_grant(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>GrantEntry&gt; {
+<a href=#423 id=423 data-nosnippet>423</a>        <span class="self">self</span>.grant_table.get(<span class="kw-2">&amp;</span>id)
+<a href=#424 id=424 data-nosnippet>424</a>    }
+<a href=#425 id=425 data-nosnippet>425</a>
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">pub fn </span>remove_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;GrantEntry&gt; {
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="self">self</span>.grant_table.remove(<span class="kw-2">&amp;</span>id)
+<a href=#428 id=428 data-nosnippet>428</a>    }
+<a href=#429 id=429 data-nosnippet>429</a>}
 </code></pre></div></section></main></body></html>
