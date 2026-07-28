@@ -143,6 +143,15 @@ jobs:
         timeout-minutes: 10
         run: sudo apt-get update -q && sudo apt-get install -y -q ${{ matrix.cc_pkg }}
 
+      # scripts/build-boot-ramdisk-ci.sh bakes a signed /POLICY.BIN, and
+      # scripts/sign-policy.py needs Ed25519 from `cryptography`. Without this the
+      # assemble step below aborts (the script runs under `set -e`), which fails
+      # the rv64 build and starves the QEMU boot gate of its artifact.
+      - name: Install Python cryptography (policy blob signing)
+        if: matrix.short == 'rv64'
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
+
       # The rv64 artifact feeds the QEMU boot gate, and kernel_fs.img (VIFS1
       # ramdisk, gitignored build artifact) must be real — build.rs otherwise
       # embeds an empty compile-only stub that cannot boot.

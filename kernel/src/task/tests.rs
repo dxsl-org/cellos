@@ -101,7 +101,9 @@ fn test_scheduler_task_table() {
     let mut sched = Scheduler::new();
 
     // Spawn a task
-    let id = sched.spawn("test-task", CellId(0), Vec::new()).expect("spawn");
+    let id = sched
+        .spawn("test-task", CellId(0), Vec::new())
+        .expect("spawn");
 
     // Verify task exists in table
     assert!(sched.tasks.contains_key(&id));
@@ -258,7 +260,9 @@ fn test_multiple_tasks_ready_queue() {
 /// and the scheduler must then pick it up on the next tick.
 fn test_blocked_then_ready_transition() {
     let mut sched = Scheduler::new();
-    let id = sched.spawn("blocked", CellId(0), Vec::new()).expect("spawn");
+    let id = sched
+        .spawn("blocked", CellId(0), Vec::new())
+        .expect("spawn");
 
     // Simulate the task blocking on Send.
     if let Some(task) = sched.tasks.get_mut(&id) {

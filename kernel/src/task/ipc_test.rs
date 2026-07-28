@@ -14,7 +14,10 @@ fn spawn_or_skip(name: &str) -> Option<usize> {
     match super::spawn(name, types::CellId(0), Vec::new()) {
         Ok(id) => Some(id),
         Err(e) => {
-            info!("IPC test: spawn '{}' failed ({:?}) — scenario skipped", name, e);
+            info!(
+                "IPC test: spawn '{}' failed ({:?}) — scenario skipped",
+                name, e
+            );
             None
         }
     }
