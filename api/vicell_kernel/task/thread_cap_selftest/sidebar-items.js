@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CTRL_TID","PARENT_TID","TARGET_TID","TEST_ALLOWLIST","TEST_CELL_ID","TEST_PKU_KEY","TEST_PKU_VALUE"],"fn":["insert","mk_task","remove","self_test"]};
+window.SIDEBAR_ITEMS = {"constant":["CTRL_TID","DOS_CELL_ID","DOS_FILLER_BASE","PARENT_TID","TARGET_TID","TEST_ALLOWLIST","TEST_CELL_ID","TEST_PKU_KEY","TEST_PKU_VALUE"],"fn":["insert","mk_task","remove","self_test"]};
