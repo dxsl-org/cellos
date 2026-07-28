@@ -77,7 +77,24 @@ MKFAT_ARGS+=("$ALPINE_CACHE/vmlinux" "/vmlinux")
 echo "  /initrd.gz <- $ALPINE_CACHE/initramfs-virt ($(du -sh "$ALPINE_CACHE/initramfs-virt" | cut -f1))"
 MKFAT_ARGS+=("$ALPINE_CACHE/initramfs-virt" "/initrd.gz")
 
+# Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
+# which is dev-permissive: the whole policy layer runs and changes nothing, and no test
+# can tell the difference.
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+# shellcheck source=scripts/lib-bake-policy.sh
+source scripts/lib-bake-policy.sh
+POLICY_TMP=$(mktemp -d "target/hv-x86-policy-tmp.XXXXXX")
+trap 'rm -rf "$POLICY_TMP"' EXIT
+bake_policy "$POLICY_TMP/POLICY.BIN"
+echo "  /POLICY.BIN <- signed operator policy"
+MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "/POLICY.BIN")
+
 python3 tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+
+# Prove the layout rather than trusting the exit code: mkfat32 exits 0 for an image
+# whose destinations were mangled, and a missing /POLICY.BIN degrades silently.
+python3 tools/inspect_fat.py "$EMBEDDED_HV/kernel_fs.img" > "$POLICY_TMP/fat-layout.txt"
+assert_policy_in_image "$POLICY_TMP/fat-layout.txt" || exit 1
 
 cp "$BIN_DIR/app-init" "$EMBEDDED_HV/init"
 echo "[make-hv-x86] init <- $BIN_DIR/app-init"

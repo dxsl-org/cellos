@@ -133,11 +133,36 @@ if ($found.Count -eq 0) {
     exit 1
 }
 
+# Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
+# which is dev-permissive: the whole policy layer runs and changes nothing, and no test
+# can tell the difference. sign-policy.py round-trip-decodes the blob before writing,
+# so an entry outside the kernel's domain masks fails here rather than becoming
+# PolicyState::Invalid → DenyAll on a booted device.
+#
+# Signed with the DEV fleet key; only verifies while the kernel carries the default
+# `dev-policy-key` feature.
+$policyTmp = "$env:TEMP\ViCell_x86_POLICY.BIN"
+python scripts\sign-policy.py --out $policyTmp
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policyTmp)) {
+    Write-Error "sign-policy.py failed — need 'pip install cryptography'."
+    exit 1
+}
+# Root-level, 8.3-uppercase: kernel/src/policy.rs reads exactly /POLICY.BIN.
+$imgArgs += @($policyTmp, "/POLICY.BIN")
+
 Write-Host ""
 Write-Host "=== Creating x86_64 kernel_fs.img ==="
 python tools\mkfat32.py @imgArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "mkfat32.py failed (exit $LASTEXITCODE)"
+    exit 1
+}
+Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
+# Assert the layout instead of trusting the exit code.
+$layout = python tools\inspect_fat.py "kernel\src\embedded-x86_64\kernel_fs.img" 2>&1
+if (($layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false) {
+    Write-Error "x86_64 kernel_fs.img has no /POLICY.BIN in the root directory"
+    $layout | Write-Host
     exit 1
 }
 $kb = [Math]::Round((Get-Item "kernel\src\embedded-x86_64\kernel_fs.img").Length / 1KB, 0)

@@ -143,7 +143,25 @@ echo "  /initrd.gz <- $INITRD ($(du -sh "$INITRD" | cut -f1))"
 MKFAT_ARGS+=("$INITRD" "initrd.gz")
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
+
+# Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
+# which is dev-permissive: the whole policy layer runs and changes nothing. Destination
+# has no leading slash, matching the bin/<cell> entries above — Git Bash rewrites a
+# leading-slash argument into a Windows path before Python sees it.
+# shellcheck source=scripts/lib-bake-policy.sh
+source scripts/lib-bake-policy.sh
+POLICY_TMP=$(mktemp -d "target/hv-policy-tmp.XXXXXX")
+trap 'rm -rf "$POLICY_TMP"' EXIT
+bake_policy "$POLICY_TMP/POLICY.BIN"
+echo "  /POLICY.BIN <- signed operator policy"
+MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "POLICY.BIN")
+
 "$PYTHON_BIN" tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+
+# Prove the layout rather than trusting the exit code: mkfat32 exits 0 for an image
+# whose destinations were mangled, and a missing /POLICY.BIN degrades silently.
+"$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED_HV/kernel_fs.img" > "$POLICY_TMP/fat-layout.txt"
+assert_policy_in_image "$POLICY_TMP/fat-layout.txt" || exit 1
 
 # INIT_ELF (include_bytes! in kernel main.rs) is embedded separately from
 # kernel_fs.img — the EMBEDDED_OVERRIDE dir must also carry the init binary.
