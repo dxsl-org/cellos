@@ -58,7 +58,9 @@ foreach ($kv in $required.GetEnumerator()) {
 # ── Step 3: assemble kernel_fs.img from test-hooks binaries.
 Write-Host "==> Building kernel_fs.img (test-hooks)..."
 New-Item -ItemType Directory -Force $th_dir | Out-Null
-$tmpDir = "$env:TEMP\ViCell_kfs_th"
+# Repo-relative, not $env:TEMP — that variable is unset on Linux runners, where the
+# path collapses to the filesystem root and the write is denied.
+$tmpDir = "target/ViCell_kfs_th"
 New-Item -ItemType Directory -Force $tmpDir | Out-Null
 Set-Content -Path "$tmpDir\hostname" -Value "ViCell-test" -NoNewline -Encoding ascii
 

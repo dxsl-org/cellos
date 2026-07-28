@@ -663,9 +663,13 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
-          # scripts/build-*-ci.sh sign every cell via scripts/sign-cell.py, which
-          # needs Ed25519 from `cryptography` and exits 1 without it.
-          python3 -m pip install --user --quiet cryptography
+
+      # Own step, not appended to the apt install above: that step already spends its
+      # whole 10-minute budget fetching gcc-riscv64-unknown-elf on a slow mirror, and
+      # a timeout there must not read as a policy/signing failure.
+      - name: Install Python cryptography (cell + policy signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
 
       - name: Build test-hooks kernel
         run: |
@@ -702,9 +706,13 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
-          # scripts/build-*-ci.sh sign every cell via scripts/sign-cell.py, which
-          # needs Ed25519 from `cryptography` and exits 1 without it.
-          python3 -m pip install --user --quiet cryptography
+
+      # Own step, not appended to the apt install above: that step already spends its
+      # whole 10-minute budget fetching gcc-riscv64-unknown-elf on a slow mirror, and
+      # a timeout there must not read as a policy/signing failure.
+      - name: Install Python cryptography (cell + policy signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
 
       - name: Build test-hooks kernel (needed by degrade test)
         run: |
@@ -793,9 +801,13 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
-          # scripts/build-*-ci.sh sign every cell via scripts/sign-cell.py, which
-          # needs Ed25519 from `cryptography` and exits 1 without it.
-          python3 -m pip install --user --quiet cryptography
+
+      # Own step, not appended to the apt install above: that step already spends its
+      # whole 10-minute budget fetching gcc-riscv64-unknown-elf on a slow mirror, and
+      # a timeout there must not read as a policy/signing failure.
+      - name: Install Python cryptography (cell + policy signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
 
       - name: Build shell-test kernel
         run: |
@@ -852,10 +864,11 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
-          # gen_disk.ps1 bakes a signed /POLICY.BIN; scripts/sign-policy.py needs
-          # Ed25519 from `cryptography` and exits 1 without it, which would fail
-          # gen_disk before any test runs.
-          python3 -m pip install --user --quiet cryptography
+
+      # Own step — see the note on the other jobs' cryptography step.
+      - name: Install Python cryptography (policy blob signing)
+        timeout-minutes: 5
+        run: python3 -m pip install --user --quiet cryptography
 
       - name: Build cells + kernel + disk images (gen_disk)
         env:

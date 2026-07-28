@@ -334,7 +334,13 @@ if (-not (Test-Path $bench_bin)) {
 # 3a. Generate kernel_fs.img (small embedded FAT32, ~8 MB, with release cells).
 #     This image is embedded in the kernel binary via ramdisk.rs.
 Write-Host "Generating kernel_fs.img (embedded FAT32, release cells)..."
-$tmpDir = "$env:TEMP/ViCell_kfs"
+# Repo-relative, NOT $env:TEMP: that variable is unset on the Linux CI runners, where
+# "$env:TEMP/ViCell_kfs" collapsed to "/ViCell_kfs" at the filesystem root. The
+# New-Item there failed with "Access to the path '/ViCell_kfs' is denied" and, because
+# Set-Content errors are non-terminating, the script carried on and quietly shipped a
+# CI image with no /etc/hostname and no /readme.txt. Only an explicit exit-code check
+# on the next writer turned that into a visible failure.
+$tmpDir = "target/ViCell_kfs"
 New-Item -ItemType Directory -Force $tmpDir | Out-Null
 Set-Content -Path "$tmpDir/hostname" -Value "ViCell" -NoNewline -Encoding ascii
 Set-Content -Path "$tmpDir/readme"   -Value "Welcome to ViCell!" -NoNewline -Encoding ascii

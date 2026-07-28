@@ -124,7 +124,11 @@ if ($found.Count -eq 0) {
 #
 # The blob is signed with the DEV fleet key and only verifies while the kernel carries
 # the default `dev-policy-key` feature.
-$policyTmp = "$env:TEMP\ViCell_aarch64_POLICY.BIN"
+# Repo-relative, not $env:TEMP — that variable is unset on Linux runners, where the
+# path collapses to the filesystem root and the write is denied. Forward slashes so the
+# same string works under PowerShell on both platforms.
+$policyTmp = "target/ViCell_aarch64_POLICY.BIN"
+New-Item -ItemType Directory -Force (Split-Path $policyTmp) | Out-Null
 python scripts\sign-policy.py --out $policyTmp
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policyTmp)) {
     Write-Error "sign-policy.py failed — need 'pip install cryptography'."
