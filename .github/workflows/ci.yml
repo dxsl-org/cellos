@@ -419,12 +419,22 @@ jobs:
       - name: Build aarch64 hypervisor kernel (EMBEDDED_OVERRIDE)
         # RUSTFLAGS REPLACES the config.toml per-target flags, so it must
         # repeat +bti,+paca,+pacg alongside the kernel's relocation model.
+        #
+        # --features qemu-virt-1g is REQUIRED, not an optimisation: QEMU's
+        # direct ELF loader does not consistently pass a DTB pointer in x0, so
+        # the kernel falls back to a compile-time RAM end (boot.rs
+        # FALLBACK_RAM_END). Without the feature that is 0x5000_0000 = 256 MiB;
+        # the Alpine-embedding kernel itself is ~58 MiB, leaving 198 MiB usable,
+        # and create_vm's 128 MiB contiguous guest carve cannot be satisfied once
+        # the boot cells have fragmented it. Both run-hypervisor-arm.ps1 and
+        # make-hypervisor-fs.sh document the flag for exactly this reason.
         env:
           RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
           EMBEDDED_OVERRIDE: "kernel/src/embedded-hv"
         run: >
           cargo build --release
           -p vicell-kernel
+          --features qemu-virt-1g
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
 
@@ -498,12 +508,15 @@ jobs:
           bash scripts/make-hypervisor-fs.sh --skip-fetch
 
       - name: Build aarch64 hypervisor kernel (EMBEDDED_OVERRIDE)
+        # --features qemu-virt-1g: same DTB/RAM-fallback requirement as the
+        # machinery job above — see the comment there.
         env:
           RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
           EMBEDDED_OVERRIDE: "kernel/src/embedded-hv"
         run: >
           cargo build --release
           -p vicell-kernel
+          --features qemu-virt-1g
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
 
