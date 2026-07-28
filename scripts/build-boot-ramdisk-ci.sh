@@ -14,6 +14,17 @@
 
 set -euo pipefail
 
+# On Windows the bare name `python3` is the Microsoft Store alias stub, which
+# exits without running anything. Probe for an interpreter that actually works.
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_BIN=python
+else
+    echo "FAIL: a working Python 3 interpreter is required" >&2
+    exit 1
+fi
+
 REL="target/riscv64gc-unknown-none-elf/release"
 EMB="kernel/src/embedded"
 
@@ -37,11 +48,19 @@ for bin in app-init app-shell service-vfs service-config platform driver-virtio-
 done
 
 echo "==> Assembling $EMB/kernel_fs.img..."
-TMPDIR_KFS=$(mktemp -d)
+# Keep the temp dir inside target/: a POSIX /tmp path from Git Bash is not a
+# path a native Windows Python can open.
+TMPDIR_KFS=$(mktemp -d "target/boot-ramdisk-tmp.XXXXXX")
+trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell' > "$TMPDIR_KFS/hostname"
 printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
 
-python3 tools/mkfat32.py \
+# MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every /bin/... DESTINATION
+# argument into a Windows path before Python sees it, and mkfat32.py silently
+# builds an image containing "C:/Program Files/Git/bin/..." instead of /bin/*.
+# The kernel then boots, mounts VIFS1, and finds none of its cells — while the
+# boot gate's "FAT16 mounted" oracle still reports success.
+MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$EMB/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
     "$REL/app-shell"         /bin/shell \
@@ -51,7 +70,16 @@ python3 tools/mkfat32.py \
     "$REL/driver-virtio-blk" /bin/block \
     "$TMPDIR_KFS/hostname"   /etc/hostname \
     "$TMPDIR_KFS/readme"     /readme.txt
-rm -rf "$TMPDIR_KFS"
+
+# Prove the layout rather than trusting the exit code — a mangled destination
+# path produces a well-formed image that simply has no /bin.
+"$PYTHON_BIN" tools/inspect_fat.py "$EMB/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
+if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'vfs'" "$TMPDIR_KFS/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin/vfs" >&2
+    cat "$TMPDIR_KFS/fat-layout.txt" >&2
+    exit 1
+fi
 
 # INIT_ELF (include_bytes! in main.rs) is embedded separately from kernel_fs.img;
 # refresh it so the committed copy can never go stale relative to the image.

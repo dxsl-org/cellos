@@ -13,6 +13,17 @@ set -euo pipefail
 REL="target/riscv64gc-unknown-none-elf/release"
 TH_DIR="kernel/src/embedded-test-hooks"
 
+# On Windows the bare name `python3` is the Microsoft Store alias stub, which
+# exits without running anything. Probe for an interpreter that actually works.
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_BIN=python3
+elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
+    PYTHON_BIN=python
+else
+    echo "FAIL: a working Python 3 interpreter is required" >&2
+    exit 1
+fi
+
 # riscv64 cross-compiler required by littlefs2 C FFI (Ubuntu: gcc-riscv64-unknown-elf).
 # Honor a pre-set compiler (local xpack riscv-none-elf-gcc); default to the CI one.
 export CC_riscv64gc_unknown_none_elf="${CC_riscv64gc_unknown_none_elf:-riscv64-unknown-elf-gcc}"
@@ -44,10 +55,17 @@ done
 
 echo "==> Assembling kernel_fs.img (test-hooks)..."
 mkdir -p "$TH_DIR"
-TMPDIR_KFS=$(mktemp -d)
+# Keep the temp dir inside target/: a POSIX /tmp path from Git Bash is not a
+# path a native Windows Python can open.
+TMPDIR_KFS=$(mktemp -d "target/test-hooks-tmp.XXXXXX")
+trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell-test' > "$TMPDIR_KFS/hostname"
 
-python3 tools/mkfat32.py \
+# MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every /bin/... DESTINATION
+# argument into a Windows path before Python sees it, and mkfat32.py silently
+# builds an image containing "C:/Program Files/Git/bin/..." instead of /bin/*.
+# The kernel then boots, mounts VIFS1, and finds none of its cells.
+MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$TH_DIR/kernel_fs.img" \
     "$REL/app-init"         /bin/init \
     "$REL/app-shell"        /bin/shell \
@@ -58,6 +76,16 @@ python3 tools/mkfat32.py \
 
 if [[ ! -f "$TH_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
+fi
+# Prove the layout rather than trusting the exit code — a mangled destination
+# path produces a well-formed image that simply has no /bin, which otherwise
+# only surfaces as a confusing "cell not found" at boot.
+"$PYTHON_BIN" tools/inspect_fat.py "$TH_DIR/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
+if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'vfs-test'" "$TMPDIR_KFS/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin/vfs-test" >&2
+    cat "$TMPDIR_KFS/fat-layout.txt" >&2
+    exit 1
 fi
 echo "   kernel_fs.img: $(du -sh "$TH_DIR/kernel_fs.img" | cut -f1)"
 

@@ -79,18 +79,28 @@ can drift from the other two while still reading as enforcement, so it was remov
 `mount()`'s third parameter. Write authorization now has exactly two homes: policy in `AccessTable`
 (consulted in `dispatch`) and structure in the backend (e.g. `BinOverlay`).
 
-### Verification and what is still unproven
+### Verification — negative control included
 VFS suite: 36 PASS / 0 FAIL on riscv64 QEMU, including five new assertions in the `vfs-test` cell
 (`/readme.txt` refused and surviving, `Rmdir`/`RmdirRecursive` under `/` refused before the backend,
 `WriteGrant` fail-closed); 31 pre-existing assertions unchanged. `cargo clippy -D warnings` clean on
-`service-vfs` and `app-vfs-test`. **Not proven**: that the new assertions fail without the fix.
-Reverting the gates and rebuilding produced an image the kernel could not read (`/bin/vfs not in
-VIFS1`) — and that reproduces with the fix restored, so it is a build-tooling fault, not a
-regression. Narrowed to: the kernel embeds the image correctly and VIFS1 mounts (it correctly reports
-`/POLICY.BIN` absent), the image carries all six files with UTF-16 LFN entries, yet `/bin/*` lookups
-fail. Tracked as a follow-up, along with two Windows blockers in `scripts/build-test-hooks-ci.sh`
-(it invokes `python3`, which is the Microsoft Store stub, and passes a POSIX `mktemp -d` path to a
-Windows Python).
+`service-vfs` and `app-vfs-test`, and on the whole riscv64 workspace.
+
+Reverting `dispatch.rs` to its pre-fix state and rebuilding gives **31 PASS / 5 FAIL** — exactly the
+five new assertions and nothing else. Decisively, `[FAIL] /readme.txt survived the refused unlink`
+means the file was genuinely deleted, so the hole was real and reachable, not theoretical; and
+`Rmdir`/`RmdirRecursive`/`WriteGrant` each returned code 1 instead of 3, confirming the ungated paths
+reached the backend rather than an authorization decision. Restoring the gates returns 36/36.
+
+That control was blocked when the fix was first written: reverting produced an image the kernel could
+not read (`/bin/vfs not in VIFS1`), which reproduced with the fix restored too. Root cause found and
+fixed in `scripts/build-test-hooks-ci.sh` — under Git Bash, MSYS rewrote every `/bin/...` DESTINATION
+argument to `mkfat32.py` into a Windows path, so the image was well-formed but contained
+`C:/Program Files/Git/bin/...` instead of `/bin/*`; `inspect_fat.py` showed a root directory literally
+named `C:`. The script now sets `MSYS2_ARG_CONV_EXCL='*'`, probes for a real interpreter (bare
+`python3` on Windows is the Microsoft Store alias stub), keeps its temp dir under `target/` instead of
+handing a POSIX `mktemp -d` path to a native Windows Python, and asserts `/bin/vfs-test` is present in
+the finished image — the same guards `build-shell-test-ci.sh` already carried. `build-srv-test-ci.sh`
+and `build-boot-ramdisk-ci.sh` still lack them.
 
 ---
 
