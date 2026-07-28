@@ -51,17 +51,17 @@
 <a href=#51 id=51 data-nosnippet>51</a>            api::disk::PART_CELLSTORE_BASE_LBA,
 <a href=#52 id=52 data-nosnippet>52</a>        )));
 <a href=#53 id=53 data-nosnippet>53</a>        <span class="comment">// Longest prefix wins: the specific mounts shadow the read-only root.
-<a href=#54 id=54 data-nosnippet>54</a>        </span>mounts.mount(<span class="string">"/"</span>, ram, <span class="bool-val">false</span>);
-<a href=#55 id=55 data-nosnippet>55</a>        mounts.mount(<span class="string">"/tmp"</span>, ram, <span class="bool-val">true</span>);
+<a href=#54 id=54 data-nosnippet>54</a>        </span>mounts.mount(<span class="string">"/"</span>, ram);
+<a href=#55 id=55 data-nosnippet>55</a>        mounts.mount(<span class="string">"/tmp"</span>, ram);
 <a href=#56 id=56 data-nosnippet>56</a>        <span class="attr">#[cfg(feature = <span class="string">"littlefs"</span>)]
-<a href=#57 id=57 data-nosnippet>57</a>        </span>mounts.mount(<span class="string">"/data"</span>, lfs, <span class="bool-val">true</span>);
-<a href=#58 id=58 data-nosnippet>58</a>        mounts.mount(<span class="string">"/mnt/sd"</span>, fat, <span class="bool-val">true</span>);
-<a href=#59 id=59 data-nosnippet>59</a>        mounts.mount(<span class="string">"/bin"</span>, binov, <span class="bool-val">false</span>);
+<a href=#57 id=57 data-nosnippet>57</a>        </span>mounts.mount(<span class="string">"/data"</span>, lfs);
+<a href=#58 id=58 data-nosnippet>58</a>        mounts.mount(<span class="string">"/mnt/sd"</span>, fat);
+<a href=#59 id=59 data-nosnippet>59</a>        mounts.mount(<span class="string">"/bin"</span>, binov);
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="comment">// /srv: RedoxFS CoW B-tree filesystem on MBR partition P5.
 <a href=#61 id=61 data-nosnippet>61</a>        // Degrades gracefully to empty/false if P5 is unformatted (see
 <a href=#62 id=62 data-nosnippet>62</a>        // docs/specs/09b-vfs-native-fs-adr.md and scripts/mksrv-img.sh).
 <a href=#63 id=63 data-nosnippet>63</a>        </span><span class="kw">let </span>srv = mounts.add_backend(Box::new(RedoxFsBackend::mount(<span class="string">"/srv"</span>)));
-<a href=#64 id=64 data-nosnippet>64</a>        mounts.mount(<span class="string">"/srv"</span>, srv, <span class="bool-val">true</span>);
+<a href=#64 id=64 data-nosnippet>64</a>        mounts.mount(<span class="string">"/srv"</span>, srv);
 <a href=#65 id=65 data-nosnippet>65</a>
 <a href=#66 id=66 data-nosnippet>66</a>        <span class="self">Self </span>{
 <a href=#67 id=67 data-nosnippet>67</a>            mounts,
