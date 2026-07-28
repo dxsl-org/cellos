@@ -63,6 +63,7 @@ CLAUDE.md
 *.img
 /kernel/src/embedded-hv/
 /kernel/src/embedded-shell-test/
+/kernel/src/embedded-srv-test/
 
 # Accidentally-created disk images from script invocations (e.g. gen_disk.ps1 --help)
 --help

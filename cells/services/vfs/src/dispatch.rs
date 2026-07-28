@@ -99,6 +99,12 @@ pub fn handle_request<'a>(
         }
 
         api::ipc::VfsRequest::Rmdir(p) => {
+            let owner = types::CellId(sender as u64);
+            // Destructive: authorize before touching the backend.  A path the caller
+            // may not write is a path it may not delete.
+            if !vfs.access.can_write(owner, p) {
+                return api::ipc::VfsResponse::Err(3);
+            }
             // Verifies the target IS a directory — POSIX ENOTDIR semantics.
             if vfs.rmdir(p) {
                 api::ipc::VfsResponse::Ok
@@ -108,11 +114,16 @@ pub fn handle_request<'a>(
         }
 
         api::ipc::VfsRequest::Unlink(p) => {
+            let owner = types::CellId(sender as u64);
+            // Authorize BEFORE `file_size`: an unauthorized caller must learn nothing,
+            // not even whether the file exists or how large it is.
+            if !vfs.access.can_write(owner, p) {
+                return api::ipc::VfsResponse::Err(3);
+            }
             // Capture file size before deletion for quota release.
             let file_size = vfs.file_size(p);
             if vfs.unlink(p) {
                 // Release the quota that was charged when the file was written.
-                let owner = types::CellId(sender as u64);
                 vfs.quota.release(owner, file_size);
                 api::ipc::VfsResponse::Ok
             } else {
@@ -122,6 +133,12 @@ pub fn handle_request<'a>(
 
         api::ipc::VfsRequest::RmdirRecursive(p) => {
             let owner = types::CellId(sender as u64);
+            // Authorize BEFORE `collect_dir_bytes`: that walk lists the whole subtree,
+            // so checking after it would leave a directory-size probe open to callers
+            // who may not write the path.
+            if !vfs.access.can_write(owner, p) {
+                return api::ipc::VfsResponse::Err(3);
+            }
             // Compute bytes to release BEFORE deletion: rmdir_recursive returns
             // only bool (adding a bytes-freed value to FsBackend would be a Law 1
             // ABI change).  Walk the subtree via list+file_size while it still exists.
@@ -198,24 +215,23 @@ pub fn handle_request<'a>(
             grant,
             bytes,
         } => {
-            // TODO(Phase 04): wire quota check here (can_charge → charge) using the
-            // same net-delta pattern as the Write arm before routing cap→path.
-            let _ = (cap, offset); // path routing via cap table deferred to Phase 04
-            match ostd::syscall::sys_grant_slice(grant) {
-                None => api::ipc::VfsResponse::Err(1),
-                Some(ptr) => {
-                    let n = bytes.min(4096);
-                    // SAFETY: ptr is a valid identity-mapped grant buffer filled
-                    // by the app before GrantShare + WriteGrant IPC.
-                    let data = unsafe { core::slice::from_raw_parts(ptr as *const u8, n) };
-                    // Phase 02 stub: data available in `data` slice.
-                    // Full routing via cap→path lookup deferred to Phase 04.
-                    let _ = data;
-                    // F14: GrantDone sent only AFTER reading the grant buffer
-                    // (ipc_call blocks, so app cannot free it prematurely).
-                    api::ipc::VfsResponse::GrantDone { bytes: n }
-                }
-            }
+            // FAIL-CLOSED until cap→path routing exists.
+            //
+            // This arm cannot resolve the target path from `cap`, so it cannot run
+            // `access.can_write` — and an unauthorizable write must be refused, not
+            // performed.  It previously drained the grant, dropped the bytes, and
+            // replied `GrantDone { bytes }`: a success report for a write that never
+            // happened, with no authorization check anywhere on the path.  Reporting
+            // success for a discarded write is worse than refusing: a caller cannot
+            // distinguish it from a real write, and wiring the routing later would
+            // silently turn the same unchecked path into real disk writes.
+            //
+            // Refuse before touching the grant — nothing is read, so there is no
+            // F14 drain obligation and no `unsafe` needed here.  When cap→path
+            // routing lands, authorize with `can_write` (and charge quota with the
+            // net-delta pattern from the `Write` arm) BEFORE writing anything.
+            let _ = (cap, offset, grant, bytes);
+            api::ipc::VfsResponse::Err(3)
         }
 
         api::ipc::VfsRequest::ReadFileGrant { path, grant, max } => {

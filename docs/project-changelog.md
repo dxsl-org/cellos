@@ -49,6 +49,61 @@ all three targets. Plan: `.agents/260726-full-utility-suite/`.
 
 ---
 
+## [2026-07-27] VFS destructive ops were unauthorized; `WriteGrant` reported success for discarded writes
+
+### `Unlink` / `Rmdir` / `RmdirRecursive` never consulted `AccessTable`
+`cells/services/vfs/src/dispatch.rs` gated `Write`, `Append`, and `Mkdir` behind
+`access.can_write()` but called straight into the backend for all three destructive ops, so the
+`/` rule (`allow_write_all: false`) was never evaluated on any delete path. `/readme.txt` — a real
+pre-seeded RamFS file under that read-only prefix, on a backend that does implement `unlink` — was
+genuinely deletable by any cell. `/bin/` was not exploitable: `BinOverlay` returns `false` from
+every mutating method, so deletes there already failed at the backend with `Err(1)` — a backend
+refusal, not an authorization one. Each op now authorizes before touching the backend, and
+deliberately before its auxiliary reads too: `Unlink` checks before `file_size`, and
+`RmdirRecursive` before `collect_dir_bytes`, so an unauthorized caller cannot use either as an
+existence or subtree-size probe.
+
+### `WriteGrant` was a stub that replied `GrantDone` for a write it threw away
+The arm drained the caller's grant, dropped the bytes, and reported success — with no authorization
+anywhere on the path, and no way to add one, since it cannot resolve a target path from `cap` and
+so cannot call `can_write`. It is now fail-closed (`Err(3)`), refusing before it touches the grant;
+the `unsafe` block that read the discarded buffer is gone. Reporting success for a write that never
+landed is worse than refusing: callers cannot distinguish it, and wiring cap→path routing later
+would have silently promoted the same unchecked path to real disk writes. No caller was affected —
+`ostd::fs::write_all` (the only route to this op) has no callers.
+
+### `MountEntry::writable` deleted rather than enforced
+The field was stored and never read (`#[allow(dead_code)]`, doc-commented as "informational"), and
+its values nearly duplicated the `AccessTable` prefix rules. A third half-wired authorization source
+can drift from the other two while still reading as enforcement, so it was removed along with
+`mount()`'s third parameter. Write authorization now has exactly two homes: policy in `AccessTable`
+(consulted in `dispatch`) and structure in the backend (e.g. `BinOverlay`).
+
+### Verification — negative control included
+VFS suite: 36 PASS / 0 FAIL on riscv64 QEMU, including five new assertions in the `vfs-test` cell
+(`/readme.txt` refused and surviving, `Rmdir`/`RmdirRecursive` under `/` refused before the backend,
+`WriteGrant` fail-closed); 31 pre-existing assertions unchanged. `cargo clippy -D warnings` clean on
+`service-vfs` and `app-vfs-test`, and on the whole riscv64 workspace.
+
+Reverting `dispatch.rs` to its pre-fix state and rebuilding gives **31 PASS / 5 FAIL** — exactly the
+five new assertions and nothing else. Decisively, `[FAIL] /readme.txt survived the refused unlink`
+means the file was genuinely deleted, so the hole was real and reachable, not theoretical; and
+`Rmdir`/`RmdirRecursive`/`WriteGrant` each returned code 1 instead of 3, confirming the ungated paths
+reached the backend rather than an authorization decision. Restoring the gates returns 36/36.
+
+That control was blocked when the fix was first written: reverting produced an image the kernel could
+not read (`/bin/vfs not in VIFS1`), which reproduced with the fix restored too. Root cause found and
+fixed in `scripts/build-test-hooks-ci.sh` — under Git Bash, MSYS rewrote every `/bin/...` DESTINATION
+argument to `mkfat32.py` into a Windows path, so the image was well-formed but contained
+`C:/Program Files/Git/bin/...` instead of `/bin/*`; `inspect_fat.py` showed a root directory literally
+named `C:`. The script now sets `MSYS2_ARG_CONV_EXCL='*'`, probes for a real interpreter (bare
+`python3` on Windows is the Microsoft Store alias stub), keeps its temp dir under `target/` instead of
+handing a POSIX `mktemp -d` path to a native Windows Python, and asserts `/bin/vfs-test` is present in
+the finished image — the same guards `build-shell-test-ci.sh` already carried. `build-srv-test-ci.sh`
+and `build-boot-ramdisk-ci.sh` still lack them.
+
+---
+
 ## [2026-07-25] Tier 3b VirtIO-GPU host stack code-complete; strict Linux DRM/E2E remains hardware-gated
 
 ### Status

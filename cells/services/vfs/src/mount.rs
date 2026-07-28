@@ -13,10 +13,6 @@ use crate::backend::FsBackend;
 struct MountEntry {
     prefix: &'static str,
     backend: usize,
-    /// Informational until AccessTable rules are mount-driven (Milestone 2.1-3);
-    /// actual write authorization lives in AccessTable + backend structural rules.
-    #[allow(dead_code)]
-    writable: bool,
 }
 
 pub struct MountTable {
@@ -38,12 +34,15 @@ impl MountTable {
         self.backends.len() - 1
     }
 
-    pub fn mount(&mut self, prefix: &'static str, backend: usize, writable: bool) {
-        self.entries.push(MountEntry {
-            prefix,
-            backend,
-            writable,
-        });
+    /// Bind `prefix` to a backend index.
+    ///
+    /// Mount points carry no write-permission flag: write authorization has exactly
+    /// two sources, and a third half-wired one would drift from them silently.
+    /// Policy ("may this cell write this path") is `AccessTable`, consulted in
+    /// `dispatch`; structure ("is this backend writable at all") is the backend
+    /// itself — e.g. `BinOverlay` returns `false` from every mutating method.
+    pub fn mount(&mut self, prefix: &'static str, backend: usize) {
+        self.entries.push(MountEntry { prefix, backend });
     }
 
     /// Boundary-aware prefix match: the next char after the prefix must be `/`

@@ -51,17 +51,17 @@ impl VfsManager {
             api::disk::PART_CELLSTORE_BASE_LBA,
         )));
         // Longest prefix wins: the specific mounts shadow the read-only root.
-        mounts.mount("/", ram, false);
-        mounts.mount("/tmp", ram, true);
+        mounts.mount("/", ram);
+        mounts.mount("/tmp", ram);
         #[cfg(feature = "littlefs")]
-        mounts.mount("/data", lfs, true);
-        mounts.mount("/mnt/sd", fat, true);
-        mounts.mount("/bin", binov, false);
+        mounts.mount("/data", lfs);
+        mounts.mount("/mnt/sd", fat);
+        mounts.mount("/bin", binov);
         // /srv: RedoxFS CoW B-tree filesystem on MBR partition P5.
         // Degrades gracefully to empty/false if P5 is unformatted (see
         // docs/specs/09b-vfs-native-fs-adr.md and scripts/mksrv-img.sh).
         let srv = mounts.add_backend(Box::new(RedoxFsBackend::mount("/srv")));
-        mounts.mount("/srv", srv, true);
+        mounts.mount("/srv", srv);
 
         Self {
             mounts,
