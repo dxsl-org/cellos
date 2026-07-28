@@ -583,7 +583,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     ))]
     {
         if task::thread_cap_selftest::self_test() {
-            log_info("thread-cap self-test PASS (thread-inherit + honest-revoke)");
+            log_info("thread-cap self-test PASS (thread-inherit + honest-revoke + spawn bound)");
         } else {
             log_info("thread-cap self-test FAIL");
         }

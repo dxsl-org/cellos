@@ -461,11 +461,31 @@ pub fn yield_cpu() {
     }
 }
 
-pub fn spawn(name: &str, cell_id: CellId, allowed_drivers: alloc::vec::Vec<usize>) -> usize {
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        sched.spawn(name, cell_id, allowed_drivers)
-    } else {
-        0
+/// Allocate a stack pair and register a task. `Err` on OOM — never a panic: this
+/// runs on the spawn path, and a panic there is a dead machine, not a failed call.
+pub fn spawn(
+    name: &str,
+    cell_id: CellId,
+    allowed_drivers: alloc::vec::Vec<usize>,
+) -> Result<usize, ViError> {
+    match SCHEDULER.lock().as_mut() {
+        Some(sched) => sched.spawn(name, cell_id, allowed_drivers),
+        None => Err(ViError::Unknown),
+    }
+}
+
+/// Register a task around a stack pair the caller already owns. See
+/// [`scheduler::Scheduler::spawn_with_stacks`] for why the caller allocates.
+pub fn spawn_with_stacks(
+    name: &str,
+    cell_id: CellId,
+    allowed_drivers: alloc::vec::Vec<usize>,
+    kstack: stack::Stack,
+    ustack: stack::Stack,
+) -> Result<usize, ViError> {
+    match SCHEDULER.lock().as_mut() {
+        Some(sched) => Ok(sched.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack)),
+        None => Err(ViError::Unknown),
     }
 }
 
@@ -475,11 +495,10 @@ pub fn spawn_with_arg(
     allowed_drivers: alloc::vec::Vec<usize>,
     entry: VAddr,
     arg: usize,
-) -> usize {
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        sched.spawn_thread(name, cell_id, allowed_drivers, entry, arg)
-    } else {
-        0
+) -> Result<usize, ViError> {
+    match SCHEDULER.lock().as_mut() {
+        Some(sched) => sched.spawn_thread(name, cell_id, allowed_drivers, entry, arg),
+        None => Err(ViError::Unknown),
     }
 }
 
@@ -576,25 +595,23 @@ pub fn spawn_from_mem(
     let kstack_top = kstack.top;
     let user_stack_top = ustack.top;
 
-    // 6. Spawn Task — creates scheduler entry.  Resources above drop on failure.
-    let tid = spawn(name, cell_id, allowed_drivers);
-    if tid == 0 {
-        // segments/kstack/ustack all drop here → frames, VA slot, stacks freed ✅
-        return Err(ViError::Unknown);
-    }
+    // 6. Spawn Task — creates scheduler entry and takes ownership of the stacks
+    //    allocated in step 5. Handing them over instead of letting the scheduler
+    //    allocate its own pair is what keeps this path to ONE contiguous run per
+    //    stack: the scheduler's pair used to be overwritten and dropped right
+    //    here, so each spawn asked the allocator for four 65-frame runs and kept
+    //    two. `segments` still drops on failure below.
+    let tid = spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack)?;
 
-    // 7. Wire pre-allocated resources into the task under the scheduler lock.
-    //    Option::take() transfers ownership; untaken Somes drop at end of scope.
+    // 7. Wire the remaining pre-allocated resources into the task under the
+    //    scheduler lock. Option::take() transfers ownership; untaken Somes drop at
+    //    end of scope.
     let mut segments_o = Some(segments);
-    let mut kstack_o = Some(kstack);
-    let mut ustack_o = Some(ustack);
     let mut setup_ok = false;
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             log::info!("Spawn: Setting up context for Task {}...", tid);
             task.segment_mem = segments_o.take();
-            task.kernel_stack = kstack_o.take();
-            task.user_stack = ustack_o.take();
             task.trap_frame.sepc = entry_va as _;
             task.trap_frame.sstatus = 0x20; // placeholder; overwritten per-arch below
 
@@ -1646,11 +1663,18 @@ pub fn spawn_synthetic(
 ) -> core::result::Result<usize, ViError> {
     // use hal::paging::PAGE_SIZE;
 
-    // 1. Spawn Task (Allocates stack, etc.)
-    let tid = spawn(name, cell_id, alloc::vec::Vec::new());
-    if tid == 0 {
-        return Err(ViError::Unknown);
-    }
+    // 1. Allocate the stacks, then register the task around them.
+    //
+    // This used to call `spawn()` (which allocated a pair) and then allocate a
+    // SECOND pair inside the scheduler-lock section below, overwriting the first.
+    // Beyond the wasted pair, the failure ordering was wrong: the task was already
+    // inserted and runnable when the second allocation could still fail, so an OOM
+    // there returned `Err` and left a half-built task in the scheduler forever.
+    let kstack = stack::Stack::new_kernel(STACK_PAGES)?;
+    let ustack = stack::Stack::new_user(STACK_PAGES)?;
+    let kstack_top = kstack.top;
+    let user_stack_top = ustack.top;
+    let tid = spawn_with_stacks(name, cell_id, alloc::vec::Vec::new(), kstack, ustack)?;
 
     // 2. Map Code Page at 'entry'
     {
@@ -1716,25 +1740,8 @@ pub fn spawn_synthetic(
             task.trap_frame.sepc = entry as _;
             task.trap_frame.sstatus = 0x20; // User Mode (SPIE=1, SPP=0)
 
-            // Allocate Kernel Stack
-            let kstack = match crate::task::stack::Stack::new_kernel(STACK_PAGES) {
-                Ok(s) => s,
-                Err(_) => return Err(ViError::OutOfMemory),
-            };
-
-            // Allocate User Stack
-            let ustack = match crate::task::stack::Stack::new_user(STACK_PAGES) {
-                Ok(s) => s,
-                Err(_) => return Err(ViError::OutOfMemory),
-            };
-
-            // Use Stacks
-            let kstack_top = kstack.top;
-            let user_stack_top = ustack.top;
-
-            task.kernel_stack = Some(kstack);
-            task.user_stack = Some(ustack);
-
+            // Stacks are already owned by the task (step 1) — nothing to allocate
+            // here, so this section can no longer fail partway and abandon a task.
             let tf_ptr = kstack_top - TRAP_FRAME_SIZE;
             task.trap_frame.regs[2] = user_stack_top as _; // User SP
 

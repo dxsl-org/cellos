@@ -93,6 +93,16 @@ pub enum AuditEvent {
     /// `MAINTENANCE_PERMITTED` flag in the signed policy. Payload:
     /// `encode_u32x2(tid, 0)`; the path is logged separately via `log::warn!`.
     PolicyMaintenanceBypass = 24,
+    /// A cell hit `MAX_THREADS_PER_CELL` and its `spawn_thread` was refused.
+    /// Payload: `encode_u32x2(cell_id, live_task_count)`. Refusing is the correct
+    /// outcome, but a cell hitting the cap repeatedly is either leaking threads or
+    /// probing for the allocator-fragmentation DoS this cap closes.
+    ///
+    /// Numbered 25 rather than 23: this variant and the two above were authored on
+    /// parallel branches that each claimed 23. The discriminant is the byte written
+    /// into the ring, so a collision would leave two unrelated events
+    /// indistinguishable to anything that decodes the log.
+    ThreadCapReached = 25,
 }
 
 struct AuditRing {

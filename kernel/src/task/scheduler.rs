@@ -6,6 +6,14 @@ use core::task::{Context, Poll};
 use log::info;
 use types::*;
 
+/// Upper bound on live tasks sharing one `CellId` — the cell's own task plus its
+/// threads. Each costs a contiguous run of `STACK_PAGES + 1` frames that cannot be
+/// satisfied from fragmented memory, so this is a fragmentation bound, not a
+/// fairness one. Chosen well above any current cell's use (no cell spawns threads
+/// today; `ostd` exposes `sys_spawn` but nothing calls it) and far below the point
+/// where 65-frame runs stop being findable.
+pub const MAX_THREADS_PER_CELL: usize = 32;
+
 /// Read the currently-executing cell ID (0 = kernel).
 ///
 /// Delegates to `hart_local` which reads the per-hart `current_cell_id` field
@@ -180,21 +188,43 @@ impl Scheduler {
         // No-op on non-riscv64 targets.
     }
 
+    /// Allocate a stack pair and register a task around it.
+    ///
+    /// Prefer [`Self::spawn_with_stacks`] from the cell-spawn path, which already
+    /// owns its stacks — calling this there allocated a second pair that was
+    /// overwritten and dropped a few lines later.
     pub fn spawn(
         &mut self,
         name: &str,
         cell_id: CellId,
         allowed_drivers: alloc::vec::Vec<usize>,
+    ) -> Result<usize, ViError> {
+        let pages = crate::task::STACK_PAGES;
+        let kstack = crate::task::stack::Stack::new_kernel(pages)?;
+        let ustack = crate::task::stack::Stack::new_user(pages)?;
+        Ok(self.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack))
+    }
+
+    /// Register a task around stacks the caller already owns.
+    ///
+    /// Taking the stacks by value keeps the cell-spawn path's ordering guarantee:
+    /// it allocates every per-task resource *before* touching the scheduler, so a
+    /// failure unwinds through `Drop` without a half-built task ever being
+    /// reachable. Allocating here as well would break that, and did — the pair
+    /// this function used to allocate was overwritten by the caller's pair
+    /// immediately after, so every cell spawn demanded 4 contiguous 65-frame runs
+    /// and used 2.
+    pub fn spawn_with_stacks(
+        &mut self,
+        name: &str,
+        cell_id: CellId,
+        allowed_drivers: alloc::vec::Vec<usize>,
+        kstack: crate::task::stack::Stack,
+        ustack: crate::task::stack::Stack,
     ) -> usize {
         let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
         task.state = TaskState::Ready;
         let id = task.id;
-
-        // Stack Size: 8 Frames (32KB)
-        use crate::task::STACK_PAGES as STACK_FRAMES;
-
-        // Allocate Kernel Stack
-        let kstack = crate::task::stack::Stack::new_kernel(STACK_FRAMES).expect("OOM Stack");
 
         // Stack grows DOWN. Top is at end of region.
         let stack_top = kstack.top;
@@ -202,22 +232,25 @@ impl Scheduler {
 
         // Zero the usable stack pages. Skip the guard frame at `stack_base` (it is
         // unmapped — a write there faults); the usable region starts one page above
-        // base and spans exactly STACK_FRAMES pages. (The old code zeroed from base,
-        // which clobbered the guard AND missed the top usable page.)
-        // SAFETY: we own these freshly-allocated, mapped frames exclusively.
+        // base and spans exactly `kstack.pages` pages.
+        //
+        // The length comes from the Stack we were handed, never from a constant:
+        // with a constant, handing in a smaller stack writes past its end, and in
+        // a single address space that lands in another cell's frames with no fault
+        // and no log.
+        // SAFETY: we own these freshly-allocated, mapped frames exclusively, and
+        // the range is exactly the usable extent this Stack reports.
         unsafe {
             core::ptr::write_bytes(
                 (stack_base + crate::memory::paging::PAGE_SIZE) as *mut u8,
                 0,
-                STACK_FRAMES * crate::memory::paging::PAGE_SIZE,
+                kstack.pages * crate::memory::paging::PAGE_SIZE,
             );
         }
 
         let entry = task_entry_point as *const () as usize;
         let (_gp, _tp) = crate::task::get_kernel_gp_tp();
 
-        // Allocate User Stack
-        let ustack = crate::task::stack::Stack::new_user(STACK_FRAMES).expect("OOM User Stack");
         let ustack_top = ustack.top;
 
         task.context.sp = stack_top as _;
@@ -253,6 +286,13 @@ impl Scheduler {
         id
     }
 
+    /// Spawn an additional thread inside an existing cell.
+    ///
+    /// Bounded per cell: a thread costs a contiguous run of `STACK_PAGES + 1`
+    /// frames, and `Syscall::Spawn` is gated only by the syscall allowlist, not by
+    /// `SpawnCap`. Without a bound, an unprivileged cell could loop here until the
+    /// allocator fragmented — which used to `.expect` and take the whole kernel
+    /// down with it, so never-die was breakable from userspace.
     pub fn spawn_thread(
         &mut self,
         name: &str,
@@ -260,28 +300,40 @@ impl Scheduler {
         allowed_drivers: alloc::vec::Vec<usize>,
         entry: usize,
         arg: usize,
-    ) -> usize {
+    ) -> Result<usize, ViError> {
+        let live = self.tasks.values().filter(|t| t.cell_id == cell_id).count();
+        if live >= MAX_THREADS_PER_CELL {
+            log::warn!(
+                "[sched] cell {:?} at thread cap ({}) — refusing spawn_thread",
+                cell_id,
+                MAX_THREADS_PER_CELL
+            );
+            crate::audit::log_event(
+                crate::audit::AuditEvent::ThreadCapReached,
+                &crate::audit::encode_u32x2(cell_id.0 as u32, live as u32),
+            );
+            return Err(ViError::OutOfMemory);
+        }
+
         let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
         task.state = TaskState::Ready;
         let id = task.id;
 
-        use crate::task::STACK_PAGES as STACK_FRAMES;
-
-        // Allocate Kernel Stack
-        let kstack = crate::task::stack::Stack::new_kernel(STACK_FRAMES).expect("OOM Stack");
+        let kstack = crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES)?;
 
         let stack_top = kstack.top;
         let stack_base = kstack.base;
+        let kstack_pages = kstack.pages;
 
         // SAFETY: We own the allocated stack memory exclusively. The pointer is valid.
         // Setting up task context with valid register values for thread initialization.
         unsafe {
-            // Skip the guard frame at `stack_base` (unmapped); zero only the
-            // STACK_FRAMES usable pages that begin one page above base.
+            // Skip the guard frame at `stack_base` (unmapped); zero exactly the
+            // usable extent this Stack reports, never a constant.
             core::ptr::write_bytes(
                 (stack_base + crate::memory::paging::PAGE_SIZE) as *mut u8,
                 0,
-                STACK_FRAMES * crate::memory::paging::PAGE_SIZE,
+                kstack_pages * crate::memory::paging::PAGE_SIZE,
             );
 
             let (_gp, _tp) = crate::task::get_kernel_gp_tp();
@@ -333,7 +385,7 @@ impl Scheduler {
         self.tasks.insert(id, task);
         self.push_ready(id);
         self.next_task_id += 1;
-        id
+        Ok(id)
     }
 
     /// Reap a task: move it to the zombie list, purge ready queues, unblock

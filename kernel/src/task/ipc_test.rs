@@ -5,6 +5,21 @@
 use alloc::vec::Vec;
 use log::info;
 
+/// Spawn a scenario task, or `None` if the spawn failed.
+///
+/// These harnesses have no recovery path — a scenario that cannot spawn its tasks
+/// cannot run — so the caller returns early rather than reporting on tasks that do
+/// not exist.
+fn spawn_or_skip(name: &str) -> Option<usize> {
+    match super::spawn(name, types::CellId(0), Vec::new()) {
+        Ok(id) => Some(id),
+        Err(e) => {
+            info!("IPC test: spawn '{}' failed ({:?}) — scenario skipped", name, e);
+            None
+        }
+    }
+}
+
 /// Test Scenario 1: Simple Ping-Pong
 /// - Task A sends "PING" to Task B
 /// - Task B receives, replies with "PONG"
@@ -13,11 +28,15 @@ pub fn test_ping_pong() {
     info!("=== IPC Test: Ping-Pong ===");
 
     // Spawn Task B (Server)
-    let server_id = super::spawn("ipc-server", types::CellId(0), Vec::new());
+    let Some(server_id) = spawn_or_skip("ipc-server") else {
+        return;
+    };
     info!("Spawned Server: Task {}", server_id);
 
     // Spawn Task A (Client)
-    let client_id = super::spawn("ipc-client", types::CellId(0), Vec::new());
+    let Some(client_id) = spawn_or_skip("ipc-client") else {
+        return;
+    };
     info!("Spawned Client: Task {}", client_id);
 
     // In simulation, we can't actually run these tasks in parallel
@@ -38,8 +57,12 @@ pub fn test_ping_pong() {
 pub fn test_borrow_read() {
     info!("=== IPC Test: Borrow Read ===");
 
-    let lender_id = super::spawn("lender", types::CellId(0), Vec::new());
-    let borrower_id = super::spawn("borrower", types::CellId(0), Vec::new());
+    let Some(lender_id) = spawn_or_skip("lender") else {
+        return;
+    };
+    let Some(borrower_id) = spawn_or_skip("borrower") else {
+        return;
+    };
 
     info!("Lender: Task {}", lender_id);
     info!("Borrower: Task {}", borrower_id);
@@ -56,12 +79,16 @@ pub fn test_borrow_read() {
 pub fn test_multiple_clients() {
     info!("=== IPC Test: Multiple Clients ===");
 
-    let _server_id = super::spawn("multi-server", types::CellId(0), Vec::new());
+    if spawn_or_skip("multi-server").is_none() {
+        return;
+    }
 
     for i in 0..3 {
         use alloc::string::ToString;
         let name = alloc::string::String::from("client-") + &i.to_string();
-        let client_id = super::spawn(&name, types::CellId(0), Vec::new());
+        let Some(client_id) = spawn_or_skip(&name) else {
+            return;
+        };
         info!("Client {}: Task {}", i, client_id);
     }
 

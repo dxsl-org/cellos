@@ -48,37 +48,16 @@ impl Stack {
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         let allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
 
-        // 1. Allocate contiguous frames
-        // Note: Our simple allocator returns single frames.
-        // We need contiguous VIRTUAL memory.
-        // In Identity Mapping (SAS), Physical Contiguity = Virtual Contiguity.
-        // So we need contiguous physical frames if we rely on simple pointer arithmetic.
-        // However, `paging::map_page` maps arbitrary PAddr to VAddr.
-        // BUT, our current `frame::FrameAllocator` (bitmap) might not guarantee contiguous frames.
-        // And we don't have a virtual memory allocator (VMA) yet.
+        // A stack must be ONE contiguous run of frames, and that is a consequence of
+        // SAS rather than a shortcut: everything is identity-mapped (VA == PA) and
+        // there is no virtual-address allocator, so virtual contiguity can only come
+        // from physical contiguity.
         //
-        // TEMPORARY SOLUTION:
-        // We assume we can get contiguous frames OR we are mapping to Identity.
-        // For now, we try to allocate one by one.
-        // Wait, if we use Identity Mapping for Kernel, we MUST have contiguous physical frames.
-        //
-        // If we are mapping User Stack, we can map arbitrary frames to contiguous Virtual Addresses?
-        // No, we don't have a Virtual Address Allocator yet.
-        // We are using Identity Mapping for everything currently (SAS).
-        // So we MUST find a contiguous run of physical pages.
-        //
-        // Our `FrameAllocator` (likely a simple bump or bitmap) needs to support range allocation.
-        // Looking at `kernel/src/memory/frame.rs` (not read yet, but assuming simple).
-        //
-        // Let's assume we can just call `allocate_frame` N times and check contiguity?
-        // No, that's brittle.
-        //
-        // Let's rely on the fact that currently `allocate_frame` is likely linear.
-        //
-        // Refactoring: We will allocate the FIRST frame as base.
-        // Then we hope subsequent calls are contiguous. If not, we panic/fail for now
-        // (until VMA is implemented).
-
+        // The cost: this can fail on a fragmented allocator while plenty of memory is
+        // free, and no amount of lazy commit helps — a guard page cannot make VA != PA.
+        // So callers must read `OutOfMemory` here as "no run this long exists right
+        // now", which is recoverable, and never as grounds to panic. Lifting the
+        // constraint means adding a VA allocator so stack pages can be scattered.
         let base_frame = allocator
             .allocate_contiguous(total_pages)
             .ok_or(ViError::OutOfMemory)?;
