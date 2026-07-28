@@ -897,6 +897,18 @@ fn network_wget_downloads_to_vfs() {
     qemu.wait_for("ViCell >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt after wget: {e}\n{}", qemu.dump()));
 
+    // Same 500 ms guard this test already uses before its first send_line, and that
+    // five other tests in this file use before theirs. Seeing "ViCell >" on the serial
+    // line does NOT mean the shell has posted its receive buffer, and until it does the
+    // input cell's try_send DROPS keystrokes — which surfaces as a typo rather than a
+    // dropped write: "vcat /tmp/x" arrives as "at /tmp/x" and the shell answers
+    // "command not found: at".
+    //
+    // This guards the harness, not the assertion. The underlying drop is a real guest
+    // bug (input → shell try_send has no queue) and is untouched by this line: measured
+    // at 2 of 6 runs on origin/main versus 1 of 6 here, so it predates these commits.
+    std::thread::sleep(Duration::from_millis(500));
+
     qemu.send_line("vcat /tmp/wget_out.txt");
     qemu.wait_for("HELLO", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vcat after wget: {e}\n{}", qemu.dump()));
