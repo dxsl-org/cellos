@@ -65,6 +65,9 @@ CLAUDE.md
 /kernel/src/embedded-shell-test/
 /kernel/src/embedded-srv-test/
 
+# Python bytecode from tools/ and scripts/ (mkfat32, inspect_fat, sign-policy)
+__pycache__/
+
 # Accidentally-created disk images from script invocations (e.g. gen_disk.ps1 --help)
 --help
 

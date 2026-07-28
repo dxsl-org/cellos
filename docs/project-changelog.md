@@ -4,6 +4,70 @@
 
 ---
 
+## [2026-07-28] POLICY.BIN v2 — the operator policy layer stops being a no-op
+
+### The state it was in
+`/POLICY.BIN` had never been baked into any image. Every device took the `Absent`
+branch, which is dev-permissive, so the entire signed-policy layer — loader, verifier,
+parser, narrowing rule — ran and then changed nothing. The `policy-required` posture
+existed but had no policy to require.
+
+Two things had to be true before baking one could be safe, and neither was:
+
+- **The blob could not express the three strongest capabilities.** `CAP_BYTES = 6`
+  covered block_io/network/spawn/hypervisor/mmio/regions but not `pcie_driver`,
+  `platform`, `supervisor`. The parser filled them with `..CapSet::EMPTY`, and because
+  `Permit` *intersects*, that is not "not granted" — it is **always stripped**. A blob
+  naming `/bin/block` would have killed the block driver.
+- **The shipped policy had four entries.** The real boot set is 23 paths, and one of
+  those four (`/bin/shell`) carried `mmio = 0`, which would have zeroed gpio|uart on
+  the shell — and, because a spawner's caps are the ceiling for its children, on every
+  peripheral demo the shell launches.
+
+### What shipped
+Layout v2 adds three cap bytes; v1 still parses, deliberately keeping its
+strip-the-privileged-caps behaviour so an old blob cannot silently widen authority.
+The new bytes take a stricter domain than the old ones — literal 0/1, not `!= 0` —
+because these are the caps that can DMA anywhere. Unknown version, unknown flag bit,
+and truncated entries are all parse failures rather than guesses.
+
+`maintenance-mode` is no longer a one-factor bypass. It now also requires a signed
+`MAINTENANCE_PERMITTED` flag in the policy, so an image built with the wrong feature
+flag no longer hands every cell every capability with nothing on the device to say so.
+The accepted cost: maintenance mode can no longer recover a device *from* a bad policy;
+that case falls to the `is_trusted_core` hatch, which keeps vfs/shell/net alive.
+
+Audit gained `PrivilegedCapGranted` and `PolicyMaintenanceBypass`. The `dropped`
+bitmask went from 4 bits to 9. Until now, *granting* DMA-anywhere authority left no
+trace at all — only losing it did.
+
+`sign-policy.py` emits all 23 entries and round-trip-decodes its own output with an
+independent decoder before writing, unconditionally. That gate is the point: a blob the
+kernel rejects becomes `DenyAll` for every path, and a "boot to prompt" check cannot
+catch it because the shell is trusted core and comes up regardless.
+
+### Verified
+`[policy] loaded + verified (23 entries)` — the first time the policy layer has done
+anything on a booted device. Behaviour-neutral: the boot log with the blob differs from
+the boot log without it by exactly one line, the policy line itself. Both postures boot;
+clippy `-D warnings` clean on all three architectures and five feature combinations.
+
+The enforcement is real, not inert: with the same kernel, image, and disk, a policy
+containing `/bin/block` gives `[virtio-blk] ready`, and a policy missing that one entry
+gives `[virtio-blk] no free device — exiting`.
+
+### Repaired on the way
+`policy::self_test` hardcoded the dev-permissive expectation for `NoEntry`, so **every**
+`policy-required` build failed its own power-on self-test — the posture where the check
+matters most — and the failure was advisory, so nothing ever stopped. Pre-existing.
+
+### Not covered
+Seven of the eight embedded images still ship without the blob (they stay on the
+`absent` → dev-permissive path, i.e. exactly today's behaviour). The three peripheral
+demos were not run from a shell prompt; the A/B log diff stands in for that check.
+A dev-signed blob only verifies while the kernel carries the default `dev-policy-key`
+feature — an image carrying this blob built without it would be `Invalid` → `DenyAll`.
+
 ## [2026-07-28] Full utility suite shipped (grep/sed/mini-AWK/top) + `GetProcs2` telemetry ABI
 
 ### What shipped

@@ -24,12 +24,32 @@ use alloc::vec::Vec;
 
 /// Magic "VPOL" as a little-endian u32 (bytes V,P,O,L).
 const MAGIC: u32 = u32::from_le_bytes(*b"VPOL");
-const VERSION: u8 = 1;
+/// v1: 6 cap bytes. Still parsed — a fleet mid-rollout may hold either.
+const VERSION_V1: u8 = 1;
+/// v2: 9 cap bytes; adds the three privileged path-caps so a policy can express
+/// them at all. Under v1 they parse as `false`, and since `Permit` *intersects*,
+/// that means a v1 entry silently STRIPS them — see `parse`.
+const VERSION_V2: u8 = 2;
 const SIG_LEN: usize = 64;
 const HEADER_LEN: usize = 8; // magic(4) + version(1) + flags(1) + entry_count(2)
-const CAP_BYTES: usize = 6; // block_io, network, spawn, hyp, mmio_devices, block_regions
+const CAP_BYTES_V1: usize = 6; // block_io, network, spawn, hyp, mmio_devices, block_regions
+const CAP_BYTES_V2: usize = 9; // + pcie_driver, platform, supervisor
 /// 8.3-safe, root-level path (VIFS1 uppercases + is FAT16 8.3).
 const POLICY_PATH: &str = "/POLICY.BIN";
+
+/// Signed header flags. Unknown bits → `Invalid` (a signed-but-malformed policy
+/// is still rejected).
+const FLAG_MAINTENANCE_PERMITTED: u8 = 1 << 0;
+const FLAGS_MASK: u8 = FLAG_MAINTENANCE_PERMITTED;
+
+/// Cap-byte count for a blob version, or `None` for an unknown version.
+const fn cap_bytes_for(version: u8) -> Option<usize> {
+    match version {
+        VERSION_V1 => Some(CAP_BYTES_V1),
+        VERSION_V2 => Some(CAP_BYTES_V2),
+        _ => None,
+    }
+}
 
 /// Valid `mmio_devices` bits and `block_regions` bits (domain-validation masks).
 const MMIO_MASK: u8 = DEV_GPIO | DEV_UART | DEV_PCIE;
@@ -70,8 +90,16 @@ struct PolicyEntry {
     caps: CapSet,
 }
 
+struct LoadedPolicy {
+    /// Signed header flags — see `FLAGS_MASK`. Read only after signature verify,
+    /// which is what makes `FLAG_MAINTENANCE_PERMITTED` a second factor rather
+    /// than a build-time switch.
+    flags: u8,
+    entries: Vec<PolicyEntry>,
+}
+
 enum PolicyState {
-    Loaded(Vec<PolicyEntry>),
+    Loaded(LoadedPolicy),
     Absent,
     Invalid,
 }
@@ -117,14 +145,18 @@ pub fn load_from_vifs1() {
     }
 
     match parse(body) {
-        Some(entries) => {
-            let n = entries.len() as u32;
-            log::info!("[policy] loaded + verified ({} entries)", n);
+        Some(loaded) => {
+            let n = loaded.entries.len() as u32;
+            log::info!(
+                "[policy] loaded + verified ({} entries, flags {:#04x})",
+                n,
+                loaded.flags
+            );
             crate::audit::log_event(
                 crate::audit::AuditEvent::PolicyLoaded,
-                &crate::audit::encode_u32x2(n, 0),
+                &crate::audit::encode_u32x2(n, loaded.flags as u32),
             );
-            *POLICY.lock() = Some(PolicyState::Loaded(entries));
+            *POLICY.lock() = Some(PolicyState::Loaded(loaded));
         }
         None => {
             log::warn!("[policy] malformed body — fail-closed");
@@ -143,12 +175,19 @@ fn mark_invalid(reason: u32) {
 
 /// Parse the (already signature-verified) body into entries. Panic-free: every
 /// read is bounds-checked; any malformation or out-of-domain cap bit → `None`.
-fn parse(body: &[u8]) -> Option<Vec<PolicyEntry>> {
+fn parse(body: &[u8]) -> Option<LoadedPolicy> {
     if body.len() < HEADER_LEN {
         return None;
     }
     let magic = u32::from_le_bytes([body[0], body[1], body[2], body[3]]);
-    if magic != MAGIC || body[4] != VERSION {
+    if magic != MAGIC {
+        return None;
+    }
+    // Version selects the per-entry stride; an unknown version is a parse failure,
+    // never a guess — misreading the stride would shift every subsequent field.
+    let cap_bytes = cap_bytes_for(body[4])?;
+    let flags = body[5];
+    if flags & !FLAGS_MASK != 0 {
         return None;
     }
     let count = u16::from_le_bytes([body[6], body[7]]) as usize;
@@ -163,9 +202,9 @@ fn parse(body: &[u8]) -> Option<Vec<PolicyEntry>> {
         let path_bytes = body.get(off..off.checked_add(path_len)?)?;
         let path = core::str::from_utf8(path_bytes).ok()?;
         off += path_len;
-        // 6 cap bytes
-        let caps_raw = body.get(off..off.checked_add(CAP_BYTES)?)?;
-        off += CAP_BYTES;
+        // cap bytes (6 in v1, 9 in v2)
+        let caps_raw = body.get(off..off.checked_add(cap_bytes)?)?;
+        off += cap_bytes;
 
         let mmio_devices = caps_raw[4];
         let block_regions = caps_raw[5];
@@ -173,6 +212,25 @@ fn parse(body: &[u8]) -> Option<Vec<PolicyEntry>> {
         if mmio_devices & !MMIO_MASK != 0 || block_regions & !REGION_MASK != 0 {
             return None;
         }
+        // The three privileged path-caps exist only in v2. In v1 they parse as
+        // `false`, which — because `Permit` intersects — means a v1 entry STRIPS
+        // them from any cell it names. That is the v1 behaviour, preserved
+        // deliberately: changing it would widen authority on an old blob.
+        //
+        // Stricter domain than the four bools above: these are the caps that can
+        // DMA anywhere, so anything other than a literal 0/1 is a malformed blob
+        // rather than something to coerce with `!= 0`. The older bools keep
+        // `!= 0` because tightening them could reject a v1 blob that boots today,
+        // and a rejected blob is `DenyAll` — a brick, not a safe default.
+        let (pcie_driver, platform, supervisor) = if cap_bytes == CAP_BYTES_V2 {
+            let (p, pl, s) = (caps_raw[6], caps_raw[7], caps_raw[8]);
+            if p > 1 || pl > 1 || s > 1 {
+                return None;
+            }
+            (p == 1, pl == 1, s == 1)
+        } else {
+            (false, false, false)
+        };
         entries.push(PolicyEntry {
             path: String::from(path),
             caps: CapSet {
@@ -182,14 +240,13 @@ fn parse(body: &[u8]) -> Option<Vec<PolicyEntry>> {
                 hypervisor: caps_raw[3] != 0,
                 mmio_devices,
                 block_regions,
-                // The operator-policy blob has no fields for the privileged
-                // path-caps; they are never policy-granted (P-TRUST folds them
-                // into the spawner-ceiling intersection, not the policy one).
-                ..CapSet::EMPTY
+                pcie_driver,
+                platform,
+                supervisor,
             },
         });
     }
-    Some(entries)
+    Some(LoadedPolicy { flags, entries })
 }
 
 /// Self-test of the full signed-policy path: verify + parse a known dev-signed
@@ -220,13 +277,22 @@ pub fn self_test() -> bool {
     if !crate::ed25519::verify(&DEV_FLEET_PUBKEY, body, &s) {
         return false;
     }
-    let Some(entries) = parse(body) else {
+    let Some(v1) = parse(body) else {
         return false;
     };
-    let Some(vfs) = entries.iter().find(|e| e.path == "/bin/vfs") else {
+    let Some(vfs) = v1.entries.iter().find(|e| e.path == "/bin/vfs") else {
         return false;
     };
     if !vfs.caps.block_io || vfs.caps.block_regions != 0b111 {
+        return false;
+    }
+    // v1 has no privileged bytes: they parse false, and because Permit intersects
+    // that means a v1 entry STRIPS them. Pinned so the compat path cannot silently
+    // start granting authority a v1 operator never wrote.
+    if vfs.caps.pcie_driver || vfs.caps.platform || vfs.caps.supervisor {
+        return false;
+    }
+    if !v2_parse_cases() {
         return false;
     }
     // 2. Tampered blob: a flipped body byte must FAIL verification.
@@ -263,8 +329,73 @@ pub fn self_test() -> bool {
     if decision_to_caps("/bin/vfs", full, PolicyDecision::DenyAll) != full {
         return false;
     }
-    // NoEntry (dev-permissive default) → keeps caps.
-    if decision_to_caps("/bin/app", full, PolicyDecision::NoEntry) != full {
+    // NoEntry is posture-dependent, so the expectation has to be too. This
+    // assertion used to hardcode `full`, which meant a `policy-required` build
+    // failed its own power-on self-test on every boot — the one posture where
+    // the check matters most, and the failure was advisory so nothing stopped.
+    #[cfg(not(feature = "policy-required"))]
+    let expect_no_entry = full;
+    #[cfg(feature = "policy-required")]
+    let expect_no_entry = CapSet::EMPTY;
+    if decision_to_caps("/bin/app", full, PolicyDecision::NoEntry) != expect_no_entry {
+        return false;
+    }
+    // Trusted core survives NoEntry in BOTH postures — that is the recovery hatch
+    // that keeps a fail-closed misfire from bricking a headless device.
+    if decision_to_caps("/bin/vfs", full, PolicyDecision::NoEntry) != full {
+        return false;
+    }
+    true
+}
+
+/// v2 layout coverage for `self_test`, exercised at the `parse` level: these check
+/// stride and domain handling, which a signature cannot. Bodies are hand-built so
+/// the test does not have to be regenerated every time the shipped policy changes.
+fn v2_parse_cases() -> bool {
+    // magic | version=2 | flags=0 | count=1 | len=8 "/bin/vfs" | 9 cap bytes
+    const V2: [u8; 26] = [
+        0x56, 0x50, 0x4f, 0x4c, 0x02, 0x00, 0x01, 0x00, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x76,
+        0x66, 0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x07, 0x01, 0x00, 0x00,
+    ];
+    // Valid v2: the 9-byte stride is read correctly, and pcie_driver arrives.
+    let Some(p) = parse(&V2) else {
+        return false;
+    };
+    if p.flags != 0 || p.entries.len() != 1 {
+        return false;
+    }
+    let c = p.entries[0].caps;
+    if !c.block_io || c.block_regions != 0b111 || !c.pcie_driver || c.platform || c.supervisor {
+        return false;
+    }
+
+    // A privileged byte outside {0,1} → Invalid, not coerced to true.
+    let mut bad_priv = V2;
+    bad_priv[23] = 2;
+    if parse(&bad_priv).is_some() {
+        return false;
+    }
+    // mmio outside MMIO_MASK → Invalid (pre-existing rule, re-checked under v2).
+    let mut bad_mmio = V2;
+    bad_mmio[21] = 0xF0;
+    if parse(&bad_mmio).is_some() {
+        return false;
+    }
+    // Unknown flag bit → Invalid: flags gate the maintenance bypass, so an
+    // unrecognised one must not be ignored.
+    let mut bad_flags = V2;
+    bad_flags[5] = 0x02;
+    if parse(&bad_flags).is_some() {
+        return false;
+    }
+    // Unknown version → Invalid. Guessing the stride would misread every field.
+    let mut bad_ver = V2;
+    bad_ver[4] = 3;
+    if parse(&bad_ver).is_some() {
+        return false;
+    }
+    // Truncated entry (the 9-byte stride does not fit) → None, not a panic.
+    if parse(&V2[..V2.len() - 1]).is_some() {
         return false;
     }
     true
@@ -275,8 +406,8 @@ pub fn self_test() -> bool {
 pub fn lookup(path: &str) -> PolicyDecision {
     let guard = POLICY.lock();
     match guard.as_ref() {
-        Some(PolicyState::Loaded(entries)) => {
-            for e in entries {
+        Some(PolicyState::Loaded(loaded)) => {
+            for e in &loaded.entries {
                 if e.path == path {
                     return PolicyDecision::Permit(e.caps);
                 }
@@ -333,25 +464,63 @@ fn decision_to_caps(path: &str, caps: CapSet, decision: PolicyDecision) -> CapSe
 /// policy actually narrows the grant. `init` (Spawner::Root) is exempt and must
 /// NOT call this (subjecting the policy loader to the loaded policy is circular).
 pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
-    // Maintenance image: bypass policy narrowing entirely (field recovery).
+    // Maintenance bypass needs TWO factors: the build feature AND a signed
+    // `MAINTENANCE_PERMITTED` flag in the policy. A feature flag alone used to be
+    // enough, so one image built with the wrong flag granted every cell every cap
+    // with nothing on the device to say so.
+    //
+    // Consequence accepted: an absent or `Invalid` policy no longer permits the
+    // bypass, so maintenance mode cannot recover a device *from* a bad policy.
+    // The recovery path in that case is `is_trusted_core` — vfs/shell/net keep
+    // their caps even under `DenyAll`, which is enough to reach a prompt and
+    // re-provision.
     #[cfg(feature = "maintenance-mode")]
-    {
-        let _ = (path, tid);
-        caps
+    if maintenance_permitted() {
+        log::warn!("[policy] maintenance bypass ACTIVE for {}", path);
+        crate::audit::log_event(
+            crate::audit::AuditEvent::PolicyMaintenanceBypass,
+            &crate::audit::encode_u32x2(tid as u32, 0),
+        );
+        return caps;
     }
-    #[cfg(not(feature = "maintenance-mode"))]
-    {
-        let narrowed = decision_to_caps(path, caps, lookup(path));
-        if narrowed != caps {
-            let dropped = (caps.block_io && !narrowed.block_io) as u32
-                | (((caps.network && !narrowed.network) as u32) << 1)
-                | (((caps.spawn && !narrowed.spawn) as u32) << 2)
-                | (((caps.hypervisor && !narrowed.hypervisor) as u32) << 3);
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CapNarrowedByPolicy,
-                &crate::audit::encode_u32x2(tid as u32, dropped),
-            );
-        }
-        narrowed
+
+    let narrowed = decision_to_caps(path, caps, lookup(path));
+    if narrowed != caps {
+        let dropped = (caps.block_io && !narrowed.block_io) as u32
+            | (((caps.network && !narrowed.network) as u32) << 1)
+            | (((caps.spawn && !narrowed.spawn) as u32) << 2)
+            | (((caps.hypervisor && !narrowed.hypervisor) as u32) << 3)
+            | (((caps.pcie_driver && !narrowed.pcie_driver) as u32) << 4)
+            | (((caps.platform && !narrowed.platform) as u32) << 5)
+            | (((caps.supervisor && !narrowed.supervisor) as u32) << 6)
+            | (((caps.mmio_devices != narrowed.mmio_devices) as u32) << 7)
+            | (((caps.block_regions != narrowed.block_regions) as u32) << 8);
+        crate::audit::log_event(
+            crate::audit::AuditEvent::CapNarrowedByPolicy,
+            &crate::audit::encode_u32x2(tid as u32, dropped),
+        );
     }
+    // Audit the GRANT of privileged authority, not only its removal. Losing a cap
+    // is an availability problem and shows up as a broken cell; *keeping* one of
+    // these three is the security-relevant event, and until now it left no trace.
+    let granted = narrowed.pcie_driver as u32
+        | ((narrowed.platform as u32) << 1)
+        | ((narrowed.supervisor as u32) << 2);
+    if granted != 0 {
+        crate::audit::log_event(
+            crate::audit::AuditEvent::PrivilegedCapGranted,
+            &crate::audit::encode_u32x2(tid as u32, granted),
+        );
+    }
+    narrowed
+}
+
+/// Whether the loaded policy carries the signed maintenance-bypass flag.
+/// Absent / `Invalid` / not-yet-loaded → `false` (the bypass is opt-in and signed).
+#[cfg(feature = "maintenance-mode")]
+fn maintenance_permitted() -> bool {
+    matches!(
+        POLICY.lock().as_ref(),
+        Some(PolicyState::Loaded(p)) if p.flags & FLAG_MAINTENANCE_PERMITTED != 0
+    )
 }
