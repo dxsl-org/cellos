@@ -5,9 +5,7 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{
-    sys_lookup_service, sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult,
-};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
 
 /// Maximum accumulated response size (stack-allocated; avoids the 4 MB alloc BSS).
 const RESP_BUF: usize = 4096;
@@ -17,19 +15,12 @@ api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 #[no_mangle]
 pub fn main() {
     // ── Parse argv ───────────────────────────────────────────────────────────
-    let mut arg_buf = [0u8; 128];
-    let arg_len = sys_spawn_args(&mut arg_buf);
-    if arg_len == 0 {
+    let argv = ostd::args();
+    if argv.is_empty() {
         println("Usage: curl http://IP[:PORT][/path]");
         return;
     }
-    let url = match core::str::from_utf8(&arg_buf[..arg_len]) {
-        Ok(s) => s.trim(),
-        Err(_) => {
-            println("curl: bad args");
-            return;
-        }
-    };
+    let url = argv.first().map(|arg| arg.as_str()).unwrap_or("");
 
     // ── Parse URL ────────────────────────────────────────────────────────────
     let (host, port, path) = match parse_url(url) {

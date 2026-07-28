@@ -737,6 +737,7 @@ impl Scheduler {
             let mut action = WdAction::None;
             if let Some(task) = self.tasks.get_mut(&cid) {
                 if task.state == TaskState::Running {
+                    task.cpu_run_ticks = task.cpu_run_ticks.saturating_add(1);
                     // Only RealTime-priority tasks can livelock the system.
                     if task.priority >= api::TaskPriority::RealTime as u8 {
                         task.run_ticks = task.run_ticks.saturating_add(1);

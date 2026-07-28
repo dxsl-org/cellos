@@ -12,6 +12,7 @@ use crate::{
     psci, timer,
     virtio_blk::BlkDisk,
     virtio_console::Console,
+    virtio_gpu::GpuDev,
     virtio_mmio::{self, VirtioMmio},
     virtio_net::NetDev,
     vmm,
@@ -19,7 +20,7 @@ use crate::{
 use api::hypervisor::ViVmExit;
 use api::syscall::service;
 use ostd::io::println;
-use ostd::syscall::sys_lookup_service;
+use ostd::syscall::{sys_get_resolution, sys_lookup_service};
 
 pub enum RunOutcome {
     Shutdown,
@@ -29,6 +30,8 @@ pub enum RunOutcome {
 pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
     // Resolve Net Cell TID for L2 frame bridging (0 = unavailable, bridging disabled).
     let net_tid = sys_lookup_service(service::NET).unwrap_or(0);
+    let compositor_tid = sys_lookup_service(service::COMPOSITOR).unwrap_or(0);
+    let (width, height) = sys_get_resolution();
 
     let mut pl011 = Pl011::new();
     let mut gicd = Gicd::new();
@@ -38,12 +41,21 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
     let mut blk_vmio = VirtioMmio::default();
     let mut net = NetDev::new(net_tid);
     let mut net_vmio = VirtioMmio::default();
+    let mut gpu = GpuDev::new(
+        compositor_tid,
+        if width == 0 { 1024 } else { width },
+        if height == 0 { 768 } else { height },
+    );
+    let mut gpu_vmio = VirtioMmio::default();
+    gpu.bring_up();
     let mut exit = ViVmExit::Unknown { ec: 0, iss: 0 };
 
     loop {
+        gpu.poll_damage();
         let ret = vmm::run_vcpu(vm_id, vcpu_id, &mut exit);
         if ret == usize::MAX {
             println("[hv] run_vcpu kernel error — aborting");
+            gpu.shutdown();
             return RunOutcome::Shutdown;
         }
 
@@ -58,6 +70,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
                 }
                 psci::PsciAction::SystemOff | psci::PsciAction::SystemReset => {
                     println("[hv] PSCI SYSTEM_OFF");
+                    gpu.shutdown();
                     return RunOutcome::Shutdown;
                 }
             },
@@ -84,6 +97,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
                         0 => vmio.mmio_write(off, val as u32, &mut console, vm_id, vcpu_id),
                         1 => blk_vmio.mmio_write(off, val as u32, &mut blk, vm_id, vcpu_id),
                         2 => net_vmio.mmio_write(off, val as u32, &mut net, vm_id, vcpu_id),
+                        3 => gpu_vmio.mmio_write(off, val as u32, &mut gpu, vm_id, vcpu_id),
                         _ => {}
                     }
                 } else {
@@ -110,6 +124,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
                         0 => vmio.mmio_read(off, &console),
                         1 => blk_vmio.mmio_read(off, &blk),
                         2 => net_vmio.mmio_read(off, &net),
+                        3 => gpu_vmio.mmio_read(off, &gpu),
                         _ => 0,
                     }
                 } else {
@@ -128,6 +143,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
             // ── WFI — inject virtual timer; poll for guest RX frames ─────────
             ViVmExit::Wfi => {
                 timer::inject_timer_irq(vm_id, vcpu_id);
+                gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
                 if let Some(frame) = net_backend::try_receive(net_tid) {
                     net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio);
                 }
@@ -135,6 +151,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── Preemption budget expired (C2 yield) — poll RX before re-enter
             ViVmExit::Preempted => {
+                gpu.reconnect_compositor(sys_lookup_service(service::COMPOSITOR).unwrap_or(0));
                 if let Some(frame) = net_backend::try_receive(net_tid) {
                     net.push_rx_frame(&frame, vm_id, vcpu_id, &net_vmio);
                 }
@@ -143,6 +160,7 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
             // ── Guest shutdown ────────────────────────────────────────────────
             ViVmExit::Shutdown => {
                 println("[hv] ViVmExit::Shutdown");
+                gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
 
@@ -159,11 +177,30 @@ pub fn run(vm_id: usize, vcpu_id: usize) -> RunOutcome {
 
             // ── Unknown exit ─────────────────────────────────────────────────
             ViVmExit::Unknown { ec, iss } => {
+                // Guest PC pinpoints WHERE the guest faulted — without it an
+                // ec=0x20 (guest instruction abort) is undebuggable.
+                let mut rb = [0u64; 32];
+                vmm::vcpu_regs(vm_id, vcpu_id, &mut rb, false);
                 println(&alloc::format!(
-                    "[hv] unknown vmexit ec=0x{:x} iss=0x{:x}",
+                    "[hv] unknown vmexit ec=0x{:x} iss=0x{:x} pc=0x{:x} x0=0x{:x} x30=0x{:x}",
                     ec,
-                    iss
+                    iss,
+                    rb[31],
+                    rb[0],
+                    rb[30],
                 ));
+                gpu.shutdown();
+                return RunOutcome::Shutdown;
+            }
+
+            // ── x86-only exits (SVM/VT-x) — never emitted on this aarch64 cell;
+            //    the x86 personality (P05) handles them in its own run loop. ──
+            ViVmExit::PortIn { .. }
+            | ViVmExit::PortOut { .. }
+            | ViVmExit::Hlt
+            | ViVmExit::Msr { .. } => {
+                println("[hv] unexpected x86 vmexit on aarch64 — shutting down VM");
+                gpu.shutdown();
                 return RunOutcome::Shutdown;
             }
         }

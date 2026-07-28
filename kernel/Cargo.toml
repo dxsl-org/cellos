@@ -37,6 +37,7 @@ fdt = "0.1"
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["aarch64", "critical-section-impl"] }
+fdt = "0.1"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["x86_64", "critical-section-impl"] }
@@ -79,6 +80,9 @@ signing-required = []
 # Field-recovery: bypass policy narrowing entirely (trusted core always boots).
 # Gated build flag for a headless maintenance image.
 maintenance-mode = []
+# QEMU `virt -m 1G` direct-kernel lane. QEMU's ELF loader may omit x0/DTB,
+# so the fallback map cannot discover RAM size at runtime.
+qemu-virt-1g = []
 # Real VisionFive2 JH7110 board — adjusts fallback DRAM map to 0x4000_0000.
 # Build: RUSTFLAGS="-C relocation-model=pic" cargo build --release --features board-vf2
 board-vf2 = []

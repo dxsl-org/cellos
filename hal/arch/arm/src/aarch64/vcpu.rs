@@ -5,7 +5,7 @@
 //! **Entry (`vcpu_enter_guest` asm):**
 //! 1. Save host callee-saved (x19-x30) + SP_EL2 to `vcpu.h_*` fields.
 //! 2. Store `vcpu` ptr in `TPIDR_EL2` (the guest-trap trampoline reads this).
-//! 3. Set `HCR_EL2` to guest bits: `RW | VM | SWIO | AMO | IMO | FMO | TWI | TWE | TSC`.
+//! 3. Set `HCR_EL2` to guest bits: `RW | VM | SWIO | AMO | IMO | FMO | TWI | TWE | TSC | TID3`.
 //! 4. Restore guest GP (x1-x30), then x0 last (overwrites vcpu ptr).
 //! 5. `eret` → guest EL1.
 //!
@@ -215,6 +215,31 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
         );
     }
 
+    // ── 2b. Virtualize CPU identity + allow FP/SVE ───────────────────────────
+    // Non-VHE: a guest MIDR_EL1/MPIDR_EL1 read at EL1 returns VPIDR_EL2/VMPIDR_EL2,
+    // whose reset value is 0 under QEMU. A zero MIDR makes Linux mis-run CPU
+    // errata/feature detection and take wrong early-boot code paths; mirror the
+    // real host values so the guest sees the physical CPU it runs on.
+    // CPTR_EL2 = RES1-only (0x33FF: bits[13:12] and [9:0] are RES1 in the non-VHE
+    // format) leaves TFP/TTA/TCPAC/TAM clear so guest FP/SIMD/trace do not trap to
+    // EL2 — writing 0 would clear the RES1 bits and is UNPREDICTABLE. Phase-05 lazy
+    // FP is not implemented; the single vCPU owns FP state exclusively.
+    // SAFETY: all four are EL2-private; reading MIDR/MPIDR at EL2 is unprivileged.
+    const CPTR_EL2_RES1: u64 = 0x33FF;
+    unsafe {
+        core::arch::asm!(
+            "mrs {tmp}, midr_el1",
+            "msr vpidr_el2, {tmp}",
+            "mrs {tmp}, mpidr_el1",
+            "msr vmpidr_el2, {tmp}",
+            "msr cptr_el2, {cptr}",
+            "isb",
+            tmp = out(reg) _,
+            cptr = in(reg) CPTR_EL2_RES1,
+            options(nomem, nostack),
+        );
+    }
+
     // ── 2. Restore guest EL1 sysregs + EL2 entry control ────────────────────
     // SAFETY: writing EL1/EL0 sysregs from EL2 is permitted; Cells are EL0
     // and protected by TGE routing — these writes only affect the guest bank.
@@ -258,6 +283,42 @@ pub unsafe fn run_vcpu_impl(vcpu: &mut AArch64Vcpu) -> ViVmExit {
     // SAFETY: Stage-2 enabled; TPIDR_EL2 used as single-CPU coroutine pointer.
     unsafe {
         vcpu_enter_guest(vcpu as *mut AArch64Vcpu);
+    }
+
+    // ── 3b. Save the guest's LIVE EL1 sysregs before the host overwrites them ─
+    // The EL1 bank still holds the guest's state at trap time. Without this
+    // save, every re-entry restored the STALE g_* values captured at vCPU
+    // creation — the first benign exit (SysReg read, WFI, IRQ budget) silently
+    // reset the guest's SCTLR/TTBR/VBAR to reset values, and Linux then ran on
+    // with its MMU off and VBAR_EL1=0 until it took an exception and fetched a
+    // vector from IPA 0x200 (observed as ec=0x20 iss=0x6 pc=0x200). ESR/FAR
+    // are saved too: after a guest-internal exception they carry the original
+    // syndrome, which the vector-fetch S2 abort at EL2 does not.
+    // SAFETY: reading EL1 sysregs from EL2 is always permitted; the guest is
+    // stopped (TPIDR_EL2 cleared by vt_vcpu_trap).
+    unsafe {
+        core::arch::asm!(
+            "mrs {0}, sctlr_el1",  "mrs {1}, ttbr0_el1",
+            "mrs {2}, ttbr1_el1",  "mrs {3}, tcr_el1",
+            "mrs {4}, mair_el1",   "mrs {5}, vbar_el1",
+            "mrs {6}, tpidr_el0",  "mrs {7}, tpidr_el1",
+            out(reg) vcpu.g_sctlr_el1, out(reg) vcpu.g_ttbr0_el1,
+            out(reg) vcpu.g_ttbr1_el1, out(reg) vcpu.g_tcr_el1,
+            out(reg) vcpu.g_mair_el1,  out(reg) vcpu.g_vbar_el1,
+            out(reg) vcpu.g_tpidr_el0, out(reg) vcpu.g_tpidr_el1,
+            options(nomem, nostack),
+        );
+        core::arch::asm!(
+            "mrs {0}, cntv_ctl_el0",  "mrs {1}, cntv_cval_el0",
+            "mrs {2}, spsr_el1",      "mrs {3}, elr_el1",
+            "mrs {4}, sp_el1",
+            "mrs {5}, esr_el1",       "mrs {6}, far_el1",
+            out(reg) vcpu.g_cntv_ctl, out(reg) vcpu.g_cntv_cval,
+            out(reg) vcpu.g_spsr_el1, out(reg) vcpu.g_elr_el1,
+            out(reg) vcpu.g_sp_el1,
+            out(reg) vcpu.g_esr_el1,  out(reg) vcpu.g_far_el1,
+            options(nomem, nostack),
+        );
     }
 
     // ── 4. Restore host EL1 sysregs ─────────────────────────────────────────
@@ -371,10 +432,13 @@ vcpu_enter_guest:
     // SAFETY: TPIDR_EL2 is EL2-private; the guest cannot read or write it.
     msr  tpidr_el2, x0
 
-    // Set HCR_EL2 guest bits: RW|VM|SWIO|AMO|IMO|FMO|TWI|TWE|TSC.
+    // Set HCR_EL2 guest bits: RW|VM|SWIO|AMO|IMO|FMO|TWI|TWE|TSC|TID3.
     // RW(31)=AArch64 EL1, VM(0)=enable Stage-2, SWIO(1)=SW IRQ override,
     // AMO(3)/IMO(4)/FMO(5)=route physical async exceptions, TWI(12)/TWE(13)=trap
-    // WFI/WFE to EL2 (lets us emulate them), TSC(19)=trap SMC to EL2.
+    // WFI/WFE to EL2 (lets us emulate them), TSC(19)=trap SMC to EL2,
+    // TID3(18)=trap guest reads of the AArch64 ID-register group (Op0=3,Op1=0,
+    // CRn=0,CRm=1..7) to EL2 so the un-virtualized host PARange/feature bits
+    // are never handed to the guest raw — see `id_regs::read_trapped_id_reg`.
     // SAFETY: HCR_EL2 is EL2-private.
     mov  x9,  #(1 << 31)       // RW
     orr  x9,  x9,  #(1 << 0)   // VM
@@ -384,6 +448,7 @@ vcpu_enter_guest:
     orr  x9,  x9,  #(1 << 5)   // FMO
     orr  x9,  x9,  #(1 << 12)  // TWI
     orr  x9,  x9,  #(1 << 13)  // TWE
+    orr  x9,  x9,  #(1 << 18)  // TID3
     orr  x9,  x9,  #(1 << 19)  // TSC
     msr  hcr_el2, x9
     isb

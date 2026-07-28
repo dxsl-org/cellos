@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-07-07 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; WASM Tier 2, Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-07-25 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; Tier 3b VirtIO-GPU host stack code-complete; strict guest lane remains hardware-gated; WASM Tier 2, Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -309,6 +309,14 @@ Device can fire next interrupt (if new data arrives)
 ```
 
 **Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, leaving `InterruptStatus` register set. PLIC would immediately re-fire the same interrupt after `plic_complete()`, creating an infinite interrupt storm. This caused kernel to hang on first keystroke. Fix: Ensured input Driver Cell calls `ack_irq()` on every interrupt; kernel dispatcher invokes the handler. *(Later refactored to Driver Cell architecture in Phase 01, 2026-06-24.)*
+
+### Tier 3b VirtIO-GPU Host Stack
+
+- `cells/services/hypervisor/src/virtio_gpu.rs` implements the VirtIO-GPU 2D device model (DeviceID 16, MMIO slot 3, SPI 19) and wires the control/cursor queues into the VMM IRQ path.
+- `cells/services/hypervisor/src/virtio_gpu/resource/{control,render}.rs` owns resource creation, scanout binding, cursor redraw, and the VMM-owned scanout Grant.
+- `cells/services/hypervisor/src/virtio_gpu/scanout.rs` performs Grant sharing, compositor attach/damage, reconnect, and deferred teardown when the compositor owner disappears.
+- `cells/tools/init/src/main.rs` and the supervisor start the physical GPU Driver Cell, compositor, and hypervisor in dependency order; `scripts/fetch-alpine-artifacts.sh` and `scripts/make-hypervisor-fs.sh` build the pinned ARM64 Alpine guest image.
+- `tests/integration/tests/tier3b-virtio-gpu.rs` is the strict, ignored-by-default guest lane; it requires both `TIER3B_GPU_E2E=1` and an explicit `--ignored` run on ARM64 KVM or real hardware, not nested Windows QEMU-TCG.
 
 ### FAT16 Persistence & Graceful Shutdown (Phase E)
 
@@ -871,9 +879,9 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 ---
 
-## Current Status (2026-07-07)
+## Current Status (2026-07-25)
 
-> **Status refresh 2026-07-07**: Every item the 2026-06-05 snapshot listed as In-Progress / Planned — KASLR, ARM64 full bring-up, ViUI v2, reliability/supervisor restart, Tier 3b Linux VM, cell signing — has since **shipped** (cross-checked against `docs/project-roadmap.md` milestone table). See the "Recently shipped" block below.
+> **Status refresh 2026-07-25**: Every item the 2026-06-05 snapshot listed as In-Progress / Planned — KASLR, ARM64 full bring-up, ViUI v2, reliability/supervisor restart, Tier 3b Linux VM, cell signing — has since **shipped** (cross-checked against `docs/project-roadmap.md` milestone table). The Tier 3b VirtIO-GPU host stack is code-complete and documented below, but the strict Linux guest lane remains hardware-gated on ARM64 KVM or real hardware. See the "Recently shipped" block below.
 
 ### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3b VM, Cell Signing)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
@@ -910,6 +918,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   - **DNS resolver**: static table → IPv4 literal → UDP A-record query
   - **net-tools binaries** (6 total): ping, curl (HTTP/1.0), wget, nc (multi-conn relay), httpd, mqtt (skeleton)
 - **GPU framebuffer** (opt-in, basic compositor)
+- **Tier 3b VirtIO-GPU host stack** — host device model, resource/scanout Grant lifecycle, and compositor bridge are implemented; strict guest verification stays hardware-gated (`TIER3B_GPU_E2E=1` on ARM64 KVM / real hardware).
 - **HotSwap orchestrator** (5-step live Cell replacement, kernel + shell + config + vfs + robot-demo verified)
 - **Peripheral Driver Track v1** (GPIO/UART HAL traits + driver Cells + safe MMIO + Resource Registry)
   - `cells/drivers/driver-gpio/` — PL061 GPIO implementation (QEMU ARM virt)
@@ -932,7 +941,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 - **ViUI v2 — Reactive Signal Tree + Dual-Layer DSL** — ✅ ALL 7 PHASES COMPLETE 2026-06-16 (production-ready; overlays, navigation, charts, DSL build.rs, virtual ListView, FlexBox, advanced two-way/computed bindings). See ViUI Architecture section above.
 - **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
-- **Tier 3b Linux VM (ARM64 EL2 VMM)** — ✅ COMPLETE 2026-06-16: EL2 hypervisor boots Alpine 3.21.3 aarch64; all 10 phases done; CI smoke job. Untrusted/legacy code isolation now lives here (hardware Stage-2/EPT), replacing the dropped Tier 2 WASM sandbox.
+- **Tier 3b Linux VM (ARM64 EL2 VMM)** — ✅ COMPLETE 2026-06-16 **(ARM64 only)**: EL2 hypervisor boots Alpine 3.21.3 aarch64 (musl); all 10 phases done; CI smoke job. Untrusted/legacy code isolation now lives here (hardware Stage-2). **x86_64 (SVM/VT-x) is design-plan only, not implemented** (`.agents/260711-1917-tier3b-x86-vtx/`); glibc-guest + writable-storage are planned follow-ups (`.agents/260712-0952-tier3b-vm-hardening-compat/`).
 - **Cell signing + hot migration** — ✅ COMPLETE 2026-06-23: Ed25519 verify-at-spawn gate (`kernel/src/loader.rs`), in-kernel `ed25519::verify` (RFC 8032 self-test at boot), 5-step hotswap with `TaskState::Frozen` + `ViStateTransfer`; 11/11 hotswap-smoke tests.
 - **Hardware Key Isolation (Silo)** — ✅ COMPLETE 2026-06-16 (SiloHandle API; reclassified Tier 3a → Tier 1 hardware capability, G2 ARM64/x86).
 
@@ -942,7 +951,6 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 ### ⏳ Genuinely planned (later phases)
 - Peripheral Driver extensions: I2C shipped; SPI/CAN/PWM/ADC via sim/loopback + generic bit-bang (G1 ext / G2 real MMIO)
 - Real SBC validation (RPi 4 / VisionFive2 / Radxa ROCK 5)
-- Tier 3b VirtIO-GPU backend (Linux VM graphics / browser) `[G2]`
 - DICE/RIoT attestation chain, KMS Cell for G2 key management
 - Additional architecture ports (RV32 nano, full x86_64 beyond ring-3)
 

@@ -100,6 +100,24 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
     SyscallSet(base.0 | bio_extra.0 | net_extra.0 | spawn_extra.0).bits()
 }
 
+/// Rich process telemetry stays opt-in.
+///
+/// `spawn = true` grants the legacy `GetProcs` (id/state/name only). `GetProcs2`
+/// additionally exposes per-task CPU ticks and owned-memory footprint, which is
+/// a side channel between Cells — it must be declared explicitly through
+/// `declare_syscalls!`, never inherited from a coarse capability flag. A
+/// compile-time assertion so no future edit to the sets above can regress it.
+const _: () = {
+    let bit = match ViSyscall::GetProcs2.allowlist_bit() {
+        Some(bit) => bit,
+        None => panic!("GetProcs2 must own an allowlist bit"),
+    };
+    assert!(
+        app_syscall_set(true, true, true) & (1u64 << bit) == 0,
+        "GetProcs2 must never be granted implicitly by app_syscall_set"
+    );
+};
+
 /// Like [`app_syscall_set`] but includes `WaitForEvent` in the base set for
 /// service cells that wake on kernel events (net RX, etc.).
 pub const fn service_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 {

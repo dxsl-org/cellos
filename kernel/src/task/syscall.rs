@@ -6,6 +6,7 @@
 use super::tcb::TaskState;
 use crate::sync::Spinlock;
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
 // use log::info;
 use types::*;
@@ -70,9 +71,10 @@ const MAX_GRANT_PAGES: usize = 4096;
 ///
 /// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as `PageGrant`).
 struct RegGrant {
-    base: usize,                           // physical address of first allocated page
-    size: usize,                           // byte count (multiple of 4096)
-    owner: usize,                          // task id — only owner may call GrantUnregister
+    base: usize, // physical address of first allocated page
+    size: usize, // byte count (multiple of 4096)
+    // 0 means the owner exited while a grantee still held the mapping.
+    owner: usize,
     shared_to: Option<(usize, GrantPerm)>, // authorized grantee task id + permission
 }
 
@@ -234,11 +236,24 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
                 grant.shared_to = None;
             }
         }
-        let owned_keys: alloc::vec::Vec<usize> = map
-            .iter()
-            .filter(|(_, g)| g.owner == dead_tid)
-            .map(|(k, _)| *k)
-            .collect();
+        let mut owned_keys = alloc::vec::Vec::new();
+        let mut orphan_keys = alloc::vec::Vec::new();
+        for (&key, grant) in map.iter_mut() {
+            if grant.owner == dead_tid {
+                if let Some((grantee, _)) = grant.shared_to {
+                    // Transfer ownership to the sole grantee. The grantee's
+                    // owner-death cleanup drops its cached pointer before calling
+                    // GrantUnregister, allowing the pages to be reclaimed without
+                    // exposing an owner-dead, permanently leaked grant.
+                    grant.owner = grantee;
+                } else {
+                    owned_keys.push(key);
+                }
+            } else if grant.owner == 0 && grant.shared_to.is_none() {
+                orphan_keys.push(key);
+            }
+        }
+        owned_keys.extend(orphan_keys);
         owned_keys.iter().filter_map(|k| map.remove(k)).collect()
     }; // REG_GRANT_TABLE lock released
 
@@ -378,6 +393,95 @@ fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<(), SyscallEr
         return Err(SyscallError::InvalidInput);
     }
     Ok(())
+}
+
+fn write_optional_usize(ptr: usize, value: usize) -> Result<(), SyscallError> {
+    if ptr == 0 {
+        return Ok(());
+    }
+    validate_user_buf(ptr, core::mem::size_of::<usize>(), MAX_USER_BUF)?;
+    // SAFETY: the caller pointer and exact write size were validated above.
+    unsafe { (ptr as *mut usize).write(value) };
+    Ok(())
+}
+
+fn encode_task_state(state: &TaskState) -> u32 {
+    match state {
+        TaskState::Ready => 0,
+        TaskState::Running => 1,
+        TaskState::Terminated => 3,
+        _ => 2,
+    }
+}
+
+fn encode_task_name(name: &str) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    let bytes = name.as_bytes();
+    let len = core::cmp::min(bytes.len(), out.len());
+    out[..len].copy_from_slice(&bytes[..len]);
+    out
+}
+
+fn task_heap_bytes(task: &crate::task::tcb::Task) -> u64 {
+    crate::memory::cell_quota::in_use(task.cell_id) as u64
+}
+
+fn task_owned_bytes(task: &crate::task::tcb::Task) -> u64 {
+    let user_stack_bytes = task
+        .user_stack
+        .as_ref()
+        .map(|stack| stack.usable_bytes() as u64)
+        .unwrap_or(0);
+    let segment_bytes = task
+        .segment_mem
+        .as_ref()
+        .map(|segments| segments.allocated_bytes() as u64)
+        .unwrap_or(0);
+    task_heap_bytes(task)
+        .saturating_add(user_stack_bytes)
+        .saturating_add(segment_bytes)
+}
+
+fn snapshot_process_info(task: &crate::task::tcb::Task) -> api::syscall::ProcessInfo {
+    api::syscall::ProcessInfo {
+        id: task.id,
+        state: encode_task_state(&task.state) as usize,
+        name: encode_task_name(&task.name),
+    }
+}
+
+fn snapshot_process_info_v2(
+    task: &crate::task::tcb::Task,
+    sample_ticks: u64,
+) -> api::syscall::ProcessInfoV2 {
+    api::syscall::ProcessInfoV2 {
+        id: task.id as u64,
+        state: encode_task_state(&task.state),
+        reserved0: 0,
+        name: encode_task_name(&task.name),
+        sample_ticks,
+        cpu_run_ticks: task.cpu_run_ticks,
+        heap_bytes: task_heap_bytes(task),
+        owned_bytes: task_owned_bytes(task),
+    }
+}
+
+fn collect_process_rows<T>(
+    row_capacity: usize,
+    mut build: impl FnMut(&crate::task::tcb::Task) -> T,
+) -> Vec<T> {
+    let mut rows = Vec::new();
+    if row_capacity == 0 {
+        return rows;
+    }
+    if let Some(sched) = super::SCHEDULER.lock().as_ref() {
+        let cap = core::cmp::min(row_capacity, sched.tasks.len());
+        rows.reserve(cap);
+        for task in sched.tasks.values().take(cap) {
+            rows.push(build(task));
+        }
+    }
+    rows
 }
 
 /// The Fundamental Verbs of ViCell IPC (Hubris ABI + Lease System)
@@ -546,6 +650,8 @@ pub enum Syscall {
     ShmMap { handle: usize, target_pid: usize },
     /// 30: GetProcs
     GetProcs { buf_ptr: usize, buf_len: usize },
+    /// 239: GetProcs2
+    GetProcs2 { buf_ptr: usize, buf_len: usize },
 
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -682,7 +788,10 @@ pub enum Syscall {
         perm: usize,
     },
     /// 210: GrantSlice — return the user-space pointer for a Grant the caller owns/holds.
-    GrantSlice { grant_id: usize },
+    GrantSlice {
+        grant_id: usize,
+        size_out_ptr: usize,
+    },
     /// 211: GrantFree — unmap + deallocate a Grant region.
     GrantFree { grant_id: usize },
     /// 212: BlkReadAsync — synchronous-but-zero-copy sector read into a Grant buffer.
@@ -810,6 +919,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::ShmAlloc { .. } => V::ShmAlloc,
         Syscall::ShmMap { .. } => V::ShmMap,
         Syscall::GetProcs { .. } => V::GetProcs,
+        Syscall::GetProcs2 { .. } => V::GetProcs2,
         Syscall::OpenCap { .. } => V::OpenCap,
         Syscall::ReadCap { .. } => V::ReadCap,
         Syscall::CloseCap { .. } => V::CloseCap,
@@ -2548,41 +2658,43 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GetProcs { buf_ptr, buf_len } => {
+            let bytes = buf_len
+                .checked_mul(core::mem::size_of::<api::syscall::ProcessInfo>())
+                .ok_or(SyscallError::InvalidInput)?;
+            validate_user_buf(buf_ptr, bytes, MAX_USER_BUF)?;
+
+            let rows = collect_process_rows(buf_len, snapshot_process_info);
+            // SAFETY: the destination buffer size/overflow was validated above and
+            // `rows.len() <= buf_len`, so the copy stays within the caller-owned range.
             unsafe {
-                let slice = core::slice::from_raw_parts_mut(
+                core::ptr::copy_nonoverlapping(
+                    rows.as_ptr(),
                     buf_ptr as *mut api::syscall::ProcessInfo,
-                    buf_len,
+                    rows.len(),
                 );
-                if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                    let mut count = 0;
-                    for (pid, task) in sched.tasks.iter() {
-                        if count >= slice.len() {
-                            break;
-                        }
-
-                        let mut name = [0u8; 32];
-                        let name_bytes = task.name.as_bytes();
-                        let len = core::cmp::min(name_bytes.len(), 32);
-                        name[..len].copy_from_slice(&name_bytes[..len]);
-
-                        let state_val = match task.state {
-                            TaskState::Ready => 0,
-                            TaskState::Running => 1,
-                            TaskState::Terminated => 3,
-                            _ => 2, // Map everything else (Waiting, Sleeping, IPC blocks) to Waiting
-                        };
-
-                        slice[count] = api::syscall::ProcessInfo {
-                            id: *pid,
-                            state: state_val,
-                            name,
-                        };
-                        count += 1;
-                    }
-                    return Ok(count);
-                }
-                Ok(0)
             }
+            Ok(rows.len())
+        }
+
+        Syscall::GetProcs2 { buf_ptr, buf_len } => {
+            let bytes = buf_len
+                .checked_mul(core::mem::size_of::<api::syscall::ProcessInfoV2>())
+                .ok_or(SyscallError::InvalidInput)?;
+            validate_user_buf(buf_ptr, bytes, MAX_USER_BUF)?;
+
+            let sample_ticks = super::system_ticks() as u64;
+            let rows =
+                collect_process_rows(buf_len, |task| snapshot_process_info_v2(task, sample_ticks));
+            // SAFETY: the destination buffer size/overflow was validated above and
+            // `rows.len() <= buf_len`, so the copy stays within the caller-owned range.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    rows.as_ptr(),
+                    buf_ptr as *mut api::syscall::ProcessInfoV2,
+                    rows.len(),
+                );
+            }
+            Ok(rows.len())
         }
 
         Syscall::Seek { fd, offset, whence } => {
@@ -3291,25 +3403,42 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
 
-        Syscall::GrantSlice { grant_id } => {
+        Syscall::GrantSlice {
+            grant_id,
+            size_out_ptr,
+        } => {
             // Check PAGE_GRANT_TABLE first.
-            {
+            let page_grant = {
                 let tbl = grant_table_lock().lock();
-                if let Some(grant) = tbl.as_ref().and_then(|m| m.get(&grant_id)) {
+                tbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
                     let allowed = grant.owner == caller_id
                         || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
-                    return Ok(if allowed { grant.base } else { usize::MAX });
+                    (allowed, grant.base, grant.size)
+                })
+            };
+            if let Some((allowed, base, size)) = page_grant {
+                if allowed {
+                    write_optional_usize(size_out_ptr, size)?;
+                    return Ok(base);
                 }
+                return Ok(usize::MAX);
             }
             // Fall back to REG_GRANT_TABLE.
-            let rtbl = reg_grant_table_lock().lock();
-            match rtbl.as_ref().and_then(|m| m.get(&grant_id)) {
-                None => Ok(usize::MAX),
-                Some(grant) => {
+            let reg_grant = {
+                let rtbl = reg_grant_table_lock().lock();
+                rtbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
                     let allowed = grant.owner == caller_id
                         || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
-                    Ok(if allowed { grant.base } else { usize::MAX })
+                    (allowed, grant.base, grant.size)
+                })
+            };
+            match reg_grant {
+                None => Ok(usize::MAX),
+                Some((true, base, size)) => {
+                    write_optional_usize(size_out_ptr, size)?;
+                    Ok(base)
                 }
+                Some((false, _, _)) => Ok(usize::MAX),
             }
         }
 
@@ -3815,6 +3944,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             buf_ptr: a0,
             buf_len: a1,
         },
+        ViSyscall::GetProcs2 => Syscall::GetProcs2 {
+            buf_ptr: a0,
+            buf_len: a1,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -3914,7 +4047,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             target_cell: a1,
             perm: a2,
         },
-        ViSyscall::GrantSlice => Syscall::GrantSlice { grant_id: a0 },
+        ViSyscall::GrantSlice => Syscall::GrantSlice {
+            grant_id: a0,
+            size_out_ptr: a1,
+        },
         ViSyscall::GrantFree => Syscall::GrantFree { grant_id: a0 },
         ViSyscall::BlkReadAsync => Syscall::BlkReadAsync {
             sector: a0 as u64,
@@ -4233,5 +4369,66 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
     match result {
         Ok(val) => frame.regs[10] = val as u32,
         Err(_) => frame.regs[10] = u32::MAX,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{check_allowlist, map_syscall, syscall_to_vi, Syscall, SyscallError};
+    use crate::sync::Spinlock;
+    use crate::task::{scheduler::Scheduler, SCHEDULER};
+    use api::syscall::ViSyscall;
+    use types::CellId;
+
+    static TEST_LOCK: Spinlock<()> = Spinlock::new(());
+
+    fn with_scheduler_task<F>(allowlist: u64, f: F)
+    where
+        F: FnOnce(usize),
+    {
+        let _guard = TEST_LOCK.lock();
+        let mut previous = SCHEDULER.lock();
+        let saved = previous.take();
+        let mut scheduler = Scheduler::new();
+        let tid = scheduler.spawn("allowlist-test", CellId(7), alloc::vec::Vec::new());
+        scheduler.tasks.get_mut(&tid).unwrap().syscall_allowlist = allowlist;
+        *previous = Some(scheduler);
+        drop(previous);
+
+        f(tid);
+
+        let mut restore = SCHEDULER.lock();
+        *restore = saved;
+    }
+
+    #[test]
+    fn get_procs2_maps_args_and_dispatch_variant() {
+        let syscall = map_syscall(ViSyscall::GetProcs2 as usize, 0x1000, 7, 0, 0)
+            .expect("GetProcs2 must decode");
+        match syscall {
+            Syscall::GetProcs2 { buf_ptr, buf_len } => {
+                assert_eq!(buf_ptr, 0x1000);
+                assert_eq!(buf_len, 7);
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), Some(ViSyscall::GetProcs2));
+    }
+
+    #[test]
+    fn get_procs2_allowlist_denies_without_bit_55() {
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::GetProcs2 as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+    }
+
+    #[test]
+    fn get_procs2_allowlist_allows_with_bit_55() {
+        with_scheduler_task(1u64 << 55, |tid| {
+            assert_eq!(check_allowlist(ViSyscall::GetProcs2 as usize, tid), Ok(()));
+        });
     }
 }

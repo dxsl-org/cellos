@@ -15,9 +15,7 @@ extern crate ostd;
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
 use api::syscall::service;
 use ostd::io::{print, println};
-use ostd::syscall::{
-    sys_lookup_service, sys_recv, sys_send, sys_spawn_args, sys_yield, SyscallResult,
-};
+use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
@@ -211,20 +209,12 @@ fn write_content_length(n: usize, out: &mut [u8]) -> usize {
 
 #[no_mangle]
 pub fn main() {
-    let mut arg_buf = [0u8; 128];
-    let arg_len = sys_spawn_args(&mut arg_buf);
-    if arg_len == 0 {
+    let argv = ostd::args();
+    if argv.is_empty() {
         println("Usage: httpd <port> <vfs_path>");
         return;
     }
-    let args_str = match core::str::from_utf8(&arg_buf[..arg_len]) {
-        Ok(s) => s,
-        Err(_) => {
-            println("httpd: bad args");
-            return;
-        }
-    };
-    let mut parts = args_str.split_whitespace();
+    let mut parts = argv.iter().map(|arg| arg.as_str());
     let port = match parts.next().and_then(parse_u16) {
         Some(p) => p,
         None => {

@@ -1,6 +1,8 @@
 //! Boot protocol interfaces.
 
 use crate::*;
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod limine;
 
@@ -337,27 +339,124 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
 
 // AArch64 QEMU virt (256MB at 0x4000_0000, kernel loaded at 0x4008_0000):
 // MMIO below 0x4000_0000 is mapped by init_kernel_paging; RAM regions only here.
+//
+// The kernel span is measured at RUNTIME from the linker's `__stack_top`, not
+// hardcoded: EMBEDDED_OVERRIDE images make the binary size unbounded (the
+// hypervisor build embeds Alpine and reaches 60 MB). The previous fixed 32 MB
+// boundary let the frame allocator re-issue everything past it as free RAM —
+// the kernel then overwrote the tail of its own embedded VIFS1 image and died
+// in a recursive same-EL sync-abort storm (PC pinned at vt_sync_spx) the
+// moment the corrupted FAT was walked.
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
-    // Kernel: 0x4000_0000 — 0x4200_0000 (32MB, covers binary + embedded init ELF)
+static mut FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     MemoryMapEntry {
         base: 0x4000_0000,
-        length: 0x200_0000,
+        length: 0, // patched by fallback_boot_info()
         ty: MemoryType::Kernel,
     },
-    // Usable: 0x4200_0000 — 0x5000_0000 (~224MB)
     MemoryMapEntry {
-        base: 0x4200_0000,
-        length: 0x0E00_0000,
+        base: 0,
+        length: 0, // patched by fallback_boot_info()
         ty: MemoryType::Usable,
     },
 ];
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
-    memory_map: &FALLBACK_MEMORY_MAP,
+static mut FALLBACK_BOOT_INFO_RUNTIME: SimpleBootInfo = SimpleBootInfo {
+    memory_map: &[],
     kernel_phys_base: 0x4008_0000,
     hhdm_offset: 0x0,
 };
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+static FALLBACK_DTB_RAM_START: AtomicUsize = AtomicUsize::new(0);
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+static FALLBACK_DTB_RAM_END: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+pub fn fallback_dtb_ram_range() -> (usize, usize) {
+    (
+        FALLBACK_DTB_RAM_START.load(Ordering::Relaxed),
+        FALLBACK_DTB_RAM_END.load(Ordering::Relaxed),
+    )
+}
+
+/// Fallback boot info with the kernel region sized from the linker end symbol.
+///
+/// # Panics
+/// Never — falls back to a 32 MB span only if `__stack_top` resolves below the
+/// RAM base (impossible with the current linker script).
+#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
+    use core::ptr::{addr_of, addr_of_mut};
+    extern "C" {
+        /// Highest kernel address (end of .bss.stack) — linker-aarch64.ld.
+        static __stack_top: u8;
+    }
+    const RAM_BASE: usize = 0x4000_0000;
+    #[cfg(feature = "qemu-virt-1g")]
+    const FALLBACK_RAM_END: usize = 0x8000_0000;
+    #[cfg(not(feature = "qemu-virt-1g"))]
+    const FALLBACK_RAM_END: usize = 0x5000_0000;
+    const ALIGN_2M: usize = 0x20_0000;
+    let dtb_ram = if dtb != 0 {
+        // SAFETY: QEMU/firmware passes a valid FDT pointer in x0; Fdt validates
+        // its header before any node traversal.
+        unsafe { fdt::Fdt::from_ptr(dtb as *const u8) }
+            .ok()
+            .and_then(|tree| {
+                tree.memory().regions().find_map(|region| {
+                    let start = region.starting_address as usize;
+                    region
+                        .size
+                        .and_then(|size| start.checked_add(size))
+                        .map(|end| (start, end))
+                })
+            })
+    } else {
+        None
+    };
+    if let Some((start, end)) = dtb_ram {
+        FALLBACK_DTB_RAM_START.store(start, Ordering::Relaxed);
+        FALLBACK_DTB_RAM_END.store(end, Ordering::Relaxed);
+    }
+    let ram_end = match dtb_ram {
+        Some((start, end)) if start <= RAM_BASE && end > RAM_BASE => end,
+        _ => FALLBACK_RAM_END,
+    };
+    // SAFETY: single-hart early boot; the statics are written exactly once here
+    // before any other reader exists, then only shared immutably.
+    unsafe {
+        let end = addr_of!(__stack_top) as usize;
+        let kernel_len = if end > RAM_BASE {
+            (end - RAM_BASE + ALIGN_2M - 1) & !(ALIGN_2M - 1)
+        } else {
+            0x200_0000
+        };
+        *addr_of_mut!(FALLBACK_MEMORY_MAP) = [
+            MemoryMapEntry {
+                base: RAM_BASE,
+                length: kernel_len,
+                ty: MemoryType::Kernel,
+            },
+            MemoryMapEntry {
+                base: RAM_BASE + kernel_len,
+                length: ram_end.saturating_sub(RAM_BASE + kernel_len),
+                ty: MemoryType::Usable,
+            },
+        ];
+        (*addr_of_mut!(FALLBACK_BOOT_INFO_RUNTIME)).memory_map =
+            core::slice::from_raw_parts(addr_of!(FALLBACK_MEMORY_MAP) as *const MemoryMapEntry, 2);
+        &*addr_of!(FALLBACK_BOOT_INFO_RUNTIME)
+    }
+}
+
+/// Fallback boot info — static map on arches whose images stay small.
+///
+/// Only aarch64 QEMU-virt sizes its kernel region at runtime (see above);
+/// the other fallbacks keep their audited static spans.
+#[cfg(not(all(target_arch = "aarch64", not(feature = "board-rpi3"))))]
+pub fn fallback_boot_info(_dtb: usize) -> &'static SimpleBootInfo {
+    &FALLBACK_BOOT_INFO
+}
 
 // x86_64 QEMU q35 -m 256M: Limine always provides a real memory map;
 // this fallback is unreachable in normal operation but must compile.

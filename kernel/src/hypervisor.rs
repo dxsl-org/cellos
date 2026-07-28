@@ -5,7 +5,14 @@
 //! (Phase 05).  The public API here is intentionally kernel-internal; the
 //! stable VMM ABI (syscalls 220+) is exposed in Phase 04.
 
+#[cfg(target_arch = "aarch64")]
+pub mod pending_irqs;
 pub mod registry;
+
+/// x86 SVM VM store + run loop (Tier 3b P03), the x86 twin of the aarch64
+/// branch in [`registry`].
+#[cfg(target_arch = "x86_64")]
+pub mod svm_registry;
 
 #[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
 pub mod smoke_guest;

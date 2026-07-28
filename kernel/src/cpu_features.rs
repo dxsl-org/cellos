@@ -3,6 +3,8 @@
 //! Call `detect(dtb)` once at kernel boot before any Cell is spawned.
 //! All other callers use the read-only `has_*()` accessors.
 
+#[cfg(target_arch = "x86_64")]
+use core::sync::atomic::AtomicU8;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
@@ -10,6 +12,25 @@ static HAS_H_EXT: AtomicBool = AtomicBool::new(false);
 /// Latched at boot by `detect()` if the kernel entered at EL2 (ARM64,
 /// QEMU `virtualization=on`).  Always `false` on non-aarch64 targets.
 static HAS_EL2: AtomicBool = AtomicBool::new(false);
+
+/// x86 hardware-virtualization vendor detected via CPUID (Tier 3b x86 VMM).
+#[cfg(target_arch = "x86_64")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum X86Virt {
+    /// AMD SVM (`CPUID.8000_0001:ECX[2]`) — first backend (QEMU TCG emulates it).
+    Svm,
+    /// Intel VT-x (`CPUID.1:ECX[5]`) — second backend (KVM/real-HW lane only).
+    Vmx,
+}
+
+/// 0 = none, 1 = SVM, 2 = VMX — written once by `detect()`.
+#[cfg(target_arch = "x86_64")]
+static X86_VIRT_KIND: AtomicU8 = AtomicU8::new(0);
+
+/// Latched by kmain AFTER root operation is actually entered (EFER.SVME set /
+/// VMXON succeeded).  The HypervisorCap gate keys off THIS, not raw CPUID —
+/// firmware may advertise the feature but lock it off.
+static HAS_X86_VIRT: AtomicBool = AtomicBool::new(false);
 
 /// Probe the device tree for CPU feature flags.
 ///
@@ -25,6 +46,43 @@ pub(crate) fn detect(dtb: usize) {
     if hal::aarch64::el2::is_el2() {
         HAS_EL2.store(true, Ordering::Relaxed);
     }
+    // Latch the x86 hardware-virt vendor (SVM preferred — the TCG-testable
+    // backend; VMX only when SVM is absent, i.e. genuine Intel).
+    #[cfg(target_arch = "x86_64")]
+    {
+        if hal::svm::supported() {
+            X86_VIRT_KIND.store(1, Ordering::Relaxed);
+        } else if hal::vmx::supported() {
+            X86_VIRT_KIND.store(2, Ordering::Relaxed);
+        }
+    }
+}
+
+/// The x86 virt vendor CPUID advertised, if any.  `None` before `detect()`.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn x86_virt_kind() -> Option<X86Virt> {
+    match X86_VIRT_KIND.load(Ordering::Relaxed) {
+        1 => Some(X86Virt::Svm),
+        2 => Some(X86Virt::Vmx),
+        _ => None,
+    }
+}
+
+/// Record that this CPU successfully entered x86 root operation.
+///
+/// Called by kmain after `hal::svm::enable()` / `hal::vmx::enter_root()`
+/// returned `Ok` — the HypervisorCap gate reads [`has_x86_virt`].
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn latch_x86_root_active() {
+    HAS_X86_VIRT.store(true, Ordering::Relaxed);
+}
+
+/// Returns `true` if this kernel entered x86 root operation (SVM/VMX) at boot.
+///
+/// Always `false` on non-x86_64 targets and on CPUs where the feature is
+/// absent or firmware-locked.
+pub(crate) fn has_x86_virt() -> bool {
+    HAS_X86_VIRT.load(Ordering::Relaxed)
 }
 
 /// Returns `true` if the kernel booted at EL2 (ARM64, QEMU `virtualization=on`).

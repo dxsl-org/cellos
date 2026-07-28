@@ -51,6 +51,42 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
     }
 }
 
+/// Acknowledge an interrupt from an as-yet unclaimed VirtIO MMIO slot.
+///
+/// Driver Cells may need several synchronous queue transactions to initialise
+/// before they can enter `sys_wait_irq`. Leaving those level-triggered
+/// interrupts asserted starves the Cell before registration completes.
+fn ack_unclaimed(irq: u32) -> bool {
+    #[cfg(target_arch = "aarch64")]
+    let base = (16..48)
+        .contains(&irq)
+        .then_some(0x0a00_0000usize + (irq as usize - 16) * 0x200);
+    #[cfg(target_arch = "riscv64")]
+    let base = (1..9)
+        .contains(&irq)
+        .then_some(0x1000_1000usize + (irq as usize - 1) * 0x1000);
+    // x86_64 routes VirtIO through PCI MSI-X, not a fixed MMIO IRQ window, so
+    // there is no slot base to derive and nothing to acknowledge here.
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+    let base: Option<usize> = {
+        let _ = irq;
+        None
+    };
+
+    let Some(base) = base else {
+        return false;
+    };
+    // SAFETY: the architecture-specific ranges above are the identity-mapped
+    // VirtIO MMIO windows. InterruptStatus is read-only and InterruptACK accepts
+    // exactly the status bits returned by the device.
+    let status = unsafe { core::ptr::read_volatile((base + 0x60) as *const u32) };
+    if status == 0 {
+        return false;
+    }
+    unsafe { core::ptr::write_volatile((base + 0x64) as *mut u32, status) };
+    true
+}
+
 /// VirtIO MMIO IRQ dispatcher — called from the arch trap handlers (riscv64/aarch64)
 /// when any VirtIO MMIO IRQ fires. Routes the IRQ to whichever Driver Cell registered
 /// for it via `sys_wait_irq` (the block / net / gpu cells all rely on this), ACKs the
@@ -71,6 +107,9 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
     // Input (keyboard) slot: ACK to prevent an interrupt storm before the input
     // service Cell is up; event routing lives entirely in that Cell.
     if crate::task::drivers::input_irq_ack::ack_if_input(irq) {
+        return;
+    }
+    if ack_unclaimed(irq) {
         return;
     }
     // Unknown VirtIO slot — no device registered. InterruptStatus is already cleared

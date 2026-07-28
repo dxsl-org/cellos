@@ -4,6 +4,10 @@
 target/
 Cargo.lock
 
+# Fetched Linux VM guest artifacts (scripts/fetch-alpine*.sh cache dirs)
+.alpine-cache/
+.alpine-cache-x86/
+
 # Zig build artifacts
 **/.zig-cache/
 **/zig-out/
@@ -57,6 +61,8 @@ CLAUDE.md
 
 # Disk Images
 *.img
+/kernel/src/embedded-hv/
+/kernel/src/embedded-shell-test/
 
 # Accidentally-created disk images from script invocations (e.g. gen_disk.ps1 --help)
 --help

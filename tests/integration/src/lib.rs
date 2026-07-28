@@ -262,13 +262,19 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary())
             .args([
-                "-machine", "virt",
-                "-m", "256M",
+                "-machine",
+                "virt",
+                "-m",
+                "256M",
                 "-nographic",
-                "-bios", "default",
-                "-kernel", kernel,
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-bios",
+                "default",
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -277,7 +283,10 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -293,7 +302,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU RISC-V with a single VirtIO-BLK disk attached.
@@ -308,15 +323,23 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary())
             .args([
-                "-machine", "virt",
-                "-m", "256M",
+                "-machine",
+                "virt",
+                "-m",
+                "256M",
                 "-nographic",
-                "-bios", "default",
-                "-kernel", kernel,
-                "-drive", &format!("file={disk},format=raw,if=none,id=hd0"),
-                "-device", "virtio-blk-device,drive=hd0",
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-bios",
+                "default",
+                "-kernel",
+                kernel,
+                "-drive",
+                &format!("file={disk},format=raw,if=none,id=hd0"),
+                "-device",
+                "virtio-blk-device,drive=hd0",
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -325,7 +348,10 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -341,7 +367,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU with an AArch64 kernel (no disk, no netdev — bring-up mode).
@@ -357,13 +389,19 @@ impl QemuRunner {
             .args([
                 // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
                 // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
-                "-machine", "virt,gic-version=2",
-                "-cpu", "cortex-a57",
-                "-m", "256M",
+                "-machine",
+                "virt,gic-version=2",
+                "-cpu",
+                "cortex-a57",
+                "-m",
+                "256M",
                 "-nographic",
-                "-kernel", kernel,
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -372,7 +410,10 @@ impl QemuRunner {
             .expect("qemu-system-aarch64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -388,7 +429,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU with an AArch64 kernel AND a VirtIO block disk (full boot mode).
@@ -404,20 +451,30 @@ impl QemuRunner {
             .args([
                 // gic-version=2: QEMU 7+ defaults to GICv3 on virt; our GIC driver
                 // targets GICv2 MMIO (GICC at 0x08010000, GICD at 0x08000000).
-                "-machine", "virt,gic-version=2",
-                "-cpu", "cortex-a57",
-                "-m", "256M",
+                "-machine",
+                "virt,gic-version=2",
+                "-cpu",
+                "cortex-a57",
+                "-m",
+                "256M",
                 "-nographic",
-                "-kernel", kernel,
-                "-drive", &format!("if=none,file={disk},format=raw,id=hd0"),
-                "-device", "virtio-blk-device,drive=hd0",
-                "-netdev", "user,id=net0",
-                "-device", "virtio-net-device,netdev=net0",
+                "-kernel",
+                kernel,
+                "-drive",
+                &format!("if=none,file={disk},format=raw,id=hd0"),
+                "-device",
+                "virtio-blk-device,drive=hd0",
+                "-netdev",
+                "user,id=net0",
+                "-device",
+                "virtio-net-device,netdev=net0",
                 // rng-builtin is the cross-platform RNG (rng-random dropped in QEMU 9.x on Windows);
                 // omit here — not required for kernel boot or shell tests.
                 "-no-reboot",
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -426,7 +483,10 @@ impl QemuRunner {
             .expect("qemu-system-aarch64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -442,7 +502,108 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
+    }
+
+    /// Boot the ARM64 EL2 image used by the nested Tier3b Linux GPU lane.
+    pub fn boot_tier3b_aarch64(kernel: &str, disk: &str) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
+        let port = listener.local_addr().unwrap().port();
+        let mut child = Command::new(qemu_binary_aarch64())
+            .args([
+                "-machine",
+                "virt,virtualization=on,gic-version=2",
+                "-cpu",
+                "cortex-a72",
+                // Kernel must be built with `qemu-virt-1g`: QEMU's direct ELF
+                // loader does not consistently pass a DTB pointer in x0.
+                "-m",
+                "1G",
+                "-display",
+                "none",
+                "-kernel",
+                kernel,
+                "-drive",
+                &format!("if=none,file={disk},format=raw,id=hd0"),
+                "-device",
+                "virtio-blk-device,drive=hd0",
+                "-device",
+                "virtio-gpu-device",
+                "-netdev",
+                "user,id=net0",
+                "-device",
+                "virtio-net-device,netdev=net0",
+                "-no-reboot",
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("qemu-system-aarch64 must be available");
+        let qemu_stderr = Arc::new(Mutex::new(String::new()));
+        let captured_stderr = Arc::clone(&qemu_stderr);
+        let stderr = child.stderr.take().expect("capture QEMU stderr");
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stderr);
+            let mut text = String::new();
+            let _ = reader.read_to_string(&mut text);
+            *captured_stderr.lock().unwrap() = text;
+        });
+        listener
+            .set_nonblocking(true)
+            .expect("nonblocking serial listener");
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let stream = loop {
+            match listener.accept() {
+                Ok((stream, _)) => break stream,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(error) => panic!("QEMU serial accept failed: {error}"),
+            }
+            if let Some(status) = child.try_wait().expect("poll QEMU process") {
+                thread::sleep(Duration::from_millis(25));
+                panic!(
+                    "QEMU exited before connecting serial ({status})\n--- stderr ---\n{}",
+                    qemu_stderr.lock().unwrap()
+                );
+            }
+            if Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                thread::sleep(Duration::from_millis(25));
+                panic!(
+                    "QEMU did not connect to serial within 15s\n--- stderr ---\n{}",
+                    qemu_stderr.lock().unwrap()
+                );
+            }
+            thread::sleep(Duration::from_millis(25));
+        };
+        let writer = stream.try_clone().expect("clone serial stream");
+        let output = Arc::new(Mutex::new(String::new()));
+        let captured = Arc::clone(&output);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stream);
+            let mut byte = [0u8; 1];
+            while reader.read(&mut byte).ok() == Some(1) {
+                captured.lock().unwrap().push(byte[0] as char);
+            }
+        });
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU with an x86_64 Limine BIOS ISO.
@@ -457,18 +618,25 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_x86())
             .args([
-                "-machine", "q35",
+                "-machine",
+                "q35",
                 // pdpe1gb: Limine 8.x uses 1 GiB pages for the HHDM and
                 // panics if the CPU CPUID doesn't advertise PDPE1GB.
                 // The qemu64 model omits it by default; enable explicitly.
-                "-cpu", "qemu64,+pdpe1gb",
-                "-m", "256M",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
                 "-nographic",
-                "-cdrom", iso,
-                "-boot", "d",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
                 "-no-reboot",
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -477,7 +645,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -493,7 +664,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot x86_64 q35 from a Limine ISO with a PCIe NVMe disk attached.
@@ -508,17 +685,26 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_x86())
             .args([
-                "-machine", "q35",
-                "-cpu",     "qemu64,+pdpe1gb",
-                "-m",       "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
                 "-nographic",
-                "-cdrom",   iso,
-                "-boot",    "d",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
                 "-no-reboot",
-                "-monitor", "none",
-                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+                "-monitor",
+                "none",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -527,7 +713,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -542,7 +731,13 @@ impl QemuRunner {
                 }
             }
         });
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot x86_64 q35 from a Limine ISO with NVMe + e1000 NIC.
@@ -555,19 +750,30 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_x86())
             .args([
-                "-machine", "q35",
-                "-cpu",     "qemu64,+pdpe1gb",
-                "-m",       "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
                 "-nographic",
-                "-cdrom",   iso,
-                "-boot",    "d",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
                 "-no-reboot",
-                "-monitor", "none",
-                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
-                "-netdev",  "user,id=net0,restrict=on",
-                "-device",  "e1000,netdev=net0",
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+                "-monitor",
+                "none",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
+                "-netdev",
+                "user,id=net0,restrict=on",
+                "-device",
+                "e1000,netdev=net0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -576,7 +782,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -591,7 +800,13 @@ impl QemuRunner {
                 }
             }
         });
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot x86_64 q35 from a Limine ISO with NVMe + Intel VT-d + e1000 NIC.
@@ -604,21 +819,33 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_x86())
             .args([
-                "-machine", "q35",
-                "-cpu",     "qemu64,+pdpe1gb",
-                "-m",       "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
                 "-nographic",
-                "-cdrom",   iso,
-                "-boot",    "d",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
                 "-no-reboot",
-                "-monitor", "none",
-                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
+                "-monitor",
+                "none",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
                 // intel-iommu must precede endpoint devices.
-                "-device",  "intel-iommu",
-                "-netdev",  "user,id=net0,restrict=on",
-                "-device",  "e1000,netdev=net0",
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+                "-device",
+                "intel-iommu",
+                "-netdev",
+                "user,id=net0,restrict=on",
+                "-device",
+                "e1000,netdev=net0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -627,7 +854,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -642,7 +872,13 @@ impl QemuRunner {
                 }
             }
         });
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot x86_64 q35 from a Limine ISO with a VirtIO BLK PCI device attached.
@@ -662,18 +898,27 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_x86())
             .args([
-                "-machine", "q35",
-                "-cpu", "qemu64,+pdpe1gb",
-                "-m", "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64,+pdpe1gb",
+                "-m",
+                "256M",
                 "-nographic",
-                "-cdrom", iso,
-                "-boot", "d",
+                "-cdrom",
+                iso,
+                "-boot",
+                "d",
                 "-no-reboot",
-                "-monitor", "none",
+                "-monitor",
+                "none",
                 // VirtIO BLK PCI device — kernel should log "VirtIO Block: initialized".
-                "-drive",  &format!("file={virtio_disk},format=raw,if=none,id=hd0"),
-                "-device", "virtio-blk-pci,drive=hd0",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-drive",
+                &format!("file={virtio_disk},format=raw,if=none,id=hd0"),
+                "-device",
+                "virtio-blk-pci,drive=hd0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -682,7 +927,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -698,7 +946,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU with a RISC-V 32-bit kernel (Phase-31 Nano, no disk, no VirtIO).
@@ -711,13 +965,19 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_rv32())
             .args([
-                "-machine", "virt",
-                "-m", "256M",
+                "-machine",
+                "virt",
+                "-m",
+                "256M",
                 "-nographic",
-                "-bios", "default",
-                "-kernel", kernel,
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-bios",
+                "default",
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -726,7 +986,10 @@ impl QemuRunner {
             .expect("qemu-system-riscv32 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -742,7 +1005,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU with an AArch32 (ARMv7-A) bare-metal kernel (Nano profile).
@@ -755,13 +1024,19 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_arm32())
             .args([
-                "-machine", "virt",
-                "-cpu", "cortex-a15",
-                "-m", "256M",
+                "-machine",
+                "virt",
+                "-cpu",
+                "cortex-a15",
+                "-m",
+                "256M",
                 "-nographic",
-                "-kernel", kernel,
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -770,7 +1045,10 @@ impl QemuRunner {
             .expect("qemu-system-arm must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -786,7 +1064,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU with an x86_32 (IA-32) bare-metal kernel via Multiboot1.
@@ -800,13 +1084,19 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary_i386())
             .args([
-                "-machine", "pc",
-                "-cpu", "base",
-                "-m", "256M",
+                "-machine",
+                "pc",
+                "-cpu",
+                "base",
+                "-m",
+                "256M",
                 "-nographic",
-                "-kernel", kernel,
-                "-monitor", "none",
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -815,7 +1105,10 @@ impl QemuRunner {
             .expect("qemu-system-i386 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept().expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
 
         let output = Arc::new(Mutex::new(String::new()));
@@ -831,7 +1124,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Internal: boot QEMU with a caller-specified `-netdev` value.
@@ -855,31 +1154,46 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary())
             .args([
-                "-machine", "virt",
-                "-m", "256M",
+                "-machine",
+                "virt",
+                "-m",
+                "256M",
                 // Use `-display none` instead of `-nographic` so that QEMU
                 // creates a proper graphical console for virtio-gpu + virtio-keyboard,
                 // enabling input-send-event to route keyboard events to the guest.
                 // `-nographic` routes serial to stdio but prevents graphical console
                 // creation, making input-send-event a no-op for VirtIO keyboard.
                 // Serial output is still captured via the TCP socket below.
-                "-display", "none",
-                "-bios", "default",
-                "-kernel", kernel,
-                "-drive", &format!("file={disk},format=raw,id=hd0,if=none"),
-                "-device", "virtio-blk-device,drive=hd0",
-                "-netdev", netdev,
-                "-device", "virtio-net-device,netdev=net0",
-                "-device", "virtio-keyboard-device",
-                "-device", "virtio-gpu-device",
+                "-display",
+                "none",
+                "-bios",
+                "default",
+                "-kernel",
+                kernel,
+                "-drive",
+                &format!("file={disk},format=raw,id=hd0,if=none"),
+                "-device",
+                "virtio-blk-device,drive=hd0",
+                "-netdev",
+                netdev,
+                "-device",
+                "virtio-net-device,netdev=net0",
+                "-device",
+                "virtio-keyboard-device",
+                "-device",
+                "virtio-gpu-device",
                 // VirtIO RNG: required for TLS handshakes (ViRng panics without it).
                 // Mirrors run.ps1 — the standard G1 hardware set includes entropy.
-                "-object", "rng-builtin,id=rng0",
-                "-device", "virtio-rng-device,rng=rng0",
+                "-object",
+                "rng-builtin,id=rng0",
+                "-device",
+                "virtio-rng-device,rng=rng0",
                 // QMP for keyboard injection via input-send-event.
-                "-qmp", &format!("tcp:127.0.0.1:{monitor_port}"),
+                "-qmp",
+                &format!("tcp:127.0.0.1:{monitor_port}"),
                 // Serial 0 → TCP socket (bidirectional, replaces -nographic stdio mux).
-                "-serial", &format!("tcp:127.0.0.1:{port}"),
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -888,9 +1202,7 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         // Accept QEMU's connection to our serial socket.
-        listener
-            .set_nonblocking(false)
-            .expect("blocking listener");
+        listener.set_nonblocking(false).expect("blocking listener");
         let stream = listener
             .accept()
             .expect("QEMU did not connect to the serial socket")
@@ -929,7 +1241,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: monitor_stream }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: monitor_stream,
+        }
     }
 
     /// Boot QEMU with a VirtIO GPU + VirtIO tablet (for absolute mouse events)
@@ -958,26 +1276,40 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary())
             .args([
-                "-machine", "virt",
-                "-m", "256M",
+                "-machine",
+                "virt",
+                "-m",
+                "256M",
                 // `-display none` creates a graphical console for VirtIO input
                 // while capturing serial via TCP (see boot_with_netdev comment).
-                "-display", "none",
-                "-bios", "default",
-                "-kernel", kernel,
-                "-drive", &format!("file={disk},format=raw,id=hd0,if=none"),
-                "-device", "virtio-blk-device,drive=hd0",
-                "-netdev", "user,id=net0",
-                "-device", "virtio-net-device,netdev=net0",
-                "-device", "virtio-keyboard-device",
-                "-device", "virtio-gpu-device",
+                "-display",
+                "none",
+                "-bios",
+                "default",
+                "-kernel",
+                kernel,
+                "-drive",
+                &format!("file={disk},format=raw,id=hd0,if=none"),
+                "-device",
+                "virtio-blk-device,drive=hd0",
+                "-netdev",
+                "user,id=net0",
+                "-device",
+                "virtio-net-device,netdev=net0",
+                "-device",
+                "virtio-keyboard-device",
+                "-device",
+                "virtio-gpu-device",
                 // Tablet device: exposes EV_ABS events for absolute cursor positioning.
                 // QMP input-send-event with type "abs" requires a tablet backend.
-                "-device", "virtio-tablet-device",
+                "-device",
+                "virtio-tablet-device",
                 // QMP monitor: QEMU is the server, binds this port.
                 // `nowait` = QEMU does not block for a client connection at startup.
-                "-qmp", &format!("tcp:127.0.0.1:{qmp_port},server,nowait"),
-                "-serial", &format!("tcp:127.0.0.1:{serial_port}"),
+                "-qmp",
+                &format!("tcp:127.0.0.1:{qmp_port},server,nowait"),
+                "-serial",
+                &format!("tcp:127.0.0.1:{serial_port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -986,7 +1318,9 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         // Accept QEMU's serial connection.
-        serial_listener.set_nonblocking(false).expect("blocking listener");
+        serial_listener
+            .set_nonblocking(false)
+            .expect("blocking listener");
         let stream = serial_listener
             .accept()
             .expect("QEMU did not connect to serial socket")
@@ -1093,7 +1427,10 @@ impl QemuRunner {
         m.set_read_timeout(Some(Duration::from_millis(500))).ok();
         let mut resp = vec![0u8; 1024];
         match m.read(&mut resp) {
-            Ok(n) if n > 0 => eprintln!("[test] QMP response: {:?}", String::from_utf8_lossy(&resp[..n])),
+            Ok(n) if n > 0 => eprintln!(
+                "[test] QMP response: {:?}",
+                String::from_utf8_lossy(&resp[..n])
+            ),
             Ok(_) => eprintln!("[test] QMP response: empty"),
             Err(e) => eprintln!("[test] QMP read error: {e}"),
         }
@@ -1148,14 +1485,18 @@ impl QemuRunner {
     /// constructors have `monitor: None` and this method is a no-op.
     pub fn send_qemu_key(&mut self, key: &str) {
         let Some(m) = self.monitor.as_mut() else {
-            eprintln!("[test] WARNING: QMP socket is None — sendkey {:?} dropped", key);
+            eprintln!(
+                "[test] WARNING: QMP socket is None — sendkey {:?} dropped",
+                key
+            );
             return;
         };
 
         // QMP handshake: read the server greeting, then negotiate capabilities.
         // The greeting is sent immediately on connect.  Drain it now if we
         // haven't already (the timeout makes this idempotent on repeat calls).
-        m.set_read_timeout(Some(std::time::Duration::from_millis(200))).ok();
+        m.set_read_timeout(Some(std::time::Duration::from_millis(200)))
+            .ok();
         let mut buf = vec![0u8; 4096];
         loop {
             match m.read(&mut buf) {
@@ -1170,7 +1511,8 @@ impl QemuRunner {
         let _ = m.write_all(b"{\"execute\":\"qmp_capabilities\"}\n");
         let _ = m.flush();
         // Drain the {"return": {}} ack.
-        m.set_read_timeout(Some(std::time::Duration::from_millis(300))).ok();
+        m.set_read_timeout(Some(std::time::Duration::from_millis(300)))
+            .ok();
         loop {
             match m.read(&mut buf) {
                 Ok(0) | Err(_) => break,
@@ -1192,10 +1534,14 @@ impl QemuRunner {
         let _ = m.write_all(b"\n");
         let _ = m.flush();
         // Read response for diagnostics.
-        m.set_read_timeout(Some(std::time::Duration::from_millis(500))).ok();
+        m.set_read_timeout(Some(std::time::Duration::from_millis(500)))
+            .ok();
         let mut resp = vec![0u8; 1024];
         match m.read(&mut resp) {
-            Ok(n) if n > 0 => eprintln!("[test] QMP response: {:?}", String::from_utf8_lossy(&resp[..n])),
+            Ok(n) if n > 0 => eprintln!(
+                "[test] QMP response: {:?}",
+                String::from_utf8_lossy(&resp[..n])
+            ),
             Ok(_) => eprintln!("[test] QMP response: empty"),
             Err(e) => eprintln!("[test] QMP read error: {e}"),
         }
@@ -1270,14 +1616,16 @@ pub fn spawn_http_server() -> (u16, thread::JoinHandle<()>) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
                         total += n;
-                        if buf[..total].windows(4).any(|w| w == b"\r\n\r\n") { break; }
-                        if total == buf.len() { break; }
+                        if buf[..total].windows(4).any(|w| w == b"\r\n\r\n") {
+                            break;
+                        }
+                        if total == buf.len() {
+                            break;
+                        }
                     }
                 }
             }
-            let _ = stream.write_all(
-                b"HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nHELLO",
-            );
+            let _ = stream.write_all(b"HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nHELLO");
             drop(stream); // sends FIN — curl's SOCKET_STATE will see CloseWait
         }
     });
@@ -1298,7 +1646,9 @@ pub fn spawn_echo_server() -> u16 {
             loop {
                 match stream.read(&mut buf) {
                     Ok(0) | Err(_) => break,
-                    Ok(n) => { let _ = stream.write_all(&buf[..n]); }
+                    Ok(n) => {
+                        let _ = stream.write_all(&buf[..n]);
+                    }
                 }
             }
         }
@@ -1344,17 +1694,25 @@ impl QemuRunner {
 
         let child = Command::new(qemu_x86_binary())
             .args([
-                "-machine", "q35",
-                "-cpu",     "qemu64",
-                "-m",       "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64",
+                "-m",
+                "256M",
                 "-nographic",
                 // NVMe drive: PCIe NVMe controller backed by nvme_disk.
-                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
                 // Serial → TCP socket (same pattern as boot_with_netdev).
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
-                "-kernel",  kernel,
-                "-monitor", "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1382,7 +1740,13 @@ impl QemuRunner {
             }
         });
 
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU x86_64 q35 with an NVMe disk AND an e1000 NIC.
@@ -1398,17 +1762,27 @@ impl QemuRunner {
 
         let child = Command::new(qemu_x86_binary())
             .args([
-                "-machine", "q35",
-                "-cpu",     "qemu64",
-                "-m",       "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64",
+                "-m",
+                "256M",
                 "-nographic",
-                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
-                "-netdev",  "user,id=net0,restrict=on",
-                "-device",  "e1000,netdev=net0",
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
-                "-kernel",  kernel,
-                "-monitor", "none",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
+                "-netdev",
+                "user,id=net0,restrict=on",
+                "-device",
+                "e1000,netdev=net0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1417,8 +1791,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept()
-            .expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
@@ -1432,7 +1808,13 @@ impl QemuRunner {
                 }
             }
         });
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU x86_64 q35 with an NVMe disk, an e1000 NIC, **and** Intel VT-d.
@@ -1446,19 +1828,30 @@ impl QemuRunner {
 
         let child = Command::new(qemu_x86_binary())
             .args([
-                "-machine", "q35",
-                "-cpu",     "qemu64",
-                "-m",       "256M",
+                "-machine",
+                "q35",
+                "-cpu",
+                "qemu64",
+                "-m",
+                "256M",
                 "-nographic",
-                "-drive",   &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
-                "-device",  "nvme,drive=nvme0,serial=deadbeef01",
+                "-drive",
+                &format!("file={nvme_disk},format=raw,if=none,id=nvme0"),
+                "-device",
+                "nvme,drive=nvme0,serial=deadbeef01",
                 // intel-iommu must precede endpoint devices so QEMU wires it up first.
-                "-device",  "intel-iommu",
-                "-netdev",  "user,id=net0,restrict=on",
-                "-device",  "e1000,netdev=net0",
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
-                "-kernel",  kernel,
-                "-monitor", "none",
+                "-device",
+                "intel-iommu",
+                "-netdev",
+                "user,id=net0,restrict=on",
+                "-device",
+                "e1000,netdev=net0",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
+                "-kernel",
+                kernel,
+                "-monitor",
+                "none",
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1467,8 +1860,10 @@ impl QemuRunner {
             .expect("qemu-system-x86_64 must be on PATH or set $VIOS_QEMU_X86");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept()
-            .expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
@@ -1482,7 +1877,13 @@ impl QemuRunner {
                 }
             }
         });
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 
     /// Boot QEMU RISC-V virt with a RISC-V IOMMU PCIe device attached.
@@ -1497,18 +1898,29 @@ impl QemuRunner {
 
         let child = Command::new(qemu_binary())
             .args([
-                "-machine", "virt",
-                "-m",       "256M",
+                "-machine",
+                "virt",
+                "-m",
+                "256M",
                 "-nographic",
-                "-bios",    "default",
-                "-kernel",  kernel,
-                "-drive",   &format!("file={disk},format=raw,id=hd0,if=none"),
-                "-device",  "virtio-blk-device,drive=hd0",
-                "-netdev",  "user,id=net0",
-                "-device",  "virtio-net-device,netdev=net0",
-                "-device",  "riscv-iommu-pci,bus=pcie.0",
-                "-monitor", "none",
-                "-serial",  &format!("tcp:127.0.0.1:{port}"),
+                "-bios",
+                "default",
+                "-kernel",
+                kernel,
+                "-drive",
+                &format!("file={disk},format=raw,id=hd0,if=none"),
+                "-device",
+                "virtio-blk-device,drive=hd0",
+                "-netdev",
+                "user,id=net0",
+                "-device",
+                "virtio-net-device,netdev=net0",
+                "-device",
+                "riscv-iommu-pci,bus=pcie.0",
+                "-monitor",
+                "none",
+                "-serial",
+                &format!("tcp:127.0.0.1:{port}"),
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -1517,8 +1929,10 @@ impl QemuRunner {
             .expect("qemu-system-riscv64 must be on PATH");
 
         listener.set_nonblocking(false).expect("blocking listener");
-        let stream = listener.accept()
-            .expect("QEMU did not connect to the serial socket").0;
+        let stream = listener
+            .accept()
+            .expect("QEMU did not connect to the serial socket")
+            .0;
         let writer = stream.try_clone().expect("clone serial stream");
         let output = Arc::new(Mutex::new(String::new()));
         let buf = Arc::clone(&output);
@@ -1532,7 +1946,13 @@ impl QemuRunner {
                 }
             }
         });
-        Self { child, writer: Some(writer), output, temp_disk: None, monitor: None }
+        Self {
+            child,
+            writer: Some(writer),
+            output,
+            temp_disk: None,
+            monitor: None,
+        }
     }
 }
 
@@ -1556,7 +1976,9 @@ pub fn spawn_mqtt_broker(
     let port = listener.local_addr().expect("mqtt local addr").port();
     let (tx, rx) = mpsc::channel::<Vec<u8>>();
     thread::spawn(move || {
-        let Ok((mut stream, _)) = listener.accept() else { return };
+        let Ok((mut stream, _)) = listener.accept() else {
+            return;
+        };
         // Use a single buffer for all reads so CONNECT + SUBSCRIBE bytes
         // arriving in the same TCP segment are handled correctly.
         // `pos` tracks where the next packet starts after CONNECT is consumed.
@@ -1571,13 +1993,19 @@ pub fn spawn_mqtt_broker(
                     filled += k;
                     if filled >= 2 && buf[0] == 0x10 {
                         // CONNECT remaining_len is always < 128 for our client.
-                        if filled >= 2 + buf[1] as usize { break; }
+                        if filled >= 2 + buf[1] as usize {
+                            break;
+                        }
                     }
-                    if filled >= 512 { return; }
+                    if filled >= 512 {
+                        return;
+                    }
                 }
             }
         }
-        if buf[0] != 0x10 { return; }
+        if buf[0] != 0x10 {
+            return;
+        }
         let _ = stream.write_all(&[0x20, 0x02, 0x00, 0x00]); // CONNACK
 
         // For subscribe tests: inject_payload is non-empty.  Send SUBACK + PUBLISH
@@ -1591,11 +2019,11 @@ pub fn spawn_mqtt_broker(
             // mqtt_recv drains all 500 polls in ~50 ms before we send SUBACK.
             thread::sleep(std::time::Duration::from_millis(50));
             let _ = stream.write_all(&[0x90, 0x03, 0x00, 0x01, 0x00]); // SUBACK
-            // 500 ms gives the client time to consume the SUBACK via RECV_OP and
-            // start its PUBLISH poll loop before PUBLISH arrives.  Without this
-            // gap, the net service may deliver SUBACK + PUBLISH in one RECV
-            // response; mqtt_recv extracts only the first packet and discards the
-            // trailing PUBLISH bytes, which are then lost from smoltcp's buffer.
+                                                                       // 500 ms gives the client time to consume the SUBACK via RECV_OP and
+                                                                       // start its PUBLISH poll loop before PUBLISH arrives.  Without this
+                                                                       // gap, the net service may deliver SUBACK + PUBLISH in one RECV
+                                                                       // response; mqtt_recv extracts only the first packet and discards the
+                                                                       // trailing PUBLISH bytes, which are then lost from smoltcp's buffer.
             thread::sleep(std::time::Duration::from_millis(500));
             // PUBLISH: topic "t" (1 byte), payload = inject_payload.
             let topic = b"t";
@@ -1623,26 +2051,32 @@ pub fn spawn_mqtt_broker(
         while filled < connect_end {
             match stream.read(&mut buf[filled..]) {
                 Ok(0) | Err(_) => return,
-                Ok(k) => { filled += k; }
+                Ok(k) => {
+                    filled += k;
+                }
             }
         }
         let pos = connect_end;
         loop {
             let have = filled.saturating_sub(pos);
-            if have >= 2 && have >= 2 + buf[pos + 1] as usize { break; }
+            if have >= 2 && have >= 2 + buf[pos + 1] as usize {
+                break;
+            }
             match stream.read(&mut buf[filled..]) {
                 Ok(0) | Err(_) => break,
-                Ok(k) => { filled += k; }
+                Ok(k) => {
+                    filled += k;
+                }
             }
         }
         let next = &buf[pos..filled];
-        let n    = next.len();
+        let n = next.len();
         if n > 0 && next[0] == 0x30 {
             // PUBLISH: extract payload after fixed-header(2) + topic_len(2) + topic.
-            let remaining     = next[1] as usize;
-            let topic_len     = (next[2] as usize) << 8 | next[3] as usize;
+            let remaining = next[1] as usize;
+            let topic_len = (next[2] as usize) << 8 | next[3] as usize;
             let payload_start = 4 + topic_len;
-            let payload_end   = (2 + remaining).min(n);
+            let payload_end = (2 + remaining).min(n);
             if payload_end > payload_start {
                 let _ = tx.send(next[payload_start..payload_end].to_vec());
             }

@@ -22,13 +22,18 @@ api::declare_manifest!(
 api::declare_syscalls![
     // IPC / service discovery
     Send,
+    TrySend,
     Recv,
+    RecvTimeout,
     Log,
     LookupService,
     // Kernel filesystem access (read vmlinuz + initrd)
     OpenCap,
     ReadCap,
     CloseCap,
+    // Guest console input: drain the kernel UART RX ring (fd 0) into the
+    // emulated 16550 RX FIFO (x86) / future PL011 RX (aarch64)
+    Read,
     // Timer emulation
     GetTime,
     // VMM syscalls 220-227
@@ -40,38 +45,110 @@ api::declare_syscalls![
     VcpuRegs,
     InjectIrq,
     ReadGuestMemory,
+    // Scanout backing shared read-only with the compositor.
+    GrantRegister,
+    GrantShare,
+    GrantSlice,
+    GrantUnregister,
+    GpuGetResolution,
+    WaitForEvent,
 ];
 
-mod dtb;
-mod gicd;
-mod loader_image;
-mod net_backend;
-mod pl011;
-mod psci;
-mod run_loop;
-mod timer;
-mod virtio_blk;
-mod virtio_console;
-mod virtio_mmio;
-mod virtio_net;
-mod virtqueue;
+// VMM syscall wrappers — only the two arches with a kernel VMM backend have a
+// caller; on any other target every wrapper would be dead code.
+#[cfg(any(target_arch = "aarch64", target_arch = "x86_64"))]
 mod vmm;
 
-use ostd::io::println;
-use types::ViError;
+// ── aarch64 (EL2) personality ─────────────────────────────────────────────────
+#[cfg(target_arch = "aarch64")]
+mod dtb;
+#[cfg(target_arch = "aarch64")]
+mod gicd;
+#[cfg(target_arch = "aarch64")]
+mod loader_image;
+#[cfg(target_arch = "aarch64")]
+mod net_backend;
+#[cfg(target_arch = "aarch64")]
+mod pl011;
+#[cfg(target_arch = "aarch64")]
+mod psci;
+#[cfg(target_arch = "aarch64")]
+mod run_loop;
+#[cfg(target_arch = "aarch64")]
+mod timer;
+#[cfg(target_arch = "aarch64")]
+mod virtio_blk;
+#[cfg(target_arch = "aarch64")]
+mod virtio_console;
+#[cfg(target_arch = "aarch64")]
+mod virtio_gpu;
+#[cfg(target_arch = "aarch64")]
+mod virtio_mmio;
+#[cfg(target_arch = "aarch64")]
+mod virtio_net;
+#[cfg(target_arch = "aarch64")]
+mod virtqueue;
+#[cfg(target_arch = "aarch64")]
+mod virtqueue_guard;
+
+// ── x86_64 (SVM/VT-x) personality ──────────────────────────────────────────────
+#[cfg(target_arch = "x86_64")]
+mod acpi;
+#[cfg(target_arch = "x86_64")]
+mod boot_info;
+#[cfg(target_arch = "x86_64")]
+mod boot_x86;
+#[cfg(target_arch = "x86_64")]
+mod cmos_rtc;
+#[cfg(target_arch = "x86_64")]
+mod loader_image_x86;
+#[cfg(target_arch = "x86_64")]
+mod pic_8259;
+#[cfg(target_arch = "x86_64")]
+mod pit_8253;
+#[cfg(target_arch = "x86_64")]
+mod run_loop_x86;
+#[cfg(target_arch = "x86_64")]
+mod uart_16550;
+
+/// Entry: dispatch to the arch personality that has a VMM backend.
+#[no_mangle]
+pub fn main() -> ! {
+    #[cfg(target_arch = "aarch64")]
+    boot_arm();
+    #[cfg(target_arch = "x86_64")]
+    boot_x86::run();
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    ostd::io::println("[hv] no VMM personality for this architecture");
+    quiesce()
+}
+
+fn quiesce() -> ! {
+    ostd::io::println("[hv] service quiesced");
+    loop {
+        let _ = ostd::syscall::sys_wait_for_event(0, 0);
+    }
+}
 
 /// Guest IPA base (1 GiB, must match registry.rs GUEST_IPA_BASE).
+#[cfg(target_arch = "aarch64")]
 const GUEST_IPA_BASE: u64 = 0x4000_0000;
 /// 128 MiB guest RAM.
+#[cfg(target_arch = "aarch64")]
 const GUEST_RAM_SIZE: u64 = 128 * 1024 * 1024;
 /// Page count for create_vm.
+#[cfg(target_arch = "aarch64")]
 const GUEST_RAM_PAGES: usize = (GUEST_RAM_SIZE / 4096) as usize;
 
+#[cfg(target_arch = "aarch64")]
 const VMLINUZ_PATH: &str = "/vmlinuz";
+#[cfg(target_arch = "aarch64")]
 const INITRD_PATH: &str = "/initrd.gz";
 
-#[no_mangle]
-pub fn main() {
+#[cfg(target_arch = "aarch64")]
+fn boot_arm() {
+    use ostd::io::println;
+    use types::ViError;
     println("[hv] hypervisor service cell starting");
 
     // ── 1. Allocate guest VM ──────────────────────────────────────────────────
@@ -89,34 +166,24 @@ pub fn main() {
         return;
     }
 
-    // ── 3. Read Alpine kernel and initramfs from VIFS1 ───────────────────────
-    let kernel_bytes = match loader_image::read_file_from_vfs(VMLINUZ_PATH) {
-        Ok(b) => b,
+    // ── 3. Parse the ARM64 Image header + compute guest RAM layout ──────────
+    // Layout math needs only the header, so the images are streamed straight
+    // into guest RAM afterwards — buffering either file whole exceeds the
+    // 8 MiB cell heap and OOM-kills the cell.
+    let (text_offset, image_size) = match loader_image::read_image_header(VMLINUZ_PATH) {
+        Ok(h) => h,
         Err(e) => {
             println(&alloc::format!(
-                "[hv] read {} failed: {:?}",
+                "[hv] read {} header failed: {:?}",
                 VMLINUZ_PATH,
                 e
             ));
             return;
         }
     };
-    let initrd_bytes = match loader_image::read_file_from_vfs(INITRD_PATH) {
-        Ok(b) => b,
-        Err(e) => {
-            println(&alloc::format!("[hv] read {} failed: {:?}", INITRD_PATH, e));
-            return;
-        }
-    };
-    println(&alloc::format!(
-        "[hv] kernel={} B  initrd={} B",
-        kernel_bytes.len(),
-        initrd_bytes.len()
-    ));
+    let mut guest = loader_image::compute_layout(text_offset, image_size, GUEST_IPA_BASE);
 
-    // ── 4. Two-pass image placement ───────────────────────────────────────────
-    // Pass 1: write a placeholder DTB to discover initrd_gpa from place_images.
-    let placeholder = alloc::vec![0u8; 4096];
+    // ── 4. Stream kernel + initramfs into guest RAM ──────────────────────────
     let write_guest = |gpa: u64, bytes: &[u8]| -> types::ViResult<()> {
         let r = vmm::write_guest_memory(vm_id, gpa, bytes);
         if r == usize::MAX {
@@ -125,21 +192,39 @@ pub fn main() {
             Ok(())
         }
     };
-    let guest = match loader_image::place_images(
-        &kernel_bytes,
-        &initrd_bytes,
-        &placeholder,
-        GUEST_IPA_BASE,
-        write_guest,
-    ) {
-        Ok(g) => g,
-        Err(e) => {
-            println(&alloc::format!("[hv] place_images failed: {:?}", e));
-            return;
-        }
-    };
+    let kernel_size =
+        match loader_image::stream_file_to_guest(VMLINUZ_PATH, guest.kernel_entry_gpa, write_guest)
+        {
+            Ok(n) => n,
+            Err(e) => {
+                println(&alloc::format!(
+                    "[hv] stream {} failed: {:?}",
+                    VMLINUZ_PATH,
+                    e
+                ));
+                return;
+            }
+        };
+    let initrd_size =
+        match loader_image::stream_file_to_guest(INITRD_PATH, guest.initrd_gpa, write_guest) {
+            Ok(n) => n,
+            Err(e) => {
+                println(&alloc::format!(
+                    "[hv] stream {} failed: {:?}",
+                    INITRD_PATH,
+                    e
+                ));
+                return;
+            }
+        };
+    guest.finalize_dtb_gpa(initrd_size);
+    println(&alloc::format!(
+        "[hv] kernel={} B  initrd={} B (streamed)",
+        kernel_size,
+        initrd_size
+    ));
 
-    // Pass 2: build real DTB now that we know initrd_gpa and overwrite the slot.
+    // Build the DTB now that initrd_gpa/size are known and write it in place.
     let dtb_bytes = match dtb::build_dtb(
         GUEST_IPA_BASE,
         GUEST_RAM_SIZE,
@@ -190,4 +275,5 @@ pub fn main() {
     run_loop::run(vm_id, vcpu_id);
 
     println("[hv] guest exited");
+    quiesce()
 }

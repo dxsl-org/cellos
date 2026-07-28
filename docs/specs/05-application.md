@@ -194,7 +194,7 @@ Cellos (HS-mode)
             apt install nginx; nginx; → works
 ```
 
-### 4.3 VMM: Minimal VMM (custom, ~9K LOC)
+### 4.3 VMM: Minimal VMM (custom, ~2.9K LOC shipped; ~9K planned at full device coverage)
 
 **Hypervisor Cell là Tier 1 Rust cell bình thường** — cùng spawn/lifecycle/IPC/restart pattern với vfs/net/shell cells. Điểm khác duy nhất: có `HypervisorCap` capability token, được kernel dùng để gate hypervisor syscalls và switch HS-mode khi dispatch.
 
@@ -240,13 +240,13 @@ Cellos tự viết VMM tối giản thay vì fork crosvm (~75K LOC thực tế, 
 **Tại sao không QEMU:** ~1M LOC C, cần JIT/mmap/fork — không fit Tier 1 cell.
 **Tại sao không Firecracker:** thiếu GPU/display backend — chỉ cho serverless, không G2 desktop.
 
-**Cấu trúc `cells/services/hypervisor/` (shipped, ~9K LOC):**
+**Cấu trúc `cells/services/hypervisor/` (shipped ARM64, ~2.9K LOC cell+kernel; ~9K là mục tiêu khi phủ đủ device):**
 ```
 src/
   run_loop.rs       — VmExit dispatch loop (MMIO/HVC/WFI/Preempted/Shutdown)
   vmm.rs            — create_vm / create_vcpu / map_guest / run_vcpu wrappers
   loader_image.rs   — ARM64 Image header parser + guest RAM placement
-  dtb.rs            — FDT builder (9 nodes: RAM/CPU/PSCI/GIC/timer/chosen/UART/virtio×3)
+  dtb.rs            — FDT builder (10 nodes: RAM/CPU/PSCI/GIC/timer/chosen/UART + virtio×3)
   pl011.rs          — PL011 UART emulator
   gicd.rs           — GICv2 GICD shadow-register emulator
   psci.rs           — PSCI 1.0 handler (SYSTEM_OFF/CPU_ON/…)
@@ -260,6 +260,42 @@ src/
   vgic.rs           — GICH/GICV hardware vGIC (Phase 09)
   loader_image.rs   — guest image placement helper
 ```
+
+### 4.3.1 Tier-3 Threat Model (guest-escape)
+
+> **Scope:** cô lập giữa **Linux guest ↔ Cellos host** (kernel + cell khác). KHÔNG bàn bảo mật *bên trong* guest (đó là việc của guest OS). Bổ sung [15-kernel-boundary.md](15-kernel-boundary.md) (kernel TCB) và [16-rustc-tcb.md](16-rustc-tcb.md) (LBI).
+> **Ratified:** 2026-07-12 (research `.agents/reports/research-260712-1010`, red-team `.agents/260712-0952`).
+
+**Tài sản cần bảo vệ:** (1) host RAM ngoài vùng guest; (2) kernel TCB + CapSet; (3) cell khác + dữ liệu của chúng; (4) host disk (cell-store, ELF cell khác); (5) tính sẵn sàng của cả máy (SAS — một địa chỉ, kernel OOM = chết tất cả).
+
+**Mô hình đối thủ:** guest root độc hại, hoặc guest kernel bị khai thác, điều khiển hoàn toàn: nội dung mọi vùng RAM guest, giá trị MMIO/PIO ghi ra, mọi trường trong virtqueue (địa chỉ/độ dài descriptor, chỉ số ring), HVC/PSCI function-id + tham số, tần suất QueueNotify.
+
+**Bề mặt tấn công ↔ phòng thủ:**
+
+| # | Bề mặt | Phòng thủ hiện có (file:line) | Trạng thái |
+|---|--------|-------------------------------|-----------|
+| 1 | Wrapper `read/write_guest_memory` (mọi truy cập RAM guest đi qua đây) | Kernel bounds-check GPA vào cửa sổ guest-RAM: `checked_sub`/`checked_add`, `end > guest_pages*PAGE_SIZE` → `InvalidInput` (`kernel/src/hypervisor/registry.rs:311-317, 358-364`). Cell `#![forbid(unsafe_code)]` — không deref con trỏ thô. | ✅ **Load-bearing.** Miễn nhiễm class CVE-2026-5747 (Firecracker virtio OOB write). |
+| 2 | Parser descriptor chain (`virtqueue.rs`) | Mọi đọc desc/ring qua wrapper #1; `MAX_CHAIN=64` chống chain vô hạn (`virtqueue.rs:23`). | ⚠️ **GAP:** `cur` (next-index) chưa clamp `< q_size`; `avail_idx` delta chưa cap; assert `buf.writable` khớp chiều device còn thiếu → **fuzz + fix ở phase P06**. |
+| 3 | `inject_irq` intid | Syscall layer validate `intid ≤ 1019`; IRQ chỉ vào hàng đợi vCPU của chính guest đó (`registry.rs:390-398`). | ⚠️ **GAP (C1, Critical, LIVE):** `push_back` không cap độ sâu (`registry.rs:398`) → guest mask IRQ + spam QueueNotify = kernel-heap OOM = chết cả máy. **Cap độ sâu ở P06.** |
+| 4 | Backing-store virtio-blk | Ghi **đã hoạt động hôm nay** (BLK_T_OUT xử lý bởi `blk_write`, `virtio_blk.rs:81,103-116`) nhưng backing là **16MiB Vec volatile, zero-filled** (`:15,33`) — không load từ ảnh thật, mất khi cell restart; sector clamp `off>=disk.len()` (`:94,107`). | ⚠️ **GAP:** khi P04 thêm persist, backing PHẢI là **image-file/partition per-VM, KHÔNG shared cell-store** (nếu không: guest ghi sector tùy ý → đè FAT/cell-table/ELF cell khác = host-disk escape); sector clamp phải theo backing thật (không phải hằng số 16MiB). **Invariant + fix ở P04.** virtio-blk theo *sector*, không path → path-traversal guard KHÔNG áp (chỉ áp nếu sau này có virtio-fs). |
+| 5 | PSCI/HVC dispatch | Hiện an toàn: CPU_ON trả DENIED, AFFINITY_INFO chỉ so `mpidr==0`, không index (`psci.rs:72-83`). | ⚠️ **GAP tương lai:** P09 SMP sẽ implement CPU_ON với target-CPU/entry guest-controlled → phải bounds-check khi làm. Ghi nhận trước. |
+| 6 | MMIO dispatch default arm | Run-loop có default arm (log + error) cho IPA chưa đăng ký. | ✅ (m2 red-team ARM64 đã đóng). |
+| 7 | Config-space reads | `config_read` trả hằng số (`virtio_blk.rs:41-47`). | ✅ hiện tại; giữ bất biến "config trả giá trị không guest-influenced". |
+| 8 | Resource-exhaustion tổng quát | — | ⚠️ **GAP (C1):** xem #3 + `avail_idx` delta (#2). Nguyên tắc: guest KHÔNG được làm cạn tài nguyên kernel; mọi hàng đợi kernel do guest kích phải có trần. |
+
+**Bất biến load-bearing (vi phạm = mất cô lба):**
+1. **Bounds-check tập trung** — mọi truy cập RAM guest qua wrapper kernel đã `checked_add` (`registry.rs:311-317`). Refactor/tối ưu (P06/P07) phải chạy production qua CÙNG đường này.
+2. **Cell không deref thô** — hypervisor cell `#![forbid(unsafe_code)]`; guest memory chỉ chạm qua syscall.
+3. **Backing-store isolation** — virtio-blk RW backing = image-file/partition per-VM, không bao giờ shared cell-store.
+4. **Shadow-GICD** — `gicd.rs` chỉ giữ shadow register, không ghi GICD vật lý (chống corrupt IRQ routing host).
+5. **Single-thread/sync-vCPU** — `write_guest_memory` an toàn nhờ không vCPU nào chạy đồng thời VÀ RunVcpu đồng bộ same-core (`registry.rs:182-217, 321-323`); mọi hướng SMP/đa-luồng/async-vCPU phải thêm quiesce.
+6. **Resource ceiling** — mọi hàng đợi kernel guest kích (IRQ queue, avail delta) có trần.
+7. **Stage-2 SAS-isolation guard** — `stage2::map()` từ chối map một IPA guest-RAM vào HPA nằm ngoài vùng đã `carve_guest_ram` cho VM đó, trả `SasViolation` (`kernel/src/memory/stage2.rs:222-224`). Đây là cơ chế THẬT chặn `map_guest_memory` map bừa RAM host vào guest — khác với bất biến #1 (bounds-check trên đường copy runtime).
+
+**Non-goal:** nested VM (guest không tạo sub-VM). **Ngoại lệ đã audit (không phải "không có passthrough" tuyệt đối):** `create_vm` cài đặt **GICV MMIO hardware passthrough** (GIC CPU interface HPA→IPA, cho vGIC) qua `map_mmio_passthrough`, cố ý bypass CẢ MMIO-hole guard lẫn SAS-isolation guard (`registry.rs:79-84`, `stage2.rs:279-286`) — đây là passthrough phần cứng duy nhất, read-only về phía guest, cô lập theo VMID, dùng Device-nGnRnE. Mọi device khác (blk/net/console/PL011/timer/PSCI) đều emulate, buffer copy qua wrapper #1. Không hỗ trợ VFIO/IOMMU passthrough tùy ý ⇒ nếu thêm sau phải mở threat-model.
+
+**Khuyến nghị (KHÔNG bắt buộc) — thu hẹp syscall allowlist của hypervisor cell:**
+Cell đã khai báo allowlist hẹp (`cells/services/hypervisor/src/main.rs:22-32`). Siết thêm KHÔNG phải "jailer-equivalent" như Firecracker: dưới LBI + `#![forbid(unsafe_code)]` + bounds-check tập trung, cell không thể bị chiếm quyền thực thi như một tiến trình VMM Linux. Giá trị *duy nhất* của việc siết thêm = giảm blast-radius nếu (a) một dependency `unsafe` (vd `alloc`) có lỗi, hoặc (b) rustc miscompile ([16-rustc-tcb.md](16-rustc-tcb.md)). Cân nhắc theo chi phí/lợi ích, không coi là hàng rào cô lập chính.
 
 ### 4.4 Kernel H-extension requirements (RISC-V)
 

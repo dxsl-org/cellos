@@ -66,6 +66,6 @@ Different target boards in the Cellos roadmap require distinct hardware debug in
 | **G1 (Sub)** | **SiFive E21 / CHERIoT**<br>*(RV32 Core)* | RV32 | **4-wire JTAG / cJTAG**: Standard TAP pins. | `target/sifive-e21.cfg` | `riscv32` |
 | **G2** | **Milk-V Pioneer**<br>*(SOPHON SG2042 / X60)* | RV64 | **Workstation JTAG**: Dedicated 20-pin ARM/RISC-V JTAG header. | `target/sophgo_sg2042.cfg` | `riscv64` |
 | **G2** | **Alibaba C930**<br>*(T-Head Xuantie)* | RV64 | **T-Head CKLink**: Dedicated JTAG / T-Head debug probe. | `target/thead_c930.cfg` | `riscv64` |
-| **G2** | **Generic x86_64 PC**<br>*(Intel / AMD PC)* | x86_64 | **Intel DCI / USB3 Debug**: Direct Connect Interface via USB 3.0 / UART. | N/A *(Intel DCI OpenIPC or QEMU GDB stub)* | `i386:x86-64` |
+| **G2** | **Generic x86_64 PC**<br>*(Intel / AMD PC)* | x86_64 | **USB RS-232/UART** | N/A *(Intel DCI OpenIPC or QEMU GDB stub)* | `i386:x86-64` |
 | **G3** | **Radxa ROCK 5 / OPi 5+**<br>*(Rockchip RK3588)* | ARM64 | **ARM SWD / JTAG**: Dedicated SWD header or muxed SDMMC pins. | `target/rk3588.cfg` | `aarch64` |
 | **G3** | **SiFive P870 / X390**<br>*(Next-Gen RISC-V)* | RV64 | **SiFive Debug TAP**: Standard 10-pin RISC-V Debug connector. | `target/sifive_p870.cfg` | `riscv64` |

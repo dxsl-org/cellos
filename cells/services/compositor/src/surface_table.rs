@@ -19,7 +19,6 @@ use types::ViError;
 pub const MAX_SURFACES: usize = 32;
 
 /// Pixel data source for a surface.
-#[allow(dead_code)] // reg_id reserved for future cleanup on cell exit
 enum PixelSource {
     /// App Cell's Grant buffer — compositor reads directly via a read-only pointer.
     ///
@@ -104,6 +103,14 @@ impl SurfaceState {
     /// detach. The legacy WRITE_PIXELS path regrows the buffer lazily if reused.
     pub fn detach_grant(&mut self) {
         self.source = PixelSource::Owned(alloc::vec::Vec::new().into_boxed_slice());
+    }
+
+    /// Return the registered Grant ID, if this surface still owns one.
+    pub fn grant_id(&self) -> Option<usize> {
+        match self.source {
+            PixelSource::Grant { reg_id, .. } => Some(reg_id),
+            PixelSource::Owned(_) => None,
+        }
     }
 
     /// Read access to pixel data — either from the Grant or the Owned buffer.
@@ -237,7 +244,6 @@ impl SurfaceTable {
     }
 
     /// Find all surfaces owned by `tid` and return their caps.
-    #[allow(dead_code)] // used by future NotifyOnExit cleanup path
     pub fn caps_owned_by(&self, tid: usize) -> alloc::vec::Vec<u64> {
         self.entries
             .iter()

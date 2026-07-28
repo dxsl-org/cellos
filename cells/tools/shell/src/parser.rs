@@ -16,24 +16,81 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QuoteStyle {
+    None,
+    Single,
+    Double,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Word {
+    pub text: String,
+    pub quote: QuoteStyle,
+    pub segments: Vec<WordSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WordSegment {
+    pub text: String,
+    pub quote: QuoteStyle,
+}
+
+impl Word {
+    #[cfg(test)]
+    fn new(text: String, quote: QuoteStyle) -> Self {
+        Self {
+            segments: alloc::vec![WordSegment {
+                text: text.clone(),
+                quote,
+            }],
+            text,
+            quote,
+        }
+    }
+
+    fn from_segments(segments: Vec<WordSegment>) -> Self {
+        let mut text = String::new();
+        for segment in &segments {
+            text.push_str(&segment.text);
+        }
+        let quote = if segments.len() == 1 {
+            segments[0].quote
+        } else {
+            QuoteStyle::None
+        };
+        Self {
+            text,
+            quote,
+            segments,
+        }
+    }
+
+    fn is_unquoted(&self) -> bool {
+        self.segments
+            .iter()
+            .all(|segment| segment.quote == QuoteStyle::None)
+    }
+}
+
 /// One redirect target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Redirect {
     /// `> path`
-    StdoutTo(String),
+    StdoutTo(Word),
     /// `>> path`
-    StdoutAppend(String),
+    StdoutAppend(Word),
     /// `< path`
-    StdinFrom(String),
+    StdinFrom(Word),
     /// `2> path`
-    StderrTo(String),
+    StderrTo(Word),
 }
 
 /// A single command with its arguments and any redirects.
 #[derive(Debug, Clone)]
 pub struct Cmd {
     /// `argv[0]` and arguments.
-    pub argv: Vec<String>,
+    pub argv: Vec<Word>,
     /// Redirects attached to this command.
     pub redirects: Vec<Redirect>,
 }
@@ -117,7 +174,7 @@ pub enum Ast {
 /// Raw token before AST construction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Tok {
-    Word(String),
+    Word(Word),
     Pipe,           // |
     RedirectOut,    // >
     RedirectAppend, // >>
@@ -154,14 +211,39 @@ enum Tok {
 fn tokenize(line: &str) -> Vec<Tok> {
     let mut tokens = Vec::new();
     let mut chars = line.chars().peekable();
-    let mut current = String::new();
+    let mut current: Vec<WordSegment> = Vec::new();
+
+    fn append_segment(current: &mut Vec<WordSegment>, text: String, quote: QuoteStyle) {
+        if let Some(last) = current.last_mut() {
+            if last.quote == quote {
+                last.text.push_str(&text);
+                return;
+            }
+        }
+        current.push(WordSegment { text, quote });
+    }
+
+    fn push_word(tokens: &mut Vec<Tok>, current: &mut Vec<WordSegment>) {
+        if !current.is_empty() {
+            tokens.push(Tok::Word(Word::from_segments(core::mem::take(current))));
+        }
+    }
+
+    fn read_quoted(chars: &mut core::iter::Peekable<core::str::Chars<'_>>, end: char) -> String {
+        let mut text = String::new();
+        loop {
+            match chars.next() {
+                Some(ch) if ch == end => break,
+                Some(ch) => text.push(ch),
+                None => break,
+            }
+        }
+        text
+    }
 
     macro_rules! flush {
         () => {
-            if !current.is_empty() {
-                tokens.push(Tok::Word(current.clone()));
-                current.clear();
-            }
+            push_word(&mut tokens, &mut current);
         };
     }
 
@@ -170,14 +252,14 @@ fn tokenize(line: &str) -> Vec<Tok> {
             ' ' | '\t' => {
                 flush!();
             }
-            '"' => {
-                // Consume until closing '"'.
-                loop {
-                    match chars.next() {
-                        Some('"') | None => break,
-                        Some(ch) => current.push(ch),
-                    }
-                }
+            '"' | '\'' => {
+                let quote = if c == '"' {
+                    QuoteStyle::Double
+                } else {
+                    QuoteStyle::Single
+                };
+                let quoted = read_quoted(&mut chars, c);
+                append_segment(&mut current, quoted, quote);
             }
             '|' => {
                 flush!();
@@ -228,7 +310,7 @@ fn tokenize(line: &str) -> Vec<Tok> {
                     chars.next();
                     tokens.push(Tok::RedirectErr);
                 } else {
-                    current.push(c);
+                    append_segment(&mut current, String::from(c), QuoteStyle::None);
                 }
             }
             // `$(...)` — command substitution.  Consume everything up to the
@@ -236,31 +318,31 @@ fn tokenize(line: &str) -> Vec<Tok> {
             // the token.  Nested `$( $() )` increments depth correctly.
             '$' if chars.peek() == Some(&'(') => {
                 chars.next(); // consume '('
-                current.push('$');
-                current.push('(');
+                let mut substitution = String::from("$(");
                 let mut depth = 1usize;
                 loop {
                     match chars.next() {
                         None => break, // unclosed: pass through
                         Some('(') => {
                             depth += 1;
-                            current.push('(');
+                            substitution.push('(');
                         }
                         Some(')') => {
                             depth -= 1;
-                            current.push(')');
+                            substitution.push(')');
                             if depth == 0 {
                                 break;
                             }
                         }
                         Some(ch) => {
-                            current.push(ch);
+                            substitution.push(ch);
                         }
                     }
                 }
+                append_segment(&mut current, substitution, QuoteStyle::None);
             }
             other => {
-                current.push(other);
+                append_segment(&mut current, String::from(other), QuoteStyle::None);
             }
         }
     }
@@ -289,28 +371,29 @@ pub fn parse(line: &str) -> Ast {
     // `name() { body; }` — function definition.
     // name() is a single Word token ending with "()" (no spaces inside).
     if let Some(Tok::Word(w)) = tokens.first() {
-        if w.ends_with("()")
+        if w.is_unquoted()
+            && w.text.ends_with("()")
             && tokens.get(1) == Some(&Tok::LBrace)
             && tokens.last() == Some(&Tok::RBrace)
         {
-            let name = String::from(&w[..w.len() - 2]);
+            let name = String::from(&w.text[..w.text.len() - 2]);
             let body = tokens_to_string(&tokens[2..tokens.len() - 1]);
             return Ast::FuncDef { name, body };
         }
     }
 
-    if tokens.first() == Some(&Tok::Word("if".into())) {
+    if is_kw_token(tokens.first(), "if") {
         return parse_if_stmt(&tokens);
     }
-    if tokens.first() == Some(&Tok::Word("while".into())) {
+    if is_kw_token(tokens.first(), "while") {
         return parse_while_stmt(&tokens);
     }
-    if tokens.first() == Some(&Tok::Word("for".into())) {
+    if is_kw_token(tokens.first(), "for") {
         return parse_for_stmt(&tokens);
     }
     // `case` must be parsed before semicolon splitting because `;;` arm
     // separators are also Semicolon tokens and would fragment the statement.
-    if tokens.first() == Some(&Tok::Word("case".into())) {
+    if is_kw_token(tokens.first(), "case") {
         return parse_case_stmt(&tokens);
     }
 
@@ -362,7 +445,7 @@ fn tokens_to_string(tokens: &[Tok]) -> String {
     let parts: alloc::vec::Vec<&str> = tokens
         .iter()
         .map(|t| match t {
-            Tok::Word(w) => w.as_str(),
+            Tok::Word(w) => w.text.as_str(),
             Tok::Pipe => "|",
             Tok::And => "&&",
             Tok::Or => "||",
@@ -382,7 +465,11 @@ fn tokens_to_string(tokens: &[Tok]) -> String {
 
 /// Helper: returns true when a token is the keyword word `w`.
 fn is_kw(tok: &Tok, w: &str) -> bool {
-    tok == &Tok::Word(w.into())
+    matches!(tok, Tok::Word(word) if word.is_unquoted() && word.text == w)
+}
+
+fn is_kw_token(tok: Option<&Tok>, w: &str) -> bool {
+    matches!(tok, Some(tok) if is_kw(tok, w))
 }
 
 /// Parse `while COND; do BODY; done`.
@@ -399,7 +486,7 @@ fn is_kw(tok: &Tok, w: &str) -> bool {
 fn parse_for_stmt(tokens: &[Tok]) -> Ast {
     // tokens[1] = variable name; tokens[2] should be Word("in").
     let var = match tokens.get(1) {
-        Some(Tok::Word(w)) if w != "in" => w.clone(),
+        Some(Tok::Word(w)) if w.is_unquoted() && w.text != "in" => w.text.clone(),
         _ => return parse_tokens(tokens),
     };
     let in_pos = match tokens.iter().position(|t| is_kw(t, "in")) {
@@ -417,7 +504,7 @@ fn parse_for_stmt(tokens: &[Tok]) -> Ast {
         .iter()
         .filter_map(|t| {
             if let Tok::Word(w) = t {
-                Some(w.clone())
+                Some(w.text.clone())
             } else {
                 None
             }
@@ -446,7 +533,7 @@ fn parse_case_stmt(tokens: &[Tok]) -> Ast {
 
     // Expression: single word between `case` and `in`.
     let expr = match tokens.get(1) {
-        Some(Tok::Word(w)) => w.clone(),
+        Some(Tok::Word(w)) => w.text.clone(),
         _ => String::new(),
     };
 
@@ -480,7 +567,7 @@ fn push_arm(tokens: &[Tok], arms: &mut alloc::vec::Vec<(String, alloc::boxed::Bo
         .unwrap_or(tokens.len());
     let tokens = &tokens[start..];
     if let Some(Tok::Word(pat)) = tokens.first() {
-        let pattern = String::from(pat.trim_end_matches(')'));
+        let pattern = String::from(pat.text.trim_end_matches(')'));
         let body = parse_tokens(&tokens[1..]);
         arms.push((pattern, alloc::boxed::Box::new(body)));
     }
@@ -648,7 +735,8 @@ mod tests {
     #[test]
     fn parse_simple() {
         if let Ast::Simple(cmd) = parse("ls /bin") {
-            assert_eq!(cmd.argv, &["ls", "/bin"]);
+            assert_eq!(cmd.argv[0], Word::new("ls".to_string(), QuoteStyle::None));
+            assert_eq!(cmd.argv[1], Word::new("/bin".to_string(), QuoteStyle::None));
         } else {
             panic!("expected Simple");
         }
@@ -658,8 +746,8 @@ mod tests {
     fn parse_pipeline() {
         if let Ast::Pipeline(cmds) = parse("cat /etc/hosts | grep 127") {
             assert_eq!(cmds.len(), 2);
-            assert_eq!(cmds[0].argv[0], "cat");
-            assert_eq!(cmds[1].argv[0], "grep");
+            assert_eq!(cmds[0].argv[0].text, "cat");
+            assert_eq!(cmds[1].argv[0].text, "grep");
         } else {
             panic!("expected Pipeline");
         }
@@ -670,7 +758,10 @@ mod tests {
         if let Ast::Simple(cmd) = parse("echo hi > /tmp/a.txt") {
             assert_eq!(
                 cmd.redirects,
-                &[Redirect::StdoutTo(String::from("/tmp/a.txt"))]
+                &[Redirect::StdoutTo(Word::new(
+                    String::from("/tmp/a.txt"),
+                    QuoteStyle::None
+                ))]
             );
         } else {
             panic!("expected Simple with redirect");
@@ -694,5 +785,71 @@ mod tests {
     #[test]
     fn parse_sequence() {
         assert!(matches!(parse("echo a ; echo b"), Ast::Sequence(_)));
+    }
+
+    #[test]
+    fn parse_quote_metadata() {
+        if let Ast::Simple(cmd) = parse("grep -e 'a b' \"$HOME\"") {
+            assert_eq!(
+                cmd.argv[2],
+                Word::new("a b".to_string(), QuoteStyle::Single)
+            );
+            assert_eq!(
+                cmd.argv[3],
+                Word::new("$HOME".to_string(), QuoteStyle::Double)
+            );
+        } else {
+            panic!("expected Simple");
+        }
+    }
+
+    #[test]
+    fn parse_mixed_quote_segments() {
+        if let Ast::Simple(cmd) = parse("echo pre'$HOME' '$HOME'suffix") {
+            assert_eq!(
+                cmd.argv[1].segments,
+                alloc::vec![
+                    WordSegment {
+                        text: "pre".to_string(),
+                        quote: QuoteStyle::None,
+                    },
+                    WordSegment {
+                        text: "$HOME".to_string(),
+                        quote: QuoteStyle::Single,
+                    },
+                ]
+            );
+            assert_eq!(
+                cmd.argv[2].segments,
+                alloc::vec![
+                    WordSegment {
+                        text: "$HOME".to_string(),
+                        quote: QuoteStyle::Single,
+                    },
+                    WordSegment {
+                        text: "suffix".to_string(),
+                        quote: QuoteStyle::None,
+                    },
+                ]
+            );
+        } else {
+            panic!("expected Simple");
+        }
+    }
+
+    #[test]
+    fn parse_empty_quoted_words() {
+        if let Ast::Simple(cmd) = parse("echo \"\" ''") {
+            assert_eq!(cmd.argv.len(), 3);
+            assert_eq!(cmd.argv[1], Word::new(String::new(), QuoteStyle::Double));
+            assert_eq!(cmd.argv[2], Word::new(String::new(), QuoteStyle::Single));
+        } else {
+            panic!("expected Simple");
+        }
+        if let Ast::Simple(cmd) = parse("grep \"\"") {
+            assert_eq!(cmd.argv[1], Word::new(String::new(), QuoteStyle::Double));
+        } else {
+            panic!("expected Simple");
+        }
     }
 }

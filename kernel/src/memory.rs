@@ -3,6 +3,9 @@
 use crate::*;
 
 pub mod cell_quota;
+/// x86 nested paging (EPT/NPT) — Tier 3b x86 VMM. x86_64 only.
+#[cfg(target_arch = "x86_64")]
+pub mod ept;
 pub mod frame;
 pub mod heap;
 pub mod kaslr;

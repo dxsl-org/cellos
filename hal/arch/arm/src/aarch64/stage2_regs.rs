@@ -34,10 +34,16 @@
 #[cfg(target_arch = "aarch64")]
 const VTCR_VALUE: u64 = 0x8002_3558;
 
-/// Enable Stage-2 translation for the given `vmid` and root page-table at `root_pa`.
+/// Arm Stage-2 translation for the given `vmid` and root page-table at `root_pa`.
 ///
-/// Programs VTCR_EL2 and VTTBR_EL2, sets HCR_EL2.VM=1, then issues a full
-/// Stage-2 TLB invalidation to discard any stale cached translations.
+/// Programs VTCR_EL2 and VTTBR_EL2 and issues a full Stage-2 TLB invalidation.
+/// It does NOT set HCR_EL2.VM: the host's Cells keep running at EL0 after this
+/// returns, and with VM=1 their EL1&0 stage-1 walks are themselves Stage-2
+/// translated through the guest map — the first post-syscall instruction fetch
+/// then walks garbage and the Cell dies on a wild PC (observed as an
+/// instruction abort at return-address | 0x06000000 on QEMU 8.2). VM is owned
+/// exclusively by the world-switch: `vcpu_enter_guest` sets it on guest entry
+/// and `vt_vcpu_trap` clears it on every guest exit (vcpu.rs "CRITICAL" note).
 ///
 /// # Safety
 /// - Must only be called from EL2 (after `el2::el2_mark_active()`).
@@ -45,7 +51,7 @@ const VTCR_VALUE: u64 = 0x8002_3558;
 /// - The Stage-2 page table must be fully populated and all writes flushed to
 ///   RAM before this function is called.
 /// - `vmid` must be ≥ 1 (VMID 0 is reserved for the EL2 host).
-/// - This function must NOT be called while a vCPU is running (HCR_EL2.VM races).
+/// - This function must NOT be called while a vCPU is running (VTTBR races).
 #[cfg(target_arch = "aarch64")]
 pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
     debug_assert_eq!(root_pa % (2 * 4096), 0, "S2 root must be 8 KB-aligned");
@@ -61,18 +67,13 @@ pub unsafe fn enable_stage2(vmid: u16, root_pa: u64) {
             // 2. Program VTTBR_EL2 (VMID + S2 root PA).
             "msr vttbr_el2, {vttbr}",
             "isb",
-            // 3. Set HCR_EL2.VM = bit[0] to enable S2 translation.
-            "mrs {tmp}, hcr_el2",
-            "orr {tmp}, {tmp}, #1",
-            "msr hcr_el2, {tmp}",
-            "isb",
-            // 4. Invalidate all Stage-1 + Stage-2 TLB entries for this VMID.
+            // 3. Invalidate all Stage-1 + Stage-2 TLB entries for this VMID.
+            //    HCR_EL2.VM stays 0 — vcpu_enter_guest sets it per guest entry.
             "tlbi vmalls12e1is",
             "dsb ish",
             "isb",
             vtcr  = in(reg) VTCR_VALUE,
             vttbr = in(reg) vttbr,
-            tmp   = out(reg) _,
             options(nomem, nostack),
         );
     }

@@ -1,4 +1,4 @@
-//! Filesystem-oriented shell built-ins: wc, head, tail, grep, mkdir, rm, rmdir, touch.
+//! Filesystem-oriented shell built-ins: wc, head, tail, mkdir, rm, rmdir, touch.
 //!
 //! VFS-write operations (mkdir, rm, rmdir) send IPC to the VFS service cell
 //! resolved via `sys_lookup_service`.  Read operations use the kernel's `sys_open`/`sys_read` path.
@@ -20,6 +20,24 @@ fn vfs_endpoint() -> usize {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Return VFS metadata for a path without reading its contents.
+pub(crate) fn stat_file_vfs(path: &str) -> Option<(usize, bool)> {
+    let request = api::ipc::VfsRequest::Stat(path);
+    let mut send_buf = [0u8; 512];
+    let mut reply = [0u8; 64];
+    match ostd::ipc::service_call_typed::<_, api::ipc::VfsResponse>(
+        vfs_endpoint(),
+        &request,
+        &mut send_buf,
+        &mut reply,
+    ) {
+        Ok(api::ipc::VfsResponse::Stat { size, is_dir }) => {
+            usize::try_from(size).ok().map(|size| (size, is_dir))
+        }
+        _ => None,
+    }
+}
 
 /// Read the entire contents of `path` into a Vec<u8>.
 fn read_file_bytes(path: &str) -> ViResult<Vec<u8>> {
@@ -67,7 +85,7 @@ fn vfs_req_ok(req: &api::ipc::VfsRequest<'_>) -> bool {
 /// `wc [file]` — print line, word, and byte counts.
 ///
 /// When called without a file (in a pipeline), reads from `shell_stdin()`.
-pub fn cmd_wc<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_wc(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
@@ -100,7 +118,7 @@ pub fn cmd_wc<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 // ─── head ─────────────────────────────────────────────────────────────────────
 
 /// `head [-n N] <file>` — print first N lines (default 10).
-pub fn cmd_head<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_head(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut n: usize = 10;
     let mut path = "";
     // Simple arg parsing: if first arg is "-n", consume the count.
@@ -137,7 +155,7 @@ pub fn cmd_head<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 // ─── tail ─────────────────────────────────────────────────────────────────────
 
 /// `tail [-n N] <file>` — print last N lines (default 10).
-pub fn cmd_tail<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_tail(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut n: usize = 10;
     let mut path = "";
     loop {
@@ -172,252 +190,10 @@ pub fn cmd_tail<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
     Ok(())
 }
 
-// ─── grep ─────────────────────────────────────────────────────────────────────
-
-/// `grep [-i] [-v] [-n] [-c] [-r] <pattern> [file|dir]` — print lines matching a literal pattern.
-///
-/// Flags:
-///   `-i`  case-insensitive match
-///   `-v`  invert: print lines that do NOT match
-///   `-n`  prefix each output line with its 1-based line number
-///   `-c`  count mode: print only the total count of matching lines
-///   `-r`  recursive: walk a directory via VFS `ListDir` and grep each file
-///
-/// No regex — literal substring match only (v1.0 contract).
-pub fn cmd_grep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
-    let mut case_insensitive = false;
-    let mut invert = false;
-    let mut line_numbers = false;
-    let mut count_only = false;
-    let mut recursive = false;
-    let mut pattern = "";
-    let mut path = "";
-
-    loop {
-        match args.next() {
-            Some(a) if a.starts_with('-') && !a.is_empty() => {
-                for ch in a[1..].chars() {
-                    match ch {
-                        'i' => case_insensitive = true,
-                        'v' => invert = true,
-                        'n' => line_numbers = true,
-                        'c' => count_only = true,
-                        'r' => recursive = true,
-                        _ => {}
-                    }
-                }
-            }
-            Some(p) if pattern.is_empty() => pattern = p,
-            Some(p) => {
-                path = p;
-                break;
-            }
-            None => break,
-        }
-    }
-    if pattern.is_empty() {
-        crate::executor::shell_println("Usage: grep [-ivncr] <pattern> [file|dir]");
-        return Ok(());
-    }
-
-    if recursive && !path.is_empty() {
-        grep_recursive(
-            path,
-            pattern,
-            case_insensitive,
-            invert,
-            line_numbers,
-            count_only,
-        );
-        return Ok(());
-    }
-
-    // Read from file or pipe-fed stdin.
-    let owned;
-    let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
-            crate::executor::shell_println("Usage: grep [-ivncr] <pattern> [file|dir]");
-            return Ok(());
-        }
-        s
-    } else {
-        owned = read_file_bytes(path).map_err(|_| {
-            ostd::io::print("grep: cannot open '");
-            ostd::io::print(path);
-            ostd::io::println("'");
-            ViError::NotFound
-        })?;
-        &owned
-    };
-    grep_data(
-        data,
-        pattern,
-        case_insensitive,
-        invert,
-        line_numbers,
-        count_only,
-        "",
-    );
-    Ok(())
-}
-
-/// Run grep on a single data buffer; `prefix` is printed before filename-prefixed output.
-fn grep_data(
-    data: &[u8],
-    pattern: &str,
-    ci: bool,
-    invert: bool,
-    line_numbers: bool,
-    count_only: bool,
-    prefix: &str,
-) {
-    let mut hit_count: usize = 0;
-    for (nr, line) in collect_lines(data).into_iter().enumerate() {
-        let matches = if ci {
-            contains_insensitive(line, pattern)
-        } else {
-            line.contains(pattern)
-        };
-        let emit = matches ^ invert;
-        if emit {
-            hit_count += 1;
-            if !count_only {
-                if !prefix.is_empty() {
-                    crate::executor::shell_print(prefix);
-                    crate::executor::shell_print(":");
-                }
-                if line_numbers {
-                    crate::executor::shell_print(&alloc::format!("{}:", nr + 1));
-                }
-                crate::executor::shell_println(line);
-            }
-        }
-    }
-    if count_only {
-        if !prefix.is_empty() {
-            crate::executor::shell_print(prefix);
-            crate::executor::shell_print(":");
-        }
-        crate::executor::shell_println(&alloc::format!("{}", hit_count));
-    }
-}
-
-/// Recursively grep all files under `dir` via VFS `ListDir` IPC.
-fn grep_recursive(
-    dir: &str,
-    pattern: &str,
-    ci: bool,
-    invert: bool,
-    line_numbers: bool,
-    count_only: bool,
-) {
-    use api::syscall::service;
-    let vfs_tid = loop {
-        if let Some(tid) = ostd::syscall::sys_lookup_service(service::VFS) {
-            break tid;
-        }
-        ostd::task::yield_now();
-    };
-    grep_recursive_inner(
-        dir,
-        pattern,
-        ci,
-        invert,
-        line_numbers,
-        count_only,
-        0,
-        vfs_tid,
-    );
-}
-
-const GREP_MAX_DEPTH: usize = 16;
-
-#[allow(clippy::too_many_arguments)] // reason: recursive walker threads all grep flags explicitly; an options struct is not worth it for a shell builtin
-fn grep_recursive_inner(
-    dir: &str,
-    pattern: &str,
-    ci: bool,
-    invert: bool,
-    line_numbers: bool,
-    count_only: bool,
-    depth: usize,
-    vfs_tid: usize,
-) {
-    if depth >= GREP_MAX_DEPTH {
-        return;
-    }
-    use api::ipc::{VfsRequest, VfsResponse};
-    let mut send = [0u8; 512];
-    let n = match api::ipc::encode(&VfsRequest::ListDir(dir), &mut send) {
-        Ok(s) => s.len(),
-        Err(_) => return,
-    };
-    ostd::syscall::sys_send(vfs_tid, &send[..n]);
-    let mut reply = [0u8; 512];
-    // Masked recv — see vfs_req_ok: wildcard would eat queued input events.
-    let raw = match ostd::syscall::sys_recv(vfs_tid, &mut reply) {
-        ostd::syscall::SyscallResult::Ok(_) => &reply,
-        _ => return,
-    };
-    if let Ok(VfsResponse::Data(entries)) = api::ipc::decode::<VfsResponse>(raw) {
-        let text = core::str::from_utf8(entries).unwrap_or("");
-        for entry in text.lines() {
-            let (kind, name) = if let Some(rest) = entry.strip_prefix("d:") {
-                ("d", rest)
-            } else if let Some(rest) = entry.strip_prefix("f:") {
-                ("f", rest)
-            } else {
-                continue;
-            };
-            let mut full = alloc::string::String::from(dir);
-            if !full.ends_with('/') {
-                full.push('/');
-            }
-            full.push_str(name);
-            if kind == "f" {
-                if let Ok(data) = read_file_bytes(&full) {
-                    grep_data(&data, pattern, ci, invert, line_numbers, count_only, &full);
-                }
-            } else {
-                grep_recursive_inner(
-                    &full,
-                    pattern,
-                    ci,
-                    invert,
-                    line_numbers,
-                    count_only,
-                    depth + 1,
-                    vfs_tid,
-                );
-            }
-        }
-    }
-}
-
-fn contains_insensitive(haystack: &str, needle: &str) -> bool {
-    if needle.is_empty() {
-        return true;
-    }
-    let hn = needle.len();
-    let hb = haystack.as_bytes();
-    let nb = needle.as_bytes();
-    for i in 0..hb.len().saturating_sub(hn - 1) {
-        if hb[i..i + hn]
-            .iter()
-            .zip(nb)
-            .all(|(h, n)| h.eq_ignore_ascii_case(n))
-        {
-            return true;
-        }
-    }
-    false
-}
-
 // ─── mkdir ────────────────────────────────────────────────────────────────────
 
 /// `mkdir <path>` — create a new directory via VFS IPC.
-pub fn cmd_mkdir<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_mkdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = match args.next() {
         Some(p) => p,
         None => {
@@ -436,7 +212,7 @@ pub fn cmd_mkdir<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 // ─── rmdir ────────────────────────────────────────────────────────────────────
 
 /// `rmdir <path>` — remove an empty directory via VFS IPC.
-pub fn cmd_rmdir<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_rmdir(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = match args.next() {
         Some(p) => p,
         None => {
@@ -455,7 +231,7 @@ pub fn cmd_rmdir<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 // ─── rm ───────────────────────────────────────────────────────────────────────
 
 /// `rm [-r] [-f] <path>` — remove a file, or (with -r on /data) a directory tree.
-pub fn cmd_rm<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_rm(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut recursive = false;
     let path = loop {
         match args.next() {
@@ -522,7 +298,7 @@ pub fn vfs_write_chunked(path: &str, data: &[u8], append: bool) -> bool {
 }
 
 /// `vwrite <path> <text>` — write text to a VFS path via OP_WRITE (test helper).
-pub fn cmd_vwrite<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_vwrite(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = match args.next() {
         Some(p) => p,
         None => {
@@ -540,7 +316,7 @@ pub fn cmd_vwrite<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> 
 }
 
 /// `vappend <path> <text>` — append text to a VFS path via OP_APPEND (test helper).
-pub fn cmd_vappend<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = match args.next() {
         Some(p) => p,
         None => {
@@ -648,7 +424,7 @@ fn read_file_vfs_async(path: &str, out: &mut [u8]) -> usize {
 ///
 /// Unlike `cat`, which reads the kernel-embedded FS, `vcat` reads from the
 /// VFS cell's RamFS — the same store that OP_WRITE targets.
-pub fn cmd_vcat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_vcat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = match args.next() {
         Some(p) => p,
         None => {
@@ -675,7 +451,7 @@ pub fn cmd_vcat<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 ///
 /// Uses VFS `ListDir` IPC.  Directories with more than ~30 entries are silently
 /// truncated by the 512-byte `ListDir` reply limit — a known v1.0 limitation.
-pub fn cmd_find<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_find(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let dir = args.next().unwrap_or(".");
     let pattern = if args.next() == Some("-name") {
         args.next()
@@ -743,7 +519,7 @@ fn find_recursive(dir: &str, pattern: Option<&str>, depth: usize, vfs_tid: usize
 /// `uniq [file]` — filter adjacent duplicate lines.
 ///
 /// When called without a file (in a pipeline), reads from `shell_stdin()`.
-pub fn cmd_uniq<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_uniq(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
@@ -778,7 +554,7 @@ pub fn cmd_uniq<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 /// `sort [file]` — sort lines lexicographically.
 ///
 /// When called without a file (in a pipeline), reads from `shell_stdin()`.
-pub fn cmd_sort<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_sort(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
@@ -811,7 +587,7 @@ pub fn cmd_sort<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 ///
 /// `-a` appends to the file instead of overwriting. Data flows through the
 /// shell pipeline (via `shell_print`) AND is written to `path` via VFS IPC.
-pub fn cmd_tee<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_tee(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut append = false;
     let path = loop {
         match args.next() {
@@ -837,150 +613,6 @@ pub fn cmd_tee<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         ostd::io::print("tee: cannot write '");
         ostd::io::print(path);
         ostd::io::println("'");
-    }
-    Ok(())
-}
-
-// ─── sed ─────────────────────────────────────────────────────────────────────
-
-/// `sed [-n] EXPR [file]` — stream editor: substitute, delete, or print lines.
-///
-/// Supported expression forms (no regex — literal match only):
-///   `s/PAT/REP/[g]`  — replace PAT with REP (first occurrence, or all with `g`)
-///   `/PAT/d`         — delete (suppress) lines matching PAT
-///   `/PAT/p`         — print lines matching PAT (most useful with `-n`)
-///   `Np`             — print only line N (1-based)
-///
-/// `-n` suppresses the default auto-print; only explicitly `p`-addressed lines appear.
-/// Reads from `shell_stdin()` when no file is given (pipeline-friendly).
-pub fn cmd_sed<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
-    // Parse leading -n flag.
-    let mut suppress = false;
-    let expr = loop {
-        match args.next() {
-            Some("-n") => suppress = true,
-            Some(e) => break e,
-            None => {
-                crate::executor::shell_println(
-                    "Usage: sed [-n] s/PAT/REP/[g] | /PAT/d | /PAT/p | Np  [file]",
-                );
-                return Ok(());
-            }
-        }
-    };
-
-    // Classify the expression.
-    enum SedOp<'x> {
-        Substitute {
-            pat: &'x str,
-            rep: &'x str,
-            global: bool,
-        },
-        Delete(&'x str),    // pattern to match for deletion
-        Print(SedAddr<'x>), // print matching lines
-    }
-    enum SedAddr<'x> {
-        Pattern(&'x str),
-        LineNum(usize),
-    }
-
-    let op: SedOp = if let Some(body) = expr.strip_prefix("s/") {
-        let mut parts = body.splitn(3, '/');
-        let pat = parts.next().unwrap_or("");
-        let rep = parts.next().unwrap_or("");
-        let flags = parts.next().unwrap_or("");
-        SedOp::Substitute {
-            pat,
-            rep,
-            global: flags.contains('g'),
-        }
-    } else if expr.starts_with('/') && expr.ends_with('d') {
-        let inner = &expr[1..];
-        let pat = inner
-            .trim_end_matches('/')
-            .trim_end_matches('d')
-            .trim_end_matches('/');
-        SedOp::Delete(pat)
-    } else if expr.starts_with('/') && (expr.ends_with('p') || expr.ends_with("/p")) {
-        let inner = &expr[1..];
-        let pat = inner
-            .trim_end_matches('/')
-            .trim_end_matches('p')
-            .trim_end_matches('/');
-        SedOp::Print(SedAddr::Pattern(pat))
-    } else if expr.ends_with('p') && expr[..expr.len() - 1].bytes().all(|b| b.is_ascii_digit()) {
-        let n = expr[..expr.len() - 1].parse::<usize>().unwrap_or(0);
-        SedOp::Print(SedAddr::LineNum(n))
-    } else {
-        crate::executor::shell_print("sed: unrecognised expression: ");
-        crate::executor::shell_println(expr);
-        return Ok(());
-    };
-
-    // Optional file argument.
-    let path = args.next().unwrap_or("");
-    let owned;
-    let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
-            crate::executor::shell_println(
-                "Usage: sed [-n] s/PAT/REP/[g] | /PAT/d | /PAT/p | Np  [file]",
-            );
-            return Ok(());
-        }
-        s
-    } else {
-        owned = read_file_bytes(path).map_err(|_| {
-            ostd::io::print("sed: cannot open '");
-            ostd::io::print(path);
-            ostd::io::println("'");
-            ViError::NotFound
-        })?;
-        &owned
-    };
-
-    let text = core::str::from_utf8(data).unwrap_or("");
-
-    for (idx, line) in text.lines().enumerate() {
-        let nr = idx + 1; // 1-based
-        match &op {
-            SedOp::Substitute { pat, rep, global } => {
-                if pat.is_empty() {
-                    if !suppress {
-                        crate::executor::shell_println(line);
-                    }
-                } else {
-                    let out = if *global {
-                        sed_replace_all(line, pat, rep)
-                    } else {
-                        sed_replace_first(line, pat, rep)
-                    };
-                    if !suppress {
-                        crate::executor::shell_println(&out);
-                    }
-                }
-            }
-            SedOp::Delete(pat) => {
-                let matches = line.contains(*pat);
-                if !matches && !suppress {
-                    crate::executor::shell_println(line);
-                }
-            }
-            SedOp::Print(addr) => {
-                let matches = match addr {
-                    SedAddr::Pattern(p) => line.contains(*p),
-                    SedAddr::LineNum(n) => nr == *n,
-                };
-                // With `-n`: only explicit `p` prints; without `-n`: also auto-print
-                // every line, so matched lines appear twice (POSIX sed semantics).
-                if matches {
-                    crate::executor::shell_println(line);
-                }
-                if !suppress {
-                    crate::executor::shell_println(line);
-                }
-            }
-        }
     }
     Ok(())
 }
@@ -1106,30 +738,4 @@ pub fn cmd_awk<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
         }
     }
     Ok(())
-}
-
-fn sed_replace_first(s: &str, pat: &str, rep: &str) -> String {
-    match s.find(pat) {
-        Some(i) => {
-            let mut out = String::with_capacity(s.len() + rep.len());
-            out.push_str(&s[..i]);
-            out.push_str(rep);
-            out.push_str(&s[i + pat.len()..]);
-            out
-        }
-        None => String::from(s),
-    }
-}
-
-/// Replace all non-overlapping occurrences of `pat` in `s` with `rep`.
-fn sed_replace_all(s: &str, pat: &str, rep: &str) -> String {
-    let mut out = String::with_capacity(s.len() + rep.len());
-    let mut rest = s;
-    while let Some(i) = rest.find(pat) {
-        out.push_str(&rest[..i]);
-        out.push_str(rep);
-        rest = &rest[i + pat.len()..];
-    }
-    out.push_str(rest);
-    out
 }

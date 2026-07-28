@@ -7,13 +7,13 @@ use ostd::syscall;
 ///
 /// ViCell v1.0 has no per-cell CWD tracking; always prints `/` until
 /// Phase 17a adds a proper chdir/getcwd implementation.
-pub fn cmd_pwd<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_pwd(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     crate::executor::shell_println("/");
     Ok(())
 }
 
 /// `uname [-a]` — print system identification.
-pub fn cmd_uname<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_uname(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let all = args.any(|a| a == "-a");
     crate::executor::shell_println(if all {
         "ViCell vicell-kernel 0.2.1 riscv64 ViCell"
@@ -27,7 +27,7 @@ pub fn cmd_uname<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 ///
 /// The MemInfo syscall is stubbed in v1.0; this shows approximate compiled-in
 /// values until a proper MemInfo syscall is wired.
-pub fn cmd_free<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_free(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     crate::executor::shell_println("              total        used        free");
     crate::executor::shell_println(
         "Mem:        131072        ~4096      ~127000 (KB approx, no MemInfo yet)",
@@ -36,7 +36,7 @@ pub fn cmd_free<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 }
 
 /// `env` — list all environment key=value pairs from the Config Cell.
-pub fn cmd_env<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_env(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     crate::executor::shell_println("PATH=/bin");
     crate::executor::shell_println("SHELL=/bin/shell");
     crate::executor::shell_println("OS=ViCell");
@@ -46,7 +46,7 @@ pub fn cmd_env<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 /// `uptime` — print time since boot in seconds.
 ///
 /// Reads the kernel monotonic timer; converts ticks to seconds at 10 MHz.
-pub fn cmd_uptime<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_uptime(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let ticks = syscall::sys_get_time();
     let secs = ticks / 10_000_000; // 10 MHz mtime
     crate::executor::shell_print(&alloc::format!("up {} seconds\n", secs));
@@ -66,7 +66,7 @@ pub fn cmd_shutdown() -> ViResult<()> {
 ///
 /// Uses the kernel monotonic timer (mtime at 10 MHz on QEMU RV64).
 /// Yields on each iteration so other tasks keep running during the delay.
-pub fn cmd_sleep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_sleep(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     const TIMER_HZ: u64 = 10_000_000; // 10 MHz mtime
     let secs: u64 = match args.next().and_then(|s| {
         let mut n = 0u64;
@@ -96,7 +96,7 @@ pub fn cmd_sleep<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 /// Prints `"blkio: denied"` when Phase G's capability gate correctly rejects the
 /// call, or `"blkio: ALLOWED (BUG)"` if the gate is missing. Used exclusively
 /// by the `block_io_denied_non_vfs` integration test.
-pub fn cmd_blkio_test<'a>(_args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
+pub fn cmd_blkio_test(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let mut buf = [0u8; 512];
     if syscall::sys_blk_read(0, &mut buf) {
         ostd::io::println("blkio: ALLOWED (BUG)");

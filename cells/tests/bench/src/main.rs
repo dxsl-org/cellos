@@ -179,9 +179,8 @@ fn print_under_load(name: &str, idle_p99: u64, load_p99: u64) {
 pub fn main() {
     // Multi-role dispatch: load/rt-probe cells are re-spawns of this binary with
     // a role arg; the default (no arg) role is the orchestrator.
-    let mut argbuf = [0u8; 32];
-    let an = ostd::syscall::sys_spawn_args(&mut argbuf);
-    match core::str::from_utf8(&argbuf[..an]).unwrap_or("") {
+    let argv = ostd::args();
+    match argv.first().map(|arg| arg.as_str()).unwrap_or("") {
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),

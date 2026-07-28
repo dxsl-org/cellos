@@ -38,6 +38,7 @@ pub use heapless;
 pub mod args;
 pub use args::args;
 pub use args::check_help;
+pub use args::set_spawn_argv;
 pub mod fast_ipc;
 /// Typed linear Grant handles for zero-copy shared memory (Singularity exchange-heap pattern).
 pub mod grant;

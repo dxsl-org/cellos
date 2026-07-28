@@ -74,7 +74,7 @@ pub extern "C" fn main() {
     use api::syscall::service;
     use ostd::syscall::{
         sys_get_time, sys_lookup_service, sys_notify_on_exit, sys_recv, sys_register_service,
-        sys_spawn_from_path, SyscallResult,
+        sys_send, sys_spawn_from_path, SyscallResult,
     };
     println("Init: Starting ViCell Orchestrator...");
 
@@ -231,8 +231,17 @@ pub extern "C" fn main() {
     // Spawned after compositor is up (index 4 in the supervised list).
     let _ = sys_spawn_from_path("/bin/fb-console");
 
-    // Hypervisor: AArch64 + virtualization=on kernel builds only.
-    let _ = sys_spawn_from_path("/bin/hypervisor");
+    // Hypervisor: AArch64 + virtualization=on kernel builds only. Keep a death
+    // watch even though it is not part of the ordinary service restart table;
+    // the compositor must release any shared scanout Grants before those pages
+    // can be reused by a replacement cell.
+    let mut hypervisor_tid = match sys_spawn_from_path("/bin/hypervisor") {
+        SyscallResult::Ok(tid) => {
+            let _ = sys_notify_on_exit(tid);
+            Some(tid)
+        }
+        _ => None,
+    };
 
     // ── CI / test-image-only cells (not present in normal disk images) ────────
     // bench is intentionally NOT auto-started — run '/bin/bench' from the shell.
@@ -283,6 +292,17 @@ pub extern "C" fn main() {
         let reason = u64::from_le_bytes([
             buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7],
         ]);
+        if hypervisor_tid == Some(dead) {
+            let mut relay = [0u8; 1 + core::mem::size_of::<usize>()];
+            relay[0] = 0xE1;
+            relay[1..].copy_from_slice(&dead.to_le_bytes());
+            if let Some(supervisor) = sys_lookup_service(service::SUPERVISOR) {
+                let _ = sys_send(supervisor, &relay);
+            }
+            hypervisor_tid = None;
+            println("Init: hypervisor exited — scanout cleanup relayed.");
+            continue;
+        }
         // Which supervised service died? (Ignore notifications for unknown tids.)
         let mut which = None;
         for (i, t) in tids.iter().enumerate() {

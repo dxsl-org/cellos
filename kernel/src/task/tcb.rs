@@ -276,6 +276,11 @@ pub struct Task {
     /// budget and is terminated — preventing livelock ("alive but paralyzed").
     pub run_ticks: u32,
 
+    /// Cumulative scheduler ticks charged to this task while it was the running
+    /// task at a scheduler accounting point. This is the kernel-exported CPU
+    /// sample source for `GetProcs2`; userspace computes percentages from deltas.
+    pub cpu_run_ticks: u64,
+
     /// Cumulative count of `RecvTimeout` deadlines this task has missed (the awaited
     /// message did not arrive in time). For an RT control loop this is its missed-cycle
     /// count. Observability only — surfaced via the audit ring ([`crate::audit`]); the
@@ -364,6 +369,7 @@ impl Task {
             cluster_id: 0,
             syscall_allowlist: u64::MAX, // permit-all until ELF section is read
             run_ticks: 0,
+            cpu_run_ticks: 0,
             deadline_misses: 0,
             rt_overrun_warned: false,
             heartbeat_deadline: None,

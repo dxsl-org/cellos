@@ -4,6 +4,58 @@
 
 ---
 
+## [2026-07-28] Full utility suite shipped (grep/sed/mini-AWK/top) + `GetProcs2` telemetry ABI
+
+### What shipped
+`grep` gained `-F/-E/-e/-f/-i/-v/-n/-c/-q/-x/-r`, multiple file operands, stdin, and honest
+0/1/2 exit statuses. `sed` accepts one command with alternate delimiters, `&` expansion, and
+numeric/regex addresses. A documented mini-AWK covers `-F`, `NR`/`NF`, `$0..$9`, comparisons,
+arithmetic and `print`. `top` reports CPU% from scheduler-tick deltas plus heap/owned-memory
+footprint, with `-a/-b/-n/-d/-o` and interactive `q`. Matching is **ERE-lite**, not POSIX: linear
+time via `regex-automata`, ASCII-first, no backreferences or look-around, and bounded at 256-byte
+patterns / depth 32 / 4096 compiled states / 256 repetitions.
+
+### New ABI (Law 1, second confirmation received 2026-07-28)
+`GetProcs2 = 239` returns fixed-width `ProcessInfoV2` rows (80 bytes on every target: `u64` id,
+`u32` state + pad, `[u8;32]` name, then sample/CPU/heap/owned `u64`s). `GetProcs = 30` and its
+`ProcessInfo` row are untouched, so every existing caller — including `ps` — is byte-for-byte
+unaffected. Bit 55 in the per-Cell allowlist gates the new call and is **opt-in only**: a
+`const _` assertion in `libs/ostd/src/runtime.rs` fails the build if `app_syscall_set(…)` ever
+grants it implicitly, because per-task CPU and memory footprint is a cross-Cell side channel.
+The kernel side is one new counter, `Task::cpu_run_ticks`, charged at the existing scheduler
+accounting point.
+
+### The 42 host tests that had never run
+The pure argv/pattern/record/grep/sed/awk/top stages were written as `#[cfg(test)]` modules inside
+`app-shell`. That crate links `ostd`, which owns `#[panic_handler]` and `#[global_allocator]`, so
+`cargo test -p app-shell` dies on duplicate lang items (E0152) — the whole suite was dead code that
+had never compiled once. Extracting them to `libs/text-engine` (same rationale as `libs/http-core`,
+no lang items, `cfg_attr(not(test), no_std)`) makes them runnable: **38 pass**, and one of them
+caught a real assertion bug (the AWK lexer test asserted `Field(2)` for the literal `2` in
+`print NR, $1 + 2`). `grep`'s `-f` read is now injected as a `PatternFileReader` closure instead of
+the option parser calling the VFS, which is what made it testable at all. The `unit-tests` CI job
+now runs `cargo test -p text-engine`.
+
+### Also repaired on the way (pre-existing red on this branch)
+`cargo fmt --check` failed on 26 files and `clippy -D warnings` failed on the x86_64 kernel (10
+errors) and the hypervisor cell (10 dead-code errors on riscv64, where `vmm`/`virtqueue_guard` have
+no caller) — all landed unchecked with the x86 SVM and virtio-gpu commits. The unsafe ratchet was
+also red: the two virtio-gpu scanout blit sites are now allowlisted with their bounds argument.
+
+### Verification
+38 host tests · 12 ABI tests · 33/33 guest scenarios under QEMU rv64 (`[shell-test] ALL TESTS
+PASSED`) · rv64 boot smoke · rv64/aarch64/x86_64 builds · workspace clippy `-D warnings` clean on
+all three targets. Plan: `.agents/260726-full-utility-suite/`.
+
+---
+
+## [2026-07-25] Tier 3b VirtIO-GPU host stack code-complete; strict Linux DRM/E2E remains hardware-gated
+
+### Status
+The Tier 3b VirtIO-GPU backend reached code-complete in the active plan: device wiring, bounded wire decoding, resource/cursor model, Grant-backed compositor bridge, teardown/reconnect handling, pinned Alpine guest image, and the dedicated serial-token lane are in place and compile/test cleanly. The dedicated guest E2E lane is still gated on ARM64 KVM or real hardware because local Windows QEMU-TCG can fault before the Linux DRM probe, so strict Linux DRM/E2E and interactive T4-T9 remain unverified.
+
+---
+
 ## [2026-07-13] RV32/Cellos-Nano compile break fixed; Hypha + init auto-restart Grant-syscall denial fixed
 
 ### RV32 Nano was silently un-buildable since virtio_drivers joined the always-linked kernel path
@@ -3545,4 +3597,3 @@ MicroPython (C) → modvfs.c extern calls → Cellos_vfs_*(vfs_bridge.rs) → ty
 - `scripts/dev-setup.sh`, `scripts/dev-setup.ps1`
 
 **Impact**: All 23 plan phases are at least `partial`; the system compiles clean with zero new errors.
-

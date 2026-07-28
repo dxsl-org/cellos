@@ -347,11 +347,21 @@ jobs:
           chmod +x scripts/qemu-aarch64-test.sh
           BOOT_WINDOW=90 bash scripts/qemu-aarch64-test.sh
 
-  qemu-hypervisor-smoke:
-    name: QEMU Hypervisor Smoke (Alpine / # in 420s)
+  # Tier 3b ARM64 hypervisor — two-tier lane (see
+  # .agents/reports/design-260723-0709-arm64-kvm-verification-lane.md). The
+  # VMM cannot be validated boot-to-shell under QEMU-TCG: TCG's software
+  # composition of the guest's stage-1-over-Cellos-stage-2 page walk
+  # spuriously raises an address-size fault partway through Alpine's early
+  # boot relocation, even though the guest page tables and Cellos stage-2 are
+  # independently provable as correct. A physical MMU doing the nested walk
+  # (KVM) does not hit this. So the machinery job below runs on every PR on
+  # ubuntu-24.04/TCG and asserts the VMM is healthy (tolerating exactly that
+  # one documented fault signature); the boot-to-shell job asserts the full
+  # "/ #" prompt but needs real ARM64+KVM hardware and stays gated off until
+  # a self-hosted runner exists.
+  qemu-hypervisor-machinery:
+    name: QEMU Hypervisor Machinery Smoke (TCG)
     runs-on: ubuntu-24.04
-    # continue-on-error: alpine fetch or TCG timeout should not block other CI jobs.
-    continue-on-error: true
     needs: build
     # Job-level: make-hypervisor-fs.sh runs its own cargo builds, so the
     # littlefs cross-compile env must cover every step, not just the explicit
@@ -385,6 +395,9 @@ jobs:
           path: .alpine-cache
           key: alpine-netboot-aarch64-3.21.3
 
+      # Fetches Alpine over the network on a cache miss — acceptable for now
+      # (mirrors local dev), but a pinned/mirrored artifact would remove this
+      # as a source of CI flakiness if it proves unreliable.
       - name: Fetch Alpine aarch64 netboot artifacts
         run: |
           chmod +x scripts/fetch-alpine-artifacts.sh
@@ -406,12 +419,22 @@ jobs:
       - name: Build aarch64 hypervisor kernel (EMBEDDED_OVERRIDE)
         # RUSTFLAGS REPLACES the config.toml per-target flags, so it must
         # repeat +bti,+paca,+pacg alongside the kernel's relocation model.
+        #
+        # --features qemu-virt-1g is REQUIRED, not an optimisation: QEMU's
+        # direct ELF loader does not consistently pass a DTB pointer in x0, so
+        # the kernel falls back to a compile-time RAM end (boot.rs
+        # FALLBACK_RAM_END). Without the feature that is 0x5000_0000 = 256 MiB;
+        # the Alpine-embedding kernel itself is ~58 MiB, leaving 198 MiB usable,
+        # and create_vm's 128 MiB contiguous guest carve cannot be satisfied once
+        # the boot cells have fragmented it. Both run-hypervisor-arm.ps1 and
+        # make-hypervisor-fs.sh document the flag for exactly this reason.
         env:
           RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
           EMBEDDED_OVERRIDE: "kernel/src/embedded-hv"
         run: >
           cargo build --release
           -p vicell-kernel
+          --features qemu-virt-1g
           --target aarch64-unknown-none-softfloat
           -Z build-std=core,alloc
 
@@ -420,10 +443,95 @@ jobs:
           chmod +x scripts/format-disk-hv-arm.sh
           bash scripts/format-disk-hv-arm.sh disk_hv_arm.img
 
-      - name: Run hypervisor smoke test (Alpine / # within 180s)
+      - name: Run hypervisor machinery smoke test (TCG)
+        env:
+          HV_SMOKE_MODE: machinery
+          BOOT_WINDOW: "120"
         run: |
           chmod +x scripts/qemu-hypervisor-smoke.sh
-          BOOT_WINDOW=420 bash scripts/qemu-hypervisor-smoke.sh
+          bash scripts/qemu-hypervisor-smoke.sh
+
+  # Boot-to-shell: needs real ARM64+KVM hardware (see job comment above), so it
+  # stays a no-op until a self-hosted runner is registered with the `kvm`
+  # label. Flip the HV_KVM_RUNNER repository variable to "true" once that
+  # runner exists (Settings -> Secrets and variables -> Actions -> Variables).
+  qemu-hypervisor-boot-kvm:
+    name: QEMU Hypervisor Boot-to-Shell (KVM)
+    if: ${{ vars.HV_KVM_RUNNER == 'true' }}
+    runs-on: [self-hosted, linux, ARM64, kvm]
+    needs: build
+    env:
+      CC_aarch64_unknown_none_softfloat: clang
+      CFLAGS_aarch64_unknown_none_softfloat: --target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I${{ github.workspace }}/third_party/freestanding-include
+      BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat: --target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: aarch64-unknown-none-softfloat
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: hypervisor-boot-kvm
+
+      - name: Install QEMU and aarch64 sysroot
+        timeout-minutes: 10
+        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-arm libclang-dev gcc-aarch64-linux-gnu
+
+      - name: Cache Alpine artifacts
+        uses: actions/cache@v4
+        with:
+          path: .alpine-cache
+          key: alpine-netboot-aarch64-3.21.3
+
+      - name: Fetch Alpine aarch64 netboot artifacts
+        run: |
+          chmod +x scripts/fetch-alpine-artifacts.sh
+          bash scripts/fetch-alpine-artifacts.sh .alpine-cache
+
+      - name: Build aarch64 cells (core + hypervisor)
+        run: >
+          cargo build --release
+          --target aarch64-unknown-none-softfloat
+          -Z build-std=core,alloc
+          -p app-init -p app-shell -p service-vfs -p service-config
+          -p service-net -p service-hypervisor
+
+      - name: Build hypervisor kernel_fs.img (embeds Alpine)
+        run: |
+          chmod +x scripts/make-hypervisor-fs.sh
+          bash scripts/make-hypervisor-fs.sh --skip-fetch
+
+      - name: Build aarch64 hypervisor kernel (EMBEDDED_OVERRIDE)
+        # --features qemu-virt-1g: same DTB/RAM-fallback requirement as the
+        # machinery job above — see the comment there.
+        env:
+          RUSTFLAGS: "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
+          EMBEDDED_OVERRIDE: "kernel/src/embedded-hv"
+        run: >
+          cargo build --release
+          -p vicell-kernel
+          --features qemu-virt-1g
+          --target aarch64-unknown-none-softfloat
+          -Z build-std=core,alloc
+
+      - name: Create hypervisor disk image
+        run: |
+          chmod +x scripts/format-disk-hv-arm.sh
+          bash scripts/format-disk-hv-arm.sh disk_hv_arm.img
+
+      - name: Run hypervisor boot-to-shell test (KVM, Alpine / # within 420s)
+        env:
+          HV_SMOKE_MODE: boot
+          BOOT_WINDOW: "420"
+        run: |
+          chmod +x scripts/qemu-hypervisor-smoke.sh
+          bash scripts/qemu-hypervisor-smoke.sh
 
   x86_64-lint:
     name: Clippy (x86_64)
@@ -622,11 +730,14 @@ jobs:
           cache-on-failure: true
 
       - name: Run host-side unit tests
-        # libs/types and libs/api use cfg_attr(not(test), no_std) so they can
-        # run on the host without a bare-metal target.
+        # libs/types, libs/api and libs/text-engine use cfg_attr(not(test), no_std)
+        # and define no panic/alloc lang items, so they run on the host without a
+        # bare-metal target. text-engine holds the pure grep/sed/awk/top logic that
+        # app-shell cannot host-test itself (it links ostd, which owns those items).
         run: |
-          cargo test -p types --target x86_64-unknown-linux-gnu
-          cargo test -p api   --target x86_64-unknown-linux-gnu
+          cargo test -p types       --target x86_64-unknown-linux-gnu
+          cargo test -p api         --target x86_64-unknown-linux-gnu
+          cargo test -p text-engine --target x86_64-unknown-linux-gnu
 
   unsafe-ratchet:
     # Replaces the cargo-geiger gate: geiger cannot analyse `-Z build-std`

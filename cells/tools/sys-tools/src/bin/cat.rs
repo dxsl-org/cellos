@@ -4,18 +4,11 @@ extern crate ostd;
 
 use ostd::{io, syscall};
 
-/// Read the spawn-args stash into `buf` and return the trimmed content.
-fn spawn_args(buf: &mut [u8]) -> &str {
-    let n = syscall::sys_spawn_args(buf);
-    core::str::from_utf8(&buf[..n]).unwrap_or("").trim()
-}
-
 /// cat <path> — print file content from the kernel FS to stdout.
 #[no_mangle]
 pub fn main() {
-    let mut arg_buf = [0u8; 256];
-    let arg = spawn_args(&mut arg_buf);
-    let path = arg.split_whitespace().next().unwrap_or("");
+    let argv = ostd::args();
+    let path = argv.first().map(|arg| arg.as_str()).unwrap_or("");
 
     if path.is_empty() {
         io::println("usage: cat <path>");

@@ -1,16 +1,13 @@
-//! Low-level VMM syscall wrappers (220-226) for the hypervisor service cell.
+//! Low-level VMM syscall wrappers (220-227) for the hypervisor service cell.
 //!
-//! These are ARM64-only at runtime (guarded by cpu_features::has_el2 at cell start).
-//! RISC-V stubs return a NotSupported sentinel so the code compiles on all targets.
+//! Compiled only for the two arches with a kernel VMM backend — aarch64
+//! (`svc #0`) and x86_64 (`syscall`); `main.rs` gates the module accordingly.
 
 use api::hypervisor::ViVmExit;
 use api::syscall::ViSyscall;
 
 /// Scheduler tick budget for each RunVcpu call (~10ms in 10 MHz ticks = 100_000 ticks).
 pub const SCHED_TICK_BUDGET_NS: u64 = 10_000_000; // 10ms in nanoseconds
-
-/// Error sentinel returned by VMM syscalls on failure.
-const ERR: usize = usize::MAX;
 
 #[inline]
 unsafe fn syscall4(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) -> usize {
@@ -22,11 +19,16 @@ unsafe fn syscall4(id: ViSyscall, a0: usize, a1: usize, a2: usize, a3: usize) ->
         in("x1") a0, in("x2") a1, in("x3") a2, in("x4") a3,
         options(nostack, preserves_flags),
     );
-    #[cfg(not(target_arch = "aarch64"))]
-    {
-        let _ = (id, a0, a1, a2, a3);
-        ret = ERR;
-    }
+    // ViCell x86_64 ABI (matches ostd::syscall): RAX=id, RDI/RSI/RDX/R10=a0..a3.
+    // SYSCALL clobbers RCX (user RIP) and R11 (user RFLAGS) — declared as outputs.
+    #[cfg(target_arch = "x86_64")]
+    core::arch::asm!(
+        "syscall",
+        inlateout("rax") id as usize => ret,
+        in("rdi") a0, in("rsi") a1, in("rdx") a2, in("r10") a3,
+        lateout("rcx") _, lateout("r11") _,
+        options(nostack),
+    );
     ret
 }
 
@@ -67,6 +69,7 @@ pub fn write_guest_memory(vm_id: usize, gpa: u64, src: &[u8]) -> usize {
 }
 
 /// Copy `len` bytes from guest RAM at `gpa` into `dst`; returns bytes read or ERR.
+#[allow(dead_code)] // reason: guest-RAM readback used by the aarch64 personality + future x86 device DMA
 pub fn read_guest_memory(vm_id: usize, gpa: u64, dst: &mut [u8]) -> usize {
     unsafe {
         syscall4(

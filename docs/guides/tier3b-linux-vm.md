@@ -8,12 +8,12 @@
 
 Tier 3b lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightweight hypervisor. From the app's perspective, it's a normal Linux environment:
 
-- Standard libc (musl, glibc)
+- Standard libc — **musl today** (Alpine guest, shipped). glibc (Debian) guest is **planned** (see roadmap: broadens binary compatibility for glibc-only software).
 - Full POSIX (fork, mmap, signals, pthreads)
-- Package manager (`apk install`, `apt`)
-- Any unmodified Linux binary
+- Package manager — `apk` on the Alpine guest; `apt` applies to the **planned** Debian glibc guest, not the current Alpine one.
+- Any unmodified Linux binary built for the guest's libc (musl-built today).
 
-**Trade-off**: 10–15% performance overhead vs Tier 1; 2–10 second boot time.
+**Trade-off** *(estimates — not yet benchmarked; see Performance Characteristics)*: ~10–15% performance overhead vs Tier 1; ~2–10 second boot time.
 
 ---
 
@@ -21,11 +21,11 @@ Tier 3b lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightw
 
 | Platform | Status | Hypervisor | Notes |
 |----------|--------|-----------|-------|
-| **ARM64** | ✅ Working (G2) | EL2 (Secure/Normal mode split) | RK3588, Cortex-A72+; boots Alpine |
-| **x86_64** | ✅ Working (G2) | VMX (Intel) / SVM (AMD) | QEMU q35 with KVM; boots Alpine |
+| **ARM64** | ✅ Working (G2) | EL2 (non-VHE) | Cortex-A72+; boots Alpine (musl) to a shell; virtio-blk/net/console |
+| **x86_64** | 🚧 **Planned — not implemented** | SVM (AMD, TCG-testable) then VT-x (Intel) | Design plan only (`.agents/260711-1917-tier3b-x86-vtx/`); **no code yet** |
 | **RISC-V** | ❌ Not implemented | H-ext (too new) | Deferred beyond G1 |
 
-**G2-only**: requires real hardware or advanced QEMU (not basic RISC-V).
+**G2-only**: requires real hardware or advanced QEMU (not basic RISC-V). Only the ARM64 path currently boots a guest.
 
 ---
 
@@ -36,7 +36,7 @@ Tier 3b lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightw
 │ Cellos Kernel (S-mode / VMX host)
 │                                 │
 │  ┌──────────────────────────┐   │
-│  │ Hypervisor (custom ~9K LOC)
+│  │ Hypervisor (custom, ~2.9K LOC today; ~9K planned)
 │  │                          │   │  Trap device MMIO
 │  │  ┌────────────────────┐  │   │  Emulate PL011, clint, etc.
 │  │  │ Linux Guest (HS-mode / VM) │
@@ -86,11 +86,11 @@ vm exit <vm_id>
 
 ## Guest Filesystem Access
 
-The guest mounts Cellos's VFS as a VirtIO block device. By default, the root filesystem is read-only FAT32 (from kernel build). You can:
+The guest's virtio-blk device backing is currently a 16 MiB **volatile, zero-filled** in-memory buffer — writes are accepted (BLK_T_OUT works) but are lost on cell restart, and there is no bootable filesystem image loaded onto it today (Alpine itself boots from initramfs, not this device). Persistent, image-backed storage is planned (see `.agents/260712-0952-tier3b-vm-hardening-compat/phase-04-writable-storage.md`). Until then:
 
-1. **Create an overlay** (writable tmpfs on top)
-2. **Mount a writable partition** (future: FAT32 RW)
-3. **Write to /tmp** (ramdisk, shared with Cellos)
+1. **Create an overlay** (writable tmpfs on top) — survives only for the VM's lifetime
+2. **Write to /tmp** (ramdisk, shared with Cellos)
+3. Persistent image-backed disk — **planned**, not yet shipped
 
 ---
 
@@ -117,11 +117,11 @@ Network traffic is routed through Cellos's kernel; no direct hardware access.
 
 | Device | Status | Notes |
 |--------|--------|-------|
-| Block (disk) | ✅ | Read-only FAT32 (kernel.img); no write yet |
+| Block (disk) | ✅ (volatile) | 16 MiB in-memory Vec; writes work but are not persisted; no image loaded |
 | Network | ✅ | Full NIC; routed via Cellos net cell |
 | Console | ✅ | Serial output to kernel log |
-| Entropy (RNG) | ✅ | `/dev/urandom` works |
-| Clock (MMIO) | ✅ | `clock_gettime()` accurate |
+| Entropy (RNG) | 🚧 Planned | No virtio-rng device model exists yet (`cells/services/hypervisor/src/`); planned in the glibc-guest track since glibc TLS blocks on entropy |
+| Clock (virtual timer) | ✅ | armv8 CNTV register (not MMIO); `CNTVOFF_EL2=0` keeps guest counter matching host, so `clock_gettime()` is accurate; no wall-clock RTC device yet |
 
 ---
 
@@ -164,12 +164,14 @@ exit
 
 ## Performance Characteristics
 
-| Operation | Tier 1 Rust | Tier 1 + SDK | Tier 3b Linux |
+> ⚠️ **The numbers below are design estimates, not measured.** A real benchmark pass (throughput, trap latency, boot time on QEMU/TCG with its caveats) is planned; treat these as targets until then.
+
+| Operation | Tier 1 Rust | Tier 1 + SDK | Tier 3b Linux *(est.)* |
 |-----------|-------------|--------------|--------------|
 | Syscall latency | ~1 μs | ~2 μs (IPC) | ~10–20 μs (trap) |
 | App startup | <1 ms | <1 ms | 2–5 s (kernel boot) |
 | I/O throughput | Native | ~90% native | ~80% native (VirtIO) |
-| Memory overhead | ~10 KiB | ~50 KiB | ~64 MiB (guest kernel) |
+| Memory overhead | ~10 KiB | ~50 KiB | ~128 MiB guest RAM (Alpine); more for glibc guest |
 
 **Use Tier 3b when**: boot time and startup latency don't matter, but compatibility and ease-of-deployment do.
 
@@ -180,19 +182,19 @@ exit
 ❌ **No nested VMs** — guest cannot create sub-VMs.  
 ❌ **No direct hardware access** — I/O goes through Cellos drivers.  
 ❌ **No DMA to host memory** — disk/network buffers are copied.  
-⚠️ **Slow boot** — 2–10 seconds for full Linux init.  
+⚠️ **Slow boot** — ~2–10 seconds for full Linux init *(estimate)*.  
 ✅ **Full fork() / pthreads** — anything Unix-like works.  
-✅ **Package managers** — `apk` / `apt` work in writable layers.  
+⚠️ **Package managers** — `apk` works on the Alpine guest; persistence across VM reboots needs writable-backing storage (**planned**, not yet shipped). `apt` requires the planned Debian glibc guest.  
 
 ---
 
 ## Hypervisor Internals (Advanced)
 
-The hypervisor is a custom minimal VMM (~9K lines of Rust), not a fork of Crosvm or KVM. It:
+The hypervisor is a custom minimal VMM (~2.9K lines of Rust shipped today, ~9K planned at full device coverage), not a fork of Crosvm or KVM. It:
 
-1. **Boots the guest** — loads ELF, sets up page tables, enters guest mode
-2. **Emulates MMIO** — traps device accesses (PL011 UART, CLINT timer, etc.)
-3. **Passes through VirtIO** — disk/net queues bypass emulation (direct DMA)
+1. **Boots the guest** — loads ELF, sets up Stage-2 page tables, enters guest mode
+2. **Emulates MMIO** — traps device accesses (PL011 UART, GICv2, timer, etc.)
+3. **Mediates VirtIO** — disk/net virtqueue buffers are copied through **kernel-bounds-checked** guest-memory wrappers (NOT direct DMA to host); every guest-physical address is validated against the guest RAM window
 4. **Isolates faults** — guest page faults, invalid instructions trapped; host continues
 
 For details, see [system-architecture.md](../system-architecture.md) § Tier 3 Hypervisor.
@@ -215,7 +217,7 @@ cd scripts
 
 ✅ Existing Linux C/C++ code (no rewrite)  
 ✅ Apps that fork() heavily (e.g., nginx, Java)  
-✅ Package managers essential (`apt install opencv`)  
+✅ Package managers essential (`apk add` today; `apt install opencv` once the Debian glibc guest ships)  
 ✅ Untrusted code (isolated in VM)  
 ✅ Learning Linux internals without rewriting  
 

@@ -8,8 +8,10 @@
 extern crate alloc;
 
 use crate::jobs::{JobState, Jobs};
-use crate::parser::{Ast, Cmd, Redirect};
-use alloc::boxed::Box;
+use crate::parser::{Ast, Cmd, QuoteStyle, Redirect, Word};
+use crate::text_engine::args::{with_legacy_parts, ArgCursor, UtilityStatus};
+use crate::text_engine::records::{extend_input, InputBufferError, MAX_INPUT_BYTES};
+use crate::text_tools::{awk, sed};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::UnsafeCell;
@@ -120,6 +122,7 @@ pub fn shell_stdin() -> &'static [u8] {
 }
 
 /// All recognized shell built-in names, used by tab completion.
+#[cfg(not(feature = "shell_test"))] // reason: tab completion only exists in the interactive REPL
 pub const BUILTINS: &[&str] = &[
     "alias", "awk", "bg", "blktest", "break", "cat", "clear", "continue", "echo", "env", "exec",
     "exit", "export", "fg", "find", "free", "grep", "head", "help", "jobs", "kill", "ls", "mkdir",
@@ -204,6 +207,7 @@ pub fn request_exit(code: i32) {
 }
 
 /// True if `exit` has been called; clears the flag.
+#[cfg(not(feature = "shell_test"))] // reason: only the REPL loop can honour an exit request
 pub fn take_exit_request() -> Option<i32> {
     // SAFETY: single shell task; no concurrent reads/writes.
     unsafe {
@@ -468,6 +472,19 @@ fn expand_token(s: &str) -> String {
     result
 }
 
+fn expand_word(word: &Word) -> String {
+    let mut expanded = String::new();
+    for segment in &word.segments {
+        match segment.quote {
+            QuoteStyle::Single => expanded.push_str(&segment.text),
+            QuoteStyle::None | QuoteStyle::Double => {
+                expanded.push_str(&expand_token(&segment.text));
+            }
+        }
+    }
+    expanded
+}
+
 /// Parse and execute `line`, capturing all `shell_print` output into a `Vec<u8>`.
 ///
 /// Used by the `shell_test` feature harness to assert on command output without
@@ -500,7 +517,11 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             // is marked Done before control returns. True async background would
             // require spawning the command as a separate Cell via SpawnCap — not
             // in scope for G1. `fg`/`bg` built-ins report this limitation.
-            let name = cmd.argv.first().map(String::as_str).unwrap_or("?");
+            let name = cmd
+                .argv
+                .first()
+                .map(|word| word.text.as_str())
+                .unwrap_or("?");
             let jid = jobs.add(name);
             // Background job notification always goes to console, not the sink.
             ostd::io::print("[");
@@ -654,9 +675,9 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     }
 
     // Expand $VAR tokens in every argument before dispatch.
-    let expanded: Vec<String> = cmd.argv.iter().map(|s| expand_token(s)).collect();
+    let expanded: Vec<String> = cmd.argv.iter().map(expand_word).collect();
     let prog: &str = &expanded[0];
-    let args: Vec<&str> = expanded[1..].iter().map(String::as_str).collect();
+    let args: Vec<String> = expanded[1..].to_vec();
 
     // Detect `KEY=VALUE` assignment (key is non-empty alphanumeric+underscore).
     if args.is_empty() {
@@ -676,11 +697,13 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
             .iter()
             .find(|r| matches!(r, Redirect::StdoutTo(_)))
         {
-            let bytes = crate::commands::cmd_echo_to_vec(&args);
-            if !crate::cmd_fs::write_file(path, &bytes) {
+            let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            let bytes = crate::commands::cmd_echo_to_vec(&arg_refs);
+            if !crate::cmd_fs::write_file(&expand_word(path), &bytes) {
                 ostd::io::print("echo: cannot write '");
-                ostd::io::print(path);
+                ostd::io::print(&path.text);
                 ostd::io::println("'");
+                return 1;
             }
             return 0;
         }
@@ -689,11 +712,13 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
             .iter()
             .find(|r| matches!(r, Redirect::StdoutAppend(_)))
         {
-            let bytes = crate::commands::cmd_echo_to_vec(&args);
-            if !crate::cmd_fs::append_file(path, &bytes) {
+            let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+            let bytes = crate::commands::cmd_echo_to_vec(&arg_refs);
+            if !crate::cmd_fs::append_file(&expand_word(path), &bytes) {
                 ostd::io::print("echo: cannot append '");
-                ostd::io::print(path);
+                ostd::io::print(&path.text);
                 ostd::io::println("'");
+                return 1;
             }
             return 0;
         }
@@ -709,10 +734,11 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     {
         stdin_file_buf = {
             let mut buf = alloc::vec![0u8; 4096];
-            let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
+            let expanded_path = expand_word(path);
+            let n = crate::cmd_fs::read_file_vfs(&expanded_path, &mut buf);
             if n == 0 {
                 ostd::io::print("shell: cannot open '");
-                ostd::io::print(path);
+                ostd::io::print(&path.text);
                 ostd::io::println("'");
             }
             buf[..n].to_vec()
@@ -753,12 +779,17 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
     let code = if let Some((path, append)) = stdout_redir {
         // Capture this command's output into a buffer, then write to VFS.
         let mut captured: Vec<u8> = Vec::new();
+        let status;
         {
             let _guard = SinkGuard::new(OutputSink::Buffer(&mut captured as *mut _));
-            dispatch_builtin(prog, &args, jobs);
+            status = dispatch_builtin(prog, &args, jobs);
         } // _guard drops here, restoring sink before the VFS write
-        crate::cmd_fs::vfs_write_chunked(&path, &captured, append);
-        0
+        let write_ok = crate::cmd_fs::vfs_write_chunked(&expand_word(&path), &captured, append);
+        if status == 0 && !write_ok {
+            1
+        } else {
+            status
+        }
     } else {
         dispatch_builtin(prog, &args, jobs)
     };
@@ -815,148 +846,130 @@ fn i32_to_str(n: i32) -> &'static str {
 ///
 /// Returns the exit code (0 = success, non-zero = error).
 /// Falls through to `spawn_external` if no built-in matches.
-fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
-    let parts = core::iter::once(prog)
-        .chain(args.iter().copied())
-        .collect::<alloc::vec::Vec<_>>();
-    let joined = parts.join(" ");
-    let mut split = joined.split_whitespace();
-    let _first = split.next();
+fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
+    let legacy_result = match prog {
+        "ls" => Some(with_legacy_parts(args, crate::commands::cmd_ls)),
+        "cat" => Some(with_legacy_parts(args, crate::commands::cmd_cat)),
+        "wc" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_wc)),
+        "head" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_head)),
+        "tail" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_tail)),
+        "find" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_find)),
+        "uniq" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_uniq)),
+        "sort" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_sort)),
+        "tee" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_tee)),
+        "mkdir" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_mkdir)),
+        "rmdir" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_rmdir)),
+        "rm" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_rm)),
+        "vcat" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vcat)),
+        "vwrite" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vwrite)),
+        "vappend" => Some(with_legacy_parts(args, crate::cmd_fs::cmd_vappend)),
+        "kill" => Some(with_legacy_parts(args, crate::commands::cmd_kill)),
+        "ps" => Some(with_legacy_parts(args, crate::commands::cmd_ps)),
+        "pwd" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_pwd)),
+        "uname" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_uname)),
+        "free" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_free)),
+        "env" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_env)),
+        "uptime" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_uptime)),
+        "sleep" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_sleep)),
+        "blktest" => Some(with_legacy_parts(args, crate::cmd_sys::cmd_blkio_test)),
+        "echo" => Some(with_legacy_parts(args, crate::commands::cmd_echo)),
+        "exec" => Some(with_legacy_parts(args, crate::commands::cmd_exec)),
+        _ => None,
+    };
+    if let Some(result) = legacy_result {
+        return match result {
+            Ok(()) => 0,
+            Err(_) => 1,
+        };
+    }
 
-    let result = match prog {
-        // ── Filesystem ──────────────────────────────────────────────────
-        "ls" => crate::commands::cmd_ls(make_parts(args)),
-        "cat" => crate::commands::cmd_cat(make_parts(args)),
-        "wc" => crate::cmd_fs::cmd_wc(make_parts(args)),
-        "head" => crate::cmd_fs::cmd_head(make_parts(args)),
-        "tail" => crate::cmd_fs::cmd_tail(make_parts(args)),
-        "grep" => crate::cmd_fs::cmd_grep(make_parts(args)),
-        "find" => crate::cmd_fs::cmd_find(make_parts(args)),
-        "uniq" => crate::cmd_fs::cmd_uniq(make_parts(args)),
-        "sort" => crate::cmd_fs::cmd_sort(make_parts(args)),
-        "tee" => crate::cmd_fs::cmd_tee(make_parts(args)),
-        "sed" => crate::cmd_fs::cmd_sed(make_parts(args)),
-        "mkdir" => crate::cmd_fs::cmd_mkdir(make_parts(args)),
-        "rmdir" => crate::cmd_fs::cmd_rmdir(make_parts(args)),
-        "rm" => crate::cmd_fs::cmd_rm(make_parts(args)),
-        "vcat" => crate::cmd_fs::cmd_vcat(make_parts(args)),
-        "vwrite" => crate::cmd_fs::cmd_vwrite(make_parts(args)),
-        "vappend" => crate::cmd_fs::cmd_vappend(make_parts(args)),
-        "awk" => crate::cmd_fs::cmd_awk(make_parts(args)),
-        "top" => crate::commands::cmd_top(make_parts(args)),
-        "kill" => crate::commands::cmd_kill(make_parts(args)),
-        // ── Snapshot ────────────────────────────────────────────────────
-        "snapshot" => {
-            shell_println("[shell] writing warm-boot snapshot...");
-            match ostd::syscall::sys_snapshot() {
-                ostd::syscall::SyscallResult::Ok(n) if n > 0 => {
-                    shell_print(&alloc::format!(
-                        "[shell] snapshot: wrote {} frames. Reboot for warm boot.\n",
-                        n
-                    ));
-                    Ok(())
-                }
-                _ => {
-                    shell_println("[shell] snapshot: failed");
-                    Err(ViError::Unknown)
-                }
-            }
+    match prog {
+        "top" => {
+            let joined = args.join(" ");
+            crate::commands::cmd_top(joined.split_whitespace())
+                .map(|_| 0)
+                .unwrap_or(1)
         }
-        // ── System ──────────────────────────────────────────────────────
-        "ps" => crate::commands::cmd_ps(make_parts(args)),
-        "pwd" => crate::cmd_sys::cmd_pwd(make_parts(args)),
-        "uname" => crate::cmd_sys::cmd_uname(make_parts(args)),
-        "free" => crate::cmd_sys::cmd_free(make_parts(args)),
-        "env" => crate::cmd_sys::cmd_env(make_parts(args)),
-        "uptime" => crate::cmd_sys::cmd_uptime(make_parts(args)),
-        "shutdown" => crate::cmd_sys::cmd_shutdown(),
-        "sleep" => crate::cmd_sys::cmd_sleep(make_parts(args)),
-        "blktest" => crate::cmd_sys::cmd_blkio_test(make_parts(args)),
-        "echo" => crate::commands::cmd_echo(make_parts(args)),
-        "clear" => crate::commands::cmd_clear(),
-        "help" => crate::commands::cmd_help(),
-        "exec" => crate::commands::cmd_exec(make_parts(args)),
-        // ── Jobs ────────────────────────────────────────────────────────
+        "grep" => cmd_grep_args(args),
+        "sed" => cmd_sed_args(args),
+        "awk" => cmd_awk_args(args),
+        "snapshot" => match ostd::syscall::sys_snapshot() {
+            ostd::syscall::SyscallResult::Ok(n) if n > 0 => {
+                shell_print(&alloc::format!(
+                    "[shell] snapshot: wrote {} frames. Reboot for warm boot.\n",
+                    n
+                ));
+                0
+            }
+            _ => 1,
+        },
+        "shutdown" => crate::cmd_sys::cmd_shutdown().map(|_| 0).unwrap_or(1),
+        "clear" => crate::commands::cmd_clear().map(|_| 0).unwrap_or(1),
+        "help" => crate::commands::cmd_help().map(|_| 0).unwrap_or(1),
         "jobs" => {
             print_jobs(jobs);
-            Ok(())
+            0
         }
-        // fg/bg: ViCell background jobs run synchronously (cooperative scheduler,
-        // single-task shell). All &-jobs already completed before fg/bg is called.
         "fg" | "bg" => {
             shell_println(
                 "fg/bg: no job control — background jobs run synchronously in this shell",
             );
-            Ok(())
+            0
         }
-        // ── Scripting ───────────────────────────────────────────────────
-        // `.` is the POSIX short form of `source`.
-        "source" | "." => cmd_source(args, jobs),
-        // `test`/`[`: condition evaluation.  Returns Ok(()) (exit 0) on true,
-        // Err (exit 1) on false.  `[` strips a trailing `]` argument.
-        "test" => cmd_test(args),
+        "source" | "." => cmd_source(args, jobs).map(|_| 0).unwrap_or(1),
+        "test" => {
+            let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+            cmd_test(&refs).map(|_| 0).unwrap_or(1)
+        }
         "[" => {
-            let stripped: Vec<&str> = args.iter().copied().filter(|&a| a != "]").collect();
-            cmd_test(&stripped)
+            let refs: Vec<&str> = args
+                .iter()
+                .map(String::as_str)
+                .filter(|arg| *arg != "]")
+                .collect();
+            cmd_test(&refs).map(|_| 0).unwrap_or(1)
         }
         "break" => {
             set_loop_signal(LoopSignal::Break);
-            Ok(())
+            0
         }
         "continue" => {
             set_loop_signal(LoopSignal::Continue);
-            Ok(())
+            0
         }
-        "read" => cmd_read(args),
+        "read" => {
+            let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+            cmd_read(&refs).map(|_| 0).unwrap_or(1)
+        }
         "exit" => {
             let code = args
                 .first()
-                .and_then(|s| {
-                    let mut n = 0i32;
-                    for ch in s.bytes() {
-                        if !ch.is_ascii_digit() {
-                            return None;
-                        }
-                        n = n.saturating_mul(10).saturating_add((ch - b'0') as i32);
-                    }
-                    Some(n)
-                })
+                .and_then(|s| s.parse::<i32>().ok())
                 .unwrap_or(0);
             request_exit(code);
-            Ok(())
+            0
         }
         "unset" => {
             for name in args {
                 unset_var(name);
             }
-            Ok(())
+            0
         }
-        // ── External / user-defined functions ───────────────────────────
         _ => {
-            // Check the function table before trying to spawn an external binary.
             if let Some(body) = get_function(prog) {
-                // Bind positional parameters $1..$9, $#, $@ for the function body.
-                // Use owned Strings for index keys and saved values so we don't
-                // alias the shared i32_to_str static buffer or VARS slot memory.
                 let nargs = args.len().min(9);
-                // Save keys "#" and "@" plus positional indices "1".."9".
-                let mut saved: alloc::vec::Vec<(String, Option<String>)> =
-                    alloc::vec::Vec::with_capacity(nargs + 2);
+                let mut saved: Vec<(String, Option<String>)> = Vec::with_capacity(nargs + 2);
                 for i in 1..=nargs {
                     let key = usize_key(i);
                     saved.push((key.clone(), get_var(&key).map(String::from)));
                 }
                 saved.push((String::from("#"), get_var("#").map(String::from)));
                 saved.push((String::from("@"), get_var("@").map(String::from)));
-                // Set new positional variables.
                 for i in 1..=nargs {
-                    set_var(&usize_key(i), args[i - 1]);
+                    set_var(&usize_key(i), &args[i - 1]);
                 }
                 set_var("#", i32_to_str(nargs as i32));
                 set_var("@", &args.join(" "));
-
-                // Copy body to a local stack buffer so the 'static reference is
-                // not held across the re-entrant parse+execute call.
                 let mut buf = [0u8; 480];
                 let bb = body.as_bytes();
                 let blen = bb.len().min(479);
@@ -967,22 +980,17 @@ fn dispatch_builtin(prog: &str, args: &[&str], jobs: &mut Jobs) -> i32 {
                 } else {
                     1
                 };
-
-                // Restore saved positional variables.
                 for (k, v) in &saved {
                     match v {
                         Some(old) => set_var(k, old),
                         None => unset_var(k),
                     }
                 }
-                return result;
+                result
+            } else {
+                spawn_external(prog, args)
             }
-            return spawn_external(prog, args);
         }
-    };
-    match result {
-        Ok(()) => 0,
-        Err(_) => 1,
     }
 }
 
@@ -1111,9 +1119,9 @@ fn cmd_read(args: &[&str]) -> ViResult<()> {
 /// Lines starting with `#` and blank lines are skipped. The script runs in the
 /// current shell's Jobs context, so spawns from the script are tracked normally.
 /// Maximum script size is 4096 bytes (same limit as VFS OP_READ reply).
-fn cmd_source(args: &[&str], jobs: &mut Jobs) -> ViResult<()> {
+fn cmd_source(args: &[String], jobs: &mut Jobs) -> ViResult<()> {
     let path = match args.first() {
-        Some(p) => *p,
+        Some(p) => p.as_str(),
         None => {
             ostd::io::println("Usage: source <path>");
             return Ok(());
@@ -1145,8 +1153,11 @@ fn cmd_source(args: &[&str], jobs: &mut Jobs) -> ViResult<()> {
 /// slot) for the spawned cell to read on startup — `sys_spawn_from_path` does
 /// not yet carry argv on the new cell's stack. We always set the slot (empty
 /// when there are no args) so the cell never reads a previous command's args.
-fn spawn_external(prog: &str, args: &[&str]) -> i32 {
-    syscall::sys_set_spawn_args(&args.join(" "));
+fn spawn_external(prog: &str, args: &[String]) -> i32 {
+    if !ostd::set_spawn_argv(args) {
+        shell_println("shell: external argv exceeds 512-byte transport limit");
+        return 1;
+    }
 
     let mut path = alloc::string::String::from("/bin/");
     path.push_str(prog);
@@ -1200,21 +1211,207 @@ fn spawn_external(prog: &str, args: &[&str]) -> i32 {
     }
 }
 
-/// Convert `args` into a `SplitWhitespace<'static>` for the existing `cmd_*` API.
-///
-/// Joins the slice with spaces, leaks the resulting `String` into a `'static`
-/// reference, then splits on whitespace.  The leaked bytes (~arg length) are
-/// bounded per command invocation and acceptable for a shell that runs until
-/// reboot.
-fn make_parts(args: &[&str]) -> core::str::SplitWhitespace<'static> {
-    if args.is_empty() {
-        return "".split_whitespace();
+fn cmd_grep_args(args: &[String]) -> i32 {
+    crate::text_tools::grep::run(args)
+}
+
+fn cmd_sed_args(args: &[String]) -> i32 {
+    let mut cursor = ArgCursor::new(args);
+    let mut suppress = false;
+    let expr = loop {
+        match cursor.next() {
+            Some("-n") => suppress = true,
+            Some(arg) => break String::from(arg),
+            None => return UtilityStatus::Error.exit_code(),
+        }
+    };
+    let path = cursor.next_owned();
+    if cursor.next().is_some() {
+        shell_println("sed: only one input file is supported");
+        return UtilityStatus::Error.exit_code();
     }
-    let joined = args.join(" ");
-    // SAFETY: We intentionally leak the allocation so the returned SplitWhitespace
-    // can carry a 'static lifetime.  The shell runs for the lifetime of the OS
-    // session; per-invocation leaks are bounded by command argument sizes
-    // (typically < 1 KB) and are acceptable.
-    let leaked: &'static str = Box::leak(joined.into_boxed_str());
-    leaked.split_whitespace()
+    let text = match read_utility_text("sed", path.as_deref()) {
+        Ok(text) => text,
+        Err(code) => return code,
+    };
+    let output = match sed::execute(&expr, suppress, &text) {
+        Ok(output) => output,
+        Err(err) => {
+            shell_print("sed: ");
+            shell_println(err.message());
+            return UtilityStatus::Error.exit_code();
+        }
+    };
+    for line in output {
+        shell_println(&line);
+    }
+    UtilityStatus::Selected.exit_code()
+}
+
+fn cmd_awk_args(args: &[String]) -> i32 {
+    let mut cursor = ArgCursor::new(args);
+    let mut separator = None;
+    let program = loop {
+        match cursor.next() {
+            Some("-F") => separator = cursor.next_owned(),
+            Some(arg) if arg.starts_with("-F") && arg.len() > 2 => {
+                separator = Some(String::from(&arg[2..]));
+            }
+            Some(arg) => break String::from(arg),
+            None => return UtilityStatus::Error.exit_code(),
+        }
+    };
+    if !awk::looks_like_program(&program) {
+        let joined = args.join(" ");
+        return match crate::cmd_fs::cmd_awk(joined.split_whitespace()) {
+            Ok(()) => UtilityStatus::Selected.exit_code(),
+            Err(_) => UtilityStatus::Error.exit_code(),
+        };
+    }
+    let path = cursor.next_owned();
+    if cursor.next().is_some() {
+        shell_println("awk: only one input file is supported");
+        return UtilityStatus::Error.exit_code();
+    }
+    let text = match read_utility_text("awk", path.as_deref()) {
+        Ok(text) => text,
+        Err(code) => return code,
+    };
+    let separator = match awk::Separator::from_flag(separator.as_deref()) {
+        Ok(separator) => separator,
+        Err(err) => {
+            shell_print("awk: ");
+            shell_println(err.message());
+            return UtilityStatus::Error.exit_code();
+        }
+    };
+    let output = match awk::execute(&program, separator, &text) {
+        Ok(output) => output,
+        Err(err) => {
+            shell_print("awk: ");
+            shell_println(err.message());
+            return UtilityStatus::Error.exit_code();
+        }
+    };
+    for line in output {
+        shell_println(&line);
+    }
+    UtilityStatus::Selected.exit_code()
+}
+
+fn read_utility_text(name: &str, path: Option<&str>) -> Result<String, i32> {
+    let bytes = if let Some(path) = path {
+        match read_path_bytes(path) {
+            Ok(bytes) => bytes,
+            Err(UtilityReadError::Io) => {
+                ostd::io::print(name);
+                ostd::io::print(": cannot open '");
+                ostd::io::print(path);
+                ostd::io::println("'");
+                return Err(UtilityStatus::Error.exit_code());
+            }
+            Err(UtilityReadError::InputTooLarge) => {
+                shell_print(name);
+                shell_println(": input exceeds 65536-byte limit");
+                return Err(UtilityStatus::Error.exit_code());
+            }
+            Err(UtilityReadError::AllocationFailed) => {
+                shell_print(name);
+                shell_println(": input allocation failed");
+                return Err(UtilityStatus::Error.exit_code());
+            }
+        }
+    } else {
+        let stdin = shell_stdin();
+        let mut bytes = Vec::new();
+        if let Err(err) = extend_input(&mut bytes, stdin) {
+            shell_print(name);
+            shell_println(match err {
+                InputBufferError::TooLarge => ": input exceeds 65536-byte limit",
+                InputBufferError::AllocationFailed => ": input allocation failed",
+            });
+            return Err(UtilityStatus::Error.exit_code());
+        }
+        bytes
+    };
+    core::str::from_utf8(&bytes).map(String::from).map_err(|_| {
+        shell_print(name);
+        shell_println(": input is not valid UTF-8");
+        UtilityStatus::Error.exit_code()
+    })
+}
+
+enum UtilityReadError {
+    Io,
+    InputTooLarge,
+    AllocationFailed,
+}
+
+fn read_path_bytes(path: &str) -> Result<Vec<u8>, UtilityReadError> {
+    if let Some((size, is_dir)) = crate::cmd_fs::stat_file_vfs(path) {
+        if is_dir {
+            return Err(UtilityReadError::Io);
+        }
+        if size > MAX_INPUT_BYTES {
+            return Err(UtilityReadError::InputTooLarge);
+        }
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(size)
+            .map_err(|_| UtilityReadError::AllocationFailed)?;
+        bytes.resize(size, 0);
+        if size == 0 {
+            return Ok(bytes);
+        }
+        let read = crate::cmd_fs::read_file_vfs(path, &mut bytes);
+        if read == size {
+            return Ok(bytes);
+        }
+    }
+
+    let fd = syscall::sys_open(path).map_err(|_| UtilityReadError::Io)?;
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 512];
+    loop {
+        match syscall::sys_read(fd, &mut chunk) {
+            Ok(0) => break,
+            Ok(n) => {
+                if let Err(err) = extend_input(&mut bytes, &chunk[..n]) {
+                    syscall::sys_close(fd);
+                    return Err(match err {
+                        InputBufferError::TooLarge => UtilityReadError::InputTooLarge,
+                        InputBufferError::AllocationFailed => UtilityReadError::AllocationFailed,
+                    });
+                }
+            }
+            Err(_) => {
+                syscall::sys_close(fd);
+                return Err(UtilityReadError::Io);
+            }
+        }
+    }
+    syscall::sys_close(fd);
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{expand_word, set_var};
+    use crate::parser::{parse, Ast};
+
+    fn expanded_arg(line: &str) -> alloc::string::String {
+        match parse(line) {
+            Ast::Simple(cmd) => expand_word(&cmd.argv[1]),
+            _ => panic!("expected Simple"),
+        }
+    }
+
+    #[test]
+    fn mixed_quote_expansion_is_segment_local() {
+        set_var("HOME", "/home/test");
+        assert_eq!(expanded_arg("echo pre'$HOME'"), "pre$HOME");
+        assert_eq!(expanded_arg("echo '$HOME'suffix"), "$HOMEsuffix");
+        assert_eq!(expanded_arg("echo $HOME\"/bin\""), "/home/test/bin");
+        assert_eq!(expanded_arg("echo \"\""), "");
+    }
 }
