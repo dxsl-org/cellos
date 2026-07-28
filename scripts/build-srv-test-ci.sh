@@ -62,6 +62,13 @@ for bin in app-init app-shell service-vfs service-config srv-test platform drive
     fi
 done
 
+# shellcheck source=scripts/lib-sign-cells.sh
+source scripts/lib-sign-cells.sh
+
+echo "==> Signing cells..."
+sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-config" \
+           "$REL/srv-test" "$REL/platform" "$REL/driver-virtio-blk"
+
 echo "==> Assembling kernel_fs.img (srv-test)..."
 mkdir -p "$SRV_DIR"
 # Keep the temp dir inside target/: a POSIX /tmp path from Git Bash is not a

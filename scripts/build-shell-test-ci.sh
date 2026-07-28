@@ -55,6 +55,12 @@ for bin in app-init app-shell service-vfs service-config; do
     fi
 done
 
+# shellcheck source=scripts/lib-sign-cells.sh
+source scripts/lib-sign-cells.sh
+
+echo "==> Signing cells..."
+sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-config"
+
 echo "==> Assembling kernel_fs.img (shell-test)..."
 mkdir -p "$ST_DIR"
 TMPDIR_KFS=$(mktemp -d "target/shell-test-tmp.XXXXXX")

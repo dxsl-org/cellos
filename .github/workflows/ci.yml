@@ -660,7 +660,12 @@ jobs:
 
       - name: Install dependencies
         timeout-minutes: 10
-        run: sudo apt-get update -q && sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          # scripts/build-*-ci.sh sign every cell via scripts/sign-cell.py, which
+          # needs Ed25519 from `cryptography` and exits 1 without it.
+          python3 -m pip install --user --quiet cryptography
 
       - name: Build test-hooks kernel
         run: |
@@ -697,6 +702,9 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          # scripts/build-*-ci.sh sign every cell via scripts/sign-cell.py, which
+          # needs Ed25519 from `cryptography` and exits 1 without it.
+          python3 -m pip install --user --quiet cryptography
 
       - name: Build test-hooks kernel (needed by degrade test)
         run: |
@@ -785,6 +793,9 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
+          # scripts/build-*-ci.sh sign every cell via scripts/sign-cell.py, which
+          # needs Ed25519 from `cryptography` and exits 1 without it.
+          python3 -m pip install --user --quiet cryptography
 
       - name: Build shell-test kernel
         run: |
