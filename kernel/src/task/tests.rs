@@ -35,8 +35,8 @@ pub fn run_scheduler_tests() {
 fn test_rt_preempts_normal_priority() {
     let mut sched = Scheduler::new();
 
-    let normal_id = sched.spawn("normal", CellId(0), Vec::new());
-    let rt_id = sched.spawn("rt", CellId(0), Vec::new());
+    let normal_id = sched.spawn("normal", CellId(0), Vec::new()).expect("spawn");
+    let rt_id = sched.spawn("rt", CellId(0), Vec::new()).expect("spawn");
 
     // Set rt task to RealTime priority
     if let Some(t) = sched.tasks.get_mut(&rt_id) {
@@ -58,8 +58,8 @@ fn test_rt_preempts_normal_priority() {
 fn test_background_lower_than_normal_priority() {
     let mut sched = Scheduler::new();
 
-    let bg_id = sched.spawn("bg", CellId(0), Vec::new());
-    let normal_id = sched.spawn("normal", CellId(0), Vec::new());
+    let bg_id = sched.spawn("bg", CellId(0), Vec::new()).expect("spawn");
+    let normal_id = sched.spawn("normal", CellId(0), Vec::new()).expect("spawn");
 
     if let Some(t) = sched.tasks.get_mut(&bg_id) {
         t.priority = api::TaskPriority::Background as u8;
@@ -78,9 +78,9 @@ fn test_background_lower_than_normal_priority() {
 fn test_same_priority_round_robin() {
     let mut sched = Scheduler::new();
 
-    let id1 = sched.spawn("a", CellId(0), Vec::new());
-    let id2 = sched.spawn("b", CellId(0), Vec::new());
-    let id3 = sched.spawn("c", CellId(0), Vec::new());
+    let id1 = sched.spawn("a", CellId(0), Vec::new()).expect("spawn");
+    let id2 = sched.spawn("b", CellId(0), Vec::new()).expect("spawn");
+    let id3 = sched.spawn("c", CellId(0), Vec::new()).expect("spawn");
 
     // First pick: id1 (spawned first → front of queue)
     sched.pick_next();
@@ -101,7 +101,9 @@ fn test_scheduler_task_table() {
     let mut sched = Scheduler::new();
 
     // Spawn a task
-    let id = sched.spawn("test-task", CellId(0), Vec::new());
+    let id = sched
+        .spawn("test-task", CellId(0), Vec::new())
+        .expect("spawn");
 
     // Verify task exists in table
     assert!(sched.tasks.contains_key(&id));
@@ -190,8 +192,8 @@ fn test_lease_attributes() {
 fn test_round_robin_scheduling() {
     let mut sched = Scheduler::new();
 
-    let id1 = sched.spawn("task1", CellId(0), Vec::new());
-    let id2 = sched.spawn("task2", CellId(0), Vec::new());
+    let id1 = sched.spawn("task1", CellId(0), Vec::new()).expect("spawn");
+    let id2 = sched.spawn("task2", CellId(0), Vec::new()).expect("spawn");
 
     // pick_next -> should be task1
     sched.pick_next(); // Selects task1
@@ -220,7 +222,7 @@ fn test_scheduler_current_task() {
     assert_eq!(sched.current_task_id, None);
 
     // Spawn and schedule
-    let id = sched.spawn("test", CellId(0), Vec::new());
+    let id = sched.spawn("test", CellId(0), Vec::new()).expect("spawn");
 
     // Sched::pick_next would be called by yield/interrupt.
     // We simulate it here.
@@ -239,9 +241,9 @@ fn test_multiple_tasks_ready_queue() {
     let mut sched = Scheduler::new();
 
     // Spawn 3 tasks
-    let id1 = sched.spawn("task1", CellId(0), Vec::new());
-    let id2 = sched.spawn("task2", CellId(0), Vec::new());
-    let id3 = sched.spawn("task3", CellId(0), Vec::new());
+    let id1 = sched.spawn("task1", CellId(0), Vec::new()).expect("spawn");
+    let id2 = sched.spawn("task2", CellId(0), Vec::new()).expect("spawn");
+    let id3 = sched.spawn("task3", CellId(0), Vec::new()).expect("spawn");
 
     // All should be in ready queue
     assert_eq!(sched.ready_count(), 3);
@@ -258,7 +260,9 @@ fn test_multiple_tasks_ready_queue() {
 /// and the scheduler must then pick it up on the next tick.
 fn test_blocked_then_ready_transition() {
     let mut sched = Scheduler::new();
-    let id = sched.spawn("blocked", CellId(0), Vec::new());
+    let id = sched
+        .spawn("blocked", CellId(0), Vec::new())
+        .expect("spawn");
 
     // Simulate the task blocking on Send.
     if let Some(task) = sched.tasks.get_mut(&id) {
@@ -293,8 +297,8 @@ fn test_blocked_then_ready_transition() {
 /// A task in `Waiting` state (joined to another task) must never be scheduled.
 fn test_waiting_task_not_scheduled() {
     let mut sched = Scheduler::new();
-    let waiter = sched.spawn("waiter", CellId(0), Vec::new());
-    let target = sched.spawn("target", CellId(0), Vec::new());
+    let waiter = sched.spawn("waiter", CellId(0), Vec::new()).expect("spawn");
+    let target = sched.spawn("target", CellId(0), Vec::new()).expect("spawn");
 
     // Put waiter into Waiting state.
     if let Some(task) = sched.tasks.get_mut(&waiter) {

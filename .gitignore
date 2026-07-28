@@ -65,6 +65,13 @@ CLAUDE.md
 /kernel/src/embedded-shell-test/
 /kernel/src/embedded-srv-test/
 
+# Python bytecode from tools/ and scripts/ (mkfat32, inspect_fat, sign-policy)
+__pycache__/
+
+# Upstream extract-vmlinux, downloaded + checksum-verified by fetch-alpine-x86.sh.
+# Cached so re-runs work offline; not ours to vendor (GPL-2.0, Linux scripts/).
+/scripts/.extract-vmlinux
+
 # Accidentally-created disk images from script invocations (e.g. gen_disk.ps1 --help)
 --help
 

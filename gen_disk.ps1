@@ -334,10 +334,34 @@ if (-not (Test-Path $bench_bin)) {
 # 3a. Generate kernel_fs.img (small embedded FAT32, ~8 MB, with release cells).
 #     This image is embedded in the kernel binary via ramdisk.rs.
 Write-Host "Generating kernel_fs.img (embedded FAT32, release cells)..."
-$tmpDir = "$env:TEMP/ViCell_kfs"
+# Repo-relative, NOT $env:TEMP: that variable is unset on the Linux CI runners, where
+# "$env:TEMP/ViCell_kfs" collapsed to "/ViCell_kfs" at the filesystem root. The
+# New-Item there failed with "Access to the path '/ViCell_kfs' is denied" and, because
+# Set-Content errors are non-terminating, the script carried on and quietly shipped a
+# CI image with no /etc/hostname and no /readme.txt. Only an explicit exit-code check
+# on the next writer turned that into a visible failure.
+$tmpDir = "target/ViCell_kfs"
 New-Item -ItemType Directory -Force $tmpDir | Out-Null
 Set-Content -Path "$tmpDir/hostname" -Value "ViCell" -NoNewline -Encoding ascii
 Set-Content -Path "$tmpDir/readme"   -Value "Welcome to ViCell!" -NoNewline -Encoding ascii
+
+# Signed operator policy. Without it the kernel takes the `Absent` branch, which is
+# dev-permissive — every capability survives untouched and nothing exercises the
+# policy layer. Since this is the image the integration suite boots, leaving it out
+# means those tests can never catch a policy regression.
+#
+# sign-policy.py round-trip-decodes the blob before writing, so an entry outside the
+# kernel's domain masks fails HERE rather than becoming PolicyState::Invalid →
+# DenyAll on a booted device. It is signed with the DEV fleet key, which only
+# verifies while the kernel carries the default `dev-policy-key` feature; an image
+# with this blob built without that feature is Invalid → DenyAll for every cell
+# outside vfs/shell/net.
+$policy_bin = "$tmpDir/POLICY.BIN"
+& $python "scripts/sign-policy.py" --out $policy_bin
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policy_bin)) {
+    Write-Host "FATAL: sign-policy.py failed — need 'pip install cryptography'." -ForegroundColor Red
+    exit 1
+}
 # G2 kernel-shrink: VIFS1 carries ONLY what must resolve before/without VFS.
 #   1. Bootstrap cells (loader::early::BOOTSTRAP_CELLS + init): the chain that
 #      brings up the Block Cell + VFS with no block driver in the kernel.
@@ -356,7 +380,12 @@ $kfs_args = @(
     "$rel_dir/service-vfs",    "/bin/vfs",
     "$rel_dir/service-config", "/bin/config",
     "$tmpDir/hostname",        "/etc/hostname",
-    "$tmpDir/readme",          "/readme.txt"
+    "$tmpDir/readme",          "/readme.txt",
+    # Root-level, 8.3-uppercase — kernel/src/policy.rs reads exactly /POLICY.BIN.
+    # Anywhere else and the kernel reports "absent" and silently falls back to
+    # dev-permissive, which is worse than no policy because the image looks
+    # provisioned.
+    $policy_bin,               "/POLICY.BIN"
 )
 if (Test-Path $platform_bin)   { $kfs_args += @($platform_bin,   "/bin/platform") }
 if (Test-Path $virtio_blk_bin) { $kfs_args += @($virtio_blk_bin, "/bin/block") }
@@ -371,6 +400,17 @@ if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/b
 & $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
+    exit 1
+}
+# Assert the layout instead of trusting the exit code. mkfat32 exits 0 for images
+# whose destination paths were mangled (Git Bash rewrote /bin/... once, producing a
+# well-formed FAT with a root directory literally named "C:"), and a missing
+# /POLICY.BIN degrades silently to the dev-permissive branch.
+$kfs_layout = & $python "$tools_dir/inspect_fat.py" "kernel/src/embedded/kernel_fs.img" 2>&1
+if (($kfs_layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false -or
+    ($kfs_layout | Select-String -Quiet -SimpleMatch "LFN 'vfs'") -eq $false) {
+    Write-Host "FATAL: kernel_fs.img lacks /POLICY.BIN or /bin/vfs." -ForegroundColor Red
+    $kfs_layout | Write-Host
     exit 1
 }
 Remove-Item -Recurse -Force $tmpDir

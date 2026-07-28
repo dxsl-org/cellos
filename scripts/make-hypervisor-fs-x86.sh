@@ -77,7 +77,47 @@ MKFAT_ARGS+=("$ALPINE_CACHE/vmlinux" "/vmlinux")
 echo "  /initrd.gz <- $ALPINE_CACHE/initramfs-virt ($(du -sh "$ALPINE_CACHE/initramfs-virt" | cut -f1))"
 MKFAT_ARGS+=("$ALPINE_CACHE/initramfs-virt" "/initrd.gz")
 
-python3 tools/mkfat32.py "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+# Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
+# which is dev-permissive: the whole policy layer runs and changes nothing, and no test
+# can tell the difference.
+# On Windows the bare name `python3` is the Microsoft Store alias stub, which prints
+# an install hint and exits without running anything. Probe for an interpreter that
+# actually works — the same guard the build-*-ci.sh scripts carry.
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN=python
+    else
+        echo "FAIL: a working Python 3 interpreter is required" >&2
+        exit 1
+    fi
+fi
+# shellcheck source=scripts/lib-bake-policy.sh
+source scripts/lib-bake-policy.sh
+POLICY_TMP=$(mktemp -d "target/hv-x86-policy-tmp.XXXXXX")
+trap 'rm -rf "$POLICY_TMP"' EXIT
+bake_policy "$POLICY_TMP/POLICY.BIN"
+echo "  /POLICY.BIN <- signed operator policy"
+MKFAT_ARGS+=("$POLICY_TMP/POLICY.BIN" "/POLICY.BIN")
+
+# MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every leading-slash DESTINATION
+# into a Windows path before Python sees it, and mkfat32.py builds an image whose /bin
+# holds "Program Files" instead of the cells. mkfat32 still exits 0. The aarch64
+# sibling dodges this by using slash-free destinations; this lane needs the guard.
+MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
+    "$EMBEDDED_HV/kernel_fs.img" "${MKFAT_ARGS[@]}"
+
+# Prove the layout rather than trusting the exit code: mkfat32 exits 0 for an image
+# whose destinations were mangled, and a missing /POLICY.BIN degrades silently.
+"$PYTHON_BIN" tools/inspect_fat.py "$EMBEDDED_HV/kernel_fs.img" > "$POLICY_TMP/fat-layout.txt"
+if ! grep -q -- '--- /bin ---' "$POLICY_TMP/fat-layout.txt" ||
+   ! grep -q -- "LFN 'hypervisor'" "$POLICY_TMP/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img does not contain /bin/hypervisor" >&2
+    cat "$POLICY_TMP/fat-layout.txt" >&2
+    exit 1
+fi
+assert_policy_in_image "$POLICY_TMP/fat-layout.txt" || exit 1
 
 cp "$BIN_DIR/app-init" "$EMBEDDED_HV/init"
 echo "[make-hv-x86] init <- $BIN_DIR/app-init"

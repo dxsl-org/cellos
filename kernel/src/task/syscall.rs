@@ -1446,10 +1446,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             };
 
-            let tid = super::spawn_with_arg(name, parent_cell_id, drivers, entry, arg);
-            if tid == 0 {
-                return Err(SyscallError::Unknown);
-            }
+            // A refused thread spawn is `TryAgain`, not a fault: both the per-cell
+            // thread cap and a fragmented allocator surface as OutOfMemory, and
+            // both must leave the caller running. This path used to reach an
+            // `.expect` in the scheduler, so an unprivileged cell looping here
+            // could panic the kernel — never-die broken from userspace.
+            let tid = match super::spawn_with_arg(name, parent_cell_id, drivers, entry, arg) {
+                Ok(t) => t,
+                Err(ViError::OutOfMemory) => return Err(SyscallError::TryAgain),
+                Err(_) => return Err(SyscallError::Unknown),
+            };
 
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&tid) {
@@ -4390,7 +4396,9 @@ mod tests {
         let mut previous = SCHEDULER.lock();
         let saved = previous.take();
         let mut scheduler = Scheduler::new();
-        let tid = scheduler.spawn("allowlist-test", CellId(7), alloc::vec::Vec::new());
+        let tid = scheduler
+            .spawn("allowlist-test", CellId(7), alloc::vec::Vec::new())
+            .expect("spawn allowlist-test");
         scheduler.tasks.get_mut(&tid).unwrap().syscall_allowlist = allowlist;
         *previous = Some(scheduler);
         drop(previous);

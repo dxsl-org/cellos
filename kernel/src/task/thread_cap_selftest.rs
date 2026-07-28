@@ -26,6 +26,10 @@ use types::CellId;
 const PARENT_TID: usize = 9001;
 const TARGET_TID: usize = 9002;
 const CTRL_TID: usize = 9003;
+/// Separate cell for the thread-cap section, so its fillers cannot be mistaken
+/// for (or collide with) the identity-inheritance section's parent cell.
+const DOS_CELL_ID: u64 = 0x00D0_5000;
+const DOS_FILLER_BASE: usize = 9100;
 
 // Distinctive sentinels so an inherited value is unambiguously the parent's.
 const TEST_CELL_ID: u64 = 0x00C0_FFEE;
@@ -226,13 +230,64 @@ pub fn self_test() -> bool {
         remove(CTRL_TID);
     }
 
+    // ── thread-spawn DoS bound ─────────────────────────────────────────────────
+    // `Syscall::Spawn` is gated by the syscall allowlist but NOT by SpawnCap, and
+    // each thread costs a contiguous run of STACK_PAGES+1 frames. Before the cap an
+    // unprivileged cell could loop here until the allocator fragmented, at which
+    // point the scheduler's `.expect("OOM Stack")` panicked the kernel — never-die
+    // broken from userspace. The refusal must be an error the caller survives.
+    //
+    // The cell is filled with STACKLESS synthetic tasks: the cap counts live tasks
+    // sharing a CellId, so proving the bound costs 31 Task structs instead of 31
+    // real 65-frame stack allocations.
+    {
+        let mut parent = mk_task(PARENT_TID, DOS_CELL_ID);
+        parent.spawn_cap = Some(super::cap::SpawnCap::new());
+        insert(parent);
+
+        let filler: alloc::vec::Vec<usize> = (0..super::scheduler::MAX_THREADS_PER_CELL - 1)
+            .map(|i| DOS_FILLER_BASE + i)
+            .collect();
+        for &tid in &filler {
+            insert(mk_task(tid, DOS_CELL_ID));
+        }
+
+        // Parent + fillers occupy the whole budget, so the next thread must be
+        // refused — with TryAgain (a recoverable refusal), not a panic, and not a
+        // silent success.
+        let refused = handle_syscall(
+            PARENT_TID,
+            Syscall::Spawn {
+                entry: 0x1000,
+                arg: 0,
+            },
+        );
+        if !matches!(refused, Err(SyscallError::TryAgain)) {
+            ok = false;
+            log::error!(
+                "[selftest] THREAD-CAP-DOS: FAIL — spawn at cap returned {:?}, expected TryAgain",
+                refused
+            );
+            // A spawn that unexpectedly succeeded left a task behind; drop it so the
+            // scheduler is still returned exactly as it was found.
+            if let Ok(stray) = refused {
+                remove(stray);
+            }
+        }
+
+        for tid in filler {
+            remove(tid);
+        }
+        remove(PARENT_TID);
+    }
+
     // Restore the spawn counter so the test leaves no trace on tid assignment.
     if let (Some(sched), Some(n)) = (super::SCHEDULER.lock().as_mut(), saved_next_tid) {
         sched.next_task_id = n;
     }
 
     if ok {
-        log::info!("[selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke)");
+        log::info!("[selftest] THREAD-CAP: PASS (thread-inherit + honest-revoke + spawn bound)");
     } else {
         log::error!("[selftest] THREAD-CAP: FAIL");
     }

@@ -47,12 +47,29 @@ fetch_and_verify() {
 # a hand-rolled `grep -P` magic scan misses Alpine's gzip payload). Cached under
 # scripts/ so re-runs work offline.
 EXTRACT_TOOL="scripts/.extract-vmlinux"
+# Pinned to a tag, never `master`: this file is downloaded and then EXECUTED, so an
+# unpinned ref means running whatever upstream HEAD happens to hold that day. The
+# supply-chain rule this script's header states for the Alpine artifacts applies here
+# with more force — those are only read, this one runs as code.
+# v6.12 and v6.6 ship byte-identical copies; the file has been stable for years.
+EXTRACT_TOOL_URL="https://raw.githubusercontent.com/torvalds/linux/v6.12/scripts/extract-vmlinux"
+EXTRACT_TOOL_SHA256="97cfeeeb51de17f4b5928c5442b56e5581314ddef3cedf2523be2049d79394af"
+
 extract_vmlinux() {
     local bzimage="$1" out="$2"
     if [[ ! -f "$EXTRACT_TOOL" ]]; then
-        curl -fsSL -o "$EXTRACT_TOOL" \
-            https://raw.githubusercontent.com/torvalds/linux/master/scripts/extract-vmlinux \
-            || return 1
+        curl -fsSL -o "$EXTRACT_TOOL" "$EXTRACT_TOOL_URL" || return 1
+    fi
+    # Verify on every call, not just after a fresh download: the cache sits in the
+    # working tree, so a stale or edited copy has to be rejected as well.
+    local got
+    got="$(sha256sum "$EXTRACT_TOOL" | awk '{print $1}')"
+    if [[ "$got" != "$EXTRACT_TOOL_SHA256" ]]; then
+        echo "ERROR: $EXTRACT_TOOL checksum mismatch — refusing to execute it" >&2
+        echo "  expected $EXTRACT_TOOL_SHA256" >&2
+        echo "  got      $got" >&2
+        echo "  Delete the file to re-fetch from $EXTRACT_TOOL_URL" >&2
+        return 1
     fi
     bash "$EXTRACT_TOOL" "$bzimage" > "$out" 2>/dev/null || return 1
     [[ "$(dd if="$out" bs=1 count=4 2>/dev/null)" == $'\x7fELF' ]]

@@ -47,6 +47,13 @@ for bin in app-init app-shell service-vfs service-config platform driver-virtio-
     fi
 done
 
+# shellcheck source=scripts/lib-sign-cells.sh
+source scripts/lib-sign-cells.sh
+
+echo "==> Signing cells..."
+sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" \
+           "$REL/service-config" "$REL/platform" "$REL/driver-virtio-blk"
+
 echo "==> Assembling $EMB/kernel_fs.img..."
 # Keep the temp dir inside target/: a POSIX /tmp path from Git Bash is not a
 # path a native Windows Python can open.
@@ -54,6 +61,16 @@ TMPDIR_KFS=$(mktemp -d "target/boot-ramdisk-tmp.XXXXXX")
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell' > "$TMPDIR_KFS/hostname"
 printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
+
+# Signed operator policy. sign-policy.py round-trip-decodes the blob before it
+# writes, so an entry outside the kernel's domain masks fails HERE rather than
+# turning into PolicyState::Invalid → DenyAll on every booted device.
+#
+# The blob is signed with the DEV fleet key, which only verifies while the kernel
+# carries the default `dev-policy-key` feature. Building an image that contains
+# this blob WITHOUT that feature makes the policy Invalid → every cell outside
+# vfs/shell/net boots with no capabilities.
+"$PYTHON_BIN" scripts/sign-policy.py --out "$TMPDIR_KFS/POLICY.BIN" >/dev/null
 
 # MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every /bin/... DESTINATION
 # argument into a Windows path before Python sees it, and mkfat32.py silently
@@ -69,7 +86,8 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$REL/platform"          /bin/platform \
     "$REL/driver-virtio-blk" /bin/block \
     "$TMPDIR_KFS/hostname"   /etc/hostname \
-    "$TMPDIR_KFS/readme"     /readme.txt
+    "$TMPDIR_KFS/readme"     /readme.txt \
+    "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
 # Prove the layout rather than trusting the exit code — a mangled destination
 # path produces a well-formed image that simply has no /bin.
@@ -77,6 +95,15 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'vfs'" "$TMPDIR_KFS/fat-layout.txt"; then
     echo "FAIL: kernel_fs.img does not contain /bin/vfs" >&2
+    cat "$TMPDIR_KFS/fat-layout.txt" >&2
+    exit 1
+fi
+# POLICY.BIN is read by the kernel at /POLICY.BIN (root, 8.3-uppercase). If it
+# lands anywhere else the kernel reports "absent" and silently falls back to the
+# dev-permissive posture — a policy that does nothing, which is worse than none
+# because the image looks provisioned.
+if ! grep -q -- "SFN POLICY.BIN" "$TMPDIR_KFS/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img has no /POLICY.BIN in the root directory" >&2
     cat "$TMPDIR_KFS/fat-layout.txt" >&2
     exit 1
 fi

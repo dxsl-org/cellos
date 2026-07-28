@@ -69,7 +69,8 @@ pub enum AuditEvent {
     PolicyAbsent = 18,
     /// Operator policy narrowed a cell's spawn-time caps. Payload:
     /// `encode_u32x2(tid, dropped_flags)` (dropped_flags: bit0 block_io, bit1
-    /// network, bit2 spawn, bit3 hypervisor).
+    /// network, bit2 spawn, bit3 hypervisor, bit4 pcie_driver, bit5 platform,
+    /// bit6 supervisor, bit7 mmio_devices changed, bit8 block_regions changed).
     CapNarrowedByPolicy = 19,
     /// Runtime revocation: a SpawnCap holder stripped capabilities from a live cell.
     /// Payload: `encode_u32x2(target_tid, cap_mask)` where `cap_mask` matches
@@ -82,6 +83,26 @@ pub enum AuditEvent {
     /// Cell binary signature absent or invalid — spawn denied.
     /// Payload: `encode_u32x2(tid, 0)`. Path is logged separately via `log::warn!`.
     CellSignatureFailed = 22,
+    /// A cell was granted privileged path authority that survived policy narrowing.
+    /// Payload: `encode_u32x2(tid, mask)` (bit0 pcie_driver, bit1 platform,
+    /// bit2 supervisor). These are the caps that can DMA anywhere or orchestrate
+    /// other cells, so the grant — not only its removal — is auditable.
+    PrivilegedCapGranted = 23,
+    /// The signed maintenance bypass was exercised: policy narrowing was skipped
+    /// for this spawn. Requires BOTH the `maintenance-mode` build feature and the
+    /// `MAINTENANCE_PERMITTED` flag in the signed policy. Payload:
+    /// `encode_u32x2(tid, 0)`; the path is logged separately via `log::warn!`.
+    PolicyMaintenanceBypass = 24,
+    /// A cell hit `MAX_THREADS_PER_CELL` and its `spawn_thread` was refused.
+    /// Payload: `encode_u32x2(cell_id, live_task_count)`. Refusing is the correct
+    /// outcome, but a cell hitting the cap repeatedly is either leaking threads or
+    /// probing for the allocator-fragmentation DoS this cap closes.
+    ///
+    /// Numbered 25 rather than 23: this variant and the two above were authored on
+    /// parallel branches that each claimed 23. The discriminant is the byte written
+    /// into the ring, so a collision would leave two unrelated events
+    /// indistinguishable to anything that decodes the log.
+    ThreadCapReached = 25,
 }
 
 struct AuditRing {

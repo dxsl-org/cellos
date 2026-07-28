@@ -4,6 +4,183 @@
 
 ---
 
+## [2026-07-28] Cell signing reached only one image lane out of five
+
+### What was wrong
+`gen_disk.ps1` signed its cells. `build-boot-ramdisk-ci.sh`, `build-test-hooks-ci.sh`,
+`build-shell-test-ci.sh` and `build-srv-test-ci.sh` did not. A cell with no
+`__ViCell_sig` section is denied by `loader::spawn_gated` under the `signing-required`
+feature, so four of the five lanes produced images that cannot boot in the posture
+`kernel/src/signing.rs` documents as "CI/prod". No CI job enables it, which is
+consistent with a posture that was never usable.
+
+The symptom is why this stayed hidden: init reports a denied spawn as
+`Init: cell not found — skipping:`, so the guest log blames a missing file. The only
+mention of signatures is a kernel-side `[loader] DENY` line, which a test asserting on
+guest output never sees.
+
+### What shipped
+`scripts/lib-sign-cells.sh`, sourced by all four scripts rather than copied into each.
+The four already carry duplicated `PYTHON_BIN` and `CC` probe blocks, and that
+duplication is precisely why one still defaults `CC` to a compiler name absent from a
+dev box while the others were fixed — four copies of a probe drift apart.
+
+`resolve_objcopy` honors a pre-set `$OBJCOPY`, else probes
+`riscv64-unknown-elf-objcopy` (the Ubuntu package name) then `riscv-none-elf-objcopy`
+(local xpack), and fails loudly. It deliberately does not fall back to plain `objcopy`:
+a host objcopy exits 1 with "Unable to recognise the architecture of the input file" on
+a riscv64 ELF, and `gen_disk.ps1` works only because it sets `OBJCOPY` explicitly.
+
+Every signed binary is re-read with `--verify`. objcopy can exit 0 having written a
+section the kernel's payload rules reject — the ELF header is deliberately outside the
+signed bytes, so a layout change invalidates the signature without failing the embed.
+`cryptography` is added to the remaining jobs that run these scripts.
+
+### Verified
+Same kernel built `--features signing-required`: against the unsigned test-hooks image
+it emitted `DENY` for vfs, config, shell and vfs-test and never reached a prompt; after
+the change, no `DENY` lines, `[vfs-test] Results: 36 PASS, 0 FAIL`, shell ready. Default
+posture unaffected: `vfs-quota` 1/1, `shell-utils` 1/1, `redoxfs-srv` 3/3, and the boot
+suite 54/54 on a signed, policy-baked image.
+
+### Left open — one tracked artifact, two build configurations
+The tracked `kernel/src/embedded*/init` blobs are not updated here. Signing changes
+them, but stripping the new signature back off does **not** reproduce the committed
+bytes: a further 1136 bytes differ, because `gen_disk.ps1` builds cells without
+`-Z build-std` (prebuilt `core`/`alloc`) while the CI scripts build with it. Two lanes
+produce two different `init` binaries and both write the same tracked file, so whichever
+ran last is what got committed. Choosing which flags are canonical is a separate
+decision from signing. The embedded copy is exempt from the gate regardless, since
+`spawn_from_mem` does not call `spawn_gated`.
+
+## [2026-07-28] Spawn path: no duplicate stacks, no OOM panic, bounded thread spawn
+
+### What was wrong
+Every cell spawn asked the frame allocator for **four** contiguous 65-frame runs and
+kept two. `task.rs` pre-allocated a kernel/user pair (correctly, with `Result`), then
+called `Scheduler::spawn`, which allocated its own pair with `.expect("OOM Stack")` —
+and that pair was overwritten and dropped a few lines later.
+
+`spawn_synthetic` had the same duplication with a sharper edge: its second pair was
+allocated *after* the task was already inserted and runnable, so an OOM there returned
+`Err` and left a half-built task in the scheduler forever.
+
+Three `.expect("OOM Stack")` sites turned a recoverable allocation failure into a dead
+machine. One of them, in `spawn_thread`, was reachable from userspace: `Syscall::Spawn`
+is gated by the syscall allowlist but **not** by `SpawnCap`, so an unprivileged cell
+could loop thread-spawns until the allocator fragmented and panic the kernel —
+never-die broken from a cell holding no capabilities at all.
+
+### What shipped
+`Scheduler::spawn` splits into `spawn_with_stacks` (takes the stacks) and `spawn`
+(allocates, then delegates). Both cell-spawn paths hand over stacks they already own,
+so the allocator sees two runs per spawn instead of four, and the ordering guarantee —
+allocate everything before touching the scheduler, let `Drop` unwind — now holds on
+both paths.
+
+All three `.expect` sites return `Result`. A refused thread spawn surfaces as
+`TryAgain`, which is what it is: a resource that may exist later.
+
+`MAX_THREADS_PER_CELL = 32` bounds live tasks per `CellId`. This replaces the planned
+"charge stack bytes to `cell_quota`": byte accounting needs a refund tied to task reap,
+and one missed refund permanently starves the cell — a worse failure than the DoS it
+closes. A cap derived from live tasks heals itself when a task dies.
+
+The stack memset length now comes from the `Stack` it was handed rather than a
+constant. With a constant, handing in a smaller stack writes past its end, and in a
+single address space that lands in another cell's frames with no fault and no log.
+
+### Verified
+The first cell's stack base moved down by exactly `0x82000` — 130 pages, i.e.
+2 × (`STACK_PAGES` + 1). `grep 'expect("OOM Stack'` returns nothing. A new boot
+self-test fills a cell to the cap with stackless synthetic tasks, calls the real
+`Syscall::Spawn` path, and requires `TryAgain`: `[sched] cell … at thread cap (32) —
+refusing spawn_thread`, then `[selftest] THREAD-CAP: PASS (… + spawn bound)`. rv64
+boots to a shell; clippy `-D warnings` clean on all three architectures.
+
+### Correcting two earlier claims
+Steady-state RAM per cell did **not** drop by half. The duplicate pair was freed at the
+assignment that overwrote it, so the allocator recycled it before the next spawn — the
+address gap between consecutive cells is unchanged. What halved is the number of
+contiguous-run searches per spawn, and since each 65-frame search is a chance to fail
+on a fragmented allocator, that is the win — not RAM.
+
+And `fontdue` is **not** dead weight in non-GUI cells. A symbol-level measurement
+(`llvm-nm`, not a string grep) finds exactly one fontdue-attributed symbol in
+`service-vfs` and `app-shell`: `alloc::vec::from_elem::<u8>`, 46 and 60 bytes — a
+shared generic credited to fontdue's codegen unit, no rasterizer. `hashbrown` and
+`heapless` contribute zero symbols to every cell measured. LTO and `gc-sections`
+already do this job, so the planned `ui` feature gate was dropped rather than built.
+
+Worth recording for later: `.bss` is ~8 MB in *every* cell, including a 31 KB
+`hello-cell`, because the heap is a `static mut` reservation. That dwarfs every
+`.text` figure here and is untouched by this change.
+
+## [2026-07-28] POLICY.BIN v2 — the operator policy layer stops being a no-op
+
+### The state it was in
+`/POLICY.BIN` had never been baked into any image. Every device took the `Absent`
+branch, which is dev-permissive, so the entire signed-policy layer — loader, verifier,
+parser, narrowing rule — ran and then changed nothing. The `policy-required` posture
+existed but had no policy to require.
+
+Two things had to be true before baking one could be safe, and neither was:
+
+- **The blob could not express the three strongest capabilities.** `CAP_BYTES = 6`
+  covered block_io/network/spawn/hypervisor/mmio/regions but not `pcie_driver`,
+  `platform`, `supervisor`. The parser filled them with `..CapSet::EMPTY`, and because
+  `Permit` *intersects*, that is not "not granted" — it is **always stripped**. A blob
+  naming `/bin/block` would have killed the block driver.
+- **The shipped policy had four entries.** The real boot set is 23 paths, and one of
+  those four (`/bin/shell`) carried `mmio = 0`, which would have zeroed gpio|uart on
+  the shell — and, because a spawner's caps are the ceiling for its children, on every
+  peripheral demo the shell launches.
+
+### What shipped
+Layout v2 adds three cap bytes; v1 still parses, deliberately keeping its
+strip-the-privileged-caps behaviour so an old blob cannot silently widen authority.
+The new bytes take a stricter domain than the old ones — literal 0/1, not `!= 0` —
+because these are the caps that can DMA anywhere. Unknown version, unknown flag bit,
+and truncated entries are all parse failures rather than guesses.
+
+`maintenance-mode` is no longer a one-factor bypass. It now also requires a signed
+`MAINTENANCE_PERMITTED` flag in the policy, so an image built with the wrong feature
+flag no longer hands every cell every capability with nothing on the device to say so.
+The accepted cost: maintenance mode can no longer recover a device *from* a bad policy;
+that case falls to the `is_trusted_core` hatch, which keeps vfs/shell/net alive.
+
+Audit gained `PrivilegedCapGranted` and `PolicyMaintenanceBypass`. The `dropped`
+bitmask went from 4 bits to 9. Until now, *granting* DMA-anywhere authority left no
+trace at all — only losing it did.
+
+`sign-policy.py` emits all 23 entries and round-trip-decodes its own output with an
+independent decoder before writing, unconditionally. That gate is the point: a blob the
+kernel rejects becomes `DenyAll` for every path, and a "boot to prompt" check cannot
+catch it because the shell is trusted core and comes up regardless.
+
+### Verified
+`[policy] loaded + verified (23 entries)` — the first time the policy layer has done
+anything on a booted device. Behaviour-neutral: the boot log with the blob differs from
+the boot log without it by exactly one line, the policy line itself. Both postures boot;
+clippy `-D warnings` clean on all three architectures and five feature combinations.
+
+The enforcement is real, not inert: with the same kernel, image, and disk, a policy
+containing `/bin/block` gives `[virtio-blk] ready`, and a policy missing that one entry
+gives `[virtio-blk] no free device — exiting`.
+
+### Repaired on the way
+`policy::self_test` hardcoded the dev-permissive expectation for `NoEntry`, so **every**
+`policy-required` build failed its own power-on self-test — the posture where the check
+matters most — and the failure was advisory, so nothing ever stopped. Pre-existing.
+
+### Not covered
+Seven of the eight embedded images still ship without the blob (they stay on the
+`absent` → dev-permissive path, i.e. exactly today's behaviour). The three peripheral
+demos were not run from a shell prompt; the A/B log diff stands in for that check.
+A dev-signed blob only verifies while the kernel carries the default `dev-policy-key`
+feature — an image carrying this blob built without it would be `Invalid` → `DenyAll`.
+
+
 ## [2026-07-28] Full utility suite shipped (grep/sed/mini-AWK/top) + `GetProcs2` telemetry ABI
 
 ### What shipped
