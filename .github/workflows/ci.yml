@@ -468,6 +468,21 @@ jobs:
           chmod +x scripts/qemu-hypervisor-smoke.sh
           bash scripts/qemu-hypervisor-smoke.sh
 
+      # This lane fails intermittently on an unchanged source tree (docs/TODO.md).
+      # The step log only holds the tail the script prints, so keep the whole
+      # boot output per run — comparing a failing run against a passing one is
+      # the only way to characterise the intermittency.
+      - name: Upload QEMU boot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hv-machinery-log-${{ github.run_attempt }}
+          path: |
+            qemu-hv.log
+            qemu-hv.raw.log
+          if-no-files-found: warn
+          retention-days: 14
+
   # Boot-to-shell: needs real ARM64+KVM hardware (see job comment above), so it
   # stays a no-op until a self-hosted runner is registered with the `kvm`
   # label. Flip the HV_KVM_RUNNER repository variable to "true" once that
@@ -549,6 +564,17 @@ jobs:
         run: |
           chmod +x scripts/qemu-hypervisor-smoke.sh
           bash scripts/qemu-hypervisor-smoke.sh
+
+      - name: Upload QEMU boot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hv-boot-kvm-log-${{ github.run_attempt }}
+          path: |
+            qemu-hv.log
+            qemu-hv.raw.log
+          if-no-files-found: warn
+          retention-days: 14
 
   x86_64-lint:
     name: Clippy (x86_64)

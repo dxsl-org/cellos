@@ -34,6 +34,10 @@
 # Environment:
 #   HV_SMOKE_MODE  machinery (default) | boot
 #   BOOT_WINDOW    seconds to wait (default: 180 — TCG boot takes 30-120s)
+#   LOG_TAIL       lines of qemu-hv.log printed on any failure (default: 200)
+#
+# On failure the full boot output is left in qemu-hv.log (normalised) and
+# qemu-hv.raw.log (verbatim) in the working directory.
 #
 # Exit codes:
 #   0  — assertion for the selected mode passed
@@ -92,10 +96,24 @@ timeout "$BOOT_WINDOW" qemu-system-aarch64 "${QEMU_ARGS[@]}" \
 # Strip NULs and ANSI escapes.
 tr -d '\000' < qemu-hv.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu-hv.log
 
+# Every failure path must show the boot output itself, not only the grepped
+# signature lines: a fault line says which cell died but nothing about what the
+# run was doing beforehand, and on CI this stdout is the only copy unless the
+# workflow also uploads qemu-hv.log. LOG_TAIL raises the bound when a failure
+# needs more history than the default.
+LOG_TAIL="${LOG_TAIL:-200}"
+dump_log() {
+    echo "--- qemu-hv.log, last ${LOG_TAIL} of $(wc -l < qemu-hv.log) lines ---" >&2
+    tail -n "$LOG_TAIL" qemu-hv.log >&2
+}
+
 # Real defects — fatal in both modes, checked before any mode-specific logic.
 if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-hv.log; then
     echo "FAIL: kernel panic / cell fault detected" >&2
-    grep -ai "fault\|PANIC" qemu-hv.log | head -20
+    # `|| true`: head closing the pipe early SIGPIPEs grep, and pipefail would
+    # turn that into exit 141 instead of the documented exit 1.
+    grep -ai "fault\|PANIC" qemu-hv.log 2>&1 | head -20 >&2 || true
+    dump_log
     exit 1
 fi
 
@@ -103,7 +121,8 @@ if [[ "$HV_SMOKE_MODE" == "boot" ]]; then
     # Check for hypervisor-specific errors.
     if grep -qi "\[hv\] .*fail\|\[hv\] .*error\|\[hv\] guest exited" qemu-hv.log; then
         echo "FAIL: hypervisor error before guest boot" >&2
-        grep -i "\[hv\]" qemu-hv.log | tail -20
+        grep -i "\[hv\]" qemu-hv.log | tail -20 >&2
+        dump_log
         exit 1
     fi
 
@@ -120,8 +139,7 @@ if [[ "$HV_SMOKE_MODE" == "boot" ]]; then
     fi
 
     echo "FAIL: Alpine '/ #' prompt not seen within ${BOOT_WINDOW}s" >&2
-    echo "--- last 50 lines of QEMU output ---" >&2
-    tail -50 qemu-hv.log >&2
+    dump_log
     exit 1
 fi
 
@@ -135,8 +153,7 @@ fi
 LIVENESS_MARKER='[hv] vCPU ready'
 if ! grep -qF "$LIVENESS_MARKER" qemu-hv.log; then
     echo "FAIL: liveness marker '$LIVENESS_MARKER' not seen — VMM never brought the guest up" >&2
-    echo "--- last 50 lines of QEMU output ---" >&2
-    tail -50 qemu-hv.log >&2
+    dump_log
     exit 1
 fi
 
@@ -151,7 +168,8 @@ fi
 # is unexpected and must fail — do not let the fault tolerance mask it.
 if grep -qi "\[hv\] .*fail\|\[hv\] .*error" qemu-hv.log; then
     echo "FAIL: unexpected hypervisor error" >&2
-    grep -i "\[hv\]" qemu-hv.log | tail -20
+    grep -i "\[hv\]" qemu-hv.log | tail -20 >&2
+    dump_log
     exit 1
 fi
 
@@ -195,6 +213,5 @@ echo "FAIL: guest did not reach a shell, and the fault seen (if any) does not ma
 echo "  wanted vmexit:      $TOLERATED_VMEXIT" >&2
 echo "  wanted guest fault: ESR_EL1 with EC=0x25 and DFSC=0b0000xx (address size fault)" >&2
 echo "  guest ESR_EL1 seen: $(grep -o 'ESR_EL1=0x[0-9a-fA-F]\+' qemu-hv.log | sort -u | tr '\n' ' ')" >&2
-echo "--- last 50 lines of QEMU output ---" >&2
-tail -50 qemu-hv.log >&2
+dump_log
 exit 1
