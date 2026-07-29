@@ -43,6 +43,40 @@ impl<T> Spinlock<T> {
         }
     }
 
+    /// Acquire the lock only if it is free right now; never spins.
+    ///
+    /// # Returns
+    /// `None` when the lock is already held, leaving the caller's interrupt
+    /// state untouched.
+    ///
+    /// Intended for fault and panic teardown paths, where [`lock`](Self::lock)
+    /// is unusable: the faulting context may itself be the holder, so spinning
+    /// deadlocks. A `None` result is also information rather than mere failure —
+    /// it proves the guarded data was mid-mutation when the fault landed, so
+    /// reading it would observe a half-updated structure.
+    pub fn try_lock(&self) -> Option<SpinlockGuard<'_, T>> {
+        let saved_int = crate::hal::ARCH.interrupts_enabled();
+        crate::hal::ARCH.disable_interrupts();
+
+        if self
+            .lock
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
+            Some(SpinlockGuard {
+                lock: self,
+                saved_int,
+            })
+        } else {
+            // No guard is produced, so nothing will run the Drop that normally
+            // restores this — do it here or the caller silently loses interrupts.
+            if saved_int {
+                crate::hal::ARCH.enable_interrupts();
+            }
+            None
+        }
+    }
+
     /// Force unlock the spinlock.
     ///
     /// # Safety
