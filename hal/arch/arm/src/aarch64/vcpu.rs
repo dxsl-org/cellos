@@ -9,12 +9,21 @@
 //! 4. Restore guest GP (x1-x30), then x0 last (overwrites vcpu ptr).
 //! 5. `eret` → guest EL1.
 //!
-//! **Exit (`vt_vcpu_trap` asm in this module, branched to from `el2.rs::vt_sync_el2_lower`):**
+//! **Exit (`vt_vcpu_trap` asm in this module, branched to from
+//! `el2.rs::vt_sync_el2_lower` *and* `el2.rs::vt_irq_el2_lower`):**
 //! 1. Save guest x0-x30 + exit regs (ESR/ELR/FAR/HPFAR) to `vcpu.*`.
 //! 2. Restore host `HCR_EL2 = RW | TGE` (clears VM — mandatory before any Cell access).
 //! 3. Clear `TPIDR_EL2` (marks no active guest).
 //! 4. Restore host callee-saved (x19-x30) + SP_EL2 from `vcpu.h_*`.
 //! 5. `ret` → returns to `run_vcpu_impl` as if `vcpu_enter_guest` returned.
+//!
+//! Both lower-EL entry paths must funnel through this epilogue. `HCR_EL2.IMO` routes
+//! physical IRQs to EL2, and an interrupt routed to EL2 is *not* masked by the lower
+//! EL's `PSTATE.I` — so a timer tick lands here mid-guest regardless of the guest's
+//! `DAIF`. Servicing it without this epilogue would run the scheduler, and hence a
+//! Cell at EL0, while `HCR_EL2.VM` is still set and the EL1 sysreg bank still holds
+//! the *guest's* `TTBR0_EL1`/`TCR_EL1`/`SCTLR_EL1`/`VBAR_EL1`, making every Cell
+//! instruction fetch untranslatable.
 //!
 //! # AArch64Vcpu layout (fixed `#[repr(C)]`, offsets verified by `offset_check` cfg)
 //! ```text
@@ -24,6 +33,7 @@
 //! 400 .. 416  g_el2_ctrl    ELR_EL2 + SPSR_EL2 for guest entry
 //! 416 .. 512  h_*           host callee-saved (x19-x30) + SP
 //! 512 .. 520  h_sp          host SP_EL2 (separate field for alignment)
+//! 520 .. 528  exit_is_irq   set by the lower-EL IRQ vector, cleared by the sync one
 //! ```
 //!
 //! # FP handling
@@ -89,6 +99,22 @@ pub struct AArch64Vcpu {
     pub h_x29: u64,
     pub h_x30: u64, // 496, 504 — h_x30 = host return address
     pub h_sp: u64,  // 512 — host SP_EL2
+
+    // ─── Exit classification (offset 520) ───────────────────────────────────
+    /// Non-zero when this exit was a physical interrupt taken to EL2 while the
+    /// guest was running, rather than a synchronous guest trap.
+    ///
+    /// Set by `vt_irq_el2_lower` and cleared by `vt_sync_el2_lower` before either
+    /// branches into the shared `vt_vcpu_trap` epilogue. `decode_exit` must consult
+    /// it *before* `decode_vmexit`: an IRQ entry does not write `ESR_EL2`, which is
+    /// therefore left holding the syndrome of some earlier synchronous exception —
+    /// decoding that yields a bogus `Unknown { ec, iss }` and the hypervisor cell
+    /// treats `Unknown` as a fatal guest fault and halts the VM.
+    ///
+    /// Appended after the host save area rather than placed beside the other
+    /// `exit_*` fields so every byte offset already hard-coded in the `global_asm!`
+    /// trampolines below stays valid.
+    pub exit_is_irq: u64, // 520
 }
 
 // Verify critical struct offsets match the asm constants at compile time.
@@ -105,6 +131,7 @@ const _: () = {
     assert!(core::mem::offset_of!(AArch64Vcpu, h_x29) == 496);
     assert!(core::mem::offset_of!(AArch64Vcpu, h_x30) == 504);
     assert!(core::mem::offset_of!(AArch64Vcpu, h_sp) == 512);
+    assert!(core::mem::offset_of!(AArch64Vcpu, exit_is_irq) == 520);
 };
 
 // SAFETY: AArch64Vcpu is only accessed from single-CPU kernel context in Phase 03.
@@ -125,7 +152,14 @@ impl AArch64Vcpu {
     }
 
     /// Decode the VM exit recorded on the last trap.
+    ///
+    /// An interrupt-caused exit is reported as `Preempted` and must be tested for
+    /// before touching `exit_esr` — see [`AArch64Vcpu::exit_is_irq`] for why the
+    /// saved `ESR_EL2` is meaningless on that path.
     pub fn decode_exit(&self) -> ViVmExit {
+        if self.exit_is_irq != 0 {
+            return ViVmExit::Preempted;
+        }
         super::trap_el2::decode_vmexit(
             self.exit_esr,
             self.exit_elr,
@@ -410,6 +444,7 @@ extern "C" {
 //   h_x29      → offset  496
 //   h_x30      → offset  504   ← host LR / return address
 //   h_sp       → offset  512
+//   exit_is_irq→ offset  520   (written by el2.rs lower-EL vectors, not here)
 
 global_asm!(
     r#"
@@ -476,14 +511,16 @@ vcpu_enter_guest:
 
     // ── vt_vcpu_trap ─────────────────────────────────────────────────────────
     //
-    // Called from vt_sync_el2_lower (el2.rs) when TPIDR_EL2 != 0.
+    // Called from vt_sync_el2_lower and vt_irq_el2_lower (el2.rs) when TPIDR_EL2 != 0.
     //
-    // On entry (set up by vt_sync_el2_lower):
+    // On entry (set up identically by both callers):
     //   x0        = vcpu ptr (from TPIDR_EL2)
-    //   [sp + 0]  = guest x0 (saved before we clobbered x0 to read TPIDR_EL2)
-    //   [sp + 8]  = guest x1 (saved before we clobbered x1)
-    //   sp        = host_SP - 16 (two scratch slots from vt_sync_el2_lower)
+    //   [sp + 0]  = guest x0 (saved before the caller clobbered x0 to read TPIDR_EL2)
+    //   [sp + 8]  = guest x1 (saved before the caller clobbered x1)
+    //   sp        = host_SP - 16 (two scratch slots allocated by the caller)
     //   x2-x30    = guest register values (untouched since guest ran)
+    //   vcpu.exit_is_irq already written by the caller: 1 from the IRQ vector,
+    //                    0 from the sync vector. This epilogue must not touch it.
     //
     // Exit: restores host state and `ret`s to run_vcpu_impl.
 
