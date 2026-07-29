@@ -10,12 +10,17 @@
 # Prerequisites (the CI job installs these):
 #   apt: gcc-riscv64-unknown-elf libclang-dev qemu-system-misc
 #   rustup: nightly with rust-src component
+#
+# POSIX only. Under Git Bash on Windows, MSYS rewrites the `/bin/...`
+# destination arguments below into Windows paths and the image comes out with
+# no /bin at all — run this in WSL2 or on Linux. The inspect_fat.py assertion
+# further down fails loudly if that ever happens.
 
 set -euo pipefail
 
-REL="target/riscv64gc-unknown-none-elf/release"
-ST_DIR="kernel/src/embedded-shell-test"
-
+# `python3` is not universal: some distros ship only `python`, and on Windows the
+# bare name is the Microsoft Store alias stub. Probe once; the shared libs in
+# lib-sign-cells.sh / lib-bake-policy.sh consume $PYTHON_BIN from here.
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
     PYTHON_BIN=python3
 elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
@@ -24,6 +29,9 @@ else
     echo "FAIL: a working Python 3 interpreter is required" >&2
     exit 1
 fi
+
+REL="target/riscv64gc-unknown-none-elf/release"
+ST_DIR="kernel/src/embedded-shell-test"
 
 # riscv64 cross-compiler required by littlefs2 C FFI.
 # Honor a pre-set compiler (local xpack riscv-none-elf-gcc); default to the CI one.
@@ -63,7 +71,7 @@ sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-con
 
 echo "==> Assembling kernel_fs.img (shell-test)..."
 mkdir -p "$ST_DIR"
-TMPDIR_KFS=$(mktemp -d "target/shell-test-tmp.XXXXXX")
+TMPDIR_KFS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell-shell-test' > "$TMPDIR_KFS/hostname"
 
@@ -71,7 +79,7 @@ printf 'ViCell-shell-test' > "$TMPDIR_KFS/hostname"
 source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
-MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
+"$PYTHON_BIN" tools/mkfat32.py \
     "$ST_DIR/kernel_fs.img" \
     "$REL/app-init"        /bin/init \
     "$REL/app-shell"       /bin/shell \

@@ -5,7 +5,7 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 # HOST TESTS: the workspace pins a bare-metal default target, so run them with an
-# explicit host triple, e.g. `cargo test -p text-engine --target x86_64-pc-windows-msvc`.
+# explicit host triple, e.g. `cargo test -p text-engine --target x86_64-unknown-linux-gnu`.
 #
 # Like libs/http-core, this crate deliberately defines NO #[global_allocator] and
 # NO #[panic_handler]. app-shell cannot host-test its own modules because it links
