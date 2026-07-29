@@ -3,8 +3,8 @@
 <p>The workspace <code>.cargo/config.toml</code> pins a bare-metal default target
 (<code>riscv64gc-unknown-none-elf</code>), so a bare <code>cargo test -p text-engine</code> tries to
 build the test harness for <code>no_std</code> and fails.  Pass an explicit HOST target:</p>
-<div class="example-wrap"><pre class="language-text"><code>cargo test -p text-engine --target x86_64-pc-windows-msvc   # Windows host
-cargo test -p text-engine --target x86_64-unknown-linux-gnu # Linux host</code></pre></div><h2 id="why-this-crate-exists"><a class="doc-anchor" href="#why-this-crate-exists">§</a>Why this crate exists</h2>
+<div class="example-wrap"><pre class="language-text"><code>cargo test -p text-engine --target x86_64-unknown-linux-gnu # Linux host (what CI runs)
+cargo test -p text-engine --target x86_64-pc-windows-msvc   # Windows host</code></pre></div><h2 id="why-this-crate-exists"><a class="doc-anchor" href="#why-this-crate-exists">§</a>Why this crate exists</h2>
 <p><code>app-shell</code> links <code>ostd</code>, which owns <code>#[global_allocator]</code> and
 <code>#[panic_handler]</code>; linking it alongside the std test harness fails with
 duplicate lang items (E0152).  Every byte-in/byte-out utility stage —
