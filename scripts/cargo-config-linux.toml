@@ -1,0 +1,85 @@
+# Template for the gitignored .cargo/config.toml on Linux / WSL2.
+#
+# `scripts/dev-setup.sh` copies this to .cargo/config.toml and substitutes
+# @REPO_ROOT@. Do not edit the copy — edit this file and re-run dev-setup.sh,
+# otherwise the next machine gets different codegen flags than this one.
+#
+# ⚠ These per-target rustflags MUST stay in sync with the CARGO_TARGET_*_RUSTFLAGS
+# block at the top of .github/workflows/ci.yml. That block exists precisely
+# because .cargo/config.toml is gitignored and never reaches CI. A silent drift
+# between the two is the "builds fine locally, 27 tests fail in CI with zero code
+# defects" failure mode — the flags decide relocation model and target features,
+# not just optimisation.
+
+[build]
+# Default target for a bare `cargo build`. Most crates in this workspace are
+# no_std bare-metal and cannot link for the host.
+target = "riscv64gc-unknown-none-elf"
+
+[env]
+# littlefs2-sys compiles a vendored C core through the cc crate, which probes for
+# <target>-gcc. Ubuntu's bare-metal RISC-V cross compiler is the `-unknown-elf`
+# one — NOT `gcc-riscv64-linux-gnu`, which targets hosted Linux and cannot link
+# freestanding. Same names CI uses.
+CC_riscv64gc_unknown_none_elf = "riscv64-unknown-elf-gcc"
+AR_riscv64gc_unknown_none_elf = "riscv64-unknown-elf-ar"
+
+# That bare-elf gcc ships no libc headers, but littlefs includes <string.h> and
+# <stdint.h>. The vendored freestanding set fills the gap. Absolute path because
+# cargo does not interpolate here — dev-setup.sh substitutes the repo root.
+CFLAGS_riscv64gc_unknown_none_elf = "-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I@REPO_ROOT@/third_party/freestanding-include"
+
+# aarch64 cells cross-compile the same C core with clang; bindgen needs a real
+# sysroot because a bare `-none` OS makes libclang hunt for one that is not there.
+CC_aarch64_unknown_none_softfloat = "clang"
+CFLAGS_aarch64_unknown_none_softfloat = "--target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I@REPO_ROOT@/third_party/freestanding-include"
+BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat = "--target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu"
+
+[target.riscv64gc-unknown-none-elf]
+# `relocation-model=pic` is required for every RISC-V crate here:
+#
+#   * Cells — `pie` makes lld reject the R_RISCV_64 absolute relocations LLVM
+#     emits for fat-pointer statics (e.g. `&str` panic locations). `pic` avoids
+#     them; the ELF then carries only R_RISCV_RELATIVE fixups, which the kernel
+#     reloc engine applies at spawn time.
+#   * Kernel — also needs `pic` so the startup `lla` self-relocation at `_start`
+#     resolves through the GOT and works at any load address.
+rustflags = ["-C", "relocation-model=pic"]
+
+[target.aarch64-unknown-none-softfloat]
+# +bti  — BTI landing pads (ARMv8.5-A). The kernel only enables enforcement at
+#         runtime when ID_AA64PFR1_EL1 reports support.
+# +paca — ARMv8.3-A Pointer Authentication, A-key: PACIASP/AUTIASP around returns.
+# +pacg — G-key variant; some LLVM versions need it for complete PAC codegen and
+#         it is harmless when the CPU only implements the A-key.
+#         ("pac-ret" is NOT a valid aarch64 target-feature string — it is passed
+#          through and silently ignored. Use +paca/+pacg.)
+#
+# relocation-model=pic matches what CI sets for this target. RUSTFLAGS REPLACES
+# (does not merge with) these values, so any script that sets RUSTFLAGS for
+# aarch64 must repeat +bti,+paca,+pacg alongside its own relocation model.
+rustflags = ["-C", "relocation-model=pic", "-C", "target-feature=+bti,+paca,+pacg"]
+
+[target.x86_64-unknown-none]
+# code-model=kernel + no red zone: standard for a bare-metal x86_64 kernel.
+#
+# +cet-shstk emits ENDBR64 prologues and shadow-stack instructions. The CPU only
+# honours them once CR4.CET + S_CET.ENDBR_EN are set (cet::init_kernel_cet());
+# on non-CET hardware the bytes execute as a NOP sled.
+#
+# relocation-model=static is required: the Limine loader panics when LOAD segments
+# with different permissions share a page, and PIE generates the extra
+# .dynamic/.got segments that cause exactly that overlap.
+#
+# NOTE this is the KERNEL profile. x86_64 CELLS build with relocation-model=pic —
+# the image scripts and CI both override it per-invocation.
+#
+# The two target features share one `-C target-feature=` flag so this array is
+# byte-comparable with the CI env var — scripts/check-cargo-config-parity.py
+# enforces that. (rustc accumulates repeated -C target-feature, so splitting them
+# would behave the same but defeat the check.)
+rustflags = [
+    "-C", "code-model=kernel",
+    "-C", "target-feature=-red-zone,+cet-shstk",
+    "-C", "relocation-model=static",
+]
