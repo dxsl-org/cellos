@@ -18,8 +18,19 @@ picked next.
 Found while renaming: `hal/arch/riscv/src/rv32/trap.rs` declared `vi_terminate_on_fault`
 with **two** parameters against its three-parameter `#[no_mangle]` definition. The callee
 therefore read whatever the third argument register happened to hold and printed it as the
-fault address. rv32 is `#[cfg(target_arch = "riscv32")]`-gated and not built by CI, which is
-why no compiler ever saw the mismatch.
+fault address.
+
+**Correcting this entry's first version**, which blamed rv32 being
+`#[cfg(target_arch = "riscv32")]`-gated and unbuilt by CI. That is not the reason. Tested by
+declaring `vi_terminate_on_fault` with two parameters in `rv64/trap.rs` — a target CI builds
+on every push — and `cargo check -p vicell-kernel --target riscv64gc-unknown-none-elf`
+finished clean. rustc does not check an `extern "Rust"` declaration against a `#[no_mangle]`
+definition in another crate; `clashing_extern_declarations` only compares declarations within
+one crate, and the linker matches symbol names, not signatures. **No CI lane on any target
+would have caught this**, and the same silent mismatch is possible in every
+`extern "Rust" { … }` block in the HAL. The durable fix is to stop hand-declaring these
+signatures per architecture — one shared declaration the compiler can check — not another
+build lane.
 
 ### What shipped
 Parameters renamed to `cause`/`pc`/`fault_addr` — the role each value plays rather than one

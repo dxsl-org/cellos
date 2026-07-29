@@ -26,8 +26,23 @@ Việc phái sinh từ lần điều tra đó cũng đã xong: dòng fault từn
 `scause` — chính chỗ làm bản ghi cũ ở trên giải mã sai — nay dùng tên theo vai trò
 (`cause`/`pc`/`addr`) và có bảng đối chiếu từng kiến trúc trong rustdoc của
 `terminate_current_cell_on_fault`. Sửa kèm: `hal/arch/riscv/src/rv32/trap.rs` khai báo
-`vi_terminate_on_fault` thiếu một tham số so với định nghĩa, nên in ra rác làm địa chỉ fault;
-rv32 bị cfg-gate và CI không build nên không compiler nào thấy.
+`vi_terminate_on_fault` thiếu một tham số so với định nghĩa, nên in ra rác làm địa chỉ fault.
+
+**Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
+việc CI không build rv32. Sai: đã thử khai báo thiếu tham số trong `rv64/trap.rs` (target CI
+build mọi lần push) và `cargo check -p vicell-kernel` vẫn xanh. rustc **không** đối chiếu khai
+báo `extern "Rust"` với định nghĩa `#[no_mangle]` ở crate khác — `clashing_extern_declarations`
+chỉ so các khai báo trong cùng crate, còn linker chỉ khớp tên symbol chứ không khớp signature.
+Nên **không lane CI nào bắt được lỗi này**, và HAL hiện có 23 khai báo tay như vậy (14 symbol:
+`vi_terminate_on_fault`, `vi_timer_tick`, `vi_trap_handler`, `ViCell_syscall_dispatch`, …), mỗi
+cái là một chỗ signature có thể lệch âm thầm. Cách sửa bền là để signature tồn tại đúng một
+nơi compiler kiểm được (crate trait dùng chung / macro sinh cả khai báo lẫn định nghĩa), thay
+vì mỗi kiến trúc tự khai báo lại.
+
+Ghi kèm để ai định thêm lane rv32 biết trước: kernel **không** build được cho
+`riscv32imac-unknown-none-elf` — hai lỗi `E0308` có sẵn (`task/syscall.rs:3540`,
+`task.rs:483`, đều là `u32` vs `usize` do trap frame rv32 dùng `u32`). `hal-riscv` thì compile
+sạch.
 
 Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.
 AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
