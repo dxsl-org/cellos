@@ -12,11 +12,17 @@
 # Prerequisites (the CI job installs these):
 #   apt: gcc-riscv64-unknown-elf libclang-dev qemu-system-misc
 #   rustup: nightly with rust-src component
+#
+# POSIX only. Under Git Bash on Windows, MSYS rewrites the `/bin/...`
+# destination arguments below into Windows paths and the image comes out with
+# no /bin at all — run this in WSL2 or on Linux. The inspect_fat.py assertion
+# further down fails loudly if that ever happens.
 
 set -euo pipefail
 
-# On Windows the bare name `python3` is the Microsoft Store alias stub, which
-# exits without running anything. Probe for an interpreter that actually works.
+# `python3` is not universal: some distros ship only `python`, and on Windows the
+# bare name is the Microsoft Store alias stub. Probe once; the shared libs in
+# lib-sign-cells.sh / lib-bake-policy.sh consume $PYTHON_BIN from here.
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
     PYTHON_BIN=python3
 elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
@@ -71,9 +77,7 @@ sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" "$REL/service-con
 
 echo "==> Assembling kernel_fs.img (srv-test)..."
 mkdir -p "$SRV_DIR"
-# Keep the temp dir inside target/: a POSIX /tmp path from Git Bash is not a
-# path a native Windows Python can open.
-TMPDIR_KFS=$(mktemp -d "target/srv-test-tmp.XXXXXX")
+TMPDIR_KFS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell-srv-test' > "$TMPDIR_KFS/hostname"
 
@@ -81,11 +85,7 @@ printf 'ViCell-srv-test' > "$TMPDIR_KFS/hostname"
 source scripts/lib-bake-policy.sh
 bake_policy "$TMPDIR_KFS/POLICY.BIN"
 
-# MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every /bin/... DESTINATION
-# argument into a Windows path before Python sees it, and mkfat32.py silently
-# builds an image containing "C:/Program Files/Git/bin/..." instead of /bin/*.
-# The kernel then boots, mounts VIFS1, and finds none of its cells.
-MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
+"$PYTHON_BIN" tools/mkfat32.py \
     "$SRV_DIR/kernel_fs.img" \
     "$REL/app-init"       /bin/init \
     "$REL/app-shell"      /bin/shell \
@@ -100,8 +100,9 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
 if [[ ! -f "$SRV_DIR/kernel_fs.img" ]]; then
     echo "FAIL: mkfat32.py did not produce kernel_fs.img" >&2; exit 1
 fi
-# Prove the layout rather than trusting the exit code — a mangled destination
-# path produces a well-formed image that simply has no /bin.
+# Prove the layout rather than trusting the exit code. mkfat32.py exits 0 for a
+# well-formed image whose destination paths went astray, so a /bin-less image
+# only surfaces later as a confusing "cell not found" at boot.
 "$PYTHON_BIN" tools/inspect_fat.py "${SRV_DIR}/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'srv-test'" "$TMPDIR_KFS/fat-layout.txt"; then

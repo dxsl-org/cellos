@@ -11,11 +11,17 @@
 #
 # Run from the repo root BEFORE `cargo build --target riscv64gc-unknown-none-elf`.
 # Prerequisites: gcc-riscv64-unknown-elf, libclang-dev (littlefs2-sys bindgen).
+#
+# POSIX only. Under Git Bash on Windows, MSYS rewrites the `/bin/...`
+# destination arguments below into Windows paths and the image comes out with
+# no /bin at all — run this in WSL2 or on Linux. The inspect_fat.py assertion
+# further down fails loudly if that ever happens.
 
 set -euo pipefail
 
-# On Windows the bare name `python3` is the Microsoft Store alias stub, which
-# exits without running anything. Probe for an interpreter that actually works.
+# `python3` is not universal: some distros ship only `python`, and on Windows the
+# bare name is the Microsoft Store alias stub. Probe once; the shared libs in
+# lib-sign-cells.sh / lib-bake-policy.sh consume $PYTHON_BIN from here.
 if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
     PYTHON_BIN=python3
 elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
@@ -55,9 +61,7 @@ sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" \
            "$REL/service-config" "$REL/platform" "$REL/driver-virtio-blk"
 
 echo "==> Assembling $EMB/kernel_fs.img..."
-# Keep the temp dir inside target/: a POSIX /tmp path from Git Bash is not a
-# path a native Windows Python can open.
-TMPDIR_KFS=$(mktemp -d "target/boot-ramdisk-tmp.XXXXXX")
+TMPDIR_KFS=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_KFS"' EXIT
 printf 'ViCell' > "$TMPDIR_KFS/hostname"
 printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
@@ -72,12 +76,7 @@ printf 'Welcome to ViCell!' > "$TMPDIR_KFS/readme"
 # vfs/shell/net boots with no capabilities.
 "$PYTHON_BIN" scripts/sign-policy.py --out "$TMPDIR_KFS/POLICY.BIN" >/dev/null
 
-# MSYS2_ARG_CONV_EXCL: without it Git Bash rewrites every /bin/... DESTINATION
-# argument into a Windows path before Python sees it, and mkfat32.py silently
-# builds an image containing "C:/Program Files/Git/bin/..." instead of /bin/*.
-# The kernel then boots, mounts VIFS1, and finds none of its cells — while the
-# boot gate's "FAT16 mounted" oracle still reports success.
-MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
+"$PYTHON_BIN" tools/mkfat32.py \
     "$EMB/kernel_fs.img" \
     "$REL/app-init"          /bin/init \
     "$REL/app-shell"         /bin/shell \
@@ -89,8 +88,9 @@ MSYS2_ARG_CONV_EXCL='*' "$PYTHON_BIN" tools/mkfat32.py \
     "$TMPDIR_KFS/readme"     /readme.txt \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
-# Prove the layout rather than trusting the exit code — a mangled destination
-# path produces a well-formed image that simply has no /bin.
+# Prove the layout rather than trusting the exit code. mkfat32.py exits 0 for a
+# well-formed image whose destination paths went astray, so a /bin-less image
+# only surfaces later as a confusing "cell not found" at boot.
 "$PYTHON_BIN" tools/inspect_fat.py "$EMB/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'vfs'" "$TMPDIR_KFS/fat-layout.txt"; then

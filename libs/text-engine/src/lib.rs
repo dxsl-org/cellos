@@ -7,8 +7,8 @@
 //! build the test harness for `no_std` and fails.  Pass an explicit HOST target:
 //!
 //! ```text
+//! cargo test -p text-engine --target x86_64-unknown-linux-gnu # Linux host (what CI runs)
 //! cargo test -p text-engine --target x86_64-pc-windows-msvc   # Windows host
-//! cargo test -p text-engine --target x86_64-unknown-linux-gnu # Linux host
 //! ```
 //!
 //! # Why this crate exists
