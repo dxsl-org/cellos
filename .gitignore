@@ -96,3 +96,9 @@ third_party/mlibc/build-aarch64/
 # Maintained as a standalone git repo; zero trace in Cellos history.
 # Clone separately: git clone git@github.com:dxsl-org/vove.git cells/apps/vove
 cells/apps/vove/
+
+# Files literally named like a CLI flag. tools/mkfat32.py takes its output path as
+# a POSITIONAL argument (sys.argv[1]), so invoking it with `--out`/`--list` writes a
+# disk image to a file of that name instead of erroring. That is how a 4 MB `--list`
+# and an 8 MB `--out` got committed once; this keeps the next slip untracked.
+/--*
