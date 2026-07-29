@@ -195,7 +195,7 @@
 <a href=#195 id=195 data-nosnippet>195</a>    <span class="doccomment">/// Called on every S-mode timer interrupt.  Defined in `kernel::task`.
 <a href=#196 id=196 data-nosnippet>196</a>    </span><span class="kw">fn </span>vi_timer_tick();
 <a href=#197 id=197 data-nosnippet>197</a>    <span class="doccomment">/// Terminate the currently-executing Cell on hardware fault.  Defined in `kernel::task`.
-<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">fn </span>vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize);
+<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">fn </span>vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
 <a href=#199 id=199 data-nosnippet>199</a>    <span class="doccomment">/// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell).
 <a href=#200 id=200 data-nosnippet>200</a>    </span><span class="kw">fn </span>vi_current_cell_id() -&gt; usize;
 <a href=#201 id=201 data-nosnippet>201</a>}

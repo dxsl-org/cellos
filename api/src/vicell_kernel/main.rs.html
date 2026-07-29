@@ -847,7 +847,7 @@
 <a href=#847 id=847 data-nosnippet>847</a>    <span class="kw">if </span>cell_id != <span class="number">0 </span>{
 <a href=#848 id=848 data-nosnippet>848</a>        <span class="comment">// Cell OOM/panic — kill the Cell, kernel survives. Print the panic
 <a href=#849 id=849 data-nosnippet>849</a>        // FIRST: this path used to swallow the message entirely, leaving only
-<a href=#850 id=850 data-nosnippet>850</a>        // a meaningless "scause=0x0 sepc=0x0" fault line to debug from.
+<a href=#850 id=850 data-nosnippet>850</a>        // a meaningless "cause=0x0 pc=0x0" fault line to debug from.
 <a href=#851 id=851 data-nosnippet>851</a>        </span>{
 <a href=#852 id=852 data-nosnippet>852</a>            <span class="attr">#[inline(always)]
 <a href=#853 id=853 data-nosnippet>853</a>            </span><span class="kw">fn </span>cell_panic_putchar(c: u8) {
