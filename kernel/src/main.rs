@@ -847,7 +847,7 @@ fn panic(info: &PanicInfo) -> ! {
     if cell_id != 0 {
         // Cell OOM/panic — kill the Cell, kernel survives. Print the panic
         // FIRST: this path used to swallow the message entirely, leaving only
-        // a meaningless "scause=0x0 sepc=0x0" fault line to debug from.
+        // a meaningless "cause=0x0 pc=0x0" fault line to debug from.
         {
             #[inline(always)]
             fn cell_panic_putchar(c: u8) {
