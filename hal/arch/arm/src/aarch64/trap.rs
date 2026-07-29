@@ -130,11 +130,46 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
                 );
             }
         }
+        // Every other EC: a cell must never be able to panic the kernel.
+        //
+        // Mirrors the RISC-V dispatcher (hal-riscv rv64/trap.rs, `_` arm). The
+        // ECs above are lower-EL-only encodings, so reaching them at all proves
+        // a cell raised them. These do not have that property — EC 0x22 (PC
+        // alignment) and 0x26 (SP alignment) carry the same value whether EL0 or
+        // EL2 raised them — so the originating EL has to come from SPSR.M[3:0]
+        // (0b0000 = EL0t). A cell that corrupts its PC to a misaligned address
+        // previously landed here and panicked the whole kernel; it now dies
+        // alone, exactly as the 0x20 (branch-to-unmapped) case already did.
+        //
+        // Checking cell_id != 0 alone is insufficient, for the reason the
+        // RISC-V side documents: the kernel faulting while servicing a cell's
+        // syscall still has a non-zero CURRENT_CELL_ID but is executing at EL2,
+        // and misreading that as a cell fault would silently kill the cell and
+        // bury the kernel bug.
         _ => {
-            panic!(
-                "[aarch64] trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X}",
-                ec, esr, frame.elr_el1, frame.far_el1
-            );
+            extern "Rust" {
+                fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize);
+                fn vi_current_cell_id() -> usize;
+            }
+            // SAFETY: both are #[no_mangle] in kernel::task and linked via
+            // extern "Rust"; see the 0x20 | 0x24 arm for the teardown contract.
+            let cell_id = unsafe { vi_current_cell_id() };
+            let from_el0 = (frame.spsr_el1 & 0xF) == 0;
+            if from_el0 && cell_id != 0 {
+                // SAFETY: as above — switches away from this (now dead) cell.
+                unsafe {
+                    vi_terminate_on_fault(
+                        esr as usize,
+                        frame.elr_el1 as usize,
+                        frame.far_el1 as usize,
+                    );
+                }
+            } else {
+                panic!(
+                    "[aarch64] kernel trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X} spsr=0x{:X}",
+                    ec, esr, frame.elr_el1, frame.far_el1, frame.spsr_el1
+                );
+            }
         }
     }
 }

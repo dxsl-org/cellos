@@ -292,9 +292,30 @@ unsafe fn force_unlock_all_kernel_locks() {
 /// the kernel after we resume the next task.
 pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize) {
     let cell_id_raw = hart_local::current_cell_id();
+
+    // Name the victim. A bare cell ID cannot be resolved after the fact — IDs are
+    // handed out by a running counter, not by boot order — so a CI log leaves the
+    // reader guessing which cell died. The name comes from the running task's TCB
+    // (`Task::name`), which is the only populated source: `CellRegistry` looks like
+    // the natural place, but nothing in the tree ever calls its `register`.
+    //
+    // MUST use try_lock, and MUST run before force_unlock_all_kernel_locks(): a
+    // plain lock() deadlocks when the fault interrupted the scheduler's own
+    // holder, and once the force-unlock has run, acquiring the lock no longer
+    // proves the map was not mid-mutation.
+    let faulting_tid = hart_local::ready::current_task_id_for(hart_local::current_hart_id());
+    let cell_name = SCHEDULER.try_lock().and_then(|sched| {
+        sched
+            .as_ref()
+            .and_then(|s| s.tasks.get(&faulting_tid))
+            .map(|task| task.name.clone())
+    });
+
     log::error!(
-        "[fault] Cell {} terminated: scause={:#x} sepc={:#x} stval={:#x}",
+        "[fault] Cell {} (task {} '{}') terminated: scause={:#x} sepc={:#x} stval={:#x}",
         cell_id_raw,
+        faulting_tid,
+        cell_name.as_deref().unwrap_or("unknown"),
         scause,
         sepc,
         stval
@@ -313,9 +334,8 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize)
         force_unlock_all_kernel_locks();
     }
 
-    let current_tid = hart_local::ready::current_task_id_for(hart_local::current_hart_id());
-    let task_id = if current_tid > 0 {
-        Some(current_tid)
+    let task_id = if faulting_tid > 0 {
+        Some(faulting_tid)
     } else {
         None
     };
