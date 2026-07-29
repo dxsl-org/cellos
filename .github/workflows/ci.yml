@@ -46,6 +46,14 @@ jobs:
       - name: Check Cell VA layout (SAS)
         run: python3 scripts/check-cell-va-layout.py
 
+      # Second fast static guard: the CARGO_TARGET_*_RUSTFLAGS block below is a
+      # hand-maintained mirror of scripts/cargo-config-linux.toml, because
+      # .cargo/config.toml is gitignored and never reaches CI. Those flags decide
+      # relocation model and target features, so a silent drift produces a build
+      # that succeeds in one place and fails in the other with no code defect.
+      - name: Check cargo config / CI codegen-flag parity
+        run: python3 scripts/check-cargo-config-parity.py
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
