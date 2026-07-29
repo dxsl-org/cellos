@@ -102,3 +102,7 @@ cells/apps/vove/
 # disk image to a file of that name instead of erroring. That is how a 4 MB `--list`
 # and an 8 MB `--out` got committed once; this keeps the next slip untracked.
 /--*
+
+# repomix whole-repo dump for LLM context (/hc-scout --pack). Regenerated on demand
+# and stale the moment any source file changes, so a committed copy is worse than none.
+/repomix-output.*
