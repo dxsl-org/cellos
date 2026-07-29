@@ -267,6 +267,18 @@ __vectors_el2:
     // vt_sync_el2_lower: lower-EL sync (Cell SVCs or guest EL1 traps).
     //   Checks TPIDR_EL2: if non-zero a vCPU is running → jump to vt_vcpu_trap
     //   (defined in vcpu.rs global_asm! block); otherwise fall through to host SVC.
+    // vt_irq_el2_cur: host IRQ path — kernel at EL2 took the interrupt.
+    // vt_irq_el2_lower: lower-EL IRQ (a Cell at EL0, or the guest at EL1).
+    //   Makes the same TPIDR_EL2 check, for the reason spelled out at that label:
+    //   servicing a tick without exiting the guest first runs a Cell under the
+    //   guest's translation regime.
+    //
+    // Every vector that can fire while a vCPU is live needs the TPIDR_EL2 check.
+    // Lower-EL FIQ and SError are routed to vt_sync_el2_lower below and so inherit
+    // it; FIQ additionally lands in vt_vcpu_trap with exit_is_irq=0 and would decode
+    // a stale ESR_EL2, but nothing in this system raises FIQ (GICv2 here delivers
+    // every source, timer PPIs included, on the IRQ line), so that path is left
+    // as-is rather than changed without a way to exercise it.
     .section .text
     .balign 4
 vt_sync_el2_cur:
@@ -326,15 +338,52 @@ vt_sync_el2_lower:
     // Check TPIDR_EL2: non-zero means a vCPU is running and this is a guest trap.
     // SAFETY: TPIDR_EL2 is EL2-private; always 0 when no guest runs.
     mrs  x0, tpidr_el2
-    cbnz x0, vt_vcpu_trap      // → vcpu.rs global_asm! handler
+    cbz  x0, 1f
+    str  xzr, [x0, #520]       // vcpu.exit_is_irq = 0 → decode ESR_EL2 normally
+    b    vt_vcpu_trap          // → vcpu.rs global_asm! handler
     // Guest not running: restore scratch and fall through to the host SVC handler.
-    ldp  x0, x1, [sp]
+1:  ldp  x0, x1, [sp]
     add  sp, sp, #16
     b    vt_sync_el2_cur
 
+    // ── Lower-EL IRQ: Cell-preempting tick, or a tick that interrupted the guest ─
+    //
+    // HCR_EL2.IMO routes physical IRQs to EL2 and an interrupt routed to EL2 is not
+    // masked by the lower EL's PSTATE.I, so the timer PPI lands here mid-guest even
+    // though the guest runs with SPSR_EL2=0x3C5 (DAIF all set). This vector MUST
+    // therefore make the same TPIDR_EL2 check the sync vector makes.
+    //
+    // Falling straight through to the host handler instead would reach
+    // vi_timer_tick → yield_cpu → a context switch, running a Cell at EL0 while
+    // HCR_EL2.VM is still set (Stage-2 active against the guest's VTTBR_EL2) and the
+    // EL1 sysreg bank still holds the guest's TTBR0_EL1/TCR_EL1/SCTLR_EL1/VBAR_EL1 —
+    // the host bank is only restored at run_vcpu_impl step 4, which that path never
+    // reaches. Every Cell instruction fetch then aborts with EC 0x20 / ISS 0x6.
+    //
+    // Exiting to the host instead costs nothing: the IRQ has not been claimed at the
+    // GIC, so it re-fires as soon as we eret back to the hypervisor Cell at EL0 and
+    // is serviced by vt_irq_el2_cur with no guest live. No tick is lost.
+    //
+    // The #520 displacement below is AArch64Vcpu::exit_is_irq, defined in vcpu.rs —
+    // the only vcpu offset this file hard-codes. vcpu.rs pins it with an
+    // offset_of! assertion in its `const _` block, so a struct change breaks the
+    // build rather than silently corrupting the field next to it.
+    .balign 4
+vt_irq_el2_lower:
+    sub  sp, sp, #16
+    stp  x0, x1, [sp]
+    // SAFETY: TPIDR_EL2 is EL2-private; always 0 when no guest runs.
+    mrs  x0, tpidr_el2
+    cbz  x0, 1f
+    mov  x1, #1
+    str  x1, [x0, #520]        // vcpu.exit_is_irq = 1 → decode_exit reports Preempted
+    b    vt_vcpu_trap
+1:  ldp  x0, x1, [sp]
+    add  sp, sp, #16
+    b    vt_irq_el2_cur
+
     .balign 4
 vt_irq_el2_cur:
-vt_irq_el2_lower:
     sub  sp, sp, #(35 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
