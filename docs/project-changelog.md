@@ -4,6 +4,125 @@
 
 ---
 
+## [2026-07-29] Fault reporting stops naming ARM64 registers after RISC-V CSRs
+
+### What was wrong
+`terminate_current_cell_on_fault` took `scause`/`sepc`/`stval` and printed them under those
+names, but every HAL trap handler funnels into it — on AArch64 the first argument is
+`ESR_EL2`, not a RISC-V cause code. This is not cosmetic: it actively misled the hypervisor
+lane investigation below. The TODO entry tracking that lane decoded
+`scause=0x82000006` as a RISC-V value and concluded the faulting cell was VFS; the number is
+an `ESR_EL2` with EC=0x20/ISS=0x6, and the cell was simply whichever one the scheduler
+picked next.
+
+Found while renaming: `hal/arch/riscv/src/rv32/trap.rs` declared `vi_terminate_on_fault`
+with **two** parameters against its three-parameter `#[no_mangle]` definition. The callee
+therefore read whatever the third argument register happened to hold and printed it as the
+fault address. rv32 is `#[cfg(target_arch = "riscv32")]`-gated and not built by CI, which is
+why no compiler ever saw the mismatch.
+
+### What shipped
+Parameters renamed to `cause`/`pc`/`fault_addr` — the role each value plays rather than one
+architecture's register — with the per-architecture mapping documented on
+`terminate_current_cell_on_fault`. The log line now reads `cause=… pc=… addr=…`. The
+`[fault] Cell` prefix is unchanged and now carries a comment saying why:
+`scripts/qemu-hypervisor-smoke.sh` greps it as its first fatal gate.
+
+`WATCHDOG_SCAUSE` → `WATCHDOG_FAULT_CAUSE`, since a watchdog kill is not a hardware trap on
+any architecture. rv32's declaration corrected to three parameters, passing `frame.stval`.
+
+Deliberately **not** renamed: the `scause`/`stval` fields on `ViTrapFrameBridge`
+(`hal/arch/arm/src/aarch64/trap.rs`). That struct exists to mirror the RISC-V `ViTrapFrame`
+layout so the shared `ViCell_syscall_dispatch` call is well-defined; there the RISC-V names
+are correct and renaming them would make the mirror harder to check against its counterpart.
+
+### Verified
+`cargo clippy -- -D warnings` clean for `vicell-kernel` on aarch64, riscv64 and x86_64;
+`cargo fmt --all --check` clean. The rv32 fix was verified by installing
+`riscv32imac-unknown-none-elf` and checking `hal-riscv` against it; the surviving arity
+mismatch is itself evidence that no compiler had checked that call site in some time.
+
+## [2026-07-29] Hypervisor lane was a real kernel defect, not VFS and not TCG noise
+
+### What was wrong
+`QEMU Hypervisor Machinery Smoke (TCG)` failed roughly 3 runs in 6 on an unchanged source
+tree, and the standing diagnosis was that the red badge did not reflect code health. It did.
+
+`vt_irq_el2_lower` shared its body with `vt_irq_el2_cur` and never read `TPIDR_EL2`, so a
+timer tick arriving while a vCPU was running was serviced in place: `vi_timer_tick` →
+`yield_cpu` → context switch, putting a Cell on the CPU at EL0 while `HCR_EL2.VM` was still
+set (Stage-2 live against the guest's `VTTBR_EL2`) and the EL1 sysreg bank still held the
+guest's `TTBR0_EL1`/`TCR_EL1`/`SCTLR_EL1`/`VBAR_EL1`. The host bank is restored only at
+`run_vcpu_impl` step 4, which that path never reaches, so every Cell instruction fetch
+aborted with EC 0x20 / ISS 0x6. `vt_vcpu_trap` already documented clearing VM as
+load-bearing — only the sync vector honoured it.
+
+The guest's own masking does not help: `HCR_EL2.IMO` routes physical IRQs to EL2, and an
+interrupt routed to EL2 is not masked by the lower EL's `PSTATE.I`, so the tick arrives
+mid-guest despite `SPSR_EL2=0x3C5`.
+
+The intermittency followed from needing a tick inside the guest's run window *and* the
+scheduler to pick a Cell — nothing about the source tree changed between runs.
+
+### What shipped
+Three changes, in the order that made the next one possible:
+
+- `scripts/qemu-hypervisor-smoke.sh` now dumps `qemu-hv.log` on every failing branch rather
+  than only the greppped fault lines, and both hypervisor CI jobs upload the log as an
+  artifact. This is what made the defect visible: the log showed Cells printing output
+  *after* `[hv] vCPU ready — entering run loop`, which is only reachable through the IRQ
+  vector.
+- `hal/arch/arm/src/aarch64/trap.rs`: the `_` arm no longer panics the kernel for any EC
+  raised from EL0. It separates an EL0 cell fault from an EL2 kernel fault via `SPSR.M[3:0]`,
+  mirroring the RISC-V dispatcher, so EC 0x22/0x26 (PC/SP alignment) kill only the offending
+  cell. An EC allowlist would have been wrong: those ECs carry the same value from either EL,
+  so allowlisting them would route a *kernel* alignment fault into "kill the current cell".
+  The fault line also now names the victim from `Task::name` via `SCHEDULER.try_lock()` —
+  which must run before `force_unlock_all_kernel_locks`, or a successful acquire no longer
+  proves the map is safe to read.
+- `hal/arch/arm/src/aarch64/el2.rs` + `vcpu.rs`: the lower-EL IRQ vector now makes the same
+  `TPIDR_EL2` check as the sync vector and exits the guest through `vt_vcpu_trap`. Because an
+  IRQ entry does not write `ESR_EL2`, a new `AArch64Vcpu::exit_is_irq` flag (offset 520,
+  pinned by an `offset_of!` assertion) tells `decode_exit` to report `Preempted` instead of
+  decoding a stale syndrome into `Unknown{ec,iss}`, which the hypervisor cell treats as fatal.
+  `Preempted` already existed plumbed end-to-end but was never produced on this architecture
+  (`_budget_ns` in `kernel/src/hypervisor/registry.rs` is ignored), and the hypervisor cell
+  already re-enters on it without advancing PC — correct here, the guest must resume at the
+  interrupted instruction. No tick is lost: the IRQ is not claimed at the GIC, so it re-fires
+  on the `eret` back to the hypervisor Cell.
+
+Rejected: masking physical IRQs across the guest run window (`IMO=0`, or DAIF at EL2), which
+would make a runaway guest unpreemptible and hang the OS.
+
+### Verified
+The lane ran 5 times on the fix, all green, every one reporting `PASS: machinery ran — VMM
+entered the guest; only the documented TCG address-size fault occurred`, with no
+`[fault] Cell` and no `panic-in-cell` line in any run. That is conclusive rather than
+suggestive: the script's *first* gate, before any mode-specific logic, is
+`grep -qia "KERNEL PANIC\|\[fault\] Cell"` → exit 1, so a zero exit proves the fault is
+absent rather than tolerated.
+
+Five consecutive passes against the recorded ~3-in-6 failure rate is ~3% by chance, but the
+statistics are not what settles it — a mechanism traced end-to-end in source, disassembly
+confirming the emitted vector wiring (`__vectors_el2` slot 9 → the new trampoline, slots 1/5
+→ the now-distinct `vt_irq_el2_cur`, both storing to `[x0, #0x208]`), and the lane converging
+on the previously-documented TCG signature all point the same way.
+
+A secondary EC 0x22 fault (`elr=0x4153C0E9`, a misaligned EL2 PC in guest RAM) disappeared
+with the same fix, confirming it was a consequence of the half-swapped translation window
+rather than a separate defect — the outcome that had been named in advance as the test.
+
+Also corrected: the tolerance clause in the smoke script needed no change. The
+`iss=0x5` / `ESR_EL1=0x0` pair read off the failing logs was itself a symptom of the
+half-swapped state, not signature drift.
+
+### Left open
+Lower-EL FIQ and SError route to `vt_sync_el2_lower` and so inherit the `TPIDR_EL2` check,
+but FIQ would reach `vt_vcpu_trap` with `exit_is_irq=0` and decode a stale `ESR_EL2`. Nothing
+in this system raises FIQ — the GICv2 configuration here delivers every source, timer PPIs
+included, on the IRQ line — so the path was left alone rather than changed without a way to
+exercise it. Documented in place.
+
 ## [2026-07-28] Cell signing reached only one image lane out of five
 
 ### What was wrong

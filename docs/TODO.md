@@ -22,10 +22,12 @@ hay `panic-in-cell`. Fault phụ EC 0x22 (`elr=0x4153C0E9`, PC lệch 4 byte ở
 cùng lúc, đúng như dự đoán rằng nó là hệ quả của cùng cửa sổ state nửa vời — không phải bug
 riêng. Chi tiết: `.agents/reports/debug-260729-1401-el2-irq-guest-preemption.md`.
 
-Còn treo từ lần điều tra đó: dòng fault in ESR_EL2 dưới tên `scause`
-(`kernel/src/task.rs:293,315`, giá trị đi qua `vi_terminate_on_fault` từ
-`hal/arch/arm/src/aarch64/trap.rs`) — tên RISC-V trên ARM64, đã làm lệch hướng chẩn đoán một
-lần rồi, nên đổi tên theo kiến trúc.
+Việc phái sinh từ lần điều tra đó cũng đã xong: dòng fault từng in `ESR_EL2` dưới tên RISC-V
+`scause` — chính chỗ làm bản ghi cũ ở trên giải mã sai — nay dùng tên theo vai trò
+(`cause`/`pc`/`addr`) và có bảng đối chiếu từng kiến trúc trong rustdoc của
+`terminate_current_cell_on_fault`. Sửa kèm: `hal/arch/riscv/src/rv32/trap.rs` khai báo
+`vi_terminate_on_fault` thiếu một tham số so với định nghĩa, nên in ra rác làm địa chỉ fault;
+rv32 bị cfg-gate và CI không build nên không compiler nào thấy.
 
 Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.
 AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
