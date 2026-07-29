@@ -195,7 +195,7 @@ extern "Rust" {
     /// Called on every S-mode timer interrupt.  Defined in `kernel::task`.
     fn vi_timer_tick();
     /// Terminate the currently-executing Cell on hardware fault.  Defined in `kernel::task`.
-    fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize);
+    fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
     /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell).
     fn vi_current_cell_id() -> usize;
 }

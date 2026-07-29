@@ -53,9 +53,10 @@ const WATCHDOG_BUDGET_TICKS: u32 = 500;
 /// catch a degrading RT loop before it is terminated. Observability only.
 const WATCHDOG_WARN_TICKS: u32 = WATCHDOG_BUDGET_TICKS * 4 / 5;
 
-/// Sentinel recorded as the "scause" in a `CellFault` audit entry for a watchdog
-/// kill, to distinguish it from a real hardware trap.
-const WATCHDOG_SCAUSE: u32 = 0x0000_DEAD;
+/// Sentinel recorded as the `cause` of a `CellFault` audit entry for a watchdog
+/// kill, to distinguish it from a real hardware trap. Deliberately not a valid
+/// syndrome on any supported architecture.
+const WATCHDOG_FAULT_CAUSE: u32 = 0x0000_DEAD;
 
 /// Death-notification subscriptions: `watched_tid → [watcher_tid, …]`.
 ///
@@ -826,7 +827,7 @@ impl Scheduler {
                     );
                     crate::audit::log_event(
                         crate::audit::AuditEvent::CellFault,
-                        &crate::audit::encode_u32x2(cell_raw as u32, WATCHDOG_SCAUSE),
+                        &crate::audit::encode_u32x2(cell_raw as u32, WATCHDOG_FAULT_CAUSE),
                     );
                     crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
                     crate::memory::cell_quota::deregister(CellId(cell_raw));

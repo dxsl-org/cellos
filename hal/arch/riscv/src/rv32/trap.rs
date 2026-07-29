@@ -86,7 +86,11 @@ pub extern "C" fn vi_trap_handler32(frame: &mut ViTrapFrame32) {
                 let cell_id = unsafe { vi_current_cell_id() };
                 if cell_id != 0 {
                     unsafe {
-                        vi_terminate_on_fault(code as usize, frame.sepc as usize);
+                        vi_terminate_on_fault(
+                            code as usize,
+                            frame.sepc as usize,
+                            frame.stval as usize,
+                        );
                     }
                     // vi_terminate_on_fault calls yield_cpu() — we should not reach here.
                 } else {
@@ -114,7 +118,12 @@ extern "Rust" {
     /// Called on every S-mode timer interrupt. Defined in `kernel::task`.
     fn vi_timer_tick();
     /// Terminate the currently-executing Cell on hardware fault. Defined in `kernel::task`.
-    fn vi_terminate_on_fault(scause: usize, sepc: usize);
+    ///
+    /// The arity must match the `#[no_mangle]` definition exactly — this was declared
+    /// with two parameters against a three-parameter definition, so the callee read
+    /// whatever the third argument register happened to hold and reported it as the
+    /// fault address.
+    fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
     /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell). Defined in `kernel::task`.
     fn vi_current_cell_id() -> usize;
 }

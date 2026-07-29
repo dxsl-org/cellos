@@ -117,7 +117,7 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // Forward to the kernel fault handler: kills the cell, lets the OS continue.
         0x20 | 0x24 => {
             extern "Rust" {
-                fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize);
+                fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
             }
             // SAFETY: vi_terminate_on_fault is #[no_mangle] in kernel::task.
             // It force-unlocks all kernel locks, sends NotifyOnExit, and calls
@@ -148,7 +148,7 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // bury the kernel bug.
         _ => {
             extern "Rust" {
-                fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize);
+                fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
                 fn vi_current_cell_id() -> usize;
             }
             // SAFETY: both are #[no_mangle] in kernel::task and linked via

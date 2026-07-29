@@ -198,9 +198,14 @@ pub fn init() {
 
 /// Exposes `terminate_current_cell_on_fault` to the HAL trap handler via
 /// `extern "Rust"` linkage.
+///
+/// # Arguments
+/// Architecture-neutral by necessity — every HAL trap handler calls this symbol,
+/// so the parameters name the *role* each value plays, not the register it came
+/// from. See [`terminate_current_cell_on_fault`] for the per-architecture mapping.
 #[no_mangle]
-pub extern "Rust" fn vi_terminate_on_fault(scause: usize, sepc: usize, stval: usize) {
-    terminate_current_cell_on_fault(scause, sepc, stval);
+pub extern "Rust" fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize) {
+    terminate_current_cell_on_fault(cause, pc, fault_addr);
 }
 
 /// Exposes `scheduler::current_cell_id` to the HAL trap handler.
@@ -284,13 +289,26 @@ unsafe fn force_unlock_all_kernel_locks() {
 /// Cell context (`scheduler::CURRENT_CELL_ID != 0`).  The Cell moves to the
 /// zombie list; the kernel continues running the next ready task.
 ///
+/// # Arguments
+/// Named for the role each value plays, not for one architecture's register, because
+/// every HAL trap handler funnels into here. Previously these were `scause`/`sepc`/
+/// `stval`, which read as RISC-V CSRs on every architecture and did mislead an ARM64
+/// investigation into decoding an `ESR_EL2` value as a RISC-V cause code.
+///
+/// * `cause` — trap syndrome: `scause` on RISC-V, `ESR_EL2` on AArch64. Also carries
+///   `scheduler`'s `WATCHDOG_FAULT_CAUSE` sentinel for a watchdog kill, which is not a
+///   hardware trap at all.
+/// * `pc` — faulting instruction address: `sepc` on RISC-V, `ELR_EL2` on AArch64.
+/// * `fault_addr` — faulting data/instruction address: `stval` on RISC-V, `FAR_EL2`
+///   on AArch64. Zero when the trap carries no address.
+///
 /// # Safety
 /// Must be called from trap context with S-mode interrupts disabled.
 /// Force-unlocks ALL global kernel locks first (see
 /// [`force_unlock_all_kernel_locks`]) so a panic that fired while holding one
 /// (e.g. mid-syscall OOM during a scheduler/allocator insert) cannot deadlock
 /// the kernel after we resume the next task.
-pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize) {
+pub fn terminate_current_cell_on_fault(cause: usize, pc: usize, fault_addr: usize) {
     let cell_id_raw = hart_local::current_cell_id();
 
     // Name the victim. A bare cell ID cannot be resolved after the fact — IDs are
@@ -311,18 +329,20 @@ pub fn terminate_current_cell_on_fault(scause: usize, sepc: usize, stval: usize)
             .map(|task| task.name.clone())
     });
 
+    // The `[fault] Cell` prefix is load-bearing: scripts/qemu-hypervisor-smoke.sh
+    // greps for it as its first fatal gate. Do not reword it.
     log::error!(
-        "[fault] Cell {} (task {} '{}') terminated: scause={:#x} sepc={:#x} stval={:#x}",
+        "[fault] Cell {} (task {} '{}') terminated: cause={:#x} pc={:#x} addr={:#x}",
         cell_id_raw,
         faulting_tid,
         cell_name.as_deref().unwrap_or("unknown"),
-        scause,
-        sepc,
-        stval
+        cause,
+        pc,
+        fault_addr
     );
     crate::audit::log_event(
         crate::audit::AuditEvent::CellFault,
-        &crate::audit::encode_u32x2(cell_id_raw as u32, scause as u32),
+        &crate::audit::encode_u32x2(cell_id_raw as u32, cause as u32),
     );
 
     // The panic/fault may have fired while kernel code (servicing this Cell's
