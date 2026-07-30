@@ -2685,6 +2685,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::SpawnFromMem { args_ptr } => {
+            // Creating a cell requires the spawn capability on every other entry
+            // point (`SpawnFromPath`, `SpawnFromElf`, `SpawnPinned`). Without the
+            // same check here, the capability bounds only which *route* a caller
+            // takes to spawn, not whether it may spawn at all.
+            if !caller_has_spawn(caller_id) {
+                log::warn!(
+                    "[loader] DENY SpawnFromMem: caller {} holds no spawn capability",
+                    caller_id
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
             if args_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
             }
