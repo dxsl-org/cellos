@@ -47,8 +47,13 @@ FLAG_MAINTENANCE_PERMITTED = 1 << 0
 # core boots with no caps. Checked locally in build_body so that never reaches an
 # image: one bad byte here bricks a fleet, and "boot to prompt" still passes
 # because the shell comes up from the ramdisk.
-MMIO_MASK = 0b111      # DEV_UART=1 | DEV_GPIO=2 | DEV_PCIE=4
-REGION_MASK = 0b111    # P1=1 | P4=2 | SRV=4
+# These MUST mirror the kernel's masks in kernel/src/policy.rs. If this file is
+# the stricter of the two it rejects blobs the kernel would have accepted, which
+# blocks a legitimate re-bake; if it is the looser one it emits a blob the kernel
+# scores Invalid, which is the fleet-wide DenyAll described above. Bit values come
+# from the DEV_* constants in kernel/src/resource_registry.rs.
+MMIO_MASK = 0b11111    # DEV_UART=1 | DEV_GPIO=2 | DEV_PCIE=4 | DEV_CAN=8 | DEV_ADC=16
+REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | bit 3 reserved for the /bin/vfs fold
 
 # Operator policy: the CEILING each path may hold. It intersects the manifest
 # request, so an entry can only ever take authority away — but a missing entry is

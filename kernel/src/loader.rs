@@ -9,6 +9,8 @@ use types::*;
 /// skips `spawn_from_path`, so re-registration never fires spuriously.
 static BLOCK_IO_REGISTERED: AtomicBool = AtomicBool::new(false);
 
+/// Per-path capability ceiling for the cells named in the boot manifest.
+pub mod boot_ceiling;
 pub mod disk_layout;
 pub mod early;
 pub mod elf;
@@ -264,7 +266,19 @@ pub fn spawn_gated(
     // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
     // before the child-mutation lock below (the Spinlock is non-reentrant).
     let after_spawner: CapSet = match spawner {
-        Spawner::Root => requested,
+        // Boot/kernel-initiated spawn. There is no spawner task to snapshot, so
+        // the ceiling comes from the per-path boot table: a boot cell may hold
+        // exactly the authority its row states, and a path with no row holds
+        // none. A refusal here is loud (`log_refusal`) because the only evidence
+        // available to whoever debugs it is the boot log.
+        Spawner::Root => {
+            let ceiling = boot_ceiling::boot_ceiling(path);
+            let bounded = requested.intersect(ceiling);
+            if bounded != requested {
+                boot_ceiling::log_refusal(path, requested, ceiling, bounded);
+            }
+            bounded
+        }
         Spawner::Ceiling(ceil) => requested.intersect(ceil),
         Spawner::User(stid) => {
             let ceil = crate::task::SCHEDULER
@@ -279,9 +293,14 @@ pub fn spawn_gated(
     // 3. Operator policy (P5/Phase 04): `granted = after_spawner ∩ policy(path)`,
     //    with trusted-core recovery + fail-safe. `policy::apply` takes the POLICY
     //    lock internally — called OUTSIDE the SCHEDULER guard above to avoid lock
-    //    nesting. `init` (Root) is exempt (it is the loader OF the policy).
+    //    nesting.
+    //
+    //    The root-authority policy exemption is scoped to spawns that happen
+    //    BEFORE the policy is resolved: subjecting the boot path to a policy that
+    //    does not exist yet is circular, but once it is resolved there is no
+    //    circularity left to protect and Root is bound like every other spawner.
     let granted: CapSet = match spawner {
-        Spawner::Root => after_spawner,
+        Spawner::Root if !crate::policy::is_resolved() => after_spawner,
         _ => crate::policy::apply(path, tid, after_spawner),
     };
 

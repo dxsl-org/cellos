@@ -16,7 +16,7 @@
 //! - **Domain validation:** parsed cap bytes are masked to known bits; unknown
 //!   bits → `Invalid` (a signed-but-malformed policy is still rejected).
 
-use crate::resource_registry::{DEV_GPIO, DEV_PCIE, DEV_UART};
+use crate::resource_registry::{DEV_ADC, DEV_CAN, DEV_GPIO, DEV_PCIE, DEV_UART};
 use crate::sync::Spinlock;
 use crate::task::cap::CapSet;
 use alloc::string::String;
@@ -52,8 +52,16 @@ const fn cap_bytes_for(version: u8) -> Option<usize> {
 }
 
 /// Valid `mmio_devices` bits and `block_regions` bits (domain-validation masks).
-const MMIO_MASK: u8 = DEV_GPIO | DEV_UART | DEV_PCIE;
-const REGION_MASK: u8 = 0b111;
+///
+/// Both masks must cover every bit the kernel is capable of minting, or a policy
+/// that names a legitimate device/partition is rejected as malformed → `DenyAll`
+/// for the whole fleet. `CapSet::from_manifest` mints `DEV_CAN`/`DEV_ADC` from the
+/// manifest, and the block-region encoding carries a 4th bit for the cell-store
+/// region, so both belong in the accepted domain. Widening a mask cannot grant
+/// authority: a `Permit` intersects the request, so a bit the manifest never
+/// asked for stays off.
+const MMIO_MASK: u8 = DEV_GPIO | DEV_UART | DEV_PCIE | DEV_CAN | DEV_ADC;
+const REGION_MASK: u8 = 0b1111;
 
 /// Dev fleet Ed25519 **public** key — derived from the fixed dev seed in
 /// `scripts/sign-policy.py` (reproducible; a dev key, never shipped in release).
@@ -163,6 +171,18 @@ pub fn load_from_vifs1() {
             mark_invalid(3);
         }
     }
+}
+
+/// Whether `load_from_vifs1` has already run, in any outcome (loaded, absent, or
+/// invalid).
+///
+/// The boot path needs this to decide whether the root-authority policy exemption
+/// still applies: before the policy is resolved there is nothing to apply, and
+/// applying it would be circular; afterwards the exemption has no justification.
+/// `false` means "policy not yet resolved", never "no policy" — an absent policy
+/// resolves to `Absent` and reports `true`.
+pub fn is_resolved() -> bool {
+    POLICY.lock().is_some()
 }
 
 fn mark_invalid(reason: u32) {
@@ -381,6 +401,31 @@ fn v2_parse_cases() -> bool {
     if parse(&bad_mmio).is_some() {
         return false;
     }
+    // The CAN and ADC device bits are inside the domain: `from_manifest` mints
+    // them, so a policy that names a CAN/ADC cell must not be read as malformed
+    // (which would be `DenyAll` for every path, not just that one).
+    let mut can_adc = V2;
+    can_adc[21] = DEV_CAN | DEV_ADC;
+    match parse(&can_adc).as_ref().and_then(|p| p.entries.first()) {
+        Some(e) if e.caps.mmio_devices == (DEV_CAN | DEV_ADC) => {}
+        _ => return false,
+    }
+    // The 4-bit block-region encoding is inside the domain: the `/bin/vfs`
+    // cell-store region lives in bit 3, and a policy able to express it is the
+    // precondition for granting it through policy instead of a raw grant.
+    let mut regions4 = V2;
+    regions4[22] = 0b1111;
+    match parse(&regions4).as_ref().and_then(|p| p.entries.first()) {
+        Some(e) if e.caps.block_regions == 0b1111 => {}
+        _ => return false,
+    }
+    // …but bit 4 and above are still out of domain — widening the mask must not
+    // turn it into "accept anything".
+    let mut bad_regions = V2;
+    bad_regions[22] = 0b1_0000;
+    if parse(&bad_regions).is_some() {
+        return false;
+    }
     // Unknown flag bit → Invalid: flags gate the maintenance bypass, so an
     // unrecognised one must not be ignored.
     let mut bad_flags = V2;
@@ -498,6 +543,17 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
         crate::audit::log_event(
             crate::audit::AuditEvent::CapNarrowedByPolicy,
             &crate::audit::encode_u32x2(tid as u32, dropped),
+        );
+        // Mirror the audit record into the boot log with its own legend. The audit
+        // ring needs a live cell to read it, which is exactly what is missing when
+        // policy strips the caps a boot cell needed — leaving the serial log as the
+        // only evidence a reader has.
+        log::warn!(
+            "[policy] narrowed {:?} (tid {}): dropped {:#011b} \
+             [regions|mmio|sup|plat|pcie|hyp|spawn|net|bio]",
+            path,
+            tid,
+            dropped
         );
     }
     // Audit the GRANT of privileged authority, not only its removal. Losing a cap

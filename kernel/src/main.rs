@@ -644,6 +644,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("P-TRUST self-test FAIL");
         }
+        // Boot ceiling: the per-path table is per-path (not a union) and no boot
+        // cell is over-tightened out of the cap it needs. Runs BEFORE the first
+        // Root spawn below, so a bad row is reported before it breaks a cell.
+        if crate::loader::boot_ceiling::self_test() {
+            log_info("boot-ceiling self-test PASS (per-path table, no union collapse)");
+        } else {
+            log_info("boot-ceiling self-test FAIL — a boot cell may lose caps");
+        }
         // Manifest v2: v1-upcast/v2-parse + the tier-floor invariant. Pure logic,
         // no scheduler — runs alongside the other crypto/trust self-tests.
         if crate::task::manifest_v2_selftest::self_test() {
@@ -695,17 +703,19 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 // Probe 'V': confirms spawn_from_mem succeeded → init is in ready queue.
                 #[cfg(feature = "board-rpi3")]
                 crate::hal::uart_bcm_mini::probe_put(b'V');
-                // init is the ROOT AUTHORITY (P2 monotonic-downgrade): grant the
-                // FULL capability set directly here. init is spawned via
-                // spawn_from_mem (NOT spawn_from_path), so its manifest is never
-                // read — this direct TCB write is the only place its caps come
-                // from. init then delegates subsets to vfs/net/shell/... via the
+                // init is the ROOT AUTHORITY (P2 monotonic-downgrade). It is
+                // spawned via spawn_from_mem (NOT spawn_from_path), so its
+                // manifest is never read — this direct TCB write is the only
+                // place its caps come from, and it takes them from the SAME
+                // per-path boot table every other boot cell is bound by, so
+                // there is exactly one place that describes boot authority.
+                // init then delegates subsets to vfs/net/shell/... via the
                 // SpawnFromPath syscall, where each child is intersected against
                 // init's caps. Escalation-oracle bound: init's spawn targets MUST
                 // remain compile-time constants (no data-derived paths).
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                        task::cap::CapSet::ALL.apply_to(t);
+                        crate::loader::boot_ceiling::boot_ceiling("/bin/init").apply_to(t);
                         // SupervisorCap is NOT in CapSet (not delegatable via intersection).
                         // Init holds it so it can unfreeze cells if the Supervisor Cell crashes.
                         t.supervisor_cap = Some(task::cap::SupervisorCap::new());
@@ -714,7 +724,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                         t.is_critical = true;
                     }
                 }
-                log_info("init granted root authority (CapSet::ALL + SupervisorCap)");
+                log_info("init granted root authority (boot_ceiling(/bin/init) + SupervisorCap)");
             }
             Err(_e) => {
                 log_info("Failed to spawn init");
