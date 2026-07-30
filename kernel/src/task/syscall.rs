@@ -405,6 +405,53 @@ fn write_optional_usize(ptr: usize, value: usize) -> Result<(), SyscallError> {
     Ok(())
 }
 
+/// Look up the attested identity of `sender_tid`.
+///
+/// Returns `None` when the sender is gone (a reply to a dead cell, a queued
+/// message whose sender already exited) or is not attributable to a cell. A
+/// receiver must read that as "unknown caller" and deny, never as "some caller
+/// that owns nothing" — owning nothing still reads unowned state.
+pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::CallerIdentity> {
+    let sched_guard = super::SCHEDULER.lock();
+    let task = sched_guard.as_ref()?.tasks.get(&sender_tid)?;
+    if task.cell_id.0 == 0 {
+        return None;
+    }
+    Some(api::caller_identity::CallerIdentity {
+        cell_id: task.cell_id.0,
+        generation: task.cell_generation,
+        sender_tid: sender_tid as u64,
+    })
+}
+
+/// Write the caller-identity trailer into the last bytes of a receiver's buffer.
+///
+/// MUST be called only after the payload has been copied into `buf_ptr`: the
+/// trailer's unforgeability rests on the kernel writing it last, so a sender that
+/// pads its message across the whole buffer cannot pre-place a forged one.
+///
+/// A sender the scheduler can no longer attribute leaves the tail zeroed, which
+/// parses back as "no identity" and therefore as deny.
+fn write_caller_identity(buf_ptr: usize, buf_len: usize, sender_tid: usize) {
+    let len = api::caller_identity::CALLER_IDENTITY_LEN;
+    let Some(offset) = buf_len.checked_sub(len) else {
+        return; // buffer cannot hold a trailer; receiver sees no identity → deny
+    };
+    let dst = buf_ptr.wrapping_add(offset);
+    if validate_user_buf(dst, len, MAX_USER_BUF).is_err() {
+        return;
+    }
+    let trailer = attested_identity_of(sender_tid)
+        .map(|id| id.to_trailer())
+        .unwrap_or([0u8; api::caller_identity::CALLER_IDENTITY_LEN]);
+    // SAFETY: `dst..dst+len` was validated as this caller's own user buffer, and
+    // we run in that caller's syscall context, so the write is exclusive in the
+    // single address space (the sender is parked or already resumed past its send).
+    unsafe {
+        core::ptr::copy_nonoverlapping(trailer.as_ptr(), dst as *mut u8, len);
+    }
+}
+
 fn encode_task_state(state: &TaskState) -> u32 {
     match state {
         TaskState::Ready => 0,
@@ -504,6 +551,10 @@ pub enum Syscall {
         mask: usize,
         buf_ptr: usize,
         buf_len: usize,
+        /// Receiver asked for a caller-identity trailer (a3 =
+        /// `RECV_ATTEST_CALLER`). False for every pre-existing caller, which is
+        /// why opting in cannot change any other receiver's buffer.
+        attest_caller: bool,
     },
     /// 202: SendGather — send one IPC message from multiple non-contiguous buffers.
     SendGather {
@@ -1069,10 +1120,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             mask,
             buf_ptr,
             buf_len,
+            attest_caller,
         } => {
+            // Identity trailer, when requested, is written at each delivery point
+            // AFTER the payload copy and AFTER the scheduler lock is dropped —
+            // `attested_identity_of` takes that lock itself.
+            let attest = |sender_tid: usize| {
+                if attest_caller {
+                    write_caller_identity(buf_ptr, buf_len, sender_tid);
+                }
+            };
+
             // A NotifyOnExit death that arrived while we were busy (not parked in
             // Recv) was queued; deliver it now without blocking. The dead tid is
             // returned as the "sender" so a supervisor never misses a child death.
+            let mut queued_death = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
                     if !t.pending_deaths.is_empty() {
@@ -1089,9 +1151,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                 core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
                             }
                         }
-                        return Ok(dead_tid);
+                        queued_death = Some(dead_tid);
                     }
                 }
+            }
+            if let Some(dead_tid) = queued_death {
+                attest(dead_tid);
+                return Ok(dead_tid);
             }
 
             // Hot-swap pending-message drain — guaranteed delivery path.
@@ -1113,6 +1179,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             //   avoiding any lifetime dependency on the task struct.
             // - current_caller is set so the cell sees the original sender's TID, not
             //   the hotswap orchestrator's TID, preserving the IPC identity contract.
+            let mut drained_sender = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
                     // The drain MUST honour the recv mask: a masked recv (e.g. the
@@ -1144,9 +1211,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             }
                         }
                         t.current_caller = Some(msg.sender_tid);
-                        return Ok(msg.sender_tid);
+                        drained_sender = Some(msg.sender_tid);
                     }
                 }
+            }
+            if let Some(sender_tid) = drained_sender {
+                attest(sender_tid);
+                return Ok(sender_tid);
             }
 
             let res = super::ipc_recv(caller_id, mask, buf_ptr, buf_len);
@@ -1178,9 +1249,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             }
                         }
                     }
+                    attest(sender);
                     Ok(sender)
                 }
-                Ok(id) => Ok(id), // Got message instantly
+                Ok(id) => {
+                    // Got message instantly — ipc_recv already copied the payload.
+                    attest(id);
+                    Ok(id)
+                }
                 Err(_) => Err(SyscallError::InvalidCommand),
             }
         }
@@ -3859,6 +3935,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             mask: a0,
             buf_ptr: a1,
             buf_len: a2,
+            attest_caller: a3 & api::caller_identity::RECV_ATTEST_CALLER != 0,
         },
         ViSyscall::TryRecv => Syscall::TryRecv {
             mask: a0,

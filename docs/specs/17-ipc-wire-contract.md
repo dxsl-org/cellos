@@ -24,6 +24,8 @@ primitives (`libs/api/src/abi/syscall.rs`, kernel `task.rs`):
 - `sys_recv(mask, &mut [u8]) -> sender_tid` — blocks until a message arrives;
   returns the **sender tid**, not a byte count. `mask == 0` = wildcard (any
   sender); `mask == tid` = only that sender.
+- `sys_recv_attested(mask, &mut [u8]) -> sender_tid` — as `sys_recv`, plus a
+  kernel-written caller identity in the tail of the buffer (§11).
 - `sys_recv_timeout(mask, &mut [u8], ticks)` — as `sys_recv`, returns `Ok(0)` on
   timeout (10 ms/tick).
 - `sys_reply` / `current_caller` — the request/reply short-circuit.
@@ -111,6 +113,9 @@ recoverable from the buffer.
 
 - `IPC_BUF_SIZE = 4096` (`libs/api/src/services/ipc.rs`) is the recv-buffer and
   max message size. A cell's recv buffer MUST be `IPC_BUF_SIZE` bytes.
+- **A receiver that opts into caller attestation (§11) gives up the last 32
+  bytes** of its recv buffer to the kernel. Max usable payload for it is
+  `IPC_BUF_SIZE - CALLER_IDENTITY_LEN`.
 - **A reply must fit the frame *after* its postcard envelope.** VFS caps
   `Data` payloads at 480 bytes, not 512, because a full-frame payload made
   `encode` fail and the client saw an *empty* reply (§8.3). When chunking a
@@ -203,6 +208,9 @@ A new or modified IPC path is compliant when:
 - [ ] No silent-empty / silent-drop / silent-fallback path (§7).
 - [ ] Prefer `ostd::ipc::service_call` (encapsulates §2/§4/§7) over hand-rolled
       send+recv.
+- [ ] A service that **authorizes** requests reads the caller from the kernel
+      attestation (§11), never from the sender tid or the payload, and denies when
+      the attestation is absent.
 
 **Byte-0 registry amendments** must add a row to §3 with owner, direction, and
 the reason the value is safe against existing owners.
@@ -213,6 +221,11 @@ the reason the value is safe against existing owners.
   `.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md`.
   Includes user confirm #1 (of the Law-1 2×) for appending `NetRequest`
   variants 17/18; confirm #2 happens at implementation time.
+- 2026-07-30 — **Ratified (Law-1 2× confirmed):** new §11 "Caller attestation".
+  Adds `api::caller_identity` (`CallerIdentity`, `CALLER_IDENTITY_LEN`,
+  `RECV_ATTEST_CALLER`) and a flag on the previously-unused fourth `Recv`
+  argument. No message enum changes, no discriminant changes, no framing change
+  for any existing receiver.
 
 ---
 
@@ -325,3 +338,79 @@ The `u32` socket handle is provider-local, allocated monotonically from 1,
 handling is therefore drop-unknown-handle at the reactor. The std-layer
 `AsCellHandle` ABI over this value (class-tagged `u32`) is frozen in
 `.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md` §D7.
+
+---
+
+## 11. Caller attestation — Ratified 2026-07-30
+
+> How a service learns **which cell** is calling it. Required reading before
+> putting an authorization check in any service.
+
+### 11.1 The problem
+
+`sys_recv` returns a **tid**, and a tid is not a cell:
+
+- A cell spawned by the loader gets `cell_id == CellId(tid)`, so for it the two
+  coincide — by accident of the spawn path, not by contract.
+- A **thread** gets its own tid while inheriting its parent's `cell_id`. A service
+  that built `CellId(sender)` therefore invented a cell that does not exist, and
+  charged that thread's quota to a ledger row nothing owned.
+
+Deriving identity from the request is worse. The nearest thing to a cell's name in
+the system is the last component of the `path_hint` its spawner passed to
+`SpawnFromPath` / `SpawnFromElf`, and a spawner chooses that string freely: a cell
+spawned as `path_hint = "/bin/vfs"` is named `vfs`. Cell signatures cover the ELF
+bytes, not the path, so nothing rejects the lie. **Any ACL keyed on a cell name is
+forgeable.** `CapSet` is safe there (the ceiling bounds it, and a lied-about hint
+can only lose privilege); a service-side ACL is not.
+
+### 11.2 The mechanism
+
+A receiver opts in by passing `RECV_ATTEST_CALLER` as the **fourth argument of
+`ViSyscall::Recv`** — a register that was unused and that every pre-existing
+caller passes as 0. `ostd::syscall::sys_recv_attested` is the wrapper.
+
+The kernel then writes a `CallerIdentity` (`cell_id`, `generation`, `sender_tid`;
+32 bytes, LE, tagged) into the **last `CALLER_IDENTITY_LEN` bytes of that
+receiver's own recv buffer**, and does so **after** copying the payload. Read it
+with `CallerIdentity::from_recv_buf(&buf)`.
+
+Why the tail and not a message field: byte 0 is the postcard discriminant, so
+widening a request enum or prefixing the frame moves every following byte — the
+failure mode §8.1 was built on. `decode` (`take_from_bytes`) consumes exactly one
+message and ignores the rest, so a fixed-offset trailer past the payload is
+invisible to every existing parser.
+
+### 11.3 Normative rules
+
+- **Absent identity means deny.** `from_recv_buf` returning `None` — no trailer, a
+  garbage tail, or `cell_id == 0` — is "unknown caller". Refuse the request. Do
+  not fall back to the sender tid, and do not treat it as a caller that merely
+  owns nothing: owning nothing still reads everything unowned.
+- **Opting in reserves the tail** (§5). Do not expect payload bytes there.
+- **The kernel writes the trailer last**, so a sender that pads its message across
+  the whole buffer cannot pre-place a forged one.
+- **Identity is per cell, not per task.** A thread reports its parent cell, which
+  is what makes one attestation serve both authorization and accounting.
+- `generation` is a monotonic cell epoch, inherited by a cell's threads. A service
+  that holds state against a `CellId` — open handles, pending reads — MUST compare
+  the generation too, so a successor cell under a recycled id does not inherit its
+  predecessor's state. `generation == 0` means "not attested on this path"; refuse
+  to record durable state for it.
+- `TryRecv`, `RecvTimeout`, and `RecvScatter` do **not** attest. `RecvTimeout`
+  already uses the fourth argument for its deadline, and `RecvScatter` has no
+  single buffer tail to write. A service that authorizes must receive with `Recv`.
+
+### 11.4 Direct (non-`ecall`) service calls
+
+`fast_ipc` bypasses the trap entirely, so there is no sender tid and nothing in
+the arguments is trustworthy — every one of them is chosen by the cell being
+authorized. `kernel::fast_ipc::call_vfs` therefore resolves the identity itself,
+from live scheduler state for the task running on the hart, and passes it to the
+handler. `TrustedHandle<T>` is not a control; its own contract says it is
+advisory.
+
+A fast-path handler MUST authorize exactly as its `ecall` counterpart does. VFS's
+fast path serves `GetFile`, which replies with a raw `DataPtr` — in a single
+address space that is permanent, unrevocable read authority — so an ungated fast
+path would reduce the gate on the message path to decoration.

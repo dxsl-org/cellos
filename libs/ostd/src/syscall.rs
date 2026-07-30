@@ -797,6 +797,32 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     }
 }
 
+/// Blocking receive that also asks the kernel to attest who sent the message.
+///
+/// Identical to [`sys_recv`] except that the kernel writes a
+/// `api::caller_identity::CallerIdentity` into the **last
+/// `CALLER_IDENTITY_LEN` bytes of `buf`** once the payload is in place. Read it
+/// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
+/// and the request must be denied, never handled on a guessed identity.
+///
+/// Only a service that authorizes requests needs this. It costs no extra syscall
+/// and no extra round trip, but it **reserves the tail of `buf`** — pass a full
+/// `IPC_BUF_SIZE` buffer and do not expect payload bytes in that tail.
+pub fn sys_recv_attested(mask: usize, buf: &mut [u8]) -> SyscallResult {
+    // SAFETY: buf is a valid mutable slice for the whole call; the kernel writes
+    // the payload and then the trailer inside its bounds.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::Recv,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            api::caller_identity::RECV_ATTEST_CALLER,
+        )
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
 /// Non-blocking receive: returns immediately with `Ok(0)` when no message is
 /// queued, instead of parking the task like [`sys_recv`].
 ///

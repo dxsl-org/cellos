@@ -8,6 +8,16 @@
 pub enum ViSyscall {
     // === IPC (0-9) ===
     Send = 0,
+    /// Blocking receive.
+    ///
+    /// ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = flags → sender tid.
+    ///
+    /// a3 was unused (every pre-existing caller passes 0). Passing
+    /// [`crate::caller_identity::RECV_ATTEST_CALLER`] additionally makes the
+    /// kernel write a [`crate::caller_identity::CallerIdentity`] into the LAST
+    /// `CALLER_IDENTITY_LEN` bytes of `buf`, after the payload — the only
+    /// unforgeable answer to "which cell called me?" available to a service.
+    /// Opting in reserves that tail; see that module for the invariants.
     Recv = 1,
     Call = 2,
     Reply = 3,

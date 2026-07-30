@@ -318,6 +318,14 @@ impl Scheduler {
 
         let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
         task.state = TaskState::Ready;
+        // A thread shares its cell's identity, so it must also share the epoch
+        // that identity is attested with; otherwise a service would see the
+        // thread as a different principal than the cell that spawned it and
+        // refuse it access to the cell's own state. `Task::new` mints a fresh
+        // epoch for a new cell; a thread discards it for its cell's.
+        if let Some(cell_task) = self.tasks.get(&(cell_id.0 as usize)) {
+            task.cell_generation = cell_task.cell_generation;
+        }
         let id = task.id;
 
         let kstack = crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES)?;

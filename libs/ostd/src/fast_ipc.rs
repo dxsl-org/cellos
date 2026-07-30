@@ -17,15 +17,27 @@
 //! the spinlock would deadlock.  Interrupt-disable makes the fast-path call
 //! behave as an atomic critical section w.r.t. the scheduler.
 
+use api::caller_identity::CallerIdentity;
 use api::fast_ipc::{TrustedHandle, VfsCell};
 use api::ipc::{VfsRequest, IPC_BUF_SIZE};
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 /// Signature of a registered VFS fast-IPC handler.
 ///
-/// Reads the request and writes the response into `out`.
+/// Reads the request on behalf of `caller` and writes the response into `out`.
 /// Returns the number of bytes written into `out`.
-pub type VfsFastHandler = unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
+///
+/// Must stay identical to `kernel::fast_ipc::VfsFastHandler`: the loader resolves
+/// a cell's `register_vfs`/`call_vfs` imports to the kernel's copies, so a
+/// mismatch here is a silently wrong call through a function pointer.
+///
+/// `caller` is `None` when the call could not be attributed to a live cell; the
+/// handler must refuse rather than serve an unattributed read.
+pub type VfsFastHandler = unsafe fn(
+    caller: Option<CallerIdentity>,
+    req: &VfsRequest<'_>,
+    out: &mut [u8; IPC_BUF_SIZE],
+) -> usize;
 
 static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId of the cell that registered the VFS handler; 0 = unregistered.
@@ -127,6 +139,14 @@ impl Drop for SieGuard {
 /// The fast path activates once cells are compiled as PIE and the kernel loader
 /// patches JUMP_SLOT relocations to `kernel::fast_ipc::call_vfs` (G2 work).
 ///
+/// # Caller identity
+/// This copy of the dispatch table lives inside a cell, where there is no
+/// attested answer to "who is calling" — the kernel's copy
+/// (`kernel::fast_ipc::call_vfs`, which the loader resolves cell imports to) is
+/// the one that derives identity from scheduler state. If control ever does reach
+/// this copy, it passes `None`, so the handler denies the request instead of
+/// serving a read on an identity nobody vouched for.
+///
 /// # Safety
 /// The caller must own `out` exclusively for the duration of this call.
 /// `_handle: TrustedHandle<VfsCell>` documents that the caller has been
@@ -149,5 +169,5 @@ pub unsafe fn call_vfs(
     // SAFETY: called from S-mode; SieGuard::disable is safe here.
     let _sie = SieGuard::disable();
 
-    handler(req, out)
+    handler(None, req, out)
 }

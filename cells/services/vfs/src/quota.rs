@@ -3,16 +3,37 @@
 //! Phase 13 tracks bytes-on-disk per `CellId` and rejects writes that would
 //! push a cell over its quota.  Default quota is `DEFAULT_QUOTA_BYTES`.
 
+//! ## Who gets credited on delete
+//! Usage is charged to the cell that wrote a path, so it must be released to that
+//! same cell — not to whoever deletes the file. Releasing to the deleter let any
+//! cell mint quota for itself by deleting another cell's files, and left the real
+//! writer permanently charged for bytes that are gone. [`QuotaTracker`] therefore
+//! remembers the charged writer per path.
+//!
+//! Bound on that record: if two cells write the same path, the first writer stays
+//! recorded and is credited for the whole file when it is deleted. That
+//! misallocates between two cells that already share a file, but it preserves the
+//! property that matters — **deleting a file never credits the deleter**.
+//! The record is in-memory, so it does not survive a hot-swap of this cell; after
+//! one, a delete credits nobody, which errs toward over-charging rather than
+//! toward handing out free quota.
+
 use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
 use types::{CellId, ViError, ViResult};
 
 /// Default per-cell quota: 32 MB.
 const DEFAULT_QUOTA_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Per-cell quota and usage tracker.
+///
+/// Keyed by `CellId` alone, without the caller generation: a respawned service
+/// inherits its predecessor's usage because the bytes are still on disk.
 #[derive(Default)]
 pub struct QuotaTracker {
     used: BTreeMap<u64, u64>,
+    /// Path → the cell whose ledger that path's bytes were charged to.
+    writers: BTreeMap<String, CellId>,
     limit: u64,
 }
 
@@ -20,6 +41,7 @@ impl QuotaTracker {
     pub fn new() -> Self {
         Self {
             used: BTreeMap::new(),
+            writers: BTreeMap::new(),
             limit: DEFAULT_QUOTA_BYTES,
         }
     }
@@ -33,6 +55,7 @@ impl QuotaTracker {
     pub fn with_limit(limit: u64) -> Self {
         Self {
             used: BTreeMap::new(),
+            writers: BTreeMap::new(),
             limit,
         }
     }
@@ -57,9 +80,51 @@ impl QuotaTracker {
     }
 
     /// Release `bytes` from `owner` (on file delete or close-after-write).
+    ///
+    /// Prefer [`Self::release_path`]: this releases from whichever cell is named,
+    /// so a caller that passes the requesting cell instead of the charged one
+    /// hands out quota that was never charged.
     pub fn release(&mut self, owner: CellId, bytes: u64) {
         if let Some(used) = self.used.get_mut(&owner.0) {
             *used = used.saturating_sub(bytes);
+        }
+    }
+
+    /// Record `owner` as the cell charged for `path`, replacing any earlier
+    /// record.
+    ///
+    /// For a write that replaces the whole file: the previous contents have just
+    /// been released to the previous writer, so the new writer owns all the bytes.
+    pub fn set_writer(&mut self, path: &str, owner: CellId) {
+        self.writers.insert(path.to_string(), owner);
+    }
+
+    /// Record `owner` as the cell charged for `path` only if no cell is recorded
+    /// yet.
+    ///
+    /// For an append, which leaves earlier bytes charged where they were. See the
+    /// module note on files written by more than one cell.
+    pub fn record_writer(&mut self, path: &str, owner: CellId) {
+        self.writers.entry(path.to_string()).or_insert(owner);
+    }
+
+    /// The cell charged for `path`, if VFS charged anyone.
+    ///
+    /// `None` for a file that predates this cell's current instance (seeded at
+    /// boot, or written before a hot-swap) — nothing was charged for it here, so
+    /// nothing may be released for it either.
+    pub fn writer_of(&self, path: &str) -> Option<CellId> {
+        self.writers.get(path).copied()
+    }
+
+    /// Release `bytes` for `path` from the cell that was charged, and forget the
+    /// record.
+    ///
+    /// A path with no recorded writer releases nothing. That is deliberate: the
+    /// alternative — crediting the requesting cell — is the bug this replaces.
+    pub fn release_path(&mut self, path: &str, bytes: u64) {
+        if let Some(owner) = self.writers.remove(path) {
+            self.release(owner, bytes);
         }
     }
 

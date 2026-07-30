@@ -23,6 +23,7 @@ mod lfs_disk;
 // x86_64-only str* providers for the littlefs C core — the api POSIX shim
 // (which provides them on riscv64/aarch64) is cfg-gated off on x86_64 to
 // avoid duplicate symbols with mlibc Tier-B cells.
+mod caller;
 mod dispatch;
 mod handle_table;
 #[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
@@ -32,6 +33,7 @@ mod mount;
 mod page_cache;
 mod pending;
 mod quota;
+mod subtree;
 
 use manager::VfsManager;
 use ostd::io::println;
@@ -90,28 +92,42 @@ static GLOBAL_VFS: Mutex<Option<VfsManager>> = Mutex::new(None);
 
 /// Fast-IPC handler: serves VfsRequest::GetFile without ecall overhead.
 ///
+/// Authorized exactly like the ecall path.  It has to be: `GetFile` replies with a
+/// raw `DataPtr`, which in a single address space is permanent read authority that
+/// cannot be revoked once handed out — so an ungated fast path would make the gate
+/// on the ecall path decorative.  `caller` comes from the kernel
+/// (`kernel::fast_ipc::call_vfs` resolves it from live scheduler state), never from
+/// an argument this cell's client controls; `None` means unattributable, which is
+/// refused.
+///
 /// # Safety
 /// Called with S-mode interrupts disabled (guaranteed by `ostd::fast_ipc::call_vfs`).
 unsafe fn vfs_fast_handler(
+    caller: Option<api::caller_identity::CallerIdentity>,
     req: &api::ipc::VfsRequest<'_>,
     out: &mut [u8; api::ipc::IPC_BUF_SIZE],
 ) -> usize {
-    let resp = match req {
-        api::ipc::VfsRequest::GetFile(path) => {
-            if let Some(vfs) = GLOBAL_VFS.lock().as_ref() {
-                if let Some((ptr, len)) = vfs.get_file_ptr(path) {
-                    api::ipc::VfsResponse::DataPtr {
-                        ptr: ptr as u64,
-                        len: len as u64,
+    let resp = match caller.map(crate::caller::Caller::from_attested) {
+        None => api::ipc::VfsResponse::Err(3), // unknown caller → denied
+        Some(caller) => match req {
+            api::ipc::VfsRequest::GetFile(path) => {
+                if let Some(vfs) = GLOBAL_VFS.lock().as_ref() {
+                    if !vfs.access.can_read(caller, path) {
+                        api::ipc::VfsResponse::Err(3)
+                    } else if let Some((ptr, len)) = vfs.get_file_ptr(path) {
+                        api::ipc::VfsResponse::DataPtr {
+                            ptr: ptr as u64,
+                            len: len as u64,
+                        }
+                    } else {
+                        api::ipc::VfsResponse::Err(1)
                     }
                 } else {
-                    api::ipc::VfsResponse::Err(1)
+                    api::ipc::VfsResponse::Err(0xFF)
                 }
-            } else {
-                api::ipc::VfsResponse::Err(0xFF)
             }
-        }
-        _ => api::ipc::VfsResponse::Err(0xFE), // other ops must use ecall path
+            _ => api::ipc::VfsResponse::Err(0xFE), // other ops must use ecall path
+        },
     };
     api::ipc::encode(&resp, out).map(|s| s.len()).unwrap_or(0)
 }
@@ -131,7 +147,12 @@ pub fn main() {
     let mut buf = [0u8; api::ipc::IPC_BUF_SIZE];
 
     loop {
-        match ostd::syscall::sys_recv(0, &mut buf) {
+        // `sys_recv_attested` asks the kernel to state which cell sent the
+        // message, in the tail of `buf`.  VFS cannot derive that itself: `sender`
+        // is a tid, and a thread has its own tid while belonging to its parent
+        // cell, so a cell id built from that tid named a cell that does not exist
+        // and charged its quota to a ledger row nothing owned.
+        match ostd::syscall::sys_recv_attested(0, &mut buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
                 // Encode the response into a local buffer while holding the VFS lock,
                 // then DROP the lock before sys_send.  If ipc_send blocks (client not
@@ -147,7 +168,11 @@ pub fn main() {
                     let vfs = gvfs
                         .as_mut()
                         .expect("VFS initialized before serving requests");
-                    let resp = dispatch::handle_request(vfs, &buf, sender, &mut resp_buf);
+                    // `None` here (no trailer, or a sender the kernel could no
+                    // longer attribute) makes every op deny — see handle_request.
+                    let attested = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
+                        .map(caller::Caller::from_attested);
+                    let resp = dispatch::handle_request(vfs, &buf, attested, &mut resp_buf);
                     // Encode while holding the lock (safe: no sys_send yet).
                     encoded_len = api::ipc::encode(&resp, &mut encoded)
                         .map(|s| s.len())

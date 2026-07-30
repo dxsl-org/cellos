@@ -325,7 +325,27 @@ pub struct Task {
     /// this queue to the new cell before the old cell is terminated.
     /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
     pub pending_msgs: Vec<PendingMsg>,
+
+    /// Epoch of the cell this task belongs to, attested to services alongside
+    /// `cell_id` (see `api::caller_identity`).
+    ///
+    /// A service that holds state against a `CellId` — an open handle, a pending
+    /// read, a quota ledger row — must not hand that state to a *different* cell
+    /// that later shows up under the same id. `CellId` is `CellId(tid)` and the
+    /// scheduler's `next_task_id` only ever increments, so ids are not recycled
+    /// today; this epoch is what keeps the guarantee if that ever changes,
+    /// because it is minted fresh per cell and never reused.
+    ///
+    /// Threads override the freshly minted value with their cell's (see
+    /// `Scheduler::spawn_thread`) so a thread is indistinguishable from its cell
+    /// to any check that keys on identity — which is the point of the whole
+    /// attestation: `CellId(tid)` was misattributing threads.
+    pub cell_generation: u64,
 }
+
+/// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
+/// "generation not attested on this path".
+static NEXT_CELL_GENERATION: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
 
 impl Task {
     pub fn new(id: usize, cell_id: CellId, name: &str, allowed_drivers: Vec<usize>) -> Self {
@@ -377,6 +397,8 @@ impl Task {
             hotswap_ready: false,
             is_critical: false,
             pending_msgs: Vec::new(),
+            cell_generation: NEXT_CELL_GENERATION
+                .fetch_add(1, core::sync::atomic::Ordering::Relaxed),
         }
     }
 

@@ -11,6 +11,7 @@
 //! - Only add at new explicit discriminant/offset values.
 //! - Even additions require 2× confirmation (they change the build contract).
 
+pub mod caller_identity;
 pub mod cap;
 pub mod disk;
 pub mod fast_ipc;

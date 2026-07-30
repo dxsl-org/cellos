@@ -17,13 +17,23 @@
 //! with `Release` ordering, read with `Acquire`, and only ever nulled on VFS
 //! fault. Single-hart QEMU: no concurrent modification.
 
+use api::caller_identity::CallerIdentity;
 use api::fast_ipc::{TrustedHandle, VfsCell};
 use api::ipc::{VfsRequest, IPC_BUF_SIZE};
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-/// Signature of a registered VFS fast-IPC handler: read `req`, write the
-/// response into `out`, return the number of bytes written.
-pub type VfsFastHandler = unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
+/// Signature of a registered VFS fast-IPC handler: read `req` on behalf of
+/// `caller`, write the response into `out`, return the number of bytes written.
+///
+/// `caller` is `None` when the kernel could not attribute the call to a live
+/// cell. The handler must then refuse the request: this path serves `GetFile`,
+/// which hands back a raw `DataPtr` — permanent, unrevocable read authority in a
+/// single address space — so an unauthorized answer here cannot be taken back.
+pub type VfsFastHandler = unsafe fn(
+    caller: Option<CallerIdentity>,
+    req: &VfsRequest<'_>,
+    out: &mut [u8; IPC_BUF_SIZE],
+) -> usize;
 
 static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId that registered the handler; 0 = unregistered. Lets the kernel
@@ -110,6 +120,17 @@ impl Drop for SieGuard {
 /// cells are compiled as PIE and the loader patches JUMP_SLOT relocations to this
 /// kernel function.  The fallback is always safe.
 ///
+/// # Caller identity
+/// This path does not go through `ecall`, so the request carries no sender tid
+/// and the handler has nothing of its own to authorize against. The identity is
+/// therefore derived HERE, from live scheduler state for the task currently
+/// running on this hart — never from an argument, because every argument on this
+/// path is chosen by the cell being authorized. That makes the fast path exactly
+/// as attested as the message path; without it, gating `GetFile` on the message
+/// path would only move the hole rather than close it.
+///
+/// `TrustedHandle` is not the control: its own contract says it is advisory.
+///
 /// # Safety
 /// The caller must own `out` exclusively for the call. `_handle` documents that
 /// the caller was granted fast-path access; it is not enforced at runtime.
@@ -123,6 +144,10 @@ pub unsafe extern "Rust" fn call_vfs(
     if ptr.is_null() {
         return 0; // VFS not yet registered — caller falls back to ecall path.
     }
+    // Resolve identity BEFORE disabling interrupts: it takes the scheduler lock,
+    // and holding that lock across the handler would deadlock the VFS backends.
+    let caller = crate::task::syscall::attested_identity_of(crate::task::current_task_id());
+
     // SAFETY: ptr was stored by register_vfs from a valid VfsFastHandler.
     let handler: VfsFastHandler = core::mem::transmute(ptr);
 
@@ -132,7 +157,7 @@ pub unsafe extern "Rust" fn call_vfs(
     // SAFETY: called from S-mode trap handler context.
     let _sie = SieGuard::disable();
 
-    handler(req, out)
+    handler(caller, req, out)
 }
 
 /// Resolve a kernel-exported symbol name to its runtime address — the loader's
