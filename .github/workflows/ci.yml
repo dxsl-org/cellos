@@ -334,11 +334,21 @@ jobs:
           -Z build-std=core,alloc
           -p app-init -p app-shell -p service-vfs -p service-config
           -p service-net -p service-input -p service-compositor
+          -p periph-demo -p input-test -p app-sys-tools
 
       # kernel_fs.img is a gitignored build artifact; assemble it from the
       # cells built above so the kernel embeds a real VIFS1 (build.rs would
       # otherwise stub it and the boot test could never reach the shell).
       - name: Assemble aarch64 kernel_fs.img
+        # The cell list must match scripts/build-aarch64-cells.ps1, which is the
+        # source of truth for what an aarch64 image carries. It had four entries
+        # here against that script's eleven, so periph-demo and input-test were
+        # absent and the GPIO and UART-input cases of the boot suite below could
+        # only ever fail — with "shell: command not found", which reads as a shell
+        # fault rather than a missing binary. The disk image is not a substitute:
+        # format-disk-arm.sh writes a plain FAT volume, not the cell-store layout
+        # the loader's block-table fallback reads, so on this architecture a cell
+        # is reachable only from here.
         run: |
           REL=target/aarch64-unknown-none-softfloat/release
           python3 tools/mkfat32.py \
@@ -346,7 +356,14 @@ jobs:
             "$REL/app-shell"      /bin/shell \
             "$REL/service-vfs"    /bin/vfs \
             "$REL/service-config" /bin/config \
-            "$REL/service-input"  /bin/input
+            "$REL/service-input"  /bin/input \
+            "$REL/input-test"     /bin/input-test \
+            "$REL/periph-demo"    /bin/periph-demo \
+            "$REL/ls"             /bin/ls \
+            "$REL/cat"            /bin/cat \
+            "$REL/echo"           /bin/echo \
+            "$REL/ps"             /bin/ps \
+            "$REL/kill"           /bin/kill
           cp "$REL/app-init" kernel/src/embedded-aarch64/init
 
       - name: Build aarch64 kernel
