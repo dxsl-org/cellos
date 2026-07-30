@@ -13,6 +13,8 @@ pub mod disk_layout;
 pub mod early;
 pub mod elf;
 pub mod elf_tests;
+/// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
+pub mod mem_spawn_gate;
 pub mod reloc;
 pub mod va_alloc;
 /// W^X: lower cell pages to their ELF `p_flags` once relocation has finished.

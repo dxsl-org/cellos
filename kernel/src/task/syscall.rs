@@ -2614,31 +2614,46 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
             // Validate the args descriptor itself before reading it.
             validate_user_buf(args_ptr, core::mem::size_of::<ViSpawnArgs>(), MAX_LOG_MSG)?;
-            unsafe {
+            // SAFETY: `args_ptr` was validated above as a caller-owned range of at
+            // least `size_of::<ViSpawnArgs>()` bytes, and each pointer inside the
+            // struct is validated before it is dereferenced. SUM=1 lets S-mode read
+            // U-mode memory; the caller is blocked in this syscall, so the buffers
+            // stay mapped until the gate has copied the ELF into fresh frames.
+            let (elf_bytes, name) = unsafe {
                 let args = &*(args_ptr as *const ViSpawnArgs);
 
                 // Validate every pointer inside the args struct.
                 validate_user_buf(args.buffer_addr, args.buffer_size, MAX_USER_BUF)?;
                 validate_user_buf(args.name_ptr, args.name_len, MAX_LOG_MSG)?;
 
-                let data_slice =
+                let elf_bytes =
                     core::slice::from_raw_parts(args.buffer_addr as *const u8, args.buffer_size);
                 let name_slice =
                     core::slice::from_raw_parts(args.name_ptr as *const u8, args.name_len);
-                let name = core::str::from_utf8(name_slice).unwrap_or("unknown");
+                (
+                    elf_bytes,
+                    core::str::from_utf8(name_slice).unwrap_or("unknown"),
+                )
+            };
 
-                // The spawner names the image, not the identity: CellId(0) asks
-                // spawn_from_mem to derive a fresh per-cell id, which is what
-                // makes this cell's memory chargeable and its faults survivable.
-                // Leaving the placeholder in place would give it the kernel's
-                // identity, and a fault it then took would be unattributable.
-                let drivers = alloc::vec::Vec::new();
-
-                match super::spawn_from_mem(data_slice, name, CellId(0), drivers) {
-                    Ok((tid, _load_base)) => Ok(tid),
-                    Err(_) => Err(SyscallError::InvalidInput),
-                }
-            }
+            // The image goes through the same admission gate as every other spawn
+            // path (signature, manifest, ceiling, policy) — the gate belongs to the
+            // BYTES, so their source is irrelevant to trust. `name` is caller-chosen
+            // and is NOT a path: `mem_spawn_gate` reduces it to a `/mem/` label so it
+            // cannot select the path-derived authority a real install path carries.
+            // The gate also passes the `CellId(0)` sentinel down to
+            // `task::spawn_from_mem`, which is what gives this cell a derived
+            // per-cell identity instead of the kernel's.
+            crate::loader::mem_spawn_gate::spawn_from_mem_gated(
+                elf_bytes,
+                name,
+                crate::task::cap::Spawner::User(caller_id),
+            )
+            .map_err(|e| match e {
+                types::ViError::PermissionDenied => SyscallError::PermissionDenied,
+                types::ViError::OutOfMemory => SyscallError::Unknown,
+                _ => SyscallError::InvalidInput,
+            })
         }
         Syscall::Create { path_ptr, path_len } => {
             validate_user_buf(path_ptr, path_len, MAX_LOG_MSG)?;

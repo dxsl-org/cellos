@@ -19,6 +19,10 @@ pub fn run_all() {
     test_spawn_path_no_leading_slash_rejected();
     test_spawn_path_too_long_rejected();
     test_spawn_path_valid_format_accepted();
+    test_mem_label_neutralises_forged_install_path();
+    test_mem_label_component_carries_no_separator();
+    test_mem_label_grants_no_path_caps();
+    test_mem_label_truncates_long_name();
     test_reloc_empty_section_ok();
     test_reloc_non_multiple_size_rejected();
     test_reloc_too_many_entries_rejected();
@@ -97,6 +101,103 @@ fn test_spawn_path_valid_format_accepted() {
         }
     }
     log::info!("  [ok] well-formed path passes format validation");
+}
+
+// ─── caller-supplied in-memory image label ───────────────────────────────────
+
+fn test_mem_label_neutralises_forged_install_path() {
+    let label = super::mem_spawn_gate::mem_label("/bin/vfs");
+    assert_eq!(label, "/mem/vfs", "label keeps only the final component");
+    assert!(
+        !label.starts_with("/bin/"),
+        "a forged name must not yield a /bin/ label"
+    );
+    assert!(
+        !label.ends_with("/bin/vfs"),
+        "a forged name must not yield a /bin/ suffix match"
+    );
+    log::info!("  [ok] forged \"/bin/vfs\" name → {}", label);
+}
+
+fn test_mem_label_component_carries_no_separator() {
+    const PREFIX: &str = "/mem/";
+    for name in [
+        "/bin/platform",
+        "a/../bin/nvme",
+        "..",
+        ".",
+        "",
+        "/",
+        "//bin//supervisor",
+        "wéird\u{0}name",
+    ] {
+        let label = super::mem_spawn_gate::mem_label(name);
+        assert!(
+            label.starts_with(PREFIX) && label.len() > PREFIX.len(),
+            "label for {:?} must be a non-empty /mem/ component: {}",
+            name,
+            label
+        );
+        assert!(
+            !label[PREFIX.len()..].contains('/'),
+            "label component for {:?} must carry no separator: {}",
+            name,
+            label
+        );
+    }
+    log::info!("  [ok] every label component is non-empty and separator-free");
+}
+
+fn test_mem_label_grants_no_path_caps() {
+    use crate::task::cap::CapSet;
+    for forged in [
+        "/bin/vfs",
+        "/bin/net",
+        "/bin/shell",
+        "/bin/init",
+        "/bin/nvme",
+        "/bin/e1000",
+        "/bin/platform",
+        "/bin/supervisor",
+        "/bin/input",
+        "a/../bin/vfs",
+    ] {
+        let label = super::mem_spawn_gate::mem_label(forged);
+        assert_eq!(
+            super::legacy_path_caps(&label),
+            CapSet::EMPTY,
+            "legacy path grants must be empty for {} (from {:?})",
+            label,
+            forged
+        );
+        assert_eq!(
+            CapSet::EMPTY.with_path_caps(&label),
+            CapSet::EMPTY,
+            "privileged path caps must be empty for {} (from {:?})",
+            label,
+            forged
+        );
+        assert_ne!(
+            label, "/bin/vfs",
+            "label must not reach the block-region grant"
+        );
+        assert!(
+            !label.ends_with("/bin/input"),
+            "label must not reach the input-cell registration"
+        );
+    }
+    log::info!("  [ok] no forged name selects a path-derived capability");
+}
+
+fn test_mem_label_truncates_long_name() {
+    let long: alloc::string::String = "x".repeat(300);
+    let label = super::mem_spawn_gate::mem_label(&long);
+    assert!(
+        label.len() <= crate::loader::disk_layout::MAX_CELL_PATH,
+        "label must stay within MAX_CELL_PATH, got {}",
+        label.len()
+    );
+    log::info!("  [ok] 300-char name truncated to {} bytes", label.len());
 }
 
 // ─── apply_relocations ───────────────────────────────────────────────────────
