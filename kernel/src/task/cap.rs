@@ -277,6 +277,34 @@ impl CapSet {
         self
     }
 
+    /// Whether `with_path_caps` layers any privileged (P-TRUST) authority onto a
+    /// request for `path` — i.e. whether the install path alone is enough to ask
+    /// for `pcie_driver` / `platform` / `supervisor`.
+    ///
+    /// Derived from `with_path_caps` itself rather than a second path list, so the
+    /// match arms above stay the single source of truth. Callers use it to decide
+    /// how dangerous a *missing* authorisation for `path` is: for these paths a
+    /// permissive default hands out DMA-anywhere or cell-orchestration authority,
+    /// so they must fail closed where an ordinary path may not.
+    pub fn path_mints_ptrust(path: &str) -> bool {
+        let requested = CapSet::EMPTY.with_path_caps(path);
+        requested.pcie_driver || requested.platform || requested.supervisor
+    }
+
+    /// Drop every privileged (P-TRUST) cap, keeping the ordinary ones.
+    ///
+    /// The privileged three are the caps whose holder can DMA anywhere or drive
+    /// other cells; removing only those keeps a cell runnable (and its failure
+    /// diagnosable) where zeroing the whole set would look like a crash.
+    pub fn without_ptrust(self) -> CapSet {
+        CapSet {
+            pcie_driver: false,
+            platform: false,
+            supervisor: false,
+            ..self
+        }
+    }
+
     /// Field-wise minimum (bool AND, bitmask AND). The monotonic-downgrade core.
     pub fn intersect(self, o: CapSet) -> CapSet {
         CapSet {

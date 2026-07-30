@@ -13,6 +13,11 @@
 //! - **Fail-safe:** an *invalid* signature/parse is ALWAYS fail-closed. An *absent*
 //!   policy is dev-permissive in G1 (this build) and fail-closed only when the
 //!   `policy-required` feature is set (real-fleet posture). See `lookup`.
+//! - **Missing entry ≠ absent policy:** with a policy loaded, a path the operator
+//!   never listed keeps its ordinary caps but LOSES the privileged (P-TRUST) ones,
+//!   because those are minted from the install path alone — so a forgotten entry
+//!   would otherwise hand out DMA-anywhere authority. With no policy at all,
+//!   nothing is tightened. See `PolicyDecision::NoEntry`.
 //! - **Domain validation:** parsed cap bytes are masked to known bits; unknown
 //!   bits → `Invalid` (a signed-but-malformed policy is still rejected).
 
@@ -81,16 +86,31 @@ const FLEET_ROOT_PUBKEY: [u8; 32] = DEV_FLEET_PUBKEY;
 #[cfg(not(feature = "dev-policy-key"))]
 const FLEET_ROOT_PUBKEY: [u8; 32] = [0u8; 32]; // TODO(prod): provisioned fleet key
 
-/// Result of a policy lookup for a given cell path.
+/// Result of a policy lookup for a given cell path. Plain data (`Copy`) so a
+/// caller can both inspect a decision and pass it to the narrowing rule.
+#[derive(Copy, Clone)]
 pub enum PolicyDecision {
     /// Policy explicitly grants this path the given caps (ceiling).
     Permit(CapSet),
     /// Policy is present and explicitly denies (or invalid → fail-closed).
     DenyAll,
-    /// No policy entry for this path (or policy absent). Caller applies the
-    /// fail-safe rule: dev-permissive keeps the spawner-intersected caps;
-    /// `policy-required` treats it as deny.
-    NoEntry,
+    /// No caps stated for this path. The caller applies the fail-safe rule:
+    /// dev-permissive keeps the spawner-intersected caps; `policy-required`
+    /// treats it as deny.
+    ///
+    /// `policy_loaded` separates the two ways to arrive here, because they carry
+    /// different amounts of information:
+    /// - `false` — no policy at all (absent, or not yet resolved). The operator
+    ///   has said nothing about any path; nothing can be inferred about this one.
+    /// - `true` — a signed policy IS loaded and simply does not name this path.
+    ///   That is a coverage gap in a document that was supposed to be exhaustive,
+    ///   so a path whose install path alone mints privileged authority
+    ///   (`CapSet::path_mints_ptrust`) fails closed for that authority.
+    ///
+    /// Collapsing the two would force one behaviour on both: fail-closed would
+    /// strip every driver's caps on a device with no policy blob (no boot), and
+    /// permissive lets a forgotten entry hand out DMA-anywhere authority.
+    NoEntry { policy_loaded: bool },
 }
 
 struct PolicyEntry {
@@ -271,8 +291,9 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
 
 /// Self-test of the full signed-policy path: verify + parse a known dev-signed
 /// blob (from `scripts/sign-policy.py`), confirm a known entry parses correctly,
-/// and confirm a tampered blob is REJECTED. Returns `true` iff both hold. Run as
-/// a boot power-on self-test before trusting the policy path.
+/// confirm a tampered blob is REJECTED, and pin the narrowing rule (including the
+/// fail-closed handling of a missing entry). Returns `true` iff every case holds.
+/// Run as a boot power-on self-test before trusting the policy path.
 pub fn self_test() -> bool {
     // 135-byte dev-signed blob (4 entries) emitted by scripts/sign-policy.py.
     const BLOB: [u8; 135] = [
@@ -357,12 +378,70 @@ pub fn self_test() -> bool {
     let expect_no_entry = full;
     #[cfg(feature = "policy-required")]
     let expect_no_entry = CapSet::EMPTY;
-    if decision_to_caps("/bin/app", full, PolicyDecision::NoEntry) != expect_no_entry {
+    if decision_to_caps(
+        "/bin/app",
+        full,
+        PolicyDecision::NoEntry {
+            policy_loaded: false,
+        },
+    ) != expect_no_entry
+    {
         return false;
     }
     // Trusted core survives NoEntry in BOTH postures — that is the recovery hatch
     // that keeps a fail-closed misfire from bricking a headless device.
-    if decision_to_caps("/bin/vfs", full, PolicyDecision::NoEntry) != full {
+    if decision_to_caps(
+        "/bin/vfs",
+        full,
+        PolicyDecision::NoEntry {
+            policy_loaded: false,
+        },
+    ) != full
+    {
+        return false;
+    }
+    no_entry_ptrust_cases(full)
+}
+
+/// The fail-closed rule for a *loaded* policy with a missing entry, pinned in both
+/// directions: privileged authority goes away for a path that mints it, and nothing
+/// changes for a path that does not (or when there is no policy at all).
+fn no_entry_ptrust_cases(full: CapSet) -> bool {
+    let driver = CapSet {
+        pcie_driver: true,
+        ..full
+    };
+    let loaded = PolicyDecision::NoEntry {
+        policy_loaded: true,
+    };
+    let absent = PolicyDecision::NoEntry {
+        policy_loaded: false,
+    };
+
+    // Loaded policy, no entry, path mints P-TRUST → the privileged cap is gone and
+    // the ordinary ones survive (the cell runs; the gap is diagnosable).
+    #[cfg(not(feature = "policy-required"))]
+    let expect_stripped = full;
+    #[cfg(feature = "policy-required")]
+    let expect_stripped = CapSet::EMPTY;
+    let stripped = decision_to_caps("/bin/nvme", driver, loaded);
+    if stripped.pcie_driver || stripped != expect_stripped {
+        log::error!("[selftest] policy: FAIL — NoEntry kept privileged caps for /bin/nvme");
+        return false;
+    }
+
+    // Two cases that must NOT tighten: an absent policy (no document, so no gap to
+    // infer) and a path the table mints nothing for.
+    #[cfg(not(feature = "policy-required"))]
+    let expect_kept = driver;
+    #[cfg(feature = "policy-required")]
+    let expect_kept = CapSet::EMPTY;
+    if decision_to_caps("/bin/nvme", driver, absent) != expect_kept {
+        log::error!("[selftest] policy: FAIL — absent policy changed behaviour for /bin/nvme");
+        return false;
+    }
+    if decision_to_caps("/bin/app", driver, loaded) != expect_kept {
+        log::error!("[selftest] policy: FAIL — NoEntry tightened an ordinary path");
         return false;
     }
     true
@@ -457,13 +536,19 @@ pub fn lookup(path: &str) -> PolicyDecision {
                     return PolicyDecision::Permit(e.caps);
                 }
             }
-            PolicyDecision::NoEntry
+            PolicyDecision::NoEntry {
+                policy_loaded: true,
+            }
         }
         // Invalid → fail-closed ALWAYS, regardless of posture.
         Some(PolicyState::Invalid) => PolicyDecision::DenyAll,
         // Absent / not-yet-loaded → NoEntry; the caller's fail-safe rule decides
-        // (dev-permissive keeps caps; `policy-required` denies).
-        Some(PolicyState::Absent) | None => PolicyDecision::NoEntry,
+        // (dev-permissive keeps caps; `policy-required` denies). `policy_loaded:
+        // false` keeps this the pre-existing, entirely permissive path: there is no
+        // document to have a gap in, so nothing here may tighten.
+        Some(PolicyState::Absent) | None => PolicyDecision::NoEntry {
+            policy_loaded: false,
+        },
     }
 }
 
@@ -487,7 +572,20 @@ fn decision_to_caps(path: &str, caps: CapSet, decision: PolicyDecision) -> CapSe
                 CapSet::EMPTY
             }
         }
-        PolicyDecision::NoEntry => {
+        PolicyDecision::NoEntry { policy_loaded } => {
+            // A loaded policy that does not name a P-TRUST-minting path is a gap in
+            // a document meant to be exhaustive — a typo or a forgotten re-bake —
+            // and keeping the caps would turn that mistake into a cell holding
+            // DMA-anywhere authority no operator approved. Strip only the
+            // privileged three: the cell still runs, and the ordinary dev loop for
+            // every other path is untouched. `policy_loaded == false` (absent
+            // policy) must NOT tighten anything, or a device with no blob loses
+            // every driver.
+            let caps = if policy_loaded && CapSet::path_mints_ptrust(path) {
+                caps.without_ptrust()
+            } else {
+                caps
+            };
             #[cfg(feature = "policy-required")]
             {
                 if is_trusted_core(path) {
@@ -529,7 +627,35 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
         return caps;
     }
 
-    let narrowed = decision_to_caps(path, caps, lookup(path));
+    let decision = lookup(path);
+    // This is the only point that knows *why* the privileged caps disappeared, and
+    // the fleet needs that distinct from an ordinary policy narrowing: a missing
+    // entry is a bake mistake to fix at the build, not an operator choice. Recorded
+    // even when the request carried none of the three, because the coverage gap is
+    // the finding.
+    let no_entry_strip = matches!(
+        decision,
+        PolicyDecision::NoEntry {
+            policy_loaded: true
+        }
+    ) && CapSet::path_mints_ptrust(path);
+    let narrowed = decision_to_caps(path, caps, decision);
+    if no_entry_strip {
+        let stripped = caps.pcie_driver as u32
+            | ((caps.platform as u32) << 1)
+            | ((caps.supervisor as u32) << 2);
+        crate::audit::log_event(
+            crate::audit::AuditEvent::PolicyNoEntryStripped,
+            &crate::audit::encode_u32x2(tid as u32, stripped),
+        );
+        log::warn!(
+            "[policy] no entry for {:?} (tid {}) — privileged caps stripped {:#05b} \
+             [sup|plat|pcie]; add the path to the signed policy",
+            path,
+            tid,
+            stripped
+        );
+    }
     if narrowed != caps {
         let dropped = (caps.block_io && !narrowed.block_io) as u32
             | (((caps.network && !narrowed.network) as u32) << 1)

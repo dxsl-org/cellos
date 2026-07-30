@@ -103,6 +103,17 @@ pub enum AuditEvent {
     /// into the ring, so a collision would leave two unrelated events
     /// indistinguishable to anything that decodes the log.
     ThreadCapReached = 25,
+    /// A present, verified policy had NO entry for a path that mints privileged
+    /// (P-TRUST) authority, so that authority was stripped instead of kept.
+    /// Payload: `encode_u32x2(tid, mask)` (bit0 pcie_driver, bit1 platform,
+    /// bit2 supervisor) — the bits the request carried into the strip; `mask == 0`
+    /// means the spawner held none of them and only the coverage gap remains.
+    ///
+    /// This is a bake-time mistake surfacing at runtime: every such path is
+    /// supposed to be listed in the signed policy, and `scripts/sign-policy.py`
+    /// refuses to build a blob that omits one. Path via `log::warn!`, as for the
+    /// other policy events.
+    PolicyNoEntryStripped = 26,
 }
 
 struct AuditRing {
