@@ -2627,10 +2627,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     core::slice::from_raw_parts(args.name_ptr as *const u8, args.name_len);
                 let name = core::str::from_utf8(name_slice).unwrap_or("unknown");
 
-                let cell_id = CellId(0);
+                // The spawner names the image, not the identity: CellId(0) asks
+                // spawn_from_mem to derive a fresh per-cell id, which is what
+                // makes this cell's memory chargeable and its faults survivable.
+                // Leaving the placeholder in place would give it the kernel's
+                // identity, and a fault it then took would be unattributable.
                 let drivers = alloc::vec::Vec::new();
 
-                match super::spawn_from_mem(data_slice, name, cell_id, drivers) {
+                match super::spawn_from_mem(data_slice, name, CellId(0), drivers) {
                     Ok((tid, _load_base)) => Ok(tid),
                     Err(_) => Err(SyscallError::InvalidInput),
                 }

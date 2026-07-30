@@ -44,6 +44,8 @@ pub fn run_all() {
     test_signing_extract_sig_none_for_non_elf();
     test_signing_extract_sig_some_from_constructed_elf();
     test_signing_required_flag_off_in_dev_build();
+    // W^X post-relocation flag derivation.
+    super::wx::run_self_tests();
     log::info!("=== ELF Loader Tests PASSED ===");
 }
 

@@ -9,6 +9,9 @@ pub mod ept;
 pub mod frame;
 pub mod heap;
 pub mod kaslr;
+/// Permission changes on already-mapped pages (`protect_page` / `protect_range`).
+/// Re-exported through `paging`; kept separate so `paging.rs` stops growing.
+pub mod page_protect;
 pub mod paging;
 pub mod rt_heap;
 pub mod stage2;

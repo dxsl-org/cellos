@@ -15,6 +15,8 @@ pub mod elf;
 pub mod elf_tests;
 pub mod reloc;
 pub mod va_alloc;
+/// W^X: lower cell pages to their ELF `p_flags` once relocation has finished.
+pub mod wx;
 pub use elf::ElfLoader;
 
 /// ELF parser trait.
@@ -177,22 +179,14 @@ pub fn spawn_gated(
     // Extract cell name from the last path component (e.g. "/bin/shell" → "shell").
     let name = path.rsplit('/').next().unwrap_or(path);
 
-    // Spawn via the in-memory path.  spawn_from_mem now applies .rela.dyn
-    // relocations internally, so no separate apply_relocations call is needed.
+    // Spawn via the in-memory path.  spawn_from_mem applies .rela.dyn
+    // relocations internally, so no separate apply_relocations call is needed,
+    // and CellId(0) asks it to derive a unique per-cell identity before the task
+    // becomes reachable — do not patch task.cell_id here.
     let (tid, _load_base) =
         crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())
             .map_err(|_| ViError::OutOfMemory)?;
-
-    // Assign a unique CellId based on the task ID so per-cell quota and
-    // capability checks are correctly scoped.  `spawn_from_mem` defaults to
-    // CellId(0) (kernel), which would make every path-spawned cell share the
-    // kernel's quota slot (charge() short-circuits for cell_id == 0).
     let cell_id = CellId(tid as u64);
-    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.tasks.get_mut(&tid) {
-            task.cell_id = cell_id;
-        }
-    }
 
     crate::audit::log_event(
         crate::audit::AuditEvent::CellSpawn,

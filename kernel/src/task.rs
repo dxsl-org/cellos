@@ -529,6 +529,45 @@ pub fn spawn_with_stacks(
     }
 }
 
+/// Register a cell's task and give it a per-cell identity in one critical section.
+///
+/// `requested == CellId(0)` means "derive one": the caller has no identity to
+/// impose, so the task id is reused as the cell id. Every ELF-loading spawn
+/// route funnels through here for that derivation instead of each remembering to
+/// patch `task.cell_id` afterwards, because a user cell left on `CellId(0)`:
+///
+/// - shares the kernel's per-cell memory quota slot, whose `charge()` is a
+///   short-circuit for id 0, so its allocations are never accounted; and
+/// - is unattributable at fault time — the unserviceable-fault handlers on every
+///   arch refuse to terminate a fault they cannot pin on a cell and panic
+///   instead, turning one cell's memory bug into a whole-system halt.
+///
+/// A non-zero `requested` is honoured verbatim: a thread joining an existing
+/// cell must keep that cell's identity, not invent a second one.
+///
+/// The derivation shares the registration's scheduler lock so the task is never
+/// observable with the placeholder id.
+///
+/// # Errors
+/// `ViError::Unknown` if the scheduler is not initialised yet.
+fn spawn_cell_task(
+    name: &str,
+    requested: CellId,
+    allowed_drivers: alloc::vec::Vec<usize>,
+    kstack: stack::Stack,
+    ustack: stack::Stack,
+) -> Result<usize, ViError> {
+    let mut guard = SCHEDULER.lock();
+    let sched = guard.as_mut().ok_or(ViError::Unknown)?;
+    let tid = sched.spawn_with_stacks(name, requested, allowed_drivers, kstack, ustack);
+    if requested == CellId(0) {
+        if let Some(task) = sched.tasks.get_mut(&tid) {
+            task.cell_id = CellId(tid as u64);
+        }
+    }
+    Ok(tid)
+}
+
 pub fn spawn_with_arg(
     name: &str,
     cell_id: CellId,
@@ -555,6 +594,11 @@ fn elf_is_pie(data: &[u8]) -> bool {
 /// Spawn a cell from an ELF image already in memory.
 ///
 /// Applies ELF relocations internally (`.rela.dyn`) so callers need not do it.
+///
+/// Pass `CellId(0)` unless the cell's identity is already fixed by something
+/// else; the task is then given a derived per-cell identity before it is
+/// reachable — see [`spawn_cell_task`] for why no caller should patch
+/// `task.cell_id` itself.
 ///
 /// Returns `(tid, load_base)` where `load_base` is:
 /// - `0` for fixed-VA (non-PIE) cells — load address comes from the ELF itself.
@@ -622,12 +666,46 @@ pub fn spawn_from_mem(
             })?
     };
 
-    // 5. Pre-allocate all per-task resources BEFORE touching the scheduler.
-    //    Rust Drop ensures cleanup on any error path — no manual free needed here.
-    //    load_base is transferred into CellSegments (pie_va_base field), so after
-    //    this point the VA slot is freed by segments.drop(), not manually.
+    // Target permissions per page, kept alive until step 6 lowers them. Derived
+    // in `load_segments` because only it sees the per-segment p_flags and the
+    // boundary-page merge; recomputing here would risk the two disagreeing.
+    let wx_pages: alloc::vec::Vec<(usize, crate::memory::paging::Flags)> =
+        seg_pages.iter().map(|p| (p.va, p.final_flags)).collect();
+
+    // 5. Take ownership of the mapped segment frames NOW, before anything else
+    //    can fail. From here on every error path frees the frames and the PIE VA
+    //    slot by dropping `segments`; load_base is transferred into its
+    //    pie_va_base field, so it must not also be freed manually.
     let entry_va = header.entry.wrapping_add(load_base);
-    let segments = crate::task::stack::CellSegments::new(seg_pages, load_base);
+    let segments = crate::task::stack::CellSegments::new(
+        seg_pages.iter().map(|p| (p.va, p.frame)).collect(),
+        load_base,
+    );
+
+    // 6. Relocate, then lock the pages down — both BEFORE the task exists.
+    //
+    //    Relocation is the last kernel write through the cell's own USER
+    //    mapping, so it must precede the lowering or the loader would fault on
+    //    its own patches. The lowering in turn must precede task registration:
+    //    registering pushes the task onto a ready queue, and another hart can
+    //    steal and start it on its next tick. A cell that starts before this
+    //    point runs unrelocated, with every page still writable, and caches
+    //    those writable PTEs in a TLB no cross-hart shootdown exists to clear.
+    if load_base != 0 {
+        if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
+            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
+                log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
+                return Err(e);
+            }
+        }
+    }
+    if let Err(e) = crate::loader::wx::enforce(&wx_pages, name) {
+        log::error!("Spawn: W^X enforcement failed for '{}': {:?}", name, e);
+        return Err(e);
+    }
+
+    // 7. Pre-allocate the remaining per-task resources BEFORE touching the
+    //    scheduler. Rust Drop cleans up on any error path — no manual free here.
     let kstack =
         crate::task::stack::Stack::new_kernel(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
     let ustack =
@@ -635,15 +713,15 @@ pub fn spawn_from_mem(
     let kstack_top = kstack.top;
     let user_stack_top = ustack.top;
 
-    // 6. Spawn Task — creates scheduler entry and takes ownership of the stacks
-    //    allocated in step 5. Handing them over instead of letting the scheduler
-    //    allocate its own pair is what keeps this path to ONE contiguous run per
-    //    stack: the scheduler's pair used to be overwritten and dropped right
-    //    here, so each spawn asked the allocator for four 65-frame runs and kept
-    //    two. `segments` still drops on failure below.
-    let tid = spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack)?;
+    // 8. Spawn Task — creates the scheduler entry, derives the cell identity, and
+    //    takes ownership of the stacks allocated in step 7. Handing them over
+    //    instead of letting the scheduler allocate its own pair is what keeps
+    //    this path to ONE contiguous run per stack: the scheduler's pair used to
+    //    be overwritten and dropped right here, so each spawn asked the allocator
+    //    for four 65-frame runs and kept two. `segments` still drops on failure.
+    let tid = spawn_cell_task(name, cell_id, allowed_drivers, kstack, ustack)?;
 
-    // 7. Wire the remaining pre-allocated resources into the task under the
+    // 9. Wire the remaining pre-allocated resources into the task under the
     //    scheduler lock. Option::take() transfers ownership; untaken Somes drop at
     //    end of scope.
     let mut segments_o = Some(segments);
@@ -765,20 +843,6 @@ pub fn spawn_from_mem(
             sched.exit_task(tid, 0xff);
         }
         return Err(ViError::Unknown);
-    }
-
-    // Apply PIE relocations (.rela.dyn) now that all segments are mapped.
-    if load_base != 0 {
-        use crate::loader::ElfParser;
-        if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
-            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
-                log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
-                if let Some(sched) = SCHEDULER.lock().as_mut() {
-                    sched.exit_task(tid, 0xff);
-                }
-                return Err(e);
-            }
-        }
     }
 
     Ok((tid, load_base))

@@ -683,11 +683,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
 
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
-        // CellId(0) placeholder → fixed up to CellId(init_tid) below, mirroring the
-        // path-spawn convention (loader.rs: cell_id = CellId(tid)). A hardcoded
-        // CellId(1) here would COLLIDE with the Platform Cell, which spawns first
-        // (tid=1 → CellId(1)); the collision commingled their per-cell quota slots
-        // and made fault attribution ambiguous ("Cell 1" meant either).
+        // CellId(0) asks spawn_from_mem to derive CellId(init_tid), the same
+        // convention every other spawn route uses. A hardcoded CellId(1) here
+        // would COLLIDE with the Platform Cell, which spawns first (tid=1 →
+        // CellId(1)); the collision commingled their per-cell quota slots and
+        // made fault attribution ambiguous ("Cell 1" meant either).
         let init_data = alloc::vec::Vec::from(INIT_ELF);
         match task::spawn_from_mem(&init_data, "init", types::CellId(0), alloc::vec![]) {
             Ok((init_tid, _load_base)) => {
@@ -705,10 +705,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 // remain compile-time constants (no data-derived paths).
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                        // Unique per-cell identity (see spawn comment above): init
-                        // gets CellId(init_tid), never the placeholder or a value
-                        // shared with an earlier path-spawned cell.
-                        t.cell_id = types::CellId(init_tid as u64);
                         task::cap::CapSet::ALL.apply_to(t);
                         // SupervisorCap is NOT in CapSet (not delegatable via intersection).
                         // Init holds it so it can unfreeze cells if the Supervisor Cell crashes.

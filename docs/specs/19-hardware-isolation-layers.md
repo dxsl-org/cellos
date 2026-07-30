@@ -1,35 +1,54 @@
 # Spec 19 — Hardware Isolation Layers & Concurrency Scale Model (ADR)
 
-> **Status**: Accepted 2026-07-30 — direction ratified; W^X is scheduled as phase 10 of
-> the `midori-lessons` plan, per-domain page tables belong to the following plan (they
-> are the Tier-2 mechanism of Spec 18). This is the "layer2_hw_security" document that
-> Spec 16 §8 reserved.
+> **Status**: Accepted 2026-07-30 — direction ratified. **Layer A is implemented**
+> (`midori-lessons` phase 10, 2026-07-30); per-domain page tables belong to the
+> following plan (they are the Tier-2 mechanism of Spec 18). This is the
+> "layer2_hw_security" document that Spec 16 §8 reserved.
 
 ## 1. Context
 
 LBI protects cell↔cell memory only where F1 holds (Spec 16, Spec 18 §1). Kernel↔cell
-is hardware-protected (U/S privilege); cell↔cell is not: every cell page is mapped
-`USER+WRITE` in the shared table so the loader can apply PIE relocations
-(`kernel/src/loader/elf.rs` — the p_flags W bit is currently ignored). Deployment
-hardware constrains the fixes: **VF2, Pioneer (RISC-V) and RK3588 (Cortex-A76/A55,
-ARMv8.2) all have a full MMU with ASIDs, and none has MTE (needs v8.5+) or x86 PKU.**
-Any isolation layer that must work on real boards has to be built from page tables.
+is hardware-protected (U/S privilege); cell↔cell was not: every cell page used to be
+left mapped `USER+WRITE` in the shared table — the loader needs WRITE to apply PIE
+relocations and never lowered it afterwards, so the `p_flags` W bit was ignored for
+the whole life of the cell. Layer A closes that; Layers B and C remain future work.
+Deployment hardware constrains the fixes: **VF2, Pioneer (RISC-V) and RK3588
+(Cortex-A76/A55, ARMv8.2) all have a full MMU with ASIDs, and none has MTE (needs
+v8.5+) or x86 PKU.** Any isolation layer that must work on real boards has to be
+built from page tables.
 
 ## 2. Decision — three layers, in delivery order
 
-### Layer A — Software W^X after relocation (all arches, now)
+### Layer A — Software W^X after relocation (all arches) — IMPLEMENTED
 
-After the loader finishes PIE relocations for a cell, page permissions are tightened
-to the ELF `p_flags`: segments without W lose `Flags::WRITE` (`.text` → USER+R+X,
-`.rodata`/RELRO → USER+R), followed by the required TLB invalidation. Pages shared by
-adjacent PT_LOAD segments keep the OR of their segments' flags (the existing
-`already_ours` merge). The kernel writes through the HHDM alias if it ever needs to
-touch such a page again.
+Implemented by `kernel/src/loader/wx.rs`, driven from `task::spawn_from_mem` as the
+last step of a spawn. The ordering is the whole design:
+
+1. `loader::elf::load_segments` maps every page `USER+WRITE` (relocation needs it) and
+   records each page's *target* flags derived from `p_flags`, OR-ed across PT_LOADs
+   that share a boundary page (the existing `already_ours` merge).
+2. `loader::reloc::apply_relocations` patches `.rela.dyn` through those writable pages.
+3. `wx::enforce` calls `memory::paging::protect_page` per page: the PTE keeps its frame,
+   takes the recorded flags, and gets a per-VA TLB invalidate
+   (`sfence.vma` / `tlbi vaae1is` / `invlpg`, added to the HAL as
+   `hal::paging::flush_tlb_page`).
+
+Result: `.text` → USER+R+X, `.rodata`/RELRO → USER+R, `.data`/`.bss` → USER+RW. RELRO
+needs no special case — lowering happens *after* relocation, so `.data.rel.ro` lands on
+its declared R. A PT_LOAD declaring W+X is rejected at load time (spawn fails, logged);
+a page that becomes W+X only through the boundary merge is logged as a warning and left
+merged, because dropping either bit would break the cell.
+
+Kernel writes into cell memory (segment load, AArch64 relocation, warm-snapshot restore)
+go through the physical/HHDM alias, which is kernel-RW independently of the USER PTE —
+audited at implementation time, no path needed converting.
 
 Guarantee: no cell — including one containing `unsafe`, at any tier — can modify any
-cell's code or constants. This closes cross-cell code injection. Limit: heap, stack
-and `.data` remain USER+RW across cells inside the SAS; W^X is a code-integrity layer,
-not a confidentiality layer.
+cell's code or constants. This closes cross-cell code injection. Limits, stated plainly:
+heap, stack and `.data` remain USER+RW across cells inside the SAS (that is Layer B);
+there is no cross-hart TLB shootdown, so on SMP another hart may hold a stale writable
+entry until its own TLB turns over; and bare-physical targets (riscv32 Nano) have no
+page tables, so `wx::enforce` logs the gap instead of enforcing.
 
 ### Layer B — Per-domain page tables (Tier-2 mechanism, next plan)
 
