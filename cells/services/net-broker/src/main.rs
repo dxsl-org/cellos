@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 //! **net-broker** — Cluster net-broker Cell (service::NET_BROKER = 8).
 //!
@@ -90,8 +91,9 @@ const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
 /// Heartbeat interval in milliseconds — re-armed every dispatch-loop iteration.
 const HEARTBEAT_MS: u64 = 500;
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[net-broker] Cluster net-broker v0.2 (G1 internet relay)");
     println("[net-broker] service::NET_BROKER = 8 (registered by init)");
 

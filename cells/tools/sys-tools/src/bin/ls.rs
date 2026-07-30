@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use ostd::{fs, io, syscall};
 
+ostd::cell_main!(cell_main);
+
 /// ls [path] — list kernel FS directory entries, one per line.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     let argv = ostd::args();
     let path = argv.first().map(|arg| arg.as_str()).unwrap_or("/");
     let path = if path.is_empty() { "/" } else { path };

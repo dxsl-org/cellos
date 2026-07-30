@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -39,8 +40,9 @@ macro_rules! fail {
     }};
 }
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[periph-test] ViCell peripheral integration tests");
     println("[periph-test] target: QEMU ARM virt (PL061 GPIO + PL011 UART)");
     println("");

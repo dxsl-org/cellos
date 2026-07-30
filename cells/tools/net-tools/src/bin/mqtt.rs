@@ -7,6 +7,7 @@
 //! Only QoS 0 (fire-and-forget publish, at-most-once subscribe).
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
@@ -16,8 +17,9 @@ use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallRe
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     let argv = ostd::args();
     if argv.is_empty() {
         println("Usage: mqtt publish  host:port topic payload");

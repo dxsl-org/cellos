@@ -798,19 +798,33 @@ jobs:
           cargo test -p api         --target x86_64-unknown-linux-gnu
           cargo test -p text-engine --target x86_64-unknown-linux-gnu
 
-  unsafe-ratchet:
-    # Replaces the cargo-geiger gate: geiger cannot analyse `-Z build-std`
-    # bare-metal targets (instant CLI failure), and its premise — zero unsafe
-    # in cells/ — is false: Driver Cells legitimately need unsafe for MMIO/DMA.
-    # The ratchet enforces the real invariant: no unsafe OUTSIDE the audited
-    # allowlist in scripts/check-cells-unsafe-ratchet.py.
-    name: Unsafe ratchet (cells/ allowlist must not grow)
+  f1-admission:
+    # Tier-1 admission gate (Spec 18 §2.1): the same `cellos-sign --check` that
+    # the image scripts must pass before anything is signed. Replaces the
+    # cargo-geiger gate (geiger cannot analyse `-Z build-std` bare-metal targets)
+    # and the unsafe ratchet it was itself replaced by — the ratchet's rule and
+    # its 49-entry Python allowlist now live in scripts/unsafe-allowlist.toml, so
+    # there is exactly one implementation of "no unsafe in cells/" in the repo.
+    #
+    # The toolchain is installed so F5 is genuinely exercised here; --strict makes
+    # a missing rustup a failure rather than a silently skipped check.
+    name: F1/F5 admission check (cellos-sign --check)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check unsafe stays inside the audited allowlist
-        run: python3 scripts/check-cells-unsafe-ratchet.py
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+
+      # cargo-deny is deliberately NOT repeated here: the Security Scan job below
+      # already runs it over the same workspace, and a second run buys nothing.
+      - name: Unit-test the gate itself
+        run: python3 scripts/test_cellos_sign.py
+
+      - name: Check F1 (forbid + no unsafe outside the allowlist) and F5 (toolchain pin)
+        run: python3 scripts/cellos-sign --check --strict
 
   shell-utils:
     name: Shell Utilities Integration Test (Phase E)

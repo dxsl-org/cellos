@@ -11,6 +11,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -76,8 +77,9 @@ impl Tools {
     }
 }
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("Hypha — Cellos AI agent (P3: fs+sys+spawn tools). Type 'exit' to quit.");
 
     let gw = match sys_spawn_from_path(GATEWAY_PATH) {

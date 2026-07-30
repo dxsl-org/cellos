@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate ostd;
 
@@ -62,6 +63,8 @@ enum Policy {
 const MAX_RESTARTS_PER_WINDOW: u32 = 5;
 const RESTART_WINDOW_TICKS: u64 = 1000;
 
+ostd::cell_main!(extern "C" cell_main);
+
 /// Kernel spawns init from its embedded ELF.  Init's job is to bring up the
 /// rest of the system by loading cell ELFs from the bootstrap disk table.
 ///
@@ -69,8 +72,7 @@ const RESTART_WINDOW_TICKS: u64 = 1000;
 ///   1. Spawn VFS service — serves `/bin/*` once running.
 ///   2. Spawn Config service — configuration KV store.
 ///   3. Spawn Shell — interactive REPL.
-#[no_mangle]
-pub extern "C" fn main() {
+fn cell_main() {
     use api::syscall::service;
     use ostd::syscall::{
         sys_get_time, sys_lookup_service, sys_notify_on_exit, sys_recv, sys_register_service,

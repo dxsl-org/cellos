@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
-// #[no_mangle] on main() requires allowing unsafe_attr — cannot use forbid(unsafe_code).
+#![forbid(unsafe_code)]
+// The `main` symbol comes from `ostd::cell_main!`, whose expansion carries the
+// `#[no_mangle]` the ELF loader needs without tripping `forbid(unsafe_code)`
+// (see libs/ostd/src/entry.rs).
 // All peripheral-access code is unsafe-free (uses MmioRegion abstraction).
 
 extern crate alloc;
@@ -22,8 +25,9 @@ declare_manifest!(
     uart = false
 );
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[spi-demo] SPI bit-bang demo (MOSI=2, MISO=3, SCK=4, CS=5)");
 
     match Pl061Gpio::open() {

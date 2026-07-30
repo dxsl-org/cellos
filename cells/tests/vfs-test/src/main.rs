@@ -11,6 +11,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate alloc;
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -434,8 +435,9 @@ fn test_rmdir_recursive_quota() {
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     ostd::io::println("[vfs-test] Starting VFS integration test suite...");
 
     test_file_lifecycle();

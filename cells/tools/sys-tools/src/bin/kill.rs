@@ -1,9 +1,12 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use api::syscall::ProcessInfo;
 use ostd::{io, syscall};
+
+ostd::cell_main!(cell_main);
 
 /// kill <tid> — send cooperative shutdown signal or force-exit a task.
 ///
@@ -11,8 +14,7 @@ use ostd::{io, syscall};
 /// checks for this sentinel and exits cleanly.
 /// Force (state=Ready/Running): calls sys_force_exit; the kernel terminates the
 /// task immediately.  System Cells with SpawnCap may reject force-exit.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     let argv = ostd::args();
     let tid_str = argv.first().map(|arg| arg.as_str()).unwrap_or("");
 

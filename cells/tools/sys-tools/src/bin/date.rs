@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 /// Convert Unix epoch seconds to (year, month, day, hour, min, sec) in UTC.
@@ -70,9 +71,10 @@ fn print_pad4(n: u64) {
     ostd::io::print_usize(n as usize);
 }
 
+ostd::cell_main!(cell_main);
+
 /// date — print wall-clock time from hardware RTC (UTC).
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     let epoch = ostd::syscall::sys_get_wall_secs();
     if epoch == 0 {
         // RTC absent — fall back to uptime display.

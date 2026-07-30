@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use ostd::io::println;
@@ -16,8 +17,9 @@ const HOSTNAME: &str = "example.com";
 
 const GET_REQUEST: &[u8] = b"GET / HTTP/1.0\r\nHost: example.com\r\nConnection: close\r\n\r\n";
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[https-demo] TLS 1.3 HTTPS demo starting");
 
     let net_tid = match sys_lookup_service(api::syscall::service::NET) {

@@ -17,6 +17,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate alloc;
 
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -205,8 +206,9 @@ fn write_persist_marker() {
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     ostd::io::println("[srv-test] Starting RedoxFS /srv test suite...");
 
     // Check for persist marker from a previous boot BEFORE running any tests

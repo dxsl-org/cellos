@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -21,8 +22,9 @@ const FRAME_COUNT: u32 = 5;
 const BASE_ID: u32 = 0x100;
 const KBPS: u32 = 500;
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[can-demo] CAN loopback demo (500 kbps, 5 frames)");
 
     let mut can = LoopbackCan::new();

@@ -186,6 +186,23 @@ via code injection" hole that produced repeated macOS/iOS TCC CVEs.
   gated in `kernel/src/loader.rs`). ⚠️ **G1 dev-seed keys:** `signing.rs::CELL_SIGNER_PUBKEY` and
   `policy.rs::FLEET_ROOT_PUBKEY` fall back to a fixed dev seed under the dev feature gate and to a `[0u8; 32]`
   fail-closed placeholder otherwise — **production must provision real keys.**
+- **What a signature now means (2026-07-30, phase 11)** — the signature changed meaning from *"these bytes
+  are ours"* to **"built by a pipeline that enforced F1"** (Spec 18 §2.1). `scripts/cellos-sign` checks and
+  signs in one step, and has no sign-only path: it verifies that every Cell crate root carries
+  `#![forbid(unsafe_code)]`, that no tracked `.rs` file under `cells/` contains `unsafe` outside
+  `scripts/unsafe-allowlist.toml`, and that the running rustc is the one `rust-toolchain.toml` pins (F5).
+  Every image lane signs through it — `scripts/lib-sign-cells.sh` for the bash scripts, `gen_disk.ps1` for
+  the Windows lane — and CI runs the same `cellos-sign --check`. F5 is mandatory on the signing path: a host
+  that cannot verify the toolchain refuses to sign rather than signing with a `SKIP`. The low-level
+  `scripts/sign-cell.py` refuses to sign at all unless `cellos_sign.signing` has marked the check as passed,
+  or the caller passes the explicit `--unchecked-dev-signature` opt-in (dev key only, for signer round-trip
+  tests) — so no dev-key back door reaches an image, and a non-dev key is refused outside CI in the
+  low-level signer itself. The `__ViCell_sig` format and the kernel verifier are unchanged.
+
+  **Do not oversell this.** It defends against *unintentional* mistakes by trusted developers. It does not
+  defend against a malicious developer holding the key: every check runs on the signer's own machine over
+  source the signer controls, and whoever can sign can also edit the allowlist. Defence there is the key
+  policy's job (CI/KMS only) and Tier 2's (unsigned third-party cells get a hardware page-table wall).
 
 **Still open** (see [research/research-cell-security-permissions.md](research/research-cell-security-permissions.md)
 §3): full **secure/measured boot** and a **device attestation** story — a TPM-free **DICE/RIoT** layered chain

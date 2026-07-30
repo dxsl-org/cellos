@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use ostd::{io, syscall};
 
+ostd::cell_main!(cell_main);
+
 /// echo [text...] — print arguments to stdout followed by a newline.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     let argv = ostd::args();
     for (index, arg) in argv.iter().enumerate() {
         if index > 0 {

@@ -152,89 +152,101 @@ foreach ($line in $zig_output) {
 }
 
 # ── Cell binary signing (Ed25519) ────────────────────────────────────────────
-# Sign each cell ELF with the dev key before embedding. Runs here — inside
-# gen_disk — so signing is never accidentally skipped (a separate wrapper could
-# be bypassed; this cannot). The dev seed [0x43]*32 is fixed so rebuilds are
-# reproducible and no key paste is required.
+# Sign every cell ELF with the dev key before embedding, unconditionally — a
+# cell with no __ViCell_sig is DENIED at spawn under the `signing-required`
+# feature, and the guest never reaches a shell. The dev seed [0x43]*32 is fixed
+# so rebuilds are reproducible and no key paste is required.
 #
-# sign-cell.py reads $env:OBJCOPY to select the correct cross-objcopy binary.
+# Signing goes through `scripts/cellos-sign`, never the low-level signer: the
+# signature attests that the pipeline enforced F1 and F5 (Spec 18 §2.1), and
+# only that wrapper runs the check. A dev-key signature carries the same claim
+# as a production one, because every local and QEMU image is a dev-key build.
+# One invocation for the whole set — the F1 scan is per-tree, not per-binary.
+#
+# cellos-sign reads $env:OBJCOPY to select the correct cross-objcopy binary.
 # Default to the xpack RISC-V toolchain; override before invoking this script.
 if (-not $env:OBJCOPY) { $env:OBJCOPY = "riscv-none-elf-objcopy" }
 Write-Host "Signing cell binaries (Ed25519 dev key, objcopy=$($env:OBJCOPY))..."
-$sign_script = "scripts/sign-cell.py"
+$sign_script = "scripts/cellos-sign"
 if (-not (Test-Path $sign_script)) {
     Write-Host "ERROR: $sign_script not found — run from the Cellos repo root." -ForegroundColor Red
     exit 1
 }
 
-function Invoke-SignCell {
+$cells_to_sign = New-Object System.Collections.Generic.List[string]
+function Add-CellToSign {
     param([string]$Path)
     if (-not (Test-Path $Path)) { return }  # optional cells handled below
-    Write-Host "  signing $Path"
-    & $python $sign_script --in $Path --out $Path
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: sign-cell.py failed for $Path" -ForegroundColor Red
-        exit 1
-    }
+    $cells_to_sign.Add($Path)
 }
 
-# Sign the cells that are embedded / placed in the disk image.
-Invoke-SignCell "$rel_dir/app-init"
-Invoke-SignCell "$rel_dir/app-shell"
-Invoke-SignCell "$rel_dir/platform"
-Invoke-SignCell "$rel_dir/service-vfs"
-Invoke-SignCell "$rel_dir/service-config"
-Invoke-SignCell "$rel_dir/service-net"
-Invoke-SignCell "$rel_dir/service-net-broker"
-Invoke-SignCell "$rel_dir/service-compositor"
-Invoke-SignCell "$rel_dir/supervisor"
-Invoke-SignCell "$rel_dir/driver-nvme"
-Invoke-SignCell "$rel_dir/driver-e1000"
-Invoke-SignCell "$rel_dir/driver-virtio-net"
-Invoke-SignCell "$rel_dir/driver-virtio-blk"
-Invoke-SignCell "$rel_dir/driver-virtio-gpu"
-Invoke-SignCell "$rel_dir/service-input"
-Invoke-SignCell "$rel_dir/app-bench"
-Invoke-SignCell "$rel_dir/bench-probe"
-Invoke-SignCell "$rel_dir/app-net-tools"
-Invoke-SignCell "$rel_dir/app-sys-tools"
-Invoke-SignCell "$rel_dir/robot-demo"
-Invoke-SignCell "$rel_dir/robot-dashboard"
-Invoke-SignCell "$rel_dir/fb-console"
-Invoke-SignCell "$rel_dir/hypha-llm-gateway"
-Invoke-SignCell "$rel_dir/hypha-core"
-Invoke-SignCell "$rel_dir/hypha-tool-fs"
-Invoke-SignCell "$rel_dir/hypha-tool-sys"
-Invoke-SignCell "$rel_dir/hypha-tool-spawn"
-Invoke-SignCell "$rel_dir/input-test"
-Invoke-SignCell "$rel_dir/audio-demo"
-Invoke-SignCell "$rel_dir/app-https-demo"
-Invoke-SignCell "$rel_dir/http-smoke"
-Invoke-SignCell "$rel_dir/cfi-test"
-Invoke-SignCell "$rel_dir/hotswap-demo-v1"
-Invoke-SignCell "$rel_dir/hotswap-demo-v2"
-Invoke-SignCell "$rel_dir/ls"
-Invoke-SignCell "$rel_dir/cat"
-Invoke-SignCell "$rel_dir/echo"
-Invoke-SignCell "$rel_dir/ps"
-Invoke-SignCell "$rel_dir/kill"
-if (Test-Path "$rel_dir/lua")          { Invoke-SignCell "$rel_dir/lua" }
-if (Test-Path "$rel_dir/doom")         { Invoke-SignCell "$rel_dir/doom" }
-if (Test-Path "$rel_dir/tetris")       { Invoke-SignCell "$rel_dir/tetris" }
-if (Test-Path "$rel_dir/tetris-c")     { Invoke-SignCell "$rel_dir/tetris-c" }
-if (Test-Path "$rel_dir/tetris-lua")   { Invoke-SignCell "$rel_dir/tetris-lua" }
-if (Test-Path "$rel_dir/micropython")  { Invoke-SignCell "$rel_dir/micropython" }
-if (Test-Path "$rel_dir/posix-shim-test") { Invoke-SignCell "$rel_dir/posix-shim-test" }
+# Collect the cells that are embedded / placed in the disk image.
+Add-CellToSign "$rel_dir/app-init"
+Add-CellToSign "$rel_dir/app-shell"
+Add-CellToSign "$rel_dir/platform"
+Add-CellToSign "$rel_dir/service-vfs"
+Add-CellToSign "$rel_dir/service-config"
+Add-CellToSign "$rel_dir/service-net"
+Add-CellToSign "$rel_dir/service-net-broker"
+Add-CellToSign "$rel_dir/service-compositor"
+Add-CellToSign "$rel_dir/supervisor"
+Add-CellToSign "$rel_dir/driver-nvme"
+Add-CellToSign "$rel_dir/driver-e1000"
+Add-CellToSign "$rel_dir/driver-virtio-net"
+Add-CellToSign "$rel_dir/driver-virtio-blk"
+Add-CellToSign "$rel_dir/driver-virtio-gpu"
+Add-CellToSign "$rel_dir/service-input"
+Add-CellToSign "$rel_dir/app-bench"
+Add-CellToSign "$rel_dir/bench-probe"
+Add-CellToSign "$rel_dir/app-net-tools"
+Add-CellToSign "$rel_dir/app-sys-tools"
+Add-CellToSign "$rel_dir/robot-demo"
+Add-CellToSign "$rel_dir/robot-dashboard"
+Add-CellToSign "$rel_dir/fb-console"
+Add-CellToSign "$rel_dir/hypha-llm-gateway"
+Add-CellToSign "$rel_dir/hypha-core"
+Add-CellToSign "$rel_dir/hypha-tool-fs"
+Add-CellToSign "$rel_dir/hypha-tool-sys"
+Add-CellToSign "$rel_dir/hypha-tool-spawn"
+Add-CellToSign "$rel_dir/input-test"
+Add-CellToSign "$rel_dir/audio-demo"
+Add-CellToSign "$rel_dir/app-https-demo"
+Add-CellToSign "$rel_dir/http-smoke"
+Add-CellToSign "$rel_dir/cfi-test"
+Add-CellToSign "$rel_dir/hotswap-demo-v1"
+Add-CellToSign "$rel_dir/hotswap-demo-v2"
+Add-CellToSign "$rel_dir/ls"
+Add-CellToSign "$rel_dir/cat"
+Add-CellToSign "$rel_dir/echo"
+Add-CellToSign "$rel_dir/ps"
+Add-CellToSign "$rel_dir/kill"
+if (Test-Path "$rel_dir/lua")          { Add-CellToSign "$rel_dir/lua" }
+if (Test-Path "$rel_dir/doom")         { Add-CellToSign "$rel_dir/doom" }
+if (Test-Path "$rel_dir/tetris")       { Add-CellToSign "$rel_dir/tetris" }
+if (Test-Path "$rel_dir/tetris-c")     { Add-CellToSign "$rel_dir/tetris-c" }
+if (Test-Path "$rel_dir/tetris-lua")   { Add-CellToSign "$rel_dir/tetris-lua" }
+if (Test-Path "$rel_dir/micropython")  { Add-CellToSign "$rel_dir/micropython" }
+if (Test-Path "$rel_dir/posix-shim-test") { Add-CellToSign "$rel_dir/posix-shim-test" }
 # Sign Zig cells
 foreach ($zig_path in $zig_elfs.Values) {
-    if (Test-Path $zig_path) { Invoke-SignCell $zig_path }
+    if (Test-Path $zig_path) { Add-CellToSign $zig_path }
+}
+
+if ($cells_to_sign.Count -gt 0) {
+    Write-Host "  cellos-sign --sign ($($cells_to_sign.Count) cells)"
+    $sign_targets = $cells_to_sign.ToArray()
+    & $python $sign_script --objcopy $env:OBJCOPY --sign $sign_targets
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: cellos-sign refused — F1/F5 check failed or signing failed." -ForegroundColor Red
+        exit 1
+    }
 }
 
 Write-Host "All cells signed."
 
 # 1b. Update kernel embedded cells (init, shell, vfs, config) from release builds.
 # These 4 cells are embedded in kernel_fs.img via include_bytes!.
-# NOTE: cells are already signed in-place by Sign-Cell above.
+# NOTE: cells are already signed in-place by cellos-sign above.
 Write-Host "Updating kernel embedded cells..."
 $embedded = "kernel/src/embedded"
 # Only `init` is embedded as a separate blob (kernel/src/main.rs INIT_ELF).

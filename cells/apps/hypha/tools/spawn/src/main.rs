@@ -9,6 +9,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -27,8 +28,9 @@ api::declare_manifest!(block_io = false, network = false, spawn = true);
 // one covers all six (Alloc/Share/Slice/Free/Register/Unregister).
 api::declare_syscalls![Send, Recv, Log, SpawnFromPath, GrantAlloc];
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[tool-spawn] ready");
     CellRuntime::new().no_heartbeat().run(|ctx, ev| match ev {
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {

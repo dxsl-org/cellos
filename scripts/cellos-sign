@@ -1,0 +1,20 @@
+#!/usr/bin/env python3
+"""Entry point for `cellos-sign`.
+
+Thin on purpose: it only puts `scripts/` on the import path so the
+`cellos_sign` package resolves no matter which directory the caller ran from,
+then hands off. All behaviour — and the threat model — lives in the package.
+
+    scripts/cellos-sign --check
+    scripts/cellos-sign --sign target/…/app-shell --objcopy riscv64-unknown-elf-objcopy
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from cellos_sign.cli import main  # noqa: E402  (path must be set before import)
+
+if __name__ == "__main__":
+    sys.exit(main())

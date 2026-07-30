@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
-// Note: #[no_mangle] on main() is required by the ViCell ELF loader and
-// triggers unsafe_attr, so we cannot use #![forbid(unsafe_code)] here.
+#![forbid(unsafe_code)]
+// The `main` symbol comes from `ostd::cell_main!`, whose expansion carries the
+// `#[no_mangle]` the ELF loader needs without tripping `forbid(unsafe_code)`
+// (see libs/ostd/src/entry.rs).
 // All benchmark logic in framework/ and scenarios/ is unsafe-free.
 
 extern crate alloc;
@@ -175,8 +177,9 @@ fn print_under_load(name: &str, idle_p99: u64, load_p99: u64) {
     ));
 }
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     // Multi-role dispatch: load/rt-probe cells are re-spawns of this binary with
     // a role arg; the default (no arg) role is the orchestrator.
     let argv = ostd::args();

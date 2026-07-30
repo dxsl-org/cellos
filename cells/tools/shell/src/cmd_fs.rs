@@ -89,12 +89,12 @@ pub fn cmd_wc(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: wc [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("wc: cannot open '");
@@ -523,12 +523,12 @@ pub fn cmd_uniq(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: uniq [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("uniq: cannot open '");
@@ -558,12 +558,12 @@ pub fn cmd_sort(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: sort [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("sort: cannot open '");
@@ -605,11 +605,11 @@ pub fn cmd_tee(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<(
         return Ok(());
     }
     // Write to the current output sink (console or outer pipeline capture).
-    if let Ok(s) = core::str::from_utf8(data) {
+    if let Ok(s) = core::str::from_utf8(&data) {
         crate::executor::shell_print(s);
     }
     // Also write the same data to the VFS file.
-    if !vfs_write_chunked(path, data, append) {
+    if !vfs_write_chunked(path, &data, append) {
         ostd::io::print("tee: cannot write '");
         ostd::io::print(path);
         ostd::io::println("'");
@@ -690,12 +690,12 @@ pub fn cmd_awk<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: awk [-F sep] [/pattern/] [col,...] [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("awk: cannot open '");
