@@ -17,15 +17,51 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// Prerequisite gate: silent-skip locally, HARD FAIL in CI.
+/// Announce a skip on the real stderr, bypassing libtest's output capture.
+///
+/// libtest captures both stdout and stderr unless `--nocapture`, so a plain
+/// `eprintln!` here is invisible and a skipped test is indistinguishable from a
+/// passing one — `test result: ok` with nothing actually executed. Writing to
+/// file descriptor 2 directly sidesteps the capture, so the line always reaches
+/// the terminal.
+///
+/// The thread name is the test's own name, which is how the reader learns *which*
+/// test skipped; a nameless thread falls back to a placeholder rather than lying.
+#[cfg(unix)]
+fn announce_skip() {
+    use std::os::fd::FromRawFd;
+    let name = thread::current().name().unwrap_or("<unnamed>").to_string();
+    // SAFETY: fd 2 is stderr, open for the lifetime of the process. ManuallyDrop
+    // keeps the File from closing it on drop, which would take stderr away from
+    // the rest of the run.
+    let mut err = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(2) });
+    let _ = writeln!(
+        err,
+        "SKIPPED (prerequisites missing, nothing executed): {name}"
+    );
+}
+
+#[cfg(not(unix))]
+fn announce_skip() {
+    // No fd guarantees off unix; the `--nocapture` SKIP lines remain the signal.
+}
+
+/// Prerequisite gate: announce-and-skip locally, HARD FAIL in CI.
 ///
 /// Every test suite starts with `if !prerequisites_ok() { return; }` so devs
 /// without a built kernel/disk aren't blocked. In CI that same pattern once
 /// turned a missing artifact into an all-green run with zero tests executed —
 /// the suite rotted for days undetected. Wrap the prerequisite expression in
-/// this guard: locally it just returns the value; under `CI=…` a missing
-/// prerequisite panics so the job goes red instead of silently vacuous.
+/// this guard: locally it announces the skip and returns the value; under `CI=…`
+/// a missing prerequisite panics so the job goes red instead of silently vacuous.
+///
+/// The local announcement matters as much as the CI panic: a skip still reports
+/// `test result: ok`, so without it a reader cannot tell a green suite from an
+/// empty one.
 pub fn ci_guard(ok: bool) -> bool {
+    if !ok {
+        announce_skip();
+    }
     if !ok && std::env::var_os("CI").is_some() {
         panic!(
             "prerequisites missing while CI is set — the artifacts this suite \
