@@ -105,6 +105,11 @@ Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS serv
 Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
 Build-Cargo -What "cfi-test" -Packages @('cfi-test')   # Layer-2 CFI violation test cell
 Build-Cargo -What "wx-test"  -Packages @('wx-test')    # W^X violation test cell
+# Built here for the same reason posix-shim-test is: the signing section below
+# only Test-Path's these, so without a build step they are silently absent from
+# the disk and tests/integration/tests/hotswap-smoke.rs fails with
+# "command not found" rather than anything about hotswap.
+Build-Cargo -What "hotswap demos" -Packages @('hotswap-demo-v1', 'hotswap-demo-v2')
 # posix-shim-test must be BUILT here, not just Test-Path'd below — CI runs
 # gen_disk on a fresh target/ and the posix_shim_* boot tests spawn it from
 # the shell ("command not found" on CI was exactly this gap).

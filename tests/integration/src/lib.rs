@@ -27,23 +27,31 @@ use std::time::{Duration, Instant};
 ///
 /// The thread name is the test's own name, which is how the reader learns *which*
 /// test skipped; a nameless thread falls back to a placeholder rather than lying.
+/// Announce a skip and why, for a test that returns early for any reason.
+///
+/// Use this instead of `eprintln!` whenever a test gives up without running: a
+/// captured message leaves `test result: ok` as the only visible outcome, which
+/// reads as coverage. Prerequisite gates get this for free via [`ci_guard`];
+/// call it directly for the other cases, such as an emulator that lacks a device
+/// the test needs.
 #[cfg(unix)]
-fn announce_skip() {
+pub fn skip_notice(reason: &str) {
     use std::os::fd::FromRawFd;
     let name = thread::current().name().unwrap_or("<unnamed>").to_string();
     // SAFETY: fd 2 is stderr, open for the lifetime of the process. ManuallyDrop
     // keeps the File from closing it on drop, which would take stderr away from
     // the rest of the run.
     let mut err = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_fd(2) });
-    let _ = writeln!(
-        err,
-        "SKIPPED (prerequisites missing, nothing executed): {name}"
-    );
+    let _ = writeln!(err, "SKIPPED ({reason}): {name}");
 }
 
 #[cfg(not(unix))]
-fn announce_skip() {
+pub fn skip_notice(_reason: &str) {
     // No fd guarantees off unix; the `--nocapture` SKIP lines remain the signal.
+}
+
+fn announce_skip() {
+    skip_notice("prerequisites missing, nothing executed");
 }
 
 /// Prerequisite gate: announce-and-skip locally, HARD FAIL in CI.

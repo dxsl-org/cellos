@@ -37,26 +37,29 @@ fn disk_path() -> String {
 }
 
 /// Returns true if qemu-system-riscv64 version is ≥ 8.2.
-fn qemu_riscv_version_ok() -> bool {
-    let out = match std::process::Command::new(qemu_binary())
-        .arg("--version")
+/// Whether this QEMU can emulate the RISC-V IOMMU at all.
+///
+/// Asks the emulator for its device list rather than parsing a version. A version
+/// threshold gets this wrong in both directions: distributions backport and omit
+/// devices independently of the release number, and Debian's 8.2.2 in particular
+/// reports a version that clears any sane threshold while shipping only
+/// `virtio-iommu`. The result was a hard failure — the only suite here that
+/// aborts instead of skipping when its emulator cannot run it.
+fn qemu_riscv_iommu_available() -> bool {
+    let Ok(out) = std::process::Command::new(qemu_binary())
+        .arg("-device")
+        .arg("help")
         .output()
-    {
-        Ok(o) => o,
-        Err(_) => return false,
+    else {
+        return false;
     };
-    let s = String::from_utf8_lossy(&out.stdout);
-    // "QEMU emulator version X.Y.Z" → parse first "X.Y" token
-    let ver: Vec<u64> = s
-        .split_whitespace()
-        .find(|t| t.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false))
-        .unwrap_or("0.0")
-        .split('.')
-        .flat_map(|p| p.parse::<u64>().ok())
-        .collect();
-    let major = ver.first().copied().unwrap_or(0);
-    let minor = ver.get(1).copied().unwrap_or(0);
-    major > 8 || (major == 8 && minor >= 2)
+    // The list goes to stdout on some builds and stderr on others.
+    let listing = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    listing.contains("riscv-iommu-pci")
 }
 
 fn prerequisites_ok() -> bool {
@@ -85,12 +88,17 @@ fn prerequisites_ok() -> bool {
 /// Phase B-04: RISC-V IOMMU bare passthrough.
 ///
 /// Boots with `riscv-iommu-pci` and asserts the kernel probe log.
-/// Skips when QEMU < 8.2 (device not available in older emulator).
+/// Skips when the emulator does not carry that device.
 #[test]
 fn nic_riscv_iommu_bare() {
-    if !prerequisites_ok() { return; }
-    if !qemu_riscv_version_ok() {
-        eprintln!("SKIP nic-riscv: RISC-V IOMMU requires QEMU ≥ 8.2 (found older version)");
+    if !prerequisites_ok() {
+        return;
+    }
+    if !qemu_riscv_iommu_available() {
+        vicell_integration_tests::skip_notice(
+            "qemu-system-riscv64 has no riscv-iommu-pci device, so the IOMMU probe \
+             cannot be exercised",
+        );
         return;
     }
 
