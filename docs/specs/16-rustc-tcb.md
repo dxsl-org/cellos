@@ -241,7 +241,8 @@ Singularity/Midori never had.
 |---|---|
 | Kernel boundary — what goes in the kernel vs. Cells | `docs/specs/15-kernel-boundary.md` |
 | LBI cost numbers (Singularity benchmarks) | `docs/specs/00-context.md §5` · `docs/research/research-singularity-midori.md` |
-| Hardware security layers (MTE, MPK, CET) — complement to LBI | `docs/specs/` *(layer2-hw-security — to be extracted)* |
+| Hardware security layers (W^X, MPK, domain tables) — complement to LBI | `docs/specs/19-hardware-isolation-layers.md` |
+| Cell trust tiers — what the signature attests, tier admission | `docs/specs/18-cell-trust-tiers.md` |
 | Async owned-buffer invariant (Law 2) | `docs/specs/03-runtime.md` |
 | Capability model (CapSet, manifest, grant) | `docs/specs/01-core.md` |
 | Security model overview | `docs/security-model.md` |

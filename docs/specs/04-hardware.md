@@ -18,8 +18,8 @@ Cellos không phụ thuộc vào một kiến trúc CPU cụ thể. Mọi tươn
 * **Platform HAL**: Được biên dịch **cùng** Nano Kernel. Chịu trách nhiệm khởi tạo CPU, RAM và các thành phần cốt lõi.
 * **Driver Cells**: Được nạp động dưới dạng **Cells**. Chịu trách nhiệm cho các ngoại vi (NIC, GPU, cảm biến Robot).
 
-### ~~Chiến lược WASM Sandboxed Drivers~~ _(DROPPED — 2026-06-06)_
-WASM Tier-2 đã bị loại khỏi official stack. C driver isolation dùng **Tier 1b FFI** (Newlib shim) thay thế — xem [specs/05-application.md §3](05-application.md). `WasmDriverRuntime` Cell không implement.
+### C Driver Isolation qua Tier 1b FFI
+C driver isolation dùng **Tier 1b FFI** (Newlib shim) — xem [specs/05-application.md §3](05-application.md).
 
 ## 3. Interrupt Model: "Async Waker Dispatch"
 Cellos sử dụng mô hình ngắt bất đồng bộ để tối ưu độ trễ.

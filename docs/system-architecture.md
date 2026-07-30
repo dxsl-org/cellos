@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-07-25 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; Tier 3b VirtIO-GPU host stack code-complete; strict guest lane remains hardware-gated; WASM Tier 2, Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-07-25 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; Tier 3b VirtIO-GPU host stack code-complete; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -22,7 +22,7 @@ Cellos is **NOT** a traditional Linux-style OS. It uses:
 
 The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer — it runs in a **Tier 3 Linux VM** (`apt install nginx/postgres/python`), except a narrow set of libraries linked into Tier 1/1b cells (crypto, codec, libm, sensor protocols). This keeps Cellos's identity intact and avoids re-implementing what Linux already does well.
 
-Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier 1/1b cell needs → **Tier 1b shim — port the library, not the feature**; (3) general Linux app / fork-based / POSIX → **Tier 3 VM**; (4) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, WASM Tier 2 + MicroPython dropped.
+Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier 1/1b cell needs → **Tier 1b shim — port the library, not the feature**; (3) general Linux app / fork-based / POSIX → **Tier 3 VM**; (4) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, MicroPython dropped.
 
 ---
 
@@ -460,7 +460,6 @@ cells/tools/shell/     — Interactive REPL (parser, executor, aliases, jobs, hi
 cells/tools/init/      — Bootstrap (spawns vfs, config, input, net, compositor, shell, robot-demo; games/demos run on-demand from shell)
 cells/tools/sys-tools/ — Standalone binaries: ls, cat, echo, ps, kill (0x2A000000 VA base)
 cells/tools/net-tools/ — Network utilities: ping, curl, wget, nc, httpd, mqtt (0x26000000 VA base)
-cells/tools/wasm/      — WASM interpreter cell (⚠️ Tier 2 DROPPED from official stack 2026-06-06; retained under feature = "wasm-experimental" only — not part of the shipping stack; untrusted code → Tier 3 VM)
 ```
 
 **Applications**: User-facing applications
@@ -503,7 +502,6 @@ cells/drivers/spi-gpio/  — BitBangSpi<G> generic over ViGpio
 cells/drivers/pwm-gpio/  — BitBangPwm<G> generic over ViGpio
 cells/drivers/adc-sim/   — Simulated ADC (no MMIO)
 cells/drivers/can-loopback/ — Loopback CAN (no MMIO)
-cells/drivers/wasm/      — WASM runtime wrapper (⚠️ Tier 2 DROPPED 2026-06-06; experimental feature only)
 ```
 
 **Services**: System services with long-lived state
@@ -956,8 +954,8 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 > ⚠️ **Per-Cell SATP isolation at Tier 1 is explicitly NOT pursued** (decided 2026-06-05).
 > Hardware isolation belongs to Tier 3 (per-VM Stage-2 paging), not per-cell page tables.
-> **Tier 2 WASM was dropped from the official stack (2026-06-06)** — untrusted third-party
-> code goes to the Tier 3 Linux VM, not a WASM sandbox. See *Key Design Decisions* below
+> Tier 2 runs unsigned native cells in a private MMU protection domain — see
+> `docs/specs/18-cell-trust-tiers.md`. See *Key Design Decisions* below
 > and [specs/05-application.md §6](specs/05-application.md).
 
 ---
@@ -969,7 +967,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 | Single Address Space | Reduce context-switch overhead, simplify memory management |
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
 | **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
-| Tiered isolation (1 / 3) | Trusted signed-native (LBI) · hypervisor hardware silo (Tier 3b Linux VM). **The former "Tier 2 WASM software sandbox" was dropped from the official stack 2026-06-06** — untrusted third-party code now goes to Tier 3, so hardware MMU cost is paid there. WASM code retained under `feature = "wasm-experimental"` only. |
+| Tiered isolation (1 / 2 / 3) | Trusted signed-native (LBI) · Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` · hypervisor hardware silo (Tier 3b Linux VM). |
 | Round-Robin Scheduler | Simple, fair, predictable for embedded real-time systems |
 | Capability-Based Access | Fine-grained control, no global permissions |
 | Owned Buffers in Async | Deterministic cleanup in SAS (no process teardown) |
@@ -992,7 +990,6 @@ Areas where the current implementation diverges from the specification or modern
 | No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
 | No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |
 | Performance baseline unmeasured | Can't validate PDR targets | ✅ **DONE** (Phase 24 — bench cell, RT + SMP latency) |
-| ~~Tier 2 WASM runtime absent~~ | — | ❌ **DROPPED** (2026-06-06) — Tier 2 removed from official stack; untrusted third-party code → Tier 3 Linux VM. Not a gap. |
 | Audit ring buffer | Forensics | Partial — reliability P06 observability shipped; full audit log G2 |
 
 ---

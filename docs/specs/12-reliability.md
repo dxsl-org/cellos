@@ -49,7 +49,7 @@ not from retrofitting MMU into the SAS:
 | Tier | Who runs here | Isolation mechanism |
 |------|---------------|---------------------|
 | **Tier 1 — Native (SAS)** | Signed, first-party, `#![forbid(unsafe_code)]` cells: drivers, FS, robot control | Language-Based Isolation (compiler) + signed-cells |
-| **Tier 2 — Managed** | Third-party / portable code | WASM software sandbox (`wasmi` interpreter — no JIT escape) |
+| **Tier 2 — Managed** | Third-party / portable code | Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` |
 | **Tier 3 — Virtual** | Untrusted / legacy / sensitive silos | Hypervisor cell, **Stage-2 paging** (real hardware MMU barrier, *per-VM*) |
 
 Hardware isolation thus lives in **Tier 3 (per-VM Stage-2)** — the right place for it —

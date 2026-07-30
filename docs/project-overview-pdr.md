@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-07-07 (docs audit: WASM Tier 2 dropped, native scripting runtimes unmaintained, kernel LOC + phase-number corrections)
+**Last Updated**: 2026-07-07 (docs audit: native scripting runtimes unmaintained, kernel LOC + phase-number corrections)
 
 ---
 
@@ -13,7 +13,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 **Product delivery is framed in two use-case stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) → "Two Use-Case Stages"):
 - **Stage G1 — Robot & Embedded** (now → ~2026 Q4): complete the OS for robots/embedded. Primary target = Tier A SBC with MMU (RV64/ARM64, RPi-class robot brain); sub-track = Tier B MCU (RV32 <512KB, CHERIoT-Nano) for low-level control. Defining traits: never-die, bounded real-time, fault isolation, peripheral I/O (GPIO/I2C/SPI/UART/CAN), instant-on boot.
-- **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage. (Note: Tier-2 WASM was previously listed here but is **DROPPED** from the official stack — see Risk Assessment. Untrusted code runs in the Tier 3 Linux VM.)
+- **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage. Untrusted code runs in the Tier 3 Linux VM.
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
@@ -458,8 +458,6 @@ None documented yet (Phase 1 still stabilizing).
 5. **Spec–Reality IPC Gap** — IPC is 100–1000× slower than architecture spec claims (syscall vs. direct call)
 6. **No Per-Cell Memory Quota** — Single cell OOM kills entire system
 7. **KASLR Absent** — Kernel address predictable from first bytecode execution
-8. **WASM Tier 2 — DROPPED (2026-06-06)** — Formerly tracked as "no safe third-party code path". Tier 2 WASM was removed from the official stack (no clear use case between trusted Tier 1 and full Tier 3); the untrusted / multi-tenant code path is the **Tier 3 Linux VM**. Phase 28 MVP code retained only under `feature = "wasm-experimental"`. Revisit only if G2 becomes an untrusted multi-tenant platform (Cloudflare Workers–style). See docs/specs/05-application.md §6.
-9. **WASI 2.0 Competitive Threat** — Moot while WASM Tier 2 is dropped; re-evaluate only if the multi-tenant use case above materializes
 
 ### Mitigation Strategies
 
@@ -469,7 +467,7 @@ None documented yet (Phase 1 still stabilizing).
 - Conservative feature additions (one major change per week)
 - Direct IPC fast path (Phase 27) to close spec gap
 - Priority scheduler (Phase 25) for real-time isolation
-- Untrusted third-party code isolated via the Tier 3 Linux VM (Tier 2 WASM path dropped 2026-06-06)
+- Untrusted third-party code isolated via the Tier 3 Linux VM
 
 ---
 
@@ -477,7 +475,7 @@ None documented yet (Phase 1 still stabilizing).
 
 > **Use-case stage overlay** (maps onto the technical phases below):
 > - **G1 Robot & Embedded** (now → ~2026 Q4): Core Stability ✅ + Phases 24–26, 29–30 + Peripheral Driver track 🆕 + ARM64 full bring-up 🆕 + VFS robustness + RV32-Nano sub-track (tail) + reference robot demo 🆕.
-> - **G2 Server & PC** (~2027): Phase 32 (SMP), Phase 27-3 (direct IPC), full compositor/desktop, hot migration (M4.1), x86_64 full bring-up 🆕, full utilities, throughput benchmarks. (Phase 28 Tier-2 WASM dropped 2026-06-06 — revisit only for an untrusted multi-tenant platform.)
+> - **G2 Server & PC** (~2027): Phase 32 (SMP), Phase 27-3 (direct IPC), full compositor/desktop, hot migration (M4.1), x86_64 full bring-up 🆕, full utilities, throughput benchmarks.
 
 ```
 Phase 1: Core Stability

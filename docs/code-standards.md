@@ -381,7 +381,7 @@ Cellos organizes cells into 8 semantic groups (parallel to code, not functionali
 
 ```
 cells/
-├─ tools/        — System utilities (shell, init, sys-tools, net-tools, wasm)
+├─ tools/        — System utilities (shell, init, sys-tools, net-tools)
 ├─ apps/         — User applications (robot-dashboard)
 ├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, audio-demo, etc.)
 ├─ drivers/      — Hardware device drivers (gpio, i2c, spi, uart, etc.)
@@ -397,7 +397,7 @@ cells/
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
 - **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
 - **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
-- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython, WASM)
+- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
 

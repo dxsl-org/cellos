@@ -87,7 +87,7 @@ Cellos is a **Cellular Single Address Space (SAS) Operating System** — revolut
 
 ### Key Concepts
 
-**Cells**: Independent compiled units (not processes). Each Cell can be Native Rust, WASM, or sandboxed C/C++. Loaded and linked at runtime.
+**Cells**: Independent compiled units (not processes). Each Cell can be Native Rust or sandboxed C/C++. Loaded and linked at runtime.
 
 **Single Address Space**: All Cells share one virtual address space. No address space switches, no context overhead. Direct pointer sharing within safety rules.
 

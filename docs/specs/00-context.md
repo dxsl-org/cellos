@@ -22,7 +22,7 @@ Trước khi code bất kỳ module nào, Agent **BẮT BUỘC** phải đọc f
 | SAS Layout, HHDM & Metadata Registry | `design/02-memory.md` |
 | Async Safety & Owned Buffers Rule | `design/03-runtime.md` |
 | Multi-Arch Trait (RV32/64/128) | `design/04-hardware.md` |
-| Native vs WASM vs Virtualization | `design/05-application.md` |
+| Native vs Virtualization | `design/05-application.md` |
 | Zero-copy Compositing & Input | `design/06-graphics.md` |
 | User-space Stack (smoltcp) | `design/07-networking.md` |
 | Tickless Idle & Pointer Swizzling | `design/08-power.md` |
@@ -75,8 +75,7 @@ Cellos/
 │   │   ├── gpu/              #
 │   │   ├── input/            #
 │   │   ├── net/              #
-│   │   ├── serial/           #
-│   │   └── wasm/             #
+│   │   └── serial/           #
 │   ├── runtimes/             # Language Runtimes (Lua, MicroPython)
 │   │   ├── micropython/      #
 │   │   └── lua/              #

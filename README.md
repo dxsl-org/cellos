@@ -61,7 +61,6 @@ ARM64 target:
 | **Reliability** | ✅ | Supervisor restart · guard pages · RT watchdog · `NotifyOnExit(204)` · zombie reaper |
 | **RT Latency** | ✅ | All benchmarks pass on QEMU TCG · mtime-based · jitter in-cell |
 | **RTC** | ✅ | Goldfish RTC (RV64/ARM64) · CMOS (x86_64) · `date` command |
-| **WASM** | ✅ | Tier-2: wasmi + `vi.*` imports + fuel metering |
 | **ViUI v2** | ✅ | Reactive Signal Tree · Dual-Layer DSL · GPU command buffer · embedded/robot readiness (P01–P10) |
 | **Heap Snapshot** | ✅ | Instant-On: snapshot → restore |
 | **RV32 Nano** | ✅ | QEMU S-mode boot verified · OpenSBI · SATP=0 |
@@ -69,7 +68,6 @@ ARM64 target:
 | **x86_64** | ✅ boot | Boots to scheduler on QEMU q35 |
 | Compositor | 📋 | Full GPU desktop — G2 |
 | ARM64 full bring-up | 📋 | Beyond ring-3 smoke |
-| WASM vi.* expand | 📋 | VFS+net+time+spawn imports |
 | Hot migration | 📋 | Zero-downtime Cell live update — G2 |
 
 ---
@@ -90,8 +88,8 @@ Cellos/
 │   └── viui-macros/    vi_design! proc macro
 ├── cells/
 │   ├── apps/           init · shell · hello · utils · bench · viui-demo
-│   │                   robot-demo · periph-demo · wasm · https-demo
-│   ├── drivers/        disk · gpu · gpio · gpio-sifive · i2c-gpio · input · net · serial · wasm
+│   │                   robot-demo · periph-demo · https-demo
+│   ├── drivers/        disk · gpu · gpio · gpio-sifive · i2c-gpio · input · net · serial
 │   └── services/       vfs · net · input · compositor · config · power
 ├── tools/
 │   ├── vi-compiler/    .vi DSL → Rust codegen
@@ -157,7 +155,7 @@ Full rules: [CLAUDE.md](./CLAUDE.md) · [code-standards.md](./docs/code-standard
 | [02-memory.md](./docs/specs/02-memory.md) | SAS · HHDM · registry |
 | [03-runtime.md](./docs/specs/03-runtime.md) | Async safety · owned buffers |
 | [04-hardware.md](./docs/specs/04-hardware.md) | Multi-arch HAL |
-| [05-application.md](./docs/specs/05-application.md) | Native · WASM · VM tiers |
+| [05-application.md](./docs/specs/05-application.md) | Native · VM tiers |
 | [06-graphics.md](./docs/specs/06-graphics.md) | ViUI · compositor · GPU |
 | [07-networking.md](./docs/specs/07-networking.md) | Network stack |
 | [09-vfs.md](./docs/specs/09-vfs.md) | VFS · filesystem |

@@ -81,9 +81,10 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 > **Isolation strategy decision (2026-06-05):** per-Cell **SATP** isolation at Tier 1 is
 > **explicitly NOT pursued**. PMP is M-mode-only (unreachable from Cellos's S-mode without
 > custom firmware) and sPMP is unratified; per-cell SATP would break Tier 1 zero-copy IPC.
-> Hardware isolation is delivered by **Tier 3 Stage-2 paging (per-VM)**, and untrusted code
-> is confined to **Tier 3 (Linux VM / hypervisor)** — the WASM Tier 2 sandbox was **dropped from
-> the official stack (2026-06-06)**, so there is no WASM confinement path. The Tier 1 "signed cells
+> Hardware isolation is delivered by **Tier 3 Stage-2 paging (per-VM)**, and untrusted
+> third-party code is confined to **Tier 3 (Linux VM / hypervisor)**. Tier 2 runs unsigned
+> native cells in a private MMU protection domain — see
+> [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md). The Tier 1 "signed cells
 > only" guarantee is now **enforced**: Ed25519 signature verification runs at the loader spawn gate
 > (`kernel/src/signing.rs` + `loader.rs`), backed by per-Cell SHA-256 measurement. ⚠️ G1 ships a
 > dev-seed signer key; prod must provision a real one. See [specs/12-reliability.md](specs/12-reliability.md) §2.
@@ -275,11 +276,12 @@ Bước 4: Kernel unsafe blocks
 2. **KASLR:** *Shipped (Phase 24).* Limine randomizes the kernel load base
    (kernel built PIE, `KASLR=yes`).
 
-3. **Trusted Cells:** All installed Cells are fully trusted (now enforced by
-   Ed25519 verify-at-spawn + SHA-256 measurement). There is no in-SAS sandbox
-   for untrusted Cells — untrusted third-party code belongs in **Tier 3 (Linux
-   VM / hypervisor)**, not a WASM Tier 2 (WASM was dropped from the stack
-   2026-06-06). See Phase 23 for community submission review gates.
+3. **Trusted Cells:** All installed Tier 1 Cells are fully trusted (now enforced by
+   Ed25519 verify-at-spawn + SHA-256 measurement). Untrusted third-party code belongs
+   in **Tier 3 (Linux VM / hypervisor)**. Tier 2 runs unsigned native cells in a
+   private MMU protection domain — see
+   [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md). See Phase 23 for
+   community submission review gates.
 
 4. **Audit log:** *Shipped (Phase 26).* Cell actions are recorded in the kernel
    audit ring buffer (`kernel/src/audit.rs`).

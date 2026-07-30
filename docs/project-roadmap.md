@@ -48,7 +48,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 > **Locked decisions (brainstorm 2026-07-22)**:
 > 1. **Route A** — pure-Rust PAL (`sys/pal/cellos`) in a small rustc fork, apps via `-Zbuild-std`; precedent = Hermit (`x86_64-unknown-hermit`: SAS, no fork, tier-3 upstream). **Route B (std over mlibc) REJECTED** — pulls C into every Tier 1 cell's TCB; std's unix PAL assumes fork/signals (thin-shim creep).
 > 2. **No tokio reimplementation** — write bottom-of-stack backends: `polling` crate first (smol; validates protocol), then `mio` (tokio). Readiness = IPC message from net cell; reactor = recv-mask + RecvTimeout loop. **No kernel epoll** — multiplexing is policy (Kernel Boundary Law). Planner research revised "zero new syscalls" → **2 small kernel-surface additions needed** (futex_wait has no timeout — `Condvar::wait_timeout` requires it; no self-wake primitive for reactor `notify()` — IPC mask is binary 0/N, not OR-able). Both Boundary-Law-legal (scheduler/IPC mechanism); P2.5 settles the notify() design before P3 code.
-> 3. **Fallback ladder** per std module: native syscall → userspace emulation over IPC/Grant → `ErrorKind::Unsupported` stub (wasm32-wasi model). `std::os::unix` deliberately ABSENT — POSIX-needing crates fail at compile → routed to Tier 3 VM (Scope Doctrine firewall enforced by rustc itself).
+> 3. **Fallback ladder** per std module: native syscall → userspace emulation over IPC/Grant → `ErrorKind::Unsupported` stub (WASI-style fallback model). `std::os::unix` deliberately ABSENT — POSIX-needing crates fail at compile → routed to Tier 3 VM (Scope Doctrine firewall enforced by rustc itself).
 > 4. `panic=abort` first (never-die supervisor = recovery story); unwinding late. `Command` → spawn-model on `sys_spawn_from_elf` (no fork). ostd survives as Cellos-native ext layer (Grant/IPC/Silo/ViUI) beside std, like hermit-abi beside Hermit std.
 >
 > **Already in place** (why this is cheaper than it looks): FutexWait/FutexWake syscalls 9/10 (std's lock impls are futex-based) · `spawn_thread` in-cell threads · GetRandom=214 · RTC wall-clock · spawn-args stash · `sys_spawn_from_elf` · VFS IPC + Grant large-buffer path.
@@ -110,8 +110,6 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | 🆕 **Cell-to-Cell Anywhere** — L.2 Internet layer (flagship feature) | *new* | ✅ G1 COMPLETE (2026-06-24) — P00 Remote-Call API Contract (approved), P01 CellNetId+Ticket+NodeId binding (Law 1 approved), P02 STUN reflexive, P03 DERP relay client; all compile cleanly (0 errors); FATAL-1 Noise prologue fix shipped. G2 plan forthcoming (P04 HyParView+PlumTree, P05 UDP hole-punch, P06 Pkarr/DNS, P07 K2 per-node, P08 K3 DICE). See `.agents/260624-cell-to-cell-anywhere/plan.md` | **✅ G1 (P01-P03) · 📋 G2 (P04-P08)** |
 | Distributed Cells L.2 — server cluster control plane | *new* | 📋 PARKED (2026-06-23) — separate problem; reuses L.0 foundation; lean on external k8s/LB. See §L.2 | **G2/G3** |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
-| WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
-| WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |
 | 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | ✅ COMPLETE (2026-06-07) — cpu_features.rs DTB detection + HypervisorCap ZST + TCB field; see .agents/260607-1420-h-ext-hypervisor-cap/ | **G1 prep** (non-breaking) |
 | 🆕 Hardware Key Isolation (Silo — Tier 1 ext., G2 ARM64/x86) | *new* | ✅ COMPLETE 2026-06-16 — SiloHandle API shipped; reclassified from Tier 3a → Tier 1 capability (not a VM tier) | G2 |
 | 🆕 Tier 3b Linux VM — ARM64 EL2 VMM (all 10 phases) | Phase 31 | ✅ COMPLETE 2026-06-16 — EL2 hypervisor boots Alpine 3.21.3 aarch64, multi-arch ENOSYS stubs, CI smoke job | **G2** |
@@ -194,8 +192,6 @@ Two sub-items (Silo reclassified — see Hardware Key Isolation entry above):
 **G2 — Server/PC is "done" when:**
 SMP scales across N cores · windowed desktop + mouse · hot migration with no dropped connections · x86_64 full bring-up · full utility suite + large storage · throughput benchmarks meet targets · **Linux VM boots inside Tier 3 (minimal VMM) and runs a real workload (nginx serving HTTP)** · RISC-V AI inference server demo: HTTP → NPU cell → response with P99 latency bound.
 
-> WASM Tier 2 deferred: dropped from official stack; revisit only if G2 needs multi-tenant platform (untrusted third-party workloads). See [specs/05-application.md §6](specs/05-application.md).
-
 ---
 
 ## 🧩 Application Platform Gaps (backlog — brainstorm+plan pending)
@@ -272,7 +268,7 @@ showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
 
 - 🆕 **Name service** `[shared]` — ✅ REGISTRY SHIPPED (2026-06-06). `sys_register_service(id, tid)` (syscall 205) + `sys_lookup_service(id)` → tid (206); fixed service-ID registry (`service::VFS`, `service::NET`, etc.); kernel init auto-registers bootstrap services; lookup-based clients replace hardcoded TIDs. See [project-service-id-registry.md](../MEMORY.md). 📋 Residual gap: string-name / dynamic registration still fixed-ID-only (Hypha os-gaps).
 - ✅ **High-level cell libraries** `[shared, COMPLETE 2026-06-21]` — HTTP/1.1 + no_std JSON shipped. `libs/http-core` (pure, host-testable protocol) + `ostd::http`/`ostd::json` (feature-gated). `HttpClient<T>` generic over `embedded_io::Read+Write` (TcpStream/TlsStream); serde_json optional (zero link cost if unused). 51 host tests, `cells/demos/http-smoke` reference Cell. Known: HTTPS binary bodies unreliable (net-cell frame-length gap); cert verification deferred. Hypha P0 unblocked.
-- 🆕 **Python/scripting story** `[G2]` — Python R&D users: full CPython via Tier 3 Linux VM (`apt install python3 pip numpy torch` → works). Lua/MicroPython native runtimes **dropped** (half-measure). WASM Tier 2 dropped — no `micropython.wasm` path. Robot code stays Rust (Tier 1). Milestones 3.3/3.4 marked complete but runtimes not actively maintained.
+- 🆕 **Python/scripting story** `[G2]` — Python R&D users: full CPython via Tier 3 Linux VM (`apt install python3 pip numpy torch` → works). Lua/MicroPython native runtimes **dropped** (half-measure). Robot code stays Rust (Tier 1). Milestones 3.3/3.4 marked complete but runtimes not actively maintained.
 - 🆕 **Async runtime exposed to apps** `[shared]` — 📋 no app-facing async executor for concurrent I/O.
 - ✅ **`embedded-io` traits for ostd** `[shared, COMPLETE 2026-06-15]` — `embedded_io::Read` impl'd for `ostd::fs::File` + `Stdin`; `embedded_io::Write` impl'd for `Stdout` + `File` (via `VfsRequest::Append` IPC, chunked at 400B). Opens the no_std embedded-crate ecosystem. **Gate for high-level cell libraries: cleared.**
 - ✅ **`HashMap` in ostd prelude** `[shared, COMPLETE 2026-06-15]` — `hashbrown` already in `libs/ostd/Cargo.toml`; `ostd::collections::HashMap`/`HashSet` exported; re-exported in `ostd::prelude`. Was already shipped — roadmap was stale.
@@ -282,9 +278,8 @@ showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
 ### E. Ecosystem / distribution `[G2]`
 - ✅ **Tier 1b C library integration** `[shared, COMPLETE 2026-06-13]` — link vendor C/C++ libraries (NPU SDK, mbedTLS, SQLite, legacy firmware) into Rust cells via `Cellos-libc` (Newlib + POSIX shim). Shim in `libs/api/src/posix.rs`: malloc/free, strings, file I/O, time → ViSyscall, getentropy → `ViSyscall::GetRandom` (op 214), socket/connect/send/recv/close → typed Net IPC (postcard). ARM64 `svc #0` ABI added; send() postcard decode bug fixed; `_time()` op code fixed (op=3 = epoch seconds). Integration tests: `posix_shim_getentropy` + `posix_shim_net` in `tests/integration/tests/boot.rs`. No `fork` by design. Primary use case: hardware NPU SDKs (RKNN/Hailo/K230). Plan: `.agents/260613-0520-tier1b-posix-shims/`. See [specs/05-application.md §3](specs/05-application.md).
 - 🆕 **Tier 1b Zig Support** `[G1/G2]` — ✅ COMPLETE (2026-06-23). Level A (raw syscalls via `libs/zig-syscall`) + Level B (mlibc). Plan: [.agents/260623-0834-tier1b-zig/](.agents/260623-0834-tier1b-zig/); cells: `tests/zig-hello` (L.A) + `tests/zig-mlibc-smoke` (L.B). Validates SAS with Zig natively alongside C/Rust. 📋 Residual demo: Tetris.zig port (not critical for graduation).
-- ✅ **C Runtime: picolibc libm cherry-pick** `[G1, COMPLETE 2026-06-17]` — 9-module split of posix.rs (alloc/strings/sysio/entropy/net/math/stdio_fmt/stdio/setjmp), 96+ C99 math symbols via libm crate, full stdio family (FILE/fopen/fclose/fread/fwrite), naked-asm setjmp/longjmp for RV64/ARM64 (wasm32 stub). Zero picolibc dependency. Enables: DOOM, codec libs (zlib/libpng), MicroPython/Lua math. c-math-smoke cell (12 scenarios) verifies all three stacks end-to-end.
+- ✅ **C Runtime: picolibc libm cherry-pick** `[G1, COMPLETE 2026-06-17]` — 9-module split of posix.rs (alloc/strings/sysio/entropy/net/math/stdio_fmt/stdio/setjmp), 96+ C99 math symbols via libm crate, full stdio family (FILE/fopen/fclose/fread/fwrite), naked-asm setjmp/longjmp for RV64/ARM64. Zero picolibc dependency. Enables: DOOM, codec libs (zlib/libpng), MicroPython/Lua math. c-math-smoke cell (12 scenarios) verifies all three stacks end-to-end.
 - 🆕 **C Runtime: mlibc migration** `[G2]` — ✅ COMPLETE (2026-06-17). [mlibc](https://github.com/managarm/mlibc) (MIT) integrated as `third_party/mlibc/`, sysdeps mapping Cellos primitives (`open/read/write` → VFS IPC, `clock_get` → sys_get_time, `socket` → Net IPC). Shipped in [.agents/260617-1000-mlibc-integration/](.agents/260617-1000-mlibc-integration/). Cell precedent: `mlibc-smoke` on aarch64 via WSL2 clang. **Does NOT unlock fork-based software** — nginx/PostgreSQL → always Tier 3 VM (fork incompatible with SAS). **Does unlock:** broader single-process C apps, vendor C/C++ SDKs (RKNN/Hailo/codec libs). posix.rs remains Tier A default (simpler cells).
-- **WASM Tier-2** — Phase 28 MVP ✅ (wasmi + 4 imports). **Tier 2 dropped from official stack** (2026-06-06). Phase 28 code retained under `feature = "wasm-experimental"` only — Phase 28-5 and WASI 2.0 migration cancelled. Revisit only if G2 becomes multi-tenant platform (Cloudflare Workers–style) after WASI 1.0 freezes (late 2026/early 2027).
 - 🆕 **Package manager / app distribution** `[G2]` — 📋 no install/update mechanism beyond baking into the disk image. Plan drafted 2026-07-12: [.agents/260712-1000-cell-package-distribution/](.agents/260712-1000-cell-package-distribution/).
 
 ### F. G2 Server Strategy — ARM64 Graduation Demo + RISC-V Latency Demo `[G2]`
@@ -761,8 +756,8 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 - VFS handles binary caching + discovery
 
 **Next Action**: Supervisor-based cell restart — see [specs/12-reliability.md](specs/12-reliability.md).
-> Address-space isolation for untrusted code is provided by Tier 2 (WASM sandbox) and
-> Tier 3 (hypervisor / Stage-2 paging), **not** per-Cell SATP. See [specs/05-application.md](specs/05-application.md).
+> Address-space isolation for untrusted code is provided by Tier 3 (hypervisor / Stage-2 paging),
+> **not** per-Cell SATP. See [specs/05-application.md](specs/05-application.md).
 
 ---
 
@@ -996,28 +991,9 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [x] VFS cell registers handler at init; shell uses fast path for `cat`/`ls`
 - [x] Benchmark: direct vtable call vs ecall round-trip
 
-### Phase 28 — Tier 2 WASM + RISC-V ePMP Cell Boundaries (P2) `[G2]`
+### Phase 28 — RISC-V ePMP Cell Boundaries (P2) `[G2]`
 **Target**: 2026-09-22 | **Effort**: ~5 weeks  
-**Status**: 📋 PLANNED — see `.agents/260605-1406-phase28-wasm-cells-epmp/`
-
-**Research findings (2026-06-05):**
-- WasmEdge: **discard** (C++ + libc, incompatible with no_std bare-metal)
-- **wasmi v1** chosen: pure Rust, no_std + alloc, RISC-V confirmed, fuel metering, 2 deps
-- WASI 2.0 Component Model: **skip** (unstable toolchain, canonical ABI overhead) — use 4 custom `vi.*` imports
-- Loading: WASM cell = Tier 1 Rust host ELF that reads `.wasm` from VFS (`/data/apps/*.wasm`)
-- ePMP: **blocked by M-mode architecture** — PMP CSRs require M-mode, violations trap to M-mode. Full per-Cell ePMP deferred; static boot-time kernel protection as optional Phase 28-4
-
-**Phase 28-1 — wasmi integration:**
-- [ ] Add wasmi v1 (`no_std`, `prefer-btree-collections`) to `cells/drivers/wasm/Cargo.toml`
-- [ ] Implement `WasmRuntime::new()`, `load_module()`, `new_store()` with fuel metering
-
-**Phase 28-2 — `vi.*` host imports:**
-- [ ] `vi.send(target, ptr, len)`, `vi.recv(ptr, max_len, sender_out)`, `vi.log(ptr, len)`, `vi.exit(code)`
-- [ ] Register via `Linker::func_wrap` in `imports.rs`
-
-**Phase 28-3 — WASM host cell (`/bin/wasm`):**
-- [ ] Tier 1 Rust ELF that reads `.wasm` path from argv, loads via VFS, runs via wasmi
-- [ ] Fuel-cooperative loop: `OutOfFuel` trap → `set_fuel()` + `yield_cpu()`
+**Status**: 📋 PLANNED — ePMP **blocked by M-mode architecture** (PMP CSRs require M-mode, violations trap to M-mode); full per-Cell ePMP deferred, static boot-time kernel protection tracked as optional Phase 28-4
 
 **Phase 28-4 — PMP foundation (optional, P2):**
 - [ ] `hal/arch/riscv/src/common/pmp.rs` with NAPOT helpers + `init_static_regions()`
@@ -1086,7 +1062,7 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 **Next iteration (Phase 31b, deferred to G1 tail):**
 - [ ] Sonata dev board (CHERIoT-IBEX) — hardware not yet available
 - [ ] CHERIoT-Platform/rust fork integration (toolchain fork risk, low priority)
-- [ ] Cellos-Nano profile variants (no WASM, minimal drivers)
+- [ ] Cellos-Nano profile variants (minimal drivers)
 
 ### Phase 32 — SMP Multi-Core Scheduler (P3) `[G2]`
 **Target**: 2027-Q1 | **Effort**: ~4 weeks | **Status**: ✅ COMPLETE (2026-06-09)
@@ -1388,7 +1364,7 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 ```
 Use-case stages (overlay on technical phases below):
   G1 Robot & Embedded  ─ now → ~2026 Q4 ─ Tier A SBC (RV64/ARM64) primary; Tier B RV32-Nano sub-track at tail
-  G2 Server & PC       ─ ~2027         ─ SMP + WASM + desktop + x86_64 + hot migration
+  G2 Server & PC       ─ ~2027         ─ SMP + desktop + x86_64 + hot migration
 
 Technical phases:
 2026

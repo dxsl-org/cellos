@@ -16,7 +16,7 @@ Cellos phân cấp ứng dụng dựa trên sự cân bằng giữa **Hiệu nă
 | **Toolchain** | cargo | cargo + cc crate | Linux ecosystem |
 | **Trusted** | Bắt buộc | Bắt buộc | Không cần |
 
-**Tier 2 WASM không có trong stack — xem §6 (Wrong Paths) để hiểu lý do.**
+**Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md`.**
 
 ---
 
@@ -400,10 +400,4 @@ VT-x impl deferred to G2.
 4. **Gộp Security Silo và Linux VM**: Hai use case khác nhau — implement riêng, reuse Stage-2 primitives.
 5. **Assume H-ext mọi nơi**: RV32 không có H-ext. ARM dùng EL2. x86 dùng VT-x. Phải per-arch HAL. ✅ ENOSYS stubs cho riscv64/x86_64 landed P10; ARM64 EL2 shipped.
 6. **Android G1**: Android cần GPU passthrough + camera HAL + binder IPC — G2+ only, đừng để Android shape G2 design sớm.
-7. **WASM Tier 2 (wasmi / WAMR / WASI)**: Semi-trusted zone giả định không tồn tại trong thực tế:
-   - G1 (robot/embedded): code đều là trusted Rust — R&D/thử nghiệm diễn ra trên PC không phải thiết bị
-   - G2 (server/PC): code trusted → Tier 1 (nhanh hơn 5-10x), code untrusted → Tier 3 VM (isolation mạnh hơn)
-   - WASM không có use case rõ ràng nằm giữa hai case trên
-   - Phase 28 WASM MVP (wasmi + vi.*) giữ lại dưới `feature = "wasm-experimental"` — không roadmap tiếp
-   - Revisit nếu Cellos G2 trở thành multi-tenant platform (third-party workloads từ internet)
-8. **WASI Preview 1**: Deprecated (2019 spec), bỏ qua hoàn toàn.
+7. **WASI Preview 1**: Deprecated (2019 spec), bỏ qua hoàn toàn.
