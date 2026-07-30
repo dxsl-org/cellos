@@ -29,11 +29,35 @@ $python = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } els
 # and refuse to link with our lp64d objects.
 # Respect a pre-set CC so Linux CI can point at its distro toolchain
 # (gcc-riscv64-unknown-elf → riscv64-unknown-elf-gcc) — same for OBJCOPY below.
+
+# Probe rather than assume a toolchain name. The xpack distribution installs
+# `riscv-none-elf-*`, Ubuntu's gcc-riscv64-unknown-elf installs
+# `riscv64-unknown-elf-*`, and hard-coding either makes this script fail on the
+# other platform for a reason that surfaces only as a cc-rs "tool not found"
+# deep inside a cell build. scripts/lib-sign-cells.sh probes the same way.
+function Resolve-CrossTool([string[]]$Candidates, [string]$What) {
+    foreach ($c in $Candidates) {
+        if (Get-Command $c -ErrorAction SilentlyContinue) { return $c }
+    }
+    Write-Host "FATAL: no $What found (tried: $($Candidates -join ', '))" -ForegroundColor Red
+    Write-Host "  Install one: bash scripts/dev-setup.sh (Linux) or the xpack riscv toolchain." -ForegroundColor Red
+    exit 1
+}
+
 if (-not $env:CC_riscv64gc_unknown_none_elf) {
-    $env:CC_riscv64gc_unknown_none_elf = "riscv-none-elf-gcc"
+    $env:CC_riscv64gc_unknown_none_elf =
+        Resolve-CrossTool @('riscv-none-elf-gcc', 'riscv64-unknown-elf-gcc') 'riscv cross gcc'
+}
+if (-not $env:AR_riscv64gc_unknown_none_elf) {
+    $env:AR_riscv64gc_unknown_none_elf =
+        Resolve-CrossTool @('riscv-none-elf-ar', 'riscv64-unknown-elf-ar') 'riscv cross ar'
 }
 if (-not $env:CFLAGS_riscv64gc_unknown_none_elf) {
-    $env:CFLAGS_riscv64gc_unknown_none_elf = "-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS"
+    # -I third_party/freestanding-include: bare-metal gccs ship no libc headers and
+    # littlefs includes <string.h>. Ubuntu's needs the vendored set; omitting it
+    # fails the littlefs2-sys build rather than anything about the cell.
+    $inc = Join-Path (Get-Location) "third_party/freestanding-include"
+    $env:CFLAGS_riscv64gc_unknown_none_elf = "-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$inc"
 }
 if (-not $env:LIBCLANG_PATH) {
     $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
@@ -170,8 +194,10 @@ foreach ($line in $zig_output) {
 # One invocation for the whole set — the F1 scan is per-tree, not per-binary.
 #
 # cellos-sign reads $env:OBJCOPY to select the correct cross-objcopy binary.
-# Default to the xpack RISC-V toolchain; override before invoking this script.
-if (-not $env:OBJCOPY) { $env:OBJCOPY = "riscv-none-elf-objcopy" }
+# Probed like the compiler above, since a host objcopy cannot read these ELFs.
+if (-not $env:OBJCOPY) {
+    $env:OBJCOPY = Resolve-CrossTool @('riscv-none-elf-objcopy', 'riscv64-unknown-elf-objcopy') 'riscv cross objcopy'
+}
 Write-Host "Signing cell binaries (Ed25519 dev key, objcopy=$($env:OBJCOPY))..."
 $sign_script = "scripts/cellos-sign"
 if (-not (Test-Path $sign_script)) {
