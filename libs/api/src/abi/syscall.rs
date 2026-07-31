@@ -364,6 +364,42 @@ pub enum ViSyscall {
 
     // === Process Info ===
     GetProcs = 30,
+
+    // === Directory-handle inheritance (appended last; see abi.rs rules) ===
+    /// 240: Name the directory handles the caller's NEXT spawn passes to its child.
+    ///
+    /// ABI: a0 = ptr to [`crate::dir_handles::ViSpawnDirHandles`] (0 clears a
+    /// previously named set), a1..a3 reserved → 0 on success.
+    ///
+    /// Staged on the caller's own task rather than passed as a spawn argument
+    /// because `SpawnFromElf` and `SpawnPinned` already use all four argument
+    /// registers, and a carrier that reached only half the spawn entry points
+    /// would leave the other half silently granting nothing. The set is consumed
+    /// and cleared by the next spawn the caller makes, whether that spawn
+    /// succeeds or fails, so a set can never attach to a later unrelated spawn.
+    ///
+    /// A malformed set (unknown version, over-long count, zero or repeated
+    /// handle) is refused here rather than trimmed — see
+    /// [`crate::dir_handles::DirHandleSetError`].
+    ///
+    /// Privileged: requires SpawnCap, the same authority every spawn entry point
+    /// demands. Always permitted past the syscall allowlist, matching
+    /// `RegisterService`/`CapRevoke`.
+    SpawnSetDirs = 240,
+    /// 241: Read the kernel's record of a cell's inherited directory handles.
+    ///
+    /// ABI: a0 = cell_id, a1 = buf_ptr, a2 = buf_len → bytes written
+    /// ([`crate::dir_attestation::DIR_ATTESTATION_LEN`]).
+    ///
+    /// The kernel states which spawner named the set and what the set was. It
+    /// does NOT state that the spawner held those handles — that is a question
+    /// about the filesystem service's own table, and only the service can answer
+    /// it. A buffer shorter than the record is an error, never a partial write.
+    ///
+    /// Restricted to the registered provider of `service::VFS` and to a cell
+    /// asking about itself. Always permitted past the syscall allowlist; the
+    /// identity check at dispatch is the gate.
+    QueryDirHandles = 241,
 }
 
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
@@ -603,12 +639,18 @@ impl ViSyscall {
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
             // NotifyOnExit, RegisterService, and CapRevoke are privileged (SpawnCap-gated),
             // so they are always permitted past the allowlist — SpawnCap is the gate at dispatch.
+            // SpawnSetDirs (SpawnCap) and QueryDirHandles (VFS-provider or self)
+            // join them: giving them bits would silently deny every cell whose
+            // `__ViCell_syscalls` section was generated before those bits existed,
+            // and the authority check at dispatch is the real gate either way.
             Self::Yield
             | Self::Exit
             | Self::ForceExit
             | Self::NotifyOnExit
             | Self::RegisterService
             | Self::CapRevoke
+            | Self::SpawnSetDirs
+            | Self::QueryDirHandles
             | Self::Unknown => None,
         }
     }
@@ -688,6 +730,8 @@ impl From<usize> for ViSyscall {
             237 => ViSyscall::ReadLog,
             238 => ViSyscall::SpawnFromElf,
             239 => ViSyscall::GetProcs2,
+            240 => ViSyscall::SpawnSetDirs,
+            241 => ViSyscall::QueryDirHandles,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

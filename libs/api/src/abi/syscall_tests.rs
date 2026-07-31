@@ -35,6 +35,8 @@ mod tests {
         (232, ViSyscall::SyncCap),
         (233, ViSyscall::GrantDma),
         (239, ViSyscall::GetProcs2),
+        (240, ViSyscall::SpawnSetDirs),
+        (241, ViSyscall::QueryDirHandles),
         (20, ViSyscall::ShmAlloc),
         (21, ViSyscall::ShmMap),
         (30, ViSyscall::GetProcs),
@@ -87,6 +89,28 @@ mod tests {
         assert_eq!(ViSyscall::Close as usize, 103);
         assert_eq!(ViSyscall::GetProcs as usize, 30);
         assert_eq!(ViSyscall::GetProcs2 as usize, 239);
+        assert_eq!(ViSyscall::SpawnSetDirs as usize, 240);
+        assert_eq!(ViSyscall::QueryDirHandles as usize, 241);
+    }
+
+    /// The two directory-handle opcodes must sit past every previously shipped
+    /// id. An appended variant that reused a live discriminant has already cost
+    /// this project one silent IPC collision.
+    #[test]
+    fn appended_opcodes_do_not_collide_with_shipped_ids() {
+        for &(id, variant) in CASES {
+            if matches!(
+                variant,
+                ViSyscall::SpawnSetDirs | ViSyscall::QueryDirHandles
+            ) {
+                continue;
+            }
+            assert_ne!(id, ViSyscall::SpawnSetDirs as usize);
+            assert_ne!(id, ViSyscall::QueryDirHandles as usize);
+        }
+        // Previously unmapped ids must still decode as Unknown, so nothing that
+        // used to be rejected is now silently accepted as a new opcode.
+        assert_eq!(ViSyscall::from(242), ViSyscall::Unknown);
     }
 
     /// v1 must stay byte-for-byte identical for every existing `GetProcs`

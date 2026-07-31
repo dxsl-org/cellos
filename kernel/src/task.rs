@@ -4,6 +4,7 @@
 #![allow(clippy::result_unit_err)]
 
 pub mod cap;
+pub mod dir_inherit;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
 pub mod p_trust_selftest;
@@ -557,6 +558,7 @@ fn spawn_cell_task(
     kstack: stack::Stack,
     ustack: stack::Stack,
 ) -> Result<usize, ViError> {
+    let spawner = current_task_id();
     let mut guard = SCHEDULER.lock();
     let sched = guard.as_mut().ok_or(ViError::Unknown)?;
     let tid = sched.spawn_with_stacks(name, requested, allowed_drivers, kstack, ustack);
@@ -565,6 +567,12 @@ fn spawn_cell_task(
             task.cell_id = CellId(tid as u64);
         }
     }
+    // Inside the same critical section that made the task reachable: the child
+    // is already on a ready queue, and any hart that could pick it up must first
+    // take this lock. Installing after the guard drops would leave a window in
+    // which the child runs and the filesystem service reads "inherited nothing"
+    // for a cell that was in fact given a set.
+    dir_inherit::install_on_child(sched, tid, spawner);
     Ok(tid)
 }
 

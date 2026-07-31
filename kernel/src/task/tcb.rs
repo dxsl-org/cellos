@@ -341,6 +341,33 @@ pub struct Task {
     /// to any check that keys on identity — which is the point of the whole
     /// attestation: `CellId(tid)` was misattributing threads.
     pub cell_generation: u64,
+
+    /// Directory handles this task's spawner named for it, with the spawner's
+    /// attested identity (see [`api::dir_handles`]).
+    ///
+    /// The kernel is a courier here and nothing more. It does not know what any
+    /// of these handles refer to, cannot tell a live one from a revoked one, and
+    /// must never treat this as a second record of filesystem authority — the
+    /// filesystem service owns that, and a second copy would drift in the
+    /// direction of silently widening what a cell may reach. The only claim the
+    /// kernel makes about this field is provenance: *this* spawner named *these*
+    /// values at spawn.
+    ///
+    /// Bounded inline at [`api::dir_handles::MAX_SPAWN_DIR_HANDLES`], so a
+    /// caller-supplied count never sizes an allocation.
+    ///
+    /// Set once, under the scheduler lock that creates the task, before it can
+    /// be scheduled. It is never updated afterwards: authority fixed at creation
+    /// is what makes it auditable.
+    pub inherited_dirs: api::dir_handles::InheritedDirHandles,
+
+    /// Directory handles this task has named for the next cell it spawns.
+    ///
+    /// Staged by `SpawnSetDirs` and consumed by the next cell this task creates,
+    /// then cleared — including when that spawn fails, so a set can never attach
+    /// to a later unrelated child. Empty means "pass nothing on", which is what
+    /// every task that never calls `SpawnSetDirs` does.
+    pub staged_dirs: api::dir_handles::DirHandleSet,
 }
 
 /// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
@@ -399,6 +426,8 @@ impl Task {
             pending_msgs: Vec::new(),
             cell_generation: NEXT_CELL_GENERATION
                 .fetch_add(1, core::sync::atomic::Ordering::Relaxed),
+            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
+            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
         }
     }
 

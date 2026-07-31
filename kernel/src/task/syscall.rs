@@ -452,6 +452,38 @@ fn write_caller_identity(buf_ptr: usize, buf_len: usize, sender_tid: usize) {
     }
 }
 
+/// May `caller_id` read the kernel's provenance record for `target_cell`?
+///
+/// Two callers have a reason to: the filesystem service, which must decide
+/// whether to bind the set, and a cell asking about itself. Anything else
+/// enumerating another cell's grant is reconnaissance with no legitimate use.
+///
+/// The filesystem service is identified by the service registry rather than by
+/// name, because a cell's name comes from a spawner-chosen path hint and is
+/// therefore forgeable; registering a well-known service id is SpawnCap-gated
+/// and is not.
+///
+/// Lock order SCHEDULER → REGISTRY, matching `Scheduler::reap`; REGISTRY is a
+/// leaf and is never held across a scheduler acquisition.
+fn may_query_dir_handles(caller_id: usize, target_cell: u64) -> bool {
+    let guard = super::SCHEDULER.lock();
+    let Some(sched) = guard.as_ref() else {
+        return false;
+    };
+    let Some(caller_cell) = sched.tasks.get(&caller_id).map(|t| t.cell_id.0) else {
+        return false;
+    };
+    if caller_cell == 0 {
+        return false;
+    }
+    if caller_cell == target_cell {
+        return true;
+    }
+    crate::cell::service_registry::lookup(api::syscall::service::VFS)
+        .and_then(|tid| sched.tasks.get(&tid))
+        .is_some_and(|vfs| vfs.cell_id.0 == caller_cell)
+}
+
 fn encode_task_state(state: &TaskState) -> u32 {
     match state {
         TaskState::Ready => 0,
@@ -660,6 +692,16 @@ pub enum Syscall {
         path_len: usize,
         priority: u8,
         core_id: usize,
+    },
+    /// 240: SpawnSetDirs — name the directory handles the caller's next spawn
+    /// passes to its child. ABI: a0 = ptr to `ViSpawnDirHandles` (0 clears).
+    SpawnSetDirs { carrier_ptr: usize },
+    /// 241: QueryDirHandles — read the kernel's record of a cell's inherited
+    /// directory handles. ABI: a0 = cell_id, a1 = buf_ptr, a2 = buf_len.
+    QueryDirHandles {
+        cell_id: u64,
+        buf_ptr: usize,
+        buf_len: usize,
     },
     /// 13: OpenCap — open a file and return a CapId.
     OpenCap { path_ptr: usize, path_len: usize },
@@ -1038,7 +1080,10 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::ForceExit { .. }
         | Syscall::NotifyOnExit { .. }
         | Syscall::RegisterService { .. }
-        | Syscall::CapRevoke { .. } => return None,
+        | Syscall::CapRevoke { .. }
+        // SpawnCap / VFS-provider gated at dispatch; see ViSyscall::allowlist_bit.
+        | Syscall::SpawnSetDirs { .. }
+        | Syscall::QueryDirHandles { .. } => return None,
         // Raw block-I/O (500-503): ZST BlockIoCap gated at dispatch.
         Syscall::BlkRead { .. }
         | Syscall::BlkWrite { .. }
@@ -2192,11 +2237,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
-            let task_id = crate::loader::spawn_from_path(
+            let spawned = crate::loader::spawn_from_path(
                 path_str,
                 crate::task::cap::Spawner::User(caller_id),
-            )
-            .map_err(|e| match e {
+            );
+            // A successful spawn consumed any staged directory-handle set inside
+            // task creation. Clearing unconditionally covers the failure paths:
+            // a set left staged by a spawn that never produced a child would be
+            // handed to whichever child this caller created next.
+            crate::task::dir_inherit::clear_staged(caller_id);
+            let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,
@@ -2218,6 +2268,76 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
             }
             Ok(task_id)
+        }
+
+        Syscall::SpawnSetDirs { carrier_ptr } => {
+            // The same authority every spawn entry point demands. A cell that
+            // cannot spawn has no child to hand handles to, so accepting a set
+            // from one would only build state nothing can consume.
+            if !caller_has_spawn(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if carrier_ptr == 0 {
+                crate::task::dir_inherit::clear_staged(caller_id);
+                return Ok(0);
+            }
+            let carrier_size = core::mem::size_of::<api::dir_handles::ViSpawnDirHandles>();
+            validate_user_buf(carrier_ptr, carrier_size, MAX_USER_BUF)?;
+            // SAFETY: `carrier_ptr` was validated above as a caller-owned range
+            // of at least the carrier's size. The carrier is `#[repr(C)]` plain
+            // integer data with no invalid bit patterns, so any bytes there are
+            // a well-formed value, and `read_unaligned` tolerates a caller that
+            // supplied an unaligned pointer. SUM=1 permits the S-mode read. The
+            // value is copied out before it is inspected, so nothing can change
+            // between the check and the use.
+            let carrier = unsafe {
+                core::ptr::read_unaligned(carrier_ptr as *const api::dir_handles::ViSpawnDirHandles)
+            };
+            // Refused whole, never trimmed: a set the caller cannot tell was
+            // narrowed is the failure this mechanism exists to prevent.
+            let set = api::dir_handles::DirHandleSet::from_carrier(&carrier).map_err(|e| {
+                log::warn!(
+                    "[dirs] tid {} named an invalid directory handle set: {:?}",
+                    caller_id,
+                    e
+                );
+                SyscallError::InvalidInput
+            })?;
+            crate::task::dir_inherit::stage(caller_id, set);
+            Ok(0)
+        }
+
+        Syscall::QueryDirHandles {
+            cell_id,
+            buf_ptr,
+            buf_len,
+        } => {
+            if !may_query_dir_handles(caller_id, cell_id) {
+                log::warn!(
+                    "[dirs] tid {} denied a provenance query for cell {}",
+                    caller_id,
+                    cell_id
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
+            let len = api::dir_attestation::DIR_ATTESTATION_LEN;
+            // A short buffer is an error, not a partial write: a truncated
+            // record reads as a smaller set than the kernel recorded, which is
+            // exactly the silent narrowing this path must not produce.
+            if buf_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            validate_user_buf(buf_ptr, len, MAX_USER_BUF)?;
+            let record = crate::task::dir_inherit::attestation_for(cell_id)
+                .ok_or(SyscallError::InvalidInput)?
+                .to_bytes();
+            // SAFETY: `buf_ptr..buf_ptr+len` was validated as a caller-owned
+            // range of exactly this size, and we run in that caller's syscall
+            // context with SUM=1, so the write is to the caller's own memory.
+            unsafe {
+                core::ptr::copy_nonoverlapping(record.as_ptr(), buf_ptr as *mut u8, len);
+            }
+            Ok(len)
         }
 
         Syscall::SpawnFromElf {
@@ -2277,12 +2397,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // in this syscall, so it cannot free the grant before spawn_gated copies
             // the ELF segments into fresh frames.
             let elf_bytes = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
-            let task_id = crate::loader::spawn_gated(
+            let spawned = crate::loader::spawn_gated(
                 elf_bytes,
                 path_str,
                 crate::task::cap::Spawner::User(caller_id),
-            )
-            .map_err(|e| match e {
+            );
+            // See `SpawnFromPath`: consumed on success, cleared here so a failed
+            // spawn cannot leave its set for an unrelated later child.
+            crate::task::dir_inherit::clear_staged(caller_id);
+            let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
@@ -2333,11 +2456,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidInput);
             }
             // Spawn at requested priority; future SMP can use core_id for affinity.
-            let task_id = crate::loader::spawn_from_path(
+            let spawned = crate::loader::spawn_from_path(
                 path_str,
                 crate::task::cap::Spawner::User(caller_id),
-            )
-            .map_err(|e| match e {
+            );
+            // See `SpawnFromPath`: consumed on success, cleared here so a failed
+            // spawn cannot leave its set for an unrelated later child.
+            crate::task::dir_inherit::clear_staged(caller_id);
+            let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,
@@ -2731,12 +2857,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // The gate also passes the `CellId(0)` sentinel down to
             // `task::spawn_from_mem`, which is what gives this cell a derived
             // per-cell identity instead of the kernel's.
-            crate::loader::mem_spawn_gate::spawn_from_mem_gated(
+            let spawned = crate::loader::mem_spawn_gate::spawn_from_mem_gated(
                 elf_bytes,
                 name,
                 crate::task::cap::Spawner::User(caller_id),
-            )
-            .map_err(|e| match e {
+            );
+            // See `SpawnFromPath`: consumed on success, cleared here so a failed
+            // spawn cannot leave its set for an unrelated later child.
+            crate::task::dir_inherit::clear_staged(caller_id);
+            spawned.map_err(|e| match e {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 types::ViError::OutOfMemory => SyscallError::Unknown,
                 _ => SyscallError::InvalidInput,
@@ -3428,6 +3557,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 unsafe { core::slice::from_raw_parts(path_ptr as *const u8, path_len) };
             let path = core::str::from_utf8(path_bytes).map_err(|_| SyscallError::InvalidInput)?;
             let target = types::CellId(cell_id as u64);
+            // Directory handles do not survive a swap: the replacement cell
+            // re-acquires them, which is what makes the generation in an
+            // attested identity mean anything. A set the orchestrator happened
+            // to have staged must not become the new instance's inheritance, so
+            // it is dropped before the replacement is created rather than
+            // consumed by it.
+            crate::task::dir_inherit::clear_staged(caller_id);
             crate::cell::hotswap::hotswap(target, path, caller_id)
                 .map_err(|_| SyscallError::Unknown)
         }
@@ -3998,6 +4134,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             path_len: a1,
             priority: a2 as u8,
             core_id: a3,
+        },
+        ViSyscall::SpawnSetDirs => Syscall::SpawnSetDirs { carrier_ptr: a0 },
+        ViSyscall::QueryDirHandles => Syscall::QueryDirHandles {
+            cell_id: a0 as u64,
+            buf_ptr: a1,
+            buf_len: a2,
         },
         ViSyscall::OpenCap => Syscall::OpenCap {
             path_ptr: a0,

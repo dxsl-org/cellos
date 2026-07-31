@@ -132,10 +132,27 @@ Without some such confirmation, (a) degenerates into the confused-deputy problem
 of an unauthenticated (c) with more machinery attached. **The confirmation path is
 part of the ABI change, not a follow-up.**
 
-Narrowing-only is enforced where the set is constructed, symmetric with the
-capability intersection already performed at spawn. A spawn requesting a handle
-its parent does not hold fails the spawn rather than silently dropping the handle,
-so an over-broad request is visible instead of quietly downgraded.
+**Where narrowing-only is actually enforced.** An earlier draft of this record
+said the spawn itself fails when a parent names a handle it does not hold. That is
+not reachable, and the reason is the same principle that makes the kernel a
+courier: the kernel cannot evaluate the claim. What it records is what the spawner
+*named*, never what the spawner *holds* — a cell acquires handles from the
+filesystem service after it starts, so the two are different sets and only the
+service knows the second one. A kernel-side check would need the very mirrored
+state this record rejects, and would wrongly reject legitimate narrowing of a
+handle acquired at runtime.
+
+The check therefore lives in the filesystem service, at the moment it binds the
+set to the child, and it is all-or-nothing: if any named handle was not held by
+the spawner, none are bound. The kernel enforces only structural validity —
+version, bound, no zero, no duplicate — and rejects the whole set rather than
+sanitising part of it, logging the task and the reason.
+
+The consequence, stated rather than glossed: an over-broad request fails at the
+child's first filesystem call, not at the spawn. Still fail-closed, and still
+narrowing-only, but the failure surfaces later than the ideal and further from its
+cause. Closing that gap would require the kernel to consult the service from
+inside a spawn syscall, which is not a trade worth making.
 
 **Why not (c), given it was free.** The attested caller identity added earlier in
 this work does make (c) sound — a grant request now arrives with the granting

@@ -13,6 +13,9 @@
 
 pub mod caller_identity;
 pub mod cap;
+pub mod dir_attestation;
+pub mod dir_handles;
+pub mod dir_handles_tests;
 pub mod disk;
 pub mod fast_ipc;
 pub mod hypervisor;
