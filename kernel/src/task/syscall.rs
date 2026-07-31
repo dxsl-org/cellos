@@ -477,7 +477,7 @@ fn caller_has_platform(caller_id: usize) -> bool {
 /// supplied by user code will fault on access — but the fault is far more
 /// graceful when we reject obvious garbage up front.
 #[inline]
-fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<(), SyscallError> {
+pub(super) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<(), SyscallError> {
     if ptr == 0 {
         return Err(SyscallError::InvalidInput);
     }
@@ -995,6 +995,17 @@ pub enum Syscall {
     /// 217: WaitForEvent — block until `mask` bits fire or `deadline` ticks pass.
     /// `deadline = None` means block indefinitely.
     WaitForEvent { mask: u32, deadline: Option<u64> },
+    /// 242: WaitCompletion — reserve a slot on the caller's completion queue for
+    /// the source named by `mask`, wait for it to be filled, and write the
+    /// result to `out_ptr`. `deadline = None` waits indefinitely.
+    ///
+    /// Carries a deadline for the same reason `WaitForEvent` does: its caller
+    /// has maintenance work that must run on a timer even when no frame arrives.
+    WaitCompletion {
+        mask: u32,
+        deadline: Option<u64>,
+        out_ptr: usize,
+    },
 
     // === Hypervisor (220-225) — HypervisorCap ZST-gated ===
     /// 220: CreateVm — allocate guest RAM + Stage-2 table → vm_id.
@@ -1157,6 +1168,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::GrantRegister { .. } => V::GrantRegister,
         Syscall::GrantUnregister { .. } => V::GrantUnregister,
         Syscall::WaitForEvent { .. } => V::WaitForEvent,
+        Syscall::WaitCompletion { .. } => V::WaitCompletion,
         Syscall::CreateVm { .. } => V::CreateVm,
         Syscall::CreateVcpu { .. } => V::CreateVcpu,
         Syscall::MapGuestMemory { .. } => V::MapGuestMemory,
@@ -3906,6 +3918,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(fired)
         }
 
+        Syscall::WaitCompletion {
+            mask,
+            deadline,
+            out_ptr,
+        } => super::completion_wait::wait_completion(caller_id, mask, deadline, out_ptr),
+
         Syscall::RequestMmio { base, len } => {
             // PlatformCap bypass: Platform Cell may claim any MMIO range
             // (including the ECAM config-space window, which is not in PCIE_BARS).
@@ -4452,6 +4470,22 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
                 Some((super::system_ticks() as u64).wrapping_add(timeout))
             };
             Syscall::WaitForEvent { mask, deadline }
+        }
+        ViSyscall::WaitCompletion => {
+            // ABI: a0 = source mask (u32), a1 = timeout_ticks_lo,
+            // a2 = timeout_ticks_hi, a3 = pointer to the result record.
+            let mask = a0 as u32;
+            let timeout = (a1 as u64) | ((a2 as u64) << 32);
+            let deadline = if timeout == 0 {
+                None
+            } else {
+                Some((super::system_ticks() as u64).wrapping_add(timeout))
+            };
+            Syscall::WaitCompletion {
+                mask,
+                deadline,
+                out_ptr: a3,
+            }
         }
         // Hypervisor syscalls 220-225.
         ViSyscall::CreateVm => Syscall::CreateVm { guest_pages: a0 },

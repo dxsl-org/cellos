@@ -197,6 +197,31 @@ impl CompletionQueue {
         true
     }
 
+    /// Withdraw a reservation whose operation never started.
+    ///
+    /// This is not a completion and must never be expressed as one: completing
+    /// a slot raises a wake request, and a request raised by the submitter
+    /// itself — which is already running — is still outstanding when that same
+    /// task parks next, so the park is cancelled the instant it begins. A
+    /// submitter that withdraws and re-submits in a loop would then never
+    /// sleep at all.
+    ///
+    /// # Returns
+    /// `true` when the slot was reserved and is now free. `false` when it
+    /// already holds a result: the submitter lost the race with the source and
+    /// must [`drain`](Self::drain) that result rather than discard it.
+    #[must_use = "a refused withdrawal means a result is waiting and would be lost"]
+    pub fn release(&self, slot: SlotId) -> bool {
+        let mut ring = self.ring.lock();
+        match ring.slots.get(slot.index()) {
+            Some(Slot::Reserved) => {
+                ring.slots[slot.index()] = Slot::Free;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Take the oldest undrained completion, releasing its slot for reuse.
     ///
     /// Holds the same single leaf lock as [`complete`](Self::complete); the

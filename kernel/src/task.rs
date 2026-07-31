@@ -6,9 +6,11 @@
 pub mod cap;
 pub mod completion;
 pub mod completion_selftest;
+pub mod completion_wait;
 pub mod dir_inherit;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
+pub mod net_rx_selftest;
 pub mod p_trust_selftest;
 pub mod smp;
 pub mod syscall;

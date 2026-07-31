@@ -32,7 +32,9 @@ const TID_C: usize = 9303;
 const CELL_ONE: u64 = 9401;
 const CELL_TWO: u64 = 9402;
 
-fn insert(tid: usize, cell: u64) {
+/// Put a synthetic task in the table. Shared with the NET_RX self-test, which
+/// needs the same scaffolding to reach a real queue.
+pub(super) fn insert(tid: usize, cell: u64) {
     let task = alloc::boxed::Box::new(Task::new(
         tid,
         CellId(cell),
@@ -44,14 +46,14 @@ fn insert(tid: usize, cell: u64) {
     }
 }
 
-fn remove(tid: usize) {
+pub(super) fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         sched.tasks.remove(&tid);
     }
     super::hart_local::ready::remove_from_all(tid);
 }
 
-fn queue(tid: usize) -> Option<Arc<CompletionQueue>> {
+pub(super) fn queue(tid: usize) -> Option<Arc<CompletionQueue>> {
     let mut guard = super::SCHEDULER.lock();
     completion::queue_for(guard.as_mut()?, tid)
 }
@@ -255,13 +257,69 @@ fn deferred_wake_reaches_scheduler() -> bool {
     ok
 }
 
+/// Withdrawing a reservation frees the slot and raises no wake request.
+///
+/// A withdrawal expressed as a completion would leave a request outstanding for
+/// a task that is running, and that request cancels the submitter's *next* park
+/// the instant it begins — a submit/withdraw loop would then never sleep.
+fn withdrawal_raises_no_wake() -> bool {
+    insert(TID_A, CELL_ONE);
+    let mut ok = true;
+    match queue(TID_A) {
+        Some(q) => {
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                completion::deliver_pending_wakes(sched);
+            }
+            match q.reserve() {
+                Some(slot) => {
+                    if !q.release(slot) {
+                        ok = fail("withdrawing a freshly reserved slot was refused");
+                    }
+                    if completion::wakes_pending() {
+                        ok = fail("a withdrawal raised a wake request");
+                    }
+                    if q.drainable() != 0 {
+                        ok = fail("a withdrawal left something to drain");
+                    }
+                    if q.reserved() != 0 {
+                        ok = fail("a withdrawal left the slot charged");
+                    }
+                    if q.release(slot) {
+                        ok = fail("a free slot was withdrawn a second time");
+                    }
+                }
+                None => ok = fail("an empty queue refused the first reservation"),
+            }
+            // A slot holding a result must be drained, never discarded.
+            if let Some(slot) = q.reserve() {
+                if !q.complete(slot, 5) {
+                    ok = fail("completing a freshly reserved slot was refused");
+                }
+                if q.release(slot) {
+                    ok = fail("a slot holding a result was withdrawn instead of drained");
+                }
+                if q.drain().is_none() {
+                    ok = fail("the refused withdrawal lost the result it protected");
+                }
+            }
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                completion::deliver_pending_wakes(sched);
+            }
+        }
+        None => ok = fail("no queue could be reached from the task record"),
+    }
+    remove(TID_A);
+    ok
+}
+
 /// Returns true iff the completion queue reserves, lands, bounds and defers as
 /// specified. Logs a decisive serial line.
 pub fn self_test() -> bool {
     let ok = round_trip()
         & shared_within_cell()
         & exhaustion_refuses_submission()
-        & deferred_wake_reaches_scheduler();
+        & deferred_wake_reaches_scheduler()
+        & withdrawal_raises_no_wake();
 
     if ok {
         log::info!(

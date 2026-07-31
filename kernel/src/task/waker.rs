@@ -1,35 +1,145 @@
-//! Kernel event waker — IRQ-driven wake for WaitForEvent syscall.
+//! The NET_RX event source: where a NIC RX frame is reported to the cell
+//! waiting for one.
 //!
-//! Architecture: a single `NET_RX_PENDING` AtomicBool is set by the VirtIO NIC
-//! ISR on every RX interrupt.  The global timer sweep (hart 0, `pick_next`) checks
-//! all `WaitEvent` tasks each tick and wakes those whose mask matches a pending bit.
-//! The net cell checks the flag BEFORE parking (lost-wakeup guard): if NET_RX_PENDING
-//! is already set when WaitForEvent is called, it returns immediately without blocking.
+//! Two mechanisms serve this one source, and they are not alternatives:
 //!
-//! Lock order: SCHEDULER (global) → per-hart ready (leaf).
-//! This module does NOT acquire SCHEDULER itself — callers in the sweep already hold it.
+//! - **A reservation.** `WaitCompletion(NET_RX)` reserves a slot on the calling
+//!   cell's completion queue and records it here. That reservation is what the
+//!   RX signal completes, so the result lands in a place that already existed
+//!   before the frame arrived — the interrupt path never allocates and can never
+//!   be refused.
+//! - **A level flag.** `NET_RX_PENDING` remembers a frame that arrived while
+//!   nobody was waiting. A hardware condition is level-triggered: a frame that
+//!   turns up between two waits must still be visible to the next one, or the
+//!   cell sleeps on data it already has. The flag is that memory, and it is the
+//!   lost-wakeup guard the wait applies before parking. Removing it would not
+//!   simplify anything — it would lose frames.
+//!
+//! Exactly one reservation may be outstanding, because there is one source and
+//! one consumer. Arming while one is already outstanding displaces it, and the
+//! displaced reservation is completed as abandoned rather than dropped: a slot
+//! that has been promised a landing must always get one, or its waiter never
+//! runs again. Refusing the newcomer instead was rejected — a reservation left
+//! behind by a cell that died mid-wait would then wedge the source for the cell
+//! that replaces it, and a service dying and being restarted is routine here.
+//!
+//! Lock order: `NET_RX_WAIT` is a leaf and is taken alone. It is never held
+//! across `CompletionQueue::complete`, so the append path's lock set stays
+//! exactly one lock, which is what makes it safe from interrupt context. It is
+//! also never taken while `SCHEDULER` is held, so an interrupt on another hart
+//! never waits behind a scheduler critical section.
 
+use super::completion::{CompletionQueue, SlotId};
+use crate::sync::Spinlock;
+use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// Set by the VirtIO NIC ISR whenever at least one RX frame is available.
-/// Cleared by the WaitForEvent handler when the net cell is woken.
+/// Set when an RX frame arrives with no reservation outstanding.
+/// Consumed by the next waiter before it parks.
 pub static NET_RX_PENDING: AtomicBool = AtomicBool::new(false);
+
+/// The single outstanding NET_RX reservation.
+///
+/// `queue` outlives `slot` deliberately: the handle is replaced only by the next
+/// arm, from syscall context, so the interrupt path never drops the last
+/// reference to a queue and therefore never reaches the allocator.
+struct NetRxWait {
+    queue: Option<Arc<CompletionQueue>>,
+    slot: Option<SlotId>,
+}
+
+static NET_RX_WAIT: Spinlock<NetRxWait> = Spinlock::new(NetRxWait {
+    queue: None,
+    slot: None,
+});
 
 /// Returns true if any event is currently pending.
 pub fn has_any_pending() -> bool {
     NET_RX_PENDING.load(Ordering::Relaxed)
 }
 
+/// Record `slot` on `queue` as the landing place for the next RX frame.
+///
+/// Call from the submitting cell's own context, never from an interrupt: a
+/// displaced reservation is completed here, and the handle it displaced is
+/// dropped here, both of which may run arbitrary destructor work.
+///
+/// # Panics
+/// Never panics.
+pub fn arm_net_rx(queue: Arc<CompletionQueue>, slot: SlotId) {
+    let arriving = queue.cell().0;
+    let displaced = {
+        let mut wait = NET_RX_WAIT.lock();
+        let previous = wait.queue.replace(queue);
+        let previous_slot = wait.slot.replace(slot);
+        (previous, previous_slot)
+    };
+
+    // Outside the guard: `complete` takes the queue's own lock, and this is the
+    // one rule that keeps the append path down to a single lock.
+    if let (Some(previous), Some(previous_slot)) = displaced {
+        let _ = previous.complete(previous_slot, api::completion::RESULT_ABANDONED as isize);
+        log::warn!(
+            "[net-rx] cell {} took over the reservation held by cell {}",
+            arriving,
+            previous.cell().0
+        );
+    }
+}
+
+/// Release the outstanding reservation if it belongs to `queue`.
+///
+/// Returns the slot only to the caller that took it, so a waiter and the
+/// interrupt path can race for the same reservation and exactly one of them
+/// wins. A `None` means the interrupt path got there first and the result is
+/// already on the queue.
+pub fn disarm_net_rx(queue: &Arc<CompletionQueue>) -> Option<SlotId> {
+    let mut wait = NET_RX_WAIT.lock();
+    let mine = wait
+        .queue
+        .as_ref()
+        .map(|armed| Arc::ptr_eq(armed, queue))
+        .unwrap_or(false);
+    if !mine {
+        return None;
+    }
+    wait.slot.take()
+}
+
 /// Signal a NIC RX event.  Called from the VirtIO interrupt handler (ISR context).
 ///
-/// Sets `NET_RX_PENDING` so the next timer sweep wakes any `WaitEvent(NET_RX)` task.
-/// On RISC-V we also pend local SSIP so the timer handler fires without waiting for
+/// Completes the outstanding reservation if there is one, and otherwise records
+/// the frame in `NET_RX_PENDING` for whoever waits next. Waking the completed
+/// waiter is deliberately not done here — it needs the scheduler, which this
+/// context may not take, so it is deferred to `deliver_pending_wakes`.
+/// On RISC-V we pend local SSIP so the timer handler fires without waiting for
 /// the next mtime tick — sub-millisecond latency on the handling hart.
 ///
 /// # Safety contract
 /// Callers must be in S-mode trap context (SIE already cleared by hardware entry).
 pub fn signal_net_rx() {
-    NET_RX_PENDING.store(true, Ordering::Release);
+    let armed = {
+        let mut wait = NET_RX_WAIT.lock();
+        // Cloning here cannot free anything: the registry keeps its own strong
+        // reference, so this clone is never the last one even when it is dropped
+        // unused below. That is what keeps the allocator out of this path.
+        let handle = wait.queue.as_ref().map(Arc::clone);
+        match (handle, wait.slot) {
+            (Some(queue), Some(slot)) => {
+                wait.slot = None;
+                Some((queue, slot))
+            }
+            _ => None,
+        }
+    };
+
+    match armed {
+        Some((queue, slot)) => {
+            let _ = queue.complete(slot, api::syscall::events::NET_RX as isize);
+        }
+        None => NET_RX_PENDING.store(true, Ordering::Release),
+    }
+
     // Pend a software interrupt on the current hart so vi_timer_tick fires immediately.
     // SAFETY: csrsi sip.SSIP is permitted from S-mode (RISC-V priv spec §4.1.3).
     // SIE is currently cleared by the hardware trap entry, so this is queued and
@@ -43,8 +153,10 @@ pub fn signal_net_rx() {
 /// Check whether event `mask` has any pending bits.  Returns the matching fired bits,
 /// or 0 if none.  Clears the matching bits as a side effect (consume-on-read).
 ///
-/// Called by the timer sweep (already under SCHEDULER) and the WaitForEvent syscall
-/// handler before parking the task.
+/// Called by the timer sweep (already under SCHEDULER), by the WaitForEvent
+/// syscall handler before parking the task, and by `WaitCompletion` after it
+/// arms — the ordering that closes the window where a frame arrives between the
+/// two.
 pub fn consume_pending(mask: u32) -> u32 {
     let mut fired: u32 = 0;
     if mask & api::syscall::events::NET_RX != 0

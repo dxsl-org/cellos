@@ -400,6 +400,27 @@ pub enum ViSyscall {
     /// asking about itself. Always permitted past the syscall allowlist; the
     /// identity check at dispatch is the gate.
     QueryDirHandles = 241,
+    /// 242: Wait for one asynchronous result on the caller's completion queue.
+    ///
+    /// ABI: a0 = source mask (see [`events`]), a1 = timeout_ticks_lo,
+    /// a2 = timeout_ticks_hi, a3 = pointer to a
+    /// [`crate::completion::COMPLETION_LEN`]-byte buffer → 1 when a completion
+    /// was written there, 0 when the wait ended with nothing.
+    ///
+    /// Calling this **is** the submission: it reserves a slot on the caller's
+    /// own queue, from the caller's own context, so the completion the source
+    /// later appends can never fail to find somewhere to land. A queue with no
+    /// free slot refuses here, where the caller can act on it, rather than in
+    /// the interrupt handler that is trying to report a result.
+    ///
+    /// `timeout_ticks = 0` waits indefinitely. A wait that ends on its deadline
+    /// releases the reservation and reports 0; it does not leave a slot held.
+    ///
+    /// Distinct from [`Self::WaitForEvent`], which reports only *that* an event
+    /// bit fired. This reports *which submission* finished and with what result,
+    /// which is what lets one parked thread serve several outstanding
+    /// operations. Both exist; neither replaces the other.
+    WaitCompletion = 242,
 }
 
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
@@ -596,6 +617,12 @@ impl ViSyscall {
             Self::GetRandom => Some(41),
             // WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
             Self::WaitForEvent => Some(42),
+            // WaitCompletion: same authority as WaitForEvent — park until a
+            // kernel event source reports. It shares bit 42 deliberately: a
+            // fresh bit would deny the call to every cell whose
+            // `__ViCell_syscalls` section was generated before that bit
+            // existed, and the two calls gate the same thing.
+            Self::WaitCompletion => Some(42),
             // AudioPlay: VirtIO sound output (bit 47 — next free after TruncateCap 46).
             Self::AudioPlay => Some(47),
             // HypervisorCap (bit 44): all 6 VMM syscalls share one bit.
@@ -732,6 +759,7 @@ impl From<usize> for ViSyscall {
             239 => ViSyscall::GetProcs2,
             240 => ViSyscall::SpawnSetDirs,
             241 => ViSyscall::QueryDirHandles,
+            242 => ViSyscall::WaitCompletion,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -755,6 +783,11 @@ impl From<usize> for ViSyscall {
 }
 
 /// Kernel event bit masks for `WaitForEvent` / `signal_event`.
+///
+/// The same bits name a source for `WaitCompletion`, where one bit selects the
+/// source a submission is made against. `WaitForEvent` accepts any combination;
+/// `WaitCompletion` accepts exactly one bit, because a submission is made
+/// against one source.
 pub mod events {
     /// A NIC RX frame is available for the net cell to drain.
     pub const NET_RX: u32 = 1 << 0;

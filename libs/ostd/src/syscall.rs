@@ -1,5 +1,6 @@
 #![allow(unsafe_code)]
 
+use api::completion::{ViCompletion, COMPLETION_LEN};
 use api::syscall::{ViSpawnArgs, ViSyscall};
 use core::arch::asm;
 
@@ -1519,6 +1520,42 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
         )
     };
     ret as u32
+}
+
+/// Submit a wait against one kernel event source and block for its result.
+///
+/// The call reserves a slot on this cell's completion queue before it parks, so
+/// the source always has somewhere to put the result. `timeout_ticks = 0` waits
+/// indefinitely; any other value is a deadline in 10 ms scheduler ticks, after
+/// which the wait returns `None` and the reservation is released.
+///
+/// `mask` names exactly one source — see `api::syscall::events`.
+///
+/// # Errors
+/// `None` on timeout, on a mask this kernel does not serve, and when the cell's
+/// queue is full (that many operations are already outstanding). A caller that
+/// must tell those apart cannot use this wrapper.
+///
+/// Requires `WaitForEvent` or `WaitCompletion` in the cell's `declare_syscalls!`
+/// list; both name the same authority.
+pub fn sys_wait_completion(mask: u32, timeout_ticks: u64) -> Option<ViCompletion> {
+    let mut record = [0u8; COMPLETION_LEN];
+    // SAFETY: `record` is a live, exclusively borrowed stack buffer of exactly
+    // COMPLETION_LEN bytes, which is the length this syscall writes; the kernel
+    // writes nothing when it returns 0.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::WaitCompletion,
+            mask as usize,
+            timeout_ticks as usize,
+            (timeout_ticks >> 32) as usize,
+            record.as_mut_ptr() as usize,
+        )
+    };
+    if ret != 1 {
+        return None;
+    }
+    ViCompletion::from_bytes(&record)
 }
 
 // ── Supervisor Primitives (P03) ───────────────────────────────────────────────
