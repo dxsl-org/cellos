@@ -198,6 +198,7 @@ fn cell_main() {
                 ostd::syscall::sys_send(sender, &[]);
             }
         }
+        "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         _ => {} // orchestrator falls through
     }
@@ -282,6 +283,22 @@ fn cell_main() {
     let (sp, sf) = scenarios::smp::run_smp_suite();
     passed += sp;
     failed += sf;
+
+    // ── Service-call stage breakdown ─────────────────────────────────────────
+    // Not pass/fail: it apportions the cost of a service call between the work a
+    // direct (non-ecall) call would skip and the work both paths pay, which is
+    // the evidence for whether a direct path is worth its constraints. Each
+    // sample is 1000 operations — divide a reported figure by 1000 for per-op.
+    {
+        use scenarios::vfs_getfile_breakdown as vgb;
+        println("");
+        println("[breakdown] service call — per-stage cost (each sample = 1000 ops)");
+        report::print_report(&runner::run(&mut vgb::EncodeRequestBench::new(), 2, 10));
+        report::print_report(&runner::run(&mut vgb::DecodeReplyBench::new(), 2, 10));
+        report::print_report(&runner::run(&mut vgb::TrapRoundTripBench, 2, 10));
+        report::print_report(&runner::run(&mut vgb::RoundTripBench::new(), 2, 10));
+        println("[breakdown] done");
+    }
 
     // ── Summary ───────────────────────────────────────────────────────────────
     println("");

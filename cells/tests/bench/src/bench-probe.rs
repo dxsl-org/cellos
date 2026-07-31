@@ -45,6 +45,7 @@ fn cell_main() {
                 ostd::syscall::sys_send(sender, &[0]);
             }
         }
+        "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         _ => {} // unknown role: exit cleanly
     }
