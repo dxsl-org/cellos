@@ -113,3 +113,16 @@ fi
 cp "$REL/app-init" "$EMB/init"
 
 echo "==> Done: $(du -sh "$EMB/kernel_fs.img" | cut -f1) at $EMB/kernel_fs.img"
+
+# gen_disk.ps1 writes this same path with a much larger cell set. Whichever script
+# ran last decides what the next kernel embeds, and the difference is invisible
+# until a test spawns something that is no longer there — `bench` resolves its
+# children through the kernel loader, so it reads this image and not disk_v3.img,
+# and its failure says the suite "did not run to completion" rather than naming
+# the absent binary. Say so here, where the eviction actually happens.
+cat >&2 <<'NOTE'
+NOTE: this image carries the bootstrap chain only, which is all the boot gate
+      needs. It has just replaced any fuller image at the same path — if you
+      intend to run the benchmark or real-time suites, re-run ./gen_disk.ps1
+      before building the kernel they boot.
+NOTE
