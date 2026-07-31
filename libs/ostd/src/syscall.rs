@@ -582,6 +582,47 @@ pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
     }
 }
 
+/// Ask the kernel which directory handles `cell_id`'s spawner named for it.
+///
+/// The kernel writes the record into `buf` during this call, so its trust basis
+/// is the same as the attested caller identity in a recv buffer: it is produced
+/// from live scheduler state and never relayed through a message any cell
+/// composed. What it states is provenance only — that *this* spawner named
+/// *these* values. Whether the spawner was entitled to them is a question about
+/// the filesystem service's own table, and only that service can answer it.
+///
+/// Restricted by the kernel to the registered filesystem-service provider and to
+/// a cell asking about itself.
+///
+/// Returns `None` when the call was refused, `buf` is shorter than
+/// [`api::dir_attestation::DIR_ATTESTATION_LEN`], `cell_id` names no live cell,
+/// or the record does not parse. Every one of those means "no attested set", and
+/// the only correct response to that is to bind nothing.
+pub fn sys_query_dir_handles(
+    cell_id: u64,
+    buf: &mut [u8],
+) -> Option<api::dir_attestation::ViDirHandleAttestation> {
+    if buf.len() < api::dir_attestation::DIR_ATTESTATION_LEN {
+        return None;
+    }
+    // SAFETY: `buf` is a live writable slice for the whole call and its length
+    // is passed alongside the pointer, so the kernel writes only inside it. A
+    // buffer shorter than the record is an error there, never a partial write.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::QueryDirHandles,
+            cell_id as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    if (ret as usize) != api::dir_attestation::DIR_ATTESTATION_LEN {
+        return None;
+    }
+    api::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
+}
+
 /// Resolve a well-known `service_id` to its current provider tid.
 ///
 /// Returns `Some(tid)` for a live provider, or `None` when nothing is registered

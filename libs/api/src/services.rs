@@ -11,6 +11,8 @@ pub mod benchmark;
 pub mod block;
 pub mod cluster;
 pub mod config;
+pub mod dir_name;
+pub mod dir_name_tests;
 pub mod display;
 pub mod driver;
 pub mod fs;

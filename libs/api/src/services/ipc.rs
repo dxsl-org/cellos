@@ -80,6 +80,115 @@ pub enum VfsRequest<'a> {
         grant: usize,
         max: usize,
     },
+
+    // ── Directory capabilities ────────────────────────────────────────────────
+    //
+    // Appended at the END and never reordered. Postcard encodes the variant
+    // index as a varint, so inserting anywhere above would renumber every
+    // variant after the insertion point: an old sender and a new receiver would
+    // then agree on the bytes and disagree on the meaning, which is a silently
+    // wrong operation rather than a decode error. This system has shipped that
+    // bug once already.
+    //
+    // Each of these names a directory the service issued to this caller and a
+    // single entry inside it. The name cannot express a path outside the
+    // directory, so there is no path for the service to authorize — see
+    // `docs/specs/09c-vfs-directory-capabilities-adr.md`.
+    /// Acquire a handle to an absolute directory path.
+    ///
+    /// The one remaining operation that names a path, and the bootstrap for
+    /// every other handle: a cell acquires the directories it needs and then
+    /// sends `SealPaths`, after which no path string from it is served.
+    OpenRootDir { path: &'a str },
+    /// Derive a handle to `name` inside `dir`, narrower than `dir` by
+    /// construction. Revoking `dir` revokes it.
+    OpenDir {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Read the whole of `name` inside `dir`.
+    ReadAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Create or overwrite `name` inside `dir`.
+    WriteAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+        content: &'a [u8],
+    },
+    /// Size and kind of `name` inside `dir`.
+    StatAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Entries of `dir` itself.
+    ///
+    /// Takes no name: listing a subdirectory means holding a handle to it, which
+    /// is what `OpenDir` is for. A name here would be a second resolution path
+    /// to keep in step with the first.
+    ListAt {
+        dir: crate::dir_handles::ViDirHandle,
+    },
+    /// Delete `name` inside `dir`.
+    UnlinkAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Give up `dir`, and with it every handle derived from `dir`.
+    ///
+    /// Revocation is transitive on purpose: a derived handle that outlived the
+    /// handle it came from would let a cell keep access forever by deriving a
+    /// subdirectory and dropping the original.
+    CloseDir {
+        dir: crate::dir_handles::ViDirHandle,
+    },
+    /// Give up the ability to name a path, permanently, for this cell.
+    ///
+    /// Every path-addressed request from the sender is refused from here on. The
+    /// transition is one-way and survives for the life of the cell: an operation
+    /// that could undo it would make the guarantee advisory.
+    SealPaths,
+}
+
+impl VfsRequest<'_> {
+    /// Whether this request names its target with a path string.
+    ///
+    /// A sealed cell is refused every request for which this is true. Matched
+    /// exhaustively on purpose: a new variant does not compile until someone has
+    /// decided which side of the boundary it falls on, and the answer defaults
+    /// to nothing.
+    pub fn is_path_addressed(&self) -> bool {
+        match self {
+            Self::GetFile(_)
+            | Self::ListDir(_)
+            | Self::Stat(_)
+            | Self::Write { .. }
+            | Self::Append { .. }
+            | Self::Mkdir(_)
+            | Self::Rmdir(_)
+            | Self::Unlink(_)
+            | Self::RmdirRecursive(_)
+            | Self::ReadAsync { .. }
+            | Self::ReadFileGrant { .. }
+            | Self::OpenRootDir { .. } => true,
+            // `Poll`, `ReadGrant` and `WriteGrant` carry a handle the service
+            // issued, not a path. They stay reachable so a sealed cell can drain
+            // work it started before sealing; the path recorded against the
+            // handle is still re-authorized on every use.
+            Self::Poll { .. }
+            | Self::ReadGrant { .. }
+            | Self::WriteGrant { .. }
+            | Self::OpenDir { .. }
+            | Self::ReadAt { .. }
+            | Self::WriteAt { .. }
+            | Self::StatAt { .. }
+            | Self::ListAt { .. }
+            | Self::UnlinkAt { .. }
+            | Self::CloseDir { .. }
+            | Self::SealPaths => false,
+        }
+    }
 }
 
 /// Responses from the VFS service.
@@ -102,6 +211,12 @@ pub enum VfsResponse<'a> {
     Pending,
     /// Zero-copy I/O complete: `bytes` is the number of bytes transferred.
     GrantDone { bytes: usize },
+    /// A directory handle the service has issued to the caller.
+    ///
+    /// Appended at the END for the same reason as the request variants: an
+    /// insertion above would renumber the rest and turn an old reply into a
+    /// different one that still decodes.
+    DirHandle(crate::dir_handles::ViDirHandle),
 }
 
 // ── Network service ───────────────────────────────────────────────────────────

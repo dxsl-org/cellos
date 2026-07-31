@@ -24,13 +24,17 @@ mod lfs_disk;
 // (which provides them on riscv64/aarch64) is cfg-gated off on x86_64 to
 // avoid duplicate symbols with mlibc Tier-B cells.
 mod caller;
+mod dir_admission;
+mod dirs;
 mod dispatch;
+mod dispatch_dirs;
 mod handle_table;
 #[cfg(all(feature = "littlefs", target_arch = "x86_64"))]
 mod lfs_string_shim;
 mod manager;
 mod mount;
 mod page_cache;
+mod paths;
 mod pending;
 mod quota;
 mod subtree;
@@ -100,6 +104,14 @@ static GLOBAL_VFS: Mutex<Option<VfsManager>> = Mutex::new(None);
 /// an argument this cell's client controls; `None` means unattributable, which is
 /// refused.
 ///
+/// A cell this service has never served over the ecall path is declined with a
+/// zero-length reply, which `call_vfs` callers treat as "fast path unavailable"
+/// and retry as an ordinary syscall.  The reason is the seal: deciding whether a
+/// cell may still name a path needs the kernel's provenance record, and pulling
+/// that is a syscall this handler cannot make with interrupts disabled.  Serving
+/// an unknown cell here would therefore serve a path read to a cell that should
+/// already have been refused one.  The cost is a single ecall per cell.
+///
 /// # Safety
 /// Called with S-mode interrupts disabled (guaranteed by `ostd::fast_ipc::call_vfs`).
 unsafe fn vfs_fast_handler(
@@ -112,7 +124,13 @@ unsafe fn vfs_fast_handler(
         Some(caller) => match req {
             api::ipc::VfsRequest::GetFile(path) => {
                 if let Some(vfs) = GLOBAL_VFS.lock().as_ref() {
-                    if !vfs.access.can_read(caller, path) {
+                    if !vfs.dirs.has_met(caller) {
+                        return 0; // decline; the ecall path will decide
+                    }
+                    // Sealed and unauthorized are one refusal: this cell may not
+                    // read this path, and which rule said so is not the caller's
+                    // business.
+                    if vfs.dirs.is_sealed(caller) || !vfs.access.can_read(caller, path) {
                         api::ipc::VfsResponse::Err(3)
                     } else if let Some((ptr, len)) = vfs.get_file_ptr(path) {
                         api::ipc::VfsResponse::DataPtr {

@@ -70,7 +70,7 @@ so the allocation is **global and must not collide**. Current owners:
 
 | byte 0 | Namespace | Direction | Notes |
 |--------|-----------|-----------|-------|
-| `0x00`–`0x0F` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum |
+| `0x00`–`0x16` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22) — see the note below |
 | `0x04` | `WIRE_ASCII` — kernel UART relay | kernel → input service | Overlaps the postcard range **but is disambiguated by sender** (kernel sender id `isize::MAX`), not by byte value |
 | `0x10` | `INPUT_EVENT_OPCODE` | input service → focused cell | |
 | `0x11` | `NET_READY` readiness edge (§10, G4 P2.5) | net service → interest-owner tid | Fixed 6-byte frame; safe: net→client byte-0 is otherwise postcard `NetResponse` ≤ `0x0F` (§10.2). **Numerically overlaps `NetRequest` variant 17 (`NotifyRegister`) — disambiguated by direction** (client→net vs net→client), same treatment as `0x04 WIRE_ASCII` |
@@ -84,6 +84,24 @@ today only because the NIC driver and the postcard services are **different
 target cells**. A cell that serves BOTH a postcard protocol and a raw op-byte
 protocol on its single recv buffer is FORBIDDEN — disambiguate by cell, or by
 the `0xAC` envelope, never by hoping the ranges don't meet.
+
+**Postcard variant growth past `0x0F` (2026-07-31).** `VfsRequest` now runs to
+variant 22 (`0x16`), so its byte-0 values numerically overlap `0x10`
+`INPUT_EVENT_OPCODE`, `0x11` `NET_READY` and `0x12` `REACTOR_WAKE`. Safe on the
+same grounds those three are safe against each other — **by receiver, not by
+value**:
+
+- `0x10` goes to the *focused* cell. The VFS service never calls `SetFocus`, so
+  it is never a focus target.
+- `0x11` goes to a net-interest owner. The VFS manifest declares `network =
+  false` and its syscall allowlist carries no net op, so it can never register
+  an interest.
+- `0x12` goes to a reactor tid inside the sending cell. The VFS main loop is a
+  plain `sys_recv_attested` loop, not a reactor.
+
+**Therefore:** growing `VfsRequest` past variant 22 (byte-0 `0x17`+), or making
+the VFS service a focus target / net-interest owner / reactor host, MUST re-check
+this table first. Same standing obligation the `NetRequest` 17/18 rows carry.
 
 **Rule:** a new protocol MUST either (a) use postcard (`api::ipc::encode`), or
 (b) claim an unused byte-0 value here in §3 and §9. Never reuse a value for a
@@ -226,6 +244,14 @@ the reason the value is safe against existing owners.
   `RECV_ATTEST_CALLER`) and a flag on the previously-unused fourth `Recv`
   argument. No message enum changes, no discriminant changes, no framing change
   for any existing receiver.
+- 2026-07-31 — **Ratified (Law-1 2× confirmed):** `VfsRequest` gains nine
+  directory-capability variants (14–22) and `VfsResponse` gains `DirHandle`, all
+  **appended at the end**; discriminants 0–13 and the existing response variants
+  are unchanged, so an unmigrated cell's messages decode exactly as before. The
+  §3 postcard range widens to `0x16` with the receiver-disambiguation note there.
+  A handle-plus-component request is strictly smaller on the wire than the
+  absolute path it replaces, so no message that fitted the frame stops fitting.
+  Model and rationale: `docs/specs/09c-vfs-directory-capabilities-adr.md`.
 
 ---
 

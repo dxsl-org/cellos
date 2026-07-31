@@ -41,8 +41,14 @@ pub const SPAWN_DIR_HANDLES_VERSION: u32 = 1;
 /// share a representation and nothing else, and passing one where the other
 /// belongs must be a compile error on a boundary whose purpose is that authority
 /// cannot be mistaken.
+///
+/// The serde impls carry that distinction onto the wire as well, at no cost in
+/// bytes: postcard encodes a newtype struct as its inner value, so the encoding
+/// is identical to a bare `u64` while `VfsRequest` still refuses a `CapId`.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct ViDirHandle(pub u64);
 
 /// Caller-supplied carrier naming the directory handles a spawn should pass on.

@@ -57,6 +57,53 @@ VFS service (MountTable, longest-prefix match)
 * 🔧 **Tech debt ghi nhận**: VFS service hiện `include_bytes!` lại các ELF `/bin` (nhúng trùng lặp với `kernel_fs.img`) — sẽ thay bằng proxy qua syscall kernel (xem plan).
 
 
+## 2b. Directory capabilities (2026-07-31)
+
+Quyết định và lý lẽ nằm ở [ADR 09c](09c-vfs-directory-capabilities-adr.md); phần này
+chỉ ghi mô hình đang chạy.
+
+Một cell không còn phải đặt câu hỏi "tôi có được đọc path này không". Nó cầm một
+**directory handle** (`api::dir_handles::ViDirHandle` — kiểu riêng, **không phải**
+`CapId`) và gửi `(handle, tên)`. Vì `tên` không được chứa separator, VFS resolve ra
+đúng một mức bên trong thư mục của handle: **không có path nào ngoài handle mà cell
+diễn đạt được**, nên không còn gì để check.
+
+| Op | Ý nghĩa |
+|---|---|
+| `OpenRootDir { path }` | Op **duy nhất** còn nhận path. Bootstrap: cell xin handle cho các thư mục nó cần, rồi `SealPaths`. Vẫn qua `AccessTable` |
+| `OpenDir { dir, name }` | Dẫn xuất handle hẹp hơn. Revoke `dir` revoke luôn nó |
+| `ReadAt` / `WriteAt` / `StatAt` / `UnlinkAt` `{ dir, name }` | Thao tác trên một entry trong `dir` |
+| `ListAt { dir }` | Liệt kê chính `dir`. Không nhận `name` — muốn liệt kê thư mục con thì phải cầm handle của nó |
+| `CloseDir { dir }` | Trả lại `dir` **và mọi handle dẫn xuất từ nó** |
+| `SealPaths` | Một chiều. Từ đây mọi request path-addressed của cell đó bị `Err(3)` |
+
+**Kiểm tra tên làm trên byte thô, trước mọi normalize** (`api::dir_name`): rỗng, `.`,
+`..`, mọi `/` hoặc `\`, byte điều khiển/NUL, quá dài, và UTF-8 không hợp lệ đều bị từ
+chối. Không normalize trước — normalize chính là nơi sinh ra lỗ traversal.
+
+**Vòng đời & thu hồi** (`cells/services/vfs/src/dirs/`): handle thuộc về
+`(CellId, generation)`. Thấy generation cao hơn nghĩa là instance cũ đã chết → purge
+toàn bộ handle của nó, nên **handle không sống qua hot-swap**. Thu hồi là **bắc cầu**:
+mỗi entry ghi lại handle nó được dẫn xuất từ đâu, kể cả qua ranh giới spawn.
+
+**Kế thừa lúc spawn**: kernel chỉ là người đưa thư — nó chép tập handle từ spawner
+sang con và khai báo *ai* đã nêu tập đó (`QueryDirHandles`), chứ không diễn giải handle
+nào. VFS mới là nơi kiểm: lần đầu tiếp xúc với một cell, VFS kéo bản khai của kernel và
+chỉ bind nếu spawner **thực sự giữ đủ** mọi handle được nêu — **all-or-nothing**. Thiếu
+một cái thì không bind cái nào. Hệ quả đã biết và chấp nhận: một yêu cầu quá rộng
+**hỏng ở lần gọi filesystem đầu tiên của con, không phải lúc spawn**. Một cell có tập
+kế thừa được seal ngay, kể cả khi bind thất bại — nếu không, thất bại sẽ *mở rộng*
+quyền so với thành công.
+
+`AccessTable` vẫn chạy trên path đã resolve, nhưng lùi về vai trò **defense in depth**:
+handle quyết định *thư mục nào*, bảng vẫn nói *hệ thống cho phép gì ở đó* (một handle
+tới mount read-only không được biến thành quyền ghi).
+
+**Đường di trú**: các op path-string vẫn còn, chuyển từng cell một. Cell tiên phong là
+`/bin/vfs-test`. Chừng nào chưa xoá hẳn các variant path-string, guarantee chỉ đúng với
+cell đã seal.
+
+
 ## 3. Cơ chế Direct I/O & Zero-Copy
 Nhờ lợi thế của Single Address Space (SAS), Cellos đạt được tốc độ đọc/ghi dữ liệu ở mức vật lý mà không cần memcpy.
 

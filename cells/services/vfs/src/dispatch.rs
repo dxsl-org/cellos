@@ -7,15 +7,7 @@
 
 use crate::caller::Caller;
 use crate::manager::VfsManager;
-
-/// `types::ViError::PermissionDenied` as the wire code.
-const ERR_DENIED: u8 = 3;
-/// The path does not exist, or the backend refused the operation.
-const ERR_IO: u8 = 1;
-/// Quota exceeded.
-const ERR_QUOTA: u8 = 2;
-/// Stale, unknown, or not-this-caller's async-read handle.
-const ERR_HANDLE: u8 = 4;
+use crate::paths::{unlink_file, write_file, ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
 
 /// Handle one decoded request on behalf of a caller the kernel has attested.
 ///
@@ -37,6 +29,12 @@ pub fn handle_request<'a>(
         return api::ipc::VfsResponse::Err(ERR_DENIED);
     };
 
+    // Settle what the kernel says this cell inherited before acting on anything
+    // it sent. The answer decides both what it holds and whether it may still
+    // name a path, and a cell that reached its first request before the second
+    // answer landed would be one path-string operation ahead of the seal.
+    crate::dir_admission::admit(vfs, caller);
+
     // Decode typed request; `take_from_bytes` tolerates trailing bytes in the
     // receive buffer — both zeros left by a previous message and the kernel's
     // caller-identity trailer at the very end.
@@ -44,6 +42,14 @@ pub fn handle_request<'a>(
         Ok(r) => r,
         Err(_) => return api::ipc::VfsResponse::Err(0xFF), // malformed request
     };
+
+    // A cell that has given up path strings is refused here, before the request
+    // reaches an arm that could serve it. Refusing at the entry rather than in
+    // each arm is what makes the guarantee hold for every path-addressed
+    // operation, including any added later.
+    if req.is_path_addressed() && vfs.dirs.is_sealed(caller) {
+        return api::ipc::VfsResponse::Err(ERR_DENIED);
+    }
 
     match req {
         api::ipc::VfsRequest::GetFile(p) => {
@@ -84,37 +90,7 @@ pub fn handle_request<'a>(
             }
         }
 
-        api::ipc::VfsRequest::Write { path, content } => {
-            if !vfs.access.can_write(caller, path) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            // Overwriting charges the delta, not the full new size — otherwise
-            // repeated overwrites inflate usage.  The delta is only a delta for
-            // the cell that was charged for the old contents: if another cell
-            // wrote them, this caller gets nothing back and must afford the whole
-            // new size.
-            let old_size = vfs.file_size(path);
-            let new_size = content.len() as u64;
-            let refunded_to_caller = if vfs.quota.writer_of(path) == Some(caller.cell) {
-                old_size
-            } else {
-                0
-            };
-            let net_charge = new_size.saturating_sub(refunded_to_caller);
-            if net_charge > 0 && !vfs.quota.can_charge(caller.cell, net_charge) {
-                return api::ipc::VfsResponse::Err(ERR_QUOTA);
-            }
-            if vfs.write(path, content) {
-                // Release the old contents to whoever was charged for them, then
-                // charge the new contents to this caller.
-                vfs.quota.release_path(path, old_size);
-                let _ = vfs.quota.charge(caller.cell, new_size);
-                vfs.quota.set_writer(path, caller.cell);
-                api::ipc::VfsResponse::Ok
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
+        api::ipc::VfsRequest::Write { path, content } => write_file(vfs, caller, path, content),
 
         api::ipc::VfsRequest::Append { path, content } => {
             if !vfs.access.can_write(caller, path) {
@@ -159,23 +135,7 @@ pub fn handle_request<'a>(
             }
         }
 
-        api::ipc::VfsRequest::Unlink(p) => {
-            // Authorize BEFORE `file_size`: an unauthorized caller must learn nothing,
-            // not even whether the file exists or how large it is.
-            if !vfs.access.can_write(caller, p) {
-                return api::ipc::VfsResponse::Err(ERR_DENIED);
-            }
-            let file_size = vfs.file_size(p);
-            if vfs.unlink(p) {
-                // Credit the cell that was charged, never the cell that asked:
-                // otherwise deleting another cell's file mints quota for the
-                // deleter and leaves the writer charged for bytes that are gone.
-                vfs.quota.release_path(p, file_size);
-                api::ipc::VfsResponse::Ok
-            } else {
-                api::ipc::VfsResponse::Err(ERR_IO)
-            }
-        }
+        api::ipc::VfsRequest::Unlink(p) => unlink_file(vfs, caller, p),
 
         api::ipc::VfsRequest::RmdirRecursive(p) => {
             // Authorize BEFORE the walk: that walk lists the whole subtree, so
@@ -343,6 +303,23 @@ pub fn handle_request<'a>(
                     api::ipc::VfsResponse::GrantDone { bytes: n }
                 }
             }
+        }
+
+        // ── Directory capabilities ──────────────────────────────────────────
+        // Grouped and delegated: these arms share a resolution step that has no
+        // counterpart above, and interleaving them would put the two addressing
+        // models in one match where a reader has to check which one each arm is
+        // in.
+        api::ipc::VfsRequest::OpenRootDir { .. }
+        | api::ipc::VfsRequest::OpenDir { .. }
+        | api::ipc::VfsRequest::ReadAt { .. }
+        | api::ipc::VfsRequest::WriteAt { .. }
+        | api::ipc::VfsRequest::StatAt { .. }
+        | api::ipc::VfsRequest::ListAt { .. }
+        | api::ipc::VfsRequest::UnlinkAt { .. }
+        | api::ipc::VfsRequest::CloseDir { .. }
+        | api::ipc::VfsRequest::SealPaths => {
+            crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
     }
 }

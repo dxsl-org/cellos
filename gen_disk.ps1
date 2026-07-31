@@ -129,6 +129,10 @@ Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS serv
 Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
 Build-Cargo -What "cfi-test" -Packages @('cfi-test')   # Layer-2 CFI violation test cell
 Build-Cargo -What "wx-test"  -Packages @('wx-test')    # W^X violation test cell
+# Directory-capability pioneer: the only cell sealed to handle-addressed VFS ops,
+# so it is the only place the "a sealed cell cannot use a path" guarantee can be
+# demonstrated on a running system rather than argued from the table's contents.
+Build-Cargo -What "vfs-test" -Packages @('app-vfs-test')
 # Built here for the same reason posix-shim-test is: the signing section below
 # only Test-Path's these, so without a build step they are silently absent from
 # the disk and tests/integration/tests/hotswap-smoke.rs fails with
@@ -246,6 +250,7 @@ Add-CellToSign "$rel_dir/app-https-demo"
 Add-CellToSign "$rel_dir/http-smoke"
 Add-CellToSign "$rel_dir/cfi-test"
 Add-CellToSign "$rel_dir/wx-test"
+Add-CellToSign "$rel_dir/vfs-test"
 Add-CellToSign "$rel_dir/hotswap-demo-v1"
 Add-CellToSign "$rel_dir/hotswap-demo-v2"
 Add-CellToSign "$rel_dir/ls"
@@ -333,6 +338,7 @@ $https_demo_bin = "$rel_dir/app-https-demo"  # G14 TLS server-auth e2e gate (she
 $http_smoke_bin = "$rel_dir/http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
 $cfi_test_bin   = "$rel_dir/cfi-test"        # Layer-2 CFI violation test (shell: `cfi-test`)
 $wx_test_bin    = "$rel_dir/wx-test"         # W^X violation test (shell: `wx-test`)
+$vfs_test_bin   = "$rel_dir/vfs-test"        # directory-capability pioneer (shell: `vfs-test`)
 $hotswap_demo_v1_bin = "$rel_dir/hotswap-demo-v1"  # M4.1 hotswap demo cell v1
 $hotswap_demo_v2_bin = "$rel_dir/hotswap-demo-v2"  # M4.1 hotswap demo cell v2
 $ls_bin   = "$rel_dir/ls"    # M3.2 embedded debug utils
@@ -553,6 +559,7 @@ if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
 if (Test-Path $cfi_test_bin)   { $table_args += "/bin/cfi-test=$cfi_test_bin" }
 if (Test-Path $wx_test_bin)    { $table_args += "/bin/wx-test=$wx_test_bin" }
+if (Test-Path $vfs_test_bin)   { $table_args += "/bin/vfs-test=$vfs_test_bin" }
 if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hotswap_demo_v1_bin" }
 if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
 # Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds
