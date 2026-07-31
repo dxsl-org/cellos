@@ -154,7 +154,7 @@ Cells
 - [x] x86_64 (paging, exception handling, Ring-3 smoke)
 - [x] Feature-gated builds: `cargo build --features aarch64` / `--features x86_64`
 - [x] Architecture validation tests (10/10 score) on RV64
-- [x] Zero unsafe code in Cells
+- [x] No `unsafe` in Cells outside the reviewed allowlist (`scripts/unsafe-allowlist.toml`), enforced by `cellos-sign --check`
 
 **Effort**: 120 hours  
 **Owner**: Completed in Phase 05
@@ -530,7 +530,7 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 
 1. ✅ Passes architecture validation (10/10)
 2. ❌ Kernel < 6000 LOC — NOT met; measures ~22,600 LOC (`kernel/src`, 2026-07-07). Shrinks once tracked in-kernel drivers/orchestration migrate to Cells (see CLAUDE.md "Kernel Boundary Law")
-3. ✅ Zero unsafe code in Cells
+3. ✅ No `unsafe` in Cells outside the reviewed allowlist — enforced at the signing gate; driver/FFI cells hold documented exemptions
 4. ✅ Multi-architecture HAL (RV64, ARM, x86)
 5. ✅ Full test coverage (80%+)
 6. ✅ Production-ready documentation

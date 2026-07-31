@@ -209,7 +209,7 @@ the safety argument in §2.
 
 | Policy | Rule | Rationale |
 |---|---|---|
-| **F1** | Every Cell crate MUST carry `#![forbid(unsafe_code)]` | Compiler cannot verify isolation if unsafe is permitted anywhere |
+| **F1** | Every Cell crate MUST carry `#![forbid(unsafe_code)]`, **absolute outside a reviewed allowlist** (`scripts/unsafe-allowlist.toml`). Enforced at the signing gate by `scripts/cellos-sign --check`, which refuses to sign and fails CI on any `unsafe` outside the list. Each entry carries `class`/`reason`/`approver`/`date`, and is reported once past `review_by` (or `max_age_days`), so a temporary exemption cannot become permanent by silence. | Compiler cannot verify isolation if unsafe is permitted anywhere. Driver Cells need `unsafe` for MMIO/DMA, so the allowlist is unavoidable — but it **is** the hole in the LBI wall, and every entry must be reviewed as the unsafe itself would be. Review the current tally with `cellos-sign --check`; do not restate it in prose (Spec 21 §2, Layer 3). |
 | **F2** | `unsafe` in kernel/HAL MUST be documented with `// SAFETY:` explaining the invariant | Undocumented unsafe = unaudited TCB hole |
 | **F3** | Async IPC/Grant paths MUST use owned buffers (`Box<[u8]>`) not borrows | Rust lifetime rules do not cover borrows across `.await` yield points in SAS |
 | **F4** | `static mut` in kernel is only permitted inside `Spinlock<Option<T>>` | Mutable statics are "ambient authority" (Duffy 2013); raw `static mut` = type safety bypass in kernel code |

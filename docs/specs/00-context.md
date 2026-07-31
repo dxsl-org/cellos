@@ -216,7 +216,7 @@ Cellos tốt hơn Singularity/Midori ở điểm này vì ba lý do:
 |---|---|
 | **Không link GC runtime vào RT-critical Cells** | Midori's unsolved problem — GC pauses phá RT guarantees. Rust RAII = deterministic destruction là lợi thế cấu trúc quyết định. |
 | **`static mut` trong kernel chỉ qua `Spinlock<Option<T>>`** | Mutable statics = "ambient authority" (F6, Duffy). Cells đã block qua `forbid(unsafe_code)`. Kernel là gap còn lại. |
-| **`#![forbid(unsafe_code)]` tuyệt đối trên mọi Cell** | Compiler không thể verify safety nếu unsafe được phép — một unsafe line đủ để vô hiệu hóa toàn bộ LBI guarantee. |
+| **`#![forbid(unsafe_code)]` trên mọi Cell, tuyệt đối ngoài allowlist đã review** | Compiler không thể verify safety nếu unsafe được phép — một unsafe line đủ để vô hiệu hóa LBI guarantee của cell đó. Driver cần MMIO/DMA nên allowlist tồn tại; mỗi entry **là một lỗ trên tường LBI**, có reason/approver/date và bị báo khi quá `review_by`. Nguồn sự thật: `scripts/unsafe-allowlist.toml`, cổng: `cellos-sign --check`. |
 | **Upgrade `rustc` ngay khi CVE soundness hole** | Soundness hole trong borrow checker hoặc codegen = P0 breach — không có patch nào khác ngoài upgrade compiler. |
 
 ### Hệ quả với security review

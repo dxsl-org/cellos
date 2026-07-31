@@ -11,7 +11,10 @@ relies on:
 
 1. **Rust ownership + borrow checker** — prevents spatial/temporal memory bugs
 2. **Capability tokens (`CapId`)** — unforgeable, kernel-managed access rights
-3. **`#![forbid(unsafe_code)]` on Cells** — enforced by `cargo-geiger` in CI
+3. **`#![forbid(unsafe_code)]` on Cells** — enforced at the signing gate by
+   `scripts/cellos-sign --check` (both CI workflows), absolute outside a reviewed allowlist
+   (`scripts/unsafe-allowlist.toml`); each allowlisted file is an approved hole in the LBI
+   wall, not an exempt no-op
 4. **VFS access through capabilities** — no direct file-descriptor integers
 
 ## STRIDE Threat Model
@@ -54,7 +57,7 @@ relies on:
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cell executes privileged instruction (e.g., `wfi`) | Cells run in EL0/Ring3; trap dispatched to kernel | ✅ Mitigated |
-| `#[allow(unsafe_code)]` in a Cell | `cargo-geiger` CI gate fails if any Cell contains `unsafe`; zero-tolerance policy | ✅ Mitigated |
+| `#[allow(unsafe_code)]` in a Cell | `scripts/cellos-sign --check --strict` fails CI when a Cell file contains `unsafe` and is not in the reviewed allowlist, and refuses to sign; allowlist entries carry reason/approver/date and are reported once past `review_by` | ✅ Mitigated, with a bounded hole — see `docs/specs/18-cell-trust-tiers.md` §2.1 |
 | Malformed syscall arguments overflow kernel buffers | All syscall arg lengths validated via `validate_user_buf` before dereference | ✅ Mitigated |
 
 ## Known Architecture Risks
@@ -320,7 +323,7 @@ Bước 4: Kernel unsafe blocks
 | Language | `#![forbid(unsafe_code)]` on all Cell crates |
 | Compile-time | Rust ownership, borrow checker, lifetimes |
 | Kernel | Capability table, syscall argument validation, frame zeroing |
-| CI | `cargo-geiger`, `cargo-audit`, `cargo-deny` on every PR |
+| CI | `cellos-sign --check --strict` (F1/F5 admission), `cargo-audit`, `cargo-deny` on every PR |
 | Fuzzing | Weekly libFuzzer harnesses on ELF parser + VFS path validator |
 | HW — spatial | ✅ MTE (ARM UAF hardening); PKU domains wired on x86 (keys all-zero → enforcement pending PTE-key tagging, G2); MPU/PMP (embedded C-tier) _(roadmap)_ |
 | HW — control-flow | ✅ **Shipped**: BTI+PAC-RET (ARM), CET-IBT (x86); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
