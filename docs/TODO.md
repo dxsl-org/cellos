@@ -49,3 +49,41 @@ AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level 
 Desktop đầy đủ (compositor + mouse, windowed) — 📋; VFS scale (ext4/large disk) — 📋; 
 App Platform Layers §J: L1 SDK ✅, còn L0 docs / L2 middleware / L3 tooling / L4 observability — 📋.
 Cell-to-Cell Anywhere phần G2 (P04-P08: HyParView, hole-punch, K2/K3 DICE)
+---
+
+## Từ đợt audit mô tả kiến trúc (2026-07-31)
+
+Bốn việc dưới đây phát sinh từ đợt đối chiếu spec với code; mỗi việc kèm bằng chứng vì lý do
+tại sao nó không hiển nhiên. Docket đầy đủ (D1–D25, 8 mục đã chốt) nằm ở
+`.agents/reports/decision-docket-260730.md` — **gitignored**, nên phần cần sống lâu ghi ở đây.
+
+**A1 — RISC-V đọc memory node của DTB thay vì `FALLBACK_MEMORY_MAP`.** `kernel/src/boot.rs`
+khai cứng vùng usable = `0x0BE0_0000` = **190 MiB** cho "QEMU virt (256 MB)", và không có
+đường nào đọc DTB. Cấp cho guest 2 GiB thì kernel vẫn chỉ thấy 190 MiB. Đo được: spawn cell
+đậu (parked) tới khi bị từ chối dừng ở **n = 9**, dù `MAX_CELLS` đã nâng 512 và còn 512 VA
+slot — trần thật là RAM nhìn thấy được, không phải hằng số nào ta hay bàn. Đây không chỉ chặn
+profile per-request server: **mọi deployment đang âm thầm bỏ RAM trên 190 MiB.** Rẻ nhất, đòn
+bẩy lớn nhất.
+
+**A2 — `OutOfMemory` cần error riêng, và cần log chỗ cấp phát thất bại.**
+`ViError::OutOfMemory` bị map thành `SyscallError::Unknown` (`kernel/src/task/syscall.rs`) và
+không log gì. Thất bại duy nhất mà một thí nghiệm dung lượng cần thấy lại là thất bại ABI
+không diễn đạt được; ngay hai dòng trên, `NotFound → FileNotFound` map đúng.
+
+**A3 — cần syscall MemInfo; `memory_footprint` bench hiện không đo gì.**
+`cells/tests/bench/src/scenarios/memory_footprint.rs` trả về một hằng số compile-time kèm
+`// TODO: replace with MemInfo syscall`, mà suite báo **PASS**. Ngoài `total_frames` không có
+kế toán frame trống nào, nên A1 phải suy ra dung lượng bằng cách spawn tới khi fail thay vì
+đọc một con số.
+
+**A4 — chạy lại cổng runtime mà phase 09 và 11 để ngỏ.** Cả hai đóng với lý do "runtime
+UNVERIFIED — máy không có QEMU/cross toolchain". Tiền đề đó **sai**: QEMU cả ba arch và
+`riscv64-unknown-elf-*` đều có. Hai vấn đề thật đều nhỏ — `build.rs` khai cứng tên
+`riscv-none-elf-*` khi biến `CC_<target>` chưa set, và `gen_disk.ps1` soạn
+`CFLAGS_riscv64gc_unknown_none_elf` nhưng không truyền được sang cargo (littlefs thiếu
+`string.h`). Phase 10 đã verify theo đường này ngày 2026-07-31: `wx-text-write` 2/2 PASS, suite
+`boot` 54/54 PASS. Cách làm ghi ở `.agents/reports/qemu-build-unblock-260731.md`.
+
+**Lưu ý cho integration test trên Linux**: cần `--target x86_64-unknown-linux-gnu`. Bản
+`.cargo/config.toml` trong repo mặc định target Windows, nên `cargo test` trần sẽ fail vì không
+tìm thấy `core` cho `x86_64-pc-windows-msvc` trước khi kịp khởi động QEMU.
