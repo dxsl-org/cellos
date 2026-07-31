@@ -40,7 +40,30 @@ Dành riêng cho các tác vụ điều khiển Robot (Tier 1). Đảm bảo th�
 * **Hành vi**: Stack Overflow sẽ kích hoạt `Page Fault` ngay lập tức. Kernel sẽ cô lập Task đó thay vì để nó phá nát dữ liệu Cell lân cận.
 
 ## 5. Protection Policy (W^X)
-Mặc dù dùng chung bộ nhớ, nhưng hardware page-level protection vẫn được bật:
+
+Dù dùng chung bộ nhớ, hardware page-level protection vẫn được bật cho segment của cell:
+
 * **Text**: Read + Execute (RX).
 * **Data**: Read + Write (RW).
-* **Read-only**: Read (R).
+* **Read-only** (`.rodata`, RELRO): Read (R).
+
+Loader phải map mọi trang WRITE trong lúc áp `.rela.dyn`, rồi **hạ về đúng `p_flags`
+trước khi cell chạy lệnh đầu tiên**. Cơ chế: `docs/specs/19-hardware-isolation-layers.md`
+§2 Layer A. Verify runtime 2026-07-31 (`tests/integration/tests/wx-text-write.rs`: cell ghi
+vào `.text` của chính nó → fault → cell bị terminate, kernel tiếp tục chạy).
+
+### Bảo đảm này KHÔNG bao gồm
+
+Ba giới hạn dưới đây là giới hạn của *bảo đảm*, không phải chi tiết hiện thực — đọc §5 mà
+thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
+
+* **Chỉ là code integrity, không phải data confidentiality.** Stack, heap, grant page và
+  MMIO window vẫn `USER+RW` **xuyên cell**: một cell có `unsafe` vẫn đọc/ghi được *dữ liệu*
+  của cell khác. Tường cho dữ liệu là Layer B (per-domain page table, Tier 2 — chưa hiện
+  thực). Điều §5 bảo đảm là không cell nào sửa được **code hoặc hằng** của cell nào.
+* **Không có cross-hart TLB shootdown.** `protect_page` chỉ invalidate trên hart gọi nó, nên
+  một hart khác có thể còn giữ bản dịch cũ rộng quyền hơn cho cùng VA từ một cell trước đó.
+  Trên SMP thật đây là cửa sổ có thật.
+* **Arch bare-physical không enforce.** riscv32 Nano, x86_32, arm32 chạy không page table;
+  `wx::enforce` ghi log khoảng trống thay vì áp đặt. Câu "protection vẫn được bật" chỉ đúng
+  với các arch có MMU.
