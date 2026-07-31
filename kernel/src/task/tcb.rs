@@ -382,6 +382,14 @@ pub struct Task {
     /// to a later unrelated child. Empty means "pass nothing on", which is what
     /// every task that never calls `SpawnSetDirs` does.
     pub staged_dirs: api::dir_handles::DirHandleSet,
+
+    /// This cell's completion queue, or `None` until something reserves a slot.
+    ///
+    /// Kernel-owned heap memory, never a grant: a cell cannot unregister or free
+    /// it, so a completion always has somewhere to land and appending needs no
+    /// address resolution. Threads of one cell share the handle, and the queue
+    /// dies with the last reference to it — see [`crate::task::completion`].
+    pub completion: Option<alloc::sync::Arc<crate::task::completion::CompletionQueue>>,
 }
 
 /// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
@@ -443,6 +451,7 @@ impl Task {
                 .fetch_add(1, core::sync::atomic::Ordering::Relaxed),
             inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
             staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
+            completion: None,
         }
     }
 

@@ -4,6 +4,8 @@
 #![allow(clippy::result_unit_err)]
 
 pub mod cap;
+pub mod completion;
+pub mod completion_selftest;
 pub mod dir_inherit;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
@@ -440,6 +442,16 @@ pub fn yield_cpu() {
         crate::task::syscall::release_acked_frames(tid);
         crate::task::syscall::reap_grants_for_task(tid);
         crate::hypervisor::registry::reap_vms_for_task(tid);
+    }
+
+    // Turn completion appends into scheduler wakes. An append may run in
+    // interrupt context and must not take SCHEDULER, so it only raises a flag;
+    // the wake happens here, the same deferral the two reaps above use. The
+    // gate is one relaxed load on the overwhelmingly common empty tick.
+    if completion::wakes_pending() {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            completion::deliver_pending_wakes(sched);
+        }
     }
 
     let hart_id = hart_local::current_hart_id();
