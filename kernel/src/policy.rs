@@ -555,8 +555,18 @@ pub fn lookup(path: &str) -> PolicyDecision {
 /// The minimal trusted core that is NEVER reduced to no-caps by policy — so a
 /// fail-closed mis-fire (bad/absent policy under `policy-required`) cannot brick
 /// a headless robot by stripping the filesystem/shell/network it needs to recover.
+///
+/// `/bin/platform` belongs here for the same reason, not a lesser one: it is the
+/// PCIe ECAM enumeration cell, and on x86_64 the block driver — hence /data and
+/// the cell-store — cannot exist without it. A shell and a filesystem that came
+/// up with no disk behind them are not a recovery path. This only ever matters
+/// on the `DenyAll` branch below (malformed blob, or an explicit deny); a valid
+/// policy's own entry for this path is honoured normally through `Permit`.
 fn is_trusted_core(path: &str) -> bool {
-    matches!(path, "/bin/vfs" | "/bin/shell" | "/bin/net")
+    matches!(
+        path,
+        "/bin/vfs" | "/bin/shell" | "/bin/net" | "/bin/platform"
+    )
 }
 
 /// Pure narrowing rule: combine spawner-intersected `caps` with a policy
@@ -614,9 +624,9 @@ pub fn apply(path: &str, tid: usize, caps: CapSet) -> CapSet {
     //
     // Consequence accepted: an absent or `Invalid` policy no longer permits the
     // bypass, so maintenance mode cannot recover a device *from* a bad policy.
-    // The recovery path in that case is `is_trusted_core` — vfs/shell/net keep
-    // their caps even under `DenyAll`, which is enough to reach a prompt and
-    // re-provision.
+    // The recovery path in that case is `is_trusted_core` — vfs/shell/net/platform
+    // keep their caps even under `DenyAll`, which is enough to reach a prompt with
+    // a working disk and re-provision.
     #[cfg(feature = "maintenance-mode")]
     if maintenance_permitted() {
         log::warn!("[policy] maintenance bypass ACTIVE for {}", path);
