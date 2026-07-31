@@ -602,6 +602,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("net-rx-reservation self-test FAIL");
         }
+        if task::ipc_pending_selftest::self_test() {
+            log_info("ipc-pending self-test PASS (deferred delivery, bounds, quota)");
+        } else {
+            log_info("ipc-pending self-test FAIL");
+        }
     }
 
     // 7b. Bring secondary harts online (riscv64 only; no-op on other arches).

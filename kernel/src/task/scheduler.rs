@@ -510,8 +510,9 @@ impl Scheduler {
         super::hart_local::ready::remove_from_all(tid);
 
         // Best-effort IPC cleanup: unblock tasks stuck sending to the dead task,
-        // and clear stale current_caller references.  Does not handle multi-hop
-        // chains — those require a full state-machine audit (future work).
+        // and clear stale current_caller references. A plain reply waiter that has
+        // already left `Sending` is still not woken here (known pre-existing gap,
+        // 2026-07-31 Recv buffer-pinning audit); fixing it needs a state-machine audit.
         let mut to_wake = Vec::new();
         for (id, task) in self.tasks.iter_mut() {
             if let TaskState::Sending { target, .. } = task.state {

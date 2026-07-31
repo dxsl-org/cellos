@@ -1,6 +1,7 @@
+use super::pending_mailbox::PendingMailbox;
+pub use super::pending_mailbox::PendingMsg;
 use crate::hal::arch::Context;
 use crate::hal::arch::ViTrapFrame;
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 // use alloc::sync::Arc;
@@ -26,19 +27,6 @@ pub const HOTSWAP_MSG_QUEUE_DEPTH: usize = 64;
 /// characters of headroom — beyond any realistic line — while still bounding
 /// a wedged focused cell to ~50 KiB of queued events.
 pub const INPUT_EVENT_QUEUE_DEPTH: usize = 512;
-
-/// A message buffered for a `Frozen` cell during a hot-swap sequence.
-///
-/// Invariants:
-/// - `data` holds an owned copy of the original message bytes (Law 2).
-/// - `sender_tid` identifies the originating task; the new cell sees it as
-///   `current_caller` when it next calls `sys_recv`.
-/// - `enqueued_tick` is for diagnostics; not used for ordering.
-pub struct PendingMsg {
-    pub sender_tid: usize,
-    pub data: Box<[u8]>,
-    pub enqueued_tick: u64,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskState {
@@ -338,7 +326,7 @@ pub struct Task {
     /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
     /// this queue to the new cell before the old cell is terminated.
     /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
-    pub pending_msgs: Vec<PendingMsg>,
+    pub pending_msgs: PendingMailbox,
 
     /// Epoch of the cell this task belongs to, attested to services alongside
     /// `cell_id` (see `api::caller_identity`).
@@ -446,7 +434,7 @@ impl Task {
             vma: crate::memory::vma::VmaList::new(),
             hotswap_ready: false,
             is_critical: false,
-            pending_msgs: Vec::new(),
+            pending_msgs: PendingMailbox::new(),
             cell_generation: NEXT_CELL_GENERATION
                 .fetch_add(1, core::sync::atomic::Ordering::Relaxed),
             inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,

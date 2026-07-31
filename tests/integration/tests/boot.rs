@@ -1454,7 +1454,59 @@ fn console_long_line_with_backspace_no_stall() {
         "backspace correction did not take effect (expected HELLO)\n--- output ---\n{}", qemu.dump());
 }
 
+/// A single UART burst near `INPUT_EVENT_QUEUE_DEPTH` must survive the
+/// `ipc_post_nonblock` → pending mailbox → resumed `RecvTimeout` path intact.
+#[test]
+fn console_near_depth_burst_is_lossless() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    // 247 UART bytes produce 494 press/release events, close to the 512-entry
+    // input mailbox bound without crossing it.
+    let payload = "A".repeat(220);
+    let command = format!("echo {payload} && echo IPC_BURST_OK\n");
+    assert_eq!(command.len(), 247, "burst size drifted away from the queue boundary");
+    qemu.send_bytes(command.as_bytes());
+
+    qemu.wait_for("IPC_BURST_OK", CMD_TIMEOUT).unwrap_or_else(|e| {
+        panic!(
+            "near-depth UART burst was truncated or stalled: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    assert!(
+        qemu.output_contains(&payload),
+        "near-depth UART burst lost payload bytes\n--- output ---\n{}",
+        qemu.dump()
+    );
+}
+
 // ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────
+
+/// The boot self-test proves all three producers avoid a foreign `Recv.buf_ptr`,
+/// and that full-mailbox and cell-quota failures leave the receiver unchanged.
+#[test]
+fn ipc_pending_delivery_selftest_passes() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for(
+        "[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)",
+        BOOT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "IPC pending-delivery self-test did not pass: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+}
 
 /// Input M2.2 (Phase 01): kernel must register the input service at spawn time.
 ///

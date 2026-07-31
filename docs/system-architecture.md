@@ -122,6 +122,11 @@ struct Task {
 > **Implementation Note**: The architecture spec (01-core.md) describes inter-cell IPC as direct function calls via vtable (2–3 CPU cycles). The current implementation uses kernel-mediated syscall message passing (~100–1000 cycles per round-trip), equivalent to a lightweight microkernel. Direct vtable IPC is planned for Phase 27 (trusted-cell fast path) once the Metadata Registry is integrated with the linker.
 >
 > **Normative wire contract**: the actual kernel-mediated framing is now ratified in **[`docs/specs/17-ipc-wire-contract.md`](specs/17-ipc-wire-contract.md)** (Ratified 2026-07-07, normative for all cells). It fixes the recurring silent-failure class from ad-hoc per-service framing: `sys_recv(mask, buf)` returns the **sender tid** not a byte count (`mask == 0` wildcard, `mask == tid` filters one sender); the **byte-0 discriminant registry** and message framing/buffer-size rules are defined there. Any new IPC path MUST comply.
+>
+> **Suspended-receiver ownership**: a matched send never writes through another task's retained
+> `Recv` pointer. The kernel queues owned bytes in the target mailbox, wakes the task, and the
+> resumed receiver performs the validated copy. IRQ-sized payloads remain inline; larger payloads
+> are allocated fallibly and charged/refunded to the receiver Cell.
 
 | Syscall | Purpose |
 |---------|---------|

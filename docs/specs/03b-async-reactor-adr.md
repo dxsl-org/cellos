@@ -143,6 +143,16 @@ append that wakes inline is not.
 - The stack sizing work stays blocked until this lands, because a shim pins a
   future on the caller's stack and changes the watermark for every call in every
   cell.
+- The 2026-07-31 buffer-pinning audit is addressed independently of queue
+  migration: `ipc_send`, `ipc_post_nonblock`, and `ipc_try_send` now place owned
+  bytes in the receiver's existing `pending_msgs` mailbox, and only the resumed
+  receiver copies them into its buffer. This also removes the interrupt-side need
+  to enable supervisor writes to user pages for console delivery.
+- Migrating `TaskState::Recv` itself onto completion queues remains deferred. The
+  rejected prototype consumed the shared NET_RX slot space, lost slot bookkeeping
+  across reply/exit/freeze teardown paths, and relied on waiter arbitration the
+  queue does not provide. A future attempt needs IPC-owned slots and task-level
+  lifecycle bookkeeping rather than fields embedded only in `TaskState::Recv`.
 
 ## Rejected
 

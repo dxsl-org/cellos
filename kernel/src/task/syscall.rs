@@ -500,6 +500,37 @@ fn write_optional_usize(ptr: usize, value: usize) -> Result<(), SyscallError> {
     Ok(())
 }
 
+/// Delivery selected when a blocked receive resumes.
+pub(super) enum ResumeDelivery {
+    Death { sender_tid: usize, reason: usize },
+    Message(super::tcb::PendingMsg),
+    Wake { sender_tid: usize },
+}
+
+/// Consume the wake-owned event before any later queued message.
+pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> ResumeDelivery {
+    if let Some(reason) = task.pending_exit_reason.take() {
+        return ResumeDelivery::Death {
+            sender_tid: task.current_caller.unwrap_or(0),
+            reason,
+        };
+    }
+
+    let slot = task
+        .pending_msgs
+        .iter()
+        .position(|message| mask == 0 || message.sender_tid == mask);
+    if let Some(index) = slot {
+        let message = task.pending_msgs.remove(index);
+        task.current_caller = Some(message.sender_tid);
+        return ResumeDelivery::Message(message);
+    }
+
+    ResumeDelivery::Wake {
+        sender_tid: task.current_caller.unwrap_or(0),
+    }
+}
+
 /// Look up the attested identity of `sender_tid`.
 ///
 /// Returns `None` when the sender is gone (a reply to a dead cell, a queued
@@ -1252,7 +1283,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     }
                     Ok(0)
                 }
-                Err(_) => Err(SyscallError::InvalidCommand),
+                Err(super::IpcSendError::Backpressure) => Err(SyscallError::TryAgain),
+                Err(super::IpcSendError::TargetGone) => Err(SyscallError::InvalidCommand),
                 _ => Ok(0),
             }
         }
@@ -1327,7 +1359,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Invariants:
             // - Lock is held for the entire drain + delivery so no concurrent send can
             //   observe a partially-drained queue.
-            // - We copy from msg.data (an owned Box<[u8]>) before releasing the lock,
+            // - We copy from msg.data (owned message storage) before releasing the lock,
             //   avoiding any lifetime dependency on the task struct.
             // - current_caller is set so the cell sees the original sender's TID, not
             //   the hotswap orchestrator's TID, preserving the IPC identity contract.
@@ -1377,30 +1409,52 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Ok(0) => {
                     // Blocked
                     super::yield_cpu();
-                    // Resume: return who sent the message (or the dead tid for a death
-                    // notification). If this wake was a death, a reason was stashed by
-                    // exit_task — deliver it as the recv payload HERE, in our own syscall
-                    // context where writing a USER buffer is valid (unlike the trap context).
-                    let mut sender = 0;
-                    let mut death_reason = None;
-                    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                        if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                            sender = t.current_caller.unwrap_or(0);
-                            death_reason = t.pending_exit_reason.take();
-                        }
-                    }
-                    if let Some(reason) = death_reason {
-                        if buf_len >= core::mem::size_of::<u64>()
-                            && validate_user_buf(buf_ptr, core::mem::size_of::<u64>(), MAX_USER_BUF)
+                    // A matched sender now leaves owned bytes in pending_msgs before waking us.
+                    // Drain them before interpreting the wake as a timeout, death, or spurious
+                    // scheduler event; the receiver is the only context allowed to write its
+                    // user buffer.
+                    let delivery = super::SCHEDULER
+                        .lock()
+                        .as_mut()
+                        .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                        .map(|task| take_resume_delivery(task, mask))
+                        .unwrap_or(ResumeDelivery::Wake { sender_tid: 0 });
+                    let sender = match delivery {
+                        ResumeDelivery::Death { sender_tid, reason } => {
+                            if buf_len >= core::mem::size_of::<u64>()
+                                && validate_user_buf(
+                                    buf_ptr,
+                                    core::mem::size_of::<u64>(),
+                                    MAX_USER_BUF,
+                                )
                                 .is_ok()
-                        {
-                            // SAFETY: buf_ptr is validated as this caller's user buffer; we
-                            // run in the caller's syscall context, so the store is permitted.
-                            unsafe {
-                                core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
+                            {
+                                // SAFETY: the resumed caller owns this validated receive buffer.
+                                unsafe {
+                                    core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
+                                }
                             }
+                            sender_tid
                         }
-                    }
+                        ResumeDelivery::Message(message) => {
+                            let copy_len = core::cmp::min(message.data.len(), buf_len);
+                            if copy_len > 0
+                                && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
+                            {
+                                // SAFETY: the resumed caller owns this validated receive buffer;
+                                // the removed mailbox message owns the source bytes.
+                                unsafe {
+                                    core::ptr::copy_nonoverlapping(
+                                        message.data.as_ptr(),
+                                        buf_ptr as *mut u8,
+                                        copy_len,
+                                    );
+                                }
+                            }
+                            message.sender_tid
+                        }
+                        ResumeDelivery::Wake { sender_tid } => sender_tid,
+                    };
                     attest(sender);
                     Ok(sender)
                 }
@@ -1464,14 +1518,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 pos += len;
             }
             let msg_ptr = gathered.as_ptr() as usize;
-            super::ipc_send(caller_id, target, msg_ptr, total)
-                .map_err(|_| SyscallError::InvalidCommand)
+            super::ipc_send(caller_id, target, msg_ptr, total).map_err(|error| match error {
+                super::IpcSendError::Backpressure => SyscallError::TryAgain,
+                super::IpcSendError::TargetGone => SyscallError::InvalidCommand,
+            })
         }
         Syscall::RecvScatter {
             mask,
             iovec_ptr,
             iovec_count,
         } => {
+            // Known pre-existing defect (2026-07-31 Recv buffer-pinning audit):
+            // ipc_recv may park with this temporary buffer, but this handler does
+            // not yield before scattering and returning. Producer-side mailbox
+            // delivery prevents a foreign write through the retained pointer;
+            // functional repair requires a separate blocking/lifecycle change.
             // Receive a single IPC message and scatter it across the iovec buffers.
             // For v1.0: receive into one temp buffer then scatter.
             const MAX_IOVEC: usize = 8;
@@ -1583,14 +1644,48 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     }
                     // Yield so the scheduler runs other tasks and can fire the timeout.
                     super::yield_cpu();
-                    if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                        return Ok(sched
-                            .tasks
-                            .get(&caller_id)
-                            .and_then(|t| t.current_caller)
-                            .unwrap_or(0));
+                    let delivery = super::SCHEDULER
+                        .lock()
+                        .as_mut()
+                        .and_then(|sched| sched.tasks.get_mut(&caller_id))
+                        .map(|task| take_resume_delivery(task, mask))
+                        .unwrap_or(ResumeDelivery::Wake { sender_tid: 0 });
+                    match delivery {
+                        ResumeDelivery::Death { sender_tid, reason } => {
+                            if buf_len >= core::mem::size_of::<u64>()
+                                && validate_user_buf(
+                                    buf_ptr,
+                                    core::mem::size_of::<u64>(),
+                                    MAX_USER_BUF,
+                                )
+                                .is_ok()
+                            {
+                                // SAFETY: the resumed caller owns this validated receive buffer.
+                                unsafe {
+                                    core::ptr::write_unaligned(buf_ptr as *mut u64, reason as u64);
+                                }
+                            }
+                            Ok(sender_tid)
+                        }
+                        ResumeDelivery::Message(message) => {
+                            let copy_len = core::cmp::min(message.data.len(), buf_len);
+                            if copy_len > 0
+                                && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
+                            {
+                                // SAFETY: the resumed caller owns this validated receive buffer;
+                                // the removed mailbox message owns the source bytes.
+                                unsafe {
+                                    core::ptr::copy_nonoverlapping(
+                                        message.data.as_ptr(),
+                                        buf_ptr as *mut u8,
+                                        copy_len,
+                                    );
+                                }
+                            }
+                            Ok(message.sender_tid)
+                        }
+                        ResumeDelivery::Wake { sender_tid } => Ok(sender_tid),
                     }
-                    Ok(0)
                 }
                 Ok(id) => Ok(id),
                 Err(_) => Err(SyscallError::InvalidCommand),

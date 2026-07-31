@@ -19,7 +19,9 @@ pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub use tcb::Task;
 pub mod drivers;
+pub mod ipc_pending_selftest;
 pub mod ipc_test;
+pub mod pending_mailbox;
 pub mod scheduler;
 pub mod stack;
 #[cfg(feature = "test-hooks")]
@@ -44,6 +46,34 @@ extern "C" {
 // use alloc::vec::Vec;
 use tcb::TaskState;
 use types::*;
+
+/// Queue an owned IPC message without invoking the infallible allocation path.
+///
+/// Returns `Err(())` when the mailbox is full or the sender's cell cannot fund
+/// the owned copy. The target is unchanged on failure.
+pub(crate) fn queue_pending_msg(
+    target: &mut Task,
+    sender_tid: usize,
+    data: &[u8],
+    max_depth: usize,
+) -> core::result::Result<(), ()> {
+    if target.pending_msgs.len() >= max_depth {
+        return Err(());
+    }
+
+    let owned = pending_mailbox::PendingMsgData::try_copy(data, target.cell_id.0 as usize)?;
+    target.pending_msgs.try_push(tcb::PendingMsg {
+        sender_tid,
+        data: owned,
+        enqueued_tick: system_ticks() as u64,
+    })
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IpcSendError {
+    TargetGone,
+    Backpressure,
+}
 
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
@@ -1155,13 +1185,13 @@ pub fn ipc_send(
     target_id: usize,
     msg_ptr: VAddr,
     msg_len: usize,
-) -> core::result::Result<usize, ()> {
+) -> core::result::Result<usize, IpcSendError> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if !sched.tasks.contains_key(&target_id) {
             // Expected: caller sends to a cell that already exited (e.g. input service
             // dispatching to a focused cell that called sys_exit).  Not a system error.
             log::debug!("IPC: Target Task {} not found (cell exited)", target_id);
-            return Err(());
+            return Err(IpcSendError::TargetGone);
         }
 
         // ── Hot-swap queue: buffer messages to Frozen cells ─────────────────
@@ -1174,29 +1204,20 @@ pub fn ipc_send(
         // The new cell drains this queue in Step 5 (UNFREEZE).
         if let Some(target) = sched.tasks.get_mut(&target_id) {
             if matches!(target.state, TaskState::Frozen { .. }) {
-                if target.pending_msgs.len() >= tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+                // SAFETY: msg_ptr is valid for this syscall's duration; the caller
+                // cannot resume or free it while the kernel copies these bytes.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                if queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err()
+                {
                     // Queue saturated — tell caller to back off and retry.
                     log::warn!(
-                        "[hotswap] pending_msgs full for frozen tid={} (caller={}); dropping",
+                        "[hotswap] cannot queue msg for frozen tid={} (caller={})",
                         target_id,
                         caller_id
                     );
                     // Return Err(()) so the syscall layer maps this to TryAgain.
-                    return Err(());
+                    return Err(IpcSendError::Backpressure);
                 }
-                // SAFETY: msg_ptr is a user-space pointer valid for this syscall's
-                // duration (SAS: single address space, caller is in mid-syscall so
-                // its stack is alive).  We copy immediately to an owned buffer so
-                // the bytes survive after this stack frame and the caller's
-                // execution resumes.
-                let bytes: alloc::vec::Vec<u8> =
-                    unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len).to_vec() };
-                let tick = crate::task::system_ticks() as u64;
-                target.pending_msgs.push(tcb::PendingMsg {
-                    sender_tid: caller_id,
-                    data: bytes.into_boxed_slice(),
-                    enqueued_tick: tick,
-                });
                 log::debug!(
                     "[hotswap] queued msg ({} bytes) from tid={} to frozen tid={}",
                     msg_len,
@@ -1212,27 +1233,20 @@ pub fn ipc_send(
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
             match target.state {
                 // G18 fix: honour the mask — only deliver if mask==0 (wildcard) or mask==caller_id.
-                TaskState::Recv {
-                    mask,
-                    buf_ptr,
-                    buf_len,
-                    ..
-                } if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
-                _ => None,
+                TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id => true,
+                _ => false,
             }
         } else {
-            None
+            false
         };
 
-        if let Some((dest_ptr, dest_len)) = target_ready {
-            let app_src = msg_ptr as *const u8;
-            let app_dst = dest_ptr as *mut u8;
-            let copy_len = core::cmp::min(msg_len, dest_len);
-            unsafe {
-                core::ptr::copy_nonoverlapping(app_src, app_dst, copy_len);
-            }
-
+        if target_ready {
             if let Some(target) = sched.tasks.get_mut(&target_id) {
+                // SAFETY: msg_ptr remains owned by the blocked-in-kernel caller until
+                // this syscall returns, so it is valid for the immediate owned copy.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
+                    .map_err(|_| IpcSendError::Backpressure)?;
                 target.state = TaskState::Ready;
                 target.current_caller = Some(caller_id);
             }
@@ -1257,14 +1271,14 @@ pub fn ipc_send(
             return Ok(1);
         }
     }
-    Err(())
+    Err(IpcSendError::TargetGone)
 }
 
 /// Post a message to `target_id` without blocking the caller.
 ///
-/// Delivers immediately if target is in `Recv` state (copies into its buffer,
-/// marks it Ready, pends a preempt).  If the target is busy, queues the message
-/// into `pending_msgs` (bounded by `HOTSWAP_MSG_QUEUE_DEPTH`).
+/// Queues an owned message and wakes the target immediately when it is in `Recv`.
+/// Busy targets retain the queued message until their next receive call. The
+/// mailbox is bounded by `HOTSWAP_MSG_QUEUE_DEPTH`.
 ///
 /// Never puts the caller in `Sending` state — the caller always continues.
 /// Returns `Ok(())` if delivered or queued, `Err(())` if target is gone or queue full.
@@ -1281,40 +1295,26 @@ pub fn ipc_post_nonblock(
             return Err(());
         }
 
-        let target_ready = sched.tasks.get(&target_id).and_then(|t| match t.state {
-            TaskState::Recv {
-                buf_ptr, buf_len, ..
-            } => Some((buf_ptr, buf_len)),
-            _ => None,
-        });
+        // Known pre-existing contract gap (2026-07-31 Recv buffer-pinning audit):
+        // unlike ipc_send/ipc_try_send, this path intentionally preserves its
+        // current behavior of matching any Recv without consulting the mask.
+        let target_ready = sched
+            .tasks
+            .get(&target_id)
+            .is_some_and(|t| matches!(t.state, TaskState::Recv { .. }));
 
-        if let Some((dest_ptr, dest_len)) = target_ready {
-            let copy_len = msg.len().min(dest_len);
-            // SAFETY: dest_ptr is the target cell's recv buffer (SAS identity mapping);
-            // we hold SCHEDULER lock so the target is not concurrently executing.
-            unsafe {
-                core::ptr::copy_nonoverlapping(msg.as_ptr(), dest_ptr as *mut u8, copy_len);
-            }
-            if let Some(t) = sched.tasks.get_mut(&target_id) {
+        if let Some(t) = sched.tasks.get_mut(&target_id) {
+            queue_pending_msg(t, sender_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
+            if target_ready {
                 t.state = TaskState::Ready;
                 t.current_caller = Some(sender_id);
             }
+        }
+        if target_ready {
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
-            return Ok(());
         }
-
-        // Target not in Recv — queue to pending_msgs (bounded).
-        if let Some(t) = sched.tasks.get_mut(&target_id) {
-            if t.pending_msgs.len() < tcb::HOTSWAP_MSG_QUEUE_DEPTH {
-                t.pending_msgs.push(tcb::PendingMsg {
-                    sender_tid: sender_id,
-                    data: msg.to_vec().into_boxed_slice(),
-                    enqueued_tick: crate::task::system_ticks() as u64,
-                });
-                return Ok(());
-            }
-        }
+        return Ok(());
     }
     Err(())
 }
@@ -1464,25 +1464,18 @@ pub fn ipc_try_send(
         }
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
             match target.state {
-                TaskState::Recv {
-                    mask,
-                    buf_ptr,
-                    buf_len,
-                    ..
-                } if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
-                _ => None,
+                TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id => true,
+                _ => false,
             }
         } else {
-            None
+            false
         };
-        if let Some((dest_ptr, dest_len)) = target_ready {
-            let copy_len = core::cmp::min(msg_len, dest_len);
-            // SAFETY: msg_ptr is a valid user-space buffer for this syscall's
-            // duration (SAS, single address space, caller is mid-syscall).
-            unsafe {
-                core::ptr::copy_nonoverlapping(msg_ptr as *const u8, dest_ptr as *mut u8, copy_len);
-            }
+        if target_ready {
             if let Some(target) = sched.tasks.get_mut(&target_id) {
+                // SAFETY: msg_ptr remains valid while the caller is in this syscall;
+                // queue_pending_msg copies it into owned storage before return.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                queue_pending_msg(target, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
                 target.state = TaskState::Ready;
                 target.current_caller = Some(caller_id);
             }
@@ -1504,20 +1497,11 @@ pub fn ipc_try_send(
             .load(core::sync::atomic::Ordering::Relaxed);
         if caller_id == input_tid && input_tid != 0 {
             if let Some(t) = sched.tasks.get_mut(&target_id) {
-                if t.pending_msgs.len() < tcb::INPUT_EVENT_QUEUE_DEPTH {
-                    // SAFETY: copy the message bytes out of the caller's user buffer
-                    // (SAS identity mapping; caller is mid-syscall) into an owned box.
-                    let data =
-                        unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) }
-                            .to_vec()
-                            .into_boxed_slice();
-                    t.pending_msgs.push(tcb::PendingMsg {
-                        sender_tid: caller_id,
-                        data,
-                        enqueued_tick: crate::task::system_ticks() as u64,
-                    });
-                    return Ok(());
-                }
+                // SAFETY: msg_ptr is valid for the duration of this syscall and is
+                // copied into owned storage before the caller resumes.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                queue_pending_msg(t, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
+                return Ok(());
             }
         }
         // Non-input caller, or queue full — drop event without blocking.
@@ -1552,6 +1536,8 @@ pub fn ipc_borrow_read(
     dst_ptr: VAddr,
     len: usize,
 ) -> core::result::Result<usize, ()> {
+    // Audit guard (2026-07-31): no live production caller currently exists.
+    // Re-enabling this path requires a separate lease pin/lifetime review.
     if let Some(sched) = SCHEDULER.lock().as_ref() {
         if let Some(task) = sched.tasks.get(&caller_id) {
             if let Some(lease) = task.get_lease(lease_id) {
@@ -1583,6 +1569,8 @@ pub fn ipc_borrow_write(
     src_ptr: VAddr,
     len: usize,
 ) -> core::result::Result<usize, ()> {
+    // Audit guard (2026-07-31): no live production caller currently exists.
+    // Re-enabling this path requires a separate lease pin/lifetime review.
     if let Some(sched) = SCHEDULER.lock().as_ref() {
         if let Some(task) = sched.tasks.get(&caller_id) {
             if let Some(lease) = task.get_lease(lease_id) {

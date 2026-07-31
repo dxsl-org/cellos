@@ -460,66 +460,71 @@ pub fn hotswap(old_cell_id: CellId, new_elf_path: &str, caller_tid: usize) -> Vi
     // this guarantees the new cell sees all buffered messages in order.
     unfreeze(old_cell_id);
 
-    // Extract the buffered message queue from the old task under the SCHEDULER
-    // lock, then release the lock before calling ipc_send (which re-acquires it).
-    // Lock order: SCHEDULER acquired → pending_msgs taken → SCHEDULER released →
-    //             ipc_send (re-acquires SCHEDULER per message).
-    let pending: alloc::vec::Vec<crate::task::tcb::PendingMsg> = {
-        let mut guard = crate::task::SCHEDULER.lock();
-        if let Some(sched) = guard.as_mut() {
-            if let Some(old_task) = sched.tasks.get_mut(&old_tid) {
-                core::mem::take(&mut old_task.pending_msgs)
-            } else {
-                alloc::vec::Vec::new()
-            }
-        } else {
-            alloc::vec::Vec::new()
-        }
-    };
-
-    let queued_count = pending.len();
-    for msg in pending {
-        // Deliver each buffered message to the new cell.
-        //
-        // Caller identity: we pass `msg.sender_tid` so the new cell's `sys_recv`
-        // sees the *original* sender as `current_caller` — preserving the IPC
-        // identity contract.  However, the original sender has already resumed
-        // (the Frozen intercept returned `Ok(0)` to them), so we must NOT let
-        // `ipc_send` put them back into `TaskState::Sending` if the new cell is
-        // not yet in Recv.  The new cell is expected to be in Recv at this point
-        // (invariant: `wait_for_hotswap_ready` succeeded, meaning the cell called
-        // `sys_hotswap_ready` and re-entered its recv loop before we reach Step 5).
-        //
-        // If, despite the invariant, the new cell is not in Recv, `ipc_send`
-        // returns `Ok(1)` and sets `sender_tid`'s state to Sending — which would
-        // corrupt its live state.  Guard against this: we only proceed when the
-        // new cell is actually in Recv (fire-and-assert).  Log a warning and skip
-        // if not; the caller already has the returned `Ok(0)` and has moved on.
-        //
-        // SAFETY: msg.data is an owned Box<[u8]> from the Frozen intercept.
-        // The pointer is valid for this loop iteration; ipc_send copies before
-        // returning.
-        let new_cell_in_recv = {
-            let guard = crate::task::SCHEDULER.lock();
+    // Remove one message per scheduler-lock acquisition, then re-lock to copy it
+    // into the replacement mailbox. The old mailbox container stays with its task,
+    // preserving its kernel-owned allocation accounting.
+    let queued_count = crate::task::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&old_tid))
+        .map(|task| task.pending_msgs.len())
+        .unwrap_or(0);
+    for _ in 0..queued_count {
+        let msg = {
+            let mut guard = crate::task::SCHEDULER.lock();
             guard
-                .as_ref()
-                .and_then(|s| s.tasks.get(&new_tid))
-                .map(|t| matches!(t.state, crate::task::tcb::TaskState::Recv { .. }))
-                .unwrap_or(false)
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&old_tid))
+                .filter(|task| !task.pending_msgs.is_empty())
+                .map(|task| task.pending_msgs.remove(0))
         };
-
-        if !new_cell_in_recv {
-            log::warn!(
-                "[hotswap] new cell {} not in Recv during drain; dropping msg from tid={}",
-                new_tid,
-                msg.sender_tid
-            );
-            continue;
+        let Some(msg) = msg else {
+            break;
+        };
+        // Copy into receiver-owned storage directly. The original sender already
+        // resumed when the Frozen intercept accepted the message, so replaying
+        // through ipc_send could incorrectly park that live sender when the
+        // replacement is not yet in Recv. The copy also rebinds heap quota ownership
+        // because the replacement may have a different CellId from the old task.
+        let sender_tid = msg.sender_tid;
+        let mut queued = false;
+        let mut wake = false;
+        {
+            let mut guard = crate::task::SCHEDULER.lock();
+            if let Some(sched) = guard.as_mut() {
+                if let Some(target) = sched.tasks.get_mut(&new_tid) {
+                    let recv_matches = matches!(
+                        target.state,
+                        crate::task::tcb::TaskState::Recv { mask, .. }
+                            if mask == 0 || mask == sender_tid
+                    );
+                    if crate::task::queue_pending_msg(
+                        target,
+                        sender_tid,
+                        msg.data.as_slice(),
+                        crate::task::tcb::HOTSWAP_MSG_QUEUE_DEPTH,
+                    )
+                    .is_ok()
+                    {
+                        queued = true;
+                        if recv_matches {
+                            target.state = crate::task::tcb::TaskState::Ready;
+                            target.current_caller = Some(sender_tid);
+                            wake = true;
+                        }
+                    }
+                }
+                if wake {
+                    sched.push_ready(new_tid);
+                }
+            }
         }
-
-        let ptr = msg.data.as_ptr() as usize;
-        let len = msg.data.len();
-        let _ = crate::task::ipc_send(msg.sender_tid, new_tid, ptr, len);
+        if !queued {
+            log::warn!(
+                "[hotswap] replacement mailbox full or missing; dropping msg from tid={}",
+                sender_tid
+            );
+        }
     }
 
     if queued_count > 0 {

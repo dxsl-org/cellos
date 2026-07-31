@@ -4,6 +4,28 @@
 
 ---
 
+## [2026-07-31] IPC delivery no longer writes through suspended receiver buffers
+
+### What was wrong
+The kernel retained a receiver's raw `Recv` buffer pointer while the task was suspended, then
+`ipc_send`, `ipc_post_nonblock`, and `ipc_try_send` wrote through it from producer or interrupt
+context. That made temporary or no-longer-valid receive buffers a foreign-context memory-safety
+hazard. Heap-backed deferred messages also charged and refunded quota according to whichever Cell
+happened to allocate or drop them.
+
+### What changed
+Matched sends now enqueue receiver-owned message data and wake the target; only the resumed
+receiver copies into its own validated buffer. IRQ-sized messages use inline storage, larger
+payloads allocate fallibly under the receiver's quota, and their recorded owner receives the
+refund. Death-notification wakes take priority over later mailbox traffic, hot-swap rebases queued
+payloads into the replacement Cell's ownership, and `ipc_send` reports mailbox pressure as
+`TryAgain`.
+
+### Verified
+Kernel checks pass for RISC-V, AArch64, and x86_64, the integration target compiles, and the
+release RISC-V kernel builds. Focused QEMU tests pass for deferred IPC delivery, a near-depth UART
+burst, long console input with backspace, FAT16 VFS request/reply, and keyboard input.
+
 ## [2026-07-29] Fault reporting stops naming ARM64 registers after RISC-V CSRs
 
 ### What was wrong
