@@ -67,25 +67,50 @@ kernel = key 0, everything else = key 1, PKRU written on context switch); ARM MT
 future ≥v8.5 silicon. These are lane-specific bonuses, never load-bearing — the boards
 named in §1 don't have them.
 
-## 3. Concurrency scale model — "light as BEAM", defined honestly
+## 3. Concurrency scale model — two profiles, not one number
 
-A Cellos **cell is a Midori process, not a BEAM process**. Chasing BEAM's process
-count with cells (256 KiB+ stacks, manifests, quotas) is a category error. The model
-Cellos commits to is Midori's two-level one:
+> **Revised 2026-07-31.** An earlier version of this section committed to a single
+> two-level model — tens of cells, thousands of async tasks inside them — and rejected
+> "raising `MAX_CELLS` toward BEAM scale" as the wrong axis. That was wrong for a server.
+> N futures inside one cell share one heap, one quota and one capability set, so a faulty
+> or hostile task reads and corrupts the other N−1. Per-request isolation is exactly what a
+> multi-request server needs, and the actor-future model does not provide it. The rejection
+> rested on an assumption — that a cell must cost half a megabyte — which is a *policy*, not
+> a property of the design.
 
-- **Isolation unit — the cell**: tens of them (`MAX_CELLS = 64`, revisit upward to
-  ~256 after midori-lessons phase 08 measures real stack watermarks). Carries quota,
-  capabilities, manifest, restart policy.
-- **Concurrency unit — the async task** (Midori: "activity"): thousands per cell on
-  one thread, once the phase-07 reactor lands. Rust futures are heap state machines —
-  the actor of this system.
+Cellos commits to **two named profiles**, both first-class:
 
-The measurable "lightness" target replacing the slogan: **≥10,000 concurrent
-actor-futures across ≤64 cells within the existing RAM budget**, benchmarked after
-phase 07; not cell count. BEAM-style supervision (monitors via `NotifyOnExit`,
-Permanent/Transient/Temporary restart with intensity windows) already exists at the
-cell level and stays there; mailbox semantics for in-cell actors are an `ostd` library
-concern layered on the phase-07 completion queue.
+**Large-app profile.** A few big cells; MiB-scale quotas; stacks sized for deep call
+graphs. This is today's behaviour and needs nothing new.
+
+**Per-request server profile.** Thousands of very light cells, one per request, each with a
+real isolation boundary. Requires three changes, none architectural:
+
+1. **Shared `.text`/`.rodata` across instances of one image.** The loader currently copies
+   the whole ELF on every spawn (`kernel/src/loader/elf.rs`), so 1000 instances of a 1 MiB
+   handler cost ~1 GiB of identical, immutable pages. Layer A makes sharing safe: once those
+   segments are read-only, N instances can map the *same* frames and allocate only stack,
+   heap and TCB. Needs image-hash frame refcounting in the loader; the VA allocator already
+   hands out distinct slots (`MAX_SLOTS = 512`).
+2. **Demand-paged stacks.** A 512 KiB pre-allocation per cell is the dominant fixed cost. A
+   light request touches a few KiB. This goes beyond static per-path sizing, which still
+   pre-allocates.
+3. **`MAX_CELLS` raised** from 64, and the per-cell tables sized dynamically.
+
+The measurable target is stated per profile and only after measurement: per-spawn memory and
+spawn latency are to be measured at N = 64/128/256/512 *before* any of the three changes are
+designed, so the sharing win is sized rather than assumed.
+
+**Where this can beat BEAM rather than imitate it.** BEAM processes are lightweight but share
+one VM: a single faulty NIF takes neighbours with it. A per-request Cellos cell is separated
+by W^X (Layer A), capabilities, and — for unverified code — a Tier-2 domain page table
+(Spec 18). Matching BEAM on count is an engineering target; exceeding it on isolation is the
+part only this design can claim.
+
+BEAM-style supervision (monitors via `NotifyOnExit`, Permanent/Transient/Temporary restart
+with intensity windows) already exists at the cell level and stays there. Mailbox semantics
+for in-cell actors remain an `ostd` library concern over the phase-07 completion queue — the
+two profiles compose: a large-app cell may still run many futures internally.
 
 ## 4. Rejected alternatives
 
@@ -94,7 +119,10 @@ concern layered on the phase-07 completion queue.
 - **Full per-cell address spaces (classic processes)** — abandons SAS's transferable
   pointers and zero-copy economy for all cells; Layer B keeps SAS semantics and applies
   the wall only where trust is absent.
-- **Raising `MAX_CELLS` toward BEAM scale** — wrong axis; see §3.
+- ~~**Raising `MAX_CELLS` toward BEAM scale** — wrong axis~~ — **withdrawn 2026-07-31.** The
+  argument assumed a cell must cost 512 KiB, which is an allocation policy rather than a
+  property of the design, and it left per-request isolation unserved. Superseded by the
+  per-request server profile in §3.
 
 ## 5. Cross-references
 
