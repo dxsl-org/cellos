@@ -178,7 +178,11 @@ pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
     crate::memory::cell_quota::deregister(cell_id);
     crate::resource_registry::release_for(cell_id);
     crate::resource_registry::release_bdfs_for(tid);
-    crate::task::drivers::iommu::cleanup_cell(cell_id.0);
+    // Keyed by task id, as at every other call site: this is also the point that
+    // releases quarantined frames, so a cell id here would look up nothing and
+    // leak them on every swap. The two agree for a loader-spawned cell, which is
+    // what let the mismatch go unnoticed.
+    crate::task::drivers::iommu::cleanup_cell(tid as u64);
 
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         // 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).

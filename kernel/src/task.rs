@@ -272,6 +272,7 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::cell::registry::CELL_REGISTRY.force_unlock();
     crate::cell::cap_registry::CAP_TABLE.force_unlock();
     crate::memory::cell_quota::force_unlock_locks();
+    crate::memory::pin::force_unlock();
     crate::memory::rt_heap::force_unlock_locks();
     crate::cell::hotswap::force_unlock_locks();
     crate::cell::service_registry::force_unlock_locks();
@@ -372,7 +373,9 @@ pub fn terminate_current_cell_on_fault(cause: usize, pc: usize, fault_addr: usiz
         crate::resource_registry::release_for(cell_id);
         // Reap grant/registered-grant pages for this cell. SCHEDULER lock is
         // already released (the block above exited), so the
-        // KERNEL_ROOT → FRAME_ALLOCATOR path inside reap_grants_for_task is safe.
+        // FRAME_ALLOCATOR → KERNEL_ROOT path inside reap_grants_for_task is safe.
+        // (free_grant_pages takes FRAME_ALLOCATOR first and holds it across
+        // unmap_page/map_page, which take KERNEL_ROOT — not the reverse.)
         crate::task::syscall::reap_grants_for_task(tid);
         // Reap any VMs (guest RAM + Stage-2 tables) owned by this cell.
         crate::hypervisor::registry::reap_vms_for_task(tid);
@@ -417,7 +420,7 @@ pub fn yield_cpu() {
     drop(reaped);
 
     // Reap grant pages for watchdog-killed tasks. The watchdog enqueues task IDs
-    // here because free_grant_pages (KERNEL_ROOT → FRAME_ALLOCATOR) must not run
+    // here because free_grant_pages (FRAME_ALLOCATOR → KERNEL_ROOT) must not run
     // while SCHEDULER is held — same pattern as take_reapable_zombies above.
     let grant_tids = {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
@@ -430,6 +433,10 @@ pub fn yield_cpu() {
         crate::resource_registry::release_bdfs_for(tid);
         // IOFENCE/IOTLB flush must complete before frames are returned to the allocator.
         crate::task::drivers::iommu::cleanup_cell(tid as u64);
+        // The flush above is the acknowledgement the pin quarantine waits on.
+        // Running it before the reaper is fine: the pins are dropped here, so
+        // the reaper finds nothing quarantined and frees the frames itself.
+        crate::task::syscall::release_acked_frames(tid);
         crate::task::syscall::reap_grants_for_task(tid);
         crate::hypervisor::registry::reap_vms_for_task(tid);
     }

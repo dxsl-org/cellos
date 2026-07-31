@@ -189,19 +189,63 @@ fn free_grant_pages(base: usize, n_pages: usize) {
     crate::memory::paging::tlb_flush_all();
 }
 
+/// Refuse an owner-initiated teardown of `[base, base + size)` while an
+/// in-flight asynchronous operation still holds any part of it.
+///
+/// `kind` and `id` name the request in the log; the frames must not go back to
+/// the allocator while a device or the kernel can still write them.
+///
+/// # Errors
+/// [`SyscallError::PermissionDenied`] when the region is pinned.
+fn refuse_if_pinned(kind: &str, id: usize, base: usize, size: usize) -> Result<(), SyscallError> {
+    let Some(held) = crate::memory::pin::holder_of(base, size) else {
+        return Ok(());
+    };
+    log::warn!(
+        "[grant] {kind} {id:#x} refused: region {base:#x}+{size} overlaps a pinned region \
+         {:#x}+{} pages owned by task {} with {} in-flight operation(s){}",
+        held.base,
+        held.pages,
+        held.owner,
+        held.holds,
+        if held.quarantined {
+            " (quarantined: owner died, awaiting driver acknowledgement)"
+        } else {
+            ""
+        }
+    );
+    Err(SyscallError::PermissionDenied)
+}
+
 // ── Grant Reaper ──────────────────────────────────────────────────────────────
 
 /// Reclaim all grant pages owned or held by a dying task.
 ///
 /// Called from every task-exit code path (Exit syscall, ForceExit, scheduler watchdog, fault handler).
-/// Two effects:
+/// Three effects:
 ///   1. Owner death  — remove entry, unmap pages, return frames to allocator.
 ///   2. Grantee death — clear `shared_to` so the owner's grant becomes unshared.
+///   3. Pinned frames — quarantined instead of freed, so a device still
+///      programmed against them cannot write into the next cell allocated them.
+///      The death itself is never delayed for a pin.
 ///
-/// Lock order: PAGE_GRANT_TABLE collect → unmap (KERNEL_ROOT) → FRAME_ALLOCATOR.
-/// Never holds FRAME_ALLOCATOR when calling free_grant_pages.
+/// Lock order: PIN_TABLE (leaf) → PAGE_GRANT_TABLE collect → FRAME_ALLOCATOR →
+/// KERNEL_ROOT (inside `unmap_page`/`map_page`). Never holds FRAME_ALLOCATOR
+/// when calling free_grant_pages, and never holds PIN_TABLE across either.
 pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     const PAGE_SIZE: usize = 4096;
+
+    // Pins outlive their owner: a device authorised through the IOMMU keeps its
+    // mapping after the cell is gone. Mark them before sweeping the tables so
+    // the frames below are withheld rather than recycled.
+    let pinned = crate::memory::pin::quarantine_task(dead_tid);
+    if pinned > 0 {
+        log::warn!(
+            "[grant] task {dead_tid} died holding {pinned} pinned region(s); frames quarantined \
+             ({} page(s) total withheld) until the driver acknowledges",
+            crate::memory::pin::quarantined_pages()
+        );
+    }
 
     // ── PAGE_GRANT_TABLE pass ─────────────────────────────────────────────────
     let owned: alloc::vec::Vec<PageGrant> = {
@@ -223,6 +267,9 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     }; // PAGE_GRANT_TABLE lock released
 
     for grant in &owned {
+        if withhold_or_free(grant.base, grant.size / PAGE_SIZE) {
+            continue;
+        }
         free_grant_pages(grant.base, grant.size / PAGE_SIZE);
     }
 
@@ -258,7 +305,55 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     }; // REG_GRANT_TABLE lock released
 
     for reg in &reg_owned {
+        if withhold_or_free(reg.base, reg.size / PAGE_SIZE) {
+            continue;
+        }
         free_grant_pages(reg.base, reg.size / PAGE_SIZE);
+    }
+}
+
+/// Whether the reaper must withhold `pages` frames at `base` instead of freeing
+/// them, because an in-flight operation still holds part of the region.
+///
+/// A pin held by a task OTHER than the one dying counts: a driver cell may have
+/// authorised DMA against a buffer belonging to the cell now being reaped, and
+/// that driver — not the corpse — is the one whose acknowledgement must arrive.
+/// The frames are charged to the holder so its acknowledgement releases them.
+///
+/// Returns `true` when the frames must not be freed. A full quarantine also
+/// returns `true`: leaking the frames is the only safe answer left.
+fn withhold_or_free(base: usize, pages: usize) -> bool {
+    let size = pages * 4096;
+    let Some(held) = crate::memory::pin::holder_of(base, size) else {
+        return false;
+    };
+    if !crate::memory::pin::withhold_frames(base, pages, held.owner) {
+        log::error!(
+            "[grant] quarantine full: leaking {pages} page(s) at {base:#x} pinned by task {}",
+            held.owner
+        );
+    }
+    true
+}
+
+/// Return quarantined frames owned by `tid` to the allocator once the driver has
+/// acknowledged that nothing can still reach them.
+///
+/// The acknowledgement point is `iommu::cleanup_cell(tid)`: with the cell's IOTLB
+/// entries flushed and its DDT/context entries zeroed, no device it authorised
+/// can address the frames. Call this immediately after that teardown, and only
+/// with a task id — the pin registry is keyed by task, not by cell.
+///
+/// Order-insensitive with respect to [`reap_grants_for_task`]: an acknowledgement
+/// that arrives first drops the pins, so the reaper then frees the frames itself.
+///
+/// Must run with neither FRAME_ALLOCATOR nor SCHEDULER held.
+pub(crate) fn release_acked_frames(tid: usize) {
+    for (base, pages) in crate::memory::pin::acknowledge(tid) {
+        log::info!(
+            "[grant] task {tid} acknowledged: releasing {pages} quarantined page(s) at {base:#x}"
+        );
+        free_grant_pages(base, pages);
     }
 }
 
@@ -1768,6 +1863,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Flush IOTLB for any DMA domains this Cell held; zero DC/context entries.
             // Must run BEFORE yield_cpu returns frames to the allocator (frame quarantine).
             super::drivers::iommu::cleanup_cell(caller_id as u64);
+            // The flush above is the acknowledgement the quarantine waits on.
+            release_acked_frames(caller_id);
 
             // yield_cpu switches away; this task is never rescheduled.
             super::yield_cpu();
@@ -1855,6 +1952,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
             // Flush IOTLB for any DMA domains the target Cell held.
             super::drivers::iommu::cleanup_cell(tid as u64);
+            // The flush above is the acknowledgement the quarantine waits on.
+            release_acked_frames(tid);
 
             log::info!(
                 "[kernel] ForceExit: task {} killed by task {}",
@@ -2777,6 +2876,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 );
                 return Err(SyscallError::PermissionDenied);
             }
+            // Pin BEFORE the mapping exists. Once a device can address these
+            // frames, only an IOMMU teardown can stop it — a later GrantFree
+            // would hand them to the next allocation while DMA is still live.
+            // Fail closed: no pin, no mapping.
+            if let Err(e) = crate::memory::pin::pin(phys as usize, size, caller_id) {
+                log::warn!(
+                    "[iommu] Cell {caller_id} DMA grant denied: cannot pin {phys:#x}+{size} ({e:?})"
+                );
+                return Err(SyscallError::PermissionDenied);
+            }
             // Map into IOMMU.
             super::drivers::iommu::map_dma_for_cell(caller_id as u64, bdf, phys, size);
             crate::memory::cell_quota::record_dma_mapped(cell_id_raw, size);
@@ -3691,16 +3800,24 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GrantFree { grant_id } => {
-            // Owner-only: remove from table before touching page tables.
+            // Owner-only, and only while no in-flight operation holds the region.
+            // The pin check runs inside the table lock (order: PAGE_GRANT_TABLE →
+            // PIN_TABLE, a leaf) so a concurrent GrantDma on another hart cannot
+            // pin the region between the check and the removal.
             let entry = {
                 let mut tbl = grant_table_lock().lock();
-                tbl.as_mut().and_then(|m| {
-                    if m.get(&grant_id).is_some_and(|g| g.owner == caller_id) {
-                        m.remove(&grant_id)
-                    } else {
-                        None
+                let owned = tbl
+                    .as_ref()
+                    .and_then(|m| m.get(&grant_id))
+                    .filter(|g| g.owner == caller_id)
+                    .map(|g| (g.base, g.size));
+                match owned {
+                    None => None,
+                    Some((base, size)) => {
+                        refuse_if_pinned("GrantFree", grant_id, base, size)?;
+                        tbl.as_mut().and_then(|m| m.remove(&grant_id))
                     }
-                })
+                }
             };
             let entry = match entry {
                 Some(e) => e,
@@ -3739,15 +3856,22 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::GrantUnregister { reg_id } => {
+            // Same contract as GrantFree: owner-only, and refused outright while
+            // the region is pinned. Lock order: REG_GRANT_TABLE → PIN_TABLE (leaf).
             let entry = {
                 let mut tbl = reg_grant_table_lock().lock();
-                tbl.as_mut().and_then(|m| {
-                    if m.get(&reg_id).is_some_and(|g| g.owner == caller_id) {
-                        m.remove(&reg_id)
-                    } else {
-                        None
+                let owned = tbl
+                    .as_ref()
+                    .and_then(|m| m.get(&reg_id))
+                    .filter(|g| g.owner == caller_id)
+                    .map(|g| (g.base, g.size));
+                match owned {
+                    None => None,
+                    Some((base, size)) => {
+                        refuse_if_pinned("GrantUnregister", reg_id, base, size)?;
+                        tbl.as_mut().and_then(|m| m.remove(&reg_id))
                     }
-                })
+                }
             };
             let entry = match entry {
                 Some(e) => e,
