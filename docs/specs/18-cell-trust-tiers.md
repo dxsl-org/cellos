@@ -32,11 +32,23 @@ no problem the tiers below don't solve better.
 Three tiers. The loader assigns the tier at spawn from signature verification; the
 tier decides which memory model the Cell gets.
 
-| Tier | Who | Isolation mechanism | Execution speed | IPC |
-|------|-----|---------------------|-----------------|-----|
-| **1 — SAS cell** | First-party / platform-built cells, signed via `cellos-sign` | LBI: rustc + enforced F1 (build-time verification) | Native, zero-cost boundary | Zero-copy grants |
-| **2 — Domain cell** | Any unsigned native ELF (third-party developers) | Hardware: private page-table view — same VA layout as the SAS, but *other cells' pages are simply not mapped* | Native inside the domain; `satp`+ASID switch at the boundary | Kernel-copied messages; grants mapped explicitly per-share |
-| **3 — Silo VM** | Whole legacy stacks (Linux guests) | Stage-2 paging (H-extension, already shipped) | Native inside guest | virtio / proxy |
+| Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
+|------|--------|-----|---------------------|-----------------|-----|
+| **1 — SAS cell** | shipped | First-party / platform-built cells, signed via `cellos-sign` | LBI: rustc + enforced F1 (build-time verification) | Native, zero-cost boundary | Zero-copy grants |
+| **2 — Domain cell** | **accepted, NOT implemented** | Any unsigned native ELF (third-party developers) | Hardware: private page-table view — same VA layout as the SAS, but *other cells' pages are simply not mapped* | Native inside the domain; `satp`+ASID switch at the boundary | Kernel-copied messages; grants mapped explicitly per-share |
+| **3 — Silo VM** | shipped (aarch64) | Whole legacy stacks (Linux guests) | Stage-2 paging (H-extension) | Native inside guest | virtio / proxy |
+
+Tier 2 **adds** a containment option; it does not retract the standing advice that untrusted
+third-party code belongs in Tier 3 **until Tier 2's mechanism exists**. Today the kernel has
+one root page table (`kernel/src/memory/paging.rs:38`) and no context switch writes
+`satp`/`TTBR0`/`CR3`, so there is no domain to place a cell in. The operative rule until then
+is Tier 3 or nothing (`docs/security-model.md`).
+
+A note on an apparent conflict: `security-model.md` records a 2026-06-05 decision that
+per-Cell SATP isolation is "explicitly NOT pursued". That decision is about **Tier 1**, where
+a page-table switch per cell would destroy zero-copy IPC and the SAS economy. Tier 2 pays
+that exact cost on purpose, and only for cells that have not been verified — which is why the
+two decisions coexist rather than contradict.
 
 Invariant: **there is no "unverified native code inside the shared SAS view" tier.**
 An ELF without a valid platform signature never sees another Cell's pages.

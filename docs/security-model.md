@@ -71,7 +71,13 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 - Medium-term: Tier 3 VM isolation for untrusted code (hardware page tables per VM)
 - Long-term: CHERIoT RISC-V hardware capabilities — see "Hardware Isolation Roadmap" section below
 
-**Do NOT use Cellos to run untrusted third-party code until Tier 3 VM is implemented.**
+**Do NOT use Cellos to run untrusted third-party code until either containment tier is
+implemented: Tier 2 (per-domain page tables for unsigned native cells) or Tier 3 (VM).**
+Neither exists today — the kernel holds a single root page table (`memory/paging.rs:38`
+`KERNEL_ROOT`) and no context switch writes `satp`/`TTBR0`/`CR3`, so an unsigned cell in the
+shared address space is contained by nothing but the Rust type system. Tier 2 is the
+designed answer (`specs/18-cell-trust-tiers.md` §2.2) and does not reverse this warning; it
+narrows what the warning will say once the mechanism ships.
 
 > **Full analysis:** [research/research-hardware-isolation.md](research/research-hardware-isolation.md) — covers the
 > full menu of hardware supplements (CFI, MPK/PKS, MPU/PMP, RISC-V WorldGuard/Smmtt, IOMMU/IOPMP, confidential
@@ -81,10 +87,14 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 > **Isolation strategy decision (2026-06-05):** per-Cell **SATP** isolation at Tier 1 is
 > **explicitly NOT pursued**. PMP is M-mode-only (unreachable from Cellos's S-mode without
 > custom firmware) and sPMP is unratified; per-cell SATP would break Tier 1 zero-copy IPC.
-> Hardware isolation is delivered by **Tier 3 Stage-2 paging (per-VM)**, and untrusted
-> third-party code is confined to **Tier 3 (Linux VM / hypervisor)**. Tier 2 runs unsigned
-> native cells in a private MMU protection domain — see
-> [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md). The Tier 1 "signed cells
+> Hardware isolation available **today** is **Tier 3 Stage-2 paging (per-VM)**, so untrusted
+> third-party code is confined to **Tier 3 (Linux VM / hypervisor)** for now. **Tier 2**
+> (accepted, **not yet implemented**) will run an unsigned native cell in its own page-table
+> domain — same cell shape and SDK as Tier 1, contained by the MMU instead of by trust — see
+> [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md) §2.2. Note that the decision
+> not to pursue per-Cell SATP applies to **Tier 1**, where it would break zero-copy IPC; it
+> is not an argument against Tier 2, which pays exactly that cost deliberately, in exchange
+> for needing no trust in the code it contains. The Tier 1 "signed cells
 > only" guarantee is now **enforced**: Ed25519 signature verification runs at the loader spawn gate
 > (`kernel/src/signing.rs` + `loader.rs`), backed by per-Cell SHA-256 measurement. ⚠️ G1 ships a
 > dev-seed signer key; prod must provision a real one. See [specs/12-reliability.md](specs/12-reliability.md) §2.
