@@ -180,6 +180,20 @@ pub struct Task {
     /// (reaped). Without it, a cell's code/data frames leak on every death.
     pub segment_mem: Option<super::stack::CellSegments>,
 
+    /// Bytes of stack charged to `cell_id`'s memory quota on this task's behalf,
+    /// `0` if nothing was charged.
+    ///
+    /// Only thread tasks carry a charge: a cell's own stacks are part of the cost
+    /// of admitting the cell, whereas a thread is a cost the cell chose at runtime
+    /// and can choose repeatedly, so it has to appear in the same ledger as the
+    /// cell's heap or concurrency becomes the one free way to grow a footprint.
+    ///
+    /// Released exactly once, in `Scheduler::exit_task` — the funnel every death
+    /// path passes through — by taking the field, so a double call cannot
+    /// double-refund. Reaping is too late: a zombie can sit unreaped indefinitely
+    /// and the cell would be billed for a thread that is already gone.
+    pub stack_quota_charge: usize,
+
     // Lifecycle
     pub waiters: Vec<usize>,
     pub exit_code: Option<usize>,
@@ -395,6 +409,7 @@ impl Task {
             kernel_stack: None,
             user_stack: None,
             segment_mem: None,
+            stack_quota_charge: 0,
             waiters: Vec::new(),
             exit_code: None,
             pending_deaths: Vec::new(),

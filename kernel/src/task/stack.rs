@@ -3,10 +3,35 @@
 //! Handles allocation, deallocation, and guard pages for Kernel and User stacks.
 //! Complies with Rule 2 (Owned Buffers / Memory Safety) and Rule 8 (Resource Management).
 
-use crate::memory::frame::FRAME_ALLOCATOR;
+use crate::memory::frame::{FrameAllocator, FRAME_ALLOCATOR};
 use crate::memory::paging::{self, Flags, PAGE_SIZE};
 use log::{error, trace};
 use types::{VAddr, ViError};
+
+/// Hand `total_pages` frames starting at `base` back to `allocator`, restoring each
+/// to the boot identity mapping (kernel RWX) first.
+///
+/// Invariant this upholds: every frame on the allocator's free list is
+/// identity-mapped kernel-RWX. The cell loader zeroes a freshly allocated frame
+/// through its identity address, so a frame released while unmapped (as the guard
+/// frame is) store-faults for its next owner, and one released carrying USER flags
+/// hands that owner the wrong permissions. Unmap-then-map normalises the PTE
+/// whatever state the frame was left in.
+///
+/// The caller must already hold `FRAME_ALLOCATOR`; only `KERNEL_ROOT` (a leaf) is
+/// taken here, which is the documented order.
+fn release_frames(allocator: &mut FrameAllocator, base: VAddr, total_pages: usize) {
+    let kernel_rwx = Flags::from_bits(
+        Flags::VALID | Flags::READ | Flags::WRITE | Flags::EXECUTE | Flags::ACCESSED | Flags::DIRTY,
+    );
+    for i in 0..total_pages {
+        let frame = base + (i * PAGE_SIZE);
+        let _ = paging::unmap_page(frame);
+        let _ = paging::map_page(allocator, frame, frame, kernel_rwx);
+        allocator.deallocate_frame(frame);
+    }
+    paging::tlb_flush_all();
+}
 
 /// Represents an allocated Stack.
 /// Implements Drop to automatically free pages.
@@ -24,24 +49,37 @@ pub struct Stack {
 }
 
 impl Stack {
-    /// Allocate a new Kernel Stack.
-    /// - `pages`: Number of usable pages.
-    /// - Uses `FRAME_ALLOCATOR` to get contiguous physical frames.
-    /// - Maps them as RWX (Kernel).
-    /// - Adds a Guard Page at the bottom (Unmapped).
+    /// Allocate a new Kernel Stack of `pages` usable pages, plus a guard page
+    /// below it.
+    ///
+    /// # Errors
+    /// - `OutOfMemory` — no contiguous run of `pages + 1` frames exists, or a
+    ///   page-table mapping could not be installed.
+    /// - `NotSupported` — the guard page could not be established. No stack is
+    ///   returned in that case; see [`Self::allocate`].
     pub fn new_kernel(pages: usize) -> Result<Self, ViError> {
         Self::allocate(pages, true, false)
     }
 
-    /// Allocate a new User Stack.
-    /// - `pages`: Number of usable pages.
-    /// - Maps them as USER RWX.
-    /// - Adds a Guard Page at the bottom (Unmapped).
+    /// Allocate a new User Stack of `pages` usable pages, plus a guard page below
+    /// it. Usable pages are mapped USER RW.
+    ///
+    /// # Errors
+    /// Same as [`Self::new_kernel`].
     pub fn new_user(pages: usize) -> Result<Self, ViError> {
         Self::allocate(pages, true, true)
     }
 
     /// Internal allocation logic.
+    ///
+    /// Contract: this either returns a stack whose guard page is *verified* absent
+    /// from the page tables, or it returns an error having released every frame it
+    /// took. There is deliberately no third outcome. An unguarded stack is not a
+    /// degraded stack — in a single address space the frame below it belongs to
+    /// another cell, so an overflow that should have trapped instead corrupts a
+    /// neighbour with no fault and no log, and the victim dies later somewhere
+    /// unrelated. A log line at allocation time is not a mitigation: nothing reads
+    /// it in the microseconds before the overflow.
     fn allocate(pages: usize, guard: bool, user_mode: bool) -> Result<Self, ViError> {
         let total_pages = if guard { pages + 1 } else { pages };
 
@@ -94,7 +132,13 @@ impl Stack {
 
         for i in usable_start_idx..total_pages {
             let addr = base_addr + (i * PAGE_SIZE);
-            paging::map_page(allocator, addr, addr, flags).map_err(|_| ViError::OutOfMemory)?;
+            if paging::map_page(allocator, addr, addr, flags).is_err() {
+                // The run is not yet owned by a Stack, so nothing will drop it —
+                // release it here or the frames are lost until reboot.
+                error!("Stack alloc failed: cannot map page 0x{:X}", addr);
+                release_frames(allocator, base_addr, total_pages);
+                return Err(ViError::OutOfMemory);
+            }
         }
 
         // Guard page: drop the bottom frame's pre-existing identity mapping so a
@@ -104,16 +148,22 @@ impl Stack {
         // the guard frame. The frame stays owned by this Stack (freed in Drop);
         // only its PTE is cleared. unmap_page locks KERNEL_ROOT (not FRAME_ALLOCATOR,
         // which we still hold) — no deadlock.
+        //
+        // The guard is verified by translation, not by the unmap's return code: on
+        // some arches `unmap_page` reports success for a page it never touched
+        // (paging root absent, or the PTE was not a 4 KiB leaf). Asking the page
+        // tables whether the frame still resolves is the only answer that matches
+        // what the hardware will do on overflow.
         if guard {
-            if paging::unmap_page(base_addr).is_err() {
-                // Non-fatal: stack is still usable, just unguarded. Loud so a
-                // silently-unprotected stack is never mistaken for a guarded one.
+            let unmap_ok = paging::unmap_page(base_addr).is_ok();
+            paging::tlb_flush_all();
+            if !unmap_ok || paging::virt_to_phys(base_addr).is_some() {
                 error!(
-                    "Stack guard NOT active: unmap of guard frame 0x{:X} failed",
-                    base_addr
+                    "Stack alloc refused: guard frame 0x{:X} still mapped (unmap_ok={})",
+                    base_addr, unmap_ok
                 );
-            } else {
-                paging::tlb_flush_all();
+                release_frames(allocator, base_addr, total_pages);
+                return Err(ViError::NotSupported);
             }
         }
 
@@ -163,34 +213,9 @@ impl Drop for Stack {
             self.pages
         };
 
-        // Restore each frame to the BOOT identity mapping (kernel RWX) before
-        // returning it to the allocator. This is load-bearing in the SAS model:
-        // the cell loader zeroes a freshly-allocated frame through its identity
-        // address (`phys_to_virt(frame)` == frame on RISC-V, elf.rs), so EVERY
-        // free frame must be identity-mapped. Stack::new unmaps the guard frame
-        // (overflow protection) and maps usable frames with USER flags; without
-        // this restore, a freed guard frame stays unmapped → the next owner's
-        // BSS memset store-faults, and a freed USER frame carries stale perms →
-        // wrong-page reads (garbage WAD). Unmap-then-map lands every frame in a
-        // clean, uniform kernel-RWX PTE regardless of its prior state.
-        let kernel_rwx = paging::Flags::from_bits(
-            paging::Flags::VALID
-                | paging::Flags::READ
-                | paging::Flags::WRITE
-                | paging::Flags::EXECUTE
-                | paging::Flags::ACCESSED
-                | paging::Flags::DIRTY,
-        );
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
-            for i in 0..total_pages {
-                let frame = self.base + (i * PAGE_SIZE);
-                let _ = paging::unmap_page(frame);
-                let _ = paging::map_page(allocator, frame, frame, kernel_rwx);
-                allocator.deallocate_frame(frame);
-            }
-
-            paging::tlb_flush_all();
+            release_frames(allocator, self.base, total_pages);
         }
     }
 }

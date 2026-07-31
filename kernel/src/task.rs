@@ -12,6 +12,7 @@ pub mod smp;
 pub mod syscall;
 pub mod tcb;
 pub mod thread_cap_selftest;
+pub mod thread_quota_selftest;
 pub use tcb::Task;
 pub mod drivers;
 pub mod ipc_test;

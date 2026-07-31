@@ -587,6 +587,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("thread-cap self-test FAIL");
         }
+        if task::thread_quota_selftest::self_test() {
+            log_info("thread-quota self-test PASS (charged, released, enforced)");
+        } else {
+            log_info("thread-quota self-test FAIL");
+        }
     }
 
     // 7b. Bring secondary harts online (riscv64 only; no-op on other arches).
