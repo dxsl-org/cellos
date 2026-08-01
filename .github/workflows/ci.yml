@@ -54,6 +54,9 @@ jobs:
       - name: Check cargo config / CI codegen-flag parity
         run: python3 scripts/check-cargo-config-parity.py
 
+      - name: Check generated code metrics
+        run: python3 scripts/generate-code-metrics.py --check
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
