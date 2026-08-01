@@ -63,7 +63,7 @@ fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
     if path.starts_with("/bin/") {
         if path.ends_with("/bin/vfs") {
             c.block_io = true;
-            c.block_regions = 0b11; // legacy: P1 + P4 (pre-P03, no SRV bit)
+            c.block_regions = 0b111; // legacy manifest-less fallback: P1 + P4 + SRV
         }
         if path.ends_with("/bin/net") {
             c.network = true;
@@ -303,9 +303,25 @@ pub fn spawn_gated(
         _ => crate::policy::apply(path, tid, after_spawner),
     };
 
+    if path == "/bin/vfs" && granted.block_regions != 0b1111 {
+        log::error!(
+            "[loader] /bin/vfs granted block_regions {:#06b}, expected 0b1111",
+            granted.block_regions
+        );
+        if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+            sched.exit_task(tid, usize::MAX);
+        }
+        crate::memory::cell_quota::deregister(cell_id);
+        return Err(types::ViError::PermissionDenied);
+    }
+
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             granted.apply_to(task);
+
+            if path == "/bin/vfs" {
+                log::info!("[loader] /bin/vfs block_regions=0b1111");
+            }
 
             // x86_64 PKU: derive the protection-key domain from the granted caps
             // AND the manifest's declared tier (Manifest v2). See
@@ -339,15 +355,6 @@ pub fn spawn_gated(
                         return Err(types::ViError::PermissionDenied);
                     }
                 }
-            }
-            // 2. VFS cell-store block region (0b1000) — DEFERRED post-policy raw grant.
-            //    Folding it into the ceiling (like the caps above) would be zeroed by
-            //    the `/bin/vfs` operator-policy entry (`block_regions = 0b111`), breaking
-            //    VFS. Closing this channel needs a POLICY.BIN re-bake that grants vfs
-            //    0b1111; tracked as a P-TRUST follow-up. Lower severity than the caps
-            //    above (partition access, not DMA-anywhere).
-            if path == "/bin/vfs" {
-                task.block_regions |= 0b1000;
             }
         }
     }

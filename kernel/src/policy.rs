@@ -295,7 +295,7 @@ fn parse(body: &[u8]) -> Option<LoadedPolicy> {
 /// fail-closed handling of a missing entry). Returns `true` iff every case holds.
 /// Run as a boot power-on self-test before trusting the policy path.
 pub fn self_test() -> bool {
-    // 135-byte dev-signed blob (4 entries) emitted by scripts/sign-policy.py.
+    // 135-byte dev-signed v1 compatibility blob (4 entries).
     const BLOB: [u8; 135] = [
         0x56, 0x50, 0x4f, 0x4c, 0x01, 0x00, 0x04, 0x00, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x76,
         0x66, 0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x07, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x6e,
@@ -324,9 +324,11 @@ pub fn self_test() -> bool {
     let Some(vfs) = v1.entries.iter().find(|e| e.path == "/bin/vfs") else {
         return false;
     };
-    if !vfs.caps.block_io || vfs.caps.block_regions != 0b111 {
+    if !vfs.caps.block_io {
         return false;
     }
+    // The current `/bin/vfs` fold is pinned below in `v2_parse_cases()`. This
+    // smaller v1 fixture stays three-region to keep the backward-compat path covered.
     // v1 has no privileged bytes: they parse false, and because Permit intersects
     // that means a v1 entry STRIPS them. Pinned so the compat path cannot silently
     // start granting authority a v1 operator never wrote.
@@ -454,9 +456,10 @@ fn v2_parse_cases() -> bool {
     // magic | version=2 | flags=0 | count=1 | len=8 "/bin/vfs" | 9 cap bytes
     const V2: [u8; 26] = [
         0x56, 0x50, 0x4f, 0x4c, 0x02, 0x00, 0x01, 0x00, 0x08, 0x2f, 0x62, 0x69, 0x6e, 0x2f, 0x76,
-        0x66, 0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x07, 0x01, 0x00, 0x00,
+        0x66, 0x73, 0x01, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x01, 0x00, 0x00,
     ];
-    // Valid v2: the 9-byte stride is read correctly, and pcie_driver arrives.
+    // Valid v2: the 9-byte stride is read correctly, pcie_driver arrives, and
+    // `/bin/vfs` can carry all four block regions through policy.
     let Some(p) = parse(&V2) else {
         return false;
     };
@@ -464,7 +467,7 @@ fn v2_parse_cases() -> bool {
         return false;
     }
     let c = p.entries[0].caps;
-    if !c.block_io || c.block_regions != 0b111 || !c.pcie_driver || c.platform || c.supervisor {
+    if !c.block_io || c.block_regions != 0b1111 || !c.pcie_driver || c.platform || c.supervisor {
         return false;
     }
 

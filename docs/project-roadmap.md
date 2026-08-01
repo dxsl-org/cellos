@@ -422,6 +422,7 @@ Layer C — Per-arch hardening         → opportunistic MTE/MPK bonuses   [HW-G
 - ✅ **Spawn-time cap intersection (delegation) (2026-06-21)** `[G1]` — `spawn_from_path(path, Spawner)` grants `manifest ∩ spawner_caps`; a Cell cannot hand a child a cap it lacks (Fuchsia/Genode monotonic downgrade; kills confused-deputy). New `CapSet`/`Spawner` in `kernel/src/task/cap.rs` (intersect unit-tested). **init = root authority `CapSet::ALL`** via direct main.rs TCB write (NOT manifest — init spawns via `spawn_from_mem`, manifest never read); HotSwap passes the replaced cell's caps as ceiling (not the Root exemption). Red-teamed + validated (plan `.agents/260621-0830-cell-perms-p2-p5/`). riscv64 boots to `Cellos >`, "init granted root authority" logged, vfs/net/shell receive full caps, no faults/denials. (Phases P5 — Ed25519 + operator policy — deferred pending the Phase 02 crypto spike.)
 - 📋 **Runtime revocation** `[G1/G2]` — `CapHandle` kernel object; `sys_cap_revoke(handle)` clears `task.cap`; next syscall → `ViError::CapRevoked`; Cell gets `AppEvent::CapRevoked`. Simpler than seL4 CDT (no cap-to-cap derivation yet).
 - 🟡 **Operator-policy consent (G1)** `[G1]` — Operator signs a policy blob (Ed25519) at fleet provision; kernel verifies vs fleet root key + spawns with `manifest ∩ spawner ∩ policy`. SROS2 semantics at the kernel level; no dialog.
+  - `/bin/vfs` keeps the cell-store block-region bit end-to-end: request ∩ ceiling ∩ signed policy preserve `block_regions=0b1111`, and the loader fails closed instead of backfilling a raw grant if the bit is missing.
   - ✅ **Crypto (P5a, 2026-06-21)** — in-kernel `ed25519::verify` (`ed25519-compact`, no_std, PIC-clean both arches); RFC 8032 + tamper self-test at boot.
   - ✅ **Load/verify/parse (P5b)** — `kernel/src/policy.rs`: `VPOL` blob, verify-then-parse (panic-free, domain-validated), `lookup`; host signer `scripts/sign-policy.py`; absent + signed/invalid paths verified at boot.
   - ✅ **Intersection + recovery (P5c/Phase 04)** — `policy::apply` folds `∩ policy` into the spawn grant; trusted-core (`vfs`/`shell`/`net`) recovery hatch + `maintenance-mode`; `init` exempt; fail-safe (dev-permissive G1 / `policy-required` fleet). Narrowing self-test green both arches.
@@ -1517,7 +1518,7 @@ Phase 4 (Advanced Features)
 ✅ **Phase F**: FAT16 hardening (unlink, mkdir, nested paths, block-I/O gate)  
 ✅ **Phase F**: Lua script file loading + vfs.* bindings  
 ✅ **Phase G**: FAT16 completion (can_block_io capability, rmdir, persistence)  
-✅ **Phase H**: Kernel permissions + FAT16 type guards (KernelPerms, rmdir type-safe, recursive rm, append)  
+✅ **Phase H**: Kernel permissions + FAT16 type guards + `/bin/vfs` cell-store fold (KernelPerms, rmdir type-safe, recursive rm, append)  
 ✅ **Phase A**: Network TCP Data-Path (CONNECT, SEND, RECV, CLOSE, socket state)  
 ✅ **Phase B**: HTTP/1.0 GET via curl (nc binary, curl binary, state introspection)  
 ✅ **Phase C**: TCP Server (LISTEN, ACCEPT, hostname resolution, nc -l server mode)  

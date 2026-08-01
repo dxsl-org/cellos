@@ -188,6 +188,10 @@ pub struct Grant {
 - Apply relocations (position-independent code)
 - Set up stack, heap pointers
 - Enter user-space at `_start`
+- `/bin/vfs` is only admitted if the manifest request, boot ceiling, and signed
+  operator policy all preserve the cell-store bit (`block_regions=0b1111`);
+  the loader fails closed and tears down the spawn instead of adding authority
+  after policy.
 
 ### 6. **Filesystem (FAT32)** (`kernel/src/fs/`)
 

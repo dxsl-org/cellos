@@ -41,6 +41,16 @@ Phase 01 still remains partial. `ReadGrant` runtime coverage is blocked because
 caller, and actual fast-IPC `GetFile` runtime proof is still blocked by D1 pending a
 separate approved Tier-1 rewrite/rescope.
 
+## [2026-08-01] Fold `/bin/vfs` cell-store bit through request, ceiling, and signed policy
+
+`/bin/vfs` now requests the cell-store block-region bit in `CapSet::with_path_caps`,
+the boot ceiling preserves it as `0b1111`, and the signed policy blob keeps the same
+bit through decode. The loader no longer adds a post-policy raw grant; it requires the
+granted `/bin/vfs` row to remain `0b1111`, logs success, and fails closed by tearing
+down the spawned task and deregistering quota if policy strips the bit.
+
+Verified by `cargo check -p vicell-kernel`, clean VFS `68/0`, and `redoxfs-srv 3/3`.
+
 ## [2026-08-01] Close Part 6 documentation sweep
 
 D1 consequents are now stated as withdrawn history rather than live architecture: the

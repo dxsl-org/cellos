@@ -55,7 +55,7 @@ FLAG_MAINTENANCE_PERMITTED = 1 << 0
 # scores Invalid, which is the fleet-wide DenyAll described above. Bit values come
 # from the DEV_* constants in kernel/src/resource_registry.rs.
 MMIO_MASK = 0b11111    # DEV_UART=1 | DEV_GPIO=2 | DEV_PCIE=4 | DEV_CAN=8 | DEV_ADC=16
-REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | bit 3 reserved for the /bin/vfs fold
+REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | /bin/vfs cell-store=8
 
 # Operator policy: the CEILING each path may hold. It intersects the manifest
 # request, so an entry can only ever take authority away — but a missing entry is
@@ -79,7 +79,7 @@ DEV_POLICY = [
     # Kernel-spawned (Root, exempt); listed so the intent is reviewable.
     ("/bin/platform",    0, 0, 0, 0, 0, 0,     0, 1, 0),
     # ── core services ─────────────────────────────────────────────────────────
-    ("/bin/vfs",         1, 0, 0, 0, 0, 0b111, 0, 0, 0),
+    ("/bin/vfs",         1, 0, 0, 0, 0, 0b1111, 0, 0, 0),
     ("/bin/net",         0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/net-broker",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/supervisor",  0, 0, 1, 0, 0, 0,     0, 0, 1),
@@ -210,6 +210,22 @@ def assert_round_trip(body, entries, flags):
         sys.exit(f"round-trip: {len(got)} entries decoded, {len(want)} expected")
 
 
+def assert_vfs_regions_folded(entries):
+    """Require /bin/vfs to carry all four block regions after decode.
+
+    The independent decoder is the right place to pin the fold: if the source
+    table drifts back to 0b111 the image still bakes and the old loader raw
+    grant could hide it at runtime. This check forces the baked blob itself to
+    carry the cell-store bit before the loader fallback is removed.
+    """
+    for entry in entries:
+        if entry[0] == "/bin/vfs":
+            if entry[6] != 0b1111:
+                sys.exit(f"/bin/vfs decoded block_regions {entry[6]:#06b}, expected 0b1111")
+            return
+    sys.exit("/bin/vfs missing from policy table")
+
+
 CAP_SOURCE = Path(__file__).resolve().parent.parent / "kernel" / "src" / "task" / "cap.rs"
 
 
@@ -296,6 +312,8 @@ def main():
     flags = FLAG_MAINTENANCE_PERMITTED if args.maintenance else 0
     body = build_body(DEV_POLICY, flags)
     assert_round_trip(body, DEV_POLICY, flags)
+    _, decoded = decode_body(body)
+    assert_vfs_regions_folded(decoded)
     # Unconditional, like the round-trip: the gate has to hold for every blob that
     # gets built, not only when someone remembers a flag.
     assert_ptrust_covered(DEV_POLICY)

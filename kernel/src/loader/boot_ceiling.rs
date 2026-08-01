@@ -30,12 +30,13 @@ mod selftest;
 /// rather than a union, and that no row is over-tightened. See `selftest`.
 pub use selftest::run as self_test;
 
-/// Block regions VFS must be able to hold: P1 | P4 | SRV | cell-store.
+/// Block regions VFS must be able to hold after request ∩ ceiling ∩ policy:
+/// P1 | P4 | SRV | cell-store.
 ///
-/// The 4th bit is wider than the manifest request (`0b111`) on purpose: the
-/// cell-store region is still granted after the policy intersect in the loader,
-/// and the ceiling intersect runs BEFORE policy — so a `0b111` ceiling here
-/// would zero the 4th bit before the policy blob ever gets a say.
+/// `/bin/vfs` now requests bit 3 in `CapSet::with_path_caps`, the boot ceiling
+/// must preserve it, and the signed `/POLICY.BIN` row must also preserve it.
+/// A `0b111` ceiling here would still zero the cell-store bit before policy
+/// runs, so this row remains `0b1111`.
 const VFS_REGIONS: u8 = 0b1111;
 
 /// The two console peripherals the interactive shell holds so it can delegate

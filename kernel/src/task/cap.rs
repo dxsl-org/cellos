@@ -251,12 +251,12 @@ impl CapSet {
     /// so `sys_spawn_from_elf(bytes, "/bin/nvme")` handed any SpawnCap holder
     /// `PcieDriverCap` regardless of its ceiling → DMA-anywhere.
     ///
-    /// The cell-store block region for `/bin/vfs` is intentionally NOT folded here:
-    /// the `/bin/vfs` operator-policy entry grants `block_regions = 0b111`, so
-    /// folding `0b1000` into the request would be zeroed by the policy `∩` and
-    /// break VFS. It stays a post-policy raw grant in the loader until a POLICY.BIN
-    /// re-bake lets it be folded (documented follow-up).
+    /// `/bin/vfs` requests the cell-store block region here so the same ceiling and
+    /// operator-policy intersection that bounds every other authority also bounds bit 3.
     pub fn with_path_caps(mut self, path: &str) -> CapSet {
+        if path == "/bin/vfs" {
+            self.block_regions |= 0b1000;
+        }
         if matches!(
             path,
             "/bin/nvme"
@@ -431,6 +431,17 @@ mod tests {
         };
         // init (ALL) spawning a child must leave the child's requested caps intact.
         assert_eq!(child.intersect(CapSet::ALL), child);
+    }
+
+    #[test]
+    fn vfs_path_request_adds_cell_store_region() {
+        let requested = CapSet {
+            block_io: true,
+            block_regions: 0b111,
+            ..CapSet::EMPTY
+        }
+        .with_path_caps("/bin/vfs");
+        assert_eq!(requested.block_regions, 0b1111);
     }
 
     #[test]
