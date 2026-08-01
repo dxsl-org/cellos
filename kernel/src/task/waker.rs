@@ -29,29 +29,16 @@
 //! also never taken while `SCHEDULER` is held, so an interrupt on another hart
 //! never waits behind a scheduler critical section.
 
+pub(super) use self::net_rx_reservation::{DisarmResult, PendingCompletion};
 use super::completion::{CompletionQueue, SlotId};
-use crate::sync::Spinlock;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
+
+mod net_rx_reservation;
 
 /// Set when an RX frame arrives with no reservation outstanding.
 /// Consumed by the next waiter before it parks.
 pub static NET_RX_PENDING: AtomicBool = AtomicBool::new(false);
-
-/// The single outstanding NET_RX reservation.
-///
-/// `queue` outlives `slot` deliberately: the handle is replaced only by the next
-/// arm, from syscall context, so the interrupt path never drops the last
-/// reference to a queue and therefore never reaches the allocator.
-struct NetRxWait {
-    queue: Option<Arc<CompletionQueue>>,
-    slot: Option<SlotId>,
-}
-
-static NET_RX_WAIT: Spinlock<NetRxWait> = Spinlock::new(NetRxWait {
-    queue: None,
-    slot: None,
-});
 
 /// Returns true if any event is currently pending.
 pub fn has_any_pending() -> bool {
@@ -67,24 +54,7 @@ pub fn has_any_pending() -> bool {
 /// # Panics
 /// Never panics.
 pub fn arm_net_rx(queue: Arc<CompletionQueue>, slot: SlotId) {
-    let arriving = queue.cell().0;
-    let displaced = {
-        let mut wait = NET_RX_WAIT.lock();
-        let previous = wait.queue.replace(queue);
-        let previous_slot = wait.slot.replace(slot);
-        (previous, previous_slot)
-    };
-
-    // Outside the guard: `complete` takes the queue's own lock, and this is the
-    // one rule that keeps the append path down to a single lock.
-    if let (Some(previous), Some(previous_slot)) = displaced {
-        let _ = previous.complete(previous_slot, api::completion::RESULT_ABANDONED as isize);
-        log::warn!(
-            "[net-rx] cell {} took over the reservation held by cell {}",
-            arriving,
-            previous.cell().0
-        );
-    }
+    net_rx_reservation::arm(queue, slot);
 }
 
 /// Release the outstanding reservation if it belongs to `queue`.
@@ -93,17 +63,16 @@ pub fn arm_net_rx(queue: Arc<CompletionQueue>, slot: SlotId) {
 /// interrupt path can race for the same reservation and exactly one of them
 /// wins. A `None` means the interrupt path got there first and the result is
 /// already on the queue.
-pub fn disarm_net_rx(queue: &Arc<CompletionQueue>) -> Option<SlotId> {
-    let mut wait = NET_RX_WAIT.lock();
-    let mine = wait
-        .queue
-        .as_ref()
-        .map(|armed| Arc::ptr_eq(armed, queue))
-        .unwrap_or(false);
-    if !mine {
-        return None;
-    }
-    wait.slot.take()
+pub fn disarm_net_rx(queue: &Arc<CompletionQueue>) -> DisarmResult {
+    net_rx_reservation::disarm(queue)
+}
+
+pub(super) fn begin_signal_net_rx_for_test() -> Option<PendingCompletion> {
+    net_rx_reservation::begin_signal()
+}
+
+pub(super) fn finish_signal_net_rx_for_test(pending: PendingCompletion) {
+    net_rx_reservation::finish_signal(pending, api::syscall::events::NET_RX as isize);
 }
 
 /// Signal a NIC RX event.  Called from the VirtIO interrupt handler (ISR context).
@@ -118,24 +87,9 @@ pub fn disarm_net_rx(queue: &Arc<CompletionQueue>) -> Option<SlotId> {
 /// # Safety contract
 /// Callers must be in S-mode trap context (SIE already cleared by hardware entry).
 pub fn signal_net_rx() {
-    let armed = {
-        let mut wait = NET_RX_WAIT.lock();
-        // Cloning here cannot free anything: the registry keeps its own strong
-        // reference, so this clone is never the last one even when it is dropped
-        // unused below. That is what keeps the allocator out of this path.
-        let handle = wait.queue.as_ref().map(Arc::clone);
-        match (handle, wait.slot) {
-            (Some(queue), Some(slot)) => {
-                wait.slot = None;
-                Some((queue, slot))
-            }
-            _ => None,
-        }
-    };
-
-    match armed {
-        Some((queue, slot)) => {
-            let _ = queue.complete(slot, api::syscall::events::NET_RX as isize);
+    match net_rx_reservation::begin_signal() {
+        Some(pending) => {
+            net_rx_reservation::finish_signal(pending, api::syscall::events::NET_RX as isize)
         }
         None => NET_RX_PENDING.store(true, Ordering::Release),
     }

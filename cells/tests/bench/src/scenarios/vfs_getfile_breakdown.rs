@@ -62,7 +62,9 @@ const PROBE_PATH: &str = "/bin/bench-probe";
 pub fn run_resp_echo() -> ! {
     let mut rx = [0u8; IPC_BUF_SIZE];
     let mut tx = [0u8; 64];
-    let n = api::ipc::encode(&REPLY, &mut tx).map(|s| s.len()).unwrap_or(0);
+    let n = api::ipc::encode(&REPLY, &mut tx)
+        .map(|s| s.len())
+        .unwrap_or(0);
     loop {
         let sender = match syscall::sys_recv(0, &mut rx) {
             SyscallResult::Ok(sid) => sid,

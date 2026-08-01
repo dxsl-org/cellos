@@ -172,6 +172,10 @@ impl CompletionQueue {
                     let position = (ring.head + ring.len) % QUEUE_CAPACITY;
                     ring.drainable[position] = index as u16;
                     ring.len += 1;
+                    // Publish the wake while the ring transition is serialized.
+                    // A drain that empties the ring can then cancel this exact
+                    // request without erasing a later completion's wake.
+                    self.wake_requested.store(true, Ordering::Release);
                     None
                 }
                 Some(Slot::Free) => Some("free"),
@@ -190,9 +194,9 @@ impl CompletionQueue {
             return false;
         }
 
-        // Flagged only after the entry is visible, so a drain triggered by the
-        // flag can never observe an empty queue and go back to sleep.
-        self.wake_requested.store(true, Ordering::Release);
+        // The queue-local request is already visible with the entry. Raising the
+        // global scan flag afterwards may cause a harmless empty scan if the
+        // submitter drains first, but can never hide a completion.
         WAKES_PENDING.store(true, Ordering::Release);
         true
     }
@@ -235,6 +239,9 @@ impl CompletionQueue {
             let index = ring.drainable[ring.head] as usize;
             ring.head = (ring.head + 1) % QUEUE_CAPACITY;
             ring.len -= 1;
+            if ring.len == 0 {
+                self.wake_requested.store(false, Ordering::Release);
+            }
             match ring.slots[index] {
                 Slot::Done(result) => {
                     ring.slots[index] = Slot::Free;
@@ -286,9 +293,14 @@ impl CompletionQueue {
         self.waiter.store(tid, Ordering::Release);
     }
 
-    /// Stop waking anyone for this queue.
-    pub fn clear_waiter(&self) {
-        self.waiter.store(0, Ordering::Release);
+    /// Stop waking `tid` for this queue if it still owns the registration.
+    ///
+    /// Returns `false` when another waiter replaced `tid`; the older wait must
+    /// not erase the newer waiter's registration while unwinding.
+    pub fn clear_waiter(&self, tid: usize) -> bool {
+        self.waiter
+            .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
     }
 
     /// Consume a pending wake request, yielding the task to make runnable.

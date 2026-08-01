@@ -17,11 +17,31 @@
 //! reservation that outlived its waiter would consume queue capacity that never
 //! comes back, and the queue is the cell's bound on outstanding work.
 
-use super::completion::{self, Completion};
+use super::completion::{self, Completion, CompletionQueue};
 use super::syscall::{validate_user_buf, SyscallError};
 use super::tcb::TaskState;
 use super::waker;
 use api::completion::{ViCompletion, COMPLETION_LEN};
+
+/// Removes this waiter's registration on every return path without erasing a
+/// newer waiter that may have replaced it on the shared per-cell queue.
+struct WaiterRegistration<'a> {
+    queue: &'a CompletionQueue,
+    tid: usize,
+}
+
+impl<'a> WaiterRegistration<'a> {
+    fn new(queue: &'a CompletionQueue, tid: usize) -> Self {
+        queue.register_waiter(tid);
+        Self { queue, tid }
+    }
+}
+
+impl Drop for WaiterRegistration<'_> {
+    fn drop(&mut self) {
+        let _ = self.queue.clear_waiter(self.tid);
+    }
+}
 
 /// Reserve a slot on the caller's completion queue, wait for it to be filled,
 /// and write the result to `out_ptr`.
@@ -62,15 +82,17 @@ pub fn wait_completion(
         let sched = guard.as_mut().ok_or(SyscallError::Unknown)?;
         completion::queue_for(sched, caller_id).ok_or(SyscallError::Unknown)?
     };
-    queue.register_waiter(caller_id);
     let slot = queue.reserve().ok_or(SyscallError::TryAgain)?;
+    let _waiter = WaiterRegistration::new(&queue, caller_id);
     waker::arm_net_rx(queue.clone(), slot);
 
     // Lost-wakeup guard, first half: a frame that arrived while nobody held a
     // reservation is remembered in the level flag. Consuming it only *after* the
     // arm is what makes the check total — a frame arriving during the check has
     // a reservation to complete instead.
-    if waker::consume_pending(mask) != 0 && waker::disarm_net_rx(&queue).is_some() {
+    if waker::consume_pending(mask) != 0
+        && matches!(waker::disarm_net_rx(&queue), waker::DisarmResult::Owned(_))
+    {
         // The result is reported straight out of the reservation rather than
         // pushed through the queue and pulled back: appending would raise a
         // wake request for a task that is not parked, and that request would
@@ -110,15 +132,26 @@ pub fn wait_completion(
     // Nothing landed: the deadline passed, or the wake was spurious. Either way
     // the reservation goes back, and the race with a frame arriving at this
     // exact moment is settled by whoever takes the slot.
-    match waker::disarm_net_rx(&queue) {
-        Some(own) if queue.release(own) => Ok(0),
-        // Either the source completed the slot as it was being withdrawn, or it
-        // got there first. Both leave a result that must be reported, never
-        // discarded.
-        _ => match queue.drain() {
-            Some(done) => Ok(write_completion(out_ptr, done)),
-            None => Ok(0),
-        },
+    loop {
+        match waker::disarm_net_rx(&queue) {
+            waker::DisarmResult::Owned(own) if queue.release(own) => return Ok(0),
+            // The source owns the slot but has not published it yet. This can
+            // only run concurrently on another hart, so wait until the queue
+            // record becomes visible before clearing the waiter registration.
+            waker::DisarmResult::Completing => core::hint::spin_loop(),
+            // Either the source completed the slot as it was being withdrawn,
+            // or another waiter displaced it. Both publish a result before
+            // leaving the Completing state.
+            _ => {
+                return match queue.drain() {
+                    Some(done) => Ok(write_completion(out_ptr, done)),
+                    None => Ok(0),
+                };
+            }
+        }
+        if let Some(done) = queue.drain() {
+            return Ok(write_completion(out_ptr, done));
+        }
     }
 }
 

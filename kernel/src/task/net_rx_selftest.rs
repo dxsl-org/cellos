@@ -1,11 +1,6 @@
 //! Boot self-test for the NET_RX reservation: the interrupt half of the wait.
 //!
-//! This half cannot be reached from a running system on this tree — no
-//! interrupt path calls `signal_net_rx` today, so nothing else executes these
-//! lines, and a defect in them would surface only when a producer is finally
-//! wired, far from the change that caused it.
-//!
-//! The four properties proven here are the ones the wait's correctness rests on:
+//! These properties are the ones the wait's correctness rests on:
 //!
 //! - a signal fills the outstanding reservation, and does *not* also leave the
 //!   level flag set — a frame handed to a waiter must not be remembered as still
@@ -17,13 +12,8 @@
 //!   it;
 //! - a reservation displaced by a later one is completed as abandoned rather
 //!   than dropped, so its waiter is never left with a slot nothing will fill;
-//! - releasing a reservation releases only the caller's own.
-//!
-//! Runs in the same single-hart window as the other task self-tests. The
-//! synthetic tasks are inserted into the task table but never pushed onto a
-//! ready queue, and no waiter is registered, so a tick landing mid-test finds
-//! nothing to wake. Both the registry and the level flag are left as they were
-//! found.
+//! - releasing a reservation releases only the caller's own;
+//! - an in-flight ISR publication cannot look like an empty reservation.
 
 use super::completion::CompletionQueue;
 use super::completion_selftest::{insert, queue, remove};
@@ -46,7 +36,7 @@ fn fail(reason: &str) -> bool {
 /// Leave the source exactly as it was found, whatever the rows above did.
 fn reset(queues: &[&Arc<CompletionQueue>]) {
     for q in queues {
-        if let Some(slot) = waker::disarm_net_rx(q) {
+        if let waker::DisarmResult::Owned(slot) = waker::disarm_net_rx(q) {
             let _ = q.complete(slot, RESULT_ABANDONED as isize);
         }
         while q.drain().is_some() {}
@@ -77,7 +67,7 @@ fn signal_fills_the_reservation() -> bool {
                     if waker::has_any_pending() {
                         ok = fail("a frame handed to a waiter was also left pending");
                     }
-                    if waker::disarm_net_rx(&q).is_some() {
+                    if waker::disarm_net_rx(&q) != waker::DisarmResult::NotOwned {
                         ok = fail("the signal left the reservation armed");
                     }
                 }
@@ -134,10 +124,10 @@ fn takeover_completes_the_displaced_reservation() -> bool {
                             ))
                         }
                     }
-                    if waker::disarm_net_rx(&first).is_some() {
+                    if waker::disarm_net_rx(&first) != waker::DisarmResult::NotOwned {
                         ok = fail("the displaced reservation is still the armed one");
                     }
-                    if waker::disarm_net_rx(&second) != Some(second_slot) {
+                    if waker::disarm_net_rx(&second) != waker::DisarmResult::Owned(second_slot) {
                         ok = fail("the reservation that took over is not the armed one");
                     }
                 }
@@ -152,12 +142,53 @@ fn takeover_completes_the_displaced_reservation() -> bool {
     ok
 }
 
+/// Taking the slot and publishing its completion are separate ISR steps. The
+/// waiter must observe the intermediate state instead of returning a timeout.
+fn split_signal_publication_is_visible() -> bool {
+    insert(TID_ONE, CELL_ONE);
+    let mut ok = true;
+    match queue(TID_ONE) {
+        Some(q) => match q.reserve() {
+            Some(slot) => {
+                waker::arm_net_rx(q.clone(), slot);
+                match waker::begin_signal_net_rx_for_test() {
+                    Some(pending) => {
+                        if waker::disarm_net_rx(&q) != waker::DisarmResult::Completing {
+                            ok = fail("an in-flight signal looked like an empty reservation");
+                        }
+                        if q.drain().is_some() {
+                            ok = fail("the split signal published before its finish step");
+                        }
+                        waker::finish_signal_net_rx_for_test(pending);
+                        match q.drain() {
+                            Some(done) if done.slot == slot && done.result == NET_RX as isize => {}
+                            other => {
+                                ok = fail(&alloc::format!(
+                                    "split signal drained {:?}, expected the RX completion",
+                                    other
+                                ))
+                            }
+                        }
+                    }
+                    None => ok = fail("an armed reservation could not begin a signal"),
+                }
+                reset(&[&q]);
+            }
+            None => ok = fail("an empty queue refused a reservation"),
+        },
+        None => ok = fail("no queue could be reached from the task record"),
+    }
+    remove(TID_ONE);
+    ok
+}
+
 /// Returns true iff the NET_RX reservation completes, remembers and releases as
 /// specified. Logs a decisive serial line.
 pub fn self_test() -> bool {
     let ok = signal_fills_the_reservation()
         & signal_with_no_waiter_is_remembered()
-        & takeover_completes_the_displaced_reservation();
+        & takeover_completes_the_displaced_reservation()
+        & split_signal_publication_is_visible();
 
     if ok {
         log::info!("[selftest] NET-RX-RESERVATION: PASS (fills, remembers, releases)");

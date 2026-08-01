@@ -253,7 +253,72 @@ fn deferred_wake_reaches_scheduler() -> bool {
         sched.tasks.remove(&TID_A);
     }
     super::hart_local::ready::remove_from_all(TID_A);
-    q.clear_waiter();
+    let _ = q.clear_waiter(TID_A);
+    ok
+}
+
+/// Cleanup is ownership-aware: an older waiter must not clear the task that
+/// replaced it on the cell's shared queue.
+fn waiter_cleanup_preserves_replacement() -> bool {
+    insert(TID_A, CELL_ONE);
+    insert(TID_B, CELL_ONE);
+    let q = match queue(TID_A) {
+        Some(q) => q,
+        None => {
+            remove(TID_A);
+            remove(TID_B);
+            return fail("no queue could be reached from the task record");
+        }
+    };
+
+    q.register_waiter(TID_A);
+    q.register_waiter(TID_B);
+    let mut ok = true;
+    if q.clear_waiter(TID_A) {
+        ok = fail("an older waiter erased its replacement");
+    }
+    if !q.clear_waiter(TID_B) {
+        ok = fail("the current waiter could not clear its registration");
+    }
+
+    remove(TID_A);
+    remove(TID_B);
+    ok
+}
+
+/// Draining while still running consumes the associated wake request, so it
+/// cannot cancel the task's next unrelated park.
+fn self_drain_cancels_stale_wake() -> bool {
+    insert(TID_A, CELL_ONE);
+    let q = match queue(TID_A) {
+        Some(q) => q,
+        None => {
+            remove(TID_A);
+            return fail("no queue could be reached from the task record");
+        }
+    };
+    q.register_waiter(TID_A);
+    let mut ok = true;
+    match q.reserve() {
+        Some(slot) if q.complete(slot, 1) && q.drain().is_some() => {}
+        _ => ok = fail("a self-drained completion did not round-trip"),
+    }
+    {
+        let mut guard = super::SCHEDULER.lock();
+        if let Some(sched) = guard.as_mut() {
+            if let Some(task) = sched.tasks.get_mut(&TID_A) {
+                task.state = TaskState::Sleeping { until: usize::MAX };
+            }
+            completion::deliver_pending_wakes(sched);
+            if sched.tasks.get(&TID_A).map(|task| &task.state)
+                != Some(&TaskState::Sleeping { until: usize::MAX })
+            {
+                ok = fail("a self-drained completion woke the task's next park");
+            }
+        }
+    }
+    let _ = q.clear_waiter(TID_A);
+    remove(TID_A);
     ok
 }
 
@@ -319,6 +384,8 @@ pub fn self_test() -> bool {
         & shared_within_cell()
         & exhaustion_refuses_submission()
         & deferred_wake_reaches_scheduler()
+        & waiter_cleanup_preserves_replacement()
+        & self_drain_cancels_stale_wake()
         & withdrawal_raises_no_wake();
 
     if ok {
