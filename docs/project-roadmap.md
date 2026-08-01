@@ -15,7 +15,8 @@
 > truth. Midori is the sole active feature program until phases 02/04/07/08 close;
 > supervisory migration, package distribution, Trust & Identity remainder, and remote
 > integration are queued. P0 security, broken CI/build repair, and verification-only
-> closures are the only side-work exceptions.
+> closures are the only side-work exceptions. Phase 01 is blocked on the fast-IPC runtime
+> proof gap, phase 02 is branch-complete pending merge gate, and phase 03 is audit-only.
 
 ---
 

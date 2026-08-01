@@ -4,6 +4,13 @@
 
 ---
 
+## [2026-08-01] Sync Midori closure plan status
+
+Phase 01 is still blocked on the fast-IPC runtime proof gap, phase 02 is branch-complete
+pending the merge gate, and phase 03 is complete as an audit-only package. The plan
+artifacts now point at the supporting reports for each phase so the tracked status and
+evidence stay aligned.
+
 ## [2026-08-01] Close Part 6 documentation sweep
 
 D1 consequents are now stated as withdrawn history rather than live architecture: the
