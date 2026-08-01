@@ -29,7 +29,7 @@ api::declare_syscalls![
     StateStash,
     StateRestore,
     GetRandom,
-    WaitForEvent,
+    WaitCompletion,
 ];
 
 mod dhcp;
@@ -47,7 +47,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use interface::VirtioNetDevice;
 use ostd::io::println;
-use ostd::syscall::{sys_get_time, sys_try_recv, sys_wait_for_event, SyscallResult};
+use ostd::syscall::{sys_get_time, sys_try_recv, sys_wait_completion, SyscallResult};
 use poll_driver::POLL_INTERVAL_MS;
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
@@ -171,12 +171,17 @@ pub fn main() {
             }
             _ => {
                 // Block until NIC RX fires or the smoltcp maintenance deadline.
-                // UNIT TRAP: WaitForEvent takes SCHEDULER ticks (10 ms each),
+                // The deadline is not optional: smoltcp has to be polled for
+                // retransmits and DHCP renewal whether or not a frame arrives.
+                // UNIT TRAP: the wait takes SCHEDULER ticks (10 ms each),
                 // while POLL_TICKS is mtime ticks (10 MHz) for sys_get_time
                 // comparisons. Passing POLL_TICKS here meant a ~2.8 h park —
                 // the 5 s heartbeat then killed net every cycle (restart loop).
+                // The completion itself carries nothing this loop needs: whether
+                // the wake came from a frame or from the deadline, the next pass
+                // does the same work.
                 let timeout_ticks = POLL_INTERVAL_MS / 10; // 100 ms → 10 ticks
-                sys_wait_for_event(NET_RX, timeout_ticks);
+                let _ = sys_wait_completion(NET_RX, timeout_ticks);
             }
         }
     }

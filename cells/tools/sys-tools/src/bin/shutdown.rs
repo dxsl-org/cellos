@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
+
+ostd::cell_main!(cell_main);
 
 /// shutdown — halt the system via the kernel's architecture-independent shutdown syscall.
 ///
@@ -10,8 +13,7 @@ extern crate ostd;
 /// - x86_64: QEMU isa-debug-exit or ACPI S5
 ///
 /// Never returns if the host accepts the shutdown request.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     ostd::io::println("System shutting down...");
     ostd::syscall::sys_shutdown();
 }

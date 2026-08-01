@@ -43,15 +43,24 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  unsafe-ratchet:
-    # Replaces the cargo-geiger scan: geiger cannot analyse `-Z build-std`
-    # bare-metal targets, and Driver Cells legitimately contain unsafe for
-    # MMIO/DMA. The ratchet enforces the real invariant — no unsafe outside
-    # the audited allowlist (scripts/check-cells-unsafe-ratchet.py).
-    name: Unsafe ratchet (cells/ allowlist must not grow)
+  f1-admission:
+    # Same gate as ci.yml's `f1-admission`, run weekly for the one thing a
+    # per-push run cannot catch: allowlist entries ageing past `review_by` /
+    # `max_age_days` without anyone touching the file. `--check` reports those.
+    #
+    # Replaces the cargo-geiger scan (geiger cannot analyse `-Z build-std`
+    # bare-metal targets) and the unsafe ratchet that replaced it; the rule and
+    # its allowlist now live in scripts/unsafe-allowlist.toml, checked by
+    # scripts/cellos-sign — one implementation, two schedules.
+    name: F1/F5 admission check (cellos-sign --check)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check unsafe stays inside the audited allowlist
-        run: python3 scripts/check-cells-unsafe-ratchet.py
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+
+      - name: Check F1 (forbid + no unsafe outside the allowlist) and F5 (toolchain pin)
+        run: python3 scripts/cellos-sign --check --strict

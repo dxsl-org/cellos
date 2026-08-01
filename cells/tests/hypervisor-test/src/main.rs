@@ -7,8 +7,8 @@
 //!
 //! Compiled for ARM64 only (HypervisorCap requires EL2 boot).
 //!
-//! Note: `#[no_mangle]` on `main` triggers unstable `unsafe_attr` — forbid
-//! is relaxed to `warn` here.  All logic in this file is safe Rust.
+//! Note: this crate is allowlisted (class hypervisor) — it performs EL2 world
+//! switching, so `#![forbid(unsafe_code)]` does not apply.
 #![no_std]
 #![no_main]
 

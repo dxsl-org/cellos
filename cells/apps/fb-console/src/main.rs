@@ -8,6 +8,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 mod font;
 
@@ -35,8 +36,9 @@ api::declare_syscalls![
 const FG: [u8; 4] = [0xCC, 0xCC, 0xCC, 0xFF]; // light grey
 const BG: [u8; 4] = [0x00, 0x00, 0x00, 0xFF]; // black
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     let (width, height) = ostd::syscall::sys_get_resolution();
     let width = width as usize;
     let height = height as usize;

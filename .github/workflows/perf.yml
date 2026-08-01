@@ -168,13 +168,13 @@ jobs:
         run: |
           bash scripts/compare-bench-results.sh perf-results/
 
-      - name: Check PDR targets
+      - name: Check QEMU-calibrated gates
         run: |
           OUTPUT="${{ steps.bench_run.outputs.bench_output }}"
           if echo "$OUTPUT" | grep -q "FAIL"; then
-            echo "::error::One or more benchmarks exceed PDR targets — see bench output above"
+            echo "::error::One or more QEMU-calibrated gates failed — see bench output above"
             echo "$OUTPUT"
             exit 1
           else
-            echo "[perf] All PDR targets met"
+            echo "[perf] All QEMU-calibrated gates met; IPC hardware target is informational"
           fi

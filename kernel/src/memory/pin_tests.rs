@@ -1,0 +1,145 @@
+//! Unit tests for the async pinning registry.
+//!
+//! The registry is a single global table, so every test works on a base address
+//! range and owner id of its own and acknowledges what it pinned before
+//! returning. Ranges are 1 MiB apart so no two tests can overlap.
+
+use super::*;
+
+/// Distinct 1 MiB test arena per case, well clear of any real frame.
+const fn arena(n: usize) -> usize {
+    0x4000_0000 + n * 0x10_0000
+}
+
+#[test]
+fn refuses_an_empty_or_overflowing_range() {
+    assert_eq!(pin(arena(0), 0, 900), Err(PinError::InvalidRange));
+    assert_eq!(pin(usize::MAX - 8, 64, 900), Err(PinError::InvalidRange));
+}
+
+#[test]
+fn a_pinned_region_reports_its_holder() {
+    let base = arena(1);
+    assert_eq!(pin(base, PAGE_SIZE, 901), Ok(()));
+    let held = holder_of(base, PAGE_SIZE).expect("region must report as pinned");
+    assert_eq!(held.owner, 901);
+    assert_eq!(held.pages, 1);
+    assert!(!held.quarantined);
+    acknowledge(901);
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn a_partial_overlap_still_counts_as_pinned() {
+    let base = arena(2);
+    // Pin the middle page of a three-page span, then ask about the whole span:
+    // a teardown of the enclosing grant must not be allowed to proceed.
+    assert_eq!(pin(base + PAGE_SIZE, PAGE_SIZE, 902), Ok(()));
+    assert!(holder_of(base, 3 * PAGE_SIZE).is_some());
+    assert!(holder_of(base + 2 * PAGE_SIZE, PAGE_SIZE).is_none());
+    acknowledge(902);
+}
+
+#[test]
+fn an_unaligned_range_pins_every_page_it_touches() {
+    let base = arena(3);
+    assert_eq!(pin(base + 8, 16, 903), Ok(()));
+    let held = holder_of(base, PAGE_SIZE).expect("head page must be covered");
+    assert_eq!(held.base, base);
+    assert_eq!(held.pages, 1);
+    acknowledge(903);
+}
+
+#[test]
+fn repinning_the_same_range_reuses_the_slot() {
+    let base = arena(4);
+    assert_eq!(pin(base, PAGE_SIZE, 904), Ok(()));
+    assert_eq!(pin(base, PAGE_SIZE, 904), Ok(()));
+    assert_eq!(holder_of(base, PAGE_SIZE).map(|h| h.holds), Some(2));
+    // One acknowledgement releases the region regardless of hold count.
+    assert!(acknowledge(904).is_empty());
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn a_single_owner_cannot_exhaust_the_table() {
+    let base = arena(5);
+    for i in 0..MAX_PINS_PER_TASK {
+        assert_eq!(pin(base + i * PAGE_SIZE, PAGE_SIZE, 905), Ok(()));
+    }
+    assert_eq!(
+        pin(base + MAX_PINS_PER_TASK * PAGE_SIZE, PAGE_SIZE, 905),
+        Err(PinError::TaskLimit)
+    );
+    acknowledge(905);
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn death_quarantines_rather_than_releases() {
+    let base = arena(6);
+    assert_eq!(pin(base, 2 * PAGE_SIZE, 906), Ok(()));
+    assert_eq!(quarantine_task(906), 1);
+    // The reaper hands the frames to the quarantine instead of the allocator.
+    let before = quarantined_pages();
+    assert!(withhold_frames(base, 2, 906));
+    assert_eq!(quarantined_pages(), before + 2);
+    // Still refused to a teardown request: the frames are not the owner's to
+    // release, and they are not the allocator's to hand out.
+    let held = holder_of(base, PAGE_SIZE).expect("quarantined region stays pinned");
+    assert!(held.quarantined);
+
+    assert_eq!(acknowledge(906), alloc::vec![(base, 2)]);
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+    assert_eq!(quarantined_pages(), before);
+}
+
+#[test]
+fn an_acknowledgement_before_death_leaves_nothing_to_quarantine() {
+    let base = arena(7);
+    assert_eq!(pin(base, PAGE_SIZE, 907), Ok(()));
+    assert!(acknowledge(907).is_empty());
+    assert_eq!(quarantine_task(907), 0);
+    // Nothing pinned means the reaper frees the frames on its own.
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn only_frames_the_reaper_withheld_are_ever_released() {
+    // A range pinned but never handed to the quarantine — an MMIO window a
+    // driver authorised for DMA, say — must not come back as frames to free.
+    let base = arena(8);
+    assert_eq!(pin(base, PAGE_SIZE, 908), Ok(()));
+    assert_eq!(quarantine_task(908), 1);
+    assert!(acknowledge(908).is_empty());
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn quarantine_and_acknowledgement_are_per_owner() {
+    let mine = arena(9);
+    let theirs = arena(10);
+    assert_eq!(pin(mine, PAGE_SIZE, 909), Ok(()));
+    assert_eq!(pin(theirs, PAGE_SIZE, 910), Ok(()));
+    assert_eq!(quarantine_task(909), 1);
+    assert!(withhold_frames(mine, 1, 909));
+    assert!(withhold_frames(theirs, 1, 910));
+    assert_eq!(acknowledge(909), alloc::vec![(mine, 1)]);
+    assert!(holder_of(theirs, PAGE_SIZE).is_some());
+    assert_eq!(acknowledge(910), alloc::vec![(theirs, 1)]);
+}
+
+#[test]
+fn frames_are_charged_to_the_pin_holder_not_the_dead_owner() {
+    // A driver cell authorises DMA against another cell's buffer. When that
+    // other cell dies, the driver's acknowledgement is the one that counts.
+    let base = arena(11);
+    let driver = 911;
+    assert_eq!(pin(base, PAGE_SIZE, driver), Ok(()));
+    let held = holder_of(base, PAGE_SIZE).expect("driver holds the pin");
+    assert_eq!(held.owner, driver);
+    assert!(withhold_frames(base, 1, held.owner));
+    // The dead buffer owner acknowledging nothing releases nothing.
+    assert!(acknowledge(912).is_empty());
+    assert_eq!(acknowledge(driver), alloc::vec![(base, 1)]);
+}

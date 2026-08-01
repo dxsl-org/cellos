@@ -89,12 +89,12 @@ pub fn cmd_wc(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: wc [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("wc: cannot open '");
@@ -335,13 +335,13 @@ pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResu
 
 /// Read file content from VFS, trying the fast-IPC path first then falling back to ecall.
 ///
-/// Fast path: `ostd::fast_ipc::call_vfs` calls the VFS handler directly (~3 cycles).
-/// Fallback: `sys_send`/`sys_recv` round-trip via ecall (~200 cycles).
+/// The retained `ostd::fast_ipc` probe is inactive for separately linked Cells,
+/// so current reads use the governed `sys_send`/`sys_recv` message round trip.
 pub fn read_file_vfs(path: &str, out: &mut [u8]) -> usize {
     let req = api::ipc::VfsRequest::GetFile(path);
     let mut fast_buf = [0u8; api::ipc::IPC_BUF_SIZE];
 
-    // Try fast-IPC path — returns 0 if VFS handler not registered yet.
+    // Retained Tier-1 rewrite scaffold; current separately linked Cells return 0.
     // SAFETY: fast_buf is exclusive; TrustedHandle::default() is a ZST no-op.
     let fast_n = unsafe {
         ostd::fast_ipc::call_vfs(api::fast_ipc::TrustedHandle::default(), &req, &mut fast_buf)
@@ -523,12 +523,12 @@ pub fn cmd_uniq(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: uniq [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("uniq: cannot open '");
@@ -558,12 +558,12 @@ pub fn cmd_sort(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     let path = args.next().unwrap_or("");
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: sort [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("sort: cannot open '");
@@ -605,11 +605,11 @@ pub fn cmd_tee(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<(
         return Ok(());
     }
     // Write to the current output sink (console or outer pipeline capture).
-    if let Ok(s) = core::str::from_utf8(data) {
+    if let Ok(s) = core::str::from_utf8(&data) {
         crate::executor::shell_print(s);
     }
     // Also write the same data to the VFS file.
-    if !vfs_write_chunked(path, data, append) {
+    if !vfs_write_chunked(path, &data, append) {
         ostd::io::print("tee: cannot write '");
         ostd::io::print(path);
         ostd::io::println("'");
@@ -690,12 +690,12 @@ pub fn cmd_awk<'a>(mut args: core::str::SplitWhitespace<'a>) -> ViResult<()> {
 
     let owned;
     let data: &[u8] = if path.is_empty() {
-        let s = crate::executor::shell_stdin();
-        if s.is_empty() {
+        owned = crate::executor::shell_stdin();
+        if owned.is_empty() {
             crate::executor::shell_println("Usage: awk [-F sep] [/pattern/] [col,...] [file]");
             return Ok(());
         }
-        s
+        &owned
     } else {
         owned = read_file_bytes(path).map_err(|_| {
             ostd::io::print("awk: cannot open '");

@@ -225,6 +225,36 @@ pub fn try_restore() -> bool {
         return false;
     }
 
+    // The restore below writes every frame back to the physical address recorded
+    // at serialize time, overwriting kernel `.bss`/`.data` along the way, so the
+    // recorded layout must be the layout this boot actually has. `kernel_hash`
+    // cannot establish that: under a randomised load address the binary is
+    // byte-identical and the hash matches while the RAM base has moved. Refusing
+    // here turns "warm boot corrupts all of RAM" into a logged cold boot.
+    {
+        let guard = FRAME_ALLOCATOR.lock();
+        match guard.as_ref() {
+            Some(allocator) => {
+                let live_base = allocator.memory_start();
+                let live_end = allocator.memory_end();
+                if header.pa_base as usize != live_base || header.pa_end as usize != live_end {
+                    log::warn!(
+                        "[snapshot] RAM layout moved since capture (saved 0x{:X}..0x{:X}, live 0x{:X}..0x{:X}) → cold boot",
+                        header.pa_base,
+                        header.pa_end,
+                        live_base,
+                        live_end
+                    );
+                    return false;
+                }
+            }
+            None => {
+                log::warn!("[snapshot] frame allocator not ready → cold boot");
+                return false;
+            }
+        }
+    }
+
     let frame_count = header.frame_count as usize;
     let pa_base = header.pa_base as usize;
     let saved_crc = header.crc32;

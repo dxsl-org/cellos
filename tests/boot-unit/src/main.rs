@@ -37,6 +37,11 @@ struct MemoryMapEntry {
     ty: MemoryType,
 }
 
+#[path = "../../../kernel/src/boot/dtb_memory.rs"]
+mod dtb_memory;
+#[path = "dtb-memory-tests.rs"]
+mod dtb_memory_tests;
+
 /// Mirrors the `match entry.entry_type` block in `boot.rs:96-107`.
 fn limine_type_to_memory_type(entry_type: u32) -> MemoryType {
     match entry_type {

@@ -10,6 +10,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
@@ -207,8 +208,9 @@ fn write_content_length(n: usize, out: &mut [u8]) -> usize {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     let argv = ostd::args();
     if argv.is_empty() {
         println("Usage: httpd <port> <vfs_path>");

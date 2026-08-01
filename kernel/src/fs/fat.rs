@@ -469,6 +469,9 @@ impl ViFile for FatFile {
         buf_ptr: usize,
         buf_len: usize,
     ) -> BoxFuture<'static, FileResult<usize>> {
+        // Contract guard (2026-07-31 Recv buffer-pinning audit): this synchronous
+        // future must not be wired to a live async syscall until cancellation has
+        // an explicit stop-touching-buffer acknowledgement and unpin point.
         Box::pin(async move {
             let mut this = self;
             // Create a temporary slice from the user pointer.

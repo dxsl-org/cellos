@@ -147,7 +147,7 @@ app calls net_send()  Cell A calls CellB::process()
      ↓                      ↓
 direct function call   vtable dispatch (no syscall)
      ↓                      ↓
-~3 cycles             ~3 cycles (spec 01-core.md target)
+unmeasured target     unmeasured Tier-1 rewrite target
 ```
 
 **Hermit source để đọc**: `src/syscalls/net.rs` — cách họ implement "syscall" thực ra là function call trong same address space.

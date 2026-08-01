@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate ostd;
 
@@ -10,8 +11,9 @@ use ostd::io::println;
 // No hardware caps — input delivery uses IPC only.
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[input-test] starting");
     let mut ctx = AppContext::new();
     // Retry focus request until granted (boot-race: input service may not

@@ -1,7 +1,8 @@
 # Cellos Architecture: VFS & Filesystems
-**Version**: 0.5 (Mount-Table Layered Backends — thay thế Dual-VFS)
+**Version**: 0.6 (Mount-Table Layered Backends + phased `/srv` activation)
 **Status**: Definitive
 **Changed 2026-06-10**: Bỏ chiến lược Dual-VFS (viFS1 RedoxFS fork / viFS2 TFS — TFS upstream đã ngừng phát triển từ ~2018). Thay bằng mô hình MountTable một VFS service + nhiều backend cắm song song. Plan chi tiết: `.agents/260610-1202-vfs-mount-table-backends/`.
+**Amended 2026-08-01**: D10 giữ RedoxFS-on-VirtIO làm G1 proof-of-function và tách riêng các gate G2 production theo ADR 0002.
 
 
 ## 1. VFS Contract (The Interface)
@@ -34,9 +35,9 @@ Một VFS service duy nhất (`cells/services/vfs/`) sở hữu một **MountTab
 VFS service (MountTable, longest-prefix match)
 ├── /bin, /etc   → BootFS  (initramfs — FAT16 nhúng kernel, read-only)
 ├── /tmp         → RamFS   (tmpfs, volatile, read-write)
-├── /data        → FAT32 hiện tại → littlefs (power-safe, G1 tail)
-├── /mnt/sd      → FAT32   (interop thẻ SD/PC — sau khi /data chuyển littlefs)
-└── /srv         → Native FS (CoW, checksum — G2, cùng NVMe)
+├── /data        → littlefs (default-enabled persistent store)
+├── /mnt/sd      → FAT32   (interop thẻ SD/PC)
+└── /srv         → RedoxFS (G1 functional; G2 production qualification pending)
 ```
 
 ### Vai trò từng backend
@@ -45,9 +46,9 @@ VFS service (MountTable, longest-prefix match)
 |---|---|---|---|
 | **BootFS** (kernel `VIFS1`, `kernel_fs.img` FAT16 nhúng) | `/bin`, `/etc` | Initramfs: giải bài toán con gà–quả trứng (kernel load được binary VFS service trước khi VFS tồn tại). Loader fallback tại `kernel/src/loader/early.rs` | Có rồi |
 | **RamFS** | `/tmp` | tmpfs chuẩn — scratch space volatile | Có rồi |
-| **FAT32** (crate `fatfs`, có LFN/VFAT) | `/data` (hiện tại) → `/mnt/sd` | Interop thẻ SD ≤32GB / boot partition RPi / trao đổi dữ liệu với PC. **Không journaling — không dùng làm persistent store chính cho robot** | Có rồi |
-| **littlefs** | `/data` | Persistent store power-loss-resilient cho config/log/model — mất điện giữa chừng ghi không hỏng volume. Bắt buộc trước robot demo trên board thật | G1 tail |
-| **Native FS** | `/srv` | CoW + checksum cho server workload. **Quyết định: RedoxFS port** (MIT, ~10 K LOC; xem [ADR](09b-vfs-native-fs-adr.md)). Implement tại G2 cùng NVMe. Hiện stub `StubBackend` mounted tại `/srv` — trả empty/false, không crash VFS | G2 |
+| **FAT32** (crate `fatfs`, có LFN/VFAT) | `/mnt/sd` | Interop thẻ SD ≤32GB / boot partition RPi / trao đổi dữ liệu với PC. **Không journaling — không dùng làm persistent store chính cho robot** | Shipped |
+| **littlefs** | `/data` | Default-enabled persistent store for config/log/model. Backend and block adapter are shipped; QEMU functional and power-loss suites pass. Repeated real-board power-cut qualification remains required before production robot claims | Shipped software path; hardware qualification pending |
+| **RedoxFS** | `/srv` | CoW + checksum. [ADR 09b](09b-vfs-native-fs-adr.md) + [ADR 0002](../decisions/0002-phased-srv-redoxfs-activation.md) cho phép G1/QEMU proof-of-function qua block Driver Cell; G2 production vẫn cần RedoxFS-on-NVMe test, benchmark `<100 us`, hardware thật, và quyết định capability P5. Mount hiện tại degrade về empty/false nếu P5 thiếu hoặc chưa format | G1 functional; G2 pending |
 | **exFAT** | `/mnt/sd` (mở rộng) | Thẻ SDXC >32GB nguyên bản (xuất xưởng exFAT, `fatfs` không đọc được). `FatBackend::mount()` tự detect OEM-Name `"EXFAT   "` và log cảnh báo rõ thay vì lỗi cryptic. Full support chỉ khi có nhu cầu thật | Theo nhu cầu |
 
 ### Quyết định đã chốt (2026-06-10)
@@ -55,6 +56,53 @@ VFS service (MountTable, longest-prefix match)
 * ❌ **Dual-VFS viFS1/viFS2 bị loại bỏ**: TFS upstream đã chết; RedoxFS port (~10K+ LOC) quá lớn so với nhu cầu G1 (YAGNI).
 * ⚠️ **Xung đột tên đã gỡ**: thuật ngữ "viFS1" trong spec cũ (= RedoxFS fork) bị bỏ; `VIFS1` trong kernel (`kernel/src/fs.rs`) từ nay hiểu là **BootFS/initramfs**.
 * 🔧 **Tech debt ghi nhận**: VFS service hiện `include_bytes!` lại các ELF `/bin` (nhúng trùng lặp với `kernel_fs.img`) — sẽ thay bằng proxy qua syscall kernel (xem plan).
+
+
+## 2b. Directory capabilities (2026-07-31)
+
+Quyết định và lý lẽ nằm ở [ADR 09c](09c-vfs-directory-capabilities-adr.md); phần này
+chỉ ghi mô hình đang chạy.
+
+Một cell không còn phải đặt câu hỏi "tôi có được đọc path này không". Nó cầm một
+**directory handle** (`api::dir_handles::ViDirHandle` — kiểu riêng, **không phải**
+`CapId`) và gửi `(handle, tên)`. Vì `tên` không được chứa separator, VFS resolve ra
+đúng một mức bên trong thư mục của handle: **không có path nào ngoài handle mà cell
+diễn đạt được**, nên không còn gì để check.
+
+| Op | Ý nghĩa |
+|---|---|
+| `OpenRootDir { path }` | Op **duy nhất** còn nhận path. Bootstrap: cell xin handle cho các thư mục nó cần, rồi `SealPaths`. Vẫn qua `AccessTable` |
+| `OpenDir { dir, name }` | Dẫn xuất handle hẹp hơn. Revoke `dir` revoke luôn nó |
+| `ReadAt` / `WriteAt` / `StatAt` / `UnlinkAt` `{ dir, name }` | Thao tác trên một entry trong `dir` |
+| `ListAt { dir }` | Liệt kê chính `dir`. Không nhận `name` — muốn liệt kê thư mục con thì phải cầm handle của nó |
+| `CloseDir { dir }` | Trả lại `dir` **và mọi handle dẫn xuất từ nó** |
+| `SealPaths` | Một chiều. Từ đây mọi request path-addressed của cell đó bị `Err(3)` |
+
+**Kiểm tra tên làm trên byte thô, trước mọi normalize** (`api::dir_name`): rỗng, `.`,
+`..`, mọi `/` hoặc `\`, byte điều khiển/NUL, quá dài, và UTF-8 không hợp lệ đều bị từ
+chối. Không normalize trước — normalize chính là nơi sinh ra lỗ traversal.
+
+**Vòng đời & thu hồi** (`cells/services/vfs/src/dirs/`): handle thuộc về
+`(CellId, generation)`. Thấy generation cao hơn nghĩa là instance cũ đã chết → purge
+toàn bộ handle của nó, nên **handle không sống qua hot-swap**. Thu hồi là **bắc cầu**:
+mỗi entry ghi lại handle nó được dẫn xuất từ đâu, kể cả qua ranh giới spawn.
+
+**Kế thừa lúc spawn**: kernel chỉ là người đưa thư — nó chép tập handle từ spawner
+sang con và khai báo *ai* đã nêu tập đó (`QueryDirHandles`), chứ không diễn giải handle
+nào. VFS mới là nơi kiểm: lần đầu tiếp xúc với một cell, VFS kéo bản khai của kernel và
+chỉ bind nếu spawner **thực sự giữ đủ** mọi handle được nêu — **all-or-nothing**. Thiếu
+một cái thì không bind cái nào. Hệ quả đã biết và chấp nhận: một yêu cầu quá rộng
+**hỏng ở lần gọi filesystem đầu tiên của con, không phải lúc spawn**. Một cell có tập
+kế thừa được seal ngay, kể cả khi bind thất bại — nếu không, thất bại sẽ *mở rộng*
+quyền so với thành công.
+
+`AccessTable` vẫn chạy trên path đã resolve, nhưng lùi về vai trò **defense in depth**:
+handle quyết định *thư mục nào*, bảng vẫn nói *hệ thống cho phép gì ở đó* (một handle
+tới mount read-only không được biến thành quyền ghi).
+
+**Đường di trú**: các op path-string vẫn còn, chuyển từng cell một. Cell tiên phong là
+`/bin/vfs-test`. Chừng nào chưa xoá hẳn các variant path-string, guarantee chỉ đúng với
+cell đã seal.
 
 
 ## 3. Cơ chế Direct I/O & Zero-Copy
@@ -71,7 +119,8 @@ Nhờ lợi thế của Single Address Space (SAS), Cellos đạt được tốc
 Thay vì mỗi FS Cell tự giữ cache, Cellos dùng một Unified Page Cache nằm trong vùng nhớ dùng chung của SAS.
 
 * **Zero-copy Metadata**: backend native (G2) có thể trả về con trỏ trực tiếp đến cấu trúc metadata trong RAM, cho phép App đọc Metadata mà không cần syscall trung gian.
-* **LRU & OOM**: Chính sách thu hồi bộ nhớ (Eviction) được quản lý tập trung bởi Kernel để tránh xung đột tài nguyên giữa các Cell.
+* **LRU & OOM**: VFS Cell owns page-cache replacement/eviction policy. Kernel supplies
+  quota and reclaim mechanisms but does not choose filesystem eviction policy.
 
 
 ## 5. Large File Support (LFS) trên Multi-Arch

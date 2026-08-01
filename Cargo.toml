@@ -135,6 +135,7 @@ members = [
     "cells/tests/test-isolation",
     "cells/tests/input-test",
     "cells/tests/silo-test",
+    "cells/tests/wx-test",
 
     # Cells - Runtimes
     "cells/runtimes/lua",

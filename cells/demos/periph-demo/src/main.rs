@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
-// #[no_mangle] on main() requires allowing unsafe_attr — cannot use forbid(unsafe_code).
+#![forbid(unsafe_code)]
+// The `main` symbol comes from `ostd::cell_main!`, whose expansion carries the
+// `#[no_mangle]` the ELF loader needs without tripping `forbid(unsafe_code)`
+// (see libs/ostd/src/entry.rs).
 // All peripheral-access code is unsafe-free (uses MmioRegion abstraction).
 
 extern crate alloc;
@@ -25,8 +28,9 @@ declare_manifest!(
 const SELF_PATH: &str = "/bin/periph-demo";
 const POLL_PRIORITY: u8 = 200;
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     // ── RTC test ──────────────────────────────────────────────────────────────
     // sys_get_wall_secs() calls GetTime op=3 → Goldfish RTC epoch seconds.
     // Passes if the RTC returned a plausible year (> 2020-01-01 = 1577836800).

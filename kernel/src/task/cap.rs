@@ -167,22 +167,22 @@ impl CapSet {
         supervisor: false,
     };
 
-    /// Full capability authority — granted ONLY to `init` (the root authority,
-    /// like seL4's initial task holds the root CNode). Direct-write in `main.rs`;
-    /// never reached via the manifest path. `hypervisor` is set unconditionally
-    /// here (init never exercises H-ext CSRs; a child's H-ext gate lives in
-    /// `from_manifest`, and intersection preserves it).
+    /// Every cap this kernel can express — a **reference upper bound for
+    /// ceiling self-tests only**. It is NOT granted to any task.
+    ///
+    /// Boot authority comes from the per-path table in
+    /// `crate::loader::boot_ceiling`, which states what ONE path may hold. This
+    /// constant is the union of everything and therefore never constrains
+    /// anything; using it as a ceiling would admit every request while reading
+    /// like a restriction. The self-tests use it in the opposite direction — as
+    /// the widest possible ceiling, to prove a request is not *over*-tightened.
     pub const ALL: CapSet = CapSet {
         block_io: true,
         network: true,
         spawn: true,
         hypervisor: true,
         mmio_devices: crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_UART,
-        block_regions: 0b111,
-        // init is root authority, so its ceiling permits delegating the privileged
-        // path-caps to the driver/supervisor cells it spawns. `platform` is inert
-        // in practice — the Platform Cell is Root-spawned by the kernel, and
-        // `apply_to` never writes `platform_cap` (the singleton latch owns it).
+        block_regions: 0b1111,
         pcie_driver: true,
         platform: true,
         supervisor: true,
@@ -275,6 +275,34 @@ impl CapSet {
             self.supervisor = true;
         }
         self
+    }
+
+    /// Whether `with_path_caps` layers any privileged (P-TRUST) authority onto a
+    /// request for `path` — i.e. whether the install path alone is enough to ask
+    /// for `pcie_driver` / `platform` / `supervisor`.
+    ///
+    /// Derived from `with_path_caps` itself rather than a second path list, so the
+    /// match arms above stay the single source of truth. Callers use it to decide
+    /// how dangerous a *missing* authorisation for `path` is: for these paths a
+    /// permissive default hands out DMA-anywhere or cell-orchestration authority,
+    /// so they must fail closed where an ordinary path may not.
+    pub fn path_mints_ptrust(path: &str) -> bool {
+        let requested = CapSet::EMPTY.with_path_caps(path);
+        requested.pcie_driver || requested.platform || requested.supervisor
+    }
+
+    /// Drop every privileged (P-TRUST) cap, keeping the ordinary ones.
+    ///
+    /// The privileged three are the caps whose holder can DMA anywhere or drive
+    /// other cells; removing only those keeps a cell runnable (and its failure
+    /// diagnosable) where zeroing the whole set would look like a crash.
+    pub fn without_ptrust(self) -> CapSet {
+        CapSet {
+            pcie_driver: false,
+            platform: false,
+            supervisor: false,
+            ..self
+        }
     }
 
     /// Field-wise minimum (bool AND, bitmask AND). The monotonic-downgrade core.

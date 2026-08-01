@@ -2,7 +2,7 @@
 
 **Version**: 0.1 (Initial — Reliability Track Definition)
 **Status**: Definitive
-**Last Updated**: 2026-06-05
+**Last Updated**: 2026-08-01 (D12 hardware layers; D13 signature-admission posture)
 
 > Cellos targets robots and embedded devices. For that domain "fast + realtime" is not
 > enough — the system **must not die**. This spec defines what "không chết" means
@@ -43,26 +43,34 @@ A statically-isolated but unrecoverable system still "dies" the moment a control
   grants) and forces `sfence.vma` on every switch (**ASID is broken/absent on most RV
   silicon**, forcing full TLB flushes). The cost falls on the crown-jewel fast path.
 
+Spec 19 owns the current hardware-isolation delivery model: PMP remains at most a future
+firmware/static guard here, while per-domain page tables are Layer B.
+
 **Resolution — isolation comes from the tiered model** ([05-application.md](05-application.md)),
 not from retrofitting MMU into the SAS:
 
 | Tier | Who runs here | Isolation mechanism |
 |------|---------------|---------------------|
 | **Tier 1 — Native (SAS)** | Signed, first-party, `#![forbid(unsafe_code)]` cells: drivers, FS, robot control | Language-Based Isolation (compiler) + signed-cells |
-| **Tier 2 — Managed** | Third-party / portable code | WASM software sandbox (`wasmi` interpreter — no JIT escape) |
+| **Tier 2 — Managed** | Third-party / portable code | Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` |
 | **Tier 3 — Virtual** | Untrusted / legacy / sensitive silos | Hypervisor cell, **Stage-2 paging** (real hardware MMU barrier, *per-VM*) |
 
 Hardware isolation thus lives in **Tier 3 (per-VM Stage-2)** — the right place for it —
 **not** smeared across every Tier-1 cell. This **strengthens** the never-die story: with
-Tier 1 restricted to signed safe-Rust, the only failure mode is a panic (caught + killed),
+Tier 1 restricted to operationally trusted, F1-reviewed Rust, the intended failure mode is
+a panic (caught + killed),
 not silent memory corruption. Every Tier-1 death becomes a *restartable* event — which is
 exactly what the supervisor track (below) handles.
 
-> **Dependency this shifts onto Security:** the "Tier 1 = signed only" premise requires
-> **code-signing + secure-boot + a loader gate** that refuses unsigned native ELF and routes
-> untrusted code to Tier 2/3. Today "trusted" = *path is under `/bin/`* (a directory, not a
-> crypto boundary). Ed25519 signing is spec-only. This is tracked separately as the Security
-> track; it does not block the Reliability track but is load-bearing for the trust model.
+> **Dependency this shifts onto Security:** Ed25519 verification now runs in the common
+> loader gate, but the default G1 build is not "Tier 1 = signed only": `signing-required`
+> is off, so an ELF with no signature section is admitted to the shared SAS. `/bin/` remains
+> an authorization class for path-scoped capabilities and policy, not proof of provenance.
+> The reproducible dev key is a test fixture, not a fleet trust anchor. A fleet-secure
+> posture still requires a provisioned immutable public key, mandatory signing/policy
+> features, controlled artifact provenance, negative admission tests, and secure boot.
+> Until that posture and Tier 2 exist, every admitted native cell must be operationally
+> trusted; untrusted code remains Tier 3 or refused. See Specs 18 and 19.
 
 ---
 
@@ -74,21 +82,20 @@ embedded/robotics OS (QNX/seL4 class), not relative to zero.
 | Axis | Score | What exists | What's missing |
 |------|------:|-------------|----------------|
 | 1. Fault isolation | **~85%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)); stack **guard pages active** ([stack.rs](../../kernel/src/task/stack.rs)); load-time VA-overwrite guard + build-time VA-layout CI check; async-pin/grant leak closed as moot (§4.4) | Depends entirely on zero-unsafe-bug in kernel/HAL; no per-cell SATP (by decision) |
-| 2. Fault detection | **~78%** | Audit ring (`CellFault`/`CellExit`); CPU-monopoly watchdog (RT-only, reset-on-syscall); `RecvTimeout` deadline sweep checked in `pick_next`; **liveness heartbeat** (`Heartbeat=207` → `CellHung` kill→restart, catches silent hangs any priority); RT `RtDeadlineMiss`/`RtCpuOverrun` audit events ([kernel/src/audit.rs](../../kernel/src/audit.rs)) | No external HW watchdog; heartbeat is opt-in (only net adopts it so far) |
-| 3. Fault recovery | **~88%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); per-service restart **policies** (permanent/transient/temporary) + **time-windowed restart intensity** (crash-storm escalation); exit-reason delivered as recv payload; service-ID registry (clients reconnect across respawn); hotswap + state-stash | App-level liveness heartbeat; cross-node failover (out of scope for single device) |
+| 2. Fault detection | **~78%** | Audit ring (`CellFault`/`CellExit`); CPU-monopoly watchdog (RT-only, reset-on-syscall); `RecvTimeout` deadline sweep checked in `pick_next`; **liveness heartbeat** (`Heartbeat=207` → `CellHung` kill→restart, catches silent hangs any priority); RT `RtDeadlineMiss`/`RtCpuOverrun` audit events ([kernel/src/audit.rs](../../kernel/src/audit.rs)) | No external HW watchdog; heartbeat remains opt-in, although multiple service, tool, demo, and application Cells now adopt it |
+| 3. Fault recovery | **~88%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); per-service restart **policies** (permanent/transient/temporary) + **time-windowed restart intensity** (crash-storm escalation); exit-reason delivered as recv payload; service-ID registry (clients reconnect across respawn); hotswap + state-stash | Fleet policy for required heartbeat enrollment; cross-node failover (out of scope for single device) |
 | 4. Realtime guarantee | **~45%** | 3-level priority preempt + zero-latency SSIP; RT watchdog; deadline-miss + CPU-overrun **observability** ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | EDF / deadline enforcement / CPU-budget — **hardware-data-gated** (QEMU TCG has no cycle-accurate timing); WCET unmeasured |
 | 5. Continuous operation | **~50%** | 5-step hotswap protocol ([kernel/src/cell/hotswap.rs](../../kernel/src/cell/hotswap.rs)); snapshot warm-boot | Partial rollback, message-queue preservation incomplete, manual trigger |
 | 6. HW fault tolerance | **~5%** | — | No HW watchdog, no ECC, no redundancy/failover |
 
-**Aggregate "never-die": ~25–30%.** Strong *prevention* foundation (tiny ~11.5K-LOC TCB,
+**Aggregate "never-die": ~25–30%.** Strong *prevention* foundation (Rust LBI and a
+[generated, reviewable kernel-size metric](../code-metrics.generated.md),
 Rust safety, working cell isolation). The *detection + recovery* layer — the part that
 defines never-die for robots — is largely absent.
 
-> **Spec/code mismatch to fix:** [01-core.md](01-core.md) §5 describes `catch_unwind`-wrapped
-> inter-cell calls, automatic driver hardware-reset, and hot re-linking on panic. **None of
-> that is implemented.** Actual behavior = `panic_handler` → `terminate_current_cell_on_fault`
-> → cell killed, **no restart**. The supervisor work below makes §5's intent real; until then
-> §5 is aspirational, not descriptive.
+> **Recovery contract:** Cell builds abort rather than unwind. A panic/trap follows
+> terminate → lifecycle reaping → exit notification → supervisor restart/backoff policy.
+> Hardware reset and state restoration remain explicit service policies.
 
 ---
 
@@ -165,8 +172,9 @@ Erlang/OTP-style "let it crash + restart".
       faults: S-mode store to a USER page with SSTATUS.SUM unset; that bug was caught + fixed in
       test). Live-verified: `exit` → shell faults (reason=MAX) → died/restarting/restarted, new tid +
       prompt, exactly 1 fault, 0 panics.
-- [ ] Remaining polish (not blocking): `parent_cell_id` for finer watch-gating; app-level liveness
-      heartbeat. **Shell `exit` fault FIXED** (commit 844409f4): its root cause was the cell
+- [ ] Remaining polish (not blocking): `parent_cell_id` for finer watch-gating; explicit
+      fleet policy for required liveness-heartbeat enrollment and negative coverage. Exact
+      adopter counts belong in generated status. **Shell `exit` fault FIXED** (commit 844409f4): its root cause was the cell
       heap leak below — the shell OOM'd during command processing and store-faulted. With the
       freeing allocator + a direct `sys_exit`, `exit` now exits cleanly (reason 0) and init's
       Transient policy keeps it down; a crash still restarts.
@@ -204,20 +212,13 @@ Erlang/OTP-style "let it crash + restart".
       details: skips a cell's own intra-ELF overlaps (the load's `mapped` set); rolls back partials
       on reject; `CellSegments::eager_unmap` frees a dying cell's VAs at death so respawn (fixed VA)
       isn't blocked. Verified: 0 false-fires on boot, shell crash→respawn works, 0 panics.
-- [x] **GC for async-pinned buffers / grants — CLOSED as MOOT 2026-06-06** (scoping report:
-      `.agents/reports/scope-260606-1454-p05-async-pin-gc.md`). Verified leak-free **by
-      construction**, three independent reasons: (1) the async FileRead future is Task-owned
-      and pins no separate frame — it captures a raw pointer into the cell's OWN buffer
-      (task.rs:567-592); a cell killed while `Polling` is removed from `self.tasks` in
-      `exit_task` BEFORE its frames free, and the poll loop only polls `self.tasks`, so the
-      dangling write never executes. (2) The inner read is synchronous (fat.rs:415-425) — no
-      DMA descriptor outlives the future. (3) Grant/lease IPC cannot be created at runtime —
-      `ostd::sys_grant` is a stub (ostd/syscall.rs:538), so `grant_table`/`leases` are always
-      empty (and are Task-owned metadata, freed at reap, holding no frames). **Future-work
-      trigger:** a real async-DMA driver (the fat.rs TODO) or SMP makes this real — the
-      cancellation point is `exit_task` (descriptor-cancel / frame-unpin before reclaim),
-      documented inline there. With this closed, **P05 (stop slow death) is complete**: zombie
-      reaper + stack reclaim + segment reclaim + overwrite-guard + async/grant verified safe.
+- [ ] **Async-pin/grant lifecycle qualification.** GrantAlloc/Share/Slice/Free,
+      GrantRegister/GrantUnregister, and pin/quarantine paths are active and reachable;
+      the deleted legacy `sys_grant`
+      wrapper was not the ABI. Safety derives from owner-scoped grant tables, teardown
+      ordering, cancellation/unpin, and quarantine before frame reclaim. Add end-to-end
+      death-during-grant and death-during-DMA tests before calling the lifecycle fully
+      qualified.
 
 ### 4.5 — Realtime hardening (P1–P2)
 - [x] **RT observability (P06 slice, DONE 2026-06-06).** `RtDeadlineMiss` audit event + per-task
@@ -303,7 +304,7 @@ by design), the *same* supervision/abstraction can later extend across nodes (di
 **Conclusion for Cellos:** the realistic single-OS target is **QNX-class on axes 1–5** (trusted-tier
 model), with **axis 6 pushed to deployment hardware** (ECC, HW watchdog, redundant nodes) — and
 the cell+supervisor model kept *scale-ready* so the availability-regime path to axis 6 stays open
-later. Cellos's differentiator vs QNX (C) is **Rust LBI + ~11.5K-LOC TCB**: no existing OS
+later. Cellos's differentiator vs QNX (C) is **Rust LBI + a responsibility-bounded TCB**: no existing OS
 combines Rust safety + a tiny TCB + Erlang-style supervision. That intersection is the niche.
 
 ---

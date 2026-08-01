@@ -18,6 +18,7 @@
 $kernel_root = Get-Location
 $tools_dir   = "$kernel_root/tools"
 $rel_dir     = "$kernel_root/target/riscv64gc-unknown-none-elf/release"
+$include_capacity_probe = $env:CELLOS_INCLUDE_CAPACITY_PROBE -eq "1"
 
 # Linux runners ship `python3` only; Windows dev boxes ship `python`.
 $python = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { "python3" }
@@ -29,11 +30,35 @@ $python = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } els
 # and refuse to link with our lp64d objects.
 # Respect a pre-set CC so Linux CI can point at its distro toolchain
 # (gcc-riscv64-unknown-elf → riscv64-unknown-elf-gcc) — same for OBJCOPY below.
+
+# Probe rather than assume a toolchain name. The xpack distribution installs
+# `riscv-none-elf-*`, Ubuntu's gcc-riscv64-unknown-elf installs
+# `riscv64-unknown-elf-*`, and hard-coding either makes this script fail on the
+# other platform for a reason that surfaces only as a cc-rs "tool not found"
+# deep inside a cell build. scripts/lib-sign-cells.sh probes the same way.
+function Resolve-CrossTool([string[]]$Candidates, [string]$What) {
+    foreach ($c in $Candidates) {
+        if (Get-Command $c -ErrorAction SilentlyContinue) { return $c }
+    }
+    Write-Host "FATAL: no $What found (tried: $($Candidates -join ', '))" -ForegroundColor Red
+    Write-Host "  Install one: bash scripts/dev-setup.sh (Linux) or the xpack riscv toolchain." -ForegroundColor Red
+    exit 1
+}
+
 if (-not $env:CC_riscv64gc_unknown_none_elf) {
-    $env:CC_riscv64gc_unknown_none_elf = "riscv-none-elf-gcc"
+    $env:CC_riscv64gc_unknown_none_elf =
+        Resolve-CrossTool @('riscv-none-elf-gcc', 'riscv64-unknown-elf-gcc') 'riscv cross gcc'
+}
+if (-not $env:AR_riscv64gc_unknown_none_elf) {
+    $env:AR_riscv64gc_unknown_none_elf =
+        Resolve-CrossTool @('riscv-none-elf-ar', 'riscv64-unknown-elf-ar') 'riscv cross ar'
 }
 if (-not $env:CFLAGS_riscv64gc_unknown_none_elf) {
-    $env:CFLAGS_riscv64gc_unknown_none_elf = "-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS"
+    # -I third_party/freestanding-include: bare-metal gccs ship no libc headers and
+    # littlefs includes <string.h>. Ubuntu's needs the vendored set; omitting it
+    # fails the littlefs2-sys build rather than anything about the cell.
+    $inc = Join-Path (Get-Location) "third_party/freestanding-include"
+    $env:CFLAGS_riscv64gc_unknown_none_elf = "-march=rv64gc -mabi=lp64d -mcmodel=medany -ffreestanding -DLFS_NO_INTRINSICS -I$inc"
 }
 if (-not $env:LIBCLANG_PATH) {
     $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
@@ -104,6 +129,16 @@ Build-Cargo -What "audio-demo"     -Packages @('audio-demo')      # VirtIO sound
 Build-Cargo -What "app-https-demo" -Packages @('app-https-demo')  # G14 TLS server-auth e2e gate
 Build-Cargo -What "app-http-smoke" -Packages @('app-http-smoke')  # ostd::http + ostd::json e2e gate
 Build-Cargo -What "cfi-test" -Packages @('cfi-test')   # Layer-2 CFI violation test cell
+Build-Cargo -What "wx-test"  -Packages @('wx-test')    # W^X violation test cell
+# Directory-capability pioneer: the only cell sealed to handle-addressed VFS ops,
+# so it is the only place the "a sealed cell cannot use a path" guarantee can be
+# demonstrated on a running system rather than argued from the table's contents.
+Build-Cargo -What "vfs-test" -Packages @('app-vfs-test')
+# Built here for the same reason posix-shim-test is: the signing section below
+# only Test-Path's these, so without a build step they are silently absent from
+# the disk and tests/integration/tests/hotswap-smoke.rs fails with
+# "command not found" rather than anything about hotswap.
+Build-Cargo -What "hotswap demos" -Packages @('hotswap-demo-v1', 'hotswap-demo-v2')
 # posix-shim-test must be BUILT here, not just Test-Path'd below — CI runs
 # gen_disk on a fresh target/ and the posix_shim_* boot tests spawn it from
 # the shell ("command not found" on CI was exactly this gap).
@@ -152,89 +187,106 @@ foreach ($line in $zig_output) {
 }
 
 # ── Cell binary signing (Ed25519) ────────────────────────────────────────────
-# Sign each cell ELF with the dev key before embedding. Runs here — inside
-# gen_disk — so signing is never accidentally skipped (a separate wrapper could
-# be bypassed; this cannot). The dev seed [0x43]*32 is fixed so rebuilds are
-# reproducible and no key paste is required.
+# Sign every cell ELF with the dev key before embedding, unconditionally — a
+# cell with no __ViCell_sig is DENIED at spawn under the `signing-required`
+# feature, and the guest never reaches a shell. The dev seed [0x43]*32 is fixed
+# so rebuilds are reproducible and no key paste is required.
 #
-# sign-cell.py reads $env:OBJCOPY to select the correct cross-objcopy binary.
-# Default to the xpack RISC-V toolchain; override before invoking this script.
-if (-not $env:OBJCOPY) { $env:OBJCOPY = "riscv-none-elf-objcopy" }
+# Signing goes through `scripts/cellos-sign`, never the low-level signer: the
+# signature attests that the pipeline enforced F1 and F5 (Spec 18 §2.1), and
+# only that wrapper runs the check. A dev-key signature carries the same claim
+# as a production one, because every local and QEMU image is a dev-key build.
+# One invocation for the whole set — the F1 scan is per-tree, not per-binary.
+#
+# cellos-sign reads $env:OBJCOPY to select the correct cross-objcopy binary.
+# Probed like the compiler above, since a host objcopy cannot read these ELFs.
+if (-not $env:OBJCOPY) {
+    $env:OBJCOPY = Resolve-CrossTool @('riscv-none-elf-objcopy', 'riscv64-unknown-elf-objcopy') 'riscv cross objcopy'
+}
 Write-Host "Signing cell binaries (Ed25519 dev key, objcopy=$($env:OBJCOPY))..."
-$sign_script = "scripts/sign-cell.py"
+$sign_script = "scripts/cellos-sign"
 if (-not (Test-Path $sign_script)) {
     Write-Host "ERROR: $sign_script not found — run from the Cellos repo root." -ForegroundColor Red
     exit 1
 }
 
-function Invoke-SignCell {
+$cells_to_sign = New-Object System.Collections.Generic.List[string]
+function Add-CellToSign {
     param([string]$Path)
     if (-not (Test-Path $Path)) { return }  # optional cells handled below
-    Write-Host "  signing $Path"
-    & $python $sign_script --in $Path --out $Path
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ERROR: sign-cell.py failed for $Path" -ForegroundColor Red
-        exit 1
-    }
+    $cells_to_sign.Add($Path)
 }
 
-# Sign the cells that are embedded / placed in the disk image.
-Invoke-SignCell "$rel_dir/app-init"
-Invoke-SignCell "$rel_dir/app-shell"
-Invoke-SignCell "$rel_dir/platform"
-Invoke-SignCell "$rel_dir/service-vfs"
-Invoke-SignCell "$rel_dir/service-config"
-Invoke-SignCell "$rel_dir/service-net"
-Invoke-SignCell "$rel_dir/service-net-broker"
-Invoke-SignCell "$rel_dir/service-compositor"
-Invoke-SignCell "$rel_dir/supervisor"
-Invoke-SignCell "$rel_dir/driver-nvme"
-Invoke-SignCell "$rel_dir/driver-e1000"
-Invoke-SignCell "$rel_dir/driver-virtio-net"
-Invoke-SignCell "$rel_dir/driver-virtio-blk"
-Invoke-SignCell "$rel_dir/driver-virtio-gpu"
-Invoke-SignCell "$rel_dir/service-input"
-Invoke-SignCell "$rel_dir/app-bench"
-Invoke-SignCell "$rel_dir/bench-probe"
-Invoke-SignCell "$rel_dir/app-net-tools"
-Invoke-SignCell "$rel_dir/app-sys-tools"
-Invoke-SignCell "$rel_dir/robot-demo"
-Invoke-SignCell "$rel_dir/robot-dashboard"
-Invoke-SignCell "$rel_dir/fb-console"
-Invoke-SignCell "$rel_dir/hypha-llm-gateway"
-Invoke-SignCell "$rel_dir/hypha-core"
-Invoke-SignCell "$rel_dir/hypha-tool-fs"
-Invoke-SignCell "$rel_dir/hypha-tool-sys"
-Invoke-SignCell "$rel_dir/hypha-tool-spawn"
-Invoke-SignCell "$rel_dir/input-test"
-Invoke-SignCell "$rel_dir/audio-demo"
-Invoke-SignCell "$rel_dir/app-https-demo"
-Invoke-SignCell "$rel_dir/http-smoke"
-Invoke-SignCell "$rel_dir/cfi-test"
-Invoke-SignCell "$rel_dir/hotswap-demo-v1"
-Invoke-SignCell "$rel_dir/hotswap-demo-v2"
-Invoke-SignCell "$rel_dir/ls"
-Invoke-SignCell "$rel_dir/cat"
-Invoke-SignCell "$rel_dir/echo"
-Invoke-SignCell "$rel_dir/ps"
-Invoke-SignCell "$rel_dir/kill"
-if (Test-Path "$rel_dir/lua")          { Invoke-SignCell "$rel_dir/lua" }
-if (Test-Path "$rel_dir/doom")         { Invoke-SignCell "$rel_dir/doom" }
-if (Test-Path "$rel_dir/tetris")       { Invoke-SignCell "$rel_dir/tetris" }
-if (Test-Path "$rel_dir/tetris-c")     { Invoke-SignCell "$rel_dir/tetris-c" }
-if (Test-Path "$rel_dir/tetris-lua")   { Invoke-SignCell "$rel_dir/tetris-lua" }
-if (Test-Path "$rel_dir/micropython")  { Invoke-SignCell "$rel_dir/micropython" }
-if (Test-Path "$rel_dir/posix-shim-test") { Invoke-SignCell "$rel_dir/posix-shim-test" }
+# Collect the cells that are embedded / placed in the disk image.
+Add-CellToSign "$rel_dir/app-init"
+Add-CellToSign "$rel_dir/app-shell"
+Add-CellToSign "$rel_dir/platform"
+Add-CellToSign "$rel_dir/service-vfs"
+Add-CellToSign "$rel_dir/service-config"
+Add-CellToSign "$rel_dir/service-net"
+Add-CellToSign "$rel_dir/service-net-broker"
+Add-CellToSign "$rel_dir/service-compositor"
+Add-CellToSign "$rel_dir/supervisor"
+Add-CellToSign "$rel_dir/driver-nvme"
+Add-CellToSign "$rel_dir/driver-e1000"
+Add-CellToSign "$rel_dir/driver-virtio-net"
+Add-CellToSign "$rel_dir/driver-virtio-blk"
+Add-CellToSign "$rel_dir/driver-virtio-gpu"
+Add-CellToSign "$rel_dir/service-input"
+Add-CellToSign "$rel_dir/app-bench"
+Add-CellToSign "$rel_dir/bench-probe"
+if ($include_capacity_probe) { Add-CellToSign "$rel_dir/capacity-probe" }
+Add-CellToSign "$rel_dir/app-net-tools"
+Add-CellToSign "$rel_dir/app-sys-tools"
+Add-CellToSign "$rel_dir/robot-demo"
+Add-CellToSign "$rel_dir/robot-dashboard"
+Add-CellToSign "$rel_dir/fb-console"
+Add-CellToSign "$rel_dir/hypha-llm-gateway"
+Add-CellToSign "$rel_dir/hypha-core"
+Add-CellToSign "$rel_dir/hypha-tool-fs"
+Add-CellToSign "$rel_dir/hypha-tool-sys"
+Add-CellToSign "$rel_dir/hypha-tool-spawn"
+Add-CellToSign "$rel_dir/input-test"
+Add-CellToSign "$rel_dir/audio-demo"
+Add-CellToSign "$rel_dir/app-https-demo"
+Add-CellToSign "$rel_dir/http-smoke"
+Add-CellToSign "$rel_dir/cfi-test"
+Add-CellToSign "$rel_dir/wx-test"
+Add-CellToSign "$rel_dir/vfs-test"
+Add-CellToSign "$rel_dir/hotswap-demo-v1"
+Add-CellToSign "$rel_dir/hotswap-demo-v2"
+Add-CellToSign "$rel_dir/ls"
+Add-CellToSign "$rel_dir/cat"
+Add-CellToSign "$rel_dir/echo"
+Add-CellToSign "$rel_dir/ps"
+Add-CellToSign "$rel_dir/kill"
+if (Test-Path "$rel_dir/lua")          { Add-CellToSign "$rel_dir/lua" }
+if (Test-Path "$rel_dir/doom")         { Add-CellToSign "$rel_dir/doom" }
+if (Test-Path "$rel_dir/tetris")       { Add-CellToSign "$rel_dir/tetris" }
+if (Test-Path "$rel_dir/tetris-c")     { Add-CellToSign "$rel_dir/tetris-c" }
+if (Test-Path "$rel_dir/tetris-lua")   { Add-CellToSign "$rel_dir/tetris-lua" }
+if (Test-Path "$rel_dir/micropython")  { Add-CellToSign "$rel_dir/micropython" }
+if (Test-Path "$rel_dir/posix-shim-test") { Add-CellToSign "$rel_dir/posix-shim-test" }
 # Sign Zig cells
 foreach ($zig_path in $zig_elfs.Values) {
-    if (Test-Path $zig_path) { Invoke-SignCell $zig_path }
+    if (Test-Path $zig_path) { Add-CellToSign $zig_path }
+}
+
+if ($cells_to_sign.Count -gt 0) {
+    Write-Host "  cellos-sign --sign ($($cells_to_sign.Count) cells)"
+    $sign_targets = $cells_to_sign.ToArray()
+    & $python $sign_script --objcopy $env:OBJCOPY --sign $sign_targets
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: cellos-sign refused — F1/F5 check failed or signing failed." -ForegroundColor Red
+        exit 1
+    }
 }
 
 Write-Host "All cells signed."
 
 # 1b. Update kernel embedded cells (init, shell, vfs, config) from release builds.
 # These 4 cells are embedded in kernel_fs.img via include_bytes!.
-# NOTE: cells are already signed in-place by Sign-Cell above.
+# NOTE: cells are already signed in-place by cellos-sign above.
 Write-Host "Updating kernel embedded cells..."
 $embedded = "kernel/src/embedded"
 # Only `init` is embedded as a separate blob (kernel/src/main.rs INIT_ELF).
@@ -256,6 +308,7 @@ $tetris_lua_bin = "$rel_dir/tetris-lua"   # Tetris-Lua — Lua 5.4 embedded, tet
 $upy_bin    = "$rel_dir/micropython"       # Phase 18: MicroPython runtime cell
 $bench_bin       = "$rel_dir/bench"             # Phase 22 benchmark cell
 $bench_probe_bin = "$rel_dir/bench-probe"      # bench probe/load child (VA 0x19000000)
+$capacity_probe_bin = "$rel_dir/capacity-probe" # A2/A3 OOM + MemInfo runtime probe
 $input_bin  = "$rel_dir/service-input"     # Phase 14: input service cell
 $net_bin    = "$rel_dir/service-net"       # Phase 15: network service cell
 $net_broker_bin   = "$rel_dir/service-net-broker" # L.0: cluster net-broker cell
@@ -287,6 +340,8 @@ $audio_bin = "$rel_dir/audio-demo"   # VirtIO sound test-tone cell (shell: `audi
 $https_demo_bin = "$rel_dir/app-https-demo"  # G14 TLS server-auth e2e gate (shell: `https-demo`)
 $http_smoke_bin = "$rel_dir/http-smoke"      # ostd::http + ostd::json e2e gate (shell: `http-smoke`)
 $cfi_test_bin   = "$rel_dir/cfi-test"        # Layer-2 CFI violation test (shell: `cfi-test`)
+$wx_test_bin    = "$rel_dir/wx-test"         # W^X violation test (shell: `wx-test`)
+$vfs_test_bin   = "$rel_dir/vfs-test"        # directory-capability pioneer (shell: `vfs-test`)
 $hotswap_demo_v1_bin = "$rel_dir/hotswap-demo-v1"  # M4.1 hotswap demo cell v1
 $hotswap_demo_v2_bin = "$rel_dir/hotswap-demo-v2"  # M4.1 hotswap demo cell v2
 $ls_bin   = "$rel_dir/ls"    # M3.2 embedded debug utils
@@ -397,6 +452,9 @@ if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin
 # the KERNEL loader (VIFS1/P2 only, no VFS), so the child spawns need VIFS1.
 if ($bench_bin)                       { $kfs_args += @($bench_bin,       "/bin/bench") }
 if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/bench-probe") }
+if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
+    $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
+}
 & $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
@@ -476,6 +534,9 @@ if (Test-Path $tetris_c_bin)   { $table_args += "/bin/tetris-c=$tetris_c_bin" }
 if (Test-Path $tetris_lua_bin) { $table_args += "/bin/tetris-lua=$tetris_lua_bin" }
 if ($bench_bin)       { $table_args += "/bin/bench=$bench_bin" }
 if (Test-Path "$rel_dir/bench-probe") { $table_args += "/bin/bench-probe=$bench_probe_bin" }
+if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
+    $table_args += "/bin/capacity-probe=$capacity_probe_bin"
+}
 if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
 if (Test-Path $net_bin)   { $table_args += "/bin/net=$net_bin" }
 if (Test-Path $net_broker_bin) { $table_args += "/bin/net-broker=$net_broker_bin" }
@@ -506,6 +567,8 @@ if (Test-Path $audio_bin) { $table_args += "/bin/audio-demo=$audio_bin" }
 if (Test-Path $https_demo_bin) { $table_args += "/bin/https-demo=$https_demo_bin" }
 if (Test-Path $http_smoke_bin) { $table_args += "/bin/http-smoke=$http_smoke_bin" }
 if (Test-Path $cfi_test_bin)   { $table_args += "/bin/cfi-test=$cfi_test_bin" }
+if (Test-Path $wx_test_bin)    { $table_args += "/bin/wx-test=$wx_test_bin" }
+if (Test-Path $vfs_test_bin)   { $table_args += "/bin/vfs-test=$vfs_test_bin" }
 if (Test-Path $hotswap_demo_v1_bin) { $table_args += "/bin/hotswap-demo-v1=$hotswap_demo_v1_bin" }
 if (Test-Path $hotswap_demo_v2_bin) { $table_args += "/bin/hotswap-demo-v2=$hotswap_demo_v2_bin" }
 # Zig cells (Tier 1b) — added when zig is in PATH and build-zig-cells.ps1 succeeds

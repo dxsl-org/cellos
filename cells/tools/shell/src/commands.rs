@@ -173,9 +173,10 @@ pub fn cmd_cat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<(
                             Err(e) => {
                                 let valid_len = e.valid_up_to();
                                 if valid_len > 0 {
-                                    let s = unsafe {
-                                        core::str::from_utf8_unchecked(&buffer[..valid_len])
-                                    };
+                                    // `valid_up_to()` is by definition the length of
+                                    // the longest valid prefix, so this never fails.
+                                    let s =
+                                        core::str::from_utf8(&buffer[..valid_len]).unwrap_or("");
                                     crate::executor::shell_print(s);
                                 }
 

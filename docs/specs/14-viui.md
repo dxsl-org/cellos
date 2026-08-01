@@ -1,288 +1,109 @@
-# Cellos UI Toolkit: ViUI
-**Version**: 1.0 (Definitive — supersedes Slint standard in specs/06-graphics.md §4)
-**Status**: Architectural Decision — awaiting G2 implementation
-**Last Updated**: 2026-06-07
+# Cellos UI Toolkit: ViUI v2
+
+**Version**: 2.0 (Reactive Signal Tree + dual-layer DSL)
+**Status**: Definitive — library architecture shipped; product qualification remains evidence-gated
+**Last Updated**: 2026-08-01 (D26)
 
 ---
 
-## 1. Quyết định kiến trúc
+## 1. Decision
 
-### Tại sao không dùng Slint / iced / egui
+ViUI is the Cellos-native `no_std + alloc` UI toolkit. Its normative model is a retained
+tree of `ViNode` objects whose state is carried by fine-grained `Signal<T>` values. A
+signal update invalidates the affected node/region; the app runner performs layout,
+event dispatch, and painting into the app-owned surface before sending damage to the
+compositor.
 
-| Library | Lý do loại |
-|---------|-----------|
-| **Slint** | GPL-3 viral hoặc $1+/device commercial. Không thể xây Cellos ecosystem trên license này — mọi App Cell downstream bị ảnh hưởng. |
-| **iced** | `iced_runtime` cần std async executor; `iced_winit` coupling không tách được clean cho bare-metal. |
-| **egui (port)** | Pipeline: widget → tessellate triangles → rasterize → pixels. Tessellation là overhead không cần thiết cho software renderer. Per-frame heap alloc. |
+The shipped architecture does **not** promise egui or iced API compatibility. Earlier
+immediate/Elm compatibility facades and their percentage claims are withdrawn.
 
-### ViUI: Custom toolkit, Cellos-native
+## 2. Runtime architecture
 
-ViUI được thiết kế từ đầu cho Cellos's constraints:
-- `#![no_std] + alloc` — native, không patch
-- Direct pixel rendering (không có triangle/path intermediate)
-- Event-driven, không game-loop (0 CPU khi idle)
-- Dual-facade API: egui-compatible + iced-compatible
-- MIT license — không viral, không per-device fee
-
----
-
-## 2. Kiến trúc layers
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    APP CELL CODE                        │
-│                                                         │
-│  Immediate Facade (egui-compatible)  │  Elm Facade     │
-│  ui.label("Hello")                   │  fn view()      │
-│  ui.button("Click").clicked()        │  fn update(msg) │
-└──────────────────────┬───────────────┴────────┬────────┘
-                       │ reconcile              │ retained
-           ┌───────────▼────────────────────────▼──────┐
-           │             ViUI Core Engine              │
-           │  ┌─────────┐ ┌──────────┐ ┌───────────┐  │
-           │  │ Widget  │ │ Layout   │ │  Event    │  │
-           │  │  Tree   │ │ Engine   │ │ Dispatch  │  │
-           │  │(retained│ │(flexbox- │ │   (Elm    │  │
-           │  │  nodes) │ │  lite)   │ │ messages) │  │
-           │  └─────────┘ └──────────┘ └───────────┘  │
-           └──────────────────┬─────────────────────────┘
-                              │
-           ┌──────────────────▼──────────────────────┐
-           │              ViCanvas                   │
-           │  fill_rect / draw_text / clip_push      │
-           │  (direct pixel ops — no tessellation)   │
-           └──────────────────┬──────────────────────┘
-                              │
-           ┌──────────────────▼──────────────────────┐
-           │      embedded-graphics DrawTarget        │
-           │       ← ViSurface::pixels_mut()          │
-           └──────────────────┬──────────────────────┘
-                              │
-                        DamageNotify
-                              │
-                         Compositor
+```text
+App state (`Signal<T>` / computed subscriptions)
+        │
+        ▼
+Reactive node tree (`ViNode` + signal-driven widgets)
+        │ layout / input / paint invalidation
+        ▼
+App runner + dirty-region renderer
+        │
+        ▼
+App-owned `ViSurface` → DamageNotify → compositor
 ```
 
----
+Normative properties:
 
-## 3. Core Engine
+- State belongs to signals and application objects, not a global widget-state store.
+- Nodes receive constraints, events, and paint contexts through the `ViNode` contract.
+- ViUI renders inside the App Cell; the compositor is toolkit-agnostic.
+- Updates are event-driven. Animation ticks are explicit and feed signal changes.
+- Dirty-region behavior is an optimization contract, not permission to skip correctness
+  when layout changes affect ancestors or siblings.
 
-### Widget trait
+Source anchors: `libs/viui/src/signal.rs`, `node.rs`, `app_runner.rs`, and
+`dirty_region.rs`.
 
-```rust
-// libs/viui/src/widget.rs
-pub trait ViWidget: 'static {
-    fn layout(&self, cx: &LayoutCx, constraints: Constraints) -> Size;
-    fn paint(&self, cx: &mut PaintCx);        // PaintCx wraps ViCanvas
-    fn event(&mut self, cx: &mut EventCx, e: &Event) -> EventStatus;
-    fn children(&self) -> &[Box<dyn ViWidget>];
-}
-```
+## 3. Dual authoring layer
 
-**Retained mode**: widget tree chỉ rebuild khi state thay đổi. Không rebuild toàn bộ mỗi frame như egui.
+"Dual layer" means two ways to create the same reactive node graph:
 
-### Layout Engine
+1. **Rust node API** — construct `ViNode` implementations and bind `Signal<T>` values
+   directly. This is the escape hatch and the canonical generated-code target.
+2. **`.vi` declarative DSL** — compile an inline document with `vi_design!`, or compile
+   standalone `.vi` files at build time with `viui-build`.
 
-Flexbox-lite: `Column`, `Row`, `Stack`, `Padding`, `SizedBox`. Constraints-based (min/max size), không layout toàn bộ tree khi dirty region nhỏ.
+Both paths must produce ordinary Rust/node structures. The DSL does not introduce a
+second runtime, hidden interpreter, or compositor protocol.
 
-### Event Dispatch (Elm)
+Source anchors: `libs/viui-macros/src/lib.rs`, `tools/viui-build/src/lib.rs`, and the
+shared compiler/code generator used by them.
 
-```rust
-// Elm contract — iced-compatible
-pub trait ViApp: 'static {
-    type Message: 'static;
-    fn view(&self) -> Element<Self::Message>;
-    fn update(&mut self, msg: Self::Message);
-}
-```
+## 4. Shipped component surface
 
-`Message` types map tự nhiên sang Cellos IPC messages — không cần adapter layer.
+The source tree currently provides:
 
----
+- flex layout, wrapping, gap, grow, and shrink behavior;
+- labels, buttons, checkbox, slider, progress, text editing, dropdown, and image nodes;
+- list and virtual-list nodes with signal-backed data;
+- stack and tab navigation;
+- overlay/menu support;
+- line and bar charts;
+- signal-driven animation and dirty-region repaint.
 
-## 4. ViCanvas — Direct Pixel Rendering
+This list describes implemented library surface. Exact widget/test counts belong in
+generated project status, not this normative specification.
 
-```rust
-pub trait ViCanvas {
-    fn fill_rect(&mut self, rect: Rect, color: Color);
-    fn draw_text(&mut self, pos: Point, text: &str, style: TextStyle);
-    fn draw_image(&mut self, rect: Rect, data: &[u8], fmt: PixelFormat);
-    fn draw_line(&mut self, a: Point, b: Point, color: Color, width: u8);
-    fn clip_push(&mut self, rect: Rect);
-    fn clip_pop(&mut self);
-}
-```
+## 5. Rendering and text
 
-Implement trên `embedded-graphics DrawTarget`. Không có tessellation pipeline — widget gọi `fill_rect` để paint thẳng vào `&mut [u8]`.
+ViUI paints directly into the app-owned pixel surface. It does not require a triangle
+tessellation pipeline or compositor-side widget knowledge. Text may use the small bitmap
+path for diagnostics or the cached scalable-font path for application UI. Applications
+must damage every pixel region affected by a visual or layout change.
 
-**Tại sao nhanh hơn egui/iced**: egui cần tessellate → rasterize triangles. ViCanvas gọi `memset`/`memcpy` pattern trực tiếp — gần memory bandwidth của hardware.
+## 6. Non-goals
 
----
+- Drop-in egui, iced, Slint, DOM, or web-framework compatibility.
+- A second application event loop hidden inside the toolkit.
+- Compositor-owned application state or widget layout.
+- Unmeasured latency, allocation, or comparative performance guarantees.
 
-## 5. Dual-Facade API
+Slint remains rejected as the project standard because its licensing/deployment model
+does not fit the intended ecosystem. Third-party toolkit comparisons are rationale, not
+an API compatibility contract.
 
-### Immediate Mode Facade (egui-compatible)
+## 7. Verification gates
 
-```rust
-// libs/viui/src/ui.rs — ~95% API compatibility với egui
-impl Ui<'_> {
-    pub fn label(&mut self, text: impl Into<String>) -> Response;
-    pub fn button(&mut self, text: impl Into<String>) -> Response;
-    pub fn text_edit_singleline(&mut self, text: &mut String) -> Response;
-    pub fn checkbox(&mut self, checked: &mut bool, label: &str) -> Response;
-    pub fn horizontal(&mut self, f: impl FnOnce(&mut Ui));
-    pub fn vertical(&mut self, f: impl FnOnce(&mut Ui));
-    pub fn add(&mut self, widget: impl ViWidget) -> Response;
-}
-
-impl Response {
-    pub fn clicked(&self) -> bool;
-    pub fn hovered(&self) -> bool;
-    pub fn changed(&self) -> bool;
-}
-```
-
-Developer biết egui có thể dùng ViUI với zero learning curve. Khác biệt duy nhất: không có `eframe::App` — thay bằng `ViApp` trait; không có backend setup — Cellos lo thay.
-
-### Elm Facade (iced-compatible)
-
-```rust
-// libs/viui/src/elm.rs — ~90% API compatibility với iced
-pub fn column<Msg>(children: Vec<Element<Msg>>) -> Element<Msg>;
-pub fn row<Msg>(children: Vec<Element<Msg>>) -> Element<Msg>;
-pub fn text<Msg>(content: impl Into<String>) -> Element<Msg>;
-pub fn button<Msg>(content: impl Into<String>) -> Element<Msg>;
-// macro
-viui::column![text("Hello"), button("Click").on_press(Msg::Click)]
-```
+A capability is "shipped" only when its source and focused tests build in the supported
+workspace lane. End-to-end qualification additionally requires a signed App Cell,
+input-to-render integration coverage, compositor damage validation, and measured target
+hardware results. Performance claims require a checked-in benchmark command, fixture,
+target profile, and generated result.
 
 ---
 
-## 6. Text Rendering
+## See also
 
-### Hai tầng
-
-| Tầng | Crate | Dùng khi | Tốc độ |
-|------|-------|----------|--------|
-| **Bitmap 8×8** | internal (`libs/ostd/src/font.rs`) | CLI mode, debug text, minimal apps | ~0.001ms/glyph |
-| **GlyphAtlas** | `fontdue` + `libs/ostd/src/font_atlas.rs` | UI apps cần scalable font, Unicode | ~0.002ms/glyph (cache hit) |
-
-### GlyphAtlas design
-
-```rust
-// libs/ostd/src/font_atlas.rs
-pub struct GlyphAtlas {
-    data:    Box<[u8]>,              // 512×512 alpha channel
-    entries: BTreeMap<GlyphKey, GlyphEntry>,
-}
-
-impl GlyphAtlas {
-    pub fn prewarm_ascii(&mut self, font: &fontdue::Font, size: f32);
-    pub fn get_or_insert(&mut self, font: &fontdue::Font,
-                         c: char, size: f32) -> &GlyphEntry;
-}
-```
-
-Pre-warm ASCII 0x20–0x7E tại app startup (~19ms một lần). Cache hit sau đó = memcpy ~200 bytes — tốc độ bằng bitmap font.
-
-**Tại sao không FreeType**: C FFI, không no_std, vi phạm Law 4 trong App Cells.
-
----
-
-## 7. Text rendering gap — fontdue vs FreeType vs ab_glyph
-
-fontdue được giữ làm rasterizer vì: no_std native, pure Rust, anti-aliasing tốt. Vấn đề hiện tại là thiếu atlas cache — không phải rasterizer chậm. ab_glyph (egui's rasterizer) là alternative nếu fontdue có vấn đề.
-
----
-
-## 8. Tích hợp với Compositor
-
-ViUI chạy hoàn toàn trong App Cell. Compositor không biết ViUI tồn tại.
-
-```
-App Cell:
-  ViApp::view() → ViUI render → ViSurface::pixels_mut()
-  ViSurface::damage(dirty_rect) → DamageNotify IPC → Compositor
-
-Compositor:
-  Nhận DamageNotify → blend surface vào framebuffer → VirtIO GPU flush
-```
-
-Không có round-trip giữa ViUI và Compositor trong render path — chỉ 24-byte DamageNotify sau khi app đã vẽ xong.
-
----
-
-## 9. Performance Profile
-
-| Scenario | ViUI | egui | iced | Slint |
-|----------|------|------|------|-------|
-| Idle (no change) | ~0 | ~6-17ms (game loop) | ~0 | ~0 |
-| Button press (small dirty) | ~0.05ms | ~6-17ms | ~0.5-2ms | ~0.1-0.3ms |
-| Full screen redraw 1080p | ~2-5ms | ~6-17ms | ~8-20ms | ~5-15ms |
-| Per-frame alloc | zero | high | low | zero |
-
-ViUI nhanh nhất vì pipeline ngắn nhất (widget → pixels trực tiếp).
-
----
-
-## 10. Crate location
-
-```
-libs/viui/
-├── Cargo.toml           # no_std, alloc only
-├── src/
-│   ├── lib.rs
-│   ├── widget.rs        # ViWidget trait
-│   ├── layout.rs        # LayoutEngine, Constraints
-│   ├── canvas.rs        # ViCanvas trait + FramebufferCanvas
-│   ├── event.rs         # Event, EventStatus, Focus
-│   ├── response.rs      # Response (clicked/hovered/changed)
-│   ├── ui.rs            # Immediate mode facade (egui-compatible)
-│   ├── elm.rs           # Elm facade (iced-compatible)
-│   ├── theme.rs         # Theme trait, dark/light defaults
-│   └── widgets/
-│       ├── label.rs
-│       ├── button.rs
-│       ├── text_edit.rs
-│       ├── checkbox.rs
-│       ├── scroll_area.rs
-│       └── image.rs
-```
-
-App Cells dùng: `use viui::prelude::*;` + `use ostd::display::ViSurface;`
-
----
-
-## 11. Phân tầng theo profile
-
-| Mode | UI usage |
-|------|----------|
-| **CLI** | Bitmap font only, không load ViUI |
-| **Kiosk** | ViUI full-screen single app, GlyphAtlas, no window chrome |
-| **Desktop** | ViUI multi-window, window decorations, taskbar — G2 |
-
----
-
-## 12. Milestones
-
-| Phase | Nội dung | Stage |
-|-------|----------|-------|
-| P01 | Core Engine (Widget trait, Layout, Event, Elm) | G2 start |
-| P02 | ViCanvas + DrawTarget (direct pixel rendering) | G2 start |
-| P03 | Immediate Mode Facade (egui Ui API) | G2 start |
-| P04 | Basic Widget Set (Label, Button, TextInput, CheckBox, ScrollArea) | G2 start |
-| P05 | GlyphAtlas + fontdue scalable text | G2 start |
-| P06 | Theming (dark/light, custom palette, `Theme` trait) | G2 |
-| P07 | Elm Facade (iced view/update/Message API) | G2 |
-| P08 | Animation system (transitions, property animation) | G2 later |
-
-P01–P06 là G2 MVP. P07–P08 là G2 polish.
-
----
-
-## References
-
-- [specs/06-graphics.md](06-graphics.md) — Compositor + Input architecture
-- [libs/ostd/src/display.rs](../../libs/ostd/src/display.rs) — ViSurface API
-- [libs/api/src/display.rs](../../libs/api/src/display.rs) — Compositor protocol (DamageNotify, AttachGrant)
-- [cells/services/compositor/](../../cells/services/compositor/) — Compositor implementation
+- [06-graphics.md](06-graphics.md) — surfaces, compositor, and damage protocol
+- [10-testing.md](10-testing.md) — verification layers
+- [21-documentation-architecture.md](21-documentation-architecture.md) — normative versus generated status

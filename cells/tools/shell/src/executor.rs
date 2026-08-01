@@ -1,92 +1,25 @@
 //! Shell AST executor — runs parsed commands, handles pipes and redirects.
 //!
-//! Pipes between built-in commands are implemented via an in-memory `OutputSink`:
-//! each pipeline stage's output is captured into a `Vec<u8>`, then passed as
-//! stdin to the next stage.  `SinkGuard` (RAII, Law 8) ensures the sink is
-//! restored on every exit path, including early returns.
+//! Pipes between built-in commands are implemented via an in-memory capture
+//! stack (`shell_state`): each pipeline stage's output is captured into a
+//! `Vec<u8>`, then passed as stdin to the next stage. `CaptureGuard` (RAII,
+//! Law 8) pops the capture on every exit path, including early returns.
+//!
+//! All shell state lives in `shell_state` behind locks; this module holds no
+//! mutable statics of its own.
 
 extern crate alloc;
 
 use crate::jobs::{JobState, Jobs};
 use crate::parser::{Ast, Cmd, QuoteStyle, Redirect, Word};
+use crate::shell_state::{self as state, CaptureGuard, LoopSignal};
 use crate::text_engine::args::{with_legacy_parts, ArgCursor, UtilityStatus};
 use crate::text_engine::records::{extend_input, InputBufferError, MAX_INPUT_BYTES};
 use crate::text_tools::{awk, sed};
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::UnsafeCell;
 use ostd::prelude::*;
 use ostd::syscall;
-
-// ── Output sink (pipeline capture) ───────────────────────────────────────────
-//
-// All shell command output MUST go through `shell_print` / `shell_println`
-// rather than `ostd::io::print` directly.  When the sink is set to `Buffer`,
-// output is captured into the pointed-to Vec instead of the serial console.
-//
-// Only the single shell task reads or writes `CURRENT_SINK`.  External cells
-// never call `shell_print`, so there is no concurrent-access hazard.
-// `CURRENT_STDIN` follows the same pattern for pipe-fed stdin data.
-
-enum OutputSink {
-    Console,
-    Buffer(*mut Vec<u8>),
-}
-
-/// Newtype that asserts `Sync` for an `UnsafeCell` in a single-task context.
-///
-/// Only valid when ALL accesses are guaranteed to come from one task (the shell).
-/// External cells never call `shell_print` or `shell_stdin`, so the invariant holds.
-struct SingleTaskCell<T>(UnsafeCell<T>);
-
-// SAFETY: the shell is a single-task executor; no other task accesses these statics.
-unsafe impl<T> Sync for SingleTaskCell<T> {}
-
-impl<T> SingleTaskCell<T> {
-    const fn new(val: T) -> Self {
-        Self(UnsafeCell::new(val))
-    }
-    fn get(&self) -> *mut T {
-        self.0.get()
-    }
-}
-
-static CURRENT_SINK: SingleTaskCell<OutputSink> = SingleTaskCell::new(OutputSink::Console);
-
-/// True while executing the command of an `Ast::Background` (`cmd &`).
-///
-/// A backgrounded EXTERNAL cell (e.g. `httpd 9092 /file &`) must NOT be
-/// sys_wait'd — httpd loops forever, so waiting parks the shell in sys_wait
-/// indefinitely and no subsequent command runs (the symptom: a second
-/// `vwrite` after `httpd &` never executed, so httpd kept serving stale
-/// content). When set, spawn_external returns right after spawn. Built-ins
-/// are unaffected (they run synchronously in the shell task either way).
-static BG_SPAWN: SingleTaskCell<bool> = SingleTaskCell::new(false);
-
-/// Points to the current stdin buffer for pipe-aware built-ins.
-/// Null when no pipe is active (reads from real serial stdin).
-static CURRENT_STDIN: SingleTaskCell<*const [u8]> =
-    SingleTaskCell::new(core::ptr::null::<[u8; 0]>() as *const [u8]);
-
-/// RAII guard that restores the previous `OutputSink` on all exit paths (Law 8).
-struct SinkGuard(OutputSink);
-
-impl SinkGuard {
-    fn new(new_sink: OutputSink) -> Self {
-        // SAFETY: single shell task; exclusive access guaranteed.
-        let prev = unsafe { core::mem::replace(&mut *CURRENT_SINK.get(), new_sink) };
-        SinkGuard(prev)
-    }
-}
-
-impl Drop for SinkGuard {
-    fn drop(&mut self) {
-        // SAFETY: single shell task; restoring saved sink on any exit path.
-        unsafe {
-            *CURRENT_SINK.get() = core::mem::replace(&mut self.0, OutputSink::Console);
-        }
-    }
-}
 
 /// Route command output through the current sink.
 ///
@@ -94,11 +27,7 @@ impl Drop for SinkGuard {
 /// capture works.  The prompt and internal error diagnostics call
 /// `ostd::io::print` directly to always reach the console regardless of sink.
 pub fn shell_print(s: &str) {
-    // SAFETY: only the shell task reads/writes CURRENT_SINK.
-    match unsafe { &*CURRENT_SINK.get() } {
-        OutputSink::Console => ostd::io::print(s),
-        OutputSink::Buffer(v) => unsafe { (**v).extend_from_slice(s.as_bytes()) },
-    }
+    state::write_out(s);
 }
 
 /// `shell_print(s)` followed by a newline.
@@ -107,18 +36,13 @@ pub fn shell_println(s: &str) {
     shell_print("\n");
 }
 
-/// Return the current pipe-fed stdin bytes, or an empty slice.
+/// Return the current pipe-fed stdin bytes, empty when no pipe is active.
 ///
 /// Commands that accept either a file argument or stdin (e.g., `grep`, `wc`)
-/// call this when no file path is given.
-pub fn shell_stdin() -> &'static [u8] {
-    // SAFETY: CURRENT_STDIN is set and live for the duration of dispatch_builtin.
-    let ptr = unsafe { *CURRENT_STDIN.get() };
-    if ptr.is_null() {
-        &[]
-    } else {
-        unsafe { &*ptr }
-    }
+/// call this when no file path is given. Owned rather than borrowed — see
+/// `shell_state::stdin_bytes`.
+pub fn shell_stdin() -> Vec<u8> {
+    state::stdin_bytes()
 }
 
 /// All recognized shell built-in names, used by tab completion.
@@ -131,205 +55,18 @@ pub const BUILTINS: &[&str] = &[
     "vwrite", "wc",
 ];
 
-// ── Shell function store ──────────────────────────────────────────────────────
+// ── Shell-global state ────────────────────────────────────────────────────────
 //
-// Functions are stored as (name, body_text) pairs.  When a command name matches
-// a stored function, its body text is re-parsed and executed in the current
-// shell context (same Jobs, same VARS store).
+// Functions, variables, the exit flag and the loop signal all live in
+// `shell_state` behind locks. These aliases keep the call sites in this module
+// short and mark which of them the rest of the crate may use.
 
-const MAX_FUNS: usize = 8;
-
-static mut FUNS: [(bool, [u8; 32], [u8; 480]); MAX_FUNS] =
-    [(false, [0u8; 32], [0u8; 480]); MAX_FUNS];
-
-pub fn define_function(name: &str, body: &str) {
-    let nb = name.as_bytes();
-    let bb = body.as_bytes();
-    let nlen = nb.len().min(31);
-    let blen = bb.len().min(479);
-    // SAFETY: single shell task; no concurrent writes.
-    // SAFETY: addr_of_mut! avoids materializing a `&mut` directly on the
-    // static-mut path expression (satisfies `clippy::static_mut_refs`); the
-    // single-shell-task invariant above still makes this reference exclusive.
-    let store = unsafe { &mut *core::ptr::addr_of_mut!(FUNS) };
-    // Update existing.
-    for slot in store.iter_mut() {
-        if slot.0 && slot.1[..nlen] == nb[..nlen] && slot.1[nlen] == 0 {
-            slot.2[..blen].copy_from_slice(&bb[..blen]);
-            slot.2[blen] = 0;
-            return;
-        }
-    }
-    // First empty slot.
-    for slot in store.iter_mut() {
-        if !slot.0 {
-            slot.0 = true;
-            slot.1[..nlen].copy_from_slice(&nb[..nlen]);
-            slot.1[nlen] = 0;
-            slot.2[..blen].copy_from_slice(&bb[..blen]);
-            slot.2[blen] = 0;
-            return;
-        }
-    }
-}
-
-fn get_function(name: &str) -> Option<&'static str> {
-    let nb = name.as_bytes();
-    let nlen = nb.len().min(31);
-    // SAFETY: single shell task; no concurrent reads.
-    // SAFETY: addr_of! avoids materializing a `&` directly on the static-mut
-    // path expression (satisfies `clippy::static_mut_refs`); single shell task.
-    let store = unsafe { &*core::ptr::addr_of!(FUNS) };
-    for slot in store.iter() {
-        if slot.0 && slot.1[..nlen] == nb[..nlen] && slot.1[nlen] == 0 {
-            let blen = slot.2.iter().position(|&b| b == 0).unwrap_or(480);
-            return core::str::from_utf8(&slot.2[..blen]).ok();
-        }
-    }
-    None
-}
-
-// ── Shell exit signal ─────────────────────────────────────────────────────────
-//
-// `exit [N]` sets this flag; the shell's main run() loop checks it after each
-// command and terminates when set.  Single-threaded — static is safe.
-
-static mut EXIT_REQUESTED: bool = false;
-static mut EXIT_CODE_VALUE: i32 = 0;
-
-/// Signal the shell to exit with the given code on its next loop iteration.
-pub fn request_exit(code: i32) {
-    // SAFETY: single shell task; no concurrent writes.
-    unsafe {
-        EXIT_REQUESTED = true;
-        EXIT_CODE_VALUE = code;
-    }
-}
-
-/// True if `exit` has been called; clears the flag.
 #[cfg(not(feature = "shell_test"))] // reason: only the REPL loop can honour an exit request
-pub fn take_exit_request() -> Option<i32> {
-    // SAFETY: single shell task; no concurrent reads/writes.
-    unsafe {
-        if EXIT_REQUESTED {
-            EXIT_REQUESTED = false;
-            Some(EXIT_CODE_VALUE)
-        } else {
-            None
-        }
-    }
-}
-
-// ── Loop control signal ───────────────────────────────────────────────────────
-//
-// `break` and `continue` built-ins set a static signal that the nearest
-// enclosing while/for executor arm consumes.  The shell is single-threaded
-// (one task, cooperative scheduling) so a static flag is safe.
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LoopSignal {
-    None,
-    Break,
-    Continue,
-}
-
-static mut LOOP_SIGNAL: LoopSignal = LoopSignal::None;
-
-// Only called from within this module (the `break`/`continue` builtins below),
-// so this stays private to match `LoopSignal`'s privacy — a `pub` fn exposing
-// a private type tripped the `private_interfaces` lint.
-fn set_loop_signal(s: LoopSignal) {
-    // SAFETY: single shell task; no concurrent writes.
-    unsafe {
-        LOOP_SIGNAL = s;
-    }
-}
-
-fn take_loop_signal() -> LoopSignal {
-    // SAFETY: single shell task; no concurrent access.
-    unsafe {
-        let s = LOOP_SIGNAL;
-        LOOP_SIGNAL = LoopSignal::None;
-        s
-    }
-}
-
-// ── Shell variable store ──────────────────────────────────────────────────────
-//
-// Up to 16 named variables, keyed as fixed-width byte arrays.
-// The shell runs as a single task with no concurrent access, so a static
-// array is safe here.  Lifetimes of values returned by get_var are bounded
-// to the next set_var call — callers must not keep references across mutations.
-
-const MAX_VARS: usize = 16;
-
-// Slot layout: (occupied, key[32], value[128]).  NUL-terminated on set.
-static mut VARS: [(bool, [u8; 32], [u8; 128]); MAX_VARS] =
-    [(false, [0u8; 32], [0u8; 128]); MAX_VARS];
-
-fn unset_var(key: &str) {
-    let kb = key.as_bytes();
-    let klen = kb.len().min(31);
-    // SAFETY: single shell task; no concurrent writes.
-    // SAFETY: addr_of_mut! avoids materializing a `&mut` directly on the
-    // static-mut path expression (satisfies `clippy::static_mut_refs`); the
-    // single-shell-task invariant above still makes this reference exclusive.
-    let store = unsafe { &mut *core::ptr::addr_of_mut!(VARS) };
-    for slot in store.iter_mut() {
-        if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
-            slot.0 = false;
-            return;
-        }
-    }
-}
-
-fn set_var(key: &str, value: &str) {
-    let kb = key.as_bytes();
-    let vb = value.as_bytes();
-    // SAFETY: single shell task; no concurrent writes to VARS.
-    // SAFETY: addr_of_mut! avoids materializing a `&mut` directly on the
-    // static-mut path expression (satisfies `clippy::static_mut_refs`); the
-    // single-shell-task invariant above still makes this reference exclusive.
-    let store = unsafe { &mut *core::ptr::addr_of_mut!(VARS) };
-    let klen = kb.len().min(31);
-    let vlen = vb.len().min(127);
-    // Update existing slot first.
-    for slot in store.iter_mut() {
-        if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
-            slot.2[..vlen].copy_from_slice(&vb[..vlen]);
-            slot.2[vlen] = 0;
-            return;
-        }
-    }
-    // Use first empty slot.
-    for slot in store.iter_mut() {
-        if !slot.0 {
-            slot.0 = true;
-            slot.1[..klen].copy_from_slice(&kb[..klen]);
-            slot.1[klen] = 0;
-            slot.2[..vlen].copy_from_slice(&vb[..vlen]);
-            slot.2[vlen] = 0;
-            return;
-        }
-    }
-    // Store full — silently drop. 16 variables is sufficient for scripts.
-}
-
-fn get_var(key: &str) -> Option<&'static str> {
-    let kb = key.as_bytes();
-    let klen = kb.len().min(31);
-    // SAFETY: single shell task; no concurrent reads.
-    // SAFETY: addr_of! avoids materializing a `&` directly on the static-mut
-    // path expression (satisfies `clippy::static_mut_refs`); single shell task.
-    let store = unsafe { &*core::ptr::addr_of!(VARS) };
-    for slot in store.iter() {
-        if slot.0 && slot.1[..klen] == kb[..klen] && slot.1[klen] == 0 {
-            let vlen = slot.2.iter().position(|&b| b == 0).unwrap_or(128);
-            return core::str::from_utf8(&slot.2[..vlen]).ok();
-        }
-    }
-    None
-}
+pub use crate::shell_state::take_exit_request;
+pub use crate::shell_state::{define_function, request_exit};
+use crate::shell_state::{
+    get_function, get_var, set_loop_signal, set_var, take_loop_signal, unset_var,
+};
 
 /// Expand a single token: `$NAME` (whole-token only) → variable value.
 /// Non-`$` tokens are returned unchanged (as an owned String clone).
@@ -401,8 +138,9 @@ fn expand_token(s: &str) -> String {
                     j += 1;
                 }
                 if depth == 0 {
-                    // SAFETY: bytes[inner_start..j] is ASCII shell token chars.
-                    let inner = unsafe { core::str::from_utf8_unchecked(&bytes[inner_start..j]) };
+                    // bytes[inner_start..j] is a run of shell token chars, which the
+                    // parser guarantees are ASCII — the checked decode cannot fail.
+                    let inner = core::str::from_utf8(&bytes[inner_start..j]).unwrap_or("");
                     // Reject nested $(...) — pass $(  literally so the user can see the issue.
                     if !inner.contains("$(") {
                         let captured = run_capture(inner.trim());
@@ -419,7 +157,7 @@ fn expand_token(s: &str) -> String {
             if next == b'?' {
                 // $? — exit code of the last command.
                 if let Some(v) = get_var("?") {
-                    result.push_str(v);
+                    result.push_str(&v);
                 }
                 i += 2;
                 continue;
@@ -427,7 +165,7 @@ fn expand_token(s: &str) -> String {
             if next == b'#' {
                 // $# — positional argument count.
                 if let Some(v) = get_var("#") {
-                    result.push_str(v);
+                    result.push_str(&v);
                 }
                 i += 2;
                 continue;
@@ -435,16 +173,17 @@ fn expand_token(s: &str) -> String {
             if next == b'@' {
                 // $@ — all positional arguments joined with spaces.
                 if let Some(v) = get_var("@") {
-                    result.push_str(v);
+                    result.push_str(&v);
                 }
                 i += 2;
                 continue;
             }
             if next.is_ascii_digit() && next != b'0' {
                 // $1..$9 — single-digit positional parameter.
-                let key = unsafe { core::str::from_utf8_unchecked(&bytes[i + 1..i + 2]) };
+                // Guarded by `next.is_ascii_digit()` above.
+                let key = core::str::from_utf8(&bytes[i + 1..i + 2]).unwrap_or("");
                 if let Some(v) = get_var(key) {
-                    result.push_str(v);
+                    result.push_str(&v);
                 }
                 i += 2;
                 continue;
@@ -456,10 +195,10 @@ fn expand_token(s: &str) -> String {
                     .take_while(|&&b| b.is_ascii_alphanumeric() || b == b'_')
                     .count()
                     + start;
-                // SAFETY: bytes[start..end] contains only ASCII alphanumeric / '_'.
-                let name = unsafe { core::str::from_utf8_unchecked(&bytes[start..end]) };
+                // `take_while` above accepted only ASCII alphanumeric / '_'.
+                let name = core::str::from_utf8(&bytes[start..end]).unwrap_or("");
                 if let Some(v) = get_var(name) {
-                    result.push_str(v);
+                    result.push_str(&v);
                 }
                 // Unset variables expand to empty string (POSIX default).
                 i = end;
@@ -488,19 +227,14 @@ fn expand_word(word: &Word) -> String {
 /// Parse and execute `line`, capturing all `shell_print` output into a `Vec<u8>`.
 ///
 /// Used by the `shell_test` feature harness to assert on command output without
-/// requiring a real serial console.  The `SinkGuard` ensures the sink is restored
-/// even if the command panics or returns early.
-///
-/// Precondition: must be called from the single shell task (same `SingleTaskCell`
-/// invariant as `shell_print`).
+/// requiring a real serial console.  The `CaptureGuard` pops the capture even if
+/// the command panics or returns early.
 #[cfg(feature = "shell_test")]
 pub fn capture_line(line: &str, jobs: &mut Jobs) -> Vec<u8> {
-    let mut out: Vec<u8> = Vec::new();
-    let _guard = SinkGuard::new(OutputSink::Buffer(&mut out as *mut _));
+    let guard = CaptureGuard::new();
     let ast = crate::parser::parse(line);
     execute(&ast, jobs);
-    drop(_guard);
-    out
+    guard.finish()
 }
 
 /// Execute an `Ast` and return the last command's exit code.
@@ -529,14 +263,9 @@ pub fn execute(ast: &Ast, jobs: &mut Jobs) -> i32 {
             ostd::io::println("] running");
             // Signal spawn_external to skip sys_wait so a long-running external
             // cell (httpd) does not park the shell forever. Built-ins ignore it.
-            // SAFETY: single shell task; flag cleared on the same call frame.
-            unsafe {
-                *BG_SPAWN.get() = true;
-            }
+            state::set_bg_spawn(true);
             exec_cmd(cmd, &[], jobs);
-            unsafe {
-                *BG_SPAWN.get() = false;
-            }
+            state::set_bg_spawn(false);
             jobs.set_state(jid, JobState::Done);
             0
         }
@@ -636,14 +365,9 @@ fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
         if i == last_idx {
             // Last stage: run directly (no intermediate capture).
             // Wire pipe stdin so built-ins without a file path read from it.
-            // SAFETY: stdin_data is alive for the duration of exec_cmd.
-            unsafe {
-                *CURRENT_STDIN.get() = stdin_data.as_slice() as *const [u8];
-            }
+            state::set_stdin(&stdin_data);
             let code = exec_cmd(cmd, &stdin_data, jobs);
-            unsafe {
-                *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8];
-            }
+            state::clear_stdin();
             return code;
         }
         stdin_data = capture_cmd(cmd, &stdin_data, jobs);
@@ -653,17 +377,13 @@ fn exec_pipeline(cmds: &[Cmd], jobs: &mut Jobs) -> i32 {
 
 /// Run a command and capture its output into a `Vec<u8>`.
 ///
-/// Uses `OutputSink::Buffer` so that any built-in calling `shell_print` writes
-/// into `out` instead of the serial console.  The `SinkGuard` ensures the
-/// previous sink (Console or an outer Buffer for nested pipelines) is restored
-/// on every exit path.
+/// Pushes a capture so that any built-in calling `shell_print` writes into it
+/// instead of the serial console. The guard pops it on every exit path, which is
+/// what makes an outer capture (a nested pipeline, or `$(...)`) resume correctly.
 fn capture_cmd(cmd: &Cmd, stdin: &[u8], jobs: &mut Jobs) -> Vec<u8> {
-    let mut out: Vec<u8> = Vec::new();
-    let _guard = SinkGuard::new(OutputSink::Buffer(&mut out as *mut _));
+    let guard = CaptureGuard::new();
     exec_cmd(cmd, stdin, jobs);
-    // _guard.drop() restores the previous sink before `out` is returned.
-    drop(_guard);
-    out
+    guard.finish()
 }
 
 /// Execute one simple command.
@@ -771,19 +491,17 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         });
 
     // Wire the pipe-fed stdin so pipe-aware built-ins can read it.
-    // SAFETY: effective_stdin is alive for the duration of dispatch_builtin.
-    unsafe {
-        *CURRENT_STDIN.get() = effective_stdin as *const [u8];
-    }
+    state::set_stdin(effective_stdin);
 
     let code = if let Some((path, append)) = stdout_redir {
         // Capture this command's output into a buffer, then write to VFS.
-        let mut captured: Vec<u8> = Vec::new();
+        let captured: Vec<u8>;
         let status;
         {
-            let _guard = SinkGuard::new(OutputSink::Buffer(&mut captured as *mut _));
+            let guard = CaptureGuard::new();
             status = dispatch_builtin(prog, &args, jobs);
-        } // _guard drops here, restoring sink before the VFS write
+            captured = guard.finish();
+        } // capture popped here, before the VFS write
         let write_ok = crate::cmd_fs::vfs_write_chunked(&expand_word(&path), &captured, append);
         if status == 0 && !write_ok {
             1
@@ -794,10 +512,8 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         dispatch_builtin(prog, &args, jobs)
     };
 
-    // Clear stdin pointer; keep CURRENT_SINK unmodified (exec_cmd doesn't own it).
-    unsafe {
-        *CURRENT_STDIN.get() = core::ptr::null::<[u8; 0]>() as *const [u8];
-    }
+    // Clear pipe stdin; leave the capture stack alone (exec_cmd does not own it).
+    state::clear_stdin();
 
     set_var("?", i32_to_str(code));
     code
@@ -817,7 +533,7 @@ fn case_matches(pattern: &str, value: &str) -> bool {
 fn usize_key(n: usize) -> String {
     let digit = b'0' + (n as u8).min(9);
     // SAFETY: `digit` is always a valid ASCII byte.
-    String::from(unsafe { core::str::from_utf8_unchecked(core::slice::from_ref(&digit)) })
+    String::from(digit as char) // `digit` is b'0'..=b'9', so this is ASCII
 }
 
 /// Convert a small non-negative integer to a &str backed by a fixed buffer.
@@ -961,10 +677,10 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
                 let mut saved: Vec<(String, Option<String>)> = Vec::with_capacity(nargs + 2);
                 for i in 1..=nargs {
                     let key = usize_key(i);
-                    saved.push((key.clone(), get_var(&key).map(String::from)));
+                    saved.push((key.clone(), get_var(&key)));
                 }
-                saved.push((String::from("#"), get_var("#").map(String::from)));
-                saved.push((String::from("@"), get_var("@").map(String::from)));
+                saved.push((String::from("#"), get_var("#")));
+                saved.push((String::from("@"), get_var("@")));
                 for i in 1..=nargs {
                     set_var(&usize_key(i), &args[i - 1]);
                 }
@@ -1168,8 +884,7 @@ fn spawn_external(prog: &str, args: &[String]) -> i32 {
             // command runs. The child keeps the shell's focus grant; that is
             // acceptable for a server that never reads the keyboard. Foreground
             // spawns fall through to the focus-handoff + sys_wait below.
-            // SAFETY: single shell task.
-            if unsafe { *BG_SPAWN.get() } {
+            if state::bg_spawn() {
                 return 0;
             }
             // Drain any pending input-service IPC events before ClearFocus.
@@ -1324,7 +1039,7 @@ fn read_utility_text(name: &str, path: Option<&str>) -> Result<String, i32> {
     } else {
         let stdin = shell_stdin();
         let mut bytes = Vec::new();
-        if let Err(err) = extend_input(&mut bytes, stdin) {
+        if let Err(err) = extend_input(&mut bytes, &stdin) {
             shell_print(name);
             shell_println(match err {
                 InputBufferError::TooLarge => ": input exceeds 65536-byte limit",

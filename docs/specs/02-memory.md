@@ -24,23 +24,54 @@ Hệ thống sử dụng **Hybrid Allocator** để cân bằng giữa tốc đ�
 * **OOM Policy**: Trả về `Result::Err(OutOfMemory)` thay vì panic toàn hệ thống.
 
 ### Real-Time Pool (TLSF)
-Dành riêng cho các tác vụ điều khiển Robot (Tier 1). Đảm bảo thời gian cấp phát là **O(1)** và không bị block bởi các App AI nặng.
+`rlsf 0.2.3` is linked and a 256 KiB static pool is initialised at boot, but no runtime
+allocation path currently calls the `alloc` / `dealloc` wrappers. Stacks still come from
+`Stack::new_kernel` and `Stack::new_user`, so Cellos has not qualified end-to-end TLSF
+WCET or latency on the current system.
 
-## 3. Metadata Registry & Ownership Transfer
-Đây là trái tim để duy trì an toàn trong SAS khi Hot-swap.
+## 3. Focused ownership authorities
 
-* **Registry**: Một bảng băm theo dõi `[Address Range] -> {OwnerID, State}`.
-* **State**: 
-    * `Owned`: Thuộc về một Cell.
-    * `AsyncLocked`: Đang trong quá trình truyền dữ liệu (DMA/Async). Không được giải phóng kể cả khi Cell sở hữu bị Unload.
-* **Transfer Protocol**: Khi Cell A gửi `Box<T>` cho Cell B, Kernel cập nhật `OwnerID = B` trong Registry. Nếu A bị xóa, vùng nhớ của B vẫn an toàn.
+Cellos không có một "Metadata Registry" toàn cục. Quyền sở hữu được giữ tại authority
+nhỏ nhất có thể kiểm tra và thu hồi đúng vòng đời:
+
+* Task/Cell frame ownership và quota nằm ở task-owned frame lists + `cell_quota`.
+* Grant ownership/lease nằm trong per-task grant tables; reaper thu hồi khi task chết.
+* Async/DMA lifetime nằm trong pin registry và quarantine; frame chỉ được reclaim sau
+  cancel/unpin hoặc quarantine completion.
+* MMIO/resource exclusivity nằm trong resource registry tương ứng.
+
+Không scan con trỏ tổng quát và không cập nhật OwnerID bằng heuristic. Hibernate/hot-swap
+phải dùng typed, subsystem-owned serialization.
 
 ## 4. Stack Safety (Guard Pages)
 * **Cơ chế**: Mọi Stack của Task/Cell được bao bọc bởi một trang **Unmapped 4KB (Guard Page)**.
 * **Hành vi**: Stack Overflow sẽ kích hoạt `Page Fault` ngay lập tức. Kernel sẽ cô lập Task đó thay vì để nó phá nát dữ liệu Cell lân cận.
 
 ## 5. Protection Policy (W^X)
-Mặc dù dùng chung bộ nhớ, nhưng hardware page-level protection vẫn được bật:
+
+Dù dùng chung bộ nhớ, hardware page-level protection vẫn được bật cho segment của cell:
+
 * **Text**: Read + Execute (RX).
 * **Data**: Read + Write (RW).
-* **Read-only**: Read (R).
+* **Read-only** (`.rodata`, RELRO): Read (R).
+
+Loader phải map mọi trang WRITE trong lúc áp `.rela.dyn`, rồi **hạ về đúng `p_flags`
+trước khi cell chạy lệnh đầu tiên**. Cơ chế: `docs/specs/19-hardware-isolation-layers.md`
+§2 Layer A. Verify runtime 2026-07-31 (`tests/integration/tests/wx-text-write.rs`: cell ghi
+vào `.text` của chính nó → fault → cell bị terminate, kernel tiếp tục chạy).
+
+### Bảo đảm này KHÔNG bao gồm
+
+Ba giới hạn dưới đây là giới hạn của *bảo đảm*, không phải chi tiết hiện thực — đọc §5 mà
+thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
+
+* **Chỉ là code integrity, không phải data confidentiality.** Stack, heap, grant page và
+  MMIO window vẫn `USER+RW` **xuyên cell**: một cell có `unsafe` vẫn đọc/ghi được *dữ liệu*
+  của cell khác. Tường cho dữ liệu là Layer B (per-domain page table, Tier 2 — chưa hiện
+  thực). Điều §5 bảo đảm là không cell nào sửa được **code hoặc hằng** của cell nào.
+* **Không có cross-hart TLB shootdown.** `protect_page` chỉ invalidate trên hart gọi nó, nên
+  một hart khác có thể còn giữ bản dịch cũ rộng quyền hơn cho cùng VA từ một cell trước đó.
+  Trên SMP thật đây là cửa sổ có thật.
+* **Arch bare-physical không enforce.** riscv32 Nano, x86_32, arm32 chạy không page table;
+  `wx::enforce` ghi log khoảng trống thay vì áp đặt. Câu "protection vẫn được bật" chỉ đúng
+  với các arch có MMU.

@@ -118,6 +118,18 @@ const _: () = {
     );
 };
 
+/// Global allocator telemetry stays opt-in because it exposes cross-cell activity.
+const _: () = {
+    let bit = match ViSyscall::MemInfo.allowlist_bit() {
+        Some(bit) => bit,
+        None => panic!("MemInfo must own an allowlist bit"),
+    };
+    assert!(
+        app_syscall_set(true, true, true) & (1u64 << bit) == 0,
+        "MemInfo must never be granted implicitly by app_syscall_set"
+    );
+};
+
 /// Like [`app_syscall_set`] but includes `WaitForEvent` in the base set for
 /// service cells that wake on kernel events (net RX, etc.).
 pub const fn service_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 {

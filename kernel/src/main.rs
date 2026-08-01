@@ -91,6 +91,7 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let _hartid = hartid;
+    let dtb = boot::effective_dtb(dtb);
     cpu_features::detect(dtb);
     // Parse DTB for MMIO bases before any driver or paging init.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
@@ -270,6 +271,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Initialize frame allocator with the largest usable region
     let frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+    log::info!(
+        "[boot] allocator range {:#x}..{:#x} ({} bytes)",
+        frame_allocator.memory_start(),
+        frame_allocator.memory_end(),
+        frame_allocator.total_frames() * 4096
+    );
 
     // 2. Frame Allocator (Physical Memory)
     // The local `frame_allocator` is moved into the global static.
@@ -587,6 +594,26 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("thread-cap self-test FAIL");
         }
+        if task::thread_quota_selftest::self_test() {
+            log_info("thread-quota self-test PASS (charged, released, enforced)");
+        } else {
+            log_info("thread-quota self-test FAIL");
+        }
+        if task::completion_selftest::self_test() {
+            log_info("completion-queue self-test PASS (reserve, land, bound, defer)");
+        } else {
+            log_info("completion-queue self-test FAIL");
+        }
+        if task::net_rx_selftest::self_test() {
+            log_info("net-rx-reservation self-test PASS (fill, remember, release)");
+        } else {
+            log_info("net-rx-reservation self-test FAIL");
+        }
+        if task::ipc_pending_selftest::self_test() {
+            log_info("ipc-pending self-test PASS (deferred delivery, bounds, quota)");
+        } else {
+            log_info("ipc-pending self-test FAIL");
+        }
     }
 
     // 7b. Bring secondary harts online (riscv64 only; no-op on other arches).
@@ -644,6 +671,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("P-TRUST self-test FAIL");
         }
+        // Boot ceiling: the per-path table is per-path (not a union) and no boot
+        // cell is over-tightened out of the cap it needs. Runs BEFORE the first
+        // Root spawn below, so a bad row is reported before it breaks a cell.
+        if crate::loader::boot_ceiling::self_test() {
+            log_info("boot-ceiling self-test PASS (per-path table, no union collapse)");
+        } else {
+            log_info("boot-ceiling self-test FAIL — a boot cell may lose caps");
+        }
         // Manifest v2: v1-upcast/v2-parse + the tier-floor invariant. Pure logic,
         // no scheduler — runs alongside the other crypto/trust self-tests.
         if crate::task::manifest_v2_selftest::self_test() {
@@ -683,11 +718,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
 
         // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
-        // CellId(0) placeholder → fixed up to CellId(init_tid) below, mirroring the
-        // path-spawn convention (loader.rs: cell_id = CellId(tid)). A hardcoded
-        // CellId(1) here would COLLIDE with the Platform Cell, which spawns first
-        // (tid=1 → CellId(1)); the collision commingled their per-cell quota slots
-        // and made fault attribution ambiguous ("Cell 1" meant either).
+        // CellId(0) asks spawn_from_mem to derive CellId(init_tid), the same
+        // convention every other spawn route uses. A hardcoded CellId(1) here
+        // would COLLIDE with the Platform Cell, which spawns first (tid=1 →
+        // CellId(1)); the collision commingled their per-cell quota slots and
+        // made fault attribution ambiguous ("Cell 1" meant either).
         let init_data = alloc::vec::Vec::from(INIT_ELF);
         match task::spawn_from_mem(&init_data, "init", types::CellId(0), alloc::vec![]) {
             Ok((init_tid, _load_base)) => {
@@ -695,21 +730,19 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 // Probe 'V': confirms spawn_from_mem succeeded → init is in ready queue.
                 #[cfg(feature = "board-rpi3")]
                 crate::hal::uart_bcm_mini::probe_put(b'V');
-                // init is the ROOT AUTHORITY (P2 monotonic-downgrade): grant the
-                // FULL capability set directly here. init is spawned via
-                // spawn_from_mem (NOT spawn_from_path), so its manifest is never
-                // read — this direct TCB write is the only place its caps come
-                // from. init then delegates subsets to vfs/net/shell/... via the
+                // init is the ROOT AUTHORITY (P2 monotonic-downgrade). It is
+                // spawned via spawn_from_mem (NOT spawn_from_path), so its
+                // manifest is never read — this direct TCB write is the only
+                // place its caps come from, and it takes them from the SAME
+                // per-path boot table every other boot cell is bound by, so
+                // there is exactly one place that describes boot authority.
+                // init then delegates subsets to vfs/net/shell/... via the
                 // SpawnFromPath syscall, where each child is intersected against
                 // init's caps. Escalation-oracle bound: init's spawn targets MUST
                 // remain compile-time constants (no data-derived paths).
                 if let Some(sched) = task::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                        // Unique per-cell identity (see spawn comment above): init
-                        // gets CellId(init_tid), never the placeholder or a value
-                        // shared with an earlier path-spawned cell.
-                        t.cell_id = types::CellId(init_tid as u64);
-                        task::cap::CapSet::ALL.apply_to(t);
+                        crate::loader::boot_ceiling::boot_ceiling("/bin/init").apply_to(t);
                         // SupervisorCap is NOT in CapSet (not delegatable via intersection).
                         // Init holds it so it can unfreeze cells if the Supervisor Cell crashes.
                         t.supervisor_cap = Some(task::cap::SupervisorCap::new());
@@ -718,7 +751,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                         t.is_critical = true;
                     }
                 }
-                log_info("init granted root authority (CapSet::ALL + SupervisorCap)");
+                log_info("init granted root authority (boot_ceiling(/bin/init) + SupervisorCap)");
             }
             Err(_e) => {
                 log_info("Failed to spawn init");

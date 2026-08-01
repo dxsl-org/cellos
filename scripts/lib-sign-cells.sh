@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Shared cell-signing helper for the image-assembly scripts. Source it, then call
-# `sign_cells <binary>...`.
+# `sign_cells <binary>...`, which runs the F1/F5 check and signs only if it passes.
 #
 # WHY every image needs this: a cell with no `__ViCell_sig` section is DENIED by
 # loader::spawn_gated under the `signing-required` feature, and the guest never
@@ -37,11 +37,22 @@ resolve_objcopy() {
     return 1
 }
 
-# Sign each argument in place, then verify. Verifying separately is the point:
-# objcopy can exit 0 having written a section the kernel's payload rules reject —
-# the ELF header is deliberately excluded from the signed bytes, so a layout change
-# invalidates the signature without failing the embed.
+# Check F1/F5, then sign each argument in place and re-verify — one `cellos-sign`
+# invocation, because the signature now attests "built by a pipeline that enforced
+# F1", not merely "these bytes are ours" (Spec 18 §2.1). Splitting the check from
+# the signing would make the attestation a claim nobody checks, so this helper has
+# no sign-only path: if the check fails, nothing is signed and the image build stops.
+#
+# F5 is mandatory here and needs no flag: `cellos-sign --sign` forces strict mode, so
+# a build host that cannot confirm the pinned toolchain refuses to sign rather than
+# printing SKIP and signing anyway. A caller cannot weaken that by forgetting an option.
+#
+# Verifying after the embed is also not redundant: objcopy can exit 0 having written
+# a section the kernel's payload rules reject — the ELF header is deliberately
+# excluded from the signed bytes, so a layout change invalidates the signature
+# without failing the embed.
 sign_cells() {
+    [[ $# -gt 0 ]] || return 0
     resolve_objcopy || return 1
     local bin
     for bin in "$@"; do
@@ -49,7 +60,6 @@ sign_cells() {
             echo "FAIL: cannot sign missing binary: $bin" >&2
             return 1
         fi
-        "$PYTHON_BIN" scripts/sign-cell.py --objcopy "$OBJCOPY" --in "$bin" --out "$bin" >/dev/null
-        "$PYTHON_BIN" scripts/sign-cell.py --verify --in "$bin" >/dev/null
     done
+    "$PYTHON_BIN" scripts/cellos-sign --quiet --objcopy "$OBJCOPY" --sign "$@"
 }

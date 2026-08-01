@@ -25,6 +25,22 @@ const USER_VADDR_MAX: usize = 0xFFFF_FFFF; // 4 GB — full 32-bit address space
 
 pub struct ElfLoader;
 
+/// One 4 KiB page of a loaded cell image.
+///
+/// `final_flags` is the permission set the page must carry once the loader is
+/// done — the ELF's `p_flags`, OR-ed across every PT_LOAD that touches the page.
+/// It is deliberately NOT the set the page is mapped with during loading: see
+/// [`crate::loader::wx`] for why the two differ and when they converge.
+#[derive(Debug, Clone, Copy)]
+pub struct LoadedPage {
+    /// Page-aligned virtual address in the cell's address space.
+    pub va: VAddr,
+    /// Backing physical frame, reclaimed by `CellSegments` when the cell dies.
+    pub frame: PhysAddr,
+    /// Post-relocation permissions, applied by `wx::enforce`.
+    pub final_flags: crate::memory::paging::Flags,
+}
+
 impl ElfLoader {
     /// Load loadable segments into memory.
     ///
@@ -32,21 +48,29 @@ impl ElfLoader {
     /// - For fixed-VA cells (ET_EXEC, non-PIE): pass `0` — uses p_vaddr directly.
     /// - For PIE cells (ET_DYN): pass the VA base allocated by `va_alloc::alloc_cell_va`.
     ///
-    /// Returns the list of mapped (va, frame) pairs so `CellSegments` can reclaim
-    /// them when the cell dies.
+    /// Returns one [`LoadedPage`] per mapped page so the caller can (a) hand the
+    /// frames to `CellSegments` for reclamation and (b) run the W^X lowering pass
+    /// once relocations are applied.
+    ///
+    /// # Errors
+    /// - `ViError::InvalidInput` — malformed headers (file_size > mem_size, ranges
+    ///   outside the ELF buffer, arithmetic overflow).
+    /// - `ViError::PermissionDenied` — segment VA outside user space, a VA already
+    ///   owned by another live cell or kernel MMIO, or a PT_LOAD declaring W+X.
+    /// - `ViError::OutOfMemory` — no frame available, or the mapping failed.
     pub fn load_segments(
         &self,
         data: &[u8],
         frame_allocator: &mut crate::memory::frame::FrameAllocator,
         load_base: usize,
-    ) -> ViResult<alloc::vec::Vec<(VAddr, PhysAddr)>> {
+    ) -> ViResult<alloc::vec::Vec<LoadedPage>> {
         let elf = ElfFile::new(data).map_err(|_| ViError::InvalidInput)?;
-        // Record each mapped (vaddr, frame) so the cell's segment frames can be
-        // reclaimed when it dies (see task::stack::CellSegments) — otherwise they leak.
-        use crate::memory::paging::Flags;
-        let mut mapped: alloc::vec::Vec<(VAddr, PhysAddr, Flags)> = alloc::vec::Vec::new();
+        // Record each mapped page so the cell's segment frames can be reclaimed
+        // when it dies (see task::stack::CellSegments) — otherwise they leak — and
+        // so the post-relocation W^X pass knows each page's target permissions.
+        let mut mapped: alloc::vec::Vec<LoadedPage> = alloc::vec::Vec::new();
 
-        for ph in elf.program_iter() {
+        for (seg_index, ph) in elf.program_iter().enumerate() {
             if let Ok(xmas_elf::program::Type::Load) = ph.get_type() {
                 let file_offset = ph.offset() as usize;
                 // For PIE cells load_base relocates every segment; for fixed-VA
@@ -57,6 +81,16 @@ impl ElfLoader {
                 let ph_flags = ph.flags();
 
                 // --- Header sanity checks ---
+                // W+X is refused before a single frame is allocated: a cell must
+                // not be able to opt out of W^X by declaring writable code.
+                super::wx::reject_wx_segment(
+                    seg_index,
+                    vaddr,
+                    ph_flags.is_write(),
+                    ph_flags.is_execute(),
+                )
+                .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+
                 // file_size MUST NOT exceed mem_size (the rest is BSS).
                 if file_size > mem_size {
                     log::error!(
@@ -64,12 +98,14 @@ impl ElfLoader {
                         file_size,
                         mem_size
                     );
+                    Self::unwind(&mapped, frame_allocator);
                     return Err(ViError::InvalidInput);
                 }
                 // file_offset + file_size must fit inside the ELF buffer.
                 let file_end = file_offset
                     .checked_add(file_size)
-                    .ok_or(ViError::InvalidInput)?;
+                    .ok_or(ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
                 if file_end > data.len() {
                     log::error!(
                         "ELF: segment file range {}..{} exceeds buffer len {}",
@@ -77,17 +113,22 @@ impl ElfLoader {
                         file_end,
                         data.len()
                     );
+                    Self::unwind(&mapped, frame_allocator);
                     return Err(ViError::InvalidInput);
                 }
                 // vaddr + mem_size must not overflow and must lie below the
                 // kernel VA window — prevents user ELF clobbering kernel maps.
-                let end_addr = vaddr.checked_add(mem_size).ok_or(ViError::InvalidInput)?;
+                let end_addr = vaddr
+                    .checked_add(mem_size)
+                    .ok_or(ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
                 if vaddr >= USER_VADDR_MAX || end_addr > USER_VADDR_MAX {
                     log::error!(
                         "ELF: segment VA range 0x{:X}-0x{:X} outside user space",
                         vaddr,
                         end_addr
                     );
+                    Self::unwind(&mapped, frame_allocator);
                     return Err(ViError::PermissionDenied);
                 }
 
@@ -95,27 +136,30 @@ impl ElfLoader {
 
                 // Align start/end to page boundaries
                 let start_page = start_addr & !(4096 - 1);
-                let end_page =
-                    end_addr.checked_add(4095).ok_or(ViError::InvalidInput)? & !(4096 - 1);
+                let end_page = end_addr
+                    .checked_add(4095)
+                    .ok_or(ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?
+                    & !(4096 - 1);
 
                 // --- Translate ELF p_flags to page-table flags ---
-                // p_flags bits: 0x1=X, 0x2=W, 0x4=R. Default deny if all zero.
+                // p_flags bits: 0x1=X, 0x2=W, 0x4=R.
                 //
-                // All cell pages are mapped WRITE so the kernel can apply PIE
-                // relocations (.rela.dyn) after loading.  SAS/LBI enforces R/W/X
-                // semantics via Rust's type system, not hardware read-only pages;
-                // hardware-enforced W^X (MTE, SMMU, PKU) is a G2 item.
+                // TWO flag sets per segment, and the difference is the whole point:
+                //
+                //   final_flags — what the ELF actually asks for. Recorded per page,
+                //                 OR-ed across PT_LOADs that share a boundary page,
+                //                 and applied by `wx::enforce` after relocation.
+                //   load_flags  — final_flags plus WRITE. Used only while the loader
+                //                 runs, because `.rela.dyn` patching writes through
+                //                 the cell's own VA on riscv64/x86_64.
+                //
+                // The WRITE bit therefore lives for exactly the load window. After
+                // `wx::enforce` a cell's `.text`/`.rodata` are hardware read-only,
+                // which is what stops one cell rewriting another's code in the SAS.
                 use crate::memory::paging::Flags;
-                let mut perm_bits = Flags::VALID
-                    | Flags::USER
-                    | Flags::ACCESSED
-                    | Flags::READ
-                    | Flags::WRITE
-                    | Flags::DIRTY;
-                if ph_flags.is_execute() {
-                    perm_bits |= Flags::EXECUTE;
-                }
-                let flags = Flags::from_bits(perm_bits);
+                let final_flags = super::wx::page_flags(ph_flags.is_write(), ph_flags.is_execute());
+                let flags = Flags::from_bits(final_flags.bits() | Flags::WRITE);
 
                 // Map pages
                 let mut current_page = start_page;
@@ -129,17 +173,14 @@ impl ElfLoader {
                     // share the same physical page.  In that case already_ours==true and
                     // we reuse the frame, merging the new segment's flags into the page
                     // rather than allocating a fresh one or blindly overwriting flags.
-                    let already_ours = mapped.iter().any(|(va, _, _)| *va == current_page);
+                    let already_ours = mapped.iter().any(|p| p.va == current_page);
                     if !already_ours && crate::memory::paging::virt_to_phys(current_page).is_some()
                     {
                         log::error!(
                             "ELF: load VA 0x{:X} already mapped — rejecting spawn (VA collision with a live cell or kernel MMIO; fix the cell's linker script)",
                             current_page
                         );
-                        for &(va, fr, _) in &mapped {
-                            let _ = crate::memory::paging::unmap_page(va);
-                            frame_allocator.deallocate_frame(fr);
-                        }
+                        Self::unwind(&mapped, frame_allocator);
                         return Err(ViError::PermissionDenied);
                     }
 
@@ -151,36 +192,62 @@ impl ElfLoader {
                         // satisfies both segments' access requirements.
                         let phys = crate::memory::paging::virt_to_phys(current_page)
                             .expect("already_ours but virt_to_phys returned None");
-                        if let Some(entry) =
-                            mapped.iter_mut().find(|(va, _, _)| *va == current_page)
-                        {
-                            let merged = Flags::from_bits(entry.2.bits() | flags.bits());
-                            if merged != entry.2 {
-                                entry.2 = merged;
+                        if let Some(entry) = mapped.iter_mut().find(|p| p.va == current_page) {
+                            // Merge the TARGET flags — this is the value `wx::enforce`
+                            // will apply, so the OR must happen here, on the page, and
+                            // never per-segment after the fact.
+                            let merged =
+                                Flags::from_bits(entry.final_flags.bits() | final_flags.bits());
+                            if merged != entry.final_flags {
+                                entry.final_flags = merged;
                                 let _ = crate::memory::paging::map_page(
                                     frame_allocator,
                                     current_page,
                                     phys,
-                                    merged,
+                                    Flags::from_bits(merged.bits() | Flags::WRITE),
                                 );
                             }
                         }
                         crate::memory::frame::phys_to_virt(phys)
                     } else {
-                        let buf_frame = frame_allocator
-                            .allocate_frame()
-                            .ok_or(ViError::OutOfMemory)?;
+                        let buf_frame = match frame_allocator.allocate_frame() {
+                            Some(f) => f,
+                            None => {
+                                log::warn!(
+                                    "[loader] segment frame allocation failed: va={:#x} mapped_pages={}",
+                                    current_page,
+                                    mapped.len()
+                                );
+                                Self::unwind(&mapped, frame_allocator);
+                                return Err(ViError::OutOfMemory);
+                            }
+                        };
 
-                        crate::memory::paging::map_page(
+                        if crate::memory::paging::map_page(
                             frame_allocator,
                             current_page,
                             buf_frame,
                             flags,
                         )
-                        .map_err(|_| ViError::OutOfMemory)?;
+                        .is_err()
+                        {
+                            log::warn!(
+                                "[loader] segment page-table allocation failed: va={:#x} mapped_pages={}",
+                                current_page,
+                                mapped.len()
+                            );
+                            // buf_frame is not in `mapped` yet — free it separately.
+                            frame_allocator.deallocate_frame(buf_frame);
+                            Self::unwind(&mapped, frame_allocator);
+                            return Err(ViError::OutOfMemory);
+                        }
 
                         // Track for reclamation on cell death.
-                        mapped.push((current_page, buf_frame, flags));
+                        mapped.push(LoadedPage {
+                            va: current_page,
+                            frame: buf_frame,
+                            final_flags,
+                        });
 
                         // Zero the frame first (simplifies BSS and padding, and
                         // prevents info-leak from previous frame owner).
@@ -207,7 +274,8 @@ impl ElfLoader {
                         // arithmetic on `len` from any rounding surprise.
                         let src_end = src_offset_in_file
                             .checked_add(len)
-                            .ok_or(ViError::InvalidInput)?;
+                            .ok_or(ViError::InvalidInput)
+                            .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
                         if src_end <= data.len() {
                             let src = &data[src_offset_in_file..src_end];
                             unsafe {
@@ -230,7 +298,21 @@ impl ElfLoader {
                 );
             }
         }
-        Ok(mapped.into_iter().map(|(va, phys, _)| (va, phys)).collect())
+        Ok(mapped)
+    }
+
+    /// Undo a partially loaded image: unmap every page recorded so far and
+    /// return its frame to the allocator.
+    ///
+    /// Every early return inside `load_segments` must call this. Without it a
+    /// rejected ELF leaves its already-mapped pages resident, which both leaks
+    /// the frames and poisons the VA-collision guard for the next spawn at the
+    /// same base.
+    fn unwind(mapped: &[LoadedPage], frame_allocator: &mut crate::memory::frame::FrameAllocator) {
+        for page in mapped {
+            let _ = crate::memory::paging::unmap_page(page.va);
+            frame_allocator.deallocate_frame(page.frame);
+        }
     }
 }
 

@@ -15,5 +15,9 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[dependencies]
+fdt = "0.1"
+vm-fdt = "0.3"
+
 # Detach from the parent workspace (riscv64 default target).
 [workspace]

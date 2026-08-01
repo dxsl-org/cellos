@@ -9,12 +9,18 @@ use types::*;
 /// skips `spawn_from_path`, so re-registration never fires spuriously.
 static BLOCK_IO_REGISTERED: AtomicBool = AtomicBool::new(false);
 
+/// Per-path capability ceiling for the cells named in the boot manifest.
+pub mod boot_ceiling;
 pub mod disk_layout;
 pub mod early;
 pub mod elf;
 pub mod elf_tests;
+/// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
+pub mod mem_spawn_gate;
 pub mod reloc;
 pub mod va_alloc;
+/// W^X: lower cell pages to their ELF `p_flags` once relocation has finished.
+pub mod wx;
 pub use elf::ElfLoader;
 
 /// ELF parser trait.
@@ -177,22 +183,13 @@ pub fn spawn_gated(
     // Extract cell name from the last path component (e.g. "/bin/shell" → "shell").
     let name = path.rsplit('/').next().unwrap_or(path);
 
-    // Spawn via the in-memory path.  spawn_from_mem now applies .rela.dyn
-    // relocations internally, so no separate apply_relocations call is needed.
+    // Spawn via the in-memory path.  spawn_from_mem applies .rela.dyn
+    // relocations internally, so no separate apply_relocations call is needed,
+    // and CellId(0) asks it to derive a unique per-cell identity before the task
+    // becomes reachable — do not patch task.cell_id here.
     let (tid, _load_base) =
-        crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())
-            .map_err(|_| ViError::OutOfMemory)?;
-
-    // Assign a unique CellId based on the task ID so per-cell quota and
-    // capability checks are correctly scoped.  `spawn_from_mem` defaults to
-    // CellId(0) (kernel), which would make every path-spawned cell share the
-    // kernel's quota slot (charge() short-circuits for cell_id == 0).
+        crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())?;
     let cell_id = CellId(tid as u64);
-    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.tasks.get_mut(&tid) {
-            task.cell_id = cell_id;
-        }
-    }
 
     crate::audit::log_event(
         crate::audit::AuditEvent::CellSpawn,
@@ -268,7 +265,19 @@ pub fn spawn_gated(
     // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
     // before the child-mutation lock below (the Spinlock is non-reentrant).
     let after_spawner: CapSet = match spawner {
-        Spawner::Root => requested,
+        // Boot/kernel-initiated spawn. There is no spawner task to snapshot, so
+        // the ceiling comes from the per-path boot table: a boot cell may hold
+        // exactly the authority its row states, and a path with no row holds
+        // none. A refusal here is loud (`log_refusal`) because the only evidence
+        // available to whoever debugs it is the boot log.
+        Spawner::Root => {
+            let ceiling = boot_ceiling::boot_ceiling(path);
+            let bounded = requested.intersect(ceiling);
+            if bounded != requested {
+                boot_ceiling::log_refusal(path, requested, ceiling, bounded);
+            }
+            bounded
+        }
         Spawner::Ceiling(ceil) => requested.intersect(ceil),
         Spawner::User(stid) => {
             let ceil = crate::task::SCHEDULER
@@ -283,9 +292,14 @@ pub fn spawn_gated(
     // 3. Operator policy (P5/Phase 04): `granted = after_spawner ∩ policy(path)`,
     //    with trusted-core recovery + fail-safe. `policy::apply` takes the POLICY
     //    lock internally — called OUTSIDE the SCHEDULER guard above to avoid lock
-    //    nesting. `init` (Root) is exempt (it is the loader OF the policy).
+    //    nesting.
+    //
+    //    The root-authority policy exemption is scoped to spawns that happen
+    //    BEFORE the policy is resolved: subjecting the boot path to a policy that
+    //    does not exist yet is circular, but once it is resolved there is no
+    //    circularity left to protect and Root is bound like every other spawner.
     let granted: CapSet = match spawner {
-        Spawner::Root => after_spawner,
+        Spawner::Root if !crate::policy::is_resolved() => after_spawner,
         _ => crate::policy::apply(path, tid, after_spawner),
     };
 

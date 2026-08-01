@@ -1,11 +1,13 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 use ostd::syscall;
 
+ostd::cell_main!(cell_main);
+
 /// List running tasks from the kernel task table.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     let mut buf = [api::syscall::ProcessInfo::default(); 32];
     match syscall::sys_get_procs(&mut buf) {
         Ok(count) => {

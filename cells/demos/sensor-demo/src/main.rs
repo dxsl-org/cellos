@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -21,8 +22,9 @@ declare_manifest!(
     uart = false
 );
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[sensor-demo] SHT3x via bit-bang I2C (pin 0=SCL, pin 1=SDA, addr 0x44)");
 
     match Pl061Gpio::open() {

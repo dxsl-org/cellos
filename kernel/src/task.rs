@@ -4,16 +4,24 @@
 #![allow(clippy::result_unit_err)]
 
 pub mod cap;
+pub mod completion;
+pub mod completion_selftest;
+pub mod completion_wait;
+pub mod dir_inherit;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
+pub mod net_rx_selftest;
 pub mod p_trust_selftest;
 pub mod smp;
 pub mod syscall;
 pub mod tcb;
 pub mod thread_cap_selftest;
+pub mod thread_quota_selftest;
 pub use tcb::Task;
 pub mod drivers;
+pub mod ipc_pending_selftest;
 pub mod ipc_test;
+pub mod pending_mailbox;
 pub mod scheduler;
 pub mod stack;
 #[cfg(feature = "test-hooks")]
@@ -38,6 +46,34 @@ extern "C" {
 // use alloc::vec::Vec;
 use tcb::TaskState;
 use types::*;
+
+/// Queue an owned IPC message without invoking the infallible allocation path.
+///
+/// Returns `Err(())` when the mailbox is full or the sender's cell cannot fund
+/// the owned copy. The target is unchanged on failure.
+pub(crate) fn queue_pending_msg(
+    target: &mut Task,
+    sender_tid: usize,
+    data: &[u8],
+    max_depth: usize,
+) -> core::result::Result<(), ()> {
+    if target.pending_msgs.len() >= max_depth {
+        return Err(());
+    }
+
+    let owned = pending_mailbox::PendingMsgData::try_copy(data, target.cell_id.0 as usize)?;
+    target.pending_msgs.try_push(tcb::PendingMsg {
+        sender_tid,
+        data: owned,
+        enqueued_tick: system_ticks() as u64,
+    })
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum IpcSendError {
+    TargetGone,
+    Backpressure,
+}
 
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
@@ -271,6 +307,7 @@ unsafe fn force_unlock_all_kernel_locks() {
     crate::cell::registry::CELL_REGISTRY.force_unlock();
     crate::cell::cap_registry::CAP_TABLE.force_unlock();
     crate::memory::cell_quota::force_unlock_locks();
+    crate::memory::pin::force_unlock();
     crate::memory::rt_heap::force_unlock_locks();
     crate::cell::hotswap::force_unlock_locks();
     crate::cell::service_registry::force_unlock_locks();
@@ -371,7 +408,9 @@ pub fn terminate_current_cell_on_fault(cause: usize, pc: usize, fault_addr: usiz
         crate::resource_registry::release_for(cell_id);
         // Reap grant/registered-grant pages for this cell. SCHEDULER lock is
         // already released (the block above exited), so the
-        // KERNEL_ROOT → FRAME_ALLOCATOR path inside reap_grants_for_task is safe.
+        // FRAME_ALLOCATOR → KERNEL_ROOT path inside reap_grants_for_task is safe.
+        // (free_grant_pages takes FRAME_ALLOCATOR first and holds it across
+        // unmap_page/map_page, which take KERNEL_ROOT — not the reverse.)
         crate::task::syscall::reap_grants_for_task(tid);
         // Reap any VMs (guest RAM + Stage-2 tables) owned by this cell.
         crate::hypervisor::registry::reap_vms_for_task(tid);
@@ -416,7 +455,7 @@ pub fn yield_cpu() {
     drop(reaped);
 
     // Reap grant pages for watchdog-killed tasks. The watchdog enqueues task IDs
-    // here because free_grant_pages (KERNEL_ROOT → FRAME_ALLOCATOR) must not run
+    // here because free_grant_pages (FRAME_ALLOCATOR → KERNEL_ROOT) must not run
     // while SCHEDULER is held — same pattern as take_reapable_zombies above.
     let grant_tids = {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
@@ -429,8 +468,22 @@ pub fn yield_cpu() {
         crate::resource_registry::release_bdfs_for(tid);
         // IOFENCE/IOTLB flush must complete before frames are returned to the allocator.
         crate::task::drivers::iommu::cleanup_cell(tid as u64);
+        // The flush above is the acknowledgement the pin quarantine waits on.
+        // Running it before the reaper is fine: the pins are dropped here, so
+        // the reaper finds nothing quarantined and frees the frames itself.
+        crate::task::syscall::release_acked_frames(tid);
         crate::task::syscall::reap_grants_for_task(tid);
         crate::hypervisor::registry::reap_vms_for_task(tid);
+    }
+
+    // Turn completion appends into scheduler wakes. An append may run in
+    // interrupt context and must not take SCHEDULER, so it only raises a flag;
+    // the wake happens here, the same deferral the two reaps above use. The
+    // gate is one relaxed load on the overwhelmingly common empty tick.
+    if completion::wakes_pending() {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            completion::deliver_pending_wakes(sched);
+        }
     }
 
     let hart_id = hart_local::current_hart_id();
@@ -529,6 +582,52 @@ pub fn spawn_with_stacks(
     }
 }
 
+/// Register a cell's task and give it a per-cell identity in one critical section.
+///
+/// `requested == CellId(0)` means "derive one": the caller has no identity to
+/// impose, so the task id is reused as the cell id. Every ELF-loading spawn
+/// route funnels through here for that derivation instead of each remembering to
+/// patch `task.cell_id` afterwards, because a user cell left on `CellId(0)`:
+///
+/// - shares the kernel's per-cell memory quota slot, whose `charge()` is a
+///   short-circuit for id 0, so its allocations are never accounted; and
+/// - is unattributable at fault time — the unserviceable-fault handlers on every
+///   arch refuse to terminate a fault they cannot pin on a cell and panic
+///   instead, turning one cell's memory bug into a whole-system halt.
+///
+/// A non-zero `requested` is honoured verbatim: a thread joining an existing
+/// cell must keep that cell's identity, not invent a second one.
+///
+/// The derivation shares the registration's scheduler lock so the task is never
+/// observable with the placeholder id.
+///
+/// # Errors
+/// `ViError::Unknown` if the scheduler is not initialised yet.
+fn spawn_cell_task(
+    name: &str,
+    requested: CellId,
+    allowed_drivers: alloc::vec::Vec<usize>,
+    kstack: stack::Stack,
+    ustack: stack::Stack,
+) -> Result<usize, ViError> {
+    let spawner = current_task_id();
+    let mut guard = SCHEDULER.lock();
+    let sched = guard.as_mut().ok_or(ViError::Unknown)?;
+    let tid = sched.spawn_with_stacks(name, requested, allowed_drivers, kstack, ustack);
+    if requested == CellId(0) {
+        if let Some(task) = sched.tasks.get_mut(&tid) {
+            task.cell_id = CellId(tid as u64);
+        }
+    }
+    // Inside the same critical section that made the task reachable: the child
+    // is already on a ready queue, and any hart that could pick it up must first
+    // take this lock. Installing after the guard drops would leave a window in
+    // which the child runs and the filesystem service reads "inherited nothing"
+    // for a cell that was in fact given a set.
+    dir_inherit::install_on_child(sched, tid, spawner);
+    Ok(tid)
+}
+
 pub fn spawn_with_arg(
     name: &str,
     cell_id: CellId,
@@ -555,6 +654,11 @@ fn elf_is_pie(data: &[u8]) -> bool {
 /// Spawn a cell from an ELF image already in memory.
 ///
 /// Applies ELF relocations internally (`.rela.dyn`) so callers need not do it.
+///
+/// Pass `CellId(0)` unless the cell's identity is already fixed by something
+/// else; the task is then given a derived per-cell identity before it is
+/// reachable — see [`spawn_cell_task`] for why no caller should patch
+/// `task.cell_id` itself.
 ///
 /// Returns `(tid, load_base)` where `load_base` is:
 /// - `0` for fixed-VA (non-PIE) cells — load address comes from the ELF itself.
@@ -622,12 +726,46 @@ pub fn spawn_from_mem(
             })?
     };
 
-    // 5. Pre-allocate all per-task resources BEFORE touching the scheduler.
-    //    Rust Drop ensures cleanup on any error path — no manual free needed here.
-    //    load_base is transferred into CellSegments (pie_va_base field), so after
-    //    this point the VA slot is freed by segments.drop(), not manually.
+    // Target permissions per page, kept alive until step 6 lowers them. Derived
+    // in `load_segments` because only it sees the per-segment p_flags and the
+    // boundary-page merge; recomputing here would risk the two disagreeing.
+    let wx_pages: alloc::vec::Vec<(usize, crate::memory::paging::Flags)> =
+        seg_pages.iter().map(|p| (p.va, p.final_flags)).collect();
+
+    // 5. Take ownership of the mapped segment frames NOW, before anything else
+    //    can fail. From here on every error path frees the frames and the PIE VA
+    //    slot by dropping `segments`; load_base is transferred into its
+    //    pie_va_base field, so it must not also be freed manually.
     let entry_va = header.entry.wrapping_add(load_base);
-    let segments = crate::task::stack::CellSegments::new(seg_pages, load_base);
+    let segments = crate::task::stack::CellSegments::new(
+        seg_pages.iter().map(|p| (p.va, p.frame)).collect(),
+        load_base,
+    );
+
+    // 6. Relocate, then lock the pages down — both BEFORE the task exists.
+    //
+    //    Relocation is the last kernel write through the cell's own USER
+    //    mapping, so it must precede the lowering or the loader would fault on
+    //    its own patches. The lowering in turn must precede task registration:
+    //    registering pushes the task onto a ready queue, and another hart can
+    //    steal and start it on its next tick. A cell that starts before this
+    //    point runs unrelocated, with every page still writable, and caches
+    //    those writable PTEs in a TLB no cross-hart shootdown exists to clear.
+    if load_base != 0 {
+        if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
+            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
+                log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
+                return Err(e);
+            }
+        }
+    }
+    if let Err(e) = crate::loader::wx::enforce(&wx_pages, name) {
+        log::error!("Spawn: W^X enforcement failed for '{}': {:?}", name, e);
+        return Err(e);
+    }
+
+    // 7. Pre-allocate the remaining per-task resources BEFORE touching the
+    //    scheduler. Rust Drop cleans up on any error path — no manual free here.
     let kstack =
         crate::task::stack::Stack::new_kernel(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
     let ustack =
@@ -635,15 +773,15 @@ pub fn spawn_from_mem(
     let kstack_top = kstack.top;
     let user_stack_top = ustack.top;
 
-    // 6. Spawn Task — creates scheduler entry and takes ownership of the stacks
-    //    allocated in step 5. Handing them over instead of letting the scheduler
-    //    allocate its own pair is what keeps this path to ONE contiguous run per
-    //    stack: the scheduler's pair used to be overwritten and dropped right
-    //    here, so each spawn asked the allocator for four 65-frame runs and kept
-    //    two. `segments` still drops on failure below.
-    let tid = spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack)?;
+    // 8. Spawn Task — creates the scheduler entry, derives the cell identity, and
+    //    takes ownership of the stacks allocated in step 7. Handing them over
+    //    instead of letting the scheduler allocate its own pair is what keeps
+    //    this path to ONE contiguous run per stack: the scheduler's pair used to
+    //    be overwritten and dropped right here, so each spawn asked the allocator
+    //    for four 65-frame runs and kept two. `segments` still drops on failure.
+    let tid = spawn_cell_task(name, cell_id, allowed_drivers, kstack, ustack)?;
 
-    // 7. Wire the remaining pre-allocated resources into the task under the
+    // 9. Wire the remaining pre-allocated resources into the task under the
     //    scheduler lock. Option::take() transfers ownership; untaken Somes drop at
     //    end of scope.
     let mut segments_o = Some(segments);
@@ -765,20 +903,6 @@ pub fn spawn_from_mem(
             sched.exit_task(tid, 0xff);
         }
         return Err(ViError::Unknown);
-    }
-
-    // Apply PIE relocations (.rela.dyn) now that all segments are mapped.
-    if load_base != 0 {
-        use crate::loader::ElfParser;
-        if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
-            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
-                log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
-                if let Some(sched) = SCHEDULER.lock().as_mut() {
-                    sched.exit_task(tid, 0xff);
-                }
-                return Err(e);
-            }
-        }
     }
 
     Ok((tid, load_base))
@@ -1061,13 +1185,13 @@ pub fn ipc_send(
     target_id: usize,
     msg_ptr: VAddr,
     msg_len: usize,
-) -> core::result::Result<usize, ()> {
+) -> core::result::Result<usize, IpcSendError> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if !sched.tasks.contains_key(&target_id) {
             // Expected: caller sends to a cell that already exited (e.g. input service
             // dispatching to a focused cell that called sys_exit).  Not a system error.
             log::debug!("IPC: Target Task {} not found (cell exited)", target_id);
-            return Err(());
+            return Err(IpcSendError::TargetGone);
         }
 
         // ── Hot-swap queue: buffer messages to Frozen cells ─────────────────
@@ -1080,29 +1204,20 @@ pub fn ipc_send(
         // The new cell drains this queue in Step 5 (UNFREEZE).
         if let Some(target) = sched.tasks.get_mut(&target_id) {
             if matches!(target.state, TaskState::Frozen { .. }) {
-                if target.pending_msgs.len() >= tcb::HOTSWAP_MSG_QUEUE_DEPTH {
+                // SAFETY: msg_ptr is valid for this syscall's duration; the caller
+                // cannot resume or free it while the kernel copies these bytes.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                if queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH).is_err()
+                {
                     // Queue saturated — tell caller to back off and retry.
                     log::warn!(
-                        "[hotswap] pending_msgs full for frozen tid={} (caller={}); dropping",
+                        "[hotswap] cannot queue msg for frozen tid={} (caller={})",
                         target_id,
                         caller_id
                     );
                     // Return Err(()) so the syscall layer maps this to TryAgain.
-                    return Err(());
+                    return Err(IpcSendError::Backpressure);
                 }
-                // SAFETY: msg_ptr is a user-space pointer valid for this syscall's
-                // duration (SAS: single address space, caller is in mid-syscall so
-                // its stack is alive).  We copy immediately to an owned buffer so
-                // the bytes survive after this stack frame and the caller's
-                // execution resumes.
-                let bytes: alloc::vec::Vec<u8> =
-                    unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len).to_vec() };
-                let tick = crate::task::system_ticks() as u64;
-                target.pending_msgs.push(tcb::PendingMsg {
-                    sender_tid: caller_id,
-                    data: bytes.into_boxed_slice(),
-                    enqueued_tick: tick,
-                });
                 log::debug!(
                     "[hotswap] queued msg ({} bytes) from tid={} to frozen tid={}",
                     msg_len,
@@ -1118,27 +1233,20 @@ pub fn ipc_send(
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
             match target.state {
                 // G18 fix: honour the mask — only deliver if mask==0 (wildcard) or mask==caller_id.
-                TaskState::Recv {
-                    mask,
-                    buf_ptr,
-                    buf_len,
-                    ..
-                } if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
-                _ => None,
+                TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id => true,
+                _ => false,
             }
         } else {
-            None
+            false
         };
 
-        if let Some((dest_ptr, dest_len)) = target_ready {
-            let app_src = msg_ptr as *const u8;
-            let app_dst = dest_ptr as *mut u8;
-            let copy_len = core::cmp::min(msg_len, dest_len);
-            unsafe {
-                core::ptr::copy_nonoverlapping(app_src, app_dst, copy_len);
-            }
-
+        if target_ready {
             if let Some(target) = sched.tasks.get_mut(&target_id) {
+                // SAFETY: msg_ptr remains owned by the blocked-in-kernel caller until
+                // this syscall returns, so it is valid for the immediate owned copy.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
+                    .map_err(|_| IpcSendError::Backpressure)?;
                 target.state = TaskState::Ready;
                 target.current_caller = Some(caller_id);
             }
@@ -1163,14 +1271,14 @@ pub fn ipc_send(
             return Ok(1);
         }
     }
-    Err(())
+    Err(IpcSendError::TargetGone)
 }
 
 /// Post a message to `target_id` without blocking the caller.
 ///
-/// Delivers immediately if target is in `Recv` state (copies into its buffer,
-/// marks it Ready, pends a preempt).  If the target is busy, queues the message
-/// into `pending_msgs` (bounded by `HOTSWAP_MSG_QUEUE_DEPTH`).
+/// Queues an owned message and wakes the target immediately when it is in `Recv`.
+/// Busy targets retain the queued message until their next receive call. The
+/// mailbox is bounded by `HOTSWAP_MSG_QUEUE_DEPTH`.
 ///
 /// Never puts the caller in `Sending` state — the caller always continues.
 /// Returns `Ok(())` if delivered or queued, `Err(())` if target is gone or queue full.
@@ -1187,40 +1295,26 @@ pub fn ipc_post_nonblock(
             return Err(());
         }
 
-        let target_ready = sched.tasks.get(&target_id).and_then(|t| match t.state {
-            TaskState::Recv {
-                buf_ptr, buf_len, ..
-            } => Some((buf_ptr, buf_len)),
-            _ => None,
-        });
+        // Known pre-existing contract gap (2026-07-31 Recv buffer-pinning audit):
+        // unlike ipc_send/ipc_try_send, this path intentionally preserves its
+        // current behavior of matching any Recv without consulting the mask.
+        let target_ready = sched
+            .tasks
+            .get(&target_id)
+            .is_some_and(|t| matches!(t.state, TaskState::Recv { .. }));
 
-        if let Some((dest_ptr, dest_len)) = target_ready {
-            let copy_len = msg.len().min(dest_len);
-            // SAFETY: dest_ptr is the target cell's recv buffer (SAS identity mapping);
-            // we hold SCHEDULER lock so the target is not concurrently executing.
-            unsafe {
-                core::ptr::copy_nonoverlapping(msg.as_ptr(), dest_ptr as *mut u8, copy_len);
-            }
-            if let Some(t) = sched.tasks.get_mut(&target_id) {
+        if let Some(t) = sched.tasks.get_mut(&target_id) {
+            queue_pending_msg(t, sender_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
+            if target_ready {
                 t.state = TaskState::Ready;
                 t.current_caller = Some(sender_id);
             }
+        }
+        if target_ready {
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
-            return Ok(());
         }
-
-        // Target not in Recv — queue to pending_msgs (bounded).
-        if let Some(t) = sched.tasks.get_mut(&target_id) {
-            if t.pending_msgs.len() < tcb::HOTSWAP_MSG_QUEUE_DEPTH {
-                t.pending_msgs.push(tcb::PendingMsg {
-                    sender_tid: sender_id,
-                    data: msg.to_vec().into_boxed_slice(),
-                    enqueued_tick: crate::task::system_ticks() as u64,
-                });
-                return Ok(());
-            }
-        }
+        return Ok(());
     }
     Err(())
 }
@@ -1355,9 +1449,11 @@ pub fn ipc_try_recv(
 /// Non-blocking IPC send: deliver to target if it is in `Recv` state with a
 /// matching mask; otherwise return `Err(())` without blocking the caller.
 ///
-/// Used by the input service dispatcher so that key events are dropped (not
-/// queued in the caller) when the focused cell is not ready to receive.
-/// This prevents the input/focused-cell deadlock: both sides in `Sending`.
+/// For most callers, "not ready" still means drop immediately. The input
+/// service is the one exception: if the focused receiver is not in `Recv`, the
+/// kernel may enqueue the event into that receiver's bounded pending mailbox
+/// instead of blocking the sender. The mailbox is capped at 512 input events;
+/// once full, this call drops again with `Err(())`.
 pub fn ipc_try_send(
     caller_id: usize,
     target_id: usize,
@@ -1369,26 +1465,19 @@ pub fn ipc_try_send(
             return Err(());
         }
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {
-            match target.state {
-                TaskState::Recv {
-                    mask,
-                    buf_ptr,
-                    buf_len,
-                    ..
-                } if mask == 0 || mask == caller_id => Some((buf_ptr, buf_len)),
-                _ => None,
-            }
+            matches!(
+                target.state,
+                TaskState::Recv { mask, .. } if mask == 0 || mask == caller_id
+            )
         } else {
-            None
+            false
         };
-        if let Some((dest_ptr, dest_len)) = target_ready {
-            let copy_len = core::cmp::min(msg_len, dest_len);
-            // SAFETY: msg_ptr is a valid user-space buffer for this syscall's
-            // duration (SAS, single address space, caller is mid-syscall).
-            unsafe {
-                core::ptr::copy_nonoverlapping(msg_ptr as *const u8, dest_ptr as *mut u8, copy_len);
-            }
+        if target_ready {
             if let Some(target) = sched.tasks.get_mut(&target_id) {
+                // SAFETY: msg_ptr remains valid while the caller is in this syscall;
+                // queue_pending_msg copies it into owned storage before return.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                queue_pending_msg(target, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
                 target.state = TaskState::Ready;
                 target.current_caller = Some(caller_id);
             }
@@ -1396,34 +1485,21 @@ pub fn ipc_try_send(
             sched.pend_preempt_if_needed(prio);
             return Ok(());
         }
-        // Target not in Recv. The input service must never DROP a translated key
-        // event just because the focused cell is momentarily out of Recv (e.g. it
-        // is echoing the previous char or re-entering its read loop): a burst typed
-        // at the serial console ("hypha\n") arrives faster than the focused cell can
-        // re-park, so a fire-once try_send loses all but the first key.  For the
-        // input service specifically, fall back to a BOUNDED queue into the target's
-        // pending_msgs (same primitive as ipc_post_nonblock), which the target drains
-        // on its next sys_recv / sys_recv_timeout.  Bounded depth keeps a wedged GUI
-        // cell from growing the queue without limit; when full we drop as before.
-        // All other try_send callers keep strict drop-if-not-ready semantics.
+        // Target not in Recv. The input service alone may fall back to the
+        // receiver's bounded pending mailbox so short bursts of translated key
+        // events survive while the focused cell re-enters its next recv. That
+        // mailbox is capped at 512 queued input events; once full, we drop as
+        // before. All other try_send callers keep strict drop-if-not-ready
+        // semantics.
         let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
             .load(core::sync::atomic::Ordering::Relaxed);
         if caller_id == input_tid && input_tid != 0 {
             if let Some(t) = sched.tasks.get_mut(&target_id) {
-                if t.pending_msgs.len() < tcb::INPUT_EVENT_QUEUE_DEPTH {
-                    // SAFETY: copy the message bytes out of the caller's user buffer
-                    // (SAS identity mapping; caller is mid-syscall) into an owned box.
-                    let data =
-                        unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) }
-                            .to_vec()
-                            .into_boxed_slice();
-                    t.pending_msgs.push(tcb::PendingMsg {
-                        sender_tid: caller_id,
-                        data,
-                        enqueued_tick: crate::task::system_ticks() as u64,
-                    });
-                    return Ok(());
-                }
+                // SAFETY: msg_ptr is valid for the duration of this syscall and is
+                // copied into owned storage before the caller resumes.
+                let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
+                queue_pending_msg(t, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
+                return Ok(());
             }
         }
         // Non-input caller, or queue full — drop event without blocking.
@@ -1458,6 +1534,8 @@ pub fn ipc_borrow_read(
     dst_ptr: VAddr,
     len: usize,
 ) -> core::result::Result<usize, ()> {
+    // Audit guard (2026-07-31): no live production caller currently exists.
+    // Re-enabling this path requires a separate lease pin/lifetime review.
     if let Some(sched) = SCHEDULER.lock().as_ref() {
         if let Some(task) = sched.tasks.get(&caller_id) {
             if let Some(lease) = task.get_lease(lease_id) {
@@ -1489,6 +1567,8 @@ pub fn ipc_borrow_write(
     src_ptr: VAddr,
     len: usize,
 ) -> core::result::Result<usize, ()> {
+    // Audit guard (2026-07-31): no live production caller currently exists.
+    // Re-enabling this path requires a separate lease pin/lifetime review.
     if let Some(sched) = SCHEDULER.lock().as_ref() {
         if let Some(task) = sched.tasks.get(&caller_id) {
             if let Some(lease) = task.get_lease(lease_id) {

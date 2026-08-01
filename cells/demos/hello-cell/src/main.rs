@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 use ostd::app::{AppContext, AppEvent};
 use ostd::io::println;

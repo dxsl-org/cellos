@@ -11,6 +11,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -26,8 +27,9 @@ use ostd::syscall::sys_exit;
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 api::declare_syscalls![Send, Recv, Log, LookupService];
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[tool-fs] ready");
     CellRuntime::new().no_heartbeat().run(|ctx, ev| match ev {
         AppEvent::Message { sender_tid, data } | AppEvent::RawMessage { sender_tid, data } => {

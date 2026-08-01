@@ -16,14 +16,24 @@ The signature is embedded as a non-loadable ELF section `__ViCell_sig` (64 bytes
 via `objcopy`. The section must not have the ALLOC flag — it must never be in PT_LOAD.
 
 Usage:
-    python scripts/sign-cell.py --in cell.elf --out cell-signed.elf
-    python scripts/sign-cell.py --in cell.elf --out cell.elf          (sign in-place)
+    python scripts/cellos-sign --sign cell.elf                        (the only signing route)
     python scripts/sign-cell.py --verify --in cell-signed.elf         (check signature)
     python scripts/sign-cell.py --emit-test-vector                    (print Rust consts)
     python scripts/sign-cell.py --emit-pubkey                         (print Rust const)
 
     --seed-hex HEX    32-byte hex seed for a custom/prod key (default: dev seed)
     --objcopy PATH    path to riscv64/aarch64 objcopy (default: $OBJCOPY env or "objcopy")
+
+NOTE: this is the low-level signer and performs NO F1/F5 policy check, so it
+refuses to sign on its own. A cell signature attests that the pipeline enforced
+F1 and F5 (Spec 18 §2.1); this entry point cannot attest that, and a dev-key
+signature is just as load-bearing as a production one because every local and
+QEMU image is a dev-key build. Signing therefore requires either the `_CHECKED`
+sentinel — set only by `cellos_sign.signing`, i.e. only after a passing check —
+or the explicit `--unchecked-dev-signature` opt-in, which exists for signer
+round-trip tests and produces a binary that must never reach an image. The
+production-key guard is enforced here as well as in the wrapper, so no route
+through this file can mint a production signature outside CI.
 """
 
 import argparse
@@ -32,6 +42,9 @@ import struct
 import subprocess
 import sys
 import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cellos_sign.signing import SigningRefused, guard_prod_key  # noqa: E402
 
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -48,6 +61,14 @@ except ImportError:
 # Fixed dev seed — deterministic, matches kernel's CELL_SIGNER_PUBKEY when
 # the `dev-signing-key` feature is enabled. NEVER use in production.
 DEV_SEED: bytes = bytes([0x43] * 32)
+
+# Set to True on *this module object* by `cellos_sign.signing.sign_and_verify`,
+# and nowhere else, once the F1/F5 check has passed. A direct `python3
+# scripts/sign-cell.py` runs a fresh module whose sentinel is False, so the
+# no-check route cannot mint a signature by accident. It is a wiring assertion,
+# not a security boundary: anyone who can run the script can also edit it (see
+# the threat model in scripts/cellos_sign/__init__.py).
+_CHECKED = False
 
 ELF_MAGIC = b'\x7fELF'
 SIG_SECTION = "__ViCell_sig"
@@ -235,6 +256,34 @@ def _rust_array(name: str, data: bytes) -> str:
     return f"const {name}: [u8; {len(data)}] = [{body}];"
 
 
+# ── Admission ─────────────────────────────────────────────────────────────────
+
+def _guard_admission(args) -> None:
+    """Refuse to mint a signature that no F1/F5 check stands behind.
+
+    Raises SigningRefused unless the signature is either backed by a passing
+    check (`_CHECKED`) or explicitly declared unchecked by the caller. The
+    opt-in is dev-key only: a production signature is never allowed to skip the
+    check, whatever the operator asks for.
+    """
+    if _CHECKED:
+        return
+    if not args.unchecked_dev_signature:
+        raise SigningRefused(
+            "sign-cell.py runs no F1/F5 policy check, so a signature minted here "
+            "would attest nothing. Sign with `python3 scripts/cellos-sign --sign "
+            "ELF...`, which checks first. For a signer round-trip test only, pass "
+            "--unchecked-dev-signature."
+        )
+    if args.seed_hex:
+        raise SigningRefused(
+            "--unchecked-dev-signature is dev-key only; a production key must "
+            "never sign without a passing F1/F5 check."
+        )
+    print("WARNING: minting an UNCHECKED dev signature — no F1/F5 check ran. "
+          "This binary must never be shipped in an image.", file=sys.stderr)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -246,7 +295,19 @@ def main() -> None:
     ap.add_argument("--emit-test-vector", action="store_true", help="Print self_test() Rust consts and exit")
     ap.add_argument("--seed-hex", default=None, help="32-byte hex seed (default: dev seed)")
     ap.add_argument("--objcopy", default=os.environ.get("OBJCOPY", "objcopy"), help="objcopy binary")
+    ap.add_argument("--unchecked-dev-signature", action="store_true",
+                    help="mint a dev signature with NO F1/F5 check — signer "
+                         "round-trip tests only; the result attests nothing")
     args = ap.parse_args()
+
+    # --verify and the --emit-* modes never produce a signature, so they may use
+    # any key anywhere; only the signing path is gated.
+    if not (args.verify or args.emit_pubkey or args.emit_test_vector):
+        try:
+            guard_prod_key(args.seed_hex)
+            _guard_admission(args)
+        except SigningRefused as exc:
+            sys.exit(f"REFUSED: {exc}")
 
     seed = bytes.fromhex(args.seed_hex) if args.seed_hex else DEV_SEED
     priv = _priv_from_seed(seed)

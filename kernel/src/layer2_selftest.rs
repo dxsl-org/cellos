@@ -90,6 +90,10 @@ pub fn run_mte_selftest() {
 /// - The range `[ptr, ptr + len)` must be valid kernel memory (Normal-Tagged).
 /// - Must be called from EL1 with interrupts masked (boot path).
 #[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+// `stg` is rejected by the assembler unless MTE is enabled. Scoping the feature
+// to this function keeps the rest of the kernel's codegen untouched, and is
+// sound because the caller returns early unless ID_AA64PFR1_EL1 reports MTE2.
+#[target_feature(enable = "mte")]
 unsafe fn tag_region(ptr: *mut u8, len: usize, color: u8) {
     let tag = (color & 0xF) as u64;
     let mut cur = ptr as u64;
@@ -119,6 +123,9 @@ unsafe fn tag_region(ptr: *mut u8, len: usize, color: u8) {
 /// - `ptr` must point inside a valid Normal-Tagged region that was previously
 ///   tagged with [`tag_region`].
 #[cfg(all(target_arch = "aarch64", feature = "test-hooks"))]
+// `ldg` needs the MTE feature for the same reason `tag_region` does; the same
+// availability check guards the caller.
+#[target_feature(enable = "mte")]
 unsafe fn get_tag(ptr: *const u8) -> u8 {
     let mut result: u64 = ptr as u64;
     // SAFETY: LDG reads only the tag memory for the granule at `ptr`.
