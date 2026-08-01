@@ -1,5 +1,8 @@
 # Incremental Native Shell (Shell bản địa tăng trưởng)
 
+**Status**: Historical / superseded by Spec 09 and the shipped shell implementation. This
+document is retained as a design sketch, not a normative specification.
+
 
 ### 1. Giai đoạn 1: Built-in Commands (Tier 1 Cell)
 
@@ -91,7 +94,7 @@ impl<'a> ViShell<'a> {
         // Luật 7: Box<dyn ViFile + Send + Sync>
         let dir = crate::fs::open(path)?; 
         
-        // Giả sử viFS1 hoặc viFS2 trả về danh sách entry qua SAS
+        // Giả sử backend lịch sử được thay bằng MountTable hiện hành của Spec 09
         for entry in dir.read_dir()? {
             println!("{}", entry.name());
         }
@@ -104,7 +107,7 @@ impl<'a> ViShell<'a> {
 ### Tại sao cấu trúc này lại "đáng đồng tiền bát gạo"?
 
 1. **Hiệu suất Robot Nano**: Nhờ **Luật 8 (Borrowing)**, việc mày parse một câu lệnh dài dằng dặc cũng không tốn thêm một byte nào trên Global Heap. Điều này cực kỳ quan trọng khi Cellos chạy trên các thiết bị có RAM giới hạn.
-2. **Tính linh hoạt của Cell**: Vì mày dùng **Luật 7 (Trait Objects)**, cái Shell này không cần biết nó đang `ls` trên `viFS1` (RAM Disk) hay `viFS2` (TFS). Khi mày tháo RAM Disk ra và cắm một ổ cứng thật dùng `viFS2`, cái Shell vẫn chạy mà không cần sửa một dòng code nào.
+2. **Tính linh hoạt của Cell**: Vì mày dùng **Luật 7 (Trait Objects)**, cái Shell này không cần biết nó đang `ls` trên backend nào. Trong policy hiện hành, việc chọn backend được Spec 09 MountTable quyết định; `viFS1`/`viFS2` chỉ còn là tên thiết kế đã retired.
 3. **An toàn tuyệt đối (LBI)**: Nếu Shell bị lỗi (ví dụ: parse sai địa chỉ), cơ chế **Panic Recovery** của Cellos sẽ chỉ làm sập cái Shell Cell đó. Kernel bắt được trap, hồi sinh Shell, và mày lại thấy dấu nhắc lệnh `Cellos >` mà không phải reboot cả hệ thống.
 
 

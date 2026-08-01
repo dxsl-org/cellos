@@ -54,7 +54,8 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
    - No buffer overflows, no use-after-free in application code
 
 3. **Nano-Kernel Philosophy**: Minimize trusted code
-   - Kernel: ~22,600 LOC measured (`kernel/src` all `.rs`, 2026-07-07); grown well past the original ~8,700 / <6,000 aspiration as in-kernel drivers and orchestration await migration to Cells (vs. Linux: 20M LOC)
+   - Kernel size is tracked by generated project status; in-kernel driver and
+     orchestration residue remains scheduled for migration to Cells
    - Move filesystem, networking, drivers to userspace Cells
    - Each Cell is independently testable and upgradeable
 
@@ -64,9 +65,9 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
    - Revocation is automatic (Drop trait)
 
 5. **Multi-Architecture from Day 1**: Single codebase, multiple targets
-   - RISC-V 64/32-bit (RV64, RV32) — IMPLEMENTED (RV64)
-   - ARM AArch64/32-bit — PLANNED
-   - x86_64 — PLANNED
+   - RV64, AArch64, and x86_64 have distinct build/smoke evidence
+   - RV32/AArch32 and architecture-specific production qualification remain separate gates
+   - A successful HAL smoke is not a blanket hardware/product qualification
 
 ---
 
@@ -76,7 +77,7 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
 
 ```
 Kernel & Core
-├── kernel              Nano kernel (~22,600 LOC measured 2026-07-07; migration of drivers/orchestration to Cells will shrink it)
+├── kernel              Nano kernel (size reported by generated project status; boundary migrations remain tracked)
 
 Hardware Abstraction
 ├── hal/core            Facade (feature-gated)
@@ -98,9 +99,10 @@ Cells
 ```
 
 ### Total Codebase
-- **Rust Code**: kernel measures ~22,600 LOC alone (`kernel/src`, 2026-07-07); the earlier ~21,473 total (kernel 8706 + hal 2503 + libs 4284 + cells 5980) is stale and pending a full recount
-- **Design Docs**: 36 specification files (30,000+ LOC)
-- **Build Target**: `riscv64gc-unknown-none-elf` (primary); `aarch64-unknown-none`, `x86_64-unknown-none` supported
+- **Rust Code**: moving file/LOC totals belong in generated project status, not this PDR
+- **Design Docs**: normative specifications plus generated status; exact counts are generated
+- **Build lanes**: RV64 is the primary reference/QEMU CI target; ARM64 is the first
+  bare-metal safety-qualification candidate; x86_64 support and qualification are tracked separately
 
 ---
 
@@ -145,7 +147,8 @@ Cells
 
 #### 1.3 Multi-Architecture HAL
 
-**Status**: ✅ COMPLETE (RV64 + AArch64 + x86_64 Ring-3 Smoke Verified)
+**Status**: Implemented for RV64, AArch64, and x86_64 with target-specific smoke evidence;
+production qualification remains per architecture and board.
 
 **Requirement**: Stable trait-based HAL supporting RV64, ARM AArch64, x86_64.
 
@@ -200,10 +203,12 @@ Cells
 
 **Requirement**: Full filesystem abstraction (FAT32, ext4 support planned).
 
-**Current Status**: RamFS with basic `/bin/` access.
+**Current Status**: MountTable VFS with BootFS, RamFS, FAT write support, default-enabled
+littlefs at `/data`, and staged RedoxFS activation. QEMU evidence does not replace
+real-board power-cut qualification.
 
 **Acceptance Criteria**:
-- [ ] Write support for FAT32
+- [x] Write support for FAT32
 - [ ] Directory creation/deletion
 - [ ] File permissions (read/write/execute bits)
 - [ ] Async file operations (non-blocking I/O)
@@ -398,8 +403,8 @@ Cells
 |-------|-----------|---------|--------|
 | Bootloader | Limine | Latest | ✅ Working |
 | Kernel | Rust nightly | 2024+ | ✅ Compiling |
-| HAL | Custom traits | N/A | ✅ RV64 done, ARM/x86 planned |
-| Filesystems | FAT32 | Existing | ✅ Read-only working |
+| HAL | Custom traits | N/A | RV64/AArch64/x86_64 implemented with different smoke/qualification levels |
+| Filesystems | MountTable: BootFS/RamFS/FAT/littlefs/RedoxFS | Existing | FAT writes and littlefs `/data` shipped; RedoxFS and hardware qualification are phased |
 | Runtimes | Lua / MicroPython | 5.4 / 1.24.1 | ⚠️ Native runtimes unmaintained (dropped); Python = Tier 3 VM |
 
 ### Key Dependencies
@@ -422,14 +427,14 @@ None documented yet (Phase 1 still stabilizing).
 
 | Metric | Target | Current | Status |
 |--------|--------|---------|--------|
-| Kernel LOC | < 10000 | ~22,600 (measured 2026-07-07) | ❌ Exceeded — pending driver/orchestration migration to Cells |
+| Kernel boundary | Core excludes driver/service policy | See generated project status | 🚧 Driver/orchestration residue remains |
 | Architecture Tests | 10/10 | 10/10 | ✅ Met |
-| Build Time | < 60s | 45s | ✅ Met |
+| Build Time | < 60s | No retained benchmark artifact | 🚧 Measurement gate open |
 | VirtIO Block | Working | ✅ Working | ✅ Complete |
 | Keyboard Input | Multi-key | ✅ Multi-key | ✅ Complete |
-| Multi-Arch HAL | RV64+ARM+x86 | ✅ All 3 | ✅ Complete |
-| Unit Test Coverage | 80%+ | 75% | 🚧 In Progress |
-| Documentation | Complete | 95% | ✅ Near Complete |
+| Multi-Arch HAL | RV64+ARM+x86 | Implemented; evidence differs by target | 🚧 Qualification is target-specific |
+| Unit Test Coverage | 80%+ | Not currently measured by a committed artifact | 🚧 Measurement gate open |
+| Documentation | Current and cross-checked | No synthetic completion percentage | 🚧 Drift reconciliation ongoing |
 
 ---
 
@@ -512,8 +517,8 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 | **Reliability** | 99.5% uptime | Watchdog timers, graceful shutdown |
 | **Performance** | < 100 µs context switch | Benchmarking suite |
 | **Security** | No buffer overflows in Cells | Rust compiler enforcement |
-| **Maintainability** | < 6000 LOC kernel | Nano-kernel philosophy |
-| **Scalability** | Support 1000+ Cells | Adaptive scheduler, memory pooling |
+| **Maintainability** | Responsibility-bounded kernel with generated total/core nLOC trend | Spec 15 + [generated metrics](code-metrics.generated.md) |
+| **Scalability** | Per-request profile goal: 1000 simultaneous isolated cells after staged 64/128/256/512 measurements | Shared immutable image frames, demand-paged stacks, profile quotas, dynamic tables |
 | **Portability** | RV64, ARM, x86 | Feature-gated HAL |
 
 ---
@@ -529,12 +534,12 @@ Phase 4: Advanced Features (2026-12 — 2027-03)
 ## Success Criteria (Overall)
 
 1. ✅ Passes architecture validation (10/10)
-2. ❌ Kernel < 6000 LOC — NOT met; measures ~22,600 LOC (`kernel/src`, 2026-07-07). Shrinks once tracked in-kernel drivers/orchestration migrate to Cells (see CLAUDE.md "Kernel Boundary Law")
+2. 🚧 Kernel boundary target — generated size/status must show tracked driver and orchestration migrations complete
 3. ✅ No `unsafe` in Cells outside the reviewed allowlist — enforced at the signing gate; driver/FFI cells hold documented exemptions
-4. ✅ Multi-architecture HAL (RV64, ARM, x86)
-5. ✅ Full test coverage (80%+)
-6. ✅ Production-ready documentation
-7. ✅ Reproducible builds (bit-for-bit identical)
+4. 🚧 Multi-architecture HAL (RV64, ARM, x86) — implemented, with qualification tracked per target
+5. 🚧 Coverage target (80%+) — unverified until coverage output is generated and retained
+6. 🚧 Production-ready documentation — drift reconciliation and link checks remain continuous gates
+7. 🚧 Reproducible builds — bit-for-bit CI comparison harness not yet verified
 8. ✅ Open source with permissive license
 
 ---

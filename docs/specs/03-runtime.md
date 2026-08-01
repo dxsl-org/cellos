@@ -20,7 +20,8 @@ Cellos tận dụng triệt để mô hình lập trình bất đồng bộ củ
 * **Giải pháp**: Phải truyền `Box<[u8]>` hoặc `Vec<u8>`. Quyền sở hữu (Ownership) được chuyển giao hoàn toàn cho Driver.
 
 ### Async Pinning Registry (Lá chắn Unload)
-* **Cơ chế**: Khi một vùng nhớ đang tham gia vào tác vụ Async, nó được đánh dấu là **Pinned/Locked** trong `Metadata Registry`.
+* **Cơ chế**: Khi một vùng nhớ tham gia Async/DMA, pin registry ghi owner, range và
+  lifecycle; quarantine ngăn reclaim trước khi cancellation/unpin hoàn tất.
 * **Bảo vệ**: Kernel sẽ từ chối lệnh `unload` của Cell sở hữu ban đầu cho đến khi tác vụ Async hoàn tất và quyền sở hữu được trả về hoặc giải phóng.
 
 ## 3. Hot-Swap & State Transfer
@@ -95,7 +96,8 @@ Offset  Size   Field
 
 ### 4.5 Prerequisites trước khi triển khai (Phase 29)
 
-- [ ] **Metadata Registry** hoàn chỉnh — cần biết OwnerID của từng page để exclude MMIO
+- [ ] Typed snapshot inventory từ từng subsystem owner; MMIO/resource ranges lấy từ
+      resource registry, không từ pointer scanning
 - [ ] **Direct IPC vtable** (Phase 27) — snapshot cần capture vtable layout, không phải syscall table
 - [ ] **FAT16 write path** ổn định — ghi `system.img` sau cold boot
 - [ ] **Fixed physical layout** đã confirmed (no physical ASLR)

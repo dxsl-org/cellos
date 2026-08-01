@@ -1,5 +1,8 @@
 # 🛸 Cellos - FORK & REFERENCE STRATEGY
 
+**Status**: Non-normative reference strategy. Binding subsystem architecture lives in
+the owning numbered specs; for filesystems, Spec 09 supersedes §6 below.
+
 File này định hướng việc tái sử dụng mã nguồn và ý tưởng từ các dự án Open Source để tối ưu hóa thời gian phát triển Cellos.
 
 Mã nguồn đã tải về thư mục .reference/, nếu không tìm thấy thì tải từ github.
@@ -62,12 +65,16 @@ Mã nguồn đã tải về thư mục .reference/, nếu không tìm thấy th�
 
 *Mục tiêu: Đa dạng hóa khả năng lưu trữ từ thẻ nhớ nhỏ đến các "cánh đồng" dữ liệu SAS.*
 
+> Historical note: the active filesystem architecture now lives in Spec 09 (MountTable).
+> This section preserves the retired fork/reference strategy only; uppercase `VIFS1`
+> remains the valid kernel BootFS/initramfs name.
+
 | Thành phần | Nguồn tham khảo | Hành động (Action) | Ghi chú |
 | --- | --- | --- | --- |
 | **FAT32** | `fatfs` crate | **Copy & Wrap** | Dùng cho các phân vùng boot nhỏ, thẻ nhớ đời cũ. |
 | **exFAT** | `exfat-rs` / `vfat` | **Fork & Fix** | Bắt buộc phải có để đọc thẻ nhớ dung lượng lớn (>32GB) trên các robot nano. |
-| **viFS1 (Classic)** | `RedoxFS` | POSIX-compliant, dựa trên Node và Path truyền thống. | Dùng cho các App Cell được port từ môi trường Unix/Redox sang cho nhanh. |
-| **viFS2 (Modern)** | **TFS (B-tree)** | **B-tree based**, tối ưu tìm kiếm, hỗ trợ snapshot và ghi đè an toàn. | Dùng làm phân vùng hệ thống chính (System Partition), nạp Cell cực nhanh và chống lỗi dữ liệu. |
+| **viFS1 (Classic)** | Retired design name; see Spec 09 MountTable. | POSIX-compliant, dựa trên Node và Path truyền thống. | Historical only; không còn là policy hiện hành. |
+| **viFS2 (Modern)** | Retired design name; see Spec 09 MountTable. | **B-tree based**, tối ưu tìm kiếm, hỗ trợ snapshot và ghi đè an toàn. | Historical only; không còn là policy hiện hành. |
 | **SAS-based Global Page Cache** | `TheseusOS` | **Refer** | Cách Theseus tận dụng SAS để cache dữ liệu từ đĩa mà không cần copy qua lại giữa các tiến trình. |
 
 
@@ -95,7 +102,9 @@ Khi copy code HAL từ các dự án khác, hãy cảnh giác với các địa 
 
 ### C. Cơ chế "Panic Guard"
 
-Khi mượn code từ các OS dùng `panic!` nhiều (như Redox), hãy bọc chúng lại bằng `catch_unwind` hoặc chuyển đổi sang `ViResult`. Tuyệt đối không để một thư viện "chôm" về làm sập cả Nano Kernel của mày.
+Khi mượn code từ OS dùng `panic!` nhiều, chuyển failure có thể phục hồi sang `ViResult`
+ở boundary thích hợp. Panic còn lại abort Cell và đi qua terminate → reap → notify →
+supervisor; không dùng `catch_unwind` trong no_std abort-on-panic builds.
 
 ### D. ⚠️ DO'S & DON'TS
 

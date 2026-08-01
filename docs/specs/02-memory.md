@@ -29,14 +29,19 @@ allocation path currently calls the `alloc` / `dealloc` wrappers. Stacks still c
 `Stack::new_kernel` and `Stack::new_user`, so Cellos has not qualified end-to-end TLSF
 WCET or latency on the current system.
 
-## 3. Metadata Registry & Ownership Transfer
-Đây là trái tim để duy trì an toàn trong SAS khi Hot-swap.
+## 3. Focused ownership authorities
 
-* **Registry**: Một bảng băm theo dõi `[Address Range] -> {OwnerID, State}`.
-* **State**: 
-    * `Owned`: Thuộc về một Cell.
-    * `AsyncLocked`: Đang trong quá trình truyền dữ liệu (DMA/Async). Không được giải phóng kể cả khi Cell sở hữu bị Unload.
-* **Transfer Protocol**: Khi Cell A gửi `Box<T>` cho Cell B, Kernel cập nhật `OwnerID = B` trong Registry. Nếu A bị xóa, vùng nhớ của B vẫn an toàn.
+Cellos không có một "Metadata Registry" toàn cục. Quyền sở hữu được giữ tại authority
+nhỏ nhất có thể kiểm tra và thu hồi đúng vòng đời:
+
+* Task/Cell frame ownership và quota nằm ở task-owned frame lists + `cell_quota`.
+* Grant ownership/lease nằm trong per-task grant tables; reaper thu hồi khi task chết.
+* Async/DMA lifetime nằm trong pin registry và quarantine; frame chỉ được reclaim sau
+  cancel/unpin hoặc quarantine completion.
+* MMIO/resource exclusivity nằm trong resource registry tương ứng.
+
+Không scan con trỏ tổng quát và không cập nhật OwnerID bằng heuristic. Hibernate/hot-swap
+phải dùng typed, subsystem-owned serialization.
 
 ## 4. Stack Safety (Guard Pages)
 * **Cơ chế**: Mọi Stack của Task/Cell được bao bọc bởi một trang **Unmapped 4KB (Guard Page)**.

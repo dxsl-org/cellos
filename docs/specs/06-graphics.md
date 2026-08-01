@@ -15,14 +15,14 @@ Trong Cellos SAS, chúng ta loại bỏ hoàn toàn việc copy buffer giữa Cl
     * Thay vì copy toàn bộ, Compositor chỉ thực hiện `memcpy` các vùng dữ liệu bị thay đổi (Damaged regions).
     * **Game/Full-screen Mode**: Compositor chuyển nhượng trực tiếp quyền sở hữu vùng nhớ Framebuffer cho App Cell thông qua Capability. Đây là mức hiệu năng **True Zero-Copy**.
 
-## 2. Hệ thống Input: Latency-Free Dispatcher
-Độ trễ từ lúc chạm/gõ đến lúc App nhận được sự kiện phải bằng 0.
+## 2. Hệ thống Input: Focus-Gated Dispatcher
+Độ trễ input phải được đo bằng mục tiêu kiểm chứng được; không có đường `direct call` giữa các Cell.
 
 * **Input Driver (Tier 1)**: Nhận ngắt (IRQ), giải mã thành `InputEvent` (Enum).
 * **Dispatcher**: 
     * Nắm giữ danh sách các `Window` của các Cell.
     * Xác định Cell đang được focus.
-    * **Direct Call**: Gọi trực tiếp hàm `on_event(event)` của Cell đó mà không qua hàng đợi trung gian (Queue) của OS truyền thống.
+    * Chuyển sự kiện qua cơ chế của [Spec 17 §6](17-ipc-wire-contract.md#6-blocking-discipline--the-input-queue): kernel-mediated try-send vào mailbox bounded của target focus, với drop/backpressure theo queue bounds và không gọi trực tiếp vào callback giữa các Cell.
 
 
 
@@ -40,8 +40,8 @@ Cellos cho phép cấu hình linh hoạt tùy theo mục đích sử dụng:
 > **Quyết định 2026-06-07**: Slint bị loại do GPL-3 viral / $1+/device commercial license không phù hợp cho một OS platform. iced bị loại do `iced_runtime` cần std. egui bị loại do tessellation pipeline không phù hợp với software renderer. ViUI được xây dựng từ đầu. Xem chi tiết: [specs/14-viui.md](14-viui.md).
 
 ViUI là UI toolkit `no_std`-native của Cellos với:
-* **Dual-facade API**: Immediate mode (egui-compatible) + Elm architecture (iced-compatible) — developer quen egui hoặc iced không cần học API mới.
-* **Direct pixel rendering**: widget → `ViCanvas` → `DrawTarget` → `&mut [u8]` — không có tessellation triangle/path intermediate. Nhanh hơn egui ~3-5x cho software render.
+* **Dual authoring layer**: Rust `ViNode` API + declarative `.vi` DSL (`vi_design!` inline hoặc `viui-build` lúc build), cùng tạo một Reactive Signal Tree.
+* **Direct pixel rendering**: widget → app-owned pixel surface → DamageNotify. Comparative performance requires a checked-in benchmark artifact; no egui/iced compatibility or speed multiplier is promised.
 * **Event-driven**: 0 CPU khi idle (retained mode + DamageNotify, không phải game loop).
 * **Text**: Bitmap 8×8 cho CLI mode + `GlyphAtlas` + fontdue cho scalable Unicode text.
 * **MIT license**: không viral, không per-device fee — safe cho toàn bộ Cellos ecosystem.

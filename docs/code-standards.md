@@ -109,7 +109,7 @@ foo/
 | **Error Types** | `Vi` prefix | `ViError`, `ViResult<T>` |
 | **Core Structs** | `Vi` prefix (or generic) | `ViConfig`, `ViBenchmark` |
 | **Address Types** | `V` or `P` prefix | `VAddr`, `PAddr` |
-| **Filesystem Names** | `vi` lowercase | `viFS1` (RedoxFS), `viFS2` (TFS) |
+| **Filesystem Names** | retired `viFS1` / `viFS2`; active boot FS `VIFS1` | `VIFS1` (kernel BootFS/initramfs) |
 | **Modules/Files** | snake_case | `task.rs`, `memory.rs`, `frame_allocator.rs` |
 | **Functions** | snake_case | `init_paging`, `handle_interrupt` |
 | **Constants** | UPPER_SNAKE | `MAX_CELLS`, `KERNEL_HEAP_SIZE` |
@@ -130,6 +130,9 @@ pub fn register_driver(driver: Arc<dyn ViDriver + Send + Sync>) { }
 - Implement `Drop` for cleanup (Law 8)
 
 **Why**: Enables dynamic Cell loading without recompilation.
+
+**Filesystem naming note**: use `VIFS1` only for the kernel BootFS/initramfs. Keep
+`viFS1` / `viFS2` only in historical references to retired designs.
 
 ### Law 8: RAII - Implement Drop
 

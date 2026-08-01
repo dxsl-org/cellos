@@ -94,6 +94,9 @@ The bounded `PEER_LOSS_MS` window is acceptable ONLY because the local interlock
 When a partition heals and both nodes believe they are Primary:
 
 1. **Tiebreak:** lower `machine_id` wins Primary; the loser re-enrolls as Secondary.
+   `machine_id` is derived locally from the Noise-authenticated NodeId as
+   `u64::from_le_bytes(SHA256("cellos-machine-id-v1" || NodeId)[0..8])`. A peer wire
+   value is non-authoritative and must be rejected if it differs from this derivation.
 2. **Re-negotiate from scratch:** the loser does NOT retain stale lease claims — all leases are re-requested after re-enrollment. No automatic state merge.
 3. **Anti-flap:** a node that just degraded waits `REJOIN_COOLDOWN_MS` before re-enrolling.
 4. Re-enrolling node MUST complete the Noise KKpsk0 handshake again — no trust carried across a partition boundary.
@@ -102,7 +105,7 @@ When a partition heals and both nodes believe they are Primary:
 
 Each beacon carries `(boot_epoch: u64, mono_counter: u64)` authenticated by the AEAD. The `boot_epoch` is the sender's monotonic time at boot (sourced from `GetTime op=1` at Init — unique per boot since the clock resets).
 
-Receiver rules per `machine_id`:
+Receiver rules per authenticated, locally derived `machine_id`:
 - **Same epoch, non-increasing counter** → replay, drop silently.
 - **Higher epoch** → re-baseline: accept as a fresh sender (reboot detected).
 - **epoch=0 fallback**: if RTC epoch is 0 (no battery / no clock), rely purely on `(boot_epoch, counter)` monotonicity + AEAD freshness. Never use wall-clock in the acceptance window.

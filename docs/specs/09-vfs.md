@@ -35,8 +35,8 @@ Một VFS service duy nhất (`cells/services/vfs/`) sở hữu một **MountTab
 VFS service (MountTable, longest-prefix match)
 ├── /bin, /etc   → BootFS  (initramfs — FAT16 nhúng kernel, read-only)
 ├── /tmp         → RamFS   (tmpfs, volatile, read-write)
-├── /data        → FAT32 hiện tại → littlefs (power-safe, G1 tail)
-├── /mnt/sd      → FAT32   (interop thẻ SD/PC — sau khi /data chuyển littlefs)
+├── /data        → littlefs (default-enabled persistent store)
+├── /mnt/sd      → FAT32   (interop thẻ SD/PC)
 └── /srv         → RedoxFS (G1 functional; G2 production qualification pending)
 ```
 
@@ -46,8 +46,8 @@ VFS service (MountTable, longest-prefix match)
 |---|---|---|---|
 | **BootFS** (kernel `VIFS1`, `kernel_fs.img` FAT16 nhúng) | `/bin`, `/etc` | Initramfs: giải bài toán con gà–quả trứng (kernel load được binary VFS service trước khi VFS tồn tại). Loader fallback tại `kernel/src/loader/early.rs` | Có rồi |
 | **RamFS** | `/tmp` | tmpfs chuẩn — scratch space volatile | Có rồi |
-| **FAT32** (crate `fatfs`, có LFN/VFAT) | `/data` (hiện tại) → `/mnt/sd` | Interop thẻ SD ≤32GB / boot partition RPi / trao đổi dữ liệu với PC. **Không journaling — không dùng làm persistent store chính cho robot** | Có rồi |
-| **littlefs** | `/data` | Persistent store power-loss-resilient cho config/log/model — mất điện giữa chừng ghi không hỏng volume. Bắt buộc trước robot demo trên board thật | G1 tail |
+| **FAT32** (crate `fatfs`, có LFN/VFAT) | `/mnt/sd` | Interop thẻ SD ≤32GB / boot partition RPi / trao đổi dữ liệu với PC. **Không journaling — không dùng làm persistent store chính cho robot** | Shipped |
+| **littlefs** | `/data` | Default-enabled persistent store for config/log/model. Backend and block adapter are shipped; QEMU functional and power-loss suites pass. Repeated real-board power-cut qualification remains required before production robot claims | Shipped software path; hardware qualification pending |
 | **RedoxFS** | `/srv` | CoW + checksum. [ADR 09b](09b-vfs-native-fs-adr.md) + [ADR 0002](../decisions/0002-phased-srv-redoxfs-activation.md) cho phép G1/QEMU proof-of-function qua block Driver Cell; G2 production vẫn cần RedoxFS-on-NVMe test, benchmark `<100 us`, hardware thật, và quyết định capability P5. Mount hiện tại degrade về empty/false nếu P5 thiếu hoặc chưa format | G1 functional; G2 pending |
 | **exFAT** | `/mnt/sd` (mở rộng) | Thẻ SDXC >32GB nguyên bản (xuất xưởng exFAT, `fatfs` không đọc được). `FatBackend::mount()` tự detect OEM-Name `"EXFAT   "` và log cảnh báo rõ thay vì lỗi cryptic. Full support chỉ khi có nhu cầu thật | Theo nhu cầu |
 
@@ -119,7 +119,8 @@ Nhờ lợi thế của Single Address Space (SAS), Cellos đạt được tốc
 Thay vì mỗi FS Cell tự giữ cache, Cellos dùng một Unified Page Cache nằm trong vùng nhớ dùng chung của SAS.
 
 * **Zero-copy Metadata**: backend native (G2) có thể trả về con trỏ trực tiếp đến cấu trúc metadata trong RAM, cho phép App đọc Metadata mà không cần syscall trung gian.
-* **LRU & OOM**: Chính sách thu hồi bộ nhớ (Eviction) được quản lý tập trung bởi Kernel để tránh xung đột tài nguyên giữa các Cell.
+* **LRU & OOM**: VFS Cell owns page-cache replacement/eviction policy. Kernel supplies
+  quota and reclaim mechanisms but does not choose filesystem eviction policy.
 
 
 ## 5. Large File Support (LFS) trên Multi-Arch

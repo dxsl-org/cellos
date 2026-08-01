@@ -12,7 +12,7 @@
 
 | Area | Crates | Key Highlights |
 |------|--------|---------------|
-| Kernel | 1 | ~8,700 LOC; HotSwap, scatter/gather IPC, lease caps, VirtIO VA→PA fix |
+| Kernel | 1 | Size in [generated metrics](code-metrics.generated.md); HotSwap, scatter/gather IPC, lease caps, VirtIO VA→PA fix |
 | HAL | 10 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs |
 | Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
 | Apps | 8+ | shell (parser+executor+45+ built-ins+$(cmd)+args), bench, sys-tools, net-tools (6 bins), utils |

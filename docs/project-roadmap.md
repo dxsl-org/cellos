@@ -10,6 +10,13 @@
 > absent signatures, the dev seed is public, no production public-key provisioning path
 > exists, and secure boot remains open. See Spec 18 and the fleet-admission item below.
 
+> **Plan-portfolio WIP limit (D34-D39, 2026-08-01):**
+> [`.agents/plan-portfolio.md`](../.agents/plan-portfolio.md) is the scheduling source of
+> truth. Midori is the sole active feature program until phases 02/04/07/08 close;
+> supervisory migration, package distribution, Trust & Identity remainder, and remote
+> integration are queued. P0 security, broken CI/build repair, and verification-only
+> closures are the only side-work exceptions.
+
 ---
 
 ## Overview
@@ -33,6 +40,11 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 > **"Done" means**: throughput · multi-core scaling · untrusted third-party code · desktop GUI · zero-downtime · full tooling · large storage · RT-bounded NPU inference (via Tier 1b).
 >
 > **Hardware**: x86_64 (full bring-up) + multi-core RV64/ARM64 servers + RISC-V AI server (C930/P870).
+>
+> **Queued scale profile (D5):** 1000 simultaneous per-request isolated cells is a G2
+> qualification goal, not current capacity. Promotion requires 64/128/256/512 measurements,
+> shared immutable image frames, demand-paged stacks, profile quotas, and dynamic tables; the
+> current 64-cell large-app default stays in force.
 
 ### 🧠 Stage G3 — NPU-native Compute OS _(placeholder — starts after G2 ships)_
 > **"Done" means**: kernel schedules NPU as first-class compute resource · zero-copy tensor pipeline cross cells · per-cell NPU quota · NPU fault isolation (driver cell restart, app cells survive) · model weight shared across inference cells.
@@ -112,19 +124,19 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + Cellos-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (2026-06-16) — full SHT3x I2C + GPIO actuator + MQTT pipeline; `robot-demo-e2e` integration test passes on QEMU ARM64 in 9.83s | **G1** (graduation) |
-| 🆕 Distributed Cells L.0+L.1 — robot swarm (net-broker + merge/split + gossip) | *new* | ✅ COMPLETE (2026-06-23) — all 10 phases shipped; net-broker Cell, Noise KKpsk0 p2p, XChaCha20 gossip, remote service proxy, task-claiming lease, enrollment/merge/split; runs on 2-node QEMU ARM64 cluster. See §L.0 | **G1** |
-| 🆕 **Cell-to-Cell Anywhere** — L.2 Internet layer (flagship feature) | *new* | ✅ G1 COMPLETE (2026-06-24) — P00 Remote-Call API Contract (approved), P01 CellNetId+Ticket+NodeId binding (Law 1 approved), P02 STUN reflexive, P03 DERP relay client; all compile cleanly (0 errors); FATAL-1 Noise prologue fix shipped. G2 plan forthcoming (P04 HyParView+PlumTree, P05 UDP hole-punch, P06 Pkarr/DNS, P07 K2 per-node, P08 K3 DICE). See `.agents/260624-cell-to-cell-anywhere/plan.md` | **✅ G1 (P01-P03) · 📋 G2 (P04-P08)** |
+| 🆕 Distributed Cells L.0+L.1 — robot swarm (net-broker + merge/split + gossip) | *new* | ✅ FOUNDATION CODE COMPLETE (2026-06-23) — net-broker Cell, Noise KKpsk0 p2p, XChaCha20 gossip, remote service proxy, task-claiming lease, enrollment/merge/split; the forwarder/runtime path is still a stub, so do not read this as a shipped two-node runtime. See §L.0 | **G1** |
+| 🆕 **Cell-to-Cell Anywhere** — L.2 Internet layer (flagship feature) | *new* | ✅ G1 FOUNDATION CODE COMPLETE (2026-06-24) — P00 Remote-Call API Contract (approved), P01 CellNetId+Ticket+NodeId binding (Law 1 approved), P02 STUN reflexive, P03 DERP relay client; modules compile cleanly (0 errors), but the remote forwarder is still a stub and two-node runtime verification remains pending. G2 plan forthcoming (P04 HyParView+PlumTree, P05 UDP hole-punch, P06 Pkarr/DNS, P07 K2 per-node, P08 K3 DICE). See `.agents/260624-cell-to-cell-anywhere/plan.md` | **✅ G1 (P01-P03) · 📋 G2 (P04-P08)** |
 | Distributed Cells L.2 — server cluster control plane | *new* | 📋 PARKED (2026-06-23) — separate problem; reuses L.0 foundation; lean on external k8s/LB. See §L.2 | **G2/G3** |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
 | 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | ✅ COMPLETE (2026-06-07) — cpu_features.rs DTB detection + HypervisorCap ZST + TCB field; see .agents/260607-1420-h-ext-hypervisor-cap/ | **G1 prep** (non-breaking) |
 | 🆕 Hardware Key Isolation (Silo — Tier 1 ext., G2 ARM64/x86) | *new* | ✅ COMPLETE 2026-06-16 — SiloHandle API shipped; reclassified from Tier 3a → Tier 1 capability (not a VM tier) | G2 |
-| 🆕 Tier 3b Linux VM — ARM64 EL2 VMM (all 10 phases) | Phase 31 | ✅ COMPLETE 2026-06-16 — EL2 hypervisor boots Alpine 3.21.3 aarch64, multi-arch ENOSYS stubs, CI smoke job | **G2** |
+| 🆕 Tier 3b Linux VM / x86 VMM | Phase 31 + x86 follow-up | ARM64 EL2 boots Alpine with CI smoke; AMD SVM is an implemented MVP; Intel VMX has root-operation plumbing only; RISC-V H-extension remains pending | **G2** |
 | 🆕 **Tier 3b VirtIO-GPU Backend** (Linux VM Graphics / Browser Support) | M2.4 ext. | 📋 | **G2** |
 | 🆕 **Enterprise App Isolation** — Wine/Proton-in-Linux-VM Cell + bare Windows VM Cell | new | 📋 G3 on-demand (gated on paying customer + virtio-gpu) | **G3** |
 | 🆕 **SMP multi-core scheduler + work-stealing** | Phase 32 | ✅ COMPLETE 2026-06-09 — SBI HSM hart_start/send_ipi, per-hart ViHartLocal via tp CSR, per-hart ready queues + work stealing, RT cells pinned to hart 1, WaitForEvent (217) | **G2** |
 | Compositor + GPU desktop (full) + mouse | M2.4 + M2.2 full | 📋 | G2 |
 | 🆕 **ViUI v1** (Elm model, FramebufferCanvas, GlyphAtlas, P01–P07) | new | ✅ Done 2026-06-08 — foundation only, design superseded | **G2 prep** |
-| 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | ✅ ALL 7 PHASES COMPLETE 2026-06-16 — Production-ready (P01: Overlay Widgets Dialog/DropDown/Toast; P02: Navigation StackNavigator/TabNavigator; P03: Charts LineChart/BarChart; P04: DSL build.rs vi-build crate; P05: Virtual ListView ListDataProvider; P06: FlexBox v2 wrap/gap/SpaceEvenly/Stretch/flex_shrink; P07: DSL Advanced Bindings @= two-way #= computed) | **G2** |
+| 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | 🚧 Implemented library surface — overlays, navigation, charts, `.vi` build integration, virtual lists, FlexBox, and signal bindings are present; signed-App, input/render, compositor-damage, and measured target qualification remain open | **G2** |
 | 🆕 **TLS 1.3 stack** `[shared, G1-priority]` | Phase TLS-01 | ✅ COMPLETE 2026-06-07 — Network service supports TLS 1.3 via sys_get_random(214), three TLS IPC opcodes (0x30/0x31/0x32), HTTPS demo verified | **G1** |
 | 📋 **TLS server-side accept** `[G2, optional]` | .agents/260623-1500-tls-server-accept | PARKED — plan complete, implement G2 when httpd needs to serve external HTTPS (curl/browser). Swarm uses Noise_KKpsk/NNpsk (separate plan). `tls-server` optional Cargo feature. | **G2** |
 | 🆕 **RTC / wall-clock** `[G1]` | new | ✅ COMPLETE 2026-06-07 — Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time | **G1** |
@@ -621,7 +633,11 @@ Porting simple games using the **C → Lua → Rust** progression is the officia
 **Hard rules:**
 - **Native Tier-1 Cells NEVER speak mTLS.** Noise is the lingua franca between Cellos Cells, at every stage. G1→G2 is an *identity* upgrade (K1→K3), NOT a transport swap — do NOT "rip out Noise, install mTLS" at G2.
 - **mTLS lives ONLY at the Tier-3/interop boundary**, and Cellos gets it from the **Tier 3b Linux VM** (rustls/OpenSSL run natively there) OR from an **external LB/service-mesh terminating mTLS** — **never build X.509 PKI inside the Cellos kernel.**
-- **Fail-closed entropy gate (all native crypto):** `GetRandom(214)` silently falls back to predictable xorshift32 when VirtIO-RNG is absent (`kernel/src/task/syscall.rs:2493-2504`) — broker MUST panic if real entropy is unavailable (mirror `tls/rng.rs:31-35`); VirtIO-RNG mandatory on G1 hardware.
+- **Entropy profiles (all native crypto):** development/QEMU builds may use the explicit
+  `dev-weak-rng` fallback, which is predictable and never credential-grade. Fleet and
+  production artifacts must exclude that feature and fail closed without trusted
+  entropy. Add a release/CI assertion that production features cannot include
+  `dev-weak-rng`; VirtIO-RNG remains mandatory on G1 hardware.
 - **Multicast gossip is G1-only-ish:** cloud VPCs typically block multicast → at G2 the discovery model itself changes to a registry/control plane (part of L.2), so the XChaCha20-gossip layer does not simply carry forward.
 
 #### L.0 Shared foundation `[build once, G1 delivers]`
@@ -871,7 +887,7 @@ All milestones complete when:
 - ✅ HotSwap orchestrator (5-step protocol) working — Phase 20
 - 🚧 Unit + integration tests pass (80%+ coverage) — 75% now, targeting 80%
 - ✅ Architecture validation score: 10/10 — Phase 02
-- ✅ Kernel LOC: < 10,000 (actual: 8,700) — Phase 05
+- ✅ Kernel responsibility boundary established — moving size evidence is generated, not frozen in this historical phase
 - ✅ Multi-architecture HAL (RV64 + AArch64 + x86_64) — Phase 05
 
 ---
@@ -979,7 +995,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 **Status**: ✅ COMPLETE (2026-06-07) — net service now uses typed postcard `NetRequest`/`NetResponse` for primary IPC; raw opcodes 0x15 (close) and 0x30–0x32 (TLS ops) fall through to legacy fallback handler for backward compatibility.
 
 **Research findings (2026-06-05):**
-- Hermit vtable = function-pointer table, not true ring-bypass; real speedup is SAS = no privilege switch → direct `jalr` (~3 cycles vs ~100 ecall)
+- Hermit vtable = function-pointer table, not true ring-bypass; Cellos's direct `jalr` path remains an unmeasured Tier-1 rewrite target, not a shipped comparison
 - postcard crate recommended for typed enums into existing `[u8; 512]` buffer
 - Syscall filter: u64 bitset in TCB + `__Cellos_syscalls` ELF section (xmas-elf already supports arbitrary sections); check BEFORE handle_syscall to avoid SCHEDULER double-lock
 - Existing VFS 3-byte header needs version-gate on postcard migration
@@ -1570,7 +1586,7 @@ Phase 4 (Advanced Features)
 | MicroPython runtime | ✅ Working | ✅ Milestone 3.4 complete (typed VFS IPC) | ✅ COMPLETE |
 | Test coverage | ✅ 80%+ | ✅ 96%+ (65+ integration tests: Phases A–H, X-1–X-6, 3.3, 3.4) | ✅ MET |
 | Architecture tests | ✅ 10/10 | ✅ 10/10 | ✅ MET |
-| Kernel LOC | ✅ < 10,000 | ✅ 8,700 | ✅ MET |
+| Kernel boundary | Responsibility-limited; generated nLOC trend | See [code-metrics.generated.md](code-metrics.generated.md) | ACTIVE CONTROL |
 
 ---
 

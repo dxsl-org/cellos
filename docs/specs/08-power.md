@@ -34,7 +34,9 @@ SAS gặp khó khăn lớn khi Hibernate (S4) vì nó chứa hàng triệu đị
 **Pointer Swizzling (Đóng gói địa chỉ)**
 Khi Hibernate, hệ thống không thể chỉ "dump" RAM ra đĩa vì khi khởi động lại, các Cell có thể được nạp vào địa chỉ khác.
 
-**Deflation (Nén)**: Kernel quét Metadata Registry, chuyển đổi mọi con trỏ tuyệt đối (0x1234...) thành địa chỉ tương đối: Ref(CellID, Section, Offset).
+**Deflation (Nén)**: Mỗi subsystem serialize state bằng schema typed/versioned và tự
+chuyển references của nó thành identifiers tương đối. Kernel không quét hoặc rewrite
+con trỏ tổng quát.
 
 **Persistence**: Lưu trạng thái đã "nén" này xuống đĩa cùng với Snapshot của Heap.
 

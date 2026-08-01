@@ -79,6 +79,11 @@ allocator-committed, nên mục tiêu `<10 MiB` hiện **FAIL thật** thay vì 
 định nghĩa metric hoặc threshold để làm gate xanh. `capacity-probe` có tính phá huỷ chỉ được
 include/sign khi build test-mode với `CELLOS_INCLUDE_CAPACITY_PROBE=1`; image mặc định loại nó.
 
+**D5 — QUEUED: profile per-request server.** Giữ mục tiêu qualification 1000 Cell cô lập đồng
+thời, nhưng không coi đó là capacity hiện tại. Đo N=64/128/256/512 trước; sau Midori mới xét
+shared `.text`/`.rodata` bất biến, stack demand-page, quota riêng theo profile và bảng động.
+Large-app với mặc định 64 Cell không đổi.
+
 **A4 — chạy lại cổng runtime mà phase 09 và 11 để ngỏ.** Cả hai đóng với lý do "runtime
 UNVERIFIED — máy không có QEMU/cross toolchain". Tiền đề đó **sai**: QEMU cả ba arch và
 `riscv64-unknown-elf-*` đều có. Hai vấn đề thật đều nhỏ — `build.rs` khai cứng tên

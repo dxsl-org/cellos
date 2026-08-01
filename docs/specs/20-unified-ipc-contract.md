@@ -2,6 +2,9 @@
 
 > **Status**: Draft v2 2026-07-30 — revised after two adversarial reviews (security
 > adversary + distributed-systems failure analyst). **Not normative until ratified.**
+> D24 approves **zero Law-1/ABI additions** from this draft; every public type, syscall,
+> discriminant, and broker-watch primitive remains subject to the checklist and two
+> explicit confirmations.
 > Extends Spec 17 (IPC wire contract) and Spec 14 (distributed); depends on midori-lessons
 > phase 02 (kernel-attested sender) and the Cell-to-Cell Anywhere stack
 > (`.agents/260624-cell-to-cell-anywhere/plan.md`).
@@ -24,12 +27,22 @@ the single **contract** that removes that split.
 It is a *contract*, not a component: no bus daemon (the D-Bus daemon is a bottleneck and a
 CVE magnet). Kernel keeps mechanism, cells keep policy, this spec is the shared shape.
 
-**Foundation status (corrected, verified):**
+**Foundation status (transitional, verified code reality):**
+
+> No generated `docs/spec-status.generated.md` exists yet, so this is a hand-written
+> transitional snapshot, not the authoritative Layer-3 status file.
+
+The runtime reality splits into four states:
+
+1. Broker boot and NodeId generation are wired.
+2. Transport, relay, gossip, lease, and enrollment modules compile, but most of them are not wired into the dispatch loop.
+3. Typed remote forwarding is a stub.
+4. Remote call/watch has no working runtime yet.
 
 | Piece | Local (SAS) | Remote |
 |---|---|---|
-| Transport / NodeId / relay / Noise KKpsk0 | n/a | ✅ built (`net-broker/src/{transport,relay,identity}.rs`) |
-| Typed request/response forwarding | ✅ Spec 17 | ⚠️ **stub** — `main.rs:151` `dispatch()` is TODO, `routing.rs:154` returns `self_tid` ("forward via Noise" deferred) |
+| Transport / NodeId / relay / Noise KKpsk0 | n/a | ⚠️ code present (`net-broker/src/{transport,relay,identity}.rs`); runtime wiring incomplete |
+| Typed request/response forwarding | ✅ Spec 17 | ⚠️ **stub** — `main.rs:153` `dispatch()` is TODO, `routing.rs:158` returns `self_tid` ("forward via Noise" deferred) |
 | Kernel-attested sender | ⚠️ **phase 02 not landed** | — |
 
 The remote `call`/`watch` paths in §2 therefore have **no runtime today**. This spec
@@ -195,7 +208,7 @@ thread** (`main.rs:126`).
 |---|---|
 | midori-lessons phase 02 | kernel-attested local sender — the *only* trustworthy half of §2.2 |
 | midori-lessons phase 07 | async reactor — `call`+timeout wants completion queues, not thread-block (and §3 constraint 2) |
-| CTC-Anywhere stack | transport/NodeId/relay built; **forwarder still a stub** (§1) |
+| CTC-Anywhere stack | transport/NodeId/relay code present; **forwarder still a stub** (§1) |
 | Spec 18 tiers | remote caller ≤ Tier-2; domain cells use this same contract |
 | Spec 14 | §2.4 safety classes are the missing per-service signal; physical-safety mandate is load-bearing, not decoration |
 

@@ -438,14 +438,20 @@ invisible to every existing parser.
 
 ### 11.4 Direct (non-`ecall`) service calls
 
-`fast_ipc` bypasses the trap entirely, so there is no sender tid and nothing in
-the arguments is trustworthy — every one of them is chosen by the cell being
-authorized. `kernel::fast_ipc::call_vfs` therefore resolves the identity itself,
-from live scheduler state for the task running on the hart, and passes it to the
-handler. `TrustedHandle<T>` is not a control; its own contract says it is
-advisory.
+**Status: accepted Tier-1 rewrite; direct dispatch is not reachable today.** Separately linked
+Cells hold private handler tables, and no loader import-resolution bridge connects them to
+`kernel::fast_ipc`. Current calls therefore use the governed message fallback.
 
-A fast-path handler MUST authorize exactly as its `ecall` counterpart does. VFS's
-fast path serves `GetFile`, which replies with a raw `DataPtr` — in a single
-address space that is permanent, unrevocable read authority — so an ungated fast
-path would reduce the gate on the message path to decoration.
+A future direct path would bypass the trap, so there would be no sender tid and nothing in the
+arguments would be trustworthy. It MUST derive identity from live scheduler state, never from a
+cell-chosen argument. `TrustedHandle<T>` is advisory and is not an authorization control.
+
+A future fast-path handler MUST authorize exactly as its `ecall` counterpart does and MUST carry
+a measured release gate for its maximum interrupt-off duration. `GetFile` is not a valid target
+operation for the rewrite: its raw `DataPtr` is permanent, unrevocable read authority in SAS and
+cannot cross the Tier-2 boundary.
+
+Before any Tier-2/Layer-B domain is enabled, `GetFile`/`DataPtr` must be removed or
+replaced by a representable revocable handle/grant contract. The detailed Layer-B grant
+mapping ADR is intentionally deferred to that implementation window; this prerequisite
+does not approve a new Law-1 ABI by itself.

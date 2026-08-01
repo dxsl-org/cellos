@@ -133,7 +133,8 @@ item; not a prerequisite for anything above.
 - Scheduler context-switch path becomes tier-aware (`satp` swap only when crossing
   domains; SAS→SAS switches stay as cheap as today).
 - Spec 02 (memory) and Spec 17 (IPC wire contract) need addenda when Tier 2 lands.
-- `cells/drivers/wasm` and wasmi leave the workspace; docs no longer describe WASM.
+- WASM crates are still present in the workspace. Their retain-vs-remove disposition and
+  Tier-2/runtime qualification remain unresolved; do not describe removal as landed.
 
 ## 5. Cross-references
 

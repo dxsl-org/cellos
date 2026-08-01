@@ -346,10 +346,14 @@ pub trait ViHypervisor {
 | Arch | Mechanism | HAL crate | Status |
 |---|---|---|---|
 | **ARM64** | EL2 non-VHE (HCR_EL2, VTTBR_EL2, Stage-2, GICH) | `hal-arm` | **✅ G1 shipped** (P01–P10) |
-| RISC-V | H-extension (HS-mode, hgatp Stage-2) | `hal-riscv` (ENOSYS stub) | ⏳ G2 — H-ext absent on current boards |
-| x86_64 | VT-x (VMCS, EPT) | `hal-x86` (ENOSYS stub) | ⏳ G2 |
+| RISC-V | H-extension (HS-mode, hgatp Stage-2) | unsupported path | ⏳ Pending — H-ext absent on current boards |
+| x86_64 AMD | SVM (VMCB, NPT) | `hal-x86` + owner-scoped kernel registry | 🚧 Implemented MVP; production hardware qualification pending |
+| x86_64 Intel | VMX | `hal-x86` root-operation plumbing | 🚧 VMXON implemented; VMCS/EPT/guest execution pending |
 
-Kernel syscall dispatch (`kernel/src/hypervisor/registry.rs`) is `#[cfg(target_arch = "aarch64")]` for the real impl and returns `NotSupported` on riscv64/x86_64 — matching the HAL stubs. No kernel change needed when future RISC-V/x86 impls land.
+Kernel syscall dispatch (`kernel/src/hypervisor/registry.rs`) selects the ARM64 registry
+or the x86 SVM registry by target. Unsupported architectures return `NotSupported`.
+The x86 label must remain backend-specific: AMD guest execution exists; Intel guest
+execution does not.
 
 ### 4.6 Implementation status
 
@@ -365,7 +369,7 @@ Phases 01–10 shipped in cells/services/hypervisor/:
   P07: virtio-blk → VFS Cell → mounts rootfs
   P08: virtio-net → Net Cell (L2 MAC-bridge, DHCP → 10.0.2.15, apt works)
   P09: Full GICH/GICV hardware vGIC upgrade (IRQ throughput)
-  P10: CI smoke + ENOSYS stubs (riscv64/x86_64) + this docs update
+  P10: ARM64 CI smoke + unsupported RISC-V path + this docs update
 ```
 
 **RISC-V H-extension — ⏳ Pending**
@@ -375,10 +379,18 @@ ENOSYS stubs in hal-riscv/src/hypervisor.rs + registry.rs are in place.
 Impl unblocks when H-ext hardware is available.
 ```
 
-**x86_64 VT-x — ⏳ Pending (G2)**
+**x86_64 AMD SVM — 🚧 Implemented MVP**
 ```
-ENOSYS stubs in hal-x86/src/hypervisor.rs + registry.rs are in place.
-VT-x impl deferred to G2.
+SVM root enablement, owner-scoped VM/vCPU registry, NPT guest mapping,
+world-switch/exit conversion, IRQ injection, and the x86 Hypervisor Cell loop exist.
+This is not production qualification: real-hardware lifecycle, isolation, and stress
+gates remain open.
+```
+
+**x86_64 Intel VMX — 🚧 Root operation only**
+```
+VMX feature/firmware checks and VMXON are implemented. VMCS lifecycle, EPT, vCPU
+world-switch, and guest execution remain pending.
 ```
 
 ---
@@ -399,6 +411,8 @@ VT-x impl deferred to G2.
 2. **Port QEMU**: Quá lớn (~1M LOC C, cần JIT/mmap) — không fit Tier 1 cell.
 3. **Fork crosvm**: ~75K LOC thực tế (không phải ~20K), kéo theo tokio + mmap — không fit SAS cell. ✅ Build minimal VMM từ scratch (~9K LOC) — đã shipped ARM64 EL2 (P01-P10).
 4. **Gộp Security Silo và Linux VM**: Hai use case khác nhau — implement riêng, reuse Stage-2 primitives.
-5. **Assume H-ext mọi nơi**: RV32 không có H-ext. ARM dùng EL2. x86 dùng VT-x. Phải per-arch HAL. ✅ ENOSYS stubs cho riscv64/x86_64 landed P10; ARM64 EL2 shipped.
+5. **Assume H-ext mọi nơi**: RV32 không có H-ext. ARM dùng EL2. x86 splits AMD SVM
+   and Intel VMX. Phải per-arch HAL. ARM64 EL2 shipped; AMD SVM is an MVP; Intel VMX
+   guest execution and RISC-V H-extension remain pending.
 6. **Android G1**: Android cần GPU passthrough + camera HAL + binder IPC — G2+ only, đừng để Android shape G2 design sớm.
 7. **WASI Preview 1**: Deprecated (2019 spec), bỏ qua hoàn toàn.

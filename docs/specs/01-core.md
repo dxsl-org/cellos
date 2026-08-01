@@ -39,12 +39,14 @@ Kernel tối giản, tập trung vào việc "xây dựng" hệ thống lúc run
     * `fn reboot(_: RebootCap)`.
     * Token chỉ được cấp qua hàm `init()` của Cell và không thể copy trái phép.
 
-## 5. Fault Tolerance (Panic Recovery)
-* **Unwind Boundary**: Kernel wrap mọi inter-cell call bằng `catch_unwind`.
-* **Safe Recovery**: Khi Cell panic, Kernel:
-    1.  Cô lập Cell (Trạng thái Poisoned).
-    2.  Nếu Cell là Driver, thực hiện reset phần cứng tương ứng.
-    3.  Tải bản copy mới từ Disk và thực hiện **Re-linking** nóng.
+## 5. Fault Tolerance (Terminate and Supervise)
+Cell builds use abort-on-panic; the kernel does not unwind across Cell boundaries.
+
+1. Panic/trap terminates the faulting Cell through the normal exit path.
+2. Reaping releases task-owned frames, grants, pins, and registrations in lifecycle order.
+3. Exit notification carries the reason to the supervisor.
+4. Supervisor policy decides restart, backoff/intensity, or permanent stop. Driver reset
+   and state restore are explicit service policies, not automatic kernel side effects.
 
 ## 6. Lifecycle Integrity
 * **Hot-swap**: Chỉ cho phép khi không có Strong Ref nào đang hoạt động.

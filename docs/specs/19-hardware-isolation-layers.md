@@ -91,7 +91,9 @@ Cellos commits to **two named profiles**, both first-class:
 graphs. This is today's behaviour and needs nothing new.
 
 **Per-request server profile.** Thousands of very light cells, one per request, each with a
-real isolation boundary. Requires three changes, none architectural:
+real isolation boundary. **D5 accepts 1000 simultaneous isolated cells as the qualification
+goal, not as current capacity.** The profile is queued behind the active Midori program and
+requires three changes; this ruling authorizes no runtime or ABI change:
 
 1. **Shared `.text`/`.rodata` across instances of one image.** The loader currently copies
    the whole ELF on every spawn (`kernel/src/loader/elf.rs`), so 1000 instances of a 1 MiB
@@ -104,9 +106,11 @@ real isolation boundary. Requires three changes, none architectural:
    pre-allocates.
 3. **`MAX_CELLS` raised** from 64, and the per-cell tables sized dynamically.
 
-The measurable target is stated per profile and only after measurement: per-spawn memory and
-spawn latency are to be measured at N = 64/128/256/512 *before* any of the three changes are
-designed, so the sharing win is sized rather than assumed.
+The staged gate measures per-spawn allocator commitment, spawn latency, clean refusal, and
+cross-cell isolation at N = 64/128/256/512 before raising limits. Qualification at N = 1000
+additionally requires immutable-frame refcounts to survive spawn/reap, W^X to prove shared pages
+remain read-only, stacks to grow on demand without crossing guards, and mutable data/heap/grants
+to remain per cell. The current large-app profile and 64-cell default do not change meanwhile.
 
 **Where this can beat BEAM rather than imitate it.** BEAM processes are lightweight but share
 one VM: a single faulty NIF takes neighbours with it. A per-request Cellos cell is separated

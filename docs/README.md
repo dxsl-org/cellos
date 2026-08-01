@@ -1,6 +1,6 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-06-03
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-01
 
 ---
 
@@ -41,7 +41,8 @@
 | File | Purpose |
 |------|---------|
 | [api-reference.md](api-reference.md) | Syscall ABI, trait definitions, examples |
-| [performance-report.md](performance-report.md) | Benchmarking targets and methodology |
+| [performance-report.md](performance-report.md) | Hardware-qualified IPC latency targets and QEMU regression tracking |
+| [code-metrics.generated.md](code-metrics.generated.md) | Generated kernel-size metrics owner; canonical moving counts |
 
 ---
 

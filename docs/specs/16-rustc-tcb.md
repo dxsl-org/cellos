@@ -139,7 +139,7 @@ layers outside `rustc`'s purview.
 | Component | Role | Approx LOC | Notes |
 |---|---|---|---|
 | `rustc` (nightly Rust compiler + LLVM backend) | Enforce all LBI invariants listed in §2 | ~3–5M (compiler) + ~1M (LLVM) | Open-source; Ferrocene-audited subset for ARM64/x86 |
-| Cellos kernel | SAS allocator, preemptive scheduler, IPC, ELF loader, CapSet, manifest check | ~11.5K | Only privileged code; strict boundary law per Spec 15 |
+| Cellos kernel | SAS allocator, preemptive scheduler, IPC, ELF loader, CapSet, manifest check | [generated nLOC](../code-metrics.generated.md) | Only privileged code; strict boundary law per Spec 15 |
 | `libs/api` | Stable ABI — syscall numbers, capability types, IPC encoding | ~2K | Law 1: any change requires 2× user confirmation |
 | `libs/types` | Primitive types shared by kernel and Cells (`VAddr`, `PAddr`, `ViError`) | ~800 | Law 1: same change protocol |
 
@@ -159,22 +159,25 @@ layers outside `rustc`'s purview.
 rustc is fully open source. Any Cellos developer can audit compiler behaviour. This is
 strictly better than Singularity's Bartok compiler (closed-source, auditable only by MSFT).
 
-### 5.2 Ferrocene: ISO 26262 ASIL-D Certified Subset
+### 5.2 Ferrocene qualification lane
 
 [Ferrocene](https://ferrocene.dev) is a safety-qualified toolchain derived from rustc. It
-provides formal qualification evidence for ISO 26262 (automotive), IEC 61508 (industrial),
-and IEC 62278 (rail) standards.
+provides toolchain qualification evidence for defined targets, host/build conditions, and
+a qualified subset. That evidence does not certify Cellos, its dependencies, generated
+binary, or end product.
 
-**Qualified targets (as of 2026-06):**
-- `aarch64-unknown-none` ✅
-- `x86_64-unknown-none` ✅ (in progress)
-- `riscv64gc-unknown-none-elf` ⚠️ **Not yet qualified** — ETA 12–24 months from now.
+**Lane split (verified 2026-08-01 against current Ferrocene documentation):**
+- RV64 remains the Cellos reference/development and QEMU CI lane.
+- `aarch64-unknown-none` is the first bare-metal safety-qualification candidate, subject
+  to Ferrocene's documented host/build conditions and Cellos product evidence.
+- Bare-metal RV64 is not a qualified Ferrocene target. RV64GC Linux support is not the
+  same target or evidence as Cellos bare metal.
 
-> ⚠️ **Do not make safety claims for RISC-V builds until Ferrocene qualifies the
-> riscv64 target.** G1 RISC-V is development/demonstration only.
+> Toolchain qualification is necessary but not sufficient for a product safety claim.
+> Do not extrapolate Ferrocene evidence to all Rust crates, `alloc`, or the Cellos image.
 
-**When to adopt Ferrocene**: Before G2 production release on ARM64 hardware (RK3588).
-Ferrocene is a drop-in replacement for `rustc`; no source changes required.
+**Adoption point**: before the first ARM64 safety-qualified product lane. Keep RV64 as
+the primary reference build independently; do not wait for a speculative qualification ETA.
 
 ### 5.3 miri: MIR Interpreter for Unsoundness Detection
 
@@ -233,7 +236,7 @@ the safety argument in §2.
 | **Singularity** | Spec# / Sing# type system (LBI) | Bartok (closed source) | ~<5% LBI overhead confirmed; exchange heap IPC ~1,200 cycles; cancelled 2012 |
 | **Midori** | C# type system (LBI) | Bartok/Midori (closed) | GC pauses caused unsolvable RT problems; cancelled 2015 |
 | **Theseus OS** | Rust type system (LBI) | `rustc` | Academic; no preemption; not production-ready; Cellos is independent parallel work |
-| **seL4** | Hardware MMU (formal proof) | None (no LBI) | IPC ~300–400 cycles; formal proof covers kernel only; drivers in ring-3; Cellos has cheaper IPC |
+| **seL4** | Hardware MMU (formal proof) | None (no LBI) | IPC ~300–400 cycles; formal proof covers kernel only; drivers in ring-3; Cellos has no measured direct-path comparison yet |
 
 **Key differentiator**: Cellos is the only production-targeting LBI OS using `rustc`,
 giving it both the <5% overhead of LBI *and* a qualification path (Ferrocene) that

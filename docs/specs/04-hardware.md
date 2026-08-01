@@ -32,13 +32,16 @@ Trong SAS, việc hai driver cùng ghi vào một địa chỉ phần cứng là
 * **Exclusive Access**: Driver phải gọi `kernel.request_mmio(base, size)`. Nếu vùng nhớ đã bị chiếm, Kernel sẽ từ chối cấp phát.
 
 ## 5. SMP & Real-Time Affinity
-* **Work Stealing**: Scheduler tự động cân bằng tải giữa các core.
-* **Affinity**: Các tác vụ điều khiển robot cực kỳ nhạy cảm có thể dùng `spawn_pinned(core_id)` để chiếm quyền ưu tiên tuyệt đối trên một core cụ thể, tránh bị các tác vụ AI làm gián đoạn.
+* **Work Stealing**: RV64 two-hart scheduler steals Normal/Background work between
+  per-hart queues; RealTime tasks are excluded and remain affinity-controlled.
+* **Affinity**: RT routing is policy over scheduler mechanisms; it does not grant
+  exclusive ownership of a core unless an explicit isolation policy proves that property.
 
-## 6. Deadlock Watchdog
-Vì dùng chung bộ nhớ, việc tranh chấp Lock giữa các Cell là rủi ro hiện hữu.
-* **Cơ chế**: Một tác vụ nền (Low-priority task) định kỳ quét **Resource Graph**.
-* **Xử lý**: Nếu phát hiện vòng lặp (Cycle), hệ thống sẽ chủ động `panic` và reload Cell có độ ưu tiên thấp nhất để giải phóng tài nguyên.
+## 6. Hang detection
+Cellos không có kernel Resource-Graph deadlock detector. Shipped detection uses the
+RT CPU-monopoly watchdog plus opt-in liveness heartbeats; termination flows through the
+normal exit path and supervisor policy. Lock-order review and focused deadlock tests remain
+the prevention layer.
 
 ---
 

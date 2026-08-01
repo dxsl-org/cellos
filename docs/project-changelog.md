@@ -4,6 +4,84 @@
 
 ---
 
+## [2026-08-01] Close Part 6 documentation sweep
+
+D1 consequents are now stated as withdrawn history rather than live architecture: the
+unreachable 2-3-cycle direct path is withdrawn, `resolve_export` and
+`R_RISCV_JUMP_SLOT` are gone, and the retained handler tables are marked inactive pending
+the ruled Tier-1 rewrite.
+
+D1b is documented as a hardware-only IPC p99 target with QEMU regression tracking. A QEMU
+miss records trend evidence only; the 50 us ceiling is enforced against qualified hardware,
+not treated as a direct release-gate failure in software emulation.
+
+D3 now points at `docs/code-metrics.generated.md` as the canonical moving kernel-size owner.
+The frozen `<5,000` target is withdrawn in favor of generated nLOC plus the separate core lens.
+
+D5 records the accepted queued per-request 1000-cell profile. The current defaults remain
+unchanged while image sharing, demand-paged stacks, and related gates stay staged work.
+
+## [2026-08-01] Reconcile D34-D39 plan portfolio
+
+The plan portfolio now has one scheduling index instead of relying on stale aggregate
+checkbox counts. Midori is the sole active feature program until its 02/04/07/08 closure
+gates land, with narrow exceptions for P0 security, broken CI/builds, and verification.
+
+Overlapping ViUI plans were closed/superseded around one canonical implementation record.
+Manifest, revocation, and DICE remain separate children of one Trust & Identity group,
+with their landed phases corrected. Reciprocal precedence now forbids ambient/name-gated
+`/bin` writes and requires revocation to honor pin/quarantine ordering. WASM is
+partial/suspect because its crates remain while disposition is unresolved; ePMP is
+M-mode-blocked. Cell-to-Cell Anywhere is partial—foundation complete, integration blocked.
+
+## [2026-08-01] Reconcile D26-D33 stale architecture claims
+
+Part 4 now reflects source-backed state. Spec 14 was rewritten for the shipped ViUI v2
+Reactive Signal Tree and Rust/`.vi` dual authoring layer; unimplemented egui/iced
+compatibility and speculative performance claims were withdrawn. Kernel-boundary docs no
+longer freeze hand-counted residue sizes, and heartbeat adoption no longer says only net
+uses the opt-in contract.
+
+Virtualization status is split by backend: AMD SVM is an implemented MVP, Intel VMX has
+root-operation plumbing but no VMCS/EPT guest path, and RISC-V H-extension remains
+pending. Entropy is now explicitly development-profile weak versus production
+fail-closed. littlefs `/data` is recorded as shipped and QEMU-tested with real-board
+power-cut qualification still open. The PDR drops unsupported coverage, reproducibility,
+LOC, and completion claims, while Spec 10 replaces nonexistent SASan/Metadata Registry/
+`catch_unwind` assumptions with executable SAS boundary and lifecycle gates.
+
+## [2026-08-01] Apply D18-D25 ownership, recovery, and qualification rulings
+
+The monolithic Metadata Registry concept is withdrawn in favor of subsystem-owned frame,
+grant, pin/quarantine, quota, socket, and resource authorities. Panic recovery is now the
+shipped abort/terminate/reap/notify/supervisor pipeline. The unused legacy `sys_grant`
+wrapper was removed; active grant lifecycle APIs remain unchanged and require end-to-end
+death/cancellation qualification.
+
+VFS eviction remains VFS Cell policy, hang detection uses watchdog/heartbeat rather than
+a nonexistent Resource Graph, and current two-hart work stealing excludes RT tasks.
+Layer-B requires removal of raw `GetFile`/`DataPtr` before activation, while its detailed
+ADR and any ABI package remain deferred. RV64 stays the reference/QEMU lane and ARM64 the
+first bare-metal qualification candidate; toolchain evidence is not product certification.
+Spec 20 remains Draft with zero new ABI approved, and distributed `machine_id` is now
+normatively derived from the Noise-authenticated NodeId.
+
+## [2026-08-01] Apply D15-D17 contract and documentation rulings
+
+D15 makes Spec 17 §6 the sole owner of bounded input-delivery mechanics; Spec 06 now
+owns focus/window routing and no longer promises a direct callback or zero latency.
+Comments were aligned with the shipped mailbox and current focus-failure behaviour.
+
+D16 assigns the proposed remote-IPC contract to Spec 20 and future implementation status
+to generated Layer 3. Until that artifact exists, cluster docs use a four-state
+transitional snapshot and no longer claim a working two-node forwarder/runtime.
+
+D17 makes Spec 09 the filesystem-architecture owner, marks `00-fork` non-normative and
+`11-shell` historical, retires lowercase `viFS1`/`viFS2`, and preserves uppercase `VIFS1`
+for kernel BootFS/initramfs. These rulings change no runtime or ABI.
+
+---
+
 ## [2026-08-01] Apply D14 docs-only ruling for scheduler and TLSF rows
 
 D14 is now recorded as approved recommendation A. Public docs now describe the shipped
@@ -930,10 +1008,10 @@ Phase 07 (MMC Cell) cannot be validated on QEMU: `virt` machine has no SDHCI har
 
 ---
 
-## [2026-06-23] Distributed Cells L.0+L.1 — robot swarm COMPLETE (all 10 phases shipped)
+## [2026-06-23] Distributed Cells L.0+L.1 — robot swarm foundation code landed
 
 ### Summary
-All 10 phases of the Distributed Cells foundation (L.0) and robot swarm (L.1) are complete and merged. The net-broker Cell enables federated multi-machine clusters with encrypted discovery, remote service calls, task-claiming gossip, and dynamic merge/split enrollment. G1 use case (leaderless robot swarm) is now production-ready; G2/G3 server cluster strategy is parked and will lean on external k8s/LB infrastructure.
+All 10 phases of the Distributed Cells foundation (L.0) and robot swarm (L.1) merged as code. The net-broker Cell provides the architecture and test scaffolding for federated multi-machine clusters, encrypted discovery, remote service calls, task-claiming gossip, and dynamic merge/split enrollment, but the forwarder/runtime path is still a stub, so this entry must not be read as a shipped two-node runtime. G2/G3 server cluster strategy is parked and will lean on external k8s/LB infrastructure.
 
 ### Phases Complete
 

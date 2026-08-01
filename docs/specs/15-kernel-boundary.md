@@ -209,10 +209,10 @@ remaining bootstrap RAM image, not a device driver.
 
 **Remaining genuine exceptions (tech debt — G2):**
 
-| Driver | LOC | Migration target |
-|--------|-----|-----------------|
-| `kernel/src/task/drivers/mmc.rs` + subs | ~200 | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
-| `kernel/src/task/drivers/pcie_ecam.rs` | ~100 | simplify to store-only; full removal in G2 |
+| Driver | Migration target |
+|--------|-----------------|
+| `kernel/src/task/drivers/mmc.rs` + subs | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
+| `kernel/src/task/drivers/pcie_ecam.rs` | Platform Cell; enumeration migration and store-only simplification remain open |
 
 **Migrated (kernel-boundary-cleanup plan, 2026-06-24):**
 
@@ -235,10 +235,13 @@ before dependent service Cells, and (2) use kernel fallbacks during the transiti
 These are complex state machines that can run in a privileged Cell with access to
 freeze/resume/kill primitives.
 
-| Code | LOC | Correct home |
-|------|-----|--------------|
-| `kernel/src/cell/hotswap.rs` (orchestration) | ~400 | Supervisory Cell |
-| `kernel/src/snapshot.rs` (state machine) | ~350 | Supervisory Cell |
+| Code | Current boundary | Correct home |
+|------|------------------|--------------|
+| `kernel/src/cell/hotswap.rs` | Substantial orchestration residue remains despite a Supervisor-side client/protocol | Supervisory Cell policy; kernel retains atomic mechanism only |
+| `kernel/src/snapshot.rs` | Snapshot state machine remains in kernel | Supervisory Cell policy; kernel retains freeze/resume/kill primitives |
+
+Migration is **partial**, not complete. Exact source sizes are generated status and must
+not be hand-maintained in this specification.
 
 The kernel retains only: `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell` —
 thin wrappers around the existing scheduler primitives.
@@ -296,11 +299,11 @@ When proposing to add code to `kernel/src/`, answer these questions:
 
 ## 5. Kernel Size Budget
 
-| Era | Target kernel LOC | Current |
-|-----|------------------|---------|
-| G1 (now) | ≤ 7,000 LOC core (excl. drivers) | ~5,600 LOC |
-| G1 end (after driver migration) | ≤ 5,000 LOC core | target |
-| G2 | ≤ 5,000 LOC core | VirtIO cells, ACPI cell |
+| Era | Boundary target | Current evidence |
+|-----|-----------------|------------------|
+| G1 | Core excludes device policy and service orchestration | See generated project status |
+| G1 end | Complete tracked driver/orchestration migrations | Target |
+| G2 | Platform parsing and remaining policy move to trusted Cells | Target |
 
 **Size is a proxy, not the goal.** The goal is minimizing the TCB — the code that must
 be trusted for the entire system's security to hold. Smaller kernel = smaller TCB =
@@ -310,15 +313,20 @@ fewer places for a bug to compromise everything.
 
 ## 6. Comparison Table — Where Cellos Fits
 
-| System | IOMMU | Device drivers | Hotswap | LOC kernel |
-|--------|-------|---------------|---------|-----------|
+| System | IOMMU | Device drivers | Hotswap | Kernel size evidence |
+|--------|-------|---------------|---------|----------------------|
 | seL4 | Userspace (IOMMU PT object) | All userspace | N/A | ~9,300 |
 | Fuchsia/Zircon | Kernel (BTI/PMT) | All userspace | Component bind/unbind | ~43,000+ |
 | Genode base-hw | Userspace (23.11) | All userspace | Architectural | ~15,000 |
 | Redox | None | All userspace | Limited | ~19,000 |
 | MINIX3 | None | All userspace | Reincarnation | ~4,000 |
-| **Cellos (target)** | **Kernel (Zircon model)** | **All → Driver Cells** | **Supervisory Cell** | **≤ 5,000** |
-| Cellos (G1, 2026-06) | Kernel | NVMe+e1000+GPU+NIC+Input+Sound in Cells; VirtIO-Blk+MMC G2 pending | Kernel orchestration (hotswap/snapshot deferred) | ~7,200 |
+| **Cellos (target)** | **Kernel (Zircon model)** | **All → Driver Cells** | **Supervisory Cell** | **Generated downward-trend evidence** |
+| Cellos (G1) | Kernel | Most drivers in Cells; remaining residents tracked above | Supervisor protocol exists; kernel orchestration residue remains | Generated status |
+
+The former fixed `≤5,000` target is withdrawn by D3. It had no approved baseline and encouraged
+moving code to satisfy a number rather than enforcing the boundary. The canonical total and core
+lens are generated in [code-metrics.generated.md](../code-metrics.generated.md); responsibilities
+and completed migrations remain the binding acceptance criteria.
 
 ---
 
