@@ -22,6 +22,7 @@ api::declare_syscalls![
     SpawnPinned,
     StateStash,
     StateRestore,
+    MemInfo,
     Exit,
     Yield
 ];
@@ -257,16 +258,24 @@ fn cell_main() {
     // ── 4. Memory footprint ───────────────────────────────────────────────────
     {
         let mut mb = MemoryFootprintBench::new();
-        let _ = mb.run_once();
-        let r = mb.footprint_report();
-        report::print_report(&r);
-        report::print_json(&r);
-        if r.p50 <= TARGET_FOOTPRINT_BYTES {
-            passed += 1;
-            println("[bench] memory_footprint PASS");
-        } else {
+        if mb.run_once().is_err() {
             failed += 1;
-            println("[bench] memory_footprint FAIL (exceeds 10 MB target)");
+            println("[bench] memory_footprint FAIL (MemInfo unavailable)");
+        } else {
+            let r = mb.footprint_report();
+            println(&alloc::format!(
+                "[bench] allocator_committed_bytes={}",
+                mb.bytes()
+            ));
+            report::print_report(&r);
+            report::print_json(&r);
+            if r.p50 <= TARGET_FOOTPRINT_BYTES {
+                passed += 1;
+                println("[bench] memory_footprint PASS");
+            } else {
+                failed += 1;
+                println("[bench] memory_footprint FAIL (exceeds 10 MB target)");
+            }
         }
     }
 

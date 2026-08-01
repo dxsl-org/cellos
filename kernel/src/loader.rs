@@ -188,8 +188,7 @@ pub fn spawn_gated(
     // and CellId(0) asks it to derive a unique per-cell identity before the task
     // becomes reachable — do not patch task.cell_id here.
     let (tid, _load_base) =
-        crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())
-            .map_err(|_| ViError::OutOfMemory)?;
+        crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())?;
     let cell_id = CellId(tid as u64);
 
     crate::audit::log_event(

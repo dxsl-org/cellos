@@ -1,7 +1,7 @@
 #![allow(unsafe_code)]
 
 use api::completion::{ViCompletion, COMPLETION_LEN};
-use api::syscall::{ViSpawnArgs, ViSyscall};
+use api::syscall::{ViMemInfoV1, ViSpawnArgs, ViSyscall};
 use core::arch::asm;
 
 #[derive(Debug, Copy, Clone)]
@@ -10,7 +10,7 @@ pub enum SyscallResult {
     Err(SyscallError),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SyscallError {
     InvalidDriverId,
     InvalidCommand,
@@ -19,6 +19,19 @@ pub enum SyscallError {
     FileNotFound,
     TryAgain,
     Unknown,
+    OutOfMemory,
+}
+
+const SYSCALL_OOM: isize = -2;
+
+fn decode_spawn_result(ret: isize) -> SyscallResult {
+    if ret > 0 {
+        SyscallResult::Ok(ret as usize)
+    } else if ret == SYSCALL_OOM {
+        SyscallResult::Err(SyscallError::OutOfMemory)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
 }
 
 #[inline(always)]
@@ -260,11 +273,7 @@ pub fn sys_spawn_from_mem(data: &[u8], name: &str, args: &str) -> SyscallResult 
             0,
             0,
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
+        decode_spawn_result(ret)
     }
 }
 
@@ -279,16 +288,16 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
     // Post-boot (VFS registered): read the cell ELF from VFS into a Grant (reaching
     // the /bin cell-store overlay + VIFS1 bootstrap cells) and spawn from the bytes,
     // so the kernel loader needs no disk access for the spawn. Falls back to the raw
-    // kernel bootstrap reader when VFS is not yet up (early boot) OR on ANY failure of
-    // the VFS path — the bootstrap reader still serves every cell until the in-kernel
-    // block reader is removed (phase 06), so this routing is purely ADDITIVE and
-    // cannot regress spawning. (G2 loader redesign phase 04.)
+    // kernel bootstrap reader when VFS is not yet up (early boot), the VFS read fails,
+    // or the VFS-loaded ELF is rejected. OOM is returned immediately: retrying the same
+    // allocation through bootstrap would add pressure and hide the typed failure.
     if let Some(vfs_tid) = crate::service::lookup(crate::service::service::VFS) {
         if let Ok((grant_id, len)) = crate::fs::read_full_via_grant(path, vfs_tid) {
             let r = sys_spawn_from_elf(grant_id, len, path);
             sys_grant_free(grant_id);
-            if let SyscallResult::Ok(_) = r {
-                return r;
+            match r {
+                SyscallResult::Ok(_) | SyscallResult::Err(SyscallError::OutOfMemory) => return r,
+                SyscallResult::Err(_) => {}
             }
             // VFS read OK but spawn failed → fall through to bootstrap (belt-and-suspenders).
         }
@@ -303,11 +312,7 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
             0,
             0,
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
+        decode_spawn_result(ret)
     }
 }
 
@@ -329,11 +334,7 @@ pub fn sys_spawn_from_elf(grant_id: usize, len: usize, path_hint: &str) -> Sysca
             path_hint.as_ptr() as usize,
             path_hint.len(),
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
+        decode_spawn_result(ret)
     }
 }
 
@@ -368,11 +369,49 @@ pub fn sys_spawn_pinned(path: &str, priority: u8, core_id: usize) -> SyscallResu
             priority as usize,
             core_id,
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
+        decode_spawn_result(ret)
+    }
+}
+
+/// Read one global physical-frame allocator snapshot.
+///
+/// Requires an explicit `MemInfo` syscall declaration. The returned
+/// `used_frames` value is allocator-committed capacity, not resident bytes.
+pub fn sys_mem_info() -> Result<ViMemInfoV1, SyscallError> {
+    let mut info = ViMemInfoV1::default();
+    let len = core::mem::size_of::<ViMemInfoV1>();
+    // SAFETY: `info` is a live aligned local and the kernel writes at most `len` bytes.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::MemInfo,
+            &mut info as *mut ViMemInfoV1 as usize,
+            len,
+            0,
+            0,
+        )
+    };
+    if ret == len as isize {
+        Ok(info)
+    } else {
+        Err(SyscallError::Unknown)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_spawn_result, SyscallError, SyscallResult};
+
+    #[test]
+    fn spawn_result_decoder_preserves_additive_oom() {
+        assert!(matches!(decode_spawn_result(7), SyscallResult::Ok(7)));
+        assert!(matches!(
+            decode_spawn_result(-1),
             SyscallResult::Err(SyscallError::Unknown)
-        }
+        ));
+        assert!(matches!(
+            decode_spawn_result(-2),
+            SyscallResult::Err(SyscallError::OutOfMemory)
+        ));
     }
 }
 

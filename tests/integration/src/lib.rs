@@ -301,6 +301,11 @@ impl QemuRunner {
     /// (`Frame allocator initialized`, `Heap initialized`, etc.) without requiring a
     /// pre-built `disk_v3.img`. The guest serial is bridged to a TCP socket as usual.
     pub fn boot_rv64(kernel: &str) -> Self {
+        Self::boot_rv64_with_memory(kernel, "256M")
+    }
+
+    /// Boot the minimal RV64 handoff lane with a caller-selected QEMU RAM size.
+    pub fn boot_rv64_with_memory(kernel: &str, memory: &str) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
 
@@ -309,7 +314,7 @@ impl QemuRunner {
                 "-machine",
                 "virt",
                 "-m",
-                "256M",
+                memory,
                 "-nographic",
                 "-bios",
                 "default",

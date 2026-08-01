@@ -2,7 +2,7 @@
 
 **Version**: 0.1 (Initial — Reliability Track Definition)
 **Status**: Definitive
-**Last Updated**: 2026-06-05
+**Last Updated**: 2026-08-01 (D12 hardware layers; D13 signature-admission posture)
 
 > Cellos targets robots and embedded devices. For that domain "fast + realtime" is not
 > enough — the system **must not die**. This spec defines what "không chết" means
@@ -43,6 +43,9 @@ A statically-isolated but unrecoverable system still "dies" the moment a control
   grants) and forces `sfence.vma` on every switch (**ASID is broken/absent on most RV
   silicon**, forcing full TLB flushes). The cost falls on the crown-jewel fast path.
 
+Spec 19 owns the current hardware-isolation delivery model: PMP remains at most a future
+firmware/static guard here, while per-domain page tables are Layer B.
+
 **Resolution — isolation comes from the tiered model** ([05-application.md](05-application.md)),
 not from retrofitting MMU into the SAS:
 
@@ -54,15 +57,20 @@ not from retrofitting MMU into the SAS:
 
 Hardware isolation thus lives in **Tier 3 (per-VM Stage-2)** — the right place for it —
 **not** smeared across every Tier-1 cell. This **strengthens** the never-die story: with
-Tier 1 restricted to signed safe-Rust, the only failure mode is a panic (caught + killed),
+Tier 1 restricted to operationally trusted, F1-reviewed Rust, the intended failure mode is
+a panic (caught + killed),
 not silent memory corruption. Every Tier-1 death becomes a *restartable* event — which is
 exactly what the supervisor track (below) handles.
 
-> **Dependency this shifts onto Security:** the "Tier 1 = signed only" premise requires
-> **code-signing + secure-boot + a loader gate** that refuses unsigned native ELF and routes
-> untrusted code to Tier 2/3. Today "trusted" = *path is under `/bin/`* (a directory, not a
-> crypto boundary). Ed25519 signing is spec-only. This is tracked separately as the Security
-> track; it does not block the Reliability track but is load-bearing for the trust model.
+> **Dependency this shifts onto Security:** Ed25519 verification now runs in the common
+> loader gate, but the default G1 build is not "Tier 1 = signed only": `signing-required`
+> is off, so an ELF with no signature section is admitted to the shared SAS. `/bin/` remains
+> an authorization class for path-scoped capabilities and policy, not proof of provenance.
+> The reproducible dev key is a test fixture, not a fleet trust anchor. A fleet-secure
+> posture still requires a provisioned immutable public key, mandatory signing/policy
+> features, controlled artifact provenance, negative admission tests, and secure boot.
+> Until that posture and Tier 2 exist, every admitted native cell must be operationally
+> trusted; untrusted code remains Tier 3 or refused. See Specs 18 and 19.
 
 ---
 

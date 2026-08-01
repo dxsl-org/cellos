@@ -10,7 +10,7 @@
 mod tests {
     use core::mem::{align_of, size_of};
 
-    use crate::syscall::{ProcessInfo, ProcessInfoV2, SyscallSet, ViSyscall};
+    use crate::syscall::{ProcessInfo, ProcessInfoV2, SyscallSet, ViMemInfoV1, ViSyscall};
 
     /// All (id, expected_variant) pairs that must round-trip correctly.
     const CASES: &[(usize, ViSyscall)] = &[
@@ -38,6 +38,7 @@ mod tests {
         (240, ViSyscall::SpawnSetDirs),
         (241, ViSyscall::QueryDirHandles),
         (242, ViSyscall::WaitCompletion),
+        (243, ViSyscall::MemInfo),
         (20, ViSyscall::ShmAlloc),
         (21, ViSyscall::ShmMap),
         (30, ViSyscall::GetProcs),
@@ -93,6 +94,7 @@ mod tests {
         assert_eq!(ViSyscall::SpawnSetDirs as usize, 240);
         assert_eq!(ViSyscall::QueryDirHandles as usize, 241);
         assert_eq!(ViSyscall::WaitCompletion as usize, 242);
+        assert_eq!(ViSyscall::MemInfo as usize, 243);
     }
 
     /// The appended opcodes must sit past every previously shipped id. An
@@ -103,17 +105,21 @@ mod tests {
         for &(id, variant) in CASES {
             if matches!(
                 variant,
-                ViSyscall::SpawnSetDirs | ViSyscall::QueryDirHandles | ViSyscall::WaitCompletion
+                ViSyscall::SpawnSetDirs
+                    | ViSyscall::QueryDirHandles
+                    | ViSyscall::WaitCompletion
+                    | ViSyscall::MemInfo
             ) {
                 continue;
             }
             assert_ne!(id, ViSyscall::SpawnSetDirs as usize);
             assert_ne!(id, ViSyscall::QueryDirHandles as usize);
             assert_ne!(id, ViSyscall::WaitCompletion as usize);
+            assert_ne!(id, ViSyscall::MemInfo as usize);
         }
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
-        assert_eq!(ViSyscall::from(243), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(244), ViSyscall::Unknown);
     }
 
     /// `WaitCompletion` parks on the same authority as `WaitForEvent` and shares
@@ -143,6 +149,12 @@ mod tests {
         // AArch64 and x86_64: u64 + u32 + u32 + [u8; 32] + 4 × u64.
         assert_eq!(size_of::<ProcessInfoV2>(), 80);
         assert_eq!(align_of::<ProcessInfoV2>(), 8);
+    }
+
+    #[test]
+    fn mem_info_v1_layout_is_stable() {
+        assert_eq!(size_of::<ViMemInfoV1>(), 32);
+        assert_eq!(align_of::<ViMemInfoV1>(), 8);
     }
 
     #[test]
@@ -245,6 +257,7 @@ mod allowlist {
         assert_eq!(ViSyscall::Log.allowlist_bit(), Some(10));
         assert_eq!(ViSyscall::GetProcs.allowlist_bit(), Some(14));
         assert_eq!(ViSyscall::GetProcs2.allowlist_bit(), Some(55));
+        assert_eq!(ViSyscall::MemInfo.allowlist_bit(), Some(56));
 
         let mask = SyscallSet::EMPTY
             .with(ViSyscall::Send)

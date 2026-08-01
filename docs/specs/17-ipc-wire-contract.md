@@ -1,7 +1,9 @@
 # Spec 17 — Cell IPC Wire Contract
 
-> **Status**: Ratified 2026-07-07. Normative. New cells and every change to an
-> existing IPC path MUST comply. Amendments require an entry in §9.
+> **Status**: Ratified 2026-07-07, except §10 which is Draft/reserved-but-unbuilt
+> under [ADR 0001](../decisions/0001-readiness-notifications-remain-draft-until-implemented.md).
+> New cells and every change to a Ratified IPC path MUST comply. Amendments require
+> an entry in §9.
 >
 > This spec exists because the single largest source of recurring bugs in Cellos
 > is not algorithms — it is **unspecified IPC contracts**. Every service invented
@@ -73,8 +75,8 @@ so the allocation is **global and must not collide**. Current owners:
 | `0x00`–`0x16` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22) — see the note below |
 | `0x04` | `WIRE_ASCII` — kernel UART relay | kernel → input service | Overlaps the postcard range **but is disambiguated by sender** (kernel sender id `isize::MAX`), not by byte value |
 | `0x10` | `INPUT_EVENT_OPCODE` | input service → focused cell | |
-| `0x11` | `NET_READY` readiness edge (§10, G4 P2.5) | net service → interest-owner tid | Fixed 6-byte frame; safe: net→client byte-0 is otherwise postcard `NetResponse` ≤ `0x0F` (§10.2). **Numerically overlaps `NetRequest` variant 17 (`NotifyRegister`) — disambiguated by direction** (client→net vs net→client), same treatment as `0x04 WIRE_ASCII` |
-| `0x12` | `REACTOR_WAKE` (§10.5, G4 P2.5) | same-cell thread → reactor tid | Only byte-0 the kernel same-cell `pending_msgs` fallback accepts; coalesced. Numerically overlaps `NetRequest` variant 18 (`NotifyDeregister`) — disambiguated by direction |
+| `0x11` | **Reserved:** proposed `NET_READY` readiness edge (§10, Draft) | net service → interest-owner tid | No implementation exists. Held against reuse under ADR 0001; the proposed collision rules remain design constraints, not runtime claims |
+| `0x12` | **Reserved:** proposed `REACTOR_WAKE` (§10.5, Draft) | same-cell thread → reactor tid | No implementation exists. Held against reuse under ADR 0001; no same-cell pending-message fallback is claimed yet |
 | `0x30`–`0x32` | legacy TLS raw ops (connect/send/recv) in the net service | client → net | Predates typed `NetRequest`; kept for `ostd::tls`. **Client→net only — the net service never emits these toward a client** (§10.2) |
 | `0xAC` | `APP_MSG_MAGIC` — App SDK envelope | any → `run_app!`/`app_entry!` cell | byte 1 = event type (`0x00` Message, `0xFF` Shutdown, `0xF0`/`0xF1` hotswap) |
 
@@ -234,6 +236,10 @@ A new or modified IPC path is compliant when:
 the reason the value is safe against existing owners.
 
 **Amendment log:**
+- 2026-08-01 — **D8 ruling:** §10 returns to Draft/reserved-but-unbuilt because
+  its mechanisms are absent and Spec 21 forbids unbuilt work in a Ratified section.
+  `0x11`/`0x12` remain reserved. The 2026-07-23 Law-1 confirmation #1 is historical;
+  confirmation #2 is still required immediately before implementation. See ADR 0001.
 - 2026-07-23 — **Ratified:** §3 rows `0x11 NET_READY` + `0x12 REACTOR_WAKE`;
   new §10 "Readiness notifications" (G4 P2.5). Design + rationale:
   `.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md`.
@@ -255,11 +261,14 @@ the reason the value is safe against existing owners.
 
 ---
 
-## 10. Readiness notifications (G4 P2.5) — Ratified 2026-07-23
+## 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
 
 > How a cell learns "socket X is now readable/writable" without a kernel epoll.
 > Consumed by the G4 async reactor (`polling`/`mio` backends); implemented by the
 > net cell's readiness engine (G4 P2.6). Kernel stays multiplexing-free.
+>
+> This section reserves a reviewed design and byte values only. It does not describe
+> behavior available in the current implementation. See ADR 0001.
 
 ### 10.1 `NET_READY` frame
 

@@ -34,8 +34,10 @@ Decisive against "move all specs into comments": **the worst drift is about thin
 not exist**, and absence has no line number to comment on. The Metadata Registry
 (`02-memory.md §Registry`, depended on by four other specs), `catch_unwind`
 (`01-core.md §5`), SASan (`10-testing.md §2`), and readiness notifications
-(`17-ipc-wire-contract.md §10`, marked Ratified) are all specified and all absent from the
-tree. In a comments-only world these would not be *fixed*; they would be *invisible*.
+(`17-ipc-wire-contract.md §10`, later corrected to Draft by
+[ADR 0001](../decisions/0001-readiness-notifications-remain-draft-until-implemented.md))
+were all specified and absent from the tree. In a comments-only world these would not be
+*fixed*; they would be *invisible*.
 Comments also cannot host rejected alternatives (no code location), cross-file invariants
 (no single home), or hardware/certification constraints.
 
@@ -104,8 +106,8 @@ implements it without amending the spec.
 
 1. A section marked Ratified/Accepted/Definitive with **no** `Anchor:` line.
 2. An anchor pointing at a missing file, symbol, or test — the mechanism was renamed or
-   removed and the spec was not updated. *(Would have caught `17 §10`'s
-   `NotifyRegister`/`NotifyDeregister`, absent from `NetRequest`.)*
+   removed and the spec was not updated. *(This is the class behind D8 and ADR 0001:
+   `17 §10` named `NotifyRegister`/`NotifyDeregister`, absent from `NetRequest`.)*
 3. A `const` whose value drifted from the spec's number.
 4. `planned` on a Ratified section — a spec claiming ratified status for unbuilt work.
    *(Would have caught the Metadata Registry, `catch_unwind`, and SASan.)*

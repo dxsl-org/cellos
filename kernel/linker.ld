@@ -61,6 +61,14 @@ SECTIONS
         __stack_top = .;
     } >ram
 
+    /* Keep the GOT inside the runtime kernel ownership interval. Without an
+     * explicit rule the linker placed it after __stack_top, where the frame
+     * allocator could immediately reuse and overwrite it. */
+    .got : ALIGN(4096) {
+        *(.got .got.*)
+    } >ram
+    __kernel_end = .;
+
     /DISCARD/ : {
         *(.eh_frame)
     }

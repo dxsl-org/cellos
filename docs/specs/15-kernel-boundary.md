@@ -1,6 +1,6 @@
 # Spec 15 — Kernel Boundary Law
 
-> **Status**: Ratified 2026-06-23 — does not change without explicit architectural review.
+> **Status**: Ratified 2026-06-23; amended 2026-08-01 by the approved D12 architectural review.
 >
 > This document defines what belongs in the Cellos kernel and what does not. It is the
 > authoritative reference. The summary in `CLAUDE.md` is derived from this spec.
@@ -102,13 +102,15 @@ isolates Cells" is claimed — the claim holds for Rust Cells, not for Tier-1b.
 
 **Requirement (G2 / untrusted third-party):** before Tier-1b (or any Cell) may
 run **untrusted**, the MMIO window must be gated in hardware per-Cell:
-- **RISC-V**: per-Cell **PMP/Smepmp** over the MMIO physical range, reprogrammed
-  on context switch (SAS-safe: `satp=Bare` needs no `sfence.vma`) — stops the
-  rogue register write. Roadmap §G backlog.
+- **RISC-V**: Spec 19 Layer B page-table domains are the implementable S-mode wall.
+  PMP/Smepmp would require a separately approved M-mode firmware owner; the current
+  runtime cannot program PMP or reconfigure it on a cell switch.
 - Plus **IOMMU/WorldGuard** coverage of virtio-mmio DMA for defense-in-depth
-  (PMP stops the Cell programming the device; the IOMMU confines a device already
-  told to DMA).
-- **x86**: MPK per-Cell key on the MMIO pages (needs CET-IBT, already shipped).
+  (the CPU-side domain stops the Cell programming the device; the IOMMU confines a
+  device already told to DMA).
+- **x86**: Spec 19 Layer B page-table domains are the load-bearing untrusted-cell wall.
+  MPK may add Layer-C hardening only after PTE key tagging and shared/MMIO-page semantics
+  are designed and verified; the current PKRU plumbing does not enforce this boundary.
 
 Until then, **do not spawn an untrusted Tier-1b Cell adjacent to USER-mapped
 device MMIO.** Tier-1b is a first-party capability, not a sandbox.

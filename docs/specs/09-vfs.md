@@ -1,7 +1,8 @@
 # Cellos Architecture: VFS & Filesystems
-**Version**: 0.5 (Mount-Table Layered Backends — thay thế Dual-VFS)
+**Version**: 0.6 (Mount-Table Layered Backends + phased `/srv` activation)
 **Status**: Definitive
 **Changed 2026-06-10**: Bỏ chiến lược Dual-VFS (viFS1 RedoxFS fork / viFS2 TFS — TFS upstream đã ngừng phát triển từ ~2018). Thay bằng mô hình MountTable một VFS service + nhiều backend cắm song song. Plan chi tiết: `.agents/260610-1202-vfs-mount-table-backends/`.
+**Amended 2026-08-01**: D10 giữ RedoxFS-on-VirtIO làm G1 proof-of-function và tách riêng các gate G2 production theo ADR 0002.
 
 
 ## 1. VFS Contract (The Interface)
@@ -36,7 +37,7 @@ VFS service (MountTable, longest-prefix match)
 ├── /tmp         → RamFS   (tmpfs, volatile, read-write)
 ├── /data        → FAT32 hiện tại → littlefs (power-safe, G1 tail)
 ├── /mnt/sd      → FAT32   (interop thẻ SD/PC — sau khi /data chuyển littlefs)
-└── /srv         → Native FS (CoW, checksum — G2, cùng NVMe)
+└── /srv         → RedoxFS (G1 functional; G2 production qualification pending)
 ```
 
 ### Vai trò từng backend
@@ -47,7 +48,7 @@ VFS service (MountTable, longest-prefix match)
 | **RamFS** | `/tmp` | tmpfs chuẩn — scratch space volatile | Có rồi |
 | **FAT32** (crate `fatfs`, có LFN/VFAT) | `/data` (hiện tại) → `/mnt/sd` | Interop thẻ SD ≤32GB / boot partition RPi / trao đổi dữ liệu với PC. **Không journaling — không dùng làm persistent store chính cho robot** | Có rồi |
 | **littlefs** | `/data` | Persistent store power-loss-resilient cho config/log/model — mất điện giữa chừng ghi không hỏng volume. Bắt buộc trước robot demo trên board thật | G1 tail |
-| **Native FS** | `/srv` | CoW + checksum cho server workload. **Quyết định: RedoxFS port** (MIT, ~10 K LOC; xem [ADR](09b-vfs-native-fs-adr.md)). Implement tại G2 cùng NVMe. Hiện stub `StubBackend` mounted tại `/srv` — trả empty/false, không crash VFS | G2 |
+| **RedoxFS** | `/srv` | CoW + checksum. [ADR 09b](09b-vfs-native-fs-adr.md) + [ADR 0002](../decisions/0002-phased-srv-redoxfs-activation.md) cho phép G1/QEMU proof-of-function qua block Driver Cell; G2 production vẫn cần RedoxFS-on-NVMe test, benchmark `<100 us`, hardware thật, và quyết định capability P5. Mount hiện tại degrade về empty/false nếu P5 thiếu hoặc chưa format | G1 functional; G2 pending |
 | **exFAT** | `/mnt/sd` (mở rộng) | Thẻ SDXC >32GB nguyên bản (xuất xưởng exFAT, `fatfs` không đọc được). `FatBackend::mount()` tự detect OEM-Name `"EXFAT   "` và log cảnh báo rõ thay vì lỗi cryptic. Full support chỉ khi có nhu cầu thật | Theo nhu cầu |
 
 ### Quyết định đã chốt (2026-06-10)

@@ -1,16 +1,9 @@
-//! Memory footprint measurement — static, not time-based.
+//! Memory footprint measurement — allocator-backed, not time-based.
 //!
-//! Queries the kernel for total used memory after the standard boot sequence
-//! (init + config + vfs + shell) and reports it.  PDR target: kernel + 3
-//! core services < 10 MB total.
+//! Reports physical frames committed by the kernel frame allocator. This
+//! includes the reserved kernel heap and is not a resident-set measurement.
 
 use api::benchmark::{BenchReport, ViBenchmark};
-
-/// Approximate memory used by init+config+vfs+shell cell ELFs from disk image
-/// size as a rough lower bound when MemInfo syscall is not yet implemented.
-///
-/// This constant is updated from actual QEMU measurements.
-const APPROX_BOOT_BYTES: u64 = 3_500_000; // ~3.5 MB baseline
 
 pub struct MemoryFootprintBench {
     measured_bytes: u64,
@@ -22,7 +15,6 @@ impl MemoryFootprintBench {
     }
 
     /// Return the last measurement in bytes (valid after `run_once`).
-    #[allow(dead_code)] // reason: convenience accessor for future MemInfo syscall integration
     pub fn bytes(&self) -> u64 {
         self.measured_bytes
     }
@@ -50,9 +42,14 @@ impl ViBenchmark for MemoryFootprintBench {
     }
 
     fn run_once(&mut self) -> api::ViResult<u64> {
-        // TODO: replace with MemInfo syscall when implemented.
-        // For now, use a compile-time approximation.
-        self.measured_bytes = APPROX_BOOT_BYTES;
+        let info = ostd::syscall::sys_mem_info().map_err(|_| api::ViError::IO)?;
+        if info.total_frames != info.used_frames.saturating_add(info.free_frames) {
+            return Err(api::ViError::InvalidInput);
+        }
+        self.measured_bytes = info
+            .used_frames
+            .checked_mul(info.page_size)
+            .ok_or(api::ViError::InvalidInput)?;
         Ok(self.measured_bytes)
     }
 }

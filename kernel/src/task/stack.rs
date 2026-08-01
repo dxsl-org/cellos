@@ -84,7 +84,13 @@ impl Stack {
         let total_pages = if guard { pages + 1 } else { pages };
 
         let mut frame_guard = FRAME_ALLOCATOR.lock();
-        let allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
+        let allocator = frame_guard.as_mut().ok_or_else(|| {
+            error!(
+                "Stack alloc failed: frame allocator unavailable (user={}, pages={})",
+                user_mode, total_pages
+            );
+            ViError::OutOfMemory
+        })?;
 
         // A stack must be ONE contiguous run of frames, and that is a consequence of
         // SAS rather than a shortcut: everything is identity-mapped (VA == PA) and
@@ -96,9 +102,15 @@ impl Stack {
         // So callers must read `OutOfMemory` here as "no run this long exists right
         // now", which is recoverable, and never as grounds to panic. Lifting the
         // constraint means adding a VA allocator so stack pages can be scattered.
-        let base_frame = allocator
-            .allocate_contiguous(total_pages)
-            .ok_or(ViError::OutOfMemory)?;
+        let base_frame = allocator.allocate_contiguous(total_pages).ok_or_else(|| {
+            error!(
+                "Stack alloc failed: no contiguous run (user={}, pages={}, bytes={})",
+                user_mode,
+                total_pages,
+                total_pages * PAGE_SIZE
+            );
+            ViError::OutOfMemory
+        })?;
 
         let base_addr = base_frame; // Identity Map
 

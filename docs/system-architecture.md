@@ -50,7 +50,10 @@ The kernel is **tiny** by design, handling only:
 
 ### 1. **Boot & Initialization** (`kernel/src/boot.rs`)
 - Limine bootloader integration (fallback: SimpleBootInfo)
-- Parse DTB (device tree)
+- Resolve the effective firmware DTB once for CPU, platform, and fallback boot discovery
+- On RV64 direct OpenSBI boot, derive a non-overlapping memory map from enabled DTB memory
+  nodes while excluding firmware, the live kernel, `/memreserve/`, and static
+  `/reserved-memory`; malformed or unsupported maps fail closed to audited board defaults
 - Initialize UART for logging
 - Initialize HAL (interrupts, paging)
 - Set up frame allocator
@@ -63,8 +66,12 @@ The kernel is **tiny** by design, handling only:
 
 **Frame Allocator**:
 - Bitmap-based allocation (O(1) free, O(n) scan for allocate)
-- 128–256 MB physical RAM in QEMU (0x8000_0000–0x8000_0000 + size)
-- Tracks allocated vs. free pages (4KB each)
+- RV64 capacity follows the firmware DTB rather than a fixed 190 MiB usable window
+- Selects the largest page-aligned usable interval; multi-region allocation is not implemented
+- Tracks allocated vs. free pages (4KB each) with an exact counter updated only on bitmap
+  transitions, so repeated reservation and double-free paths do not skew the snapshot
+- Exposes aggregate telemetry through opt-in `MemInfo=243` (allowlist bit 56), returning the
+  fixed 32-byte `ViMemInfoV1`; it reveals no addresses or per-cell ownership
 
 **Virtual Memory (SV39 on RV64)**:
 - **Trap Zone**: Low 4KB, unmapped → catches NULL deref
@@ -137,9 +144,20 @@ struct Task {
 | `Spawn(binary, argv)` | Create new Cell |
 | `Exec(binary, argv)` | Replace self with new Cell |
 | `SpawnFromMem(ptr, size)` | Load Cell from memory buffer |
+| `MemInfo(out, len)` | Opt-in aggregate frame totals (`ViMemInfoV1`, 32 bytes) |
 | `Exit(code)` | Terminate self |
 | `Yield()` | Voluntarily yield CPU |
 | `Log(msg)` | Print to kernel log |
+
+Cell-spawn allocation exhaustion is encoded additively as `-2` for the four cell-spawn paths and
+decoded as `SyscallError::OutOfMemory`. Generic syscall errors retain the legacy `-1` sentinel.
+Source-stage and bounded caller/path logs make exhaustion diagnosable without panicking the kernel.
+
+The current RV64 benchmark measures allocator commitment directly: **135,782,400 bytes
+(129.49 MiB)** on 2026-08-01. This exceeds the unchanged `<10 MiB` performance objective; the
+measurement mechanism is complete, while memory reduction remains separate work. The destructive
+capacity probe is excluded from default images and enabled only with
+`CELLOS_INCLUDE_CAPACITY_PROBE=1` for test-mode builds.
 
 **Capability-Based Access Control**:
 ```rust
@@ -676,7 +694,7 @@ Design brief: [.agents/brainstorms/260608-viui-nextgen-architecture.md](.agents/
 ┌─────────────────────────────────────────────────┐
 │ kernel/src/boot.rs: kmain(hartid, dtb)          │
 │ 1. Initialize UART for logging                  │
-│ 2. Parse bootloader info (memory map, DTB)      │
+│ 2. Resolve DTB and build reservation-safe map   │
 │ 3. Initialize HAL (traps, interrupt handler)    │
 └──────────────┬──────────────────────────────────┘
                ↓
@@ -741,7 +759,8 @@ Virtual Address Space (64-bit, SV39 = 39-bit VA)
 │  - Task pool (TCBs)               │
 └───────────────────────────────────┘  0xffff_ffff_ffff_ffff
 
-Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
+Physical RAM: firmware-described on RV64 direct OpenSBI boots; protected intervals are removed
+before usable pages reach the frame allocator.
 ```
 
 ---
@@ -811,31 +830,34 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 
 ## Security Model Implementation Status (2026-06-23)
 
-### Three-Layer Security Model
+### Hardware-Isolation Delivery Model (Spec 19)
 
 ```
-Layer 1 — LBI (Rust compiler)       → Cell↔Cell isolation            [DONE]
-Layer 2 — Hardware supplement       → CFI + MTE + CET + PKU + DMA   [COMPLETE 2026-06-23]
-Layer 3 — Silo / VM (Stage-2 MMU)  → Key/VM isolation from kernel   [DONE, G2]
+Layer A — W^X after relocation      → code/constant integrity        [DONE]
+Layer B — Per-domain page tables    → untrusted native-cell wall     [PLANNED]
+Layer C — Per-arch hardening        → opportunistic MTE/MPK bonuses  [HW-GATED]
 ```
 
-**Layer 2 (Hardware Security) Implementations by Architecture:**
+LBI, CFI, DMA isolation, and Tier-3 Silo/VM protection complement this delivery model but
+do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
+
+**Hardware Security Implementations by Architecture:**
 
 | Component | ARM64 | x86_64 | RISC-V |
 |-----------|-------|--------|--------|
 | **CFI (Forward-edge)** | BTI+PAC ✅ | CET-IBT ✅ | Zicfilp (ratified, await silicon) |
-| **Memory Tagging** | MTE ✅ (ARMv8.5, RK3588) | N/A | Zimt (draft, await silicon) |
-| **Domain Isolation** | N/A | PKU ✅ (Broadwell+) | PMP / Smepmp (ratified, await silicon) |
+| **Memory Tagging** | MTE implementation ✅; unavailable on RK3588 (A76/A55, Armv8.2-A) | N/A | Zimt (draft, await silicon) |
+| **Domain Isolation** | Layer B planned | PKU plumbing only; PTE enforcement pending | PMP descriptors only; M-mode owner absent |
 | **DMA Enforcement** | Per-Cell DDT ✅ | Per-Cell VT-d ✅ | Per-Cell IOMMU ✅ |
 
 **Deployment Details:**
-- **ARM64**: Compiler flags `-C target-feature=+bti,+paca,+pacg`; hardware detection via ID_AA64PFR1_EL1, MTE requires ARMv8.5-A
-- **x86_64**: CR4.CET + MSR_IA32_S_CET for CET-IBT; CR4.PKE for PKU (feature-gated, CET-IBT prerequisite enforced)
-- **RISC-V**: DMA isolation (3-level DDT, Sv39 domains) complete; CFI/memory-tagging extensions pending silicon availability
+- **ARM64**: Compiler flags `-C target-feature=+bti,+paca,+pacg`; MTE is runtime-gated through `ID_AA64PFR1_EL1` and requires Armv8.5-A or later. RK3588's Cortex-A76/A55 cores expose the MTE field as zero.
+- **x86_64**: CR4.CET + MSR_IA32_S_CET for CET-IBT; CR4.PKE and WRPKRU paths are feature-gated, but user PTEs remain key 0
+- **RISC-V**: DMA isolation (3-level DDT, Sv39 domains) complete; PMP is inaccessible from the S-mode runtime without a custom M-mode firmware owner
 
 **Known Limitations:**
-- **MTE**: Probabilistic (1/16 tag collision); hardening only, not a strict safety boundary
-- **PKU**: PTE key tagging (bits [62:59]) deferred to G2; current implementation is wired but keys are zeroed
+- **MTE**: Probabilistic (1/16 tag collision), hardening only, and unavailable on the RK3588 deployment target; use only on QEMU or future Armv8.5+ hardware
+- **PKU**: PTE key tagging (bits [62:59]) is absent; current PKRU switching cannot deny access while all pages remain key 0, and the self-test does not prove a keyed-page fault
 - **RISC-V**: Zicfilp/Zimt/Smepmp extensions ratified 2024–2025 but no shipping silicon yet
 
 ---
@@ -892,6 +914,9 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 - **48 syscall variants** (IPC, memory, task, FS, GPU, network, state) + **Block I/O capability gate**
 - **Block I/O syscalls** (raw 500/501/503 for FAT16 persistence, gated to VFS task 3)
 - Frame allocator (bitmap) and virtual memory
+- **RV64 DTB memory discovery** — enabled RAM nodes minus firmware, live-kernel, FDT
+  `/memreserve/`, and static `/reserved-memory`, with audited static-map fallback; a 2 GiB QEMU
+  capacity gate verifies more than 1 GiB is managed
 - ELF loader with PIE relocation support
 - **VFS service** (RamFS read/write, FAT32 write/read/delete via block device, zero-copy grants)
   - **10 IPC opcodes** (0x01–0x0A): OP_GET_FILE, OP_LIST_DIR, OP_STAT, OP_WRITE, OP_MKDIR, OP_RMDIR, OP_UNLINK, **OP_READ, OP_RMDIR_RECURSIVE, OP_APPEND**
@@ -945,7 +970,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 - **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
 - **Tier 3b Linux VM (ARM64 EL2 VMM)** — ✅ COMPLETE 2026-06-16 **(ARM64 only)**: EL2 hypervisor boots Alpine 3.21.3 aarch64 (musl); all 10 phases done; CI smoke job. Untrusted/legacy code isolation now lives here (hardware Stage-2). **x86_64 (SVM/VT-x) is design-plan only, not implemented** (`.agents/260711-1917-tier3b-x86-vtx/`); glibc-guest + writable-storage are planned follow-ups (`.agents/260712-0952-tier3b-vm-hardening-compat/`).
-- **Cell signing + hot migration** — ✅ COMPLETE 2026-06-23: Ed25519 verify-at-spawn gate (`kernel/src/loader.rs`), in-kernel `ed25519::verify` (RFC 8032 self-test at boot), 5-step hotswap with `TaskState::Frozen` + `ViStateTransfer`; 11/11 hotswap-smoke tests.
+- **Cell-signing mechanism + hot migration** — ✅ MECHANISMS COMPLETE 2026-06-23: the common spawn gate verifies present Ed25519 signatures, and the 5-step hotswap uses `TaskState::Frozen` + `ViStateTransfer`; 11/11 hotswap-smoke tests passed. Fleet signed-only admission remains planned: default builds permit absent signatures, the dev seed is public, no production public-key provisioning path exists, and secure boot does not yet anchor the kernel/key. Signature status does not select a memory tier.
 - **Hardware Key Isolation (Silo)** — ✅ COMPLETE 2026-06-16 (SiloHandle API; reclassified Tier 3a → Tier 1 hardware capability, G2 ARM64/x86).
 
 ### 🚧 In Progress / Partial

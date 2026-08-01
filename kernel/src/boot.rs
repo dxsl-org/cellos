@@ -4,7 +4,15 @@ use crate::*;
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(target_arch = "riscv64")]
+mod dtb_memory;
+
 pub mod limine;
+
+/// Select the firmware DTB once so every early-boot consumer sees the same tree.
+pub fn effective_dtb(entry_dtb: usize) -> usize {
+    limine::get_dtb_ptr().unwrap_or(entry_dtb)
+}
 
 // OpenSBI boot entry point is provided by HAL
 // See hal/arch/riscv/src/rv64/boot.rs
@@ -256,6 +264,19 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
+#[cfg(target_arch = "riscv64")]
+static mut DTB_MEMORY_MAP: [MemoryMapEntry; MAX_MEMORY_MAP_ENTRIES] = [MemoryMapEntry {
+    base: 0,
+    length: 0,
+    ty: MemoryType::Reserved,
+}; MAX_MEMORY_MAP_ENTRIES];
+#[cfg(target_arch = "riscv64")]
+static mut DTB_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
+    memory_map: &[],
+    kernel_phys_base: 0,
+    hhdm_offset: 0,
+};
+
 // StarFive VisionFive2 / JH7110 (DRAM at 0x4000_0000).
 // PLIC/UART/CLINT addresses are identical to QEMU virt — no paging.rs changes needed.
 // This fallback is only used when Limine fails to parse the device tree; under normal
@@ -453,7 +474,51 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
 ///
 /// Only aarch64 QEMU-virt sizes its kernel region at runtime (see above);
 /// the other fallbacks keep their audited static spans.
-#[cfg(not(all(target_arch = "aarch64", not(feature = "board-rpi3"))))]
+#[cfg(target_arch = "riscv64")]
+pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
+    use core::ptr::{addr_of, addr_of_mut};
+    extern "C" {
+        static __kernel_end: u8;
+    }
+
+    if dtb != 0 {
+        // SAFETY: firmware supplies a mapped FDT pointer; the parser validates its header.
+        if let Ok(tree) = unsafe { fdt::Fdt::from_ptr(dtb as *const u8) } {
+            let kernel_base = FALLBACK_BOOT_INFO.kernel_phys_base as usize;
+            let kernel_end = addr_of!(__kernel_end) as usize;
+            // SAFETY: early boot publishes these statics once before other tasks exist.
+            let result = unsafe {
+                dtb_memory::build(
+                    &tree,
+                    kernel_base,
+                    kernel_end,
+                    &mut *addr_of_mut!(DTB_MEMORY_MAP),
+                )
+            };
+            match result {
+                Ok(count) => unsafe {
+                    (*addr_of_mut!(DTB_BOOT_INFO)).memory_map = core::slice::from_raw_parts(
+                        addr_of!(DTB_MEMORY_MAP) as *const MemoryMapEntry,
+                        count,
+                    );
+                    (*addr_of_mut!(DTB_BOOT_INFO)).kernel_phys_base = kernel_base as u64;
+                    return &*addr_of!(DTB_BOOT_INFO);
+                },
+                Err(error) => log::warn!("[boot] DTB memory map rejected: {:?}", error),
+            }
+        } else {
+            log::warn!("[boot] invalid DTB memory map; using static fallback");
+        }
+    } else {
+        log::warn!("[boot] no DTB memory map; using static fallback");
+    }
+    &FALLBACK_BOOT_INFO
+}
+
+#[cfg(not(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", not(feature = "board-rpi3"))
+)))]
 pub fn fallback_boot_info(_dtb: usize) -> &'static SimpleBootInfo {
     &FALLBACK_BOOT_INFO
 }

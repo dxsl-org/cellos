@@ -1,6 +1,6 @@
 # Cellos Architecture: Application Tiers
 **Version**: 0.9 (Security Silo reclassified from Tier 3a → Tier 1 hardware capability)
-**Status**: Definitive — updated 2026-06-19
+**Status**: Definitive — updated 2026-08-01 (D12 hardware-isolation ruling)
 
 ---
 
@@ -53,20 +53,21 @@ let (our_pub, shared) = handle.ecdh(&peer_pub)?;  // ECDH key agreement
 
 Implementation: `silo-guest` binary (~10KB bare-metal AArch64 no_std) chạy trong Stage-2 fenced memory, dispatch bằng mailbox page. Đây là **kernel infrastructure firmware**, không phải app tier.
 
-#### Hardware Supplement to LBI (Planned G2)
+#### Hardware Isolation Layers
 
-LBI (Rust type system) alone có 3 limitations:
-1. **rustc là TCB** — compiler correctness là load-bearing; compromised compiler bypass toàn bộ guarantee
-2. **Spectre/Meltdown** — shared L1/L2 cache là side channel dù có LBI
-3. **Mutable statics** — `static mut` = ambient authority (Midori finding)
+LBI remains load-bearing for trusted Tier-1 cells: `rustc` is part of the TCB, unsafe or
+ambient-authority code can break the language wall, and shared microarchitectural state can
+still expose timing or speculative side channels.
 
-Hardware supplement (Tier 1, G2 roadmap — no virtualization):
+The hardware-isolation taxonomy and implementation status are owned by
+[Spec 19](19-hardware-isolation-layers.md): Layer A W^X is implemented; Layer B per-domain
+page tables are the future hardware boundary for untrusted native cells and optional
+defense-in-depth for selected Tier-1 cells; Layer C mechanisms such as MTE or MPK are
+hardware-gated bonuses and never load-bearing. RISC-V PMP is not available to the Cellos
+S-mode runtime without a separate M-mode firmware owner (see Spec 12 §2).
 
-| Platform | Mechanism | Effect |
-|---|---|---|
-| ARM64 | MTE (Memory Tagging Extension) | Pointer tags, Spectre mitigation |
-| x86 | MPK (Memory Protection Keys) | 16 per-Cell access domains, no TLB flush |
-| RISC-V | PMP (Physical Memory Protection) | M-mode fence cho high-value Cells |
+MTE and MPK are not Spectre/Meltdown mitigations. Side-channel controls require their own
+threat model, implementation, and verification.
 
 ---
 

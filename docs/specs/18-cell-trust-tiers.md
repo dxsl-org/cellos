@@ -1,9 +1,8 @@
 # Spec 18 — Cell Trust Tiers (ADR)
 
-> **Status**: Accepted 2026-07-30 — supersedes the WASM runtime tier wherever older
-> documents mention it. Implementation of Tier 2 is scheduled for the plan following
-> `midori-lessons` (per-domain page tables); Tier 1 tooling (`cellos-sign`) is phase 11
-> of the current plan.
+> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D13. Supersedes the WASM
+> runtime tier wherever older documents mention it. Tier 2 and fleet-secure Tier-1
+> admission are accepted designs, not current production mechanisms.
 
 ## 1. Context
 
@@ -11,11 +10,12 @@ Cellos isolation is language-based (LBI): the Rust type system is the wall betwe
 Cells sharing one address space (Spec 16). That wall only holds for code that provably
 contains no `unsafe`. Two facts broke the previous story:
 
-1. **The signature attests provenance, not safety.** `scripts/sign-cell.py` signs
-   PT_LOAD segments + manifest with Ed25519. It proves *who built the binary*, not
-   *what the binary can do*. Policy F1 (`#![forbid(unsafe_code)]` on every Cell crate,
-   Spec 16 §6) is not enforced by any pipeline — at the time of this ADR only 25 of 71
-   cell crates carry the attribute.
+1. **A signature proves only possession of its key.** `scripts/sign-cell.py` signs
+   PT_LOAD segments + manifest with Ed25519. The normal `cellos-sign` route now checks
+   F1/F5 before signing, but that meaning depends on a controlled pipeline and key:
+   the scan covers `cells/` (with a reviewed allowlist), not every dependency; the CLI
+   accepts target ELFs after checking the source tree rather than proving they came from
+   that build; and the reproducible dev seed is public and forgeable.
 2. **There is no algorithm that verifies memory-safety of a compiled ELF.** Midori
    could verify at install time because apps shipped as typed bytecode (MSIL). Native
    ELF cannot be verified after the fact — safety must be checked at *build* time
@@ -29,12 +29,13 @@ no problem the tiers below don't solve better.
 
 ## 2. Decision
 
-Three tiers. The loader assigns the tier at spawn from signature verification; the
-tier decides which memory model the Cell gets.
+Three tiers are the accepted destination. The current loader does **not** assign a memory
+tier from signature verification: every admitted native cell uses the shared SAS. The
+tier decision point arrives only when Spec 19 Layer B is implemented.
 
 | Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
 |------|--------|-----|---------------------|-----------------|-----|
-| **1 — SAS cell** | shipped | First-party / platform-built cells, signed via `cellos-sign` | LBI: rustc + enforced F1 (build-time verification) | Native, zero-cost boundary | Zero-copy grants |
+| **1 — SAS cell** | SAS shipped; fleet signed-only admission **not shipped** | Operationally trusted first-party/platform cells; future fleet posture requires a controlled signing pipeline | LBI: rustc + F1 policy outside reviewed exceptions | Native, zero-cost boundary | Zero-copy grants |
 | **2 — Domain cell** | **accepted, NOT implemented** | Any unsigned native ELF (third-party developers) | Hardware: private page-table view — same VA layout as the SAS, but *other cells' pages are simply not mapped* | Native inside the domain; `satp`+ASID switch at the boundary | Kernel-copied messages; grants mapped explicitly per-share |
 | **3 — Silo VM** | shipped (aarch64) | Whole legacy stacks (Linux guests) | Stage-2 paging (H-extension) | Native inside guest | virtio / proxy |
 
@@ -50,30 +51,44 @@ a page-table switch per cell would destroy zero-copy IPC and the SAS economy. Ti
 that exact cost on purpose, and only for cells that have not been verified — which is why the
 two decisions coexist rather than contradict.
 
-Invariant: **there is no "unverified native code inside the shared SAS view" tier.**
-An ELF without a valid platform signature never sees another Cell's pages.
+Target invariant: **there is no unverified native code inside the shared SAS view in a
+fleet-secure build.** Current G1/dev builds do not enforce this invariant: when
+`signing-required` is off, an ELF with no `__ViCell_sig` section is admitted to the SAS.
+This is a development posture, not a sandbox for hostile native code.
 
 ### 2.1 Tier 1 admission — `cellos-sign`
 
-The platform signature changes meaning from "bytes are ours" to **"built by a pipeline
-that enforced F1"**. `cellos-sign` (evolution of `scripts/sign-cell.py` +
-`lib-sign-cells.sh`) refuses to sign unless, in the same pipeline step as the build:
+In a controlled fleet pipeline, the platform signature is intended to mean **"approved
+by a pipeline that enforced F1/F5"**. The normal `cellos-sign` route refuses to sign
+unless its repository checks pass:
 
-- `#![forbid(unsafe_code)]` is present on the cell crate and every dependency outside
-  a reviewed allowlist (drivers needing MMIO, `ostd`) — each allowlist entry carries a
-  written reason and a `// SAFETY:` audit reference;
+- Cell crate roots and tracked Rust files under `cells/` satisfy the F1 attribute/token
+  checks outside `scripts/unsafe-allowlist.toml`; `libs/*` remains reviewed TCB rather
+  than part of this ratchet;
 - the toolchain matches the pinned `rust-toolchain.toml` (policy F5);
-- the signed artifact is the artifact produced by that checked build (check and sign
-  are one step — the tool never signs a foreign ELF).
+- the controlled CI job binds the target ELF to the checked build before releasing the
+  production signing key. The CLI itself accepts target paths and does not establish
+  that build-to-artifact provenance.
 
-The signing key lives in CI/KMS, not on developer machines. Possession of the
-`cellos-sign` tool grants nothing; the key policy is the guarantee.
+The production signing key must live in CI/KMS, not on developer machines; key policy and
+artifact provenance are the guarantee. The current `[0x43; 32]` dev seed and
+`--unchecked-dev-signature` route are test fixtures: the kernel cannot distinguish their
+signatures from a checked dev signature, so they establish no adversarial provenance.
+
+Current admission behavior is explicit:
+
+- signature present but invalid: deny in every build;
+- signature absent + `signing-required`: deny;
+- signature absent + default G1 features: admit to the SAS;
+- disabling `dev-signing-key` selects a `[0u8; 32]` placeholder, not a provisioned fleet
+  key, so it cannot form a usable production profile.
 
 ### 2.2 Tier 2 admission — nothing
 
-That is the point. A third-party developer builds a normal cell ELF with the public
-SDK, does not sign it, does not disclose source, and it runs at native speed behind an
-MMU wall. `unsafe` in a Tier-2 cell can corrupt only that cell. The costs a Tier-2
+That is the point of the accepted design. A third-party developer would build a normal
+cell ELF with the public SDK, omit a platform signature, withhold source, and run at native
+speed behind an MMU wall once Tier 2 exists. `unsafe` in a Tier-2 cell would corrupt only
+that cell. The costs a Tier-2
 cell pays, relative to Tier 1: address-space switch at its scheduling boundary
 (ASID-tagged, no full TLB flush — VF2/Pioneer/RK3588 all have MMU+ASID; none has
 MTE/PKU, which is why page tables are the mechanism), and copied IPC instead of
@@ -103,10 +118,15 @@ item; not a prerequisite for anything above.
 
 ## 4. Consequences
 
-- The kernel loader gains a tier decision point: signature valid → SAS mapping (status
-  quo); absent/invalid → domain mapping (new; requires the per-domain page-table
-  mechanism of Spec 19 §2). Until that mechanism ships, unsigned cells in production
-  posture are refused (dev builds keep `signing_required` off).
+- The future kernel loader gains a tier decision point: an artifact approved by the
+  fleet pipeline may use the SAS; an unapproved/unsigned artifact uses a domain mapping
+  once Spec 19 Layer B exists. Today there is no domain branch: default builds admit an
+  absent signature to the SAS, while `signing-required` builds refuse it.
+- A production profile must provision the kernel's immutable cell-signing public key,
+  enable `signing-required` and `policy-required`, remove dev-key/weak-RNG features, bind
+  checked source to the signed artifact, and test unsigned, stripped, wrong-key,
+  dev-key, tampered, and unchecked-dev-signed negative cases.
+- Secure boot remains required to anchor the kernel and its embedded trust key.
 - `GrantShare` to/from a Tier-2 cell maps the grant into the domain's table explicitly;
   `DataPtr`-style raw pointers (`GetFile`) are unrepresentable across the tier boundary
   — consistent with their planned removal (midori-lessons phase 06).

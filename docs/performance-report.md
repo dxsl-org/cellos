@@ -1,6 +1,6 @@
 # Cellos Performance Baseline Report
 
-> **Status:** Initial baseline — QEMU measurements pending first CI run.
+> **Status:** Capacity measured; consolidated latency baseline still pending.
 > Updated weekly by `.github/workflows/perf.yml`.
 
 ---
@@ -12,7 +12,7 @@
 | Context-switch latency | < 100 µs | ≥ 2× in QEMU | Measured via double `sys_yield` round-trip |
 | IPC send/recv round-trip | < 50 µs | ≥ 2× in QEMU | 64-byte message to VFS cell and back |
 | Syscall overhead (`Yield`) | < 10 µs | ≥ 2× in QEMU | Single ecall → return to U-mode |
-| Kernel + 3 services footprint | < 10 MB | — | Init + Config + VFS + Shell combined |
+| Allocator-committed memory | < 10 MiB | — | Exact global frame commitment via opt-in MemInfo |
 
 QEMU measurements show *relative* trends well but undercount due to JIT translation
 overhead.  All targets must be met with a 2× safety margin to account for this.
@@ -49,6 +49,9 @@ ignored).  The CI build fails only on sustained regressions.
 | BIOS | OpenSBI (default) |
 | Runner | GitHub Actions `ubuntu-latest` |
 
+This table describes the scheduled latency run. The 2026-08-01 capacity artifact is a separate
+test-mode build used for MemInfo and bounded destructive OOM verification.
+
 ---
 
 ## Baseline Measurements
@@ -65,13 +68,31 @@ Expected rough order-of-magnitude for QEMU (10 MHz `mtime`):
 | `context_switch` | ~20 µs | ~40 µs | < 100 µs |
 | `ipc_send_recv` | ~15 µs | ~30 µs | < 50 µs |
 | `syscall_yield` | ~5 µs | ~10 µs | < 10 µs |
-| `memory_footprint` | ~3.5 MB | — | < 10 MB |
+| `memory_footprint` | 129.49 MiB | — | < 10 MiB — FAIL |
 
 ## Performance Baseline — Status
 
-**Current status: UNMEASURED.** No baseline run has been completed. All values in this document are estimates.
+**Current status: PARTIALLY MEASURED.** Capacity observability has a real RV64 measurement;
+the latency rows still require a consolidated baseline run.
 
-> **Action required (Phase 24)**: Run `/bin/bench` on QEMU, commit results to `.agents/reports/perf-baseline-{date}.txt`, and pin them in CI as regression reference. PDR targets cannot be validated until this is done.
+On 2026-08-01, `/bin/bench` reported:
+
+```text
+[bench] allocator_committed_bytes=135782400
+[bench] memory_footprint FAIL (exceeds 10 MB target)
+```
+
+The 135,782,400-byte value is 129.49 MiB and comes from exact transition-aware frame accounting,
+not the former synthetic 3,500,000-byte constant. The unchanged `<10 MiB` objective therefore
+fails honestly. Reducing allocator commitment is separate optimization work; changing the metric
+or threshold would invalidate the observability gate.
+
+`MemInfo=243` uses allowlist bit 56 and returns the fixed 32-byte `ViMemInfoV1`. It is opt-in
+because global used/free totals are cross-cell telemetry. The destructive spawn-exhaustion probe
+is included and signed only when `CELLOS_INCLUDE_CAPACITY_PROBE=1`; default images exclude it.
+
+> **Action required:** Complete and pin the remaining latency baseline. Capacity has been measured,
+> but the `<10 MiB` objective needs a dedicated memory-reduction plan.
 
 ## Spec vs. Implementation Gap
 
@@ -82,7 +103,7 @@ The architecture spec (03-runtime.md) claims IPC at "2–3 CPU cycles via direct
 | IPC round-trip | 2–3 cycles (direct call) | < 50 µs | ~200–500 µs (syscall) | ❌ Not yet |
 | Context switch | — | < 100 µs | ~40 µs (estimated) | ❌ Not yet |
 | Syscall yield | — | < 10 µs | ~10 µs (estimated) | ❌ Not yet |
-| Memory footprint | — | < 10 MB | ~3.5 MB (estimated) | ❌ Not yet |
+| Allocator commitment | — | < 10 MiB | 129.49 MiB | ❌ FAIL (measured 2026-08-01) |
 
 ## Scheduler Impact on Latency
 

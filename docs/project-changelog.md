@@ -4,6 +4,92 @@
 
 ---
 
+## [2026-08-01] Separate cell-signing plumbing from fleet-secure admission
+
+D13 records that the Ed25519 spawn gate is implemented, but the default G1 posture is not
+signed-only: absent signatures are admitted unless the non-default `signing-required`
+feature is enabled. `/bin/` remains an authorization classification, the public dev seed
+is only a forgeable test fixture, and signature status does not select a memory tier.
+
+Fleet-secure Tier-1 admission remains a G2 deliverable requiring a provisioned public key,
+a named production feature profile without dev keys or weak RNG, controlled
+build-to-artifact provenance, negative admission tests, and a secure-boot trust anchor.
+This ruling changes documentation only; runtime behavior, ABI, keys, and Cargo features are
+unchanged.
+
+## [2026-08-01] Centralize hardware-isolation claims in Spec 19
+
+D12 replaces the stale Tier-1 MTE/MPK/PMP table with Spec 19's delivery model: implemented
+Layer A W^X, planned/load-bearing Layer B page-table domains, and opportunistic Layer C
+hardening. MTE and MPK are no longer described as Spectre/Meltdown mitigations, and PMP
+remains unavailable to the Cellos S-mode runtime without a separate M-mode firmware owner.
+
+The x86 PKU path is now documented as register and return-path plumbing, not isolation:
+the loader does not stamp PTE bits `[62:59]`, every user page remains key 0, and PKRU
+switching cannot deny access. Its self-test checks PKRU constants and kernel `RDPKRU`; it
+does not attempt a denied keyed-page access. Runtime code and ABI are unchanged.
+
+## [2026-08-01] Correct graphics memory-isolation contract
+
+D11 removes the claim that every unauthorized cross-cell surface access triggers a page
+fault and marks the offender `Poisoned`. Tier-1 Grant-backed surfaces remain `USER+RW` in
+the shared root page table: compositor operations are sender/ownership-gated, while direct
+data-page isolation relies on LBI and the operationally trusted native-cell boundary. Hardware faults
+apply only where PTE permissions deny access, including W^X code/rodata, guard pages, and
+unmapped addresses. The fault handler terminates and reaps the task; it does not maintain a
+`Poisoned` runtime state. Tier-2 per-domain page tables remain the hardware wall for
+untrusted native cells.
+
+## [2026-08-01] Ratify phased `/srv` RedoxFS activation
+
+D10 resolves the conflict between ADR 09b's original all-or-nothing NVMe/hardware gate
+and the tested RedoxFS implementation already mounted on P5. G1/QEMU functional use
+through the generic block Driver Cell is now accepted. G2 production qualification still
+requires an automated RedoxFS-on-NVMe write/read/persistence test, a defined and measured
+`<100 us` filesystem-read benchmark, approved purchasable hardware, and an explicit P5
+partition-authorization decision. ADR 0002 records the ruling; ADR 09b, Spec 09, and the
+roadmap now describe the shipped `VicellDisk -> blk_router -> BLOCK_DRIVER` architecture.
+
+## [2026-08-01] Correct RK3588 architecture and MTE availability
+
+Authoritative Rockchip and Arm documentation confirms that RK3588 uses Cortex-A76/A55,
+both Armv8.2-A cores. Their `ID_AA64PFR1_EL1` definitions reserve bits `[63:8]` as zero,
+which includes the MTE field. RK3588 therefore does not support FEAT_MTE. The generic MTE
+implementation remains valid for QEMU and future Armv8.5+ hardware, but page-table
+isolation remains load-bearing on RK3588.
+
+## [2026-08-01] Readiness notification ABI remains reserved Draft work
+
+Spec 17 §10 no longer claims Ratified status for mechanisms that do not exist. The proposed
+`NET_READY` (`0x11`), `REACTOR_WAKE` (`0x12`), and `NetRequest` variants 17/18 remain reserved
+against collision, but no runtime behavior or enum change is claimed. ADR 0001 records why
+keeping an unbuilt section Ratified would violate Spec 21, while releasing the values would
+discard reviewed design history. Future implementation still requires Law-1 confirmation #2
+immediately before the ABI edit and evidence before re-ratification.
+
+## [2026-08-01] Capacity observability reports real OOM and frame commitment
+
+### What changed
+The four cell-spawn syscall paths now preserve allocation exhaustion as additive return code `-2`,
+decoded by ostd as `SyscallError::OutOfMemory`; generic failures remain `-1` and existing opcodes
+are unchanged. Allocation-source and syscall-boundary logs identify the failing stage and bounded
+caller/path context without turning OOM into a kernel panic.
+
+`MemInfo=243` is an opt-in telemetry syscall at allowlist bit 56. It returns the fixed 32-byte
+`ViMemInfoV1` (`total_frames`, `used_frames`, `free_frames`, `page_size`, all `u64`) from exact,
+transition-aware frame accounting. The benchmark now reports allocator-committed bytes instead of
+the synthetic 3,500,000-byte constant.
+
+### Verified and measured
+API tests pass 71/71, exact allocator tests pass 2/2, supported architecture checks pass, and the
+RV64 runtime gate proves unauthorized MemInfo denial, authorized reporting, typed spawn OOM,
+bounded diagnostics, no panic, and shell recovery. The measured footprint is **135,782,400 bytes
+(129.49 MiB)**, so the unchanged `<10 MiB` objective honestly fails; memory reduction is separate
+follow-up work.
+
+The destructive `capacity-probe` is included and signed only in test-mode images built with
+`CELLOS_INCLUDE_CAPACITY_PROBE=1`. Default images exclude it.
+
 ## [2026-07-31] IPC delivery no longer writes through suspended receiver buffers
 
 ### What was wrong
@@ -25,6 +111,37 @@ payloads into the replacement Cell's ownership, and `ipc_send` reports mailbox p
 Kernel checks pass for RISC-V, AArch64, and x86_64, the integration target compiles, and the
 release RISC-V kernel builds. Focused QEMU tests pass for deferred IPC delivery, a near-depth UART
 burst, long console input with backspace, FAT16 VFS request/reply, and keyboard input.
+
+## [2026-07-31] RV64 boot derives usable memory from the firmware DTB
+
+### What was wrong
+Direct OpenSBI boots ignored the firmware DTB for physical memory and always published an
+audited but fixed 190 MiB usable range. Larger machines therefore left most RAM unmanaged.
+Simply trusting `/memory` would also have been unsafe because firmware, the live kernel,
+`/memreserve/`, and `/reserved-memory` can occupy subranges that the frame allocator must not
+issue.
+
+Verification exposed a second ownership bug: the linker placed an orphan `.got` immediately
+after `__stack_top`, while the first implementation treated that symbol as the image end. The
+allocator could consequently overwrite the GOT and fault later during scheduling.
+
+### What changed
+RV64 fallback boot now resolves the effective DTB once and builds a bounded, allocation-free
+memory map from every enabled memory node. It subtracts firmware and the live kernel, FDT header
+reservations, and enabled static `/reserved-memory` entries; malformed maps, dynamic
+reservations, overflow, or capacity exhaustion fail closed to the existing static board map.
+Usable ranges align inward to 4 KiB and protected ranges align outward.
+
+The linker now places `.got` explicitly and publishes `__kernel_end`, which is the live image
+boundary used by the map builder. The frame allocator continues to select the largest usable
+interval; combining discontiguous regions remains separate work.
+
+### Verified
+The production range logic passes 15 host fixtures. Default RV64, VisionFive 2, and Pioneer
+build checks pass, as do focused shell, FAT, GPU, DHCP, echo, and concurrent IPC runtime gates.
+A QEMU `-m 2G` boot reports more than 1.95 GiB managed after reservations, proving the former
+190 MiB ceiling is gone. A fresh full serial boot-suite run exceeded its 20-minute harness
+timeout near test 28, so the prior 54/54 result is not claimed as a fresh post-change verdict.
 
 ## [2026-07-29] Fault reporting stops naming ARM64 registers after RISC-V CSRs
 
@@ -875,10 +992,13 @@ Design + planning session for cross-machine Cell communication (roadmap §L, sys
 
 ---
 
-## [2026-06-23] Layer-2 Hardware Security Supplements — CFI + MTE + CET + PKU (all 5 phases complete)
+## [2026-06-23] Hardware Security Supplements — implementation phases delivered; enforcement varies
 
 ### Summary
-Completed all 5 phases of Layer-2 hardware security supplements (2026-06-23). Deployed control-flow integrity (CFI), memory tagging, privilege-key domains, and DMA isolation enforcement across ARM64 and x86_64. Hardware-backed security is now complementary to the Rust LBI foundation, closing critical gaps in the 3-layer security model (Layer 1: LBI; Layer 2: hardware; Layer 3: Silo/VMs). All phases compile clean on riscv64 + aarch64 + x86_64; testing infrastructure added.
+Delivered the five planned implementation phases on 2026-06-23: control-flow integrity,
+hardware-gated memory-tagging support, x86 PKU register/return-path plumbing, and test
+infrastructure. This did **not** complete PKU page isolation: user PTEs remain key 0.
+Spec 19 now owns the Layer A/B/C hardware-isolation status.
 
 ### Changes
 
@@ -896,12 +1016,12 @@ Completed all 5 phases of Layer-2 hardware security supplements (2026-06-23). De
   - `tag_region(vaddr: VAddr, tag: u8)` — Tag all bytes in a region with a 4-bit color
   - `get_tag(vaddr: VAddr) -> u8` — Read tag of a pointer
   - `set_check_mode(mode: MteMode)` — Configure fault behavior (sync/async/none)
-- **`hal/arch/arm/src/aarch64/mte.rs`** — AArch64Mte impl for ARMv8.5-A (RK3588+)
+- **`hal/arch/arm/src/aarch64/mte.rs`** — AArch64Mte impl for Armv8.5-A hardware and QEMU (not RK3588)
   - SCTLR_EL1.ATA/ATA0 enable hardware tagging (synchronous/asynchronous)
   - SCTLR_EL1.TCF0/TCF configure tag-check faults (kernel/user space)
   - `tag_region()` uses STGP (store tagged pair) instructions to tag memory
   - `get_tag()` extracts top 4 bits of pointer via MRS from register (ARMv8.5)
-- **Hardware prerequisite**: ARMv8.5-A (FEAT_MTE); RK3588 confirmed supported
+- **Hardware prerequisite**: Armv8.5-A (FEAT_MTE). **Correction 2026-08-01:** RK3588 is Cortex-A76/A55 Armv8.2-A and is not supported.
 - **Impact**: Use-after-free, heap buffer overflows detected by tag mismatch faults (sync: immediate; async: deferred). **Hardening only** — probabilistic (1/16 collision) and can be bypassed by speculative gadgets (TikTag 2024); not a strict memory-safety guarantee.
 
 #### P03: x86_64 CET-IBT (Control Enforcement Technology — Indirect Branch Tracking)
@@ -914,61 +1034,70 @@ Completed all 5 phases of Layer-2 hardware security supplements (2026-06-23). De
 - **Impact**: Indirect JMP/CALL to non-ENDBR64 address triggers #CP exception (kernel kills offending cell)
 - **Prerequisite**: Intel Ice Lake+; AMD Zen5+; feature-gated as the hardware is not in all QEMU versions
 
-#### P04: x86_64 PKU (Protection Keys for Userspace) + PKS (Protection Key Supervisor)
-- **`hal/arch/x86/src/x86_64/pku.rs`** — New PKU domain isolation module
+#### P04: x86_64 PKU (Protection Keys for Userspace) plumbing
+- **`hal/arch/x86/src/x86_64/pku.rs`** — PKU feature and PKRU-state module
   - 3-key tier model: key 0=kernel-trusted (unrestricted), key 1=cell service (restricted), key 2=FFI/legacy (most restricted)
   - `enable_pku()` sets CR4.PKE (Protection Key Enable)
-  - `set_pku_state(key, access_mask)` uses WRPKRU instruction to set per-key permissions (R/W/X bits)
-  - PTE bits [62:59] encode which key protects a page (kernel fills these during cell load)
+  - task PKRU masks are computed for the assigned trust tier
+  - PTE bits [62:59] would select a page's key, but the loader does not fill them
   - **Guard on both ring-3 exit paths**: WRPKRU called before registers restored on both IRETQ and SYSRETQ paths
-- **PKS (Supervisor version)** — kernel metadata (cell registry, frame allocator) protected via MSR_IA32_PKRS (ice Lake+ only)
+- **PKS helper** — code exists for supervisor-key setup, but no protected kernel-page mapping is claimed here
 - **`kernel/src/task/tcb.rs`** — `Task.pku_value: u32` caches the PKRU state per cell
 - **Prerequisite**: CET-IBT must be present (MPK without CFI is bypassable via JOP gadgets — ERIM/PKU-Pitfalls 2021)
-- **Impact**: Cell attempts to access page with wrong key → #PF (page fault) with PFEC.PK bit set; kernel kills cell
-- **Known limitation**: PTE key bits (bits [62:59]) currently zeroed; G2 follow-up tags cells with their assigned keys during load
+- **Current impact**: PKRU switching is exercised, but no page can produce a wrong-key fault while all user PTEs remain key 0
+- **Required follow-up**: design PTE tagging, shared/grant/MMIO semantics, domain cardinality, and an end-to-end PFEC.PK test
 
 #### P05: Testing Infrastructure & Self-Tests
 - **`cells/demos/cfi-test/`** — NEW demo cell: attempts illegal indirect branch (violates CET-IBT), triggers #CP, gracefully caught
 - **`kernel/src/layer2_selftest.rs`** — Kernel-internal self-tests (feature-gated: `layer2-selftest`)
   - MTE: allocate + tag + read (verify tag round-trip), bad-tag access detection
-  - PKU: set PKRU, attempt forbidden access, verify fault
+  - PKU: verify computed PKRU constants and kernel-mode `RDPKRU`; no keyed page or forbidden-access fault
   - CET: (QEMU doesn't support #CP in user-space testing; kernel path verified at boot)
-- **`docs/specs/10-testing.md` § "Layer 2 Security"** — Updated with test matrix (MTE/PKU/CET per arch, QEMU gating)
+- **`docs/specs/10-testing.md` § "Hardware Security Tests"** — Test matrix for MTE/PKU/CET and hardware/QEMU gating
 - **CI/CD** — no test regression (all existing tests continue to pass; new feature-gates don't break builds)
 
 ### Architecture Notes
 
-**Three-layer security model (updated status):**
+**Hardware-isolation delivery model (corrected by D12 on 2026-08-01):**
 ```
-Layer 1 — LBI (Rust compiler)        → Cell↔Cell isolation            [DONE]
-Layer 2 — Hardware supplement         → CFI + MTE + PKU + DMA         [COMPLETE 2026-06-23]
-Layer 3 — Silo / VM (Stage-2 MMU)    → Key/VM isolation from kernel   [DONE, G2]
+Layer A — W^X after relocation        → code/constant integrity        [DONE]
+Layer B — Per-domain page tables      → untrusted native-cell wall     [PLANNED]
+Layer C — Per-arch hardening          → opportunistic MTE/MPK bonuses  [HW-GATED]
 ```
 
-**No TLB-flush per Cell**: Cellos's SAS architecture avoids per-Cell SATP switches (no hardware isolation at Tier 1). Layer 2 is **supplementary hardening** (defense-in-depth) on top of Rust LBI, not a replacement for it. The three axes (spatial protection, forward-edge CFI, DMA enforcement) are load-bearing together; none alone is sufficient.
+**No TLB-flush per Cell**: Cellos's Tier-1 SAS architecture avoids per-Cell SATP switches.
+LBI, CFI, and DMA isolation remain important, but MTE/PKU are non-load-bearing Layer-C
+hardening and neither mitigates Spectre. Layer B is the planned wall where native code is
+not trusted.
 
 ### Impact
-- **G2 security foundation**: Layer 2 now covers spatial (MTE), forward-edge (CFI), domain (PKU), and DMA isolation — a complete security envelope for the system
+- **Security foundation**: CFI and DMA enforcement shipped; MTE is hardware-gated hardening; PKU page-domain enforcement remains incomplete
 - **G1 determinism unchanged**: Hardware enforcement adds 0-10 cycle overhead per indirect branch (PAC) or memory access (MTE tagging); no context-switch penalty
 - **No ABI breakage**: All changes are feature-gated or ISA-detected; systems lacking hardware support degrade to LBI-only (safe, no privilege escalation)
 
 ### Known Limitations
 - **MTE probabilistic**: 1 in 16 collisions; not a hard memory-safety guarantee (hardening only)
-- **PKU key tagging deferred**: PTE bits [62:59] not yet filled by loader; PKU enforcement inactive until G2 follow-up (PKU works but doesn't enforce cell boundaries yet)
+- **PKU key tagging absent**: PTE bits [62:59] are not filled by the loader; register plumbing works, but PKU does not enforce cell boundaries
 - **RISC-V pending silicon**: Zicfilp, Zimt extensions ratified 2024; no shipping silicon yet; SiFive P/E-series expected 2025+
 
 ---
 
-## [2026-06-23] Cell binary signing + M4.1 hot migration — zero-downtime deployment with cryptographic origin proof
+## [2026-06-23] Cell-signing verification hook + M4.1 hot migration
 
 ### Summary
-Two complementary G2-critical features shipped together in commits 9a695a5d (hotswap), 56dc7946 (signing), and ab0b9ecd (P2 table + cell cap). **Cell binary signing** enforces origin verification at spawn (Ed25519, signed cells required if flag set, dev seed for G1). **M4.1 hot migration** enables zero-downtime cell replacement with IPC queue preservation and state snapshots. Combined, these unlock **zero-downtime deployment with cryptographic proof of origin** — mandatory for G2/G3 untrusted third-party workloads. 11/11 hotswap-smoke tests pass (2 QEMU + 9 unit); signing gate verified end-to-end.
+Two complementary mechanisms shipped together in commits 9a695a5d (hotswap), 56dc7946
+(signing), and ab0b9ecd (P2 table + cell cap). **Cell binary signing** added a common
+Ed25519 verification hook at spawn: present invalid signatures are denied, while absent
+signatures are denied only when the non-default `signing-required` feature is enabled.
+**M4.1 hot migration** enables cell replacement with IPC queue preservation and state
+snapshots. The mechanisms compose, but neither the signing CLI nor hotswap proves
+production artifact provenance. 11/11 hotswap-smoke tests passed (2 QEMU + 9 unit).
 
 ### Changes
 
 #### Cell Binary Signing (commit 56dc7946)
 - **`kernel/src/signing.rs`** (NEW) — Ed25519 verify-at-spawn gate. Verifies `__ViCell_sig` ELF section before cell is scheduled. Dev-key verification under `dev-signing-key` feature. `signed` manifest flag + `signing-required` feature flag. Three-way decision: signed → verify, unsigned+required → deny, unsigned dev → permit.
-- **`kernel/src/loader.rs`** — spawn-time gate calls `signing::verify_cell_signature()` before `schedule_task()`. Kernel denies unsigned cells when `signing-required` feature active. Spawn path unaffected for dev builds; production flips the feature.
+- **`kernel/src/loader.rs`** — spawn-time gate calls `signing::verify_cell_signature()` before `schedule_task()`. Invalid present signatures are denied. Unsigned cells are denied only when `signing-required` is active; no checked-in production profile or key-provisioning path completes that posture.
 - **`scripts/sign-cell.py`** (NEW) — Ed25519 signer tool; fixed dev seed (0x43 × 32); reproducible dev keypair. Emits dev pubkey as Rust literal or signs ELF → `__ViCell_sig` noload section.
 - **`kernel/src/audit.rs`** — `AuditEvent::CellSignatureVerified(21)` + `CellSignatureFailed(22)`.
 - **`cells/demos/hotswap-demo-v1/` + `hotswap-demo-v2/`** — registered in P2 cell bootstrap table; demo cells now signed with dev seed.
@@ -993,18 +1122,21 @@ Two complementary G2-critical features shipped together in commits 9a695a5d (hot
 - **Opt-in by design**: cells without `HotSwapReady` support cannot hotswap (safe default = no mutation).
 
 ### Impact
-- **Cell origin verification**: Ed25519 signature enforces that spawned cells match the signed binary (prevents tampering/replay in untrusted environments)
-- **G2 zero-downtime deployment**: rolling updates, blue-green deploys, A/B testing without dropping clients — signed cells prove the new binary is legitimate
+- **Cell-byte verification hook**: a present valid Ed25519 signature covers the signed ELF bytes, but default admission can be downgraded by removing the signature section because unsigned cells remain allowed
+- **G2 zero-downtime mechanism**: rolling updates, blue-green deploys, and A/B testing can preserve clients; hotswap does not prove that the replacement binary is legitimate
 - **Stateful service restart**: supervisor kills crashed cell → hotswap new binary (signed) → state restored from snapshot
 - **Backward compatibility**: all 9 tests verify old-binary → new-binary transitions (schema versioning in ViStateTransfer); unsigned cells work in dev mode
 - **No Law 1 violations**: syscall ABI stable (401/412 opcodes); manifest stays at FULL bitmask; signing happens pre-schedule
-- **G2/G3 prerequisite**: Combined (signing + hotswap) unlock trustworthy third-party app deployment model (operator policy + signed cells + never-die supervisor)
+- **G2/G3 prerequisite remains open**: trustworthy third-party deployment additionally requires fleet key provisioning, fail-closed production features, artifact provenance, negative tests, memory-tier enforcement, and secure boot
 
 ### Known Limitations
 - State snapshot size capped at 1MB (MAX_STASH_LEN); G2 extension to 16MB if needed
 - Snapshot serialization is app-driven (no automatic heap walk); apps must implement ViStateTransfer
 - Long freeze windows block other cells on the same hart; real-time cells should be pinned to separate harts
-- Development signing uses fixed seed (0x43 × 32); production deploys require real KMS (Cell Signing plan Phase 3 in roadmap)
+- `signing-required` is off by default, so removing `__ViCell_sig` converts a signed artifact into an admitted unsigned artifact
+- Development signing uses the public fixed seed (0x43 × 32), and unchecked-dev signatures are indistinguishable to the kernel; neither proves provenance
+- Disabling the dev key selects a zero public-key placeholder; no production provisioning path exists
+- Signature validity does not route a cell to Tier 1 or Tier 2; admitted native ELFs use the shared SAS
 
 ---
 

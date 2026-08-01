@@ -18,6 +18,7 @@
 $kernel_root = Get-Location
 $tools_dir   = "$kernel_root/tools"
 $rel_dir     = "$kernel_root/target/riscv64gc-unknown-none-elf/release"
+$include_capacity_probe = $env:CELLOS_INCLUDE_CAPACITY_PROBE -eq "1"
 
 # Linux runners ship `python3` only; Windows dev boxes ship `python`.
 $python = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { "python3" }
@@ -234,6 +235,7 @@ Add-CellToSign "$rel_dir/driver-virtio-gpu"
 Add-CellToSign "$rel_dir/service-input"
 Add-CellToSign "$rel_dir/app-bench"
 Add-CellToSign "$rel_dir/bench-probe"
+if ($include_capacity_probe) { Add-CellToSign "$rel_dir/capacity-probe" }
 Add-CellToSign "$rel_dir/app-net-tools"
 Add-CellToSign "$rel_dir/app-sys-tools"
 Add-CellToSign "$rel_dir/robot-demo"
@@ -306,6 +308,7 @@ $tetris_lua_bin = "$rel_dir/tetris-lua"   # Tetris-Lua — Lua 5.4 embedded, tet
 $upy_bin    = "$rel_dir/micropython"       # Phase 18: MicroPython runtime cell
 $bench_bin       = "$rel_dir/bench"             # Phase 22 benchmark cell
 $bench_probe_bin = "$rel_dir/bench-probe"      # bench probe/load child (VA 0x19000000)
+$capacity_probe_bin = "$rel_dir/capacity-probe" # A2/A3 OOM + MemInfo runtime probe
 $input_bin  = "$rel_dir/service-input"     # Phase 14: input service cell
 $net_bin    = "$rel_dir/service-net"       # Phase 15: network service cell
 $net_broker_bin   = "$rel_dir/service-net-broker" # L.0: cluster net-broker cell
@@ -449,6 +452,9 @@ if (Test-Path $hotswap_demo_v2_bin) { $kfs_args += @($hotswap_demo_v2_bin, "/bin
 # the KERNEL loader (VIFS1/P2 only, no VFS), so the child spawns need VIFS1.
 if ($bench_bin)                       { $kfs_args += @($bench_bin,       "/bin/bench") }
 if (Test-Path "$rel_dir/bench-probe") { $kfs_args += @($bench_probe_bin, "/bin/bench-probe") }
+if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
+    $kfs_args += @($capacity_probe_bin, "/bin/capacity-probe")
+}
 & $python "$tools_dir/mkfat32.py" @kfs_args 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: mkfat32.py failed — kernel_fs.img is invalid." -ForegroundColor Red
@@ -528,6 +534,9 @@ if (Test-Path $tetris_c_bin)   { $table_args += "/bin/tetris-c=$tetris_c_bin" }
 if (Test-Path $tetris_lua_bin) { $table_args += "/bin/tetris-lua=$tetris_lua_bin" }
 if ($bench_bin)       { $table_args += "/bin/bench=$bench_bin" }
 if (Test-Path "$rel_dir/bench-probe") { $table_args += "/bin/bench-probe=$bench_probe_bin" }
+if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
+    $table_args += "/bin/capacity-probe=$capacity_probe_bin"
+}
 if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
 if (Test-Path $net_bin)   { $table_args += "/bin/net=$net_bin" }
 if (Test-Path $net_broker_bin) { $table_args += "/bin/net-broker=$net_broker_bin" }

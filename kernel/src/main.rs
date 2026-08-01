@@ -91,6 +91,7 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let _hartid = hartid;
+    let dtb = boot::effective_dtb(dtb);
     cpu_features::detect(dtb);
     // Parse DTB for MMIO bases before any driver or paging init.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
@@ -270,6 +271,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Initialize frame allocator with the largest usable region
     let frame_allocator = memory::frame::FrameAllocator::new_from_map(mmap_entries);
+    log::info!(
+        "[boot] allocator range {:#x}..{:#x} ({} bytes)",
+        frame_allocator.memory_start(),
+        frame_allocator.memory_end(),
+        frame_allocator.total_frames() * 4096
+    );
 
     // 2. Frame Allocator (Physical Memory)
     // The local `frame_allocator` is moved into the global static.

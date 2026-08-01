@@ -213,6 +213,11 @@ impl ElfLoader {
                         let buf_frame = match frame_allocator.allocate_frame() {
                             Some(f) => f,
                             None => {
+                                log::warn!(
+                                    "[loader] segment frame allocation failed: va={:#x} mapped_pages={}",
+                                    current_page,
+                                    mapped.len()
+                                );
                                 Self::unwind(&mapped, frame_allocator);
                                 return Err(ViError::OutOfMemory);
                             }
@@ -226,6 +231,11 @@ impl ElfLoader {
                         )
                         .is_err()
                         {
+                            log::warn!(
+                                "[loader] segment page-table allocation failed: va={:#x} mapped_pages={}",
+                                current_page,
+                                mapped.len()
+                            );
                             // buf_frame is not in `mapped` yet — free it separately.
                             frame_allocator.deallocate_frame(buf_frame);
                             Self::unwind(&mapped, frame_allocator);

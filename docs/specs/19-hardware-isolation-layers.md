@@ -1,6 +1,6 @@
 # Spec 19 — Hardware Isolation Layers & Concurrency Scale Model (ADR)
 
-> **Status**: Accepted 2026-07-30 — direction ratified. **Layer A is implemented**
+> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D12. **Layer A is implemented**
 > (`midori-lessons` phase 10, 2026-07-30); per-domain page tables belong to the
 > following plan (they are the Tier-2 mechanism of Spec 18). This is the
 > "layer2_hw_security" document that Spec 16 §8 reserved.
@@ -15,7 +15,9 @@ the whole life of the cell. Layer A closes that; Layers B and C remain future wo
 Deployment hardware constrains the fixes: **VF2, Pioneer (RISC-V) and RK3588
 (Cortex-A76/A55, ARMv8.2) all have a full MMU with ASIDs, and none has MTE (needs
 v8.5+) or x86 PKU.** Any isolation layer that must work on real boards has to be
-built from page tables.
+built from page tables. This is hardware fact, not a policy assumption: Rockchip names
+the A76/A55 complex, and both Arm core TRMs specify Armv8.2-A with the
+`ID_AA64PFR1_EL1` MTE field reserved zero.
 
 ## 2. Decision — three layers, in delivery order
 
@@ -62,10 +64,15 @@ pass on grant mapping and the Spec 17 wire contract before implementation.
 
 ### Layer C — Per-arch hardening (opportunistic, G2+)
 
-Where hardware exists, cheap extra walls: x86 MPK two-key scheme (current cell +
-kernel = key 0, everything else = key 1, PKRU written on context switch); ARM MTE on
-future ≥v8.5 silicon. These are lane-specific bonuses, never load-bearing — the boards
-named in §1 don't have them.
+Where hardware exists, cheap extra walls may be added: x86 MPK after PTE-key and
+shared/grant-page semantics are designed, and ARM MTE on future ≥v8.5 silicon. Current
+x86 code enables CR4.PKE, computes task PKRU values, and writes PKRU on ring-3 return,
+but the loader never stamps PTE bits `[62:59]`; every user page remains key 0, so PKU
+does not currently enforce a page boundary. Its self-test checks PKRU constants and
+kernel `RDPKRU`, not a denied keyed-page access.
+
+These are lane-specific bonuses, never load-bearing — the boards named in §1 do not
+provide them, and Layer B remains the wall where native code is untrusted.
 
 ## 3. Concurrency scale model — two profiles, not one number
 

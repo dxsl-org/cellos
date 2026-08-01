@@ -65,16 +65,19 @@ slot — trần thật là RAM nhìn thấy được, không phải hằng số 
 profile per-request server: **mọi deployment đang âm thầm bỏ RAM trên 190 MiB.** Rẻ nhất, đòn
 bẩy lớn nhất.
 
-**A2 — `OutOfMemory` cần error riêng, và cần log chỗ cấp phát thất bại.**
-`ViError::OutOfMemory` bị map thành `SyscallError::Unknown` (`kernel/src/task/syscall.rs`) và
-không log gì. Thất bại duy nhất mà một thí nghiệm dung lượng cần thấy lại là thất bại ABI
-không diễn đạt được; ngay hai dòng trên, `NotFound → FileNotFound` map đúng.
+**A2 — DONE 2026-08-01: cell-spawn OOM có mã riêng và log chẩn đoán.** Bốn syscall spawn
+cell trả additive `-2` cho OOM, ostd giải mã thành `SyscallError::OutOfMemory`; lỗi generic vẫn
+là `-1`, opcode cũ không đổi. Runtime probe xác nhận log nguồn cấp phát + caller/path, không
+panic và shell tiếp tục hoạt động.
 
-**A3 — cần syscall MemInfo; `memory_footprint` bench hiện không đo gì.**
-`cells/tests/bench/src/scenarios/memory_footprint.rs` trả về một hằng số compile-time kèm
-`// TODO: replace with MemInfo syscall`, mà suite báo **PASS**. Ngoài `total_frames` không có
-kế toán frame trống nào, nên A1 phải suy ra dung lượng bằng cách spawn tới khi fail thay vì
-đọc một con số.
+**A3 — DONE 2026-08-01: MemInfo và benchmark dùng số thật.** `MemInfo=243`, allowlist bit 56,
+trả `ViMemInfoV1` 32 byte theo opt-in vì đây là telemetry xuyên cell. Frame allocator kế toán
+chính xác theo bitmap transition. Benchmark đo **135.782.400 byte (129,49 MiB)**
+allocator-committed, nên mục tiêu `<10 MiB` hiện **FAIL thật** thay vì PASS giả.
+
+**Follow-up dung lượng:** giảm 129,49 MiB xuống dưới 10 MiB là việc tối ưu riêng; không đổi
+định nghĩa metric hoặc threshold để làm gate xanh. `capacity-probe` có tính phá huỷ chỉ được
+include/sign khi build test-mode với `CELLOS_INCLUDE_CAPACITY_PROBE=1`; image mặc định loại nó.
 
 **A4 — chạy lại cổng runtime mà phase 09 và 11 để ngỏ.** Cả hai đóng với lý do "runtime
 UNVERIFIED — máy không có QEMU/cross toolchain". Tiền đề đó **sai**: QEMU cả ba arch và

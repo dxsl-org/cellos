@@ -1,6 +1,6 @@
 # Spec 16 — rustc as Cellos Trusted Computing Base
 
-> **Status**: Ratified 2026-06-29 — does not change without explicit architectural review.
+> **Status**: Ratified 2026-06-29; amended 2026-08-01 by the approved D12 architectural review.
 >
 > This document specifies the role of `rustc` as Cellos's load-bearing TCB, the guarantees
 > it provides, its limits, risk mitigations, and the operational policies that follow.
@@ -110,8 +110,14 @@ interrupt, which arrives in privileged mode.
 
 Memory safety is distinct from speculative-execution leaks. A Cell cannot *directly*
 read another Cell's memory (type safety), but it may be able to *infer* values via
-timing side channels. Mitigations are hardware-level (ARM MTE pointer tagging, x86 MPK
-domain separation — see Spec `layer2_hw_security`).
+timing or speculative side channels through shared microarchitectural state. ARM MTE is
+probabilistic spatial-memory hardening and x86 MPK is architectural page-access control;
+neither is a Spectre/Meltdown mitigation.
+
+These side channels remain a separately scoped threat-model and mitigation problem. No
+cache partitioning, predictor isolation, fencing, or compiler mitigation is considered
+implemented without independent design and verification. See Spec 19 for the hardware
+isolation layers; those layers must not be read as a side-channel guarantee.
 
 ### 3.4 Supply Chain / Compiler Compromise
 

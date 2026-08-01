@@ -360,7 +360,7 @@ pub(crate) fn release_acked_frames(tid: usize) {
 /// Result of a System Call
 pub type SyscallResult = core::result::Result<usize, SyscallError>;
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SyscallError {
     InvalidDriverId,
     InvalidCommand,
@@ -371,6 +371,30 @@ pub enum SyscallError {
     Unknown,
     NotSupported,
     InvalidInput,
+    OutOfMemory,
+}
+
+/// Encode the additive spawn-OOM result while preserving all other legacy errors.
+fn encode_syscall_result(
+    result: SyscallResult,
+    error_sentinel: usize,
+    supports_typed_oom: bool,
+) -> usize {
+    match result {
+        Ok(value) => value,
+        Err(SyscallError::OutOfMemory) if supports_typed_oom => error_sentinel - 1,
+        Err(_) => error_sentinel,
+    }
+}
+
+fn supports_typed_spawn_oom(syscall: &Syscall) -> bool {
+    matches!(
+        syscall,
+        Syscall::SpawnFromMem { .. }
+            | Syscall::SpawnFromPath { .. }
+            | Syscall::SpawnFromElf { .. }
+            | Syscall::SpawnPinned { .. }
+    )
 }
 
 /// Maximum bytes a single syscall may read/write through a user buffer.
@@ -871,6 +895,8 @@ pub enum Syscall {
     GetProcs { buf_ptr: usize, buf_len: usize },
     /// 239: GetProcs2
     GetProcs2 { buf_ptr: usize, buf_len: usize },
+    /// 243: MemInfo
+    MemInfo { out_ptr: usize, out_len: usize },
 
     // --- Legacy / Compatibility Layer ---
     /// 100: Service Lookup (Find driver ID by name)
@@ -1150,6 +1176,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::ShmMap { .. } => V::ShmMap,
         Syscall::GetProcs { .. } => V::GetProcs,
         Syscall::GetProcs2 { .. } => V::GetProcs2,
+        Syscall::MemInfo { .. } => V::MemInfo,
         Syscall::OpenCap { .. } => V::OpenCap,
         Syscall::ReadCap { .. } => V::ReadCap,
         Syscall::CloseCap { .. } => V::CloseCap,
@@ -2454,7 +2481,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
-                types::ViError::OutOfMemory => SyscallError::Unknown,
+                types::ViError::OutOfMemory => {
+                    log::warn!(
+                        "[loader] spawn OOM: op=SpawnFromPath caller={} path={}",
+                        caller_id,
+                        path_str
+                    );
+                    SyscallError::OutOfMemory
+                }
                 _ => SyscallError::InvalidInput,
             })?;
             // Transfer pending spawn args to a per-task personal slot so a
@@ -2613,7 +2647,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
-                types::ViError::OutOfMemory => SyscallError::Unknown,
+                types::ViError::OutOfMemory => {
+                    log::warn!(
+                        "[loader] spawn OOM: op=SpawnFromElf caller={} path={} elf_len={}",
+                        caller_id,
+                        path_str,
+                        len
+                    );
+                    SyscallError::OutOfMemory
+                }
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 _ => SyscallError::InvalidInput,
             })?;
@@ -2671,7 +2713,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::task::dir_inherit::clear_staged(caller_id);
             let task_id = spawned.map_err(|e| match e {
                 types::ViError::NotFound => SyscallError::FileNotFound,
-                types::ViError::OutOfMemory => SyscallError::Unknown,
+                types::ViError::OutOfMemory => {
+                    log::warn!(
+                        "[loader] spawn OOM: op=SpawnPinned caller={} path={}",
+                        caller_id,
+                        path_str
+                    );
+                    SyscallError::OutOfMemory
+                }
                 _ => SyscallError::InvalidInput,
             })?;
             // Transfer pending spawn args to a per-task personal slot
@@ -3083,7 +3132,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             crate::task::dir_inherit::clear_staged(caller_id);
             spawned.map_err(|e| match e {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
-                types::ViError::OutOfMemory => SyscallError::Unknown,
+                types::ViError::OutOfMemory => {
+                    log::warn!(
+                        "[loader] spawn OOM: op=SpawnFromMem caller={} name={} elf_len={}",
+                        caller_id,
+                        name,
+                        elf_bytes.len()
+                    );
+                    SyscallError::OutOfMemory
+                }
                 _ => SyscallError::InvalidInput,
             })
         }
@@ -3152,6 +3209,34 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 );
             }
             Ok(rows.len())
+        }
+
+        Syscall::MemInfo { out_ptr, out_len } => {
+            let len = core::mem::size_of::<api::syscall::ViMemInfoV1>();
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            let info = {
+                let guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
+                let allocator = guard.as_ref().ok_or(SyscallError::OutOfMemory)?;
+                api::syscall::ViMemInfoV1 {
+                    total_frames: allocator.total_frames() as u64,
+                    used_frames: allocator.used_frames() as u64,
+                    free_frames: allocator.free_frames() as u64,
+                    page_size: allocator.page_size() as u64,
+                }
+            };
+            // SAFETY: the exact destination range was validated and `info` is a
+            // fixed-width byte-stable ABI value owned by this stack frame.
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    &info as *const api::syscall::ViMemInfoV1 as *const u8,
+                    out_ptr as *mut u8,
+                    len,
+                );
+            }
+            Ok(len)
         }
 
         Syscall::Seek { fd, offset, whence } => {
@@ -4440,6 +4525,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             buf_ptr: a0,
             buf_len: a1,
         },
+        ViSyscall::MemInfo => Syscall::MemInfo {
+            out_ptr: a0,
+            out_len: a1,
+        },
         ViSyscall::Open => Syscall::Open {
             path_ptr: a0,
             path_len: a1,
@@ -4811,6 +4900,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
     }
 
+    let supports_typed_oom = supports_typed_spawn_oom(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     #[cfg(target_arch = "riscv64")]
@@ -4818,10 +4908,7 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    match result {
-        Ok(val) => frame.regs[10] = val,
-        Err(_) => frame.regs[10] = usize::MAX,
-    }
+    frame.regs[10] = encode_syscall_result(result, usize::MAX, supports_typed_oom);
 }
 
 #[cfg(target_arch = "riscv32")]
@@ -4868,21 +4955,22 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
         core::arch::asm!("csrs sstatus, {0}", in(reg) 0x40000usize);
     }
 
+    let supports_typed_oom = supports_typed_spawn_oom(&syscall);
     let result = handle_syscall(caller_id, syscall);
 
     unsafe {
         core::arch::asm!("csrc sstatus, {0}", in(reg) 0x40000usize);
     }
 
-    match result {
-        Ok(val) => frame.regs[10] = val as u32,
-        Err(_) => frame.regs[10] = u32::MAX,
-    }
+    frame.regs[10] = encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32;
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{check_allowlist, map_syscall, syscall_to_vi, Syscall, SyscallError};
+    use super::{
+        check_allowlist, encode_syscall_result, map_syscall, supports_typed_spawn_oom,
+        syscall_to_vi, Syscall, SyscallError,
+    };
     use crate::sync::Spinlock;
     use crate::task::{scheduler::Scheduler, SCHEDULER};
     use api::syscall::ViSyscall;
@@ -4939,6 +5027,58 @@ mod tests {
     fn get_procs2_allowlist_allows_with_bit_55() {
         with_scheduler_task(1u64 << 55, |tid| {
             assert_eq!(check_allowlist(ViSyscall::GetProcs2 as usize, tid), Ok(()));
+        });
+    }
+
+    #[test]
+    fn syscall_result_encoding_preserves_generic_and_additive_oom_codes() {
+        assert_eq!(encode_syscall_result(Ok(9), usize::MAX, false), 9);
+        assert_eq!(
+            encode_syscall_result(Err(SyscallError::InvalidInput), usize::MAX, true),
+            usize::MAX
+        );
+        assert_eq!(
+            encode_syscall_result(Err(SyscallError::OutOfMemory), usize::MAX, true),
+            usize::MAX - 1
+        );
+        assert_eq!(
+            encode_syscall_result(Err(SyscallError::OutOfMemory), u32::MAX as usize, true),
+            u32::MAX as usize - 1
+        );
+        assert_eq!(
+            encode_syscall_result(Err(SyscallError::OutOfMemory), usize::MAX, false),
+            usize::MAX
+        );
+        assert!(supports_typed_spawn_oom(&Syscall::SpawnFromPath {
+            path_ptr: 0,
+            path_len: 0,
+        }));
+        assert!(!supports_typed_spawn_oom(&Syscall::MemInfo {
+            out_ptr: 0,
+            out_len: 0,
+        }));
+    }
+
+    #[test]
+    fn mem_info_maps_args_and_requires_bit_56() {
+        let syscall = map_syscall(ViSyscall::MemInfo as usize, 0x2000, 32, 0, 0)
+            .expect("MemInfo must decode");
+        match syscall {
+            Syscall::MemInfo { out_ptr, out_len } => {
+                assert_eq!(out_ptr, 0x2000);
+                assert_eq!(out_len, 32);
+            }
+            other => panic!("decoded wrong syscall variant: {other:?}"),
+        }
+        assert_eq!(syscall_to_vi(&syscall), Some(ViSyscall::MemInfo));
+        with_scheduler_task(0, |tid| {
+            assert_eq!(
+                check_allowlist(ViSyscall::MemInfo as usize, tid),
+                Err(SyscallError::PermissionDenied)
+            );
+        });
+        with_scheduler_task(1u64 << 56, |tid| {
+            assert_eq!(check_allowlist(ViSyscall::MemInfo as usize, tid), Ok(()));
         });
     }
 }

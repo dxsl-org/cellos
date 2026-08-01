@@ -128,6 +128,12 @@ pub enum ViSyscall {
     /// ABI: a0 = buf_ptr, a1 = row_capacity. Returns rows written.
     /// Preserves `GetProcs` v1 layout/opcode by exposing a separate v2 row type.
     GetProcs2 = 239,
+    /// Return one fixed-width global physical-frame allocator snapshot.
+    ///
+    /// ABI: a0 = out_ptr, a1 = out_len. On success writes exactly one
+    /// [`ViMemInfoV1`] and returns its byte size. This aggregate telemetry is
+    /// opt-in because used/free capacity is observable across cells.
+    MemInfo = 243,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -661,6 +667,8 @@ impl ViSyscall {
             Self::ReadLog => Some(54),
             // GetProcs2 (bit 55): richer task telemetry, opt-in like ReadLog.
             Self::GetProcs2 => Some(55),
+            // MemInfo (bit 56): global allocator telemetry is a cross-cell side channel.
+            Self::MemInfo => Some(56),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -760,6 +768,7 @@ impl From<usize> for ViSyscall {
             240 => ViSyscall::SpawnSetDirs,
             241 => ViSyscall::QueryDirHandles,
             242 => ViSyscall::WaitCompletion,
+            243 => ViSyscall::MemInfo,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -870,4 +879,18 @@ pub struct ProcessInfoV2 {
     pub cpu_run_ticks: u64,
     pub heap_bytes: u64,
     pub owned_bytes: u64,
+}
+
+/// Version 1 global physical-frame allocator snapshot.
+///
+/// All fields are fixed-width so the layout is identical on RV32, RV64,
+/// AArch64, and x86_64. `used_frames` measures allocator-committed frames,
+/// including frames reserved for the kernel heap.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ViMemInfoV1 {
+    pub total_frames: u64,
+    pub used_frames: u64,
+    pub free_frames: u64,
+    pub page_size: u64,
 }

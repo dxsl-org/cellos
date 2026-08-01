@@ -1,6 +1,7 @@
 # Cellos Architecture: Graphics & Input
-**Version**: 0.3 (Zero-Cost Compositing & Low-Latency Input)
+**Version**: 0.4 (Zero-Cost Compositing, Low-Latency Input & SAS Security Boundary)
 **Status**: Definitive
+**Amended 2026-08-01**: D11 replaces the false cross-cell page-fault/`Poisoned` claim with the implemented capability, LBI, and MMU boundaries.
 
 ---
 
@@ -48,6 +49,21 @@ ViUI là UI toolkit `no_std`-native của Cellos với:
 Mode 3 (Desktop) dùng ViUI thay vì Slint.
 
 ## 5. Bảo mật đồ họa trong SAS
-Vì các Cell dùng chung bộ nhớ, chúng ta sử dụng **Tokens (Capabilities)** để bảo vệ:
-* App Cell A không thể đọc vùng nhớ Surface của App Cell B trừ khi được Compositor cấp quyền.
-* Mọi hành vi truy cập trái phép vùng nhớ đồ họa sẽ kích hoạt `Page Fault` và khiến Cell vi phạm bị **Poisoned** ngay lập tức.
+Tier 1 dùng một page table chung, nên bảo vệ surface có hai lớp khác nhau:
+
+* **API capability + sender identity**: Compositor chỉ cho creator của surface thực hiện
+  attach, damage, move, raise, detach và destroy. `GrantShare`/`GrantSlice` kiểm tra owner
+  và grantee trước khi trả con trỏ qua syscall.
+* **LBI + signed-cell trust boundary**: buffer surface dùng Grant identity-mapped
+  `USER+RW`. `GrantPerm::ReadOnly` là contract phần mềm cho Compositor, không phải PTE
+  read-only riêng theo Cell. Vì vậy một Cell có khả năng tạo con trỏ tùy ý có thể truy cập
+  data page của Cell khác mà không gây page fault; untrusted native code phải chạy ở Tier 2
+  khi per-domain page tables hoàn tất, hoặc Tier 3 VM.
+
+Page fault chỉ xảy ra khi quyền PTE thật sự từ chối truy cập: ghi vào `.text`/`.rodata`
+đã được W^X hạ quyền, guard page, hoặc địa chỉ unmapped. Kernel terminate task vi phạm,
+thu hồi resource và chuyển nó qua zombie/reap; runtime hiện không đặt trạng thái
+`CellState::Poisoned`.
+
+Xem [Spec 19](19-hardware-isolation-layers.md) cho ranh giới Layer A hiện tại và Layer B
+per-domain page tables.

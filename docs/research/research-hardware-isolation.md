@@ -5,6 +5,11 @@
 **Scope**: Bổ sung biện pháp phần cứng để cô lập Cell, hỗ trợ (không thay thế) Language-Based Isolation (LBI). Trạng thái ISA/silicon cập nhật tới 2026-Q2.
 **Status**: Research — đầu vào cho [security-model.md](../security-model.md) §"Hardware Isolation Roadmap" và [project-roadmap.md](../project-roadmap.md) §G.
 
+> **Correction 2026-08-01:** RK3588 uses Cortex-A76/A55. Arm's TRMs identify both as
+> Armv8.2-A and reserve `ID_AA64PFR1_EL1[63:8]` as zero, including the MTE field.
+> Therefore RK3588 has no MTE; references below now treat MTE as future Armv8.5+
+> hardening rather than an RK3588 capability.
+
 ---
 
 ## 0. Nguyên lý chỉ đạo: tiêu chí "không flush TLB"
@@ -127,7 +132,7 @@ Nhiều DMA controller on-chip (DMAC/PDMA) đi qua bus nội bộ **bỏ qua c�
 
 **Adoption production:** OpenSSL 3.0+ (bảo vệ private key), Firefox/SpiderMonkey (JIT page 2020), Linux BPF JIT (5.2+), V8 Sandbox (2023, thử nghiệm). Hầu hết là **heap hardening**, không phải full compartmentalization. glibc expose `pkey_alloc/free/mprotect` từ 2.27.
 
-**ARM không có MPK analogue** → trên RK3588 dùng PAC+BTI + MTE + Stage-2.
+**ARM không có MPK analogue** → trên RK3588 dùng PAC+BTI + page-table/Stage-2 isolation; MTE chỉ dành cho phần cứng Armv8.5+ tương lai.
 
 Nguồn: ERIM (trên) · libmpk <https://www.usenix.org/conference/atc19/presentation/park-soyeon> · Donky <https://www.usenix.org/conference/usenixsecurity20/presentation/schrammel> · Intel SDM Vol 3A §4.6.
 
@@ -247,7 +252,7 @@ Nguồn: RedLeaf <https://www.usenix.org/conference/osdi20/presentation/narayana
 
 **Server/PC (G2):**
 - x86: **MPK/PKU coarse-tier (3 key)** + **PKS** (Intel) bảo vệ metadata kernel — **CHỈ khi đã bật CET (IBT+Shadow Stack)** vì gadget WRPKRU. AMD G2 không có PKS → feature-gate.
-- ARM64 (RK3588): không MPK → **PAC + BTI** (full CFI) + **MTE** (hardening) + **Stage-2** cho Tier 3.
+- ARM64 (RK3588): không MPK, không MTE → **PAC + BTI** (full CFI) + page-table isolation; **Stage-2** cho Tier 3. MTE chỉ là hardening cơ hội trên Armv8.5+ tương lai.
 - RISC-V server: theo dõi **WorldGuard** (gần hạn), **Smmtt/Smsdid** (dài hạn); bật **Zicfilp/Zicfiss** khi có silicon.
 
 **Bắt buộc mọi tier:** **DMA isolation** — chuyển IOMMU khỏi passthrough; tách DMA-capability khỏi MMIO-ownership.

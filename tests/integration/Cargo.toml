@@ -107,6 +107,10 @@ path = "tests/hypha-p3-boot.rs"
 name = "wx-text-write"
 path = "tests/wx-text-write.rs"
 
+[[test]]
+name = "policy-noentry"
+path = "tests/policy-noentry.rs"
+
 [dev-dependencies]
 tempfile = "3"
 
