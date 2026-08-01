@@ -96,7 +96,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 |------|--------------|--------|-------|
 | Core Stability (VirtIO, kbd, ELF, hotswap) | Phase 1 | ✅ | G1 (foundation) |
 | Perf baseline + KASLR | Phase 24 | ✅ | G1 |
-| Priority scheduler + RT TLSF heap + spawn_pinned | Phase 25 | ✅ | G1 |
+| Priority scheduler + RT heap init + spawn_pinned | Phase 25 | ✅ | G1 |
 | Memory quota + ZST caps + panic isolation | Phase 26 | ✅ | **G1** (never-die) |
 | Capacity observability: typed spawn OOM + opt-in MemInfo | A2/A3 | ✅ DONE 2026-08-01 — real allocator metric is 129.49 MiB; `<10 MiB` optimization remains open | G1 |
 | Reliability / supervisor restart | specs/12 | ✅ SUBSTANTIAL (P00-03 DONE 2026-06-06: fault-path force-unlock, reboot-on-panic, guard pages, RT watchdog; P05 done: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability done) | **G1** |
@@ -791,7 +791,7 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 
 **Deliverables**:
 - [x] Frame allocator: sequential, random, fragmentation patterns
-- [x] Scheduler: round-robin fairness, preemption under load
+- [x] Scheduler: fixed-priority tiers, FIFO within tier, RT-hart routing
 - [x] IPC: grant/revoke, cascading messages, timeout behavior
 - [x] Config service: KV operations, state transfer
 - [x] Shell: input dispatch, history, aliases
@@ -913,21 +913,21 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ### Phase 25 — Priority Scheduler (P1) `[G1]`
 **Target**: 2026-07-21 | **Effort**: ~2 weeks  
-**Status**: ✅ COMPLETE (2026-06-05) — see `.agents/260605-1052-phase25-priority-scheduler/`
+**Status**: ✅ COMPLETE (2026-06-05) — see `.agents/260605-1052-phase25-priority-scheduler/` (historical; D14 records the docs-only ruling)
 
 **Completed (2026-06-05):**
 - [x] Phase 25-1: Timer preemption — `sie.STIE` enabled, `vi_timer_tick()` wired, initial timer armed
 - [x] Phase 25-2: Priority queue — `TaskPriority` enum in `libs/api/`, `priority: u8` on TCB, `BTreeMap<u8, VecDeque>` scheduler
 - [x] Phase 25-3: SSIP self-IPI — `sie.SSIE` enabled, scause==1 handler clears SSIP + yields, `pend_preempt_if_needed` at wakeup
-- [x] Phase 25-4: TLSF RT heap — rlsf 0.2.2 integrated, 256 KiB pool, RT cells use `rt_alloc()` for stacks
+- [x] Phase 25-4: TLSF RT heap — rlsf 0.2.3 integrated, 256 KiB pool initialised, no runtime caller yet; stacks still use the frame allocator
 - [x] Phase 25-5: Tests + spawn_pinned — 3 priority unit tests added, `SpawnPinned` syscall opcode 16, core_id validation
 
 **Implementation Summary:**
 - Timer fires every 10 ms (TICKS_PER_10MS = 100,000 @ 10 MHz mtime clock)
-- `TaskPriority` enum: Background=0, Normal=1 (default), RealTime=2
-- Ready queue: `BTreeMap<u8, VecDeque<usize>>` — pick_next iterates in descending priority order
-- SSIP pending: `pend_preempt_if_needed()` fires immediately when RealTime becomes ready
-- RT heap: Isolated TLSF pool (256 KiB) for O(1) RealTime stack allocation; Normal cells use global heap
+- `TaskPriority` enum: `Background < Normal < RealTime`
+- Ready queue: `BTreeMap<u8, VecDeque<usize>>` — `pick_next` iterates highest tier first and preserves FIFO within each tier
+- SSIP pending: `pend_preempt_if_needed()` fires on RV64 when a higher-priority task becomes ready
+- RT heap: TLSF pool is initialised (256 KiB) but no runtime caller uses it yet; stacks still use the frame allocator
 - `spawn_pinned(0)` succeeds; `spawn_pinned(n>0)` returns `NotSupported` (SMP future-compatible)
 
 **Verification:**
@@ -940,7 +940,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - ✅ No priority field → TCB field added + scheduler restructured
 - ✅ No SSIP handler → scause==1 implemented with IPI pending logic
 
-**Ready for Phase 26**: Memory Quota + ZST Capabilities (depends on priority scheduler working)
+**Follow-up**: Memory Quota + ZST Capabilities was tracked as Phase 26 and is already shipped; this phase file is historical
 
 ### Phase 26 — Memory Quota + ZST Capabilities + Panic Isolation (P1) `[G1]`
 **Target**: 2026-08-04 | **Effort**: ~3 weeks  

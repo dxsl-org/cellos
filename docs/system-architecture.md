@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-07-25 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; Tier 3b VirtIO-GPU host stack code-complete; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-01 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -96,12 +96,13 @@ Kernel Space: (virt addr 0x8020_0000+)
 
 ### 3. **Task Scheduler** (`kernel/src/task/scheduler.rs`)
 
-**Round-Robin with Time Slices**:
-- All Cells scheduled fairly
-- Each gets ~10ms time slice (configurable)
-- Yield/preempt on timer interrupt
+**Fixed-Priority Scheduler**:
+- Three public tiers: `Background < Normal < RealTime`
+- FIFO within each tier
+- RT-hart routing when the dedicated RV64 hart is online
+- RV64 software-interrupt preemption path for higher-priority wakeups
 
-> **Roadmap**: Round-robin 10 ms timeslice is the current baseline. Phase 25 will add three priority levels (RealTime / Normal / Background) to prevent Tier 1 robot-control tasks from being preempted by batch workloads.
+> **Roadmap**: Fixed-priority scheduling is shipped. The consolidated latency baseline is still pending, and the immediate-preemption path remains architecture-scoped (RV64 only).
 
 **Task Control Block (TCB)**:
 ```rust
@@ -910,7 +911,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 ### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3b VM, Cell Signing)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
-- **Nano kernel** (~22.6K LOC `kernel/src`, measured 2026-07-07 — nano by *responsibility*, not line count; see LOC note under "## Kernel") with round-robin scheduler
+- **Nano kernel** (~22.6K LOC `kernel/src`, measured 2026-07-07 — nano by *responsibility*, not line count; see LOC note under "## Kernel") with fixed-priority scheduler and RT-hart routing
 - **48 syscall variants** (IPC, memory, task, FS, GPU, network, state) + **Block I/O capability gate**
 - **Block I/O syscalls** (raw 500/501/503 for FAT16 persistence, gated to VFS task 3)
 - Frame allocator (bitmap) and virtual memory
@@ -998,7 +999,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
 | **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
 | Tiered isolation (1 / 2 / 3) | Trusted signed-native (LBI) · Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` · hypervisor hardware silo (Tier 3b Linux VM). |
-| Round-Robin Scheduler | Simple, fair, predictable for embedded real-time systems |
+| Fixed-Priority Scheduler | Three tiers, FIFO within tier, RT-hart routing on RV64 |
 | Capability-Based Access | Fine-grained control, no global permissions |
 | Owned Buffers in Async | Deterministic cleanup in SAS (no process teardown) |
 | Nano Kernel (nano by *responsibility*, not line count) | Keep TCB minimal by scope (Kernel Boundary Law); measured `kernel/src` is ~22.6K LOC (2026-07-07) after driver-migration bookkeeping, IOMMU, in-tree HAL, and EL2 hypervisor prep — the "<10K" figure is historical |
@@ -1014,8 +1015,8 @@ Areas where the current implementation diverges from the specification or modern
 | Gap | Impact | Status / Target |
 |-----|--------|-----------------|
 | IPC is syscall-based, not direct vtable call | 10–100× latency vs. spec | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
-| Round-robin scheduler, no priority levels | RT tasks can starve | **Open** — Phase 25 |
-| TLSF allocator not implemented | RT allocation guarantee broken | **Open** — Phase 25 |
+| Fixed-priority scheduler shipped; RV64 immediate preemption only | Consolidated latency baseline still pending | **Closed / verify** — architecture-scoped limit |
+| TLSF pool initialised but unused; no runtime caller or WCET qualification | RT allocation guarantee not yet established | **Open** — follow-up qualification |
 | Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | **Mitigated by design** — untrusted code confined to Tier 3 Linux VM (Layer-2 HW mitigations for native, see Security Model) |
 | No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
 | No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |

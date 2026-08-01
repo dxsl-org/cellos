@@ -1,6 +1,6 @@
 # Cellos Performance Baseline Report
 
-> **Status:** Capacity measured; consolidated latency baseline still pending.
+> **Status:** Capacity measured; fixed-priority scheduler shipped; consolidated latency baseline still pending.
 > Updated weekly by `.github/workflows/perf.yml`.
 
 ---
@@ -107,7 +107,7 @@ The architecture spec (03-runtime.md) claims IPC at "2–3 CPU cycles via direct
 
 ## Scheduler Impact on Latency
 
-Round-robin 10 ms timeslice means a network packet arriving just after a timeslice boundary waits up to 10 ms before processing. PDR network latency targets (< 10 ms loopback RTT) cannot be met until a preemptive scheduler with priority levels is implemented (Phase 25).
+Cellos no longer uses a flat round-robin model. The shipped scheduler has three fixed tiers, FIFO within a tier, and RT-hart routing on RV64, but the consolidated latency baseline is still pending. The current report therefore cannot claim an end-to-end p99 envelope yet, and architecture-scoped immediate preemption still needs measurement outside RV64.
 
 ---
 

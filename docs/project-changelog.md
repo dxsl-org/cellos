@@ -4,6 +4,17 @@
 
 ---
 
+## [2026-08-01] Apply D14 docs-only ruling for scheduler and TLSF rows
+
+D14 is now recorded as approved recommendation A. Public docs now describe the shipped
+fixed-priority scheduler with FIFO within tier and RT-hart routing on RV64, keep the
+latency baseline as pending, and retire the old scheduler wording.
+
+The TLSF wording is also corrected: the 256 KiB `rlsf` pool is compiled and initialised,
+but no runtime allocation path currently calls it, stacks still use the frame allocator,
+and Cellos has not qualified end-to-end TLSF WCET or latency. Phase 25 remains historical;
+no runtime, ABI, or phase-history edit was authorized.
+
 ## [2026-08-01] Separate cell-signing plumbing from fleet-secure admission
 
 D13 records that the Ed25519 spawn gate is implemented, but the default G1 posture is not

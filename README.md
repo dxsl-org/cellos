@@ -49,7 +49,7 @@ ARM64 target:
 
 | Subsystem | Status | Notes |
 |-----------|--------|-------|
-| **Kernel** | ✅ | Priority scheduler · RT TLSF heap · round-robin · spawn_pinned |
+| **Kernel** | ✅ | Priority scheduler · fixed priorities · RT hart routing |
 | **SMP** | ✅ | Phase 32 — hart boot (SBI HSM) · per-hart `ViHartLocal` via `tp` · cross-hart IPI · `WaitForEvent(217)` |
 | **Memory** | ✅ | SAS · HHDM · frame allocator · cell quota · Storage 2.0 grant pages (64KB→16MB) |
 | **ELF Loader** | ✅ | PIE + `R_RISCV_RELATIVE` · loaded from FAT32 `/bin/` |

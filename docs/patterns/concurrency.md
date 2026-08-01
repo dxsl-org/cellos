@@ -66,17 +66,17 @@ pub fn get_instance() -> Option<Arc<MySubsystem>> {
 **Why `Option`**: Kernel boots before subsystems initialize; `None` is valid initial state.
 Cannot use `const fn` for complex initialization.
 
-## Priority Scheduler (Phase 25 — Planned)
+## Priority Scheduler (Phase 25 — shipped historical)
 > Learn from: [RTIC v2](https://github.com/rtic-rs/rtic) `rtic-sw-pass/src/`
 
 ```rust
 pub enum TaskPriority {
-    RealTime   = 0,   // robot control, interrupt handlers — never preempted
-    Normal     = 1,   // shell, apps, network
-    Background = 2,   // bench, LLM inference, batch
+    Background, // bench, LLM inference, batch
+    Normal,     // shell, apps, network
+    RealTime,   // robot control, interrupt-adjacent work
 }
 ```
 
-- Higher-priority tasks preempt via RISC-V software interrupt (SWI), not timer tick
-- TLSF allocator reserved for `RealTime` tasks (O(1) guaranteed)
-- RT cells pinned to core 0 via `spawn_pinned(0)` — immune to work stealing
+- Higher-priority tasks preempt via RV64 software interrupt; immediate preemption is architecture-scoped
+- TLSF pool is initialised for RT follow-up, but no runtime allocation path currently uses it
+- RT placement is internal policy; caller-visible pinning is not a general CPU-affinity API

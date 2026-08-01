@@ -24,7 +24,10 @@ Hệ thống sử dụng **Hybrid Allocator** để cân bằng giữa tốc đ�
 * **OOM Policy**: Trả về `Result::Err(OutOfMemory)` thay vì panic toàn hệ thống.
 
 ### Real-Time Pool (TLSF)
-Dành riêng cho các tác vụ điều khiển Robot (Tier 1). Đảm bảo thời gian cấp phát là **O(1)** và không bị block bởi các App AI nặng.
+`rlsf 0.2.3` is linked and a 256 KiB static pool is initialised at boot, but no runtime
+allocation path currently calls the `alloc` / `dealloc` wrappers. Stacks still come from
+`Stack::new_kernel` and `Stack::new_user`, so Cellos has not qualified end-to-end TLSF
+WCET or latency on the current system.
 
 ## 3. Metadata Registry & Ownership Transfer
 Đây là trái tim để duy trì an toàn trong SAS khi Hot-swap.
