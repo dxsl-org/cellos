@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["add_boundaries","align_up","dedup","emit","is_enabled","merge_ranges","push_boundary","push_range","sort_ranges"],"struct":["Range"]};

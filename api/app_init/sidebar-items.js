@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_RESTARTS_PER_WINDOW","RESTART_WINDOW_TICKS"],"enum":["Policy"],"fn":["main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_RESTARTS_PER_WINDOW","RESTART_WINDOW_TICKS"],"enum":["Policy"],"fn":["cell_main","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

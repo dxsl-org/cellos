@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["wait_completion","write_completion"],"struct":["WaiterRegistration"]};

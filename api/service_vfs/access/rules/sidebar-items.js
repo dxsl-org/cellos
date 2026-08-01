@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["EXACT_RULES","PREFIX_RULES"],"struct":["PathRule"]};

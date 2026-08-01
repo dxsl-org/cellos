@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"static":["DEFAULT_RULES"],"struct":["AccessTable","PathRule"]};
+window.SIDEBAR_ITEMS = {"mod":["rules"],"struct":["AccessTable"]};

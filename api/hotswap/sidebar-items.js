@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","read_line"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","main","read_line"]};

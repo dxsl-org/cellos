@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["INLINE_MESSAGE_BYTES"],"enum":["PendingMsgData"],"struct":["PendingMailbox","PendingMsg"]};

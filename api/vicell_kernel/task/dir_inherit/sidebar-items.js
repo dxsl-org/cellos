@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["attestation_for","clear_staged","install_on_child","stage"]};

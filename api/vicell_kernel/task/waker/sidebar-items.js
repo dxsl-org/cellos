@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["consume_pending","has_any_pending","signal_net_rx"],"static":["NET_RX_PENDING"]};
+window.SIDEBAR_ITEMS = {"fn":["arm_net_rx","begin_signal_net_rx_for_test","consume_pending","disarm_net_rx","finish_signal_net_rx_for_test","has_any_pending","signal_net_rx"],"mod":["net_rx_reservation"],"static":["NET_RX_PENDING"]};

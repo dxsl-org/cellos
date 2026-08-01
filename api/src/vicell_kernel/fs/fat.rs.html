@@ -469,23 +469,26 @@
 <a href=#469 id=469 data-nosnippet>469</a>        buf_ptr: usize,
 <a href=#470 id=470 data-nosnippet>470</a>        buf_len: usize,
 <a href=#471 id=471 data-nosnippet>471</a>    ) -&gt; BoxFuture&lt;<span class="lifetime">'static</span>, FileResult&lt;usize&gt;&gt; {
-<a href=#472 id=472 data-nosnippet>472</a>        Box::pin(<span class="kw">async move </span>{
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">let </span><span class="kw-2">mut </span>this = <span class="self">self</span>;
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="comment">// Create a temporary slice from the user pointer.
-<a href=#475 id=475 data-nosnippet>475</a>            // SAFETY: The kernel guarantees the pointer is valid (mapped to user space)
-<a href=#476 id=476 data-nosnippet>476</a>            // and we rely on the caller to ensure it doesn't race.
-<a href=#477 id=477 data-nosnippet>477</a>            // In a real async driver, we would need to pin user memory.
-<a href=#478 id=478 data-nosnippet>478</a>            </span><span class="kw">let </span>buf = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(buf_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8, buf_len) };
-<a href=#479 id=479 data-nosnippet>479</a>
-<a href=#480 id=480 data-nosnippet>480</a>            <span class="comment">// Perform synchronous read (for now, until RamDisk is async)
-<a href=#481 id=481 data-nosnippet>481</a>            // This still satisfies the architectural requirement of returning a future.
-<a href=#482 id=482 data-nosnippet>482</a>            </span><span class="kw">let </span>res = this.read(buf);
-<a href=#483 id=483 data-nosnippet>483</a>
-<a href=#484 id=484 data-nosnippet>484</a>            <span class="comment">// Return ownership and result
-<a href=#485 id=485 data-nosnippet>485</a>            // Cast FatFile back to Trait Object
-<a href=#486 id=486 data-nosnippet>486</a>            </span><span class="kw">let </span>trait_obj: Box&lt;<span class="kw">dyn </span>ViFile + Send + Sync&gt; = this;
-<a href=#487 id=487 data-nosnippet>487</a>            (trait_obj, res)
-<a href=#488 id=488 data-nosnippet>488</a>        })
-<a href=#489 id=489 data-nosnippet>489</a>    }
-<a href=#490 id=490 data-nosnippet>490</a>}
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="comment">// Contract guard (2026-07-31 Recv buffer-pinning audit): this synchronous
+<a href=#473 id=473 data-nosnippet>473</a>        // future must not be wired to a live async syscall until cancellation has
+<a href=#474 id=474 data-nosnippet>474</a>        // an explicit stop-touching-buffer acknowledgement and unpin point.
+<a href=#475 id=475 data-nosnippet>475</a>        </span>Box::pin(<span class="kw">async move </span>{
+<a href=#476 id=476 data-nosnippet>476</a>            <span class="kw">let </span><span class="kw-2">mut </span>this = <span class="self">self</span>;
+<a href=#477 id=477 data-nosnippet>477</a>            <span class="comment">// Create a temporary slice from the user pointer.
+<a href=#478 id=478 data-nosnippet>478</a>            // SAFETY: The kernel guarantees the pointer is valid (mapped to user space)
+<a href=#479 id=479 data-nosnippet>479</a>            // and we rely on the caller to ensure it doesn't race.
+<a href=#480 id=480 data-nosnippet>480</a>            // In a real async driver, we would need to pin user memory.
+<a href=#481 id=481 data-nosnippet>481</a>            </span><span class="kw">let </span>buf = <span class="kw">unsafe </span>{ core::slice::from_raw_parts_mut(buf_ptr <span class="kw">as </span><span class="kw-2">*mut </span>u8, buf_len) };
+<a href=#482 id=482 data-nosnippet>482</a>
+<a href=#483 id=483 data-nosnippet>483</a>            <span class="comment">// Perform synchronous read (for now, until RamDisk is async)
+<a href=#484 id=484 data-nosnippet>484</a>            // This still satisfies the architectural requirement of returning a future.
+<a href=#485 id=485 data-nosnippet>485</a>            </span><span class="kw">let </span>res = this.read(buf);
+<a href=#486 id=486 data-nosnippet>486</a>
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="comment">// Return ownership and result
+<a href=#488 id=488 data-nosnippet>488</a>            // Cast FatFile back to Trait Object
+<a href=#489 id=489 data-nosnippet>489</a>            </span><span class="kw">let </span>trait_obj: Box&lt;<span class="kw">dyn </span>ViFile + Send + Sync&gt; = this;
+<a href=#490 id=490 data-nosnippet>490</a>            (trait_obj, res)
+<a href=#491 id=491 data-nosnippet>491</a>        })
+<a href=#492 id=492 data-nosnippet>492</a>    }
+<a href=#493 id=493 data-nosnippet>493</a>}
 </code></pre></div></section></main></body></html>

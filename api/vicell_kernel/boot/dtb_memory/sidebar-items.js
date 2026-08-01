@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_BOUNDARIES","MAX_RANGES","PAGE_SIZE"],"enum":["MapError"],"fn":["build"],"mod":["ranges"]};

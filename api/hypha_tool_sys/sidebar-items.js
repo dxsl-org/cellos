@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["args_extract_str","dispatch","handle","json_escape","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["args_extract_str","cell_main","dispatch","handle","json_escape","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

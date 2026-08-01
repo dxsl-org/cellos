@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["EMPTY_HOLD","EMPTY_PIN","MAX_PINNED_REGIONS","MAX_PINS_PER_TASK","MAX_QUARANTINED_REGIONS","PAGE_SIZE"],"enum":["PinError"],"fn":["acknowledge","force_unlock","holder_of","overlaps","pin","quarantine_task","quarantined_pages","span","withhold_frames"],"static":["REGISTRY"],"struct":["FrameHold","PinEntry","PinHolder","Registry"]};

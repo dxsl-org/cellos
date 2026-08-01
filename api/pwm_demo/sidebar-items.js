@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CHANNEL","PWM_HZ"],"fn":["main","run_pwm_demo"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["CHANNEL","PWM_HZ"],"fn":["cell_main","main","run_pwm_demo"],"static":["VICELL_MANIFEST"]};

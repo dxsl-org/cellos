@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"],"macro":["fail","pass"],"static":["FAIL","PASS","VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","main"],"macro":["fail","pass"],"static":["FAIL","PASS","VICELL_MANIFEST"]};

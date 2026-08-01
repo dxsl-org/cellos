@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_DIR_NAME_LEN","MAX_DIR_PATH_LEN"],"enum":["DirNameError"],"fn":["join_component","validate_dir_component","validate_dir_path"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["POLL_PRIORITY","SELF_PATH"],"fn":["main"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["POLL_PRIORITY","SELF_PATH"],"fn":["cell_main","main"],"static":["VICELL_MANIFEST"]};

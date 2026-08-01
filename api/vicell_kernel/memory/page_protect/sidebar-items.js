@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["protect_page","protect_range"]};

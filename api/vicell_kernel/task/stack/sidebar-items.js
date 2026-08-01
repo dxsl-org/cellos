@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["CellSegments","Stack"]};
+window.SIDEBAR_ITEMS = {"fn":["release_frames"],"struct":["CellSegments","Stack"]};

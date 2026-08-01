@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["SUPPLY_MV"],"fn":["main"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["SUPPLY_MV"],"fn":["cell_main","main"],"static":["VICELL_MANIFEST"]};

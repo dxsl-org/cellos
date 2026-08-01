@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["collect_dir_bytes","handle_request"]};
+window.SIDEBAR_ITEMS = {"fn":["handle_request"]};

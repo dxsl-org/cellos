@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BAD_HANDLE","DENIED","MALFORMED","WORKDIR"],"fn":["acquire","derive","file_operations_through_a_handle","refused","reject_every_traversal_shape","reject_odd_utf8","revoking_a_parent_revokes_what_came_from_it","run","seal_and_prove_paths_are_refused"]};

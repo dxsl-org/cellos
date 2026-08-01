@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CELL_ONE","CELL_TWO","TID_A","TID_B","TID_C"],"fn":["deferred_wake_reaches_scheduler","exhaustion_refuses_submission","fail","insert","queue","remove","round_trip","self_drain_cancels_stale_wake","self_test","shared_within_cell","waiter_cleanup_preserves_replacement","withdrawal_raises_no_wake"]};

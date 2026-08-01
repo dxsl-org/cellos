@@ -90,126 +90,133 @@
 <a href=#90 id=90 data-nosnippet>90</a>/// - The range `[ptr, ptr + len)` must be valid kernel memory (Normal-Tagged).
 <a href=#91 id=91 data-nosnippet>91</a>/// - Must be called from EL1 with interrupts masked (boot path).
 <a href=#92 id=92 data-nosnippet>92</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"test-hooks"</span>))]
-<a href=#93 id=93 data-nosnippet>93</a></span><span class="kw">unsafe fn </span>tag_region(ptr: <span class="kw-2">*mut </span>u8, len: usize, color: u8) {
-<a href=#94 id=94 data-nosnippet>94</a>    <span class="kw">let </span>tag = (color &amp; <span class="number">0xF</span>) <span class="kw">as </span>u64;
-<a href=#95 id=95 data-nosnippet>95</a>    <span class="kw">let </span><span class="kw-2">mut </span>cur = ptr <span class="kw">as </span>u64;
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">let </span>end = cur + len <span class="kw">as </span>u64;
-<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">while </span>cur &lt; end {
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="comment">// Bits [59:56] carry the allocation tag; TBI strips the top byte at
-<a href=#99 id=99 data-nosnippet>99</a>        // load/store so normal memory accesses are unaffected.
-<a href=#100 id=100 data-nosnippet>100</a>        </span><span class="kw">let </span>tagged_ptr = (cur &amp; !(<span class="number">0xFu64 </span>&lt;&lt; <span class="number">56</span>)) | (tag &lt;&lt; <span class="number">56</span>);
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="comment">// SAFETY: STG touches only the tag memory for the 16-byte granule at
-<a href=#102 id=102 data-nosnippet>102</a>        // `tagged_ptr`. The caller guarantees the range is valid.
-<a href=#103 id=103 data-nosnippet>103</a>        </span><span class="kw">unsafe </span>{
-<a href=#104 id=104 data-nosnippet>104</a>            <span class="macro">core::arch::asm!</span>(
-<a href=#105 id=105 data-nosnippet>105</a>                <span class="string">"stg {p}, [{p}]"</span>,
-<a href=#106 id=106 data-nosnippet>106</a>                p = <span class="kw">in</span>(reg) tagged_ptr,
-<a href=#107 id=107 data-nosnippet>107</a>                options(nostack)
-<a href=#108 id=108 data-nosnippet>108</a>            );
-<a href=#109 id=109 data-nosnippet>109</a>        }
-<a href=#110 id=110 data-nosnippet>110</a>        cur += <span class="number">16</span>;
-<a href=#111 id=111 data-nosnippet>111</a>    }
-<a href=#112 id=112 data-nosnippet>112</a>}
-<a href=#113 id=113 data-nosnippet>113</a>
-<a href=#114 id=114 data-nosnippet>114</a><span class="doccomment">/// Return the 4-bit MTE allocation tag for the granule at `ptr`.
-<a href=#115 id=115 data-nosnippet>115</a>///
-<a href=#116 id=116 data-nosnippet>116</a>/// Uses LDG (Load Tag) which places the tag in bits [59:56] of the output.
-<a href=#117 id=117 data-nosnippet>117</a>///
-<a href=#118 id=118 data-nosnippet>118</a>/// # Safety
-<a href=#119 id=119 data-nosnippet>119</a>/// - `ptr` must point inside a valid Normal-Tagged region that was previously
-<a href=#120 id=120 data-nosnippet>120</a>///   tagged with [`tag_region`].
-<a href=#121 id=121 data-nosnippet>121</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"test-hooks"</span>))]
-<a href=#122 id=122 data-nosnippet>122</a></span><span class="kw">unsafe fn </span>get_tag(ptr: <span class="kw-2">*const </span>u8) -&gt; u8 {
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">let </span><span class="kw-2">mut </span>result: u64 = ptr <span class="kw">as </span>u64;
-<a href=#124 id=124 data-nosnippet>124</a>    <span class="comment">// SAFETY: LDG reads only the tag memory for the granule at `ptr`.
-<a href=#125 id=125 data-nosnippet>125</a>    </span><span class="kw">unsafe </span>{
-<a href=#126 id=126 data-nosnippet>126</a>        <span class="macro">core::arch::asm!</span>(
-<a href=#127 id=127 data-nosnippet>127</a>            <span class="string">"ldg {r}, [{r}]"</span>,
-<a href=#128 id=128 data-nosnippet>128</a>            r = inout(reg) result,
-<a href=#129 id=129 data-nosnippet>129</a>            options(nostack)
-<a href=#130 id=130 data-nosnippet>130</a>        );
-<a href=#131 id=131 data-nosnippet>131</a>    }
-<a href=#132 id=132 data-nosnippet>132</a>    ((result &gt;&gt; <span class="number">56</span>) &amp; <span class="number">0xF</span>) <span class="kw">as </span>u8
-<a href=#133 id=133 data-nosnippet>133</a>}
-<a href=#134 id=134 data-nosnippet>134</a>
-<a href=#135 id=135 data-nosnippet>135</a><span class="doccomment">/// Write `s` to the PL011 UART (aarch64 boot path).
-<a href=#136 id=136 data-nosnippet>136</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"test-hooks"</span>))]
-<a href=#137 id=137 data-nosnippet>137</a></span><span class="kw">fn </span>puts_aa64(s: <span class="kw-2">&amp;</span>str) {
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="kw">for </span>c <span class="kw">in </span>s.bytes() {
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">crate</span>::hal::uart_pl011::putchar(c);
-<a href=#140 id=140 data-nosnippet>140</a>    }
-<a href=#141 id=141 data-nosnippet>141</a>}
-<a href=#142 id=142 data-nosnippet>142</a>
-<a href=#143 id=143 data-nosnippet>143</a><span class="comment">// ─── x86_64 PKU self-test ──────────────────────────────────────────────────
-<a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a></span><span class="doccomment">/// x86_64 PKU PKRU value and register self-test.
-<a href=#146 id=146 data-nosnippet>146</a>///
-<a href=#147 id=147 data-nosnippet>147</a>/// Verifies:
-<a href=#148 id=148 data-nosnippet>148</a>/// 1. `pkru_for_key(0)` returns 0x00000000 (trusted-core all-access).
-<a href=#149 id=149 data-nosnippet>149</a>/// 2. `pkru_for_key(1)` returns 0x55555550 (allow keys 0+1, deny rest).
-<a href=#150 id=150 data-nosnippet>150</a>/// 3. RDPKRU in kernel mode returns 0 (kernel PKRU = all-access).
-<a href=#151 id=151 data-nosnippet>151</a>///
-<a href=#152 id=152 data-nosnippet>152</a>/// # SKIP conditions
-<a href=#153 id=153 data-nosnippet>153</a>/// - `PKU_ACTIVE == 0` (PKU not enabled — either unavailable or IBT absent).
-<a href=#154 id=154 data-nosnippet>154</a>///
-<a href=#155 id=155 data-nosnippet>155</a>/// # FAIL conditions
-<a href=#156 id=156 data-nosnippet>156</a>/// - Any computed PKRU value deviates from the expected constant.
-<a href=#157 id=157 data-nosnippet>157</a>/// - RDPKRU returns a non-zero value in kernel context.
-<a href=#158 id=158 data-nosnippet>158</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"x86_64"</span>, feature = <span class="string">"test-hooks"</span>))]
-<a href=#159 id=159 data-nosnippet>159</a></span><span class="kw">pub fn </span>run_pku_selftest() {
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">use </span><span class="kw">crate</span>::hal::pku;
-<a href=#161 id=161 data-nosnippet>161</a>
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="comment">// SAFETY: PKU_ACTIVE is written once at boot (single-threaded init), then
-<a href=#163 id=163 data-nosnippet>163</a>    // treated as read-only.  No concurrent Rust reference exists after boot.
-<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">if unsafe </span>{ pku::PKU_ACTIVE } == <span class="number">0 </span>{
-<a href=#165 id=165 data-nosnippet>165</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: SKIP: PKU not active\n"</span>);
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw">return</span>;
-<a href=#167 id=167 data-nosnippet>167</a>    }
+<a href=#93 id=93 data-nosnippet>93</a></span><span class="comment">// `stg` is rejected by the assembler unless MTE is enabled. Scoping the feature
+<a href=#94 id=94 data-nosnippet>94</a>// to this function keeps the rest of the kernel's codegen untouched, and is
+<a href=#95 id=95 data-nosnippet>95</a>// sound because the caller returns early unless ID_AA64PFR1_EL1 reports MTE2.
+<a href=#96 id=96 data-nosnippet>96</a></span><span class="attr">#[target_feature(enable = <span class="string">"mte"</span>)]
+<a href=#97 id=97 data-nosnippet>97</a></span><span class="kw">unsafe fn </span>tag_region(ptr: <span class="kw-2">*mut </span>u8, len: usize, color: u8) {
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>tag = (color &amp; <span class="number">0xF</span>) <span class="kw">as </span>u64;
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span><span class="kw-2">mut </span>cur = ptr <span class="kw">as </span>u64;
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">let </span>end = cur + len <span class="kw">as </span>u64;
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">while </span>cur &lt; end {
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="comment">// Bits [59:56] carry the allocation tag; TBI strips the top byte at
+<a href=#103 id=103 data-nosnippet>103</a>        // load/store so normal memory accesses are unaffected.
+<a href=#104 id=104 data-nosnippet>104</a>        </span><span class="kw">let </span>tagged_ptr = (cur &amp; !(<span class="number">0xFu64 </span>&lt;&lt; <span class="number">56</span>)) | (tag &lt;&lt; <span class="number">56</span>);
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="comment">// SAFETY: STG touches only the tag memory for the 16-byte granule at
+<a href=#106 id=106 data-nosnippet>106</a>        // `tagged_ptr`. The caller guarantees the range is valid.
+<a href=#107 id=107 data-nosnippet>107</a>        </span><span class="kw">unsafe </span>{
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="macro">core::arch::asm!</span>(
+<a href=#109 id=109 data-nosnippet>109</a>                <span class="string">"stg {p}, [{p}]"</span>,
+<a href=#110 id=110 data-nosnippet>110</a>                p = <span class="kw">in</span>(reg) tagged_ptr,
+<a href=#111 id=111 data-nosnippet>111</a>                options(nostack)
+<a href=#112 id=112 data-nosnippet>112</a>            );
+<a href=#113 id=113 data-nosnippet>113</a>        }
+<a href=#114 id=114 data-nosnippet>114</a>        cur += <span class="number">16</span>;
+<a href=#115 id=115 data-nosnippet>115</a>    }
+<a href=#116 id=116 data-nosnippet>116</a>}
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a><span class="doccomment">/// Return the 4-bit MTE allocation tag for the granule at `ptr`.
+<a href=#119 id=119 data-nosnippet>119</a>///
+<a href=#120 id=120 data-nosnippet>120</a>/// Uses LDG (Load Tag) which places the tag in bits [59:56] of the output.
+<a href=#121 id=121 data-nosnippet>121</a>///
+<a href=#122 id=122 data-nosnippet>122</a>/// # Safety
+<a href=#123 id=123 data-nosnippet>123</a>/// - `ptr` must point inside a valid Normal-Tagged region that was previously
+<a href=#124 id=124 data-nosnippet>124</a>///   tagged with [`tag_region`].
+<a href=#125 id=125 data-nosnippet>125</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"test-hooks"</span>))]
+<a href=#126 id=126 data-nosnippet>126</a></span><span class="comment">// `ldg` needs the MTE feature for the same reason `tag_region` does; the same
+<a href=#127 id=127 data-nosnippet>127</a>// availability check guards the caller.
+<a href=#128 id=128 data-nosnippet>128</a></span><span class="attr">#[target_feature(enable = <span class="string">"mte"</span>)]
+<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">unsafe fn </span>get_tag(ptr: <span class="kw-2">*const </span>u8) -&gt; u8 {
+<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">let </span><span class="kw-2">mut </span>result: u64 = ptr <span class="kw">as </span>u64;
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="comment">// SAFETY: LDG reads only the tag memory for the granule at `ptr`.
+<a href=#132 id=132 data-nosnippet>132</a>    </span><span class="kw">unsafe </span>{
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="macro">core::arch::asm!</span>(
+<a href=#134 id=134 data-nosnippet>134</a>            <span class="string">"ldg {r}, [{r}]"</span>,
+<a href=#135 id=135 data-nosnippet>135</a>            r = inout(reg) result,
+<a href=#136 id=136 data-nosnippet>136</a>            options(nostack)
+<a href=#137 id=137 data-nosnippet>137</a>        );
+<a href=#138 id=138 data-nosnippet>138</a>    }
+<a href=#139 id=139 data-nosnippet>139</a>    ((result &gt;&gt; <span class="number">56</span>) &amp; <span class="number">0xF</span>) <span class="kw">as </span>u8
+<a href=#140 id=140 data-nosnippet>140</a>}
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a><span class="doccomment">/// Write `s` to the PL011 UART (aarch64 boot path).
+<a href=#143 id=143 data-nosnippet>143</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"aarch64"</span>, feature = <span class="string">"test-hooks"</span>))]
+<a href=#144 id=144 data-nosnippet>144</a></span><span class="kw">fn </span>puts_aa64(s: <span class="kw-2">&amp;</span>str) {
+<a href=#145 id=145 data-nosnippet>145</a>    <span class="kw">for </span>c <span class="kw">in </span>s.bytes() {
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="kw">crate</span>::hal::uart_pl011::putchar(c);
+<a href=#147 id=147 data-nosnippet>147</a>    }
+<a href=#148 id=148 data-nosnippet>148</a>}
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a><span class="comment">// ─── x86_64 PKU self-test ──────────────────────────────────────────────────
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a></span><span class="doccomment">/// x86_64 PKU PKRU value and register self-test.
+<a href=#153 id=153 data-nosnippet>153</a>///
+<a href=#154 id=154 data-nosnippet>154</a>/// Verifies:
+<a href=#155 id=155 data-nosnippet>155</a>/// 1. `pkru_for_key(0)` returns 0x00000000 (trusted-core all-access).
+<a href=#156 id=156 data-nosnippet>156</a>/// 2. `pkru_for_key(1)` returns 0x55555550 (allow keys 0+1, deny rest).
+<a href=#157 id=157 data-nosnippet>157</a>/// 3. RDPKRU in kernel mode returns 0 (kernel PKRU = all-access).
+<a href=#158 id=158 data-nosnippet>158</a>///
+<a href=#159 id=159 data-nosnippet>159</a>/// # SKIP conditions
+<a href=#160 id=160 data-nosnippet>160</a>/// - `PKU_ACTIVE == 0` (PKU not enabled — either unavailable or IBT absent).
+<a href=#161 id=161 data-nosnippet>161</a>///
+<a href=#162 id=162 data-nosnippet>162</a>/// # FAIL conditions
+<a href=#163 id=163 data-nosnippet>163</a>/// - Any computed PKRU value deviates from the expected constant.
+<a href=#164 id=164 data-nosnippet>164</a>/// - RDPKRU returns a non-zero value in kernel context.
+<a href=#165 id=165 data-nosnippet>165</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"x86_64"</span>, feature = <span class="string">"test-hooks"</span>))]
+<a href=#166 id=166 data-nosnippet>166</a></span><span class="kw">pub fn </span>run_pku_selftest() {
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="kw">use </span><span class="kw">crate</span>::hal::pku;
 <a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="comment">// Key 0 = trusted-core → PKRU = 0 (all-access).
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">let </span>k0 = pku::pkru_for_key(<span class="number">0</span>);
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">if </span>k0 != <span class="number">0x0000_0000 </span>{
-<a href=#172 id=172 data-nosnippet>172</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: FAIL: key 0 PKRU wrong\n"</span>);
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="comment">// SAFETY: PKU_ACTIVE is written once at boot (single-threaded init), then
+<a href=#170 id=170 data-nosnippet>170</a>    // treated as read-only.  No concurrent Rust reference exists after boot.
+<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">if unsafe </span>{ pku::PKU_ACTIVE } == <span class="number">0 </span>{
+<a href=#172 id=172 data-nosnippet>172</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: SKIP: PKU not active\n"</span>);
 <a href=#173 id=173 data-nosnippet>173</a>        <span class="kw">return</span>;
 <a href=#174 id=174 data-nosnippet>174</a>    }
 <a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a>    <span class="comment">// Key 1 = standard Tier-1 Rust cell.
-<a href=#177 id=177 data-nosnippet>177</a>    // All-deny = 0x5555_5555; clear bits [1:0] (key 0 AD), clear bits [3:2] (key 1 AD).
-<a href=#178 id=178 data-nosnippet>178</a>    // Expected: 0x5555_5550.
-<a href=#179 id=179 data-nosnippet>179</a>    </span><span class="kw">let </span>k1 = pku::pkru_for_key(<span class="number">1</span>);
-<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">if </span>k1 != <span class="number">0x5555_5550 </span>{
-<a href=#181 id=181 data-nosnippet>181</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: FAIL: key 1 PKRU wrong\n"</span>);
-<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">return</span>;
-<a href=#183 id=183 data-nosnippet>183</a>    }
-<a href=#184 id=184 data-nosnippet>184</a>
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="comment">// RDPKRU in Ring-0: the kernel always runs with PKRU = 0 (all-access).
-<a href=#186 id=186 data-nosnippet>186</a>    // ECX must be 0; EAX receives PKRU, EDX receives 0.
-<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">let </span>pkru_val: u32;
-<a href=#188 id=188 data-nosnippet>188</a>    <span class="comment">// SAFETY: RDPKRU from Ring-0 with ECX=0; PKU_ACTIVE=1 means CR4.PKE is set
-<a href=#189 id=189 data-nosnippet>189</a>    // so this instruction is supported. RDPKRU reads ECX (implicit, must be 0)
-<a href=#190 id=190 data-nosnippet>190</a>    // and writes PKRU to EAX; EDX is cleared.
-<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="kw">unsafe </span>{
-<a href=#192 id=192 data-nosnippet>192</a>        <span class="macro">core::arch::asm!</span>(
-<a href=#193 id=193 data-nosnippet>193</a>            <span class="string">"xor ecx, ecx"</span>,  <span class="comment">// ECX must be 0 for RDPKRU (privileged guard)
-<a href=#194 id=194 data-nosnippet>194</a>            </span><span class="string">"rdpkru"</span>,
-<a href=#195 id=195 data-nosnippet>195</a>            out(<span class="string">"eax"</span>) pkru_val,
-<a href=#196 id=196 data-nosnippet>196</a>            out(<span class="string">"edx"</span>) <span class="kw">_</span>,
-<a href=#197 id=197 data-nosnippet>197</a>            options(nomem, nostack)
-<a href=#198 id=198 data-nosnippet>198</a>        );
-<a href=#199 id=199 data-nosnippet>199</a>    }
-<a href=#200 id=200 data-nosnippet>200</a>    <span class="kw">if </span>pkru_val != <span class="number">0 </span>{
-<a href=#201 id=201 data-nosnippet>201</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: FAIL: kernel PKRU != 0\n"</span>);
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">return</span>;
-<a href=#203 id=203 data-nosnippet>203</a>    }
-<a href=#204 id=204 data-nosnippet>204</a>
-<a href=#205 id=205 data-nosnippet>205</a>    puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: PASS\n"</span>);
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a><span class="doccomment">/// Write `s` to the 16550 UART (x86_64 boot path).
-<a href=#209 id=209 data-nosnippet>209</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"x86_64"</span>, feature = <span class="string">"test-hooks"</span>))]
-<a href=#210 id=210 data-nosnippet>210</a></span><span class="kw">fn </span>puts_x86(s: <span class="kw-2">&amp;</span>str) {
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">for </span>c <span class="kw">in </span>s.bytes() {
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">crate</span>::hal::uart_16550::putchar(c);
-<a href=#213 id=213 data-nosnippet>213</a>    }
-<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="comment">// Key 0 = trusted-core → PKRU = 0 (all-access).
+<a href=#177 id=177 data-nosnippet>177</a>    </span><span class="kw">let </span>k0 = pku::pkru_for_key(<span class="number">0</span>);
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="kw">if </span>k0 != <span class="number">0x0000_0000 </span>{
+<a href=#179 id=179 data-nosnippet>179</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: FAIL: key 0 PKRU wrong\n"</span>);
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw">return</span>;
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="comment">// Key 1 = standard Tier-1 Rust cell.
+<a href=#184 id=184 data-nosnippet>184</a>    // All-deny = 0x5555_5555; clear bits [1:0] (key 0 AD), clear bits [3:2] (key 1 AD).
+<a href=#185 id=185 data-nosnippet>185</a>    // Expected: 0x5555_5550.
+<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">let </span>k1 = pku::pkru_for_key(<span class="number">1</span>);
+<a href=#187 id=187 data-nosnippet>187</a>    <span class="kw">if </span>k1 != <span class="number">0x5555_5550 </span>{
+<a href=#188 id=188 data-nosnippet>188</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: FAIL: key 1 PKRU wrong\n"</span>);
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">return</span>;
+<a href=#190 id=190 data-nosnippet>190</a>    }
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a>    <span class="comment">// RDPKRU in Ring-0: the kernel always runs with PKRU = 0 (all-access).
+<a href=#193 id=193 data-nosnippet>193</a>    // ECX must be 0; EAX receives PKRU, EDX receives 0.
+<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">let </span>pkru_val: u32;
+<a href=#195 id=195 data-nosnippet>195</a>    <span class="comment">// SAFETY: RDPKRU from Ring-0 with ECX=0; PKU_ACTIVE=1 means CR4.PKE is set
+<a href=#196 id=196 data-nosnippet>196</a>    // so this instruction is supported. RDPKRU reads ECX (implicit, must be 0)
+<a href=#197 id=197 data-nosnippet>197</a>    // and writes PKRU to EAX; EDX is cleared.
+<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">unsafe </span>{
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="macro">core::arch::asm!</span>(
+<a href=#200 id=200 data-nosnippet>200</a>            <span class="string">"xor ecx, ecx"</span>,  <span class="comment">// ECX must be 0 for RDPKRU (privileged guard)
+<a href=#201 id=201 data-nosnippet>201</a>            </span><span class="string">"rdpkru"</span>,
+<a href=#202 id=202 data-nosnippet>202</a>            out(<span class="string">"eax"</span>) pkru_val,
+<a href=#203 id=203 data-nosnippet>203</a>            out(<span class="string">"edx"</span>) <span class="kw">_</span>,
+<a href=#204 id=204 data-nosnippet>204</a>            options(nomem, nostack)
+<a href=#205 id=205 data-nosnippet>205</a>        );
+<a href=#206 id=206 data-nosnippet>206</a>    }
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">if </span>pkru_val != <span class="number">0 </span>{
+<a href=#208 id=208 data-nosnippet>208</a>        puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: FAIL: kernel PKRU != 0\n"</span>);
+<a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">return</span>;
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>    puts_x86(<span class="string">"[SELFTEST] PKU-SELFTEST: PASS\n"</span>);
+<a href=#213 id=213 data-nosnippet>213</a>}
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a><span class="doccomment">/// Write `s` to the 16550 UART (x86_64 boot path).
+<a href=#216 id=216 data-nosnippet>216</a></span><span class="attr">#[cfg(all(target_arch = <span class="string">"x86_64"</span>, feature = <span class="string">"test-hooks"</span>))]
+<a href=#217 id=217 data-nosnippet>217</a></span><span class="kw">fn </span>puts_x86(s: <span class="kw-2">&amp;</span>str) {
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">for </span>c <span class="kw">in </span>s.bytes() {
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw">crate</span>::hal::uart_16550::putchar(c);
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>}
 </code></pre></div></section></main></body></html>

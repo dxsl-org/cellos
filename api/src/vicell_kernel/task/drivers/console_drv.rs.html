@@ -170,66 +170,40 @@
 <a href=#170 id=170 data-nosnippet>170</a>/// RELEASE event is best-effort: shells act on `KeyState::Pressed` only, so a
 <a href=#171 id=171 data-nosnippet>171</a>/// lost release is harmless, while a lost press is a lost keystroke.
 <a href=#172 id=172 data-nosnippet>172</a>///
-<a href=#173 id=173 data-nosnippet>173</a>/// # Safety (kernel-only, Law 4)
-<a href=#174 id=174 data-nosnippet>174</a>/// `ipc_post_nonblock` immediate-delivery path writes into the receiver's U-mode
-<a href=#175 id=175 data-nosnippet>175</a>/// buffer from S-mode — requires SUM=1. We preserve the current SUM state and
-<a href=#176 id=176 data-nosnippet>176</a>/// restore it on return so callers from different contexts (timer ISR vs syscall)
-<a href=#177 id=177 data-nosnippet>177</a>/// are unaffected.
-<a href=#178 id=178 data-nosnippet>178</a></span><span class="kw">fn </span>relay_ascii_to_input(input_tid: usize, byte: u8) -&gt; bool {
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="comment">// Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
-<a href=#180 id=180 data-nosnippet>180</a>    </span><span class="kw">const </span>WIRE_ASCII: u8 = <span class="number">0x04</span>;
-<a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a>    <span class="comment">// RISC-V: SUM (sstatus bit 18) must be 1 for S-mode to write U-mode pages.
-<a href=#183 id=183 data-nosnippet>183</a>    // Preserve current state and restore on return so we don't corrupt the
-<a href=#184 id=184 data-nosnippet>184</a>    // sstatus of whichever context we interrupted (timer ISR vs syscall path).
-<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">let </span>sum_was_set = <span class="kw">unsafe </span>{
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="kw">let </span>s: usize;
-<a href=#188 id=188 data-nosnippet>188</a>        <span class="macro">core::arch::asm!</span>(<span class="string">"csrr {}, sstatus"</span>, out(reg) s);
-<a href=#189 id=189 data-nosnippet>189</a>        s &amp; <span class="number">0x4_0000 </span>!= <span class="number">0
-<a href=#190 id=190 data-nosnippet>190</a>    </span>};
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">if </span>!sum_was_set {
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="comment">// SAFETY: SUM allows S-mode writes to U-mode pages; cleared on return.
-<a href=#194 id=194 data-nosnippet>194</a>        </span><span class="kw">unsafe </span>{
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="macro">core::arch::asm!</span>(<span class="string">"csrs sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x4_0000usize</span>);
-<a href=#196 id=196 data-nosnippet>196</a>        }
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="comment">// Use isize::MAX as sender_id — distinguishes kernel UART messages from
-<a href=#200 id=200 data-nosnippet>200</a>    // real timeout (Ok(0)) in the input service. Must be isize::MAX (not
-<a href=#201 id=201 data-nosnippet>201</a>    // usize::MAX) because syscall() returns isize: usize::MAX == -1 as isize
-<a href=#202 id=202 data-nosnippet>202</a>    // which causes sys_recv_timeout to return Err instead of Ok.
-<a href=#203 id=203 data-nosnippet>203</a>    </span><span class="kw">const </span>KERNEL_UART_SENDER: usize = isize::MAX <span class="kw">as </span>usize;
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span><span class="kw-2">mut </span>msg = [<span class="number">0u8</span>; <span class="number">9</span>];
-<a href=#205 id=205 data-nosnippet>205</a>    msg[<span class="number">0</span>] = WIRE_ASCII;
-<a href=#206 id=206 data-nosnippet>206</a>    msg[<span class="number">1</span>..<span class="number">5</span>].copy_from_slice(<span class="kw-2">&amp;</span>(byte <span class="kw">as </span>u32).to_le_bytes());
-<a href=#207 id=207 data-nosnippet>207</a>    msg[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// press
-<a href=#208 id=208 data-nosnippet>208</a>    </span><span class="kw">let </span>press_ok = <span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]).is_ok();
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">if </span>press_ok {
-<a href=#210 id=210 data-nosnippet>210</a>        msg[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0u32</span>.to_le_bytes()); <span class="comment">// release (best-effort)
-<a href=#211 id=211 data-nosnippet>211</a>        </span><span class="kw">let _ </span>= <span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]);
-<a href=#212 id=212 data-nosnippet>212</a>    }
-<a href=#213 id=213 data-nosnippet>213</a>
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#215 id=215 data-nosnippet>215</a>    </span><span class="kw">if </span>!sum_was_set {
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="comment">// SAFETY: restore SUM to its pre-call value.
-<a href=#217 id=217 data-nosnippet>217</a>        </span><span class="kw">unsafe </span>{
-<a href=#218 id=218 data-nosnippet>218</a>            <span class="macro">core::arch::asm!</span>(<span class="string">"csrc sstatus, {0}"</span>, <span class="kw">in</span>(reg) <span class="number">0x4_0000usize</span>);
-<a href=#219 id=219 data-nosnippet>219</a>        }
-<a href=#220 id=220 data-nosnippet>220</a>    }
-<a href=#221 id=221 data-nosnippet>221</a>    press_ok
-<a href=#222 id=222 data-nosnippet>222</a>}
-<a href=#223 id=223 data-nosnippet>223</a>
-<a href=#224 id=224 data-nosnippet>224</a><span class="kw">pub static </span>CONSOLE: Spinlock&lt;viConsole&gt; = Spinlock::new(viConsole {
-<a href=#225 id=225 data-nosnippet>225</a>    buffer: VecDeque::new(),
-<a href=#226 id=226 data-nosnippet>226</a>});
-<a href=#227 id=227 data-nosnippet>227</a>
-<a href=#228 id=228 data-nosnippet>228</a><span class="kw">pub fn </span>init() {
-<a href=#229 id=229 data-nosnippet>229</a>    <span class="comment">// Nothing special to init for SBI Console so far
-<a href=#230 id=230 data-nosnippet>230</a>    // But we might want to clear buffer
-<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>cons = CONSOLE.lock();
-<a href=#232 id=232 data-nosnippet>232</a>    cons.buffer.clear();
-<a href=#233 id=233 data-nosnippet>233</a>    <span class="macro">log::info!</span>(<span class="string">"Console: Input Driver Initialized."</span>);
-<a href=#234 id=234 data-nosnippet>234</a>}
+<a href=#173 id=173 data-nosnippet>173</a>/// Delivery copies into an owned kernel mailbox entry. The resumed input task
+<a href=#174 id=174 data-nosnippet>174</a>/// drains that entry into its own user buffer, so this interrupt-side path never
+<a href=#175 id=175 data-nosnippet>175</a>/// enables supervisor access to user pages.
+<a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">fn </span>relay_ascii_to_input(input_tid: usize, byte: u8) -&gt; bool {
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="comment">// Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
+<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">const </span>WIRE_ASCII: u8 = <span class="number">0x04</span>;
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="comment">// Use isize::MAX as sender_id — distinguishes kernel UART messages from
+<a href=#181 id=181 data-nosnippet>181</a>    // real timeout (Ok(0)) in the input service. Must be isize::MAX (not
+<a href=#182 id=182 data-nosnippet>182</a>    // usize::MAX) because syscall() returns isize: usize::MAX == -1 as isize
+<a href=#183 id=183 data-nosnippet>183</a>    // which causes sys_recv_timeout to return Err instead of Ok.
+<a href=#184 id=184 data-nosnippet>184</a>    </span><span class="kw">const </span>KERNEL_UART_SENDER: usize = isize::MAX <span class="kw">as </span>usize;
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="kw">let </span><span class="kw-2">mut </span>msg = [<span class="number">0u8</span>; <span class="number">9</span>];
+<a href=#186 id=186 data-nosnippet>186</a>    msg[<span class="number">0</span>] = WIRE_ASCII;
+<a href=#187 id=187 data-nosnippet>187</a>    msg[<span class="number">1</span>..<span class="number">5</span>].copy_from_slice(<span class="kw-2">&amp;</span>(byte <span class="kw">as </span>u32).to_le_bytes());
+<a href=#188 id=188 data-nosnippet>188</a>    msg[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// press
+<a href=#189 id=189 data-nosnippet>189</a>    </span><span class="kw">let </span>press_ok = <span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]).is_ok();
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">if </span>press_ok {
+<a href=#191 id=191 data-nosnippet>191</a>        msg[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0u32</span>.to_le_bytes()); <span class="comment">// release (best-effort)
+<a href=#192 id=192 data-nosnippet>192</a>        </span><span class="kw">let _ </span>= <span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]);
+<a href=#193 id=193 data-nosnippet>193</a>    }
+<a href=#194 id=194 data-nosnippet>194</a>
+<a href=#195 id=195 data-nosnippet>195</a>    press_ok
+<a href=#196 id=196 data-nosnippet>196</a>}
+<a href=#197 id=197 data-nosnippet>197</a>
+<a href=#198 id=198 data-nosnippet>198</a><span class="kw">pub static </span>CONSOLE: Spinlock&lt;viConsole&gt; = Spinlock::new(viConsole {
+<a href=#199 id=199 data-nosnippet>199</a>    buffer: VecDeque::new(),
+<a href=#200 id=200 data-nosnippet>200</a>});
+<a href=#201 id=201 data-nosnippet>201</a>
+<a href=#202 id=202 data-nosnippet>202</a><span class="kw">pub fn </span>init() {
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="comment">// Nothing special to init for SBI Console so far
+<a href=#204 id=204 data-nosnippet>204</a>    // But we might want to clear buffer
+<a href=#205 id=205 data-nosnippet>205</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>cons = CONSOLE.lock();
+<a href=#206 id=206 data-nosnippet>206</a>    cons.buffer.clear();
+<a href=#207 id=207 data-nosnippet>207</a>    <span class="macro">log::info!</span>(<span class="string">"Console: Input Driver Initialized."</span>);
+<a href=#208 id=208 data-nosnippet>208</a>}
 </code></pre></div></section></main></body></html>

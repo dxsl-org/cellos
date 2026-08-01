@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["DisarmResult","Reservation"],"fn":["arm","begin_signal","disarm","finish_signal"],"static":["RESERVATION"],"struct":["PendingCompletion"]};

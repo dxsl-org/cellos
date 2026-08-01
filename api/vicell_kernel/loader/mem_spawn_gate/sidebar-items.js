@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["FALLBACK_NAME","MAX_LABEL_NAME","MEM_LABEL_PREFIX"],"fn":["is_label_char","mem_label","spawn_from_mem_gated"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["USER_VADDR_MAX"],"struct":["ElfLoader"]};
+window.SIDEBAR_ITEMS = {"constant":["USER_VADDR_MAX"],"struct":["ElfLoader","LoadedPage"]};
