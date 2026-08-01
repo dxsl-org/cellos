@@ -39,6 +39,13 @@ impl ViMte for AArch64Mte {
         ((pfr1 >> 8) & 0xF) >= 2
     }
 
+    // `stg` is only accepted by the assembler when the MTE feature is enabled.
+    // Enabling it here rather than in the target's rustflags keeps the rest of
+    // the kernel's codegen unchanged, and is sound because reaching this code
+    // requires `is_available()` to have reported MTE2 — see `init()`, which is
+    // the only path that turns tag access on. Targets without MTE (ARMv8.0 such
+    // as raspi3b) assemble the instruction but never execute it.
+    #[target_feature(enable = "mte")]
     unsafe fn tag_region(ptr: *mut u8, len: usize, color: u8) {
         // Build a Tagged Pointer: bits [59:56] carry the 4-bit allocation tag.
         // The address range bits and TBI (Top Byte Ignore) are already stripped.
@@ -67,6 +74,9 @@ impl ViMte for AArch64Mte {
         }
     }
 
+    // `ldg` needs the MTE feature for the same reason `tag_region` does; the
+    // same runtime availability check guards every caller.
+    #[target_feature(enable = "mte")]
     unsafe fn get_tag(ptr: *const u8) -> u8 {
         // LDG loads the allocation tag for the granule at `ptr` into bits [59:56]
         // of the output register; all other bits are copied from the input pointer.

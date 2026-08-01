@@ -103,6 +103,14 @@ path = "tests/tier3b-virtio-gpu.rs"
 name = "hypha-p3-boot"
 path = "tests/hypha-p3-boot.rs"
 
+[[test]]
+name = "wx-text-write"
+path = "tests/wx-text-write.rs"
+
+[[test]]
+name = "policy-noentry"
+path = "tests/policy-noentry.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -6,6 +6,7 @@
 //! - Bridges `vi.*` host imports to ViCell's IPC syscall layer
 
 #![no_std]
+#![forbid(unsafe_code)]
 extern crate alloc;
 
 pub mod imports;

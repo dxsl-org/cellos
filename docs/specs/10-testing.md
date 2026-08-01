@@ -1,6 +1,6 @@
 # Cellos Architecture: Testing & Verification
 **Version**: 0.3 (SAS-Specific Quality Assurance)
-**Status**: Definitive
+**Status**: Definitive — updated 2026-08-01 (D12 PKU test-scope correction)
 
 ---
 
@@ -12,13 +12,16 @@ Trong mô hình Single Address Space, một lỗi nhỏ có thể phá hủy to�
     * Chạy trực tiếp bên trong Ring 0 (QEMU hoặc Hardware).
     * Kiểm tra các Trait thực thi của `hal/core` và các logic lõi của Nano Kernel.
 2. **Cell Integration Tests**:
-    * Mô phỏng việc nạp/gỡ (Load/Unload) các Cell liên tục để kiểm tra rò rỉ bộ nhớ trong `Metadata Registry`.
-3. **SASan (Single Address Space Sanitizer)**:
-    * Công cụ dùng lúc debug để phát hiện một Cell cố tình truy cập vào vùng nhớ của Cell khác mà không có quyền sở hữu (Ownership).
+    * Nạp/gỡ Cell liên tục và kiểm tra các authority store thực sự: task-owned frames,
+      grants, pin/quarantine state, quota, và resource registry.
+3. **SAS boundary gates**:
+    * Unsafe allowlist/signing checks, W^X and VA-collision negative tests,
+      grant/pin/quarantine lifecycle tests, and architecture-specific protection tests.
+      Không có công cụ "SASan" độc lập; mọi negative test phải gắn với cơ chế enforcement thật.
 
 ## 3. Fault Injection Cell (Kẻ phá hoại)
 Một Cell đặc biệt được thiết kế để:
-* Gây ra **Panic** ngẫu nhiên trong các callback để test cơ chế `catch_unwind`.
+* Gây fault/panic trong Cell để kiểm tra terminate → reap → notify → supervisor policy.
 * Chiếm dụng 99% RAM để test cơ chế **Memory Quota**.
 * Gây ra **Deadlock** để test bộ phận giám sát (Watchdog).
 
@@ -139,11 +142,11 @@ instrumented kernel build).
 
 ---
 
-## 6. Layer-2 Hardware Security Tests
+## 6. Hardware Security Tests
 
-These tests prove each hardware enforcement feature **actually faults on
-violation**, not merely logs "enabled". A feature that logs "enabled" but
-allows an illegal access is NOT done.
+This matrix distinguishes enforcement tests from enablement or register-plumbing tests.
+A feature is not an isolation boundary until a negative test proves the forbidden access
+faults; an "enabled" log or register round-trip is insufficient.
 
 | Feature | Arch | Mechanism | Expected result | QEMU flag |
 |---------|------|-----------|-----------------|-----------|
@@ -151,7 +154,12 @@ allows an illegal access is NOT done.
 | PAC-RET | aarch64 | Boot log `CFI: PAC-RET enabled` | No fault on normal return | `-cpu max` |
 | MTE | aarch64 | Kernel self-test (tag/re-tag round-trip via STG/LDG) | `MTE-SELFTEST: PASS` | `-cpu max,+mte` |
 | CET-IBT | x86_64 | `cfi-test` cell: indirect call to non-ENDBR64 address | `#CP` fault (vector 21) | `-cpu max` |
-| PKU | x86_64 | Kernel self-test (PKRU value + RDPKRU verification) | `PKU-SELFTEST: PASS` | `-cpu max` |
+| PKU plumbing | x86_64 | Kernel self-test (PKRU constants + kernel RDPKRU verification) | `PKU-SELFTEST: PASS`; does **not** prove page isolation | `-cpu max` |
+
+Current PKU pages all retain PTE key 0 because the loader does not stamp bits `[62:59]`.
+The self-test therefore validates PKRU computation and register access only; it does not
+map differently keyed pages or provoke a protection-key `#PF`. End-to-end PKU enforcement
+remains pending alongside PTE-key and shared/grant-page semantics (Spec 19 Layer C).
 
 ### Test locations
 
@@ -203,5 +211,6 @@ the hardware or QEMU CPU model:
 - `PKU-SELFTEST: SKIP` — CPU lacks PKU (CPUID leaf 7 ECX[3] = 0)
 - `cfi-test: SKIP: BTI/CET-IBT not enforced` — feature not enabled at EL1/CR4
 
-This lets CI run on baseline QEMU (without `-cpu max`) without producing
-false failures. Hardware-enforcement proof requires explicit `-cpu max` runs.
+This lets CI run on baseline QEMU (without `-cpu max`) without producing false failures.
+Explicit `-cpu max` is necessary to exercise supported instructions, but PKU enforcement
+still requires the missing denied-page-access test described above.

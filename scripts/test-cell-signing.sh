@@ -47,7 +47,12 @@ echo "  OBJCOPY: $OBJCOPY"
 echo
 
 # ── Step 1: Sign ──────────────────────────────────────────────────────────────
-OBJCOPY="$OBJCOPY" python3 "$SIGN" --in "$ELF" --out "$TMP_SIGNED"
+# --unchecked-dev-signature: this test exercises the ELF sign/verify round trip,
+# not the admission gate, and writes to a scratch copy that never reaches an
+# image. Image lanes must sign via `scripts/cellos-sign --sign`, which checks
+# F1/F5 first; the flag is refused for any non-dev key.
+OBJCOPY="$OBJCOPY" python3 "$SIGN" --unchecked-dev-signature \
+    --in "$ELF" --out "$TMP_SIGNED"
 echo "PASS: sign"
 
 # ── Step 2: Verify signed output — must succeed (exit 0) ─────────────────────

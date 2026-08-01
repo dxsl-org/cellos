@@ -1,6 +1,6 @@
 # Spec 16 — rustc as Cellos Trusted Computing Base
 
-> **Status**: Ratified 2026-06-29 — does not change without explicit architectural review.
+> **Status**: Ratified 2026-06-29; amended 2026-08-01 by the approved D12 architectural review.
 >
 > This document specifies the role of `rustc` as Cellos's load-bearing TCB, the guarantees
 > it provides, its limits, risk mitigations, and the operational policies that follow.
@@ -110,8 +110,14 @@ interrupt, which arrives in privileged mode.
 
 Memory safety is distinct from speculative-execution leaks. A Cell cannot *directly*
 read another Cell's memory (type safety), but it may be able to *infer* values via
-timing side channels. Mitigations are hardware-level (ARM MTE pointer tagging, x86 MPK
-domain separation — see Spec `layer2_hw_security`).
+timing or speculative side channels through shared microarchitectural state. ARM MTE is
+probabilistic spatial-memory hardening and x86 MPK is architectural page-access control;
+neither is a Spectre/Meltdown mitigation.
+
+These side channels remain a separately scoped threat-model and mitigation problem. No
+cache partitioning, predictor isolation, fencing, or compiler mitigation is considered
+implemented without independent design and verification. See Spec 19 for the hardware
+isolation layers; those layers must not be read as a side-channel guarantee.
 
 ### 3.4 Supply Chain / Compiler Compromise
 
@@ -133,7 +139,7 @@ layers outside `rustc`'s purview.
 | Component | Role | Approx LOC | Notes |
 |---|---|---|---|
 | `rustc` (nightly Rust compiler + LLVM backend) | Enforce all LBI invariants listed in §2 | ~3–5M (compiler) + ~1M (LLVM) | Open-source; Ferrocene-audited subset for ARM64/x86 |
-| Cellos kernel | SAS allocator, preemptive scheduler, IPC, ELF loader, CapSet, manifest check | ~11.5K | Only privileged code; strict boundary law per Spec 15 |
+| Cellos kernel | SAS allocator, preemptive scheduler, IPC, ELF loader, CapSet, manifest check | [generated nLOC](../code-metrics.generated.md) | Only privileged code; strict boundary law per Spec 15 |
 | `libs/api` | Stable ABI — syscall numbers, capability types, IPC encoding | ~2K | Law 1: any change requires 2× user confirmation |
 | `libs/types` | Primitive types shared by kernel and Cells (`VAddr`, `PAddr`, `ViError`) | ~800 | Law 1: same change protocol |
 
@@ -153,22 +159,25 @@ layers outside `rustc`'s purview.
 rustc is fully open source. Any Cellos developer can audit compiler behaviour. This is
 strictly better than Singularity's Bartok compiler (closed-source, auditable only by MSFT).
 
-### 5.2 Ferrocene: ISO 26262 ASIL-D Certified Subset
+### 5.2 Ferrocene qualification lane
 
 [Ferrocene](https://ferrocene.dev) is a safety-qualified toolchain derived from rustc. It
-provides formal qualification evidence for ISO 26262 (automotive), IEC 61508 (industrial),
-and IEC 62278 (rail) standards.
+provides toolchain qualification evidence for defined targets, host/build conditions, and
+a qualified subset. That evidence does not certify Cellos, its dependencies, generated
+binary, or end product.
 
-**Qualified targets (as of 2026-06):**
-- `aarch64-unknown-none` ✅
-- `x86_64-unknown-none` ✅ (in progress)
-- `riscv64gc-unknown-none-elf` ⚠️ **Not yet qualified** — ETA 12–24 months from now.
+**Lane split (verified 2026-08-01 against current Ferrocene documentation):**
+- RV64 remains the Cellos reference/development and QEMU CI lane.
+- `aarch64-unknown-none` is the first bare-metal safety-qualification candidate, subject
+  to Ferrocene's documented host/build conditions and Cellos product evidence.
+- Bare-metal RV64 is not a qualified Ferrocene target. RV64GC Linux support is not the
+  same target or evidence as Cellos bare metal.
 
-> ⚠️ **Do not make safety claims for RISC-V builds until Ferrocene qualifies the
-> riscv64 target.** G1 RISC-V is development/demonstration only.
+> Toolchain qualification is necessary but not sufficient for a product safety claim.
+> Do not extrapolate Ferrocene evidence to all Rust crates, `alloc`, or the Cellos image.
 
-**When to adopt Ferrocene**: Before G2 production release on ARM64 hardware (RK3588).
-Ferrocene is a drop-in replacement for `rustc`; no source changes required.
+**Adoption point**: before the first ARM64 safety-qualified product lane. Keep RV64 as
+the primary reference build independently; do not wait for a speculative qualification ETA.
 
 ### 5.3 miri: MIR Interpreter for Unsoundness Detection
 
@@ -209,7 +218,7 @@ the safety argument in §2.
 
 | Policy | Rule | Rationale |
 |---|---|---|
-| **F1** | Every Cell crate MUST carry `#![forbid(unsafe_code)]` | Compiler cannot verify isolation if unsafe is permitted anywhere |
+| **F1** | Every Cell crate MUST carry `#![forbid(unsafe_code)]`, **absolute outside a reviewed allowlist** (`scripts/unsafe-allowlist.toml`). Enforced at the signing gate by `scripts/cellos-sign --check`, which refuses to sign and fails CI on any `unsafe` outside the list. Each entry carries `class`/`reason`/`approver`/`date`, and is reported once past `review_by` (or `max_age_days`), so a temporary exemption cannot become permanent by silence. | Compiler cannot verify isolation if unsafe is permitted anywhere. Driver Cells need `unsafe` for MMIO/DMA, so the allowlist is unavoidable — but it **is** the hole in the LBI wall, and every entry must be reviewed as the unsafe itself would be. Review the current tally with `cellos-sign --check`; do not restate it in prose (Spec 21 §2, Layer 3). |
 | **F2** | `unsafe` in kernel/HAL MUST be documented with `// SAFETY:` explaining the invariant | Undocumented unsafe = unaudited TCB hole |
 | **F3** | Async IPC/Grant paths MUST use owned buffers (`Box<[u8]>`) not borrows | Rust lifetime rules do not cover borrows across `.await` yield points in SAS |
 | **F4** | `static mut` in kernel is only permitted inside `Spinlock<Option<T>>` | Mutable statics are "ambient authority" (Duffy 2013); raw `static mut` = type safety bypass in kernel code |
@@ -227,7 +236,7 @@ the safety argument in §2.
 | **Singularity** | Spec# / Sing# type system (LBI) | Bartok (closed source) | ~<5% LBI overhead confirmed; exchange heap IPC ~1,200 cycles; cancelled 2012 |
 | **Midori** | C# type system (LBI) | Bartok/Midori (closed) | GC pauses caused unsolvable RT problems; cancelled 2015 |
 | **Theseus OS** | Rust type system (LBI) | `rustc` | Academic; no preemption; not production-ready; Cellos is independent parallel work |
-| **seL4** | Hardware MMU (formal proof) | None (no LBI) | IPC ~300–400 cycles; formal proof covers kernel only; drivers in ring-3; Cellos has cheaper IPC |
+| **seL4** | Hardware MMU (formal proof) | None (no LBI) | IPC ~300–400 cycles; formal proof covers kernel only; drivers in ring-3; Cellos has no measured direct-path comparison yet |
 
 **Key differentiator**: Cellos is the only production-targeting LBI OS using `rustc`,
 giving it both the <5% overhead of LBI *and* a qualification path (Ferrocene) that
@@ -241,7 +250,8 @@ Singularity/Midori never had.
 |---|---|
 | Kernel boundary — what goes in the kernel vs. Cells | `docs/specs/15-kernel-boundary.md` |
 | LBI cost numbers (Singularity benchmarks) | `docs/specs/00-context.md §5` · `docs/research/research-singularity-midori.md` |
-| Hardware security layers (MTE, MPK, CET) — complement to LBI | `docs/specs/` *(layer2-hw-security — to be extracted)* |
+| Hardware security layers (W^X, MPK, domain tables) — complement to LBI | `docs/specs/19-hardware-isolation-layers.md` |
+| Cell trust tiers — what the signature attests, tier admission | `docs/specs/18-cell-trust-tiers.md` |
 | Async owned-buffer invariant (Law 2) | `docs/specs/03-runtime.md` |
 | Capability model (CapSet, manifest, grant) | `docs/specs/01-core.md` |
 | Security model overview | `docs/security-model.md` |

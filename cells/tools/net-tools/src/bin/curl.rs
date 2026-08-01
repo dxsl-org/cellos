@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
@@ -12,8 +13,9 @@ const RESP_BUF: usize = 4096;
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     // ── Parse argv ───────────────────────────────────────────────────────────
     let argv = ostd::args();
     if argv.is_empty() {

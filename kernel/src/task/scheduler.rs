@@ -12,6 +12,13 @@ use types::*;
 /// fairness one. Chosen well above any current cell's use (no cell spawns threads
 /// today; `ostd` exposes `sys_spawn` but nothing calls it) and far below the point
 /// where 65-frame runs stop being findable.
+///
+/// It is also the tighter of the two bounds a thread now meets: the default 16 MiB
+/// memory quota would admit about 63 stacks of `STACK_PAGES + 1` frames on its own,
+/// so a cell hits this count first and the quota only binds a cell that is already
+/// holding heap. Keeping the count as the first refusal is deliberate — it fails on
+/// a number the operator can reason about rather than on whatever heap the cell
+/// happened to be holding at the time.
 pub const MAX_THREADS_PER_CELL: usize = 32;
 
 /// Read the currently-executing cell ID (0 = kernel).
@@ -289,11 +296,28 @@ impl Scheduler {
 
     /// Spawn an additional thread inside an existing cell.
     ///
-    /// Bounded per cell: a thread costs a contiguous run of `STACK_PAGES + 1`
-    /// frames, and `Syscall::Spawn` is gated only by the syscall allowlist, not by
-    /// `SpawnCap`. Without a bound, an unprivileged cell could loop here until the
-    /// allocator fragmented — which used to `.expect` and take the whole kernel
-    /// down with it, so never-die was breakable from userspace.
+    /// Bounded per cell twice over, because `Syscall::Spawn` is gated only by the
+    /// syscall allowlist, not by `SpawnCap`:
+    ///
+    /// 1. [`MAX_THREADS_PER_CELL`] caps live tasks sharing a `CellId`, which is the
+    ///    fragmentation bound — each thread wants a contiguous run of
+    ///    `STACK_PAGES + 1` frames, and contiguity is what runs out first.
+    /// 2. The stack is charged to the cell's memory quota, which is the *visibility*
+    ///    bound — without it a cell could grow its real footprint by half a megabyte
+    ///    a thread while its reported usage never moved.
+    ///
+    /// Deliberately NOT gated on `SpawnCap`: a thread is the same principal as the
+    /// cell that asked for it (same `CellId`, `CapSet`, allowlist and PKU domain),
+    /// so requiring the capability to create *another cell* as the price of
+    /// intra-cell concurrency would hand every worker-thread user a far stronger
+    /// authority than it needs. Denying thread creation outright is expressible
+    /// today by omitting `Spawn` from the cell's syscall allowlist.
+    ///
+    /// # Errors
+    /// - `OutOfMemory` — the cell is at its thread cap, its memory quota cannot
+    ///   absorb another stack, or no contiguous run is available. All three are
+    ///   recoverable refusals the caller survives; none is a fault.
+    /// - Whatever [`crate::task::stack::Stack::new_kernel`] returns otherwise.
     pub fn spawn_thread(
         &mut self,
         name: &str,
@@ -318,9 +342,35 @@ impl Scheduler {
 
         let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
         task.state = TaskState::Ready;
+        // A thread shares its cell's identity, so it must also share the epoch
+        // that identity is attested with; otherwise a service would see the
+        // thread as a different principal than the cell that spawned it and
+        // refuse it access to the cell's own state. `Task::new` mints a fresh
+        // epoch for a new cell; a thread discards it for its cell's.
+        if let Some(cell_task) = self.tasks.get(&(cell_id.0 as usize)) {
+            task.cell_generation = cell_task.cell_generation;
+        }
         let id = task.id;
 
         let kstack = crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES)?;
+
+        // Charge the frames the thread actually took, read back from the Stack
+        // rather than recomputed from STACK_PAGES: a second, independent use of
+        // the same constant is how the charge and the allocation drift apart.
+        // On refusal `kstack` drops here and its frames go straight back, and
+        // `charge` has already rolled its own optimistic add back, so nothing
+        // needs unwinding by hand.
+        let stack_bytes = kstack.allocated_bytes();
+        if !crate::memory::cell_quota::charge(cell_id.0 as usize, stack_bytes) {
+            log::warn!(
+                "[sched] cell {:?} cannot afford a thread stack ({} bytes, {} in use) — refusing spawn_thread",
+                cell_id,
+                stack_bytes,
+                crate::memory::cell_quota::in_use(cell_id)
+            );
+            return Err(ViError::OutOfMemory);
+        }
+        task.stack_quota_charge = stack_bytes;
 
         let stack_top = kstack.top;
         let stack_base = kstack.base;
@@ -408,6 +458,21 @@ impl Scheduler {
             .map(|t| core::mem::take(&mut t.waiters))
             .unwrap_or_default();
 
+        // Give the cell back the quota its thread stack was charged. Every death
+        // path — clean Exit, ForceExit, hardware fault, CPU watchdog, heartbeat
+        // kill, hot-swap retirement — funnels through here, which is why the refund
+        // lives here and not at reap: a zombie may sit unreaped for a long time, and
+        // billing a cell for a thread that has already died turns the quota into a
+        // slow leak that eventually refuses legitimate work. `take` makes the refund
+        // exactly-once even if this runs twice for the same tid.
+        if let Some(t) = self.tasks.get_mut(&tid) {
+            let charge = core::mem::take(&mut t.stack_quota_charge);
+            if charge != 0 {
+                let cell_raw = t.cell_id.0 as usize;
+                crate::memory::cell_quota::refund(cell_raw, charge);
+            }
+        }
+
         // Free the dying cell's address space NOW (unmap its segment VAs) so a
         // respawn can reuse the fixed VA and the load-time overwrite guard only
         // ever sees LIVE cells' mappings. Frames are freed lazily at reap.
@@ -445,8 +510,9 @@ impl Scheduler {
         super::hart_local::ready::remove_from_all(tid);
 
         // Best-effort IPC cleanup: unblock tasks stuck sending to the dead task,
-        // and clear stale current_caller references.  Does not handle multi-hop
-        // chains — those require a full state-machine audit (future work).
+        // and clear stale current_caller references. A plain reply waiter that has
+        // already left `Sending` is still not woken here (known pre-existing gap,
+        // 2026-07-31 Recv buffer-pinning audit); fixing it needs a state-machine audit.
         let mut to_wake = Vec::new();
         for (id, task) in self.tasks.iter_mut() {
             if let TaskState::Sending { target, .. } = task.state {

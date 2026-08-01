@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 //! Reference robot demo — G1 graduation criterion 8.
 //!
@@ -42,8 +43,9 @@ const LOOP_CYCLES: u32 = 5;
 /// 25.0 °C threshold — relay ON when temperature exceeds this.
 const TEMP_THRESHOLD_CX10: i32 = 250;
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[robot-demo] ViCell reference robot demo (G1 graduation criterion 8)");
 
     let gpio = match Pl061Gpio::open() {

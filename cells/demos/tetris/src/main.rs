@@ -5,6 +5,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -25,8 +26,9 @@ fn ticks_ms() -> u32 {
     (sys_get_time() / 10_000) as u32
 }
 
-#[no_mangle]
-pub extern "C" fn main() {
+ostd::cell_main!(extern "C" cell_main);
+
+fn cell_main() {
     let comp = wait_for_compositor();
     let mut surf = match ViSurface::create(
         comp,

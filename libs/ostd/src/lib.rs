@@ -39,6 +39,8 @@ pub mod args;
 pub use args::args;
 pub use args::check_help;
 pub use args::set_spawn_argv;
+/// `cell_main!` — the `#[no_mangle]` entry point, F1-compatible.
+pub mod entry;
 pub mod fast_ipc;
 /// Typed linear Grant handles for zero-copy shared memory (Singularity exchange-heap pattern).
 pub mod grant;

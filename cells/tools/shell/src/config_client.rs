@@ -1,6 +1,9 @@
+use alloc::boxed::Box;
+use alloc::string::String;
 use api::config::ViConfig;
 use api::ipc::{ConfigRequest, ConfigResponse, IPC_BUF_SIZE};
 use ostd::prelude::*;
+use ostd::sync::Mutex;
 
 /// Client for the Config service.
 ///
@@ -9,23 +12,18 @@ use ostd::prelude::*;
 /// Service Registry on each call, so it transparently reconnects when the
 /// supervisor respawns Config.
 ///
-/// # Safety invariant
-/// `resp_buf` is accessed exclusively through `&self` via `UnsafeCell`.
-/// `ConfigClient` is only used from the shell's single thread.  `Sync` is
-/// manually implemented for that reason; do not share across threads.
+/// `ViConfig` requires `Sync`; the response buffer is therefore a `Mutex`, which
+/// supplies that bound as a checked fact rather than the hand-written
+/// `unsafe impl Sync` this type used to carry.
 pub struct ConfigClient {
-    // Stores the last received response so `get()` can return `&'self str`.
-    // SAFETY: single-threaded cell; no concurrent get()/set() calls possible.
-    resp_buf: core::cell::UnsafeCell<[u8; IPC_BUF_SIZE]>,
+    /// Scratch space for the reply of the `get()` currently in flight.
+    resp_buf: Mutex<[u8; IPC_BUF_SIZE]>,
 }
-
-// SAFETY: ConfigClient is used exclusively from the shell's single thread.
-unsafe impl Sync for ConfigClient {}
 
 impl ConfigClient {
     pub fn new() -> Self {
         Self {
-            resp_buf: core::cell::UnsafeCell::new([0u8; IPC_BUF_SIZE]),
+            resp_buf: Mutex::new([0u8; IPC_BUF_SIZE]),
         }
     }
 
@@ -47,6 +45,17 @@ impl Default for ConfigClient {
 }
 
 impl ViConfig for ConfigClient {
+    /// Fetch a value.
+    ///
+    /// Contract: the returned `&str` is **leaked** — it lives for the rest of the
+    /// process. `ViConfig::get` hands back a borrow tied to `&self`, which cannot
+    /// be produced from a locked buffer without laundering the lifetime through a
+    /// raw pointer (what this used to do, unsoundly: the next `get()` overwrote
+    /// the buffer a live `&str` still pointed at). Leaking is the honest way to
+    /// satisfy the signature; callers must therefore not poll config in a loop.
+    /// The shell currently never calls `get()`, so nothing leaks today — the fix
+    /// is to change the trait to return `String`, which is a change to
+    /// `libs/api` and out of this crate's scope.
     fn get(&self, key: &str) -> ViResult<&str> {
         let sid = Self::endpoint().ok_or(ViError::IO)?;
 
@@ -55,21 +64,14 @@ impl ViConfig for ConfigClient {
         let encoded = api::ipc::encode(&req, &mut req_buf).map_err(|_| ViError::IO)?;
 
         if let ostd::syscall::SyscallResult::Ok(_) = ostd::syscall::sys_send(sid, encoded) {
-            // SAFETY: resp_buf is owned by self; no concurrent access (single-threaded cell).
-            // We fill it here and return a &str sub-slice that borrows from self.resp_buf,
-            // giving it the lifetime of &self — valid because resp_buf lives as long as self.
-            let resp_buf = unsafe { &mut *self.resp_buf.get() };
+            let mut resp_buf = self.resp_buf.lock();
             // Masked recv: a wildcard here can consume a queued input key event
             // as the config reply while the shell holds input focus.
-            match ostd::syscall::sys_recv(sid, resp_buf) {
+            match ostd::syscall::sys_recv(sid, &mut resp_buf[..]) {
                 ostd::syscall::SyscallResult::Ok(sender) if sender == sid => {
-                    match api::ipc::decode::<ConfigResponse>(resp_buf) {
+                    match api::ipc::decode::<ConfigResponse>(&resp_buf[..]) {
                         Ok(ConfigResponse::Value(val)) => {
-                            // val borrows from resp_buf which lives as long as self.
-                            // SAFETY: We extend the lifetime from the buf borrow to 'self.
-                            // The buf is not reused until the next get() call (single-threaded).
-                            let extended: &str = unsafe { &*(val as *const str) };
-                            Ok(extended)
+                            Ok(Box::leak(String::from(val).into_boxed_str()))
                         }
                         Ok(ConfigResponse::NotFound) => Err(ViError::NotFound),
                         _ => Err(ViError::IO),

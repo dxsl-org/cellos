@@ -3,7 +3,19 @@
 **Project**: Cellos (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-07-25 (🆕 **Stage G5 overlay added** — Virtualization Platform: one VMM core + two profiles (Lite=speed/CoW-golden/snapshot · Wide=compat=today's Tier 3b); rust-vmm→Firecracker/Cloud-Hypervisor precedent (one core, feature-flagged, NOT two codebases); SAS/LBI leverages the kernel owning frame-allocator+Stage2Table directly — CoW-golden clone + reset-to-golden (O(dirty pages)), zero-copy Grant image load, per-cell IOMMU guest DMA confinement, device-backends-as-capability-scoped-cells; NEW risk logged: golden frame set is a shared trust anchor writable in kernel identity map → poisoning mitigation required; cold-boot ~150ms parity plausible on real HW, sub-10ms needs guest snapshot/restore; positioned as dual-purpose (first-party fleet instant-restart + agent-sandbox latency), NOT an untrusted-hosting moat. Research/design only, post-G4. · Earlier same day: **Stage G4 overlay added** — full Rust std for Tier 1 apps via custom rustc target `x86_64-unknown-cellos` + pure-Rust PAL (Hermit model); async ecosystem via `polling`/`mio` backends over IPC readiness (no kernel epoll — Kernel Boundary Law); Route B std-over-mlibc REJECTED (C into Tier 1 TCB); `std::os::unix` deliberately absent → POSIX crates fail at compile → Tier 3 VM (doctrine firewall). Plan: .agents/260722-0917-g4-full-std-tier1/. · Earlier 2026-06-23: §L "Transport security by tier" locked after Noise red-team: native Cell↔Cell uses Noise at EVERY stage (KKpsk0 p2p + XChaCha20 gossip + fail-closed RNG gate); G1→G2 is an IDENTITY upgrade (K1 PSK → K3 per-node + DICE via KMS Cell), NOT a transport swap — native Tier-1 Cells never speak mTLS; mTLS ONLY at the Tier-3/interop boundary, sourced from the Tier 3b Linux VM or external LB, never X.509 PKI in kernel. 10-phase plan (P00 spikes GATE) at .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Robot swarm transport switched to Noise_KKpsk/NNpsk — net-broker + ClusterAuth updated accordingly; TLS server G2/parked plan added at §C. · Earlier: Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-remote-cell-ipc-research/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-08-01 (🆕 **Stage G5 overlay added** — Virtualization Platform: one VMM core + two profiles (Lite=speed/CoW-golden/snapshot · Wide=compat=today's Tier 3b); rust-vmm→Firecracker/Cloud-Hypervisor precedent (one core, feature-flagged, NOT two codebases); SAS/LBI leverages the kernel owning frame-allocator+Stage2Table directly — CoW-golden clone + reset-to-golden (O(dirty pages)), zero-copy Grant image load, per-cell IOMMU guest DMA confinement, device-backends-as-capability-scoped-cells; NEW risk logged: golden frame set is a shared trust anchor writable in kernel identity map → poisoning mitigation required; cold-boot ~150ms parity plausible on real HW, sub-10ms needs guest snapshot/restore; positioned as dual-purpose (first-party fleet instant-restart + agent-sandbox latency), NOT an untrusted-hosting moat. Research/design only, post-G4. · Earlier same day: **Stage G4 overlay added** — full Rust std for Tier 1 apps via custom rustc target `x86_64-unknown-cellos` + pure-Rust PAL (Hermit model); async ecosystem via `polling`/`mio` backends over IPC readiness (no kernel epoll — Kernel Boundary Law); Route B std-over-mlibc REJECTED (C into Tier 1 TCB); `std::os::unix` deliberately absent → POSIX crates fail at compile → Tier 3 VM (doctrine firewall). Plan: .agents/260722-0917-g4-full-std-tier1/. · Earlier 2026-06-23: §L "Transport security by tier" locked after Noise red-team: native Cell↔Cell uses Noise at EVERY stage (KKpsk0 p2p + XChaCha20 gossip + fail-closed RNG gate); G1→G2 is an IDENTITY upgrade (K1 PSK → K3 per-node + DICE via KMS Cell), NOT a transport swap — native Tier-1 Cells never speak mTLS; mTLS ONLY at the Tier-3/interop boundary, sourced from the Tier 3b Linux VM or external LB, never X.509 PKI in kernel. 10-phase plan (P00 spikes GATE) at .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Robot swarm transport switched to Noise_KKpsk/NNpsk — net-broker + ClusterAuth updated accordingly; TLS server G2/parked plan added at §C. · Earlier: Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-remote-cell-ipc-research/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+
+> **D13 correction (2026-08-01):** the earlier "cryptographic origin proof" wording
+> describes the verification hook, not a completed fleet trust chain. Default G1 admits
+> absent signatures, the dev seed is public, no production public-key provisioning path
+> exists, and secure boot remains open. See Spec 18 and the fleet-admission item below.
+
+> **Plan-portfolio WIP limit (D34-D39, 2026-08-01):**
+> [`.agents/plan-portfolio.md`](../.agents/plan-portfolio.md) is the scheduling source of
+> truth. Midori is the sole active feature program until phases 02/04/07/08 close;
+> supervisory migration, package distribution, Trust & Identity remainder, and remote
+> integration are queued. P0 security, broken CI/build repair, and verification-only
+> closures are the only side-work exceptions.
 
 ---
 
@@ -28,6 +40,11 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 > **"Done" means**: throughput · multi-core scaling · untrusted third-party code · desktop GUI · zero-downtime · full tooling · large storage · RT-bounded NPU inference (via Tier 1b).
 >
 > **Hardware**: x86_64 (full bring-up) + multi-core RV64/ARM64 servers + RISC-V AI server (C930/P870).
+>
+> **Queued scale profile (D5):** 1000 simultaneous per-request isolated cells is a G2
+> qualification goal, not current capacity. Promotion requires 64/128/256/512 measurements,
+> shared immutable image frames, demand-paged stacks, profile quotas, and dynamic tables; the
+> current 64-cell large-app default stays in force.
 
 ### 🧠 Stage G3 — NPU-native Compute OS _(placeholder — starts after G2 ships)_
 > **"Done" means**: kernel schedules NPU as first-class compute resource · zero-copy tensor pipeline cross cells · per-cell NPU quota · NPU fault isolation (driver cell restart, app cells survive) · model weight shared across inference cells.
@@ -48,7 +65,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 > **Locked decisions (brainstorm 2026-07-22)**:
 > 1. **Route A** — pure-Rust PAL (`sys/pal/cellos`) in a small rustc fork, apps via `-Zbuild-std`; precedent = Hermit (`x86_64-unknown-hermit`: SAS, no fork, tier-3 upstream). **Route B (std over mlibc) REJECTED** — pulls C into every Tier 1 cell's TCB; std's unix PAL assumes fork/signals (thin-shim creep).
 > 2. **No tokio reimplementation** — write bottom-of-stack backends: `polling` crate first (smol; validates protocol), then `mio` (tokio). Readiness = IPC message from net cell; reactor = recv-mask + RecvTimeout loop. **No kernel epoll** — multiplexing is policy (Kernel Boundary Law). Planner research revised "zero new syscalls" → **2 small kernel-surface additions needed** (futex_wait has no timeout — `Condvar::wait_timeout` requires it; no self-wake primitive for reactor `notify()` — IPC mask is binary 0/N, not OR-able). Both Boundary-Law-legal (scheduler/IPC mechanism); P2.5 settles the notify() design before P3 code.
-> 3. **Fallback ladder** per std module: native syscall → userspace emulation over IPC/Grant → `ErrorKind::Unsupported` stub (wasm32-wasi model). `std::os::unix` deliberately ABSENT — POSIX-needing crates fail at compile → routed to Tier 3 VM (Scope Doctrine firewall enforced by rustc itself).
+> 3. **Fallback ladder** per std module: native syscall → userspace emulation over IPC/Grant → `ErrorKind::Unsupported` stub (WASI-style fallback model). `std::os::unix` deliberately ABSENT — POSIX-needing crates fail at compile → routed to Tier 3 VM (Scope Doctrine firewall enforced by rustc itself).
 > 4. `panic=abort` first (never-die supervisor = recovery story); unwinding late. `Command` → spawn-model on `sys_spawn_from_elf` (no fork). ostd survives as Cellos-native ext layer (Grant/IPC/Silo/ViUI) beside std, like hermit-abi beside Hermit std.
 >
 > **Already in place** (why this is cheaper than it looks): FutexWait/FutexWake syscalls 9/10 (std's lock impls are futex-based) · `spawn_thread` in-cell threads · GetRandom=214 · RTC wall-clock · spawn-args stash · `sys_spawn_from_elf` · VFS IPC + Grant large-buffer path.
@@ -57,7 +74,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 >
 > **Phasing (8 phases)**: P0 kernel thread-runtime prereqs → P1 "compute std" (alloc/thread/futex-sync/time/stdio/env/random; fs/net/process=Unsupported; **+ `ostd-ext` split + std entry shim** — REVERSAL: ostd's singleton lang items (allocator/panic/`_start`, heap.rs:68/76 + startup.rs:120/24) collide with std's, and a std cell must still emit `__ViCell_manifest`/`__ViCell_syscalls` or signing rejects it; **+ x86_64 build/sign/boot pipeline** — gen_disk is riscv-only; milestone = serde/regex/clap **signed + booted**, not just compiled) → P2 "OS std" (fs via VFS+Grant, `fs::rename`=copy+delete; net **owner-scoped SocketTable** (fixes cross-cell socket hijack) + WouldBlock/EOF/error discriminants + DNS resolver-or-numeric-only + path canonicalization) → P2.5 readiness protocol + reactor recv rules + **`AsCellHandle` ABI freeze** (spec before code, highest design risk) → **P2.6 net-cell readiness engine** (the net cell emits NO readiness today — a spec alone can't unblock P3; new phase) → P3 `polling` then `mio` backends (milestone: tokio+axum hello-world — highest-uncertainty milestone) → P4 `std::os::cellos` + process-lite → P5 unwinding + upstream tier-3 + rebase CI gate (~6-week fork rebase cadence). **Re-baselined effort: ~120-175 engineer-days / ~10-17K LOC.**
 >
-> **Plan**: [.agents/260722-0917-g4-full-std-tier1/](../.agents/260722-0917-g4-full-std-tier1/) (8 phase files + `## Red Team Review`: 6 Critical / 7 Major / 3 Minor, all accepted, 1 DEFER = pre-existing global VFS read) · **Conditions to start coding (revised 2026-07-23, user-approved): G2 shipped** (was G3 — G3 is NPU-hardware-gated, unrelated to std/PAL work). All four now-able design deliverables are DONE + RATIFIED 2026-07-23: P0 kernel-prereqs note (futex ABI rebuild 240-243 + TLS = linker symbols + in-slot stacks), P2.5 readiness protocol + `AsCellHandle` freeze (spec 17 §10 ratified), P2.6 net-engine design, P1 PAL mapping table + target JSON.
+> **Plan**: [.agents/260722-0917-g4-full-std-tier1/](../.agents/260722-0917-g4-full-std-tier1/) (8 phase files + `## Red Team Review`: 6 Critical / 7 Major / 3 Minor, all accepted, 1 DEFER = pre-existing global VFS read) · **Conditions to start coding (revised 2026-07-23, user-approved): G2 shipped** (was G3 — G3 is NPU-hardware-gated, unrelated to std/PAL work). The design deliverables are complete, but D8 corrected their status: P0 kernel prerequisites, P2.6 net-engine design, and the P1 PAL mapping remain reviewed inputs; the P2.5 readiness protocol in Spec 17 §10 is **Draft/reserved-but-unbuilt**, with `0x11`/`0x12` held against collision until implementation and fresh Law-1 confirmation.
 
 ### 🖥️ Stage G5 — Virtualization Platform: SAS/LBI-accelerated dual-profile VM host _(placeholder — research/design only, post-G4; direction set 2026-07-22)_
 > **Thesis**: evolve the Tier 3 VMM into **one VMM core with two build/feature profiles** (industry precedent: `rust-vmm` core → Firecracker "lite" + Cloud Hypervisor "wide"; NOT two separate codebases — that violates DRY). Leverage the fact that the Cellos kernel **owns the frame allocator + `Stage2Table` directly** (no host-Linux `mm` layer between VMM and physical frames) to make VM load/reset faster and DMA-safer than a generic hypervisor.
@@ -91,8 +108,9 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 |------|--------------|--------|-------|
 | Core Stability (VirtIO, kbd, ELF, hotswap) | Phase 1 | ✅ | G1 (foundation) |
 | Perf baseline + KASLR | Phase 24 | ✅ | G1 |
-| Priority scheduler + RT TLSF heap + spawn_pinned | Phase 25 | ✅ | G1 |
+| Priority scheduler + RT heap init + spawn_pinned | Phase 25 | ✅ | G1 |
 | Memory quota + ZST caps + panic isolation | Phase 26 | ✅ | **G1** (never-die) |
+| Capacity observability: typed spawn OOM + opt-in MemInfo | A2/A3 | ✅ DONE 2026-08-01 — real allocator metric is 129.49 MiB; `<10 MiB` optimization remains open | G1 |
 | Reliability / supervisor restart | specs/12 | ✅ SUBSTANTIAL (P00-03 DONE 2026-06-06: fault-path force-unlock, reboot-on-panic, guard pages, RT watchdog; P05 done: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability done) | **G1** |
 | Typed IPC + syscall filter (reliability part) | Phase 27-1/2 | ✅ | G1 (next) |
 | ELF capability manifests | Phase 30 | ✅ | G1 |
@@ -106,28 +124,26 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | RT latency benchmark | M4.4 subset | ✅ QEMU verified "ALL BENCHMARKS PASS" (2026-06-07) | G1 |
 | 🆕 Tier B sub-track (end G1): RV32 HAL + Cellos-Nano + CHERIoT | M4.3 + Phase 31 | ✅ QEMU boot verified (2026-06-07) | **G1** (sub-track) |
 | 🆕 Reference robot demo (sensor→compute→actuator + MQTT) | *new* | ✅ COMPLETE (2026-06-16) — full SHT3x I2C + GPIO actuator + MQTT pipeline; `robot-demo-e2e` integration test passes on QEMU ARM64 in 9.83s | **G1** (graduation) |
-| 🆕 Distributed Cells L.0+L.1 — robot swarm (net-broker + merge/split + gossip) | *new* | ✅ COMPLETE (2026-06-23) — all 10 phases shipped; net-broker Cell, Noise KKpsk0 p2p, XChaCha20 gossip, remote service proxy, task-claiming lease, enrollment/merge/split; runs on 2-node QEMU ARM64 cluster. See §L.0 | **G1** |
-| 🆕 **Cell-to-Cell Anywhere** — L.2 Internet layer (flagship feature) | *new* | ✅ G1 COMPLETE (2026-06-24) — P00 Remote-Call API Contract (approved), P01 CellNetId+Ticket+NodeId binding (Law 1 approved), P02 STUN reflexive, P03 DERP relay client; all compile cleanly (0 errors); FATAL-1 Noise prologue fix shipped. G2 plan forthcoming (P04 HyParView+PlumTree, P05 UDP hole-punch, P06 Pkarr/DNS, P07 K2 per-node, P08 K3 DICE). See `.agents/260624-cell-to-cell-anywhere/plan.md` | **✅ G1 (P01-P03) · 📋 G2 (P04-P08)** |
+| 🆕 Distributed Cells L.0+L.1 — robot swarm (net-broker + merge/split + gossip) | *new* | ✅ FOUNDATION CODE COMPLETE (2026-06-23) — net-broker Cell, Noise KKpsk0 p2p, XChaCha20 gossip, remote service proxy, task-claiming lease, enrollment/merge/split; the forwarder/runtime path is still a stub, so do not read this as a shipped two-node runtime. See §L.0 | **G1** |
+| 🆕 **Cell-to-Cell Anywhere** — L.2 Internet layer (flagship feature) | *new* | ✅ G1 FOUNDATION CODE COMPLETE (2026-06-24) — P00 Remote-Call API Contract (approved), P01 CellNetId+Ticket+NodeId binding (Law 1 approved), P02 STUN reflexive, P03 DERP relay client; modules compile cleanly (0 errors), but the remote forwarder is still a stub and two-node runtime verification remains pending. G2 plan forthcoming (P04 HyParView+PlumTree, P05 UDP hole-punch, P06 Pkarr/DNS, P07 K2 per-node, P08 K3 DICE). See `.agents/260624-cell-to-cell-anywhere/plan.md` | **✅ G1 (P01-P03) · 📋 G2 (P04-P08)** |
 | Distributed Cells L.2 — server cluster control plane | *new* | 📋 PARKED (2026-06-23) — separate problem; reuses L.0 foundation; lean on external k8s/LB. See §L.2 | **G2/G3** |
 | Direct-IPC vtable (raw perf) | Phase 27-3 | ✅ | G2 |
-| WASM Tier-2 MVP (wasmi + 4 vi.* imports + fuel) | Phase 28 | ⚠️ experimental only — DROPPED from official stack 2026-06-06; revisit G2 multi-tenant only | G1 (legacy) |
-| WASM WASI 2.0 Component Model (+ePMP) | Phase 28/31 | ⚠️ dropped — same decision | **G2 (dropped)** |
 | 🆕 Tier 3 kernel prep — H-extension HS-mode boot (RISC-V) | *new* | ✅ COMPLETE (2026-06-07) — cpu_features.rs DTB detection + HypervisorCap ZST + TCB field; see .agents/260607-1420-h-ext-hypervisor-cap/ | **G1 prep** (non-breaking) |
 | 🆕 Hardware Key Isolation (Silo — Tier 1 ext., G2 ARM64/x86) | *new* | ✅ COMPLETE 2026-06-16 — SiloHandle API shipped; reclassified from Tier 3a → Tier 1 capability (not a VM tier) | G2 |
-| 🆕 Tier 3b Linux VM — ARM64 EL2 VMM (all 10 phases) | Phase 31 | ✅ COMPLETE 2026-06-16 — EL2 hypervisor boots Alpine 3.21.3 aarch64, multi-arch ENOSYS stubs, CI smoke job | **G2** |
+| 🆕 Tier 3b Linux VM / x86 VMM | Phase 31 + x86 follow-up | ARM64 EL2 boots Alpine with CI smoke; AMD SVM is an implemented MVP; Intel VMX has root-operation plumbing only; RISC-V H-extension remains pending | **G2** |
 | 🆕 **Tier 3b VirtIO-GPU Backend** (Linux VM Graphics / Browser Support) | M2.4 ext. | 📋 | **G2** |
 | 🆕 **Enterprise App Isolation** — Wine/Proton-in-Linux-VM Cell + bare Windows VM Cell | new | 📋 G3 on-demand (gated on paying customer + virtio-gpu) | **G3** |
 | 🆕 **SMP multi-core scheduler + work-stealing** | Phase 32 | ✅ COMPLETE 2026-06-09 — SBI HSM hart_start/send_ipi, per-hart ViHartLocal via tp CSR, per-hart ready queues + work stealing, RT cells pinned to hart 1, WaitForEvent (217) | **G2** |
 | Compositor + GPU desktop (full) + mouse | M2.4 + M2.2 full | 📋 | G2 |
 | 🆕 **ViUI v1** (Elm model, FramebufferCanvas, GlyphAtlas, P01–P07) | new | ✅ Done 2026-06-08 — foundation only, design superseded | **G2 prep** |
-| 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | ✅ ALL 7 PHASES COMPLETE 2026-06-16 — Production-ready (P01: Overlay Widgets Dialog/DropDown/Toast; P02: Navigation StackNavigator/TabNavigator; P03: Charts LineChart/BarChart; P04: DSL build.rs vi-build crate; P05: Virtual ListView ListDataProvider; P06: FlexBox v2 wrap/gap/SpaceEvenly/Stretch/flex_shrink; P07: DSL Advanced Bindings @= two-way #= computed) | **G2** |
+| 🆕 **ViUI v2** (Reactive Signal Tree + Dual-Layer DSL) | new | 🚧 Implemented library surface — overlays, navigation, charts, `.vi` build integration, virtual lists, FlexBox, and signal bindings are present; signed-App, input/render, compositor-damage, and measured target qualification remain open | **G2** |
 | 🆕 **TLS 1.3 stack** `[shared, G1-priority]` | Phase TLS-01 | ✅ COMPLETE 2026-06-07 — Network service supports TLS 1.3 via sys_get_random(214), three TLS IPC opcodes (0x30/0x31/0x32), HTTPS demo verified | **G1** |
 | 📋 **TLS server-side accept** `[G2, optional]` | .agents/260623-1500-tls-server-accept | PARKED — plan complete, implement G2 when httpd needs to serve external HTTPS (curl/browser). Swarm uses Noise_KKpsk/NNpsk (separate plan). `tls-server` optional Cargo feature. | **G2** |
 | 🆕 **RTC / wall-clock** `[G1]` | new | ✅ COMPLETE 2026-06-07 — Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time | **G1** |
 | 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-06-07 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); 812 LOC; RPi4/VisionFive2 ready | **G1** |
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
 | 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
-| Hot migration / zero-downtime + cell signing | M4.1 + G.2 P2 | ✅ COMPLETE 2026-06-23 — Ed25519 verify-at-spawn gate (signed cells required if flag set, dev seed for G1), 5-step hotswap protocol with TaskState::Frozen, ViStateTransfer trait, IPC queue preservation, HotSwapReady(401)/StateStashClear(412) syscalls, 11/11 hotswap-smoke tests (2 QEMU + 9 unit), hotswap-demo v1/v2 cells signed | **G2** |
+| Hot migration / zero-downtime + cell-signing mechanism | M4.1 + G.2 P2 | ✅ MECHANISMS COMPLETE 2026-06-23 — Ed25519 verify-at-spawn hook (default G1 still admits absent signatures; dev seed is test-only), 5-step hotswap protocol with TaskState::Frozen, ViStateTransfer trait, IPC queue preservation, HotSwapReady(401)/StateStashClear(412) syscalls, 11/11 hotswap-smoke tests (2 QEMU + 9 unit). Fleet signed-only admission remains planned. | **G2** |
 | 🆕 x86_64 full bring-up | ext. M1.3 | ✅ COMPLETE (2026-07-11) — APIC/HPET/MMU + PCIe Driver-Cell stack (platform/nvme/e1000 in VIFS1); FAT32-on-NVMe end-to-end incl. under VT-d per-Cell DMA isolation; sysretq preserve-all ABI fixed; 4 QEMU suites 12/12 (the 2026-06-13 "5/5" claim ran on a stale pre-G2 ISO) | **G2** |
 | VFS scale (FAT32/ext4, large disks) | M2.1 ext. | 📋 | G2 |
 | Full utility suite (grep/sed/awk/top/ps…) | M3.2 full | ✅ COMPLETE 2026-07-28 — grep `-F/-E/-e/-f/-i/-v/-n/-c/-q/-x/-r` with 0/1/2 statuses, one-command sed (alt delimiter, `&`, numeric/regex addresses), mini-AWK (`-F`, NR/NF, `$0..$9`, comparisons, arithmetic, print), `top` batch/interactive on the new `GetProcs2` telemetry ABI; ERE-lite is bounded + linear-time via regex-automata, explicitly not POSIX-complete. Pure stages live in `libs/text-engine` (38 host tests); 33/33 guest scenarios green under QEMU rv64 | **G2** |
@@ -162,6 +178,11 @@ HAL bus traits + driver Cells for sensor/actuator control. Capability-gated via 
 
 #### Architecture Full Bring-Up (split from "Multi-Arch HAL ✅")
 The existing Milestone 1.3 marks ARM64/x86_64 as **ring-3 smoke only**. Real targets need full bring-up (interrupt controller, timer, real MMU, device drivers).
+- **RV64 firmware memory discovery `[G1]`** ✅ COMPLETE (2026-07-31) — direct OpenSBI boots
+  consume all enabled DTB RAM ranges, subtract firmware/kernel/FDT reservations, and fail closed
+  to audited board maps on malformed or unsupported input. A QEMU 2 GiB capacity gate manages
+  more than 1.95 GiB after reservations; focused runtime gates pass. Fresh full-suite rerun is
+  still pending after the serial harness timed out near test 28.
 - **ARM64 full bring-up `[G1]`** ✅ COMPLETE (2026-06-12) — GIC, generic timer, 3-level MMU, VirtIO, PL011, PL061 on QEMU virt; 6/6 integration tests pass
 - **x86_64 full bring-up `[G2]`** ✅ COMPLETE (2026-07-11) — APIC, HPET/TSC, real MMU, UART RX; PCIe Driver-Cell stack (platform ECAM + NVMe + e1000 cells, user-mapped MMIO); FAT32-on-NVMe end-to-end incl. under VT-d per-Cell DMA isolation; sysretq preserve-all ABI + CVE-2012-0217 check; 4 QEMU suites 12/12 (supersedes the 2026-06-13 claim, which ran on a stale pre-G2 ISO with kernel drivers)
 
@@ -193,8 +214,6 @@ Two sub-items (Silo reclassified — see Hardware Key Isolation entry above):
 
 **G2 — Server/PC is "done" when:**
 SMP scales across N cores · windowed desktop + mouse · hot migration with no dropped connections · x86_64 full bring-up · full utility suite + large storage · throughput benchmarks meet targets · **Linux VM boots inside Tier 3 (minimal VMM) and runs a real workload (nginx serving HTTP)** · RISC-V AI inference server demo: HTTP → NPU cell → response with P99 latency bound.
-
-> WASM Tier 2 deferred: dropped from official stack; revisit only if G2 needs multi-tenant platform (untrusted third-party workloads). See [specs/05-application.md §6](specs/05-application.md).
 
 ---
 
@@ -272,7 +291,7 @@ showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
 
 - 🆕 **Name service** `[shared]` — ✅ REGISTRY SHIPPED (2026-06-06). `sys_register_service(id, tid)` (syscall 205) + `sys_lookup_service(id)` → tid (206); fixed service-ID registry (`service::VFS`, `service::NET`, etc.); kernel init auto-registers bootstrap services; lookup-based clients replace hardcoded TIDs. See [project-service-id-registry.md](../MEMORY.md). 📋 Residual gap: string-name / dynamic registration still fixed-ID-only (Hypha os-gaps).
 - ✅ **High-level cell libraries** `[shared, COMPLETE 2026-06-21]` — HTTP/1.1 + no_std JSON shipped. `libs/http-core` (pure, host-testable protocol) + `ostd::http`/`ostd::json` (feature-gated). `HttpClient<T>` generic over `embedded_io::Read+Write` (TcpStream/TlsStream); serde_json optional (zero link cost if unused). 51 host tests, `cells/demos/http-smoke` reference Cell. Known: HTTPS binary bodies unreliable (net-cell frame-length gap); cert verification deferred. Hypha P0 unblocked.
-- 🆕 **Python/scripting story** `[G2]` — Python R&D users: full CPython via Tier 3 Linux VM (`apt install python3 pip numpy torch` → works). Lua/MicroPython native runtimes **dropped** (half-measure). WASM Tier 2 dropped — no `micropython.wasm` path. Robot code stays Rust (Tier 1). Milestones 3.3/3.4 marked complete but runtimes not actively maintained.
+- 🆕 **Python/scripting story** `[G2]` — Python R&D users: full CPython via Tier 3 Linux VM (`apt install python3 pip numpy torch` → works). Lua/MicroPython native runtimes **dropped** (half-measure). Robot code stays Rust (Tier 1). Milestones 3.3/3.4 marked complete but runtimes not actively maintained.
 - 🆕 **Async runtime exposed to apps** `[shared]` — 📋 no app-facing async executor for concurrent I/O.
 - ✅ **`embedded-io` traits for ostd** `[shared, COMPLETE 2026-06-15]` — `embedded_io::Read` impl'd for `ostd::fs::File` + `Stdin`; `embedded_io::Write` impl'd for `Stdout` + `File` (via `VfsRequest::Append` IPC, chunked at 400B). Opens the no_std embedded-crate ecosystem. **Gate for high-level cell libraries: cleared.**
 - ✅ **`HashMap` in ostd prelude** `[shared, COMPLETE 2026-06-15]` — `hashbrown` already in `libs/ostd/Cargo.toml`; `ostd::collections::HashMap`/`HashSet` exported; re-exported in `ostd::prelude`. Was already shipped — roadmap was stale.
@@ -282,9 +301,8 @@ showcase)** → P5 persistence/memory → P6 ViUI chat → P7 G3 NPU backend.
 ### E. Ecosystem / distribution `[G2]`
 - ✅ **Tier 1b C library integration** `[shared, COMPLETE 2026-06-13]` — link vendor C/C++ libraries (NPU SDK, mbedTLS, SQLite, legacy firmware) into Rust cells via `Cellos-libc` (Newlib + POSIX shim). Shim in `libs/api/src/posix.rs`: malloc/free, strings, file I/O, time → ViSyscall, getentropy → `ViSyscall::GetRandom` (op 214), socket/connect/send/recv/close → typed Net IPC (postcard). ARM64 `svc #0` ABI added; send() postcard decode bug fixed; `_time()` op code fixed (op=3 = epoch seconds). Integration tests: `posix_shim_getentropy` + `posix_shim_net` in `tests/integration/tests/boot.rs`. No `fork` by design. Primary use case: hardware NPU SDKs (RKNN/Hailo/K230). Plan: `.agents/260613-0520-tier1b-posix-shims/`. See [specs/05-application.md §3](specs/05-application.md).
 - 🆕 **Tier 1b Zig Support** `[G1/G2]` — ✅ COMPLETE (2026-06-23). Level A (raw syscalls via `libs/zig-syscall`) + Level B (mlibc). Plan: [.agents/260623-0834-tier1b-zig/](.agents/260623-0834-tier1b-zig/); cells: `tests/zig-hello` (L.A) + `tests/zig-mlibc-smoke` (L.B). Validates SAS with Zig natively alongside C/Rust. 📋 Residual demo: Tetris.zig port (not critical for graduation).
-- ✅ **C Runtime: picolibc libm cherry-pick** `[G1, COMPLETE 2026-06-17]` — 9-module split of posix.rs (alloc/strings/sysio/entropy/net/math/stdio_fmt/stdio/setjmp), 96+ C99 math symbols via libm crate, full stdio family (FILE/fopen/fclose/fread/fwrite), naked-asm setjmp/longjmp for RV64/ARM64 (wasm32 stub). Zero picolibc dependency. Enables: DOOM, codec libs (zlib/libpng), MicroPython/Lua math. c-math-smoke cell (12 scenarios) verifies all three stacks end-to-end.
+- ✅ **C Runtime: picolibc libm cherry-pick** `[G1, COMPLETE 2026-06-17]` — 9-module split of posix.rs (alloc/strings/sysio/entropy/net/math/stdio_fmt/stdio/setjmp), 96+ C99 math symbols via libm crate, full stdio family (FILE/fopen/fclose/fread/fwrite), naked-asm setjmp/longjmp for RV64/ARM64. Zero picolibc dependency. Enables: DOOM, codec libs (zlib/libpng), MicroPython/Lua math. c-math-smoke cell (12 scenarios) verifies all three stacks end-to-end.
 - 🆕 **C Runtime: mlibc migration** `[G2]` — ✅ COMPLETE (2026-06-17). [mlibc](https://github.com/managarm/mlibc) (MIT) integrated as `third_party/mlibc/`, sysdeps mapping Cellos primitives (`open/read/write` → VFS IPC, `clock_get` → sys_get_time, `socket` → Net IPC). Shipped in [.agents/260617-1000-mlibc-integration/](.agents/260617-1000-mlibc-integration/). Cell precedent: `mlibc-smoke` on aarch64 via WSL2 clang. **Does NOT unlock fork-based software** — nginx/PostgreSQL → always Tier 3 VM (fork incompatible with SAS). **Does unlock:** broader single-process C apps, vendor C/C++ SDKs (RKNN/Hailo/codec libs). posix.rs remains Tier A default (simpler cells).
-- **WASM Tier-2** — Phase 28 MVP ✅ (wasmi + 4 imports). **Tier 2 dropped from official stack** (2026-06-06). Phase 28 code retained under `feature = "wasm-experimental"` only — Phase 28-5 and WASI 2.0 migration cancelled. Revisit only if G2 becomes multi-tenant platform (Cloudflare Workers–style) after WASI 1.0 freezes (late 2026/early 2027).
 - 🆕 **Package manager / app distribution** `[G2]` — 📋 no install/update mechanism beyond baking into the disk image. Plan drafted 2026-07-12: [.agents/260712-1000-cell-package-distribution/](.agents/260712-1000-cell-package-distribution/).
 
 ### F. G2 Server Strategy — ARM64 Graduation Demo + RISC-V Latency Demo `[G2]`
@@ -350,34 +368,35 @@ See also: [.agents/reports/brainstorm-260606-2016-g2-riscv-server-strategy.md](.
 > [research-cell-security-permissions.md](research/research-cell-security-permissions.md) — *permission* model + hardware attestation (Cell can only do what it's granted + can prove its identity).
 > The two are orthogonal axes.
 
-**Three-layer model:**
+**Hardware-isolation delivery model (owned by Spec 19):**
 ```
-Layer 1 — LBI (Rust compiler)       → Cell↔Cell isolation            [DONE]
-Layer 2 — Hardware supplement        → spatial + CFI + DMA + Spectre  [G2 backlog]
-Layer 3 — Silo / VM (Stage-2 hw)    → Key/VM isolation from kernel    [DONE, G2]
+Layer A — W^X after relocation       → code/constant integrity         [DONE]
+Layer B — Per-domain page tables     → untrusted native-cell wall      [PLANNED]
+Layer C — Per-arch hardening         → opportunistic MTE/MPK bonuses   [HW-GATED]
 ```
 
-> **Memory-safety needs 3 axes, not 1.** The original list (MTE/MPK/PMP) is all *spatial*. Forward-edge **CFI**
-> and **DMA isolation** are equally load-bearing — and CFI is a *prerequisite* for MPK (see CFI item below).
+> LBI, CFI, DMA isolation, and Tier-3 Silo/VM protection remain separate security-stack
+> mechanisms; MTE/MPK/PMP are not a substitute for Layer B and do not mitigate Spectre.
 
 **🟢 IOMMU DMA isolation (previously 🔴 CRITICAL gap — NOW FIXED):**
 - ✅ **Per-Cell DMA isolation (2026-06-22)** `[G1-hw / G2]` — IOMMU upgraded from bare passthrough (`DDTP MODE=1`, IOVA==PA, zero DMA isolation) to per-Cell translate mode. **RISC-V**: 3-level DDT (MODE=3LVL), per-Cell Sv39 domains, unique PSCIDs, PSCID free-list, IOTINVAL.VMA/IOFENCE.C/IODIR.INVAL_DDT. **x86**: per-Cell VtdSlpt + DID, ECAP.IRO-computed IOTLB offsets, PSI/DSI IOTLB flush, context-cache DSI invalidation. **Cell exit**: `cleanup_cell()` in Exit/ForceExit/watchdog paths, IOFENCE/IVT flush before frame reclaim. **Capability**: new `sys_grant_dma(233)` syscall (BDF ownership, DMA quota = 1× memory quota, page alignment). Kernel enforces DMA quota via `can_map_dma()` + `record_dma_mapped/unmapped()`. Zero DMA attack surface — peripherals pinned to kernel domain; user Driver Cells request authorization via syscall. See docs/research/research-hardware-isolation.md for closure of the Thunderclap gap. NIC/NVMe still kernel-local; userspace Driver Cells (future) use syscall. Both arches boots clean; syscall ABI tests pass. **Hardware isolation research gap CLOSED.**
 
-**✅ Layer-2 Hardware Security Supplements — ALL 5 PHASES COMPLETE (2026-06-23)**
+**Hardware-supplement implementation plan — 5 phases delivered (2026-06-23; enforcement varies)**
 - **P01 ARM64 BTI+PAC-RET** ✅ — SCTLR_EL1.BT0/BT1/APIAKEY_EL1 init, compiler flags `+bti,+paca,+pacg`, runtime detection via ID_AA64PFR1_EL1/ID_AA64ISAR1_EL1
-- **P02 ARM64 MTE** ✅ — ViMte trait, AArch64Mte impl (SCTLR_EL1.ATA/ATA0/TCF/TCF0), STGP tag writes, sync/async fault modes, RK3588 support
+- **P02 ARM64 MTE** ✅ implementation — ViMte trait, AArch64Mte impl (SCTLR_EL1.ATA/ATA0/TCF/TCF0), STGP tag writes, sync/async fault modes; runs only where FEAT_MTE exists (QEMU or future Armv8.5+ hardware), not RK3588
 - **P03 x86_64 CET-IBT** ✅ — CR4.CET + MSR_IA32_S_CET ENDBR_EN, ENDBR64 landing pads on all ring-3 stubs, #CP (IDT vec 21) handler
-- **P04 x86_64 PKU** ✅ — CR4.PKE, 3-key model (0=trusted/1=service/2=FFI), WRPKRU guards on iretq+sysretq, CET-IBT prerequisite enforced, PTE key tagging deferred to G2
-- **P05 Testing** ✅ — cfi-test cell, MTE/PKU/CET kernel self-tests, docs/specs/10-testing.md Layer-2 matrix, CI/CD feature-gates
+- **P04 x86_64 PKU plumbing** ⚠️ — CR4.PKE, task PKRU values, WRPKRU guards on iretq+sysretq, and CET-IBT prerequisite are wired; PTE key tagging is absent, all pages remain key 0, and isolation is not enforced
+- **P05 Testing** ⚠️ — CFI/MTE tests and feature gates exist; the PKU self-test checks constants + kernel RDPKRU only and does not attempt a denied keyed-page access
 
 **Backlog items:**
 
 - 📋 **rustc TCB documentation** `[immediate]` — Document that rustc IS the Trusted Computing Base. Add to `docs/specs/00-context.md`. A compromised compiler bypasses all LBI guarantees — this must be explicit in threat model.
 - 📋 **PKU PTE key tagging (G2 follow-up)** `[G2]` — Loader fills PTE bits [62:59] with cell-assigned key during load; WRPKRU enforcement becomes active (currently PKU is wired but keys are all-zero, so enforcement is bypassed). Prerequisite: CET-IBT already enforced (P03 complete, addresses JOP gadget threat).
-- 📋 **RISC-V PMP / Smepmp** `[G1-ext / G2]` — Under `satp=Bare` (Cellos SAS), PMP writes need **no** `sfence.vma` → SAS-safe; cost is O(N) CSR writes/switch. Smepmp (ratified) adds M-mode self-protection (MML/MMWP). Per-Cell PMP for C-tier (Tock/Hubris dual-tier model: Rust Cells = no PMP, C-tier = PMP-gated).
+- 📋 **RISC-V PMP / Smepmp firmware study** `[G1-ext / G2]` — PMP CSRs and violation handling are M-mode concerns; Cellos S-mode cannot write or switch them. Any dynamic C-tier design therefore requires a custom, separately approved M-mode firmware owner and must not replace Spec 19 Layer B. Static boot-time guards remain the nearer option.
 - 📋 **RISC-V WorldGuard / Smmtt** `[G2 future, watch]` — Beyond PMP, both isolate domains in one address space **without TLB flush**. **WorldGuard** (SiFive→RISC-V Int'l, QEMU 4/2025): 1 WID CSR write/switch, ≤32 worlds, propagates to bus fabric (covers DMA too). **Smmtt/Smsdid** (draft): per-SDID physical-page access control, SDID switch + MTT-fence (lighter than SATP). Design Cell scheduling + grant API to be SDID/WID-aware now. Available when SiFive P/E-series silicon ships.
 - 📋 **Confidential computing for Tier 3** `[G2/G3]` — TDX/SEV-SNP (x86), **ARM CCA/RME/GPT** (ARMv9.3, Fujitsu Monaka ~FY2027) protect against a *compromised kernel/hypervisor* — a threat LBI does NOT cover. Make the Tier 3 `VmHandle` ABI CC-neutral now so attested multi-tenant slots in without protocol redesign (extends the Silo "safe even if kernel compromised" principle).
-- 📋 **Cell binary signing** `[G2]` — Ed25519/P-256 signature per Cell ELF verified by loader before spawn. `kernel/src/loader.rs` is the gate. Signing key management via Key Management Service (KMS) Cell using Silo API.
+- ✅ **Cell-signing mechanism** `[G1 dev/test]` — The common loader gate verifies a present Ed25519 signature and rejects an invalid one. Default builds still admit absent signatures, and the public dev seed is a reproducible test fixture rather than a provenance root.
+- 📋 **Fleet-secure Tier-1 admission** `[G2]` — Provision an immutable fleet public key; enable `signing-required` and `policy-required` in a named production profile; exclude dev-key and weak-RNG features; bind reviewed source to the signed artifact in controlled CI/KMS; add negative tests for unsigned, stripped, wrong-key, dev-key, tampered, and unchecked-dev-signed ELFs; anchor the kernel and embedded key in secure boot. Signature status does not select Tier-1/Tier-2 memory mapping today.
 - 📋 **Key Management Service (KMS Cell)** `[G2]` — Tier 1 service cell wrapping `SiloHandle`. Exposes `sys_lookup_service(service::KMS)` + typed IPC for Wrap/Unwrap/Derive keys. First client: TLS stack (replace hardcoded keys).
 
 #### G.2 Permission model + attestation `[G1/G2 — needs its own plan]`
@@ -614,7 +633,11 @@ Porting simple games using the **C → Lua → Rust** progression is the officia
 **Hard rules:**
 - **Native Tier-1 Cells NEVER speak mTLS.** Noise is the lingua franca between Cellos Cells, at every stage. G1→G2 is an *identity* upgrade (K1→K3), NOT a transport swap — do NOT "rip out Noise, install mTLS" at G2.
 - **mTLS lives ONLY at the Tier-3/interop boundary**, and Cellos gets it from the **Tier 3b Linux VM** (rustls/OpenSSL run natively there) OR from an **external LB/service-mesh terminating mTLS** — **never build X.509 PKI inside the Cellos kernel.**
-- **Fail-closed entropy gate (all native crypto):** `GetRandom(214)` silently falls back to predictable xorshift32 when VirtIO-RNG is absent (`kernel/src/task/syscall.rs:2493-2504`) — broker MUST panic if real entropy is unavailable (mirror `tls/rng.rs:31-35`); VirtIO-RNG mandatory on G1 hardware.
+- **Entropy profiles (all native crypto):** development/QEMU builds may use the explicit
+  `dev-weak-rng` fallback, which is predictable and never credential-grade. Fleet and
+  production artifacts must exclude that feature and fail closed without trusted
+  entropy. Add a release/CI assertion that production features cannot include
+  `dev-weak-rng`; VirtIO-RNG remains mandatory on G1 hardware.
 - **Multicast gossip is G1-only-ish:** cloud VPCs typically block multicast → at G2 the discovery model itself changes to a registry/control plane (part of L.2), so the XChaCha20-gossip layer does not simply carry forward.
 
 #### L.0 Shared foundation `[build once, G1 delivers]`
@@ -761,8 +784,8 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 - VFS handles binary caching + discovery
 
 **Next Action**: Supervisor-based cell restart — see [specs/12-reliability.md](specs/12-reliability.md).
-> Address-space isolation for untrusted code is provided by Tier 2 (WASM sandbox) and
-> Tier 3 (hypervisor / Stage-2 paging), **not** per-Cell SATP. See [specs/05-application.md](specs/05-application.md).
+> Address-space isolation for untrusted code is provided by Tier 3 (hypervisor / Stage-2 paging),
+> **not** per-Cell SATP. See [specs/05-application.md](specs/05-application.md).
 
 ---
 
@@ -784,7 +807,7 @@ Routing matrix (cross-machine): Private→Public ✓ · Public→Private ✗ · 
 
 **Deliverables**:
 - [x] Frame allocator: sequential, random, fragmentation patterns
-- [x] Scheduler: round-robin fairness, preemption under load
+- [x] Scheduler: fixed-priority tiers, FIFO within tier, RT-hart routing
 - [x] IPC: grant/revoke, cascading messages, timeout behavior
 - [x] Config service: KV operations, state transfer
 - [x] Shell: input dispatch, history, aliases
@@ -864,7 +887,7 @@ All milestones complete when:
 - ✅ HotSwap orchestrator (5-step protocol) working — Phase 20
 - 🚧 Unit + integration tests pass (80%+ coverage) — 75% now, targeting 80%
 - ✅ Architecture validation score: 10/10 — Phase 02
-- ✅ Kernel LOC: < 10,000 (actual: 8,700) — Phase 05
+- ✅ Kernel responsibility boundary established — moving size evidence is generated, not frozen in this historical phase
 - ✅ Multi-architecture HAL (RV64 + AArch64 + x86_64) — Phase 05
 
 ---
@@ -906,21 +929,21 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 
 ### Phase 25 — Priority Scheduler (P1) `[G1]`
 **Target**: 2026-07-21 | **Effort**: ~2 weeks  
-**Status**: ✅ COMPLETE (2026-06-05) — see `.agents/260605-1052-phase25-priority-scheduler/`
+**Status**: ✅ COMPLETE (2026-06-05) — see `.agents/260605-1052-phase25-priority-scheduler/` (historical; D14 records the docs-only ruling)
 
 **Completed (2026-06-05):**
 - [x] Phase 25-1: Timer preemption — `sie.STIE` enabled, `vi_timer_tick()` wired, initial timer armed
 - [x] Phase 25-2: Priority queue — `TaskPriority` enum in `libs/api/`, `priority: u8` on TCB, `BTreeMap<u8, VecDeque>` scheduler
 - [x] Phase 25-3: SSIP self-IPI — `sie.SSIE` enabled, scause==1 handler clears SSIP + yields, `pend_preempt_if_needed` at wakeup
-- [x] Phase 25-4: TLSF RT heap — rlsf 0.2.2 integrated, 256 KiB pool, RT cells use `rt_alloc()` for stacks
+- [x] Phase 25-4: TLSF RT heap — rlsf 0.2.3 integrated, 256 KiB pool initialised, no runtime caller yet; stacks still use the frame allocator
 - [x] Phase 25-5: Tests + spawn_pinned — 3 priority unit tests added, `SpawnPinned` syscall opcode 16, core_id validation
 
 **Implementation Summary:**
 - Timer fires every 10 ms (TICKS_PER_10MS = 100,000 @ 10 MHz mtime clock)
-- `TaskPriority` enum: Background=0, Normal=1 (default), RealTime=2
-- Ready queue: `BTreeMap<u8, VecDeque<usize>>` — pick_next iterates in descending priority order
-- SSIP pending: `pend_preempt_if_needed()` fires immediately when RealTime becomes ready
-- RT heap: Isolated TLSF pool (256 KiB) for O(1) RealTime stack allocation; Normal cells use global heap
+- `TaskPriority` enum: `Background < Normal < RealTime`
+- Ready queue: `BTreeMap<u8, VecDeque<usize>>` — `pick_next` iterates highest tier first and preserves FIFO within each tier
+- SSIP pending: `pend_preempt_if_needed()` fires on RV64 when a higher-priority task becomes ready
+- RT heap: TLSF pool is initialised (256 KiB) but no runtime caller uses it yet; stacks still use the frame allocator
 - `spawn_pinned(0)` succeeds; `spawn_pinned(n>0)` returns `NotSupported` (SMP future-compatible)
 
 **Verification:**
@@ -933,7 +956,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - ✅ No priority field → TCB field added + scheduler restructured
 - ✅ No SSIP handler → scause==1 implemented with IPI pending logic
 
-**Ready for Phase 26**: Memory Quota + ZST Capabilities (depends on priority scheduler working)
+**Follow-up**: Memory Quota + ZST Capabilities was tracked as Phase 26 and is already shipped; this phase file is historical
 
 ### Phase 26 — Memory Quota + ZST Capabilities + Panic Isolation (P1) `[G1]`
 **Target**: 2026-08-04 | **Effort**: ~3 weeks  
@@ -972,7 +995,7 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 **Status**: ✅ COMPLETE (2026-06-07) — net service now uses typed postcard `NetRequest`/`NetResponse` for primary IPC; raw opcodes 0x15 (close) and 0x30–0x32 (TLS ops) fall through to legacy fallback handler for backward compatibility.
 
 **Research findings (2026-06-05):**
-- Hermit vtable = function-pointer table, not true ring-bypass; real speedup is SAS = no privilege switch → direct `jalr` (~3 cycles vs ~100 ecall)
+- Hermit vtable = function-pointer table, not true ring-bypass; Cellos's direct `jalr` path remains an unmeasured Tier-1 rewrite target, not a shipped comparison
 - postcard crate recommended for typed enums into existing `[u8; 512]` buffer
 - Syscall filter: u64 bitset in TCB + `__Cellos_syscalls` ELF section (xmas-elf already supports arbitrary sections); check BEFORE handle_syscall to avoid SCHEDULER double-lock
 - Existing VFS 3-byte header needs version-gate on postcard migration
@@ -996,28 +1019,9 @@ See `.agents/260605-0958-phase24-perf-kaslr/` for detailed phase reports.
 - [x] VFS cell registers handler at init; shell uses fast path for `cat`/`ls`
 - [x] Benchmark: direct vtable call vs ecall round-trip
 
-### Phase 28 — Tier 2 WASM + RISC-V ePMP Cell Boundaries (P2) `[G2]`
+### Phase 28 — RISC-V ePMP Cell Boundaries (P2) `[G2]`
 **Target**: 2026-09-22 | **Effort**: ~5 weeks  
-**Status**: 📋 PLANNED — see `.agents/260605-1406-phase28-wasm-cells-epmp/`
-
-**Research findings (2026-06-05):**
-- WasmEdge: **discard** (C++ + libc, incompatible with no_std bare-metal)
-- **wasmi v1** chosen: pure Rust, no_std + alloc, RISC-V confirmed, fuel metering, 2 deps
-- WASI 2.0 Component Model: **skip** (unstable toolchain, canonical ABI overhead) — use 4 custom `vi.*` imports
-- Loading: WASM cell = Tier 1 Rust host ELF that reads `.wasm` from VFS (`/data/apps/*.wasm`)
-- ePMP: **blocked by M-mode architecture** — PMP CSRs require M-mode, violations trap to M-mode. Full per-Cell ePMP deferred; static boot-time kernel protection as optional Phase 28-4
-
-**Phase 28-1 — wasmi integration:**
-- [ ] Add wasmi v1 (`no_std`, `prefer-btree-collections`) to `cells/drivers/wasm/Cargo.toml`
-- [ ] Implement `WasmRuntime::new()`, `load_module()`, `new_store()` with fuel metering
-
-**Phase 28-2 — `vi.*` host imports:**
-- [ ] `vi.send(target, ptr, len)`, `vi.recv(ptr, max_len, sender_out)`, `vi.log(ptr, len)`, `vi.exit(code)`
-- [ ] Register via `Linker::func_wrap` in `imports.rs`
-
-**Phase 28-3 — WASM host cell (`/bin/wasm`):**
-- [ ] Tier 1 Rust ELF that reads `.wasm` path from argv, loads via VFS, runs via wasmi
-- [ ] Fuel-cooperative loop: `OutOfFuel` trap → `set_fuel()` + `yield_cpu()`
+**Status**: 📋 PLANNED — ePMP **blocked by M-mode architecture** (PMP CSRs require M-mode, violations trap to M-mode); full per-Cell ePMP deferred, static boot-time kernel protection tracked as optional Phase 28-4
 
 **Phase 28-4 — PMP foundation (optional, P2):**
 - [ ] `hal/arch/riscv/src/common/pmp.rs` with NAPOT helpers + `init_static_regions()`
@@ -1086,7 +1090,7 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 **Next iteration (Phase 31b, deferred to G1 tail):**
 - [ ] Sonata dev board (CHERIoT-IBEX) — hardware not yet available
 - [ ] CHERIoT-Platform/rust fork integration (toolchain fork risk, low priority)
-- [ ] Cellos-Nano profile variants (no WASM, minimal drivers)
+- [ ] Cellos-Nano profile variants (minimal drivers)
 
 ### Phase 32 — SMP Multi-Core Scheduler (P3) `[G2]`
 **Target**: 2027-Q1 | **Effort**: ~4 weeks | **Status**: ✅ COMPLETE (2026-06-09)
@@ -1219,14 +1223,15 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 **Architecture decision (2026-06-10, specs/09-vfs.md v0.5):**
 - ❌ Dual-VFS viFS1/viFS2 DROPPED — TFS upstream dead; RedoxFS port too large for G1 (YAGNI)
 - ✅ **Final design**: 1 VFS service + MountTable (longest-prefix) + backend dispatch:
-  BootFS (`/bin` initramfs) · RamFS (`/tmp`) · FAT32 (interop SD → `/mnt/sd`) · littlefs (`/data` power-safe, G1) · Native FS stub (`/srv`, G2 NVMe)
+  BootFS (`/bin` initramfs) · RamFS (`/tmp`) · FAT32 (interop SD → `/mnt/sd`) · littlefs (`/data` power-safe, G1) · RedoxFS (`/srv`, G1 functional through VirtIO-BLK; G2 production qualification pending)
 
 **Completed (all 5 phases, 2026-06-11)**:
 - [x] **Phase 2.5-1**: MountTable v2 backend dispatch — FsBackend trait, hardcoded paths migrated to dispatch, main.rs 875→107 LOC (87% reduction)
 - [x] **Phase 2.5-2**: Remove duplicate `/bin` embedding — VFS binary 405KB→202KB (−50%), BootFsProxy lists via Open+ReadDir
 - [x] **Phase 2.5-3**: MBR partition table + per-cell block grants — Real MBR (P1=FAT32, P2=cell-table, P3=snapshot, P4=littlefs), Law 1 confirmed ×2
 - [x] **Phase 2.5-4**: littlefs backend — littlefs2 0.7.2 C FFI, power-loss harness 20/20 PASS (no corruption on mid-operation QEMU kill), `/data` now power-safe
-- [x] **Phase 2.5-5**: exFAT + Native FS — exFAT graceful fallback, RedoxFS ADR chilled for G2, StubBackend at `/srv` prevents crashes
+- [x] **Phase 2.5-5**: exFAT + Native FS — exFAT graceful fallback; RedoxFS selected for `/srv`
+- [x] **D10 amendment (2026-08-01)**: retain tested RedoxFS-on-VirtIO as G1 proof-of-function; G2 qualification remains gated by automated RedoxFS-on-NVMe persistence, a defined `<100 us` read benchmark, approved purchasable hardware, and an explicit P5 authorization decision ([ADR 0002](decisions/0002-phased-srv-redoxfs-activation.md))
 
 **Test Results**: vfs suite 11/11 on littlefs; full suite 48/51 (baseline preserved); power-loss harness 20/20 PASS
 
@@ -1374,6 +1379,8 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 - Message latency (Send/Recv): < 50 µs
 - Syscall overhead: < 10 µs
 - Memory footprint: < 10 MB (kernel + 3 services)
+- **Measured 2026-08-01:** allocator-committed bytes = 135,782,400 (129.49 MiB), so this
+  objective currently fails. The metric is now real; reducing memory is separate follow-up work.
 
 **Remaining G2 deliverables**:
 - Profiling tools
@@ -1388,7 +1395,7 @@ Note: QEMU TCG VirtIO throughput ~30 MB/s. Sub-100 ms on QEMU requires memory-ba
 ```
 Use-case stages (overlay on technical phases below):
   G1 Robot & Embedded  ─ now → ~2026 Q4 ─ Tier A SBC (RV64/ARM64) primary; Tier B RV32-Nano sub-track at tail
-  G2 Server & PC       ─ ~2027         ─ SMP + WASM + desktop + x86_64 + hot migration
+  G2 Server & PC       ─ ~2027         ─ SMP + desktop + x86_64 + hot migration
 
 Technical phases:
 2026
@@ -1489,6 +1496,7 @@ Phase 4 (Advanced Features)
 ✅ **Phase 01**: Workspace consolidated, 0 cargo warnings  
 ✅ **Phase 02**: CI/CD pipeline (4-job matrix, weekly security scans)  
 ✅ **Phase 05**: VirtIO fixes (keyboard + block), IRQ acknowledgment pattern  
+✅ **RV64 boot memory discovery**: reservation-safe firmware DTB map with 2 GiB capacity gate
 ✅ **Phase 10**: External ELF loading from `/bin/`  
 ✅ **Phase 14**: Keyboard input fully functional  
 ✅ **Phase 15**: Network (DHCP verified, data-path stubs)  
@@ -1578,7 +1586,7 @@ Phase 4 (Advanced Features)
 | MicroPython runtime | ✅ Working | ✅ Milestone 3.4 complete (typed VFS IPC) | ✅ COMPLETE |
 | Test coverage | ✅ 80%+ | ✅ 96%+ (65+ integration tests: Phases A–H, X-1–X-6, 3.3, 3.4) | ✅ MET |
 | Architecture tests | ✅ 10/10 | ✅ 10/10 | ✅ MET |
-| Kernel LOC | ✅ < 10,000 | ✅ 8,700 | ✅ MET |
+| Kernel boundary | Responsibility-limited; generated nLOC trend | See [code-metrics.generated.md](code-metrics.generated.md) | ACTIVE CONTROL |
 
 ---
 

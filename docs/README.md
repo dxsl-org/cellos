@@ -1,6 +1,6 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-06-03
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-01
 
 ---
 
@@ -41,7 +41,8 @@
 | File | Purpose |
 |------|---------|
 | [api-reference.md](api-reference.md) | Syscall ABI, trait definitions, examples |
-| [performance-report.md](performance-report.md) | Benchmarking targets and methodology |
+| [performance-report.md](performance-report.md) | Hardware-qualified IPC latency targets and QEMU regression tracking |
+| [code-metrics.generated.md](code-metrics.generated.md) | Generated kernel-size metrics owner; canonical moving counts |
 
 ---
 
@@ -69,8 +70,8 @@ Internal design docs — read before implementing a subsystem.
 | [specs/01-core.md](specs/01-core.md) | Cellular model, symbol table, security |
 | [specs/02-memory.md](specs/02-memory.md) | SAS layout, quota, metadata registry |
 | [specs/03-runtime.md](specs/03-runtime.md) | IPC, async/await, hot-swap, boot optimization |
-| [specs/04-hardware.md](specs/04-hardware.md) | Multi-arch HAL, WASM drivers, SMP |
-| [specs/05-application.md](specs/05-application.md) | 3-tier isolation: Native / WASM / Hypervisor |
+| [specs/04-hardware.md](specs/04-hardware.md) | Multi-arch HAL, SMP |
+| [specs/05-application.md](specs/05-application.md) | Isolation tiers: Native / Hypervisor |
 | [specs/06-graphics.md](specs/06-graphics.md) | Compositor, framebuffer, input dispatch |
 | [specs/07-networking.md](specs/07-networking.md) | Network stack, smoltcp, zero-copy |
 | [specs/08-power.md](specs/08-power.md) | Power states, hibernation, thermal |

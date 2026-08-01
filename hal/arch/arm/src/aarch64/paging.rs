@@ -13,7 +13,14 @@ const PTE_TABLE: u64 = 1 << 1;
 const PTE_PAGE: u64 = 1 << 1;
 const PTE_AF: u64 = 1 << 10;
 const PTE_SH_IS: u64 = 3 << 8;
+/// AP[1] — grant EL0 access. AP[2:1] = 0b?1.
 const PTE_AP_EL0: u64 = 1 << 6;
+/// AP[2] — read-only at BOTH exception levels. AP[2:1] = 0b1? .
+///
+/// Set when `PageFlags::WRITE` is absent. Until W^X (phase 10) nothing consulted
+/// the WRITE bit on AArch64, so every page came out read/write no matter what the
+/// caller asked for; a read-only mapping request was silently upgraded.
+const PTE_AP_RO: u64 = 1 << 7;
 const PTE_UXN: u64 = 1 << 54;
 const PTE_PXN: u64 = 1 << 53;
 /// MAIR index 1 = Normal WB-WA-RA — for RAM regions.
@@ -25,6 +32,58 @@ const ATTR_DEVICE: u64 = 0;
 
 fn phys_to_pte_addr(phys: PhysAddr) -> u64 {
     ((phys as u64) >> 12) << 12
+}
+
+/// Invalidate the TLB entry for a single virtual address in every translation
+/// regime this page table is live in, all ASIDs, broadcast across the
+/// inner-shareable domain.
+///
+/// Regime coverage: `activate` installs one root table in `TTBR0_EL1`, and when
+/// the kernel booted as an EL2 host it installs that SAME root in `TTBR0_EL2`
+/// as well (`el2::el2_mmu_init`). Two regimes then cache translations for the
+/// same VA independently, and `vaae1is` reaches only the EL1&0 one — a
+/// permission change would be honoured for cells at EL0 while the kernel's own
+/// EL2 accesses kept using the stale rights. `vae2is` covers the EL2 regime and
+/// is issued only when EL2 is active, because the instruction is UNDEFINED at
+/// EL1. The non-VHE EL2 regime has no ASIDs, so `vae2is` is already
+/// all-contexts; there is no `vaae2is` counterpart to look for.
+///
+/// Ordering contract (Arm ARM §D8.13): `dsb ishst` first so the PTE store is
+/// observable by the other PEs' table walkers before the TLBI is broadcast;
+/// `dsb ish` after so the invalidation has completed; `isb` so this PE's
+/// already-fetched instructions re-translate. Both TLBIs sit inside that ONE
+/// bracket — giving each its own barrier pair would be slower and no more
+/// correct. Callers that LOWER a page's permissions must invoke this before
+/// returning; without the leading barrier a remote PE can re-walk and re-cache
+/// the OLD entry after the TLBI.
+///
+/// Both `vaae1is` and `vae2is` take the VA shifted right by 12 (page number),
+/// not the raw VA.
+#[inline]
+pub fn flush_tlb_page(virt: VAddr) {
+    let page = (virt >> 12) as u64;
+    // Read once, outside the asm: `tlbi vae2is` traps as UNDEFINED below EL2,
+    // so the EL2 leg has to be selected at runtime rather than always issued.
+    let el2 = super::el2::is_el2() as u64;
+    // SAFETY: TLB maintenance from EL1/EL2 is privileged but always legal; the
+    // sequence modifies no memory, only translation caches. The `vae2is` is
+    // branched over unless `EL2_ACTIVE` says the kernel booted at EL2, the only
+    // exception level where that encoding is defined. `nomem` is NOT set on the
+    // block: the compiler must not sink PTE stores past the first barrier.
+    unsafe {
+        core::arch::asm!(
+            "dsb ishst",
+            "tlbi vaae1is, {page}",
+            "cbz {el2}, 2f",
+            "tlbi vae2is, {page}",
+            "2:",
+            "dsb ish",
+            "isb",
+            page = in(reg) page,
+            el2 = in(reg) el2,
+            options(nostack),
+        );
+    }
 }
 
 #[repr(C, align(4096))]
@@ -78,6 +137,12 @@ impl PageTableTrait for PageTable {
         // have AP[1]=0, so EL0 cannot fetch from them regardless of UXN.
         if flags.bits() & PageFlags::USER != 0 {
             entry |= PTE_AP_EL0 | PTE_PXN;
+        }
+        // AP[2]: without it the WRITE flag has no effect on this arch and every
+        // page is read/write, which would make the loader's W^X pass a silent
+        // no-op on AArch64 while riscv64/x86_64 enforced it.
+        if flags.bits() & PageFlags::WRITE == 0 {
+            entry |= PTE_AP_RO;
         }
         if flags.bits() & PageFlags::EXECUTE == 0 {
             entry |= PTE_UXN | PTE_PXN;

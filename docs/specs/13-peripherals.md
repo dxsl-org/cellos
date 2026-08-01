@@ -15,7 +15,7 @@ Cellos hiện chỉ có VirtIO (block/input/net/gpu) — **thiếu hoàn toàn**
 
 **Quyết định kiến trúc (đúng triết lý Cellos):** driver ngoại vi là **true Driver Cells**
 (`#![forbid(unsafe_code)]`), KHÔNG nhồi vào kernel. Lý do:
-- **Nano-kernel**: kernel giữ <10K LOC; driver không phình TCB.
+- **Nano-kernel**: driver policy không làm phình TCB; theo dõi bằng [generated nLOC](../code-metrics.generated.md) và boundary law của Spec 15.
 - **LBI**: bug driver bị cô lập trong Cell, không deref được con trỏ ngoài vùng được cấp.
 - **Never-die**: driver Cell sập → supervisor restart, kernel sống (xem [12-reliability.md](12-reliability.md)).
 - **Độc lập nâng cấp**: hot-swap từng driver.

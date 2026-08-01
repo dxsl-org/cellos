@@ -30,13 +30,24 @@ echo "[mksrv-img] P5 at LBA $PART_SRV_BASE_LBA, $PART_SRV_SECTORS sectors"
 mkdir -p "$(dirname "$OUT")"
 
 # ---------- Build redoxfs-ar from source (host target, std features) ----------
-REDOXFS_AR="third_party/redoxfs/target/release/redoxfs-ar"
+# The host triple must be named explicitly. .cargo/config.toml sets a bare-metal
+# default target for the workspace, and scripts/dev-setup.sh writes that file, so
+# an unqualified `cargo build` here compiles this std host tool for riscv64 and
+# dies in the dependency tree with errors that mention neither the target nor this
+# script. CI never saw it because that config is gitignored and absent there.
+HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+REDOXFS_TARGET_DIR="third_party/redoxfs/target"
+REDOXFS_AR="$REDOXFS_TARGET_DIR/$HOST_TRIPLE/release/redoxfs-ar"
+# Older trees built without --target, which lands the binary one level up.
+[[ -x "$REDOXFS_AR" ]] || REDOXFS_AR="$REDOXFS_TARGET_DIR/release/redoxfs-ar"
 if [[ ! -x "$REDOXFS_AR" ]]; then
-    echo "[mksrv-img] Building redoxfs-ar (host, --features std)..."
+    echo "[mksrv-img] Building redoxfs-ar (host $HOST_TRIPLE, --features std)..."
     cargo build \
         --manifest-path third_party/redoxfs/Cargo.toml \
         --features std --release --bin redoxfs-ar \
-        --target-dir third_party/redoxfs/target
+        --target "$HOST_TRIPLE" \
+        --target-dir "$REDOXFS_TARGET_DIR"
+    REDOXFS_AR="$REDOXFS_TARGET_DIR/$HOST_TRIPLE/release/redoxfs-ar"
 fi
 echo "[mksrv-img] redoxfs-ar: $REDOXFS_AR"
 

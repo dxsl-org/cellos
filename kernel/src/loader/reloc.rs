@@ -15,7 +15,6 @@ mod riscv_reloc_type {
     pub const R_RISCV_NONE: u32 = 0;
     pub const R_RISCV_RELATIVE: u32 = 3;
     pub const R_RISCV_64: u32 = 2;
-    pub const R_RISCV_JUMP_SLOT: u32 = 5;
 }
 
 /// AArch64 ELF relocation types.

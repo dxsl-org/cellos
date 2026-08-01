@@ -8,6 +8,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- kernel: enforce post-relocation W^X page permissions
+- signing: gate cells through F1/F5 admission
+- ipc: add bounded per-cell completion queues
+- vfs: add inherited directory capabilities
+- security: attest caller identity across VFS IPC
 - hypha: native AI agent Cell, LLM gateway and chat loop
 - net: TLS server certificate verification via embedded-tls
 - ostd: http-core crate with HTTP/1.1 and JSON client
@@ -29,6 +34,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - performance: release builds for all bootstrap table entries
 
 ### 🐛 Fixes
+- kernel: clean completion waiter lifecycle safely
+- boot: reject snapshots from mismatched RAM bases
+- build: align cross-target CI and image generation
 - hypha: plaintext transport workaround for net cell TLS crash
 - hypha: NetClient.tcp_send now handles Data reply correctly
 - hypha: foreground shell spawn now waits on child via sys_wait

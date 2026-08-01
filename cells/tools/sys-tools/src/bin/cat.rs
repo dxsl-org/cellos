@@ -1,12 +1,14 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
 use ostd::{io, syscall};
 
+ostd::cell_main!(cell_main);
+
 /// cat <path> — print file content from the kernel FS to stdout.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     let argv = ostd::args();
     let path = argv.first().map(|arg| arg.as_str()).unwrap_or("");
 

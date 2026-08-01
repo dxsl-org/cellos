@@ -35,6 +35,8 @@ pub struct FrameAllocator {
     memory_end: PhysAddr,
     /// Total frames managed
     total_frames: usize,
+    /// Frames whose bitmap bit is currently set.
+    used_frames: usize,
     /// Bitmap storage (borrowed from reserved memory)
     bitmap: &'static mut [u64],
     /// Index of the last allocated frame (for next-fit search)
@@ -104,6 +106,7 @@ impl FrameAllocator {
             memory_start: aligned_start,
             memory_end: aligned_end,
             total_frames,
+            used_frames: 0,
             bitmap,
             last_alloc_index: 0,
         };
@@ -141,7 +144,9 @@ impl FrameAllocator {
     /// Deallocate a physical frame
     pub fn deallocate_frame(&mut self, frame: PhysAddr) {
         if let Some(idx) = self.addr_to_frame_index(frame) {
-            self.mark_free(idx);
+            if !self.mark_free(idx) {
+                log::warn!("Attempted to free unused frame: 0x{:X}", frame);
+            }
             // Optimization: Reset last_alloc_index if we freed a lower index?
             // Maybe not needed for next-fit.
         } else {
@@ -175,16 +180,28 @@ impl FrameAllocator {
         None
     }
 
-    fn mark_used(&mut self, idx: usize) {
+    fn mark_used(&mut self, idx: usize) -> bool {
         let u64_idx = idx / 64;
         let bit_offset = idx % 64;
-        self.bitmap[u64_idx] |= 1u64 << bit_offset;
+        let mask = 1u64 << bit_offset;
+        if self.bitmap[u64_idx] & mask != 0 {
+            return false;
+        }
+        self.bitmap[u64_idx] |= mask;
+        self.used_frames += 1;
+        true
     }
 
-    fn mark_free(&mut self, idx: usize) {
+    fn mark_free(&mut self, idx: usize) -> bool {
         let u64_idx = idx / 64;
         let bit_offset = idx % 64;
-        self.bitmap[u64_idx] &= !(1u64 << bit_offset);
+        let mask = 1u64 << bit_offset;
+        if self.bitmap[u64_idx] & mask == 0 {
+            return false;
+        }
+        self.bitmap[u64_idx] &= !mask;
+        self.used_frames -= 1;
+        true
     }
 
     fn frame_index_to_addr(&self, idx: usize) -> PhysAddr {
@@ -203,12 +220,9 @@ impl FrameAllocator {
         self.total_frames * PAGE_SIZE
     }
 
-    /// Get used memory in bytes (Approximate)
+    /// Get allocator-committed memory in bytes.
     pub fn used_memory(&self) -> usize {
-        // Counting bits is expensive, just return total - free is better but we don't track free count.
-        // For now, let's just return 0 or implement counting later.
-        // This is mainly for stats.
-        0
+        self.used_frames * PAGE_SIZE
     }
 
     // ── Snapshot serialization accessors ──────────────────────────────────────
@@ -228,6 +242,20 @@ impl FrameAllocator {
         self.total_frames
     }
 
+    /// Number of frames whose allocation bitmap bit is set.
+    pub fn used_frames(&self) -> usize {
+        self.used_frames
+    }
+
+    /// Number of frames currently available for allocation.
+    pub fn free_frames(&self) -> usize {
+        self.total_frames - self.used_frames
+    }
+
+    /// Physical frame size used by this allocator.
+    pub const fn page_size(&self) -> usize {
+        PAGE_SIZE
+    }
     /// Returns `true` if frame `idx` is currently allocated (in use).
     ///
     /// Used by the snapshot serializer to enumerate only the allocated frames,
@@ -325,6 +353,61 @@ impl FrameAllocator {
 /// Global frame allocator
 pub static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
     crate::sync::Spinlock::new(None);
+
+#[cfg(test)]
+mod tests {
+    use super::{FrameAllocator, PAGE_SIZE};
+
+    fn allocator(total_frames: usize) -> FrameAllocator {
+        let bitmap = alloc::boxed::Box::leak(
+            alloc::vec![0u64; total_frames.div_ceil(64)].into_boxed_slice(),
+        );
+        FrameAllocator {
+            memory_start: PAGE_SIZE,
+            memory_end: PAGE_SIZE * (total_frames + 1),
+            total_frames,
+            used_frames: 0,
+            bitmap,
+            last_alloc_index: 0,
+        }
+    }
+
+    #[test]
+    fn accounting_changes_only_on_bitmap_transitions() {
+        let mut allocator = allocator(32);
+        let frame = allocator.allocate_frame().expect("single frame");
+        assert_eq!(allocator.used_frames(), 1);
+        assert_eq!(allocator.free_frames(), 31);
+
+        allocator.mark_range_used(0, 1);
+        assert_eq!(
+            allocator.used_frames(),
+            1,
+            "repeated mark must be idempotent"
+        );
+
+        allocator.deallocate_frame(frame);
+        allocator.deallocate_frame(frame);
+        assert_eq!(allocator.used_frames(), 0, "double free must not underflow");
+        assert_eq!(allocator.total_frames(), allocator.free_frames());
+    }
+
+    #[test]
+    fn contiguous_and_aligned_allocations_account_exactly() {
+        let mut allocator = allocator(32);
+        allocator.allocate_contiguous(3).expect("contiguous run");
+        assert_eq!(allocator.used_frames(), 3);
+        let aligned = allocator
+            .allocate_contiguous_aligned(2, PAGE_SIZE * 2)
+            .expect("aligned run");
+        assert_eq!(aligned % (PAGE_SIZE * 2), 0);
+        assert_eq!(allocator.used_frames(), 5);
+        assert_eq!(
+            allocator.total_frames(),
+            allocator.used_frames() + allocator.free_frames()
+        );
+    }
+}
 
 /// Allocate N contiguous physical frames for guest VM RAM using a chunked scan.
 ///

@@ -9,7 +9,13 @@ pub mod ept;
 pub mod frame;
 pub mod heap;
 pub mod kaslr;
+/// Permission changes on already-mapped pages (`protect_page` / `protect_range`).
+/// Re-exported through `paging`; kept separate so `paging.rs` stops growing.
+pub mod page_protect;
 pub mod paging;
+/// Regions an in-flight asynchronous operation still reads or writes, and the
+/// quarantine that withholds their frames when the owner dies mid-operation.
+pub mod pin;
 pub mod rt_heap;
 pub mod stage2;
 pub mod tests;

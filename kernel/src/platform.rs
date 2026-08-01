@@ -104,14 +104,8 @@ static PLATFORM: Spinlock<Option<PlatformInfo>> = Spinlock::new(None);
 /// `plic::set_plic_base`, and `init_kernel_paging`. Safe with `dtb_ptr == 0`.
 #[cfg(target_arch = "riscv64")]
 pub fn init(sbi_dtb: usize) {
-    // Prefer the DTB pointer from a Limine DtbResponse (set by get_dtb_ptr
-    // in boot/limine.rs before kmain). Falls back to the a1 register value.
-    let dtb_ptr = match crate::boot::limine::get_dtb_ptr() {
-        Some(p) => p,
-        None => sbi_dtb,
-    };
     #[allow(unused_mut)] // reason: only mutated under the board-pioneer feature below
-    let mut info = from_dtb(dtb_ptr);
+    let mut info = from_dtb(sbi_dtb);
 
     // Pioneer SG2042: UART (snps,dw-apb-uart) lives at 0x7040_0000_0000 — a
     // physical address that sv39 cannot map as a virtual address (bit 39 set).

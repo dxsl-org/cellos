@@ -12,11 +12,11 @@
 
 | Area | Crates | Key Highlights |
 |------|--------|---------------|
-| Kernel | 1 | ~8,700 LOC; HotSwap, scatter/gather IPC, lease caps, VirtIO VA→PA fix |
+| Kernel | 1 | Size in [generated metrics](code-metrics.generated.md); HotSwap, scatter/gather IPC, lease caps, VirtIO VA→PA fix |
 | HAL | 10 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs |
 | Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
 | Apps | 8+ | shell (parser+executor+45+ built-ins+$(cmd)+args), bench, sys-tools, net-tools (6 bins), utils |
-| Drivers | 6 | disk, gpu, input, net (VirtIO NIC), serial, wasm |
+| Drivers | 5 | disk, gpu, input, net (VirtIO NIC), serial |
 | Services | 6 | vfs (RamFS+FAT16+10 opcodes), compositor (30 FPS), net (TCP/UDP/DNS), input, config, power |
 | Runtimes | 2 | Lua 5.4 (verified, network bindings), MicroPython 1.24.1 (verified, vnet module) |
 
@@ -99,13 +99,12 @@ Cellos/
 │   ├── hello/              Minimal ELF smoke test
 │   └── test-isolation/     Capability isolation test cell
 │
-├── cells/drivers/ (6 crates)
+├── cells/drivers/ (5 crates)
 │   ├── disk/               VirtIO block passthrough
 │   ├── gpu/                GPU cell (flush_rect + fill_rect helpers)
 │   ├── input/              VirtIO input passthrough
 │   ├── net/                VirtIO NIC cell wrapper
-│   ├── serial/             UART driver cell
-│   └── wasm/               WebAssembly runtime stub
+│   └── serial/             UART driver cell
 │
 ├── cells/services/ (6 crates)
 │   ├── vfs/                RamFS + FAT16 + 10 IPC opcodes (GET_FILE/LIST_DIR/STAT/WRITE/READ/MKDIR/RMDIR/UNLINK/RMDIR_RECURSIVE/APPEND) + ViStateTransfer

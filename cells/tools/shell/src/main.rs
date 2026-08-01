@@ -66,6 +66,7 @@ mod commands;
 mod executor;
 mod jobs;
 mod parser;
+mod shell_state;
 mod text_engine;
 mod text_tools;
 mod top;

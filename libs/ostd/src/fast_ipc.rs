@@ -1,7 +1,8 @@
 //! Fast-IPC handler table for direct Cell-to-service calls.
 //!
-//! Bypasses the ecall trap for high-frequency VFS operations (~3 cycles vs
-//! ~100 cycles for a full syscall round-trip in a Single Address Space OS).
+//! Retained scaffolding for the accepted Tier-1 direct-dispatch rewrite. Current
+//! separately linked Cells cannot share this table and always use the message
+//! fallback; no latency claim attaches to this inactive path.
 //!
 //! ## Safety invariant
 //! The handler function pointer is written once at VFS startup (before any
@@ -17,15 +18,27 @@
 //! the spinlock would deadlock.  Interrupt-disable makes the fast-path call
 //! behave as an atomic critical section w.r.t. the scheduler.
 
+use api::caller_identity::CallerIdentity;
 use api::fast_ipc::{TrustedHandle, VfsCell};
 use api::ipc::{VfsRequest, IPC_BUF_SIZE};
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
 /// Signature of a registered VFS fast-IPC handler.
 ///
-/// Reads the request and writes the response into `out`.
+/// Reads the request on behalf of `caller` and writes the response into `out`.
 /// Returns the number of bytes written into `out`.
-pub type VfsFastHandler = unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
+///
+/// Must stay identical to `kernel::fast_ipc::VfsFastHandler` if the future
+/// loader bridge makes the kernel table reachable; a mismatch would be a
+/// silently wrong call through a function pointer.
+///
+/// `caller` is `None` when the call could not be attributed to a live cell; the
+/// handler must refuse rather than serve an unattributed read.
+pub type VfsFastHandler = unsafe fn(
+    caller: Option<CallerIdentity>,
+    req: &VfsRequest<'_>,
+    out: &mut [u8; IPC_BUF_SIZE],
+) -> usize;
 
 static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId of the cell that registered the VFS handler; 0 = unregistered.
@@ -125,7 +138,15 @@ impl Drop for SieGuard {
 /// `VFS_HANDLER_PTR` (statically linked from `libs/ostd`).  VFS writes to its
 /// copy; client cells read from theirs (null) → always fallback to ecall.
 /// The fast path activates once cells are compiled as PIE and the kernel loader
-/// patches JUMP_SLOT relocations to `kernel::fast_ipc::call_vfs` (G2 work).
+/// gains a reviewed import-resolution mechanism for the Tier-1 rewrite.
+///
+/// # Caller identity
+/// This copy of the dispatch table lives inside a cell, where there is no
+/// attested answer to "who is calling". The future bridge must use the kernel's
+/// `kernel::fast_ipc::call_vfs`, which derives identity from scheduler state; no
+/// loader bridge reaches it today. If control reaches this local copy, it passes
+/// `None`, so the handler denies the request instead of serving a read on an
+/// identity nobody vouched for.
 ///
 /// # Safety
 /// The caller must own `out` exclusively for the duration of this call.
@@ -149,5 +170,5 @@ pub unsafe fn call_vfs(
     // SAFETY: called from S-mode; SieGuard::disable is safe here.
     let _sie = SieGuard::disable();
 
-    handler(req, out)
+    handler(None, req, out)
 }

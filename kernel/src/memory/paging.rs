@@ -28,6 +28,10 @@ pub type PagingResult<T> = core::result::Result<T, PageTableError>;
 // it is available on all targets including riscv32.
 pub use hal::PageFlags as Flags;
 
+// Permission changes on existing mappings live in a sibling module but belong to
+// this namespace — `paging::protect_page` is where a reader looks for them.
+pub use super::page_protect::{protect_page, protect_range};
+
 use crate::sync::Spinlock;
 
 /// Global Kernel Root Page Table Address (physical).
@@ -671,21 +675,11 @@ pub fn map_page(
     paddr: PhysAddr,
     flags: Flags,
 ) -> PagingResult<()> {
-    use hal::paging::{PTE_NX, PTE_PRESENT, PTE_USER, PTE_WRITABLE};
-    // Convert generic PageFlags to x86_64 PTE bits.
-    // Note: cache-disable (PCD/MMIO) has no generic PageFlags equivalent;
-    // callers needing MMIO mappings must use map_page_x86 with pte_flags_mmio().
-    let bits = flags.bits();
-    let mut pte_flags: u64 = PTE_PRESENT;
-    if bits & hal::PageFlags::WRITE != 0 {
-        pte_flags |= PTE_WRITABLE;
-    }
-    if bits & hal::PageFlags::USER != 0 {
-        pte_flags |= PTE_USER;
-    }
-    if bits & hal::PageFlags::EXECUTE == 0 {
-        pte_flags |= PTE_NX;
-    }
+    // Cache-disable (PCD/MMIO) has no generic PageFlags equivalent; callers
+    // needing MMIO mappings must use map_page_x86 with pte_flags_mmio().
+    // The Flags→PTE translation is shared with `protect_page` so a page cannot
+    // mean one thing when created and another when re-protected.
+    let pte_flags = super::page_protect::pte_bits_from_flags(flags);
     map_page_x86(allocator, vaddr, paddr, pte_flags)
 }
 
@@ -837,11 +831,18 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 /// `extern "Rust" fn vi_handle_page_fault` declaration in `hal/arch/x86/idt.rs`.
 ///
 /// Decision tree:
-///   - User-mode fault (error_code bit 2 = U/S set): look up the current task's
-///     VMA list; if a region covers `va`, install the mapping and return so the
+///   - Kernel-mode fault: panic — a true kernel bug.
+///   - User-mode PROTECTION violation (error_code bit 0 = P set): the page is
+///     mapped and the access simply is not allowed. Terminate the cell. Never
+///     demand-page it: after W^X a cell writing its own `.text` lands here, and
+///     re-installing the mapping would hand back the writable page the loader
+///     deliberately took away.
+///   - User-mode fault on a NOT-PRESENT page: look up the current task's VMA
+///     list; if a region covers `va`, install the mapping and return so the
 ///     faulting instruction is retried.
-///   - Otherwise (kernel fault or no VMA match): panic — this is a true
-///     kernel bug or an unmapped user access.
+///   - User-mode fault with no VMA match: terminate the cell, matching the
+///     riscv64 / aarch64 trap handlers. Only when there is no cell context to
+///     charge the fault to does this panic.
 ///
 /// # Safety
 /// Must only be called from the #PF exception handler while the faulting
@@ -889,6 +890,16 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
         );
     }
 
+    // Bit 0 of the error code = P: the page WAS present, so this is a permission
+    // violation, not a missing mapping. Demand paging must not run — it would
+    // re-install the page with the VMA's flags and undo the loader's W^X pass,
+    // turning "cell tried to write its own .text" into "cell may write its own
+    // .text, once per fault". Terminate instead, as riscv64/aarch64 already do.
+    if error_code & 1 != 0 {
+        fault_kill_cell(va, error_code, rip, cs, "permission violation");
+        return;
+    }
+
     // Try to find the faulting VA in the current task's VMA list.
     // We identify the current task via the scheduler's running-task pointer.
     let result: Option<(PhysAddr, u64)> = {
@@ -916,8 +927,9 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             // into; we just wire it up here. For demand-allocated regions (Stack/Heap)
             // the ELF loader leaves pa_start = 0 and the fault handler allocates.
             //
-            // Phase 01: VMA list is always empty, so this branch is unreachable
-            // in practice — any user fault panics at the None branch above.
+            // The VMA list is empty for ELF-backed cells today (segments are
+            // mapped eagerly by the loader), so in practice only future
+            // demand-allocated regions reach here.
             let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
             let alloc = frame_guard
                 .as_mut()
@@ -933,10 +945,44 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
             let _ = map_page_x86(alloc, va & !0xFFF, effective_pa & !0xFFF, pte_flags);
         }
         None => {
-            panic!(
-                "[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — no VMA covers this address",
-                va, error_code, rip, cs
-            );
+            fault_kill_cell(va, error_code, rip, cs, "no VMA covers this address");
         }
     }
+}
+
+/// Terminate the cell that took an unserviceable user-mode #PF, or panic if the
+/// fault cannot be attributed to one.
+///
+/// Brings x86_64 in line with the riscv64 (`rv64/trap.rs`) and aarch64
+/// (`aarch64/trap.rs`) handlers, which already kill the faulting cell and keep
+/// the kernel running. Panicking here would turn every cell-level memory bug —
+/// including the W^X violation this phase deliberately creates — into a
+/// whole-system halt.
+///
+/// A non-zero cell id is required: a user-mode fault with no cell context means
+/// the scheduler state is inconsistent, and killing "the current cell" would
+/// destroy an innocent task or nothing at all.
+///
+/// Does not return when a cell is killed — `terminate_current_cell_on_fault`
+/// ends in `yield_cpu()`, which switches to another task.
+#[cfg(target_arch = "x86_64")]
+fn fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: &str) {
+    let cell_id = crate::task::hart_local::current_cell_id();
+    if cell_id == 0 {
+        panic!(
+            "[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {} and no cell owns the fault",
+            va, error_code, rip, cs, why
+        );
+    }
+    log::error!(
+        "[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {}",
+        va,
+        error_code,
+        rip,
+        cs,
+        why
+    );
+    // `cause` carries the raw #PF error code, mirroring how riscv64 passes
+    // `scause` and aarch64 passes `ESR_EL2` into the same reporting path.
+    crate::task::terminate_current_cell_on_fault(error_code as usize, rip as usize, va);
 }

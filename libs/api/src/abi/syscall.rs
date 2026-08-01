@@ -8,6 +8,16 @@
 pub enum ViSyscall {
     // === IPC (0-9) ===
     Send = 0,
+    /// Blocking receive.
+    ///
+    /// ABI: a0 = mask, a1 = buf_ptr, a2 = buf_len, a3 = flags → sender tid.
+    ///
+    /// a3 was unused (every pre-existing caller passes 0). Passing
+    /// [`crate::caller_identity::RECV_ATTEST_CALLER`] additionally makes the
+    /// kernel write a [`crate::caller_identity::CallerIdentity`] into the LAST
+    /// `CALLER_IDENTITY_LEN` bytes of `buf`, after the payload — the only
+    /// unforgeable answer to "which cell called me?" available to a service.
+    /// Opting in reserves that tail; see that module for the invariants.
     Recv = 1,
     Call = 2,
     Reply = 3,
@@ -118,6 +128,12 @@ pub enum ViSyscall {
     /// ABI: a0 = buf_ptr, a1 = row_capacity. Returns rows written.
     /// Preserves `GetProcs` v1 layout/opcode by exposing a separate v2 row type.
     GetProcs2 = 239,
+    /// Return one fixed-width global physical-frame allocator snapshot.
+    ///
+    /// ABI: a0 = out_ptr, a1 = out_len. On success writes exactly one
+    /// [`ViMemInfoV1`] and returns its byte size. This aggregate telemetry is
+    /// opt-in because used/free capacity is observable across cells.
+    MemInfo = 243,
     /// Spawn a cell pinned to a specific hardware core.
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
@@ -354,6 +370,63 @@ pub enum ViSyscall {
 
     // === Process Info ===
     GetProcs = 30,
+
+    // === Directory-handle inheritance (appended last; see abi.rs rules) ===
+    /// 240: Name the directory handles the caller's NEXT spawn passes to its child.
+    ///
+    /// ABI: a0 = ptr to [`crate::dir_handles::ViSpawnDirHandles`] (0 clears a
+    /// previously named set), a1..a3 reserved → 0 on success.
+    ///
+    /// Staged on the caller's own task rather than passed as a spawn argument
+    /// because `SpawnFromElf` and `SpawnPinned` already use all four argument
+    /// registers, and a carrier that reached only half the spawn entry points
+    /// would leave the other half silently granting nothing. The set is consumed
+    /// and cleared by the next spawn the caller makes, whether that spawn
+    /// succeeds or fails, so a set can never attach to a later unrelated spawn.
+    ///
+    /// A malformed set (unknown version, over-long count, zero or repeated
+    /// handle) is refused here rather than trimmed — see
+    /// [`crate::dir_handles::DirHandleSetError`].
+    ///
+    /// Privileged: requires SpawnCap, the same authority every spawn entry point
+    /// demands. Always permitted past the syscall allowlist, matching
+    /// `RegisterService`/`CapRevoke`.
+    SpawnSetDirs = 240,
+    /// 241: Read the kernel's record of a cell's inherited directory handles.
+    ///
+    /// ABI: a0 = cell_id, a1 = buf_ptr, a2 = buf_len → bytes written
+    /// ([`crate::dir_attestation::DIR_ATTESTATION_LEN`]).
+    ///
+    /// The kernel states which spawner named the set and what the set was. It
+    /// does NOT state that the spawner held those handles — that is a question
+    /// about the filesystem service's own table, and only the service can answer
+    /// it. A buffer shorter than the record is an error, never a partial write.
+    ///
+    /// Restricted to the registered provider of `service::VFS` and to a cell
+    /// asking about itself. Always permitted past the syscall allowlist; the
+    /// identity check at dispatch is the gate.
+    QueryDirHandles = 241,
+    /// 242: Wait for one asynchronous result on the caller's completion queue.
+    ///
+    /// ABI: a0 = source mask (see [`events`]), a1 = timeout_ticks_lo,
+    /// a2 = timeout_ticks_hi, a3 = pointer to a
+    /// [`crate::completion::COMPLETION_LEN`]-byte buffer → 1 when a completion
+    /// was written there, 0 when the wait ended with nothing.
+    ///
+    /// Calling this **is** the submission: it reserves a slot on the caller's
+    /// own queue, from the caller's own context, so the completion the source
+    /// later appends can never fail to find somewhere to land. A queue with no
+    /// free slot refuses here, where the caller can act on it, rather than in
+    /// the interrupt handler that is trying to report a result.
+    ///
+    /// `timeout_ticks = 0` waits indefinitely. A wait that ends on its deadline
+    /// releases the reservation and reports 0; it does not leave a slot held.
+    ///
+    /// Distinct from [`Self::WaitForEvent`], which reports only *that* an event
+    /// bit fired. This reports *which submission* finished and with what result,
+    /// which is what lets one parked thread serve several outstanding
+    /// operations. Both exist; neither replaces the other.
+    WaitCompletion = 242,
 }
 
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
@@ -550,6 +623,12 @@ impl ViSyscall {
             Self::GetRandom => Some(41),
             // WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
             Self::WaitForEvent => Some(42),
+            // WaitCompletion: same authority as WaitForEvent — park until a
+            // kernel event source reports. It shares bit 42 deliberately: a
+            // fresh bit would deny the call to every cell whose
+            // `__ViCell_syscalls` section was generated before that bit
+            // existed, and the two calls gate the same thing.
+            Self::WaitCompletion => Some(42),
             // AudioPlay: VirtIO sound output (bit 47 — next free after TruncateCap 46).
             Self::AudioPlay => Some(47),
             // HypervisorCap (bit 44): all 6 VMM syscalls share one bit.
@@ -588,17 +667,25 @@ impl ViSyscall {
             Self::ReadLog => Some(54),
             // GetProcs2 (bit 55): richer task telemetry, opt-in like ReadLog.
             Self::GetProcs2 => Some(55),
+            // MemInfo (bit 56): global allocator telemetry is a cross-cell side channel.
+            Self::MemInfo => Some(56),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
             // NotifyOnExit, RegisterService, and CapRevoke are privileged (SpawnCap-gated),
             // so they are always permitted past the allowlist — SpawnCap is the gate at dispatch.
+            // SpawnSetDirs (SpawnCap) and QueryDirHandles (VFS-provider or self)
+            // join them: giving them bits would silently deny every cell whose
+            // `__ViCell_syscalls` section was generated before those bits existed,
+            // and the authority check at dispatch is the real gate either way.
             Self::Yield
             | Self::Exit
             | Self::ForceExit
             | Self::NotifyOnExit
             | Self::RegisterService
             | Self::CapRevoke
+            | Self::SpawnSetDirs
+            | Self::QueryDirHandles
             | Self::Unknown => None,
         }
     }
@@ -678,6 +765,10 @@ impl From<usize> for ViSyscall {
             237 => ViSyscall::ReadLog,
             238 => ViSyscall::SpawnFromElf,
             239 => ViSyscall::GetProcs2,
+            240 => ViSyscall::SpawnSetDirs,
+            241 => ViSyscall::QueryDirHandles,
+            242 => ViSyscall::WaitCompletion,
+            243 => ViSyscall::MemInfo,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,
@@ -701,6 +792,11 @@ impl From<usize> for ViSyscall {
 }
 
 /// Kernel event bit masks for `WaitForEvent` / `signal_event`.
+///
+/// The same bits name a source for `WaitCompletion`, where one bit selects the
+/// source a submission is made against. `WaitForEvent` accepts any combination;
+/// `WaitCompletion` accepts exactly one bit, because a submission is made
+/// against one source.
 pub mod events {
     /// A NIC RX frame is available for the net cell to drain.
     pub const NET_RX: u32 = 1 << 0;
@@ -783,4 +879,18 @@ pub struct ProcessInfoV2 {
     pub cpu_run_ticks: u64,
     pub heap_bytes: u64,
     pub owned_bytes: u64,
+}
+
+/// Version 1 global physical-frame allocator snapshot.
+///
+/// All fields are fixed-width so the layout is identical on RV32, RV64,
+/// AArch64, and x86_64. `used_frames` measures allocator-committed frames,
+/// including frames reserved for the kernel heap.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ViMemInfoV1 {
+    pub total_frames: u64,
+    pub used_frames: u64,
+    pub free_frames: u64,
+    pub page_size: u64,
 }

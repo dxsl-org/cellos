@@ -19,10 +19,10 @@ Trước khi code bất kỳ module nào, Agent **BẮT BUỘC** phải đọc f
 | --- | --- |
 | Lấy code từ các dự án khác | `design/00-fork.md` |
 | Triết lý Cellular & Linker Linker | `design/01-core.md` |
-| SAS Layout, HHDM & Metadata Registry | `design/02-memory.md` |
+| SAS layout, HHDM & focused ownership authorities | `design/02-memory.md` |
 | Async Safety & Owned Buffers Rule | `design/03-runtime.md` |
 | Multi-Arch Trait (RV32/64/128) | `design/04-hardware.md` |
-| Native vs WASM vs Virtualization | `design/05-application.md` |
+| Native vs Virtualization | `design/05-application.md` |
 | Zero-copy Compositing & Input | `design/06-graphics.md` |
 | User-space Stack (smoltcp) | `design/07-networking.md` |
 | Tickless Idle & Pointer Swizzling | `design/08-power.md` |
@@ -75,8 +75,7 @@ Cellos/
 │   │   ├── gpu/              #
 │   │   ├── input/            #
 │   │   ├── net/              #
-│   │   ├── serial/           #
-│   │   └── wasm/             #
+│   │   └── serial/           #
 │   ├── runtimes/             # Language Runtimes (Lua, MicroPython)
 │   │   ├── micropython/      #
 │   │   └── lua/              #
@@ -126,7 +125,7 @@ Cellos/
 | --- | --- | --- |
 | **Public Trait (ABI)** | **Vi** + PascalCase | `ViFileSystem`, `ViFile`, `ViDriver` |
 | **Core Types / Errors** | **Vi** + PascalCase | `ViResult`, `ViError`, `ViConfig` |
-| **Hệ thống tập tin** | **vi** + Name + Version | `viFS1` (Redox), `viFS2` (TFS) |
+| **Hệ thống tập tin** | retired `viFS1` / `viFS2`; active boot FS `VIFS1` | `VIFS1` (kernel BootFS/initramfs) |
 | **Địa chỉ (Multi-Arch)** | **VAddr / PAddr** | `VAddr`, `PAddr` (Bắt buộc dùng từ `libs/types`) |
 | **Internal Modules** | **snake_case** | `task/tcb.rs`, `memory/paging.rs` |
 
@@ -183,17 +182,19 @@ Cellos sẽ không dùng per-Cell SATP vì lý do này. Các Cell chia sẻ addr
 | System | IPC cost |
 |---|---|
 | Singularity channel (pointer hand-off) | ~1,200 cycles |
-| Cellos vtable dispatch | **~2–3 cycles** (400× rẻ hơn) |
+| Cellos typed message round trip | **48,5 µs p50 / 86,6 µs p99 trên QEMU TCG** (D1 measurement) |
 | Linux syscall | ~80–150 cycles |
 
-Cellos vtable IPC rẻ hơn Singularity 2 orders of magnitude vì không có channel/heap indirection. Grant API (syscalls 208–212) là analogue của exchange heap cho large data (>page).
+Direct dispatch là mục tiêu rewrite chỉ cho Tier 1, chưa phải đường chạy hiện hành và chưa có số
+đo. Message path hiện tại tuân theo Spec 17; Grant API (syscalls 208–212) là analogue của exchange
+heap cho large data (>page).
 
 ### Thành phần TCB (nhỏ nhất → lớn nhất)
 
 | Component | Vai trò | Ước lượng |
 |---|---|---|
 | `rustc` (nightly Rust compiler) | Enforce LBI — forbid unsafe, ownership/borrow rules | ~3–5M LOC |
-| Cellos kernel | SAS memory allocator, scheduler, IPC, ELF loader | ~11.5K LOC |
+| Cellos kernel | SAS memory allocator, scheduler, IPC, ELF loader | [generated nLOC](../code-metrics.generated.md) |
 | `libs/api` + `libs/types` | Stable ABI giữa kernel và Cells | ~2K LOC |
 
 ### Không nằm trong TCB (by design)
@@ -208,7 +209,10 @@ Cellos tốt hơn Singularity/Midori ở điểm này vì ba lý do:
 
 1. **rustc là open-source** — cộng đồng lớn, thường xuyên audit; Bartok (Singularity/Midori) là closed-source.
 2. **Ferrocene** — ISO 26262 ASIL-D certified subset của rustc; đủ điều kiện cho automotive safety market.
-   - ⚠️ **Caveat**: RISC-V chưa là qualified target của Ferrocene (tính đến 2026-06, ETA 12–24 tháng). ARM64 và x86 đã qualified. Không dùng RISC-V safety claim trước khi qualify.
+   - ⚠️ **Qualification lanes**: RV64 is the reference/QEMU CI lane, not a qualified
+     bare-metal Ferrocene target. `aarch64-unknown-none` is the first qualification
+     candidate under Ferrocene's documented host/build conditions. Toolchain evidence
+     does not certify the Cellos product; see Spec 16.
 3. **miri** — interprets MIR bytecode, phát hiện unsoundness trong unsafe code. Chạy trong CI cho kernel unsafe paths.
 
 ### Policies từ LBI/TCB (phải follow)
@@ -217,7 +221,7 @@ Cellos tốt hơn Singularity/Midori ở điểm này vì ba lý do:
 |---|---|
 | **Không link GC runtime vào RT-critical Cells** | Midori's unsolved problem — GC pauses phá RT guarantees. Rust RAII = deterministic destruction là lợi thế cấu trúc quyết định. |
 | **`static mut` trong kernel chỉ qua `Spinlock<Option<T>>`** | Mutable statics = "ambient authority" (F6, Duffy). Cells đã block qua `forbid(unsafe_code)`. Kernel là gap còn lại. |
-| **`#![forbid(unsafe_code)]` tuyệt đối trên mọi Cell** | Compiler không thể verify safety nếu unsafe được phép — một unsafe line đủ để vô hiệu hóa toàn bộ LBI guarantee. |
+| **`#![forbid(unsafe_code)]` trên mọi Cell, tuyệt đối ngoài allowlist đã review** | Compiler không thể verify safety nếu unsafe được phép — một unsafe line đủ để vô hiệu hóa LBI guarantee của cell đó. Driver cần MMIO/DMA nên allowlist tồn tại; mỗi entry **là một lỗ trên tường LBI**, có reason/approver/date và bị báo khi quá `review_by`. Nguồn sự thật: `scripts/unsafe-allowlist.toml`, cổng: `cellos-sign --check`. |
 | **Upgrade `rustc` ngay khi CVE soundness hole** | Soundness hole trong borrow checker hoặc codegen = P0 breach — không có patch nào khác ngoài upgrade compiler. |
 
 ### Hệ quả với security review
@@ -234,7 +238,7 @@ Bất kỳ lỗ hổng nào trong `rustc`'s unsafe checker, borrow checker, ho�
 | Dimension | Singularity | Midori | Cellos |
 |---|---|---|---|
 | **Isolation mechanism** | Sing# + MSIL verifier | M# type system | Rust ownership + borrow checker |
-| **IPC cost** | ~1,200 cycles (channel) | Not published | ~2–3 cycles (vtable) |
+| **IPC cost** | ~1,200 cycles (channel) | Not published | Message path measured on QEMU; direct Tier-1 target unmeasured |
 | **Large data transfer** | Exchange heap (linear types) | Isolated object graph | Grant API (page-level, runtime) |
 | **MMU isolation** | Eliminated (Ring 0) | Eliminated | Eliminated (Cellular SAS) |
 | **Mutable statics** | Allowed | Banned by language | Convention only (`Spinlock<Option<T>>`); no lint |

@@ -170,31 +170,12 @@ static PENDING_ASCII: Spinlock<VecDeque<u8>> = Spinlock::new(VecDeque::new());
 /// RELEASE event is best-effort: shells act on `KeyState::Pressed` only, so a
 /// lost release is harmless, while a lost press is a lost keystroke.
 ///
-/// # Safety (kernel-only, Law 4)
-/// `ipc_post_nonblock` immediate-delivery path writes into the receiver's U-mode
-/// buffer from S-mode — requires SUM=1. We preserve the current SUM state and
-/// restore it on return so callers from different contexts (timer ISR vs syscall)
-/// are unaffected.
+/// Delivery copies into an owned kernel mailbox entry. The resumed input task
+/// drains that entry into its own user buffer, so this interrupt-side path never
+/// enables supervisor access to user pages.
 fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
     // Wire opcode 0x04: raw ASCII relay path (distinct from EV_KEY=0/EV_REL=1/EV_ABS=2).
     const WIRE_ASCII: u8 = 0x04;
-
-    // RISC-V: SUM (sstatus bit 18) must be 1 for S-mode to write U-mode pages.
-    // Preserve current state and restore on return so we don't corrupt the
-    // sstatus of whichever context we interrupted (timer ISR vs syscall path).
-    #[cfg(target_arch = "riscv64")]
-    let sum_was_set = unsafe {
-        let s: usize;
-        core::arch::asm!("csrr {}, sstatus", out(reg) s);
-        s & 0x4_0000 != 0
-    };
-    #[cfg(target_arch = "riscv64")]
-    if !sum_was_set {
-        // SAFETY: SUM allows S-mode writes to U-mode pages; cleared on return.
-        unsafe {
-            core::arch::asm!("csrs sstatus, {0}", in(reg) 0x4_0000usize);
-        }
-    }
 
     // Use isize::MAX as sender_id — distinguishes kernel UART messages from
     // real timeout (Ok(0)) in the input service. Must be isize::MAX (not
@@ -211,13 +192,6 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
         let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
     }
 
-    #[cfg(target_arch = "riscv64")]
-    if !sum_was_set {
-        // SAFETY: restore SUM to its pre-call value.
-        unsafe {
-            core::arch::asm!("csrc sstatus, {0}", in(reg) 0x4_0000usize);
-        }
-    }
     press_ok
 }
 

@@ -155,6 +155,26 @@ pub unsafe fn invlpg(va: usize) {
     }
 }
 
+/// Invalidate the TLB entry for a single virtual address.
+///
+/// Safe counterpart of [`invlpg`], named to match the riscv64 / aarch64 HAL so
+/// architecture-generic paging code can call one name. `invlpg` cannot corrupt
+/// memory or violate any Rust invariant — it only drops a translation cache
+/// entry — so the `unsafe` on the raw intrinsic is a legacy of its asm body,
+/// not a real obligation on the caller.
+///
+/// Non-shootdown: on SMP the other cores keep their entry until an IPI reaches
+/// them. Callers LOWERING permissions on a page reachable from another core
+/// must arrange that shootdown themselves.
+#[inline]
+pub fn flush_tlb_page(va: usize) {
+    // SAFETY: invlpg invalidates one TLB entry and writes no memory; it is
+    // legal from Ring 0 for any address, mapped or not.
+    unsafe {
+        invlpg(va);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // HHDM-aware PML4 walkers.
 // ---------------------------------------------------------------------------

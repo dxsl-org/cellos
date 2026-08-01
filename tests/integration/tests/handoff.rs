@@ -218,6 +218,36 @@ fn handoff_rv64_frame_allocator() {
         .unwrap_or_else(|e| panic!("{e}\n--- output ---\n{}", qemu.dump()));
 }
 
+/// The direct OpenSBI path must consume QEMU's DTB RAM size instead of the old
+/// static 190 MiB usable window.
+#[test]
+fn handoff_rv64_uses_dtb_memory_size() {
+    if !rv64_prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_rv64_with_memory(&rv64_kernel_path(), "2G");
+    qemu.wait_for("[boot] allocator range", HANDOFF_TIMEOUT)
+        .unwrap_or_else(|e| panic!("{e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("Heap initialized", HANDOFF_TIMEOUT)
+        .unwrap_or_else(|e| panic!("{e}\n--- output ---\n{}", qemu.dump()));
+
+    let output = qemu.dump();
+    let marker = output
+        .lines()
+        .find(|line| line.contains("[boot] allocator range"))
+        .expect("allocator marker present");
+    let managed_bytes = marker
+        .split_once('(')
+        .and_then(|(_, suffix)| suffix.split_once(" bytes)"))
+        .and_then(|(bytes, _)| bytes.parse::<usize>().ok())
+        .unwrap_or_else(|| panic!("invalid allocator marker: {marker}"));
+    eprintln!("{marker}");
+    assert!(
+        managed_bytes > 1024 * 1024 * 1024,
+        "2 GiB DTB exposed only {managed_bytes} managed bytes"
+    );
+}
+
 /// Page-table construction and activation must complete — confirms the SV39
 /// root table was built and `satp` was switched.
 #[test]

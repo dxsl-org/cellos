@@ -1,7 +1,9 @@
 # Spec 17 — Cell IPC Wire Contract
 
-> **Status**: Ratified 2026-07-07. Normative. New cells and every change to an
-> existing IPC path MUST comply. Amendments require an entry in §9.
+> **Status**: Ratified 2026-07-07, except §10 which is Draft/reserved-but-unbuilt
+> under [ADR 0001](../decisions/0001-readiness-notifications-remain-draft-until-implemented.md).
+> New cells and every change to a Ratified IPC path MUST comply. Amendments require
+> an entry in §9.
 >
 > This spec exists because the single largest source of recurring bugs in Cellos
 > is not algorithms — it is **unspecified IPC contracts**. Every service invented
@@ -24,6 +26,8 @@ primitives (`libs/api/src/abi/syscall.rs`, kernel `task.rs`):
 - `sys_recv(mask, &mut [u8]) -> sender_tid` — blocks until a message arrives;
   returns the **sender tid**, not a byte count. `mask == 0` = wildcard (any
   sender); `mask == tid` = only that sender.
+- `sys_recv_attested(mask, &mut [u8]) -> sender_tid` — as `sys_recv`, plus a
+  kernel-written caller identity in the tail of the buffer (§11).
 - `sys_recv_timeout(mask, &mut [u8], ticks)` — as `sys_recv`, returns `Ok(0)` on
   timeout (10 ms/tick).
 - `sys_reply` / `current_caller` — the request/reply short-circuit.
@@ -68,11 +72,11 @@ so the allocation is **global and must not collide**. Current owners:
 
 | byte 0 | Namespace | Direction | Notes |
 |--------|-----------|-----------|-------|
-| `0x00`–`0x0F` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum |
+| `0x00`–`0x16` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22) — see the note below |
 | `0x04` | `WIRE_ASCII` — kernel UART relay | kernel → input service | Overlaps the postcard range **but is disambiguated by sender** (kernel sender id `isize::MAX`), not by byte value |
 | `0x10` | `INPUT_EVENT_OPCODE` | input service → focused cell | |
-| `0x11` | `NET_READY` readiness edge (§10, G4 P2.5) | net service → interest-owner tid | Fixed 6-byte frame; safe: net→client byte-0 is otherwise postcard `NetResponse` ≤ `0x0F` (§10.2). **Numerically overlaps `NetRequest` variant 17 (`NotifyRegister`) — disambiguated by direction** (client→net vs net→client), same treatment as `0x04 WIRE_ASCII` |
-| `0x12` | `REACTOR_WAKE` (§10.5, G4 P2.5) | same-cell thread → reactor tid | Only byte-0 the kernel same-cell `pending_msgs` fallback accepts; coalesced. Numerically overlaps `NetRequest` variant 18 (`NotifyDeregister`) — disambiguated by direction |
+| `0x11` | **Reserved:** proposed `NET_READY` readiness edge (§10, Draft) | net service → interest-owner tid | No implementation exists. Held against reuse under ADR 0001; the proposed collision rules remain design constraints, not runtime claims |
+| `0x12` | **Reserved:** proposed `REACTOR_WAKE` (§10.5, Draft) | same-cell thread → reactor tid | No implementation exists. Held against reuse under ADR 0001; no same-cell pending-message fallback is claimed yet |
 | `0x30`–`0x32` | legacy TLS raw ops (connect/send/recv) in the net service | client → net | Predates typed `NetRequest`; kept for `ostd::tls`. **Client→net only — the net service never emits these toward a client** (§10.2) |
 | `0xAC` | `APP_MSG_MAGIC` — App SDK envelope | any → `run_app!`/`app_entry!` cell | byte 1 = event type (`0x00` Message, `0xFF` Shutdown, `0xF0`/`0xF1` hotswap) |
 
@@ -82,6 +86,24 @@ today only because the NIC driver and the postcard services are **different
 target cells**. A cell that serves BOTH a postcard protocol and a raw op-byte
 protocol on its single recv buffer is FORBIDDEN — disambiguate by cell, or by
 the `0xAC` envelope, never by hoping the ranges don't meet.
+
+**Postcard variant growth past `0x0F` (2026-07-31).** `VfsRequest` now runs to
+variant 22 (`0x16`), so its byte-0 values numerically overlap `0x10`
+`INPUT_EVENT_OPCODE`, `0x11` `NET_READY` and `0x12` `REACTOR_WAKE`. Safe on the
+same grounds those three are safe against each other — **by receiver, not by
+value**:
+
+- `0x10` goes to the *focused* cell. The VFS service never calls `SetFocus`, so
+  it is never a focus target.
+- `0x11` goes to a net-interest owner. The VFS manifest declares `network =
+  false` and its syscall allowlist carries no net op, so it can never register
+  an interest.
+- `0x12` goes to a reactor tid inside the sending cell. The VFS main loop is a
+  plain `sys_recv_attested` loop, not a reactor.
+
+**Therefore:** growing `VfsRequest` past variant 22 (byte-0 `0x17`+), or making
+the VFS service a focus target / net-interest owner / reactor host, MUST re-check
+this table first. Same standing obligation the `NetRequest` 17/18 rows carry.
 
 **Rule:** a new protocol MUST either (a) use postcard (`api::ipc::encode`), or
 (b) claim an unused byte-0 value here in §3 and §9. Never reuse a value for a
@@ -111,6 +133,9 @@ recoverable from the buffer.
 
 - `IPC_BUF_SIZE = 4096` (`libs/api/src/services/ipc.rs`) is the recv-buffer and
   max message size. A cell's recv buffer MUST be `IPC_BUF_SIZE` bytes.
+- **A receiver that opts into caller attestation (§11) gives up the last 32
+  bytes** of its recv buffer to the kernel. Max usable payload for it is
+  `IPC_BUF_SIZE - CALLER_IDENTITY_LEN`.
 - **A reply must fit the frame *after* its postcard envelope.** VFS caps
   `Data` payloads at 480 bytes, not 512, because a full-frame payload made
   `encode` fail and the client saw an *empty* reply (§8.3). When chunking a
@@ -203,24 +228,47 @@ A new or modified IPC path is compliant when:
 - [ ] No silent-empty / silent-drop / silent-fallback path (§7).
 - [ ] Prefer `ostd::ipc::service_call` (encapsulates §2/§4/§7) over hand-rolled
       send+recv.
+- [ ] A service that **authorizes** requests reads the caller from the kernel
+      attestation (§11), never from the sender tid or the payload, and denies when
+      the attestation is absent.
 
 **Byte-0 registry amendments** must add a row to §3 with owner, direction, and
 the reason the value is safe against existing owners.
 
 **Amendment log:**
+- 2026-08-01 — **D8 ruling:** §10 returns to Draft/reserved-but-unbuilt because
+  its mechanisms are absent and Spec 21 forbids unbuilt work in a Ratified section.
+  `0x11`/`0x12` remain reserved. The 2026-07-23 Law-1 confirmation #1 is historical;
+  confirmation #2 is still required immediately before implementation. See ADR 0001.
 - 2026-07-23 — **Ratified:** §3 rows `0x11 NET_READY` + `0x12 REACTOR_WAKE`;
   new §10 "Readiness notifications" (G4 P2.5). Design + rationale:
   `.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md`.
   Includes user confirm #1 (of the Law-1 2×) for appending `NetRequest`
   variants 17/18; confirm #2 happens at implementation time.
+- 2026-07-30 — **Ratified (Law-1 2× confirmed):** new §11 "Caller attestation".
+  Adds `api::caller_identity` (`CallerIdentity`, `CALLER_IDENTITY_LEN`,
+  `RECV_ATTEST_CALLER`) and a flag on the previously-unused fourth `Recv`
+  argument. No message enum changes, no discriminant changes, no framing change
+  for any existing receiver.
+- 2026-07-31 — **Ratified (Law-1 2× confirmed):** `VfsRequest` gains nine
+  directory-capability variants (14–22) and `VfsResponse` gains `DirHandle`, all
+  **appended at the end**; discriminants 0–13 and the existing response variants
+  are unchanged, so an unmigrated cell's messages decode exactly as before. The
+  §3 postcard range widens to `0x16` with the receiver-disambiguation note there.
+  A handle-plus-component request is strictly smaller on the wire than the
+  absolute path it replaces, so no message that fitted the frame stops fitting.
+  Model and rationale: `docs/specs/09c-vfs-directory-capabilities-adr.md`.
 
 ---
 
-## 10. Readiness notifications (G4 P2.5) — Ratified 2026-07-23
+## 10. Readiness notifications (G4 P2.5) — Draft / reserved-but-unbuilt
 
 > How a cell learns "socket X is now readable/writable" without a kernel epoll.
 > Consumed by the G4 async reactor (`polling`/`mio` backends); implemented by the
 > net cell's readiness engine (G4 P2.6). Kernel stays multiplexing-free.
+>
+> This section reserves a reviewed design and byte values only. It does not describe
+> behavior available in the current implementation. See ADR 0001.
 
 ### 10.1 `NET_READY` frame
 
@@ -325,3 +373,85 @@ The `u32` socket handle is provider-local, allocated monotonically from 1,
 handling is therefore drop-unknown-handle at the reactor. The std-layer
 `AsCellHandle` ABI over this value (class-tagged `u32`) is frozen in
 `.agents/260722-0917-g4-full-std-tier1/design-p25-readiness-protocol-handle-abi.md` §D7.
+
+---
+
+## 11. Caller attestation — Ratified 2026-07-30
+
+> How a service learns **which cell** is calling it. Required reading before
+> putting an authorization check in any service.
+
+### 11.1 The problem
+
+`sys_recv` returns a **tid**, and a tid is not a cell:
+
+- A cell spawned by the loader gets `cell_id == CellId(tid)`, so for it the two
+  coincide — by accident of the spawn path, not by contract.
+- A **thread** gets its own tid while inheriting its parent's `cell_id`. A service
+  that built `CellId(sender)` therefore invented a cell that does not exist, and
+  charged that thread's quota to a ledger row nothing owned.
+
+Deriving identity from the request is worse. The nearest thing to a cell's name in
+the system is the last component of the `path_hint` its spawner passed to
+`SpawnFromPath` / `SpawnFromElf`, and a spawner chooses that string freely: a cell
+spawned as `path_hint = "/bin/vfs"` is named `vfs`. Cell signatures cover the ELF
+bytes, not the path, so nothing rejects the lie. **Any ACL keyed on a cell name is
+forgeable.** `CapSet` is safe there (the ceiling bounds it, and a lied-about hint
+can only lose privilege); a service-side ACL is not.
+
+### 11.2 The mechanism
+
+A receiver opts in by passing `RECV_ATTEST_CALLER` as the **fourth argument of
+`ViSyscall::Recv`** — a register that was unused and that every pre-existing
+caller passes as 0. `ostd::syscall::sys_recv_attested` is the wrapper.
+
+The kernel then writes a `CallerIdentity` (`cell_id`, `generation`, `sender_tid`;
+32 bytes, LE, tagged) into the **last `CALLER_IDENTITY_LEN` bytes of that
+receiver's own recv buffer**, and does so **after** copying the payload. Read it
+with `CallerIdentity::from_recv_buf(&buf)`.
+
+Why the tail and not a message field: byte 0 is the postcard discriminant, so
+widening a request enum or prefixing the frame moves every following byte — the
+failure mode §8.1 was built on. `decode` (`take_from_bytes`) consumes exactly one
+message and ignores the rest, so a fixed-offset trailer past the payload is
+invisible to every existing parser.
+
+### 11.3 Normative rules
+
+- **Absent identity means deny.** `from_recv_buf` returning `None` — no trailer, a
+  garbage tail, or `cell_id == 0` — is "unknown caller". Refuse the request. Do
+  not fall back to the sender tid, and do not treat it as a caller that merely
+  owns nothing: owning nothing still reads everything unowned.
+- **Opting in reserves the tail** (§5). Do not expect payload bytes there.
+- **The kernel writes the trailer last**, so a sender that pads its message across
+  the whole buffer cannot pre-place a forged one.
+- **Identity is per cell, not per task.** A thread reports its parent cell, which
+  is what makes one attestation serve both authorization and accounting.
+- `generation` is a monotonic cell epoch, inherited by a cell's threads. A service
+  that holds state against a `CellId` — open handles, pending reads — MUST compare
+  the generation too, so a successor cell under a recycled id does not inherit its
+  predecessor's state. `generation == 0` means "not attested on this path"; refuse
+  to record durable state for it.
+- `TryRecv`, `RecvTimeout`, and `RecvScatter` do **not** attest. `RecvTimeout`
+  already uses the fourth argument for its deadline, and `RecvScatter` has no
+  single buffer tail to write. A service that authorizes must receive with `Recv`.
+
+### 11.4 Direct (non-`ecall`) service calls
+
+**Status: accepted Tier-1 rewrite; direct dispatch is not reachable today.** Separately linked
+Cells hold private handler tables, and no loader import-resolution bridge connects them to
+`kernel::fast_ipc`. Current calls therefore use the governed message fallback.
+
+A future direct path would bypass the trap, so there would be no sender tid and nothing in the
+arguments would be trustworthy. It MUST derive identity from live scheduler state, never from a
+cell-chosen argument. `TrustedHandle<T>` is advisory and is not an authorization control.
+
+A future fast-path handler MUST authorize exactly as its `ecall` counterpart does and MUST carry
+a measured release gate for its maximum interrupt-off duration. `GetFile` is not a valid target
+operation for the rewrite: its raw `DataPtr` is permanent, unrevocable read authority in SAS and
+cannot cross the Tier-2 boundary.
+
+Before any Tier-2/Layer-B domain is enabled, `GetFile`/`DataPtr` must be removed or
+replaced by a representable revocable handle/grant contract. The detailed Layer-B grant
+mapping ADR is intentionally deferred to that implementation window; this prerequisite
+does not approve a new Law-1 ABI by itself.

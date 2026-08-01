@@ -11,7 +11,10 @@ relies on:
 
 1. **Rust ownership + borrow checker** — prevents spatial/temporal memory bugs
 2. **Capability tokens (`CapId`)** — unforgeable, kernel-managed access rights
-3. **`#![forbid(unsafe_code)]` on Cells** — enforced by `cargo-geiger` in CI
+3. **`#![forbid(unsafe_code)]` on Cells** — enforced at the signing gate by
+   `scripts/cellos-sign --check` (both CI workflows), absolute outside a reviewed allowlist
+   (`scripts/unsafe-allowlist.toml`); each allowlisted file is an approved hole in the LBI
+   wall, not an exempt no-op
 4. **VFS access through capabilities** — no direct file-descriptor integers
 
 ## STRIDE Threat Model
@@ -28,7 +31,7 @@ relies on:
 |--------|-----------|--------|
 | Cell writes to another Cell's memory | SAS + Rust ownership; no `unsafe` in cells/ | ✅ Mitigated |
 | Cell modifies a revoked capability | Kernel removes CapId from table on Close; subsequent ops return PermissionDenied | ✅ Mitigated |
-| Attacker modifies disk image to inject malicious ELF | Every spawned ELF is SHA-256 measured into an append-only measurement log (IMA model, `kernel/src/measurement_log.rs`) **and** Ed25519 signature-verified at the unified `spawn_gated()` gate before scheduling (`kernel/src/signing.rs` → `kernel/src/loader.rs`). The gate runs on the ELF **bytes**, so the source is irrelevant to trust: both the boot/bootstrap path (`spawn_from_path` → ramdisk/VIFS1) and the post-boot **grant-fed `sys_spawn_from_elf`** path (VFS reads the disk cell-store into a grant) pass through the same signature + measurement checks — a tampered cell-store ELF is rejected identically. ⚠️ G1 uses a dev-seed signer key (`CELL_SIGNER_PUBKEY`); prod must provision a real key | ✅ Mitigated |
+| Attacker modifies disk image to inject malicious ELF | Every spawn source reaches the same SHA-256 measurement + Ed25519 verification hook. A present invalid signature is denied, but default G1 leaves `signing-required` off: stripping `__ViCell_sig` turns the image into an admitted unsigned SAS cell. The reproducible dev seed is forgeable and no production public-key provisioning path exists yet. | ⚠️ Partial — mechanism shipped; fleet enforcement open |
 
 ### Repudiation
 | Threat | Mitigation | Status |
@@ -54,7 +57,7 @@ relies on:
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cell executes privileged instruction (e.g., `wfi`) | Cells run in EL0/Ring3; trap dispatched to kernel | ✅ Mitigated |
-| `#[allow(unsafe_code)]` in a Cell | `cargo-geiger` CI gate fails if any Cell contains `unsafe`; zero-tolerance policy | ✅ Mitigated |
+| `#[allow(unsafe_code)]` in a Cell | `scripts/cellos-sign --check --strict` fails CI when a Cell file contains `unsafe` and is not in the reviewed allowlist, and refuses to sign; allowlist entries carry reason/approver/date and are reported once past `review_by` | ✅ Mitigated, with a bounded hole — see `docs/specs/18-cell-trust-tiers.md` §2.1 |
 | Malformed syscall arguments overflow kernel buffers | All syscall arg lengths validated via `validate_user_buf` before dereference | ✅ Mitigated |
 
 ## Known Architecture Risks
@@ -71,7 +74,13 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 - Medium-term: Tier 3 VM isolation for untrusted code (hardware page tables per VM)
 - Long-term: CHERIoT RISC-V hardware capabilities — see "Hardware Isolation Roadmap" section below
 
-**Do NOT use Cellos to run untrusted third-party code until Tier 3 VM is implemented.**
+**Do NOT use Cellos to run untrusted third-party code until either containment tier is
+implemented: Tier 2 (per-domain page tables for unsigned native cells) or Tier 3 (VM).**
+Neither exists today — the kernel holds a single root page table (`memory/paging.rs:38`
+`KERNEL_ROOT`) and no context switch writes `satp`/`TTBR0`/`CR3`, so an unsigned cell in the
+shared address space is contained by nothing but the Rust type system. Tier 2 is the
+designed answer (`specs/18-cell-trust-tiers.md` §2.2) and does not reverse this warning; it
+narrows what the warning will say once the mechanism ships.
 
 > **Full analysis:** [research/research-hardware-isolation.md](research/research-hardware-isolation.md) — covers the
 > full menu of hardware supplements (CFI, MPK/PKS, MPU/PMP, RISC-V WorldGuard/Smmtt, IOMMU/IOPMP, confidential
@@ -81,12 +90,18 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 > **Isolation strategy decision (2026-06-05):** per-Cell **SATP** isolation at Tier 1 is
 > **explicitly NOT pursued**. PMP is M-mode-only (unreachable from Cellos's S-mode without
 > custom firmware) and sPMP is unratified; per-cell SATP would break Tier 1 zero-copy IPC.
-> Hardware isolation is delivered by **Tier 3 Stage-2 paging (per-VM)**, and untrusted code
-> is confined to **Tier 3 (Linux VM / hypervisor)** — the WASM Tier 2 sandbox was **dropped from
-> the official stack (2026-06-06)**, so there is no WASM confinement path. The Tier 1 "signed cells
-> only" guarantee is now **enforced**: Ed25519 signature verification runs at the loader spawn gate
-> (`kernel/src/signing.rs` + `loader.rs`), backed by per-Cell SHA-256 measurement. ⚠️ G1 ships a
-> dev-seed signer key; prod must provision a real one. See [specs/12-reliability.md](specs/12-reliability.md) §2.
+> Hardware isolation available **today** is **Tier 3 Stage-2 paging (per-VM)**, so untrusted
+> third-party code is confined to **Tier 3 (Linux VM / hypervisor)** for now. **Tier 2**
+> (accepted, **not yet implemented**) will run an unsigned native cell in its own page-table
+> domain — same cell shape and SDK as Tier 1, contained by the MMU instead of by trust — see
+> [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md) §2.2. Note that the decision
+> not to pursue per-Cell SATP applies to **Tier 1**, where it would break zero-copy IPC; it
+> is not an argument against Tier 2, which pays exactly that cost deliberately, in exchange
+> for needing no trust in the code it contains. Ed25519 verification runs at the common
+> loader spawn gate (`kernel/src/signing.rs` + `loader.rs`), but the default G1 posture is
+> **not signed-only**: an absent signature is admitted to the SAS because
+> `signing-required` is off. `/bin/` remains an authorization label, and signature status
+> does not select a memory tier. See Specs 12 and 18.
 
 ### KASLR — Shipped (Phase 24)
 **Severity: Resolved**
@@ -124,27 +139,31 @@ translation entries.
 > **not** behind the IOMMU (see [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) §1.4). A Tier-1b
 > C/Zig Cell that can issue raw MMIO writes to a virtio-mmio device can still program its virtqueue with
 > arbitrary physical addresses, and the device will DMA there. This remains open for **untrusted Tier-1b**;
-> the roadmapped closure is per-Cell **PMP/WorldGuard** MMIO gating plus IOMMU/WorldGuard coverage of
-> virtio-mmio DMA. See [research/research-hardware-isolation.md](research/research-hardware-isolation.md) §3.
+> the load-bearing roadmapped closure is a Spec 19 Layer-B CPU page-table domain plus
+> IOMMU/WorldGuard coverage of virtio-mmio DMA. PMP is only a future alternative if a custom
+> M-mode firmware owner is approved; Cellos S-mode cannot program it. See
+> [research/research-hardware-isolation.md](research/research-hardware-isolation.md) §3.
 
 ### Forward-Edge CFI (BTI / CET-IBT) — Shipped (2026-06-23)
 **Severity: Resolved**
 
-Forward-edge CFI closes the gap where a corrupted indirect branch jumps anywhere in the SAS. All five phases
-of the **Layer-2 hardware security supplements** are complete:
+Forward-edge CFI closes the gap where a corrupted indirect branch jumps anywhere in the SAS. The five-phase
+hardware-supplement implementation plan delivered the following components, but their enforcement status differs:
 
 - **ARM64 BTI + PAC-RET** — `SCTLR_EL1.BT0/BT1` + `APIAKEY_EL1` init, compiled with `+bti,+paca,+pacg`,
   runtime-detected via `ID_AA64PFR1_EL1` / `ID_AA64ISAR1_EL1`. Covers both forward edge (BTI) and backward
   edge (PAC-RET return addresses).
-- **ARM64 MTE** — `ViMte` trait, `SCTLR_EL1.ATA/TCF` config, `STGP` tag writes, sync/async fault modes.
+- **ARM64 MTE** — `ViMte` trait, `SCTLR_EL1.ATA/TCF` config, `STGP` tag writes, sync/async fault modes; hardware-gated and unavailable on RK3588's Armv8.2-A Cortex-A76/A55 cores.
 - **x86 CET-IBT** — `CR4.CET` + `MSR_IA32_S_CET` ENDBR_EN, `ENDBR64` landing pads on all ring-3 stubs, `#CP`
   (IDT vector 21) handler.
-- **x86 PKU** — `CR4.PKE`, 3-key model (0=trusted / 1=service / 2=FFI), `WRPKRU` guards on `iretq`/`sysretq`,
-  with CET-IBT enforced as a hard prerequisite (closing the `WRPKRU`-gadget bypass — ERIM / PKU Pitfalls).
+- **x86 PKU plumbing** — `CR4.PKE`, task PKRU values, and `WRPKRU` guards on `iretq`/`sysretq`,
+  with CET-IBT enforced as a hard prerequisite. This is not yet page isolation.
 
 > ⚠️ **One G2 follow-up:** PKU is wired but PTE key tagging is deferred — the loader does not yet stamp
 > per-Cell keys into PTE bits [62:59], so keys are all-zero and PKU **enforcement is bypassed** until then.
-> CET-IBT (already enforced) covers the JOP-gadget threat in the interim. See
+> The current self-test checks PKRU constants and kernel `RDPKRU`; it does not attempt a
+> denied keyed-page access. CET-IBT (already enforced) covers the JOP-gadget threat, not
+> the absent page-key enforcement. See
 > [research/research-hardware-isolation.md](research/research-hardware-isolation.md) §2 and roadmap §G.
 
 ### Audit Log — Shipped (Phase 26)
@@ -181,10 +200,26 @@ via code injection" hole that produced repeated macOS/iOS TCC CVEs.
   into an append-only kernel measurement log (Linux IMA model) *before* the Cell is scheduled
   (`kernel/src/sha256.rs`, `kernel/src/measurement_log.rs`; emitted as a `CellMeasure` audit event).
 - **Ed25519 cell-signing verify-at-spawn (2026-06-23)** — the loader extracts the `__ViCell_sig` section and
-  verifies the ELF signature before spawning, failing closed when signing is required (`kernel/src/signing.rs`,
-  gated in `kernel/src/loader.rs`). ⚠️ **G1 dev-seed keys:** `signing.rs::CELL_SIGNER_PUBKEY` and
-  `policy.rs::FLEET_ROOT_PUBKEY` fall back to a fixed dev seed under the dev feature gate and to a `[0u8; 32]`
-  fail-closed placeholder otherwise — **production must provision real keys.**
+  verifies a present signature before spawning. Invalid signatures fail closed; an absent signature fails
+  only under the non-default `signing-required` feature. The default dev seed is public/reproducible, while
+  disabling it selects a `[0u8; 32]` placeholder; no production public-key provisioning path exists yet.
+- **What the normal signing workflow means (2026-07-30, phase 11)** — `scripts/cellos-sign` checks the
+  repository's F1/F5 policy before its normal signing call: it verifies that every Cell crate root carries
+  `#![forbid(unsafe_code)]`, that no tracked `.rs` file under `cells/` contains `unsafe` outside
+  `scripts/unsafe-allowlist.toml`, and that the running rustc is the one `rust-toolchain.toml` pins (F5).
+  Every image lane signs through it — `scripts/lib-sign-cells.sh` for the bash scripts, `gen_disk.ps1` for
+  the Windows lane — and CI runs the same `cellos-sign --check`. F5 is mandatory on the signing path: a host
+  that cannot verify the toolchain refuses to sign rather than signing with a `SKIP`. The low-level
+  `scripts/sign-cell.py` refuses to sign at all unless `cellos_sign.signing` has marked the check as passed,
+  or the caller passes the explicit `--unchecked-dev-signature` opt-in. That route and the known dev seed
+  are test fixtures, not security boundaries: the kernel cannot distinguish an unchecked dev signature
+  from a checked one. The CLI also accepts target ELF paths after checking the source tree; a controlled
+  CI/KMS pipeline must separately bind those artifacts to the checked build.
+
+  **Do not oversell this.** It defends against unintentional mistakes in the trusted image workflow. A
+  fleet claim additionally requires an immutable provisioned public key, mandatory signing/policy features,
+  no dev-key/weak-RNG features, controlled build provenance, negative admission tests, and secure boot.
+  Tier 2 remains the future wall for native code that does not receive that approval.
 
 **Still open** (see [research/research-cell-security-permissions.md](research/research-cell-security-permissions.md)
 §3): full **secure/measured boot** and a **device attestation** story — a TPM-free **DICE/RIoT** layered chain
@@ -275,11 +310,12 @@ Bước 4: Kernel unsafe blocks
 2. **KASLR:** *Shipped (Phase 24).* Limine randomizes the kernel load base
    (kernel built PIE, `KASLR=yes`).
 
-3. **Trusted Cells:** All installed Cells are fully trusted (now enforced by
-   Ed25519 verify-at-spawn + SHA-256 measurement). There is no in-SAS sandbox
-   for untrusted Cells — untrusted third-party code belongs in **Tier 3 (Linux
-   VM / hypervisor)**, not a WASM Tier 2 (WASM was dropped from the stack
-   2026-06-06). See Phase 23 for community submission review gates.
+3. **Trusted Cells:** All installed Tier 1 Cells are fully trusted (now enforced by
+   Ed25519 verify-at-spawn + SHA-256 measurement). Untrusted third-party code belongs
+   in **Tier 3 (Linux VM / hypervisor)**. Tier 2 runs unsigned native cells in a
+   private MMU protection domain — see
+   [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md). See Phase 23 for
+   community submission review gates.
 
 4. **Audit log:** *Shipped (Phase 26).* Cell actions are recorded in the kernel
    audit ring buffer (`kernel/src/audit.rs`).
@@ -291,14 +327,15 @@ Bước 4: Kernel unsafe blocks
 | Language | `#![forbid(unsafe_code)]` on all Cell crates |
 | Compile-time | Rust ownership, borrow checker, lifetimes |
 | Kernel | Capability table, syscall argument validation, frame zeroing |
-| CI | `cargo-geiger`, `cargo-audit`, `cargo-deny` on every PR |
+| CI | `cellos-sign --check --strict` (F1/F5 admission), `cargo-audit`, `cargo-deny` on every PR |
 | Fuzzing | Weekly libFuzzer harnesses on ELF parser + VFS path validator |
-| HW — spatial | ✅ MTE (ARM UAF hardening); PKU domains wired on x86 (keys all-zero → enforcement pending PTE-key tagging, G2); MPU/PMP (embedded C-tier) _(roadmap)_ |
+| HW — spatial | MTE hardening is available on Armv8.5+/QEMU, **not RK3588**; x86 PKU register/return-path plumbing exists but keys remain all-zero and enforcement is absent; PMP needs a future M-mode owner |
 | HW — control-flow | ✅ **Shipped**: BTI+PAC-RET (ARM), CET-IBT (x86); Zicfilp/Zicfiss (RISC-V) _(roadmap)_ |
 | HW — DMA | ✅ **Shipped**: IOMMU translate mode (RISC-V 3LVL DDT / x86 VT-d per-Cell) + per-Cell `sys_grant_dma` (**not** MMIO ownership). virtio-mmio DMA + IOPMP coverage _(roadmap)_ |
 | HW — VM-grade _(roadmap)_ | Stage-2/EPT (Tier 3); TDX/SEV-SNP/ARM CCA for attested multi-tenant |
 
-> Hardware layers are rated against the SAS "no-TLB-flush-per-switch" criterion in
+> Spec 19 owns the Layer A/B/C hardware-isolation taxonomy. The research document rates
+> candidate mechanisms against the SAS "no-TLB-flush-per-switch" criterion:
 > [research/research-hardware-isolation.md](research/research-hardware-isolation.md).
 
 ## Security Contacts

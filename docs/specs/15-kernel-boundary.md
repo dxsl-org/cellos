@@ -1,6 +1,6 @@
 # Spec 15 — Kernel Boundary Law
 
-> **Status**: Ratified 2026-06-23 — does not change without explicit architectural review.
+> **Status**: Ratified 2026-06-23; amended 2026-08-01 by the approved D12 architectural review.
 >
 > This document defines what belongs in the Cellos kernel and what does not. It is the
 > authoritative reference. The summary in `CLAUDE.md` is derived from this spec.
@@ -102,13 +102,15 @@ isolates Cells" is claimed — the claim holds for Rust Cells, not for Tier-1b.
 
 **Requirement (G2 / untrusted third-party):** before Tier-1b (or any Cell) may
 run **untrusted**, the MMIO window must be gated in hardware per-Cell:
-- **RISC-V**: per-Cell **PMP/Smepmp** over the MMIO physical range, reprogrammed
-  on context switch (SAS-safe: `satp=Bare` needs no `sfence.vma`) — stops the
-  rogue register write. Roadmap §G backlog.
+- **RISC-V**: Spec 19 Layer B page-table domains are the implementable S-mode wall.
+  PMP/Smepmp would require a separately approved M-mode firmware owner; the current
+  runtime cannot program PMP or reconfigure it on a cell switch.
 - Plus **IOMMU/WorldGuard** coverage of virtio-mmio DMA for defense-in-depth
-  (PMP stops the Cell programming the device; the IOMMU confines a device already
-  told to DMA).
-- **x86**: MPK per-Cell key on the MMIO pages (needs CET-IBT, already shipped).
+  (the CPU-side domain stops the Cell programming the device; the IOMMU confines a
+  device already told to DMA).
+- **x86**: Spec 19 Layer B page-table domains are the load-bearing untrusted-cell wall.
+  MPK may add Layer-C hardening only after PTE key tagging and shared/MMIO-page semantics
+  are designed and verified; the current PKRU plumbing does not enforce this boundary.
 
 Until then, **do not spawn an untrusted Tier-1b Cell adjacent to USER-mapped
 device MMIO.** Tier-1b is a first-party capability, not a sandbox.
@@ -207,10 +209,10 @@ remaining bootstrap RAM image, not a device driver.
 
 **Remaining genuine exceptions (tech debt — G2):**
 
-| Driver | LOC | Migration target |
-|--------|-----|-----------------|
-| `kernel/src/task/drivers/mmc.rs` + subs | ~200 | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
-| `kernel/src/task/drivers/pcie_ecam.rs` | ~100 | simplify to store-only; full removal in G2 |
+| Driver | Migration target |
+|--------|-----------------|
+| `kernel/src/task/drivers/mmc.rs` + subs | `cells/drivers/mmc/` — G2 (QEMU lacks SDHCI; real board test required) |
+| `kernel/src/task/drivers/pcie_ecam.rs` | Platform Cell; enumeration migration and store-only simplification remain open |
 
 **Migrated (kernel-boundary-cleanup plan, 2026-06-24):**
 
@@ -233,10 +235,13 @@ before dependent service Cells, and (2) use kernel fallbacks during the transiti
 These are complex state machines that can run in a privileged Cell with access to
 freeze/resume/kill primitives.
 
-| Code | LOC | Correct home |
-|------|-----|--------------|
-| `kernel/src/cell/hotswap.rs` (orchestration) | ~400 | Supervisory Cell |
-| `kernel/src/snapshot.rs` (state machine) | ~350 | Supervisory Cell |
+| Code | Current boundary | Correct home |
+|------|------------------|--------------|
+| `kernel/src/cell/hotswap.rs` | Substantial orchestration residue remains despite a Supervisor-side client/protocol | Supervisory Cell policy; kernel retains atomic mechanism only |
+| `kernel/src/snapshot.rs` | Snapshot state machine remains in kernel | Supervisory Cell policy; kernel retains freeze/resume/kill primitives |
+
+Migration is **partial**, not complete. Exact source sizes are generated status and must
+not be hand-maintained in this specification.
 
 The kernel retains only: `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell` —
 thin wrappers around the existing scheduler primitives.
@@ -294,11 +299,11 @@ When proposing to add code to `kernel/src/`, answer these questions:
 
 ## 5. Kernel Size Budget
 
-| Era | Target kernel LOC | Current |
-|-----|------------------|---------|
-| G1 (now) | ≤ 7,000 LOC core (excl. drivers) | ~5,600 LOC |
-| G1 end (after driver migration) | ≤ 5,000 LOC core | target |
-| G2 | ≤ 5,000 LOC core | VirtIO cells, ACPI cell |
+| Era | Boundary target | Current evidence |
+|-----|-----------------|------------------|
+| G1 | Core excludes device policy and service orchestration | See generated project status |
+| G1 end | Complete tracked driver/orchestration migrations | Target |
+| G2 | Platform parsing and remaining policy move to trusted Cells | Target |
 
 **Size is a proxy, not the goal.** The goal is minimizing the TCB — the code that must
 be trusted for the entire system's security to hold. Smaller kernel = smaller TCB =
@@ -308,15 +313,20 @@ fewer places for a bug to compromise everything.
 
 ## 6. Comparison Table — Where Cellos Fits
 
-| System | IOMMU | Device drivers | Hotswap | LOC kernel |
-|--------|-------|---------------|---------|-----------|
+| System | IOMMU | Device drivers | Hotswap | Kernel size evidence |
+|--------|-------|---------------|---------|----------------------|
 | seL4 | Userspace (IOMMU PT object) | All userspace | N/A | ~9,300 |
 | Fuchsia/Zircon | Kernel (BTI/PMT) | All userspace | Component bind/unbind | ~43,000+ |
 | Genode base-hw | Userspace (23.11) | All userspace | Architectural | ~15,000 |
 | Redox | None | All userspace | Limited | ~19,000 |
 | MINIX3 | None | All userspace | Reincarnation | ~4,000 |
-| **Cellos (target)** | **Kernel (Zircon model)** | **All → Driver Cells** | **Supervisory Cell** | **≤ 5,000** |
-| Cellos (G1, 2026-06) | Kernel | NVMe+e1000+GPU+NIC+Input+Sound in Cells; VirtIO-Blk+MMC G2 pending | Kernel orchestration (hotswap/snapshot deferred) | ~7,200 |
+| **Cellos (target)** | **Kernel (Zircon model)** | **All → Driver Cells** | **Supervisory Cell** | **Generated downward-trend evidence** |
+| Cellos (G1) | Kernel | Most drivers in Cells; remaining residents tracked above | Supervisor protocol exists; kernel orchestration residue remains | Generated status |
+
+The former fixed `≤5,000` target is withdrawn by D3. It had no approved baseline and encouraged
+moving code to satisfy a number rather than enforcing the boundary. The canonical total and core
+lens are generated in [code-metrics.generated.md](../code-metrics.generated.md); responsibilities
+and completed migrations remain the binding acceptance criteria.
 
 ---
 

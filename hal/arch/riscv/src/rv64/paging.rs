@@ -4,6 +4,24 @@ use types::*;
 
 pub const PAGE_SIZE: usize = 4096;
 
+/// Invalidate the TLB entry for a single virtual address (all ASIDs).
+///
+/// `sfence.vma rs1, x0` orders every prior PTE store from this hart against
+/// subsequent translations of `virt`. Callers that LOWER a page's permissions
+/// must invoke this before returning, otherwise a stale permissive entry keeps
+/// the old access rights alive until the next unrelated full fence.
+///
+/// Single-hart only: remote harts keep their own cached entry until an IPI
+/// shootdown reaches them.
+#[inline]
+pub fn flush_tlb_page(virt: VAddr) {
+    // SAFETY: sfence.vma is a privileged S-mode fence with no memory operand;
+    // it is always legal from S-mode and touches no Rust-visible state.
+    unsafe {
+        core::arch::asm!("sfence.vma {}, zero", in(reg) virt, options(nostack));
+    }
+}
+
 /// Helper to map Generic Flags to RISC-V Flags
 fn to_riscv_flags(flags: PageFlags) -> usize {
     let mut bits = flags.bits();

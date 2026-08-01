@@ -17,5 +17,9 @@ path = "src/main.rs"
 name = "bench-probe"
 path = "src/bench-probe.rs"
 
+[[bin]]
+name = "capacity-probe"
+path = "src/capacity-probe.rs"
+
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

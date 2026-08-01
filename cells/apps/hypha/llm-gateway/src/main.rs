@@ -13,6 +13,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -43,8 +44,9 @@ const MODEL: &str = "claude-sonnet-4-6";
 // Reply text must fit one IPC message (os-gap G5: Grant streaming comes later).
 const IPC_REPLY_MAX: usize = 3800;
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[hypha/llm-gateway] service ready");
     // no_heartbeat: an LLM round-trip can exceed the default 5 s watchdog.
     CellRuntime::new().no_heartbeat().run(|ctx, ev| match ev {

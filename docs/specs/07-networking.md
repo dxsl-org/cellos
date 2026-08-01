@@ -44,7 +44,8 @@ pub trait TcpStack {
 **Multi-Arch**: Code của service-net là 100% Rust no_std, biên dịch chung cho cả RV32 (Nano Robot) và RV64 (Jarvis).
 
 ## 5. Bảo mật & Cô lập mạng
-**Port Ownership**: Mỗi Port khi mở được gán một OwnerID trong Metadata Registry.
+**Port Ownership**: Mỗi port/socket khi mở được gán owner trong Net Cell's
+owner-scoped socket/port table; đây là authority của networking lifecycle.
 
 **Capability Check**: Chỉ các Cell có NetworkCap mới được phép khởi tạo kết nối ra ngoài hoặc mở Port lắng nghe.
 

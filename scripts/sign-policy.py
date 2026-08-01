@@ -27,8 +27,10 @@ Usage:
     python scripts/sign-policy.py --out POLICY.BIN   # write the signed blob for baking into VIFS1
 """
 import argparse
+import re
 import struct
 import sys
+from pathlib import Path
 
 try:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -47,15 +49,24 @@ FLAG_MAINTENANCE_PERMITTED = 1 << 0
 # core boots with no caps. Checked locally in build_body so that never reaches an
 # image: one bad byte here bricks a fleet, and "boot to prompt" still passes
 # because the shell comes up from the ramdisk.
-MMIO_MASK = 0b111      # DEV_UART=1 | DEV_GPIO=2 | DEV_PCIE=4
-REGION_MASK = 0b111    # P1=1 | P4=2 | SRV=4
+# These MUST mirror the kernel's masks in kernel/src/policy.rs. If this file is
+# the stricter of the two it rejects blobs the kernel would have accepted, which
+# blocks a legitimate re-bake; if it is the looser one it emits a blob the kernel
+# scores Invalid, which is the fleet-wide DenyAll described above. Bit values come
+# from the DEV_* constants in kernel/src/resource_registry.rs.
+MMIO_MASK = 0b11111    # DEV_UART=1 | DEV_GPIO=2 | DEV_PCIE=4 | DEV_CAN=8 | DEV_ADC=16
+REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | bit 3 reserved for the /bin/vfs fold
 
 # Operator policy: the CEILING each path may hold. It intersects the manifest
 # request, so an entry can only ever take authority away — but a missing entry is
 # not neutral: under the kernel's `policy-required` feature an unlisted path gets
 # CapSet::EMPTY. Every cell that needs any capability must therefore appear here,
-# including demos the shell launches. See the enumeration table in
-# .agents/260727-2101-midori-lessons-cellos/phase-03-policy-cap-coverage.md.
+# including demos the shell launches.
+#
+# For the paths that mint privileged (P-TRUST) authority from the install path, a
+# missing entry is not merely permissive either: a kernel with a loaded policy
+# strips those caps, so the driver cell comes up inert. `assert_ptrust_covered`
+# makes that a bake failure instead, checked against the kernel's own table.
 #
 # (path, block_io, network, spawn, hyp, mmio, regions, pcie_driver, platform, supervisor)
 DEV_POLICY = [
@@ -199,6 +210,66 @@ def assert_round_trip(body, entries, flags):
         sys.exit(f"round-trip: {len(got)} entries decoded, {len(want)} expected")
 
 
+CAP_SOURCE = Path(__file__).resolve().parent.parent / "kernel" / "src" / "task" / "cap.rs"
+
+
+def ptrust_paths(cap_source=CAP_SOURCE):
+    """Paths whose install path alone mints privileged (P-TRUST) authority.
+
+    Read out of `CapSet::with_path_caps` in the kernel source rather than copied
+    into this file: those match arms are what the running kernel obeys, and a
+    second hand-maintained list is the exact drift this check exists to catch.
+    Only the function body is scanned, so the doc comment above it — which names
+    example paths — cannot contribute.
+
+    Exits (never returns a partial answer) if the source or the function cannot be
+    found, or if the body yields no paths: a check that silently matches nothing
+    would report coverage the kernel does not have.
+    """
+    try:
+        lines = cap_source.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        sys.exit(f"cannot read {cap_source}: {exc} — P-TRUST coverage check cannot run")
+    start = next((i for i, ln in enumerate(lines) if "fn with_path_caps" in ln), None)
+    if start is None:
+        sys.exit(f"{cap_source}: fn with_path_caps not found — P-TRUST coverage check cannot run")
+    paths, depth, opened = [], 0, False
+    for ln in lines[start:]:
+        code = ln.split("//")[0]  # a trailing comment may legitimately name a path
+        paths += re.findall(r'"(/[^"]*)"', code)
+        depth += code.count("{") - code.count("}")
+        opened = opened or "{" in code
+        if opened and depth <= 0:
+            break
+    else:
+        sys.exit(f"{cap_source}: with_path_caps body never closed — P-TRUST check cannot run")
+    if not paths:
+        sys.exit(f"{cap_source}: no paths parsed from with_path_caps — check would be vacuous")
+    return paths
+
+
+def assert_ptrust_covered(entries, paths=None):
+    """Require every P-TRUST-minting path to appear in the policy table.
+
+    The kernel fails closed for these paths when a *loaded* policy has no entry:
+    it strips the privileged caps and audits the gap. That stops a forgotten entry
+    from handing out DMA-anywhere authority, but a driver cell without its caps is
+    still a dead device — so the omission has to be caught here, at bake time,
+    where the fix is one line of DEV_POLICY.
+
+    Presence is the whole requirement. An entry that deliberately zeroes
+    `pcie_driver`/`platform`/`supervisor` is an operator decision the kernel honours
+    through the normal `Permit` intersection, not a mistake.
+    """
+    listed = {e[0] for e in entries}
+    missing = sorted({p for p in (ptrust_paths() if paths is None else paths) if p not in listed})
+    if missing:
+        sys.exit(
+            "P-TRUST paths missing from the policy table — the kernel would strip "
+            f"their privileged caps at runtime: {', '.join(missing)}"
+        )
+
+
 def sign(body, seed=DEV_SEED):
     priv = Ed25519PrivateKey.from_private_bytes(seed)
     pub = priv.public_key().public_bytes(
@@ -225,6 +296,9 @@ def main():
     flags = FLAG_MAINTENANCE_PERMITTED if args.maintenance else 0
     body = build_body(DEV_POLICY, flags)
     assert_round_trip(body, DEV_POLICY, flags)
+    # Unconditional, like the round-trip: the gate has to hold for every blob that
+    # gets built, not only when someone remembers a flag.
+    assert_ptrust_covered(DEV_POLICY)
     pub, sig = sign(body)
     blob = body + sig
 

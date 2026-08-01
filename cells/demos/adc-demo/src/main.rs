@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -19,8 +20,9 @@ declare_manifest!(
 
 const SUPPLY_MV: u32 = 3300; // 3.3 V reference
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[adc-demo] ADC simulation demo (3 channels, 12-bit, 3.3V ref)");
 
     let mut adc = SimAdc::new();

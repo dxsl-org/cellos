@@ -10,6 +10,7 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -25,8 +26,9 @@ api::declare_syscalls![Send, Recv, Log, LookupService, StateRestore];
 
 const HTTPD_PORT: u16 = 8080;
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("httpd: starting");
 
     let net_ep = wait_for_service(service::NET, "net");

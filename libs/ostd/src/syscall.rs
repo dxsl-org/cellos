@@ -1,6 +1,7 @@
 #![allow(unsafe_code)]
 
-use api::syscall::{ViSpawnArgs, ViSyscall};
+use api::completion::{ViCompletion, COMPLETION_LEN};
+use api::syscall::{ViMemInfoV1, ViSpawnArgs, ViSyscall};
 use core::arch::asm;
 
 #[derive(Debug, Copy, Clone)]
@@ -9,7 +10,7 @@ pub enum SyscallResult {
     Err(SyscallError),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SyscallError {
     InvalidDriverId,
     InvalidCommand,
@@ -18,6 +19,19 @@ pub enum SyscallError {
     FileNotFound,
     TryAgain,
     Unknown,
+    OutOfMemory,
+}
+
+const SYSCALL_OOM: isize = -2;
+
+fn decode_spawn_result(ret: isize) -> SyscallResult {
+    if ret > 0 {
+        SyscallResult::Ok(ret as usize)
+    } else if ret == SYSCALL_OOM {
+        SyscallResult::Err(SyscallError::OutOfMemory)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
 }
 
 #[inline(always)]
@@ -259,11 +273,7 @@ pub fn sys_spawn_from_mem(data: &[u8], name: &str, args: &str) -> SyscallResult 
             0,
             0,
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
+        decode_spawn_result(ret)
     }
 }
 
@@ -278,16 +288,16 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
     // Post-boot (VFS registered): read the cell ELF from VFS into a Grant (reaching
     // the /bin cell-store overlay + VIFS1 bootstrap cells) and spawn from the bytes,
     // so the kernel loader needs no disk access for the spawn. Falls back to the raw
-    // kernel bootstrap reader when VFS is not yet up (early boot) OR on ANY failure of
-    // the VFS path — the bootstrap reader still serves every cell until the in-kernel
-    // block reader is removed (phase 06), so this routing is purely ADDITIVE and
-    // cannot regress spawning. (G2 loader redesign phase 04.)
+    // kernel bootstrap reader when VFS is not yet up (early boot), the VFS read fails,
+    // or the VFS-loaded ELF is rejected. OOM is returned immediately: retrying the same
+    // allocation through bootstrap would add pressure and hide the typed failure.
     if let Some(vfs_tid) = crate::service::lookup(crate::service::service::VFS) {
         if let Ok((grant_id, len)) = crate::fs::read_full_via_grant(path, vfs_tid) {
             let r = sys_spawn_from_elf(grant_id, len, path);
             sys_grant_free(grant_id);
-            if let SyscallResult::Ok(_) = r {
-                return r;
+            match r {
+                SyscallResult::Ok(_) | SyscallResult::Err(SyscallError::OutOfMemory) => return r,
+                SyscallResult::Err(_) => {}
             }
             // VFS read OK but spawn failed → fall through to bootstrap (belt-and-suspenders).
         }
@@ -302,11 +312,7 @@ pub fn sys_spawn_from_path(path: &str) -> SyscallResult {
             0,
             0,
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
+        decode_spawn_result(ret)
     }
 }
 
@@ -328,11 +334,7 @@ pub fn sys_spawn_from_elf(grant_id: usize, len: usize, path_hint: &str) -> Sysca
             path_hint.as_ptr() as usize,
             path_hint.len(),
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
-            SyscallResult::Err(SyscallError::Unknown)
-        }
+        decode_spawn_result(ret)
     }
 }
 
@@ -367,11 +369,49 @@ pub fn sys_spawn_pinned(path: &str, priority: u8, core_id: usize) -> SyscallResu
             priority as usize,
             core_id,
         );
-        if ret > 0 {
-            SyscallResult::Ok(ret as usize)
-        } else {
+        decode_spawn_result(ret)
+    }
+}
+
+/// Read one global physical-frame allocator snapshot.
+///
+/// Requires an explicit `MemInfo` syscall declaration. The returned
+/// `used_frames` value is allocator-committed capacity, not resident bytes.
+pub fn sys_mem_info() -> Result<ViMemInfoV1, SyscallError> {
+    let mut info = ViMemInfoV1::default();
+    let len = core::mem::size_of::<ViMemInfoV1>();
+    // SAFETY: `info` is a live aligned local and the kernel writes at most `len` bytes.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::MemInfo,
+            &mut info as *mut ViMemInfoV1 as usize,
+            len,
+            0,
+            0,
+        )
+    };
+    if ret == len as isize {
+        Ok(info)
+    } else {
+        Err(SyscallError::Unknown)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{decode_spawn_result, SyscallError, SyscallResult};
+
+    #[test]
+    fn spawn_result_decoder_preserves_additive_oom() {
+        assert!(matches!(decode_spawn_result(7), SyscallResult::Ok(7)));
+        assert!(matches!(
+            decode_spawn_result(-1),
             SyscallResult::Err(SyscallError::Unknown)
-        }
+        ));
+        assert!(matches!(
+            decode_spawn_result(-2),
+            SyscallResult::Err(SyscallError::OutOfMemory)
+        ));
     }
 }
 
@@ -580,6 +620,47 @@ pub fn sys_register_service(service_id: u16, tid: usize) -> SyscallResult {
             SyscallResult::Err(SyscallError::Unknown)
         }
     }
+}
+
+/// Ask the kernel which directory handles `cell_id`'s spawner named for it.
+///
+/// The kernel writes the record into `buf` during this call, so its trust basis
+/// is the same as the attested caller identity in a recv buffer: it is produced
+/// from live scheduler state and never relayed through a message any cell
+/// composed. What it states is provenance only — that *this* spawner named
+/// *these* values. Whether the spawner was entitled to them is a question about
+/// the filesystem service's own table, and only that service can answer it.
+///
+/// Restricted by the kernel to the registered filesystem-service provider and to
+/// a cell asking about itself.
+///
+/// Returns `None` when the call was refused, `buf` is shorter than
+/// [`api::dir_attestation::DIR_ATTESTATION_LEN`], `cell_id` names no live cell,
+/// or the record does not parse. Every one of those means "no attested set", and
+/// the only correct response to that is to bind nothing.
+pub fn sys_query_dir_handles(
+    cell_id: u64,
+    buf: &mut [u8],
+) -> Option<api::dir_attestation::ViDirHandleAttestation> {
+    if buf.len() < api::dir_attestation::DIR_ATTESTATION_LEN {
+        return None;
+    }
+    // SAFETY: `buf` is a live writable slice for the whole call and its length
+    // is passed alongside the pointer, so the kernel writes only inside it. A
+    // buffer shorter than the record is an error there, never a partial write.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::QueryDirHandles,
+            cell_id as usize,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            0,
+        )
+    };
+    if (ret as usize) != api::dir_attestation::DIR_ATTESTATION_LEN {
+        return None;
+    }
+    api::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
 }
 
 /// Resolve a well-known `service_id` to its current provider tid.
@@ -797,6 +878,32 @@ pub fn sys_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     }
 }
 
+/// Blocking receive that also asks the kernel to attest who sent the message.
+///
+/// Identical to [`sys_recv`] except that the kernel writes a
+/// `api::caller_identity::CallerIdentity` into the **last
+/// `CALLER_IDENTITY_LEN` bytes of `buf`** once the payload is in place. Read it
+/// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
+/// and the request must be denied, never handled on a guessed identity.
+///
+/// Only a service that authorizes requests needs this. It costs no extra syscall
+/// and no extra round trip, but it **reserves the tail of `buf`** — pass a full
+/// `IPC_BUF_SIZE` buffer and do not expect payload bytes in that tail.
+pub fn sys_recv_attested(mask: usize, buf: &mut [u8]) -> SyscallResult {
+    // SAFETY: buf is a valid mutable slice for the whole call; the kernel writes
+    // the payload and then the trailer inside its bounds.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::Recv,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            api::caller_identity::RECV_ATTEST_CALLER,
+        )
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
 /// Non-blocking receive: returns immediately with `Ok(0)` when no message is
 /// queued, instead of parking the task like [`sys_recv`].
 ///
@@ -850,11 +957,6 @@ pub fn sys_set_timer(ticks: usize) -> SyscallResult {
         syscall(ViSyscall::SetTimer, ticks, 0, 0, 0);
         SyscallResult::Ok(0)
     }
-}
-
-pub fn sys_grant(_target: usize, _ptr: usize, _len: usize, _flags: usize) -> SyscallResult {
-    // Assume Grant mapped to ID 12
-    SyscallResult::Err(SyscallError::Unknown)
 }
 
 pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, SyscallError> {
@@ -1452,6 +1554,42 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
         )
     };
     ret as u32
+}
+
+/// Submit a wait against one kernel event source and block for its result.
+///
+/// The call reserves a slot on this cell's completion queue before it parks, so
+/// the source always has somewhere to put the result. `timeout_ticks = 0` waits
+/// indefinitely; any other value is a deadline in 10 ms scheduler ticks, after
+/// which the wait returns `None` and the reservation is released.
+///
+/// `mask` names exactly one source — see `api::syscall::events`.
+///
+/// # Errors
+/// `None` on timeout, on a mask this kernel does not serve, and when the cell's
+/// queue is full (that many operations are already outstanding). A caller that
+/// must tell those apart cannot use this wrapper.
+///
+/// Requires `WaitForEvent` or `WaitCompletion` in the cell's `declare_syscalls!`
+/// list; both name the same authority.
+pub fn sys_wait_completion(mask: u32, timeout_ticks: u64) -> Option<ViCompletion> {
+    let mut record = [0u8; COMPLETION_LEN];
+    // SAFETY: `record` is a live, exclusively borrowed stack buffer of exactly
+    // COMPLETION_LEN bytes, which is the length this syscall writes; the kernel
+    // writes nothing when it returns 0.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::WaitCompletion,
+            mask as usize,
+            timeout_ticks as usize,
+            (timeout_ticks >> 32) as usize,
+            record.as_mut_ptr() as usize,
+        )
+    };
+    if ret != 1 {
+        return None;
+    }
+    ViCompletion::from_bytes(&record)
 }
 
 // ── Supervisor Primitives (P03) ───────────────────────────────────────────────

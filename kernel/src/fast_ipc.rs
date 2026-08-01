@@ -1,39 +1,51 @@
 //! Kernel-owned fast-IPC dispatch table — the single canonical instance.
 //!
 //! In a Single Address Space there is no privilege wall between Cells: a trusted
-//! Cell calling a service handler is just an indirect call (~3 cycles) versus
-//! ~100+ for an `ecall` round-trip. For the fast path to work, ONE handler
+//! A future direct path would reduce a service call to an indirect branch, but
+//! that path has no runtime measurement or loader bridge today. To work, ONE handler
 //! pointer must be shared by the VFS cell (which registers it), client cells
 //! (which call it), and the kernel (which nulls it if VFS faults).
 //!
 //! Because Cells are separately-loaded ELFs (each with its own copy of any
 //! `static`), the shared instance cannot live in a per-cell library — it lives
-//! HERE, in the kernel. Cells reach `register_vfs`/`call_vfs` by name through the
-//! loader's global-symbol-table resolution (see `loader::dynsym`); the kernel
-//! uses `set_vfs_handler_cell`/`clear_vfs_if_cell` directly.
+//! HERE, in the kernel. No loader import-resolution bridge exists today.
+//! Separately linked Cells use their private `ostd` table and therefore take
+//! the message fallback. This table is retained only as design scaffolding for
+//! the ruled Tier-1 rewrite; the kernel uses
+//! `set_vfs_handler_cell`/`clear_vfs_if_cell` directly.
 //!
 //! ## Safety invariant
 //! The handler pointer is published once at VFS startup (before any client call)
 //! with `Release` ordering, read with `Acquire`, and only ever nulled on VFS
 //! fault. Single-hart QEMU: no concurrent modification.
 
+use api::caller_identity::CallerIdentity;
 use api::fast_ipc::{TrustedHandle, VfsCell};
 use api::ipc::{VfsRequest, IPC_BUF_SIZE};
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
-/// Signature of a registered VFS fast-IPC handler: read `req`, write the
-/// response into `out`, return the number of bytes written.
-pub type VfsFastHandler = unsafe fn(req: &VfsRequest<'_>, out: &mut [u8; IPC_BUF_SIZE]) -> usize;
+/// Signature of a registered VFS fast-IPC handler: read `req` on behalf of
+/// `caller`, write the response into `out`, return the number of bytes written.
+///
+/// `caller` is `None` when the kernel could not attribute the call to a live
+/// cell. The handler must then refuse the request: this path serves `GetFile`,
+/// which hands back a raw `DataPtr` — permanent, unrevocable read authority in a
+/// single address space — so an unauthorized answer here cannot be taken back.
+pub type VfsFastHandler = unsafe fn(
+    caller: Option<CallerIdentity>,
+    req: &VfsRequest<'_>,
+    out: &mut [u8; IPC_BUF_SIZE],
+) -> usize;
 
 static VFS_HANDLER_PTR: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
 /// Raw CellId that registered the handler; 0 = unregistered. Lets the kernel
 /// null the pointer when (and only when) that specific cell faults.
 static VFS_HANDLER_CELL: AtomicUsize = AtomicUsize::new(0);
 
-/// Register the VFS fast-IPC handler. Called once by the VFS cell at startup
-/// (resolved to this kernel symbol via the loader global symbol table).
+/// Register the kernel-side VFS fast-IPC handler for the future Tier-1 bridge.
+/// No Cell import resolves here today.
 ///
-/// `#[no_mangle]` so a Cell's undefined `register_vfs` import resolves here.
+/// The stable symbol name is retained for the reviewed bridge design.
 #[no_mangle]
 pub extern "Rust" fn register_vfs(handler: VfsFastHandler) {
     // SAFETY: fn-ptr → *mut () for atomic storage; recovered with the same type
@@ -101,14 +113,26 @@ impl Drop for SieGuard {
 /// bytes written into `out`, or 0 if no handler is registered (caller falls back
 /// to the `sys_send`/`sys_recv` path).
 ///
-/// `#[no_mangle]` so a client Cell's undefined `call_vfs` import resolves here.
+/// The stable symbol name is retained for the reviewed bridge design; no client
+/// Cell import resolves here today.
 ///
 /// # Note (PIE limitation)
 /// For non-PIE cells (current default), each cell ELF links `libs/ostd` statically
 /// and gets its own copy of `VFS_HANDLER_PTR` — so `call_vfs` in the shell reads
 /// null and always takes the ecall fallback.  The fast path becomes effective once
-/// cells are compiled as PIE and the loader patches JUMP_SLOT relocations to this
-/// kernel function.  The fallback is always safe.
+/// cells are compiled as PIE and a reviewed loader import bridge resolves this
+/// kernel function. The fallback is always safe; that bridge is absent today.
+///
+/// # Caller identity
+/// This path does not go through `ecall`, so the request carries no sender tid
+/// and the handler has nothing of its own to authorize against. The identity is
+/// therefore derived HERE, from live scheduler state for the task currently
+/// running on this hart — never from an argument, because every argument on this
+/// path is chosen by the cell being authorized. That makes the fast path exactly
+/// as attested as the message path; without it, gating `GetFile` on the message
+/// path would only move the hole rather than close it.
+///
+/// `TrustedHandle` is not the control: its own contract says it is advisory.
 ///
 /// # Safety
 /// The caller must own `out` exclusively for the call. `_handle` documents that
@@ -123,6 +147,10 @@ pub unsafe extern "Rust" fn call_vfs(
     if ptr.is_null() {
         return 0; // VFS not yet registered — caller falls back to ecall path.
     }
+    // Resolve identity BEFORE disabling interrupts: it takes the scheduler lock,
+    // and holding that lock across the handler would deadlock the VFS backends.
+    let caller = crate::task::syscall::attested_identity_of(crate::task::current_task_id());
+
     // SAFETY: ptr was stored by register_vfs from a valid VfsFastHandler.
     let handler: VfsFastHandler = core::mem::transmute(ptr);
 
@@ -132,20 +160,5 @@ pub unsafe extern "Rust" fn call_vfs(
     // SAFETY: called from S-mode trap handler context.
     let _sie = SieGuard::disable();
 
-    handler(req, out)
-}
-
-/// Resolve a kernel-exported symbol name to its runtime address — the loader's
-/// "Global Symbol Table" lookup for a Cell's undefined dynamic symbols. Returns
-/// `None` for names the kernel does not intentionally export.
-///
-/// Hand-maintained: add an arm here when a Cell is permitted to call a kernel
-/// function by name. (A `static` table can't hold these — `fn as usize` is not
-/// permitted in const eval — so resolution is a runtime match.)
-pub fn resolve_export(name: &str) -> Option<usize> {
-    match name {
-        "register_vfs" => Some(register_vfs as *const () as usize),
-        "call_vfs" => Some(call_vfs as *const () as usize),
-        _ => None,
-    }
+    handler(caller, req, out)
 }

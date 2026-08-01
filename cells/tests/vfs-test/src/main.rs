@@ -11,9 +11,12 @@
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate alloc;
 
 use core::sync::atomic::{AtomicU32, Ordering};
+
+mod dircap;
 
 // Declare the syscall allowlist and manifest so the kernel enforces a minimal
 // capability set for this test cell.
@@ -43,7 +46,16 @@ fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
     let n = api::ipc::encode(req, &mut send_buf)
         .map(|s| s.len())
         .unwrap_or(0);
-    ostd::syscall::sys_send(vfs_tid(), &send_buf[..n]);
+    vfs_raw(&send_buf[..n])
+}
+
+/// Send bytes to the VFS exactly as given, without encoding them first.
+///
+/// The only way to put a message on the wire that the request type cannot
+/// express — an invalid-UTF-8 name, for instance, which Rust will not let a
+/// `&str` hold but a hostile sender has no trouble producing.
+fn vfs_raw(msg: &[u8]) -> api::ipc::VfsResponse<'static> {
+    ostd::syscall::sys_send(vfs_tid(), msg);
     // Leak the recv buffer so VfsResponse::Data borrows from it safely.
     // This is fine in a test cell that runs and exits.
     let buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
@@ -434,8 +446,9 @@ fn test_rmdir_recursive_quota() {
 
 // ── Entry point ──────────────────────────────────────────────────────────────
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     ostd::io::println("[vfs-test] Starting VFS integration test suite...");
 
     test_file_lifecycle();
@@ -449,6 +462,9 @@ pub fn main() {
     test_quota_limit();
     #[cfg(feature = "test-hooks")]
     test_rmdir_recursive_quota();
+    // Last: it ends by giving up path strings for good, so nothing above it
+    // could run afterwards.
+    dircap::run();
 
     let passed = PASSED.load(Ordering::Relaxed);
     let failed = FAILED.load(Ordering::Relaxed);

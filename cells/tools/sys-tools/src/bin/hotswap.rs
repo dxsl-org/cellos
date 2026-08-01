@@ -1,10 +1,13 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate alloc;
 extern crate ostd;
 
 use alloc::string::String;
 use ostd::syscall;
+
+ostd::cell_main!(cell_main);
 
 /// hotswap <cell-name> <new-elf-path> — live-upgrade a running Cell.
 ///
@@ -20,8 +23,7 @@ use ostd::syscall;
 ///
 /// Since arg-passing is not yet wired (Phase 17a), this binary reads
 /// cell_name and new_elf_path from stdin (one per line) as a workaround.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     ostd::io::println("hotswap — live cell upgrade");
     ostd::io::println("Enter: <cell-name>");
     let cell_name = read_line();

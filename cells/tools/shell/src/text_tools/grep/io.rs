@@ -38,7 +38,7 @@ pub fn load_inputs(cfg: &Config) -> Result<Vec<LoadedInput>, String> {
         if stdin.len() > MAX_INPUT_BYTES {
             return Err(String::from("stdin exceeds 65536-byte limit"));
         }
-        let text = core::str::from_utf8(stdin)
+        let text = core::str::from_utf8(&stdin)
             .map(String::from)
             .map_err(|_| String::from("stdin is not valid UTF-8"))?;
         return Ok(alloc::vec![LoadedInput { label: None, text }]);

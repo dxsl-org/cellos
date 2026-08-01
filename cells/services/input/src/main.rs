@@ -1,8 +1,7 @@
 #![no_std]
 #![no_main]
-// Note: #[no_mangle] on main() is required by the ViCell ELF loader and triggers
-// unsafe_attr, so we cannot use #![forbid(unsafe_code)] globally here.
-// All business logic in the submodules is unsafe-free.
+// The crate cannot carry `#![forbid(unsafe_code)]`: `virtio_device.rs` needs MMIO
+// access (allowlisted, class driver-mmio). All other submodules are unsafe-free.
 
 //! Input Service Cell.
 //!

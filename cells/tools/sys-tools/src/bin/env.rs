@@ -1,10 +1,12 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 extern crate ostd;
 
+ostd::cell_main!(cell_main);
+
 /// env — print known environment key=value pairs from the Config Cell.
-#[no_mangle]
-pub fn main() {
+fn cell_main() {
     ostd::io::println("PATH=/bin");
     ostd::io::println("SHELL=/bin/shell");
     ostd::io::println("OS=ViCell");

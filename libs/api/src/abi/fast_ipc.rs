@@ -2,7 +2,8 @@
 //!
 //! In a Single Address Space OS, a trusted Cell can call a kernel service
 //! function directly via a pointer — bypassing the ecall trap (~100 cycles)
-//! for a single indirect branch (~3 cycles).
+//! for a future direct-dispatch transport. No cycle claim applies until that
+//! transport is reachable and measured.
 //!
 //! `TrustedHandle<T>` is a zero-sized type (ZST) whose constructor is
 //! `pub(crate)` — only the kernel crate can create one.  Cell crates that

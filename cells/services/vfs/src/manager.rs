@@ -17,6 +17,7 @@ use crate::backend_fat::FatBackend;
 use crate::backend_littlefs::LittlefsBackend;
 use crate::backend_ramfs::RamFsBackend;
 use crate::backend_redoxfs::RedoxFsBackend;
+use crate::dirs::DirTable;
 use crate::handle_table::HandleTable;
 use crate::mount::MountTable;
 use crate::pending::PendingTable;
@@ -28,6 +29,9 @@ pub struct VfsManager {
     pub quota: QuotaTracker,
     pub access: AccessTable,
     pub pending: PendingTable,
+    /// Directory capabilities. Deliberately not serialised across a hot-swap —
+    /// see `dirs::lifecycle`, where the reasoning for that lives.
+    pub dirs: DirTable,
 }
 
 impl VfsManager {
@@ -74,6 +78,7 @@ impl VfsManager {
             quota: QuotaTracker::new(),
             access: AccessTable::new(),
             pending: PendingTable::new(),
+            dirs: DirTable::new(),
         }
     }
 

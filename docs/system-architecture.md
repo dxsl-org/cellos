@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-07-25 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; Tier 3b VirtIO-GPU host stack code-complete; strict guest lane remains hardware-gated; WASM Tier 2, Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-01 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -22,7 +22,7 @@ Cellos is **NOT** a traditional Linux-style OS. It uses:
 
 The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer — it runs in a **Tier 3 Linux VM** (`apt install nginx/postgres/python`), except a narrow set of libraries linked into Tier 1/1b cells (crypto, codec, libm, sensor protocols). This keeps Cellos's identity intact and avoids re-implementing what Linux already does well.
 
-Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier 1/1b cell needs → **Tier 1b shim — port the library, not the feature**; (3) general Linux app / fork-based / POSIX → **Tier 3 VM**; (4) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, WASM Tier 2 + MicroPython dropped.
+Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier 1/1b cell needs → **Tier 1b shim — port the library, not the feature**; (3) general Linux app / fork-based / POSIX → **Tier 3 VM**; (4) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, MicroPython dropped.
 
 ---
 
@@ -32,7 +32,7 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 ┌─────────────────────────────────────────┐
 │  Cells (Applications, Drivers, Services) │  Apps: hello, shell, robot-dashboard, doom
 ├──────────────────────────────────────────┤  Drivers: disk, gpu, input, net, e1000, nvme, serial (Driver Cells)
-│  Kernel (Nano Kernel, ~22.6K LOC)       │  Services: vfs, config, compositor, net, hypervisor, silo, power
+│  Kernel (responsibility-bounded TCB)    │  Services: vfs, config, compositor, net, hypervisor, silo, power
 ├──────────────────────────────────────────┤
 │  HAL (Hardware Abstraction Layer)        │  RV64 ✅, AArch64 ✅ (Ring-3), x86_64 ✅ (Ring-3)
 ├──────────────────────────────────────────┤
@@ -44,13 +44,19 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 
 ## Kernel (nano-kernel)
 
-> **LOC note (measured 2026-07-07)**: `kernel/src`, all `.rs` files = **~22.6K lines** (`find kernel/src -name '*.rs' | xargs wc -l` = 22,604). The historical "<10K LOC nano-kernel" target (variously cited as 5.6K / 7.2K / 8.7K / 11.5K across older docs) predates the driver-migration bookkeeping, IOMMU/DMA-isolation subsystem, the RISC-V/ARM64/x86 HAL integration in-tree, and the ARM64 EL2 hypervisor prep. The kernel is still nano by *responsibility* (see Kernel Boundary Law in `CLAUDE.md` / `docs/specs/15-kernel-boundary.md`), not by this line count.
+> **Size evidence:** [code-metrics.generated.md](code-metrics.generated.md) owns the moving
+> `kernel/src` nLOC total and the narrower boundary-migration lens. The historical frozen totals
+> and `<10K`/`≤5K` targets are withdrawn; the kernel is bounded by responsibility under Spec 15,
+> with generated trend evidence preventing size claims from drifting.
 
 The kernel is **tiny** by design, handling only:
 
 ### 1. **Boot & Initialization** (`kernel/src/boot.rs`)
 - Limine bootloader integration (fallback: SimpleBootInfo)
-- Parse DTB (device tree)
+- Resolve the effective firmware DTB once for CPU, platform, and fallback boot discovery
+- On RV64 direct OpenSBI boot, derive a non-overlapping memory map from enabled DTB memory
+  nodes while excluding firmware, the live kernel, `/memreserve/`, and static
+  `/reserved-memory`; malformed or unsupported maps fail closed to audited board defaults
 - Initialize UART for logging
 - Initialize HAL (interrupts, paging)
 - Set up frame allocator
@@ -63,8 +69,12 @@ The kernel is **tiny** by design, handling only:
 
 **Frame Allocator**:
 - Bitmap-based allocation (O(1) free, O(n) scan for allocate)
-- 128–256 MB physical RAM in QEMU (0x8000_0000–0x8000_0000 + size)
-- Tracks allocated vs. free pages (4KB each)
+- RV64 capacity follows the firmware DTB rather than a fixed 190 MiB usable window
+- Selects the largest page-aligned usable interval; multi-region allocation is not implemented
+- Tracks allocated vs. free pages (4KB each) with an exact counter updated only on bitmap
+  transitions, so repeated reservation and double-free paths do not skew the snapshot
+- Exposes aggregate telemetry through opt-in `MemInfo=243` (allowlist bit 56), returning the
+  fixed 32-byte `ViMemInfoV1`; it reveals no addresses or per-cell ownership
 
 **Virtual Memory (SV39 on RV64)**:
 - **Trap Zone**: Low 4KB, unmapped → catches NULL deref
@@ -89,12 +99,13 @@ Kernel Space: (virt addr 0x8020_0000+)
 
 ### 3. **Task Scheduler** (`kernel/src/task/scheduler.rs`)
 
-**Round-Robin with Time Slices**:
-- All Cells scheduled fairly
-- Each gets ~10ms time slice (configurable)
-- Yield/preempt on timer interrupt
+**Fixed-Priority Scheduler**:
+- Three public tiers: `Background < Normal < RealTime`
+- FIFO within each tier
+- RT-hart routing when the dedicated RV64 hart is online
+- RV64 software-interrupt preemption path for higher-priority wakeups
 
-> **Roadmap**: Round-robin 10 ms timeslice is the current baseline. Phase 25 will add three priority levels (RealTime / Normal / Background) to prevent Tier 1 robot-control tasks from being preempted by batch workloads.
+> **Roadmap**: Fixed-priority scheduling is shipped. The consolidated latency baseline is still pending, and the immediate-preemption path remains architecture-scoped (RV64 only).
 
 **Task Control Block (TCB)**:
 ```rust
@@ -119,9 +130,17 @@ struct Task {
 
 10 core syscalls (vs. Linux's 300+):
 
-> **Implementation Note**: The architecture spec (01-core.md) describes inter-cell IPC as direct function calls via vtable (2–3 CPU cycles). The current implementation uses kernel-mediated syscall message passing (~100–1000 cycles per round-trip), equivalent to a lightweight microkernel. Direct vtable IPC is planned for Phase 27 (trusted-cell fast path) once the Metadata Registry is integrated with the linker.
+> **Implementation Note**: The current implementation uses kernel-mediated syscall
+> message passing. A trusted-cell direct-vtable fast path remains planned, but it must
+> use explicit typed ownership/lifetime authorities; there is no monolithic Metadata
+> Registry or generic linker-time pointer scanner.
 >
 > **Normative wire contract**: the actual kernel-mediated framing is now ratified in **[`docs/specs/17-ipc-wire-contract.md`](specs/17-ipc-wire-contract.md)** (Ratified 2026-07-07, normative for all cells). It fixes the recurring silent-failure class from ad-hoc per-service framing: `sys_recv(mask, buf)` returns the **sender tid** not a byte count (`mask == 0` wildcard, `mask == tid` filters one sender); the **byte-0 discriminant registry** and message framing/buffer-size rules are defined there. Any new IPC path MUST comply.
+>
+> **Suspended-receiver ownership**: a matched send never writes through another task's retained
+> `Recv` pointer. The kernel queues owned bytes in the target mailbox, wakes the task, and the
+> resumed receiver performs the validated copy. IRQ-sized payloads remain inline; larger payloads
+> are allocated fallibly and charged/refunded to the receiver Cell.
 
 | Syscall | Purpose |
 |---------|---------|
@@ -132,9 +151,20 @@ struct Task {
 | `Spawn(binary, argv)` | Create new Cell |
 | `Exec(binary, argv)` | Replace self with new Cell |
 | `SpawnFromMem(ptr, size)` | Load Cell from memory buffer |
+| `MemInfo(out, len)` | Opt-in aggregate frame totals (`ViMemInfoV1`, 32 bytes) |
 | `Exit(code)` | Terminate self |
 | `Yield()` | Voluntarily yield CPU |
 | `Log(msg)` | Print to kernel log |
+
+Cell-spawn allocation exhaustion is encoded additively as `-2` for the four cell-spawn paths and
+decoded as `SyscallError::OutOfMemory`. Generic syscall errors retain the legacy `-1` sentinel.
+Source-stage and bounded caller/path logs make exhaustion diagnosable without panicking the kernel.
+
+The current RV64 benchmark measures allocator commitment directly: **135,782,400 bytes
+(129.49 MiB)** on 2026-08-01. This exceeds the unchanged `<10 MiB` performance objective; the
+measurement mechanism is complete, while memory reduction remains separate work. The destructive
+capacity probe is excluded from default images and enabled only with
+`CELLOS_INCLUDE_CAPACITY_PROBE=1` for test-mode builds.
 
 **Capability-Based Access Control**:
 ```rust
@@ -460,7 +490,6 @@ cells/tools/shell/     — Interactive REPL (parser, executor, aliases, jobs, hi
 cells/tools/init/      — Bootstrap (spawns vfs, config, input, net, compositor, shell, robot-demo; games/demos run on-demand from shell)
 cells/tools/sys-tools/ — Standalone binaries: ls, cat, echo, ps, kill (0x2A000000 VA base)
 cells/tools/net-tools/ — Network utilities: ping, curl, wget, nc, httpd, mqtt (0x26000000 VA base)
-cells/tools/wasm/      — WASM interpreter cell (⚠️ Tier 2 DROPPED from official stack 2026-06-06; retained under feature = "wasm-experimental" only — not part of the shipping stack; untrusted code → Tier 3 VM)
 ```
 
 **Applications**: User-facing applications
@@ -503,7 +532,6 @@ cells/drivers/spi-gpio/  — BitBangSpi<G> generic over ViGpio
 cells/drivers/pwm-gpio/  — BitBangPwm<G> generic over ViGpio
 cells/drivers/adc-sim/   — Simulated ADC (no MMIO)
 cells/drivers/can-loopback/ — Loopback CAN (no MMIO)
-cells/drivers/wasm/      — WASM runtime wrapper (⚠️ Tier 2 DROPPED 2026-06-06; experimental feature only)
 ```
 
 **Services**: System services with long-lived state
@@ -673,7 +701,7 @@ Design brief: [.agents/brainstorms/260608-viui-nextgen-architecture.md](.agents/
 ┌─────────────────────────────────────────────────┐
 │ kernel/src/boot.rs: kmain(hartid, dtb)          │
 │ 1. Initialize UART for logging                  │
-│ 2. Parse bootloader info (memory map, DTB)      │
+│ 2. Resolve DTB and build reservation-safe map   │
 │ 3. Initialize HAL (traps, interrupt handler)    │
 └──────────────┬──────────────────────────────────┘
                ↓
@@ -738,7 +766,8 @@ Virtual Address Space (64-bit, SV39 = 39-bit VA)
 │  - Task pool (TCBs)               │
 └───────────────────────────────────┘  0xffff_ffff_ffff_ffff
 
-Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
+Physical RAM: firmware-described on RV64 direct OpenSBI boots; protected intervals are removed
+before usable pages reach the frame allocator.
 ```
 
 ---
@@ -808,38 +837,48 @@ Physical RAM: 0x8000_0000–0x8800_0000 (default: 128 MB in QEMU)
 
 ## Security Model Implementation Status (2026-06-23)
 
-### Three-Layer Security Model
+### Hardware-Isolation Delivery Model (Spec 19)
 
 ```
-Layer 1 — LBI (Rust compiler)       → Cell↔Cell isolation            [DONE]
-Layer 2 — Hardware supplement       → CFI + MTE + CET + PKU + DMA   [COMPLETE 2026-06-23]
-Layer 3 — Silo / VM (Stage-2 MMU)  → Key/VM isolation from kernel   [DONE, G2]
+Layer A — W^X after relocation      → code/constant integrity        [DONE]
+Layer B — Per-domain page tables    → untrusted native-cell wall     [PLANNED]
+Layer C — Per-arch hardening        → opportunistic MTE/MPK bonuses  [HW-GATED]
 ```
 
-**Layer 2 (Hardware Security) Implementations by Architecture:**
+LBI, CFI, DMA isolation, and Tier-3 Silo/VM protection complement this delivery model but
+do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
+
+**Hardware Security Implementations by Architecture:**
 
 | Component | ARM64 | x86_64 | RISC-V |
 |-----------|-------|--------|--------|
 | **CFI (Forward-edge)** | BTI+PAC ✅ | CET-IBT ✅ | Zicfilp (ratified, await silicon) |
-| **Memory Tagging** | MTE ✅ (ARMv8.5, RK3588) | N/A | Zimt (draft, await silicon) |
-| **Domain Isolation** | N/A | PKU ✅ (Broadwell+) | PMP / Smepmp (ratified, await silicon) |
+| **Memory Tagging** | MTE implementation ✅; unavailable on RK3588 (A76/A55, Armv8.2-A) | N/A | Zimt (draft, await silicon) |
+| **Domain Isolation** | Layer B planned | PKU plumbing only; PTE enforcement pending | PMP descriptors only; M-mode owner absent |
 | **DMA Enforcement** | Per-Cell DDT ✅ | Per-Cell VT-d ✅ | Per-Cell IOMMU ✅ |
 
 **Deployment Details:**
-- **ARM64**: Compiler flags `-C target-feature=+bti,+paca,+pacg`; hardware detection via ID_AA64PFR1_EL1, MTE requires ARMv8.5-A
-- **x86_64**: CR4.CET + MSR_IA32_S_CET for CET-IBT; CR4.PKE for PKU (feature-gated, CET-IBT prerequisite enforced)
-- **RISC-V**: DMA isolation (3-level DDT, Sv39 domains) complete; CFI/memory-tagging extensions pending silicon availability
+- **ARM64**: Compiler flags `-C target-feature=+bti,+paca,+pacg`; MTE is runtime-gated through `ID_AA64PFR1_EL1` and requires Armv8.5-A or later. RK3588's Cortex-A76/A55 cores expose the MTE field as zero.
+- **x86_64**: CR4.CET + MSR_IA32_S_CET for CET-IBT; CR4.PKE and WRPKRU paths are feature-gated, but user PTEs remain key 0
+- **RISC-V**: DMA isolation (3-level DDT, Sv39 domains) complete; PMP is inaccessible from the S-mode runtime without a custom M-mode firmware owner
 
 **Known Limitations:**
-- **MTE**: Probabilistic (1/16 tag collision); hardening only, not a strict safety boundary
-- **PKU**: PTE key tagging (bits [62:59]) deferred to G2; current implementation is wired but keys are zeroed
+- **MTE**: Probabilistic (1/16 tag collision), hardening only, and unavailable on the RK3588 deployment target; use only on QEMU or future Armv8.5+ hardware
+- **PKU**: PTE key tagging (bits [62:59]) is absent; current PKRU switching cannot deny access while all pages remain key 0, and the self-test does not prove a keyed-page fault
 - **RISC-V**: Zicfilp/Zimt/Smepmp extensions ratified 2024–2025 but no shipping silicon yet
 
 ---
 
-## Cross-Machine Communication & Clustering (📋 PLANNED — see roadmap §L)
+## Cross-Machine Communication & Clustering (proposed contract — see Spec 20)
 
-> Designed 2026-06-23. Status: **planned, not implemented** (all 📋). Plans: [.agents/260623-0907-net-broker-robot-swarm/](../.agents/260623-0907-net-broker-robot-swarm/) (G1 swarm + foundation, 10 phases) · research in [.agents/260623-remote-cell-ipc-research/](../.agents/260623-remote-cell-ipc-research/). This section records the agreed architecture so it is not re-litigated; defer detail to the plans.
+> Designed 2026-06-23. Stable summary: cross-machine IPC belongs in the userspace
+> `net-broker`; the proposed contract is owned by [Spec 20](specs/20-unified-ipc-contract.md).
+> Until Layer-3 generation exists, Spec 20 carries an explicitly transitional snapshot:
+> broker boot and NodeId generation are wired, transport/relay modules compile, typed
+> forwarding remains a stub, and no two-node runtime is proven. Once generated,
+> `docs/spec-status.generated.md` is the sole owner of volatile implementation status.
+> Research and historical design input:
+> [.agents/260623-remote-cell-ipc-research/](../.agents/260623-remote-cell-ipc-research/).
 
 ### Foundational principle: LBI stops at the machine boundary
 
@@ -868,7 +907,11 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 **Hard rules (architectural invariants):**
 - Native Tier-1 Cells **never speak mTLS** — Noise is the lingua franca at every stage; G1→G2 is an *identity* upgrade (K1→K3), not a transport swap.
 - mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3b Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. (The parked [TLS-server-accept plan](../.agents/260623-1500-tls-server-accept/) is an edge-only fallback for nodes that cannot terminate TLS externally.)
-- **Fail-closed entropy gate**: `sys_get_random` falls back to predictable xorshift32 when VirtIO-RNG is absent — any native crypto must refuse to start without real entropy.
+- **Profile-specific entropy gate**: default development/QEMU builds may enable
+  `dev-weak-rng`, which supplies predictable xorshift bytes with a warning. Fleet and
+  production artifacts must forbid that feature; without trusted entropy `GetRandom`
+  fails closed. Weak dev entropy may only produce disposable test identities; it must
+  never be treated as fleet credentials, release signatures, or production Noise keys.
 - `ClusterId` is routing-only; the PSK/Noise handshake is the sole authenticator. Multicast gossip is ~G1-only (cloud VPCs block multicast → G2 discovery shifts to a registry).
 
 ### Robot swarm (G1) vs server cluster (G2/G3)
@@ -885,10 +928,13 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 ### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3b VM, Cell Signing)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
-- **Nano kernel** (~22.6K LOC `kernel/src`, measured 2026-07-07 — nano by *responsibility*, not line count; see LOC note under "## Kernel") with round-robin scheduler
+- **Responsibility-bounded kernel** ([generated nLOC](code-metrics.generated.md); see Spec 15) with fixed-priority scheduler and RT-hart routing
 - **48 syscall variants** (IPC, memory, task, FS, GPU, network, state) + **Block I/O capability gate**
 - **Block I/O syscalls** (raw 500/501/503 for FAT16 persistence, gated to VFS task 3)
 - Frame allocator (bitmap) and virtual memory
+- **RV64 DTB memory discovery** — enabled RAM nodes minus firmware, live-kernel, FDT
+  `/memreserve/`, and static `/reserved-memory`, with audited static-map fallback; a 2 GiB QEMU
+  capacity gate verifies more than 1 GiB is managed
 - ELF loader with PIE relocation support
 - **VFS service** (RamFS read/write, FAT32 write/read/delete via block device, zero-copy grants)
   - **10 IPC opcodes** (0x01–0x0A): OP_GET_FILE, OP_LIST_DIR, OP_STAT, OP_WRITE, OP_MKDIR, OP_RMDIR, OP_UNLINK, **OP_READ, OP_RMDIR_RECURSIVE, OP_APPEND**
@@ -938,11 +984,19 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 ### ✅ Recently shipped (were In-Progress/Planned in the 2026-06-05 snapshot)
 - **KASLR** — ✅ COMPLETE (Phase 24, 2026-06-05) via Limine boot randomization (`limine.conf` `KASLR=yes`); 65 integration tests pass with KASLR enabled.
 - **ARM64 full kernel bring-up** (beyond ring-3 smoke) — ✅ COMPLETE 2026-06-12: GIC, generic timer, 3-level MMU, VirtIO, PL011 RX, PL061 GPIO on QEMU virt; 6/6 integration tests pass.
-- **ViUI v2 — Reactive Signal Tree + Dual-Layer DSL** — ✅ ALL 7 PHASES COMPLETE 2026-06-16 (production-ready; overlays, navigation, charts, DSL build.rs, virtual ListView, FlexBox, advanced two-way/computed bindings). See ViUI Architecture section above.
+- **ViUI v2 — Reactive Signal Tree + Dual-Layer DSL** — implemented library surface
+  includes overlays, navigation, charts, `.vi` build integration, virtual lists, flex
+  layout, and signal bindings. "Production-ready" remains gated on signed App Cell,
+  input/render integration, compositor-damage validation, and measured target evidence.
+  See [Spec 14](specs/14-viui.md).
 - **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
-- **Tier 3b Linux VM (ARM64 EL2 VMM)** — ✅ COMPLETE 2026-06-16 **(ARM64 only)**: EL2 hypervisor boots Alpine 3.21.3 aarch64 (musl); all 10 phases done; CI smoke job. Untrusted/legacy code isolation now lives here (hardware Stage-2). **x86_64 (SVM/VT-x) is design-plan only, not implemented** (`.agents/260711-1917-tier3b-x86-vtx/`); glibc-guest + writable-storage are planned follow-ups (`.agents/260712-0952-tier3b-vm-hardening-compat/`).
-- **Cell signing + hot migration** — ✅ COMPLETE 2026-06-23: Ed25519 verify-at-spawn gate (`kernel/src/loader.rs`), in-kernel `ed25519::verify` (RFC 8032 self-test at boot), 5-step hotswap with `TaskState::Frozen` + `ViStateTransfer`; 11/11 hotswap-smoke tests.
+- **Tier 3b Linux VM** — ARM64 EL2 boots Alpine 3.21.3 aarch64 and has its CI smoke
+  lane. x86 is backend-specific: AMD SVM has an implemented MVP registry/vCPU/run-loop
+  path, while Intel VMX currently enters root operation but lacks VMCS/EPT guest
+  execution. Neither x86 path is production hardware-qualified. RISC-V H-extension
+  remains unsupported on the current board set.
+- **Cell-signing mechanism + hot migration** — ✅ MECHANISMS COMPLETE 2026-06-23: the common spawn gate verifies present Ed25519 signatures, and the 5-step hotswap uses `TaskState::Frozen` + `ViStateTransfer`; 11/11 hotswap-smoke tests passed. Fleet signed-only admission remains planned: default builds permit absent signatures, the dev seed is public, no production public-key provisioning path exists, and secure boot does not yet anchor the kernel/key. Signature status does not select a memory tier.
 - **Hardware Key Isolation (Silo)** — ✅ COMPLETE 2026-06-16 (SiloHandle API; reclassified Tier 3a → Tier 1 hardware capability, G2 ARM64/x86).
 
 ### 🚧 In Progress / Partial
@@ -956,8 +1010,8 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 > ⚠️ **Per-Cell SATP isolation at Tier 1 is explicitly NOT pursued** (decided 2026-06-05).
 > Hardware isolation belongs to Tier 3 (per-VM Stage-2 paging), not per-cell page tables.
-> **Tier 2 WASM was dropped from the official stack (2026-06-06)** — untrusted third-party
-> code goes to the Tier 3 Linux VM, not a WASM sandbox. See *Key Design Decisions* below
+> Tier 2 runs unsigned native cells in a private MMU protection domain — see
+> `docs/specs/18-cell-trust-tiers.md`. See *Key Design Decisions* below
 > and [specs/05-application.md §6](specs/05-application.md).
 
 ---
@@ -969,11 +1023,11 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 | Single Address Space | Reduce context-switch overhead, simplify memory management |
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
 | **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
-| Tiered isolation (1 / 3) | Trusted signed-native (LBI) · hypervisor hardware silo (Tier 3b Linux VM). **The former "Tier 2 WASM software sandbox" was dropped from the official stack 2026-06-06** — untrusted third-party code now goes to Tier 3, so hardware MMU cost is paid there. WASM code retained under `feature = "wasm-experimental"` only. |
-| Round-Robin Scheduler | Simple, fair, predictable for embedded real-time systems |
+| Tiered isolation (1 / 2 / 3) | Trusted signed-native (LBI) · Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` · hypervisor hardware silo (Tier 3b Linux VM). |
+| Fixed-Priority Scheduler | Three tiers, FIFO within tier, RT-hart routing on RV64 |
 | Capability-Based Access | Fine-grained control, no global permissions |
 | Owned Buffers in Async | Deterministic cleanup in SAS (no process teardown) |
-| Nano Kernel (nano by *responsibility*, not line count) | Keep TCB minimal by scope (Kernel Boundary Law); measured `kernel/src` is ~22.6K LOC (2026-07-07) after driver-migration bookkeeping, IOMMU, in-tree HAL, and EL2 hypervisor prep — the "<10K" figure is historical |
+| Nano Kernel (nano by responsibility, not a frozen line count) | Keep TCB minimal by Spec 15 scope; [generated metrics](code-metrics.generated.md) own both total and core nLOC trends |
 | Trait-Based HAL | Multi-architecture support without code duplication |
 | No mod.rs | Clearer module boundaries, IDE-friendly |
 
@@ -985,14 +1039,13 @@ Areas where the current implementation diverges from the specification or modern
 
 | Gap | Impact | Status / Target |
 |-----|--------|-----------------|
-| IPC is syscall-based, not direct vtable call | 10–100× latency vs. spec | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
-| Round-robin scheduler, no priority levels | RT tasks can starve | **Open** — Phase 25 |
-| TLSF allocator not implemented | RT allocation guarantee broken | **Open** — Phase 25 |
+| IPC is syscall-based, not direct vtable call | Direct-vtable fast-path remains unimplemented; use measured IPC results rather than an estimated multiplier | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
+| Fixed-priority scheduler shipped; RV64 immediate preemption only | Consolidated latency baseline still pending | **Closed / verify** — architecture-scoped limit |
+| TLSF pool initialised but unused; no runtime caller or WCET qualification | RT allocation guarantee not yet established | **Open** — follow-up qualification |
 | Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | **Mitigated by design** — untrusted code confined to Tier 3 Linux VM (Layer-2 HW mitigations for native, see Security Model) |
 | No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
 | No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |
 | Performance baseline unmeasured | Can't validate PDR targets | ✅ **DONE** (Phase 24 — bench cell, RT + SMP latency) |
-| ~~Tier 2 WASM runtime absent~~ | — | ❌ **DROPPED** (2026-06-06) — Tier 2 removed from official stack; untrusted third-party code → Tier 3 Linux VM. Not a gap. |
 | Audit ring buffer | Forensics | Partial — reliability P06 observability shipped; full audit log G2 |
 
 ---

@@ -12,7 +12,7 @@ ViUI is a **no_std Signal-based UI framework** designed for Cellos's constraints
 - **.vi DSL**: compile-time-checked UI layout (similar to JSX)
 - **Damage-driven rendering**: only redraw changed regions
 - **Compositor integration**: surfaces backed by kernel grants (zero-copy)
-- **Embedded performance**: no GC, WASM-ready architecture
+- **Embedded performance**: no GC
 
 **Target**: G2+ (planning; G1 uses basic turtle graphics via VFrame).
 

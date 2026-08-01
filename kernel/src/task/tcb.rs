@@ -1,6 +1,7 @@
+use super::pending_mailbox::PendingMailbox;
+pub use super::pending_mailbox::PendingMsg;
 use crate::hal::arch::Context;
 use crate::hal::arch::ViTrapFrame;
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 // use alloc::sync::Arc;
@@ -26,19 +27,6 @@ pub const HOTSWAP_MSG_QUEUE_DEPTH: usize = 64;
 /// characters of headroom — beyond any realistic line — while still bounding
 /// a wedged focused cell to ~50 KiB of queued events.
 pub const INPUT_EVENT_QUEUE_DEPTH: usize = 512;
-
-/// A message buffered for a `Frozen` cell during a hot-swap sequence.
-///
-/// Invariants:
-/// - `data` holds an owned copy of the original message bytes (Law 2).
-/// - `sender_tid` identifies the originating task; the new cell sees it as
-///   `current_caller` when it next calls `sys_recv`.
-/// - `enqueued_tick` is for diagnostics; not used for ordering.
-pub struct PendingMsg {
-    pub sender_tid: usize,
-    pub data: Box<[u8]>,
-    pub enqueued_tick: u64,
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskState {
@@ -179,6 +167,20 @@ pub struct Task {
     /// Frames mapped for this cell's ELF segments, freed when the Task is dropped
     /// (reaped). Without it, a cell's code/data frames leak on every death.
     pub segment_mem: Option<super::stack::CellSegments>,
+
+    /// Bytes of stack charged to `cell_id`'s memory quota on this task's behalf,
+    /// `0` if nothing was charged.
+    ///
+    /// Only thread tasks carry a charge: a cell's own stacks are part of the cost
+    /// of admitting the cell, whereas a thread is a cost the cell chose at runtime
+    /// and can choose repeatedly, so it has to appear in the same ledger as the
+    /// cell's heap or concurrency becomes the one free way to grow a footprint.
+    ///
+    /// Released exactly once, in `Scheduler::exit_task` — the funnel every death
+    /// path passes through — by taking the field, so a double call cannot
+    /// double-refund. Reaping is too late: a zombie can sit unreaped indefinitely
+    /// and the cell would be billed for a thread that is already gone.
+    pub stack_quota_charge: usize,
 
     // Lifecycle
     pub waiters: Vec<usize>,
@@ -324,8 +326,63 @@ pub struct Task {
     /// blocked in `Sending` state.  Step 5 of the hotswap orchestrator drains
     /// this queue to the new cell before the old cell is terminated.
     /// Bounded by `HOTSWAP_MSG_QUEUE_DEPTH`; overflow returns `TryAgain`.
-    pub pending_msgs: Vec<PendingMsg>,
+    pub pending_msgs: PendingMailbox,
+
+    /// Epoch of the cell this task belongs to, attested to services alongside
+    /// `cell_id` (see `api::caller_identity`).
+    ///
+    /// A service that holds state against a `CellId` — an open handle, a pending
+    /// read, a quota ledger row — must not hand that state to a *different* cell
+    /// that later shows up under the same id. `CellId` is `CellId(tid)` and the
+    /// scheduler's `next_task_id` only ever increments, so ids are not recycled
+    /// today; this epoch is what keeps the guarantee if that ever changes,
+    /// because it is minted fresh per cell and never reused.
+    ///
+    /// Threads override the freshly minted value with their cell's (see
+    /// `Scheduler::spawn_thread`) so a thread is indistinguishable from its cell
+    /// to any check that keys on identity — which is the point of the whole
+    /// attestation: `CellId(tid)` was misattributing threads.
+    pub cell_generation: u64,
+
+    /// Directory handles this task's spawner named for it, with the spawner's
+    /// attested identity (see [`api::dir_handles`]).
+    ///
+    /// The kernel is a courier here and nothing more. It does not know what any
+    /// of these handles refer to, cannot tell a live one from a revoked one, and
+    /// must never treat this as a second record of filesystem authority — the
+    /// filesystem service owns that, and a second copy would drift in the
+    /// direction of silently widening what a cell may reach. The only claim the
+    /// kernel makes about this field is provenance: *this* spawner named *these*
+    /// values at spawn.
+    ///
+    /// Bounded inline at [`api::dir_handles::MAX_SPAWN_DIR_HANDLES`], so a
+    /// caller-supplied count never sizes an allocation.
+    ///
+    /// Set once, under the scheduler lock that creates the task, before it can
+    /// be scheduled. It is never updated afterwards: authority fixed at creation
+    /// is what makes it auditable.
+    pub inherited_dirs: api::dir_handles::InheritedDirHandles,
+
+    /// Directory handles this task has named for the next cell it spawns.
+    ///
+    /// Staged by `SpawnSetDirs` and consumed by the next cell this task creates,
+    /// then cleared — including when that spawn fails, so a set can never attach
+    /// to a later unrelated child. Empty means "pass nothing on", which is what
+    /// every task that never calls `SpawnSetDirs` does.
+    pub staged_dirs: api::dir_handles::DirHandleSet,
+
+    /// This cell's completion queue, or `None` until something reserves a slot.
+    ///
+    /// Kernel-owned heap memory, never a grant: a cell cannot unregister or free
+    /// it, so a completion always has somewhere to land and appending needs no
+    /// address resolution. Threads of one cell share the handle, and the queue
+    /// dies with the last reference to it — see [`crate::task::completion`].
+    pub completion: Option<alloc::sync::Arc<crate::task::completion::CompletionQueue>>,
 }
+
+/// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
+/// "generation not attested on this path".
+static NEXT_CELL_GENERATION: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
 
 impl Task {
     pub fn new(id: usize, cell_id: CellId, name: &str, allowed_drivers: Vec<usize>) -> Self {
@@ -348,6 +405,7 @@ impl Task {
             kernel_stack: None,
             user_stack: None,
             segment_mem: None,
+            stack_quota_charge: 0,
             waiters: Vec::new(),
             exit_code: None,
             pending_deaths: Vec::new(),
@@ -376,7 +434,12 @@ impl Task {
             vma: crate::memory::vma::VmaList::new(),
             hotswap_ready: false,
             is_critical: false,
-            pending_msgs: Vec::new(),
+            pending_msgs: PendingMailbox::new(),
+            cell_generation: NEXT_CELL_GENERATION
+                .fetch_add(1, core::sync::atomic::Ordering::Relaxed),
+            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
+            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
+            completion: None,
         }
     }
 

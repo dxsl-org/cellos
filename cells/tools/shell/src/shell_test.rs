@@ -10,6 +10,7 @@
 //! `sys_lookup_service(VFS)` (same pattern as vfs-test/srv-test).
 
 use crate::jobs::Jobs;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 const VFS_SVC: u16 = api::syscall::service::VFS;
 
@@ -25,23 +26,17 @@ fn wait_for_vfs() {
 
 // ── Assertion helpers ─────────────────────────────────────────────────────────
 
-static mut PASSED: u32 = 0;
-static mut FAILED: u32 = 0;
+static PASSED: AtomicU32 = AtomicU32::new(0);
+static FAILED: AtomicU32 = AtomicU32::new(0);
 
 fn pass(name: &str) {
-    // SAFETY: single shell task; no concurrent access.
-    unsafe {
-        PASSED += 1;
-    }
+    PASSED.fetch_add(1, Ordering::SeqCst);
     ostd::io::print("[shell-test] PASS  ");
     ostd::io::println(name);
 }
 
 fn fail(name: &str, got: &str, want: &str) {
-    // SAFETY: single shell task; no concurrent access.
-    unsafe {
-        FAILED += 1;
-    }
+    FAILED.fetch_add(1, Ordering::SeqCst);
     ostd::io::print("[shell-test] FAIL  ");
     ostd::io::println(name);
     ostd::io::print("  got:  ");
@@ -334,8 +329,7 @@ pub fn run() {
     test_fg_bg(&mut jobs);
     test_top_batch(&mut jobs);
 
-    // SAFETY: single shell task; no concurrent reads.
-    let (passed, failed) = unsafe { (PASSED, FAILED) };
+    let (passed, failed) = (PASSED.load(Ordering::SeqCst), FAILED.load(Ordering::SeqCst));
     ostd::io::println("");
     ostd::io::print("[shell-test] Results: ");
     ostd::io::print_usize(passed as usize);

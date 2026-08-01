@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -33,8 +34,9 @@ fn _assert_gpu_renderer_api() {
     _check::<viui::GpuRenderer<viui::CpuExecutor>>();
 }
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     // build.rs generated component
     let (state, _counter_ui) = Counter::build();
     state.count.update(|n| *n += 1);

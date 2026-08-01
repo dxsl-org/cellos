@@ -34,14 +34,13 @@
 //!
 //! ## unsafe_code note
 //!
-//! `#[no_mangle]` on `main()` is required by the ViCell ELF loader and
-//! triggers the `unsafe_attr` lint under `forbid(unsafe_code)`.  We therefore
-//! do NOT use `forbid(unsafe_code)` at the crate level.  All logic in this
-//! file and in `sim.rs` is genuinely unsafe-free — this mirrors the pattern
-//! used in `cells/apps/bench` and `cells/apps/periph-demo`.
+//! The `main` symbol comes from `ostd::cell_main!`, whose expansion carries the
+//! `#[no_mangle]` the ELF loader needs without tripping `forbid(unsafe_code)`
+//! (see `libs/ostd/src/entry.rs`).  All logic here and in `sim.rs` is unsafe-free.
 
 #![no_std]
 #![no_main]
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 extern crate ostd;
@@ -77,8 +76,9 @@ const DISPLAY_H: u32 = 480;
 
 // ─── Entry ────────────────────────────────────────────────────────────────────
 
-#[no_mangle]
-pub extern "C" fn main() {
+ostd::cell_main!(extern "C" cell_main);
+
+fn cell_main() {
     ostd::io::println("[robot-dashboard] starting");
 
     // ── Surface + renderer ────────────────────────────────────────────────────

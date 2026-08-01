@@ -109,7 +109,7 @@ foo/
 | **Error Types** | `Vi` prefix | `ViError`, `ViResult<T>` |
 | **Core Structs** | `Vi` prefix (or generic) | `ViConfig`, `ViBenchmark` |
 | **Address Types** | `V` or `P` prefix | `VAddr`, `PAddr` |
-| **Filesystem Names** | `vi` lowercase | `viFS1` (RedoxFS), `viFS2` (TFS) |
+| **Filesystem Names** | retired `viFS1` / `viFS2`; active boot FS `VIFS1` | `VIFS1` (kernel BootFS/initramfs) |
 | **Modules/Files** | snake_case | `task.rs`, `memory.rs`, `frame_allocator.rs` |
 | **Functions** | snake_case | `init_paging`, `handle_interrupt` |
 | **Constants** | UPPER_SNAKE | `MAX_CELLS`, `KERNEL_HEAP_SIZE` |
@@ -130,6 +130,9 @@ pub fn register_driver(driver: Arc<dyn ViDriver + Send + Sync>) { }
 - Implement `Drop` for cleanup (Law 8)
 
 **Why**: Enables dynamic Cell loading without recompilation.
+
+**Filesystem naming note**: use `VIFS1` only for the kernel BootFS/initramfs. Keep
+`viFS1` / `viFS2` only in historical references to retired designs.
 
 ### Law 8: RAII - Implement Drop
 
@@ -381,7 +384,7 @@ Cellos organizes cells into 8 semantic groups (parallel to code, not functionali
 
 ```
 cells/
-├─ tools/        — System utilities (shell, init, sys-tools, net-tools, wasm)
+├─ tools/        — System utilities (shell, init, sys-tools, net-tools)
 ├─ apps/         — User applications (robot-dashboard)
 ├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, audio-demo, etc.)
 ├─ drivers/      — Hardware device drivers (gpio, i2c, spi, uart, etc.)
@@ -397,7 +400,7 @@ cells/
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
 - **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
 - **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
-- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython, WASM)
+- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
 

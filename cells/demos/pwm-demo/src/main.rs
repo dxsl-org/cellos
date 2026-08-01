@@ -1,6 +1,10 @@
 #![no_std]
 #![no_main]
-// #[no_mangle] on main() requires allowing unsafe_attr — all peripheral access is unsafe-free.
+#![forbid(unsafe_code)]
+// The `main` symbol comes from `ostd::cell_main!`, whose expansion carries the
+// `#[no_mangle]` the ELF loader needs without tripping `forbid(unsafe_code)`
+// (see libs/ostd/src/entry.rs).
+// All peripheral access is unsafe-free.
 
 extern crate alloc;
 
@@ -25,8 +29,9 @@ declare_manifest!(
 const CHANNEL: u8 = 6;
 const PWM_HZ: u32 = 50; // 50 Hz — standard servo PWM
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     println("[pwm-demo] PWM bit-bang demo (channel=6/pin=6, 50 Hz servo)");
 
     // Retry on AlreadyExists: another cell (robot-demo) may hold GPIO briefly.

@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(dead_code)] // orchestrator-only items in shared modules are unreachable from this binary
+#![forbid(unsafe_code)]
 
 extern crate alloc;
 
@@ -21,8 +22,9 @@ api::declare_syscalls![
 ];
 api::declare_manifest!(block_io = false, network = false, spawn = false);
 
-#[no_mangle]
-pub fn main() {
+ostd::cell_main!(cell_main);
+
+fn cell_main() {
     let argv = ostd::args();
     let role = argv.first().map(|arg| arg.as_str()).unwrap_or("");
     ostd::io::println(&alloc::format!(
@@ -43,6 +45,7 @@ pub fn main() {
                 ostd::syscall::sys_send(sender, &[0]);
             }
         }
+        "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         _ => {} // unknown role: exit cleanly
     }
