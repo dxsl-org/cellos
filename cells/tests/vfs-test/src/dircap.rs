@@ -14,6 +14,7 @@
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse};
 
+use crate::grant_io;
 use crate::{fail, pass, vfs_req};
 
 /// `types::ViError::PermissionDenied`.
@@ -25,6 +26,7 @@ const MALFORMED: u8 = 0xFF;
 
 /// Directory this cell builds and then reaches only through a handle.
 const WORKDIR: &str = "/tmp/dircap";
+const READ_FILE_GRANT_SOURCE: &str = "/tmp/grant-read.txt";
 
 pub fn run() {
     let Some(root) = acquire("/tmp") else {
@@ -224,6 +226,25 @@ fn revoking_a_parent_revokes_what_came_from_it(parent: ViDirHandle, derived: ViD
 // ── The migration is only real once paths stop working ───────────────────────
 
 fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
+    let read_file_grant_ready = matches!(
+        vfs_req(&VfsRequest::Write {
+            path: READ_FILE_GRANT_SOURCE,
+            content: b"grant-copy-bytes"
+        }),
+        VfsResponse::Ok
+    );
+
+    let read_file_grant = match grant_io::read_file_into_grant(READ_FILE_GRANT_SOURCE) {
+        Ok((grant, bytes)) if bytes == grant.len() && bytes > 0 => {
+            pass("grant: ReadFileGrant copies nonzero bytes");
+            Some(grant)
+        }
+        _ => {
+            fail("grant: ReadFileGrant copies nonzero bytes");
+            None
+        }
+    };
+
     match vfs_req(&VfsRequest::SealPaths) {
         VfsResponse::Ok => pass("dircap: the cell gives up naming paths"),
         _ => {
@@ -287,6 +308,18 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
             VfsResponse::Err(DENIED) => pass(msg),
             _ => fail(msg),
         }
+    }
+
+    match (read_file_grant_ready, read_file_grant.as_ref()) {
+        (true, Some(grant)) => match vfs_req(&VfsRequest::ReadFileGrant {
+            path: READ_FILE_GRANT_SOURCE,
+            grant: 0,
+            max: grant.len(),
+        }) {
+            VfsResponse::Err(DENIED) => pass("grant: ReadFileGrant is refused after sealing"),
+            _ => fail("grant: ReadFileGrant is refused after sealing"),
+        },
+        _ => fail("grant: ReadFileGrant is refused after sealing"),
     }
 
     // And the cell still works: sealing removed one way of naming things, not

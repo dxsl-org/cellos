@@ -18,6 +18,12 @@
 > closures are the only side-work exceptions. Phase 01 is blocked on the fast-IPC runtime
 > proof gap, phase 02 is branch-complete pending merge gate, and phase 03 is audit-only.
 
+> **Midori Phase 01 partial-closure update (2026-08-01):** the test-hooks QEMU lane now
+> proves `ReadFileGrant` allow/deny markers, but Phase 01 stays partial. `ReadGrant`
+> runtime coverage is blocked because `cells/services/vfs/src/handle_table.rs:136` remains
+> the only `HandleTable::insert_ro` caller, and actual fast-IPC `GetFile` runtime proof is
+> still blocked by D1 pending a separate approved Tier-1 rewrite/rescope.
+
 ---
 
 ## Overview

@@ -17,11 +17,20 @@ extern crate alloc;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 mod dircap;
+mod grant_io;
 
 // Declare the syscall allowlist and manifest so the kernel enforces a minimal
 // capability set for this test cell.
 api::declare_manifest!(block_io = false, network = false, spawn = false);
-api::declare_syscalls![Send, Recv, Log, LookupService];
+api::declare_syscalls![
+    Send,
+    Recv,
+    Log,
+    LookupService,
+    GrantAlloc,
+    GrantShare,
+    GrantFree
+];
 
 /// Resolve the live VFS service tid via the service registry.
 /// Spins (yield-looping) until init has registered vfs — safe because init

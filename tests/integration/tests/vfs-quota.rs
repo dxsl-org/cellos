@@ -56,6 +56,13 @@ fn prerequisites_ok() -> bool {
 /// Boot the test-hooks kernel (no disk — embedded FS only, guarantees the
 /// test-hooks service-vfs with 2 KiB quota runs), then wait for vfs-test to
 /// report all scenarios passed.
+fn wait_for_or_dump(runner: &QemuRunner, pattern: &str) {
+    runner.wait_for(pattern, 60).unwrap_or_else(|e| {
+        eprintln!("--- serial output ---\n{}\n---", runner.dump());
+        panic!("{e}");
+    });
+}
+
 #[test]
 fn riscv64_vfs_quota_all_pass() {
     if !prerequisites_ok() {
@@ -66,11 +73,14 @@ fn riscv64_vfs_quota_all_pass() {
     // the quota integration test.
     let runner = QemuRunner::boot_rv64(&test_hooks_kernel());
 
-    // vfs-test prints this banner when all scenarios pass (exit 0).
-    runner
-        .wait_for("[vfs-test] ALL TESTS PASSED", 60)
-        .unwrap_or_else(|e| {
-            eprintln!("--- serial output ---\n{}\n---", runner.dump());
-            panic!("{e}");
-        });
+    wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant copies nonzero bytes");
+    wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant is refused after sealing");
+    wait_for_or_dump(&runner, "[vfs-test] ALL TESTS PASSED");
+
+    let serial = runner.dump();
+    assert!(
+        !serial.contains("[FAIL] grant:"),
+        "--- serial output ---\n{}\n---",
+        serial
+    );
 }

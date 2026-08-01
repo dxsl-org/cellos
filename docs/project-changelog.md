@@ -30,6 +30,17 @@ pending the merge gate, and phase 03 is complete as an audit-only package. The p
 artifacts now point at the supporting reports for each phase so the tracked status and
 evidence stay aligned.
 
+## [2026-08-01] Midori Phase 01 remains partial after honest ReadFileGrant proof
+
+The test-hooks QEMU lane now requires and observes `[PASS] grant: ReadFileGrant copies
+nonzero bytes`, `[PASS] grant: ReadFileGrant is refused after sealing`, and no
+`[FAIL] grant:` marker before it accepts `[vfs-test] ALL TESTS PASSED`.
+
+Phase 01 still remains partial. `ReadGrant` runtime coverage is blocked because
+`cells/services/vfs/src/handle_table.rs:136` is still the only `HandleTable::insert_ro`
+caller, and actual fast-IPC `GetFile` runtime proof is still blocked by D1 pending a
+separate approved Tier-1 rewrite/rescope.
+
 ## [2026-08-01] Close Part 6 documentation sweep
 
 D1 consequents are now stated as withdrawn history rather than live architecture: the
