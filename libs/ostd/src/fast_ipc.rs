@@ -1,7 +1,8 @@
 //! Fast-IPC handler table for direct Cell-to-service calls.
 //!
-//! Bypasses the ecall trap for high-frequency VFS operations (~3 cycles vs
-//! ~100 cycles for a full syscall round-trip in a Single Address Space OS).
+//! Retained scaffolding for the accepted Tier-1 direct-dispatch rewrite. Current
+//! separately linked Cells cannot share this table and always use the message
+//! fallback; no latency claim attaches to this inactive path.
 //!
 //! ## Safety invariant
 //! The handler function pointer is written once at VFS startup (before any
@@ -27,9 +28,9 @@ use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 /// Reads the request on behalf of `caller` and writes the response into `out`.
 /// Returns the number of bytes written into `out`.
 ///
-/// Must stay identical to `kernel::fast_ipc::VfsFastHandler`: the loader resolves
-/// a cell's `register_vfs`/`call_vfs` imports to the kernel's copies, so a
-/// mismatch here is a silently wrong call through a function pointer.
+/// Must stay identical to `kernel::fast_ipc::VfsFastHandler` if the future
+/// loader bridge makes the kernel table reachable; a mismatch would be a
+/// silently wrong call through a function pointer.
 ///
 /// `caller` is `None` when the call could not be attributed to a live cell; the
 /// handler must refuse rather than serve an unattributed read.
@@ -137,15 +138,15 @@ impl Drop for SieGuard {
 /// `VFS_HANDLER_PTR` (statically linked from `libs/ostd`).  VFS writes to its
 /// copy; client cells read from theirs (null) → always fallback to ecall.
 /// The fast path activates once cells are compiled as PIE and the kernel loader
-/// patches JUMP_SLOT relocations to `kernel::fast_ipc::call_vfs` (G2 work).
+/// gains a reviewed import-resolution mechanism for the Tier-1 rewrite.
 ///
 /// # Caller identity
 /// This copy of the dispatch table lives inside a cell, where there is no
-/// attested answer to "who is calling" — the kernel's copy
-/// (`kernel::fast_ipc::call_vfs`, which the loader resolves cell imports to) is
-/// the one that derives identity from scheduler state. If control ever does reach
-/// this copy, it passes `None`, so the handler denies the request instead of
-/// serving a read on an identity nobody vouched for.
+/// attested answer to "who is calling". The future bridge must use the kernel's
+/// `kernel::fast_ipc::call_vfs`, which derives identity from scheduler state; no
+/// loader bridge reaches it today. If control reaches this local copy, it passes
+/// `None`, so the handler denies the request instead of serving a read on an
+/// identity nobody vouched for.
 ///
 /// # Safety
 /// The caller must own `out` exclusively for the duration of this call.

@@ -17,9 +17,10 @@ struct CachedSector {
 
 /// LRU sector cache keyed by sector number.
 ///
-/// Write policy: write-through on FAT32 (no journal) — every `write_sector`
-/// flushes dirty entries to disk immediately. Switch to write-back when
-/// viFS2 (WAL) becomes the backend.
+/// Write policy: write-through while the mounted backend has no journal —
+/// every `write_sector` flushes dirty entries to disk immediately. A future
+/// journaling backend, if selected by the Spec09 MountTable policy, can relax
+/// this to write-back.
 pub struct PageCache {
     entries: BTreeMap<u64, CachedSector>,
     lru_order: VecDeque<u64>,

@@ -959,11 +959,6 @@ pub fn sys_set_timer(ticks: usize) -> SyscallResult {
     }
 }
 
-pub fn sys_grant(_target: usize, _ptr: usize, _len: usize, _flags: usize) -> SyscallResult {
-    // Assume Grant mapped to ID 12
-    SyscallResult::Err(SyscallError::Unknown)
-}
-
 pub fn sys_get_procs(buffer: &mut [api::syscall::ProcessInfo]) -> Result<usize, SyscallError> {
     unsafe {
         let ret = syscall(

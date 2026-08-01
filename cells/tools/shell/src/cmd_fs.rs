@@ -335,13 +335,13 @@ pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResu
 
 /// Read file content from VFS, trying the fast-IPC path first then falling back to ecall.
 ///
-/// Fast path: `ostd::fast_ipc::call_vfs` calls the VFS handler directly (~3 cycles).
-/// Fallback: `sys_send`/`sys_recv` round-trip via ecall (~200 cycles).
+/// The retained `ostd::fast_ipc` probe is inactive for separately linked Cells,
+/// so current reads use the governed `sys_send`/`sys_recv` message round trip.
 pub fn read_file_vfs(path: &str, out: &mut [u8]) -> usize {
     let req = api::ipc::VfsRequest::GetFile(path);
     let mut fast_buf = [0u8; api::ipc::IPC_BUF_SIZE];
 
-    // Try fast-IPC path — returns 0 if VFS handler not registered yet.
+    // Retained Tier-1 rewrite scaffold; current separately linked Cells return 0.
     // SAFETY: fast_buf is exclusive; TrustedHandle::default() is a ZST no-op.
     let fast_n = unsafe {
         ostd::fast_ipc::call_vfs(api::fast_ipc::TrustedHandle::default(), &req, &mut fast_buf)

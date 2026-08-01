@@ -1449,9 +1449,11 @@ pub fn ipc_try_recv(
 /// Non-blocking IPC send: deliver to target if it is in `Recv` state with a
 /// matching mask; otherwise return `Err(())` without blocking the caller.
 ///
-/// Used by the input service dispatcher so that key events are dropped (not
-/// queued in the caller) when the focused cell is not ready to receive.
-/// This prevents the input/focused-cell deadlock: both sides in `Sending`.
+/// For most callers, "not ready" still means drop immediately. The input
+/// service is the one exception: if the focused receiver is not in `Recv`, the
+/// kernel may enqueue the event into that receiver's bounded pending mailbox
+/// instead of blocking the sender. The mailbox is capped at 512 input events;
+/// once full, this call drops again with `Err(())`.
 pub fn ipc_try_send(
     caller_id: usize,
     target_id: usize,
@@ -1483,16 +1485,12 @@ pub fn ipc_try_send(
             sched.pend_preempt_if_needed(prio);
             return Ok(());
         }
-        // Target not in Recv. The input service must never DROP a translated key
-        // event just because the focused cell is momentarily out of Recv (e.g. it
-        // is echoing the previous char or re-entering its read loop): a burst typed
-        // at the serial console ("hypha\n") arrives faster than the focused cell can
-        // re-park, so a fire-once try_send loses all but the first key.  For the
-        // input service specifically, fall back to a BOUNDED queue into the target's
-        // pending_msgs (same primitive as ipc_post_nonblock), which the target drains
-        // on its next sys_recv / sys_recv_timeout.  Bounded depth keeps a wedged GUI
-        // cell from growing the queue without limit; when full we drop as before.
-        // All other try_send callers keep strict drop-if-not-ready semantics.
+        // Target not in Recv. The input service alone may fall back to the
+        // receiver's bounded pending mailbox so short bursts of translated key
+        // events survive while the focused cell re-enters its next recv. That
+        // mailbox is capped at 512 queued input events; once full, we drop as
+        // before. All other try_send callers keep strict drop-if-not-ready
+        // semantics.
         let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
             .load(core::sync::atomic::Ordering::Relaxed);
         if caller_id == input_tid && input_tid != 0 {

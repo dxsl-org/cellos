@@ -10,11 +10,12 @@
 //! preferable to the previous TID-3 shell fallback which consumed events without
 //! the shell ever reading them (shell uses sys_read(0), not the input service).
 //!
-//! ## Death reversion
+//! ## Send-failure handling
 //!
-//! `dispatch()` checks the `sys_send` return value.  When the focused cell has
-//! exited, `sys_send` returns `Err(_)` and focus reverts to 0.  The next app
-//! that calls `SetFocus` resumes delivery.
+//! Keyboard dispatch is fire-and-forget: `dispatch()` ignores send failures and
+//! leaves focus unchanged until another cell calls `SetFocus`. Mouse routing
+//! uses a separate cached compositor endpoint and clears only that cache when a
+//! pointer send fails, forcing a later re-lookup after compositor restart.
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
@@ -27,10 +28,10 @@ pub const INPUT_EVENT_OPCODE: u8 = 0x10;
 pub struct Dispatcher {
     /// Task ID of the currently focused cell (0 = no focus, events dropped).
     focused: usize,
-    /// Fallback TID on focus-cell death (0 = park until next SetFocus).
-    // reason: current death-reversion policy (see module doc "Death reversion")
-    // hard-reverts to 0 and waits for the next SetFocus; this field predates that
-    // decision and is kept for a planned "revert to shell" fallback path.
+    /// Reserved for a future focus-fallback policy; `dispatch()` does not read it.
+    // reason: keyboard send failure currently leaves `focused` unchanged until a
+    // later SetFocus. Keep the field only as a placeholder for a separately
+    // specified policy, not as behaviour implemented by this dispatcher.
     #[allow(dead_code)]
     fallback_tid: usize,
     /// Cached compositor TID for mouse routing (0 = not yet resolved).
@@ -64,8 +65,8 @@ impl Dispatcher {
 
     /// Send a translated `InputEvent` to the focused cell.
     ///
-    /// If `sys_send` fails (focused cell has exited), focus reverts to
-    /// `fallback_tid` so subsequent key events reach the shell again.
+    /// Send failure does not mutate focus; a later `SetFocus` decides who owns
+    /// the keyboard next.
     ///
     /// The IPC message format is:
     /// ```text
@@ -119,8 +120,8 @@ impl Dispatcher {
         encode_event(event, &mut payload);
         buf[1..INPUT_EVENT_IPC_SIZE + 1].copy_from_slice(&payload);
 
-        // Non-blocking dispatch: if the target is not receiving (and its
-        // pending_msgs queue is full), the event is dropped.
+        // Non-blocking dispatch: if the target is not receiving and the kernel
+        // cannot queue into its bounded receiver mailbox, the event is dropped.
         match sys_try_send(target, &buf) {
             ostd::syscall::SyscallResult::Ok(_) => Ok(()),
             _ => Err(()),
