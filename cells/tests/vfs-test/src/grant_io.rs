@@ -1,9 +1,7 @@
 use api::ipc::{VfsRequest, VfsResponse};
-use ostd::syscall::{
-    sys_close_cap, sys_grant_alloc, sys_grant_copy_to_slice, sys_grant_free, sys_grant_share,
-    sys_open_cap,
-};
+use ostd::syscall::{sys_grant_alloc, sys_grant_copy_to_slice, sys_grant_free, sys_grant_share};
 const READ_WRITE_GRANT: u8 = 2;
+const UNKNOWN_CAP_ID: u64 = 0;
 
 pub struct GrantRegion {
     id: usize,
@@ -119,32 +117,21 @@ pub fn grant_prefix_equals(grant: &GrantRegion, expected: &[u8]) -> bool {
     }
 }
 
-pub fn read_cap_returns_zero(path: &str, offset: u64, size: usize) -> Result<(), &'static str> {
-    let cap = sys_open_cap(path).map_err(|_| "OpenCap failed for ReadGrant probe")?;
-    let grant = match GrantRegion::alloc(16) {
-        Ok(grant) => grant,
-        Err(err) => {
-            sys_close_cap(cap);
-            return Err(err);
-        }
-    };
-    if let Err(err) = grant.share_rw_with_vfs() {
-        sys_close_cap(cap);
-        return Err(err);
-    }
+pub fn unknown_cap_read_grant_returns_zero(offset: u64, size: usize) -> Result<(), &'static str> {
+    let grant = GrantRegion::alloc(16)?;
+    grant.share_rw_with_vfs()?;
 
     let result = match crate::vfs_req(&VfsRequest::ReadGrant {
-        cap,
+        cap: UNKNOWN_CAP_ID,
         offset,
         size,
         grant: grant.id(),
     }) {
         VfsResponse::GrantDone { bytes: 0 } => Ok(()),
-        VfsResponse::GrantDone { .. } => Err("ReadGrant returned nonzero bytes"),
+        VfsResponse::GrantDone { .. } => Err("ReadGrant returned nonzero bytes for unknown cap"),
         VfsResponse::Err(_) => Err("ReadGrant returned an error"),
         _ => Err("ReadGrant returned an unexpected response"),
     };
 
-    sys_close_cap(cap);
     result
 }

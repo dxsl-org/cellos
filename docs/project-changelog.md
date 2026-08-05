@@ -4,6 +4,22 @@
 
 ---
 
+## [2026-08-05] Midori Phase 02 runtime-closed under amended criteria
+
+The test-hooks QEMU lane now requires and observes
+`[PASS] dircap: GetFile returns a nonempty pointer before sealing` as metadata-only proof
+before it accepts the existing post-seal denial marker and the `ReadFileGrant`
+clamp/nonzero/deny markers.
+That closes Midori Phase 02 honestly under the user-approved narrowed criteria: governed
+message-path `GetFile`, governed message-path `ReadFileGrant`, and current fail-closed
+`ReadGrant` behavior only.
+
+Two items are explicitly not claimed by this closure. A real `ReadGrant` producer still
+requires a future Law 1 `OpenAt`/file-handle/close design because today's
+`HandleTable::insert_ro` producer is test-only. Direct fast-IPC `GetFile` runtime proof
+still requires a future Tier-1 transport rewrite or bridge. `DataPtr` remains same-SAS
+only and is not presented as Tier-2-safe.
+
 ## [2026-08-05] Phase 02 grant hardening and stack-only response contract
 
 `ReadFileGrant` now clamps copies to the grant length, and the quota integration lane

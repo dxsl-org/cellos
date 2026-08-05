@@ -258,6 +258,13 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
         }
     };
 
+    match vfs_req(&VfsRequest::GetFile("/tmp/volatile.txt")) {
+        VfsResponse::DataPtr { ptr, len } if ptr != 0 && len == 8 => {
+            pass("dircap: GetFile returns a nonempty pointer before sealing");
+        }
+        _ => fail("dircap: GetFile returns a nonempty pointer before sealing"),
+    }
+
     match vfs_req(&VfsRequest::SealPaths) {
         VfsResponse::Ok => pass("dircap: the cell gives up naming paths"),
         _ => {
