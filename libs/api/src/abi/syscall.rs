@@ -222,11 +222,19 @@ pub enum ViSyscall {
     GrantAlloc = 208,
     /// Share Grant access with `target_task`.
     /// ABI: a0 = grant_id, a1 = target_task_id, a2 = GrantPerm (0=RO, 1=WO, 2=RW) → 0 on success.
+    /// In the current SAS build those permission bits are a protocol contract,
+    /// not Tier 2 hardware isolation against a malicious peer.
     /// Requires GrantCap (bit 39).
     GrantShare = 209,
     /// Return the raw pointer to a Grant region the caller has access to.
-    /// ABI: a0 = grant_id, a1 = optional size_out pointer → ptr (usize, same as
-    /// grant_id for identity-mapped SAS) on success.
+    /// ABI: a0 = grant_id, a1 = optional `size_out` pointer → ptr (usize, same
+    /// as grant_id for identity-mapped SAS) on success.
+    ///
+    /// `size_out` may be null. When non-null it must point to one aligned
+    /// `usize` slot fully contained in the caller's own user stack; segment
+    /// memory and arbitrary user mappings are rejected. An invalid `size_out`
+    /// pointer makes the syscall fail with `InvalidInput`.
+    ///
     /// Returns usize::MAX on permission denied or not found.
     GrantSlice = 210,
     /// Release a Grant region: unmaps its pages and frees its frames.

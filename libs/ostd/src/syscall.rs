@@ -1286,7 +1286,7 @@ pub fn sys_get_wall_secs() -> u64 {
 
 // ── Zero-Copy Grant API (Storage 2.0, Phase 01) ───────────────────────────────
 
-/// Allocate a contiguous kernel-managed Grant region of up to 16 pages (64 KB).
+/// Allocate a contiguous kernel-managed Grant region of up to 4096 pages (16 MiB).
 ///
 /// # Returns
 /// `Some(grant_id)` on success; `None` on OOM. `grant_id` is the physical base
@@ -1340,6 +1340,11 @@ pub fn sys_grant_slice(grant_id: usize) -> Option<*mut u8> {
 }
 
 /// Return the accessible Grant pointer and its kernel-registered byte length.
+///
+/// The kernel writes the length through an internal `size_out` pointer that
+/// obeys the `GrantSlice` ABI contract: null is allowed, but any non-null
+/// pointer must name one aligned `usize` slot fully inside the caller's own
+/// user stack.
 pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
     let mut len = 0usize;
     // SAFETY: `len` is a live writable stack slot for the duration of the call.
@@ -1357,6 +1362,33 @@ pub fn sys_grant_slice_with_len(grant_id: usize) -> Option<(*mut u8, usize)> {
     } else {
         Some((ret as usize as *mut u8, len))
     }
+}
+
+/// Copy the prefix of an accessible Grant into `dst`.
+///
+/// This helper accepts any Grant that the caller can currently resolve through
+/// the kernel's shared-address-space registration table. In the current SAS
+/// model, the recorded `GrantPerm` is protocol metadata rather than an
+/// additional kernel-enforced direction check for this read, so readable access
+/// here follows the active mapping/registration state.
+///
+/// # Returns
+/// `Some(bytes_copied)` when the caller may resolve `grant_id`. The copy length
+/// is capped by both `dst.len()` and the kernel-registered Grant length.
+///
+/// # None
+/// Returns `None` when `grant_id` is unknown, no longer registered, or the
+/// caller does not currently have an accessible mapping for it.
+pub fn sys_grant_copy_to_slice(grant_id: usize, dst: &mut [u8]) -> Option<usize> {
+    let (ptr, len) = sys_grant_slice_with_len(grant_id)?;
+    let n = dst.len().min(len);
+    // SAFETY: `sys_grant_slice_with_len` validated that the caller can access
+    // this Grant and returned its registered byte length; `dst` is an exclusive
+    // mutable slice owned by this caller for the duration of the copy.
+    unsafe {
+        core::ptr::copy_nonoverlapping(ptr as *const u8, dst.as_mut_ptr(), n);
+    }
+    Some(n)
 }
 
 /// Release a Grant region (owner-only): unmaps its pages and frees the frames.

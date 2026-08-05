@@ -50,7 +50,7 @@ fn shm_is_valid(handle: usize) -> bool {
 /// because `caller_id` IS a task id, not a Cell id (F7).
 struct PageGrant {
     base: usize,                           // physical address of the first allocated page
-    size: usize,                           // total byte count (multiple of 4096)
+    size: usize,                           // logical byte count requested by the owner
     owner: usize,                          // task id of the GrantAlloc caller
     shared_to: Option<(usize, GrantPerm)>, // current grantee task id + permission
 }
@@ -65,6 +65,14 @@ fn grant_table_lock() -> &'static Spinlock<Option<BTreeMap<usize, PageGrant>>> {
 /// Acts as a safety cap; cells are further bounded by available physical frames.
 const MAX_GRANT_PAGES: usize = 4096;
 
+fn grant_pages_for_size(size: usize) -> usize {
+    size.div_ceil(4096)
+}
+
+fn grant_allocated_bytes(size: usize) -> usize {
+    grant_pages_for_size(size) * 4096
+}
+
 // ── Registered Grant Table (GrantRegister / GrantUnregister, syscalls 215/216) ──
 
 /// Persistent kernel-managed Grant buffer for a cell's lifetime.
@@ -72,7 +80,7 @@ const MAX_GRANT_PAGES: usize = 4096;
 /// Supports one grantee at a time via `GrantShare`/`GrantSlice` (same as `PageGrant`).
 struct RegGrant {
     base: usize, // physical address of first allocated page
-    size: usize, // byte count (multiple of 4096)
+    size: usize, // logical byte count requested by the owner
     // 0 means the owner exited while a grantee still held the mapping.
     owner: usize,
     shared_to: Option<(usize, GrantPerm)>, // authorized grantee task id + permission
@@ -198,11 +206,12 @@ fn free_grant_pages(base: usize, n_pages: usize) {
 /// # Errors
 /// [`SyscallError::PermissionDenied`] when the region is pinned.
 fn refuse_if_pinned(kind: &str, id: usize, base: usize, size: usize) -> Result<(), SyscallError> {
-    let Some(held) = crate::memory::pin::holder_of(base, size) else {
+    let pinned_span = grant_allocated_bytes(size);
+    let Some(held) = crate::memory::pin::holder_of(base, pinned_span) else {
         return Ok(());
     };
     log::warn!(
-        "[grant] {kind} {id:#x} refused: region {base:#x}+{size} overlaps a pinned region \
+        "[grant] {kind} {id:#x} refused: region {base:#x}+{pinned_span} overlaps a pinned region \
          {:#x}+{} pages owned by task {} with {} in-flight operation(s){}",
         held.base,
         held.pages,
@@ -233,8 +242,6 @@ fn refuse_if_pinned(kind: &str, id: usize, base: usize, size: usize) -> Result<(
 /// KERNEL_ROOT (inside `unmap_page`/`map_page`). Never holds FRAME_ALLOCATOR
 /// when calling free_grant_pages, and never holds PIN_TABLE across either.
 pub(crate) fn reap_grants_for_task(dead_tid: usize) {
-    const PAGE_SIZE: usize = 4096;
-
     // Pins outlive their owner: a device authorised through the IOMMU keeps its
     // mapping after the cell is gone. Mark them before sweeping the tables so
     // the frames below are withheld rather than recycled.
@@ -267,10 +274,10 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     }; // PAGE_GRANT_TABLE lock released
 
     for grant in &owned {
-        if withhold_or_free(grant.base, grant.size / PAGE_SIZE) {
+        if withhold_or_free(grant.base, grant_pages_for_size(grant.size)) {
             continue;
         }
-        free_grant_pages(grant.base, grant.size / PAGE_SIZE);
+        free_grant_pages(grant.base, grant_pages_for_size(grant.size));
     }
 
     // ── REG_GRANT_TABLE pass ──────────────────────────────────────────────────
@@ -305,10 +312,10 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     }; // REG_GRANT_TABLE lock released
 
     for reg in &reg_owned {
-        if withhold_or_free(reg.base, reg.size / PAGE_SIZE) {
+        if withhold_or_free(reg.base, grant_pages_for_size(reg.size)) {
             continue;
         }
-        free_grant_pages(reg.base, reg.size / PAGE_SIZE);
+        free_grant_pages(reg.base, grant_pages_for_size(reg.size));
     }
 }
 
@@ -511,16 +518,6 @@ pub(super) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<()
     if ptr.checked_add(len).is_none() {
         return Err(SyscallError::InvalidInput);
     }
-    Ok(())
-}
-
-fn write_optional_usize(ptr: usize, value: usize) -> Result<(), SyscallError> {
-    if ptr == 0 {
-        return Ok(());
-    }
-    validate_user_buf(ptr, core::mem::size_of::<usize>(), MAX_USER_BUF)?;
-    // SAFETY: the caller pointer and exact write size were validated above.
-    unsafe { (ptr as *mut usize).write(value) };
     Ok(())
 }
 
@@ -3908,7 +3905,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     paddr,
                     PageGrant {
                         base: paddr,
-                        size: n_pages * PAGE_SIZE,
+                        size,
                         owner: caller_id,
                         shared_to: None,
                     },
@@ -3967,7 +3964,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             };
             if let Some((allowed, base, size)) = page_grant {
                 if allowed {
-                    write_optional_usize(size_out_ptr, size)?;
+                    super::user_out::write_optional_usize(caller_id, size_out_ptr, size)?;
                     return Ok(base);
                 }
                 return Ok(usize::MAX);
@@ -3984,7 +3981,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             match reg_grant {
                 None => Ok(usize::MAX),
                 Some((true, base, size)) => {
-                    write_optional_usize(size_out_ptr, size)?;
+                    super::user_out::write_optional_usize(caller_id, size_out_ptr, size)?;
                     Ok(base)
                 }
                 Some((false, _, _)) => Ok(usize::MAX),
@@ -4015,7 +4012,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Some(e) => e,
                 None => return Err(SyscallError::PermissionDenied),
             };
-            free_grant_pages(entry.base, entry.size / 4096);
+            free_grant_pages(entry.base, grant_pages_for_size(entry.size));
             Ok(0)
         }
 
@@ -4038,7 +4035,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     paddr,
                     RegGrant {
                         base: paddr,
-                        size: n_pages * PAGE_SIZE,
+                        size,
                         owner: caller_id,
                         shared_to: None,
                     },
@@ -4069,7 +4066,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Some(e) => e,
                 None => return Err(SyscallError::PermissionDenied),
             };
-            free_grant_pages(entry.base, entry.size / 4096);
+            free_grant_pages(entry.base, grant_pages_for_size(entry.size));
             Ok(0)
         }
 

@@ -50,8 +50,9 @@ pub enum VfsRequest<'a> {
     Poll { handle: u32 },
     /// Zero-copy large read: VFS reads `size` bytes at `offset` from the file
     /// identified by `cap` directly into the caller's pre-allocated grant buffer.
-    /// Grant must be owned by the caller and large enough to hold `size` bytes.
-    /// VFS calls GrantShare on itself before writing, then replies GrantDone.
+    /// The caller allocates the grant, GrantShare's it RW to VFS, and then waits
+    /// for `GrantDone`. VFS copies at most `min(size, grant_len, 4096, data_len -
+    /// offset)` bytes and replies only after the copy completes.
     ReadGrant {
         cap: u64,
         offset: u64,
@@ -71,9 +72,9 @@ pub enum VfsRequest<'a> {
     /// Unlike `ReadGrant` (cap + 4 KB page at a time), this resolves `path` through
     /// the VFS mount table (so it reaches the `/bin` cell-store overlay) and copies
     /// the ENTIRE file into the caller's pre-shared grant in one shot, replying
-    /// `GrantDone { bytes }`. `grant` must be owned by the caller, GrantShare'd RW to
-    /// VFS, and ≥ the file size; `max` is the grant's byte capacity (VFS copies at most
-    /// `max`, so a file that grew after the caller's Stat can't overflow the grant).
+    /// `GrantDone { bytes }`. `grant` must be owned by the caller and GrantShare'd
+    /// RW to VFS. Short grants are valid: VFS copies `min(file_len, max, grant_len)`
+    /// bytes, so a file that grew after the caller's Stat cannot overflow the grant.
     /// Used to read a cell ELF for `sys_spawn_from_elf`.
     ReadFileGrant {
         path: &'a str,

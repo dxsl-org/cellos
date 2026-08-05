@@ -4,6 +4,14 @@
 
 ---
 
+## [2026-08-05] Phase 02 grant hardening and stack-only response contract
+
+`ReadFileGrant` now clamps copies to the grant length, and the quota integration lane
+asserts the short-grant, nonzero-copy, and sealing cases before it accepts the test as
+passed. The response side stays stack-only and fixed-size: the silo guest keeps its
+largest `CryptoResult` variant bounded at 72 bytes, and the shared IPC envelopes remain
+unchanged.
+
 ## [2026-08-01] Split Tier-1 admission into build-time attestation and install-time consent
 
 `docs/specs/18b-cell-admission-consent-adr.md` records why the one mechanism called

@@ -227,28 +227,37 @@ pub fn handle_request<'a>(
                 _ => {}
             }
             // Validate: VFS must have been GrantShare'd access by the app.
-            match ostd::syscall::sys_grant_slice(grant) {
+            match ostd::syscall::sys_grant_slice_with_len(grant) {
                 None => api::ipc::VfsResponse::Err(ERR_IO), // no access
-                Some(ptr) => {
+                Some((ptr, grant_len)) => {
                     // A cap owned by another cell reports zero bytes, exactly like
                     // an unknown cap — the caller cannot tell the two apart.
-                    let bytes =
-                        if let Some(entry) = vfs.handles.get_mut(caller, api::cap::CapId(cap)) {
-                            let avail = entry.data_len.saturating_sub(offset as usize);
-                            let n = size.min(avail).min(4096);
-                            // SAFETY: data_ptr is a valid in-memory VAddr; ptr is a
-                            // kernel-allocated, identity-mapped grant buffer.
-                            unsafe {
-                                core::ptr::copy_nonoverlapping(
-                                    (entry.data_ptr + offset as usize) as *const u8,
-                                    ptr,
-                                    n,
-                                );
+                    let bytes = if let Some(entry) =
+                        vfs.handles.get_mut(caller, api::cap::CapId(cap))
+                    {
+                        match usize::try_from(offset) {
+                            Ok(offset) if offset < entry.data_len => {
+                                let avail = entry.data_len - offset;
+                                let n = size.min(avail).min(grant_len).min(4096);
+                                if n == 0 {
+                                    0
+                                } else if let Some(src) = entry.data_ptr.checked_add(offset) {
+                                    // SAFETY: `src` stays within the in-memory file image because
+                                    // `offset < data_len` and `n <= data_len - offset`; `ptr` is a
+                                    // kernel-validated grant buffer of at least `n` bytes.
+                                    unsafe {
+                                        core::ptr::copy_nonoverlapping(src as *const u8, ptr, n);
+                                    }
+                                    n
+                                } else {
+                                    0
+                                }
                             }
-                            n
-                        } else {
-                            0 // unknown cap, or not this caller's — nothing is copied
-                        };
+                            Ok(_) | Err(_) => 0,
+                        }
+                    } else {
+                        0 // unknown cap, or not this caller's — nothing is copied
+                    };
                     // F14: reply AFTER filling the buffer.
                     api::ipc::VfsResponse::GrantDone { bytes }
                 }
@@ -286,17 +295,17 @@ pub fn handle_request<'a>(
             if !vfs.access.can_read(caller, path) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
-            match ostd::syscall::sys_grant_slice(grant) {
+            match ostd::syscall::sys_grant_slice_with_len(grant) {
                 None => api::ipc::VfsResponse::Err(ERR_IO), // grant not shared to VFS
-                Some(ptr) => {
+                Some((ptr, grant_len)) => {
                     // Resolve via the mount table (BinOverlay → cell-store for /bin),
                     // then copy the WHOLE file into the caller's grant in one shot.
                     let data = vfs.read_to_vec(path);
-                    let n = data.len().min(max);
+                    let n = data.len().min(max).min(grant_len);
                     // SAFETY: ptr is the caller's identity-mapped grant, GrantShare'd
-                    // RW and (per `max`) large enough for n bytes; `data` is a fresh
-                    // owned Vec. The caller's ipc_call blocks until we reply, so it
-                    // cannot free the grant before this copy completes.
+                    // RW and `n` is capped by the kernel-registered Grant length;
+                    // `data` is a fresh owned Vec. The caller's ipc_call blocks until
+                    // we reply, so it cannot free the grant before this copy completes.
                     unsafe {
                         core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, n);
                     }

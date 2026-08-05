@@ -234,8 +234,21 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
         VfsResponse::Ok
     );
 
+    match grant_io::read_file_into_short_grant(READ_FILE_GRANT_SOURCE, 5) {
+        Ok((grant, bytes))
+            if bytes == grant.len() && grant_io::grant_prefix_equals(&grant, b"grant") =>
+        {
+            pass("grant: ReadFileGrant clamps to grant length");
+        }
+        _ => fail("grant: ReadFileGrant clamps to grant length"),
+    }
+
     let read_file_grant = match grant_io::read_file_into_grant(READ_FILE_GRANT_SOURCE) {
-        Ok((grant, bytes)) if bytes == grant.len() && bytes > 0 => {
+        Ok((grant, bytes))
+            if bytes == grant.len()
+                && bytes > 0
+                && grant_io::grant_prefix_equals(&grant, b"grant-copy-bytes") =>
+        {
             pass("grant: ReadFileGrant copies nonzero bytes");
             Some(grant)
         }
@@ -313,7 +326,7 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
     match (read_file_grant_ready, read_file_grant.as_ref()) {
         (true, Some(grant)) => match vfs_req(&VfsRequest::ReadFileGrant {
             path: READ_FILE_GRANT_SOURCE,
-            grant: 0,
+            grant: grant.id(),
             max: grant.len(),
         }) {
             VfsResponse::Err(DENIED) => pass("grant: ReadFileGrant is refused after sealing"),

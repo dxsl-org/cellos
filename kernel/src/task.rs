@@ -26,6 +26,7 @@ pub mod scheduler;
 pub mod stack;
 #[cfg(feature = "test-hooks")]
 pub mod user_hello;
+pub mod user_out;
 pub mod waker;
 
 #[cfg(test)]

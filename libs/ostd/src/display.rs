@@ -112,7 +112,9 @@ impl ViSurface {
         let len = (self.width * self.height * self.fmt.bpp()) as usize;
         // SAFETY: ptr is our own registered Grant buffer (sys_grant_register).
         // We hold &mut self so no other code can call pixels_mut concurrently.
-        // The compositor holds ReadOnly access — the kernel blocks any compositor write.
+        // The compositor is expected to treat this Grant as read-only, but in
+        // today's SAS build `GrantPerm` is only a protocol contract, not Tier 2
+        // hardware isolation against a malicious compositor.
         unsafe { core::slice::from_raw_parts_mut(self.ptr, len) }
     }
 

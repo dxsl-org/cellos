@@ -1,5 +1,8 @@
 use api::ipc::{VfsRequest, VfsResponse};
-use ostd::syscall::{sys_grant_alloc, sys_grant_free, sys_grant_share};
+use ostd::syscall::{
+    sys_close_cap, sys_grant_alloc, sys_grant_copy_to_slice, sys_grant_free, sys_grant_share,
+    sys_open_cap,
+};
 const READ_WRITE_GRANT: u8 = 2;
 
 pub struct GrantRegion {
@@ -41,7 +44,10 @@ impl Drop for GrantRegion {
 
 pub fn stat_file_len(path: &str) -> Result<usize, &'static str> {
     match crate::vfs_req(&VfsRequest::Stat(path)) {
-        VfsResponse::Stat { size, is_dir: false } => {
+        VfsResponse::Stat {
+            size,
+            is_dir: false,
+        } => {
             if size > usize::MAX as u64 {
                 Err("grant probe file does not fit usize")
             } else if size == 0 {
@@ -77,4 +83,68 @@ pub fn read_file_into_grant(path: &str) -> Result<(GrantRegion, usize), &'static
     }
 
     Ok((grant, bytes))
+}
+
+pub fn read_file_into_short_grant(
+    path: &str,
+    grant_len: usize,
+) -> Result<(GrantRegion, usize), &'static str> {
+    let file_len = stat_file_len(path)?;
+    if grant_len == 0 || grant_len >= file_len {
+        return Err("short grant length must be nonzero and smaller than file");
+    }
+    let grant = GrantRegion::alloc(grant_len)?;
+    grant.share_rw_with_vfs()?;
+
+    match crate::vfs_req(&VfsRequest::ReadFileGrant {
+        path,
+        grant: grant.id(),
+        max: file_len,
+    }) {
+        VfsResponse::GrantDone { bytes } if bytes == grant_len => Ok((grant, bytes)),
+        VfsResponse::GrantDone { .. } => Err("ReadFileGrant ignored short grant length"),
+        VfsResponse::Err(_) => Err("ReadFileGrant short grant returned an error"),
+        _ => Err("ReadFileGrant short grant returned an unexpected response"),
+    }
+}
+
+pub fn grant_prefix_equals(grant: &GrantRegion, expected: &[u8]) -> bool {
+    let mut bytes = [0u8; 32];
+    if expected.len() > bytes.len() {
+        return false;
+    }
+    match sys_grant_copy_to_slice(grant.id(), &mut bytes[..expected.len()]) {
+        Some(n) if n >= expected.len() => bytes[..expected.len()] == *expected,
+        _ => false,
+    }
+}
+
+pub fn read_cap_returns_zero(path: &str, offset: u64, size: usize) -> Result<(), &'static str> {
+    let cap = sys_open_cap(path).map_err(|_| "OpenCap failed for ReadGrant probe")?;
+    let grant = match GrantRegion::alloc(16) {
+        Ok(grant) => grant,
+        Err(err) => {
+            sys_close_cap(cap);
+            return Err(err);
+        }
+    };
+    if let Err(err) = grant.share_rw_with_vfs() {
+        sys_close_cap(cap);
+        return Err(err);
+    }
+
+    let result = match crate::vfs_req(&VfsRequest::ReadGrant {
+        cap,
+        offset,
+        size,
+        grant: grant.id(),
+    }) {
+        VfsResponse::GrantDone { bytes: 0 } => Ok(()),
+        VfsResponse::GrantDone { .. } => Err("ReadGrant returned nonzero bytes"),
+        VfsResponse::Err(_) => Err("ReadGrant returned an error"),
+        _ => Err("ReadGrant returned an unexpected response"),
+    };
+
+    sys_close_cap(cap);
+    result
 }

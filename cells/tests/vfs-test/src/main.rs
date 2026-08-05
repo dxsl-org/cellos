@@ -27,8 +27,11 @@ api::declare_syscalls![
     Recv,
     Log,
     LookupService,
+    OpenCap,
+    CloseCap,
     GrantAlloc,
     GrantShare,
+    GrantSlice,
     GrantFree
 ];
 
@@ -253,6 +256,27 @@ fn test_access_control() {
         3,
         "WriteGrant is fail-closed (no cap→path routing yet)"
     );
+
+    assert_ok!(
+        api::ipc::VfsRequest::Write {
+            path: "/tmp/read_grant_zero.txt",
+            content: b"grant"
+        },
+        "write file for zero-byte ReadGrant probes"
+    );
+    match grant_io::read_cap_returns_zero("/tmp/read_grant_zero.txt", 5, 4) {
+        Ok(()) => pass("ReadGrant returns zero bytes at EOF without faulting"),
+        Err(_) => fail("ReadGrant returns zero bytes at EOF without faulting"),
+    }
+    match grant_io::read_cap_returns_zero("/tmp/read_grant_zero.txt", 0, 0) {
+        Ok(()) => pass("ReadGrant returns zero bytes for size=0 without faulting"),
+        Err(_) => fail("ReadGrant returns zero bytes for size=0 without faulting"),
+    }
+    match grant_io::read_cap_returns_zero("/tmp/read_grant_zero.txt", u64::MAX, 4) {
+        Ok(()) => pass("ReadGrant returns zero bytes for oversized offset without faulting"),
+        Err(_) => fail("ReadGrant returns zero bytes for oversized offset without faulting"),
+    }
+    let _ = vfs_req(&api::ipc::VfsRequest::Unlink("/tmp/read_grant_zero.txt"));
 }
 
 /// 4. Async read protocol: ReadAsync → PendingHandle → Poll → Data.
