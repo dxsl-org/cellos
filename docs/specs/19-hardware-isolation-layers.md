@@ -140,6 +140,7 @@ two profiles compose: a large-app cell may still run many futures internally.
 | Topic | Document |
 |-------|----------|
 | Trust tiers consuming these layers | `docs/specs/18-cell-trust-tiers.md` |
+| Installer Tier-1/Tier-2 choice — gated on Layer B | `docs/specs/18b-cell-admission-consent-adr.md` §5 |
 | Current mapping code / W-for-relocation note | `kernel/src/loader/elf.rs` |
 | Reactor + completion queue (phase 07) | `.agents/260727-2101-midori-lessons-cellos/phase-07-async-reactor.md` |
 | Stack sizing measurements (phase 08) | `.agents/260727-2101-midori-lessons-cellos/phase-08-stack-sizing-table.md` |

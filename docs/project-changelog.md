@@ -4,6 +4,25 @@
 
 ---
 
+## [2026-08-01] Split Tier-1 admission into build-time attestation and install-time consent
+
+`docs/specs/18b-cell-admission-consent-adr.md` records why the one mechanism called
+"signing" cannot carry both claims Tier-1 admission needs. Safety/provenance (F1/F5) is
+checkable only where source is visible, so it stays a build-time publisher signature and
+`cellos-sign` stays a source-tree checker. Owner authorization is assertable only by the
+machine owner, so it becomes an install-time digest-pinned admission record under a
+separate owner anchor — not a second signature embedded in the ELF, because
+`measurement_log.rs:56` digests the whole file and per-machine signatures would fork the
+attestation aggregate across the fleet. Admission is the conjunction: the owner's record
+may withhold Tier 1 from a signed binary and can never grant it without one.
+
+Two gaps in the current tree are now named. `/POLICY.BIN` is verified against the fleet
+root key, so today's "consent" mechanism belongs to the operator rather than the owner;
+and both trust anchors are compile-time constants, so provisioning them is the blocking
+prerequisite for the fleet posture Spec 18 §4 already requires. The installer's
+Tier-1/Tier-2 choice is gated on Spec 19 Layer B — offered earlier it would promise
+containment the kernel cannot provide. Nothing here is implemented.
+
 ## [2026-08-01] Sync Midori closure plan status
 
 Phase 01 is still blocked on the fast-IPC runtime proof gap, phase 02 is branch-complete

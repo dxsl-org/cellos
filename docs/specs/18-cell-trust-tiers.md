@@ -1,8 +1,9 @@
 # Spec 18 — Cell Trust Tiers (ADR)
 
-> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D13. Supersedes the WASM
-> runtime tier wherever older documents mention it. Tier 2 and fleet-secure Tier-1
-> admission are accepted designs, not current production mechanisms.
+> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D13, and again 2026-08-01 by
+> `18b-cell-admission-consent-adr.md` (§2.1, §4). Supersedes the WASM runtime tier
+> wherever older documents mention it. Tier 2 and fleet-secure Tier-1 admission are
+> accepted designs, not current production mechanisms.
 
 ## 1. Context
 
@@ -57,6 +58,21 @@ fleet-secure build.** Current G1/dev builds do not enforce this invariant: when
 This is a development posture, not a sandbox for hostile native code.
 
 ### 2.1 Tier 1 admission — `cellos-sign`
+
+Tier-1 admission carries two claims, and only one of them is a signature over the
+artifact. `18b-cell-admission-consent-adr.md` separates them:
+
+- **Claim A — safety/provenance**: this ELF was built under F1/F5. Checkable only where
+  source is visible, so it is attested at **build** time by a publisher key in CI/KMS.
+  That is what `cellos-sign` produces, and the rest of this section describes it.
+- **Claim B — authorization**: the owner of this machine permits this binary in their
+  SAS. Assertable only by the owner, so it is recorded at **install** time as a
+  digest-pinned admission entry under a separate owner anchor — not as a second
+  signature embedded in the ELF.
+
+Admission is `A ∧ B`: the owner's record may withhold Tier 1 from a validly signed
+binary and can never grant Tier 1 without one. Neither the owner anchor nor the
+admission store is implemented; §2.1 as written below describes Claim A only.
 
 In a controlled fleet pipeline, the platform signature is intended to mean **"approved
 by a pipeline that enforced F1/F5"**. The normal `cellos-sign` route refuses to sign
@@ -125,7 +141,16 @@ item; not a prerequisite for anything above.
 - A production profile must provision the kernel's immutable cell-signing public key,
   enable `signing-required` and `policy-required`, remove dev-key/weak-RNG features, bind
   checked source to the signed artifact, and test unsigned, stripped, wrong-key,
-  dev-key, tampered, and unchecked-dev-signed negative cases.
+  dev-key, tampered, and unchecked-dev-signed negative cases. Provisioning that key
+  requires the anchors to become boot-provisioned data rather than the `const` values in
+  `kernel/src/signing.rs` and `kernel/src/policy.rs` — the blocking prerequisite named in
+  `18b-cell-admission-consent-adr.md`.
+- Owner consent is a separate mechanism from fleet policy. `/POLICY.BIN` is verified
+  against the fleet root key, so it expresses the *operator's* capability ceiling, not the
+  machine owner's admission decision; see `18b-cell-admission-consent-adr.md` §4.
+- An installer must not offer a Tier-1/Tier-2 choice until Spec 19 Layer B exists. Before
+  then the Tier-2 option would describe containment the kernel cannot provide, and the
+  code would land in the shared SAS regardless.
 - Secure boot remains required to anchor the kernel and its embedded trust key.
 - `GrantShare` to/from a Tier-2 cell maps the grant into the domain's table explicitly;
   `DataPtr`-style raw pointers (`GetFile`) are unrepresentable across the tier boundary
@@ -140,6 +165,7 @@ item; not a prerequisite for anything above.
 
 | Topic | Document |
 |-------|----------|
+| Build-time attestation vs install-time consent | `docs/specs/18b-cell-admission-consent-adr.md` |
 | rustc as TCB, policies F1–F7 | `docs/specs/16-rustc-tcb.md` |
 | Hardware isolation layers (W^X, MPK, domain tables) | `docs/specs/19-hardware-isolation-layers.md` |
 | Signing pipeline (current) | `scripts/sign-cell.py`, `scripts/lib-sign-cells.sh`, `kernel/src/signing.rs` |
