@@ -104,6 +104,12 @@ pub struct Scheduler {
     /// watchdog runs inside SCHEDULER — inverting the documented lock order.
     /// yield_cpu() drains this list after dropping SCHEDULER, matching the zombie-reaper pattern.
     pub(super) pending_grant_reap: Vec<usize>,
+    /// TIMER reservations owned by dead tasks, released outside SCHEDULER.
+    pending_completion_release: Vec<(
+        usize,
+        alloc::sync::Arc<super::completion::CompletionQueue>,
+        super::completion::SlotId,
+    )>,
     pub last_global_sweep_tick: usize,
 }
 
@@ -120,6 +126,7 @@ impl Scheduler {
             zombies: Vec::new(),
             next_task_id: 1,
             pending_grant_reap: Vec::new(),
+            pending_completion_release: Vec::new(),
             last_global_sweep_tick: 0,
         }
     }
@@ -455,6 +462,19 @@ impl Scheduler {
     pub fn exit_task(&mut self, tid: usize, exit_reason: usize) {
         info!("Task {} exiting (reason={:#x})...", tid, exit_reason);
 
+        let timer_release = self.tasks.get_mut(&tid).and_then(|task| {
+            let wait = task.completion_wait.take()?;
+            if wait.source != api::completion::source::TIMER {
+                return None;
+            }
+            task.completion
+                .as_ref()
+                .map(|queue| (tid, queue.clone(), wait.slot))
+        });
+        if let Some(release) = timer_release {
+            self.pending_completion_release.push(release);
+        }
+
         // Capture waiters BEFORE the task is removed from the table.
         let waiters: Vec<usize> = self
             .tasks
@@ -619,6 +639,17 @@ impl Scheduler {
         core::mem::take(&mut self.pending_grant_reap)
     }
 
+    /// Take dead-task TIMER slots for release outside the scheduler lock.
+    pub fn take_pending_completion_release(
+        &mut self,
+    ) -> Vec<(
+        usize,
+        alloc::sync::Arc<super::completion::CompletionQueue>,
+        super::completion::SlotId,
+    )> {
+        core::mem::take(&mut self.pending_completion_release)
+    }
+
     /// Picks the next task to run on `hart_id` and returns pointers for context switch.
     ///
     /// Hart 0 also runs the global sweep (timer wakes, heartbeat, async-poll, watchdog).
@@ -679,6 +710,13 @@ impl Scheduler {
                             should_wake = true;
                             timed_out = true;
                         }
+                    }
+                    TaskState::WaitCompletion {
+                        source, deadline, ..
+                    } if deadline.map(|d| now as u64 >= d).unwrap_or(false) => {
+                        task.trap_frame.regs[10] = 0;
+                        should_wake = true;
+                        timed_out = *source != api::completion::source::TIMER;
                     }
                     // WaitIrq: IRQ-only wake — no deadline, no timeout.
                     // ISR sets IRQ_PENDING[irq] atomically (no lock, no scheduler access).

@@ -19,6 +19,10 @@ be answered first, because each is expensive to change afterwards:
 4. **Appending a completion takes only the queue's own lock**, and waking the
    waiter is a separate step.
 
+The Phase 04 contract is narrower than a generic reactor. `WaitCompletion` only
+covers `NET_RX` and finite `TIMER` waits, while `WaitForEvent` and the `Recv*`
+family keep their existing wake and delivery rules.
+
 ---
 
 ## Context
@@ -44,6 +48,11 @@ tree before this record was written:
   blocked inside its call. Make that future cancellable and the write lands in
   memory the caller has moved on from.
 
+The implementation keeps the reservation and the parked state separate on
+purpose. `TaskState::WaitCompletion` carries the source and deadline that the
+timer sweep can wake, while `Task::completion_wait` carries the slot bookkeeping
+so exit cleanup can release the reservation later without holding `SCHEDULER`.
+
 None of these is an argument against the change. They are the reason the change
 cannot be made incrementally in the obvious way, and the reason this record exists.
 
@@ -65,6 +74,13 @@ carries. It is meaningful only within the cell that owns the queue, dies with th
 cell, and cannot be forged into a reference to anything else. Revocation becomes
 simple, because revoking is releasing the slot.
 
+The v1 wire record is fixed at 24 bytes. Its source word sits in bytes 12..16,
+between the slot and result fields. `WaitCompletion` submits exactly one source
+bit: `NET_RX` or `TIMER`. Zero, multi-bit, and unknown submission masks are
+rejected up front. When decoding a record written by the original v1 kernel,
+source `0` is accepted as legacy `UNSPECIFIED`; that compatibility rule does not
+make `0` a valid new submission.
+
 ## Point 2 — Reserve at submission so completion cannot fail
 
 A bounded queue can fill. Dropping the entry loses a wakeup and the waiter hangs;
@@ -82,6 +98,13 @@ The cost is that a cell's outstanding operations are capped by its queue size, a
 a cell that submits without draining will be refused rather than served. That is the
 correct direction: the failure is visible, attributable, and confined to the cell
 that caused it.
+
+`NET_RX` waits indefinitely when no deadline is supplied. If a finite deadline
+expires before a frame is reported, the reservation is released and the syscall
+returns `0` without writing a completion. `TIMER` is the opposite: it requires a
+finite deadline, and when that deadline expires the resumed waiter writes a
+synthetic completion with source `TIMER` and result `0` rather than asking the
+interrupt path to append one.
 
 ## Point 3 — Cancellation discards a result, never truncates an operation
 
@@ -120,7 +143,9 @@ convenience that follows from it.
 Waking the waiter needs the scheduler and is therefore a separate step, deferred the
 way the existing grant reap already defers work that cannot run under the sweep's
 locks. An append followed by a deferred wake is safe from interrupt context; an
-append that wakes inline is not.
+append that wakes inline is not. If a task dies while still holding a reservation,
+`exit_task` records the `(tid, queue, slot)` tuple and `yield_cpu` later releases it
+outside `SCHEDULER`; dead-task cleanup never frees a slot inline.
 
 ---
 
@@ -131,12 +156,13 @@ append that wakes inline is not.
   migrated onto it, so the call is introduced with the first migration rather than
   ahead of it. Publishing an interface before anything exercises it freezes a shape
   chosen from guesswork.
-- The rendezvous receive path is kept as it is, or non-blocking send moves to the
-  completion queue in the same change. Leaving one aware of the parked state and
-  the other not is the silent-discard failure described above, and is not an
-  option.
-- Every waiter registers against the task it depends on, and task exit posts a
-  synthetic completion so a dependent gets an error instead of waiting forever.
+- `WaitForEvent` keeps its bitmask wake semantics, and the `Recv`/`TryRecv`/
+  `RecvTimeout` paths keep their existing parked-receiver contract. `WaitCompletion`
+  is additive; it does not absorb the IPC paths that still depend on the parked
+  `TaskState::Recv` shape.
+- Peer-dependent completion sources stay deferred. Any future source that waits on
+  another task must bind that target's generation at submission, because a bare tid
+  is reusable and is not a stable completion identity.
 - Every block of unsafe code justified by "the caller is blocked" must be audited
   before the executor changes, not after. That justification stops being true the
   moment a future can be cancelled.
@@ -148,11 +174,9 @@ append that wakes inline is not.
   bytes in the receiver's existing `pending_msgs` mailbox, and only the resumed
   receiver copies them into its buffer. This also removes the interrupt-side need
   to enable supervisor writes to user pages for console delivery.
-- Migrating `TaskState::Recv` itself onto completion queues remains deferred. The
-  rejected prototype consumed the shared NET_RX slot space, lost slot bookkeeping
-  across reply/exit/freeze teardown paths, and relied on waiter arbitration the
-  queue does not provide. A future attempt needs IPC-owned slots and task-level
-  lifecycle bookkeeping rather than fields embedded only in `TaskState::Recv`.
+- The first end-to-end TIMER userspace proof is still Phase 05. Phase 04 verifies
+  the encoded contract, source validation, and dead-task lifecycle guard, but it
+  does not claim a real TIMER consumer in userspace.
 
 ## Rejected
 

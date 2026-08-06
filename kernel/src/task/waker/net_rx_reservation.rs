@@ -68,9 +68,11 @@ pub fn arm(queue: Arc<CompletionQueue>, slot: SlotId) {
     };
 
     let displaced_cell = displaced.queue.cell().0;
-    let _ = displaced
-        .queue
-        .complete(displaced.slot, api::completion::RESULT_ABANDONED as isize);
+    let _ = displaced.queue.complete_from(
+        displaced.slot,
+        api::completion::source::NET_RX,
+        api::completion::RESULT_ABANDONED as isize,
+    );
     let mut state = RESERVATION.lock();
     *state = Reservation::Armed { queue, slot };
     log::warn!(
@@ -112,7 +114,9 @@ pub fn begin_signal() -> Option<PendingCompletion> {
 }
 
 pub fn finish_signal(pending: PendingCompletion, result: isize) {
-    let _ = pending.queue.complete(pending.slot, result);
+    let _ = pending
+        .queue
+        .complete_from(pending.slot, api::completion::source::NET_RX, result);
     let mut state = RESERVATION.lock();
     if matches!(
         &*state,

@@ -557,6 +557,22 @@ pub fn yield_cpu() {
     };
     drop(reaped);
 
+    // A task can die while its TIMER completion is parked. The queue is shared
+    // by every thread in the cell, so task teardown alone does not free that
+    // slot. Release it here, outside SCHEDULER, and clear the dead waiter before
+    // another thread reuses the queue.
+    let completion_releases = {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.take_pending_completion_release()
+        } else {
+            alloc::vec::Vec::new()
+        }
+    };
+    for (tid, queue, slot) in completion_releases {
+        let _ = queue.clear_waiter(tid);
+        let _ = queue.release(slot);
+    }
+
     // Reap grant pages for watchdog-killed tasks. The watchdog enqueues task IDs
     // here because free_grant_pages (FRAME_ALLOCATOR → KERNEL_ROOT) must not run
     // while SCHEDULER is held — same pattern as take_reapable_zombies above.

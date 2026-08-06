@@ -63,6 +63,30 @@ fn fail(reason: &str) -> bool {
     false
 }
 
+fn source_validation_is_fail_closed() -> bool {
+    let net_rx = api::completion::source::NET_RX;
+    let timer = api::completion::source::TIMER;
+    if !super::completion_wait::source_is_valid(net_rx, None) {
+        return fail("an indefinite NET_RX wait was rejected");
+    }
+    if !super::completion_wait::source_is_valid(timer, Some(1)) {
+        return fail("a finite TIMER wait was rejected");
+    }
+    if super::completion_wait::source_is_valid(timer, None) {
+        return fail("an indefinite TIMER wait was accepted");
+    }
+    if super::completion_wait::source_is_valid(0, Some(1)) {
+        return fail("the zero source mask was accepted");
+    }
+    if super::completion_wait::source_is_valid(net_rx | timer, Some(1)) {
+        return fail("a multi-source submission was accepted");
+    }
+    if super::completion_wait::source_is_valid(1 << 31, Some(1)) {
+        return fail("an unknown source bit was accepted");
+    }
+    true
+}
+
 /// A result lands in the slot that was reserved for it, and the slot is free
 /// again once drained.
 fn round_trip() -> bool {
@@ -71,11 +95,14 @@ fn round_trip() -> bool {
     match queue(TID_A) {
         Some(q) => match q.reserve() {
             Some(slot) => {
-                if !q.complete(slot, -7) {
+                if !q.complete_from(slot, api::completion::source::TIMER, -7) {
                     ok = fail("completing a freshly reserved slot was refused");
                 }
                 match q.drain() {
-                    Some(done) if done.slot == slot && done.result == -7 => {}
+                    Some(done)
+                        if done.slot == slot
+                            && done.source == api::completion::source::TIMER
+                            && done.result == -7 => {}
                     other => {
                         ok = fail(&alloc::format!(
                             "drained {:?}, expected the slot back with -7",
@@ -95,6 +122,69 @@ fn round_trip() -> bool {
         None => ok = fail("no queue could be reached from the task record"),
     }
     remove(TID_A);
+    ok
+}
+
+/// Task death moves a parked TIMER slot to the out-of-lock release queue.
+fn task_exit_defers_timer_release() -> bool {
+    insert(TID_A, CELL_ONE);
+    let queue = match queue(TID_A) {
+        Some(queue) => queue,
+        None => {
+            remove(TID_A);
+            return fail("no queue could be reached for TIMER exit cleanup");
+        }
+    };
+    let slot = match queue.reserve() {
+        Some(slot) => slot,
+        None => {
+            remove(TID_A);
+            return fail("an empty queue refused the TIMER reservation");
+        }
+    };
+    queue.register_waiter(TID_A);
+
+    let (releases, zombies) = {
+        let mut guard = super::SCHEDULER.lock();
+        let Some(sched) = guard.as_mut() else {
+            drop(guard);
+            remove(TID_A);
+            return fail("scheduler absent during TIMER exit cleanup");
+        };
+        if let Some(task) = sched.tasks.get_mut(&TID_A) {
+            task.completion_wait = Some(super::tcb::CompletionWait {
+                source: api::completion::source::TIMER,
+                slot,
+            });
+            task.state = TaskState::WaitCompletion {
+                source: api::completion::source::TIMER,
+                deadline: Some(u64::MAX),
+            };
+        }
+        sched.exit_task(TID_A, usize::MAX);
+        (
+            sched.take_pending_completion_release(),
+            sched.take_reapable_zombies(),
+        )
+    };
+
+    let mut ok = true;
+    if releases.len() != 1 {
+        ok = fail("task exit did not queue exactly one TIMER slot release");
+    }
+    for (tid, deferred_queue, deferred_slot) in releases {
+        if tid != TID_A || deferred_slot != slot || !Arc::ptr_eq(&queue, &deferred_queue) {
+            ok = fail("task exit queued the wrong TIMER reservation");
+        }
+        let _ = deferred_queue.clear_waiter(tid);
+        if !deferred_queue.release(deferred_slot) {
+            ok = fail("the deferred TIMER slot could not be released");
+        }
+    }
+    if queue.reserved() != 0 || queue.drainable() != 0 {
+        ok = fail("TIMER task death left queue capacity charged");
+    }
+    drop(zombies);
     ok
 }
 
@@ -380,7 +470,9 @@ fn withdrawal_raises_no_wake() -> bool {
 /// Returns true iff the completion queue reserves, lands, bounds and defers as
 /// specified. Logs a decisive serial line.
 pub fn self_test() -> bool {
-    let ok = round_trip()
+    let ok = source_validation_is_fail_closed()
+        & round_trip()
+        & task_exit_defers_timer_release()
         & shared_within_cell()
         & exhaustion_refuses_submission()
         & deferred_wake_reaches_scheduler()

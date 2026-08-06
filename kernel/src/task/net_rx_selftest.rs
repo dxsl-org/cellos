@@ -56,7 +56,10 @@ fn signal_fills_the_reservation() -> bool {
                     waker::arm_net_rx(q.clone(), slot);
                     waker::signal_net_rx();
                     match q.drain() {
-                        Some(done) if done.slot == slot && done.result == NET_RX as isize => {}
+                        Some(done)
+                            if done.slot == slot
+                                && done.source == NET_RX
+                                && done.result == NET_RX as isize => {}
                         other => {
                             ok = fail(&alloc::format!(
                                 "drained {:?}, expected the reserved slot carrying the RX bit",
@@ -116,6 +119,7 @@ fn takeover_completes_the_displaced_reservation() -> bool {
                     match first.drain() {
                         Some(done)
                             if done.slot == first_slot
+                                && done.source == NET_RX
                                 && done.result == RESULT_ABANDONED as isize => {}
                         other => {
                             ok = fail(&alloc::format!(
@@ -161,7 +165,10 @@ fn split_signal_publication_is_visible() -> bool {
                         }
                         waker::finish_signal_net_rx_for_test(pending);
                         match q.drain() {
-                            Some(done) if done.slot == slot && done.result == NET_RX as isize => {}
+                            Some(done)
+                                if done.slot == slot
+                                    && done.source == NET_RX
+                                    && done.result == NET_RX as isize => {}
                             other => {
                                 ok = fail(&alloc::format!(
                                     "split signal drained {:?}, expected the RX completion",

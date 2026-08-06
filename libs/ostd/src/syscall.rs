@@ -1622,11 +1622,12 @@ pub fn sys_wait_for_event(mask: u32, timeout_ticks: u64) -> u32 {
 /// Submit a wait against one kernel event source and block for its result.
 ///
 /// The call reserves a slot on this cell's completion queue before it parks, so
-/// the source always has somewhere to put the result. `timeout_ticks = 0` waits
-/// indefinitely; any other value is a deadline in 10 ms scheduler ticks, after
-/// which the wait returns `None` and the reservation is released.
+/// the source always has somewhere to put the result. Deadline behavior depends
+/// on the source: `NET_RX` accepts zero for an indefinite wait and returns
+/// `None` when a finite timeout expires; `TIMER` requires a nonzero duration and
+/// returns a completion with `result = 0` when that duration expires.
 ///
-/// `mask` names exactly one source — see `api::syscall::events`.
+/// `mask` names exactly one source — see `api::completion::source`.
 ///
 /// # Errors
 /// `None` on timeout, on a mask this kernel does not serve, and when the cell's

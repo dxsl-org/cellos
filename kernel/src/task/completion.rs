@@ -64,6 +64,9 @@ impl SlotId {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Completion {
     pub slot: SlotId,
+    /// One public source bit from `api::completion::source`, or zero for
+    /// kernel-only queue self-tests that do not model a public producer.
+    pub source: u32,
     /// Operation result. Negative values are reserved for errors; the exact
     /// encoding belongs with the first operation migrated onto the queue, not
     /// here, so nothing is frozen before a real caller exists.
@@ -77,7 +80,7 @@ enum Slot {
     /// A submission owns this index; its result has not arrived.
     Reserved,
     /// The result arrived and has not been drained.
-    Done(isize),
+    Done { source: u32, result: isize },
 }
 
 struct Ring {
@@ -157,6 +160,16 @@ impl CompletionQueue {
     /// is the property the whole design rests on.
     #[must_use = "a refused completion means a slot was misused and the waiter will hang"]
     pub fn complete(&self, slot: SlotId, result: isize) -> bool {
+        self.complete_from(slot, api::completion::source::UNSPECIFIED, result)
+    }
+
+    /// Record a public source and result for the operation holding `slot`.
+    ///
+    /// Production completion sources must use this method so the userspace
+    /// record identifies why the parked executor woke. The zero-source
+    /// [`complete`](Self::complete) wrapper remains for kernel-only queue tests.
+    #[must_use = "a refused completion means a slot was misused and the waiter will hang"]
+    pub fn complete_from(&self, slot: SlotId, source: u32, result: isize) -> bool {
         let index = slot.index();
         // The whole lock-holding region is this block, and it contains no call
         // that could reach another lock — not the logger, which is why the
@@ -165,7 +178,7 @@ impl CompletionQueue {
             let mut ring = self.ring.lock();
             match ring.slots.get(index) {
                 Some(Slot::Reserved) => {
-                    ring.slots[index] = Slot::Done(result);
+                    ring.slots[index] = Slot::Done { source, result };
                     // Cannot overflow: `drainable` is as long as `slots`, and a
                     // slot is only pushed on the Reserved -> Done edge, which
                     // happens once per reservation.
@@ -179,7 +192,7 @@ impl CompletionQueue {
                     None
                 }
                 Some(Slot::Free) => Some("free"),
-                Some(Slot::Done(_)) => Some("already done"),
+                Some(Slot::Done { .. }) => Some("already done"),
                 None => Some("out of range"),
             }
         };
@@ -243,10 +256,11 @@ impl CompletionQueue {
                 self.wake_requested.store(false, Ordering::Release);
             }
             match ring.slots[index] {
-                Slot::Done(result) => {
+                Slot::Done { source, result } => {
                     ring.slots[index] = Slot::Free;
                     Ok(Completion {
                         slot: SlotId(index as u16),
+                        source,
                         result,
                     })
                 }

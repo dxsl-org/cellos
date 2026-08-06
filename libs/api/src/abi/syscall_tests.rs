@@ -133,6 +133,24 @@ mod tests {
         assert!(legacy.permits(ViSyscall::WaitCompletion));
     }
 
+    #[test]
+    fn completion_source_bits_are_stable_and_disjoint() {
+        assert_eq!(crate::syscall::events::NET_RX, 1 << 0);
+        assert_eq!(crate::syscall::events::TIMER, 1 << 1);
+        assert_eq!(
+            crate::syscall::events::NET_RX,
+            crate::completion::source::NET_RX
+        );
+        assert_eq!(
+            crate::syscall::events::TIMER,
+            crate::completion::source::TIMER
+        );
+        assert_eq!(
+            crate::syscall::events::NET_RX & crate::syscall::events::TIMER,
+            0
+        );
+    }
+
     /// v1 must stay byte-for-byte identical for every existing `GetProcs`
     /// caller; v2 is a separate fixed-width row so the two never alias.
     #[test]

@@ -434,7 +434,8 @@ pub enum ViSyscall {
     QueryDirHandles = 241,
     /// 242: Wait for one asynchronous result on the caller's completion queue.
     ///
-    /// ABI: a0 = source mask (see [`events`]), a1 = timeout_ticks_lo,
+    /// ABI: a0 = source mask (see [`crate::completion::source`]),
+    /// a1 = timeout_ticks_lo,
     /// a2 = timeout_ticks_hi, a3 = pointer to a
     /// [`crate::completion::COMPLETION_LEN`]-byte buffer → 1 when a completion
     /// was written there, 0 when the wait ended with nothing.
@@ -445,8 +446,11 @@ pub enum ViSyscall {
     /// free slot refuses here, where the caller can act on it, rather than in
     /// the interrupt handler that is trying to report a result.
     ///
-    /// `timeout_ticks = 0` waits indefinitely. A wait that ends on its deadline
-    /// releases the reservation and reports 0; it does not leave a slot held.
+    /// Source-specific deadline semantics are deliberate:
+    /// - `NET_RX`: zero waits indefinitely; a finite deadline that expires
+    ///   releases the reservation and reports 0 with no record.
+    /// - `TIMER`: a finite deadline is required, and expiry writes a completion
+    ///   whose source is `TIMER` and whose result is 0.
     ///
     /// Distinct from [`Self::WaitForEvent`], which reports only *that* an event
     /// bit fired. This reports *which submission* finished and with what result,
@@ -836,7 +840,12 @@ impl From<usize> for ViSyscall {
 /// against one source.
 pub mod events {
     /// A NIC RX frame is available for the net cell to drain.
-    pub const NET_RX: u32 = 1 << 0;
+    pub const NET_RX: u32 = crate::completion::source::NET_RX;
+    /// A finite completion wait deadline elapsed.
+    ///
+    /// This source belongs to `WaitCompletion`; `WaitForEvent` continues to use
+    /// its existing timeout return value rather than firing this bit.
+    pub const TIMER: u32 = crate::completion::source::TIMER;
 }
 
 /// Well-known service IDs for the kernel Service Registry (`RegisterService` /

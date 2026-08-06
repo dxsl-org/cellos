@@ -2,6 +2,21 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-06] Phase 04 generic completion contract verified with NET_RX preserved
+
+After the reviewed Law 1 double confirmation, `WaitCompletion` now uses the
+v1 24-byte source layout without changing the existing `NET_RX` path or the
+`Recv*`/`WaitForEvent` contracts. The source field occupies bytes 12..16,
+source masks fail closed, and the public source set is limited to `NET_RX`
+plus finite `TIMER`.
+
+Task-death cleanup now runs outside the scheduler lock so parked TIMER slots can
+be released without re-entrancy risk. No peer, VFS, DMA, or grant source was
+added, and the end-to-end TIMER userspace proof remains deferred to Phase05.
+
+Verified by: API 74+2 pass, ostd/kernel RV64 check pass, QEMU 120s shell boot
+pass, tester PASS, reviewer APPROVE.
+
 ## [2026-08-06] Midori reactor-stack Phase 02 guardrails complete
 
 A raw `hypha\n` burst immediately after the shell-ready banner now proves the

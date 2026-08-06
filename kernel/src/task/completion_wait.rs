@@ -19,7 +19,7 @@
 
 use super::completion::{self, Completion, CompletionQueue};
 use super::syscall::{validate_user_buf, SyscallError};
-use super::tcb::TaskState;
+use super::tcb::{CompletionWait, TaskState};
 use super::waker;
 use api::completion::{ViCompletion, COMPLETION_LEN};
 
@@ -28,26 +28,63 @@ use api::completion::{ViCompletion, COMPLETION_LEN};
 struct WaiterRegistration<'a> {
     queue: &'a CompletionQueue,
     tid: usize,
+    slot: super::completion::SlotId,
 }
 
 impl<'a> WaiterRegistration<'a> {
-    fn new(queue: &'a CompletionQueue, tid: usize) -> Self {
+    fn new(
+        queue: &'a CompletionQueue,
+        tid: usize,
+        slot: super::completion::SlotId,
+        source: u32,
+    ) -> Option<Self> {
         queue.register_waiter(tid);
-        Self { queue, tid }
+        let registered = {
+            let mut guard = super::SCHEDULER.lock();
+            guard
+                .as_mut()
+                .and_then(|sched| sched.tasks.get_mut(&tid))
+                .map(|task| {
+                    task.completion_wait = Some(CompletionWait { source, slot });
+                })
+                .is_some()
+        };
+        if registered {
+            Some(Self { queue, tid, slot })
+        } else {
+            let _ = queue.clear_waiter(tid);
+            None
+        }
     }
 }
 
 impl Drop for WaiterRegistration<'_> {
     fn drop(&mut self) {
         let _ = self.queue.clear_waiter(self.tid);
+        let mut guard = super::SCHEDULER.lock();
+        if let Some(task) = guard
+            .as_mut()
+            .and_then(|sched| sched.tasks.get_mut(&self.tid))
+        {
+            if task.completion_wait.map(|wait| wait.slot) == Some(self.slot) {
+                task.completion_wait = None;
+            }
+        }
     }
+}
+
+/// Validate the source/deadline pair before a queue slot is reserved.
+pub(super) fn source_is_valid(mask: u32, deadline: Option<u64>) -> bool {
+    api::completion::source::is_single_supported(mask)
+        && (mask != api::completion::source::TIMER || deadline.is_some())
 }
 
 /// Reserve a slot on the caller's completion queue, wait for it to be filled,
 /// and write the result to `out_ptr`.
 ///
-/// `mask` names exactly one source; `deadline` is an absolute tick count, or
-/// `None` to wait indefinitely.
+/// `mask` names exactly one source. `deadline` is an absolute tick count;
+/// `None` is valid only for an indefinite `NET_RX` wait because `TIMER` needs a
+/// finite instant to complete against.
 ///
 /// # Returns
 /// `1` when a completion was written to `out_ptr`, `0` when the wait ended with
@@ -70,9 +107,9 @@ pub fn wait_completion(
     deadline: Option<u64>,
     out_ptr: usize,
 ) -> Result<usize, SyscallError> {
-    // One bit only: a submission is made against one source, and a mask naming
-    // two would leave the second one with no reservation of its own.
-    if mask != api::syscall::events::NET_RX {
+    // One known bit only: a submission is made against one source, and a mask
+    // naming two would leave the second one with no reservation of its own.
+    if !source_is_valid(mask, deadline) {
         return Err(SyscallError::InvalidInput);
     }
     validate_user_buf(out_ptr, COMPLETION_LEN, COMPLETION_LEN)?;
@@ -83,14 +120,24 @@ pub fn wait_completion(
         completion::queue_for(sched, caller_id).ok_or(SyscallError::Unknown)?
     };
     let slot = queue.reserve().ok_or(SyscallError::TryAgain)?;
-    let _waiter = WaiterRegistration::new(&queue, caller_id);
-    waker::arm_net_rx(queue.clone(), slot);
+    let _waiter = match WaiterRegistration::new(&queue, caller_id, slot, mask) {
+        Some(waiter) => waiter,
+        None => {
+            let _ = queue.release(slot);
+            return Err(SyscallError::Unknown);
+        }
+    };
+    let is_net_rx = mask == api::completion::source::NET_RX;
+    if is_net_rx {
+        waker::arm_net_rx(queue.clone(), slot);
+    }
 
     // Lost-wakeup guard, first half: a frame that arrived while nobody held a
     // reservation is remembered in the level flag. Consuming it only *after* the
     // arm is what makes the check total — a frame arriving during the check has
     // a reservation to complete instead.
-    if waker::consume_pending(mask) != 0
+    if is_net_rx
+        && waker::consume_pending(mask) != 0
         && matches!(waker::disarm_net_rx(&queue), waker::DisarmResult::Owned(_))
     {
         // The result is reported straight out of the reservation rather than
@@ -102,6 +149,7 @@ pub fn wait_completion(
                 out_ptr,
                 Completion {
                     slot,
+                    source: api::completion::source::NET_RX,
                     result: mask as isize,
                 },
             ));
@@ -111,28 +159,58 @@ pub fn wait_completion(
     // Second half: anything the source landed while the steps above ran is
     // delivered without parking at all.
     if let Some(done) = queue.drain() {
-        return Ok(write_completion(out_ptr, done));
-    }
-
-    // `WaitEvent` with no event bits: this waiter's result comes from the queue,
-    // so the sweep must not consume a fired bit on its behalf and report an
-    // empty wake. The deadline is the one thing the sweep is still asked for.
-    {
-        let mut guard = super::SCHEDULER.lock();
-        if let Some(task) = guard.as_mut().and_then(|s| s.tasks.get_mut(&caller_id)) {
-            task.state = TaskState::WaitEvent { mask: 0, deadline };
+        if !is_net_rx {
+            let _ = queue.release(slot);
         }
-    }
-    super::yield_cpu();
-
-    if let Some(done) = queue.drain() {
         return Ok(write_completion(out_ptr, done));
     }
 
-    // Nothing landed: the deadline passed, or the wake was spurious. Either way
-    // the reservation goes back, and the race with a frame arriving at this
-    // exact moment is settled by whoever takes the slot.
     loop {
+        // Completion waits have their own task state so TIMER expiry cannot be
+        // confused with a legacy WaitForEvent timeout.
+        {
+            let mut guard = super::SCHEDULER.lock();
+            if let Some(task) = guard.as_mut().and_then(|s| s.tasks.get_mut(&caller_id)) {
+                task.state = TaskState::WaitCompletion {
+                    source: mask,
+                    deadline,
+                };
+            }
+        }
+        super::yield_cpu();
+
+        if let Some(done) = queue.drain() {
+            if !is_net_rx {
+                let _ = queue.release(slot);
+            }
+            return Ok(write_completion(out_ptr, done));
+        }
+
+        if !is_net_rx {
+            // TIMER has no interrupt-side producer. The existing deadline sweep
+            // parks and wakes the task; after resumption the submitter releases
+            // its own slot and writes the synthetic completion directly. Going
+            // through `complete` here would raise a wake for the already-running
+            // task and cancel its next unrelated park.
+            let expired = deadline
+                .map(|at| super::system_ticks() as u64 >= at)
+                .unwrap_or(false);
+            if expired && queue.release(slot) {
+                return Ok(write_completion(
+                    out_ptr,
+                    Completion {
+                        slot,
+                        source: api::completion::source::TIMER,
+                        result: 0,
+                    },
+                ));
+            }
+            continue;
+        }
+
+        // Nothing landed: the NET_RX deadline passed, or the wake was spurious.
+        // Either way the reservation goes back, and the race with a frame
+        // arriving at this exact moment is settled by whoever takes the slot.
         match waker::disarm_net_rx(&queue) {
             waker::DisarmResult::Owned(own) if queue.release(own) => return Ok(0),
             // The source owns the slot but has not published it yet. This can
@@ -162,6 +240,7 @@ pub fn wait_completion(
 fn write_completion(out_ptr: usize, done: Completion) -> usize {
     let record = ViCompletion {
         slot: done.slot.index() as u32,
+        source: done.source,
         result: done.result as i64,
     }
     .to_bytes();

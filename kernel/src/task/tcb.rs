@@ -74,6 +74,12 @@ pub enum TaskState {
         mask: u32,
         deadline: Option<u64>,
     },
+    /// Blocked in `WaitCompletion`. Source completions wake through the queue;
+    /// a finite TIMER wakes when `deadline` elapses.
+    WaitCompletion {
+        source: u32,
+        deadline: Option<u64>,
+    },
     /// Cell is suspended during a hot-swap sequence identified by `swap_id`.
     ///
     /// Invariants while Frozen:
@@ -378,6 +384,18 @@ pub struct Task {
     /// address resolution. Threads of one cell share the handle, and the queue
     /// dies with the last reference to it — see [`crate::task::completion`].
     pub completion: Option<alloc::sync::Arc<crate::task::completion::CompletionQueue>>,
+    /// Queue slot held by an in-progress `WaitCompletion` syscall.
+    ///
+    /// Kept outside `TaskState` because a deferred source wake changes the state
+    /// to `Ready` before the syscall has released its reservation. Task exit
+    /// takes this field and defers TIMER release outside the scheduler lock.
+    pub completion_wait: Option<CompletionWait>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompletionWait {
+    pub source: u32,
+    pub slot: crate::task::completion::SlotId,
 }
 
 /// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
@@ -440,6 +458,7 @@ impl Task {
             inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
             staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
             completion: None,
+            completion_wait: None,
         }
     }
 
