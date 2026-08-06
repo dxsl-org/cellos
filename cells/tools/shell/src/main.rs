@@ -42,6 +42,9 @@ api::declare_syscalls![
     GrantShare,
     GrantSlice,
     GrantFree,
+    // Structured argv is staged in the shell's private state-stash slot and
+    // transferred by the successful spawn syscall to that exact child.
+    StateStash,
     // Read = stdin readline; Open/Close (+Read) = `cat` over the kernel FS;
     // ReadDir = the `ls` built-in (reads the kernel FS directly, not VFS IPC);
     // Snapshot = the `snapshot` built-in. Omitting Read silently bricked the

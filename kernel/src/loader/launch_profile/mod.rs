@@ -69,11 +69,9 @@ pub fn authorize(
     }?;
 
     // SpawnFromElf carries caller-owned bytes and only an advisory path. Until
-    // VFS can attest grant provenance, that route must never mint authority from
-    // the path: arbitrary bytes could otherwise borrow a reviewed privileged
-    // target name. Capability-bearing ELF routes therefore remain available
-    // only to lifecycle-authority profiles (init/supervisor); capability-free
-    // tools preserve the current shell/VFS launch path.
+    // VFS can attest grant provenance, arbitrary bytes must not borrow a launch
+    // profile that carries authority. Service-IPC tools use an empty ceiling;
+    // capability-bearing ELF routes remain lifecycle-only.
     if matches!(route, LaunchRoute::Elf)
         && profile.parent_ceiling != CapSet::EMPTY
         && !profile.requires_lifecycle_authority

@@ -6,12 +6,14 @@
 
 ## [2026-08-06] Caller-owned ELF launch paths no longer mint ambient authority
 
-`SpawnFromElf` now refuses capability-bearing launch profiles unless the caller
-uses a lifecycle-authority edge. This prevents shell, Hypha, and tool-spawn from
-attaching a privileged reviewed path to arbitrary caller-owned ELF bytes, while
-preserving capability-free shell launches and init/supervisor lifecycle spawns.
-The launch-profile QEMU lane passes with `/bin/vfs-test`, boot services, and the
-shell lifecycle denial intact; no public ABI changed.
+`SpawnFromElf` still refuses every capability-bearing non-lifecycle profile, so
+caller-owned bytes cannot borrow authority from an advisory path. Network clients
+and servers that communicate through typed service IPC now correctly have an empty
+launch ceiling, which preserves their exact shell ELF edges without ambient
+`NetworkCap`; the privileged net-broker remains lifecycle-only. Init/supervisor
+edges are unchanged. The shell's existing structured-argv transport is admitted
+only through a caller-namespaced kernel slot; it cannot write other global state
+stash keys. No public ABI changed.
 
 ## [2026-08-06] Phase 08 stack-sizing gate baseline verified; production shrink still blocked
 

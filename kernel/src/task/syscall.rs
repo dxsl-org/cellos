@@ -487,6 +487,23 @@ fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
 }
 
+const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
+const SPAWN_ARGV_MAX: usize = 512;
+
+fn spawn_argv_slot(task_id: usize) -> u64 {
+    SPAWN_ARGV_KEY ^ ((task_id as u64) << 32)
+}
+
+fn transfer_spawn_argv(caller_id: usize, child_id: usize) {
+    let staging_key = spawn_argv_slot(caller_id);
+    let mut argv_buf = alloc::vec![0u8; SPAWN_ARGV_MAX];
+    let n = crate::cell::state_stash::restore(staging_key, &mut argv_buf);
+    crate::cell::state_stash::remove(staging_key);
+    if n > 0 {
+        crate::cell::state_stash::stash(spawn_argv_slot(child_id), &argv_buf[..n]);
+    }
+}
+
 fn caller_launch_state(caller_id: usize) -> Option<(String, bool, bool)> {
     super::SCHEDULER
         .lock()
@@ -2542,22 +2559,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 _ => SyscallError::InvalidInput,
             })?;
-            // Transfer pending spawn args to a per-task personal slot so a
-            // subsequent spawn overwriting the global ARGV slot cannot race this
-            // cell before it is scheduled and reads its args.
-            // Personal key = ARGV_KEY ^ (task_id << 32) — task ids are small
-            // (<256) so the high-bit XOR stays in the argv key namespace.
-            // Use heap allocation (not stack) — the SpawnFromPath call chain
-            // is deep and a 512-byte stack buffer would overflow the kernel stack.
-            const ARGV_KEY: u64 = 0x0061_7267_7600_0000; // = ostd ARGV_STASH_KEY
-            {
-                let mut argv_buf = alloc::vec![0u8; 512];
-                let n = crate::cell::state_stash::restore(ARGV_KEY, &mut argv_buf);
-                if n > 0 {
-                    let personal_key = ARGV_KEY ^ ((task_id as u64) << 32);
-                    crate::cell::state_stash::stash(personal_key, &argv_buf[..n]);
-                }
-            }
+            transfer_spawn_argv(caller_id, task_id);
             Ok(task_id)
         }
 
@@ -2712,17 +2714,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 _ => SyscallError::InvalidInput,
             })?;
-            // Personal ARGV slot transfer — parity with SpawnFromPath (args survive a
-            // subsequent global-slot overwrite before the child is scheduled).
-            const ARGV_KEY: u64 = 0x0061_7267_7600_0000;
-            {
-                let mut argv_buf = alloc::vec![0u8; 512];
-                let n = crate::cell::state_stash::restore(ARGV_KEY, &mut argv_buf);
-                if n > 0 {
-                    let personal_key = ARGV_KEY ^ ((task_id as u64) << 32);
-                    crate::cell::state_stash::stash(personal_key, &argv_buf[..n]);
-                }
-            }
+            transfer_spawn_argv(caller_id, task_id);
             Ok(task_id)
         }
 
@@ -2778,16 +2770,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 _ => SyscallError::InvalidInput,
             })?;
-            // Transfer pending spawn args to a per-task personal slot
-            const ARGV_KEY: u64 = 0x0061_7267_7600_0000;
-            {
-                let mut argv_buf = alloc::vec![0u8; 512];
-                let n = crate::cell::state_stash::restore(ARGV_KEY, &mut argv_buf);
-                if n > 0 {
-                    let personal_key = ARGV_KEY ^ ((task_id as u64) << 32);
-                    crate::cell::state_stash::stash(personal_key, &argv_buf[..n]);
-                }
-            }
+            transfer_spawn_argv(caller_id, task_id);
             // Enforce the RT-barring invariant: a cell that declares cluster membership
             // (cluster_mode != Isolated) MUST NOT run at RealTime priority.
             // `cluster_mode` was written by the loader's __ViCell_cluster read;
@@ -3522,9 +3505,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
         } => {
             validate_user_buf(buf_ptr, buf_len, crate::cell::state_stash::MAX_STASH_LEN)?;
+            let raw_key = key as u64;
+            let is_shell =
+                caller_launch_state(caller_id).is_some_and(|(name, _, _)| name.as_str() == "shell");
+            if is_shell && (raw_key != SPAWN_ARGV_KEY || buf_len > SPAWN_ARGV_MAX) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            let stash_key = if raw_key == SPAWN_ARGV_KEY {
+                spawn_argv_slot(caller_id)
+            } else {
+                raw_key
+            };
             // SAFETY: validated above — readable user buffer of exactly buf_len bytes.
             let bytes = unsafe { core::slice::from_raw_parts(buf_ptr as *const u8, buf_len) };
-            Ok(crate::cell::state_stash::stash(key as u64, bytes))
+            Ok(crate::cell::state_stash::stash(stash_key, bytes))
         }
         Syscall::StateRestore {
             key,
@@ -3538,21 +3532,26 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // SpawnFromPath) first so rapid back-to-back spawns can't race.
             // The personal entry is consumed on read (one-shot) so it never
             // accumulates toward the MAX_ENTRIES cap.
-            const ARGV_KEY: u64 = 0x0061_7267_7600_0000; // = ostd ARGV_STASH_KEY
-            if key as u64 == ARGV_KEY {
-                let personal_key = ARGV_KEY ^ ((caller_id as u64) << 32);
+            if key as u64 == SPAWN_ARGV_KEY {
+                let personal_key = spawn_argv_slot(caller_id);
                 let n = crate::cell::state_stash::restore(personal_key, buf);
                 if n > 0 {
                     crate::cell::state_stash::remove(personal_key);
-                    return Ok(n);
                 }
+                return Ok(n);
             }
             Ok(crate::cell::state_stash::restore(key as u64, buf))
         }
         // 412: StateStashClear — delete the stash entry for `key`, freeing its slot.
         // No-op when the key is absent (idempotent). Returns 0 always.
         Syscall::StateStashClear { key } => {
-            crate::cell::state_stash::remove(key as u64);
+            let raw_key = key as u64;
+            let stash_key = if raw_key == SPAWN_ARGV_KEY {
+                spawn_argv_slot(caller_id)
+            } else {
+                raw_key
+            };
+            crate::cell::state_stash::remove(stash_key);
             Ok(0)
         }
 

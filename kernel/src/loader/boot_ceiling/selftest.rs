@@ -117,9 +117,9 @@ pub fn run() -> bool {
         ok = false;
         log::error!("[selftest] launch-profile: shell lost exact /bin/httpd launch edge");
     }
-    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_some() {
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_none() {
         ok = false;
-        log::error!("[selftest] launch-profile: caller-owned ELF gained network path authority");
+        log::error!("[selftest] launch-profile: shell lost exact /bin/httpd ELF edge");
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs-test").is_none() {
         ok = false;

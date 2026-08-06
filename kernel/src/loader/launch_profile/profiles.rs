@@ -36,10 +36,7 @@ pub(super) fn hypha_profile(route: LaunchRoute, target: &str) -> Option<LaunchPr
         return None;
     }
     let ceiling = match target {
-        "/bin/llm-gateway" => CapSet {
-            network: true,
-            ..CapSet::EMPTY
-        },
+        "/bin/llm-gateway" => CapSet::EMPTY,
         "/bin/tool-fs" | "/bin/tool-sys" => CapSet::EMPTY,
         "/bin/tool-spawn" => CapSet {
             spawn: true,

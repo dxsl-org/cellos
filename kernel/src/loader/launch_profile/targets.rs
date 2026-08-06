@@ -24,8 +24,12 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/tetris-lua"
         | "/bin/vfs-test"
         | "/bin/wx-test" => CapSet::EMPTY,
+        // These clients and servers use typed IPC to the net service; they do
+        // not hold NetworkCap themselves. Keeping their launch ceiling empty
+        // also lets exact shell SpawnFromElf edges remain capability-free.
         "/bin/httpd" | "/bin/https-demo" | "/bin/llm-gateway" | "/bin/mqtt" | "/bin/nc"
-        | "/bin/net-broker" | "/bin/wget" => CapSet {
+        | "/bin/wget" => CapSet::EMPTY,
+        "/bin/net-broker" => CapSet {
             network: true,
             ..CapSet::EMPTY
         },

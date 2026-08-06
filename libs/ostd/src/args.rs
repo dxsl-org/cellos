@@ -42,8 +42,7 @@ pub fn set_spawn_argv(argv: &[String]) -> bool {
         encoded.push_str(arg);
         encoded.push('\0');
     }
-    crate::syscall::sys_set_spawn_args(&encoded);
-    true
+    crate::syscall::sys_set_spawn_args(&encoded)
 }
 
 /// Return the command-line arguments passed to this cell by its spawner.

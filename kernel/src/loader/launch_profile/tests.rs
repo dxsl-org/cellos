@@ -24,22 +24,15 @@ fn shell_has_no_mem_launch_edge() {
 }
 
 #[test]
-fn shell_net_tool_edge_is_exact() {
+fn shell_service_ipc_tool_edge_is_capability_free() {
     assert_eq!(
         shell_edge(LaunchRoute::Path, "/bin/httpd").parent_ceiling,
-        CapSet {
-            network: true,
-            ..CapSet::EMPTY
-        }
+        CapSet::EMPTY
     );
-    assert!(
-        authorize(
-            caller("shell", false, false),
-            LaunchRoute::Elf,
-            "/bin/httpd"
-        )
-        .is_none(),
-        "caller-owned ELF bytes must not borrow a network-capable target path"
+    assert_eq!(
+        shell_edge(LaunchRoute::Elf, "/bin/httpd").parent_ceiling,
+        CapSet::EMPTY,
+        "service-IPC tools must not carry ambient network authority"
     );
     assert_eq!(
         shell_edge(LaunchRoute::Elf, "/bin/vfs-test").parent_ceiling,
