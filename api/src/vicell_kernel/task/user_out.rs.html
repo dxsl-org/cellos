@@ -17,7 +17,7 @@
 <a href=#17 id=17 data-nosnippet>17</a>}
 <a href=#18 id=18 data-nosnippet>18</a>
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">fn </span>validate_stack_usize_slot(stack: <span class="kw-2">&amp;</span>Stack, ptr: usize) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">*mut </span>usize, SyscallError&gt; {
-<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">if </span>ptr == <span class="number">0 </span>|| ptr % core::mem::align_of::&lt;usize&gt;() != <span class="number">0 </span>{
+<a href=#20 id=20 data-nosnippet>20</a>    <span class="kw">if </span>ptr == <span class="number">0 </span>|| !ptr.is_multiple_of(core::mem::align_of::&lt;usize&gt;()) {
 <a href=#21 id=21 data-nosnippet>21</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(SyscallError::InvalidInput);
 <a href=#22 id=22 data-nosnippet>22</a>    }
 <a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">let </span>end = ptr
