@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["READ_WRITE_GRANT","UNKNOWN_CAP_ID"],"fn":["grant_prefix_equals","read_file_into_grant","read_file_into_short_grant","stat_file_len","unknown_cap_read_grant_returns_zero"],"struct":["GrantRegion"]};

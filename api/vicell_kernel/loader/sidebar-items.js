@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["legacy_path_caps","spawn_from_path","spawn_gated"],"mod":["boot_ceiling","disk_layout","early","elf","elf_tests","mem_spawn_gate","reloc","va_alloc","wx"],"static":["BLOCK_IO_REGISTERED"],"struct":["ElfHeader"],"trait":["ElfParser","Linker"]};
+window.SIDEBAR_ITEMS = {"fn":["legacy_path_caps","spawn_from_path","spawn_gated"],"mod":["boot_ceiling","disk_layout","early","elf","elf_tests","launch_profile","mem_spawn_gate","reloc","va_alloc","wx"],"static":["BLOCK_IO_REGISTERED"],"struct":["ElfHeader"],"trait":["ElfParser","Linker"]};

@@ -110,8 +110,16 @@ Prevents deadlock when the focused cell is busy (e.g. reading UART).</p>
 </div><section id="variant.Exit" class="variant"><a href="#variant.Exit" class="anchor">§</a><h3 class="code-header">Exit = 60</h3></section><section id="variant.ForceExit" class="variant"><a href="#variant.ForceExit" class="anchor">§</a><h3 class="code-header">ForceExit = 61</h3></section><div class="docblock"><p>Force-terminate another task by TID.  Non-blocking: caller continues.
 Requires <code>SpawnCap</code> on caller; rejected on system cells (block_io/network_cap).
 ABI: a0 = target_tid → 0 on success, usize::MAX on error.</p>
-</div><section id="variant.Spawn" class="variant"><a href="#variant.Spawn" class="anchor">§</a><h3 class="code-header">Spawn = 5</h3></section><section id="variant.Exec" class="variant"><a href="#variant.Exec" class="anchor">§</a><h3 class="code-header">Exec = 6</h3></section><section id="variant.SpawnFromMem" class="variant"><a href="#variant.SpawnFromMem" class="anchor">§</a><h3 class="code-header">SpawnFromMem = 10</h3></section><section id="variant.SpawnFromPath" class="variant"><a href="#variant.SpawnFromPath" class="anchor">§</a><h3 class="code-header">SpawnFromPath = 12</h3></section><div class="docblock"><p>Spawn a cell by reading its ELF from a VFS path.
-ABI: a0 = path_ptr, a1 = path_len; returns cell id or error code.</p>
+</div><section id="variant.Spawn" class="variant"><a href="#variant.Spawn" class="anchor">§</a><h3 class="code-header">Spawn = 5</h3></section><section id="variant.Exec" class="variant"><a href="#variant.Exec" class="anchor">§</a><h3 class="code-header">Exec = 6</h3></section><section id="variant.SpawnFromMem" class="variant"><a href="#variant.SpawnFromMem" class="anchor">§</a><h3 class="code-header">SpawnFromMem = 10</h3></section><div class="docblock"><p>Spawn a cell from caller-supplied ELF bytes already resident in memory.</p>
+<p>The kernel still routes the request through the normal admission gate,
+but approval is by an exact launch profile on the mem route, not by the
+caller holding broad lifecycle authority. Phase 04 intentionally leaves
+this route fail-closed for shell/user cells.</p>
+</div><section id="variant.SpawnFromPath" class="variant"><a href="#variant.SpawnFromPath" class="anchor">§</a><h3 class="code-header">SpawnFromPath = 12</h3></section><div class="docblock"><p>Spawn a cell by reading its ELF from a VFS path.</p>
+<p>ABI: a0 = path_ptr, a1 = path_len → tid (&gt;0) on success.
+Phase 04 approval is by an exact kernel launch profile for the tuple
+<code>(caller identity, SpawnFromPath, path)</code>. This is distinct from
+lifecycle operations that still require ambient <code>SpawnCap</code>.</p>
 </div><section id="variant.OpenCap" class="variant"><a href="#variant.OpenCap" class="anchor">§</a><h3 class="code-header">OpenCap = 13</h3></section><div class="docblock"><p>Open a file by path, returning a kernel capability ID.
 ABI: a0 = path_ptr, a1 = path_len → CapId (&gt; 0) on success.</p>
 </div><section id="variant.ReadCap" class="variant"><a href="#variant.ReadCap" class="anchor">§</a><h3 class="code-header">ReadCap = 14</h3></section><div class="docblock"><p>Read bytes from a cap-backed file.
@@ -170,7 +178,8 @@ gate as <code>SpawnFromPath</code> (Ed25519 signature, manifest-privilege, capab
 intersection, policy, syscall allowlist, cluster, quota, measurement) over
 the grant bytes — trust is over the bytes, so the source is irrelevant.
 Lets the kernel loader stop reading a filesystem for post-boot spawns
-(G2 loader redesign). Requires SpawnCap (same as SpawnFromPath).</p>
+(G2 loader redesign). Like <code>SpawnFromPath</code>, Phase 04 approval is by the
+exact kernel launch profile for <code>(caller identity, SpawnFromElf, path_hint)</code> rather than by broad lifecycle <code>SpawnCap</code>.</p>
 <p>ABI: a0 = grant_id, a1 = len (bytes), a2 = path_hint_ptr, a3 = path_hint_len
 → tid (&gt;0) on success. <code>path_hint</code> is advisory (drives the /bin/
 privilege check, policy lookup, measurement label); a caller lying
@@ -182,9 +191,12 @@ Preserves <code>GetProcs</code> v1 layout/opcode by exposing a separate v2 row t
 <p>ABI: a0 = out_ptr, a1 = out_len. On success writes exactly one
 <a href="struct.ViMemInfoV1.html" title="struct ostd::abi::syscall::ViMemInfoV1"><code>ViMemInfoV1</code></a> and returns its byte size. This aggregate telemetry is
 opt-in because used/free capacity is observable across cells.</p>
-</div><section id="variant.SpawnPinned" class="variant"><a href="#variant.SpawnPinned" class="anchor">§</a><h3 class="code-header">SpawnPinned = 16</h3></section><div class="docblock"><p>Spawn a cell pinned to a specific hardware core.
-ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
-On single-core systems core_id must be 0; any other value returns NotSupported.</p>
+</div><section id="variant.SpawnPinned" class="variant"><a href="#variant.SpawnPinned" class="anchor">§</a><h3 class="code-header">SpawnPinned = 16</h3></section><div class="docblock"><p>Spawn a cell pinned to a specific hardware core.</p>
+<p>ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
+On single-core systems core_id must be 0; any other value returns NotSupported.
+Phase 04 approval is by the exact kernel launch profile for
+<code>(caller identity, SpawnPinned, path)</code>; lifecycle <code>SpawnCap</code> still gates
+<code>ForceExit</code>, <code>NotifyOnExit</code>, <code>RegisterService</code>, <code>HotSwap</code>, and snapshot control.</p>
 </div><section id="variant.Snapshot" class="variant"><a href="#variant.Snapshot" class="anchor">§</a><h3 class="code-header">Snapshot = 420</h3></section><div class="docblock"><p>Serialize all allocated physical frames to the snapshot sector range.
 Triggers a warm-boot-capable snapshot.  Returns frame count on success.</p>
 </div><section id="variant.Wait" class="variant"><a href="#variant.Wait" class="anchor">§</a><h3 class="code-header">Wait = 8</h3></section><section id="variant.Yield" class="variant"><a href="#variant.Yield" class="anchor">§</a><h3 class="code-header">Yield = 104</h3></section><section id="variant.SetTimer" class="variant"><a href="#variant.SetTimer" class="anchor">§</a><h3 class="code-header">SetTimer = 35</h3></section><section id="variant.ShmAlloc" class="variant"><a href="#variant.ShmAlloc" class="anchor">§</a><h3 class="code-header">ShmAlloc = 20</h3></section><section id="variant.ShmMap" class="variant"><a href="#variant.ShmMap" class="anchor">§</a><h3 class="code-header">ShmMap = 21</h3></section><section id="variant.Log" class="variant"><a href="#variant.Log" class="anchor">§</a><h3 class="code-header">Log = 11</h3></section><section id="variant.Open" class="variant"><a href="#variant.Open" class="anchor">§</a><h3 class="code-header">Open = 101</h3></section><section id="variant.Read" class="variant"><a href="#variant.Read" class="anchor">§</a><h3 class="code-header">Read = 102</h3></section><section id="variant.Close" class="variant"><a href="#variant.Close" class="anchor">§</a><h3 class="code-header">Close = 103</h3></section><section id="variant.ReadDir" class="variant"><a href="#variant.ReadDir" class="anchor">§</a><h3 class="code-header">ReadDir = 105</h3></section><section id="variant.Write" class="variant"><a href="#variant.Write" class="anchor">§</a><h3 class="code-header">Write = 109</h3></section><section id="variant.Seek" class="variant"><a href="#variant.Seek" class="anchor">§</a><h3 class="code-header">Seek = 106</h3></section><section id="variant.FileOp" class="variant"><a href="#variant.FileOp" class="anchor">§</a><h3 class="code-header">FileOp = 107</h3></section><section id="variant.GetTime" class="variant"><a href="#variant.GetTime" class="anchor">§</a><h3 class="code-header">GetTime = 120</h3></section><section id="variant.GpuFlush" class="variant"><a href="#variant.GpuFlush" class="anchor">§</a><h3 class="code-header">GpuFlush = 300</h3></section><div class="docblock"><p>Flush a pixel rectangle from a cell-provided buffer to the GPU framebuffer.
@@ -226,11 +238,17 @@ ABI: a0 = size (rounded up to pages, max 16777216) → base_paddr (&gt; 0) on su
 Requires GrantCap (allowlist bit 39).</p>
 </div><section id="variant.GrantShare" class="variant"><a href="#variant.GrantShare" class="anchor">§</a><h3 class="code-header">GrantShare = 209</h3></section><div class="docblock"><p>Share Grant access with <code>target_task</code>.
 ABI: a0 = grant_id, a1 = target_task_id, a2 = GrantPerm (0=RO, 1=WO, 2=RW) → 0 on success.
+In the current SAS build those permission bits are a protocol contract,
+not Tier 2 hardware isolation against a malicious peer.
 Requires GrantCap (bit 39).</p>
 </div><section id="variant.GrantSlice" class="variant"><a href="#variant.GrantSlice" class="anchor">§</a><h3 class="code-header">GrantSlice = 210</h3></section><div class="docblock"><p>Return the raw pointer to a Grant region the caller has access to.
-ABI: a0 = grant_id, a1 = optional size_out pointer → ptr (usize, same as
-grant_id for identity-mapped SAS) on success.
-Returns usize::MAX on permission denied or not found.</p>
+ABI: a0 = grant_id, a1 = optional <code>size_out</code> pointer → ptr (usize, same
+as grant_id for identity-mapped SAS) on success.</p>
+<p><code>size_out</code> may be null. When non-null it must point to one aligned
+<code>usize</code> slot fully contained in the caller’s own user stack; segment
+memory and arbitrary user mappings are rejected. An invalid <code>size_out</code>
+pointer makes the syscall fail with <code>InvalidInput</code>.</p>
+<p>Returns usize::MAX on permission denied or not found.</p>
 </div><section id="variant.GrantFree" class="variant"><a href="#variant.GrantFree" class="anchor">§</a><h3 class="code-header">GrantFree = 211</h3></section><div class="docblock"><p>Release a Grant region: unmaps its pages and frees its frames.
 ABI: a0 = grant_id → 0 on success.</p>
 </div><section id="variant.BlkReadAsync" class="variant"><a href="#variant.BlkReadAsync" class="anchor">§</a><h3 class="code-header">BlkReadAsync = 212</h3></section><div class="docblock"><p>Start an async sector read into a Grant buffer (poll-based stub; Phase 04 for true async).
@@ -333,8 +351,10 @@ succeeds or fails, so a set can never attach to a later unrelated spawn.</p>
 <p>A malformed set (unknown version, over-long count, zero or repeated
 handle) is refused here rather than trimmed — see
 <a href="../dir_handles/enum.DirHandleSetError.html" title="enum ostd::abi::dir_handles::DirHandleSetError"><code>crate::dir_handles::DirHandleSetError</code></a>.</p>
-<p>Privileged: requires SpawnCap, the same authority every spawn entry point
-demands. Always permitted past the syscall allowlist, matching
+<p>Privileged: requires lifecycle <code>SpawnCap</code>. Exact launch-profile approval
+is evaluated later by the actual spawn syscalls; this carrier syscall is
+the staging authority for the caller’s next child launch.
+Always permitted past the syscall allowlist, matching
 <code>RegisterService</code>/<code>CapRevoke</code>.</p>
 </div><section id="variant.QueryDirHandles" class="variant"><a href="#variant.QueryDirHandles" class="anchor">§</a><h3 class="code-header">QueryDirHandles = 241</h3></section><div class="docblock"><p>241: Read the kernel’s record of a cell’s inherited directory handles.</p>
 <p>ABI: a0 = cell_id, a1 = buf_ptr, a2 = buf_len → bytes written

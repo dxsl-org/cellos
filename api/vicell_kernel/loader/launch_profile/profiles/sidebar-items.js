@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CONSOLE_MMIO","GPIO_ONLY_MMIO"],"fn":["console_mmio_capset","gpio_mmio_capset","hypha_profile","init_profile","pinned_profile","shell_profile","supervisor_profile","tool_spawn_profile"]};

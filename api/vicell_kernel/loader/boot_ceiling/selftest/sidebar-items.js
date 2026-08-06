@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["run"],"type":["PrivCapCase"]};
+window.SIDEBAR_ITEMS = {"constant":["SHELL"],"fn":["run"],"type":["PrivCapCase"]};
