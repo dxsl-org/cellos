@@ -1077,6 +1077,12 @@ pub enum Syscall {
         path_ptr: usize,
         path_len: usize,
     },
+    /// 422: PauseService — hide the expected provider from service lookups while
+    /// it remains runnable for snapshot IPC. Requires SupervisorCap.
+    PauseService {
+        service_id: u16,
+        expected_tid: usize,
+    },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap {
         cell_id: usize,
@@ -1284,6 +1290,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::KillCell { .. } => V::KillCell,
         Syscall::QueryHotswapReady { .. } => V::QueryHotswapReady,
         Syscall::SpawnReplacement { .. } => V::SpawnReplacement,
+        Syscall::PauseService { .. } => V::PauseService,
         Syscall::RegisterBlockDriver => V::RegisterBlockDriver,
         Syscall::RegisterNicDriver => V::RegisterNicDriver,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
@@ -2317,6 +2324,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::RegisterService { service_id, tid } => {
+            // The state-transfer demo owns one non-production service ID and may
+            // self-register (`tid=0`) so QEMU can exercise the real Supervisor path.
+            if service_id == api::syscall::service::HOTSWAP_DEMO
+                && tid == 0
+                && caller_has_spawn(caller_id)
+            {
+                crate::cell::service_registry::register(service_id, caller_id);
+                return Ok(0);
+            }
             // Driver Cell self-registration path: PcieDriverCap + GPU_DRIVER + tid=0.
             // tid=0 means "register me (the caller)". No SpawnCap needed — PcieDriverCap
             // is the authority gate for driver namespace IDs.
@@ -2333,6 +2349,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // cell from hijacking a well-known endpoint (e.g. the VFS service).
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
+            }
+            let tid_is_live = super::SCHEDULER
+                .lock()
+                .as_ref()
+                .map(|scheduler| scheduler.tasks.contains_key(&tid))
+                .unwrap_or(false);
+            if !tid_is_live {
+                return Err(SyscallError::InvalidInput);
             }
             if crate::cell::service_registry::register(service_id, tid) {
                 Ok(0)
@@ -3587,6 +3611,27 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 })
         }
 
+        // 422: PauseService — atomically hide the expected provider from new
+        // lookups without stopping it, so it can process Snapshot IPC.
+        Syscall::PauseService {
+            service_id,
+            expected_tid,
+        } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if expected_tid == 0 {
+                return Err(SyscallError::InvalidInput);
+            }
+            if !crate::cell::service_registry::pause(service_id, expected_tid) {
+                return Err(SyscallError::TryAgain);
+            }
+            if !super::inbound_ipc_drained(expected_tid) {
+                return Err(SyscallError::TryAgain);
+            }
+            Ok(0)
+        }
+
         // 414: ResumeCell — re-queue a frozen Cell so it can be scheduled.
         Syscall::ResumeCell { target_tid } => {
             if !caller_has_supervisor(caller_id) {
@@ -4732,6 +4777,10 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             old_tid: a0,
             path_ptr: a1,
             path_len: a2,
+        },
+        ViSyscall::PauseService => Syscall::PauseService {
+            service_id: a0 as u16,
+            expected_tid: a1,
         },
         ViSyscall::HotSwap => Syscall::HotSwap {
             cell_id: a0,

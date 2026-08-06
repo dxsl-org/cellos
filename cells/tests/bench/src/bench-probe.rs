@@ -15,6 +15,7 @@ api::declare_syscalls![
     Log,
     GetTime,
     Heartbeat,
+    LookupService,
     SetTimer,
     StateRestore,
     Exit,
@@ -31,6 +32,9 @@ fn cell_main() {
         "[bench-probe] Started with role: '{}'",
         role
     ));
+    if role.starts_with("hotswap-cached-inc:") {
+        scenarios::hotswap_supervisor::run_cached_sender_probe(role);
+    }
     match role {
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),

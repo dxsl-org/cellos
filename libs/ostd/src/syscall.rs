@@ -1735,6 +1735,31 @@ pub fn sys_freeze_cell(target_tid: usize) -> Result<(), SyscallError> {
     }
 }
 
+/// Hide a service from new lookups while its expected provider remains runnable.
+///
+/// This is the soft-quiesce half of replacement: after it succeeds, callers
+/// resolve no provider, cached-TID ingress is rejected, and all previously
+/// accepted ingress has drained; `expected_tid` can still process Snapshot IPC.
+/// Requires `SupervisorCap`. `TryAgain` means the mapping changed or the drain
+/// barrier has not completed yet.
+pub fn sys_pause_service(service_id: u16, expected_tid: usize) -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::PauseService,
+            service_id as usize,
+            expected_tid,
+            0,
+            0,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::TryAgain)
+    }
+}
+
 /// Resume a frozen Cell so it can be scheduled again.
 ///
 /// Requires `SupervisorCap`. Idempotent on an already-running cell.

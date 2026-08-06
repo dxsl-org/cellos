@@ -392,6 +392,12 @@ pub enum ViSyscall {
     /// Requires SupervisorCap and a live kernel freeze record for `old_tid`.
     /// ABI: a0 = old_tid, a1 = path_ptr, a2 = path_len → new_task_id or error.
     SpawnReplacement = 421,
+    /// 422: Atomically pause a service mapping before replacement snapshotting.
+    /// Requires SupervisorCap. The mapping is cleared only when it still points
+    /// at `expected_tid`, so a concurrent restart cannot be accidentally hidden.
+    /// Success also means cached-TID ingress is blocked and accepted ingress drained.
+    /// ABI: a0 = service_id, a1 = expected_tid → 0 on success.
+    PauseService = 422,
 
     // === Unknown ===
     Unknown = 9999,
@@ -691,9 +697,11 @@ impl ViSyscall {
             Self::GrantDma => Some(48),
             // SupervisorOp (bit 49): freeze/resume/kill/query a live Cell.
             // Gated by SupervisorCap which is ONLY granted via direct kernel TCB write.
-            Self::FreezeCell | Self::ResumeCell | Self::KillCell | Self::QueryHotswapReady => {
-                Some(49)
-            }
+            Self::FreezeCell
+            | Self::ResumeCell
+            | Self::KillCell
+            | Self::QueryHotswapReady
+            | Self::PauseService => Some(49),
             // DriverRegistration (bit 50): announce as the active block/NIC driver,
             // and discover PCIe device BARs. All gated by PcieDriverCap.
             Self::RegisterBlockDriver | Self::RegisterNicDriver | Self::FindPcieDevice => Some(50),
@@ -836,6 +844,7 @@ impl From<usize> for ViSyscall {
             418 => ViSyscall::FindPcieDevice,
             419 => ViSyscall::QueryHotswapReady,
             421 => ViSyscall::SpawnReplacement,
+            422 => ViSyscall::PauseService,
             _ => ViSyscall::Unknown,
         }
     }

@@ -2,6 +2,7 @@
 
 pub mod context_switch;
 pub mod control_loop;
+pub mod hotswap_supervisor;
 pub mod ipc_send_recv;
 pub mod memory_footprint;
 pub mod preempt_latency;

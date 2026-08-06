@@ -84,6 +84,34 @@ pub enum IpcSendError {
     Backpressure,
 }
 
+fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) -> bool {
+    // Lock order is SCHEDULER -> service registry. PauseService releases the
+    // registry lock before checking scheduler drain state.
+    crate::cell::service_registry::is_paused_tid(target_id)
+        && !sched
+            .tasks
+            .get(&caller_id)
+            .is_some_and(|task| task.supervisor_cap.is_some())
+}
+
+/// Return whether every IPC accepted before a service pause has drained.
+///
+/// New non-supervisor sends are rejected once the registry entry is paused.
+/// The provider remains runnable until its owned mailbox and all blocking
+/// senders are empty, so the following Snapshot event is ordered after them.
+pub fn inbound_ipc_drained(target_id: usize) -> bool {
+    SCHEDULER.lock().as_ref().is_some_and(|sched| {
+        let mailbox_empty = sched
+            .tasks
+            .get(&target_id)
+            .is_some_and(|target| target.pending_msgs.is_empty());
+        mailbox_empty
+            && !sched.tasks.values().any(
+                |task| matches!(task.state, TaskState::Sending { target, .. } if target == target_id),
+            )
+    })
+}
+
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
 
@@ -1350,6 +1378,9 @@ pub fn ipc_send(
             log::debug!("IPC: Target Task {} not found (cell exited)", target_id);
             return Err(IpcSendError::TargetGone);
         }
+        if paused_target_rejects(sched, caller_id, target_id) {
+            return Err(IpcSendError::Backpressure);
+        }
 
         // ── Hot-swap queue: buffer messages to Frozen cells ─────────────────
         // Check the target's state directly under the existing SCHEDULER lock —
@@ -1453,6 +1484,9 @@ pub fn ipc_post_nonblock(
 ) -> core::result::Result<(), ()> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if !sched.tasks.contains_key(&target_id) {
+            return Err(());
+        }
+        if paused_target_rejects(sched, sender_id, target_id) {
             return Err(());
         }
 
@@ -1623,6 +1657,9 @@ pub fn ipc_try_send(
 ) -> core::result::Result<(), ()> {
     if let Some(sched) = SCHEDULER.lock().as_mut() {
         if !sched.tasks.contains_key(&target_id) {
+            return Err(());
+        }
+        if paused_target_rejects(sched, caller_id, target_id) {
             return Err(());
         }
         let target_ready = if let Some(target) = sched.tasks.get(&target_id) {

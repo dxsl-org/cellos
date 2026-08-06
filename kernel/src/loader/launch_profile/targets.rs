@@ -12,7 +12,6 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         | "/bin/doom"
         | "/bin/echo"
         | "/bin/gpio-test-rv"
-        | "/bin/hotswap-demo-v2"
         | "/bin/http-smoke"
         | "/bin/input-test"
         | "/bin/ls"
@@ -35,7 +34,11 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
         },
         "/bin/periph-demo" | "/bin/periph-test" => console_mmio_capset(),
         "/bin/pwm-demo" | "/bin/sensor-demo" | "/bin/spi-demo" => gpio_mmio_capset(),
-        "/bin/bench" | "/bin/hotswap-demo-v1" | "/bin/hypha" | "/bin/tool-spawn" => CapSet {
+        "/bin/bench"
+        | "/bin/hotswap-demo-v1"
+        | "/bin/hotswap-demo-v2"
+        | "/bin/hypha"
+        | "/bin/tool-spawn" => CapSet {
             spawn: true,
             ..CapSet::EMPTY
         },

@@ -57,6 +57,7 @@ mod tests {
         (218, ViSyscall::AudioPlay),
         (219, ViSyscall::CapRevoke),
         (421, ViSyscall::SpawnReplacement),
+        (422, ViSyscall::PauseService),
         (237, ViSyscall::ReadLog),
         (238, ViSyscall::SpawnFromElf),
         (310, ViSyscall::NetTx),
@@ -97,6 +98,7 @@ mod tests {
         assert_eq!(ViSyscall::WaitCompletion as usize, 242);
         assert_eq!(ViSyscall::MemInfo as usize, 243);
         assert_eq!(ViSyscall::SpawnReplacement as usize, 421);
+        assert_eq!(ViSyscall::PauseService as usize, 422);
     }
 
     /// The appended opcodes must sit past every previously shipped id. An
@@ -112,6 +114,7 @@ mod tests {
                     | ViSyscall::WaitCompletion
                     | ViSyscall::MemInfo
                     | ViSyscall::SpawnReplacement
+                    | ViSyscall::PauseService
             ) {
                 continue;
             }
@@ -120,11 +123,12 @@ mod tests {
             assert_ne!(id, ViSyscall::WaitCompletion as usize);
             assert_ne!(id, ViSyscall::MemInfo as usize);
             assert_ne!(id, ViSyscall::SpawnReplacement as usize);
+            assert_ne!(id, ViSyscall::PauseService as usize);
         }
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
         assert_eq!(ViSyscall::from(244), ViSyscall::Unknown);
-        assert_eq!(ViSyscall::from(422), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(423), ViSyscall::Unknown);
     }
 
     /// `WaitCompletion` parks on the same authority as `WaitForEvent` and shares
@@ -282,6 +286,7 @@ mod allowlist {
         assert_eq!(ViSyscall::GetProcs2.allowlist_bit(), Some(55));
         assert_eq!(ViSyscall::MemInfo.allowlist_bit(), Some(56));
         assert_eq!(ViSyscall::SpawnReplacement.allowlist_bit(), Some(57));
+        assert_eq!(ViSyscall::PauseService.allowlist_bit(), Some(49));
 
         let mask = SyscallSet::EMPTY
             .with(ViSyscall::Send)

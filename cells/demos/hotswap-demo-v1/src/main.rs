@@ -74,6 +74,14 @@ static STATE: Mutex<DemoState> = Mutex::new(DemoState::new());
 fn main_handler(ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
+            match ostd::syscall::sys_register_service(api::syscall::service::HOTSWAP_DEMO, 0) {
+                ostd::syscall::SyscallResult::Ok(_) => {
+                    println("[hotswap-demo-v1] service registered")
+                }
+                ostd::syscall::SyscallResult::Err(_) => {
+                    println("[hotswap-demo-v1] WARN: service registration failed")
+                }
+            }
             println("[hotswap-demo-v1] ready — send 'inc' or 'get'");
         }
 
@@ -118,27 +126,24 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
         }
 
         AppEvent::Message { sender_tid, data } => {
-            match data.as_slice() {
-                b"inc" => {
-                    let mut state = STATE.lock();
-                    state.counter = state.counter.saturating_add(1);
-                    // Reply with raw "ok" bytes so tests can assert on a simple string.
-                    ctx.send(sender_tid, b"ok").ok();
-                }
-                b"get" => {
-                    // Reply with "v1:" + 4 LE bytes of counter so the test can assert
-                    // the version prefix AND the counter value in one message.
-                    let state = STATE.lock();
-                    let mut resp = [0u8; 7];
-                    resp[0] = b'v';
-                    resp[1] = b'1';
-                    resp[2] = b':';
-                    resp[3..7].copy_from_slice(&state.counter.to_le_bytes());
-                    ctx.send(sender_tid, &resp).ok();
-                }
-                _ => {
-                    ctx.send(sender_tid, b"unknown").ok();
-                }
+            let data = data.as_slice();
+            if message_eq(data, b"inc") {
+                let mut state = STATE.lock();
+                state.counter = state.counter.saturating_add(1);
+                // Reply with raw "ok" bytes so tests can assert on a simple string.
+                ctx.send(sender_tid, b"ok").ok();
+            } else if message_eq(data, b"get") {
+                // Reply with "v1:" + 4 LE bytes of counter so the test can assert
+                // the version prefix AND the counter value in one message.
+                let state = STATE.lock();
+                let mut resp = [0u8; 7];
+                resp[0] = b'v';
+                resp[1] = b'1';
+                resp[2] = b':';
+                resp[3..7].copy_from_slice(&state.counter.to_le_bytes());
+                ctx.send(sender_tid, &resp).ok();
+            } else {
+                ctx.send(sender_tid, b"unknown").ok();
             }
         }
 
@@ -148,6 +153,11 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
 
         _ => {}
     }
+}
+
+fn message_eq(received: &[u8], expected: &[u8]) -> bool {
+    received.get(..expected.len()) == Some(expected)
+        && received[expected.len()..].iter().all(|byte| *byte == 0)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

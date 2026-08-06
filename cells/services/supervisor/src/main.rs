@@ -18,6 +18,7 @@ extern crate alloc;
 mod error;
 mod hotswap;
 mod protocol;
+mod transfer;
 
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
@@ -89,6 +90,7 @@ fn service_id_for_name(name: &str) -> u16 {
         "net" => service::NET,
         "compositor" => service::COMPOSITOR,
         "input" => service::INPUT,
+        "hotswap-demo" => service::HOTSWAP_DEMO,
         _ => 0,
     }
 }

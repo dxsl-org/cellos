@@ -147,6 +147,8 @@ Build-Cargo -What "posix-shim-test" -Packages @('app-posix-shim-test')
 # DOOM — only if doomgeneric sources have been cloned. Custom --target + -Z so
 # it can't use Build-Cargo; capture the exit code BEFORE the pipe (see Build-Cargo).
 $doom_src = "cells/demos/doom/src/c/doomgeneric/doomgeneric"
+# Optional failures must omit the cell, never reuse an earlier release artifact.
+Remove-Item "$rel_dir/doom" -Force -ErrorAction SilentlyContinue
 if (Test-Path $doom_src) {
     Write-Host "Building DOOM cell..."
     $doomOut = & cargo build --release -p doom --target riscv64gc-unknown-none-elf -Z build-std=core,alloc 2>&1
@@ -159,19 +161,26 @@ if (Test-Path $doom_src) {
 
 # Tetris (pure Rust) — no external deps, always buildable.
 Write-Host "Building Tetris (pure Rust)..."
+Remove-Item "$rel_dir/tetris" -Force -ErrorAction SilentlyContinue
 Build-Cargo -What "tetris" -Mode optional -Tail 3 -Packages @('tetris')
 
 # Tetris-C — needs Banaxi-Tech/Tetris-OS cloned into src/c/tetris-os/.
 $tetris_os_src = "cells/demos/tetris-c/src/c/tetris-os"
-if (Test-Path $tetris_os_src) {
+$tetris_c_source = Join-Path $tetris_os_src "tetris.c"
+# Never package a prior binary when the optional source checkout is incomplete.
+Remove-Item "$rel_dir/tetris-c" -Force -ErrorAction SilentlyContinue
+if (Test-Path $tetris_c_source -PathType Leaf) {
     Write-Host "Building Tetris-C cell (Banaxi-Tech/Tetris-OS port)..."
     Build-Cargo -What "tetris-c" -Mode optional -Tail 3 -Packages @('tetris-c')
+} elseif (Test-Path $tetris_os_src) {
+    Write-Host "Skipping Tetris-C (incomplete checkout: $tetris_c_source is missing)."
 } else {
     Write-Host "Skipping Tetris-C (clone to $tetris_os_src first)."
 }
 
 # Tetris-Lua — embeds Lua 5.4 + tetris.lua via include_bytes!, shared C sources from lua runtime.
 Write-Host "Building Tetris-Lua cell..."
+Remove-Item "$rel_dir/tetris-lua" -Force -ErrorAction SilentlyContinue
 Build-Cargo -What "tetris-lua" -Mode optional -Tail 3 -Packages @('tetris-lua')
 
 # 1c. Build Zig cells (optional — requires zig 0.13+ in PATH).
@@ -217,23 +226,32 @@ function Add-CellToSign {
     $cells_to_sign.Add($Path)
 }
 
+function Add-RequiredCellToSign {
+    param([string]$Path, [string]$What)
+    if (-not (Test-Path $Path -PathType Leaf)) {
+        Write-Host "FATAL: required $What artifact missing at $Path — refusing to sign a partial image." -ForegroundColor Red
+        exit 1
+    }
+    $cells_to_sign.Add($Path)
+}
+
 # Collect the cells that are embedded / placed in the disk image.
-Add-CellToSign "$rel_dir/app-init"
-Add-CellToSign "$rel_dir/app-shell"
+Add-RequiredCellToSign "$rel_dir/app-init" "app-init"
+Add-RequiredCellToSign "$rel_dir/app-shell" "app-shell"
 Add-CellToSign "$rel_dir/platform"
-Add-CellToSign "$rel_dir/service-vfs"
-Add-CellToSign "$rel_dir/service-config"
+Add-RequiredCellToSign "$rel_dir/service-vfs" "service-vfs"
+Add-RequiredCellToSign "$rel_dir/service-config" "service-config"
 Add-CellToSign "$rel_dir/service-net"
 Add-CellToSign "$rel_dir/service-net-broker"
 Add-CellToSign "$rel_dir/service-compositor"
-Add-CellToSign "$rel_dir/supervisor"
+Add-RequiredCellToSign "$rel_dir/supervisor" "supervisor"
 Add-CellToSign "$rel_dir/driver-nvme"
 Add-CellToSign "$rel_dir/driver-e1000"
 Add-CellToSign "$rel_dir/driver-virtio-net"
 Add-CellToSign "$rel_dir/driver-virtio-blk"
 Add-CellToSign "$rel_dir/driver-virtio-gpu"
 Add-CellToSign "$rel_dir/service-input"
-Add-CellToSign "$rel_dir/app-bench"
+Add-RequiredCellToSign "$rel_dir/bench" "app-bench (bench binary)"
 Add-CellToSign "$rel_dir/bench-probe"
 if ($include_capacity_probe) { Add-CellToSign "$rel_dir/capacity-probe" }
 Add-CellToSign "$rel_dir/app-net-tools"
@@ -253,8 +271,8 @@ Add-CellToSign "$rel_dir/http-smoke"
 Add-CellToSign "$rel_dir/cfi-test"
 Add-CellToSign "$rel_dir/wx-test"
 Add-CellToSign "$rel_dir/vfs-test"
-Add-CellToSign "$rel_dir/hotswap-demo-v1"
-Add-CellToSign "$rel_dir/hotswap-demo-v2"
+Add-RequiredCellToSign "$rel_dir/hotswap-demo-v1" "hotswap-demo-v1"
+Add-RequiredCellToSign "$rel_dir/hotswap-demo-v2" "hotswap-demo-v2"
 Add-CellToSign "$rel_dir/ls"
 Add-CellToSign "$rel_dir/cat"
 Add-CellToSign "$rel_dir/echo"
@@ -623,7 +641,7 @@ Write-Host "  cell-store written: $([Math]::Round($storeBytes.Length/1MB,1)) MB 
 if ($script:FailedOptional.Count -gt 0) {
     Write-Host ""
     Write-Host "⚠ WARNING: $($script:FailedOptional.Count) optional cell(s) FAILED to build: $($script:FailedOptional -join ', ')" -ForegroundColor Yellow
-    Write-Host "  The disk may carry a STALE previous binary for each — do not debug those cells on this image." -ForegroundColor Yellow
+    Write-Host "  Failed optional cells were omitted; no stale artifact was packaged." -ForegroundColor Yellow
 }
 Write-Host "Done. disk_v3.img is ready."
 Write-Host ""

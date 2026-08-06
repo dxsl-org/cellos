@@ -12,9 +12,10 @@
 extern crate alloc;
 
 use crate::error::HotswapError;
+use crate::transfer::{send_restore_event, send_snapshot_event};
 use ostd::syscall::{
-    sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_query_hotswap_ready,
-    sys_register_service, sys_resume_cell, sys_send, sys_spawn_replacement, sys_state_restore,
+    sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_pause_service, sys_query_hotswap_ready,
+    sys_register_service, sys_resume_cell, sys_spawn_replacement, sys_state_restore,
     sys_state_stash_clear, sys_yield,
 };
 
@@ -23,10 +24,6 @@ const MAX_ITERS: u32 = 500;
 
 // ── IPC envelope byte constants (must match kernel hotswap.rs) ───────────────
 
-const APP_MSG_MAGIC: u8 = 0xAC;
-const DISC_SNAPSHOT: u8 = 0xF0; // AppEvent::Snapshot { swap_id }
-const DISC_RESTORE: u8 = 0xF1; // AppEvent::Restore  { key[64] }
-
 // ── Hotswap stash key (must match ostd::hotswap::hotswap_key) ────────────────
 
 fn stash_key_for(swap_id: u64) -> u64 {
@@ -34,22 +31,6 @@ fn stash_key_for(swap_id: u64) -> u64 {
 }
 
 // ── Decimal formatter (no std) ────────────────────────────────────────────────
-
-fn fmt_u64_decimal(mut val: u64, buf: &mut [u8; 20]) -> usize {
-    if val == 0 {
-        buf[0] = b'0';
-        return 1;
-    }
-    let mut end = 20usize;
-    while val > 0 {
-        end -= 1;
-        buf[end] = b'0' + (val % 10) as u8;
-        val /= 10;
-    }
-    let len = 20 - end;
-    buf.copy_within(end..20, 0);
-    len
-}
 
 // ── Poll helpers ──────────────────────────────────────────────────────────────
 
@@ -89,33 +70,6 @@ fn wait_for_hotswap_ready(new_tid: usize) -> Result<(), HotswapError> {
 
 // ── IPC senders ───────────────────────────────────────────────────────────────
 
-/// Send `AppEvent::Snapshot { swap_id }` to `tid`.
-fn send_snapshot_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
-    let mut buf = [0u8; 10];
-    buf[0] = APP_MSG_MAGIC;
-    buf[1] = DISC_SNAPSHOT;
-    buf[2..10].copy_from_slice(&swap_id.to_le_bytes());
-    match sys_send(tid, &buf) {
-        ostd::syscall::SyscallResult::Ok(_) => Ok(()),
-        ostd::syscall::SyscallResult::Err(_) => Err(HotswapError::SnapshotIpcFailed),
-    }
-}
-
-/// Send `AppEvent::Restore { key }` to `tid`.
-fn send_restore_event(tid: usize, swap_id: u64) -> Result<(), HotswapError> {
-    let mut buf = [0u8; 66];
-    buf[0] = APP_MSG_MAGIC;
-    buf[1] = DISC_RESTORE;
-    let mut tmp = [0u8; 20];
-    let n = fmt_u64_decimal(swap_id, &mut tmp);
-    let key_len = n.min(63);
-    buf[2..2 + key_len].copy_from_slice(&tmp[..key_len]);
-    match sys_send(tid, &buf) {
-        ostd::syscall::SyscallResult::Ok(_) => Ok(()),
-        ostd::syscall::SyscallResult::Err(_) => Err(HotswapError::RestoreIpcFailed),
-    }
-}
-
 // ── Swap-ID counter (monotone — wraps after u64::MAX, which is fine) ─────────
 
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -148,11 +102,11 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     // ── Step 1a: FREEZE (soft) ────────────────────────────────────────────────
     // The old cell must still run to receive the Snapshot IPC.  We freeze the
     // service registry entry so new callers retry during the swap window.
-    sys_freeze_cell(old_tid).map_err(|_| HotswapError::FreezeFailed)?;
+    wait_for_service_pause(service_id, old_tid)?;
 
     // ── Step 2: SERIALIZE ─────────────────────────────────────────────────────
     if let Err(e) = send_snapshot_event(old_tid, swap_id) {
-        sys_resume_cell(old_tid).ok(); // roll back
+        let _ = sys_register_service(service_id, old_tid);
         return Err(e);
     }
 
@@ -161,32 +115,52 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     match wait_for_stash_key(stash_key) {
         Ok(()) | Err(HotswapError::SnapshotTimeout) => {}
         Err(e) => {
-            sys_resume_cell(old_tid).ok();
+            let _ = sys_register_service(service_id, old_tid);
             return Err(e);
         }
     }
 
     // ── Step 3: SPAWN ─────────────────────────────────────────────────────────
+    // Snapshot is complete; now stop the old task and publish its cap ceiling.
+    if sys_freeze_cell(old_tid).is_err() {
+        let _ = sys_register_service(service_id, old_tid);
+        sys_state_stash_clear(stash_key);
+        return Err(HotswapError::FreezeFailed);
+    }
+
     let new_tid = {
         let result = sys_spawn_replacement(old_tid, new_elf_path);
         match result {
             ostd::syscall::SyscallResult::Ok(tid) => tid,
             ostd::syscall::SyscallResult::Err(_) => {
                 sys_resume_cell(old_tid).ok();
+                let _ = sys_register_service(service_id, old_tid);
+                sys_state_stash_clear(stash_key);
                 return Err(HotswapError::SpawnFailed);
             }
         }
     };
 
     // ── Step 4: DESERIALIZE ───────────────────────────────────────────────────
-    send_restore_event(new_tid, swap_id)?;
-
-    wait_for_hotswap_ready(new_tid)?;
+    if let Err(error) = send_restore_event(new_tid, swap_id) {
+        rollback_spawned(service_id, old_tid, new_tid, stash_key);
+        return Err(error);
+    }
+    if let Err(error) = wait_for_hotswap_ready(new_tid) {
+        rollback_spawned(service_id, old_tid, new_tid, stash_key);
+        return Err(error);
+    }
 
     // ── Step 5: COMMIT ────────────────────────────────────────────────────────
     // Re-register the service registry entry with the new tid.
     // Note: Supervisor must hold SpawnCap to call sys_register_service.
-    let _ = sys_register_service(service_id, new_tid);
+    if !matches!(
+        sys_register_service(service_id, new_tid),
+        ostd::syscall::SyscallResult::Ok(_)
+    ) {
+        rollback_spawned(service_id, old_tid, new_tid, stash_key);
+        return Err(HotswapError::RegisterFailed);
+    }
 
     // Terminate the old cell (it is Frozen at this point — KillCell bypasses the
     // Frozen kill-guard in the kernel, same as exit_task_internal in hotswap.rs).
@@ -196,4 +170,22 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     sys_state_stash_clear(stash_key);
 
     Ok(new_tid)
+}
+
+fn rollback_spawned(service_id: u16, old_tid: usize, new_tid: usize, stash_key: u64) {
+    let _ = sys_kill_cell(new_tid, 0xAAAA_AAAB_u32);
+    sys_resume_cell(old_tid).ok();
+    let _ = sys_register_service(service_id, old_tid);
+    sys_state_stash_clear(stash_key);
+}
+
+fn wait_for_service_pause(service_id: u16, old_tid: usize) -> Result<(), HotswapError> {
+    for _ in 0..MAX_ITERS {
+        if sys_pause_service(service_id, old_tid).is_ok() {
+            return Ok(());
+        }
+        sys_yield();
+    }
+    let _ = sys_register_service(service_id, old_tid);
+    Err(HotswapError::PauseFailed)
 }

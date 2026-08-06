@@ -2,18 +2,24 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-07] Phase 00 public syscall hotswap landing is code-complete, runtime-unverified
+## [2026-08-07] Phase 00 public syscall hotswap landing is complete
 
-`HotSwap` stays at 400 and `SpawnReplacement` lands as the additive 421 replacement
-path with allowlist bit 57. `SupervisorCap` gates Freeze/Resume/Kill/
-QueryHotswapReady/SpawnReplacement; init still holds it directly, and
-`/bin/supervisor` receives it only through the exact launch-profile row intersection
-with manifest, boot ceiling, and operator policy. The kernel takes one live frozen-task
-ceiling under `SCHEDULER -> SWAP_CEILINGS`, clears that ceiling on resume and every
-scheduler exit, and keeps the old-cell cleanup path in `exit_task_internal()`. This is
-code-complete but runtime-unverified: refreshed-image QEMU proof is still blocked by the
-pre-existing `gen_disk` `tetris.c` and missing `app-init` blockers, and
-freeze-before-snapshot ordering still blocks any state-preserving claim. Phase01 remains blocked.
+`PauseService` lands as `422` with allowlist bit 49 and `SupervisorCap` gating, giving
+the supervisor a cap-safe pause point before `FreezeCell`. Cached-TID sends are rejected
+while paused, and the supervisor waits for every pre-pause sender/mailbox item to drain
+before Snapshot, closing the mutation-after-snapshot race. `HotSwap` stays at 400 and
+`SpawnReplacement` lands as the additive 421 replacement path with allowlist bit 57.
+`SupervisorCap` gates Freeze/Resume/Kill/QueryHotswapReady/SpawnReplacement; init still
+holds it directly, and `/bin/supervisor` receives it only through the exact launch-profile
+row intersection with manifest, boot ceiling, and operator policy. The kernel takes one
+live frozen-task ceiling under `SCHEDULER -> SWAP_CEILINGS`, clears that ceiling on
+resume and every scheduler exit, and keeps the old-cell cleanup path in
+`exit_task_internal()`. The fresh QEMU lane passed with `supervisor_hotswap_preserves_demo_state`
+(v1 counter 5 -> v2 counter 5), `[hotswap-cached-sender] PASS`, and
+`[hotswap-demo-v2] SpawnCap retained`; the pre-sign gate
+checks every required image artifact including the actual `bench` binary, while failed optional
+Tetris-C/Tetris-Lua outputs are omitted instead of reusing stale artifacts. Phase 01 remains
+pending (unblocked, not started).
 
 ## [2026-08-06] Phase 07 post-shim stack sizing closed
 

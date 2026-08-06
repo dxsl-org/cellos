@@ -108,6 +108,38 @@ fn hotswap_demo_v2_spawns_and_announces() {
         ));
 }
 
+/// The userspace Supervisor snapshots a runnable v1, hard-freezes only after
+/// stash publication, restores v2, and preserves five real IPC increments.
+#[test]
+fn supervisor_hotswap_preserves_demo_state() {
+    if !prerequisites_ok() { return; }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+    qemu.send_line("hotswap-demo-v1 &");
+    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("bench hotswap-supervisor");
+    qemu.wait_for("[hotswap-demo-v1] state stashed", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("snapshot not processed: {e}\n{}", qemu.dump()));
+    qemu.wait_for(
+        "[hotswap-cached-sender] PASS: paused old tid rejected",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| panic!("cached sender crossed the quiesce barrier: {e}\n{}", qemu.dump()));
+    qemu.wait_for("[hotswap-demo-v2] state restored from v1", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("restore not processed: {e}\n{}", qemu.dump()));
+    qemu.wait_for("[hotswap-demo-v2] SpawnCap retained", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("replacement capability was dropped: {e}\n{}", qemu.dump()));
+    qemu.wait_for(
+        "[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=5)",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| panic!("state-preserving swap failed: {e}\n{}", qemu.dump()));
+}
+
 /// The boot primitive guard proves sender requeue. The bench role then proves a
 /// real blocked sender receives an error and a real ForceExit notification drains.
 #[test]

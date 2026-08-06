@@ -17,6 +17,7 @@ api::declare_syscalls![
     TryRecv,
     Log,
     Heartbeat,
+    LookupService,
     GetTime,
     SetTimer,
     SpawnPinned,
@@ -185,7 +186,11 @@ fn cell_main() {
     // Multi-role dispatch: load/rt-probe cells are re-spawns of this binary with
     // a role arg; the default (no arg) role is the orchestrator.
     let argv = ostd::args();
-    match argv.first().map(|arg| arg.as_str()).unwrap_or("") {
+    let role = argv.first().map(|arg| arg.as_str()).unwrap_or("");
+    if role.starts_with("hotswap-cached-inc:") {
+        scenarios::hotswap_supervisor::run_cached_sender_probe(role);
+    }
+    match role {
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),
@@ -203,6 +208,7 @@ fn cell_main() {
         "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
         "peer-death-guard" => scenarios::smp::run_peer_death_guard(),
+        "hotswap-supervisor" => scenarios::hotswap_supervisor::run(),
         _ => {} // orchestrator falls through
     }
 

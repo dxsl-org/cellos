@@ -24,7 +24,13 @@ pub const MAX_SERVICES: usize = 32;
 
 /// `service_id` → current provider task id. `0` is never stored (it is the ABI
 /// "no provider" sentinel returned by `lookup`).
-static REGISTRY: Spinlock<BTreeMap<u16, usize>> = Spinlock::new(BTreeMap::new());
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ServiceEntry {
+    Active(usize),
+    Paused(usize),
+}
+
+static REGISTRY: Spinlock<BTreeMap<u16, ServiceEntry>> = Spinlock::new(BTreeMap::new());
 
 /// Force-release this module's lock during fault teardown.
 ///
@@ -51,7 +57,7 @@ pub fn register(service_id: u16, tid: usize) -> bool {
         );
         return false;
     }
-    map.insert(service_id, tid);
+    map.insert(service_id, ServiceEntry::Active(tid));
     log::info!("[service-registry] {} -> tid {}", service_id, tid);
     true
 }
@@ -59,7 +65,37 @@ pub fn register(service_id: u16, tid: usize) -> bool {
 /// Resolve `service_id` to its current provider tid, or `None` if no live
 /// provider is registered. The syscall layer maps `None` to the ABI value 0.
 pub fn lookup(service_id: u16) -> Option<usize> {
-    REGISTRY.lock().get(&service_id).copied()
+    match REGISTRY.lock().get(&service_id).copied() {
+        Some(ServiceEntry::Active(tid)) => Some(tid),
+        Some(ServiceEntry::Paused(_)) | None => None,
+    }
+}
+
+/// Hide a service from new lookups while its current provider remains runnable.
+///
+/// The compare-and-pause contract prevents a stale supervisor request from
+/// pausing a replacement that another recovery path already registered.
+pub fn pause(service_id: u16, expected_tid: usize) -> bool {
+    let mut map = REGISTRY.lock();
+    match map.get(&service_id).copied() {
+        Some(ServiceEntry::Active(tid)) if tid == expected_tid => {
+            map.insert(service_id, ServiceEntry::Paused(expected_tid));
+            true
+        }
+        Some(ServiceEntry::Paused(tid)) if tid == expected_tid => true,
+        _ => false,
+    }
+}
+
+/// Return whether `tid` is hidden behind any paused service mapping.
+///
+/// IPC admission uses this as the quiesce barrier for callers that cached the
+/// provider tid before the mapping was paused.
+pub fn is_paused_tid(tid: usize) -> bool {
+    REGISTRY
+        .lock()
+        .values()
+        .any(|entry| matches!(entry, ServiceEntry::Paused(provider) if *provider == tid))
 }
 
 /// Remove every registration that points at `tid`. Called from `exit_task` when a
@@ -68,7 +104,9 @@ pub fn lookup(service_id: u16) -> Option<usize> {
 pub fn clear_tid(tid: usize) {
     let mut map = REGISTRY.lock();
     let before = map.len();
-    map.retain(|_, &mut t| t != tid);
+    map.retain(|_, entry| match entry {
+        ServiceEntry::Active(provider) | ServiceEntry::Paused(provider) => *provider != tid,
+    });
     if map.len() != before {
         log::info!(
             "[service-registry] cleared stale entries for dead tid {}",
@@ -105,5 +143,27 @@ mod tests {
         register(api::syscall::service::CONFIG, 12);
         clear_tid(12);
         assert_eq!(lookup(api::syscall::service::CONFIG), None);
+    }
+
+    #[test]
+    fn pause_hides_only_the_expected_provider() {
+        const TEST_SERVICE: u16 = 60_000;
+        register(TEST_SERVICE, 21);
+        assert!(!pause(TEST_SERVICE, 20));
+        assert_eq!(lookup(TEST_SERVICE), Some(21));
+
+        assert!(pause(TEST_SERVICE, 21));
+        assert_eq!(lookup(TEST_SERVICE), None);
+        assert!(pause(TEST_SERVICE, 21));
+        assert!(is_paused_tid(21));
+    }
+
+    #[test]
+    fn register_reactivates_a_paused_service() {
+        const TEST_SERVICE: u16 = 60_001;
+        register(TEST_SERVICE, 31);
+        assert!(pause(TEST_SERVICE, 31));
+        assert!(register(TEST_SERVICE, 31));
+        assert_eq!(lookup(TEST_SERVICE), Some(31));
     }
 }

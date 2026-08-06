@@ -2,7 +2,7 @@
 //
 // Prerequisites (one-time manual steps):
 //   Clone Banaxi-Tech/Tetris-OS into src/c/tetris-os/:
-//     git clone https://github.com/Banaxi-Tech/Tetris-OS cells/games/tetris-c/src/c/tetris-os
+//     git clone https://github.com/Banaxi-Tech/Tetris-OS cells/demos/tetris-c/src/c/tetris-os
 //
 // Compiles tetris.c from Tetris-OS plus our vicell_platform.c.
 // Platform hooks (vga_*, timer_*, keyboard_*, speaker_*) are implemented
@@ -19,13 +19,9 @@ const TETRIS_OS_DIR: &str = "src/c/tetris-os";
 fn main() {
     let dir = Path::new(TETRIS_OS_DIR);
     if !dir.exists() {
-        println!(
-            "cargo:warning=\
-            Tetris-OS source not found at {TETRIS_OS_DIR}. \
-            Run: git clone https://github.com/Banaxi-Tech/Tetris-OS \
-            cells/games/tetris-c/{TETRIS_OS_DIR}"
+        panic!(
+            "Tetris-OS source missing at {TETRIS_OS_DIR}; clone it into cells/demos/tetris-c/{TETRIS_OS_DIR}"
         );
-        return;
     }
 
     let target = std::env::var("TARGET").unwrap_or_default();
@@ -70,8 +66,7 @@ fn main() {
     if tetris_c.exists() {
         build.file(&tetris_c);
     } else {
-        println!("cargo:warning=tetris.c not found in {TETRIS_OS_DIR} — check repo structure.");
-        return;
+        panic!("required source missing: {TETRIS_OS_DIR}/tetris.c");
     }
 
     // Our ViCell platform implementation replaces all hardware drivers

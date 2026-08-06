@@ -26,7 +26,7 @@ use ostd::app::{AppContext, AppEvent};
 use ostd::hotswap::{hotswap_key, restore_transfer, stash_transfer, ViStateTransfer};
 use ostd::io::println;
 use ostd::sync::Mutex;
-use ostd::syscall::sys_hotswap_ready;
+use ostd::syscall::{sys_force_exit, sys_hotswap_ready, SyscallResult};
 
 ostd::app_entry!(spawn = true, handler = main_handler);
 
@@ -92,29 +92,32 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
                     println("[hotswap-demo-v2] WARN: no stash found — starting cold");
                 }
             }
+            // A missing target makes ForceExit side-effect free while still
+            // exercising the SpawnCap gate inherited through SpawnReplacement.
+            match sys_force_exit(usize::MAX) {
+                SyscallResult::Ok(_) => println("[hotswap-demo-v2] SpawnCap retained"),
+                SyscallResult::Err(_) => println("[hotswap-demo-v2] ERROR: SpawnCap dropped"),
+            }
             sys_hotswap_ready();
         }
 
         AppEvent::Message { sender_tid, data } => {
-            match data.as_slice() {
-                b"inc" => {
-                    let mut state = STATE.lock();
-                    state.counter = state.counter.saturating_add(1);
-                    ctx.send(sender_tid, b"ok").ok();
-                }
-                b"get" => {
-                    // v2 prefix distinguishes this version from v1 in tests.
-                    let state = STATE.lock();
-                    let mut resp = [0u8; 7];
-                    resp[0] = b'v';
-                    resp[1] = b'2';
-                    resp[2] = b':';
-                    resp[3..7].copy_from_slice(&state.counter.to_le_bytes());
-                    ctx.send(sender_tid, &resp).ok();
-                }
-                _ => {
-                    ctx.send(sender_tid, b"unknown").ok();
-                }
+            let data = data.as_slice();
+            if message_eq(data, b"inc") {
+                let mut state = STATE.lock();
+                state.counter = state.counter.saturating_add(1);
+                ctx.send(sender_tid, b"ok").ok();
+            } else if message_eq(data, b"get") {
+                // v2 prefix distinguishes this version from v1 in tests.
+                let state = STATE.lock();
+                let mut resp = [0u8; 7];
+                resp[0] = b'v';
+                resp[1] = b'2';
+                resp[2] = b':';
+                resp[3..7].copy_from_slice(&state.counter.to_le_bytes());
+                ctx.send(sender_tid, &resp).ok();
+            } else {
+                ctx.send(sender_tid, b"unknown").ok();
             }
         }
 
@@ -124,6 +127,11 @@ fn main_handler(ctx: &mut AppContext, event: AppEvent) {
 
         _ => {}
     }
+}
+
+fn message_eq(received: &[u8], expected: &[u8]) -> bool {
+    received.get(..expected.len()) == Some(expected)
+        && received[expected.len()..].iter().all(|byte| *byte == 0)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
