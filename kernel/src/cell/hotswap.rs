@@ -176,6 +176,8 @@ pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
         .lock()
         .revoke_all_for(cell_id);
     crate::memory::cell_quota::deregister(cell_id);
+    crate::task::drivers::driver_cell::deregister_block_driver(tid);
+    crate::task::drivers::driver_cell::deregister_nic_driver(tid);
     crate::resource_registry::release_for(cell_id);
     crate::resource_registry::release_bdfs_for(tid);
     // Keyed by task id, as at every other call site: this is also the point that

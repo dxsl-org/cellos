@@ -51,6 +51,62 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
     }
 }
 
+/// Execute one VirtIO MMIO ACK sequence with RV64 SUM enabled only for that scope.
+///
+/// On RV64, supervisor-mode MMIO ACK helpers may touch user-accessible identity-mapped
+/// device pages while trap handling runs with SUM clear. This helper snapshots whether
+/// SUM was already set, raises it only for `ack`, and restores the prior state
+/// immediately afterwards. Other architectures execute `ack` unchanged.
+pub(crate) fn with_riscv_sum_for_virtio_ack<T>(ack: impl FnOnce() -> T) -> T {
+    #[cfg(target_arch = "riscv64")]
+    {
+        const SUM_MASK: usize = 1usize << 18;
+        let sstatus: usize;
+        // SAFETY: this helper is used only for short-lived VirtIO MMIO ACK sequences.
+        // `csrr/csrs/csrc sstatus` are privileged RV64 supervisor CSR operations; the
+        // code records the prior SUM bit, sets only SUM for the duration of `ack`, and
+        // restores the exact prior SUM state before returning. It does not widen trap
+        // entry globally or alter SSIE/SEIE/STIE.
+        unsafe {
+            core::arch::asm!("csrr {value}, sstatus", value = out(reg) sstatus, options(nostack));
+            if sstatus & SUM_MASK == 0 {
+                core::arch::asm!("csrs sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
+            }
+        }
+        let result = ack();
+        unsafe {
+            if sstatus & SUM_MASK == 0 {
+                core::arch::asm!("csrc sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
+            }
+        }
+        result
+    }
+    #[cfg(not(target_arch = "riscv64"))]
+    {
+        ack()
+    }
+}
+
+/// Read VirtIO `InterruptStatus` and ACK the exact bits it reports.
+///
+/// Returns the observed status bits; `0` means there was nothing pending to ACK.
+pub(crate) fn ack_virtio_interrupt_status(mmio_base: usize) -> u32 {
+    let status = with_riscv_sum_for_virtio_ack(|| {
+        // SAFETY: caller provides a live, identity-mapped VirtIO MMIO base. The
+        // status register is read-only, and the scoped SUM helper contains the
+        // RV64 privilege widening to this one MMIO access sequence only.
+        unsafe { core::ptr::read_volatile((mmio_base + 0x60) as *const u32) }
+    });
+    if status != 0 {
+        with_riscv_sum_for_virtio_ack(|| {
+            // SAFETY: same MMIO contract as the status read above; the ACK register
+            // consumes exactly the pending status bits returned by the device.
+            unsafe { core::ptr::write_volatile((mmio_base + 0x64) as *mut u32, status) };
+        });
+    }
+    status
+}
+
 /// Acknowledge an interrupt from an as-yet unclaimed VirtIO MMIO slot.
 ///
 /// Driver Cells may need several synchronous queue transactions to initialise
@@ -76,15 +132,7 @@ fn ack_unclaimed(irq: u32) -> bool {
     let Some(base) = base else {
         return false;
     };
-    // SAFETY: the architecture-specific ranges above are the identity-mapped
-    // VirtIO MMIO windows. InterruptStatus is read-only and InterruptACK accepts
-    // exactly the status bits returned by the device.
-    let status = unsafe { core::ptr::read_volatile((base + 0x60) as *const u32) };
-    if status == 0 {
-        return false;
-    }
-    unsafe { core::ptr::write_volatile((base + 0x64) as *mut u32, status) };
-    true
+    ack_virtio_interrupt_status(base) != 0
 }
 
 /// VirtIO MMIO IRQ dispatcher — called from the arch trap handlers (riscv64/aarch64)
@@ -98,10 +146,15 @@ fn ack_unclaimed(irq: u32) -> bool {
 /// `sys_wait_irq` path above.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
+    let nic_irq = crate::task::drivers::driver_cell::owns_registered_nic_irq(irq);
+
     // Driver Cell IRQ routing: a Cell registered for this IRQ via sys_wait_irq —
     // signal it (sets IRQ_PENDING + writes VirtIO InterruptACK) and return.
     if crate::task::drivers::irq_wait::has_waiter(irq as u8) {
         crate::task::drivers::irq_wait::signal_irq(irq as u8);
+        if nic_irq {
+            crate::task::waker::signal_net_rx();
+        }
         return;
     }
     // Input (keyboard) slot: ACK to prevent an interrupt storm before the input
@@ -110,6 +163,9 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
         return;
     }
     if ack_unclaimed(irq) {
+        if nic_irq {
+            crate::task::waker::signal_net_rx();
+        }
         return;
     }
     // Unknown VirtIO slot — no device registered. InterruptStatus is already cleared

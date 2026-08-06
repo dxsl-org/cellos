@@ -32,9 +32,17 @@ generic-wait evidence plus stronger overflow protection; no ABI, `libs/api`, or
 The completion path is now honestly closed as a NET_RX-only substrate, not a general
 async reactor. QEMU markers pass for `completion-queue` (`reserve, land, bound, defer`),
 `net-rx-reservation` (`fill, remember, release`), `ipc-pending` (`deferred delivery,
-bounds, quota`), and shell coverage. The shell still speaks `RecvTimeout` with a pending
-mailbox; `signal_net_rx()` has no production caller; and `libs/ostd/src/executor.rs`
-still uses the dummy-waker busy-yield loop.
+bounds, quota`), and shell coverage. RV64 now enables S-mode external IRQ delivery,
+VirtIO ACK reads the exact `InterruptStatus` under a scoped SUM window, and the NIC
+MMIO owner/device-type binding now points the cached NET_RX completion source. The
+network proof only advances after a real `[net-rx-producer] irq->completion PASS`
+marker, so the runtime witness depends on an actual RX drain rather than stale state.
+The shell still speaks `RecvTimeout` with a pending mailbox; `signal_net_rx()` is now
+called only from the owner- and device-type-bound NIC IRQ path; and
+`libs/ostd/src/executor.rs` still uses the dummy-waker busy-yield loop.
+
+Shared death and hotswap cleanup now clear the registered driver roles, so the final
+QEMU network and hotswap evidence passed without a stale NIC cache path.
 
 Deferred items remain deferred and must not be claimed as shipped here: generic reactor
 support, peer-death CQ target-generation ABI, `RecvScatter`-driven readiness, and async

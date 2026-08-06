@@ -71,7 +71,9 @@ pub fn ack_if_input(irq: u32) -> bool {
         return false;
     }
     if let Some(drv) = KEYBOARD_ACK.lock().as_mut() {
-        drv.inner.ack_interrupt();
+        crate::task::drivers::virtio_common::with_riscv_sum_for_virtio_ack(|| {
+            drv.inner.ack_interrupt();
+        });
     }
     true
 }

@@ -40,11 +40,10 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                 ostd::syscall::sys_exit(0);
             };
 
-            // Register as the system NIC Driver Cell.
-            // After this call the net service routes all Tx/Rx through this cell.
-            let _ = sys_register_nic_driver();
-
             *STATE.lock() = Some(dev);
+            // Register as the system NIC Driver Cell only after STATE is ready.
+            // After this call the net service may route all Tx/Rx through this cell.
+            let _ = sys_register_nic_driver();
             ostd::io::println("[virtio-net] ready");
         }
 

@@ -38,12 +38,16 @@ impl Arch for RiscVArch {
         // Initialize trap handling (set stvec)
         trap::init();
 
-        // Enable S-mode software interrupt (SSIP) so RT cells can trigger
-        // zero-latency preemption via `csrsi sip, 0x2` from kernel code.
-        // SAFETY: csrsi on sie sets only the SSIE bit (bit 1); safe from S-mode.
+        // Enable S-mode software + external interrupt delivery in SIE so the
+        // kernel can receive both SSIP preemption nudges and PLIC-routed device
+        // IRQs. Timer-interrupt enable stays on its existing lifecycle elsewhere.
+        // SAFETY: this runs during RV64 arch init before normal interrupt
+        // handling starts. `csrs sie, {mask}` only sets SSIE|SEIE (bits 1 and 9)
+        // from S-mode and leaves STIE untouched, which is the required contract.
         #[cfg(target_arch = "riscv64")]
         unsafe {
-            core::arch::asm!("csrsi sie, 0x2");
+            let mask = 0x202usize;
+            core::arch::asm!("csrs sie, {mask}", mask = in(reg) mask);
         }
     }
 

@@ -102,12 +102,21 @@ pub fn main() {
     let mut buf = [0u8; IPC_BUF_SIZE];
     let mut last_poll_ticks = sys_get_time();
     let mut local_ip = [0u8; 4];
+    let mut net_rx_producer_proved = false;
+    let mut pending_net_rx_proof = false;
 
     println("[net] Starting DHCP...");
 
     loop {
         ostd::syscall::sys_heartbeat(500);
-        device.pump_rx_split();
+        let drained = device.pump_rx_split();
+        if pending_net_rx_proof {
+            if !net_rx_producer_proved && drained > 0 {
+                println("[net-rx-producer] irq->completion PASS");
+                net_rx_producer_proved = true;
+            }
+            pending_net_rx_proof = false;
+        }
 
         if dhcp_state == DhcpState::Pending {
             dhcp_state = poll_dhcp(
@@ -181,7 +190,9 @@ pub fn main() {
                 // the wake came from a frame or from the deadline, the next pass
                 // does the same work.
                 let timeout_ticks = POLL_INTERVAL_MS / 10; // 100 ms → 10 ticks
-                let _ = sys_wait_completion(NET_RX, timeout_ticks);
+                if let Some(completion) = sys_wait_completion(NET_RX, timeout_ticks) {
+                    pending_net_rx_proof = completion.result == NET_RX as i64;
+                }
             }
         }
     }

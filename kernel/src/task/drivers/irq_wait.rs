@@ -124,10 +124,8 @@ pub fn signal_irq(irq: u8) {
         //
         // SAFETY: mmio_base was validated by sys_request_mmio before the Cell
         // stored it; the MMIO window is identity-mapped and within the known device
-        // allowlist. Writing 0x1 acks the first pending interrupt bit.
-        unsafe {
-            core::ptr::write_volatile((mmio_base + 0x64) as *mut u32, 0x1);
-        }
+        // allowlist. ACK the exact pending status bits before PLIC completion.
+        let _ = crate::task::drivers::virtio_common::ack_virtio_interrupt_status(mmio_base);
     }
 
     // Set pending AFTER the MMIO ack so the scheduler sweep races correctly:

@@ -165,6 +165,13 @@ fn network_dhcp_acquires_ip() {
         return;
     }
     let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("[net-rx-producer] irq->completion PASS", 40)
+        .unwrap_or_else(|e| {
+            panic!(
+                "NET_RX producer proof not observed: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
     qemu.wait_for("DHCP acquired", 40).unwrap_or_else(|e| {
         panic!("DHCP did not complete: {e}\n--- output ---\n{}", qemu.dump())
     });

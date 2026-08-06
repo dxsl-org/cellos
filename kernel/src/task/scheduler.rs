@@ -511,6 +511,8 @@ impl Scheduler {
         // Input-service registration cleanup: prevent the kernel poll path from pushing
         // events to a dead/reused TID. Supervisor re-registers after respawn.
         crate::task::drivers::driver_cell::clear_input_cell_if(tid);
+        crate::task::drivers::driver_cell::deregister_block_driver(tid);
+        crate::task::drivers::driver_cell::deregister_nic_driver(tid);
 
         // Remove from every hart's ready queue if present.
         super::hart_local::ready::remove_from_all(tid);

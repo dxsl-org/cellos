@@ -414,7 +414,7 @@ fn handle_typed(
         NetRequest::L2Recv { guest_mac } => {
             // Register guest MAC (idempotent) then pump the NIC for fresh frames.
             device.set_guest_mac(guest_mac);
-            device.pump_rx_split();
+            let _ = device.pump_rx_split();
             if let Some(frame) = device.pop_guest_rx() {
                 let mut rb = [0u8; IPC_BUF_SIZE];
                 if let Ok(s) = ipc::encode(&R::Data(&frame), &mut rb) {

@@ -123,7 +123,10 @@ impl VirtioNetDevice {
     }
 
     /// Drain pending RX frames, splitting by dst MAC when a guest MAC is registered.
-    pub fn pump_rx_split(&mut self) {
+    ///
+    /// Returns the number of frames pulled from the active NIC path.
+    pub fn pump_rx_split(&mut self) -> usize {
+        let mut pulled = 0;
         let mut scratch = [0u8; MAX_FRAME];
         for _ in 0..16 {
             let n = if let Some(tid) = e1000_tid() {
@@ -153,7 +156,9 @@ impl VirtioNetDevice {
                     }
                 }
             }
+            pulled += 1;
         }
+        pulled
     }
 
     /// Query the e1000 Driver Cell for the MAC address, if registered.
