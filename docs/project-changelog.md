@@ -4,6 +4,20 @@
 
 ---
 
+## [2026-08-06] Phase 07 honest closure: NET_RX completion substrate verified, reactor work still deferred
+
+The completion path is now honestly closed as a NET_RX-only substrate, not a general
+async reactor. QEMU markers pass for `completion-queue` (`reserve, land, bound, defer`),
+`net-rx-reservation` (`fill, remember, release`), `ipc-pending` (`deferred delivery,
+bounds, quota`), and shell coverage. The shell still speaks `RecvTimeout` with a pending
+mailbox; `signal_net_rx()` has no production caller; and `libs/ostd/src/executor.rs`
+still uses the dummy-waker busy-yield loop.
+
+Deferred items remain deferred and must not be claimed as shipped here: generic reactor
+support, peer-death CQ target-generation ABI, `RecvScatter`-driven readiness, and async
+VFS/DMA. The QEMU evidence only proves the NET_RX completion substrate and the existing
+mailbox path, not a new reactor model.
+
 ## [2026-08-05] Launch-edge deprivilege closes exact spawn profiles; respawn proof deferred
 
 The kernel now authorizes launch by reviewed `(caller, route, target)` edges instead of

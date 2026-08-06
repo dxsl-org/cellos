@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-05 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-06 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; NET_RX completion substrate verified only as NET_RX, not a general reactor; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -998,6 +998,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   input/render integration, compositor-damage validation, and measured target evidence.
   See [Spec 14](specs/14-viui.md).
 - **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
+- **NET_RX completion substrate** — QEMU markers pass for completion-queue reserve/land/bound/defer, net-rx-reservation fill/remember/release, and ipc-pending deferred delivery/bounds/quota; shell still uses `RecvTimeout` + pending mailbox delivery; `signal_net_rx()` has no production caller and `libs/ostd/src/executor.rs` remains dummy-waker busy-yield; generic reactor, peer-death CQ target-generation ABI, `RecvScatter`, and async VFS/DMA remain deferred.
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
 - **Tier 3b Linux VM** — ARM64 EL2 boots Alpine 3.21.3 aarch64 and has its CI smoke
   lane. x86 is backend-specific: AMD SVM has an implemented MVP registry/vCPU/run-loop
