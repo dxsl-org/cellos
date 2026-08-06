@@ -17,7 +17,7 @@ fn usable_stack_bounds(stack: &Stack) -> Result<(usize, usize), SyscallError> {
 }
 
 fn validate_stack_usize_slot(stack: &Stack, ptr: usize) -> Result<*mut usize, SyscallError> {
-    if ptr == 0 || ptr % core::mem::align_of::<usize>() != 0 {
+    if ptr == 0 || !ptr.is_multiple_of(core::mem::align_of::<usize>()) {
         return Err(SyscallError::InvalidInput);
     }
     let end = ptr

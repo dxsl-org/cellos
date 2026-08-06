@@ -121,7 +121,7 @@ pub fn unknown_cap_read_grant_returns_zero(offset: u64, size: usize) -> Result<(
     let grant = GrantRegion::alloc(16)?;
     grant.share_rw_with_vfs()?;
 
-    let result = match crate::vfs_req(&VfsRequest::ReadGrant {
+    match crate::vfs_req(&VfsRequest::ReadGrant {
         cap: UNKNOWN_CAP_ID,
         offset,
         size,
@@ -131,7 +131,5 @@ pub fn unknown_cap_read_grant_returns_zero(offset: u64, size: usize) -> Result<(
         VfsResponse::GrantDone { .. } => Err("ReadGrant returned nonzero bytes for unknown cap"),
         VfsResponse::Err(_) => Err("ReadGrant returned an error"),
         _ => Err("ReadGrant returned an unexpected response"),
-    };
-
-    result
+    }
 }
