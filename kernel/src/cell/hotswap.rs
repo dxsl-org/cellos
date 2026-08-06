@@ -26,6 +26,7 @@
 // RV32 lacks native 64-bit atomics; portable-atomic polyfills AtomicU64 there
 // via the critical-section impl hal/arch/riscv registers.
 use crate::sync::Spinlock;
+use alloc::collections::BTreeMap;
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
@@ -74,12 +75,21 @@ const DISC_RESTORE: u8 = 0xF1;
 static FROZEN: Spinlock<alloc::collections::BTreeSet<u64>> =
     Spinlock::new(alloc::collections::BTreeSet::new());
 
+/// One live replacement ceiling per frozen task id.
+///
+/// The record is written only after the supervisor captures the task's current
+/// CapSet and is cleared on every resume/kill terminal path. Missing records
+/// fail closed so replacement spawn never falls back to ambient caller caps.
+static SWAP_CEILINGS: Spinlock<BTreeMap<usize, crate::task::cap::CapSet>> =
+    Spinlock::new(BTreeMap::new());
+
 /// Force-release this module's lock during fault teardown.
 ///
 /// # Safety
 /// Single-hart; called only from the fault/panic path with interrupts disabled.
 pub unsafe fn force_unlock_locks() {
     FROZEN.force_unlock();
+    SWAP_CEILINGS.force_unlock();
 }
 
 /// Mark `cell_id` as frozen.  Subsequent `sys_send` calls to this cell will
@@ -98,6 +108,30 @@ pub fn is_frozen(cell_id: CellId) -> bool {
 pub fn unfreeze(cell_id: CellId) {
     FROZEN.lock().remove(&cell_id.0);
     log::info!("[hotswap] unfroze cell {}", cell_id.0);
+}
+
+/// Consume the live frozen task's ceiling for one replacement spawn attempt.
+///
+/// A freeze record is a one-shot authority token. Consuming it prevents a
+/// compromised supervisor from cloning multiple privileged replacements from
+/// one frozen task. A failed spawn must be rolled back with resume/refreeze.
+///
+/// Lock order is `SCHEDULER -> SWAP_CEILINGS`, shared by freeze, resume, exit,
+/// and consume. Holding both locks makes the live-Frozen check and token removal
+/// one atomic authority decision.
+pub(crate) fn take_frozen_replacement_ceiling(tid: usize) -> Option<crate::task::cap::CapSet> {
+    use crate::task::tcb::TaskState;
+
+    let scheduler = crate::task::SCHEDULER.lock();
+    let task = scheduler.as_ref()?.tasks.get(&tid)?;
+    if !matches!(task.state, TaskState::Frozen { .. }) {
+        return None;
+    }
+    SWAP_CEILINGS.lock().remove(&tid)
+}
+
+pub(crate) fn clear_swap_ceiling(tid: usize) {
+    SWAP_CEILINGS.lock().remove(&tid);
 }
 
 // ─── HotSwapReady flag ───────────────────────────────────────────────────────
@@ -148,12 +182,40 @@ pub(crate) fn set_task_frozen(tid: usize, swap_id: u64) -> ViResult<()> {
     Err(ViError::NotFound)
 }
 
+/// Freeze one supervisor-managed task and snapshot its capability ceiling at
+/// the same scheduler transition point.
+pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()> {
+    use crate::task::tcb::TaskState;
+
+    // Lock order contract: SCHEDULER -> SWAP_CEILINGS. The task transition and
+    // ceiling publication are atomic to ResumeCell, KillCell, and replacement
+    // spawn, so no runnable task can retain a usable freeze record.
+    let mut scheduler = crate::task::SCHEDULER.lock();
+    let mut ceilings = SWAP_CEILINGS.lock();
+    if ceilings.contains_key(&tid) {
+        return Err(ViError::AlreadyExists);
+    }
+    let sched = scheduler.as_mut().ok_or(ViError::NotFound)?;
+    let task = sched.tasks.get_mut(&tid).ok_or(ViError::NotFound)?;
+    if task.is_critical || matches!(task.state, TaskState::Frozen { .. }) {
+        return Err(ViError::PermissionDenied);
+    }
+    let ceiling = crate::task::cap::CapSet::of_task(task);
+    task.state = TaskState::Frozen { swap_id };
+    ceilings.insert(tid, ceiling);
+    crate::task::hart_local::ready::remove_from_all(tid);
+    Ok(())
+}
+
 /// Roll back a Frozen task to `TaskState::Ready` and re-queue it.
 ///
 /// Called on swap abort so the old cell resumes from where it left off.
 pub(crate) fn unfreeze_task(tid: usize) {
     use crate::task::tcb::TaskState;
-    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
+    let mut scheduler = crate::task::SCHEDULER.lock();
+    // Keep the SCHEDULER -> SWAP_CEILINGS order used by every record lifecycle.
+    clear_swap_ceiling(tid);
+    if let Some(sched) = scheduler.as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
             if matches!(task.state, TaskState::Frozen { .. }) {
                 task.state = TaskState::Ready;

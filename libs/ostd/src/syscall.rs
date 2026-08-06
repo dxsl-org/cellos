@@ -35,6 +35,18 @@ fn decode_spawn_result(ret: isize) -> SyscallResult {
     }
 }
 
+fn decode_spawn_replacement_result(ret: isize) -> SyscallResult {
+    if ret > 0 {
+        SyscallResult::Ok(ret as usize)
+    } else if ret == SYSCALL_DENIED {
+        SyscallResult::Err(SyscallError::PermissionDenied)
+    } else if ret == SYSCALL_OOM {
+        SyscallResult::Err(SyscallError::OutOfMemory)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
+}
+
 fn decode_snapshot_result(ret: isize) -> SyscallResult {
     if ret >= 0 {
         SyscallResult::Ok(ret as usize)
@@ -348,6 +360,34 @@ pub fn sys_spawn_from_elf(grant_id: usize, len: usize, path_hint: &str) -> Sysca
             path_hint.len(),
         );
         decode_spawn_result(ret)
+    }
+}
+
+/// Spawn a replacement for a frozen Cell using the kernel's recorded cap ceiling.
+///
+/// `old_tid` must name a Cell previously frozen through `sys_freeze_cell`; the
+/// kernel rejects the call if no live freeze record exists. The replacement can
+/// request only the intersection of its manifest and the frozen Cell's caps.
+///
+/// # Returns
+/// The replacement task id on success.
+///
+/// # Errors
+/// Returns `SyscallError::PermissionDenied` when the caller lacks
+/// `SupervisorCap` or `old_tid` has no matching live freeze record, and
+/// `SyscallError::OutOfMemory` when the replacement cannot be allocated.
+pub fn sys_spawn_replacement(old_tid: usize, path: &str) -> SyscallResult {
+    // SAFETY: `path` is a valid UTF-8 slice; the kernel validates and copies it
+    // before returning, then applies the recorded frozen-cell ceiling.
+    unsafe {
+        let ret = syscall(
+            ViSyscall::SpawnReplacement,
+            old_tid,
+            path.as_ptr() as usize,
+            path.len(),
+            0,
+        );
+        decode_spawn_replacement_result(ret)
     }
 }
 

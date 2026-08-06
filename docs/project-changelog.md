@@ -2,6 +2,19 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-07] Phase 00 public syscall hotswap landing is code-complete, runtime-unverified
+
+`HotSwap` stays at 400 and `SpawnReplacement` lands as the additive 421 replacement
+path with allowlist bit 57. `SupervisorCap` gates Freeze/Resume/Kill/
+QueryHotswapReady/SpawnReplacement; init still holds it directly, and
+`/bin/supervisor` receives it only through the exact launch-profile row intersection
+with manifest, boot ceiling, and operator policy. The kernel takes one live frozen-task
+ceiling under `SCHEDULER -> SWAP_CEILINGS`, clears that ceiling on resume and every
+scheduler exit, and keeps the old-cell cleanup path in `exit_task_internal()`. This is
+code-complete but runtime-unverified: refreshed-image QEMU proof is still blocked by the
+pre-existing `gen_disk` `tetris.c` and missing `app-init` blockers, and
+freeze-before-snapshot ordering still blocks any state-preserving claim. Phase01 remains blocked.
+
 ## [2026-08-06] Phase 07 post-shim stack sizing closed
 
 Six measured paths are now fixed at 16 usable pages plus the two Phase 06 guards:

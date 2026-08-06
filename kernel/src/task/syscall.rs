@@ -401,6 +401,7 @@ fn supports_typed_spawn_oom(syscall: &Syscall) -> bool {
         Syscall::SpawnFromMem { .. }
             | Syscall::SpawnFromPath { .. }
             | Syscall::SpawnFromElf { .. }
+            | Syscall::SpawnReplacement { .. }
             | Syscall::SpawnPinned { .. }
     )
 }
@@ -1070,6 +1071,12 @@ pub enum Syscall {
     /// 419: QueryHotswapReady — check whether `target_tid` has called sys_hotswap_ready().
     /// Returns 1 if ready, 0 if not yet, usize::MAX if tid is unknown.
     QueryHotswapReady { target_tid: usize },
+    /// 421: SpawnReplacement — supervisor-only spawn using the frozen task's recorded cap ceiling.
+    SpawnReplacement {
+        old_tid: usize,
+        path_ptr: usize,
+        path_len: usize,
+    },
     /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
     HotSwap {
         cell_id: usize,
@@ -1276,6 +1283,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::ResumeCell { .. } => V::ResumeCell,
         Syscall::KillCell { .. } => V::KillCell,
         Syscall::QueryHotswapReady { .. } => V::QueryHotswapReady,
+        Syscall::SpawnReplacement { .. } => V::SpawnReplacement,
         Syscall::RegisterBlockDriver => V::RegisterBlockDriver,
         Syscall::RegisterNicDriver => V::RegisterNicDriver,
         Syscall::FindPcieDevice { .. } => V::FindPcieDevice,
@@ -3567,19 +3575,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if target_tid == 0 || target_tid == caller_id {
                 return Err(SyscallError::InvalidInput);
             }
-            // Refuse to freeze critical cells (init, kernel threads).
-            let is_crit = super::SCHEDULER
-                .lock()
-                .as_ref()
-                .and_then(|s| s.tasks.get(&target_tid).map(|t| t.is_critical))
-                .unwrap_or(false);
-            if is_crit {
-                return Err(SyscallError::PermissionDenied);
-            }
             // swap_id u64::MAX = admin freeze (not a hotswap sequence).
-            crate::cell::hotswap::set_task_frozen(target_tid, u64::MAX)
+            crate::cell::hotswap::freeze_task_with_ceiling(target_tid, u64::MAX)
                 .map(|_| 0)
-                .map_err(|_| SyscallError::FileNotFound)
+                .map_err(|error| {
+                    if error == types::ViError::NotFound {
+                        SyscallError::FileNotFound
+                    } else {
+                        SyscallError::PermissionDenied
+                    }
+                })
         }
 
         // 414: ResumeCell — re-queue a frozen Cell so it can be scheduled.
@@ -3641,6 +3646,66 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Some(false) => Ok(0),
                 None => Err(SyscallError::FileNotFound), // tid does not exist
             }
+        }
+
+        Syscall::SpawnReplacement {
+            old_tid,
+            path_ptr,
+            path_len,
+        } => {
+            if !caller_has_supervisor(caller_id) {
+                return Err(SyscallError::PermissionDenied);
+            }
+            if old_tid == 0 || path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH
+            {
+                return Err(SyscallError::InvalidInput);
+            }
+            validate_user_buf(
+                path_ptr,
+                path_len,
+                crate::loader::disk_layout::MAX_CELL_PATH,
+            )?;
+            // SAFETY: `path_ptr..path_ptr+path_len` was validated above as a
+            // caller-owned user buffer; SUM=1 permits the S-mode read here.
+            let path_str = unsafe {
+                let slice = core::slice::from_raw_parts(path_ptr as *const u8, path_len);
+                core::str::from_utf8(slice).map_err(|_| SyscallError::InvalidInput)?
+            };
+            if !path_str.starts_with('/') {
+                return Err(SyscallError::InvalidInput);
+            }
+            let profile = authorize_launch_edge(
+                caller_id,
+                crate::loader::launch_profile::LaunchRoute::Path,
+                path_str,
+            )?;
+            let frozen_ceiling = crate::cell::hotswap::take_frozen_replacement_ceiling(old_tid)
+                .ok_or(SyscallError::PermissionDenied)?;
+            let ceiling = frozen_ceiling.intersect(profile.parent_ceiling);
+            let spawned = crate::loader::spawn_from_path(
+                path_str,
+                crate::task::cap::Spawner::Ceiling(ceiling),
+            );
+            // Mirror the regular spawn contract: a successful replacement spawn
+            // consumes any staged directory set, and a failed one must clear it
+            // so it cannot attach to an unrelated later child.
+            crate::task::dir_inherit::clear_staged(caller_id);
+            let task_id = spawned.map_err(|e| match e {
+                types::ViError::NotFound => SyscallError::FileNotFound,
+                types::ViError::OutOfMemory => {
+                    log::warn!(
+                        "[loader] spawn OOM: op=SpawnReplacement caller={} old_tid={} path={}",
+                        caller_id,
+                        old_tid,
+                        path_str
+                    );
+                    SyscallError::OutOfMemory
+                }
+                types::ViError::PermissionDenied => SyscallError::PermissionDenied,
+                _ => SyscallError::InvalidInput,
+            })?;
+            transfer_spawn_argv(caller_id, task_id);
+            Ok(task_id)
         }
 
         // ── Driver Cell Registration (P00) ───────────────────────────────────
@@ -4663,6 +4728,11 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_ptr: a3,
         },
         ViSyscall::QueryHotswapReady => Syscall::QueryHotswapReady { target_tid: a0 },
+        ViSyscall::SpawnReplacement => Syscall::SpawnReplacement {
+            old_tid: a0,
+            path_ptr: a1,
+            path_len: a2,
+        },
         ViSyscall::HotSwap => Syscall::HotSwap {
             cell_id: a0,
             path_ptr: a1,

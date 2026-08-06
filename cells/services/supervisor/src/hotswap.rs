@@ -14,7 +14,7 @@ extern crate alloc;
 use crate::error::HotswapError;
 use ostd::syscall::{
     sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_query_hotswap_ready,
-    sys_register_service, sys_resume_cell, sys_send, sys_spawn_from_path, sys_state_restore,
+    sys_register_service, sys_resume_cell, sys_send, sys_spawn_replacement, sys_state_restore,
     sys_state_stash_clear, sys_yield,
 };
 
@@ -168,7 +168,7 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
 
     // ── Step 3: SPAWN ─────────────────────────────────────────────────────────
     let new_tid = {
-        let result = sys_spawn_from_path(new_elf_path);
+        let result = sys_spawn_replacement(old_tid, new_elf_path);
         match result {
             ostd::syscall::SyscallResult::Ok(tid) => tid,
             ostd::syscall::SyscallResult::Err(_) => {

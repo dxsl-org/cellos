@@ -363,7 +363,7 @@ pub enum ViSyscall {
     /// ABI: a0 = key → 0 on success (no-op when key is absent).
     StateStashClear = 412,
 
-    // === Supervisor Primitives (P03) — SupervisorCap-gated (bit 49) ===
+    // === Supervisor Primitives (P03) — SupervisorCap-gated ===
     /// 413: Freeze a Cell. Requires SupervisorCap.
     /// ABI: a0 = target_tid → 0 on success.
     FreezeCell = 413,
@@ -388,6 +388,10 @@ pub enum ViSyscall {
     /// 419: Query whether a cell has called sys_hotswap_ready(). Requires SupervisorCap.
     /// ABI: a0 = target_tid → 1 if ready, 0 if not yet, usize::MAX on unknown tid.
     QueryHotswapReady = 419,
+    /// 421: Spawn a replacement for a frozen Cell using its recorded capability ceiling.
+    /// Requires SupervisorCap and a live kernel freeze record for `old_tid`.
+    /// ABI: a0 = old_tid, a1 = path_ptr, a2 = path_len → new_task_id or error.
+    SpawnReplacement = 421,
 
     // === Unknown ===
     Unknown = 9999,
@@ -710,6 +714,10 @@ impl ViSyscall {
             Self::GetProcs2 => Some(55),
             // MemInfo (bit 56): global allocator telemetry is a cross-cell side channel.
             Self::MemInfo => Some(56),
+            // SpawnReplacement (bit 57): supervisor-only replacement spawn via a
+            // kernel-recorded frozen-cell ceiling. This stays separate from bit 49
+            // so older supervisor-op allowlists do not silently gain it.
+            Self::SpawnReplacement => Some(57),
             // Yield, Exit, and ForceExit are always permitted — a Cell must be able
             // to yield the CPU, exit cleanly, and force-terminate unresponsive tasks
             // regardless of its allowlist.  SpawnCap is the authority gate for ForceExit.
@@ -827,6 +835,7 @@ impl From<usize> for ViSyscall {
             417 => ViSyscall::RegisterNicDriver,
             418 => ViSyscall::FindPcieDevice,
             419 => ViSyscall::QueryHotswapReady,
+            421 => ViSyscall::SpawnReplacement,
             _ => ViSyscall::Unknown,
         }
     }

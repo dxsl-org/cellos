@@ -484,6 +484,12 @@ impl Scheduler {
     pub fn exit_task(&mut self, tid: usize, exit_reason: usize) {
         info!("Task {} exiting (reason={:#x})...", tid, exit_reason);
 
+        // Scheduler exit is the terminal lifecycle funnel for clean exits,
+        // faults, watchdogs, and hot-swap retirement. Clear any replacement
+        // authority before the TID can disappear. Callers hold SCHEDULER, so
+        // this preserves the global SCHEDULER -> SWAP_CEILINGS lock order.
+        crate::cell::hotswap::clear_swap_ceiling(tid);
+
         let timer_release = self.tasks.get_mut(&tid).and_then(|task| {
             let wait = task.completion_wait.take()?;
             if wait.source != api::completion::source::TIMER {
