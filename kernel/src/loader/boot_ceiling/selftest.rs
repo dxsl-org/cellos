@@ -113,9 +113,17 @@ pub fn run() -> bool {
         ok = false;
         log::error!("[selftest] launch-profile: shell mem launch must fail closed");
     }
-    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_none() {
+    if authorize(SHELL, LaunchRoute::Path, "/bin/httpd").is_none() {
         ok = false;
         log::error!("[selftest] launch-profile: shell lost exact /bin/httpd launch edge");
+    }
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_some() {
+        ok = false;
+        log::error!("[selftest] launch-profile: caller-owned ELF gained network path authority");
+    }
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs-test").is_none() {
+        ok = false;
+        log::error!("[selftest] launch-profile: shell lost capability-free ELF edge");
     }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs").is_some() {
         ok = false;
