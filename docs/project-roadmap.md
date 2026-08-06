@@ -32,14 +32,21 @@
 > `RecvScatter` isolation, heartbeat-watchdog blocked-send wake, and ForceExit notification
 > drain now pass. The VFS grant audit records the two unsafe service-side copy sites whose
 > safety still depends on blocking caller lifetime. Generic reactor work, `RecvScatter`
-> repair, async VFS/DMA, parked executor work, and stack resizing remain deferred behind Law 1.
+> repair, and async VFS/DMA remain deferred behind Law 1; parked executor work is closed,
+> and stack resizing now remains blocked only on stronger overflow protection.
 
 > **Midori Phase 08 stack-sizing baseline (2026-08-06):** default 64-page stacks remain
 > unchanged; `stack_pages_for(path)` is default-only across the verified Phase 08 gate; the
 > RV64 test-hooks lane emits baseline markers for init/shell/vfs/vfs-test; and the
 > measurements are explicitly non-authoritative sizing baselines only. Production shrink stays
-> blocked until parked-executor or equivalent generic-wait evidence lands, plus stronger
-> overflow protection.
+> blocked on stronger overflow protection.
+
+> **Midori Phase 05 parked-executor closure (2026-08-06):** per-executor `Arc` RawWaker,
+> bounded TIMER park, independent monotonic-ms sleep deadlines, and fail-loud authority checks
+> are verified; shell `Recv` stays unchanged, the broad shell/input/DHCP/TCP/VFS and
+> peer-death lanes were run before the final fallback-only change, the exact parked marker
+> `[executor] dummy-waker=absent executor=parked source=TIMER PASS` was rerun after that
+> tweak, and reviewer APPROVE is recorded.
 
 > **Midori Phase 01 partial-closure update (2026-08-01):** the test-hooks QEMU lane now
 > proves `ReadFileGrant` allow/deny markers, but Phase 01 stays partial. `ReadGrant`
@@ -143,7 +150,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | Capacity observability: typed spawn OOM + opt-in MemInfo | A2/A3 | ✅ DONE 2026-08-01 — real allocator metric is 129.49 MiB; `<10 MiB` optimization remains open | G1 |
 | Reliability / supervisor restart | specs/12 | ✅ SUBSTANTIAL (P00-03 DONE 2026-06-06: fault-path force-unlock, reboot-on-panic, guard pages, RT watchdog; P05 done: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability done) | **G1** |
 | Generic completion contract | kernel/task completion + wait plumbing | ✅ Law 1 double confirmation honored; `WaitCompletion` stays additive with `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, and no peer/VFS/DMA/grant source was added; TIMER userspace proof deferred to Phase05 | **G1** |
-| Phase 08 stack-sizing gate | per-path stack sizing baseline | ✅ baseline-only QEMU markers PASS for init/shell/vfs/vfs-test; default 64 unchanged; production shrink blocked pending parked executor/generic wait and stronger overflow protection | **G1** |
+| Phase 08 stack-sizing gate | per-path stack sizing baseline | ✅ baseline-only QEMU markers PASS for init/shell/vfs/vfs-test; default 64 unchanged; production shrink blocked pending stronger overflow protection | **G1** |
 | Typed IPC + syscall filter (reliability part) | Phase 27-1/2 | ✅ | G1 (next) |
 | ELF capability manifests | Phase 30 | ✅ | G1 |
 | Heap snapshot / Instant-On | Phase 29 | ✅ | G1 |

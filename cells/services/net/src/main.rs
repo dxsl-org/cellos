@@ -191,7 +191,8 @@ pub fn main() {
                 // does the same work.
                 let timeout_ticks = POLL_INTERVAL_MS / 10; // 100 ms → 10 ticks
                 if let Some(completion) = sys_wait_completion(NET_RX, timeout_ticks) {
-                    pending_net_rx_proof = completion.result == NET_RX as i64;
+                    pending_net_rx_proof =
+                        completion.source == NET_RX && completion.result == NET_RX as i64;
                 }
             }
         }

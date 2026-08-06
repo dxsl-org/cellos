@@ -23,6 +23,14 @@ The Phase 04 contract is narrower than a generic reactor. `WaitCompletion` only
 covers `NET_RX` and finite `TIMER` waits, while `WaitForEvent` and the `Recv*`
 family keep their existing wake and delivery rules.
 
+The shipped executor implements that contract with an `Arc`-backed `RawWaker`
+state, a one-tick `TIMER` park for pending polls, and a `SleepFuture` that turns
+scheduler ticks into monotonic millisecond deadlines when `GetTime` is available.
+The authority contract is fail-loud: `block_on` panics if neither `WaitCompletion`
+nor `SetTimer` is granted, and `sleep` keeps the older `SetTimer` fallback only
+when monotonic time is unavailable. `Recv` stays on the mailbox path and is not
+migrated into completion-queue parking.
+
 ---
 
 ## Context
@@ -159,7 +167,9 @@ outside `SCHEDULER`; dead-task cleanup never frees a slot inline.
 - `WaitForEvent` keeps its bitmask wake semantics, and the `Recv`/`TryRecv`/
   `RecvTimeout` paths keep their existing parked-receiver contract. `WaitCompletion`
   is additive; it does not absorb the IPC paths that still depend on the parked
-  `TaskState::Recv` shape.
+  `TaskState::Recv` shape. The runtime `NET_RX` witness checks both
+  `completion.source == NET_RX` and `completion.result == NET_RX as i64`, so the
+  proof validates the source tag and the payload result separately.
 - Peer-dependent completion sources stay deferred. Any future source that waits on
   another task must bind that target's generation at submission, because a bare tid
   is reusable and is not a stable completion identity.
@@ -174,9 +184,10 @@ outside `SCHEDULER`; dead-task cleanup never frees a slot inline.
   bytes in the receiver's existing `pending_msgs` mailbox, and only the resumed
   receiver copies them into its buffer. This also removes the interrupt-side need
   to enable supervisor writes to user pages for console delivery.
-- The first end-to-end TIMER userspace proof is still Phase 05. Phase 04 verifies
-  the encoded contract, source validation, and dead-task lifecycle guard, but it
-  does not claim a real TIMER consumer in userspace.
+- The first end-to-end TIMER userspace proof landed in Phase 05. The QEMU witness
+  is the exact marker `[executor] dummy-waker=absent executor=parked source=TIMER PASS`.
+  Phase 04 verifies the encoded contract, source validation, and dead-task
+  lifecycle guard, and it does not claim a real TIMER consumer in userspace.
 
 ## Rejected
 

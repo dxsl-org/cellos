@@ -983,10 +983,19 @@ pub fn sys_recv_timeout(mask: usize, buf: &mut [u8], timeout_ticks: u64) -> Sysc
     }
 }
 
+/// Block the current task for `ticks` scheduler ticks.
+///
+/// Returns `PermissionDenied` when the cell's syscall allowlist omits
+/// `SetTimer`; other kernel failures are returned as `Unknown`.
 pub fn sys_set_timer(ticks: usize) -> SyscallResult {
-    unsafe {
-        syscall(ViSyscall::SetTimer, ticks, 0, 0, 0);
-        SyscallResult::Ok(0)
+    // SAFETY: register-only syscall; the kernel parks the current task when accepted.
+    let ret = unsafe { syscall(ViSyscall::SetTimer, ticks, 0, 0, 0) };
+    if ret >= 0 {
+        SyscallResult::Ok(ret as usize)
+    } else if ret == SYSCALL_DENIED {
+        SyscallResult::Err(SyscallError::PermissionDenied)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
     }
 }
 
@@ -1291,6 +1300,16 @@ pub fn sys_get_time() -> u64 {
     } else {
         0
     }
+}
+
+/// Read monotonic milliseconds since boot.
+///
+/// Returns `None` when the running kernel or the cell's syscall allowlist does
+/// not provide `GetTime`. The value is architecture-normalized by the kernel.
+pub fn sys_get_time_ms() -> Option<u64> {
+    // SAFETY: register-only syscall; reads and writes no user memory.
+    let ret = unsafe { syscall(ViSyscall::GetTime, 1, 0, 0, 0) };
+    (ret >= 0).then_some(ret as u64)
 }
 
 /// Nanoseconds since Unix epoch from the hardware RTC; 0 if no RTC is present.

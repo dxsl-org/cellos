@@ -35,6 +35,7 @@ api::declare_syscalls![
     GetProcs,
     GetProcs2,
     SetTimer,
+    WaitCompletion,
     OpenCap,
     ReadCap,
     CloseCap,

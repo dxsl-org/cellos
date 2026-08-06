@@ -2,6 +2,19 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-06] Phase 05 parked executor shim closed
+
+`ostd::executor::block_on()` now parks per executor through an `Arc`-backed
+`RawWaker`, uses a bounded TIMER wait instead of the busy-yield loop, keeps
+independent monotonic-ms sleep deadlines, and fails loud on authority mismatch.
+Shell `Recv` stayed unchanged, the NET_RX proof stayed intact, and the exact
+parked marker `[executor] dummy-waker=absent executor=parked source=TIMER PASS`
+was rerun after the final fallback-only tweak. Verified by `cargo fmt --all --check`,
+`git diff --check`, RV64 `ostd`/`app-shell`/`service-net` checks, fresh QEMU parked
+marker, and reviewer APPROVE. The broad shell/input/DHCP/TCP/VFS and peer-death
+lanes were run before the final fallback-only change. Stale manual nightly-2025
+failure notes are invalid here because `rust-toolchain.toml` pins `nightly-2026-05-01`.
+
 ## [2026-08-06] Phase 04 generic completion contract verified with NET_RX preserved
 
 After the reviewed Law 1 double confirmation, `WaitCompletion` now uses the
@@ -30,8 +43,9 @@ death while the caller is blocked in `Send` and a ForceExit death-notification
 drain. The VFS grant audit records `ReadGrant` and `ReadFileGrant` as the two
 unsafe service-side copies that still depend on blocking caller lifetime.
 
-Generic reactor work, `RecvScatter` repair, async VFS/DMA, the parked executor,
-and stack resizing remain deferred behind the Law 1 gate.
+Generic reactor work, `RecvScatter` repair, and async VFS/DMA remain deferred
+behind the Law 1 gate; parked executor work is closed, and stack resizing now
+remains blocked only on stronger overflow protection.
 
 ---
 
@@ -54,9 +68,8 @@ phase, and the RV64 test-hooks lane passes `[stack-baseline]` markers for
 init/shell/vfs/vfs-test.
 
 Those measurements are explicitly non-authoritative sizing baselines, not a production
-stack table. Production shrink remains blocked on parked-executor or equivalent
-generic-wait evidence plus stronger overflow protection; no ABI, `libs/api`, or
-`libs/types` change landed.
+stack table. Production shrink remains blocked on stronger overflow protection;
+no ABI, `libs/api`, or `libs/types` change landed.
 
 ## [2026-08-06] Phase 07 honest closure: NET_RX completion substrate verified, reactor work still deferred
 

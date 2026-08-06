@@ -188,6 +188,8 @@ impl AsyncStdin {
                     buffer.push(ch);
                 }
                 _ => {
+                    // The executor turns this pending edge into a one-tick
+                    // WaitCompletion(TIMER) park; Recv remains on its mailbox.
                     yield_now().await;
                 }
             }

@@ -1517,6 +1517,26 @@ fn shell_ready_hypha_burst_is_lossless() {
         });
 }
 
+/// The ostd executor must park a pending shell future through the finite TIMER
+/// completion source before the readiness banner is printed.
+#[test]
+fn shell_executor_parks_on_timer_completion() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for(
+        "[executor] dummy-waker=absent executor=parked source=TIMER PASS",
+        BOOT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "parked executor TIMER proof not observed: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+}
+
 // ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────
 
 /// The boot self-test proves all three producers avoid a foreign `Recv.buf_ptr`,
