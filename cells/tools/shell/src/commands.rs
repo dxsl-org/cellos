@@ -1,4 +1,5 @@
 use ostd::fs;
+use ostd::grant::GrantHandle;
 use ostd::prelude::*;
 use ostd::syscall;
 
@@ -35,14 +36,7 @@ pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     }
     let path = path.unwrap();
 
-    // Reconstruct args
-    let mut cmd_args = String::new();
-    for arg in args {
-        if !cmd_args.is_empty() {
-            cmd_args.push(' ');
-        }
-        cmd_args.push_str(arg);
-    }
+    let cmd_argv: Vec<String> = args.map(String::from).collect();
 
     // 1. Open file using Kernel FS (same as ls/cat)
     // This ensures consistency with 'ls' and avoids relying on potentially out-of-sync Userspace VFS.
@@ -51,7 +45,7 @@ pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
         Ok(file) => {
             ostd::io::print("exec: loading (KERNEL-FS) ");
             ostd::io::println(path);
-            exec_load_and_spawn(file, path, &cmd_args)?;
+            exec_load_and_spawn(file, path, &cmd_argv)?;
         }
         Err(_) => {
             // Fallback: Try with '/' prefix
@@ -61,7 +55,7 @@ pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
                 Ok(file) => {
                     ostd::io::print("exec: loading (KERNEL-FS) ");
                     ostd::io::println(&rooted);
-                    exec_load_and_spawn(file, &rooted, &cmd_args)?;
+                    exec_load_and_spawn(file, &rooted, &cmd_argv)?;
                 }
                 Err(_) => {
                     ostd::io::print("exec: cannot open '");
@@ -75,7 +69,7 @@ pub fn cmd_exec(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
     Ok(())
 }
 
-fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> ViResult<()> {
+fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_argv: &[String]) -> ViResult<()> {
     // Read file into memory
     let mut data = Vec::new();
     if file.read_to_end(&mut data).is_err() {
@@ -93,8 +87,22 @@ fn exec_load_and_spawn(mut file: ostd::fs::File, path: &str, cmd_args: &str) -> 
     ostd::io::print_usize(data.len());
     ostd::io::println(" bytes)...");
 
-    // Spawn
-    match syscall::sys_spawn_from_mem(&data, path, cmd_args) {
+    if !ostd::set_spawn_argv(cmd_argv) {
+        ostd::io::println("exec: argv exceeds 512-byte transport limit.");
+        return Ok(());
+    }
+
+    let grant = match GrantHandle::<u8>::alloc_copy_from_slice(&data) {
+        Some(grant) => grant,
+        None => {
+            ostd::io::println("exec: grant allocation failed.");
+            return Ok(());
+        }
+    };
+
+    // Spawn through the exact-path ELF route so the kernel can authorize the
+    // reviewed `(shell, SpawnFromElf, /bin/<target>)` edge.
+    match syscall::sys_spawn_from_elf(grant.id(), data.len(), path) {
         syscall::SyscallResult::Ok(tid) => {
             ostd::io::print("exec: process spawned (pid ");
             ostd::io::print_usize(tid);

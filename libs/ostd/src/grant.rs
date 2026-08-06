@@ -124,6 +124,30 @@ impl<T> GrantHandle<T> {
     }
 }
 
+impl GrantHandle<u8> {
+    /// Allocate a byte grant and initialize it from `data` before the handle escapes.
+    ///
+    /// `data` is copied into a freshly allocated grant owned exclusively by the
+    /// returned handle. The copy happens before the handle is exposed to callers,
+    /// preserving the linear-ownership invariant: no grant-sharing alias can
+    /// observe partially initialized bytes.
+    ///
+    /// Returns `Some(handle)` when the kernel allocates a grant large enough to
+    /// hold `data.len()` bytes; returns `None` on allocation failure or if the
+    /// kernel refuses to map the new grant for initialization.
+    pub fn alloc_copy_from_slice(data: &[u8]) -> Option<Self> {
+        let handle = Self::alloc(data.len())?;
+        let ptr = sys_grant_slice(handle.id)?;
+        // SAFETY: `handle` uniquely owns a fresh grant that has not escaped this
+        // function. `sys_grant_slice` returns the writable mapping for exactly
+        // `handle.len` bytes, and `data.len() <= handle.len` by construction.
+        unsafe {
+            core::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
+        }
+        Some(handle)
+    }
+}
+
 impl<T: Copy> GrantHandle<T> {
     /// Get an exclusive typed slice over the grant region.
     ///

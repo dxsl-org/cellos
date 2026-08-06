@@ -6,6 +6,7 @@
 use super::tcb::TaskState;
 use crate::sync::Spinlock;
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::String;
 use alloc::vec::Vec;
 use api::syscall::ViSpawnArgs;
 // use log::info;
@@ -484,6 +485,57 @@ fn caller_has_hypervisor(caller_id: usize) -> bool {
 
 fn caller_has_spawn(caller_id: usize) -> bool {
     caller_has_cap(caller_id, |t| t.spawn_cap.is_some())
+}
+
+fn caller_launch_state(caller_id: usize) -> Option<(String, bool, bool)> {
+    super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id))
+        .map(|task| {
+            (
+                task.name.clone(),
+                task.spawn_cap.is_some(),
+                task.supervisor_cap.is_some(),
+            )
+        })
+}
+
+fn authorize_launch_edge(
+    caller_id: usize,
+    route: crate::loader::launch_profile::LaunchRoute,
+    target: &str,
+) -> Result<crate::loader::launch_profile::LaunchProfile, SyscallError> {
+    let (caller_name, has_spawn, has_supervisor) =
+        caller_launch_state(caller_id).unwrap_or((String::from("<unknown>"), false, false));
+    let caller = crate::loader::launch_profile::CallerLaunchState {
+        name: &caller_name,
+        has_spawn,
+        has_supervisor,
+    };
+    let profile = crate::loader::launch_profile::authorize(caller, route, target).ok_or_else(|| {
+        log::warn!(
+            "[loader] DENY launch edge: caller={} name={} route={:?} target={} spawn_cap={} supervisor_cap={}",
+            caller_id,
+            caller.name,
+            route,
+            target,
+            caller.has_spawn,
+            caller.has_supervisor
+        );
+        SyscallError::PermissionDenied
+    })?;
+    if profile.requires_lifecycle_authority && !caller.has_spawn {
+        log::warn!(
+            "[loader] DENY launch edge: caller={} name={} route={:?} target={} lacks lifecycle authority",
+            caller_id,
+            caller.name,
+            route,
+            target
+        );
+        return Err(SyscallError::PermissionDenied);
+    }
+    Ok(profile)
 }
 
 fn caller_has_supervisor(caller_id: usize) -> bool {
@@ -2446,9 +2498,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::SpawnFromPath { path_ptr, path_len } => {
-            if !caller_has_spawn(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
             // Reject empty or over-long paths at the trust boundary.
             if path_len == 0 || path_len > crate::loader::disk_layout::MAX_CELL_PATH {
                 return Err(SyscallError::InvalidInput);
@@ -2467,9 +2516,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
+            let profile = authorize_launch_edge(
+                caller_id,
+                crate::loader::launch_profile::LaunchRoute::Path,
+                path_str,
+            )?;
             let spawned = crate::loader::spawn_from_path(
                 path_str,
-                crate::task::cap::Spawner::User(caller_id),
+                crate::task::cap::Spawner::Ceiling(profile.parent_ceiling),
             );
             // A successful spawn consumed any staged directory-handle set inside
             // task creation. Clearing unconditionally covers the failure paths:
@@ -2583,9 +2637,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             path_ptr,
             path_len,
         } => {
-            if !caller_has_spawn(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
             if len == 0 {
                 return Err(SyscallError::InvalidInput);
             }
@@ -2619,6 +2670,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
+            let profile = authorize_launch_edge(
+                caller_id,
+                crate::loader::launch_profile::LaunchRoute::Elf,
+                path_str,
+            )?;
             // Runtime evidence (G2 loader redesign phase 04): this spawn's ELF came
             // from a userspace VFS read, not the kernel disk reader. info! now that
             // the migration is verified across arches — per-spawn, so it would be
@@ -2637,7 +2693,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let spawned = crate::loader::spawn_gated(
                 elf_bytes,
                 path_str,
-                crate::task::cap::Spawner::User(caller_id),
+                crate::task::cap::Spawner::Ceiling(profile.parent_ceiling),
             );
             // See `SpawnFromPath`: consumed on success, cleared here so a failed
             // spawn cannot leave its set for an unrelated later child.
@@ -2676,9 +2732,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             priority,
             core_id,
         } => {
-            if !caller_has_spawn(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
             // On single-core builds only core 0 exists.  Return NotSupported for
             // any other core_id so callers can detect SMP unavailability.
             if core_id != 0 {
@@ -2700,10 +2753,15 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !path_str.starts_with('/') {
                 return Err(SyscallError::InvalidInput);
             }
+            let profile = authorize_launch_edge(
+                caller_id,
+                crate::loader::launch_profile::LaunchRoute::Pinned,
+                path_str,
+            )?;
             // Spawn at requested priority; future SMP can use core_id for affinity.
             let spawned = crate::loader::spawn_from_path(
                 path_str,
-                crate::task::cap::Spawner::User(caller_id),
+                crate::task::cap::Spawner::Ceiling(profile.parent_ceiling),
             );
             // See `SpawnFromPath`: consumed on success, cleared here so a failed
             // spawn cannot leave its set for an unrelated later child.
@@ -3073,17 +3131,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::SpawnFromMem { args_ptr } => {
-            // Creating a cell requires the spawn capability on every other entry
-            // point (`SpawnFromPath`, `SpawnFromElf`, `SpawnPinned`). Without the
-            // same check here, the capability bounds only which *route* a caller
-            // takes to spawn, not whether it may spawn at all.
-            if !caller_has_spawn(caller_id) {
-                log::warn!(
-                    "[loader] DENY SpawnFromMem: caller {} holds no spawn capability",
-                    caller_id
-                );
-                return Err(SyscallError::PermissionDenied);
-            }
             if args_ptr == 0 {
                 return Err(SyscallError::InvalidInput);
             }
@@ -3110,6 +3157,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     core::str::from_utf8(name_slice).unwrap_or("unknown"),
                 )
             };
+            authorize_launch_edge(
+                caller_id,
+                crate::loader::launch_profile::LaunchRoute::Mem,
+                name,
+            )?;
 
             // The image goes through the same admission gate as every other spawn
             // path (signature, manifest, ceiling, policy) — the gate belongs to the

@@ -617,7 +617,10 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
                 ));
                 0
             }
-            _ => 1,
+            _ => {
+                shell_println("snapshot: denied by shell launch/lifecycle policy");
+                1
+            }
         },
         "shutdown" => crate::cmd_sys::cmd_shutdown().map(|_| 0).unwrap_or(1),
         "clear" => crate::commands::cmd_clear().map(|_| 0).unwrap_or(1),

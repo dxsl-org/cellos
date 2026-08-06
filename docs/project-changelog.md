@@ -4,6 +4,22 @@
 
 ---
 
+## [2026-08-05] Launch-edge deprivilege closes exact spawn profiles; respawn proof deferred
+
+The kernel now authorizes launch by reviewed `(caller, route, target)` edges instead of
+ambient shell authority. `shell` carries no ambient `SpawnCap`, `gpio`, `uart`, or
+`hypervisor` manifest caps; `SpawnFromPath`, `SpawnFromElf`, and `SpawnPinned` route
+through exact launch profiles; and `SpawnFromMem` remains fail-closed with no active
+profile.
+
+The durable `tests/integration/tests/launch-profile.rs` proof and the boot self-test both
+pass: the shell still reaches `vfs-test`, the init service registry stays verified, and
+`snapshot` is denied under the launch policy. Init respawn was not directly exercised in
+that lane, so that proof remains deferred. The same change set also fixed the snapshot
+decode path, removed the shell's unsafe grant-constructor path, and kept the Law 1
+confirmation focused on the already-approved spawn semantics plus matching comments/docs,
+with no syscall IDs, signatures, or layout changed.
+
 ## [2026-08-05] Midori Phase 02 runtime-closed under amended criteria
 
 The test-hooks QEMU lane now requires and observes

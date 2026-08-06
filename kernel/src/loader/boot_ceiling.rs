@@ -39,8 +39,7 @@ pub use selftest::run as self_test;
 /// runs, so this row remains `0b1111`.
 const VFS_REGIONS: u8 = 0b1111;
 
-/// The two console peripherals the interactive shell holds so it can delegate
-/// them to the peripheral demos it launches.
+/// The two console peripherals that path-triggered demo rows may request.
 const CONSOLE_MMIO: u8 = DEV_GPIO | DEV_UART;
 
 /// The expected ceiling for `path`, or `None` when `path` is not a boot cell.
@@ -87,13 +86,9 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             network: true,
             ..CapSet::EMPTY
         },
-        // Interactive shell: spawns cells, and is the ceiling for the GPIO/UART
-        // peripheral demos it launches.
-        "/bin/shell" => CapSet {
-            spawn: true,
-            mmio_devices: CONSOLE_MMIO,
-            ..CapSet::EMPTY
-        },
+        // Interactive shell: no ambient lifecycle authority. Exact launch edges
+        // are reviewed in `loader::launch_profile`; the shell itself holds none.
+        "/bin/shell" => CapSet::EMPTY,
         // Hotswap orchestration: re-spawns cells (spawn) and freezes/resumes
         // them (supervisor, from `with_path_caps`).
         "/bin/supervisor" => CapSet {

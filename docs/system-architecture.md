@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-01 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-05 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -150,7 +150,7 @@ struct Task {
 | `Reply(to, msg)` | Reply to caller |
 | `Spawn(binary, argv)` | Create new Cell |
 | `Exec(binary, argv)` | Replace self with new Cell |
-| `SpawnFromMem(ptr, size)` | Load Cell from memory buffer |
+| `SpawnFromMem(ptr, size)` | Load Cell from memory buffer; no active launch-profile route |
 | `MemInfo(out, len)` | Opt-in aggregate frame totals (`ViMemInfoV1`, 32 bytes) |
 | `Exit(code)` | Terminate self |
 | `Yield()` | Voluntarily yield CPU |
@@ -192,6 +192,9 @@ pub struct Grant {
   operator policy all preserve the cell-store bit (`block_regions=0b1111`);
   the loader fails closed and tears down the spawn instead of adding authority
   after policy.
+- `SpawnFromPath`, `SpawnFromElf`, and `SpawnPinned` are authorized by exact
+  launch-profile rows in `kernel/src/loader/launch_profile`; `SpawnFromMem`
+  has no active profile and remains fail-closed for shell/user cells.
 
 ### 6. **Filesystem (FAT32)** (`kernel/src/fs/`)
 
@@ -933,6 +936,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 ### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3b VM, Cell Signing)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
 - **Responsibility-bounded kernel** ([generated nLOC](code-metrics.generated.md); see Spec 15) with fixed-priority scheduler and RT-hart routing
+- **Exact launch-edge profiles** — kernel-authorized `(caller, route, target)` rows gate shell/init/hypha/tool-spawn/supervisor/pinned launches; shell carries no ambient SpawnCap/gpio/uart, and `SpawnFromMem` remains fail-closed
 - **48 syscall variants** (IPC, memory, task, FS, GPU, network, state) + **Block I/O capability gate**
 - **Block I/O syscalls** (raw 500/501/503 for FAT16 persistence, gated to VFS task 3)
 - Frame allocator (bitmap) and virtual memory

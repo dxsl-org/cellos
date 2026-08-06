@@ -25,14 +25,9 @@ api::declare_syscalls![
     Heartbeat,
     LookupService,
     SpawnFromPath,
-    SpawnFromMem,
-    SpawnPinned,
     Wait,
     GetTime,
     SetTimer,
-    HotSwap,
-    StateStash,
-    StateRestore,
     GrantAlloc,
 ];
 

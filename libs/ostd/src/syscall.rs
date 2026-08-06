@@ -23,10 +23,23 @@ pub enum SyscallError {
 }
 
 const SYSCALL_OOM: isize = -2;
+const SYSCALL_DENIED: isize = -1;
 
 fn decode_spawn_result(ret: isize) -> SyscallResult {
     if ret > 0 {
         SyscallResult::Ok(ret as usize)
+    } else if ret == SYSCALL_OOM {
+        SyscallResult::Err(SyscallError::OutOfMemory)
+    } else {
+        SyscallResult::Err(SyscallError::Unknown)
+    }
+}
+
+fn decode_snapshot_result(ret: isize) -> SyscallResult {
+    if ret >= 0 {
+        SyscallResult::Ok(ret as usize)
+    } else if ret == SYSCALL_DENIED {
+        SyscallResult::Err(SyscallError::PermissionDenied)
     } else if ret == SYSCALL_OOM {
         SyscallResult::Err(SyscallError::OutOfMemory)
     } else {
@@ -348,7 +361,7 @@ pub fn sys_spawn_from_elf(grant_id: usize, len: usize, path_hint: &str) -> Sysca
 pub fn sys_snapshot() -> SyscallResult {
     // SAFETY: sys_snapshot triggers a kernel write; no user-memory pointers involved.
     let ret = unsafe { syscall(ViSyscall::Snapshot, 0, 0, 0, 0) };
-    SyscallResult::Ok(ret as usize)
+    decode_snapshot_result(ret)
 }
 
 /// Spawn a cell pinned to a specific hardware core.
@@ -399,7 +412,7 @@ pub fn sys_mem_info() -> Result<ViMemInfoV1, SyscallError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_spawn_result, SyscallError, SyscallResult};
+    use super::{decode_snapshot_result, decode_spawn_result, SyscallError, SyscallResult};
 
     #[test]
     fn spawn_result_decoder_preserves_additive_oom() {
@@ -411,6 +424,24 @@ mod tests {
         assert!(matches!(
             decode_spawn_result(-2),
             SyscallResult::Err(SyscallError::OutOfMemory)
+        ));
+    }
+
+    #[test]
+    fn snapshot_result_decoder_preserves_denial_and_oom() {
+        assert!(matches!(decode_snapshot_result(0), SyscallResult::Ok(0)));
+        assert!(matches!(decode_snapshot_result(17), SyscallResult::Ok(17)));
+        assert!(matches!(
+            decode_snapshot_result(-1),
+            SyscallResult::Err(SyscallError::PermissionDenied)
+        ));
+        assert!(matches!(
+            decode_snapshot_result(-2),
+            SyscallResult::Err(SyscallError::OutOfMemory)
+        ));
+        assert!(matches!(
+            decode_snapshot_result(-9),
+            SyscallResult::Err(SyscallError::Unknown)
         ));
     }
 }

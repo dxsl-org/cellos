@@ -15,6 +15,7 @@ pub mod disk_layout;
 pub mod early;
 pub mod elf;
 pub mod elf_tests;
+pub mod launch_profile;
 /// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
 pub mod mem_spawn_gate;
 pub mod reloc;

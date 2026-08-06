@@ -84,10 +84,9 @@ DEV_POLICY = [
     ("/bin/net-broker",  0, 1, 0, 0, 0, 0,     0, 0, 0),
     ("/bin/supervisor",  0, 0, 1, 0, 0, 0,     0, 0, 1),
     ("/bin/hypervisor",  0, 0, 0, 1, 0, 0,     0, 0, 0),
-    # Shell keeps gpio|uart: it is the SPAWNER of the peripheral demos, and a
-    # spawner's caps are the ceiling for its children. Dropping this to 0 (as the
-    # v1 policy did) silently disables every MMIO demo, not just the shell.
-    ("/bin/shell",       0, 0, 1, 0, 3, 0,     0, 0, 0),
+    # Shell holds no ambient lifecycle authority; exact child launch ceilings
+    # are reviewed in kernel/src/loader/launch_profile.rs.
+    ("/bin/shell",       0, 0, 0, 0, 0, 0,     0, 0, 0),
     # ── driver cells (pcie_driver comes from CapSet::with_path_caps) ───────────
     ("/bin/block",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/nvme",        0, 0, 0, 0, 0, 0,     1, 0, 0),
@@ -105,6 +104,19 @@ DEV_POLICY = [
     ("/bin/gpio-test-rv",0, 0, 0, 0, 2, 0,     0, 0, 0),
     ("/bin/bench",       0, 0, 1, 0, 0, 0,     0, 0, 0),
     ("/bin/bench-probe", 0, 0, 1, 0, 0, 0,     0, 0, 0),
+    ("/bin/hotswap-demo-v1", 0, 0, 1, 0, 0, 0, 0, 0, 0),
+    ("/bin/hotswap-demo-v2", 0, 0, 1, 0, 0, 0, 0, 0, 0),
+    ("/bin/hypha",       0, 0, 1, 0, 0, 0,     0, 0, 0),
+    ("/bin/llm-gateway", 0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/tool-spawn",  0, 0, 1, 0, 0, 0,     0, 0, 0),
+    ("/bin/nc",          0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/curl",        0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/wget",        0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/httpd",       0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/mqtt",        0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/posix-shim-test", 0, 1, 0, 0, 0, 0, 0, 0, 0),
+    ("/bin/https-demo",  0, 1, 0, 0, 0, 0,     0, 0, 0),
+    ("/bin/http-smoke",  0, 1, 0, 0, 0, 0,     0, 0, 0),
 ]
 
 

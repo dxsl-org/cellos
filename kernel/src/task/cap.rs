@@ -17,8 +17,9 @@ pub struct BlockIoCap(());
 #[derive(Copy, Clone, Debug)]
 pub struct NetworkCap(());
 
-/// Permits spawning new Cells (SpawnFromPath, SpawnPinned) and hot-swapping (HotSwap).
-/// Granted to `/bin/init` and `/bin/shell` at spawn.
+/// Permits lifecycle operations such as restart supervision, hot-swap, and
+/// unrestricted spawn-family syscalls.
+/// Granted to `/bin/init` and other reviewed supervisors, never to `/bin/shell`.
 #[derive(Copy, Clone, Debug)]
 pub struct SpawnCap(());
 

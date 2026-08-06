@@ -9,10 +9,17 @@
 //! panic the kernel before anything has started.
 
 use super::{boot_ceiling, lookup, VFS_REGIONS};
+use crate::loader::launch_profile::{authorize, CallerLaunchState, LaunchRoute};
 use crate::task::cap::CapSet;
 
 /// One (path, cap-accessor) case: the cap that path must still hold.
 type PrivCapCase = (&'static str, fn(&CapSet) -> bool);
+
+const SHELL: CallerLaunchState<'static> = CallerLaunchState {
+    name: "shell",
+    has_spawn: false,
+    has_supervisor: false,
+};
 
 /// Returns `true` when every table property holds; logs each violation.
 pub fn run() -> bool {
@@ -45,6 +52,7 @@ pub fn run() -> bool {
             "/bin/shell holds network",
             !boot_ceiling("/bin/shell").network,
         ),
+        ("/bin/shell holds spawn", !boot_ceiling("/bin/shell").spawn),
         (
             "/bin/shell holds block_regions",
             boot_ceiling("/bin/shell").block_regions == 0,
@@ -99,6 +107,19 @@ pub fn run() -> bool {
                 path
             );
         }
+    }
+
+    if authorize(SHELL, LaunchRoute::Mem, "/mem/demo").is_some() {
+        ok = false;
+        log::error!("[selftest] launch-profile: shell mem launch must fail closed");
+    }
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/httpd").is_none() {
+        ok = false;
+        log::error!("[selftest] launch-profile: shell lost exact /bin/httpd launch edge");
+    }
+    if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs").is_some() {
+        ok = false;
+        log::error!("[selftest] launch-profile: shell gained privileged /bin/vfs launch edge");
     }
 
     if ok {

@@ -36,10 +36,20 @@ pub enum ViSyscall {
     /// ABI: a0 = target_tid → 0 on success, usize::MAX on error.
     ForceExit = 61,
     Spawn = 5,
-    Exec = 6,          // Deprecated/Legacy
-    SpawnFromMem = 10, // New Spawn from Memory (Struct based)
+    Exec = 6, // Deprecated/Legacy
+    /// Spawn a cell from caller-supplied ELF bytes already resident in memory.
+    ///
+    /// The kernel still routes the request through the normal admission gate,
+    /// but approval is by an exact launch profile on the mem route, not by the
+    /// caller holding broad lifecycle authority. Phase 04 intentionally leaves
+    /// this route fail-closed for shell/user cells.
+    SpawnFromMem = 10,
     /// Spawn a cell by reading its ELF from a VFS path.
-    /// ABI: a0 = path_ptr, a1 = path_len; returns cell id or error code.
+    ///
+    /// ABI: a0 = path_ptr, a1 = path_len → tid (>0) on success.
+    /// Phase 04 approval is by an exact kernel launch profile for the tuple
+    /// `(caller identity, SpawnFromPath, path)`. This is distinct from
+    /// lifecycle operations that still require ambient `SpawnCap`.
     SpawnFromPath = 12,
     /// Open a file by path, returning a kernel capability ID.
     /// ABI: a0 = path_ptr, a1 = path_len → CapId (> 0) on success.
@@ -116,7 +126,9 @@ pub enum ViSyscall {
     /// intersection, policy, syscall allowlist, cluster, quota, measurement) over
     /// the grant bytes — trust is over the bytes, so the source is irrelevant.
     /// Lets the kernel loader stop reading a filesystem for post-boot spawns
-    /// (G2 loader redesign). Requires SpawnCap (same as SpawnFromPath).
+    /// (G2 loader redesign). Like `SpawnFromPath`, Phase 04 approval is by the
+    /// exact kernel launch profile for `(caller identity, SpawnFromElf,
+    /// path_hint)` rather than by broad lifecycle `SpawnCap`.
     ///
     /// ABI: a0 = grant_id, a1 = len (bytes), a2 = path_hint_ptr, a3 = path_hint_len
     ///      → tid (>0) on success. `path_hint` is advisory (drives the /bin/
@@ -135,8 +147,12 @@ pub enum ViSyscall {
     /// opt-in because used/free capacity is observable across cells.
     MemInfo = 243,
     /// Spawn a cell pinned to a specific hardware core.
+    ///
     /// ABI: a0 = path_ptr, a1 = path_len, a2 = priority: u8, a3 = core_id: usize.
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
+    /// Phase 04 approval is by the exact kernel launch profile for
+    /// `(caller identity, SpawnPinned, path)`; lifecycle `SpawnCap` still gates
+    /// `ForceExit`, `NotifyOnExit`, `RegisterService`, `HotSwap`, and snapshot control.
     SpawnPinned = 16,
     /// Serialize all allocated physical frames to the snapshot sector range.
     /// Triggers a warm-boot-capable snapshot.  Returns frame count on success.
@@ -396,8 +412,10 @@ pub enum ViSyscall {
     /// handle) is refused here rather than trimmed — see
     /// [`crate::dir_handles::DirHandleSetError`].
     ///
-    /// Privileged: requires SpawnCap, the same authority every spawn entry point
-    /// demands. Always permitted past the syscall allowlist, matching
+    /// Privileged: requires lifecycle `SpawnCap`. Exact launch-profile approval
+    /// is evaluated later by the actual spawn syscalls; this carrier syscall is
+    /// the staging authority for the caller's next child launch.
+    /// Always permitted past the syscall allowlist, matching
     /// `RegisterService`/`CapRevoke`.
     SpawnSetDirs = 240,
     /// 241: Read the kernel's record of a cell's inherited directory handles.
@@ -446,7 +464,9 @@ pub mod cap_mask {
     pub const BLOCK_IO: u32 = 1 << 0;
     /// Revoke network transmit/receive (NetTx/NetRx).
     pub const NETWORK: u32 = 1 << 1;
-    /// Revoke cell-spawning authority (SpawnFromPath/HotSwap).
+    /// Revoke lifecycle spawn authority (`ForceExit`, `NotifyOnExit`,
+    /// `RegisterService`, `HotSwap`, snapshot control, and any exact launch
+    /// profile that explicitly requires lifecycle authority).
     pub const SPAWN: u32 = 1 << 2;
     /// Revoke RISC-V H-extension / ARM64 EL2 hypervisor access.
     pub const HYPERVISOR: u32 = 1 << 3;
@@ -567,10 +587,17 @@ impl ViSyscall {
             Self::Call => Some(4),
             Self::Spawn => Some(5),
             Self::SpawnFromMem => Some(6),
+            // Exact launch-profile route: path-based spawn authorization lives in
+            // the kernel profile table, but the allowlist still names this family
+            // of outward launch operations separately from lifecycle SpawnCap.
             Self::SpawnFromPath => Some(7),
-            // SpawnFromElf shares the SpawnCap allowlist bit (7): same authority as
-            // SpawnFromPath (both require SpawnCap, enforced again in the handler).
+            // SpawnFromElf shares the same outward-launch allowlist bit (7) as
+            // SpawnFromPath: both are exact launch-profile routes for reviewed
+            // path-based child launches.
             Self::SpawnFromElf => Some(7),
+            // SpawnPinned keeps its own allowlist bit because affinity/pinned
+            // launches are a distinct external surface, even though Phase 04
+            // still routes approval through exact kernel launch profiles.
             Self::SpawnPinned => Some(8),
             Self::Wait => Some(9),
             Self::Log => Some(10),
@@ -631,8 +658,10 @@ impl ViSyscall {
             Self::GetRandom => Some(41),
             // WaitForEvent: IRQ-driven sleep (net RX waker, Phase 04 SMP).
             Self::WaitForEvent => Some(42),
-            // WaitCompletion: same authority as WaitForEvent — park until a
-            // kernel event source reports. It shares bit 42 deliberately: a
+            // WaitCompletion shares the WaitForEvent allowlist bit deliberately:
+            // same event-source authority, different return path. A fresh bit
+            // would deny the call to older cells for no security benefit.
+            // It shares bit 42 deliberately: a
             // fresh bit would deny the call to every cell whose
             // `__ViCell_syscalls` section was generated before that bit
             // existed, and the two calls gate the same thing.
@@ -850,8 +879,11 @@ pub mod service {
     pub const GPU_DRIVER: u16 = 12;
 }
 
-/// Arguments for SpawnFromMem syscall.
-/// Using repr(C) for ABI stability.
+/// Arguments for `SpawnFromMem`.
+///
+/// Using `repr(C)` for ABI stability. The caller supplies raw ELF bytes plus a
+/// caller-chosen label; the kernel may use that label only for mem-route
+/// bookkeeping and diagnostics, never as `/bin/*` path authority.
 #[repr(C)]
 pub struct ViSpawnArgs {
     /// Address of buffer containing ELF.

@@ -111,6 +111,10 @@ path = "tests/wx-text-write.rs"
 name = "policy-noentry"
 path = "tests/policy-noentry.rs"
 
+[[test]]
+name = "launch-profile"
+path = "tests/launch-profile.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -4,7 +4,7 @@
 **Version**: 0.2.1-dev (Mycelium Era)
 **Language**: Rust (nightly, `no_std`)
 **Crates**: ~52 active workspace members
-**Last Updated**: 2026-06-05 (Phase 23 complete)
+**Last Updated**: 2026-08-05 (launch-edge deprivilege and exact launch-profile proofs added; init respawn proof deferred)
 
 ---
 
@@ -40,8 +40,10 @@ Cellos/
 │   │   └── tests.rs        Stress tests (10 K alloc/free, multi-size)
 │   ├── loader/
 │   │   ├── elf.rs          ELF parser + segment loader
+│   │   ├── launch_profile/ Exact launch-edge rows for SpawnFromPath/Elf/Pinned
 │   │   ├── reloc.rs        R_RISCV_RELATIVE relocation engine
 │   │   ├── early.rs        Boot-time disk reader (before VFS)
+│   │   ├── mem_spawn_gate.rs Admission of caller-supplied in-memory ELF images
 │   │   ├── disk_layout.rs  Shared disk layout constants
 │   │   └── elf_tests.rs    10 boot-time ELF + relocation tests
 │   ├── task/
@@ -133,7 +135,7 @@ Cellos/
 ├── tests/integration/      QEMU-driven test suite (QemuRunner harness, 30/30 tests)
 │   ├── lib.rs              QemuRunner, spawn_echo_server, spawn_http_server, spawn_mqtt_broker, wait_for
 │   ├── boot.rs             9 named tests: boots_to_shell_prompt, shell_run_echo, shell_read_file, shell_run_utils, lua_repl_runs, lua_code_executes, micropython_repl_runs, network_dhcp_lease, gpu_framebuffer_renders
-│   └── (additional scenarios): FAT16 persistence, HotSwap, network TCP/UDP/DNS, Lua/MicroPython module tests
+│   └── (additional scenarios): FAT16 persistence, HotSwap, launch-profile, network TCP/UDP/DNS, Lua/MicroPython module tests
 │
 ├── scripts/
 │   ├── dev-setup.sh / .ps1 One-command setup (Linux/macOS/Windows)
