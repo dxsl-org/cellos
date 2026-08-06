@@ -283,6 +283,8 @@ impl Scheduler {
         }
         #[cfg(feature = "test-hooks")]
         kstack.test_hook_prime_watermark();
+        #[cfg(feature = "test-hooks")]
+        ustack.test_hook_prime_watermark();
 
         let entry = task_entry_point as *const () as usize;
         let (_gp, _tp) = crate::task::get_kernel_gp_tp();
@@ -511,7 +513,11 @@ impl Scheduler {
         // exactly-once even if this runs twice for the same tid.
         if let Some(t) = self.tasks.get_mut(&tid) {
             #[cfg(feature = "test-hooks")]
-            crate::task::maybe_emit_exit_stack_baseline(&t.name, t.kernel_stack.as_ref());
+            crate::task::maybe_emit_exit_stack_baseline(
+                &t.name,
+                t.kernel_stack.as_ref(),
+                t.user_stack.as_ref(),
+            );
             let charge = core::mem::take(&mut t.stack_quota_charge);
             if charge != 0 {
                 let cell_raw = t.cell_id.0 as usize;

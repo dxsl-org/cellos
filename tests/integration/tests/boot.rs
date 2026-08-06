@@ -33,6 +33,13 @@ fn kernel_path() -> String {
         .into_owned()
 }
 
+fn test_hooks_kernel_path() -> String {
+    repo_root()
+        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks")
+        .to_string_lossy()
+        .into_owned()
+}
+
 fn disk_path() -> String {
     repo_root().join("disk_v3.img").to_string_lossy().into_owned()
 }
@@ -56,6 +63,17 @@ fn prerequisites_ok() -> bool {
         eprintln!("SKIP: qemu-system-riscv64 not on PATH");
     }
     vicell_integration_tests::ci_guard(kernel_exists && disk_exists && qemu_ok)
+}
+
+fn sizing_prerequisites_ok() -> bool {
+    vicell_integration_tests::ci_guard(
+        PathBuf::from(test_hooks_kernel_path()).exists()
+            && PathBuf::from(disk_path()).exists()
+            && std::process::Command::new(qemu_binary())
+                .arg("--version")
+                .output()
+                .is_ok(),
+    )
 }
 
 /// Phase 03/06/13/14/16/17: the kernel must boot through the full service
@@ -1535,6 +1553,47 @@ fn shell_executor_parks_on_timer_completion() {
             qemu.dump()
         )
     });
+}
+
+/// Capture kernel and user-stack watermarks for every path eligible for the
+/// static Phase 07 sizing table after representative boot, shell, and NIC work.
+#[test]
+fn stack_sizing_paths_emit_kernel_and_user_watermarks() {
+    if !sizing_prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&test_hooks_kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("test-hooks shell not ready: {e}\n{}", qemu.dump()));
+
+    for command in ["help", "ls", "ps"] {
+        qemu.send_line(command);
+    }
+
+    for (name, phase) in [
+        ("init", "boot"),
+        ("shell", "boot"),
+        ("vfs", "boot"),
+        ("vfs-test", "exit"),
+        ("net", "boot"),
+        ("virtio-net", "boot"),
+    ] {
+        for kind in ["kernel", "user"] {
+            let marker = format!(
+                "[stack-baseline] name={name} phase={phase} kind={kind}"
+            );
+            qemu.wait_for(&marker, BOOT_TIMEOUT)
+                .unwrap_or_else(|e| panic!("missing {marker}: {e}\n{}", qemu.dump()));
+        }
+    }
+
+    for line in qemu
+        .dump()
+        .lines()
+        .filter(|line| line.contains("[stack-baseline]"))
+    {
+        eprintln!("{line}");
+    }
 }
 
 // ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────

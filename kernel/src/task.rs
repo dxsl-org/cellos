@@ -41,9 +41,12 @@ use alloc::string::String;
 use core::sync::atomic::{AtomicU8, Ordering};
 use log::info;
 use scheduler::Scheduler;
-/// Increased to 64 (256 KB): fatfs nests deep call frames during recursive
-/// directory removal; 16 pages (64 KB) overflows on complex FAT16 ops.
+/// Conservative fallback for every unmeasured or risk-sensitive task path.
+/// Measured Phase 07 paths use the post-reactor table below; unknown paths keep
+/// this historical 256 KiB allocation.
 pub const STACK_PAGES: usize = 64;
+/// Post-reactor floor: twice the largest measured peak, rounded up to 64 KiB.
+const MEASURED_STACK_PAGES: usize = 16;
 const TRAP_FRAME_SIZE: usize = core::mem::size_of::<crate::hal::arch::ViTrapFrame>();
 extern "C" {
     fn __trap_exit();
@@ -96,10 +99,18 @@ const STACK_BASELINE_VFS: u8 = 1 << 2;
 #[cfg(feature = "test-hooks")]
 const STACK_BASELINE_VFS_TEST: u8 = 1 << 3;
 #[cfg(feature = "test-hooks")]
-const STACK_BASELINE_ALL: u8 =
-    STACK_BASELINE_INIT | STACK_BASELINE_SHELL | STACK_BASELINE_VFS | STACK_BASELINE_VFS_TEST;
+const STACK_BASELINE_NET: u8 = 1 << 4;
 #[cfg(feature = "test-hooks")]
-const STACK_BASELINE_TICK_GATE: usize = 200;
+const STACK_BASELINE_VIRTIO_NET: u8 = 1 << 5;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_ALL: u8 = STACK_BASELINE_INIT
+    | STACK_BASELINE_SHELL
+    | STACK_BASELINE_VFS
+    | STACK_BASELINE_VFS_TEST
+    | STACK_BASELINE_NET
+    | STACK_BASELINE_VIRTIO_NET;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_TICK_GATE: usize = 1_500;
 #[cfg(feature = "test-hooks")]
 static STACK_BASELINE_EMITTED: AtomicU8 = AtomicU8::new(0);
 
@@ -223,8 +234,19 @@ pub fn tick() {
     TICKS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
 
-pub(crate) fn stack_pages_for(_name: &str) -> usize {
-    STACK_PAGES
+pub(crate) fn stack_pages_for(name: &str) -> usize {
+    match name {
+        "init" | "shell" | "vfs" | "vfs-test" | "net" | "virtio-net" => MEASURED_STACK_PAGES,
+        _ => STACK_PAGES,
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn stack_sizing_policy_self_test() -> bool {
+    ["init", "shell", "vfs", "vfs-test", "net", "virtio-net"]
+        .into_iter()
+        .all(|name| stack_pages_for(name) == MEASURED_STACK_PAGES)
+        && stack_pages_for("unmeasured-path") == STACK_PAGES
 }
 
 #[cfg(feature = "test-hooks")]
@@ -234,20 +256,23 @@ fn stack_baseline_bit(name: &str) -> Option<u8> {
         "shell" => Some(STACK_BASELINE_SHELL),
         "vfs" => Some(STACK_BASELINE_VFS),
         "vfs-test" => Some(STACK_BASELINE_VFS_TEST),
+        "net" => Some(STACK_BASELINE_NET),
+        "virtio-net" => Some(STACK_BASELINE_VIRTIO_NET),
         _ => None,
     }
 }
 
 #[cfg(feature = "test-hooks")]
-fn emit_stack_baseline(name: &str, phase: &str, stack: &stack::Stack) {
+fn emit_stack_baseline(name: &str, phase: &str, kind: &str, stack: &stack::Stack) {
     let used_bytes = stack.test_hook_watermark_bytes();
     let used_pages = used_bytes.div_ceil(crate::memory::paging::PAGE_SIZE);
     // Test-hooks run after normal boot lowers the global logger to WARN, so the
     // marker must remain visible to the serial integration harness.
     log::warn!(
-        "[stack-baseline] name={} phase={} used_bytes={} used_pages={} alloc_bytes={} usable_bytes={} baseline=non-authoritative",
+        "[stack-baseline] name={} phase={} kind={} used_bytes={} used_pages={} alloc_bytes={} usable_bytes={} baseline=authoritative-input",
         name,
         phase,
+        kind,
         used_bytes,
         used_pages,
         stack.allocated_bytes(),
@@ -279,9 +304,12 @@ fn maybe_emit_boot_stack_baselines() {
                 continue;
             }
             if let Some(kstack) = task.kernel_stack.as_ref() {
-                emit_stack_baseline(&task.name, "boot", kstack);
-                newly_emitted |= bit;
+                emit_stack_baseline(&task.name, "boot", "kernel", kstack);
             }
+            if let Some(ustack) = task.user_stack.as_ref() {
+                emit_stack_baseline(&task.name, "boot", "user", ustack);
+            }
+            newly_emitted |= bit;
         }
     }
     if newly_emitted != 0 {
@@ -290,17 +318,24 @@ fn maybe_emit_boot_stack_baselines() {
 }
 
 #[cfg(feature = "test-hooks")]
-pub(crate) fn maybe_emit_exit_stack_baseline(name: &str, stack: Option<&stack::Stack>) {
+pub(crate) fn maybe_emit_exit_stack_baseline(
+    name: &str,
+    kernel_stack: Option<&stack::Stack>,
+    user_stack: Option<&stack::Stack>,
+) {
     let Some(bit) = stack_baseline_bit(name) else {
         return;
     };
     if bit != STACK_BASELINE_VFS_TEST || STACK_BASELINE_EMITTED.load(Ordering::Relaxed) & bit != 0 {
         return;
     }
-    if let Some(kstack) = stack {
-        emit_stack_baseline(name, "exit", kstack);
-        STACK_BASELINE_EMITTED.fetch_or(bit, Ordering::Relaxed);
+    if let Some(stack) = kernel_stack {
+        emit_stack_baseline(name, "exit", "kernel", stack);
     }
+    if let Some(stack) = user_stack {
+        emit_stack_baseline(name, "exit", "user", stack);
+    }
+    STACK_BASELINE_EMITTED.fetch_or(bit, Ordering::Relaxed);
 }
 
 pub fn init() {

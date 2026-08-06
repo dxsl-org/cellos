@@ -7,7 +7,8 @@
 //! QEMU assigns devices to slots in an implementation-defined order so we must
 //! probe all 32.  The identity map in paging.rs covers the full 0x0a004000 range.
 //!
-//! Other arches: reads DTB-confirmed slots from `platform::PLATFORM`.
+//! RISC-V: reads DTB-confirmed slots from `platform::PLATFORM`.
+//! PCIe-only arches expose no VirtIO-MMIO slots.
 
 extern crate alloc;
 use alloc::vec::Vec;
@@ -34,7 +35,7 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
             .collect();
         slots.into_iter()
     }
-    #[cfg(not(target_arch = "aarch64"))]
+    #[cfg(target_arch = "riscv64")]
     {
         let slots: Vec<VirtioSlot> = crate::platform::with(|p| {
             p.virtio_mmio
@@ -48,6 +49,10 @@ pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
                 .collect()
         });
         slots.into_iter()
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+    {
+        Vec::new().into_iter()
     }
 }
 

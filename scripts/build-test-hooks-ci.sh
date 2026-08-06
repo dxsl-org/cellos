@@ -52,8 +52,14 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p app-vfs-test --features test-hooks
 
+echo "==> Building stack-sizing paths (service-net, driver-virtio-net)..."
+cargo build --release \
+    --target riscv64gc-unknown-none-elf \
+    -Z build-std=core,alloc \
+    -p service-net -p driver-virtio-net
+
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config vfs-test; do
+for bin in app-init app-shell service-vfs service-config vfs-test service-net driver-virtio-net; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -64,7 +70,8 @@ source scripts/lib-sign-cells.sh
 
 echo "==> Signing cells..."
 sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" \
-           "$REL/service-config" "$REL/vfs-test"
+           "$REL/service-config" "$REL/vfs-test" "$REL/service-net" \
+           "$REL/driver-virtio-net"
 
 echo "==> Assembling kernel_fs.img (test-hooks)..."
 mkdir -p "$TH_DIR"
@@ -83,6 +90,8 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/service-vfs"      /bin/vfs \
     "$REL/service-config"   /bin/config \
     "$REL/vfs-test"         /bin/vfs-test \
+    "$REL/service-net"      /bin/net \
+    "$REL/driver-virtio-net" /bin/virtio-net \
     "$TMPDIR_KFS/hostname"  /etc/hostname \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
@@ -94,8 +103,10 @@ fi
 # only surfaces later as a confusing "cell not found" at boot.
 "$PYTHON_BIN" tools/inspect_fat.py "$TH_DIR/kernel_fs.img" > "$TMPDIR_KFS/fat-layout.txt"
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
-   ! grep -q -- "LFN 'vfs-test'" "$TMPDIR_KFS/fat-layout.txt"; then
-    echo "FAIL: kernel_fs.img does not contain /bin/vfs-test" >&2
+   ! grep -q -- "LFN 'vfs-test'" "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'net'" "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'virtio-net'" "$TMPDIR_KFS/fat-layout.txt"; then
+    echo "FAIL: kernel_fs.img lacks a required test-hooks cell" >&2
     cat "$TMPDIR_KFS/fat-layout.txt" >&2
     exit 1
 fi

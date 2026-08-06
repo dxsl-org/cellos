@@ -631,6 +631,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("stack-probe self-test FAIL");
         }
+        #[cfg(feature = "test-hooks")]
+        if task::stack_sizing_policy_self_test() {
+            log_info("stack-sizing policy self-test PASS (measured=16, unknown=64)");
+        } else {
+            log_info("stack-sizing policy self-test FAIL");
+        }
     }
 
     // 7b. Bring secondary harts online (riscv64 only; no-op on other arches).

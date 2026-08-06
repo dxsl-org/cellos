@@ -79,6 +79,10 @@ fn riscv64_vfs_quota_all_pass() {
     );
     wait_for_or_dump(
         &runner,
+        "stack-sizing policy self-test PASS (measured=16, unknown=64)",
+    );
+    wait_for_or_dump(
+        &runner,
         "[stack-guard] deliberate overflow armed guard_pages=2",
     );
     wait_for_or_dump(

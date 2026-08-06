@@ -259,6 +259,7 @@ pub trait InterruptController {
 
 **ARM AArch64 — Production boot PASS** ✅
 **x86_64 — Production boot PASS** ✅
+- PCIe-only x86 platforms enumerate no VirtIO-MMIO slots; the boot path skips that discovery to avoid a platform panic.
 **RV32, AArch32 — TRAIT STUBS** (trait impls only, no boot code)
 
 ### Multi-Architecture Strategy
@@ -1012,7 +1013,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   See [Spec 14](specs/14-viui.md).
 - **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
 - **Generic completion contract** — QEMU markers pass for completion-queue reserve/land/bound/defer, net-rx-reservation fill/remember/release, and ipc-pending deferred delivery/bounds/quota; RV64 now enables S-mode external IRQ delivery, VirtIO ACK uses scoped SUM + exact `InterruptStatus`, NIC owner/device-type binding points the NET_RX source and is the only production caller of `signal_net_rx()`, the `[net-rx-producer] irq->completion PASS` witness requires a real RX drain, and shared death/hotswap clears driver roles; the completion path now covers finite `TIMER` as well as `NET_RX`, uses fail-closed source masks, keeps `Recv*`/`WaitForEvent` intact, and `libs/ostd/src/executor.rs` now parks through an `Arc`-backed `RawWaker` on a one-tick TIMER wait with fail-loud authority checks; the exact QEMU parked marker is `[executor] dummy-waker=absent executor=parked source=TIMER PASS`. Peer-death CQ target-generation ABI, `RecvScatter`, and async VFS/DMA remain deferred.
-- **Phase 08 stack-sizing gate baseline** — default 64-page stacks remain unchanged; `stack_pages_for(path)` is default-only; RV64 test-hooks emits baseline markers for init/shell/vfs/vfs-test; the numbers are non-authoritative sizing baselines, and production shrink remains blocked on stronger overflow protection now that the parked executor/generic wait evidence is in-tree.
+- **Phase 08 stack-sizing gate baseline** — the measured static table now covers `init`, `shell`, `vfs`, `vfs-test`, `net`, and `virtio-net`; each path lands at 16 usable pages plus 2 guards, using `max(16, ceil(2 * peak / 4096))` from the captured kernel/user watermarks. Unknown or risky paths stay on the 64-page default until they are measured.
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
 - **Tier 3b Linux VM** — ARM64 EL2 boots Alpine 3.21.3 aarch64 and has its CI smoke
   lane. x86 is backend-specific: AMD SVM has an implemented MVP registry/vCPU/run-loop
@@ -1065,7 +1066,7 @@ Areas where the current implementation diverges from the specification or modern
 | IPC is syscall-based, not direct vtable call | Direct-vtable fast-path remains unimplemented; use measured IPC results rather than an estimated multiplier | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
 | Fixed-priority scheduler shipped; RV64 immediate preemption only | Consolidated latency baseline still pending | **Closed / verify** — architecture-scoped limit |
 | TLSF pool initialised but unused; no runtime caller or WCET qualification | RT allocation guarantee not yet established | **Open** — follow-up qualification |
-| Per-path stack sizing | Baseline markers collected under test-hooks; default 64 unchanged | **Open** — parked executor/generic wait evidence is in-tree; remaining shrink work is blocked on stronger overflow protection |
+| Per-path stack sizing | Measured table now covers init/shell/vfs/vfs-test/net/virtio-net with 16 usable pages + 2 guards; unknown/risky paths remain 64 | **Closed** — shrink is now evidence-backed; no ABI/public manifest field was added |
 | Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | **Mitigated by design** — untrusted code confined to Tier 3 Linux VM (Layer-2 HW mitigations for native, see Security Model) |
 | No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
 | No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |

@@ -2,6 +2,18 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-06] Phase 07 post-shim stack sizing closed
+
+Six measured paths are now fixed at 16 usable pages plus the two Phase 06 guards:
+`init`, `shell`, `vfs`, `vfs-test`, `net`, and `virtio-net`. Unmeasured names stay on
+the 64-page default. The sizing evidence records the raw kernel/user watermarks, the
+`ceil(2 * peak / 4096)` rule, the 16-page floor, and the QEMU transcript path.
+
+Verified by the exact test-hooks / vfs sizing lane, RV64 shell/DHCP/TCP/VFS production
+lanes, and production boots on RV64, AArch64, and x86_64. The x86 VirtIO-MMIO branch
+bug was fixed during the boot gate. Final tester verdict: PASS. Final reviewer verdict:
+APPROVE. No manifest/public ABI field changed.
+
 ## [2026-08-06] Phase 05 parked executor shim closed
 
 `ostd::executor::block_on()` now parks per executor through an `Arc`-backed
