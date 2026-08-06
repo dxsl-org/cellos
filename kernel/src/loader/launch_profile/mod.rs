@@ -53,7 +53,7 @@ pub fn authorize(
     route: LaunchRoute,
     target: &str,
 ) -> Option<LaunchProfile> {
-    match caller.name {
+    let profile = match caller.name {
         "init" if caller.has_spawn => profiles::init_profile(route, target),
         "shell" => profiles::shell_profile(route, target),
         "hypha" if caller.has_spawn => profiles::hypha_profile(route, target),
@@ -66,5 +66,20 @@ pub fn authorize(
         }
         "periph-demo" => profiles::pinned_profile(caller.name, route, target),
         _ => None,
+    }?;
+
+    // SpawnFromElf carries caller-owned bytes and only an advisory path. Until
+    // VFS can attest grant provenance, that route must never mint authority from
+    // the path: arbitrary bytes could otherwise borrow a reviewed privileged
+    // target name. Capability-bearing ELF routes therefore remain available
+    // only to lifecycle-authority profiles (init/supervisor); capability-free
+    // tools preserve the current shell/VFS launch path.
+    if matches!(route, LaunchRoute::Elf)
+        && profile.parent_ceiling != CapSet::EMPTY
+        && !profile.requires_lifecycle_authority
+    {
+        return None;
     }
+
+    Some(profile)
 }

@@ -4,6 +4,15 @@
 
 ---
 
+## [2026-08-06] Caller-owned ELF launch paths no longer mint ambient authority
+
+`SpawnFromElf` now refuses capability-bearing launch profiles unless the caller
+uses a lifecycle-authority edge. This prevents shell, Hypha, and tool-spawn from
+attaching a privileged reviewed path to arbitrary caller-owned ELF bytes, while
+preserving capability-free shell launches and init/supervisor lifecycle spawns.
+The launch-profile QEMU lane passes with `/bin/vfs-test`, boot services, and the
+shell lifecycle denial intact; no public ABI changed.
+
 ## [2026-08-06] Phase 08 stack-sizing gate baseline verified; production shrink still blocked
 
 The Phase 08 gate is now verified as a baseline-only slice: default 64-page stacks

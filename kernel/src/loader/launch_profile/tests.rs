@@ -26,15 +26,48 @@ fn shell_has_no_mem_launch_edge() {
 #[test]
 fn shell_net_tool_edge_is_exact() {
     assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/httpd").parent_ceiling,
+        shell_edge(LaunchRoute::Path, "/bin/httpd").parent_ceiling,
         CapSet {
             network: true,
             ..CapSet::EMPTY
         }
     );
     assert!(
+        authorize(
+            caller("shell", false, false),
+            LaunchRoute::Elf,
+            "/bin/httpd"
+        )
+        .is_none(),
+        "caller-owned ELF bytes must not borrow a network-capable target path"
+    );
+    assert_eq!(
+        shell_edge(LaunchRoute::Elf, "/bin/vfs-test").parent_ceiling,
+        CapSet::EMPTY,
+        "capability-free ELF targets remain launchable"
+    );
+    assert!(
         authorize(caller("shell", false, false), LaunchRoute::Elf, "/bin/vfs").is_none(),
         "shell must not launch privileged services by path forgery"
+    );
+}
+
+#[test]
+fn capability_bearing_elf_route_requires_lifecycle_authority() {
+    assert_eq!(
+        authorize(caller("init", true, false), LaunchRoute::Elf, "/bin/vfs")
+            .expect("init lifecycle authority keeps the boot-service edge")
+            .parent_ceiling,
+        boot_ceiling::boot_ceiling("/bin/vfs")
+    );
+    assert!(
+        authorize(
+            caller("tool-spawn", true, false),
+            LaunchRoute::Elf,
+            "/bin/tool-spawn"
+        )
+        .is_none(),
+        "caller-owned ELF bytes must not inherit spawn authority"
     );
 }
 
