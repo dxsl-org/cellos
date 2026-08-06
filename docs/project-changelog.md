@@ -15,6 +15,14 @@ marker, and reviewer APPROVE. The broad shell/input/DHCP/TCP/VFS and peer-death
 lanes were run before the final fallback-only change. Stale manual nightly-2025
 failure notes are invalid here because `rust-toolchain.toml` pins `nightly-2026-05-01`.
 
+## [2026-08-06] Phase 06 stack overflow hardening closed; Phase 07 stack sizing opened
+
+Two bottom guards and a real U-mode overflow probe (`cause=0xf`) close Phase 06 without
+any stack shrink or public ABI change. VFS continuation stayed intact, RV64/AArch64/x86_64
+boot all passed, and the gate ended with tester PASS and reviewer APPROVE. Phase 07 is now
+in progress with no blocker, and default 64-page stacks remain the fallback while measured
+sizing work proceeds.
+
 ## [2026-08-06] Phase 04 generic completion contract verified with NET_RX preserved
 
 After the reviewed Law 1 double confirmation, `WaitCompletion` now uses the
@@ -44,8 +52,8 @@ drain. The VFS grant audit records `ReadGrant` and `ReadFileGrant` as the two
 unsafe service-side copies that still depend on blocking caller lifetime.
 
 Generic reactor work, `RecvScatter` repair, and async VFS/DMA remain deferred
-behind the Law 1 gate; parked executor work is closed, and stack resizing now
-remains blocked only on stronger overflow protection.
+behind the Law 1 gate; parked executor work is closed, and stack resizing is
+now the open Phase07 follow-on with no blocker.
 
 ---
 
@@ -60,7 +68,7 @@ edges are unchanged. The shell's existing structured-argv transport is admitted
 only through a caller-namespaced kernel slot; it cannot write other global state
 stash keys. No public ABI changed.
 
-## [2026-08-06] Phase 08 stack-sizing gate baseline verified; production shrink still blocked
+## [2026-08-06] Phase 08 stack-sizing gate baseline verified; Phase 07 sizing follow-on open
 
 The Phase 08 gate is now verified as a baseline-only slice: default 64-page stacks
 remain in force, `stack_pages_for(path)` stays default-only for every path in this
@@ -68,8 +76,8 @@ phase, and the RV64 test-hooks lane passes `[stack-baseline]` markers for
 init/shell/vfs/vfs-test.
 
 Those measurements are explicitly non-authoritative sizing baselines, not a production
-stack table. Production shrink remains blocked on stronger overflow protection;
-no ABI, `libs/api`, or `libs/types` change landed.
+stack table. Phase06 is closed and Phase07 is in progress with no blocker; no ABI,
+`libs/api`, or `libs/types` change landed.
 
 ## [2026-08-06] Phase 07 honest closure: NET_RX completion substrate verified, reactor work still deferred
 

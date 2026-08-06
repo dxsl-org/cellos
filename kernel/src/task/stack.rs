@@ -11,6 +11,9 @@ use types::{VAddr, ViError};
 #[cfg(feature = "test-hooks")]
 const STACK_WATERMARK_PATTERN: u8 = 0xA5;
 
+/// Bottom guard reservation for every kernel and user stack.
+pub const STACK_GUARD_PAGES: usize = 2;
+
 /// Hand `total_pages` frames starting at `base` back to `allocator`, restoring each
 /// to the boot identity mapping (kernel RWX) first.
 ///
@@ -41,36 +44,36 @@ fn release_frames(allocator: &mut FrameAllocator, base: VAddr, total_pages: usiz
 #[derive(Debug)]
 pub struct Stack {
     /// Base address (lowest address) of the allocated range.
-    /// This includes the guard page at the bottom if present.
+    /// This includes the guard pages at the bottom.
     pub base: VAddr,
-    /// Number of usable pages (excluding guard page).
+    /// Number of usable pages (excluding guard pages).
     pub pages: usize,
-    /// Whether this stack has a guard page.
-    pub has_guard: bool,
+    /// Number of verified-unmapped pages below the usable range.
+    pub guard_pages: usize,
     /// Top of the stack (initial SP).
     pub top: VAddr,
 }
 
 impl Stack {
-    /// Allocate a new Kernel Stack of `pages` usable pages, plus a guard page
-    /// below it.
+    /// Allocate a new Kernel Stack of `pages` usable pages plus the configured
+    /// bottom guard reservation.
     ///
     /// # Errors
-    /// - `OutOfMemory` — no contiguous run of `pages + 1` frames exists, or a
+    /// - `OutOfMemory` — no contiguous run of usable plus guard frames exists, or a
     ///   page-table mapping could not be installed.
-    /// - `NotSupported` — the guard page could not be established. No stack is
+    /// - `NotSupported` — every guard page could not be established. No stack is
     ///   returned in that case; see [`Self::allocate`].
     pub fn new_kernel(pages: usize) -> Result<Self, ViError> {
-        Self::allocate(pages, true, false)
+        Self::allocate(pages, STACK_GUARD_PAGES, false)
     }
 
-    /// Allocate a new User Stack of `pages` usable pages, plus a guard page below
-    /// it. Usable pages are mapped USER RW.
+    /// Allocate a new User Stack of `pages` usable pages plus the configured
+    /// bottom guards. Usable pages are mapped USER RW.
     ///
     /// # Errors
     /// Same as [`Self::new_kernel`].
     pub fn new_user(pages: usize) -> Result<Self, ViError> {
-        Self::allocate(pages, true, true)
+        Self::allocate(pages, STACK_GUARD_PAGES, true)
     }
 
     /// Internal allocation logic.
@@ -83,8 +86,8 @@ impl Stack {
     /// neighbour with no fault and no log, and the victim dies later somewhere
     /// unrelated. A log line at allocation time is not a mitigation: nothing reads
     /// it in the microseconds before the overflow.
-    fn allocate(pages: usize, guard: bool, user_mode: bool) -> Result<Self, ViError> {
-        let total_pages = if guard { pages + 1 } else { pages };
+    fn allocate(pages: usize, guard_pages: usize, user_mode: bool) -> Result<Self, ViError> {
+        let total_pages = pages.checked_add(guard_pages).ok_or(ViError::OutOfMemory)?;
 
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         let allocator = frame_guard.as_mut().ok_or_else(|| {
@@ -118,14 +121,13 @@ impl Stack {
         let base_addr = base_frame; // Identity Map
 
         // 2. Map Pages
-        // If Guard Page is requested, the bottom page (base_addr) is NOT mapped (or mapped as invalid).
-        // Ideally unmapped.
+        // Bottom guard frames are left unmapped; usable frames begin after them.
 
-        let usable_start_idx = if guard { 1 } else { 0 };
+        let usable_start_idx = guard_pages;
 
         // SAS identity map: all RAM is already identity-mapped RWX by
-        // init_kernel_paging. The usable pages are re-mapped below, then the guard
-        // frame (base_addr) is unmapped after the loop so an overflow traps.
+        // init_kernel_paging. The usable pages are re-mapped below, then every
+        // guard frame is unmapped after the loop so an overflow traps.
 
         // Usable Pages
         let flags = if user_mode {
@@ -156,12 +158,12 @@ impl Stack {
             }
         }
 
-        // Guard page: drop the bottom frame's pre-existing identity mapping so a
+        // Guard pages: drop the bottom frames' pre-existing identity mappings so a
         // stack overflow (a write below base_addr+PAGE_SIZE) faults instead of
         // silently corrupting the neighbouring frame. The spawn paths zero only
         // the usable pages (skipping base_addr), so nothing legitimately writes to
-        // the guard frame. The frame stays owned by this Stack (freed in Drop);
-        // only its PTE is cleared. unmap_page locks KERNEL_ROOT (not FRAME_ALLOCATOR,
+        // the guard frames. They stay owned by this Stack (freed in Drop); only
+        // their PTEs are cleared. unmap_page locks KERNEL_ROOT (not FRAME_ALLOCATOR,
         // which we still hold) — no deadlock.
         //
         // The guard is verified by translation, not by the unmap's return code: on
@@ -169,13 +171,14 @@ impl Stack {
         // (paging root absent, or the PTE was not a 4 KiB leaf). Asking the page
         // tables whether the frame still resolves is the only answer that matches
         // what the hardware will do on overflow.
-        if guard {
-            let unmap_ok = paging::unmap_page(base_addr).is_ok();
+        for guard_index in 0..guard_pages {
+            let guard_addr = base_addr + (guard_index * PAGE_SIZE);
+            let unmap_ok = paging::unmap_page(guard_addr).is_ok();
             paging::tlb_flush_all();
-            if !unmap_ok || paging::virt_to_phys(base_addr).is_some() {
+            if !unmap_ok || paging::virt_to_phys(guard_addr).is_some() {
                 error!(
                     "Stack alloc refused: guard frame 0x{:X} still mapped (unmap_ok={})",
-                    base_addr, unmap_ok
+                    guard_addr, unmap_ok
                 );
                 release_frames(allocator, base_addr, total_pages);
                 return Err(ViError::NotSupported);
@@ -187,29 +190,25 @@ impl Stack {
         let top = base_addr + (total_pages * PAGE_SIZE);
 
         trace!(
-            "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, User={}",
+            "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, Guards={}, User={}",
             base_addr,
             top,
             pages,
+            guard_pages,
             user_mode
         );
 
         Ok(Stack {
             base: base_addr,
             pages,
-            has_guard: guard,
+            guard_pages,
             top,
         })
     }
 
-    /// Total physical bytes reserved for this stack, including the guard page.
+    /// Total physical bytes reserved for this stack, including guard pages.
     pub fn allocated_bytes(&self) -> usize {
-        let total_pages = if self.has_guard {
-            self.pages + 1
-        } else {
-            self.pages
-        };
-        total_pages * PAGE_SIZE
+        (self.pages + self.guard_pages) * PAGE_SIZE
     }
 
     /// Task-owned usable stack bytes, excluding any kernel-only guard reservation.
@@ -217,9 +216,9 @@ impl Stack {
         self.pages * PAGE_SIZE
     }
 
-    #[cfg(feature = "test-hooks")]
-    fn usable_start(&self) -> usize {
-        self.base + if self.has_guard { PAGE_SIZE } else { 0 }
+    /// Lowest mapped byte in the usable stack range.
+    pub fn usable_start(&self) -> usize {
+        self.base + (self.guard_pages * PAGE_SIZE)
     }
 
     #[cfg(feature = "test-hooks")]
@@ -259,6 +258,19 @@ pub fn stack_probe_self_test() -> bool {
         Ok(stack) => stack,
         Err(_) => return false,
     };
+    if stack.guard_pages != STACK_GUARD_PAGES {
+        return false;
+    }
+    for guard_index in 0..stack.guard_pages {
+        let guard_addr = stack.base + (guard_index * PAGE_SIZE);
+        if paging::virt_to_phys(guard_addr).is_some() {
+            return false;
+        }
+    }
+    let deliberate_overflow_target = stack.usable_start().saturating_sub(8);
+    if paging::virt_to_phys(deliberate_overflow_target).is_some() {
+        return false;
+    }
     stack.test_hook_prime_watermark();
     if stack.test_hook_watermark_bytes() != 0 {
         return false;
@@ -274,11 +286,7 @@ impl Drop for Stack {
     fn drop(&mut self) {
         trace!("Dropping Stack at 0x{:X}", self.base);
 
-        let total_pages = if self.has_guard {
-            self.pages + 1
-        } else {
-            self.pages
-        };
+        let total_pages = self.pages + self.guard_pages;
 
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {

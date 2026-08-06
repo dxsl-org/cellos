@@ -30,9 +30,10 @@ const PARENT_TID: usize = 9201;
 /// this point in boot, and the test deregisters it before anything can.
 const QUOTA_CELL: u64 = (cell_quota::MAX_CELLS - 1) as u64;
 
-/// Bytes one thread stack occupies: the usable pages plus the guard page.
+/// Bytes one thread stack occupies: usable pages plus the stack policy's guards.
 fn stack_charge_bytes() -> usize {
-    (crate::task::STACK_PAGES + 1) * crate::memory::paging::PAGE_SIZE
+    (crate::task::STACK_PAGES + crate::task::stack::STACK_GUARD_PAGES)
+        * crate::memory::paging::PAGE_SIZE
 }
 
 fn insert_parent() {

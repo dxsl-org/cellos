@@ -2,7 +2,7 @@
 
 **Version**: 0.1 (Initial — Reliability Track Definition)
 **Status**: Definitive
-**Last Updated**: 2026-08-01 (D12 hardware layers; D13 signature-admission posture)
+**Last Updated**: 2026-08-06 (Phase06 stack-guard completion; RV64 test-hooks overflow probe; production boot PASS on RV64/AArch64/x86_64)
 
 > Cellos targets robots and embedded devices. For that domain "fast + realtime" is not
 > enough — the system **must not die**. This spec defines what "không chết" means
@@ -81,7 +81,7 @@ embedded/robotics OS (QNX/seL4 class), not relative to zero.
 
 | Axis | Score | What exists | What's missing |
 |------|------:|-------------|----------------|
-| 1. Fault isolation | **~85%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)); stack **guard pages active** ([stack.rs](../../kernel/src/task/stack.rs)); load-time VA-overwrite guard + build-time VA-layout CI check; async-pin/grant leak closed as moot (§4.4) | Depends entirely on zero-unsafe-bug in kernel/HAL; no per-cell SATP (by decision) |
+| 1. Fault isolation | **~85%** | `panic_handler` isolates cell panics ([kernel/src/main.rs](../../kernel/src/main.rs)); trap handler kills faulting cell not kernel ([hal/arch/riscv/src/rv64/trap.rs](../../hal/arch/riscv/src/rv64/trap.rs)); per-cell heap quota ([kernel/src/memory/cell_quota.rs](../../kernel/src/memory/cell_quota.rs)); stack **guard pages active** (`STACK_GUARD_PAGES = 2`, verified-unmapped bottom guards, `usable_start()`-derived zeroing/accounting) ([stack.rs](../../kernel/src/task/stack.rs)); load-time VA-overwrite guard + build-time VA-layout CI check; async-pin/grant leak closed as moot (§4.4) | Depends entirely on zero-unsafe-bug in kernel/HAL; no per-cell SATP (by decision) |
 | 2. Fault detection | **~78%** | Audit ring (`CellFault`/`CellExit`); CPU-monopoly watchdog (RT-only, reset-on-syscall); `RecvTimeout` deadline sweep checked in `pick_next`; **liveness heartbeat** (`Heartbeat=207` → `CellHung` kill→restart, catches silent hangs any priority); RT `RtDeadlineMiss`/`RtCpuOverrun` audit events ([kernel/src/audit.rs](../../kernel/src/audit.rs)) | No external HW watchdog; heartbeat remains opt-in, although multiple service, tool, demo, and application Cells now adopt it |
 | 3. Fault recovery | **~88%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); per-service restart **policies** (permanent/transient/temporary) + **time-windowed restart intensity** (crash-storm escalation); exit-reason delivered as recv payload; service-ID registry (clients reconnect across respawn); hotswap + state-stash | Fleet policy for required heartbeat enrollment; cross-node failover (out of scope for single device) |
 | 4. Realtime guarantee | **~45%** | 3-level priority preempt + zero-latency SSIP; RT watchdog; deadline-miss + CPU-overrun **observability** ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | EDF / deadline enforcement / CPU-budget — **hardware-data-gated** (QEMU TCG has no cycle-accurate timing); WCET unmeasured |
@@ -108,12 +108,15 @@ Ordered by ROI for never-die. Items are independent of the (dropped) SATP decisi
       SBI SRST **cold reboot** (`sbi::system_reset`) after printing diagnostics, falling back to the
       halt loop only if firmware lacks SRST. Cell faults unaffected. Verified in QEMU (injected panic
       reboots vs freezes; normal boot still reaches `Cellos >`).
-- [x] **Stack guard pages** — DONE 2026-06-06 (commit a8fa971c). Root cause of the earlier block
-      found + fixed: the spawn paths zeroed the stack from `kstack.base` (the guard frame itself)
-      for `STACK_FRAMES` pages — writing *through* the guard. Now zero from `base+PAGE_SIZE` (the
-      usable pages only), then unmap the guard frame + `sfence.vma` in `stack.rs::allocate`. A stack
-      overflow now traps. Verified: boot reaches `Cellos >` with guards active, 0 unmap failures.
-      Remaining verification: a deliberate-overflow test cell to confirm the trap fires (follow-up).
+- [x] **Stack guard pages** — DONE 2026-08-06 (commit a8fa971c + Phase06 follow-up). Every
+      `Stack` reserves two verified-unmapped bottom guards (`STACK_GUARD_PAGES = 2`) and keeps the
+      usable payload at 64 pages. Spawn zeroing and stack accounting derive from the `Stack`
+      record itself (`usable_start()`, `usable_bytes()`, `allocated_bytes()`), not hard-coded page
+      math. Allocation is fail-closed: if any guard cannot be established or verified, the full
+      contiguous run is released and the spawn is rejected. RV64 test-hooks now spawn a U-mode probe
+      whose first instruction stores `zero` at `usable_start() - 8`; QEMU reports `cause=0xf`, only
+      the probe dies, and the VFS boot path keeps running. Verified on production boot across
+      RV64/AArch64/x86_64.
 
 ### 4.2 — Detection (P0)
 - [x] **Liveness heartbeat (silent-hang detection)** — DONE 2026-06-06 (commit b5c47c62). The

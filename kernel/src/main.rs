@@ -625,7 +625,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         }
         #[cfg(feature = "test-hooks")]
         if task::stack::stack_probe_self_test() {
-            log_info("stack-probe self-test PASS (pattern, overwrite, scan)");
+            log_info(
+                "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
+            );
         } else {
             log_info("stack-probe self-test FAIL");
         }
@@ -803,6 +805,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             let _ = tid; // suppress unused warning
         }
         Err(_) => log_info("[task] user_hello spawn failed"),
+    }
+
+    // Deliberately underflow a U-mode test task into the upper guard page. The
+    // fault handler must terminate only that task and let boot continue.
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    if task::stack_overflow_probe::spawn().is_err() {
+        log_info("[stack-guard] deliberate overflow probe spawn FAIL");
     }
 
     log_info("Kernel initialization complete. Entering idle loop.");

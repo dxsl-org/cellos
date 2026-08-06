@@ -237,6 +237,26 @@ impl Scheduler {
         kstack: crate::task::stack::Stack,
         ustack: crate::task::stack::Stack,
     ) -> usize {
+        self.spawn_with_stacks_configured(name, cell_id, allowed_drivers, kstack, ustack, |_| {})
+    }
+
+    /// Build, configure, then publish a task while the scheduler remains locked.
+    ///
+    /// The callback runs after stack ownership and the default context are
+    /// installed but before the task reaches any ready queue. Test-only entry
+    /// shims use this to avoid exposing a half-configured task to SMP stealing.
+    pub(crate) fn spawn_with_stacks_configured<F>(
+        &mut self,
+        name: &str,
+        cell_id: CellId,
+        allowed_drivers: alloc::vec::Vec<usize>,
+        kstack: crate::task::stack::Stack,
+        ustack: crate::task::stack::Stack,
+        configure: F,
+    ) -> usize
+    where
+        F: FnOnce(&mut Task),
+    {
         let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
         task.state = TaskState::Ready;
         let id = task.id;
@@ -245,9 +265,8 @@ impl Scheduler {
         let stack_top = kstack.top;
         let stack_base = kstack.base;
 
-        // Zero the usable stack pages. Skip the guard frame at `stack_base` (it is
-        // unmapped — a write there faults); the usable region starts one page above
-        // base and spans exactly `kstack.pages` pages.
+        // Zero the usable stack pages. Skip every guard frame at `stack_base`;
+        // `Stack::usable_start` is derived from the allocation's actual guard count.
         //
         // The length comes from the Stack we were handed, never from a constant:
         // with a constant, handing in a smaller stack writes past its end, and in
@@ -257,7 +276,7 @@ impl Scheduler {
         // the range is exactly the usable extent this Stack reports.
         unsafe {
             core::ptr::write_bytes(
-                (stack_base + crate::memory::paging::PAGE_SIZE) as *mut u8,
+                kstack.usable_start() as *mut u8,
                 0,
                 kstack.pages * crate::memory::paging::PAGE_SIZE,
             );
@@ -291,6 +310,7 @@ impl Scheduler {
         }
         task.kernel_stack = Some(kstack);
         task.user_stack = Some(ustack);
+        configure(&mut task);
 
         info!(
             "Task '{}' (ID {}): Stack 0x{:X}-0x{:X}, Entry 0x{:X}",
@@ -388,10 +408,10 @@ impl Scheduler {
         // SAFETY: We own the allocated stack memory exclusively. The pointer is valid.
         // Setting up task context with valid register values for thread initialization.
         unsafe {
-            // Skip the guard frame at `stack_base` (unmapped); zero exactly the
-            // usable extent this Stack reports, never a constant.
+            // Skip every guard frame and zero exactly the usable extent this
+            // Stack reports, never a global constant.
             core::ptr::write_bytes(
-                (stack_base + crate::memory::paging::PAGE_SIZE) as *mut u8,
+                kstack.usable_start() as *mut u8,
                 0,
                 kstack_pages * crate::memory::paging::PAGE_SIZE,
             );

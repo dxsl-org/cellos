@@ -1,15 +1,7 @@
 use super::{stack::Stack, syscall::SyscallError, SCHEDULER};
-use crate::memory::paging::PAGE_SIZE;
 
 fn usable_stack_bounds(stack: &Stack) -> Result<(usize, usize), SyscallError> {
-    let start = if stack.has_guard {
-        stack
-            .base
-            .checked_add(PAGE_SIZE)
-            .ok_or(SyscallError::InvalidInput)?
-    } else {
-        stack.base
-    };
+    let start = stack.usable_start();
     if start > stack.top {
         return Err(SyscallError::InvalidInput);
     }
@@ -110,14 +102,14 @@ mod tests {
         Stack {
             base: 0x8000,
             pages: 2,
-            has_guard: true,
-            top: 0xb000,
+            guard_pages: 2,
+            top: 0xc000,
         }
     }
 
     #[test]
     fn accepts_aligned_slot_inside_usable_stack() {
-        let ptr = fake_stack().base + PAGE_SIZE;
+        let ptr = fake_stack().usable_start();
         assert_eq!(
             validate_stack_usize_slot(&fake_stack(), ptr).unwrap() as usize,
             ptr
@@ -127,7 +119,7 @@ mod tests {
     #[test]
     fn rejects_null_misaligned_guard_and_past_top_slots() {
         let stack = fake_stack();
-        let usable_start = stack.base + PAGE_SIZE;
+        let usable_start = stack.usable_start();
         assert_eq!(
             validate_stack_usize_slot(&stack, 0).unwrap_err(),
             SyscallError::InvalidInput
@@ -152,7 +144,7 @@ mod tests {
         let mut scheduler = SchedulerTestGuard::new();
         scheduler.set(Scheduler::new());
         assert_eq!(
-            resolve_current_task_usize_slot(99, fake_stack().base + PAGE_SIZE).unwrap_err(),
+            resolve_current_task_usize_slot(99, fake_stack().usable_start()).unwrap_err(),
             SyscallError::PermissionDenied
         );
 
@@ -164,7 +156,7 @@ mod tests {
             sched.tasks.insert(7, task);
         }
         assert_eq!(
-            resolve_current_task_usize_slot(7, fake_stack().base + PAGE_SIZE).unwrap_err(),
+            resolve_current_task_usize_slot(7, fake_stack().usable_start()).unwrap_err(),
             SyscallError::PermissionDenied
         );
     }

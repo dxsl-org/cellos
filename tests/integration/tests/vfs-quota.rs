@@ -73,7 +73,18 @@ fn riscv64_vfs_quota_all_pass() {
     // the quota integration test.
     let runner = QemuRunner::boot_rv64(&test_hooks_kernel());
 
-    wait_for_or_dump(&runner, "stack-probe self-test PASS (pattern, overwrite, scan)");
+    wait_for_or_dump(
+        &runner,
+        "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[stack-guard] deliberate overflow armed guard_pages=2",
+    );
+    wait_for_or_dump(
+        &runner,
+        "'stack_overflow_probe') terminated: cause=0xf",
+    );
     wait_for_or_dump(&runner, "[stack-baseline] name=init phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=shell phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs phase=boot ");

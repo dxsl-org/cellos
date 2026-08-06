@@ -25,6 +25,8 @@ pub mod ipc_test;
 pub mod pending_mailbox;
 pub mod scheduler;
 pub mod stack;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod stack_overflow_probe;
 #[cfg(feature = "test-hooks")]
 pub mod user_hello;
 pub mod user_out;

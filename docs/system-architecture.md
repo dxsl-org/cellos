@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-06 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; generic completion contract verified with `WaitCompletion` still additive over `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, Phase 05 landed the one-tick `Arc`-backed parked executor and the exact `[executor] dummy-waker=absent executor=parked source=TIMER PASS` witness, and the NET_RX source proof checks both source and result; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-06 (status refreshed: Phase06 stack guards and RV64 test-hooks overflow probe landed; production boot PASS on RV64/AArch64/x86_64; KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; generic completion contract verified with `WaitCompletion` still additive over `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, Phase 05 landed the one-tick `Arc`-backed parked executor and the exact `[executor] dummy-waker=absent executor=parked source=TIMER PASS` witness, and the NET_RX source proof checks both source and result; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -96,6 +96,13 @@ Kernel Space: (virt addr 0x8020_0000+)
 ├─ Heap: kernel allocations
 └─ Page Tables: per-task
 ```
+
+**Stack Contract**:
+- `Stack` records `base`, `pages`, `guard_pages`, and `top`.
+- Every kernel and user stack reserves two verified-unmapped bottom guards; usable pages stay 64 for the current stack policy.
+- Scheduler zeroing, watermarking, and quota charging derive from the `Stack` fields (`usable_start()`, `usable_bytes()`, `allocated_bytes()`), not from recomputed page constants.
+- Allocation is fail-closed: if a guard cannot be mapped, unmapped, or verified absent, the allocator releases the full contiguous run and rejects the spawn.
+- RV64 test-hooks deliberately spawn a U-mode probe whose first instruction stores `zero` at `usable_start() - 8`; the resulting store-page fault kills only that probe while the VFS boot path continues.
 
 ### 3. **Task Scheduler** (`kernel/src/task/scheduler.rs`)
 
@@ -241,7 +248,7 @@ pub trait InterruptController {
 
 ### Implementations
 
-**RISC-V 64-bit (RV64) — FULLY IMPLEMENTED** ✅
+**RISC-V 64-bit (RV64) — Production boot PASS** ✅
 - `hal/arch/riscv/src/rv64/context.rs` — Trap frame, context switch
 - `hal/arch/riscv/src/rv64/paging.rs` — SV39 page table walker
 - `hal/arch/riscv/src/rv64/trap.rs` — Exception/interrupt handler
@@ -250,8 +257,8 @@ pub trait InterruptController {
 - `hal/arch/riscv/src/common/sbi.rs` — SBI calls (shutdown, time)
 - `hal/arch/riscv/src/common/timer.rs` — SBI timer (scheduling)
 
-**ARM AArch64 — FULLY IMPLEMENTED** ✅ (Ring-3 smoke testing in QEMU)  
-**x86_64 — FULLY IMPLEMENTED** ✅ (Ring-3 smoke testing in QEMU)  
+**ARM AArch64 — Production boot PASS** ✅
+**x86_64 — Production boot PASS** ✅
 **RV32, AArch32 — TRAIT STUBS** (trait impls only, no boot code)
 
 ### Multi-Architecture Strategy
