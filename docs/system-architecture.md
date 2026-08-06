@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-06 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; NET_RX completion substrate verified only as NET_RX, not a general reactor; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-06 (status refreshed: KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles; NET_RX completion substrate verified only as NET_RX, not a general reactor; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -141,6 +141,12 @@ struct Task {
 > `Recv` pointer. The kernel queues owned bytes in the target mailbox, wakes the task, and the
 > resumed receiver performs the validated copy. IRQ-sized payloads remain inline; larger payloads
 > are allocated fallibly and charged/refunded to the receiver Cell.
+>
+> **Dead-peer wake contract**: when a target dies, blocked senders are marked Ready with a
+> caller-visible error, their trap return is set to the error value, and the scheduler requeues
+> them; the next send clears stale reply state before it parks again. Boot guardrails keep
+> `RecvScatter` mailbox-only rather than CQ-backed until the broader reactor work is actually
+> built.
 
 | Syscall | Purpose |
 |---------|---------|

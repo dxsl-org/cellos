@@ -1493,6 +1493,30 @@ fn console_near_depth_burst_is_lossless() {
     );
 }
 
+/// The first shell command must survive as one UART burst immediately after
+/// the readiness banner, before a line-oriented prompt wait can hide a drop.
+#[test]
+fn shell_ready_hypha_burst_is_lossless() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("=== ViCell shell ready", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell readiness banner: {e}\n{}", qemu.dump()));
+
+    qemu.send_bytes(b"hypha\n");
+    // The launch-edge policy intentionally denies shell -> /bin/hypha. The
+    // complete command in this diagnostic proves every byte reached the parser;
+    // a truncated burst produces a different command name or stalls.
+    qemu.wait_for("shell: command not found: hypha", CMD_TIMEOUT)
+        .unwrap_or_else(|e| {
+            panic!(
+                "first shell burst was dropped or stalled: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
 // ── Input M2.2 — kernel IPC + compositor integration ─────────────────────────
 
 /// The boot self-test proves all three producers avoid a foreign `Recv.buf_ptr`,

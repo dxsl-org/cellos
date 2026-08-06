@@ -2,6 +2,22 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-06] Midori reactor-stack Phase 02 guardrails complete
+
+A raw `hypha\n` burst immediately after the shell-ready banner now proves the
+complete token reaches the parser; launch remains intentionally policy-denied.
+When an IPC target dies, `exit_task()` now marks blocked senders Ready, stores a
+caller-visible error in `reply_value`, writes the trap return register, and
+requeues them; the next blocked send clears stale reply state. The boot selftest
+keeps the known `RecvScatter` defect isolated to owned mailbox delivery rather
+than silently routing it through the CQ. QEMU passes both a heartbeat-watchdog
+death while the caller is blocked in `Send` and a ForceExit death-notification
+drain. The VFS grant audit records `ReadGrant` and `ReadFileGrant` as the two
+unsafe service-side copies that still depend on blocking caller lifetime.
+
+Generic reactor work, `RecvScatter` repair, async VFS/DMA, the parked executor,
+and stack resizing remain deferred behind the Law 1 gate.
+
 ---
 
 ## [2026-08-06] Caller-owned ELF launch paths no longer mint ambient authority

@@ -47,6 +47,7 @@ fn cell_main() {
         }
         "resp-echo" => scenarios::vfs_getfile_breakdown::run_resp_echo(),
         "smp-worker" => scenarios::smp::run_worker(),
+        "heartbeat-peer" => scenarios::smp::run_heartbeat_peer(),
         _ => {} // unknown role: exit cleanly
     }
 }

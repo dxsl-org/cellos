@@ -10,8 +10,8 @@ use core::hint::black_box;
 use ostd::{
     io::println,
     syscall::{
-        sys_exit, sys_force_exit, sys_get_time, sys_notify_on_exit, sys_recv, sys_send,
-        sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
+        sys_exit, sys_force_exit, sys_get_time, sys_heartbeat, sys_notify_on_exit, sys_recv,
+        sys_send, sys_set_spawn_args, sys_spawn_pinned, SyscallResult,
     },
     task::yield_now,
 };
@@ -36,6 +36,19 @@ pub fn run_worker() -> ! {
     let acc = compute(SMP_WORKER_ITERS);
     println(&format!("[smp] worker done acc={}", acc));
     sys_exit(0);
+}
+
+/// Wait for one start message, then deliberately miss a heartbeat deadline.
+/// A caller's next blocking send must resume with an error when the watchdog
+/// kills this peer through the ordinary `exit_task` path.
+#[allow(dead_code)] // Shared module: dispatched by the bench-probe binary only.
+pub fn run_heartbeat_peer() -> ! {
+    let mut start = [0u8; 1];
+    let _ = sys_recv(0, &mut start);
+    sys_heartbeat(5);
+    loop {
+        yield_now();
+    }
 }
 
 // ── Orchestrator-only helpers ─────────────────────────────────────────────────
@@ -65,6 +78,56 @@ fn recv_exit(tid: usize) {
 fn wait_exit(tid: usize) {
     let _ = sys_notify_on_exit(tid);
     recv_exit(tid);
+}
+
+/// Prove caller-visible dead-peer error plus queued ForceExit notification.
+pub fn run_peer_death_guard() -> ! {
+    sys_set_spawn_args("heartbeat-peer");
+    let blocked_peer = match sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal as u8, 0) {
+        SyscallResult::Ok(tid) => tid,
+        _ => {
+            println("[peer-death-runtime] FAIL — heartbeat child spawn");
+            sys_exit(1);
+        }
+    };
+    for _ in 0..20 {
+        yield_now();
+    }
+    if !matches!(sys_send(blocked_peer, &[1]), SyscallResult::Ok(_)) {
+        println("[peer-death-runtime] FAIL — heartbeat child start");
+        let _ = sys_force_exit(blocked_peer);
+        sys_exit(1);
+    }
+    if !matches!(sys_send(blocked_peer, &[2]), SyscallResult::Err(_)) {
+        println("[peer-death-runtime] FAIL — blocked send did not return an error");
+        let _ = sys_force_exit(blocked_peer);
+        sys_exit(1);
+    }
+
+    sys_set_spawn_args("load");
+    let forced_tid = match sys_spawn_pinned(PROBE_PATH, TaskPriority::Normal as u8, 0) {
+        SyscallResult::Ok(tid) => tid,
+        _ => {
+            println("[peer-death-runtime] FAIL — ForceExit child spawn");
+            sys_exit(1);
+        }
+    };
+    if !matches!(sys_notify_on_exit(forced_tid), SyscallResult::Ok(_)) {
+        println("[peer-death-runtime] FAIL — ForceExit watch");
+        let _ = sys_force_exit(forced_tid);
+        sys_exit(1);
+    }
+    for _ in 0..20 {
+        yield_now();
+    }
+    if !matches!(sys_force_exit(forced_tid), SyscallResult::Ok(_)) {
+        println("[peer-death-runtime] FAIL — ForceExit denied");
+        sys_exit(1);
+    }
+    recv_exit(forced_tid);
+
+    println("[peer-death-runtime] PASS (blocked-send error + ForceExit notification)");
+    sys_exit(0);
 }
 
 // ── Scenario 1: spawn_rate ────────────────────────────────────────────────────

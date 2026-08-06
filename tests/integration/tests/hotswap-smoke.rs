@@ -108,6 +108,41 @@ fn hotswap_demo_v2_spawns_and_announces() {
         ));
 }
 
+/// The boot primitive guard proves sender requeue. The bench role then proves a
+/// real blocked sender receives an error and a real ForceExit notification drains.
+#[test]
+fn peer_death_guardrail_is_bounded() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for(
+        "[selftest] IPC-GUARDRAILS: PASS (dead-peer bounded, RecvScatter isolated)",
+        BOOT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "peer-death guardrail did not complete within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+    qemu.send_line("bench peer-death-guard");
+    qemu.wait_for(
+        "[peer-death-runtime] PASS (blocked-send error + ForceExit notification)",
+        CMD_TIMEOUT,
+    )
+        .unwrap_or_else(|e| {
+            panic!(
+                "real peer-death guard did not complete: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
+}
+
 // ── Unit tests (host-only, no QEMU) ──────────────────────────────────────────
 //
 // These test the state-serialization logic that runs inside both demo cells.

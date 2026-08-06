@@ -19,6 +19,7 @@ pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub use tcb::Task;
 pub mod drivers;
+pub mod ipc_guardrail_selftest;
 pub mod ipc_pending_selftest;
 pub mod ipc_test;
 pub mod pending_mailbox;
@@ -1365,6 +1366,10 @@ pub fn ipc_send(
             return Ok(0);
         } else {
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
+                // A prior dead-peer wake leaves an error in reply_value. Each new
+                // blocking send owns its resume result, so stale state must not
+                // leak into this syscall when the next peer accepts the message.
+                caller.reply_value = None;
                 caller.state = TaskState::Sending {
                     target: target_id,
                     msg_ptr,

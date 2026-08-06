@@ -27,6 +27,13 @@
 > design, direct fast-IPC `GetFile` proof is deferred to a future Tier-1 transport rewrite,
 > and `DataPtr` remains same-SAS only, not Tier-2-safe.
 
+> **Midori reactor-stack Phase 02 guardrails (2026-08-06):** a raw first-command shell burst,
+> caller-visible dead-peer error + sender requeue, stale-result reset, mailbox-only
+> `RecvScatter` isolation, heartbeat-watchdog blocked-send wake, and ForceExit notification
+> drain now pass. The VFS grant audit records the two unsafe service-side copy sites whose
+> safety still depends on blocking caller lifetime. Generic reactor work, `RecvScatter`
+> repair, async VFS/DMA, parked executor work, and stack resizing remain deferred behind Law 1.
+
 > **Midori Phase 08 stack-sizing baseline (2026-08-06):** default 64-page stacks remain
 > unchanged; `stack_pages_for(path)` is default-only across the verified Phase 08 gate; the
 > RV64 test-hooks lane emits baseline markers for init/shell/vfs/vfs-test; and the

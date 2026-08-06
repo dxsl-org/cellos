@@ -526,6 +526,9 @@ impl Scheduler {
             if let TaskState::Sending { target, .. } = task.state {
                 if target == tid {
                     task.state = TaskState::Ready;
+                    // The Send handler resumes inside the kernel and reads
+                    // reply_value; trap a0 alone would be overwritten on return.
+                    task.reply_value = Some(usize::MAX);
                     task.trap_frame.regs[10] = usize::MAX as _; // error return: target gone
                     to_wake.push(*id);
                 }

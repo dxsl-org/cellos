@@ -618,6 +618,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("ipc-pending self-test FAIL");
         }
+        if task::ipc_guardrail_selftest::self_test() {
+            log_info("ipc-guardrail self-test PASS (dead-peer wake, RecvScatter isolated)");
+        } else {
+            log_info("ipc-guardrail self-test FAIL");
+        }
         #[cfg(feature = "test-hooks")]
         if task::stack::stack_probe_self_test() {
             log_info("stack-probe self-test PASS (pattern, overwrite, scan)");
