@@ -1244,15 +1244,15 @@
 <a href=#1244 id=1244 data-nosnippet>1244</a>
 <a href=#1245 id=1245 data-nosnippet>1245</a><span class="doccomment">/// Reserved state-stash slot used to hand a command line to a freshly spawned
 <a href=#1246 id=1246 data-nosnippet>1246</a>/// cell. `sys_spawn_from_path` does not yet carry argv on the new cell's stack,
-<a href=#1247 id=1247 data-nosnippet>1247</a>/// so the spawner stashes the argument string here and the spawned cell reads
-<a href=#1248 id=1248 data-nosnippet>1248</a>/// it on startup. Single-spawner (the shell) makes this race-free in practice.
+<a href=#1247 id=1247 data-nosnippet>1247</a>/// so the kernel stores this key in a caller-namespaced staging slot and moves
+<a href=#1248 id=1248 data-nosnippet>1248</a>/// it to the successful child before that child becomes runnable.
 <a href=#1249 id=1249 data-nosnippet>1249</a></span><span class="kw">pub const </span>ARGV_STASH_KEY: u64 = <span class="number">0x0061_7267_7600_0000</span>; <span class="comment">// "argv"
 <a href=#1250 id=1250 data-nosnippet>1250</a>
 <a href=#1251 id=1251 data-nosnippet>1251</a></span><span class="doccomment">/// Publish `args` as the command line for the next cell spawned by this task.
 <a href=#1252 id=1252 data-nosnippet>1252</a>/// Always call before `sys_spawn_from_path` (pass `""` when there are no args)
 <a href=#1253 id=1253 data-nosnippet>1253</a>/// so the spawned cell never reads a previous command's leftovers.
-<a href=#1254 id=1254 data-nosnippet>1254</a></span><span class="kw">pub fn </span>sys_set_spawn_args(args: <span class="kw-2">&amp;</span>str) {
-<a href=#1255 id=1255 data-nosnippet>1255</a>    sys_state_stash(ARGV_STASH_KEY, args.as_bytes());
+<a href=#1254 id=1254 data-nosnippet>1254</a></span><span class="kw">pub fn </span>sys_set_spawn_args(args: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#1255 id=1255 data-nosnippet>1255</a>    sys_state_stash(ARGV_STASH_KEY, args.as_bytes()) == args.len()
 <a href=#1256 id=1256 data-nosnippet>1256</a>}
 <a href=#1257 id=1257 data-nosnippet>1257</a>
 <a href=#1258 id=1258 data-nosnippet>1258</a><span class="doccomment">/// Read the command line published for this cell by its spawner. Returns the

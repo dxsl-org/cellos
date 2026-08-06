@@ -117,9 +117,9 @@
 <a href=#117 id=117 data-nosnippet>117</a>        ok = <span class="bool-val">false</span>;
 <a href=#118 id=118 data-nosnippet>118</a>        <span class="macro">log::error!</span>(<span class="string">"[selftest] launch-profile: shell lost exact /bin/httpd launch edge"</span>);
 <a href=#119 id=119 data-nosnippet>119</a>    }
-<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">if </span>authorize(SHELL, LaunchRoute::Elf, <span class="string">"/bin/httpd"</span>).is_some() {
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="kw">if </span>authorize(SHELL, LaunchRoute::Elf, <span class="string">"/bin/httpd"</span>).is_none() {
 <a href=#121 id=121 data-nosnippet>121</a>        ok = <span class="bool-val">false</span>;
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">log::error!</span>(<span class="string">"[selftest] launch-profile: caller-owned ELF gained network path authority"</span>);
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">log::error!</span>(<span class="string">"[selftest] launch-profile: shell lost exact /bin/httpd ELF edge"</span>);
 <a href=#123 id=123 data-nosnippet>123</a>    }
 <a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">if </span>authorize(SHELL, LaunchRoute::Elf, <span class="string">"/bin/vfs-test"</span>).is_none() {
 <a href=#125 id=125 data-nosnippet>125</a>        ok = <span class="bool-val">false</span>;

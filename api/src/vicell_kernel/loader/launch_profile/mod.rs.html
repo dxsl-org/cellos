@@ -69,18 +69,16 @@
 <a href=#69 id=69 data-nosnippet>69</a>    }<span class="question-mark">?</span>;
 <a href=#70 id=70 data-nosnippet>70</a>
 <a href=#71 id=71 data-nosnippet>71</a>    <span class="comment">// SpawnFromElf carries caller-owned bytes and only an advisory path. Until
-<a href=#72 id=72 data-nosnippet>72</a>    // VFS can attest grant provenance, that route must never mint authority from
-<a href=#73 id=73 data-nosnippet>73</a>    // the path: arbitrary bytes could otherwise borrow a reviewed privileged
-<a href=#74 id=74 data-nosnippet>74</a>    // target name. Capability-bearing ELF routes therefore remain available
-<a href=#75 id=75 data-nosnippet>75</a>    // only to lifecycle-authority profiles (init/supervisor); capability-free
-<a href=#76 id=76 data-nosnippet>76</a>    // tools preserve the current shell/VFS launch path.
-<a href=#77 id=77 data-nosnippet>77</a>    </span><span class="kw">if </span><span class="macro">matches!</span>(route, LaunchRoute::Elf)
-<a href=#78 id=78 data-nosnippet>78</a>        &amp;&amp; profile.parent_ceiling != CapSet::EMPTY
-<a href=#79 id=79 data-nosnippet>79</a>        &amp;&amp; !profile.requires_lifecycle_authority
-<a href=#80 id=80 data-nosnippet>80</a>    {
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
-<a href=#82 id=82 data-nosnippet>82</a>    }
-<a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="prelude-val">Some</span>(profile)
-<a href=#85 id=85 data-nosnippet>85</a>}
+<a href=#72 id=72 data-nosnippet>72</a>    // VFS can attest grant provenance, arbitrary bytes must not borrow a launch
+<a href=#73 id=73 data-nosnippet>73</a>    // profile that carries authority. Service-IPC tools use an empty ceiling;
+<a href=#74 id=74 data-nosnippet>74</a>    // capability-bearing ELF routes remain lifecycle-only.
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">if </span><span class="macro">matches!</span>(route, LaunchRoute::Elf)
+<a href=#76 id=76 data-nosnippet>76</a>        &amp;&amp; profile.parent_ceiling != CapSet::EMPTY
+<a href=#77 id=77 data-nosnippet>77</a>        &amp;&amp; !profile.requires_lifecycle_authority
+<a href=#78 id=78 data-nosnippet>78</a>    {
+<a href=#79 id=79 data-nosnippet>79</a>        <span class="kw">return </span><span class="prelude-val">None</span>;
+<a href=#80 id=80 data-nosnippet>80</a>    }
+<a href=#81 id=81 data-nosnippet>81</a>
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="prelude-val">Some</span>(profile)
+<a href=#83 id=83 data-nosnippet>83</a>}
 </code></pre></div></section></main></body></html>
