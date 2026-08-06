@@ -51,7 +51,11 @@ pub fn qemu_exit(success: bool) -> ! {
     use qemu_exit::QEMUExit;
     #[cfg(target_arch = "riscv64")]
     {
-        qemu_exit::RISCV64::new(0x100000).exit(if success { 0 } else { 1 });
+        // SAFETY: 0x100000 is the SiFive test device address on the QEMU `virt`
+        // machine used by this test-only exit path.
+        unsafe {
+            qemu_exit::RISCV64::new(0x100000).exit(if success { 0 } else { 1 });
+        }
     }
     #[cfg(target_arch = "aarch64")]
     {
@@ -613,6 +617,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("ipc-pending self-test PASS (deferred delivery, bounds, quota)");
         } else {
             log_info("ipc-pending self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
+        if task::stack::stack_probe_self_test() {
+            log_info("stack-probe self-test PASS (pattern, overwrite, scan)");
+        } else {
+            log_info("stack-probe self-test FAIL");
         }
     }
 

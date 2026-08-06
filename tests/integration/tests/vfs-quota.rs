@@ -73,11 +73,16 @@ fn riscv64_vfs_quota_all_pass() {
     // the quota integration test.
     let runner = QemuRunner::boot_rv64(&test_hooks_kernel());
 
+    wait_for_or_dump(&runner, "stack-probe self-test PASS (pattern, overwrite, scan)");
+    wait_for_or_dump(&runner, "[stack-baseline] name=init phase=boot ");
+    wait_for_or_dump(&runner, "[stack-baseline] name=shell phase=boot ");
+    wait_for_or_dump(&runner, "[stack-baseline] name=vfs phase=boot ");
     wait_for_or_dump(&runner, "[PASS] dircap: GetFile returns a nonempty pointer before sealing");
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant clamps to grant length");
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant copies nonzero bytes");
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant is refused after sealing");
     wait_for_or_dump(&runner, "[vfs-test] ALL TESTS PASSED");
+    wait_for_or_dump(&runner, "[stack-baseline] name=vfs-test phase=exit ");
 
     let serial = runner.dump();
     assert!(

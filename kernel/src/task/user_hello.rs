@@ -33,7 +33,7 @@ pub const ENTRY: VAddr = 0x0001_0000;
 /// Returns [`ViError::Unknown`] if the scheduler is uninitialised.
 pub fn spawn() -> Result<usize, ViError> {
     // -- 1. Spawn a bare task (allocates TCB, not yet runnable) --
-    let tid = super::spawn("user_hello", CellId(0xFF), alloc::vec::Vec::new());
+    let tid = super::spawn("user_hello", CellId(0xFF), alloc::vec::Vec::new())?;
     if tid == 0 {
         return Err(ViError::Unknown);
     }

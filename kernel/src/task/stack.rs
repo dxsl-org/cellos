@@ -8,6 +8,9 @@ use crate::memory::paging::{self, Flags, PAGE_SIZE};
 use log::{error, trace};
 use types::{VAddr, ViError};
 
+#[cfg(feature = "test-hooks")]
+const STACK_WATERMARK_PATTERN: u8 = 0xA5;
+
 /// Hand `total_pages` frames starting at `base` back to `allocator`, restoring each
 /// to the boot identity mapping (kernel RWX) first.
 ///
@@ -213,6 +216,58 @@ impl Stack {
     pub fn usable_bytes(&self) -> usize {
         self.pages * PAGE_SIZE
     }
+
+    #[cfg(feature = "test-hooks")]
+    fn usable_start(&self) -> usize {
+        self.base + if self.has_guard { PAGE_SIZE } else { 0 }
+    }
+
+    #[cfg(feature = "test-hooks")]
+    /// Prime the usable stack range with a sentinel pattern so later scans can
+    /// estimate the deepest downward growth without adding a runtime ABI.
+    pub fn test_hook_prime_watermark(&self) {
+        unsafe {
+            core::ptr::write_bytes(
+                self.usable_start() as *mut u8,
+                STACK_WATERMARK_PATTERN,
+                self.usable_bytes(),
+            );
+        }
+    }
+
+    #[cfg(feature = "test-hooks")]
+    /// Return the deepest observed stack footprint in bytes since the sentinel
+    /// pattern was primed.
+    pub fn test_hook_watermark_bytes(&self) -> usize {
+        let usable = self.usable_bytes();
+        let start = self.usable_start() as *const u8;
+        let mut untouched_prefix = 0usize;
+        while untouched_prefix < usable {
+            let byte = unsafe { core::ptr::read_volatile(start.add(untouched_prefix)) };
+            if byte != STACK_WATERMARK_PATTERN {
+                break;
+            }
+            untouched_prefix += 1;
+        }
+        usable.saturating_sub(untouched_prefix)
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub fn stack_probe_self_test() -> bool {
+    let stack = match Stack::new_kernel(2) {
+        Ok(stack) => stack,
+        Err(_) => return false,
+    };
+    stack.test_hook_prime_watermark();
+    if stack.test_hook_watermark_bytes() != 0 {
+        return false;
+    }
+    let probe_bytes = 96usize;
+    unsafe {
+        core::ptr::write_bytes((stack.top - probe_bytes) as *mut u8, 0x11, probe_bytes);
+    }
+    stack.test_hook_watermark_bytes() == probe_bytes
 }
 
 impl Drop for Stack {

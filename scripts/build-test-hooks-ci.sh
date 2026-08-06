@@ -113,6 +113,7 @@ RUSTFLAGS="-D warnings -C relocation-model=pic" \
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
+    --features test-hooks \
     -p vicell-kernel
 
 cp "$REL/vicell-kernel" "$REL/vicell-kernel-test-hooks"

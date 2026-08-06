@@ -27,6 +27,13 @@
 > design, direct fast-IPC `GetFile` proof is deferred to a future Tier-1 transport rewrite,
 > and `DataPtr` remains same-SAS only, not Tier-2-safe.
 
+> **Midori Phase 08 stack-sizing baseline (2026-08-06):** default 64-page stacks remain
+> unchanged; `stack_pages_for(path)` is default-only across the verified Phase 08 gate; the
+> RV64 test-hooks lane emits baseline markers for init/shell/vfs/vfs-test; and the
+> measurements are explicitly non-authoritative sizing baselines only. Production shrink stays
+> blocked until parked-executor or equivalent generic-wait evidence lands, plus stronger
+> overflow protection.
+
 > **Midori Phase 01 partial-closure update (2026-08-01):** the test-hooks QEMU lane now
 > proves `ReadFileGrant` allow/deny markers, but Phase 01 stays partial. `ReadGrant`
 > runtime coverage is blocked because `cells/services/vfs/src/handle_table.rs:136` remains
@@ -129,6 +136,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | Capacity observability: typed spawn OOM + opt-in MemInfo | A2/A3 | ✅ DONE 2026-08-01 — real allocator metric is 129.49 MiB; `<10 MiB` optimization remains open | G1 |
 | Reliability / supervisor restart | specs/12 | ✅ SUBSTANTIAL (P00-03 DONE 2026-06-06: fault-path force-unlock, reboot-on-panic, guard pages, RT watchdog; P05 done: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability done) | **G1** |
 | NET_RX completion substrate | kernel/task waker + completion queue | ✅ QEMU markers PASS for completion-queue reserve/land/bound/defer, net-rx-reservation fill/remember/release, and ipc-pending deferred delivery/bounds/quota; shell still uses `RecvTimeout` + pending mailbox delivery; `signal_net_rx()` has no production caller and `libs/ostd/src/executor.rs` remains dummy-waker busy-yield; generic reactor, peer-death CQ target-generation ABI, `RecvScatter`, and async VFS/DMA remain deferred | **G1** |
+| Phase 08 stack-sizing gate | per-path stack sizing baseline | ✅ baseline-only QEMU markers PASS for init/shell/vfs/vfs-test; default 64 unchanged; production shrink blocked pending parked executor/generic wait and stronger overflow protection | **G1** |
 | Typed IPC + syscall filter (reliability part) | Phase 27-1/2 | ✅ | G1 (next) |
 | ELF capability manifests | Phase 30 | ✅ | G1 |
 | Heap snapshot / Instant-On | Phase 29 | ✅ | G1 |

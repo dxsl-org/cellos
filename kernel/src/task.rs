@@ -34,6 +34,8 @@ mod tests;
 
 use crate::sync::Spinlock;
 use alloc::string::String;
+#[cfg(feature = "test-hooks")]
+use core::sync::atomic::{AtomicU8, Ordering};
 use log::info;
 use scheduler::Scheduler;
 /// Increased to 64 (256 KB): fatfs nests deep call frames during recursive
@@ -81,6 +83,22 @@ pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
 
 // Global Tick Counter
 static TICKS: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_INIT: u8 = 1 << 0;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_SHELL: u8 = 1 << 1;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_VFS: u8 = 1 << 2;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_VFS_TEST: u8 = 1 << 3;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_ALL: u8 =
+    STACK_BASELINE_INIT | STACK_BASELINE_SHELL | STACK_BASELINE_VFS | STACK_BASELINE_VFS_TEST;
+#[cfg(feature = "test-hooks")]
+const STACK_BASELINE_TICK_GATE: usize = 200;
+#[cfg(feature = "test-hooks")]
+static STACK_BASELINE_EMITTED: AtomicU8 = AtomicU8::new(0);
 
 // Helper context to save the initial boot/kernel state during first task switch
 #[cfg(target_arch = "riscv64")]
@@ -202,6 +220,86 @@ pub fn tick() {
     TICKS.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
 }
 
+pub(crate) fn stack_pages_for(_name: &str) -> usize {
+    STACK_PAGES
+}
+
+#[cfg(feature = "test-hooks")]
+fn stack_baseline_bit(name: &str) -> Option<u8> {
+    match name {
+        "init" => Some(STACK_BASELINE_INIT),
+        "shell" => Some(STACK_BASELINE_SHELL),
+        "vfs" => Some(STACK_BASELINE_VFS),
+        "vfs-test" => Some(STACK_BASELINE_VFS_TEST),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+fn emit_stack_baseline(name: &str, phase: &str, stack: &stack::Stack) {
+    let used_bytes = stack.test_hook_watermark_bytes();
+    let used_pages = used_bytes.div_ceil(crate::memory::paging::PAGE_SIZE);
+    // Test-hooks run after normal boot lowers the global logger to WARN, so the
+    // marker must remain visible to the serial integration harness.
+    log::warn!(
+        "[stack-baseline] name={} phase={} used_bytes={} used_pages={} alloc_bytes={} usable_bytes={} baseline=non-authoritative",
+        name,
+        phase,
+        used_bytes,
+        used_pages,
+        stack.allocated_bytes(),
+        stack.usable_bytes(),
+    );
+}
+
+#[cfg(feature = "test-hooks")]
+fn maybe_emit_boot_stack_baselines() {
+    if system_ticks() < STACK_BASELINE_TICK_GATE {
+        return;
+    }
+    let emitted = STACK_BASELINE_EMITTED.load(Ordering::Relaxed);
+    if emitted == STACK_BASELINE_ALL {
+        return;
+    }
+    let mut newly_emitted = 0u8;
+    if let Some(sched) = SCHEDULER.lock().as_ref() {
+        for task in sched.tasks.values() {
+            let Some(bit) = stack_baseline_bit(&task.name) else {
+                continue;
+            };
+            // vfs-test has a deterministic exit after its full integration suite;
+            // defer that sample so the baseline includes the complete workload.
+            if bit == STACK_BASELINE_VFS_TEST {
+                continue;
+            }
+            if emitted & bit != 0 {
+                continue;
+            }
+            if let Some(kstack) = task.kernel_stack.as_ref() {
+                emit_stack_baseline(&task.name, "boot", kstack);
+                newly_emitted |= bit;
+            }
+        }
+    }
+    if newly_emitted != 0 {
+        STACK_BASELINE_EMITTED.fetch_or(newly_emitted, Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn maybe_emit_exit_stack_baseline(name: &str, stack: Option<&stack::Stack>) {
+    let Some(bit) = stack_baseline_bit(name) else {
+        return;
+    };
+    if bit != STACK_BASELINE_VFS_TEST || STACK_BASELINE_EMITTED.load(Ordering::Relaxed) & bit != 0 {
+        return;
+    }
+    if let Some(kstack) = stack {
+        emit_stack_baseline(name, "exit", kstack);
+        STACK_BASELINE_EMITTED.fetch_or(bit, Ordering::Relaxed);
+    }
+}
+
 pub fn init() {
     // Install hart-local state for hart 0 BEFORE the scheduler or timer start,
     // so current_cell_id() works correctly once interrupts are enabled.
@@ -259,6 +357,9 @@ pub extern "Rust" fn vi_current_cell_id() -> usize {
 #[no_mangle]
 pub extern "Rust" fn vi_timer_tick() {
     tick();
+
+    #[cfg(feature = "test-hooks")]
+    maybe_emit_boot_stack_baselines();
 
     // Rearm timer anchored to current mtime so the slice is constant
     // regardless of how long this ISR takes.
@@ -767,10 +868,11 @@ pub fn spawn_from_mem(
 
     // 7. Pre-allocate the remaining per-task resources BEFORE touching the
     //    scheduler. Rust Drop cleans up on any error path — no manual free here.
+    let stack_pages = stack_pages_for(name);
     let kstack =
-        crate::task::stack::Stack::new_kernel(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
+        crate::task::stack::Stack::new_kernel(stack_pages).map_err(|_| ViError::OutOfMemory)?;
     let ustack =
-        crate::task::stack::Stack::new_user(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;
+        crate::task::stack::Stack::new_user(stack_pages).map_err(|_| ViError::OutOfMemory)?;
     let kstack_top = kstack.top;
     let user_stack_top = ustack.top;
 
@@ -1791,8 +1893,9 @@ pub fn spawn_synthetic(
     // Beyond the wasted pair, the failure ordering was wrong: the task was already
     // inserted and runnable when the second allocation could still fail, so an OOM
     // there returned `Err` and left a half-built task in the scheduler forever.
-    let kstack = stack::Stack::new_kernel(STACK_PAGES)?;
-    let ustack = stack::Stack::new_user(STACK_PAGES)?;
+    let stack_pages = stack_pages_for(name);
+    let kstack = stack::Stack::new_kernel(stack_pages)?;
+    let ustack = stack::Stack::new_user(stack_pages)?;
     let kstack_top = kstack.top;
     let user_stack_top = ustack.top;
     let tid = spawn_with_stacks(name, cell_id, alloc::vec::Vec::new(), kstack, ustack)?;

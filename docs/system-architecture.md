@@ -999,6 +999,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   See [Spec 14](specs/14-viui.md).
 - **Reliability / never-die / supervisor restart** — ✅ SUBSTANTIAL (P00–P03 done 2026-06-06: fault-path force-unlock, reboot-on-panic, stack guard pages, RT watchdog; P05: RecvTimeout deadline, NotifyOnExit supervisor, zombie reaper; P06 observability) — see [specs/12-reliability.md](specs/12-reliability.md).
 - **NET_RX completion substrate** — QEMU markers pass for completion-queue reserve/land/bound/defer, net-rx-reservation fill/remember/release, and ipc-pending deferred delivery/bounds/quota; shell still uses `RecvTimeout` + pending mailbox delivery; `signal_net_rx()` has no production caller and `libs/ostd/src/executor.rs` remains dummy-waker busy-yield; generic reactor, peer-death CQ target-generation ABI, `RecvScatter`, and async VFS/DMA remain deferred.
+- **Phase 08 stack-sizing gate baseline** — default 64-page stacks remain unchanged; `stack_pages_for(path)` is default-only; RV64 test-hooks emits baseline markers for init/shell/vfs/vfs-test; the numbers are non-authoritative sizing baselines, and production shrink remains blocked on parked executor/generic wait plus stronger overflow protection.
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
 - **Tier 3b Linux VM** — ARM64 EL2 boots Alpine 3.21.3 aarch64 and has its CI smoke
   lane. x86 is backend-specific: AMD SVM has an implemented MVP registry/vCPU/run-loop
@@ -1051,6 +1052,7 @@ Areas where the current implementation diverges from the specification or modern
 | IPC is syscall-based, not direct vtable call | Direct-vtable fast-path remains unimplemented; use measured IPC results rather than an estimated multiplier | **Open** — wire contract ratified ([specs/17](specs/17-ipc-wire-contract.md)); direct vtable fast-path still Phase 27 |
 | Fixed-priority scheduler shipped; RV64 immediate preemption only | Consolidated latency baseline still pending | **Closed / verify** — architecture-scoped limit |
 | TLSF pool initialised but unused; no runtime caller or WCET qualification | RT allocation guarantee not yet established | **Open** — follow-up qualification |
+| Per-path stack sizing | Baseline markers collected under test-hooks; default 64 unchanged | **Open** — production shrink blocked until parked executor/generic wait evidence and stronger overflow protection |
 | Spectre v1/v2 unmitigated in SAS | Critical for untrusted code | **Mitigated by design** — untrusted code confined to Tier 3 Linux VM (Layer-2 HW mitigations for native, see Security Model) |
 | No KASLR | Kernel address predictable | ✅ **DONE** (Phase 24, 2026-06-05 — Limine boot randomization) |
 | No per-cell memory quota enforcement | Single cell can OOM system | ✅ **DONE** (Phase 26 — quota + ZST caps + panic isolation) |

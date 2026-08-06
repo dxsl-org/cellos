@@ -207,7 +207,7 @@ impl Scheduler {
         cell_id: CellId,
         allowed_drivers: alloc::vec::Vec<usize>,
     ) -> Result<usize, ViError> {
-        let pages = crate::task::STACK_PAGES;
+        let pages = crate::task::stack_pages_for(name);
         let kstack = crate::task::stack::Stack::new_kernel(pages)?;
         let ustack = crate::task::stack::Stack::new_user(pages)?;
         Ok(self.spawn_with_stacks(name, cell_id, allowed_drivers, kstack, ustack))
@@ -255,6 +255,8 @@ impl Scheduler {
                 kstack.pages * crate::memory::paging::PAGE_SIZE,
             );
         }
+        #[cfg(feature = "test-hooks")]
+        kstack.test_hook_prime_watermark();
 
         let entry = task_entry_point as *const () as usize;
         let (_gp, _tp) = crate::task::get_kernel_gp_tp();
@@ -352,7 +354,7 @@ impl Scheduler {
         }
         let id = task.id;
 
-        let kstack = crate::task::stack::Stack::new_kernel(crate::task::STACK_PAGES)?;
+        let kstack = crate::task::stack::Stack::new_kernel(crate::task::stack_pages_for(name))?;
 
         // Charge the frames the thread actually took, read back from the Stack
         // rather than recomputed from STACK_PAGES: a second, independent use of
@@ -386,6 +388,8 @@ impl Scheduler {
                 0,
                 kstack_pages * crate::memory::paging::PAGE_SIZE,
             );
+            #[cfg(feature = "test-hooks")]
+            kstack.test_hook_prime_watermark();
 
             let (_gp, _tp) = crate::task::get_kernel_gp_tp();
             let trampoline = crate::hal::arch::thread_trampoline as *const () as usize;
@@ -466,6 +470,8 @@ impl Scheduler {
         // slow leak that eventually refuses legitimate work. `take` makes the refund
         // exactly-once even if this runs twice for the same tid.
         if let Some(t) = self.tasks.get_mut(&tid) {
+            #[cfg(feature = "test-hooks")]
+            crate::task::maybe_emit_exit_stack_baseline(&t.name, t.kernel_stack.as_ref());
             let charge = core::mem::take(&mut t.stack_quota_charge);
             if charge != 0 {
                 let cell_raw = t.cell_id.0 as usize;

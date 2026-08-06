@@ -4,6 +4,18 @@
 
 ---
 
+## [2026-08-06] Phase 08 stack-sizing gate baseline verified; production shrink still blocked
+
+The Phase 08 gate is now verified as a baseline-only slice: default 64-page stacks
+remain in force, `stack_pages_for(path)` stays default-only for every path in this
+phase, and the RV64 test-hooks lane passes `[stack-baseline]` markers for
+init/shell/vfs/vfs-test.
+
+Those measurements are explicitly non-authoritative sizing baselines, not a production
+stack table. Production shrink remains blocked on parked-executor or equivalent
+generic-wait evidence plus stronger overflow protection; no ABI, `libs/api`, or
+`libs/types` change landed.
+
 ## [2026-08-06] Phase 07 honest closure: NET_RX completion substrate verified, reactor work still deferred
 
 The completion path is now honestly closed as a NET_RX-only substrate, not a general
