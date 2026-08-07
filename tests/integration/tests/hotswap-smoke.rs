@@ -109,7 +109,7 @@ fn hotswap_demo_v2_spawns_and_announces() {
 }
 
 /// The userspace Supervisor snapshots a runnable v1, hard-freezes only after
-/// stash publication, restores v2, and preserves five real IPC increments.
+/// stash publication, then atomically drains cached-TID ingress into v2.
 #[test]
 fn supervisor_hotswap_preserves_demo_state() {
     if !prerequisites_ok() { return; }
@@ -125,16 +125,16 @@ fn supervisor_hotswap_preserves_demo_state() {
     qemu.wait_for("[hotswap-demo-v1] state stashed", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("snapshot not processed: {e}\n{}", qemu.dump()));
     qemu.wait_for(
-        "[hotswap-cached-sender] PASS: paused old tid rejected",
+        "[hotswap-cached-sender] PASS: frozen FIFO drained in order; post-cutover old tid rejected",
         CMD_TIMEOUT,
     )
-    .unwrap_or_else(|e| panic!("cached sender crossed the quiesce barrier: {e}\n{}", qemu.dump()));
+    .unwrap_or_else(|e| panic!("atomic cached-TID cutover failed: {e}\n{}", qemu.dump()));
     qemu.wait_for("[hotswap-demo-v2] state restored from v1", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("restore not processed: {e}\n{}", qemu.dump()));
     qemu.wait_for("[hotswap-demo-v2] SpawnCap retained", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("replacement capability was dropped: {e}\n{}", qemu.dump()));
     qemu.wait_for(
-        "[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=5)",
+        "[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=6)",
         CMD_TIMEOUT,
     )
     .unwrap_or_else(|e| panic!("state-preserving swap failed: {e}\n{}", qemu.dump()));

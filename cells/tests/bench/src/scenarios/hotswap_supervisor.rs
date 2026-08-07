@@ -53,11 +53,11 @@ pub fn run() {
             SyscallResult::Ok(sender) if sender == new_tid
         )
         || &response[..3] != b"v2:"
-        || u32::from_le_bytes(response[3..7].try_into().unwrap_or([0; 4])) != 5
+        || u32::from_le_bytes(response[3..7].try_into().unwrap_or([0; 4])) != 6
     {
-        fail("replacement did not preserve counter=5");
+        fail("replacement did not apply the drained increment");
     }
-    println("[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=5)");
+    println("[hotswap-supervisor-runtime] PASS (v1 counter=5 -> v2 counter=6)");
     ostd::syscall::sys_exit(0);
 }
 
@@ -68,22 +68,59 @@ pub fn run_cached_sender_probe(role: &str) -> ! {
     else {
         probe_fail("invalid cached tid");
     };
+    let mut inc = [0u8; 5];
+    inc[..2].copy_from_slice(&[0xAC, 0x00]);
+    inc[2..].copy_from_slice(b"inc");
+    let mut get = [0u8; 5];
+    get[..2].copy_from_slice(&[0xAC, 0x00]);
+    get[2..].copy_from_slice(b"get");
+
+    let mut queued = false;
     for _ in 0..5_000 {
-        if sys_lookup_service(service::HOTSWAP_DEMO).is_none() {
-            let mut envelope = [0u8; 5];
-            envelope[..2].copy_from_slice(&[0xAC, 0x00]);
-            envelope[2..].copy_from_slice(b"inc");
-            match sys_send(old_tid, &envelope) {
-                SyscallResult::Err(_) => {
-                    println("[hotswap-cached-sender] PASS: paused old tid rejected");
-                    ostd::syscall::sys_exit(0)
-                }
-                SyscallResult::Ok(_) => probe_fail("paused old tid accepted mutation"),
+        if sys_lookup_service(service::HOTSWAP_DEMO).is_none()
+            && matches!(sys_send(old_tid, &inc), SyscallResult::Ok(_))
+        {
+            if !matches!(sys_send(old_tid, &get), SyscallResult::Ok(_)) {
+                probe_fail("cutover split the two-message frozen FIFO witness");
             }
+            queued = true;
+            break;
         }
         sys_yield();
     }
-    probe_fail("pause window not observed")
+    if !queued {
+        probe_fail("frozen old FIFO window not observed");
+    }
+
+    let new_tid = loop {
+        if let Some(tid) = sys_lookup_service(service::HOTSWAP_DEMO) {
+            if tid != old_tid {
+                break tid;
+            }
+        }
+        sys_yield();
+    };
+    if !matches!(sys_send(old_tid, &inc), SyscallResult::Err(_)) {
+        probe_fail("post-cutover old tid accepted ingress");
+    }
+
+    let mut first = [0u8; 8];
+    if !matches!(sys_recv(new_tid, &mut first), SyscallResult::Ok(sender) if sender == new_tid)
+        || &first[..2] != b"ok"
+    {
+        probe_fail("drained inc reply missing or out of order");
+    }
+    let mut second = [0u8; 7];
+    if !matches!(sys_recv(new_tid, &mut second), SyscallResult::Ok(sender) if sender == new_tid)
+        || &second[..3] != b"v2:"
+        || u32::from_le_bytes(second[3..7].try_into().unwrap_or([0; 4])) != 6
+    {
+        probe_fail("drained get reply missing or counter was not 6");
+    }
+    println(
+        "[hotswap-cached-sender] PASS: frozen FIFO drained in order; post-cutover old tid rejected",
+    );
+    ostd::syscall::sys_exit(0)
 }
 
 fn send_and_receive(tid: usize, request: &[u8], expected: &[u8]) -> bool {

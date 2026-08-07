@@ -134,6 +134,30 @@ pub(crate) fn clear_swap_ceiling(tid: usize) {
     SWAP_CEILINGS.lock().remove(&tid);
 }
 
+/// Bind a freshly spawned replacement to the frozen task whose one-shot
+/// capability ceiling authorized its creation.
+pub(crate) fn bind_replacement(source_tid: usize, target_tid: usize) -> bool {
+    let mut scheduler = crate::task::SCHEDULER.lock();
+    let Some(sched) = scheduler.as_mut() else {
+        return false;
+    };
+    let source_is_frozen = sched
+        .tasks
+        .get(&source_tid)
+        .is_some_and(|task| matches!(task.state, crate::task::tcb::TaskState::Frozen { .. }));
+    if !source_is_frozen {
+        return false;
+    }
+    let Some(target) = sched.tasks.get_mut(&target_tid) else {
+        return false;
+    };
+    if target.hotswap_source_tid.is_some() {
+        return false;
+    }
+    target.hotswap_source_tid = Some(source_tid);
+    true
+}
+
 // ─── HotSwapReady flag ───────────────────────────────────────────────────────
 
 /// Called from the `HotSwapReady` syscall handler (syscall 401) to record that
@@ -150,6 +174,11 @@ pub fn set_task_hotswap_ready(tid: usize) {
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
+
+fn enter_frozen_state(task: &mut crate::task::Task, swap_id: u64) {
+    task.hotswap_ingress_closed = false;
+    task.state = crate::task::tcb::TaskState::Frozen { swap_id };
+}
 
 /// Resolve the task-id for a live cell, or `ViError::NotFound`.
 fn find_tid_for_cell(cell_id: CellId) -> ViResult<usize> {
@@ -170,10 +199,9 @@ fn find_tid_for_cell(cell_id: CellId) -> ViResult<usize> {
 /// The task is removed from the scheduler ready queues so it cannot be selected
 /// for execution while the swap is in progress.
 pub(crate) fn set_task_frozen(tid: usize, swap_id: u64) -> ViResult<()> {
-    use crate::task::tcb::TaskState;
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&tid) {
-            task.state = TaskState::Frozen { swap_id };
+            enter_frozen_state(task, swap_id);
             // Remove from all hart ready queues — a Frozen task must not run.
             crate::task::hart_local::ready::remove_from_all(tid);
             return Ok(());
@@ -201,7 +229,7 @@ pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()>
         return Err(ViError::PermissionDenied);
     }
     let ceiling = crate::task::cap::CapSet::of_task(task);
-    task.state = TaskState::Frozen { swap_id };
+    enter_frozen_state(task, swap_id);
     ceilings.insert(tid, ceiling);
     crate::task::hart_local::ready::remove_from_all(tid);
     Ok(())
@@ -216,11 +244,133 @@ pub(crate) fn unfreeze_task(tid: usize) {
     // Keep the SCHEDULER -> SWAP_CEILINGS order used by every record lifecycle.
     clear_swap_ceiling(tid);
     if let Some(sched) = scheduler.as_mut() {
+        for task in sched.tasks.values_mut() {
+            if task.hotswap_source_tid == Some(tid) {
+                task.hotswap_source_tid = None;
+            }
+        }
         if let Some(task) = sched.tasks.get_mut(&tid) {
             if matches!(task.state, TaskState::Frozen { .. }) {
+                task.hotswap_ingress_closed = false;
                 task.state = TaskState::Ready;
                 sched.push_ready(tid);
             }
+        }
+    }
+}
+
+/// Atomically move a frozen provider's accepted IPC to its ready replacement.
+///
+/// The caller must hold `SupervisorCap`. This helper owns the cutover lock
+/// order: `SCHEDULER -> service registry`. A failed copy or registry compare
+/// removes every target append and leaves the source mailbox open and intact.
+pub(crate) fn commit_hotswap_barrier(
+    source_tid: usize,
+    target_tid: usize,
+    service_id: u16,
+) -> ViResult<()> {
+    use crate::task::pending_mailbox::{PendingMsg, PendingMsgData};
+    use crate::task::tcb::{TaskState, HOTSWAP_MSG_QUEUE_DEPTH};
+
+    let mut scheduler = crate::task::SCHEDULER.lock();
+    let sched = scheduler.as_mut().ok_or(ViError::NotFound)?;
+    let (source_len, target_start, target_cell, wake_sender) = {
+        let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
+        if !matches!(source.state, TaskState::Frozen { .. }) || source.hotswap_ingress_closed {
+            return Err(ViError::PermissionDenied);
+        }
+        let target = sched.tasks.get(&target_tid).ok_or(ViError::NotFound)?;
+        if matches!(
+            target.state,
+            TaskState::Frozen { .. } | TaskState::Terminated
+        ) || !target.hotswap_ready
+            || target.hotswap_source_tid != Some(source_tid)
+        {
+            return Err(ViError::PermissionDenied);
+        }
+        if target.pending_msgs.len() + source.pending_msgs.len() > HOTSWAP_MSG_QUEUE_DEPTH {
+            return Err(ViError::WouldBlock);
+        }
+        let wake_sender = match target.state {
+            TaskState::Recv { mask, .. } => source
+                .pending_msgs
+                .iter()
+                .find(|msg| mask == 0 || mask == msg.sender_tid)
+                .map(|msg| msg.sender_tid),
+            _ => None,
+        };
+        (
+            source.pending_msgs.len(),
+            target.pending_msgs.len(),
+            target.cell_id.0 as usize,
+            wake_sender,
+        )
+    };
+    if !crate::cell::service_registry::paused_matches(service_id, source_tid) {
+        return Err(ViError::WouldBlock);
+    }
+
+    for index in 0..source_len {
+        let copied = {
+            let source = sched.tasks.get(&source_tid).ok_or(ViError::NotFound)?;
+            let message = &source.pending_msgs.as_slice()[index];
+            PendingMsgData::try_copy(message.data.as_slice(), target_cell).map(|data| PendingMsg {
+                sender_tid: message.sender_tid,
+                data,
+                enqueued_tick: message.enqueued_tick,
+            })
+        };
+        let pushed = copied.and_then(|message| {
+            sched
+                .tasks
+                .get_mut(&target_tid)
+                .ok_or(())?
+                .pending_msgs
+                .try_push(message)
+        });
+        if pushed.is_err() {
+            rollback_mailbox_appends(sched, target_tid, target_start);
+            return Err(ViError::WouldBlock);
+        }
+    }
+
+    let mut source_mailbox = {
+        let source = sched.tasks.get_mut(&source_tid).ok_or(ViError::NotFound)?;
+        source.hotswap_ingress_closed = true;
+        core::mem::take(&mut source.pending_msgs)
+    };
+
+    if !crate::cell::service_registry::commit_paused(service_id, source_tid, target_tid) {
+        if let Some(source) = sched.tasks.get_mut(&source_tid) {
+            source.pending_msgs = core::mem::take(&mut source_mailbox);
+            source.hotswap_ingress_closed = false;
+        }
+        rollback_mailbox_appends(sched, target_tid, target_start);
+        return Err(ViError::WouldBlock);
+    }
+
+    if let Some(target) = sched.tasks.get_mut(&target_tid) {
+        target.hotswap_source_tid = None;
+    }
+    if let Some(sender_tid) = wake_sender {
+        if let Some(target) = sched.tasks.get_mut(&target_tid) {
+            target.state = TaskState::Ready;
+            target.current_caller = Some(sender_tid);
+        }
+        sched.push_ready(target_tid);
+    }
+    Ok(())
+}
+
+fn rollback_mailbox_appends(
+    sched: &mut crate::task::scheduler::Scheduler,
+    target_tid: usize,
+    target_start: usize,
+) {
+    if let Some(target) = sched.tasks.get_mut(&target_tid) {
+        while target.pending_msgs.len() > target_start {
+            let last = target.pending_msgs.len() - 1;
+            drop(target.pending_msgs.remove(last));
         }
     }
 }

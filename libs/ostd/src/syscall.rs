@@ -1773,6 +1773,34 @@ pub fn sys_resume_cell(target_tid: usize) -> Result<(), SyscallError> {
     }
 }
 
+/// Atomically move a frozen provider's queued IPC to its ready replacement and
+/// publish the replacement under `service_id`.
+///
+/// Requires `SupervisorCap`. On error, the old mailbox, ingress state, and
+/// paused service mapping remain unchanged, so the caller may use
+/// [`sys_resume_cell`] to roll back.
+pub fn sys_commit_hotswap(
+    source_tid: usize,
+    target_tid: usize,
+    service_id: u16,
+) -> Result<(), SyscallError> {
+    // SAFETY: pure register syscall; syscall 414 reserves a3 as zero.
+    let ret = unsafe {
+        syscall(
+            ViSyscall::ResumeCell,
+            target_tid,
+            source_tid,
+            service_id as usize,
+            0,
+        )
+    };
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(SyscallError::TryAgain)
+    }
+}
+
 /// Forcibly terminate a Cell and reclaim all its resources.
 ///
 /// Requires `SupervisorCap`. The `exit_code` is recorded in the audit log and

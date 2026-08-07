@@ -87,6 +87,32 @@ pub fn pause(service_id: u16, expected_tid: usize) -> bool {
     }
 }
 
+/// Publish `new_tid` only when `service_id` is still paused at `old_tid`.
+///
+/// The hot-swap barrier calls this while holding `SCHEDULER`, preserving the
+/// global `SCHEDULER -> service registry` lock order.
+pub(crate) fn commit_paused(service_id: u16, old_tid: usize, new_tid: usize) -> bool {
+    if new_tid == 0 {
+        return false;
+    }
+    let mut map = REGISTRY.lock();
+    match map.get(&service_id).copied() {
+        Some(ServiceEntry::Paused(tid)) if tid == old_tid => {
+            map.insert(service_id, ServiceEntry::Active(new_tid));
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Check the exact paused provider without exposing registry representation.
+pub(crate) fn paused_matches(service_id: u16, expected_tid: usize) -> bool {
+    matches!(
+        REGISTRY.lock().get(&service_id).copied(),
+        Some(ServiceEntry::Paused(tid)) if tid == expected_tid
+    )
+}
+
 /// Return whether `tid` is hidden behind any paused service mapping.
 ///
 /// IPC admission uses this as the quiesce barrier for callers that cached the
@@ -165,5 +191,17 @@ mod tests {
         assert!(pause(TEST_SERVICE, 31));
         assert!(register(TEST_SERVICE, 31));
         assert_eq!(lookup(TEST_SERVICE), Some(31));
+    }
+
+    #[test]
+    fn commit_requires_exact_paused_provider() {
+        const TEST_SERVICE: u16 = 60_002;
+        register(TEST_SERVICE, 41);
+        assert!(!commit_paused(TEST_SERVICE, 40, 42));
+        assert_eq!(lookup(TEST_SERVICE), Some(41));
+        assert!(pause(TEST_SERVICE, 41));
+        assert!(!commit_paused(TEST_SERVICE, 40, 42));
+        assert!(commit_paused(TEST_SERVICE, 41, 42));
+        assert_eq!(lookup(TEST_SERVICE), Some(42));
     }
 }

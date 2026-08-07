@@ -367,8 +367,10 @@ pub enum ViSyscall {
     /// 413: Freeze a Cell. Requires SupervisorCap.
     /// ABI: a0 = target_tid → 0 on success.
     FreezeCell = 413,
-    /// 414: Resume a frozen Cell. Requires SupervisorCap.
-    /// ABI: a0 = target_tid → 0 on success.
+    /// 414: Resume a frozen Cell or atomically commit a hot-swap cutover.
+    /// Requires SupervisorCap.
+    /// ABI: plain resume uses a0 = target_tid and a1..a3 = 0. Atomic cutover
+    /// uses a0 = new_tid, a1 = old_tid, a2 = service_id, a3 = 0.
     ResumeCell = 414,
     /// 415: Forcibly terminate a Cell. Requires SupervisorCap.
     /// ABI: a0 = target_tid, a1 = exit_code: u32 → exit_code on success.

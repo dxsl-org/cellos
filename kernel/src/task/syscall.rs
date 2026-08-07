@@ -1053,8 +1053,15 @@ pub enum Syscall {
     StateStashClear { key: usize },
     /// 413: FreezeCell — freeze a running Cell. Requires SupervisorCap.
     FreezeCell { target_tid: usize },
-    /// 414: ResumeCell — resume a frozen Cell. Requires SupervisorCap.
-    ResumeCell { target_tid: usize },
+    /// 414: Resume a frozen Cell or atomically commit a hot-swap cutover.
+    /// Plain resume: a0=target_tid, a1..a3=0. Cutover: a0=new_tid,
+    /// a1=old_tid, a2=service_id, a3=0. Requires SupervisorCap.
+    ResumeCell {
+        target_tid: usize,
+        source_tid: usize,
+        service_id: usize,
+        reserved: usize,
+    },
     /// 415: KillCell — forcibly terminate a Cell. Requires SupervisorCap.
     KillCell { target_tid: usize, exit_code: u32 },
     /// 416: RegisterBlockDriver — announce caller as the active block driver.
@@ -3632,16 +3639,38 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             Ok(0)
         }
 
-        // 414: ResumeCell — re-queue a frozen Cell so it can be scheduled.
-        Syscall::ResumeCell { target_tid } => {
+        // 414: plain resume or atomic old-provider -> replacement cutover.
+        Syscall::ResumeCell {
+            target_tid,
+            source_tid,
+            service_id,
+            reserved,
+        } => {
             if !caller_has_supervisor(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            if target_tid == 0 {
+            if target_tid == 0 || reserved != 0 {
                 return Err(SyscallError::InvalidInput);
             }
-            crate::cell::hotswap::unfreeze_task(target_tid);
-            Ok(0)
+            if source_tid == 0 {
+                if service_id != 0 {
+                    return Err(SyscallError::InvalidInput);
+                }
+                crate::cell::hotswap::unfreeze_task(target_tid);
+                return Ok(0);
+            }
+            if source_tid == target_tid || service_id > u16::MAX as usize {
+                return Err(SyscallError::InvalidInput);
+            }
+            crate::cell::hotswap::commit_hotswap_barrier(source_tid, target_tid, service_id as u16)
+                .map(|()| 0)
+                .map_err(|error| match error {
+                    ViError::NotFound => SyscallError::FileNotFound,
+                    ViError::PermissionDenied => SyscallError::PermissionDenied,
+                    ViError::WouldBlock | ViError::OutOfMemory => SyscallError::TryAgain,
+                    ViError::InvalidArgument | ViError::InvalidInput => SyscallError::InvalidInput,
+                    _ => SyscallError::Unknown,
+                })
         }
 
         // 415: KillCell — terminate a Cell and reclaim its resources.
@@ -3749,6 +3778,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 _ => SyscallError::InvalidInput,
             })?;
+            if !crate::cell::hotswap::bind_replacement(old_tid, task_id) {
+                log::error!(
+                    "[hotswap] replacement binding failed: old_tid={} new_tid={}",
+                    old_tid,
+                    task_id
+                );
+                let cell_id = super::SCHEDULER
+                    .lock()
+                    .as_ref()
+                    .and_then(|sched| sched.tasks.get(&task_id).map(|task| task.cell_id));
+                if let Some(cell_id) = cell_id {
+                    crate::cell::hotswap::exit_task_internal(task_id, cell_id);
+                }
+                return Err(SyscallError::Unknown);
+            }
             transfer_spawn_argv(caller_id, task_id);
             Ok(task_id)
         }
@@ -4759,7 +4803,12 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         },
         ViSyscall::StateStashClear => Syscall::StateStashClear { key: a0 },
         ViSyscall::FreezeCell => Syscall::FreezeCell { target_tid: a0 },
-        ViSyscall::ResumeCell => Syscall::ResumeCell { target_tid: a0 },
+        ViSyscall::ResumeCell => Syscall::ResumeCell {
+            target_tid: a0,
+            source_tid: a1,
+            service_id: a2,
+            reserved: a3,
+        },
         ViSyscall::KillCell => Syscall::KillCell {
             target_tid: a0,
             exit_code: a1 as u32,

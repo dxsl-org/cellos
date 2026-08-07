@@ -87,11 +87,21 @@ pub enum IpcSendError {
 fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) -> bool {
     // Lock order is SCHEDULER -> service registry. PauseService releases the
     // registry lock before checking scheduler drain state.
+    if sched
+        .tasks
+        .get(&caller_id)
+        .is_some_and(|task| task.supervisor_cap.is_some())
+    {
+        return false;
+    }
+    let Some(target) = sched.tasks.get(&target_id) else {
+        return false;
+    };
+    if target.hotswap_ingress_closed {
+        return true;
+    }
     crate::cell::service_registry::is_paused_tid(target_id)
-        && !sched
-            .tasks
-            .get(&caller_id)
-            .is_some_and(|task| task.supervisor_cap.is_some())
+        && !matches!(target.state, TaskState::Frozen { .. })
 }
 
 /// Return whether every IPC accepted before a service pause has drained.

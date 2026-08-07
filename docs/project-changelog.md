@@ -2,6 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-07] Phase 01 supervisory atomic cutover is complete
+
+Paused `Frozen` services now accept a bounded FIFO until the atomic cutover barrier
+closes old ingress. `SpawnReplacement` records the exact source-to-replacement binding,
+and the cutover preflights capacity, preserves sender identities and FIFO order, then
+publishes the replacement with compare-and-commit semantics. Failure restores the old
+mailbox and ingress state; plain resume invalidates stale replacement bindings.
+
+The supervisor now commits the barrier before killing the old task. The runtime witness
+proves a cached sender's queued `inc` then `get` requests reach v2 in order, rejects the
+old TID after publication, and preserves the counter (`v1:5` to `v2:6`). Verification
+passed formatting and host/RV64 checks, fresh image generation, and all 13 hotswap-smoke
+tests under QEMU. Final reviews were PASS and CLEAR.
+
 ## [2026-08-07] Phase 00 public syscall hotswap landing is complete
 
 `PauseService` lands as `422` with allowlist bit 49 and `SupervisorCap` gating, giving
@@ -18,8 +32,8 @@ resume and every scheduler exit, and keeps the old-cell cleanup path in
 (v1 counter 5 -> v2 counter 5), `[hotswap-cached-sender] PASS`, and
 `[hotswap-demo-v2] SpawnCap retained`; the pre-sign gate
 checks every required image artifact including the actual `bench` binary, while failed optional
-Tetris-C/Tetris-Lua outputs are omitted instead of reusing stale artifacts. Phase 01 remains
-pending (unblocked, not started).
+Tetris-C/Tetris-Lua outputs are omitted instead of reusing stale artifacts. Phase 01 was
+subsequently completed by the supervisory atomic-cutover work recorded above.
 
 ## [2026-08-06] Phase 07 post-shim stack sizing closed
 

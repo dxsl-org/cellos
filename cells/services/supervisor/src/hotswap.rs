@@ -14,9 +14,9 @@ extern crate alloc;
 use crate::error::HotswapError;
 use crate::transfer::{send_restore_event, send_snapshot_event};
 use ostd::syscall::{
-    sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_pause_service, sys_query_hotswap_ready,
-    sys_register_service, sys_resume_cell, sys_spawn_replacement, sys_state_restore,
-    sys_state_stash_clear, sys_yield,
+    sys_commit_hotswap, sys_freeze_cell, sys_kill_cell, sys_lookup_service, sys_pause_service,
+    sys_query_hotswap_ready, sys_register_service, sys_resume_cell, sys_spawn_replacement,
+    sys_state_restore, sys_state_stash_clear, sys_yield,
 };
 
 /// Maximum poll iterations while waiting for stash/ready (≈ 5 s at 10 ms/tick).
@@ -91,7 +91,7 @@ fn next_swap_id() -> u64 {
 /// 3. FREEZE (hard) — apply TaskState::Frozen
 /// 4. SPAWN — load new ELF via SpawnCap
 /// 5. DESERIALIZE — send Restore IPC, wait for HotswapReady
-/// 6. UNFREEZE + RE-REGISTER — kill old cell, register new service tid
+/// 6. COMMIT — atomically drain/close old ingress and publish the replacement
 pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapError> {
     // ── Resolve target tid ────────────────────────────────────────────────────
     let old_tid = sys_lookup_service(service_id).ok_or(HotswapError::ServiceNotFound)?;
@@ -152,12 +152,9 @@ pub fn hotswap(service_id: u16, new_elf_path: &str) -> Result<usize, HotswapErro
     }
 
     // ── Step 5: COMMIT ────────────────────────────────────────────────────────
-    // Re-register the service registry entry with the new tid.
-    // Note: Supervisor must hold SpawnCap to call sys_register_service.
-    if !matches!(
-        sys_register_service(service_id, new_tid),
-        ostd::syscall::SyscallResult::Ok(_)
-    ) {
+    // The kernel closes old ingress, moves its FIFO, and publishes new_tid at
+    // one cutover barrier. Before this succeeds rollback to old remains valid.
+    if sys_commit_hotswap(old_tid, new_tid, service_id).is_err() {
         rollback_spawned(service_id, old_tid, new_tid, stash_key);
         return Err(HotswapError::RegisterFailed);
     }

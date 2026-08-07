@@ -320,6 +320,14 @@ pub struct Task {
     /// Cleared to `false` at spawn; polled by `wait_for_hotswap_ready`.
     pub hotswap_ready: bool,
 
+    /// Frozen source task this replacement was minted from. Set by the
+    /// SpawnReplacement syscall and consumed only by the atomic cutover.
+    pub hotswap_source_tid: Option<usize>,
+
+    /// Permanently rejects non-supervisor IPC to an old provider after its
+    /// mailbox and service identity have moved to a replacement.
+    pub hotswap_ingress_closed: bool,
+
     /// When `true`, `FreezeCell` and `KillCell` syscalls are rejected with
     /// `PermissionDenied`.  Set at spawn for `init` and kernel-owned cells.
     /// Prevents a compromised Supervisor Cell from disabling the restart tree.
@@ -451,6 +459,8 @@ impl Task {
             heartbeat_deadline: None,
             vma: crate::memory::vma::VmaList::new(),
             hotswap_ready: false,
+            hotswap_source_tid: None,
+            hotswap_ingress_closed: false,
             is_critical: false,
             pending_msgs: PendingMailbox::new(),
             cell_generation: NEXT_CELL_GENERATION
