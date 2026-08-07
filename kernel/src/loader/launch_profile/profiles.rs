@@ -25,6 +25,7 @@ pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchPro
 
 pub(super) fn shell_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     let ceiling = match route {
+        LaunchRoute::Path | LaunchRoute::Elf if target == "/bin/hotswap" => CapSet::EMPTY,
         LaunchRoute::Path | LaunchRoute::Elf => reviewed_user_target_ceiling(target)?,
         LaunchRoute::Mem | LaunchRoute::Pinned => return None,
     };

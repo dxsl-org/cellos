@@ -2,6 +2,23 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-07] Phase 02 supervisory hotswap closure is complete
+
+The `hotswap` CLI is now a service-only supervisor client: it frames a canonical
+request for a registered service, validates the service name and exact ELF target
+shape, and waits for the supervisor reply without mutating state on malformed input.
+The verified lane uses `hotswap-demo` → `/bin/hotswap-demo-v2`. The supervisor now
+authorizes the sender by exact hotswap task name
+before parsing, rejects unauthorized senders with `0xFD`, and keeps mutation behind
+the canonical request contract.
+
+The exact shell-only `/bin/hotswap` launch edge remains capability-free at
+`CapSet::EMPTY`; the binary is signed and packaged into the image; and the runtime
+witness now covers state preservation, SpawnCap retention, cached FIFO / post-old-TID
+rejection, unauthorized denial, and the final QEMU hotswap-smoke run at 15/15 with
+zero skips. Fleet enforcement still requires the production `signing-required`
+posture; dev-mode unsigned admission remains an intentional trust relaxation.
+
 ## [2026-08-07] Phase 01 supervisory atomic cutover is complete
 
 Paused `Frozen` services now accept a bounded FIFO until the atomic cutover barrier

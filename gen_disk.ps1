@@ -278,6 +278,7 @@ Add-CellToSign "$rel_dir/cat"
 Add-CellToSign "$rel_dir/echo"
 Add-CellToSign "$rel_dir/ps"
 Add-CellToSign "$rel_dir/kill"
+Add-RequiredCellToSign "$rel_dir/hotswap" "app-sys-tools (hotswap binary)"
 if (Test-Path "$rel_dir/lua")          { Add-CellToSign "$rel_dir/lua" }
 if (Test-Path "$rel_dir/doom")         { Add-CellToSign "$rel_dir/doom" }
 if (Test-Path "$rel_dir/tetris")       { Add-CellToSign "$rel_dir/tetris" }
@@ -367,6 +368,7 @@ $cat_bin  = "$rel_dir/cat"
 $echo_bin = "$rel_dir/echo"
 $ps_bin   = "$rel_dir/ps"
 $kill_bin = "$rel_dir/kill"
+$hotswap_bin = "$rel_dir/hotswap"
 
 foreach ($pair in @(
     @{ Path = $init_bin;   Name = "app-init" },
@@ -598,6 +600,7 @@ if (Test-Path $cat_bin)  { $table_args += "/bin/cat=$cat_bin" }
 if (Test-Path $echo_bin) { $table_args += "/bin/echo=$echo_bin" }
 if (Test-Path $ps_bin)   { $table_args += "/bin/ps=$ps_bin" }
 if (Test-Path $kill_bin) { $table_args += "/bin/kill=$kill_bin" }
+if (Test-Path $hotswap_bin) { $table_args += "/bin/hotswap=$hotswap_bin" }
 & $python "$tools_dir/write-cell-table.py" @table_args
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FATAL: write-cell-table.py failed — disk_v3.img bootstrap table is invalid." -ForegroundColor Red

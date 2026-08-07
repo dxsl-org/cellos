@@ -125,6 +125,25 @@ pub fn run() -> bool {
         ok = false;
         log::error!("[selftest] launch-profile: shell lost capability-free ELF edge");
     }
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        match authorize(SHELL, route, "/bin/hotswap") {
+            Some(profile) if profile.parent_ceiling == CapSet::EMPTY => {}
+            Some(_) => {
+                ok = false;
+                log::error!(
+                    "[selftest] launch-profile: /bin/hotswap gained ambient authority on {:?}",
+                    route
+                );
+            }
+            None => {
+                ok = false;
+                log::error!(
+                    "[selftest] launch-profile: shell lost exact /bin/hotswap edge on {:?}",
+                    route
+                );
+            }
+        }
+    }
     if authorize(SHELL, LaunchRoute::Elf, "/bin/vfs").is_some() {
         ok = false;
         log::error!("[selftest] launch-profile: shell gained privileged /bin/vfs launch edge");

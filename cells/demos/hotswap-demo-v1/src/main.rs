@@ -8,7 +8,7 @@
 //!
 //! # Sequence
 //! 1. Run v1, send "inc" N times, send "get" → receives "v1:<counter_le4>".
-//! 2. Call `sys_hotswap(cell_id, "/bin/hotswap-demo-v2")` from the shell.
+//! 2. Run `hotswap hotswap-demo /bin/hotswap-demo-v2` from the shell.
 //! 3. v1 receives AppEvent::Snapshot → serializes counter → stashes.
 //! 4. v2 spawns, receives AppEvent::Restore → deserializes counter.
 //! 5. Send "get" to v2 → receives "v2:<counter_le4>" with the same counter.

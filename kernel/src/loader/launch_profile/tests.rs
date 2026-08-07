@@ -39,10 +39,38 @@ fn shell_service_ipc_tool_edge_is_capability_free() {
         CapSet::EMPTY,
         "capability-free ELF targets remain launchable"
     );
+    assert_eq!(
+        shell_edge(LaunchRoute::Path, "/bin/hotswap").parent_ceiling,
+        CapSet::EMPTY,
+        "the hotswap CLI must not inherit lifecycle or service authority"
+    );
+    assert_eq!(
+        shell_edge(LaunchRoute::Elf, "/bin/hotswap").parent_ceiling,
+        CapSet::EMPTY,
+        "the VFS-loaded hotswap CLI must remain capability-free"
+    );
     assert!(
         authorize(caller("shell", false, false), LaunchRoute::Elf, "/bin/vfs").is_none(),
         "shell must not launch privileged services by path forgery"
     );
+}
+
+#[test]
+fn hotswap_cli_is_shell_only() {
+    for route in [LaunchRoute::Path, LaunchRoute::Elf] {
+        assert!(
+            authorize(caller("tool-spawn", true, false), route, "/bin/hotswap").is_none(),
+            "tool-spawn must not reach the shell-only hotswap CLI on {route:?}"
+        );
+        assert!(
+            authorize(caller("supervisor", true, true), route, "/bin/hotswap").is_none(),
+            "supervisor must not relaunch the hotswap CLI on {route:?}"
+        );
+        assert!(
+            authorize(caller("init", true, false), route, "/bin/hotswap").is_none(),
+            "non-shell launchers must not inherit the hotswap CLI edge on {route:?}"
+        );
+    }
 }
 
 #[test]

@@ -1,11 +1,7 @@
-//! Phase 04 hotswap smoke tests.
+//! Userspace hotswap smoke tests.
 //!
-//! QEMU-level tests verify that the demo cells boot and produce their startup
-//! banner when spawned from the shell.  Full end-to-end message-passing
-//! (inc × 5 → hotswap → get with counter preserved) requires inter-cell IPC
-//! from outside QEMU, which is not supported by the current serial-drive
-//! harness — that scenario is exercised manually or by a future kernel-level
-//! test cell.
+//! QEMU-level tests verify shell spawnability plus the userspace Supervisor +
+//! CLI hotswap path that preserves demo state across cutover.
 //!
 //! # Prerequisites
 //! - `qemu-system-riscv64` on PATH
@@ -16,7 +12,7 @@ use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 40;
-const CMD_TIMEOUT:  u64 = 20;
+const CMD_TIMEOUT: u64 = 20;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -34,19 +30,28 @@ fn kernel_path() -> String {
 }
 
 fn disk_path() -> String {
-    repo_root().join("disk_v3.img").to_string_lossy().into_owned()
+    repo_root()
+        .join("disk_v3.img")
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn prerequisites_ok() -> bool {
     let kernel_ok = PathBuf::from(kernel_path()).exists();
-    let disk_ok   = PathBuf::from(disk_path()).exists();
-    let qemu_ok   = std::process::Command::new(qemu_binary())
+    let disk_ok = PathBuf::from(disk_path()).exists();
+    let qemu_ok = std::process::Command::new(qemu_binary())
         .arg("--version")
         .output()
         .is_ok();
-    if !kernel_ok { eprintln!("SKIP: kernel not built ({})", kernel_path()); }
-    if !disk_ok   { eprintln!("SKIP: disk_v3.img missing — run ./gen_disk.ps1"); }
-    if !qemu_ok   { eprintln!("SKIP: qemu-system-riscv64 not on PATH"); }
+    if !kernel_ok {
+        eprintln!("SKIP: kernel not built ({})", kernel_path());
+    }
+    if !disk_ok {
+        eprintln!("SKIP: disk_v3.img missing — run ./gen_disk.ps1");
+    }
+    if !qemu_ok {
+        eprintln!("SKIP: qemu-system-riscv64 not on PATH");
+    }
     vicell_integration_tests::ci_guard(kernel_ok && disk_ok && qemu_ok)
 }
 
@@ -63,7 +68,9 @@ fn prerequisites_ok() -> bool {
 /// - `AppEvent::Init` fires and the println reaches the UART.
 #[test]
 fn hotswap_demo_v1_spawns_and_announces() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViCell >", BOOT_TIMEOUT)
@@ -78,9 +85,12 @@ fn hotswap_demo_v1_spawns_and_announces() {
     }
     qemu.send_bytes(b"\n");
     qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!(
-            "demo-v1 banner not seen: {e}\n--- output ---\n{}", qemu.dump()
-        ));
+        .unwrap_or_else(|e| {
+            panic!(
+                "demo-v1 banner not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
 /// P04: hotswap-demo-v2 spawns and prints its startup banner.
@@ -89,7 +99,9 @@ fn hotswap_demo_v1_spawns_and_announces() {
 /// Schema-version and the "v2:" response prefix are tested at the unit level.
 #[test]
 fn hotswap_demo_v2_spawns_and_announces() {
-    if !prerequisites_ok() { return; }
+    if !prerequisites_ok() {
+        return;
+    }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViCell >", BOOT_TIMEOUT)
@@ -103,16 +115,21 @@ fn hotswap_demo_v2_spawns_and_announces() {
     }
     qemu.send_bytes(b"\n");
     qemu.wait_for("[hotswap-demo-v2] ready", CMD_TIMEOUT)
-        .unwrap_or_else(|e| panic!(
-            "demo-v2 banner not seen: {e}\n--- output ---\n{}", qemu.dump()
-        ));
+        .unwrap_or_else(|e| {
+            panic!(
+                "demo-v2 banner not seen: {e}\n--- output ---\n{}",
+                qemu.dump()
+            )
+        });
 }
 
-/// The userspace Supervisor snapshots a runnable v1, hard-freezes only after
-/// stash publication, then atomically drains cached-TID ingress into v2.
+/// The shell-level `hotswap` CLI can drive the Supervisor through a full demo
+/// replacement while preserving the demo counter.
 #[test]
-fn supervisor_hotswap_preserves_demo_state() {
-    if !prerequisites_ok() { return; }
+fn hotswap_cli_preserves_demo_state() {
+    if !prerequisites_ok() {
+        return;
+    }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
     qemu.wait_for("ViCell >", BOOT_TIMEOUT)
@@ -121,7 +138,65 @@ fn supervisor_hotswap_preserves_demo_state() {
     qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
 
-    qemu.send_line("bench hotswap-supervisor");
+    qemu.send_line("bench hotswap-cli-probe &");
+    qemu.wait_for("[hotswap-cli-probe] ready (v1 counter=5)", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("CLI probe did not prime demo-v1: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("hotswap hotswap-demo /bin/hotswap-demo-v2");
+    qemu.wait_for("[hotswap-demo-v2] state restored from v1", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("restore not processed: {e}\n{}", qemu.dump()));
+    qemu.wait_for("[hotswap-demo-v2] SpawnCap retained", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("replacement capability was dropped: {e}\n{}", qemu.dump()));
+    qemu.wait_for(
+        "hotswap: success: supervisor swapped service 'hotswap-demo' to /bin/hotswap-demo-v2",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| panic!("hotswap CLI did not report success: {e}\n{}", qemu.dump()));
+    qemu.wait_for(
+        "[hotswap-cli-probe] PASS (v1 counter=5 -> v2 counter=5)",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "CLI probe did not confirm preserved state: {e}\n{}",
+            qemu.dump()
+        )
+    });
+}
+
+/// The userspace Supervisor snapshots a runnable v1, hard-freezes only after
+/// stash publication, then atomically drains cached-TID ingress into v2.
+#[test]
+fn supervisor_hotswap_preserves_demo_state() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+    qemu.send_line("hotswap-demo-v1 &");
+    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("bench hotswap-supervisor &");
+    qemu.wait_for(
+        "[hotswap-supervisor-runtime] ready for CLI trigger (v1 counter=5)",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "bench did not arm the CLI trigger witness: {e}\n{}",
+            qemu.dump()
+        )
+    });
+
+    qemu.send_line("hotswap hotswap-demo /bin/hotswap-demo-v2");
+    qemu.wait_for(
+        "hotswap: success: supervisor swapped service 'hotswap-demo' to /bin/hotswap-demo-v2",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| panic!("hotswap CLI did not report success: {e}\n{}", qemu.dump()));
     qemu.wait_for("[hotswap-demo-v1] state stashed", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("snapshot not processed: {e}\n{}", qemu.dump()));
     qemu.wait_for(
@@ -138,6 +213,33 @@ fn supervisor_hotswap_preserves_demo_state() {
         CMD_TIMEOUT,
     )
     .unwrap_or_else(|e| panic!("state-preserving swap failed: {e}\n{}", qemu.dump()));
+}
+
+/// A non-CLI sender cannot coerce the supervisor into swapping a service.
+#[test]
+fn supervisor_rejects_unauthorized_hotswap_sender() {
+    if !prerequisites_ok() {
+        return;
+    }
+
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
+    qemu.send_line("hotswap-demo-v1 &");
+    qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("demo-v1 not ready: {e}\n{}", qemu.dump()));
+
+    qemu.send_line("bench hotswap-unauthorized");
+    qemu.wait_for(
+        "[hotswap-unauthorized-runtime] PASS (direct bench sender denied; tid unchanged)",
+        CMD_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "unauthorized direct sender was not denied: {e}\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 /// The boot primitive guard proves sender requeue. The bench role then proves a
@@ -167,12 +269,12 @@ fn peer_death_guardrail_is_bounded() {
         "[peer-death-runtime] PASS (blocked-send error + ForceExit notification)",
         CMD_TIMEOUT,
     )
-        .unwrap_or_else(|e| {
-            panic!(
-                "real peer-death guard did not complete: {e}\n--- output ---\n{}",
-                qemu.dump()
-            )
-        });
+    .unwrap_or_else(|e| {
+        panic!(
+            "real peer-death guard did not complete: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
 }
 
 // ── Unit tests (host-only, no QEMU) ──────────────────────────────────────────
@@ -211,7 +313,10 @@ mod unit {
         assert_eq!(version, 1);
         assert!(bytes.len() >= 4);
         let v2_counter = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        assert_eq!(v2_counter, v1_counter, "v2 must recover v1 counter unchanged");
+        assert_eq!(
+            v2_counter, v1_counter,
+            "v2 must recover v1 counter unchanged"
+        );
     }
 
     /// Truncated input (< 4 bytes) must be rejected.
@@ -241,7 +346,10 @@ mod unit {
         key[..b.len()].copy_from_slice(b);
         // Simulate parse_key_to_swap_id.
         let parsed = parse_key(&key);
-        assert_eq!(parsed, swap_id, "decimal key must round-trip through parse_key");
+        assert_eq!(
+            parsed, swap_id,
+            "decimal key must round-trip through parse_key"
+        );
     }
 
     /// parse_key_to_swap_id: zero swap_id.
@@ -270,7 +378,9 @@ mod unit {
     fn parse_key(key: &[u8; 64]) -> u64 {
         let mut val = 0u64;
         for &b in key.iter() {
-            if b == 0 || !(b'0'..=b'9').contains(&b) { break; }
+            if b == 0 || !(b'0'..=b'9').contains(&b) {
+                break;
+            }
             val = val.saturating_mul(10).saturating_add((b - b'0') as u64);
         }
         val

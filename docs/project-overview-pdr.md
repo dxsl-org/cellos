@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-07-07 (docs audit: native scripting runtimes unmaintained, kernel LOC + phase-number corrections)
+**Last Updated**: 2026-08-07 (docs refresh: supervisory hotswap closure verified, launch-edge and signing posture cross-checked, current focus updated)
 
 ---
 
@@ -17,7 +17,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
-**Current Focus**: Stabilize the nano-kernel, fix VirtIO hang issue, and achieve multi-architecture HAL with RV64/ARM/x86 support.
+**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain multi-architecture HAL evidence across RV64/ARM/x86 support.
 
 ---
 
@@ -328,7 +328,7 @@ real-board power-cut qualification.
 
 **Requirement**: Update Cell binaries without shutting down.
 
-**Current Status**: Syscall structure exists (ViStateTransfer trait), not implemented.
+**Current Status**: 🚧 PARTIAL — the verified supervisory hotswap path is complete (service-only `hotswap` CLI, exact shell-only `/bin/hotswap` launch edge, sender authorization, canonical request validation, and runtime evidence for state preservation / SpawnCap retention / cached FIFO / post-old-TID rejection / unauthorized denial). Broader generic state-transfer coverage remains future work.
 
 **Acceptance Criteria**:
 - [ ] Serialize Cell state (memory, registers, handles)

@@ -22,8 +22,11 @@ mod transfer;
 
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
-use ostd::syscall::{sys_lookup_service, sys_send};
+use ostd::syscall::{sys_get_procs, sys_lookup_service, sys_send};
 use protocol::{encode_status, HotswapRequest, OP_HOTSWAP};
+
+const HOTSWAP_TASK_NAME: &str = "hotswap";
+const PROCESS_TABLE_ROWS: usize = 64;
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
@@ -40,6 +43,10 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
             }
 
             if data[0] == OP_HOTSWAP {
+                if !sender_has_exact_name(sender_tid, HOTSWAP_TASK_NAME) {
+                    let _ = sys_send(sender_tid, &encode_status(0, 0xFD));
+                    return;
+                }
                 let Some(req) = HotswapRequest::parse(data) else {
                     let _ = sys_send(sender_tid, &encode_status(0, 0xFF));
                     return;
@@ -93,6 +100,29 @@ fn service_id_for_name(name: &str) -> u16 {
         "hotswap-demo" => service::HOTSWAP_DEMO,
         _ => 0,
     }
+}
+
+fn sender_has_exact_name(sender_tid: usize, expected_name: &str) -> bool {
+    // `GetProcs` snapshots up to the kernel's current 64-row diagnostics bound,
+    // which gives the supervisor a full, bounded inventory for sender attestation.
+    let mut rows = [api::syscall::ProcessInfo::default(); PROCESS_TABLE_ROWS];
+    let Ok(count) = sys_get_procs(&mut rows) else {
+        return false;
+    };
+    rows.iter()
+        .take(count)
+        .find(|info| info.id == sender_tid)
+        .and_then(process_name)
+        == Some(expected_name)
+}
+
+fn process_name(info: &api::syscall::ProcessInfo) -> Option<&str> {
+    let end = info
+        .name
+        .iter()
+        .position(|&byte| byte == 0)
+        .unwrap_or(info.name.len());
+    core::str::from_utf8(&info.name[..end]).ok()
 }
 
 ostd::run_app!(handler);
