@@ -2,7 +2,7 @@
 
 **Version**: 0.1 (Initial — Reliability Track Definition)
 **Status**: Definitive
-**Last Updated**: 2026-08-06 (Phase06 stack-guard completion; RV64 test-hooks overflow probe; production boot PASS on RV64/AArch64/x86_64)
+**Last Updated**: 2026-08-08 (Phase06 stack-guard completion; RV64 test-hooks overflow probe; production boot PASS on RV64/AArch64/x86_64)
 
 > Cellos targets robots and embedded devices. For that domain "fast + realtime" is not
 > enough — the system **must not die**. This spec defines what "không chết" means
@@ -85,7 +85,7 @@ embedded/robotics OS (QNX/seL4 class), not relative to zero.
 | 2. Fault detection | **~78%** | Audit ring (`CellFault`/`CellExit`); CPU-monopoly watchdog (RT-only, reset-on-syscall); `RecvTimeout` deadline sweep checked in `pick_next`; **liveness heartbeat** (`Heartbeat=207` → `CellHung` kill→restart, catches silent hangs any priority); RT `RtDeadlineMiss`/`RtCpuOverrun` audit events ([kernel/src/audit.rs](../../kernel/src/audit.rs)) | No external HW watchdog; heartbeat remains opt-in, although multiple service, tool, demo, and application Cells now adopt it |
 | 3. Fault recovery | **~88%** | Full multi-child supervisor via `NotifyOnExit` (init auto-restarts vfs/net/shell/…); per-service restart **policies** (permanent/transient/temporary) + **time-windowed restart intensity** (crash-storm escalation); exit-reason delivered as recv payload; service-ID registry (clients reconnect across respawn); hotswap + state-stash | Fleet policy for required heartbeat enrollment; cross-node failover (out of scope for single device) |
 | 4. Realtime guarantee | **~45%** | 3-level priority preempt + zero-latency SSIP; RT watchdog; deadline-miss + CPU-overrun **observability** ([kernel/src/task/scheduler.rs](../../kernel/src/task/scheduler.rs)) | EDF / deadline enforcement / CPU-budget — **hardware-data-gated** (QEMU TCG has no cycle-accurate timing); WCET unmeasured |
-| 5. Continuous operation | **~50%** | 5-step hotswap protocol ([kernel/src/cell/hotswap.rs](../../kernel/src/cell/hotswap.rs)); snapshot warm-boot | Partial rollback, message-queue preservation incomplete, manual trigger |
+| 5. Continuous operation | **~50%** | Supervisor IPC hotswap protocol ([kernel/src/cell/hotswap.rs](../../kernel/src/cell/hotswap.rs)); snapshot warm-boot | Partial rollback, message-queue preservation incomplete, Supervisor-mediated trigger |
 | 6. HW fault tolerance | **~5%** | — | No HW watchdog, no ECC, no redundancy/failover |
 
 **Aggregate "never-die": ~25–30%.** Strong *prevention* foundation (Rust LBI and a

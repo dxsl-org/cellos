@@ -2,6 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-08] Phase 04 public hotswap boundary finalization is complete
+
+Legacy `HotSwap` syscall 400 is retired/reserved and decodes `Unknown`. The
+`hotswap` CLI now reaches the Supervisor over IPC; the kernel hotswap module
+keeps only the live mechanism opcodes 401/413-415/419/421 plus the shared
+bit-32 compatibility bucket used by `HotSwapReady` and `Snapshot`.
+`SupervisorCap` continues to gate freeze/resume/kill/query/spawn and snapshot
+mutation, while the snapshot format and warm-boot restore path remain unchanged.
+
+Verification: API 75/75, RV64/AArch64/x86 release builds, hotswap 15/15,
+launch-profile 1/1, fresh disk succeeded, and embedded init refreshed. Fresh
+x86/AArch64 QEMU boot was not claimed because the host path bridge blocked those
+lanes; real MMC snapshot success remains host-gated.
+
 ## [2026-08-08] Phase 03 snapshot trigger authority is complete
 
 `Snapshot` stays syscall `420` with allowlist bit `32`, and the kernel now
@@ -4429,7 +4443,7 @@ MicroPython (C) → modvfs.c extern calls → Cellos_vfs_*(vfs_bridge.rs) → ty
 - `libs/api/src/benchmark.rs` — `BenchReport` with p50/p99 percentiles + JSON output
 - `libs/api/src/syscall.rs` — added `RecvTimeout`, `SendGather`, `RecvScatter`, `HotSwap`, `GpuFlush`
 - `libs/ostd/src/repl.rs` — shared readline + history state machine
-- `libs/ostd/src/syscall.rs` — `sys_get_time`, `sys_gpu_flush`, `sys_hotswap`, `sys_recv_timeout`, scatter/gather wrappers
+- `libs/ostd/src/syscall.rs` — `sys_get_time`, `sys_gpu_flush`, `sys_hotswap_ready`, `sys_recv_timeout`, scatter/gather wrappers
 
 ### Kernel
 - `kernel/src/task/tcb.rs` — `Recv::deadline` field for timeout IPC

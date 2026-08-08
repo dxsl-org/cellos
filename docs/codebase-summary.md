@@ -4,7 +4,7 @@
 **Version**: 0.2.1-dev (Mycelium Era)
 **Language**: Rust (nightly, `no_std`)
 **Crates**: ~52 active workspace members
-**Last Updated**: 2026-08-05 (launch-edge deprivilege and exact launch-profile proofs added; init respawn proof deferred)
+**Last Updated**: 2026-08-08 (launch-edge deprivilege and exact launch-profile proofs added; hotswap boundary finalized; init respawn proof deferred)
 
 ---
 
@@ -12,7 +12,7 @@
 
 | Area | Crates | Key Highlights |
 |------|--------|---------------|
-| Kernel | 1 | Size in [generated metrics](code-metrics.generated.md); HotSwap, scatter/gather IPC, lease caps, VirtIO VA→PA fix |
+| Kernel | 1 | Size in [generated metrics](code-metrics.generated.md); HotSwap mechanisms (400 retired/reserved; 401/413-415/419/421 live), scatter/gather IPC, lease caps, VirtIO VA→PA fix |
 | HAL | 10 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs |
 | Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
 | Apps | 8+ | shell (parser+executor+45+ built-ins+$(cmd)+args), bench, sys-tools, net-tools (6 bins), utils |
@@ -31,7 +31,7 @@ Cellos/
 │   ├── cell/
 │   │   ├── registry.rs     Cell lifecycle + VA range allocation
 │   │   ├── cap_registry.rs Capability table (lease expiry, grant depth)
-│   │   ├── hotswap.rs      5-step live Cell replacement (Phase 20)
+│   │   ├── hotswap.rs      Supervisor hotswap mechanisms + bit-32 ready/snapshot bookkeeping
 │   │   └── metadata.rs     CellHeader metadata
 │   ├── memory/
 │   │   ├── frame.rs        Bitmap frame allocator
@@ -48,7 +48,7 @@ Cellos/
 │   │   └── elf_tests.rs    10 boot-time ELF + relocation tests
 │   ├── task/
 │   │   ├── scheduler.rs    Round-robin scheduler
-│   │   ├── syscall.rs      HotSwap, GpuFlush, SendGather, RecvScatter, RecvTimeout
+│   │   ├── syscall.rs      HotSwapReady, Supervisor freeze/resume/kill/query/spawn, GpuFlush, SendGather, RecvScatter, RecvTimeout
 │   │   ├── tcb.rs          Task control block (Recv deadline field)
 │   │   ├── tests.rs        11 scheduler + state-transition tests
 │   │   ├── ipc_test.rs     IPC scenario stubs
@@ -85,7 +85,7 @@ Cellos/
 │   │   ├── cap.rs          CapId, CapPerms
 │   │   └── net.rs          ViTcpStack, IpEndpoint
 │   └── ostd/src/
-│       ├── syscall.rs      sys_gpu_flush, sys_hotswap, sys_recv_timeout, sys_send_gather, …
+│       ├── syscall.rs      sys_gpu_flush, sys_hotswap_ready, sys_recv_timeout, sys_send_gather, …
 │       ├── fs.rs           File::open/read/close (cap-based)
 │       └── repl.rs         Shared readline + 500-entry history ring buffer
 │
@@ -96,7 +96,7 @@ Cellos/
 │   │                       cmd_fs.rs (wc/head/tail/grep/mkdir/rm), cmd_sys.rs, state_transfer.rs
 │   ├── bench/              4-scenario benchmark (ctx-switch, IPC, syscall, footprint)
 │   ├── utils/              wc, head, tail, grep, sort, sed, cat, ls, cp, mv, rm, mkdir, touch, echo
-│   ├── sys-tools/          ps, env, uname, date, free, kill, shutdown, hotswap
+│   ├── tools/sys-tools/    ps, env, uname, date, free, kill, shutdown, hotswap (Supervisor IPC client)
 │   ├── net-tools/          ping, curl (HTTP GET), nc (TCP relay), wget (downloader), httpd (file server), mqtt (skeleton)
 │   ├── hello/              Minimal ELF smoke test
 │   └── test-isolation/     Capability isolation test cell
@@ -175,4 +175,9 @@ Cellos/
 | 201 | RecvTimeout | IPC with monotonic-tick deadline |
 | 202–203 | SendGather/RecvScatter | Scatter/gather IPC (Phase 20) |
 | 300 | GpuFlush | Blit pixel rect to VirtIO GPU |
-| 400 | HotSwap | Live Cell replacement |
+| 400 | HotSwap (retired/reserved) | Legacy whole-sequence opcode; decodes `Unknown` |
+| 401 | HotSwapReady | Ready signal for state transfer (bit 32) |
+| 413–415 | Freeze/Resume/Kill | SupervisorCap-gated cutover primitives |
+| 419 | QueryHotswapReady | SupervisorCap-gated readiness query (bit 32) |
+| 421 | SpawnReplacement | SupervisorCap-gated replacement launch |
+| 422 | PauseService | SupervisorCap-gated quiesce point before Snapshot |

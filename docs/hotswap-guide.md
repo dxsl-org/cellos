@@ -95,7 +95,7 @@ impl ViStateTransfer for MyCell {
 
 ## Triggering a Hot-Swap
 
-The `hotswap` admin tool (`cells/sys-tools/src/hotswap.rs`) is implemented:
+The `hotswap` admin tool (`cells/tools/sys-tools/src/bin/hotswap.rs`) is implemented as a Supervisor IPC client:
 
 ```
 Cellos> hotswap config /bin/config-v2
@@ -107,7 +107,7 @@ Cellos> hotswap config /bin/config-v2
 [hotswap] done in 12ms
 ```
 
-Alternatively, trigger via the `HotSwap` syscall (id 400) from any privileged cell.
+The CLI sends the request to the Supervisor over IPC. The legacy `HotSwap` syscall (id 400) path is retired/reserved and decodes `Unknown`; `HotSwapReady` and `Snapshot` keep the shared bit-32 compatibility bucket.
 
 ---
 
@@ -153,8 +153,8 @@ let cap = table.alloc_with_lease(owner, resource, perms, now + 10_000_000);
 |------|---------|
 | `libs/api/src/hotswap.rs` | `ViStateTransfer` trait definition |
 | `kernel/src/cell/cap_registry.rs` | Grant depth + lease expiry enforcement |
-| `kernel/src/cell/hotswap.rs` | HotSwap orchestrator (5-step protocol) |
+| `kernel/src/cell/hotswap.rs` | Live cutover helpers, `HotSwapReady`, and bit-32 compatibility bookkeeping |
 | `cells/services/config/src/main.rs` | Config KV state transfer impl |
 | `cells/services/vfs/src/state_transfer.rs` | VFS handle table state transfer |
 | `cells/apps/shell/src/state_transfer.rs` | Shell history + alias state transfer |
-| `cells/sys-tools/src/hotswap.rs` | HotSwap CLI tool |
+| `cells/tools/sys-tools/src/bin/hotswap.rs` | Supervisor IPC hotswap client |

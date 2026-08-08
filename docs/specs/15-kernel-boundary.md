@@ -237,11 +237,15 @@ freeze/resume/kill primitives.
 
 | Code | Current boundary | Correct home |
 |------|------------------|--------------|
-| `kernel/src/cell/hotswap.rs` | Substantial orchestration residue remains despite a Supervisor-side client/protocol | Supervisory Cell policy; kernel retains atomic mechanism only |
-| `kernel/src/snapshot.rs` | Snapshot state machine remains in kernel | Supervisory Cell policy; kernel retains freeze/resume/kill primitives |
+| `kernel/src/cell/hotswap.rs` | Supervisor-owned cutover orchestration; kernel retains only the live mechanism helpers (401/413-415/419/421) and bit-32 readiness bookkeeping | Supervisory Cell policy; legacy syscall 400 is retired/reserved |
+| `kernel/src/snapshot.rs` | Snapshot state machine remains in kernel; trigger/authority moved to Supervisor policy | Supervisory Cell policy; kernel retains freeze/resume/kill primitives |
 
 Migration is **partial**, not complete. Exact source sizes are generated status and must
 not be hand-maintained in this specification.
+
+The live public hotswap path now runs through Supervisor IPC. `HotSwapReady` and `Snapshot`
+remain on the bit-32 compatibility bucket after retiring opcode 400, while `SupervisorCap`
+guards the mutating freeze/resume/kill/query/spawn path.
 
 The kernel retains only: `sys_freeze_cell`, `sys_resume_cell`, `sys_kill_cell` —
 thin wrappers around the existing scheduler primitives.
