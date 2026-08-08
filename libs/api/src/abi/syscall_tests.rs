@@ -56,6 +56,8 @@ mod tests {
         (120, ViSyscall::GetTime),
         (218, ViSyscall::AudioPlay),
         (219, ViSyscall::CapRevoke),
+        (401, ViSyscall::HotSwapReady),
+        (420, ViSyscall::Snapshot),
         (421, ViSyscall::SpawnReplacement),
         (422, ViSyscall::PauseService),
         (237, ViSyscall::ReadLog),
@@ -97,6 +99,8 @@ mod tests {
         assert_eq!(ViSyscall::QueryDirHandles as usize, 241);
         assert_eq!(ViSyscall::WaitCompletion as usize, 242);
         assert_eq!(ViSyscall::MemInfo as usize, 243);
+        assert_eq!(ViSyscall::HotSwapReady as usize, 401);
+        assert_eq!(ViSyscall::Snapshot as usize, 420);
         assert_eq!(ViSyscall::SpawnReplacement as usize, 421);
         assert_eq!(ViSyscall::PauseService as usize, 422);
     }
@@ -128,7 +132,14 @@ mod tests {
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
         assert_eq!(ViSyscall::from(244), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(400), ViSyscall::Unknown);
         assert_eq!(ViSyscall::from(423), ViSyscall::Unknown);
+    }
+
+    #[test]
+    fn hotswap_ready_and_snapshot_preserve_legacy_bit_32() {
+        assert_eq!(ViSyscall::HotSwapReady.allowlist_bit(), Some(32));
+        assert_eq!(ViSyscall::Snapshot.allowlist_bit(), Some(32));
     }
 
     /// `WaitCompletion` parks on the same authority as `WaitForEvent` and shares

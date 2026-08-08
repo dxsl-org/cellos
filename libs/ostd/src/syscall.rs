@@ -1078,38 +1078,12 @@ pub fn sys_get_procs2(buffer: &mut [api::syscall::ProcessInfoV2]) -> Result<usiz
     }
 }
 
-/// Live-replace a running Cell with a new ELF version without message loss.
-///
-/// `cell_id` is the task ID of the cell to replace; `new_elf_path` must be a
-/// valid `/bin/<name>` path present on the bootstrap disk.
-///
-/// # Returns
-/// `Ok(new_task_id)` on success.  Returns `Err` if the cell is not found,
-/// the ELF cannot be loaded, or the state-transfer protocol fails.
-pub fn sys_hotswap(cell_id: usize, new_elf_path: &str) -> SyscallResult {
-    // SAFETY: new_elf_path is a valid UTF-8 str; kernel copies it before returning.
-    let ret = unsafe {
-        syscall(
-            ViSyscall::HotSwap,
-            cell_id,
-            new_elf_path.as_ptr() as usize,
-            new_elf_path.len(),
-            0,
-        )
-    };
-    if ret > 0 {
-        SyscallResult::Ok(ret as usize)
-    } else {
-        SyscallResult::Err(SyscallError::Unknown)
-    }
-}
-
 /// Signal to the kernel that this cell has finished deserializing hot-swap state
 /// and is ready to receive IPC from the service registry.
 ///
 /// Call this at the end of an [`AppEvent::Restore`] handler, after
-/// [`sys_state_restore`] completes successfully.  The hotswap orchestrator is
-/// blocked waiting for this signal; calling it unblocks Step 5 (unfreeze).
+/// [`sys_state_restore`] completes successfully. The supervisor-driven cutover
+/// path polls this flag before committing mailbox handoff.
 pub fn sys_hotswap_ready() {
     // SAFETY: no arguments; kernel sets hotswap_ready flag on the calling task.
     unsafe { syscall(ViSyscall::HotSwapReady, 0, 0, 0, 0) };

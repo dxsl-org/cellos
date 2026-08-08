@@ -43,7 +43,7 @@ use api::syscall::{SyscallSet, ViSyscall};
 /// - `block_io=true` → `GrantAlloc/Share/Slice/Free/Register/Unregister`
 /// - `network=true`  → `NetTx, NetRx, WaitForEvent, GetRandom`
 /// - `spawn=true`    → `SpawnFromPath/Mem/Pinned, Wait, OpenCap, ReadCap, CloseCap,
-///                      GetProcs, HotSwap, Snapshot, StateStash/Restore`
+///                      GetProcs, Snapshot, StateStash/Restore`
 pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 {
     let base = SyscallSet::EMPTY
         .with(ViSyscall::Send)
@@ -89,7 +89,6 @@ pub const fn app_syscall_set(block_io: bool, network: bool, spawn: bool) -> u64 
             .with(ViSyscall::ReadCap)
             .with(ViSyscall::CloseCap)
             .with(ViSyscall::GetProcs)
-            .with(ViSyscall::HotSwap)
             .with(ViSyscall::Snapshot)
             .with(ViSyscall::StateStash)
             .with(ViSyscall::StateRestore)

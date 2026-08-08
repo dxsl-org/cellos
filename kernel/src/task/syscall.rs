@@ -1090,12 +1090,6 @@ pub enum Syscall {
         service_id: u16,
         expected_tid: usize,
     },
-    /// 400: HotSwap — live-replace a Cell with a new ELF from disk.
-    HotSwap {
-        cell_id: usize,
-        path_ptr: usize,
-        path_len: usize,
-    },
     /// 401: HotSwapReady — signal that the new cell has finished deserializing
     /// state and is ready to receive IPC.  No arguments.
     HotSwapReady,
@@ -1286,7 +1280,6 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         Syscall::GpuGetResolution => V::GpuGetResolution,
         Syscall::NetTx { .. } => V::NetTx,
         Syscall::NetRx { .. } => V::NetRx,
-        Syscall::HotSwap { .. } => V::HotSwap,
         Syscall::HotSwapReady => V::HotSwapReady,
         Syscall::Snapshot => V::Snapshot,
         Syscall::StateStash { .. } => V::StateStash,
@@ -1461,14 +1454,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
             // Hot-swap pending-message drain — guaranteed delivery path.
             //
-            // The Step 5 drain in hotswap.rs tries to deliver buffered messages via
-            // ipc_send, which only succeeds when the new cell is already in TaskState::Recv.
-            // But the new cell calls sys_hotswap_ready from inside its Restore handler and
-            // hasn't re-entered sys_recv yet at that moment, so the Step 5 drain races.
+            // The supervisor cutover path can mark a replacement ready before it
+            // has re-entered TaskState::Recv, so buffered delivery races with that
+            // first user-space receive transition.
             //
             // This path is the guaranteed fallback: when the new cell finally calls
             // sys_recv for the first time (returning from the Restore handler through its
-            // app_entry loop), any messages that slipped through Step 5 are delivered here
+            // app_entry loop), any messages that slipped through the cutover are delivered here
             // before blocking.  FIFO order matches the original sender queue order.
             //
             // Invariants:
@@ -1476,8 +1468,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             //   observe a partially-drained queue.
             // - We copy from msg.data (owned message storage) before releasing the lock,
             //   avoiding any lifetime dependency on the task struct.
-            // - current_caller is set so the cell sees the original sender's TID, not
-            //   the hotswap orchestrator's TID, preserving the IPC identity contract.
+            // - current_caller is set so the cell sees the original sender's TID,
+            //   preserving the IPC identity contract.
             let mut drained_sender = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
@@ -2127,8 +2119,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
 
                 // Gate 3: protect Frozen cells — they are mid-swap and cannot be killed
-                // by external actors; only the hotswap orchestrator may terminate them via
-                // the internal exit_task path after a successful swap (or rollback on failure).
+                // by external actors; only the supervisor-owned cutover path may terminate
+                // them via the internal exit_task path after a successful swap.
                 let target_is_frozen = sched
                     .tasks
                     .get(&tid)
@@ -2234,7 +2226,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
 
                 // Gate 2: protect system service cells — revoking I/O caps from a
                 // running VFS/net service mid-flight corrupts driver state. Use
-                // HotSwap to replace them safely.
+                // the supervisor freeze/pause/replacement flow instead.
                 let target_is_system = sched
                     .tasks
                     .get(&target_tid)
@@ -4043,39 +4035,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 Err(_) => Ok(0),
             }
         }
-        Syscall::HotSwap {
-            cell_id,
-            path_ptr,
-            path_len,
-        } => {
-            if !caller_has_spawn(caller_id) {
-                return Err(SyscallError::PermissionDenied);
-            }
-            // Validate and copy the path string from user space.
-            let path_len = path_len.min(crate::loader::disk_layout::MAX_CELL_PATH);
-            // SAFETY: path_ptr is a user-space string pointer passed via syscall registers;
-            // path_len is bounded by MAX_CELL_PATH (≤ 256); the caller is responsible for
-            // ensuring the pointed-to memory is valid for their task's lifetime.
-            let path_bytes =
-                unsafe { core::slice::from_raw_parts(path_ptr as *const u8, path_len) };
-            let path = core::str::from_utf8(path_bytes).map_err(|_| SyscallError::InvalidInput)?;
-            let target = types::CellId(cell_id as u64);
-            // Directory handles do not survive a swap: the replacement cell
-            // re-acquires them, which is what makes the generation in an
-            // attested identity mean anything. A set the orchestrator happened
-            // to have staged must not become the new instance's inheritance, so
-            // it is dropped before the replacement is created rather than
-            // consumed by it.
-            crate::task::dir_inherit::clear_staged(caller_id);
-            crate::cell::hotswap::hotswap(target, path, caller_id)
-                .map_err(|_| SyscallError::Unknown)
-        }
-
         Syscall::HotSwapReady => {
             // The new cell signals that it has finished deserializing state.
-            // Set the per-task flag; the hotswap orchestrator polls this.
-            // No SpawnCap required — only the new cell itself calls this,
-            // and only after receiving AppEvent::Restore from the kernel.
+            // Set the per-task flag; the supervisor cutover path polls this.
+            // No SpawnCap required — only the new cell itself calls this
+            // after its restore flow finishes.
             crate::cell::hotswap::set_task_hotswap_ready(caller_id);
             Ok(0)
         }
@@ -4837,11 +4801,6 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
         ViSyscall::PauseService => Syscall::PauseService {
             service_id: a0 as u16,
             expected_tid: a1,
-        },
-        ViSyscall::HotSwap => Syscall::HotSwap {
-            cell_id: a0,
-            path_ptr: a1,
-            path_len: a2,
         },
         ViSyscall::HotSwapReady => Syscall::HotSwapReady,
         ViSyscall::Snapshot => Syscall::Snapshot,

@@ -152,7 +152,7 @@ pub enum ViSyscall {
     /// On single-core systems core_id must be 0; any other value returns NotSupported.
     /// Phase 04 approval is by the exact kernel launch profile for
     /// `(caller identity, SpawnPinned, path)`; lifecycle `SpawnCap` still gates
-    /// `ForceExit`, `NotifyOnExit`, `RegisterService`, `HotSwap`, and snapshot control.
+    /// `ForceExit`, `NotifyOnExit`, `RegisterService`, and snapshot control.
     SpawnPinned = 16,
     /// Serialize all allocated physical frames to the snapshot sector range.
     /// Triggers a warm-boot-capable snapshot.  Returns frame count on success.
@@ -298,7 +298,7 @@ pub enum ViSyscall {
     ///
     /// The caller must hold `SpawnCap`.  System cells (`block_io_cap` / `network_cap`
     /// holders) are protected — revoking I/O caps from a running service mid-flight
-    /// would corrupt driver state; use `HotSwap` to replace them safely.
+    /// would corrupt driver state; use the supervisor freeze/pause/replacement flow instead.
     ///
     /// `cap_mask` bit layout (see `cap_mask` module constants):
     ///   bit 0 → block_io · bit 1 → network · bit 2 → spawn · bit 3 → hypervisor
@@ -343,10 +343,9 @@ pub enum ViSyscall {
     /// ABI: a0 = vm_id, a1 = gpa, a2 = dst_ptr, a3 = len → bytes_read.
     ReadGuestMemory = 227,
 
-    // === Hot-swap (Phase 20) ===
-    /// Live-replace a running Cell without message loss.
-    /// ABI: a0 = cell_id, a1 = path_ptr, a2 = path_len → new_task_id or error.
-    HotSwap = 400,
+    // === Hot-swap / state transfer (Phase 20) ===
+    /// Opcode 400 is retired and reserved. It must remain unmapped so older
+    /// whole-sequence hot-swap callers fail closed instead of reaching a new ABI.
     /// Signal to the kernel that this cell has finished deserializing state and
     /// is ready to receive IPC. Called by the new cell during hot-swap Step 4.
     /// ABI: (no args) → 0 on success.
@@ -481,7 +480,7 @@ pub mod cap_mask {
     /// Revoke network transmit/receive (NetTx/NetRx).
     pub const NETWORK: u32 = 1 << 1;
     /// Revoke lifecycle spawn authority (`ForceExit`, `NotifyOnExit`,
-    /// `RegisterService`, `HotSwap`, snapshot control, and any exact launch
+    /// `RegisterService`, snapshot control, and any exact launch
     /// profile that explicitly requires lifecycle authority).
     pub const SPAWN: u32 = 1 << 2;
     /// Revoke RISC-V H-extension / ARM64 EL2 hypervisor access.
@@ -582,6 +581,8 @@ macro_rules! declare_syscalls {
     };
 }
 
+const HOTSWAP_STATE_TRANSFER_BIT: u8 = 32;
+
 impl ViSyscall {
     /// Stable bit index for the per-Cell syscall allowlist stored in
     /// `Task::syscall_allowlist`.
@@ -642,15 +643,17 @@ impl ViSyscall {
             Self::RecvTimeout => Some(29),
             Self::SendGather => Some(30),
             Self::RecvScatter => Some(31),
-            Self::HotSwap | Self::HotSwapReady => Some(32),
+            // Bit 32 remains the compatibility bucket shared by the live ready
+            // signal and snapshot control after retiring opcode 400.
+            Self::HotSwapReady => Some(HOTSWAP_STATE_TRANSFER_BIT),
             Self::StateStash => Some(33),
             Self::StateRestore => Some(34),
             // StateStashClear: same allowlist bit as StateRestore (both are stash housekeeping).
             Self::StateStashClear => Some(34),
             Self::Exec => Some(35),
-            // Snapshot: privileged warm-boot operation; reuses HotSwap bit
+            // Snapshot: privileged warm-boot operation; reuses compatibility bit 32
             // (allowlist-only here; the kernel authority gate requires SupervisorCap).
-            Self::Snapshot => Some(32),
+            Self::Snapshot => Some(HOTSWAP_STATE_TRANSFER_BIT),
             // LookupService is an open syscall (any client resolves a service endpoint).
             Self::LookupService => Some(37),
             // Heartbeat is an open syscall (any cell asserts its own liveness).
@@ -834,7 +837,6 @@ impl From<usize> for ViSyscall {
             302 => ViSyscall::GpuGetResolution,
             310 => ViSyscall::NetTx,
             311 => ViSyscall::NetRx,
-            400 => ViSyscall::HotSwap,
             401 => ViSyscall::HotSwapReady,
             410 => ViSyscall::StateStash,
             411 => ViSyscall::StateRestore,

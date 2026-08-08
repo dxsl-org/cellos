@@ -8,7 +8,7 @@
 //!
 //! The target cell continues running but any subsequent syscall that requires a
 //! revoked cap is denied with `PermissionDenied`.  For system cells (`block_io` /
-//! `network` holders) revocation is blocked — use `sys_hotswap` instead.
+//! `network` holders) revocation is blocked — use the supervisor replacement flow instead.
 
 use crate::syscall::{sys_cap_revoke, SyscallError};
 use api::syscall::cap_mask;

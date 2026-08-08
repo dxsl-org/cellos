@@ -43,7 +43,7 @@ pub const TIER_LEGACY: u8 = 0xFF;
 pub const MANIFEST_FLAG_BLOCK_IO: u16 = 1 << 0;
 /// Network transmit/receive (NetTx/NetRx).  Grants `NetworkCap`.
 pub const MANIFEST_FLAG_NETWORK: u16 = 1 << 1;
-/// Cell spawning and hot-swap (SpawnFromPath/SpawnPinned/HotSwap).  Grants `SpawnCap`.
+/// Cell spawning and lifecycle control entry points (SpawnFromPath/SpawnPinned). Grants `SpawnCap`.
 pub const MANIFEST_FLAG_SPAWN: u16 = 1 << 2;
 /// GPIO pin control (ViGpio driver cell).  MMIO range via `sys_request_mmio`.
 pub const MANIFEST_FLAG_GPIO: u16 = 1 << 3;
