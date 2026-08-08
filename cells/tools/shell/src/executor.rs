@@ -609,19 +609,7 @@ fn dispatch_builtin(prog: &str, args: &[String], jobs: &mut Jobs) -> i32 {
         "grep" => cmd_grep_args(args),
         "sed" => cmd_sed_args(args),
         "awk" => cmd_awk_args(args),
-        "snapshot" => match ostd::syscall::sys_snapshot() {
-            ostd::syscall::SyscallResult::Ok(n) if n > 0 => {
-                shell_print(&alloc::format!(
-                    "[shell] snapshot: wrote {} frames. Reboot for warm boot.\n",
-                    n
-                ));
-                0
-            }
-            _ => {
-                shell_println("snapshot: denied by shell launch/lifecycle policy");
-                1
-            }
-        },
+        "snapshot" => crate::snapshot_client::run(),
         "shutdown" => crate::cmd_sys::cmd_shutdown().map(|_| 0).unwrap_or(1),
         "clear" => crate::commands::cmd_clear().map(|_| 0).unwrap_or(1),
         "help" => crate::commands::cmd_help().map(|_| 0).unwrap_or(1),

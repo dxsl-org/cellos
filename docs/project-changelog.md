@@ -2,6 +2,22 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-08] Phase 03 snapshot trigger authority is complete
+
+`Snapshot` stays syscall `420` with allowlist bit `32`, and the kernel now
+checks `SupervisorCap` before it mutates any state. The shell snapshot client
+routes an opcode-only request inside a full zero-filled App IPC buffer to the
+Supervisor; the Supervisor authenticates the exact `shell` sender before
+parsing, accepts only opcode-plus-zero padding, and returns a bounded 3-byte
+status reply.
+
+QEMU now proves the failure modes honestly: `NullBlock` reports snapshot
+unavailability on the emulated path, while a directly allowlisted non-supervisor
+bench caller is denied before serialization. The kernel snapshot format,
+implementation, and warm-boot restore path remain unchanged; real MMC
+save/restore remains host-gated. The hotswap regression stayed green at 15/15,
+and the diff-aware verification sweep completed 17/17.
+
 ## [2026-08-07] Phase 02 supervisory hotswap closure is complete
 
 The `hotswap` CLI is now a service-only supervisor client: it frames a canonical

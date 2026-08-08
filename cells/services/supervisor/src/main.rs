@@ -18,14 +18,19 @@ extern crate alloc;
 mod error;
 mod hotswap;
 mod protocol;
+mod snapshot;
 mod transfer;
 
 use api::syscall::service;
 use ostd::app::{AppContext, AppEvent};
 use ostd::syscall::{sys_get_procs, sys_lookup_service, sys_send};
-use protocol::{encode_status, HotswapRequest, OP_HOTSWAP};
+use protocol::{
+    encode_status, HotswapRequest, SnapshotRequest, OP_HOTSWAP, OP_SNAPSHOT,
+    STATUS_INVALID_REQUEST, STATUS_REJECTED_CALLER, STATUS_SERVICE_NOT_FOUND,
+};
 
 const HOTSWAP_TASK_NAME: &str = "hotswap";
+const SHELL_TASK_NAME: &str = "shell";
 const PROCESS_TABLE_ROWS: usize = 64;
 
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
@@ -44,17 +49,17 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
 
             if data[0] == OP_HOTSWAP {
                 if !sender_has_exact_name(sender_tid, HOTSWAP_TASK_NAME) {
-                    let _ = sys_send(sender_tid, &encode_status(0, 0xFD));
+                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
                     return;
                 }
                 let Some(req) = HotswapRequest::parse(data) else {
-                    let _ = sys_send(sender_tid, &encode_status(0, 0xFF));
+                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_INVALID_REQUEST));
                     return;
                 };
 
                 let service_id = service_id_for_name(req.service_name());
                 if service_id == 0 {
-                    let _ = sys_send(sender_tid, &encode_status(0, 0xFE));
+                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_SERVICE_NOT_FOUND));
                     return;
                 }
 
@@ -67,6 +72,19 @@ fn handler(_ctx: &mut AppContext, event: AppEvent) {
                         let _ = sys_send(sender_tid, &encode_status(0xFF, e.as_code()));
                     }
                 }
+                return;
+            }
+
+            if data[0] == OP_SNAPSHOT {
+                if !sender_has_exact_name(sender_tid, SHELL_TASK_NAME) {
+                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_REJECTED_CALLER));
+                    return;
+                }
+                if SnapshotRequest::parse(data).is_none() {
+                    let _ = sys_send(sender_tid, &encode_status(0, STATUS_INVALID_REQUEST));
+                    return;
+                }
+                let _ = sys_send(sender_tid, &snapshot::run());
             }
         }
 

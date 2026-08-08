@@ -648,7 +648,8 @@ impl ViSyscall {
             // StateStashClear: same allowlist bit as StateRestore (both are stash housekeeping).
             Self::StateStashClear => Some(34),
             Self::Exec => Some(35),
-            // Snapshot: privileged warm-boot operation; reuses HotSwap bit (SpawnCap required).
+            // Snapshot: privileged warm-boot operation; reuses HotSwap bit
+            // (allowlist-only here; the kernel authority gate requires SupervisorCap).
             Self::Snapshot => Some(32),
             // LookupService is an open syscall (any client resolves a service endpoint).
             Self::LookupService => Some(37),

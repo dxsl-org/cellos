@@ -2,31 +2,36 @@
 //!
 //! Wire format (buf[0] = discriminant):
 //!   0x01 — HotswapRequest  { target_service: [u8; 64], new_elf: [u8; 128] }  → total 193 B
-//!   0x02 — SnapshotRequest { target_service: [u8; 64] }                       → total  65 B
+//!   0x02 — SnapshotRequest { }                                                → total   1 B
 //!   0x03 — StatusReply     { phase: u8, result: u8 }                          → total   3 B
 //!
-//! Phase 02 deliberately keeps this request service-only. The caller supplies a
-//! registered service name, not an arbitrary task id, so the wire format has no
-//! raw task-id field and both fixed fields must retain room for a trailing NUL
-//! in the zero-padded envelope.
+//! Snapshot is global whole-RAM state, so the request is opcode-only. The App
+//! SDK hands the supervisor a zero-padded receive buffer; snapshot parsing is
+//! deliberately strict and accepts only an opcode followed by all-zero padding.
 
 pub const OP_HOTSWAP: u8 = 0x01;
-// reason: SnapshotRequest is documented in the wire-format table above but its
-// handler is not yet implemented in this cell (snapshot orchestration is still
-// kernel-side per docs/specs/15-kernel-boundary.md tracked tech debt).
-#[allow(dead_code)]
 pub const OP_SNAPSHOT: u8 = 0x02;
 pub const OP_STATUS: u8 = 0x03;
+pub const SNAPSHOT_STATUS_PHASE: u8 = 1;
+pub const STATUS_OK: u8 = 0x00;
+pub const STATUS_UNAVAILABLE: u8 = 0x01;
+pub const STATUS_REJECTED_CALLER: u8 = 0xFD;
+pub const STATUS_SERVICE_NOT_FOUND: u8 = 0xFE;
+pub const STATUS_INVALID_REQUEST: u8 = 0xFF;
 
 pub const SVC_NAME_LEN: usize = 64;
 pub const ELF_PATH_LEN: usize = 128;
 pub const HOTSWAP_REQUEST_LEN: usize = 1 + SVC_NAME_LEN + ELF_PATH_LEN;
+pub const SNAPSHOT_REQUEST_LEN: usize = 1;
 
 /// Hotswap request from an authorized `hotswap` CLI caller.
 pub struct HotswapRequest<'a> {
     service_name: &'a str,
     elf_path: &'a str,
 }
+
+/// Opcode-only snapshot request from the shell.
+pub struct SnapshotRequest;
 
 impl<'a> HotswapRequest<'a> {
     /// Parse the fixed-size request prefix from an App SDK receive buffer.
@@ -57,6 +62,22 @@ impl<'a> HotswapRequest<'a> {
     /// Return the validated replacement ELF path.
     pub fn elf_path(&self) -> &str {
         self.elf_path
+    }
+}
+
+impl SnapshotRequest {
+    /// Parse an opcode-only request from the App SDK receive buffer.
+    ///
+    /// `AppContext` retains a zero-padded buffer after the caller's original
+    /// bytes, so snapshot accepts only the opcode followed by all-zero padding.
+    pub fn parse(buf: &[u8]) -> Option<Self> {
+        if buf.is_empty() || buf[0] != OP_SNAPSHOT {
+            return None;
+        }
+        if buf[SNAPSHOT_REQUEST_LEN..].iter().any(|&byte| byte != 0) {
+            return None;
+        }
+        Some(Self)
     }
 }
 
@@ -97,9 +118,19 @@ pub fn encode_status(phase: u8, result: u8) -> [u8; 3] {
     [OP_STATUS, phase, result]
 }
 
+/// Encode a bounded status reply for snapshot success.
+pub fn encode_snapshot_ok() -> [u8; 3] {
+    encode_status(SNAPSHOT_STATUS_PHASE, STATUS_OK)
+}
+
+/// Encode a bounded status reply for snapshot mechanism unavailability.
+pub fn encode_snapshot_unavailable() -> [u8; 3] {
+    encode_status(SNAPSHOT_STATUS_PHASE, STATUS_UNAVAILABLE)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{HotswapRequest, HOTSWAP_REQUEST_LEN, OP_HOTSWAP};
+    use super::{HotswapRequest, SnapshotRequest, HOTSWAP_REQUEST_LEN, OP_HOTSWAP, OP_SNAPSHOT};
 
     #[test]
     fn parse_accepts_canonical_service_request() {
@@ -131,6 +162,26 @@ mod tests {
                 "{path} must fail"
             );
         }
+    }
+
+    #[test]
+    fn snapshot_parse_accepts_opcode_and_zero_padding() {
+        let mut request = [0u8; 8];
+        request[0] = OP_SNAPSHOT;
+        assert!(SnapshotRequest::parse(&request).is_some());
+    }
+
+    #[test]
+    fn snapshot_parse_rejects_non_zero_payload() {
+        let mut request = [0u8; 8];
+        request[0] = OP_SNAPSHOT;
+        request[3] = 1;
+        assert!(SnapshotRequest::parse(&request).is_none());
+    }
+
+    #[test]
+    fn snapshot_parse_rejects_wrong_opcode() {
+        assert!(SnapshotRequest::parse(&[OP_HOTSWAP]).is_none());
     }
 
     fn request_bytes(service_name: &str, elf_path: &str) -> [u8; HOTSWAP_REQUEST_LEN] {

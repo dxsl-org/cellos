@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-07 (status refreshed: Phase06 stack guards and RV64 test-hooks overflow probe landed; production boot PASS on RV64/AArch64/x86_64; KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles and keeps `/bin/supervisor` inside the manifest/boot-ceiling/policy intersection under `SupervisorCap`; generic completion contract verified with `WaitCompletion` still additive over `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, Phase 05 landed the one-tick `Arc`-backed parked executor and the exact `[executor] dummy-waker=absent executor=parked source=TIMER PASS` witness, and the NET_RX source proof checks both source and result; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; Phase 00 public syscall landing is complete: `PauseService` 422 is SupervisorCap-gated with bit 49, `HotSwap` 400 remains, `SpawnReplacement` 421 is additive with bit 57, `SupervisorCap` gates the replacement path under `SCHEDULER -> SWAP_CEILINGS`, resume/all scheduler exits clear the ceiling, and refreshed-image QEMU `supervisor_hotswap_preserves_demo_state` passed with `[hotswap-demo-v2] SpawnCap retained`; Phase 01 supervisory atomic cutover is complete: paused+Frozen bounded FIFO, source→replacement binding, compare-and-commit rollback, plain resume invalidation of stale bindings, barrier-then-kill-old, cached-sender FIFO proof, old-TID rejection, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 02 supervisory hotswap closure is complete: the hotswap CLI is service-only, `/bin/hotswap` stays shell-only and capability-free, the supervisor rejects unauthorized senders with `0xFD` before parsing, and the QEMU hotswap-smoke suite now passes 15/15 with zero skips; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-08 (status refreshed: Phase06 stack guards and RV64 test-hooks overflow probe landed; production boot PASS on RV64/AArch64/x86_64; KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles and keeps `/bin/supervisor` inside the manifest/boot-ceiling/policy intersection under `SupervisorCap`; generic completion contract verified with `WaitCompletion` still additive over `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, Phase 05 landed the one-tick `Arc`-backed parked executor and the exact `[executor] dummy-waker=absent executor=parked source=TIMER PASS` witness, and the NET_RX source proof checks both source and result; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; Phase 00 public syscall landing is complete: `PauseService` 422 is SupervisorCap-gated with bit 49, `HotSwap` 400 remains, `SpawnReplacement` 421 is additive with bit 57, `SupervisorCap` gates the replacement path under `SCHEDULER -> SWAP_CEILINGS`, resume/all scheduler exits clear the ceiling, and refreshed-image QEMU `supervisor_hotswap_preserves_demo_state` passed with `[hotswap-demo-v2] SpawnCap retained`; Phase 01 supervisory atomic cutover is complete: paused+Frozen bounded FIFO, source→replacement binding, compare-and-commit rollback, plain resume invalidation of stale bindings, barrier-then-kill-old, cached-sender FIFO proof, old-TID rejection, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 02 supervisory hotswap closure is complete: the hotswap CLI is service-only, `/bin/hotswap` stays shell-only and capability-free, the supervisor rejects unauthorized senders with `0xFD` before parsing, and the QEMU hotswap-smoke suite now passes 15/15 with zero skips; Phase 03 snapshot trigger authority is complete: `Snapshot` 420 keeps allowlist bit 32, shell→Supervisor zero-filled opcode-only IPC is exact, `SupervisorCap` gates mutation, NullBlock proves unavailability on QEMU, direct allowlisted non-supervisor denial is enforced, real MMC save/restore remains host-gated, the snapshot format and warm-boot restore path remain unchanged, and diff-aware verification finished 17/17; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -135,7 +135,7 @@ struct Task {
 
 ### 4. **IPC System** (`kernel/src/task/ipc.rs`)
 
-10 core syscalls (vs. Linux's 300+):
+11 core syscalls (vs. Linux's 300+):
 
 > **Implementation Note**: The current implementation uses kernel-mediated syscall
 > message passing. A trusted-cell direct-vtable fast path remains planned, but it must
@@ -162,6 +162,16 @@ struct Task {
 > old ingress, and preserves rollback if the compare or capacity preflight fails. Plain
 > `ResumeCell` (`source_tid == 0`) is just an unfreeze and must not publish a replacement.
 
+> **Snapshot trigger contract**: `Snapshot` remains syscall `420` with allowlist bit `32`.
+> The shell snapshot client sends an opcode-only request inside a full zero-filled App IPC
+> buffer to the Supervisor; the Supervisor authenticates the exact `shell` sender before
+> parsing, accepts only opcode-plus-zero padding, and returns a bounded 3-byte status reply.
+> Kernel dispatch still requires `SupervisorCap` before `serialize_snapshot()` runs, so an
+> allowlisted but non-supervisor caller is denied. QEMU proves the two failure modes honestly:
+> `NullBlock` reports snapshot unavailability on the emulated path, and real MMC save/restore
+> remains host-gated. The snapshot format, kernel serializer, and warm-boot restore code are
+> otherwise unchanged.
+
 | Syscall | Purpose |
 |---------|---------|
 | `Send(to, msg, cap)` | Send message to Cell, optionally grant capability |
@@ -172,6 +182,7 @@ struct Task {
 | `Exec(binary, argv)` | Replace self with new Cell |
 | `SpawnFromMem(ptr, size)` | Load Cell from memory buffer; no active launch-profile route |
 | `MemInfo(out, len)` | Opt-in aggregate frame totals (`ViMemInfoV1`, 32 bytes) |
+| `Snapshot()` | Serialize allocated physical frames to the P3 snapshot region; `SupervisorCap`-gated |
 | `Exit(code)` | Terminate self |
 | `Yield()` | Voluntarily yield CPU |
 | `Log(msg)` | Print to kernel log |
@@ -344,7 +355,7 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
 **Driver residency (2026-07-07, post G2 loader redesign)** — migrated to Driver Cells: **virtio_blk, virtio_net, virtio_gpu, virtio_input, virtio_sound, e1000, nvme**. The kernel drives **no block device** — `virtio_blk.rs` + `virtio_pci.rs` were deleted; `cells/drivers/virtio-blk/` owns the disk and serves `service::BLOCK_DRIVER` (bootstrap cells load from the VIFS1 RAM ramdisk, so no block device is needed before the first Cell exists; see the changelog entry + `docs/specs/15-kernel-boundary.md`). The kernel retains only:
 - **`mmc`** — descoped G2 (no SDHCI on QEMU to validate against; genuine tech debt).
 - **IOMMU init + `map_dma_for_cell`** — whitelisted: the only hardware boundary between Driver Cells and physical memory in a Single Address Space.
-- **`NullBlock` fallback** — a stub block device so boot-time reads (snapshot restore, `verify_mbr`) degrade gracefully when no block Cell has claimed the device yet.
+- **`NullBlock` fallback** — a stub block device so boot-time reads (snapshot restore, `verify_mbr`) degrade gracefully on QEMU when no block Cell has claimed the device yet; real MMC save/restore remains host-gated on boards.
 
 **Interrupt Flow (Correct Pattern)**:
 ```

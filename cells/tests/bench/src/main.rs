@@ -23,6 +23,7 @@ api::declare_syscalls![
     SpawnPinned,
     StateStash,
     StateRestore,
+    Snapshot,
     MemInfo,
     Exit,
     Yield
@@ -211,6 +212,7 @@ fn cell_main() {
         "hotswap-cli-probe" => scenarios::hotswap_cli_probe::run(),
         "hotswap-supervisor" => scenarios::hotswap_supervisor::run(),
         "hotswap-unauthorized" => scenarios::hotswap_supervisor::run_unauthorized_probe(),
+        "snapshot-authority" => scenarios::snapshot_authority::run(),
         _ => {} // orchestrator falls through
     }
 

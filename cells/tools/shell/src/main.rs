@@ -47,9 +47,8 @@ api::declare_syscalls![
     // transferred by the successful spawn syscall to that exact child.
     StateStash,
     // Read = stdin readline; Open/Close (+Read) = `cat` over the kernel FS;
-    // ReadDir = the `ls` built-in (reads the kernel FS directly, not VFS IPC);
-    // Snapshot = the `snapshot` built-in. Omitting Read silently bricked the
-    // shell's serial input once dispatch-level allowlist enforcement landed
+    // ReadDir = the `ls` built-in. Omitting Read silently bricked the shell's
+    // serial input once dispatch-level allowlist enforcement landed
     // (Phase 31b check_allowlist denies without logging).
     Read,
     Open,
@@ -64,6 +63,7 @@ mod executor;
 mod jobs;
 mod parser;
 mod shell_state;
+mod snapshot_client;
 mod text_engine;
 mod text_tools;
 mod top;

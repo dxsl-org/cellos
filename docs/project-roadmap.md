@@ -18,6 +18,8 @@
 > closures are the only side-work exceptions. Phase 02 is runtime-closed under amended
 > criteria, and phase 03 is complete as the closure-amendment package.
 
+> **2026-08-08 supervisory migration update:** Phase 03 snapshot-trigger authority is complete; shell snapshot routes through Supervisor IPC, `Snapshot=420` is SupervisorCap-gated, QEMU proof remains NullBlock/unavailable on tested targets, and Phase 04 is next/pending.
+
 > **Midori Phase 02 runtime-closure update (2026-08-05):** the test-hooks QEMU lane now
 > proves metadata-only governed message-path `GetFile` positive before `SealPaths`, preserves
 > the existing post-seal denial marker, and still proves `ReadFileGrant` clamp/nonzero/post-seal

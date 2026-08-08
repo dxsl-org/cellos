@@ -1,4 +1,4 @@
-//! Phase 04 launch-profile integration proof.
+//! Phase 03 launch-profile integration proof.
 //!
 //! Manual QEMU proof already passed; this test makes the exact shell-facing
 //! behavior durable in the integration harness without mutating the shared disk.
@@ -71,7 +71,7 @@ fn wait_for_prompt_advance(qemu: &QemuRunner, previous_count: usize, timeout_sec
 }
 
 #[test]
-fn shell_launch_profile_allows_vfs_test_and_denies_snapshot() {
+fn shell_launch_profile_allows_vfs_test_and_routes_snapshot_via_supervisor() {
     if !prerequisites_ok() {
         return;
     }
@@ -92,16 +92,32 @@ fn shell_launch_profile_allows_vfs_test_and_denies_snapshot() {
 
     let prompts_before_snapshot = prompt_count(&qemu.dump());
     qemu.send_line("snapshot");
+    qemu.wait_for("[snapshot] unavailable", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("kernel snapshot unavailability not observed: {e}\n{}", qemu.dump()));
+    qemu.wait_for("snapshot: unavailable on this platform", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell snapshot unavailability not observed: {e}\n{}", qemu.dump()));
+    wait_for_prompt_advance(&qemu, prompts_before_snapshot, CMD_TIMEOUT);
+
+    let prompts_before_bench = prompt_count(&qemu.dump());
+    qemu.send_line("bench snapshot-authority");
+    qemu.wait_for("[snapshot] denied", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("kernel snapshot denial not observed: {e}\n{}", qemu.dump()));
+    qemu.wait_for("no SupervisorCap", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("kernel denial reason not observed: {e}\n{}", qemu.dump()));
     qemu.wait_for(
-        "snapshot: denied by shell launch/lifecycle policy",
+        "[snapshot-authority-runtime] PASS (allowlisted bench caller denied: no SupervisorCap)",
         CMD_TIMEOUT,
     )
-    .unwrap_or_else(|e| panic!("snapshot denial not observed: {e}\n{}", qemu.dump()));
-    wait_for_prompt_advance(&qemu, prompts_before_snapshot, CMD_TIMEOUT);
+    .unwrap_or_else(|e| panic!("bench snapshot authority proof not observed: {e}\n{}", qemu.dump()));
+    wait_for_prompt_advance(&qemu, prompts_before_bench, CMD_TIMEOUT);
 
     let output = qemu.dump();
     assert!(
+        !output.contains("[snapshot] wrote"),
+        "snapshot failure paths must not claim frames were written\n--- output ---\n{output}"
+    );
+    assert!(
         !output.contains("wrote 18446744073709551615 frames"),
-        "snapshot denial must not print wrapped usize::MAX success\n--- output ---\n{output}"
+        "snapshot failure paths must not print wrapped usize::MAX success\n--- output ---\n{output}"
     );
 }

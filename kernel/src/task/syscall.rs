@@ -4081,11 +4081,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         }
 
         Syscall::Snapshot => {
+            if !caller_has_supervisor(caller_id) {
+                log::warn!("[snapshot] denied: caller {caller_id} has no SupervisorCap");
+                return Err(SyscallError::PermissionDenied);
+            }
             // Cells must be quiesced before calling this (all at yield points).
             // For MVP: the shell is the only active task while the snapshot runs.
             match crate::snapshot::serialize_snapshot() {
                 Ok(frame_count) => Ok(frame_count as usize),
-                Err(_) => Err(SyscallError::Unknown),
+                Err(reason) => {
+                    log::warn!("[snapshot] unavailable: {reason}");
+                    Err(SyscallError::Unknown)
+                }
             }
         }
 

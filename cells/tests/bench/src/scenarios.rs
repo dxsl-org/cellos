@@ -9,5 +9,6 @@ pub mod memory_footprint;
 pub mod preempt_latency;
 pub mod rt_load;
 pub mod smp;
+pub mod snapshot_authority;
 pub mod syscall_yield;
 pub mod vfs_getfile_breakdown;
