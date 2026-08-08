@@ -74,7 +74,8 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
 /// SMP correctness.  For Phase 02 (single active hart), the single-entry
 /// array gives the correct result.
 #[no_mangle]
-pub static HART_LOCAL_TP_ADDR: AtomicUsize = AtomicUsize::new(0);
+pub static HART_LOCAL_TP_ADDRS: [AtomicUsize; MAX_HARTS] =
+    [AtomicUsize::new(0), AtomicUsize::new(0)];
 
 /// Initialize the calling hart's `ViHartLocal` and write `tp` to point at it.
 ///
@@ -106,16 +107,18 @@ pub fn install(hart_id: usize) {
     }
     hl.current_cell_id.store(0, Ordering::Relaxed);
 
-    // Point HART_LOCAL_TP_ADDR at this hart's slot so trap.S can restore tp.
-    // For single-hart, this is always HART_LOCALS[0].
-    // Phase 03 (SMP) will update to the sscratch = &HartLocal protocol instead.
+    // Publish this logical hart's restore pointer before installing its stvec.
+    // The hart-specific trap stub reads only its own array slot.
     let hl_addr = hl as *const ViHartLocal as usize;
-    HART_LOCAL_TP_ADDR.store(hl_addr, Ordering::Release);
+    HART_LOCAL_TP_ADDRS[hart_id].store(hl_addr, Ordering::Release);
 
     // Write tp CSR to point at this hart's HartLocal.
     // SAFETY: tp is a callee-save GPR used here as a kernel-internal pointer;
     // cells receive `kernel_tp_for_cells` (not this pointer) on context switch.
     unsafe { write_tp(hl_addr) };
+
+    #[cfg(target_arch = "riscv64")]
+    crate::hal::trap::init_for_hart(hart_id);
 }
 
 /// Return a reference to the calling hart's `ViHartLocal`.

@@ -193,7 +193,9 @@ impl Scheduler {
                 unsafe { core::arch::asm!("csrsi sip, 0x2") };
             } else {
                 // Cross-hart IPI: SSIP fires on the target hart's next interrupt check.
-                let _ = hal::common::sbi::sbi_send_ipi(1 << target_hart, 0);
+                if let Some((mask, base)) = crate::task::smp::logical_sbi_target(target_hart) {
+                    let _ = hal::common::sbi::sbi_send_ipi(mask, base);
+                }
             }
         }
     }

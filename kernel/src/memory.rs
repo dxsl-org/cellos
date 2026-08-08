@@ -19,6 +19,10 @@ pub mod pin;
 pub mod rt_heap;
 pub mod stage2;
 pub mod tests;
+/// Completion boundary for changed translations before execution or memory reuse.
+pub mod tlb_shootdown;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod tlb_shootdown_selftest;
 pub mod vma;
 
 /// Ownership registry entry.

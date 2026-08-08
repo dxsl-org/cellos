@@ -69,9 +69,15 @@ thiếu chúng sẽ dẫn tới kết luận sai về mức cô lập:
   MMIO window vẫn `USER+RW` **xuyên cell**: một cell có `unsafe` vẫn đọc/ghi được *dữ liệu*
   của cell khác. Tường cho dữ liệu là Layer B (per-domain page table, Tier 2 — chưa hiện
   thực). Điều §5 bảo đảm là không cell nào sửa được **code hoặc hằng** của cell nào.
-* **Không có cross-hart TLB shootdown.** `protect_page` chỉ invalidate trên hart gọi nó, nên
-  một hart khác có thể còn giữ bản dịch cũ rộng quyền hơn cho cùng VA từ một cell trước đó.
-  Trên SMP thật đây là cửa sổ có thật.
+* **Cross-hart / cross-core closure còn phụ thuộc arch.**
+  - `RV64`: W^X order PTE update, local `sfence.vma`, rồi SBI RFENCE tới mọi hart online từ xa;
+    firmware không probe được RFENCE phải giữ kernel single-hart. QEMU 8.2/OpenSBI đã PASS oracle
+    hai hart 5/5 với cả positive RFENCE và negative control; hardware RV64 thật vẫn là host gate.
+  - `x86_64`: `invlpg` chỉ local; chưa có SMP IPI shootdown path, nên cửa sổ stale entry trên core
+    khác vẫn là giới hạn thật.
+  - `AArch64`: HAL đã phát `dsb ishst; tlbi vaae1is; [vae2is nếu EL2]; dsb ish; isb`, nên stage-1
+    invalidate là broadcast trong inner-shareable domain theo code hiện tại. Tuy vậy repo vẫn thiếu
+    witness runtime 2 PE, nên chưa được tuyên bố là D7 hoàn tất.
 * **Arch bare-physical không enforce.** riscv32 Nano, x86_32, arm32 chạy không page table;
   `wx::enforce` ghi log khoảng trống thay vì áp đặt. Câu "protection vẫn được bật" chỉ đúng
   với các arch có MMU.

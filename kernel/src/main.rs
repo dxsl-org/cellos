@@ -94,6 +94,9 @@ static INIT_ELF: &[u8] = include_bytes!(concat!(env!("EMBEDDED_OUT_DIR"), "/init
 /// Kernel entry point called from HAL boot code
 #[no_mangle]
 pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
+    #[cfg(target_arch = "riscv64")]
+    task::smp::set_boot_physical_hart(hartid);
+    #[cfg(not(target_arch = "riscv64"))]
     let _hartid = hartid;
     let dtb = boot::effective_dtb(dtb);
     cpu_features::detect(dtb);
@@ -644,6 +647,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // any secondary hart starts running kernel code.
     #[cfg(target_arch = "riscv64")]
     task::smp::start_secondaries();
+
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    crate::memory::tlb_shootdown_selftest::run_primary();
 
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.

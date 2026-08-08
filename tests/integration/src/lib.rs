@@ -306,8 +306,21 @@ impl QemuRunner {
 
     /// Boot the minimal RV64 handoff lane with a caller-selected QEMU RAM size.
     pub fn boot_rv64_with_memory(kernel: &str, memory: &str) -> Self {
+        Self::boot_rv64_with_memory_and_harts(kernel, memory, 1)
+    }
+
+    /// Boot the minimal RV64 lane with an explicit hart count.
+    ///
+    /// Cross-hart tests must use this named path rather than relying on QEMU's
+    /// single-hart default, which cannot validate a remote TLB invalidation.
+    pub fn boot_rv64_smp(kernel: &str, harts: usize) -> Self {
+        Self::boot_rv64_with_memory_and_harts(kernel, "256M", harts)
+    }
+
+    fn boot_rv64_with_memory_and_harts(kernel: &str, memory: &str, harts: usize) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind serial socket");
         let port = listener.local_addr().unwrap().port();
+        let harts = harts.to_string();
 
         let child = Command::new(qemu_binary())
             .args([
@@ -315,6 +328,8 @@ impl QemuRunner {
                 "virt",
                 "-m",
                 memory,
+                "-smp",
+                &harts,
                 "-nographic",
                 "-bios",
                 "default",

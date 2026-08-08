@@ -45,12 +45,19 @@ Kernel writes into cell memory (segment load, AArch64 relocation, warm-snapshot 
 go through the physical/HHDM alias, which is kernel-RW independently of the USER PTE —
 audited at implementation time, no path needed converting.
 
-Guarantee: no cell — including one containing `unsafe`, at any tier — can modify any
-cell's code or constants. This closes cross-cell code injection. Limits, stated plainly:
-heap, stack and `.data` remain USER+RW across cells inside the SAS (that is Layer B);
-there is no cross-hart TLB shootdown, so on SMP another hart may hold a stale writable
-entry until its own TLB turns over; and bare-physical targets (riscv32 Nano) have no
-page tables, so `wx::enforce` logs the gap instead of enforcing.
+Guarantee: the loader preserves the load -> relocate -> lower -> register order on every
+paged arch, so a freshly spawned cell is never made runnable before its own final per-page
+flags are installed. That closes the writable-`.text` launch window on the calling hart
+everywhere and, by code inspection, across inner-shareable PEs on AArch64. Limits, stated
+plainly: heap, stack and `.data` remain USER+RW across cells inside the SAS (that is
+Layer B); RV64 orders the PTE store, local `sfence.vma`, and SBI RFENCE before W^X returns
+or a retired segment VA/frame is reused; the QEMU 8.2/OpenSBI two-hart oracle passed five
+repeated iterations, while real RV64 SMP hardware remains host-gated;
+x86_64 still uses only local `invlpg` and has no SMP IPI shootdown path; AArch64 already emits
+`dsb ishst; tlbi vaae1is; [vae2is when EL2]; dsb ish; isb`, but the repo still lacks a two-PE
+runtime witness, so this document does not mark D7 complete;
+and bare-physical targets (riscv32 Nano) have no page tables, so `wx::enforce` logs the
+gap instead of enforcing.
 
 ### Layer B — Per-domain page tables (Tier-2 mechanism, next plan)
 

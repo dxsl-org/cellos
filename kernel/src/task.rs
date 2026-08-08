@@ -122,6 +122,25 @@ pub fn inbound_ipc_drained(target_id: usize) -> bool {
     })
 }
 
+/// Let the RV64 test-only shootdown probe consume its expected S-mode store fault.
+///
+/// This symbol is always linked because the HAL owns trap dispatch; production
+/// builds return `false`, leaving every kernel fault on the normal panic path.
+#[no_mangle]
+pub extern "Rust" fn vi_tlb_shootdown_test_fault(
+    frame: &mut crate::hal::arch::ViTrapFrame,
+) -> bool {
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    {
+        return crate::memory::tlb_shootdown_selftest::handle_store_fault(frame);
+    }
+    #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+    {
+        let _ = frame;
+        false
+    }
+}
+
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
 

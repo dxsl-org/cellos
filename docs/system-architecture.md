@@ -887,6 +887,15 @@ Layer B — Per-domain page tables    → untrusted native-cell wall     [PLANNE
 Layer C — Per-arch hardening        → opportunistic MTE/MPK bonuses  [HW-GATED]
 ```
 
+Layer A keeps the load -> relocate -> lower -> register ordering on every paged arch.
+Its TLB closure is still arch-scoped: RV64 now orders PTE updates, local `sfence.vma`, and
+SBI RFENCE before W^X return or reuse; QEMU 8.2/OpenSBI passed the two-hart physical-byte
+oracle and negative control in five repeated iterations, while real RV64 hardware remains host-gated;
+x86_64 is local `invlpg` pending SMP/IPI shootdown, and AArch64 already emits
+inner-shareable `tlbi vaae1is` (plus `vae2is` when EL2 is active) bracketed by `dsb ishst` /
+`dsb ish` / `isb`, but multi-PE runtime proof remains gated. The repo therefore does not
+claim D7 complete.
+
 LBI, CFI, DMA isolation, and Tier-3 Silo/VM protection complement this delivery model but
 do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
 

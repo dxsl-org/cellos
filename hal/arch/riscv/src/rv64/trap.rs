@@ -23,13 +23,24 @@ impl ViTrapFrame {
 // External assembly functions
 extern "C" {
     fn __trap_entry();
+    fn __trap_entry_hart0();
+    fn __trap_entry_hart1();
     pub fn vi_set_sscratch(kernel_stack_top: usize);
 }
 
 /// Initialize trap handling by setting stvec
 pub fn init() {
+    init_for_hart(0);
+}
+
+/// Install the direct trap vector for one logical hart.
+pub fn init_for_hart(logical_hart: usize) {
     unsafe {
-        let trap_entry = __trap_entry as *const () as usize;
+        let trap_entry = match logical_hart {
+            0 => __trap_entry_hart0 as *const () as usize,
+            1 => __trap_entry_hart1 as *const () as usize,
+            _ => __trap_entry as *const () as usize,
+        };
         // Set stvec to direct mode (all traps go to __trap_entry)
         core::arch::asm!("csrw stvec, {}", in(reg) trap_entry);
         // Initialize sscratch to 0 (indicates S-mode context)
@@ -138,6 +149,9 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 //
                 // SAFETY: vi_current_cell_id and vi_terminate_on_fault are defined
                 // in kernel::task and linked via extern "Rust".
+                if code == 15 && unsafe { vi_tlb_shootdown_test_fault(frame) } {
+                    return;
+                }
                 let from_user = (frame.sstatus & 0x100) == 0; // SPP bit: 0=U-mode
                 let cell_id = unsafe { vi_current_cell_id() };
                 if from_user && cell_id != 0 {
@@ -198,4 +212,7 @@ extern "Rust" {
     fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
     /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell).
     fn vi_current_cell_id() -> usize;
+    /// Returns true only when a test-hooks shootdown probe consumed its exact
+    /// expected S-mode store fault; production kernels always return false.
+    fn vi_tlb_shootdown_test_fault(frame: &mut ViTrapFrame) -> bool;
 }

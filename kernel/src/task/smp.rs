@@ -7,6 +7,8 @@
 //! Invariant: hart 0 calls `start_secondaries()` only AFTER `task::init()`
 //! completes — the SCHEDULER and heap are live before any secondary runs.
 
+#[cfg(target_arch = "riscv64")]
+use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Maximum number of harts this kernel tracks.  2 covers QEMU virt `-smp 2`
@@ -21,6 +23,63 @@ pub const HART_RT: usize = 1;
 /// Set to `true` by each secondary hart once its trap vector and timer are ready.
 /// Hart 0's bounded wait reads this via `Acquire` to observe all preceding stores.
 pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), AtomicBool::new(false)];
+
+#[cfg(target_arch = "riscv64")]
+static BOOT_PHYSICAL_HART: AtomicUsize = AtomicUsize::new(usize::MAX);
+
+#[cfg(target_arch = "riscv64")]
+pub fn set_boot_physical_hart(physical_hart: usize) {
+    assert!(
+        physical_hart < MAX_HARTS,
+        "unsupported RV64 boot hart {physical_hart}"
+    );
+    BOOT_PHYSICAL_HART.store(physical_hart, Ordering::Release);
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn boot_physical_hart() -> Option<usize> {
+    let physical = BOOT_PHYSICAL_HART.load(Ordering::Acquire);
+    (physical < MAX_HARTS).then_some(physical)
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn logical_to_physical(logical_hart: usize) -> Option<usize> {
+    let boot = BOOT_PHYSICAL_HART.load(Ordering::Acquire);
+    match logical_hart {
+        0 if boot < MAX_HARTS => Some(boot),
+        HART_RT if boot < MAX_HARTS => Some(boot ^ 1),
+        _ => None,
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn physical_to_logical(physical_hart: usize) -> Option<usize> {
+    let boot = BOOT_PHYSICAL_HART.load(Ordering::Acquire);
+    if physical_hart == boot {
+        Some(0)
+    } else if physical_hart < MAX_HARTS && physical_hart == (boot ^ 1) {
+        Some(HART_RT)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn logical_sbi_target(logical_hart: usize) -> Option<(usize, usize)> {
+    logical_to_physical(logical_hart).map(|physical| (1, physical))
+}
+
+/// Return every online RV64 hart except the one executing this call.
+///
+/// Hart 0 is running whenever this kernel reaches normal execution but is not
+/// represented by `HART_ONLINE`; secondary harts publish readiness with Release.
+#[cfg(target_arch = "riscv64")]
+pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
+    let current = crate::task::hart_local::current_hart_id();
+    let remote = if current == 0 { HART_RT } else { 0 };
+    let online = remote == 0 || HART_ONLINE[remote].load(Ordering::Acquire);
+    online.then(|| logical_sbi_target(remote)).flatten()
+}
 
 /// How many 10 ms ticks hart 0 waits for each secondary to come online before
 /// logging a warning and continuing single-hart.  500 ms is generous for QEMU.
@@ -39,7 +98,28 @@ const SECONDARY_BOOT_TIMEOUT_TICKS: usize = 50;
 pub fn start_secondaries() {
     use crate::task::stack::Stack;
     use crate::task::STACK_PAGES;
-    use hal::common::sbi::{sbi_hart_get_status, sbi_hart_start};
+    use hal::common::sbi::{sbi_hart_get_status, sbi_hart_start, sbi_rfence_available};
+
+    let Some(boot_physical) = boot_physical_hart() else {
+        log::warn!("[smp] boot physical hart was not published");
+        return;
+    };
+    log::info!("[smp] physical {} -> logical 0 boot", boot_physical);
+
+    match sbi_rfence_available() {
+        Ok(true) => {}
+        Ok(false) => {
+            log::warn!("[smp] SBI RFENCE unavailable — keeping Cellos single-hart");
+            return;
+        }
+        Err(error) => {
+            log::warn!(
+                "[smp] SBI RFENCE probe failed (err={}) — keeping Cellos single-hart",
+                error
+            );
+            return;
+        }
+    }
 
     extern "C" {
         // Physical asm label defined in hal/arch/riscv/src/rv64/boot.rs.
@@ -48,6 +128,10 @@ pub fn start_secondaries() {
     }
 
     for (hart_id, online) in HART_ONLINE.iter().enumerate().skip(1) {
+        let Some(physical_hart) = logical_to_physical(hart_id) else {
+            log::warn!("[smp] logical hart {} has no physical mapping", hart_id);
+            continue;
+        };
         // Allocate a dedicated kernel stack for this hart.  Leak it — it lives
         // for the entire lifetime of the hart.
         let stack = match Stack::new_kernel(STACK_PAGES) {
@@ -60,8 +144,22 @@ pub fn start_secondaries() {
         let stack_top = stack.top;
         core::mem::forget(stack);
 
-        if let Ok(state) = sbi_hart_get_status(hart_id) {
-            log::info!("[smp] hart {} HSM state = {}", hart_id, state);
+        let Ok(state) = sbi_hart_get_status(physical_hart) else {
+            log::warn!(
+                "[smp] physical hart {} HSM status unavailable",
+                physical_hart
+            );
+            continue;
+        };
+        log::info!(
+            "[smp] physical {} -> logical {} HSM state = {}",
+            physical_hart,
+            hart_id,
+            state
+        );
+        if state != 1 {
+            log::warn!("[smp] physical hart {} is not HSM STOPPED", physical_hart);
+            continue;
         }
 
         // SAFETY: _secondary_entry is a physical-address asm label; the kernel
@@ -70,10 +168,10 @@ pub fn start_secondaries() {
         // SAFETY: casting function pointer to integer — use double-cast through
         // *const () to avoid the "direct cast of function item" lint.
         let entry_paddr = _secondary_entry as *const () as usize;
-        match sbi_hart_start(hart_id, entry_paddr, stack_top) {
+        match sbi_hart_start(physical_hart, entry_paddr, stack_top) {
             Ok(()) => log::info!(
                 "[smp] hart {} start requested (entry={:#x})",
-                hart_id,
+                physical_hart,
                 entry_paddr
             ),
             Err(e) => {
@@ -120,18 +218,40 @@ pub fn is_rt_hart_online() -> bool {
 ///
 /// Installs the trap vector, enables the timer, runs the per-hart scheduler loop.
 #[no_mangle]
-pub extern "C" fn smp_hart_entry(hart_id: usize) -> ! {
+pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
+    #[cfg(target_arch = "riscv64")]
+    let hart_id = physical_to_logical(physical_hart)
+        .unwrap_or_else(|| panic!("unmapped RV64 physical hart {}", physical_hart));
+    #[cfg(not(target_arch = "riscv64"))]
+    let hart_id = physical_hart;
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        let root = crate::memory::paging::KERNEL_ROOT
+            .lock()
+            .expect("RV64 secondary started before kernel paging root");
+        // SAFETY: the boot hart published a complete shared root before HSM
+        // startup; it maps this entry code, stack, and all kernel globals.
+        unsafe {
+            crate::memory::paging::activate_paging(root);
+            core::arch::asm!(
+                "csrs sstatus, {sum}",
+                sum = in(reg) 0x40000usize,
+                options(nostack)
+            );
+        }
+    }
     // Install the trap vector (each hart has its own stvec CSR).
     // `hal::ARCH.init()` sets stvec + enables SSIE.
     #[cfg(target_arch = "riscv64")]
     {
+        crate::task::hart_local::install(hart_id);
         use hal::Arch;
         hal::ARCH.init();
+        // ARCH.init installs the bootstrap-safe default vector. Restore this
+        // secondary's logical vector before any interrupt is enabled.
+        hal::trap::init_for_hart(hart_id);
     }
-
-    // Install per-hart local state (current_cell_id, tp, ready queues).
-    #[cfg(target_arch = "riscv64")]
-    crate::task::hart_local::install(hart_id);
 
     // Enable S-mode timer interrupt and arm the first tick on this hart.
     // Each hart has its own mtimecmp register via SBI; arming here starts
@@ -148,8 +268,16 @@ pub extern "C" fn smp_hart_entry(hart_id: usize) -> ! {
 
     // Signal hart 0's bounded wait that we are ready.
     if hart_id < MAX_HARTS {
+        log::info!(
+            "[smp] physical {} -> logical {} trap-ready",
+            physical_hart,
+            hart_id
+        );
         HART_ONLINE[hart_id].store(true, Ordering::Release);
     }
+
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    crate::memory::tlb_shootdown_selftest::run_secondary(hart_id);
 
     // Per-hart scheduler loop.  The timer ISR (vi_timer_tick) calls yield_cpu()
     // which runs pick_next for THIS hart (work-stealing from hart 0 if idle).

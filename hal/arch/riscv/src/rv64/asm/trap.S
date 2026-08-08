@@ -4,6 +4,8 @@
 
 .section .text
 .global __trap_entry
+.global __trap_entry_hart0
+.global __trap_entry_hart1
 .global vi_set_sscratch
 .align 4
 
@@ -17,61 +19,50 @@
 
 .equ TRAP_FRAME_SIZE, 288
 
-__trap_entry:
-    # === STEP 1: Stack Swap using sscratch ===
-    # sscratch holds kernel stack pointer when in U-mode
-    # When trap from U-mode: swap sp <-> sscratch (get kernel stack)
-    # When trap from S-mode: sscratch=0, skip swap (already on kernel stack)
-    
-    csrrw sp, sscratch, sp      # Atomically swap sp and sscratch
-    
-    # Check if we came from U-mode by checking if sscratch (now sp) was zero
-    # If sp == 0, we came from S-mode, need to restore original sp
-    bnez sp, .from_user_mode
-    
-    # From S-mode: restore original sp from sscratch
-    # From S-mode: restore original sp from sscratch AND restore sscratch to 0
-    csrrw sp, sscratch, sp      # Swap back: sp=original, sscratch=0
-    j .continue_save
-    
-.from_user_mode:
-    # sp now contains kernel stack; sscratch still holds the user sp — it is
-    # parked into the frame and ZEROED right after the early saves below.
+.macro HART_TRAP_ENTRY pointer_offset
+    # Swap user tp with the kernel stack pointer without clobbering either.
+    # From S-mode sscratch is zero, so the second swap restores kernel tp.
+    csrrw tp, sscratch, tp
+    beqz tp, .Lfrom_supervisor\@
 
-.continue_save:
-    # === STEP 2: Allocate trap frame on stack ===
-    addi sp, sp, -TRAP_FRAME_SIZE
-
-    # === STEP 3: Save all general purpose registers ===
-    # x0 is always 0, skip it but keep slot for alignment
-    sd x1,   1*8(sp)    # ra
-    # x2 (sp) saved below after we calculate user sp
-    sd x3,   3*8(sp)    # gp
-    sd x4,   4*8(sp)    # tp  (cell's tp saved here; kernel tp restored below)
-    sd x5,   5*8(sp)    # t0  (save early so t0 is free for the tp restore below)
-
-    # === NESTED-SAFE sscratch protocol (bug #7 fix) ===
-    # INVARIANT: while the hart runs in S-mode, sscratch == 0 — always.
-    # A nested trap (timer IRQ once a context with SIE=1 is restored, or a
-    # fault inside a syscall path) then takes the S-mode branch above and
-    # keeps the CURRENT sp. Previously sscratch kept the USER sp for the
-    # whole handler: a nested trap swapped it into sp, the bnez mis-took it
-    # for "from user", and the frame store sprayed user/kernel memory —
-    # boot-time init deaths with zeroed frames (scause=0).
-    # Interrupts cannot fire before this point: hardware clears SIE on trap.
-    csrr t0, sscratch   # from-U: user sp · from-S: 0 (already swapped back)
-    sd   t0, 2*8(sp)    # park the x2 slot (S-mode path overwrites it in STEP 5)
+    addi tp, tp, -TRAP_FRAME_SIZE
+    sd sp, 2*8(tp)
+    csrr sp, sscratch
+    sd sp, 4*8(tp)
     csrw sscratch, zero
+    mv sp, tp
 
-    # === Phase 02: restore kernel tp from per-hart slot ===
-    # HART_LOCAL_TP_ADDR holds &HART_LOCALS[hart_id] (set by hart_local::install).
-    # Before install() it is 0 — current_cell_id() null-guards that case safely.
-    # `lla` generates auipc+addi (PC-relative) — correct for PIE at any load bias.
     .option push
     .option norelax
-    lla  t0, HART_LOCAL_TP_ADDR   # t0 = &HART_LOCAL_TP_ADDR (a static usize)
+    lla tp, HART_LOCAL_TP_ADDRS
     .option pop
-    ld   tp, 0(t0)                # tp = *HART_LOCAL_TP_ADDR = &HART_LOCALS[hart_id]
+    ld tp, \pointer_offset(tp)
+    j .continue_save
+
+.Lfrom_supervisor\@:
+    csrrw tp, sscratch, tp
+    addi sp, sp, -TRAP_FRAME_SIZE
+    j .continue_save
+.endm
+
+__trap_entry:
+__trap_entry_hart0:
+    HART_TRAP_ENTRY 0
+
+__trap_entry_hart1:
+    HART_TRAP_ENTRY 8
+
+.continue_save:
+    sd x1,   1*8(sp)    # ra
+    sd x3,   3*8(sp)    # gp
+    sd x5,   5*8(sp)    # t0 (save before using it to inspect SPP)
+    # x2 and x4 are already saved by the U-mode prologue. S-mode overwrites
+    # x2 below and keeps the kernel tp already resident in x4.
+    csrr t0, sstatus
+    andi t0, t0, 0x100
+    beqz t0, .tp_saved
+    sd x4, 4*8(sp)
+.tp_saved:
     sd x6,   6*8(sp)    # t1
     sd x7,   7*8(sp)    # t2
     sd x8,   8*8(sp)    # s0/fp

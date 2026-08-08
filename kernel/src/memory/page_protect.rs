@@ -9,11 +9,20 @@
 //! - The physical frame is read back from the live page table, so the caller
 //!   cannot accidentally re-point the page while "only" changing flags.
 //! - The per-VA TLB invalidate happens BEFORE returning. A caller that lowers
-//!   permissions may therefore assume the new rights are in force on THIS hart
-//!   the moment the call returns.
-//! - No cross-hart shootdown. On SMP another hart can retain the old, more
-//!   permissive entry until its own TLB is invalidated; callers that need a
-//!   system-wide guarantee must pair this with an IPI shootdown.
+//!   permissions may therefore assume the new rights are in force on the
+//!   calling hart the moment the call returns.
+//! - Cross-hart / cross-core scope is architecture-specific today:
+//!   - RV64: a changed PTE is ordered locally, invalidated with `sfence.vma`,
+//!     then invalidated synchronously on online remote harts through SBI RFENCE.
+//!     Firmware without RFENCE keeps the kernel single-hart; two-hart runtime
+//!     evidence remains a separate gate.
+//!   - x86_64: `invlpg` is local only; there is no SMP IPI shootdown path yet.
+//!   - AArch64: `flush_tlb_page` broadcasts a stage-1 TLBI
+//!     (`tlbi vaae1is`, plus `vae2is` when EL2 is active) inside the required
+//!     barrier pair, but this repo still treats two-PE runtime proof as gated
+//!     evidence rather than marking D7 complete.
+//! - Bare-physical arches return `NotSupported` instead of pretending W^X
+//!   exists.
 //!
 //! Re-exported as `memory::paging::{protect_page, protect_range}` — it lives in
 //! its own file only to keep `paging.rs` from growing further.
@@ -60,7 +69,7 @@ pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
         .map(page_va, phys, new_flags, &mut no_alloc)
         .map_err(|_| PageTableError::OutOfMemory)?;
 
-    hal::paging::flush_tlb_page(page_va);
+    crate::memory::tlb_shootdown::flush_page(page_va);
     Ok(())
 }
 
@@ -69,9 +78,7 @@ pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
 #[cfg(target_arch = "x86_64")]
 pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
     use crate::memory::frame::phys_to_virt;
-    use hal::paging::{
-        flush_tlb_page, walk_create, walk_read, PTE_ADDR_MASK, PTE_PCD, PTE_PRESENT, PTE_PWT,
-    };
+    use hal::paging::{walk_create, walk_read, PTE_ADDR_MASK, PTE_PCD, PTE_PRESENT, PTE_PWT};
 
     let page_va = vaddr & !(PAGE_SIZE - 1);
     let root_lock = KERNEL_ROOT.lock();
@@ -99,7 +106,7 @@ pub fn protect_page(vaddr: VAddr, new_flags: Flags) -> PagingResult<()> {
         core::ptr::write_volatile(pte_ptr, new_pte);
     }
 
-    flush_tlb_page(page_va);
+    crate::memory::tlb_shootdown::flush_page(page_va);
     Ok(())
 }
 

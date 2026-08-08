@@ -9,6 +9,10 @@ const SBI_EID_TIMER: usize = 0x54494D45;
 const SBI_EID_LEGACY_SET_TIMER: usize = 0x00;
 const SBI_EID_DBCN: usize = 0x4442434E;
 const SBI_FID_DBCN_WRITE: usize = 0;
+const SBI_EID_BASE: usize = 0x10;
+const SBI_FID_PROBE_EXTENSION: usize = 3;
+const SBI_EID_RFENCE: usize = 0x5246_4E43;
+const SBI_FID_REMOTE_SFENCE_VMA: usize = 1;
 
 #[inline(always)]
 fn sbi_call(eid: usize, fid: usize, arg0: usize, arg1: usize, arg2: usize) -> (usize, usize) {
@@ -28,6 +32,72 @@ fn sbi_call(eid: usize, fid: usize, arg0: usize, arg1: usize, arg2: usize) -> (u
         );
     }
     (error, value)
+}
+
+/// SBI call variant for extensions whose fourth argument occupies `a3`.
+#[inline(always)]
+fn sbi_call4(
+    eid: usize,
+    fid: usize,
+    arg0: usize,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+) -> (usize, usize) {
+    let mut error;
+    let mut value;
+    // SAFETY: SBI defines this ecall register convention; inputs are plain
+    // machine words and the firmware owns all privileged side effects.
+    unsafe {
+        core::arch::asm!(
+            "ecall",
+            in("a7") eid,
+            in("a6") fid,
+            in("a0") arg0,
+            in("a1") arg1,
+            in("a2") arg2,
+            in("a3") arg3,
+            lateout("a0") error,
+            lateout("a1") value,
+            options(nostack)
+        );
+    }
+    (error, value)
+}
+
+/// Whether firmware advertises the RFENCE extension required before RV64 SMP.
+pub fn sbi_rfence_available() -> Result<bool, usize> {
+    let (error, value) = sbi_call(SBI_EID_BASE, SBI_FID_PROBE_EXTENSION, SBI_EID_RFENCE, 0, 0);
+    if error == 0 {
+        Ok(value != 0)
+    } else {
+        Err(error)
+    }
+}
+
+/// Synchronously invalidate a virtual-address range on selected remote harts.
+///
+/// `hart_mask` uses the SBI hart-mask encoding with `hart_mask_base = 0`.
+/// `start_addr` and `size` must describe page-aligned addresses and lengths.
+pub fn sbi_remote_sfence_vma(
+    hart_mask: usize,
+    hart_mask_base: usize,
+    start_addr: usize,
+    size: usize,
+) -> Result<(), usize> {
+    let (error, _) = sbi_call4(
+        SBI_EID_RFENCE,
+        SBI_FID_REMOTE_SFENCE_VMA,
+        hart_mask,
+        hart_mask_base,
+        start_addr,
+        size,
+    );
+    if error == 0 {
+        Ok(())
+    } else {
+        Err(error)
+    }
 }
 
 /// Write a character to debug console (DBCN)

@@ -20,16 +20,19 @@
 //!
 //! Step 4 is what turns "the cell never runs with a writable `.text`" from
 //! likely into guaranteed. Registration pushes the task onto a ready queue, from
-//! where another hart's work-stealing can start it on its next tick — so
-//! lowering *after* registration leaves a window in which a second hart both
-//! executes the cell and caches the writable PTE in a TLB that this kernel has
-//! no way to shoot down.
+//! where another hart's work-stealing can start it on its next tick. RV64 pairs
+//! a changed PTE with ordered local `sfence.vma` and synchronous SBI RFENCE;
+//! x86_64 remains local `invlpg` only. The loader keeps the stricter load ->
+//! relocate -> lower -> register ordering on every arch, even though AArch64
+//! emits broadcast stage-1 TLBI today.
 //!
 //! # What is NOT guaranteed
-//! Nothing here invalidates a stale, more permissive translation another hart
-//! may still hold for these same VAs from a previous cell that occupied them:
-//! the invalidate inside `protect_page` reaches the calling hart only (see
-//! [`crate::memory::page_protect`]).
+//! Remote stale-translation closure is arch-specific. RV64 requires a firmware
+//! RFENCE probe before secondary startup and still lacks its two-hart runtime
+//! witness; x86_64 lacks SMP IPI shootdown; AArch64 already emits
+//! `tlbi vaae1is` (plus `vae2is` when EL2 is active) with the required
+//! shareable barriers but still lacks a checked two-PE runtime witness. See
+//! [`crate::memory::page_protect`] for the current contract.
 //!
 //! # What stays writable
 //! Cell stacks, heaps, grant pages, and MMIO windows are mapped by other paths

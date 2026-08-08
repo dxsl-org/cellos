@@ -331,34 +331,27 @@ impl CellSegments {
     /// LIVE cells' (and kernel MMIO) mappings, never a dead-but-unreaped cell's.
     /// Locks only `KERNEL_ROOT` (a leaf), so it is safe under the SCHEDULER lock.
     pub fn eager_unmap(&self) {
-        let mut unmapped_any = false;
         for &(vaddr, frame) in &self.pages {
             // Only unmap a VA that still resolves to OUR frame (it won't if a
             // respawn already re-pointed it — leave the new mapping intact).
             if paging::virt_to_phys(vaddr) == Some(frame) {
                 let _ = paging::unmap_page(vaddr);
-                unmapped_any = true;
             }
-        }
-        if unmapped_any {
-            paging::tlb_flush_all();
+            // Flush even when a replacement mapping won the race: an old remote
+            // translation for this VA can still point at this segment's frame.
+            crate::memory::tlb_shootdown::flush_page(vaddr);
         }
     }
 }
 
 impl Drop for CellSegments {
     fn drop(&mut self) {
+        // The shootdown must complete before either the frame or PIE slot can
+        // become reusable; do not hold FRAME_ALLOCATOR across firmware RFENCE.
+        self.eager_unmap();
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
-            for &(vaddr, frame) in &self.pages {
-                // Only unmap if this VA still resolves to OUR frame. Cells load at
-                // fixed VAs, so a supervised cell respawned at the same VA before we
-                // are reaped will have re-pointed this VA at the NEW instance's frame
-                // — unmapping it then would crash the new cell. Skip the unmap in
-                // that case; the old frame is still ours to free either way.
-                if paging::virt_to_phys(vaddr) == Some(frame) {
-                    let _ = paging::unmap_page(vaddr);
-                }
+            for &(_vaddr, frame) in &self.pages {
                 allocator.deallocate_frame(frame);
             }
         }
