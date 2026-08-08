@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main","main_handler","parse_key_to_swap_id"],"static":["STATE","VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["DemoState"]};
+window.SIDEBAR_ITEMS = {"fn":["main","main_handler","message_eq","parse_key_to_swap_id"],"static":["STATE","VICELL_MANIFEST","VICELL_SYSCALLS"],"struct":["DemoState"]};

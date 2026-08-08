@@ -6,5 +6,5 @@ spawning a child and noting which caps were granted.  Calling <a href="struct.Ca
 issues <code>sys_cap_revoke</code>, stripping those caps from the live target in-kernel.</p>
 <p>The target cell continues running but any subsequent syscall that requires a
 revoked cap is denied with <code>PermissionDenied</code>.  For system cells (<code>block_io</code> /
-<code>network</code> holders) revocation is blocked — use <code>sys_hotswap</code> instead.</p>
+<code>network</code> holders) revocation is blocked — use the supervisor replacement flow instead.</p>
 </div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CapHandle.html" title="struct ostd::cap::CapHandle">CapHandle</a></dt><dd>A handle representing a revocable capability delegation to another cell.</dd></dl></section></div></main></body></html>

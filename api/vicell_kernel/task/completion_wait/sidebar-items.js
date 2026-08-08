@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["wait_completion","write_completion"],"struct":["WaiterRegistration"]};
+window.SIDEBAR_ITEMS = {"fn":["source_is_valid","wait_completion","write_completion"],"struct":["WaiterRegistration"]};

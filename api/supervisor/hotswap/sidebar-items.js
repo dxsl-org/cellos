@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["APP_MSG_MAGIC","DISC_RESTORE","DISC_SNAPSHOT","MAX_ITERS"],"fn":["fmt_u64_decimal","hotswap","next_swap_id","send_restore_event","send_snapshot_event","stash_key_for","wait_for_hotswap_ready","wait_for_stash_key"],"static":["SWAP_ID_COUNTER"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_ITERS"],"fn":["hotswap","next_swap_id","rollback_spawned","stash_key_for","wait_for_hotswap_ready","wait_for_service_pause","wait_for_stash_key"],"static":["SWAP_ID_COUNTER"]};

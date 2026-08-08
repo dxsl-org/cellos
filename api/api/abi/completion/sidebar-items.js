@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["COMPLETION_LEN","COMPLETION_MAGIC","COMPLETION_VERSION","RESULT_ABANDONED"],"struct":["ViCompletion"]};
+window.SIDEBAR_ITEMS = {"constant":["COMPLETION_LEN","COMPLETION_MAGIC","COMPLETION_VERSION","RESULT_ABANDONED"],"mod":["source"],"struct":["ViCompletion"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["handler","main","service_id_for_name"],"mod":["error","hotswap","protocol"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["HOTSWAP_TASK_NAME","PROCESS_TABLE_ROWS","SHELL_TASK_NAME"],"fn":["handler","main","process_name","sender_has_exact_name","service_id_for_name"],"mod":["error","hotswap","protocol","snapshot","transfer"],"static":["VICELL_MANIFEST"]};

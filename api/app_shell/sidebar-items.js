@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["aliases","async_utils","cmd_fs","cmd_sys","commands","config_client","executor","history","jobs","parser","shell","shell_state","state_transfer","text_engine","text_tools","top"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"fn":["main"],"mod":["aliases","async_utils","cmd_fs","cmd_sys","commands","config_client","executor","history","jobs","parser","shell","shell_state","snapshot_client","state_transfer","text_engine","text_tools","top"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

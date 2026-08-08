@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_SERVICES"],"fn":["clear_tid","force_unlock_locks","lookup","register"],"static":["REGISTRY"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_SERVICES"],"enum":["ServiceEntry"],"fn":["clear_tid","commit_paused","force_unlock_locks","is_paused_tid","lookup","pause","paused_matches","register"],"static":["REGISTRY"]};

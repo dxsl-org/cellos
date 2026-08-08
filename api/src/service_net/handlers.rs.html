@@ -414,7 +414,7 @@
 <a href=#414 id=414 data-nosnippet>414</a>        NetRequest::L2Recv { guest_mac } =&gt; {
 <a href=#415 id=415 data-nosnippet>415</a>            <span class="comment">// Register guest MAC (idempotent) then pump the NIC for fresh frames.
 <a href=#416 id=416 data-nosnippet>416</a>            </span>device.set_guest_mac(guest_mac);
-<a href=#417 id=417 data-nosnippet>417</a>            device.pump_rx_split();
+<a href=#417 id=417 data-nosnippet>417</a>            <span class="kw">let _ </span>= device.pump_rx_split();
 <a href=#418 id=418 data-nosnippet>418</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(frame) = device.pop_guest_rx() {
 <a href=#419 id=419 data-nosnippet>419</a>                <span class="kw">let </span><span class="kw-2">mut </span>rb = [<span class="number">0u8</span>; IPC_BUF_SIZE];
 <a href=#420 id=420 data-nosnippet>420</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = ipc::encode(<span class="kw-2">&amp;</span>R::Data(<span class="kw-2">&amp;</span>frame), <span class="kw-2">&amp;mut </span>rb) {

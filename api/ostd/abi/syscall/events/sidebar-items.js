@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["NET_RX"]};
+window.SIDEBAR_ITEMS = {"constant":["NET_RX","TIMER"]};

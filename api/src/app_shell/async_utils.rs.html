@@ -188,58 +188,60 @@
 <a href=#188 id=188 data-nosnippet>188</a>                    buffer.push(ch);
 <a href=#189 id=189 data-nosnippet>189</a>                }
 <a href=#190 id=190 data-nosnippet>190</a>                <span class="kw">_ </span>=&gt; {
-<a href=#191 id=191 data-nosnippet>191</a>                    yield_now().<span class="kw">await</span>;
-<a href=#192 id=192 data-nosnippet>192</a>                }
-<a href=#193 id=193 data-nosnippet>193</a>            }
-<a href=#194 id=194 data-nosnippet>194</a>        }
-<a href=#195 id=195 data-nosnippet>195</a>        buffer
-<a href=#196 id=196 data-nosnippet>196</a>    }
-<a href=#197 id=197 data-nosnippet>197</a>
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="doccomment">/// TAB completion: complete the last token against built-in command names.
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">fn </span>handle_tab(buffer: <span class="kw-2">&amp;mut </span>Vec&lt;u8&gt;) {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">let </span>line = core::str::from_utf8(buffer).unwrap_or(<span class="string">""</span>);
-<a href=#201 id=201 data-nosnippet>201</a>        <span class="kw">let </span>token = line.split_whitespace().last().unwrap_or(<span class="string">""</span>);
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span>token_bytes = token.len();
-<a href=#203 id=203 data-nosnippet>203</a>
-<a href=#204 id=204 data-nosnippet>204</a>        <span class="kw">let </span>matches: alloc::vec::Vec&lt;<span class="kw-2">&amp;</span>str&gt; = <span class="kw">crate</span>::executor::BUILTINS
-<a href=#205 id=205 data-nosnippet>205</a>            .iter()
-<a href=#206 id=206 data-nosnippet>206</a>            .filter(|b| b.starts_with(token))
-<a href=#207 id=207 data-nosnippet>207</a>            .copied()
-<a href=#208 id=208 data-nosnippet>208</a>            .collect();
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a>        <span class="kw">match </span>matches.len() {
-<a href=#211 id=211 data-nosnippet>211</a>            <span class="number">0 </span>=&gt; {}
-<a href=#212 id=212 data-nosnippet>212</a>            <span class="number">1 </span>=&gt; {
-<a href=#213 id=213 data-nosnippet>213</a>                <span class="kw">for _ in </span><span class="number">0</span>..token_bytes {
-<a href=#214 id=214 data-nosnippet>214</a>                    ostd::io::print(<span class="string">"\x08 \x08"</span>);
-<a href=#215 id=215 data-nosnippet>215</a>                    buffer.pop();
-<a href=#216 id=216 data-nosnippet>216</a>                }
-<a href=#217 id=217 data-nosnippet>217</a>                <span class="kw">let </span>completed = matches[<span class="number">0</span>];
-<a href=#218 id=218 data-nosnippet>218</a>                ostd::io::print(completed);
-<a href=#219 id=219 data-nosnippet>219</a>                ostd::io::print(<span class="string">" "</span>);
-<a href=#220 id=220 data-nosnippet>220</a>                buffer.extend_from_slice(completed.as_bytes());
-<a href=#221 id=221 data-nosnippet>221</a>                buffer.push(<span class="string">b' '</span>);
-<a href=#222 id=222 data-nosnippet>222</a>            }
-<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">_ </span>=&gt; {
-<a href=#224 id=224 data-nosnippet>224</a>                ostd::io::print(<span class="string">"\n"</span>);
-<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw">for </span>(i, m) <span class="kw">in </span>matches.iter().enumerate() {
-<a href=#226 id=226 data-nosnippet>226</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
-<a href=#227 id=227 data-nosnippet>227</a>                        ostd::io::print(<span class="string">"  "</span>);
-<a href=#228 id=228 data-nosnippet>228</a>                    }
-<a href=#229 id=229 data-nosnippet>229</a>                    ostd::io::print(m);
-<a href=#230 id=230 data-nosnippet>230</a>                }
-<a href=#231 id=231 data-nosnippet>231</a>                ostd::io::print(<span class="string">"\n"</span>);
-<a href=#232 id=232 data-nosnippet>232</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(buffer) {
-<a href=#233 id=233 data-nosnippet>233</a>                    ostd::io::print(s);
-<a href=#234 id=234 data-nosnippet>234</a>                }
-<a href=#235 id=235 data-nosnippet>235</a>            }
-<a href=#236 id=236 data-nosnippet>236</a>        }
-<a href=#237 id=237 data-nosnippet>237</a>    }
-<a href=#238 id=238 data-nosnippet>238</a>
-<a href=#239 id=239 data-nosnippet>239</a>    <span class="kw">fn </span>clear_line(current: <span class="kw-2">&amp;</span>[u8]) {
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">for _ in </span><span class="number">0</span>..current.len() {
-<a href=#241 id=241 data-nosnippet>241</a>            ostd::io::print(<span class="string">"\x08 \x08"</span>);
-<a href=#242 id=242 data-nosnippet>242</a>        }
-<a href=#243 id=243 data-nosnippet>243</a>    }
-<a href=#244 id=244 data-nosnippet>244</a>}
+<a href=#191 id=191 data-nosnippet>191</a>                    <span class="comment">// The executor turns this pending edge into a one-tick
+<a href=#192 id=192 data-nosnippet>192</a>                    // WaitCompletion(TIMER) park; Recv remains on its mailbox.
+<a href=#193 id=193 data-nosnippet>193</a>                    </span>yield_now().<span class="kw">await</span>;
+<a href=#194 id=194 data-nosnippet>194</a>                }
+<a href=#195 id=195 data-nosnippet>195</a>            }
+<a href=#196 id=196 data-nosnippet>196</a>        }
+<a href=#197 id=197 data-nosnippet>197</a>        buffer
+<a href=#198 id=198 data-nosnippet>198</a>    }
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a>    <span class="doccomment">/// TAB completion: complete the last token against built-in command names.
+<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="kw">fn </span>handle_tab(buffer: <span class="kw-2">&amp;mut </span>Vec&lt;u8&gt;) {
+<a href=#202 id=202 data-nosnippet>202</a>        <span class="kw">let </span>line = core::str::from_utf8(buffer).unwrap_or(<span class="string">""</span>);
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">let </span>token = line.split_whitespace().last().unwrap_or(<span class="string">""</span>);
+<a href=#204 id=204 data-nosnippet>204</a>        <span class="kw">let </span>token_bytes = token.len();
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span>matches: alloc::vec::Vec&lt;<span class="kw-2">&amp;</span>str&gt; = <span class="kw">crate</span>::executor::BUILTINS
+<a href=#207 id=207 data-nosnippet>207</a>            .iter()
+<a href=#208 id=208 data-nosnippet>208</a>            .filter(|b| b.starts_with(token))
+<a href=#209 id=209 data-nosnippet>209</a>            .copied()
+<a href=#210 id=210 data-nosnippet>210</a>            .collect();
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="kw">match </span>matches.len() {
+<a href=#213 id=213 data-nosnippet>213</a>            <span class="number">0 </span>=&gt; {}
+<a href=#214 id=214 data-nosnippet>214</a>            <span class="number">1 </span>=&gt; {
+<a href=#215 id=215 data-nosnippet>215</a>                <span class="kw">for _ in </span><span class="number">0</span>..token_bytes {
+<a href=#216 id=216 data-nosnippet>216</a>                    ostd::io::print(<span class="string">"\x08 \x08"</span>);
+<a href=#217 id=217 data-nosnippet>217</a>                    buffer.pop();
+<a href=#218 id=218 data-nosnippet>218</a>                }
+<a href=#219 id=219 data-nosnippet>219</a>                <span class="kw">let </span>completed = matches[<span class="number">0</span>];
+<a href=#220 id=220 data-nosnippet>220</a>                ostd::io::print(completed);
+<a href=#221 id=221 data-nosnippet>221</a>                ostd::io::print(<span class="string">" "</span>);
+<a href=#222 id=222 data-nosnippet>222</a>                buffer.extend_from_slice(completed.as_bytes());
+<a href=#223 id=223 data-nosnippet>223</a>                buffer.push(<span class="string">b' '</span>);
+<a href=#224 id=224 data-nosnippet>224</a>            }
+<a href=#225 id=225 data-nosnippet>225</a>            <span class="kw">_ </span>=&gt; {
+<a href=#226 id=226 data-nosnippet>226</a>                ostd::io::print(<span class="string">"\n"</span>);
+<a href=#227 id=227 data-nosnippet>227</a>                <span class="kw">for </span>(i, m) <span class="kw">in </span>matches.iter().enumerate() {
+<a href=#228 id=228 data-nosnippet>228</a>                    <span class="kw">if </span>i &gt; <span class="number">0 </span>{
+<a href=#229 id=229 data-nosnippet>229</a>                        ostd::io::print(<span class="string">"  "</span>);
+<a href=#230 id=230 data-nosnippet>230</a>                    }
+<a href=#231 id=231 data-nosnippet>231</a>                    ostd::io::print(m);
+<a href=#232 id=232 data-nosnippet>232</a>                }
+<a href=#233 id=233 data-nosnippet>233</a>                ostd::io::print(<span class="string">"\n"</span>);
+<a href=#234 id=234 data-nosnippet>234</a>                <span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(buffer) {
+<a href=#235 id=235 data-nosnippet>235</a>                    ostd::io::print(s);
+<a href=#236 id=236 data-nosnippet>236</a>                }
+<a href=#237 id=237 data-nosnippet>237</a>            }
+<a href=#238 id=238 data-nosnippet>238</a>        }
+<a href=#239 id=239 data-nosnippet>239</a>    }
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">fn </span>clear_line(current: <span class="kw-2">&amp;</span>[u8]) {
+<a href=#242 id=242 data-nosnippet>242</a>        <span class="kw">for _ in </span><span class="number">0</span>..current.len() {
+<a href=#243 id=243 data-nosnippet>243</a>            ostd::io::print(<span class="string">"\x08 \x08"</span>);
+<a href=#244 id=244 data-nosnippet>244</a>        }
+<a href=#245 id=245 data-nosnippet>245</a>    }
+<a href=#246 id=246 data-nosnippet>246</a>}
 </code></pre></div></section></main></body></html>

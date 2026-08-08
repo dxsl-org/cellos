@@ -8,7 +8,7 @@
 <a href=#8 id=8 data-nosnippet>8</a>//!
 <a href=#9 id=9 data-nosnippet>9</a>//! The target cell continues running but any subsequent syscall that requires a
 <a href=#10 id=10 data-nosnippet>10</a>//! revoked cap is denied with `PermissionDenied`.  For system cells (`block_io` /
-<a href=#11 id=11 data-nosnippet>11</a>//! `network` holders) revocation is blocked — use `sys_hotswap` instead.
+<a href=#11 id=11 data-nosnippet>11</a>//! `network` holders) revocation is blocked — use the supervisor replacement flow instead.
 <a href=#12 id=12 data-nosnippet>12</a>
 <a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">use </span><span class="kw">crate</span>::syscall::{sys_cap_revoke, SyscallError};
 <a href=#14 id=14 data-nosnippet>14</a><span class="kw">use </span>api::syscall::cap_mask;

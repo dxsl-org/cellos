@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DEAD_PEER","INVALID_RECV_PTR","RECEIVER","SENDER","TEST_CELL"],"fn":["dead_peer_unblocks_sender","fail","recv_scatter_stays_mailbox_isolated","self_test"]};

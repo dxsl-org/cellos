@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","main","read_line"]};
+window.SIDEBAR_ITEMS = {"constant":["APP_MESSAGE_PREFIX","ELF_PATH_LEN","EXACT_BIN_TARGET_ERROR","MALFORMED_REPLY","OP_HOTSWAP","OP_STATUS","REPLY_TIMEOUT_TICKS","REQUEST_LEN","STATUS_LEN","SUCCESS_CODE","SUCCESS_PHASE","SVC_NAME_LEN","USAGE"],"enum":["StatusError"],"fn":["cell_main","encode_hotswap_request","exit_with_message","main","parse_status","print_usage_and_exit","recv_status","send_request","supervisor_error_message","validate_elf_path","validate_service_name"]};
