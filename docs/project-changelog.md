@@ -2,6 +2,30 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-09] Phase 04 file-handle ABI lands as an append-only VFS extension
+
+`VfsRequest` now appends `OpenFileAt` (23), `ReadFileHandle { max: u32 }` (24), and `CloseFile` (25); `VfsResponse::FileHandle` stays variant 9. `ViVfsFileHandle` is VFS-local, file-handle ownership is keyed by caller generation, handles are revoked on parent-dir / owner-death / close, and the file-handle table is not serialized across hot-swap. The wire path stays on ordinary attested message IPC only, with no fast arm, async, grant, or raw-pointer lifetime, and inline `Data` replies are bounded at 4000 bytes (`IPC_BUF_SIZE - 96`).
+
+Validation is honest and narrow: API tests, the existing test-hooks QEMU markers, and RV64/AArch64/x86_64 compile-only builds. No hardware claim is made, and the global coverage debt remains open.
+
+## [2026-08-09] Phase 03 lifecycle cleanup checkpoint is complete
+
+The approved narrow bridge is exact per-request VFS grant-copy lease plus current-caller-cell-only death watch. Validation passed `cargo fmt --all --check`, `cargo test -p types -p api --target x86_64-unknown-linux-gnu`, `bash scripts/build-test-hooks-ci.sh`, RV64 QEMU `vfs_lifetime_selftest_passes` 1/1, RV64 QEMU `riscv64_vfs_quota_all_pass` 1/1, RV64/AArch64/x86_64 production kernel builds, and standard/focused security review PASS. No `libs/api`, `libs/types`, syscall number, wire, or manifest change landed, and AArch64 test-hooks runtime is still host-gated by the pre-existing semihosting compile issue.
+
+## [2026-08-09] Phase 02 bounded VFS copy-out pioneer is complete
+
+Shell now reads VFS files through sender-masked `Stat` plus caller-owned, size-bounded `ReadFileGrant`, requires exact completion, frees the grant on every path, and never falls back to `GetFile`, `DataPtr`, async polling, or fast IPC. Existing shell consumers now preserve typed errors or use metadata for `test -f`; RV64 QEMU proves a 700-byte read, truncation rejection, missing-file failure, and the prior small-buffer existence regression. All other callers remain unchanged and are recorded for Phase 04/05, including the unresolved wildcard-reply risk in `VfsClient` and both HTTPD truncation paths. No public ABI, syscall, wire, or manifest changed.
+
+## [2026-08-09] SAS/LBI VFS boundary plan is approved for design only
+
+Phase 01 characterization/inventory is complete with API baseline `77` passed / `4` ignored and `service-vfs` / `kernel/vfs-test` compile checks PASS. The approved boundary stays on file handle + bounded read, with bounded copy-out as the migration tactic and revocable `ReadGrant` deferred. Law 1 confirmations #1 and #2 are explicitly recorded, no product code or ABI landed, Phase 03 universal cell-death cleanup remains the hard gate, and scope does not expand to Tier 2, DMA, reactor, or SMP work.
+
+## [2026-08-09] Phase 04 RV64 physical hart mapping and HSM startup is complete
+
+The RV64 lane now records the boot physical hart, the single HSM secondary, and the firmware classification needed to keep the W^X proof honest. Phase 3 is blocked because real RV64 hardware is host-gated and the AArch64/x86_64 hardware/runtime gates are still open.
+
+Verification: the RV64 QEMU integration test passed again over five internal boots, the recorded evidence hash matched, and the final ordering review was CLEAR.
+
 ## [2026-08-08] Phase 04 public hotswap boundary finalization is complete
 
 Legacy `HotSwap` syscall 400 is retired/reserved and decodes `Unknown`. The

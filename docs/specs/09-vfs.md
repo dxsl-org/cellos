@@ -105,6 +105,33 @@ tới mount read-only không được biến thành quyền ghi).
 cell đã seal.
 
 
+## 2c. File handles (2026-08-09)
+
+File handles are a VFS-owned, service-local capability. `ViVfsFileHandle` is a
+distinct type, not a widened `CapId`, and the file-handle path uses the ordinary
+attested message IPC path only.
+
+| Op | Ý nghĩa |
+|---|---|
+| `OpenFileAt { dir, name }` | Resolve one entry under a directory handle and return `VfsResponse::FileHandle` |
+| `ReadFileHandle { file, offset, max }` | Read from an issued file handle, bounded by `max` (`u32`) and the inline reply cap |
+| `CloseFile { file }` | Close the issued file handle |
+
+Semantics that matter for the ABI:
+
+- The owner key includes both `CellId` and `generation`, so a respawned cell must
+  re-acquire its file handles after hot-swap.
+- `OpenFileAt` / `ReadFileHandle` / `CloseFile` are re-authorized on every
+  attested request; stale or wrong-owner handles fail closed.
+- `CloseFile` and parent-dir revocation both remove the handle from the VFS table;
+  generation purge does the same when a newer instance replaces the old one.
+- The file-handle table is not serialized across hot-swap. Open handles are
+  session-scoped and are intentionally re-acquired.
+- Replies stay inline and bounded: this path uses the 4000-byte `Data` cap
+  (`IPC_BUF_SIZE - 96`) rather than any grant-backed or pointer-based transfer.
+- No async, grant, or raw-pointer lifetime is introduced by this phase.
+
+
 ## 3. Cơ chế Direct I/O & Zero-Copy
 Nhờ lợi thế của Single Address Space (SAS), Cellos đạt được tốc độ đọc/ghi dữ liệu ở mức vật lý mà không cần memcpy.
 

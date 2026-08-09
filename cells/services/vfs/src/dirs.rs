@@ -22,6 +22,7 @@ pub mod lifecycle;
 
 use alloc::collections::BTreeMap;
 use alloc::string::String;
+use alloc::vec::Vec;
 use api::dir_handles::ViDirHandle;
 use api::dir_name::{join_component, validate_dir_component, DirNameError};
 
@@ -68,6 +69,20 @@ pub enum DirError {
     BadName(DirNameError),
     /// The caller holds [`MAX_HANDLES_PER_CELL`] already.
     TooManyHandles,
+}
+
+pub(crate) struct RevokeOutcome {
+    pub(crate) count: usize,
+    pub(crate) revoked_ids: Vec<u64>,
+}
+
+impl RevokeOutcome {
+    pub(crate) fn none() -> Self {
+        Self {
+            count: 0,
+            revoked_ids: Vec::new(),
+        }
+    }
 }
 
 /// The service's handle table.

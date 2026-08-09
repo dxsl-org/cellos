@@ -94,7 +94,7 @@ impl DirTable {
                 // prevent, and "cannot happen" is not a reason to leave the
                 // half-bound state reachable.
                 Err(_) => {
-                    self.revoke_ids(&issued);
+                    let _ = self.revoke_ids(&issued);
                     return BindOutcome::Refused;
                 }
             }

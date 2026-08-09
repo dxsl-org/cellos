@@ -69,11 +69,13 @@ fn assert_equals(jobs: &mut Jobs, name: &str, line: &str, want: &str) {
 /// Assert that the VFS file at `path` contains `needle`.
 fn assert_file_contains(name: &str, path: &str, needle: &str) {
     let mut buf = [0u8; 480];
-    let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
-    if n == 0 {
-        fail(name, "<file not found>", needle);
-        return;
-    }
+    let n = match crate::cmd_fs::read_file_vfs_result(path, &mut buf) {
+        Ok(n) => n,
+        Err(_) => {
+            fail(name, "<file read failed>", needle);
+            return;
+        }
+    };
     let got = core::str::from_utf8(&buf[..n]).unwrap_or("<invalid utf8>");
     if got.contains(needle) {
         pass(name);
@@ -303,6 +305,57 @@ fn test_top_batch(jobs: &mut Jobs) {
     );
 }
 
+fn test_vfs_bounded_grant_read(jobs: &mut Jobs) {
+    const PATH: &str = "/tmp/st_grant_read.txt";
+    let mut expected = [b'A'; 700];
+    expected[699] = b'Z';
+    if !crate::cmd_fs::vfs_write_chunked(PATH, &expected, false) {
+        fail("bounded grant read setup", "write failed", "write succeeds");
+        return;
+    }
+    assert_equals(
+        jobs,
+        "test -f uses stat for files larger than sample buffers",
+        "test -f /tmp/st_grant_read.txt ; echo $?",
+        "0\n",
+    );
+
+    let mut full = [0u8; 1024];
+    match crate::cmd_fs::read_file_vfs_result(PATH, &mut full) {
+        Ok(700) if full[..700] == expected => pass("bounded grant read exceeds 480 bytes"),
+        Ok(bytes) => fail(
+            "bounded grant read exceeds 480 bytes",
+            &alloc::format!("{} bytes", bytes),
+            "700 exact bytes",
+        ),
+        Err(_) => fail(
+            "bounded grant read exceeds 480 bytes",
+            "typed error",
+            "700 exact bytes",
+        ),
+    }
+
+    let mut too_small = [0u8; 480];
+    match crate::cmd_fs::read_file_vfs_result(PATH, &mut too_small) {
+        Err(ostd::ViError::InvalidArgument) => pass("bounded grant read rejects truncation"),
+        _ => fail(
+            "bounded grant read rejects truncation",
+            "unexpected result",
+            "InvalidArgument",
+        ),
+    }
+
+    let mut missing = [0u8; 16];
+    match crate::cmd_fs::read_file_vfs_result("/tmp/st_grant_missing.txt", &mut missing) {
+        Err(ostd::ViError::IO) => pass("bounded grant read preserves missing error"),
+        _ => fail(
+            "bounded grant read preserves missing error",
+            "unexpected result",
+            "IO",
+        ),
+    }
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 /// Test harness entry point — called from `main()` when feature `shell_test` is set.
@@ -328,6 +381,7 @@ pub fn run() {
     test_awk(&mut jobs);
     test_fg_bg(&mut jobs);
     test_top_batch(&mut jobs);
+    test_vfs_bounded_grant_read(&mut jobs);
 
     let (passed, failed) = (PASSED.load(Ordering::SeqCst), FAILED.load(Ordering::SeqCst));
     ostd::io::println("");

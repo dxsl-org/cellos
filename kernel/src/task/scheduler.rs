@@ -104,6 +104,8 @@ pub struct Scheduler {
     /// watchdog runs inside SCHEDULER — inverting the documented lock order.
     /// yield_cpu() drains this list after dropping SCHEDULER, matching the zombie-reaper pattern.
     pub(super) pending_grant_reap: Vec<usize>,
+    /// VFS per-request leases held by dead tasks, released outside SCHEDULER.
+    pub(super) pending_vfs_lease_release: Vec<usize>,
     /// TIMER reservations owned by dead tasks, released outside SCHEDULER.
     pending_completion_release: Vec<(
         usize,
@@ -126,6 +128,7 @@ impl Scheduler {
             zombies: Vec::new(),
             next_task_id: 1,
             pending_grant_reap: Vec::new(),
+            pending_vfs_lease_release: Vec::new(),
             pending_completion_release: Vec::new(),
             last_global_sweep_tick: 0,
         }
@@ -485,6 +488,11 @@ impl Scheduler {
     /// target died by fault.
     pub fn exit_task(&mut self, tid: usize, exit_reason: usize) {
         info!("Task {} exiting (reason={:#x})...", tid, exit_reason);
+        let dead_caller = self
+            .tasks
+            .get(&tid)
+            .map(|task| (task.cell_id.0, task.cell_generation))
+            .unwrap_or((0, 0));
 
         // Scheduler exit is the terminal lifecycle funnel for clean exits,
         // faults, watchdogs, and hot-swap retirement. Clear any replacement
@@ -555,6 +563,7 @@ impl Scheduler {
         if let Some(task) = self.tasks.remove(&tid) {
             self.zombies.push(task);
         }
+        self.pending_vfs_lease_release.push(tid);
 
         // Service-registry cleanup: drop any well-known service_id that pointed at this
         // tid, so a client lookup in the death→respawn window returns "none" (and retries)
@@ -588,7 +597,7 @@ impl Scheduler {
                 }
             }
             if task.current_caller == Some(tid) {
-                task.current_caller = None;
+                task.clear_current_caller_context();
             }
         }
         for id in to_wake {
@@ -620,7 +629,7 @@ impl Scheduler {
                     // RESUMES, in the watcher's own syscall context — writing a USER buffer
                     // from here (the trap/fault context) faults (S-mode store to a U page,
                     // SSTATUS.SUM not set).
-                    wt.current_caller = Some(tid);
+                    wt.set_current_caller_context(tid, dead_caller.0, dead_caller.1);
                     wt.pending_exit_reason = Some(exit_reason);
                     wt.state = TaskState::Ready;
                     woken_watchers.push(w);
@@ -671,6 +680,10 @@ impl Scheduler {
     /// free_grant_pages locks KERNEL_ROOT and FRAME_ALLOCATOR; holding SCHEDULER inverts order.
     pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
         core::mem::take(&mut self.pending_grant_reap)
+    }
+
+    pub fn take_pending_vfs_lease_release(&mut self) -> Vec<usize> {
+        core::mem::take(&mut self.pending_vfs_lease_release)
     }
 
     /// Take dead-task TIMER slots for release outside the scheduler lock.
@@ -776,7 +789,7 @@ impl Scheduler {
                         // stale buffer, duplicating characters ("wget_out.txt" →
                         // "wget_ooooo…"). Only the timeout branch clears it, so the
                         // blocking Recv path (VFS request/reply) is untouched.
-                        task.current_caller = None;
+                        task.clear_current_caller_context();
                         task.deadline_misses = task.deadline_misses.saturating_add(1);
                         // Observability: an RT cell whose awaited message missed its deadline
                         // is a missed control-loop cycle — record it (no enforcement). Gated to

@@ -16,6 +16,7 @@ pub fn run_scheduler_tests() {
     test_task_state_transitions();
     test_reply_value_storage();
     test_current_caller_tracking();
+    test_current_caller_conditional_clear();
     test_lease_attributes();
     test_round_robin_scheduling();
     test_scheduler_current_task();
@@ -166,13 +167,29 @@ fn test_current_caller_tracking() {
     assert_eq!(task.current_caller, None);
 
     // Client 5 sends to us
-    task.current_caller = Some(5);
+    task.set_current_caller_context(5, 11, 2);
 
     // Verify
     assert_eq!(task.current_caller, Some(5));
+    assert_eq!(task.current_caller_cell_id, 11);
+    assert_eq!(task.current_caller_cell_generation, 2);
+    assert!(task.allows_current_caller_owner_watch(11));
+    assert!(!task.allows_current_caller_owner_watch(12));
 
     // After reply, clear
-    task.current_caller = None;
+    task.clear_current_caller_context();
+    assert_eq!(task.current_caller, None);
+}
+
+fn test_current_caller_conditional_clear() {
+    let mut task = Task::new(1, CellId(0), "server", Vec::new());
+    task.set_current_caller_context(5, 11, 2);
+    let generation = task.current_caller_request_generation;
+    assert!(!task.clear_current_caller_context_if(6, generation));
+    assert_eq!(task.current_caller, Some(5));
+    assert!(!task.clear_current_caller_context_if(5, generation + 1));
+    assert_eq!(task.current_caller, Some(5));
+    assert!(task.clear_current_caller_context_if(5, generation));
     assert_eq!(task.current_caller, None);
 }
 

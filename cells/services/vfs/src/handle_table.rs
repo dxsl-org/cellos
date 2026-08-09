@@ -107,6 +107,20 @@ impl HandleTable {
             _ => None,
         }
     }
+
+    pub fn purge_owner(&mut self, caller: Caller) -> usize {
+        let doomed: alloc::vec::Vec<u64> = self
+            .entries
+            .iter()
+            .filter(|(_, entry)| entry.owner == caller)
+            .map(|(cap, _)| *cap)
+            .collect();
+        let removed = doomed.len();
+        for cap in doomed {
+            let _ = self.entries.remove(&cap);
+        }
+        removed
+    }
 }
 
 #[cfg(test)]
@@ -190,5 +204,15 @@ mod tests {
             );
         }
         assert!(table.get_mut(CELL_B, B_CAP).is_some());
+    }
+
+    #[test]
+    fn purge_owner_is_exact_to_the_generation() {
+        let mut table = HandleTable::new();
+        table.insert_ro(CELL_B, B_CAP, "/data/b", 0x1000, 64);
+        table.insert_ro(CELL_B_RESPAWNED, CapId(8), "/data/c", 0x2000, 32);
+        assert_eq!(table.purge_owner(CELL_B), 1);
+        assert!(table.get_mut(CELL_B, B_CAP).is_none());
+        assert!(table.get_mut(CELL_B_RESPAWNED, CapId(8)).is_some());
     }
 }

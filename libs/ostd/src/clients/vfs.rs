@@ -16,12 +16,23 @@ use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 /// Each method allocates a 4 KiB response buffer on the stack for the duration
 /// of the call (freed on return).
 ///
-/// # Large files
-/// [`read_file`][Self::read_file] uses `GetFile`, which transfers the entire
-/// file contents in one IPC message.  Files larger than ~4 KB should use the
-/// Grant-based API (`VfsRequest::ReadGrant`) directly via [`VfsRef`].
+/// # Legacy read contract
+/// [`read_file`][Self::read_file] still sends `GetFile`, but the current VFS
+/// replies with `DataPtr`. This client rejects that raw SAS pointer as
+/// [`ViError::IO`]; callers migrate to bounded reads in later phases.
 pub struct VfsClient {
     svc: VfsRef,
+}
+
+fn read_file_response(response: VfsResponse<'_>) -> ViResult<Vec<u8>> {
+    match response {
+        VfsResponse::Data(data) => Ok(data.to_vec()),
+        // Current path dispatch uses local ERR_IO=1 and ERR_DENIED=3 codes.
+        VfsResponse::Err(1) => Err(ViError::IO),
+        VfsResponse::Err(3) => Err(ViError::PermissionDenied),
+        VfsResponse::Err(_) => Err(ViError::Unknown),
+        _ => Err(ViError::IO),
+    }
 }
 
 impl VfsClient {
@@ -32,19 +43,15 @@ impl VfsClient {
 
     /// Read the full contents of a file at `path`.
     ///
-    /// Returns the raw byte contents.  Limited to ~4 KB by the IPC buffer;
-    /// use the Grant API for larger files.
+    /// Returns copied response bytes. The current `DataPtr` reply is rejected
+    /// rather than dereferenced or treated as empty success.
     pub fn read_file(&mut self, path: &str) -> ViResult<Vec<u8>> {
         let req = VfsRequest::GetFile(path);
         let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        match self
-            .svc
-            .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
-        {
-            VfsResponse::Data(data) => Ok(data.to_vec()),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
-            _ => Err(ViError::IO),
-        }
+        read_file_response(
+            self.svc
+                .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?,
+        )
     }
 
     /// Write (create or overwrite) a file at `path` with `content`.
@@ -144,5 +151,38 @@ impl VfsClient {
 impl Default for VfsClient {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_file_response_copies_data() {
+        assert_eq!(
+            read_file_response(VfsResponse::Data(b"owned bytes")),
+            Ok(b"owned bytes".to_vec())
+        );
+    }
+
+    #[test]
+    fn read_file_response_rejects_raw_pointer_reply() {
+        assert_eq!(
+            read_file_response(VfsResponse::DataPtr {
+                ptr: 0x1000,
+                len: 12,
+            }),
+            Err(ViError::IO)
+        );
+    }
+
+    #[test]
+    fn read_file_response_preserves_typed_vfs_error() {
+        assert_eq!(
+            read_file_response(VfsResponse::Err(3)),
+            Err(ViError::PermissionDenied)
+        );
+        assert_eq!(read_file_response(VfsResponse::Err(1)), Err(ViError::IO));
     }
 }

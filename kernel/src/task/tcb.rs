@@ -163,6 +163,17 @@ pub struct Task {
     pub open_files: alloc::collections::BTreeMap<usize, FileHandle>,
     // The Task ID that this task is currently handling a request FROM (for Reply).
     pub current_caller: Option<usize>,
+    /// Owning cell task of `current_caller`, captured when the request is
+    /// delivered so service-side lifecycle checks do not depend on the sender
+    /// still being alive when they run.
+    pub current_caller_cell_id: u64,
+    /// Cell generation of `current_caller`, captured with the request.
+    pub current_caller_cell_generation: u64,
+    /// Monotonic per-task generation for the request currently in
+    /// `current_caller`. Lets the kernel reject stale completion paths.
+    pub current_caller_request_generation: u64,
+    /// Next request generation to assign when this task accepts a sender.
+    next_caller_request_generation: u64,
     // Last Reply Value received
     pub reply_value: Option<usize>,
     // Current Working Directory
@@ -426,6 +437,10 @@ impl Task {
             next_grant_id: 1,
             open_files: alloc::collections::BTreeMap::new(),
             current_caller: None,
+            current_caller_cell_id: 0,
+            current_caller_cell_generation: 0,
+            current_caller_request_generation: 0,
+            next_caller_request_generation: 1,
             reply_value: None,
             cwd: String::from("/"),
             kernel_stack: None,
@@ -517,5 +532,43 @@ impl Task {
 
     pub fn remove_grant(&mut self, id: usize) -> Option<GrantEntry> {
         self.grant_table.remove(&id)
+    }
+
+    pub fn set_current_caller_context(
+        &mut self,
+        sender_tid: usize,
+        sender_cell_id: u64,
+        sender_generation: u64,
+    ) {
+        self.current_caller = Some(sender_tid);
+        self.current_caller_cell_id = sender_cell_id;
+        self.current_caller_cell_generation = sender_generation;
+        self.current_caller_request_generation = self.next_caller_request_generation;
+        self.next_caller_request_generation = self.next_caller_request_generation.saturating_add(1);
+    }
+
+    pub fn allows_current_caller_owner_watch(&self, watched: usize) -> bool {
+        self.current_caller_cell_id != 0 && watched == self.current_caller_cell_id as usize
+    }
+
+    pub fn clear_current_caller_context(&mut self) {
+        self.current_caller = None;
+        self.current_caller_cell_id = 0;
+        self.current_caller_cell_generation = 0;
+        self.current_caller_request_generation = 0;
+    }
+
+    pub fn clear_current_caller_context_if(
+        &mut self,
+        sender_tid: usize,
+        request_generation: u64,
+    ) -> bool {
+        if self.current_caller == Some(sender_tid)
+            && self.current_caller_request_generation == request_generation
+        {
+            self.clear_current_caller_context();
+            return true;
+        }
+        false
     }
 }

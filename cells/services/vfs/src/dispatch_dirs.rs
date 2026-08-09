@@ -21,13 +21,14 @@ use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 
 use crate::caller::Caller;
 use crate::dirs::DirError;
+use crate::dispatch_file_handles::{close_file, open_file, read_file};
 use crate::manager::VfsManager;
 use crate::paths::{unlink_file, write_file, ERR_DENIED, ERR_HANDLE, ERR_IO, ERR_QUOTA};
 
 /// Largest payload an inline reply carries, leaving room for the postcard
 /// envelope inside the IPC frame. A caller that needs more compares against
 /// `StatAt` and uses the grant path.
-const MAX_INLINE_PAYLOAD: usize = IPC_BUF_SIZE - 96;
+pub(crate) const MAX_INLINE_PAYLOAD: usize = IPC_BUF_SIZE - 96;
 
 /// Serve one handle-addressed request.
 pub fn handle<'a>(
@@ -40,6 +41,11 @@ pub fn handle<'a>(
         VfsRequest::OpenRootDir { path } => open_root(vfs, caller, path),
         VfsRequest::OpenDir { dir, name } => open_dir(vfs, caller, dir, name),
         VfsRequest::ReadAt { dir, name } => read_at(vfs, caller, dir, name, resp_buf),
+        VfsRequest::OpenFileAt { dir, name } => open_file(vfs, caller, dir, name),
+        VfsRequest::ReadFileHandle { file, offset, max } => {
+            read_file(vfs, caller, file, offset, max, resp_buf)
+        }
+        VfsRequest::CloseFile { file } => close_file(vfs, caller, file),
         VfsRequest::WriteAt { dir, name, content } => match resolve(vfs, caller, dir, name) {
             Ok(path) => write_file(vfs, caller, &path, content),
             Err(code) => VfsResponse::Err(code),
@@ -54,7 +60,10 @@ pub fn handle<'a>(
             Err(code) => VfsResponse::Err(code),
         },
         VfsRequest::CloseDir { dir } => match vfs.dirs.revoke(caller, dir) {
-            Ok(_) => VfsResponse::Ok,
+            Ok(outcome) => {
+                let _ = vfs.files.revoke_by_parent_dirs(&outcome.revoked_ids);
+                VfsResponse::Ok
+            }
             Err(e) => VfsResponse::Err(dir_err(e)),
         },
         VfsRequest::SealPaths => {
@@ -82,7 +91,12 @@ fn dir_err(err: DirError) -> u8 {
     }
 }
 
-fn resolve(vfs: &VfsManager, caller: Caller, dir: ViDirHandle, name: &str) -> Result<String, u8> {
+pub(crate) fn resolve(
+    vfs: &VfsManager,
+    caller: Caller,
+    dir: ViDirHandle,
+    name: &str,
+) -> Result<String, u8> {
     vfs.dirs.resolve(caller, dir, name).map_err(dir_err)
 }
 

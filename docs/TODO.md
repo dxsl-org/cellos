@@ -1,5 +1,7 @@
 # TODO
 
+SAS/LBI VFS Phases 02 and 03 are complete. Shell is the sole bounded `ReadFileGrant` pioneer and uses caller-owned lifetime, exact byte bounds, sender-masked replies, typed failure, and no `GetFile`/`DataPtr`/fast fallback; every other caller is characterized and deferred. Phase 04 file-handle work is now complete as an append-only ABI delta: `OpenFileAt` / `ReadFileHandle { max: u32 }` / `CloseFile` are appended, `ViVfsFileHandle` is service-local, and the handle path stays attested-message-only with no fast arm, async, grant, or raw-pointer lifetime. Validation is limited to API tests, existing test-hooks QEMU markers, and RV64/AArch64/x86_64 compile-only builds; no hardware claim; global coverage debt remains.
+
 Lane hypervisor bất định — **đã xong** (PR #16). Nguyên nhân: `vt_irq_el2_lower`
 (`hal/arch/arm/src/aarch64/el2.rs`) dùng chung thân với `vt_irq_el2_cur` và không đọc
 `TPIDR_EL2`, nên tick timer rơi đúng lúc vCPU đang chạy bị xử lý ngay tại chỗ —
@@ -95,3 +97,6 @@ UNVERIFIED — máy không có QEMU/cross toolchain". Tiền đề đó **sai**:
 **Lưu ý cho integration test trên Linux**: cần `--target x86_64-unknown-linux-gnu`. Bản
 `.cargo/config.toml` trong repo mặc định target Windows, nên `cargo test` trần sẽ fail vì không
 tìm thấy `core` cho `x86_64-pc-windows-msvc` trước khi kịp khởi động QEMU.
+
+## BUG
+`qemu_exit::AArch64Semihosting`

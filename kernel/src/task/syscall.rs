@@ -258,20 +258,23 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     // ── PAGE_GRANT_TABLE pass ─────────────────────────────────────────────────
     let owned: alloc::vec::Vec<PageGrant> = {
         let mut tbl = grant_table_lock().lock();
-        let Some(map) = tbl.as_mut() else { return };
-        // Clear grantee references (no removal needed — owner keeps the entry).
-        for grant in map.values_mut() {
-            if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
-                grant.shared_to = None;
+        let mut owned = alloc::vec::Vec::new();
+        if let Some(map) = tbl.as_mut() {
+            // Clear grantee references (no removal needed — owner keeps the entry).
+            for grant in map.values_mut() {
+                if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
+                    grant.shared_to = None;
+                }
             }
+            // Collect and remove owned entries.
+            let owned_keys: alloc::vec::Vec<usize> = map
+                .iter()
+                .filter(|(_, g)| g.owner == dead_tid)
+                .map(|(k, _)| *k)
+                .collect();
+            owned = owned_keys.iter().filter_map(|k| map.remove(k)).collect();
         }
-        // Collect and remove owned entries.
-        let owned_keys: alloc::vec::Vec<usize> = map
-            .iter()
-            .filter(|(_, g)| g.owner == dead_tid)
-            .map(|(k, _)| *k)
-            .collect();
-        owned_keys.iter().filter_map(|k| map.remove(k)).collect()
+        owned
     }; // PAGE_GRANT_TABLE lock released
 
     for grant in &owned {
@@ -284,32 +287,45 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
     // ── REG_GRANT_TABLE pass ──────────────────────────────────────────────────
     let reg_owned: alloc::vec::Vec<RegGrant> = {
         let mut tbl = reg_grant_table_lock().lock();
-        let Some(map) = tbl.as_mut() else { return };
-        // Clear grantee references when the grantee dies.
-        for grant in map.values_mut() {
-            if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
-                grant.shared_to = None;
-            }
-        }
-        let mut owned_keys = alloc::vec::Vec::new();
-        let mut orphan_keys = alloc::vec::Vec::new();
-        for (&key, grant) in map.iter_mut() {
-            if grant.owner == dead_tid {
-                if let Some((grantee, _)) = grant.shared_to {
-                    // Transfer ownership to the sole grantee. The grantee's
-                    // owner-death cleanup drops its cached pointer before calling
-                    // GrantUnregister, allowing the pages to be reclaimed without
-                    // exposing an owner-dead, permanently leaked grant.
-                    grant.owner = grantee;
-                } else {
-                    owned_keys.push(key);
+        let mut removed = alloc::vec::Vec::new();
+        if let Some(map) = tbl.as_mut() {
+            // Clear grantee references when the grantee dies.
+            for grant in map.values_mut() {
+                if grant.shared_to.is_some_and(|(tid, _)| tid == dead_tid) {
+                    grant.shared_to = None;
                 }
-            } else if grant.owner == 0 && grant.shared_to.is_none() {
-                orphan_keys.push(key);
             }
+            let mut owned_keys = alloc::vec::Vec::new();
+            let mut orphan_keys = alloc::vec::Vec::new();
+            for (&key, grant) in map.iter_mut() {
+                if grant.owner == dead_tid {
+                    if let Some((grantee, _)) = grant.shared_to {
+                        if crate::memory::pin::vfs_holder_of_owner(
+                            grant.base,
+                            grant_allocated_bytes(grant.size),
+                            dead_tid,
+                        )
+                        .is_some()
+                        {
+                            grant.owner = 0;
+                            grant.shared_to = None;
+                            owned_keys.push(key);
+                        } else {
+                            // Preserve the legacy transfer only when no live VFS
+                            // lease still spans the region.
+                            grant.owner = grantee;
+                        }
+                    } else {
+                        owned_keys.push(key);
+                    }
+                } else if grant.owner == 0 && grant.shared_to.is_none() {
+                    orphan_keys.push(key);
+                }
+            }
+            owned_keys.extend(orphan_keys);
+            removed = owned_keys.iter().filter_map(|k| map.remove(k)).collect();
         }
-        owned_keys.extend(orphan_keys);
-        owned_keys.iter().filter_map(|k| map.remove(k)).collect()
+        removed
     }; // REG_GRANT_TABLE lock released
 
     for reg in &reg_owned {
@@ -335,6 +351,22 @@ fn withhold_or_free(base: usize, pages: usize) -> bool {
     let Some(held) = crate::memory::pin::holder_of(base, size) else {
         return false;
     };
+    if held.request_generation != 0 {
+        if !crate::memory::pin::withhold_vfs_frames(
+            base,
+            pages,
+            held.holder_tid,
+            held.owner,
+            held.request_generation,
+        ) {
+            log::error!(
+                "[grant] VFS quarantine full: leaking {pages} page(s) at {base:#x} for holder {} request {}",
+                held.holder_tid,
+                held.request_generation
+            );
+        }
+        return true;
+    }
     if !crate::memory::pin::withhold_frames(base, pages, held.owner) {
         log::error!(
             "[grant] quarantine full: leaking {pages} page(s) at {base:#x} pinned by task {}",
@@ -360,6 +392,15 @@ pub(crate) fn release_acked_frames(tid: usize) {
     for (base, pages) in crate::memory::pin::acknowledge(tid) {
         log::info!(
             "[grant] task {tid} acknowledged: releasing {pages} quarantined page(s) at {base:#x}"
+        );
+        free_grant_pages(base, pages);
+    }
+}
+
+pub(crate) fn release_vfs_holder_leases(tid: usize) {
+    for (base, pages) in crate::memory::pin::release_vfs_holder_leases(tid) {
+        log::info!(
+            "[grant] VFS holder {tid} died: releasing {pages} quarantined page(s) at {base:#x}"
         );
         free_grant_pages(base, pages);
     }
@@ -613,7 +654,6 @@ pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> Resum
         .position(|message| mask == 0 || message.sender_tid == mask);
     if let Some(index) = slot {
         let message = task.pending_msgs.remove(index);
-        task.current_caller = Some(message.sender_tid);
         return ResumeDelivery::Message(message);
     }
 
@@ -639,6 +679,95 @@ pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::C
         generation: task.cell_generation,
         sender_tid: sender_tid as u64,
     })
+}
+
+#[derive(Clone, Copy)]
+struct VfsGrantContext {
+    grant_owner: usize,
+    request_generation: u64,
+}
+
+enum VfsGrantLookup {
+    NotVfs,
+    MissingContext,
+    Active(VfsGrantContext),
+}
+
+fn sender_cell_context(sender_tid: usize) -> (u64, u64) {
+    let sched_guard = super::SCHEDULER.lock();
+    sched_guard
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&sender_tid))
+        .map(|task| (task.cell_id.0, task.cell_generation))
+        .unwrap_or((0, 0))
+}
+
+fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
+    let sched_guard = super::SCHEDULER.lock();
+    let Some(task) = sched_guard
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id))
+    else {
+        return VfsGrantLookup::NotVfs;
+    };
+    if !crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize) {
+        return VfsGrantLookup::NotVfs;
+    }
+    match task.current_caller {
+        Some(grant_owner) => VfsGrantLookup::Active(VfsGrantContext {
+            grant_owner,
+            request_generation: task.current_caller_request_generation,
+        }),
+        None => VfsGrantLookup::MissingContext,
+    }
+}
+
+fn finish_vfs_send_release(caller_id: usize, target: usize, context: Option<VfsGrantContext>) {
+    let Some(context) = context else {
+        return;
+    };
+    if target != context.grant_owner {
+        return;
+    }
+    let released = crate::memory::pin::release_vfs_lease(
+        caller_id,
+        context.grant_owner,
+        context.request_generation,
+    );
+    for (base, pages) in released {
+        free_grant_pages(base, pages);
+    }
+    if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&caller_id) {
+            let _ = task
+                .clear_current_caller_context_if(context.grant_owner, context.request_generation);
+        }
+    }
+}
+
+fn grant_is_sliceable(
+    caller_id: usize,
+    grant_owner: usize,
+    shared_to_tid: Option<usize>,
+    base: usize,
+    size: usize,
+    grant_id: usize,
+    vfs_context: Option<VfsGrantContext>,
+) -> bool {
+    if let Some(context) = vfs_context {
+        return grant_owner == context.grant_owner
+            && shared_to_tid == Some(caller_id)
+            && crate::memory::pin::pin_vfs_lease(
+                base,
+                size,
+                context.grant_owner,
+                caller_id,
+                grant_id,
+                context.request_generation,
+            )
+            .is_ok();
+    }
+    grant_owner == caller_id || shared_to_tid == Some(caller_id)
 }
 
 /// Write the caller-identity trailer into the last bytes of a receiver's buffer.
@@ -1377,24 +1506,31 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::audit::AuditEvent::IpcSend,
                 &crate::audit::encode_u32x2(caller_id as u32, target as u32),
             );
+            let vfs_release = match current_vfs_grant_lookup(caller_id) {
+                VfsGrantLookup::Active(context) => Some(context),
+                VfsGrantLookup::NotVfs | VfsGrantLookup::MissingContext => None,
+            };
             let res = super::ipc_send(caller_id, target, msg_ptr, msg_len);
-            match res {
+            let out = match res {
                 Ok(0) => Ok(0),
                 Ok(1) => {
                     super::yield_cpu(); // Blocked
                     if let Some(sched) = super::SCHEDULER.lock().as_ref() {
-                        return Ok(sched
+                        Ok(sched
                             .tasks
                             .get(&caller_id)
                             .and_then(|t| t.reply_value)
-                            .unwrap_or(0));
+                            .unwrap_or(0))
+                    } else {
+                        Ok(0)
                     }
-                    Ok(0)
                 }
                 Err(super::IpcSendError::Backpressure) => Err(SyscallError::TryAgain),
                 Err(super::IpcSendError::TargetGone) => Err(SyscallError::InvalidCommand),
                 _ => Ok(0),
-            }
+            };
+            finish_vfs_send_release(caller_id, target, vfs_release);
+            out
         }
         Syscall::TrySend {
             target,
@@ -1487,6 +1623,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     if let Some(i) = slot {
                         let msg = t.pending_msgs.remove(i);
                         let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        let (sender_cell_id, sender_generation) =
+                            sender_cell_context(msg.sender_tid);
                         if copy_len > 0
                             && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
                         {
@@ -1501,7 +1639,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                 );
                             }
                         }
-                        t.current_caller = Some(msg.sender_tid);
+                        t.set_current_caller_context(
+                            msg.sender_tid,
+                            sender_cell_id,
+                            sender_generation,
+                        );
                         drained_sender = Some(msg.sender_tid);
                     }
                 }
@@ -1714,6 +1856,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     if let Some(i) = slot {
                         let msg = t.pending_msgs.remove(i);
                         let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        let (sender_cell_id, sender_generation) =
+                            sender_cell_context(msg.sender_tid);
                         if copy_len > 0
                             && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
                         {
@@ -1727,7 +1871,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                 );
                             }
                         }
-                        t.current_caller = Some(msg.sender_tid);
+                        t.set_current_caller_context(
+                            msg.sender_tid,
+                            sender_cell_id,
+                            sender_generation,
+                        );
                         return Ok(msg.sender_tid);
                     }
                 }
@@ -1775,6 +1923,17 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             Ok(sender_tid)
                         }
                         ResumeDelivery::Message(message) => {
+                            let (sender_cell_id, sender_generation) =
+                                sender_cell_context(message.sender_tid);
+                            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                                if let Some(task) = sched.tasks.get_mut(&caller_id) {
+                                    task.set_current_caller_context(
+                                        message.sender_tid,
+                                        sender_cell_id,
+                                        sender_generation,
+                                    );
+                                }
+                            }
                             let copy_len = core::cmp::min(message.data.len(), buf_len);
                             if copy_len > 0
                                 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
@@ -1818,6 +1977,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     if let Some(i) = slot {
                         let msg = t.pending_msgs.remove(i);
                         let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                        let (sender_cell_id, sender_generation) =
+                            sender_cell_context(msg.sender_tid);
                         if copy_len > 0
                             && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
                         {
@@ -1831,7 +1992,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                                 );
                             }
                         }
-                        t.current_caller = Some(msg.sender_tid);
+                        t.set_current_caller_context(
+                            msg.sender_tid,
+                            sender_cell_id,
+                            sender_generation,
+                        );
                         return Ok(msg.sender_tid);
                     }
                 }
@@ -2079,6 +2244,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::drivers::iommu::cleanup_cell(caller_id as u64);
             // The flush above is the acknowledgement the quarantine waits on.
             release_acked_frames(caller_id);
+            release_vfs_holder_leases(caller_id);
 
             // yield_cpu switches away; this task is never rescheduled.
             super::yield_cpu();
@@ -2168,6 +2334,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::drivers::iommu::cleanup_cell(tid as u64);
             // The flush above is the acknowledgement the quarantine waits on.
             release_acked_frames(tid);
+            release_vfs_holder_leases(tid);
 
             log::info!(
                 "[kernel] ForceExit: task {} killed by task {}",
@@ -2284,14 +2451,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // next Recv returns `watched` when it dies (see exit_task delivery).
             //
             // Race: the watched task may have already exited before this call.
-            // In that case push a synthetic pending death directly onto the watcher
-            // so recv_exit() is never stranded. Lock order: SCHEDULER first, then
-            // release before touching DEATH_SUBSCRIBERS (per documented lock order).
-            enum Action {
-                Subscribe,
-                AlreadyDead,
-            }
-            let action = {
+            // Subscribe while SCHEDULER still proves the target is live; exit_task
+            // takes DEATH_SUBSCRIBERS under the same outer lock, so publication and
+            // delivery are atomic with respect to task death.
+            {
                 let mut sched_opt = super::SCHEDULER.lock();
                 let sched = match sched_opt.as_mut() {
                     Some(s) => s,
@@ -2302,22 +2465,21 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     .get(&caller_id)
                     .map(|t| t.spawn_cap.is_some())
                     .unwrap_or(false);
-                if !has_spawn {
+                let allowed_vfs_watch = sched.tasks.get(&caller_id).is_some_and(|task| {
+                    crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
+                        && task.allows_current_caller_owner_watch(watched)
+                });
+                if !has_spawn && !allowed_vfs_watch {
                     return Err(SyscallError::PermissionDenied);
                 }
                 if sched.tasks.contains_key(&watched) {
-                    // Task still alive — subscribe normally.
-                    Action::Subscribe
+                    super::scheduler::subscribe_death(watched, caller_id);
                 } else {
                     // Task already dead — queue synthetic death so watcher never stalls.
                     if let Some(wt) = sched.tasks.get_mut(&caller_id) {
                         wt.pending_deaths.push((watched, 0));
                     }
-                    Action::AlreadyDead
                 }
-            }; // SCHEDULER lock released here
-            if matches!(action, Action::Subscribe) {
-                super::scheduler::subscribe_death(watched, caller_id);
             }
             Ok(0)
         }
@@ -4129,13 +4291,28 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             grant_id,
             size_out_ptr,
         } => {
+            let vfs_context = match current_vfs_grant_lookup(caller_id) {
+                VfsGrantLookup::NotVfs => None,
+                VfsGrantLookup::MissingContext => return Ok(usize::MAX),
+                VfsGrantLookup::Active(context) => Some(context),
+            };
             // Check PAGE_GRANT_TABLE first.
             let page_grant = {
                 let tbl = grant_table_lock().lock();
                 tbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
-                    let allowed = grant.owner == caller_id
-                        || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
-                    (allowed, grant.base, grant.size)
+                    (
+                        grant_is_sliceable(
+                            caller_id,
+                            grant.owner,
+                            grant.shared_to.as_ref().map(|(tid, _)| *tid),
+                            grant.base,
+                            grant.size,
+                            grant_id,
+                            vfs_context,
+                        ),
+                        grant.base,
+                        grant.size,
+                    )
                 })
             };
             if let Some((allowed, base, size)) = page_grant {
@@ -4149,9 +4326,19 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let reg_grant = {
                 let rtbl = reg_grant_table_lock().lock();
                 rtbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
-                    let allowed = grant.owner == caller_id
-                        || grant.shared_to.is_some_and(|(tid, _)| tid == caller_id);
-                    (allowed, grant.base, grant.size)
+                    (
+                        grant_is_sliceable(
+                            caller_id,
+                            grant.owner,
+                            grant.shared_to.as_ref().map(|(tid, _)| *tid),
+                            grant.base,
+                            grant.size,
+                            grant_id,
+                            vfs_context,
+                        ),
+                        grant.base,
+                        grant.size,
+                    )
                 })
             };
             match reg_grant {
@@ -4550,6 +4737,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .map_err(|_| SyscallError::InvalidInput)
         }
     }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_registered_grant_owner(reg_id: usize) -> Option<usize> {
+    let tbl = reg_grant_table_lock().lock();
+    tbl.as_ref()
+        .and_then(|map| map.get(&reg_id))
+        .map(|grant| grant.owner)
 }
 
 #[cfg(not(target_arch = "riscv32"))]

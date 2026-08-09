@@ -30,6 +30,8 @@ pub mod stack_overflow_probe;
 #[cfg(feature = "test-hooks")]
 pub mod user_hello;
 pub mod user_out;
+#[cfg(feature = "test-hooks")]
+pub mod vfs_lifecycle_selftest;
 pub mod waker;
 
 #[cfg(test)]
@@ -76,6 +78,14 @@ pub(crate) fn queue_pending_msg(
         data: owned,
         enqueued_tick: system_ticks() as u64,
     })
+}
+
+fn sender_context(sched: &Scheduler, sender_tid: usize) -> (u64, u64) {
+    sched
+        .tasks
+        .get(&sender_tid)
+        .map(|task| (task.cell_id.0, task.cell_generation))
+        .unwrap_or((0, 0))
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -687,6 +697,17 @@ pub fn yield_cpu() {
         crate::task::syscall::release_acked_frames(tid);
         crate::task::syscall::reap_grants_for_task(tid);
         crate::hypervisor::registry::reap_vms_for_task(tid);
+    }
+
+    let vfs_lease_tids = {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.take_pending_vfs_lease_release()
+        } else {
+            alloc::vec::Vec::new()
+        }
+    };
+    for tid in vfs_lease_tids {
+        crate::task::syscall::release_vfs_holder_leases(tid);
     }
 
     // Turn completion appends into scheduler wakes. An append may run in
@@ -1458,6 +1479,7 @@ pub fn ipc_send(
         };
 
         if target_ready {
+            let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
             if let Some(target) = sched.tasks.get_mut(&target_id) {
                 // SAFETY: msg_ptr remains owned by the blocked-in-kernel caller until
                 // this syscall returns, so it is valid for the immediate owned copy.
@@ -1465,7 +1487,7 @@ pub fn ipc_send(
                 queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
                     .map_err(|_| IpcSendError::Backpressure)?;
                 target.state = TaskState::Ready;
-                target.current_caller = Some(caller_id);
+                target.set_current_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
@@ -1527,11 +1549,12 @@ pub fn ipc_post_nonblock(
             .get(&target_id)
             .is_some_and(|t| matches!(t.state, TaskState::Recv { .. }));
 
+        let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
         if let Some(t) = sched.tasks.get_mut(&target_id) {
             queue_pending_msg(t, sender_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
             if target_ready {
                 t.state = TaskState::Ready;
-                t.current_caller = Some(sender_id);
+                t.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
             }
         }
         if target_ready {
@@ -1585,8 +1608,9 @@ pub fn ipc_recv(
                 sched.push_ready(sender_id);
             }
 
+            let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.current_caller = Some(sender_id);
+                caller.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
             }
             return Ok(sender_id);
         } else {
@@ -1644,8 +1668,9 @@ pub fn ipc_try_recv(
                 sched.push_ready(sender_id);
             }
 
+            let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.current_caller = Some(sender_id);
+                caller.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
             }
             return Ok(sender_id);
         } else {
@@ -1685,13 +1710,14 @@ pub fn ipc_try_send(
             false
         };
         if target_ready {
+            let (sender_cell_id, sender_generation) = sender_context(sched, caller_id);
             if let Some(target) = sched.tasks.get_mut(&target_id) {
                 // SAFETY: msg_ptr remains valid while the caller is in this syscall;
                 // queue_pending_msg copies it into owned storage before return.
                 let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
                 queue_pending_msg(target, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
                 target.state = TaskState::Ready;
-                target.current_caller = Some(caller_id);
+                target.set_current_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
@@ -1731,7 +1757,7 @@ pub fn ipc_reply(caller_id: usize, result: usize) -> core::result::Result<usize,
             let prio = sched.push_ready(tid);
             sched.pend_preempt_if_needed(prio);
             if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                task.current_caller = None;
+                task.clear_current_caller_context();
             }
             return Ok(0);
         }

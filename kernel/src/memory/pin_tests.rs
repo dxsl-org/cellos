@@ -143,3 +143,62 @@ fn frames_are_charged_to_the_pin_holder_not_the_dead_owner() {
     assert!(acknowledge(912).is_empty());
     assert_eq!(acknowledge(driver), alloc::vec![(base, 1)]);
 }
+
+#[test]
+fn vfs_release_is_exact_to_the_request_and_target() {
+    let base = arena(12);
+    assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 912, 301, 7, 1), Ok(()));
+    assert_eq!(release_vfs_lease(301, 913, 1), alloc::vec![]);
+    assert!(holder_of(base, PAGE_SIZE).is_some());
+    assert_eq!(release_vfs_lease(301, 912, 2), alloc::vec![]);
+    assert!(holder_of(base, PAGE_SIZE).is_some());
+    assert_eq!(release_vfs_lease(301, 912, 1), alloc::vec![]);
+    assert!(holder_of(base, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn owner_death_quarantines_until_the_matching_vfs_release() {
+    let base = arena(13);
+    assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 913, 302, 8, 9), Ok(()));
+    assert_eq!(quarantine_task(913), 1);
+    let before = quarantined_pages();
+    assert!(withhold_vfs_frames(base, 1, 302, 913, 9));
+    assert_eq!(quarantined_pages(), before + 1);
+    let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
+    assert!(held.quarantined);
+    assert_eq!(release_vfs_lease(302, 913, 8), alloc::vec![]);
+    assert_eq!(quarantined_pages(), before + 1);
+    assert_eq!(release_vfs_lease(302, 913, 9), alloc::vec![(base, 1)]);
+    assert_eq!(quarantined_pages(), before);
+}
+
+#[test]
+fn dead_vfs_holder_releases_every_quarantined_lease_it_held() {
+    let first = arena(14);
+    let second = arena(15);
+    assert_eq!(pin_vfs_lease(first, PAGE_SIZE, 914, 303, 9, 1), Ok(()));
+    assert_eq!(pin_vfs_lease(second, PAGE_SIZE, 915, 303, 10, 2), Ok(()));
+    assert!(withhold_vfs_frames(first, 1, 303, 914, 1));
+    assert!(withhold_vfs_frames(second, 1, 303, 915, 2));
+    assert_eq!(
+        release_vfs_holder_leases(303),
+        alloc::vec![(first, 1), (second, 1)]
+    );
+    assert!(holder_of(first, PAGE_SIZE).is_none());
+    assert!(holder_of(second, PAGE_SIZE).is_none());
+}
+
+#[test]
+fn vfs_owner_query_filters_by_overlapping_owner() {
+    let first = arena(16);
+    let second = arena(17);
+    assert_eq!(pin_vfs_lease(first, PAGE_SIZE, 916, 304, 11, 1), Ok(()));
+    assert_eq!(pin_vfs_lease(second, PAGE_SIZE, 917, 305, 12, 2), Ok(()));
+    let held = vfs_holder_of_owner(first, PAGE_SIZE, 916).expect("owner lease must match");
+    assert_eq!(held.owner, 916);
+    assert_eq!(held.holder_tid, 304);
+    assert!(vfs_holder_of_owner(first, PAGE_SIZE, 917).is_none());
+    assert!(vfs_holder_of_owner(second, PAGE_SIZE, 916).is_none());
+    assert_eq!(release_vfs_lease(304, 916, 1), alloc::vec![]);
+    assert_eq!(release_vfs_lease(305, 917, 2), alloc::vec![]);
+}

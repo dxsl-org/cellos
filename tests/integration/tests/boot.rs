@@ -1618,6 +1618,29 @@ fn ipc_pending_delivery_selftest_passes() {
     });
 }
 
+#[test]
+fn vfs_lifetime_selftest_passes() {
+    if !sizing_prerequisites_ok() {
+        return;
+    }
+    let qemu = QemuRunner::boot_with_fresh_disk(&test_hooks_kernel_path(), &disk_path());
+    qemu.wait_for(
+        "[selftest] VFS-LIFETIME: PASS (exact lease + quarantine + cell-owner death watch)",
+        BOOT_TIMEOUT,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "VFS lifetime self-test did not pass: {e}\n--- output ---\n{}",
+            qemu.dump()
+        )
+    });
+    assert!(
+        !qemu.output_contains("[selftest] VFS-LIFETIME: FAIL"),
+        "VFS lifetime self-test reported FAIL\n--- output ---\n{}",
+        qemu.dump()
+    );
+}
+
 /// Input M2.2 (Phase 01): kernel must register the input service at spawn time.
 ///
 /// Verifies that `loader.rs` calls `set_input_cell` for `/bin/input`, producing

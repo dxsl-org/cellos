@@ -230,7 +230,9 @@ fn every_path_naming_request_is_classified_as_path_addressed() {
 #[test]
 fn no_handle_addressed_request_is_classified_as_path_addressed() {
     use crate::dir_handles::ViDirHandle;
+    use crate::vfs_file_handles::ViVfsFileHandle;
     let dir = ViDirHandle(1);
+    let file = ViVfsFileHandle(2);
     assert!(!VfsRequest::OpenDir { dir, name: "x" }.is_path_addressed());
     assert!(!VfsRequest::ReadAt { dir, name: "x" }.is_path_addressed());
     assert!(!VfsRequest::WriteAt {
@@ -244,6 +246,14 @@ fn no_handle_addressed_request_is_classified_as_path_addressed() {
     assert!(!VfsRequest::UnlinkAt { dir, name: "x" }.is_path_addressed());
     assert!(!VfsRequest::CloseDir { dir }.is_path_addressed());
     assert!(!VfsRequest::SealPaths.is_path_addressed());
+    assert!(!VfsRequest::OpenFileAt { dir, name: "x" }.is_path_addressed());
+    assert!(!VfsRequest::ReadFileHandle {
+        file,
+        offset: 0,
+        max: 1
+    }
+    .is_path_addressed());
+    assert!(!VfsRequest::CloseFile { file }.is_path_addressed());
 }
 
 // ── Wire compatibility ───────────────────────────────────────────────────────
@@ -271,6 +281,18 @@ fn the_existing_variants_keep_their_discriminants() {
         encoded[0], 13,
         "ReadFileGrant was the last variant before the directory ops"
     );
+
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(&VfsRequest::SealPaths, &mut buf).unwrap();
+    assert_eq!(encoded[0], 22, "SealPaths must stay request variant 22");
+
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(
+        &super::ipc::VfsResponse::DirHandle(crate::dir_handles::ViDirHandle(7)),
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(encoded[0], 8, "DirHandle must stay response variant 8");
 }
 
 #[test]
@@ -296,6 +318,74 @@ fn a_handle_encodes_as_its_inner_value_and_survives_a_round_trip() {
         }
         other => panic!("round trip changed the request: {other:?}"),
     }
+}
+
+#[test]
+fn file_handle_variants_append_after_the_directory_capability_slice() {
+    use crate::dir_handles::ViDirHandle;
+    use crate::vfs_file_handles::ViVfsFileHandle;
+
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(
+        &VfsRequest::OpenFileAt {
+            dir: ViDirHandle(7),
+            name: "x",
+        },
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(encoded[0], 23, "OpenFileAt must stay variant 23");
+
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(
+        &VfsRequest::ReadFileHandle {
+            file: ViVfsFileHandle(8),
+            offset: 9,
+            max: 10,
+        },
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(encoded[0], 24, "ReadFileHandle must stay variant 24");
+
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(
+        &VfsRequest::CloseFile {
+            file: ViVfsFileHandle(11),
+        },
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(encoded[0], 25, "CloseFile must stay variant 25");
+}
+
+#[test]
+fn file_handle_response_stays_appended_and_round_trips() {
+    use crate::vfs_file_handles::ViVfsFileHandle;
+
+    let mut buf = [0u8; 64];
+    let encoded = super::ipc::encode(
+        &super::ipc::VfsResponse::FileHandle(ViVfsFileHandle(7)),
+        &mut buf,
+    )
+    .unwrap();
+    assert_eq!(encoded[0], 9, "FileHandle must stay response variant 9");
+    assert_eq!(encoded[1], 7, "the file handle is a bare varint");
+
+    let decoded: super::ipc::VfsResponse = super::ipc::decode(encoded).unwrap();
+    match decoded {
+        super::ipc::VfsResponse::FileHandle(file) => assert_eq!(file, ViVfsFileHandle(7)),
+        other => panic!("round trip changed the response: {other:?}"),
+    }
+}
+
+#[test]
+fn the_max_inline_file_read_reply_fits_inside_the_ipc_buffer() {
+    let payload = [0xAA; super::ipc::IPC_BUF_SIZE - 96];
+    let mut buf = [0u8; super::ipc::IPC_BUF_SIZE];
+    let encoded = super::ipc::encode(&super::ipc::VfsResponse::Data(&payload), &mut buf)
+        .expect("the bounded file-read reply must encode");
+    assert!(encoded.len() <= super::ipc::IPC_BUF_SIZE);
 }
 
 #[test]

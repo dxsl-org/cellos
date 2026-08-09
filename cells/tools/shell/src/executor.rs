@@ -94,12 +94,12 @@ fn run_capture(inner: &str) -> String {
         }
         "vcat" | "cat" => {
             if let Some(path) = args.first() {
-                let mut buf = [0u8; 480];
-                let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
-                if n > 0 {
-                    String::from(core::str::from_utf8(&buf[..n]).unwrap_or(""))
-                } else {
-                    String::new()
+                match crate::cmd_fs::read_file_vfs_owned(path, 4096) {
+                    Ok(bytes) => String::from(core::str::from_utf8(&bytes).unwrap_or("")),
+                    Err(_) => {
+                        ostd::io::println("shell: command substitution read failed");
+                        String::new()
+                    }
                 }
             } else {
                 String::new()
@@ -452,16 +452,14 @@ fn exec_cmd(cmd: &Cmd, _stdin: &[u8], jobs: &mut Jobs) -> i32 {
         .iter()
         .find(|r| matches!(r, Redirect::StdinFrom(_)))
     {
-        stdin_file_buf = {
-            let mut buf = alloc::vec![0u8; 4096];
-            let expanded_path = expand_word(path);
-            let n = crate::cmd_fs::read_file_vfs(&expanded_path, &mut buf);
-            if n == 0 {
+        stdin_file_buf = match crate::cmd_fs::read_file_vfs_owned(&expand_word(path), 4096) {
+            Ok(bytes) => bytes,
+            Err(_) => {
                 ostd::io::print("shell: cannot open '");
                 ostd::io::print(&path.text);
                 ostd::io::println("'");
+                return 1;
             }
-            buf[..n].to_vec()
         };
         &stdin_file_buf
     } else {
@@ -719,7 +717,7 @@ fn print_jobs(jobs: &Jobs) {
 /// `test` / `[` — evaluate a condition and return 0 (true) or 1 (false).
 ///
 /// Supported forms:
-/// - `-f path`   : file exists and is non-empty (vcat returns 0)
+/// - `-f path`   : path exists and is a regular file
 /// - `-z str`    : string is empty
 /// - `-n str`    : string is non-empty
 /// - `a = b`     : string equality
@@ -729,10 +727,7 @@ fn cmd_test(args: &[&str]) -> ViResult<()> {
     let fail = Err(ViError::NotFound); // any non-Ok maps to exit code 1
     match args {
         ["-f", path] => {
-            // File-existence check: vcat returns 0 if the file is present and
-            // non-empty, 1 otherwise. Re-use the same VFS OP_READ path.
-            let mut buf = [0u8; 8];
-            if crate::cmd_fs::read_file_vfs(path, &mut buf) > 0 {
+            if matches!(crate::cmd_fs::stat_file_vfs(path), Some((_, false))) {
                 ok
             } else {
                 fail
@@ -834,15 +829,13 @@ fn cmd_source(args: &[String], jobs: &mut Jobs) -> ViResult<()> {
             return Ok(());
         }
     };
-    let mut buf = alloc::vec![0u8; 4096];
-    let n = crate::cmd_fs::read_file_vfs(path, &mut buf);
-    if n == 0 {
+    let bytes = crate::cmd_fs::read_file_vfs_owned(path, 4096).map_err(|error| {
         ostd::io::print("source: cannot open '");
         ostd::io::print(path);
         ostd::io::println("'");
-        return Ok(());
-    }
-    let content = core::str::from_utf8(&buf[..n]).unwrap_or("");
+        error
+    })?;
+    let content = core::str::from_utf8(&bytes).unwrap_or("");
     for line in content.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -1069,8 +1062,7 @@ fn read_path_bytes(path: &str) -> Result<Vec<u8>, UtilityReadError> {
         if size == 0 {
             return Ok(bytes);
         }
-        let read = crate::cmd_fs::read_file_vfs(path, &mut bytes);
-        if read == size {
+        if crate::cmd_fs::read_file_vfs_known_size(path, size, &mut bytes) == Ok(size) {
             return Ok(bytes);
         }
     }

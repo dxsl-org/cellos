@@ -21,7 +21,7 @@ pub(super) fn read_path_bytes(path: &str) -> Result<Vec<u8>, ReadError> {
         if size == 0 {
             return Ok(bytes);
         }
-        if crate::cmd_fs::read_file_vfs(path, &mut bytes) == size {
+        if crate::cmd_fs::read_file_vfs_known_size(path, size, &mut bytes) == Ok(size) {
             return Ok(bytes);
         }
         return Err(ReadError::Io);

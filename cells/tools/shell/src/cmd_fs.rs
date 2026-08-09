@@ -333,91 +333,110 @@ pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResu
     Ok(())
 }
 
-/// Read file content from VFS, trying the fast-IPC path first then falling back to ecall.
-///
-/// The retained `ostd::fast_ipc` probe is inactive for separately linked Cells,
-/// so current reads use the governed `sys_send`/`sys_recv` message round trip.
-pub fn read_file_vfs(path: &str, out: &mut [u8]) -> usize {
-    let req = api::ipc::VfsRequest::GetFile(path);
-    let mut fast_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+struct ReadGrant(usize);
 
-    // Retained Tier-1 rewrite scaffold; current separately linked Cells return 0.
-    // SAFETY: fast_buf is exclusive; TrustedHandle::default() is a ZST no-op.
-    let fast_n = unsafe {
-        ostd::fast_ipc::call_vfs(api::fast_ipc::TrustedHandle::default(), &req, &mut fast_buf)
-    };
-
-    let decode_buf: &[u8] = if fast_n > 0 {
-        &fast_buf[..fast_n]
-    } else {
-        // Fallback: full ecall round-trip. Masked recv — see vfs_req_ok.
-        let mut send_buf = [0u8; 512];
-        let n = match api::ipc::encode(&req, &mut send_buf) {
-            Ok(s) => s.len(),
-            Err(_) => return 0,
-        };
-        let vfs = vfs_endpoint();
-        syscall::sys_send(vfs, &send_buf[..n]);
-        match syscall::sys_recv(vfs, &mut fast_buf) {
-            syscall::SyscallResult::Ok(_) => &fast_buf,
-            _ => return 0,
-        }
-    };
-
-    match api::ipc::decode::<api::ipc::VfsResponse>(decode_buf) {
-        Ok(api::ipc::VfsResponse::DataPtr { ptr, len }) => {
-            // SAFETY: VFS returned a pointer into its own SAS memory;
-            // VFS is blocked (fast path) or waiting for next recv (ecall path).
-            let data_len = (len as usize).min(out.len());
-            unsafe {
-                core::ptr::copy_nonoverlapping(ptr as *const u8, out.as_mut_ptr(), data_len);
-            }
-            data_len
-        }
-        // GetFile only serves in-memory backends (RamFS) — disk-backed paths
-        // (/data on FAT) have no stable pointer to hand out. Fall back to the
-        // copy path: ReadAsync stores the bytes under a handle, Poll returns
-        // them inline. This is how vcat reads /data since the typed migration.
-        _ => read_file_vfs_async(path, out),
+impl Drop for ReadGrant {
+    fn drop(&mut self) {
+        let _ = syscall::sys_grant_free(self.0);
     }
 }
 
-/// Copy-path read via `ReadAsync` + `Poll` (≤480 bytes, the `Data` reply limit).
-fn read_file_vfs_async(path: &str, out: &mut [u8]) -> usize {
-    use api::ipc::{VfsRequest, VfsResponse};
-    let mut buf = [0u8; 512];
-
-    let n = match api::ipc::encode(&VfsRequest::ReadAsync { path }, &mut buf) {
-        Ok(s) => s.len(),
-        Err(_) => return 0,
-    };
-    // Masked recv for both round-trips — see vfs_req_ok.
-    let vfs = vfs_endpoint();
-    syscall::sys_send(vfs, &buf[..n]);
-    let handle = match syscall::sys_recv(vfs, &mut buf) {
-        syscall::SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&buf) {
-            Ok(VfsResponse::PendingHandle(h)) => h,
-            _ => return 0,
-        },
-        _ => return 0,
-    };
-
-    let n = match api::ipc::encode(&VfsRequest::Poll { handle }, &mut buf) {
-        Ok(s) => s.len(),
-        Err(_) => return 0,
-    };
-    syscall::sys_send(vfs, &buf[..n]);
-    match syscall::sys_recv(vfs, &mut buf) {
-        syscall::SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&buf) {
-            Ok(VfsResponse::Data(data)) => {
-                let len = data.len().min(out.len());
-                out[..len].copy_from_slice(&data[..len]);
-                len
-            }
-            _ => 0,
-        },
-        _ => 0,
+fn vfs_read_error(code: u8) -> ViError {
+    match code {
+        // VFS dispatch currently uses its local ERR_IO=1 and ERR_DENIED=3
+        // constants for Stat/ReadFileGrant rather than ViError discriminants.
+        1 => ViError::IO,
+        3 => ViError::PermissionDenied,
+        _ => ViError::Unknown,
     }
+}
+
+/// Read a complete VFS file through caller-owned memory.
+///
+/// The observed Stat size is a hard bound: short copies, malformed replies,
+/// and a destination that cannot hold that snapshot fail rather than truncate
+/// or retry the legacy `GetFile`/`DataPtr` path.
+pub(crate) fn read_file_vfs_result(path: &str, out: &mut [u8]) -> ViResult<usize> {
+    use api::ipc::{VfsRequest, VfsResponse};
+
+    let vfs = vfs_endpoint();
+    let mut send = [0u8; 512];
+    let mut reply = [0u8; 64];
+    let file_len = match ostd::ipc::service_call_typed::<_, VfsResponse>(
+        vfs,
+        &VfsRequest::Stat(path),
+        &mut send,
+        &mut reply,
+    )
+    .map_err(|_| ViError::IO)?
+    {
+        VfsResponse::Stat { is_dir: true, .. } => return Err(ViError::IsADirectory),
+        VfsResponse::Stat {
+            size,
+            is_dir: false,
+        } => usize::try_from(size).map_err(|_| ViError::InvalidInput)?,
+        VfsResponse::Err(code) => return Err(vfs_read_error(code)),
+        _ => return Err(ViError::IO),
+    };
+    read_file_vfs_with_size(vfs, path, file_len, out)
+}
+
+fn read_file_vfs_with_size(
+    vfs: usize,
+    path: &str,
+    file_len: usize,
+    out: &mut [u8],
+) -> ViResult<usize> {
+    use api::ipc::{VfsRequest, VfsResponse};
+
+    if file_len == 0 {
+        return Ok(0);
+    }
+    if file_len > out.len() {
+        return Err(ViError::InvalidArgument);
+    }
+
+    let grant = ReadGrant(syscall::sys_grant_alloc(file_len).ok_or(ViError::OutOfMemory)?);
+    if !syscall::sys_grant_share(grant.0, vfs, 2) {
+        return Err(ViError::PermissionDenied);
+    }
+
+    let mut send = [0u8; 512];
+    let mut reply = [0u8; 64];
+    let copied = match ostd::ipc::service_call_typed::<_, VfsResponse>(
+        vfs,
+        &VfsRequest::ReadFileGrant {
+            path,
+            grant: grant.0,
+            max: file_len,
+        },
+        &mut send,
+        &mut reply,
+    )
+    .map_err(|_| ViError::IO)?
+    {
+        VfsResponse::GrantDone { bytes } if bytes == file_len => bytes,
+        VfsResponse::GrantDone { .. } => return Err(ViError::IO),
+        VfsResponse::Err(code) => return Err(vfs_read_error(code)),
+        _ => return Err(ViError::IO),
+    };
+    match syscall::sys_grant_copy_to_slice(grant.0, &mut out[..copied]) {
+        Some(bytes) if bytes == copied => Ok(bytes),
+        _ => Err(ViError::IO),
+    }
+}
+
+/// Perform a complete read when the caller already obtained an authorized size.
+pub(crate) fn read_file_vfs_known_size(path: &str, size: usize, out: &mut [u8]) -> ViResult<usize> {
+    read_file_vfs_with_size(vfs_endpoint(), path, size, out)
+}
+
+/// Allocate a bounded destination and perform a complete read.
+pub(crate) fn read_file_vfs_owned(path: &str, max: usize) -> ViResult<Vec<u8>> {
+    let mut bytes = alloc::vec![0u8; max];
+    let copied = read_file_vfs_result(path, &mut bytes)?;
+    bytes.truncate(copied);
+    Ok(bytes)
 }
 
 /// `vcat <path>` — print file content via VFS OP_READ (reads RamFS including /tmp/).
@@ -432,13 +451,12 @@ pub fn cmd_vcat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
             return Ok(());
         }
     };
-    let mut buf = [0u8; 480];
-    let n = read_file_vfs(path, &mut buf);
-    if n == 0 {
-        ostd::io::print("vcat: not found: ");
+    let mut buf = [0u8; 4096];
+    let n = read_file_vfs_result(path, &mut buf).map_err(|error| {
+        ostd::io::print("vcat: cannot read: ");
         ostd::io::println(path);
-        return Err(ViError::NotFound); // non-zero exit so `if vcat ...; then` works correctly
-    }
+        error
+    })?;
     if let Ok(s) = core::str::from_utf8(&buf[..n]) {
         crate::executor::shell_print(s);
     }

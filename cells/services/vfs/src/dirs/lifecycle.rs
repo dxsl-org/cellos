@@ -27,19 +27,23 @@
 //! about its parent, the same shape as a spawner's capability ceiling bounding a
 //! child it will never see again.
 
-use alloc::vec::Vec;
+mod revoke;
+
 use api::dir_handles::ViDirHandle;
 
-use super::{CellState, DirError, DirTable};
+use super::{CellState, DirError, DirTable, RevokeOutcome};
 use crate::caller::Caller;
 
 /// What the service still owes `caller` before serving it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Contact {
     /// Nothing outstanding.
     Ready,
     /// The kernel has not yet been asked what this cell inherited.
-    NeedsAttestation,
+    NeedsAttestation {
+        replaced_owner: Option<Caller>,
+        revoked_dir_ids: alloc::vec::Vec<u64>,
+    },
 }
 
 impl DirTable {
@@ -55,18 +59,31 @@ impl DirTable {
                 if state.attested {
                     Contact::Ready
                 } else {
-                    Contact::NeedsAttestation
+                    Contact::NeedsAttestation {
+                        replaced_owner: None,
+                        revoked_dir_ids: alloc::vec![],
+                    }
                 }
             }
             Some(state) if state.generation < caller.generation => {
-                self.purge_cell(cell);
+                let replaced_owner = Caller {
+                    cell: caller.cell,
+                    generation: state.generation,
+                };
+                let revoked = self.purge_cell(cell);
                 self.insert_cell_state(caller);
-                Contact::NeedsAttestation
+                Contact::NeedsAttestation {
+                    replaced_owner: Some(replaced_owner),
+                    revoked_dir_ids: revoked.revoked_ids,
+                }
             }
             Some(_) => Contact::Ready,
             None => {
                 self.insert_cell_state(caller);
-                Contact::NeedsAttestation
+                Contact::NeedsAttestation {
+                    replaced_owner: None,
+                    revoked_dir_ids: alloc::vec![],
+                }
             }
         }
     }
@@ -111,7 +128,7 @@ impl DirTable {
     ///
     /// # Errors
     /// [`DirError::UnknownHandle`] when `dir` is not this caller's.
-    pub fn revoke(&mut self, caller: Caller, dir: ViDirHandle) -> Result<usize, DirError> {
+    pub fn revoke(&mut self, caller: Caller, dir: ViDirHandle) -> Result<RevokeOutcome, DirError> {
         if self.owned(caller, dir).is_none() {
             return Err(DirError::UnknownHandle);
         }
@@ -140,48 +157,5 @@ impl DirTable {
                 handles: 0,
             },
         );
-    }
-
-    /// Remove `roots` and, repeatedly, everything whose parent has gone.
-    ///
-    /// The fixpoint loop is not an optimisation target: derivation chains are a
-    /// handful of entries deep and revocation is rare.
-    pub(crate) fn revoke_ids(&mut self, roots: &[u64]) -> usize {
-        let mut doomed: Vec<u64> = roots.to_vec();
-        let mut cursor = 0;
-        while cursor < doomed.len() {
-            let id = doomed[cursor];
-            cursor += 1;
-            let children: Vec<u64> = self
-                .entries
-                .iter()
-                .filter(|(child, e)| e.parent == Some(id) && !doomed.contains(child))
-                .map(|(child, _)| *child)
-                .collect();
-            doomed.extend(children);
-        }
-        let mut removed = 0;
-        for id in doomed {
-            if let Some(entry) = self.entries.remove(&id) {
-                removed += 1;
-                if let Some(state) = self.cells.get_mut(&entry.owner.cell.0) {
-                    state.handles = state.handles.saturating_sub(1);
-                }
-            }
-        }
-        removed
-    }
-
-    /// Revoke everything `cell` holds, at any generation, and forget the cell.
-    pub(crate) fn purge_cell(&mut self, cell: u64) -> usize {
-        let roots: Vec<u64> = self
-            .entries
-            .iter()
-            .filter(|(_, e)| e.owner.cell.0 == cell)
-            .map(|(id, _)| *id)
-            .collect();
-        let removed = self.revoke_ids(&roots);
-        self.cells.remove(&cell);
-        removed
     }
 }

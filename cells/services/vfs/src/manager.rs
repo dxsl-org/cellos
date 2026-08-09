@@ -4,11 +4,14 @@
 //! Backend routing is fully encapsulated here: dispatch code calls these
 //! delegates and never inspects path prefixes itself.
 
-use alloc::boxed::Box;
-use alloc::vec::Vec;
+mod owned_state;
+mod state_transfer;
+#[cfg(test)]
+mod tests;
 
-use api::hotswap::ViStateTransfer;
-use ostd::prelude::*;
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 use crate::access::AccessTable;
 use crate::backend_bin_overlay::BinOverlay;
@@ -17,7 +20,9 @@ use crate::backend_fat::FatBackend;
 use crate::backend_littlefs::LittlefsBackend;
 use crate::backend_ramfs::RamFsBackend;
 use crate::backend_redoxfs::RedoxFsBackend;
+use crate::caller::Caller;
 use crate::dirs::DirTable;
+use crate::file_handles::FileHandleTable;
 use crate::handle_table::HandleTable;
 use crate::mount::MountTable;
 use crate::pending::PendingTable;
@@ -29,9 +34,11 @@ pub struct VfsManager {
     pub quota: QuotaTracker,
     pub access: AccessTable,
     pub pending: PendingTable,
+    pub files: FileHandleTable,
     /// Directory capabilities. Deliberately not serialised across a hot-swap —
     /// see `dirs::lifecycle`, where the reasoning for that lives.
     pub dirs: DirTable,
+    watched_owners: BTreeMap<u64, Caller>,
 }
 
 impl VfsManager {
@@ -78,7 +85,9 @@ impl VfsManager {
             quota: QuotaTracker::new(),
             access: AccessTable::new(),
             pending: PendingTable::new(),
+            files: FileHandleTable::new(),
             dirs: DirTable::new(),
+            watched_owners: BTreeMap::new(),
         }
     }
 
@@ -151,70 +160,5 @@ impl VfsManager {
             .backend_mut(path)
             .map(|b| b.rmdir_recursive(path))
             .unwrap_or(false)
-    }
-}
-
-// ─── Hot-swap state transfer ───────────────────────────────────────────────────
-//
-// VFS serialises its quota table so per-cell byte-usage accounting survives a
-// live upgrade.  The handle table is NOT serialised — open handles are inherently
-// session-scoped and client cells reopen files after the swap completes.
-//
-// Wire format (little-endian, schema v1):
-//   [version: u32][cell_count: u32]
-//     [cell_id: u64][bytes_used: u64]...
-
-const VFS_SCHEMA_VERSION: u32 = 1;
-
-impl ViStateTransfer for VfsManager {
-    fn state_size(&self) -> usize {
-        4 + 4 + self.quota.entry_count() * 16 // version + count + (id,used) pairs
-    }
-
-    fn serialize_state(&self, buf: &mut [u8]) -> ViResult<usize> {
-        let needed = self.state_size();
-        if buf.len() < needed {
-            return Err(ViError::InvalidArgument);
-        }
-        let mut pos = 0;
-        buf[pos..pos + 4].copy_from_slice(&VFS_SCHEMA_VERSION.to_le_bytes());
-        pos += 4;
-        let entries = self.quota.all_entries();
-        buf[pos..pos + 4].copy_from_slice(&(entries.len() as u32).to_le_bytes());
-        pos += 4;
-        for (id, used) in &entries {
-            buf[pos..pos + 8].copy_from_slice(&id.to_le_bytes());
-            pos += 8;
-            buf[pos..pos + 8].copy_from_slice(&used.to_le_bytes());
-            pos += 8;
-        }
-        Ok(pos)
-    }
-
-    fn deserialize_state(&mut self, buf: &[u8]) -> ViResult<()> {
-        if buf.len() < 8 {
-            return Err(ViError::InvalidInput);
-        }
-        let _version = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
-        let count = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]) as usize;
-        let mut pos = 8;
-        for _ in 0..count {
-            if pos + 16 > buf.len() {
-                return Err(ViError::InvalidInput);
-            }
-            let id = u64::from_le_bytes(
-                buf[pos..pos + 8]
-                    .try_into()
-                    .map_err(|_| ViError::InvalidInput)?,
-            );
-            let used = u64::from_le_bytes(
-                buf[pos + 8..pos + 16]
-                    .try_into()
-                    .map_err(|_| ViError::InvalidInput)?,
-            );
-            self.quota.restore(types::CellId(id), used);
-            pos += 16;
-        }
-        Ok(())
     }
 }

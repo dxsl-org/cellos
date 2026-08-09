@@ -92,10 +92,31 @@ fn riscv64_vfs_quota_all_pass() {
     wait_for_or_dump(&runner, "[stack-baseline] name=init phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=shell phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs phase=boot ");
+    wait_for_or_dump(
+        &runner,
+        "[vfs-file-handle] wrong-owner-read-close-preserves-entry PASS",
+    );
+    wait_for_or_dump(&runner, "[vfs-file-handle] quota-32-per-owner PASS");
+    wait_for_or_dump(&runner, "[vfs-file-handle] nonreuse-and-u64-exhaustion PASS");
+    wait_for_or_dump(&runner, "[vfs-file-handle] exact-generation-purge PASS");
+    wait_for_or_dump(
+        &runner,
+        "[vfs-file-handle] parent-cross-owner-transitive-revoke PASS",
+    );
+    wait_for_or_dump(
+        &runner,
+        "[vfs-file-handle] owner-watch-filehandle-cleanup PASS",
+    );
+    wait_for_or_dump(&runner, "[vfs-file-handle] higher-generation-cleanup PASS");
     wait_for_or_dump(&runner, "[PASS] dircap: GetFile returns a nonempty pointer before sealing");
+    wait_for_or_dump(
+        &runner,
+        "[PASS] dircap: revoking a parent dir reaps file handles opened below it",
+    );
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant clamps to grant length");
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant copies nonzero bytes");
     wait_for_or_dump(&runner, "[PASS] grant: ReadFileGrant is refused after sealing");
+    wait_for_or_dump(&runner, "[PASS] dircap: ReadFileHandle still works after sealing");
     wait_for_or_dump(&runner, "[vfs-test] ALL TESTS PASSED");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs-test phase=exit ");
 

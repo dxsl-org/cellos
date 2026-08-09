@@ -150,6 +150,22 @@ pub enum VfsRequest<'a> {
     /// transition is one-way and survives for the life of the cell: an operation
     /// that could undo it would make the guarantee advisory.
     SealPaths,
+    /// Open the file `name` inside `dir` and receive a service-local file
+    /// handle for bounded inline reads.
+    OpenFileAt {
+        dir: crate::dir_handles::ViDirHandle,
+        name: &'a str,
+    },
+    /// Read at most `max` bytes from `file`, starting at `offset`.
+    ReadFileHandle {
+        file: crate::vfs_file_handles::ViVfsFileHandle,
+        offset: u64,
+        max: u32,
+    },
+    /// Give up `file`.
+    CloseFile {
+        file: crate::vfs_file_handles::ViVfsFileHandle,
+    },
 }
 
 impl VfsRequest<'_> {
@@ -187,7 +203,10 @@ impl VfsRequest<'_> {
             | Self::ListAt { .. }
             | Self::UnlinkAt { .. }
             | Self::CloseDir { .. }
-            | Self::SealPaths => false,
+            | Self::SealPaths
+            | Self::OpenFileAt { .. }
+            | Self::ReadFileHandle { .. }
+            | Self::CloseFile { .. } => false,
         }
     }
 }
@@ -218,6 +237,8 @@ pub enum VfsResponse<'a> {
     /// insertion above would renumber the rest and turn an old reply into a
     /// different one that still decodes.
     DirHandle(crate::dir_handles::ViDirHandle),
+    /// A file handle the service has issued to the caller.
+    FileHandle(crate::vfs_file_handles::ViVfsFileHandle),
 }
 
 // ── Network service ───────────────────────────────────────────────────────────

@@ -68,6 +68,10 @@ pub fn clear_vfs_if_cell(cell_id_raw: usize) {
     }
 }
 
+pub(crate) fn is_registered_vfs_cell(cell_id_raw: usize) -> bool {
+    cell_id_raw != 0 && VFS_HANDLER_CELL.load(Ordering::Relaxed) == cell_id_raw
+}
+
 /// RAII guard that restores the S-mode interrupt-enable bit (SIE) on drop.
 ///
 /// Constructed by disabling SIE and recording its prior state.  `Drop` restores

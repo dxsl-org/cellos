@@ -98,6 +98,20 @@ impl PendingTable {
             _ => None,
         }
     }
+
+    pub fn purge_owner(&mut self, caller: Caller) -> usize {
+        let doomed: alloc::vec::Vec<u32> = self
+            .slots
+            .iter()
+            .filter(|(_, slot)| slot.owner == caller)
+            .map(|(handle, _)| *handle)
+            .collect();
+        let removed = doomed.len();
+        for handle in doomed {
+            let _ = self.slots.remove(&handle);
+        }
+        removed
+    }
 }
 
 impl Default for PendingTable {
@@ -185,5 +199,15 @@ mod tests {
         let mut table = PendingTable::new();
         let handle = table.insert(CELL_A, "/data/a", vec![7u8]);
         assert_eq!(table.poll(CELL_A, handle.wrapping_add(1)), None);
+    }
+
+    #[test]
+    fn purge_owner_is_exact_to_the_generation() {
+        let mut table = PendingTable::new();
+        let old = table.insert(CELL_B, "/data/b", vec![1u8]);
+        let new = table.insert(CELL_B_RESPAWNED, "/data/c", vec![2u8]);
+        assert_eq!(table.purge_owner(CELL_B), 1);
+        assert_eq!(table.poll(CELL_B, old), None);
+        assert_eq!(table.poll(CELL_B_RESPAWNED, new), Some(vec![2u8]));
     }
 }

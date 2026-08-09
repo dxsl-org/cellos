@@ -627,6 +627,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("ipc-guardrail self-test FAIL");
         }
         #[cfg(feature = "test-hooks")]
+        if task::vfs_lifecycle_selftest::self_test() {
+            log_info("vfs-lifetime self-test PASS (exact lease, quarantine, owner watch)");
+        } else {
+            log_info("vfs-lifetime self-test FAIL");
+        }
+        #[cfg(feature = "test-hooks")]
         if task::stack::stack_probe_self_test() {
             log_info(
                 "stack-probe self-test PASS (two guards, overflow target unmapped, watermark)",

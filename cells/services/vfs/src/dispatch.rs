@@ -327,7 +327,10 @@ pub fn handle_request<'a>(
         | api::ipc::VfsRequest::ListAt { .. }
         | api::ipc::VfsRequest::UnlinkAt { .. }
         | api::ipc::VfsRequest::CloseDir { .. }
-        | api::ipc::VfsRequest::SealPaths => {
+        | api::ipc::VfsRequest::SealPaths
+        | api::ipc::VfsRequest::OpenFileAt { .. }
+        | api::ipc::VfsRequest::ReadFileHandle { .. }
+        | api::ipc::VfsRequest::CloseFile { .. } => {
             crate::dispatch_dirs::handle(vfs, caller, &req, resp_buf)
         }
     }

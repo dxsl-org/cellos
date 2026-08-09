@@ -22,3 +22,4 @@ pub mod ipc;
 pub mod net;
 pub mod posix;
 pub mod serde_helpers;
+pub mod vfs_file_handles;

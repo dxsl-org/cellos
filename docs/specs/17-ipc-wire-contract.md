@@ -72,7 +72,7 @@ so the allocation is **global and must not collide**. Current owners:
 
 | byte 0 | Namespace | Direction | Notes |
 |--------|-----------|-----------|-------|
-| `0x00`–`0x16` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22) — see the note below |
+| `0x00`–`0x19` | **postcard enum variant index** (VfsRequest, NetRequest, ConfigRequest, …) | client → service | Self-delimiting; variant 0 is the first arm of each enum. Range widened from `0x0F` on 2026-07-31 by the `VfsRequest` directory-capability variants (14–22), then on 2026-08-09 by the file-handle variants (23–25) — see the note below |
 | `0x04` | `WIRE_ASCII` — kernel UART relay | kernel → input service | Overlaps the postcard range **but is disambiguated by sender** (kernel sender id `isize::MAX`), not by byte value |
 | `0x10` | `INPUT_EVENT_OPCODE` | input service → focused cell | |
 | `0x11` | **Reserved:** proposed `NET_READY` readiness edge (§10, Draft) | net service → interest-owner tid | No implementation exists. Held against reuse under ADR 0001; the proposed collision rules remain design constraints, not runtime claims |
@@ -87,8 +87,8 @@ target cells**. A cell that serves BOTH a postcard protocol and a raw op-byte
 protocol on its single recv buffer is FORBIDDEN — disambiguate by cell, or by
 the `0xAC` envelope, never by hoping the ranges don't meet.
 
-**Postcard variant growth past `0x0F` (2026-07-31).** `VfsRequest` now runs to
-variant 22 (`0x16`), so its byte-0 values numerically overlap `0x10`
+**Postcard variant growth past `0x0F` (2026-07-31, then 2026-08-09).** `VfsRequest` now runs to
+variant 25 (`0x19`), so its byte-0 values numerically overlap `0x10`
 `INPUT_EVENT_OPCODE`, `0x11` `NET_READY` and `0x12` `REACTOR_WAKE`. Safe on the
 same grounds those three are safe against each other — **by receiver, not by
 value**:
@@ -101,7 +101,7 @@ value**:
 - `0x12` goes to a reactor tid inside the sending cell. The VFS main loop is a
   plain `sys_recv_attested` loop, not a reactor.
 
-**Therefore:** growing `VfsRequest` past variant 22 (byte-0 `0x17`+), or making
+**Therefore:** growing `VfsRequest` past variant 25 (byte-0 `0x1A`+), or making
 the VFS service a focus target / net-interest owner / reactor host, MUST re-check
 this table first. Same standing obligation the `NetRequest` 17/18 rows carry.
 
@@ -138,9 +138,11 @@ recoverable from the buffer.
   `IPC_BUF_SIZE - CALLER_IDENTITY_LEN`.
 - **A reply must fit the frame *after* its postcard envelope.** VFS caps
   `Data` payloads at 480 bytes, not 512, because a full-frame payload made
-  `encode` fail and the client saw an *empty* reply (§8.3). When chunking a
-  large payload, size chunks to leave envelope headroom (≤400–480 B is the
-  established safe chunk).
+  `encode` fail and the client saw an *empty* reply (§8.3). The file-handle
+  path uses a separate inline cap of 4000 bytes (`IPC_BUF_SIZE - 96`) so the
+  reply still leaves postcard headroom. When chunking a large payload, size
+  chunks to leave envelope headroom (≤400–480 B is the established safe chunk
+  for the legacy path; 4000 B for the file-handle path).
 - Send/reply scratch buffers smaller than `IPC_BUF_SIZE` are fine, but must be
   ≥ the largest message they encode; a too-small encode buffer returns `Err`,
   which MUST NOT be swallowed (§7).
@@ -258,6 +260,15 @@ the reason the value is safe against existing owners.
   A handle-plus-component request is strictly smaller on the wire than the
   absolute path it replaces, so no message that fitted the frame stops fitting.
   Model and rationale: `docs/specs/09c-vfs-directory-capabilities-adr.md`.
+- 2026-08-09 — **Ratified (Law-1 2× confirmed):** `VfsRequest` gains the file-
+  handle trio `OpenFileAt` / `ReadFileHandle { max: u32 }` / `CloseFile`
+  (variants 23–25), `VfsResponse` gains `FileHandle` (variant 9), and all of
+  them are appended without changing the pre-existing discriminants or the
+  attested message envelope. `ViVfsFileHandle` is service-local, re-auth happens
+  on each attested request, revocation is by parent-dir / owner-death / close,
+  hot-swap does not serialize open handles, and the handle path stays message-
+  only with no fast arm, async, grant, or raw-pointer lifetime. The §3 postcard
+  range widens to `0x19`.
 
 ---
 
@@ -450,6 +461,11 @@ A future fast-path handler MUST authorize exactly as its `ecall` counterpart doe
 a measured release gate for its maximum interrupt-off duration. `GetFile` is not a valid target
 operation for the rewrite: its raw `DataPtr` is permanent, unrevocable read authority in SAS and
 cannot cross the Tier-2 boundary.
+
+The file-handle ABI added in Phase 04 stays on the ordinary attested message
+path as well. `OpenFileAt` / `ReadFileHandle` / `CloseFile` are message-only,
+there is no fast arm for them, and their state remains VFS-owned and
+session-scoped.
 
 Before any Tier-2/Layer-B domain is enabled, `GetFile`/`DataPtr` must be removed or
 replaced by a representable revocable handle/grant contract. The detailed Layer-B grant

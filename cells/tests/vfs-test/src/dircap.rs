@@ -13,6 +13,7 @@
 
 use api::dir_handles::ViDirHandle;
 use api::ipc::{VfsRequest, VfsResponse};
+use api::vfs_file_handles::ViVfsFileHandle;
 
 use crate::grant_io;
 use crate::{fail, pass, vfs_req};
@@ -52,10 +53,6 @@ pub fn run() {
     let Some(work) = derive(root, "dircap") else {
         return;
     };
-    let _ = vfs_req(&VfsRequest::UnlinkAt {
-        dir: work,
-        name: "note.txt",
-    });
 
     seal_and_prove_paths_are_refused(work);
 }
@@ -208,6 +205,19 @@ fn file_operations_through_a_handle(dir: ViDirHandle) {
 // ── Revocation reaches what was derived ──────────────────────────────────────
 
 fn revoking_a_parent_revokes_what_came_from_it(parent: ViDirHandle, derived: ViDirHandle) {
+    let file = match vfs_req(&VfsRequest::OpenFileAt {
+        dir: derived,
+        name: "note.txt",
+    }) {
+        VfsResponse::FileHandle(file) => {
+            pass("dircap: OpenFileAt yields a file handle");
+            Some(file)
+        }
+        _ => {
+            fail("dircap: OpenFileAt yields a file handle");
+            None
+        }
+    };
     match vfs_req(&VfsRequest::CloseDir { dir: parent }) {
         VfsResponse::Ok => pass("dircap: a handle can be given up"),
         _ => fail("dircap: a handle can be given up"),
@@ -220,6 +230,24 @@ fn revoking_a_parent_revokes_what_came_from_it(parent: ViDirHandle, derived: ViD
             pass("dircap: revoking a handle revokes what was derived from it")
         }
         _ => fail("dircap: revoking a handle revokes what was derived from it"),
+    }
+    if let Some(file) = file {
+        match vfs_req(&VfsRequest::ReadFileHandle {
+            file,
+            offset: 0,
+            max: 8,
+        }) {
+            VfsResponse::Err(BAD_HANDLE) => {
+                pass("dircap: revoking a parent dir reaps file handles opened below it")
+            }
+            _ => fail("dircap: revoking a parent dir reaps file handles opened below it"),
+        }
+        match vfs_req(&VfsRequest::CloseFile { file }) {
+            VfsResponse::Err(BAD_HANDLE) => {
+                pass("dircap: a revoked file handle cannot be closed into success")
+            }
+            _ => fail("dircap: a revoked file handle cannot be closed into success"),
+        }
     }
 }
 
@@ -264,6 +292,8 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
         }
         _ => fail("dircap: GetFile returns a nonempty pointer before sealing"),
     }
+
+    let sealed_file = open_file_handle(work, "note.txt");
 
     match vfs_req(&VfsRequest::SealPaths) {
         VfsResponse::Ok => pass("dircap: the cell gives up naming paths"),
@@ -344,6 +374,48 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
 
     // And the cell still works: sealing removed one way of naming things, not
     // the cell's access to what it holds.
+    if let Some(file) = sealed_file {
+        match vfs_req(&VfsRequest::ReadFileHandle {
+            file,
+            offset: 0,
+            max: 2,
+        }) {
+            VfsResponse::Data(b"ca") => pass("dircap: ReadFileHandle still works after sealing"),
+            _ => fail("dircap: ReadFileHandle still works after sealing"),
+        }
+        match vfs_req(&VfsRequest::ReadFileHandle {
+            file,
+            offset: 99,
+            max: 1,
+        }) {
+            VfsResponse::Data(b"") => {
+                pass("dircap: ReadFileHandle returns EOF for an oversized offset")
+            }
+            _ => fail("dircap: ReadFileHandle returns EOF for an oversized offset"),
+        }
+        match vfs_req(&VfsRequest::ReadFileHandle {
+            file,
+            offset: 0,
+            max: 0,
+        }) {
+            VfsResponse::Data(b"") => {
+                pass("dircap: ReadFileHandle returns EOF for a zero-length request")
+            }
+            _ => fail("dircap: ReadFileHandle returns EOF for a zero-length request"),
+        }
+        match vfs_req(&VfsRequest::CloseFile { file }) {
+            VfsResponse::Ok => pass("dircap: CloseFile closes a live file handle"),
+            _ => fail("dircap: CloseFile closes a live file handle"),
+        }
+        match vfs_req(&VfsRequest::ReadFileHandle {
+            file,
+            offset: 0,
+            max: 1,
+        }) {
+            VfsResponse::Err(BAD_HANDLE) => pass("dircap: a closed file handle is stale"),
+            _ => fail("dircap: a closed file handle is stale"),
+        }
+    }
     match vfs_req(&VfsRequest::WriteAt {
         dir: work,
         name: "sealed.txt",
@@ -358,5 +430,18 @@ fn seal_and_prove_paths_are_refused(work: ViDirHandle) {
     }) {
         VfsResponse::Ok => pass("dircap: UnlinkAt still works after sealing"),
         _ => fail("dircap: UnlinkAt still works after sealing"),
+    }
+}
+
+fn open_file_handle(dir: ViDirHandle, name: &str) -> Option<ViVfsFileHandle> {
+    match vfs_req(&VfsRequest::OpenFileAt { dir, name }) {
+        VfsResponse::FileHandle(file) => {
+            pass("dircap: OpenFileAt returns a file handle for a file");
+            Some(file)
+        }
+        _ => {
+            fail("dircap: OpenFileAt returns a file handle for a file");
+            None
+        }
     }
 }

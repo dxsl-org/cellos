@@ -270,9 +270,17 @@ pub(crate) fn commit_hotswap_barrier(
         target.hotswap_source_tid = None;
     }
     if let Some(sender_tid) = wake_sender {
+        let sender_context = sched
+            .tasks
+            .get(&sender_tid)
+            .map(|sender| (sender_tid, sender.cell_id.0, sender.cell_generation));
         if let Some(target) = sched.tasks.get_mut(&target_tid) {
             target.state = TaskState::Ready;
-            target.current_caller = Some(sender_tid);
+            if let Some((sender_tid, sender_cell_id, sender_generation)) = sender_context {
+                target.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+            } else {
+                target.clear_current_caller_context();
+            }
         }
         sched.push_ready(target_tid);
     }
@@ -314,6 +322,10 @@ pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
     // leak them on every swap. The two agree for a loader-spawned cell, which is
     // what let the mismatch go unnoticed.
     crate::task::drivers::iommu::cleanup_cell(tid as u64);
+    // The completed IOTLB teardown is the acknowledgement for ordinary DMA pins.
+    // Drop them before grant reap so those frames are freed instead of entering
+    // an orphaned quarantine. VFS request leases remain exact-release scoped.
+    crate::task::syscall::release_acked_frames(tid);
 
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         // 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).

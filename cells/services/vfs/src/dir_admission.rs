@@ -19,14 +19,31 @@ use crate::dirs::bind::BindOutcome;
 use crate::dirs::lifecycle::Contact;
 use crate::manager::VfsManager;
 
-/// Settle what the kernel says about `caller`. Idempotent per cell generation.
-pub fn admit(vfs: &mut VfsManager, caller: Caller) {
-    if vfs.dirs.on_contact(caller) != Contact::NeedsAttestation {
-        return;
+/// Apply generation-replacement cleanup before any attestation syscall.
+pub(crate) fn prepare_contact(vfs: &mut VfsManager, caller: Caller) -> bool {
+    let contact = vfs.dirs.on_contact(caller);
+    let Contact::NeedsAttestation {
+        replaced_owner,
+        revoked_dir_ids,
+    } = contact
+    else {
+        return false;
+    };
+    if let Some(owner) = replaced_owner {
+        let _ = vfs.files.purge_owner(owner);
     }
+    let _ = vfs.files.revoke_by_parent_dirs(&revoked_dir_ids);
     // Marked before the query, not after: one attempt per cell generation either
     // way, so a cell cannot make the service re-query by failing repeatedly.
     vfs.dirs.mark_attested(caller);
+    true
+}
+
+/// Settle what the kernel says about `caller`. Idempotent per cell generation.
+pub fn admit(vfs: &mut VfsManager, caller: Caller) {
+    if !prepare_contact(vfs, caller) {
+        return;
+    }
     let mut buf = [0u8; DIR_ATTESTATION_LEN];
     let Some(record) = ostd::syscall::sys_query_dir_handles(caller.cell.0, &mut buf) else {
         return;
