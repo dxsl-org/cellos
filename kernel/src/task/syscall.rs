@@ -702,6 +702,13 @@ fn sender_cell_context(sender_tid: usize) -> (u64, u64) {
         .unwrap_or((0, 0))
 }
 
+fn sender_cell_context_in_sched(
+    sched: &super::scheduler::Scheduler,
+    sender_tid: usize,
+) -> (u64, u64) {
+    super::sender_context(sched, sender_tid)
+}
+
 fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
     let sched_guard = super::SCHEDULER.lock();
     let Some(task) = sched_guard
@@ -1608,44 +1615,41 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             //   preserving the IPC identity contract.
             let mut drained_sender = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    // The drain MUST honour the recv mask: a masked recv (e.g. the
-                    // shell awaiting a VFS reply) must NOT consume a queued input
-                    // key event — that poisoned every VFS request/reply pair after
-                    // the input-queue change (the shell decoded a keystroke as the
-                    // VFS reply → "vwrite failed", and the real reply desynced the
-                    // next conversation). Non-matching messages stay queued for the
-                    // wildcard read loop that wants them.
+                // The drain MUST honour the recv mask: a masked recv (e.g. the
+                // shell awaiting a VFS reply) must NOT consume a queued input
+                // key event — that poisoned every VFS request/reply pair after
+                // the input-queue change (the shell decoded a keystroke as the
+                // VFS reply → "vwrite failed", and the real reply desynced the
+                // next conversation). Non-matching messages stay queued for the
+                // wildcard read loop that wants them.
+                let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
                     let slot = t
                         .pending_msgs
                         .iter()
-                        .position(|m| mask == 0 || m.sender_tid == mask);
-                    if let Some(i) = slot {
-                        let msg = t.pending_msgs.remove(i);
-                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
-                        let (sender_cell_id, sender_generation) =
-                            sender_cell_context(msg.sender_tid);
-                        if copy_len > 0
-                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
-                        {
-                            // SAFETY: buf_ptr is the caller's recv buffer, validated above;
-                            // msg.data is an owned heap allocation from the Frozen intercept;
-                            // both are exclusive at this point (cell is mid-syscall).
-                            unsafe {
-                                core::ptr::copy_nonoverlapping(
-                                    msg.data.as_ptr(),
-                                    buf_ptr as *mut u8,
-                                    copy_len,
-                                );
-                            }
+                        .position(|m| mask == 0 || m.sender_tid == mask)?;
+                    Some(t.pending_msgs.remove(slot))
+                });
+                if let Some(msg) = drained {
+                    let sender_tid = msg.sender_tid;
+                    let (sender_cell_id, sender_generation) =
+                        sender_cell_context_in_sched(sched, sender_tid);
+                    let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                    if copy_len > 0 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok() {
+                        // SAFETY: buf_ptr is the caller's recv buffer, validated above;
+                        // msg.data is an owned heap allocation from the Frozen intercept;
+                        // both are exclusive at this point (cell is mid-syscall).
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                msg.data.as_ptr(),
+                                buf_ptr as *mut u8,
+                                copy_len,
+                            );
                         }
-                        t.set_current_caller_context(
-                            msg.sender_tid,
-                            sender_cell_id,
-                            sender_generation,
-                        );
-                        drained_sender = Some(msg.sender_tid);
                     }
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        t.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                    drained_sender = Some(sender_tid);
                 }
             }
             if let Some(sender_tid) = drained_sender {
@@ -1845,39 +1849,36 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // would call ipc_recv which only sees TaskState::Sending tasks, missing
             // anything queued via ipc_post_nonblock.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(t) = sched.tasks.get_mut(&caller_id) {
-                    // Honour the recv mask in the drain — same contract as Recv
-                    // above: a masked RecvTimeout must not consume queued input
-                    // events meant for the wildcard read loop.
+                // Honour the recv mask in the drain — same contract as Recv
+                // above: a masked RecvTimeout must not consume queued input
+                // events meant for the wildcard read loop.
+                let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
                     let slot = t
                         .pending_msgs
                         .iter()
-                        .position(|m| mask == 0 || m.sender_tid == mask);
-                    if let Some(i) = slot {
-                        let msg = t.pending_msgs.remove(i);
-                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
-                        let (sender_cell_id, sender_generation) =
-                            sender_cell_context(msg.sender_tid);
-                        if copy_len > 0
-                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
-                        {
-                            // SAFETY: buf_ptr is the caller's recv buffer (validated above);
-                            // msg.data is an owned heap allocation; both are exclusive here.
-                            unsafe {
-                                core::ptr::copy_nonoverlapping(
-                                    msg.data.as_ptr(),
-                                    buf_ptr as *mut u8,
-                                    copy_len,
-                                );
-                            }
+                        .position(|m| mask == 0 || m.sender_tid == mask)?;
+                    Some(t.pending_msgs.remove(slot))
+                });
+                if let Some(msg) = drained {
+                    let sender_tid = msg.sender_tid;
+                    let (sender_cell_id, sender_generation) =
+                        sender_cell_context_in_sched(sched, sender_tid);
+                    let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                    if copy_len > 0 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok() {
+                        // SAFETY: buf_ptr is the caller's recv buffer (validated above);
+                        // msg.data is an owned heap allocation; both are exclusive here.
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                msg.data.as_ptr(),
+                                buf_ptr as *mut u8,
+                                copy_len,
+                            );
                         }
-                        t.set_current_caller_context(
-                            msg.sender_tid,
-                            sender_cell_id,
-                            sender_generation,
-                        );
-                        return Ok(msg.sender_tid);
                     }
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        t.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                    return Ok(sender_tid);
                 }
             }
 
@@ -1969,36 +1970,33 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // see queued key/mouse events (ipc_try_recv only scans Sending tasks).
             // Honour the recv mask exactly like the blocking paths.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
                     let slot = t
                         .pending_msgs
                         .iter()
-                        .position(|m| mask == 0 || m.sender_tid == mask);
-                    if let Some(i) = slot {
-                        let msg = t.pending_msgs.remove(i);
-                        let copy_len = core::cmp::min(msg.data.len(), buf_len);
-                        let (sender_cell_id, sender_generation) =
-                            sender_cell_context(msg.sender_tid);
-                        if copy_len > 0
-                            && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok()
-                        {
-                            // SAFETY: buf_ptr is the caller's recv buffer (validated above);
-                            // msg.data is an owned heap allocation; both are exclusive here.
-                            unsafe {
-                                core::ptr::copy_nonoverlapping(
-                                    msg.data.as_ptr(),
-                                    buf_ptr as *mut u8,
-                                    copy_len,
-                                );
-                            }
+                        .position(|m| mask == 0 || m.sender_tid == mask)?;
+                    Some(t.pending_msgs.remove(slot))
+                });
+                if let Some(msg) = drained {
+                    let sender_tid = msg.sender_tid;
+                    let (sender_cell_id, sender_generation) =
+                        sender_cell_context_in_sched(sched, sender_tid);
+                    let copy_len = core::cmp::min(msg.data.len(), buf_len);
+                    if copy_len > 0 && validate_user_buf(buf_ptr, copy_len, MAX_USER_BUF).is_ok() {
+                        // SAFETY: buf_ptr is the caller's recv buffer (validated above);
+                        // msg.data is an owned heap allocation; both are exclusive here.
+                        unsafe {
+                            core::ptr::copy_nonoverlapping(
+                                msg.data.as_ptr(),
+                                buf_ptr as *mut u8,
+                                copy_len,
+                            );
                         }
-                        t.set_current_caller_context(
-                            msg.sender_tid,
-                            sender_cell_id,
-                            sender_generation,
-                        );
-                        return Ok(msg.sender_tid);
                     }
+                    if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                        t.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+                    }
+                    return Ok(sender_tid);
                 }
             }
             // Non-blocking Recv (scan Sending tasks)

@@ -184,13 +184,75 @@ fn death_wake_precedes_later_message() -> bool {
         || fail("a later mailbox message displaced the death-owned wake")
 }
 
+fn pending_drain_keeps_sender_context_without_relocking() -> bool {
+    insert(SENDER, TEST_CELL);
+    insert(RECEIVER, TEST_CELL + 1);
+    let payload = b"context";
+    let mut recv_buf = [0u8; 16];
+    let result = {
+        let mut guard = super::SCHEDULER.lock();
+        let Some(sched) = guard.as_mut() else {
+            return fail("scheduler missing during IPC pending drain selftest");
+        };
+        let receiver = sched
+            .tasks
+            .get_mut(&RECEIVER)
+            .expect("synthetic receiver exists");
+        receiver.pending_msgs.try_push(super::tcb::PendingMsg {
+            sender_tid: SENDER,
+            data: super::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL as usize)
+                .expect("inline payload copy must fit"),
+            enqueued_tick: 0,
+        })
+    };
+    if result.is_err() {
+        reset();
+        return fail("could not enqueue the synthetic pending IPC message");
+    }
+
+    let sender_generation = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&SENDER))
+            .map(|task| task.cell_generation)
+            .unwrap_or(0)
+    };
+    let delivered = super::syscall::handle_syscall(
+        RECEIVER,
+        super::syscall::Syscall::TryRecv {
+            mask: SENDER,
+            buf_ptr: recv_buf.as_mut_ptr() as usize,
+            buf_len: payload.len(),
+        },
+    );
+    let preserved = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&RECEIVER))
+            .is_some_and(|task| {
+                task.current_caller == Some(SENDER)
+                    && task.current_caller_cell_id == TEST_CELL
+                    && task.current_caller_cell_generation == sender_generation
+                    && task.pending_msgs.is_empty()
+            })
+    };
+    reset();
+    matches!(delivered, Ok(id) if id == SENDER)
+        && recv_buf[..payload.len()] == *payload
+        && preserved
+        || fail("pending-message drain did not preserve sender context under one scheduler lock")
+}
+
 /// Returns true iff all IPC producers defer foreign writes and fail safely.
 pub fn self_test() -> bool {
     let ok = all_producers_defer_foreign_writes()
         & full_mailbox_refuses_without_wake()
         & quota_failure_is_fallible()
         & heap_payload_refunds_receiver_quota()
-        & death_wake_precedes_later_message();
+        & death_wake_precedes_later_message()
+        & pending_drain_keeps_sender_context_without_relocking();
     if ok {
         log::info!("[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)");
     }
