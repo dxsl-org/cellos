@@ -4,11 +4,15 @@
 
 extern crate alloc;
 
-use super::vierr_from_code;
+mod read_file;
+
 use crate::service::VfsRef;
 use crate::{ViError, ViResult};
 use alloc::vec::Vec;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use read_file::wire::vfs_err_from_code;
+
+const DEFAULT_READ_FILE_MAX_BYTES: usize = 64 * 1024;
 
 /// Ergonomic client for the VFS service.
 ///
@@ -16,23 +20,8 @@ use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 /// Each method allocates a 4 KiB response buffer on the stack for the duration
 /// of the call (freed on return).
 ///
-/// # Legacy read contract
-/// [`read_file`][Self::read_file] still sends `GetFile`, but the current VFS
-/// replies with `DataPtr`. This client rejects that raw SAS pointer as
-/// [`ViError::IO`]; callers migrate to bounded reads in later phases.
 pub struct VfsClient {
     svc: VfsRef,
-}
-
-fn read_file_response(response: VfsResponse<'_>) -> ViResult<Vec<u8>> {
-    match response {
-        VfsResponse::Data(data) => Ok(data.to_vec()),
-        // Current path dispatch uses local ERR_IO=1 and ERR_DENIED=3 codes.
-        VfsResponse::Err(1) => Err(ViError::IO),
-        VfsResponse::Err(3) => Err(ViError::PermissionDenied),
-        VfsResponse::Err(_) => Err(ViError::Unknown),
-        _ => Err(ViError::IO),
-    }
 }
 
 impl VfsClient {
@@ -41,17 +30,26 @@ impl VfsClient {
         Self { svc: VfsRef::new() }
     }
 
-    /// Read the full contents of a file at `path`.
+    /// Read the contents of a file at `path`, capped at 64 KiB.
     ///
-    /// Returns copied response bytes. The current `DataPtr` reply is rejected
-    /// rather than dereferenced or treated as empty success.
+    /// Uses handle-addressed reads only: `OpenRootDir("/")`, validated `OpenDir`
+    /// traversal, `OpenFileAt`, repeated `ReadFileHandle { max <= 4000 }`, and
+    /// `CloseFile`/`CloseDir` cleanup on every path.
+    ///
+    /// This is a bounded multi-chunk read, not a snapshot read: each chunk is
+    /// re-authorized independently by VFS, so concurrent same-size writers may
+    /// produce mixed old/new content across chunk boundaries.
     pub fn read_file(&mut self, path: &str) -> ViResult<Vec<u8>> {
-        let req = VfsRequest::GetFile(path);
-        let mut resp_buf = [0u8; IPC_BUF_SIZE];
-        read_file_response(
-            self.svc
-                .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?,
-        )
+        self.read_file_bounded(path, DEFAULT_READ_FILE_MAX_BYTES)
+    }
+
+    /// Read the contents of a file at `path`, refusing payloads above `max_bytes`.
+    ///
+    /// Returns `ViError::OutOfMemory` when the file would exceed `max_bytes`.
+    /// Like [`read_file`][Self::read_file], this is bounded and weakly
+    /// consistent across chunks rather than a snapshot.
+    pub fn read_file_bounded(&mut self, path: &str, max_bytes: usize) -> ViResult<Vec<u8>> {
+        read_file::read_file(&mut self.svc, path, max_bytes)
     }
 
     /// Write (create or overwrite) a file at `path` with `content`.
@@ -65,7 +63,7 @@ impl VfsClient {
             .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
         {
             VfsResponse::Ok => Ok(()),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
+            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -79,7 +77,7 @@ impl VfsClient {
             .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
         {
             VfsResponse::Ok => Ok(()),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
+            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -93,7 +91,7 @@ impl VfsClient {
             .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
         {
             VfsResponse::Stat { size, is_dir } => Ok((size, is_dir)),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
+            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -109,7 +107,7 @@ impl VfsClient {
             .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
         {
             VfsResponse::Data(data) => Ok(data.to_vec()),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
+            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -123,7 +121,7 @@ impl VfsClient {
             .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
         {
             VfsResponse::Ok => Ok(()),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
+            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -137,7 +135,7 @@ impl VfsClient {
             .call::<VfsRequest, VfsResponse>(&req, &mut resp_buf)?
         {
             VfsResponse::Ok => Ok(()),
-            VfsResponse::Err(code) => Err(vierr_from_code(code)),
+            VfsResponse::Err(code) => Err(vfs_err_from_code(code)),
             _ => Err(ViError::IO),
         }
     }
@@ -151,38 +149,5 @@ impl VfsClient {
 impl Default for VfsClient {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn read_file_response_copies_data() {
-        assert_eq!(
-            read_file_response(VfsResponse::Data(b"owned bytes")),
-            Ok(b"owned bytes".to_vec())
-        );
-    }
-
-    #[test]
-    fn read_file_response_rejects_raw_pointer_reply() {
-        assert_eq!(
-            read_file_response(VfsResponse::DataPtr {
-                ptr: 0x1000,
-                len: 12,
-            }),
-            Err(ViError::IO)
-        );
-    }
-
-    #[test]
-    fn read_file_response_preserves_typed_vfs_error() {
-        assert_eq!(
-            read_file_response(VfsResponse::Err(3)),
-            Err(ViError::PermissionDenied)
-        );
-        assert_eq!(read_file_response(VfsResponse::Err(1)), Err(ViError::IO));
     }
 }

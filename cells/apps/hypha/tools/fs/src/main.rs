@@ -29,6 +29,9 @@ api::declare_syscalls![Send, Recv, Log, LookupService];
 
 ostd::cell_main!(cell_main);
 
+const READ_FILE_MAX_BYTES: usize = 64 * 1024;
+const READ_FILE_RESULT_CHAR_LIMIT: usize = 2048;
+
 fn cell_main() {
     println("[tool-fs] ready");
     CellRuntime::new().no_heartbeat().run(|ctx, ev| match ev {
@@ -58,15 +61,10 @@ fn dispatch(name: &str, args_json: &str) -> AgentToolResponse {
         "read_file" => {
             let path = args_extract_str(args_json, "path").unwrap_or("/data/notes.txt");
             let mut vfs = VfsClient::new();
-            match vfs.read_file(path) {
-                Ok(bytes) => {
-                    // Limit content returned to 2 KB — a tool result should be concise.
-                    let text = core::str::from_utf8(&bytes).unwrap_or("[binary data]");
-                    let truncated: String = text.chars().take(2048).collect();
-                    AgentToolResponse::Ok {
-                        result_json: json_obj_str("content", &truncated),
-                    }
-                }
+            match vfs.read_file_bounded(path, READ_FILE_MAX_BYTES) {
+                Ok(bytes) => AgentToolResponse::Ok {
+                    result_json: read_file_result_json(&bytes),
+                },
                 Err(e) => AgentToolResponse::Err {
                     message: alloc::format!("read_file {}: {:?}", path, e),
                 },
@@ -147,6 +145,14 @@ fn args_extract_str<'a>(json: &'a str, key: &str) -> Option<&'a str> {
         idx += 1;
     }
     Some(&json[start..idx])
+}
+
+fn read_file_result_json(bytes: &[u8]) -> String {
+    // Keep the previous 64 KiB VFS ceiling explicit while preserving the
+    // existing 2048-char response truncation and binary-data fallback.
+    let text = core::str::from_utf8(bytes).unwrap_or("[binary data]");
+    let truncated: String = text.chars().take(READ_FILE_RESULT_CHAR_LIMIT).collect();
+    json_obj_str("content", &truncated)
 }
 
 /// Wrap a single key/value pair into a JSON object string: `{"key":"value"}`.

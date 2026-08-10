@@ -22,6 +22,10 @@ use ostd::io::{print, println};
 
 const MAX_PEERS: usize = 8;
 const CFG_PATH: &str = "/etc/cellos/cluster.cfg";
+const CFG_READ_MAX_BYTES: usize = 4 * 1024;
+
+#[cfg(test)]
+mod tests;
 
 /// Per-machine network identity and peer address book.
 pub struct BrokerIdentity {
@@ -57,14 +61,17 @@ impl BrokerIdentity {
     /// peer_1_relay_port=...
     /// ```
     pub fn load_config(&mut self) {
-        let data = match VfsClient::new().read_file(CFG_PATH) {
+        let data = match VfsClient::new().read_file_bounded(CFG_PATH, CFG_READ_MAX_BYTES) {
             Ok(d) => d,
             Err(_) => {
-                println("[net-broker] /etc/cellos/cluster.cfg not found — no peers configured");
+                println("[net-broker] failed to read cluster.cfg — no peers configured");
                 return;
             }
         };
+        self.load_config_bytes(&data);
+    }
 
+    fn load_config_bytes(&mut self, data: &[u8]) {
         let mut builders = [const { PeerBuilder::new() }; MAX_PEERS];
 
         for line in data.split(|&b| b == b'\n') {

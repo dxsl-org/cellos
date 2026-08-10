@@ -2,6 +2,9 @@
 
 extern crate alloc;
 use alloc::{format, string::String, vec::Vec};
+use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
+use ostd::clients::VfsClient;
+use ostd::ipc::service_call_typed;
 
 #[cfg(target_arch = "riscv64")]
 const ARCH: &str = "riscv64";
@@ -17,10 +20,20 @@ const ARCH: &str = "x86_64";
 const ARCH: &str = "unknown";
 
 use crate::net_ipc;
+use crate::static_files::{
+    classify_static_file_preflight_wire, classify_static_file_read, StaticFileResult,
+    STATIC_FILE_MAX_BYTES,
+};
 
 // ── Response helpers ──────────────────────────────────────────────────────────
 
-pub fn send_response(cap: u32, net_ep: usize, status: u16, content_type: &str, body: &[u8]) {
+pub fn send_response(
+    cap: u32,
+    net_ep: usize,
+    status: u16,
+    content_type: &str,
+    body: &[u8],
+) -> bool {
     let status_text = match status {
         200 => "OK",
         204 => "No Content",
@@ -36,19 +49,19 @@ pub fn send_response(cap: u32, net_ep: usize, status: u16, content_type: &str, b
         content_type,
         body.len()
     );
-    net_ipc::tcp_send_all(cap, net_ep, header.as_bytes());
-    net_ipc::tcp_send_all(cap, net_ep, body);
+    net_ipc::tcp_send_all(cap, net_ep, header.as_bytes())
+        && net_ipc::tcp_send_all(cap, net_ep, body)
 }
 
-fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) {
+fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) -> bool {
     let body = json.as_bytes();
     let status_text = if status == 200 { "OK" } else { "Not Found" };
     let header = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n",
         status, status_text, body.len()
     );
-    net_ipc::tcp_send_all(cap, net_ep, header.as_bytes());
-    net_ipc::tcp_send_all(cap, net_ep, body);
+    net_ipc::tcp_send_all(cap, net_ep, header.as_bytes())
+        && net_ipc::tcp_send_all(cap, net_ep, body)
 }
 
 // ── HTML pages ────────────────────────────────────────────────────────────────
@@ -56,7 +69,7 @@ fn send_json(cap: u32, net_ep: usize, status: u16, json: &str) {
 // Note: askama compile-time templates are the intended long-term approach.
 // format! is used here for simplicity pending no_std askama validation.
 
-pub fn index(cap: u32, net_ep: usize) {
+pub fn index(cap: u32, net_ep: usize) -> bool {
     let html = format!(
         r#"<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>ViCell Dashboard</title>
@@ -87,10 +100,10 @@ pub fn index(cap: u32, net_ep: usize) {
         200,
         "text/html; charset=utf-8",
         html.as_bytes(),
-    );
+    )
 }
 
-pub fn status_page(cap: u32, net_ep: usize) {
+pub fn status_page(cap: u32, net_ep: usize) -> bool {
     let html = format!(
         r#"<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>ViCell Status</title>
@@ -120,22 +133,38 @@ pub fn status_page(cap: u32, net_ep: usize) {
         200,
         "text/html; charset=utf-8",
         html.as_bytes(),
-    );
+    )
 }
 
-pub fn not_found(cap: u32, net_ep: usize) {
-    send_response(cap, net_ep, 404, "text/plain", b"404 Not Found");
+pub fn not_found(cap: u32, net_ep: usize) -> bool {
+    send_response(cap, net_ep, 404, "text/plain", b"404 Not Found")
 }
 
 // ── Static file serving ───────────────────────────────────────────────────────
 
-pub fn serve_file(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) {
+pub fn serve_file(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) -> bool {
+    let mut vfs = VfsClient::new();
+    let mut stat_req = [0u8; IPC_BUF_SIZE];
+    let mut stat_resp = [0u8; IPC_BUF_SIZE];
+    match classify_static_file_preflight_wire(service_call_typed::<_, VfsResponse>(
+        vfs_ep,
+        &VfsRequest::Stat(path),
+        &mut stat_req,
+        &mut stat_resp,
+    )) {
+        Ok(()) => {}
+        Err(StaticFileResult::NotFound) => return not_found(cap, net_ep),
+        Err(_) => {
+            return send_response(cap, net_ep, 500, "text/plain", b"500 Internal Server Error");
+        }
+    }
     let content_type = mime_from_ext(path);
-    let data = net_ipc::vfs_read_file(path, vfs_ep);
-    if data.is_empty() {
-        not_found(cap, net_ep);
-    } else {
-        send_response(cap, net_ep, 200, content_type, &data);
+    match classify_static_file_read(vfs.read_file_bounded(path, STATIC_FILE_MAX_BYTES)) {
+        StaticFileResult::Body(data) => send_response(cap, net_ep, 200, content_type, &data),
+        StaticFileResult::NotFound => not_found(cap, net_ep),
+        StaticFileResult::InternalError => {
+            send_response(cap, net_ep, 500, "text/plain", b"500 Internal Server Error")
+        }
     }
 }
 
@@ -156,15 +185,15 @@ fn mime_from_ext(path: &str) -> &'static str {
 
 // ── JSON REST API ─────────────────────────────────────────────────────────────
 
-pub fn api_status(cap: u32, net_ep: usize) {
+pub fn api_status(cap: u32, net_ep: usize) -> bool {
     let json = format!(
         r#"{{"status":"running","arch":"{}","http_port":8080,"protocol":"HTTP/1.1"}}"#,
         ARCH
     );
-    send_json(cap, net_ep, 200, &json);
+    send_json(cap, net_ep, 200, &json)
 }
 
-pub fn api_cells(cap: u32, net_ep: usize) {
+pub fn api_cells(cap: u32, net_ep: usize) -> bool {
     // Well-known service IDs probed via service registry
     use ostd::service::{lookup, service};
     let mut entries = Vec::new();
@@ -185,10 +214,10 @@ pub fn api_cells(cap: u32, net_ep: usize) {
     }
     let list = entries.join(",");
     let json = format!(r#"{{"cells":[{}]}}"#, list);
-    send_json(cap, net_ep, 200, &json);
+    send_json(cap, net_ep, 200, &json)
 }
 
-pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) {
+pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) -> bool {
     let raw = net_ipc::vfs_list_dir(path, vfs_ep);
     let listing = core::str::from_utf8(&raw).unwrap_or("");
     let entries: Vec<String> = listing
@@ -198,15 +227,15 @@ pub fn api_files(cap: u32, net_ep: usize, vfs_ep: usize, path: &str) {
         .collect();
     let list = entries.join(",");
     let json = format!(r#"{{"path":"{}","entries":[{}]}}"#, path, list);
-    send_json(cap, net_ep, 200, &json);
+    send_json(cap, net_ep, 200, &json)
 }
 
-pub fn api_restart(cap: u32, net_ep: usize, _cell_name: &str) {
+pub fn api_restart(cap: u32, net_ep: usize, _cell_name: &str) -> bool {
     // Restart via init IPC is not yet implemented — return accepted.
     send_json(
         cap,
         net_ep,
         200,
         r#"{"ok":true,"note":"restart not yet wired to init"}"#,
-    );
+    )
 }

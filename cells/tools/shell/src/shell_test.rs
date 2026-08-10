@@ -306,30 +306,51 @@ fn test_top_batch(jobs: &mut Jobs) {
 }
 
 fn test_vfs_bounded_grant_read(jobs: &mut Jobs) {
-    const PATH: &str = "/tmp/st_grant_read.txt";
+    const PATH: &str = "/tmp/st_handle_read.txt";
+    const DIR: &str = "/tmp/st_handle_dir";
     let mut expected = [b'A'; 700];
     expected[699] = b'Z';
     if !crate::cmd_fs::vfs_write_chunked(PATH, &expected, false) {
-        fail("bounded grant read setup", "write failed", "write succeeds");
+        fail(
+            "bounded handle read setup",
+            "write failed",
+            "write succeeds",
+        );
         return;
     }
+    exec(jobs, "mkdir /tmp/st_handle_dir");
     assert_equals(
         jobs,
         "test -f uses stat for files larger than sample buffers",
-        "test -f /tmp/st_grant_read.txt ; echo $?",
+        "test -f /tmp/st_handle_read.txt ; echo $?",
         "0\n",
     );
 
-    let mut full = [0u8; 1024];
-    match crate::cmd_fs::read_file_vfs_result(PATH, &mut full) {
-        Ok(700) if full[..700] == expected => pass("bounded grant read exceeds 480 bytes"),
+    let mut exact = [0u8; 700];
+    match crate::cmd_fs::read_file_vfs_result(PATH, &mut exact) {
+        Ok(700) if exact == expected => pass("bounded handle read exact bound"),
         Ok(bytes) => fail(
-            "bounded grant read exceeds 480 bytes",
+            "bounded handle read exact bound",
             &alloc::format!("{} bytes", bytes),
             "700 exact bytes",
         ),
         Err(_) => fail(
-            "bounded grant read exceeds 480 bytes",
+            "bounded handle read exact bound",
+            "typed error",
+            "700 exact bytes",
+        ),
+    }
+
+    let mut full = [0u8; 1024];
+    match crate::cmd_fs::read_file_vfs_result(PATH, &mut full) {
+        Ok(700) if full[..700] == expected => pass("bounded handle read exceeds 480 bytes"),
+        Ok(bytes) => fail(
+            "bounded handle read exceeds 480 bytes",
+            &alloc::format!("{} bytes", bytes),
+            "700 exact bytes",
+        ),
+        Err(_) => fail(
+            "bounded handle read exceeds 480 bytes",
             "typed error",
             "700 exact bytes",
         ),
@@ -337,21 +358,39 @@ fn test_vfs_bounded_grant_read(jobs: &mut Jobs) {
 
     let mut too_small = [0u8; 480];
     match crate::cmd_fs::read_file_vfs_result(PATH, &mut too_small) {
-        Err(ostd::ViError::InvalidArgument) => pass("bounded grant read rejects truncation"),
+        Err(ostd::ViError::InvalidArgument) => pass("bounded handle read rejects truncation"),
         _ => fail(
-            "bounded grant read rejects truncation",
+            "bounded handle read rejects truncation",
             "unexpected result",
             "InvalidArgument",
         ),
     }
 
-    let mut missing = [0u8; 16];
-    match crate::cmd_fs::read_file_vfs_result("/tmp/st_grant_missing.txt", &mut missing) {
-        Err(ostd::ViError::IO) => pass("bounded grant read preserves missing error"),
+    match crate::cmd_fs::read_file_vfs_result(DIR, &mut [0u8; 16]) {
+        Err(ostd::ViError::IsADirectory) => pass("bounded handle read preserves directory error"),
         _ => fail(
-            "bounded grant read preserves missing error",
+            "bounded handle read preserves directory error",
+            "unexpected result",
+            "IsADirectory",
+        ),
+    }
+
+    let mut missing = [0u8; 16];
+    match crate::cmd_fs::read_file_vfs_result("/tmp/st_handle_missing.txt", &mut missing) {
+        Err(ostd::ViError::IO) => pass("bounded handle read preserves missing error"),
+        _ => fail(
+            "bounded handle read preserves missing error",
             "unexpected result",
             "IO",
+        ),
+    }
+
+    match crate::cmd_fs::read_file_vfs_result(PATH, &mut exact) {
+        Ok(700) if exact == expected => pass("bounded handle read cleans up after errors"),
+        _ => fail(
+            "bounded handle read cleans up after errors",
+            "unexpected result",
+            "700 exact bytes",
         ),
     }
 }

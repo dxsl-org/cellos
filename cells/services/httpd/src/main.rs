@@ -20,7 +20,10 @@ use ostd::syscall::{sys_lookup_service, sys_yield};
 
 mod handlers;
 mod net_ipc;
+#[cfg(test)]
+mod net_ipc_tests;
 mod router;
+mod static_files;
 
 api::declare_syscalls![Send, Recv, Log, LookupService, StateRestore];
 
@@ -55,7 +58,9 @@ fn cell_main() {
             }
         };
 
-        router::handle_connection(stream_cap, net_ep, vfs_ep);
+        if !router::handle_connection(stream_cap, net_ep, vfs_ep) {
+            println("httpd: response send failed");
+        }
 
         // Yield so smoltcp can flush the TX ring before we send FIN.
         for _ in 0..200 {

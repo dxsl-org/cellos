@@ -20,6 +20,7 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use api::ipc::{NetRequest, NetResponse};
 use clatter::{
     crypto::{cipher::ChaChaPoly, dh::X25519, hash::Sha256},
@@ -34,10 +35,15 @@ use ostd::{clients::vfs::VfsClient, syscall::sys_heartbeat, ViError, ViResult};
 use crate::rng::BrokerRng;
 use api::cluster::CellNetId;
 
+#[cfg(test)]
+mod tests;
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /// Max concurrent Noise sessions.
 const MAX_SESSIONS: usize = 4;
+const K1_MIN_BYTES: usize = 32;
+const K1_READ_MAX_BYTES: usize = 64;
 
 /// Noise handshake message buffer (KKpsk0 max msg ≈ 96 B; room to spare).
 const NOISE_MSG_BUF: usize = 256;
@@ -63,14 +69,23 @@ pub struct VfsFileKeySource {
 
 impl ClusterKeySource for VfsFileKeySource {
     fn load(&self) -> ViResult<[u8; 32]> {
-        let data = VfsClient::new().read_file(self.path)?;
-        if data.len() < 32 {
-            return Err(ViError::IO);
-        }
-        let mut key = [0u8; 32];
-        key.copy_from_slice(&data[..32]);
-        Ok(key)
+        load_vfs_key(self.path, |path, max_bytes| {
+            VfsClient::new().read_file_bounded(path, max_bytes)
+        })
     }
+}
+
+fn load_vfs_key<F>(path: &str, read_file: F) -> ViResult<[u8; 32]>
+where
+    F: FnOnce(&str, usize) -> ViResult<Vec<u8>>,
+{
+    let data = read_file(path, K1_READ_MAX_BYTES)?;
+    if data.len() < K1_MIN_BYTES {
+        return Err(ViError::IO);
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&data[..K1_MIN_BYTES]);
+    Ok(key)
 }
 
 // ── StaticKeypair ─────────────────────────────────────────────────────────────

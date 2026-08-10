@@ -5,22 +5,53 @@
 //! Listens for TCP connections on <port>.  For each connection, reads the
 //! HTTP request (discards it), reads <vfs_path> **fresh from VFS on every
 //! request** (no caching), and responds with HTTP/1.0 200 OK + current file
-//! content.  Returns HTTP 404 when the file is absent or empty.  Loops
-//! forever, serving one connection at a time.
+//! content. Returns HTTP 404 when the file is absent, and HTTP 200 with an
+//! empty body when the file exists but has zero length. Loops forever,
+//! serving one connection at a time.
 
 #![no_std]
 #![no_main]
 #![forbid(unsafe_code)]
+extern crate alloc;
 extern crate ostd;
 
-use api::ipc::{NetRequest, NetResponse, IPC_BUF_SIZE};
+use alloc::vec::Vec;
+use api::ipc::{NetRequest, NetResponse, VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use api::syscall::service;
+use ostd::clients::VfsClient;
 use ostd::io::{print, println};
+use ostd::ipc::{service_call_typed, IpcError};
 use ostd::syscall::{sys_lookup_service, sys_recv, sys_send, sys_yield, SyscallResult};
+use ostd::ViError;
 
 api::declare_syscalls![Send, Recv, Log, StateRestore, LookupService];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+const MAX_FILE_READ_BYTES: usize = 4096;
+const TCP_SEND_MAX_ZERO_PROGRESS_RETRIES: usize = 8;
+const NOT_FOUND_RESPONSE: &[u8] =
+    b"HTTP/1.0 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n";
+const INTERNAL_ERROR_RESPONSE: &[u8] =
+    b"HTTP/1.0 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n";
+
+enum FileReadOutcome {
+    NotFound,
+    Ok(Vec<u8>),
+    InternalError,
+}
+
+enum FileServePlan {
+    NotFound,
+    Serve(Vec<u8>),
+    InternalError,
+}
+
+enum StatPreflight {
+    NotFound,
+    Exists,
+    InternalError,
+}
 
 fn parse_u16(s: &str) -> Option<u16> {
     let mut n: u32 = 0;
@@ -39,6 +70,18 @@ fn parse_u16(s: &str) -> Option<u16> {
     Some(n as u16)
 }
 
+fn recv_net_response<'a>(
+    net_ep: usize,
+    resp_buf: &'a mut [u8; IPC_BUF_SIZE],
+) -> Option<NetResponse<'a>> {
+    match sys_recv(net_ep, resp_buf) {
+        SyscallResult::Ok(sender) if sender == net_ep => {
+            api::ipc::decode::<NetResponse>(resp_buf).ok()
+        }
+        _ => None,
+    }
+}
+
 fn close_cap(cap: u32, net_ep: usize) {
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::TcpClose { cap_id: cap }, &mut req_buf)
@@ -46,7 +89,7 @@ fn close_cap(cap: u32, net_ep: usize) {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut r = [0u8; IPC_BUF_SIZE];
-    let _ = sys_recv(0, &mut r);
+    let _ = recv_net_response(net_ep, &mut r);
 }
 
 fn query_state(cap: u32, net_ep: usize) -> u8 {
@@ -56,62 +99,70 @@ fn query_state(cap: u32, net_ep: usize) -> u8 {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::State(s)) => s,
-            _ => 0,
-        },
+    match recv_net_response(net_ep, &mut resp_buf) {
+        Some(NetResponse::State(s)) => s,
         _ => 0,
     }
 }
 
-/// Read a VFS file via typed `ReadAsync` + `Poll` IPC (≤480 bytes per reply).
-///
-/// The raw OP_READ byte protocol this used to speak was dropped when VFS went
-/// typed-postcard (Phase 27) — every read then returned garbage. ReadAsync
-/// works for both RamFS and disk-backed (/data) paths.
-fn vfs_read(path: &str, buf: &mut [u8], vfs_ep: usize) -> usize {
-    use api::ipc::{VfsRequest, VfsResponse};
-    let mut ipc = [0u8; 512];
+fn classify_file_read(result: Result<Vec<u8>, ViError>) -> FileReadOutcome {
+    match result {
+        Ok(bytes) => FileReadOutcome::Ok(bytes),
+        Err(ViError::NotFound) => FileReadOutcome::NotFound,
+        Err(_) => FileReadOutcome::InternalError,
+    }
+}
 
-    let n = match api::ipc::encode(&VfsRequest::ReadAsync { path }, &mut ipc) {
-        Ok(s) => s.len(),
-        Err(_) => return 0,
-    };
-    sys_send(vfs_ep, &ipc[..n]);
-    let handle = match sys_recv(0, &mut ipc) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&ipc) {
-            Ok(VfsResponse::PendingHandle(h)) => h,
-            _ => return 0,
-        },
-        _ => return 0,
-    };
+fn vfs_read(vfs: &mut VfsClient, path: &str) -> FileReadOutcome {
+    classify_file_read(vfs.read_file_bounded(path, MAX_FILE_READ_BYTES))
+}
 
-    let n = match api::ipc::encode(&VfsRequest::Poll { handle }, &mut ipc) {
-        Ok(s) => s.len(),
-        Err(_) => return 0,
-    };
-    sys_send(vfs_ep, &ipc[..n]);
-    match sys_recv(0, &mut ipc) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<VfsResponse>(&ipc) {
-            Ok(VfsResponse::Data(data)) => {
-                let len = data.len().min(buf.len());
-                buf[..len].copy_from_slice(&data[..len]);
-                len
+fn classify_stat_preflight(resp: Result<VfsResponse<'_>, IpcError>) -> StatPreflight {
+    match resp {
+        Ok(VfsResponse::Stat { is_dir: true, .. }) => StatPreflight::InternalError,
+        Ok(VfsResponse::Stat { is_dir: false, .. }) => StatPreflight::Exists,
+        Ok(VfsResponse::Err(1)) => StatPreflight::NotFound,
+        Ok(VfsResponse::Err(_)) | Ok(_) | Err(_) => StatPreflight::InternalError,
+    }
+}
+
+fn plan_file_response(vfs_ep: usize, vfs: &mut VfsClient, path: &str) -> FileServePlan {
+    let mut send_buf = [0u8; IPC_BUF_SIZE];
+    let mut recv_buf = [0u8; IPC_BUF_SIZE];
+    match classify_stat_preflight(service_call_typed::<_, VfsResponse>(
+        vfs_ep,
+        &VfsRequest::Stat(path),
+        &mut send_buf,
+        &mut recv_buf,
+    )) {
+        StatPreflight::NotFound => FileServePlan::NotFound,
+        StatPreflight::Exists => match vfs_read(vfs, path) {
+            FileReadOutcome::Ok(bytes) => FileServePlan::Serve(bytes),
+            FileReadOutcome::NotFound | FileReadOutcome::InternalError => {
+                FileServePlan::InternalError
             }
-            _ => 0,
         },
-        _ => 0,
+        StatPreflight::InternalError => FileServePlan::InternalError,
     }
 }
 
-/// Send bytes to a TCP socket cap via TcpSend, retrying until all bytes are buffered.
-fn tcp_send(cap: u32, data: &[u8], net_ep: usize) {
-    let mut sent = 0usize;
-    for _ in 0..1000 {
-        if sent >= data.len() {
-            break;
+fn decode_tcp_send_progress(resp: Option<NetResponse<'_>>) -> Option<usize> {
+    match resp {
+        Some(NetResponse::Data(bytes)) if bytes.len() >= 4 => {
+            let mut arr = [0u8; 4];
+            arr.copy_from_slice(&bytes[..4]);
+            Some(u32::from_le_bytes(arr) as usize)
         }
+        _ => None,
+    }
+}
+
+/// Send bytes to a TCP socket cap via TcpSend, failing if progress stalls or replies are malformed.
+fn tcp_send(cap: u32, data: &[u8], net_ep: usize) -> bool {
+    let mut sent = 0usize;
+    let mut zero_progress_retries = 0usize;
+
+    while sent < data.len() {
         let rem = &data[sent..];
         let chunk = rem.len().min(480);
         let mut send_buf = [0u8; IPC_BUF_SIZE];
@@ -124,24 +175,28 @@ fn tcp_send(cap: u32, data: &[u8], net_ep: usize) {
         )
         .map(|b| b.len())
         .unwrap_or(0);
+        if send_len == 0 {
+            return false;
+        }
         sys_send(net_ep, &send_buf[..send_len]);
         let mut cnt_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut cnt_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&cnt_buf) {
-                Ok(NetResponse::Data(b)) if b.len() >= 4 => {
-                    let mut arr = [0u8; 4];
-                    arr.copy_from_slice(&b[0..4]);
-                    let n = u32::from_le_bytes(arr) as usize;
-                    sent += n;
-                    if n == 0 {
-                        sys_yield();
-                    }
+        match decode_tcp_send_progress(recv_net_response(net_ep, &mut cnt_buf)) {
+            Some(0) => {
+                zero_progress_retries += 1;
+                if zero_progress_retries > TCP_SEND_MAX_ZERO_PROGRESS_RETRIES {
+                    return false;
                 }
-                _ => break,
-            },
-            _ => break,
+                sys_yield();
+            }
+            Some(n) if n <= chunk => {
+                sent += n;
+                zero_progress_retries = 0;
+            }
+            _ => return false,
         }
     }
+
+    true
 }
 
 /// Drain the HTTP request until the header terminator `\r\n\r\n` is seen.
@@ -160,22 +215,19 @@ fn drain_request(cap: u32, net_ep: usize) {
     for _ in 0..200 {
         sys_send(net_ep, &recv_req_buf[..recv_req_len]);
         let mut data_buf = [0u8; IPC_BUF_SIZE];
-        match sys_recv(0, &mut data_buf) {
-            SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&data_buf) {
-                Ok(NetResponse::Data(b)) if !b.is_empty() => {
-                    if b.windows(4).any(|w| w == b"\r\n\r\n") {
-                        break;
-                    }
+        match recv_net_response(net_ep, &mut data_buf) {
+            Some(NetResponse::Data(b)) if !b.is_empty() => {
+                if b.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
                 }
-                Ok(NetResponse::Data(_)) => {
-                    let st = query_state(cap, net_ep);
-                    if st == 0x06 || st == 0x00 {
-                        break;
-                    }
-                    sys_yield();
+            }
+            Some(NetResponse::Data(_)) => {
+                let st = query_state(cap, net_ep);
+                if st == 0x06 || st == 0x00 {
+                    break;
                 }
-                _ => break,
-            },
+                sys_yield();
+            }
             _ => break,
         }
     }
@@ -248,6 +300,8 @@ fn cell_main() {
         }
     };
 
+    let mut vfs = VfsClient::new();
+
     // ── TcpListen (atomic create + listen) ───────────────────────────────────
     let mut req_buf = [0u8; IPC_BUF_SIZE];
     let len = api::ipc::encode(&NetRequest::TcpListen { port }, &mut req_buf)
@@ -255,16 +309,10 @@ fn cell_main() {
         .unwrap_or(0);
     sys_send(net_ep, &req_buf[..len]);
     let mut resp_buf = [0u8; IPC_BUF_SIZE];
-    let listen_cap = match sys_recv(0, &mut resp_buf) {
-        SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&resp_buf) {
-            Ok(NetResponse::CapId(c)) => c,
-            _ => {
-                println("httpd: listen failed");
-                return;
-            }
-        },
+    let listen_cap = match recv_net_response(net_ep, &mut resp_buf) {
+        Some(NetResponse::CapId(c)) => c,
         _ => {
-            println("httpd: TcpListen syscall failed");
+            println("httpd: listen failed");
             return;
         }
     };
@@ -286,13 +334,8 @@ fn cell_main() {
         let stream_cap: u32 = loop {
             sys_send(net_ep, &accept_req_buf[..accept_req_len]);
             let mut r = [0u8; IPC_BUF_SIZE];
-            match sys_recv(0, &mut r) {
-                SyscallResult::Ok(_) => match api::ipc::decode::<NetResponse>(&r) {
-                    Ok(NetResponse::CapId(c)) => break c,
-                    _ => {
-                        sys_yield();
-                    }
-                },
+            match recv_net_response(net_ep, &mut r) {
+                Some(NetResponse::CapId(c)) => break c,
                 _ => {
                     sys_yield();
                 }
@@ -301,24 +344,34 @@ fn cell_main() {
 
         drain_request(stream_cap, net_ep);
 
-        let mut file_buf = [0u8; 4096];
-        let file_len = vfs_read(path, &mut file_buf, vfs_ep);
-
-        if file_len == 0 {
-            let not_found =
-                b"HTTP/1.0 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n";
-            tcp_send(stream_cap, not_found, net_ep);
-        } else {
-            let mut header = [0u8; 128];
-            let mut hlen = 0usize;
-            let status = b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n";
-            header[..status.len()].copy_from_slice(status);
-            hlen += status.len();
-            hlen += write_content_length(file_len, &mut header[hlen..]);
-            header[hlen..hlen + 2].copy_from_slice(b"\r\n");
-            hlen += 2;
-            tcp_send(stream_cap, &header[..hlen], net_ep);
-            tcp_send(stream_cap, &file_buf[..file_len], net_ep);
+        match plan_file_response(vfs_ep, &mut vfs, path) {
+            FileServePlan::NotFound => {
+                if !tcp_send(stream_cap, NOT_FOUND_RESPONSE, net_ep) {
+                    println("httpd: tcp send failed");
+                }
+            }
+            FileServePlan::Serve(bytes) => {
+                let mut header = [0u8; 128];
+                let mut hlen = 0usize;
+                let status = b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n";
+                header[..status.len()].copy_from_slice(status);
+                hlen += status.len();
+                hlen += write_content_length(bytes.len(), &mut header[hlen..]);
+                header[hlen..hlen + 2].copy_from_slice(b"\r\n");
+                hlen += 2;
+                if tcp_send(stream_cap, &header[..hlen], net_ep) {
+                    if !tcp_send(stream_cap, &bytes, net_ep) {
+                        println("httpd: tcp send failed");
+                    }
+                } else {
+                    println("httpd: tcp send failed");
+                }
+            }
+            FileServePlan::InternalError => {
+                if !tcp_send(stream_cap, INTERNAL_ERROR_RESPONSE, net_ep) {
+                    println("httpd: tcp send failed");
+                }
+            }
         }
 
         // Yield to let smoltcp flush TX before sending FIN.
@@ -328,3 +381,7 @@ fn cell_main() {
         close_cap(stream_cap, net_ep);
     }
 }
+
+#[cfg(test)]
+#[path = "httpd/tests.rs"]
+mod httpd_unit_tests;

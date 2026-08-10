@@ -23,19 +23,10 @@ fn vfs_endpoint() -> usize {
 
 /// Return VFS metadata for a path without reading its contents.
 pub(crate) fn stat_file_vfs(path: &str) -> Option<(usize, bool)> {
-    let request = api::ipc::VfsRequest::Stat(path);
-    let mut send_buf = [0u8; 512];
-    let mut reply = [0u8; 64];
-    match ostd::ipc::service_call_typed::<_, api::ipc::VfsResponse>(
-        vfs_endpoint(),
-        &request,
-        &mut send_buf,
-        &mut reply,
-    ) {
-        Ok(api::ipc::VfsResponse::Stat { size, is_dir }) => {
-            usize::try_from(size).ok().map(|size| (size, is_dir))
-        }
-        _ => None,
+    let mut vfs = ostd::clients::VfsClient::new();
+    match vfs.stat(path) {
+        Ok((size, is_dir)) => usize::try_from(size).ok().map(|size| (size, is_dir)),
+        Err(_) => None,
     }
 }
 
@@ -333,62 +324,19 @@ pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResu
     Ok(())
 }
 
-struct ReadGrant(usize);
-
-impl Drop for ReadGrant {
-    fn drop(&mut self) {
-        let _ = syscall::sys_grant_free(self.0);
-    }
-}
-
-fn vfs_read_error(code: u8) -> ViError {
-    match code {
-        // VFS dispatch currently uses its local ERR_IO=1 and ERR_DENIED=3
-        // constants for Stat/ReadFileGrant rather than ViError discriminants.
-        1 => ViError::IO,
-        3 => ViError::PermissionDenied,
-        _ => ViError::Unknown,
-    }
-}
-
-/// Read a complete VFS file through caller-owned memory.
-///
-/// The observed Stat size is a hard bound: short copies, malformed replies,
-/// and a destination that cannot hold that snapshot fail rather than truncate
-/// or retry the legacy `GetFile`/`DataPtr` path.
-pub(crate) fn read_file_vfs_result(path: &str, out: &mut [u8]) -> ViResult<usize> {
-    use api::ipc::{VfsRequest, VfsResponse};
-
-    let vfs = vfs_endpoint();
-    let mut send = [0u8; 512];
-    let mut reply = [0u8; 64];
-    let file_len = match ostd::ipc::service_call_typed::<_, VfsResponse>(
-        vfs,
-        &VfsRequest::Stat(path),
-        &mut send,
-        &mut reply,
-    )
-    .map_err(|_| ViError::IO)?
-    {
-        VfsResponse::Stat { is_dir: true, .. } => return Err(ViError::IsADirectory),
-        VfsResponse::Stat {
-            size,
-            is_dir: false,
-        } => usize::try_from(size).map_err(|_| ViError::InvalidInput)?,
-        VfsResponse::Err(code) => return Err(vfs_read_error(code)),
-        _ => return Err(ViError::IO),
+fn vfs_read_size(path: &str) -> ViResult<usize> {
+    let mut vfs = ostd::clients::VfsClient::new();
+    let (size, is_dir) = match vfs.stat(path) {
+        Ok(stat) => stat,
+        Err(err) => return Err(err),
     };
-    read_file_vfs_with_size(vfs, path, file_len, out)
+    if is_dir {
+        return Err(ViError::IsADirectory);
+    }
+    usize::try_from(size).map_err(|_| ViError::InvalidInput)
 }
 
-fn read_file_vfs_with_size(
-    vfs: usize,
-    path: &str,
-    file_len: usize,
-    out: &mut [u8],
-) -> ViResult<usize> {
-    use api::ipc::{VfsRequest, VfsResponse};
-
+fn read_file_vfs_exact(path: &str, file_len: usize, out: &mut [u8]) -> ViResult<usize> {
     if file_len == 0 {
         return Ok(0);
     }
@@ -396,46 +344,40 @@ fn read_file_vfs_with_size(
         return Err(ViError::InvalidArgument);
     }
 
-    let grant = ReadGrant(syscall::sys_grant_alloc(file_len).ok_or(ViError::OutOfMemory)?);
-    if !syscall::sys_grant_share(grant.0, vfs, 2) {
-        return Err(ViError::PermissionDenied);
+    let mut vfs = ostd::clients::VfsClient::new();
+    let bytes = vfs.read_file_bounded(path, file_len)?;
+    if bytes.len() != file_len {
+        return Err(ViError::IO);
     }
+    out[..file_len].copy_from_slice(&bytes);
+    Ok(file_len)
+}
 
-    let mut send = [0u8; 512];
-    let mut reply = [0u8; 64];
-    let copied = match ostd::ipc::service_call_typed::<_, VfsResponse>(
-        vfs,
-        &VfsRequest::ReadFileGrant {
-            path,
-            grant: grant.0,
-            max: file_len,
-        },
-        &mut send,
-        &mut reply,
-    )
-    .map_err(|_| ViError::IO)?
-    {
-        VfsResponse::GrantDone { bytes } if bytes == file_len => bytes,
-        VfsResponse::GrantDone { .. } => return Err(ViError::IO),
-        VfsResponse::Err(code) => return Err(vfs_read_error(code)),
-        _ => return Err(ViError::IO),
-    };
-    match syscall::sys_grant_copy_to_slice(grant.0, &mut out[..copied]) {
-        Some(bytes) if bytes == copied => Ok(bytes),
-        _ => Err(ViError::IO),
-    }
+/// Read a complete VFS file through caller-owned memory.
+///
+/// The observed Stat size is a hard bound: short copies, malformed replies,
+/// and a destination that cannot hold that snapshot fail rather than truncate.
+pub(crate) fn read_file_vfs_result(path: &str, out: &mut [u8]) -> ViResult<usize> {
+    let file_len = vfs_read_size(path)?;
+    read_file_vfs_exact(path, file_len, out)
 }
 
 /// Perform a complete read when the caller already obtained an authorized size.
 pub(crate) fn read_file_vfs_known_size(path: &str, size: usize, out: &mut [u8]) -> ViResult<usize> {
-    read_file_vfs_with_size(vfs_endpoint(), path, size, out)
+    read_file_vfs_exact(path, size, out)
 }
 
 /// Allocate a bounded destination and perform a complete read.
 pub(crate) fn read_file_vfs_owned(path: &str, max: usize) -> ViResult<Vec<u8>> {
-    let mut bytes = alloc::vec![0u8; max];
-    let copied = read_file_vfs_result(path, &mut bytes)?;
-    bytes.truncate(copied);
+    let file_len = vfs_read_size(path)?;
+    if file_len > max {
+        return Err(ViError::InvalidArgument);
+    }
+    let mut vfs = ostd::clients::VfsClient::new();
+    let bytes = vfs.read_file_bounded(path, file_len)?;
+    if bytes.len() != file_len {
+        return Err(ViError::IO);
+    }
     Ok(bytes)
 }
 

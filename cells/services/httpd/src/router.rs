@@ -5,10 +5,10 @@ extern crate alloc;
 use crate::{handlers, net_ipc};
 
 /// Dispatch one HTTP/1.1 request received on `cap` to the appropriate handler.
-pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
+pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) -> bool {
     let raw = net_ipc::recv_request(cap, net_ep);
     if raw.is_empty() {
-        return;
+        return true;
     }
 
     let mut header_buf = [httparse::EMPTY_HEADER; 16];
@@ -17,8 +17,7 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
     let (method, path) = match req.parse(&raw) {
         Ok(_) => (req.method.unwrap_or("GET"), req.path.unwrap_or("/")),
         Err(_) => {
-            handlers::send_response(cap, net_ep, 400, "text/plain", b"Bad Request");
-            return;
+            return handlers::send_response(cap, net_ep, 400, "text/plain", b"Bad Request");
         }
     };
 
@@ -31,7 +30,7 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
 
         // Static file serving from VFS: /files/<vfs_path>
         ("GET", p) if p.starts_with("/files/") => {
-            handlers::serve_file(cap, net_ep, vfs_ep, &p["/files/".len()..]);
+            handlers::serve_file(cap, net_ep, vfs_ep, &p["/files/".len()..])
         }
 
         // JSON REST API
@@ -39,14 +38,14 @@ pub fn handle_connection(cap: u32, net_ep: usize, vfs_ep: usize) {
         ("GET", "/api/cells") => handlers::api_cells(cap, net_ep),
         ("GET", "/api/files") => {
             let vfs_path = extract_query_param(path, "path").unwrap_or("/");
-            handlers::api_files(cap, net_ep, vfs_ep, vfs_path);
+            handlers::api_files(cap, net_ep, vfs_ep, vfs_path)
         }
 
         // POST /api/cells/<name>/restart
         ("POST", p) if p.starts_with("/api/cells/") && p.ends_with("/restart") => {
             let inner = &p["/api/cells/".len()..];
             let name = inner.trim_end_matches("/restart");
-            handlers::api_restart(cap, net_ep, name);
+            handlers::api_restart(cap, net_ep, name)
         }
 
         _ => handlers::not_found(cap, net_ep),

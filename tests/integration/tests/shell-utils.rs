@@ -77,13 +77,16 @@ fn shell_utils_all_scenarios_pass() {
     let output = qemu.dump();
     for marker in [
         "[shell-test] PASS  test -f uses stat for files larger than sample buffers",
-        "[shell-test] PASS  bounded grant read exceeds 480 bytes",
-        "[shell-test] PASS  bounded grant read rejects truncation",
-        "[shell-test] PASS  bounded grant read preserves missing error",
+        "[shell-test] PASS  bounded handle read exact bound",
+        "[shell-test] PASS  bounded handle read exceeds 480 bytes",
+        "[shell-test] PASS  bounded handle read rejects truncation",
+        "[shell-test] PASS  bounded handle read preserves directory error",
+        "[shell-test] PASS  bounded handle read preserves missing error",
+        "[shell-test] PASS  bounded handle read cleans up after errors",
     ] {
         assert!(
             output.contains(marker),
-            "missing Phase 02 grant-read evidence: {marker}\n--- serial output ---\n{output}"
+            "missing Phase 05 shell handle-read evidence: {marker}\n--- serial output ---\n{output}"
         );
     }
     assert!(

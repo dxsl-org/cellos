@@ -113,17 +113,17 @@ impl<const ID: u16> ServiceRef<ID> {
         Resp: serde::Deserialize<'b>,
     {
         let tid = self.resolve().ok_or(ViError::NotFound)?;
-        let mut req_buf = [0u8; IPC_BUF_SIZE];
-        let encoded = api::ipc::encode(req, &mut req_buf).map_err(|_| ViError::InvalidArgument)?;
-        if let syscall::SyscallResult::Err(_) = syscall::sys_send(tid, encoded) {
-            self.invalidate();
-            return Err(ViError::IO);
-        }
-        match syscall::sys_recv(0, resp_buf) {
-            syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                api::ipc::decode::<Resp>(resp_buf).map_err(|_| ViError::IO)
+        let mut send_buf = [0u8; IPC_BUF_SIZE];
+        match crate::ipc::service_call_typed::<Req, Resp>(tid, req, &mut send_buf, resp_buf) {
+            Ok(resp) => Ok(resp),
+            Err(crate::ipc::IpcError::Encode) => Err(ViError::InvalidArgument),
+            Err(crate::ipc::IpcError::Decode) => Err(ViError::IO),
+            Err(crate::ipc::IpcError::Send)
+            | Err(crate::ipc::IpcError::Recv)
+            | Err(crate::ipc::IpcError::WrongSender) => {
+                self.invalidate();
+                Err(ViError::IO)
             }
-            _ => Err(ViError::IO),
         }
     }
 }
