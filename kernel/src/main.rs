@@ -276,8 +276,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // Limine does not guarantee HHDM mappings for firmware-owned memory. The
     // parser requests a mapping for each RSDP/SDT range before dereferencing it.
-    // Child tables must stay inside ACPI reclaimable/NVS memory-map entries;
-    // only Limine's exact legacy RSDP pointer may live below 1 MiB.
+    // Child tables must stay inside ACPI reclaimable/NVS or firmware-reserved
+    // memory-map entries. Legacy BIOS ACPI records may live in the bounded
+    // 0x80000..0x100000 firmware window. Some BIOSes, including q35, report
+    // other SDTs as Reserved, so table checksums remain the final trust gate.
     #[cfg(target_arch = "x86_64")]
     let acpi_info = {
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
@@ -288,18 +290,21 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             if length == 0 {
                 return None;
             }
-            let legacy_rsdp = physical == rsdp && rsdp < 0x10_0000 && end <= 0x10_0000;
+            let legacy_firmware = physical >= 0x8_0000 && physical < 0x10_0000 && end <= 0x10_0000;
+            let legacy_rsdp = physical == rsdp && rsdp < 0x8_0000 && end <= 0x10_0000;
             let firmware_owned = mmap_entries.iter().any(|entry| {
                 let Some(entry_end) = entry.base.checked_add(entry.length) else {
                     return false;
                 };
                 matches!(
                     entry.ty,
-                    crate::boot::MemoryType::AcpiReclaimable | crate::boot::MemoryType::AcpiNvs
+                    crate::boot::MemoryType::Reserved
+                        | crate::boot::MemoryType::AcpiReclaimable
+                        | crate::boot::MemoryType::AcpiNvs
                 ) && physical >= entry.base
                     && end <= entry_end
             });
-            if !legacy_rsdp && !firmware_owned {
+            if !legacy_firmware && !legacy_rsdp && !firmware_owned {
                 log::warn!(
                     "[acpi] rejected non-firmware range {:#x}..{:#x}",
                     physical,
