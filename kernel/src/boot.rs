@@ -1,6 +1,8 @@
 //! Boot protocol interfaces.
 
 use crate::*;
+#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+use cellos_boards::MemoryRangeKind;
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -240,27 +242,36 @@ impl BootInfo for SimpleBootInfo {
 // RISC-V QEMU virt (256 MB at 0x8000_0000):
 // MMIO regions are mapped by init_kernel_paging; RAM regions only here.
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+const DEFAULT_RISCV64_BOARD: &cellos_boards::BoardDescriptor =
+    crate::board::default_riscv64_board();
+#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
+    match kind {
+        MemoryRangeKind::Bootloader => MemoryType::Bootloader,
+        MemoryRangeKind::Kernel => MemoryType::Kernel,
+        MemoryRangeKind::Usable => MemoryType::Usable,
+        MemoryRangeKind::Reserved => MemoryType::Reserved,
+    }
+}
+#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+const fn fallback_memory_entry(index: usize) -> MemoryMapEntry {
+    let range = DEFAULT_RISCV64_BOARD.fallback_memory[index];
+    MemoryMapEntry {
+        base: range.base as usize,
+        length: range.size as usize,
+        ty: fallback_memory_type(range.kind),
+    }
+}
+#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    MemoryMapEntry {
-        base: 0x8000_0000,
-        length: 0x0020_0000,
-        ty: MemoryType::Bootloader,
-    },
-    MemoryMapEntry {
-        base: 0x8020_0000,
-        length: 0x0400_0000,
-        ty: MemoryType::Kernel,
-    },
-    MemoryMapEntry {
-        base: 0x8420_0000,
-        length: 0x0BE0_0000,
-        ty: MemoryType::Usable,
-    },
+    fallback_memory_entry(0),
+    fallback_memory_entry(1),
+    fallback_memory_entry(2),
 ];
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &FALLBACK_MEMORY_MAP,
-    kernel_phys_base: 0x8020_0000,
+    kernel_phys_base: DEFAULT_RISCV64_BOARD.fallback_memory[1].base,
     hhdm_offset: 0x0,
 };
 
@@ -480,6 +491,8 @@ pub fn fallback_boot_info(dtb: usize) -> &'static SimpleBootInfo {
     extern "C" {
         static __kernel_end: u8;
     }
+    #[cfg(not(feature = "board-vf2"))]
+    let _board = crate::board::selected();
 
     if dtb != 0 {
         // SAFETY: firmware supplies a mapped FDT pointer; the parser validates its header.

@@ -11,26 +11,6 @@ mod boot_once;
 
 use boot_once::BootOnce;
 
-// ── QEMU virt defaults (riscv64 fallback) ─────────────────────────────────────
-// Only consumed by `PlatformInfo::qemu_defaults` and `from_dtb`, both riscv64-only
-// (the DTB parser below only exists on riscv64 — other arches hardcode PlatformInfo
-// directly in their own `init`). Gated to avoid dead-code warnings on aarch64/x86_64.
-
-#[cfg(target_arch = "riscv64")]
-const DEFAULT_UART_BASE: usize = 0x1000_0000;
-#[cfg(target_arch = "riscv64")]
-const DEFAULT_UART_IRQ: u32 = 10;
-#[cfg(target_arch = "riscv64")]
-const DEFAULT_PLIC_BASE: usize = 0x0C00_0000;
-/// 64 MB: PLIC claim/complete registers are at base + 0x20_0000 * context.
-#[cfg(target_arch = "riscv64")]
-const DEFAULT_PLIC_SIZE: usize = 0x400_0000;
-#[cfg(target_arch = "riscv64")]
-const DEFAULT_CLINT_BASE: usize = 0x0200_0000;
-/// Goldfish RTC default on QEMU RISC-V virt (google,goldfish-rtc in DTB).
-#[cfg(target_arch = "riscv64")]
-const DEFAULT_RTC_BASE: usize = 0x0010_1000;
-
 // ── Public types ───────────────────────────────────────────────────────────────
 
 /// A VirtIO MMIO device found in the DTB.
@@ -60,38 +40,20 @@ impl PlatformInfo {
     /// below). Gated to avoid a dead-code warning on aarch64/x86_64.
     #[cfg(target_arch = "riscv64")]
     fn qemu_defaults() -> Self {
+        let board = crate::board::selected();
+        Self::from_board(board)
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    fn from_board(board: &cellos_boards::BoardDescriptor) -> Self {
         Self {
-            uart_base: DEFAULT_UART_BASE,
-            uart_irq: DEFAULT_UART_IRQ,
-            plic_base: DEFAULT_PLIC_BASE,
-            plic_size: DEFAULT_PLIC_SIZE,
-            clint_base: DEFAULT_CLINT_BASE,
-            virtio_mmio: [
-                Some(VirtioEntry {
-                    base: 0x1000_1000,
-                    irq: 1,
-                }),
-                Some(VirtioEntry {
-                    base: 0x1000_2000,
-                    irq: 2,
-                }),
-                Some(VirtioEntry {
-                    base: 0x1000_3000,
-                    irq: 3,
-                }),
-                Some(VirtioEntry {
-                    base: 0x1000_4000,
-                    irq: 4,
-                }),
-                Some(VirtioEntry {
-                    base: 0x1000_5000,
-                    irq: 5,
-                }),
-                None,
-                None,
-                None,
-            ],
-            rtc_base: DEFAULT_RTC_BASE,
+            uart_base: board.uart.base as usize,
+            uart_irq: board.uart.irq.unwrap_or(0),
+            plic_base: board.plic.base as usize,
+            plic_size: board.plic.size as usize,
+            clint_base: board.clint.base as usize,
+            virtio_mmio: virtio_slots(board),
+            rtc_base: board.rtc.base as usize,
         }
     }
 }
@@ -236,14 +198,15 @@ fn from_dtb(dtb_ptr: usize) -> PlatformInfo {
             return PlatformInfo::qemu_defaults();
         }
     };
+    let defaults = crate::board::selected();
 
     let uart_base =
         reg_base(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"]).unwrap_or_else(|| {
             log::warn!("[platform] UART not in DTB");
-            DEFAULT_UART_BASE
+            defaults.uart.base as usize
         });
-    let uart_irq =
-        irq_first(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"]).unwrap_or(DEFAULT_UART_IRQ);
+    let uart_irq = irq_first(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"])
+        .unwrap_or(defaults.uart.irq.unwrap_or(0));
 
     // T-Head C900 (SG2042/Pioneer) uses thead,c900-plic / thead,c900-clint.
     // Their base addresses match the RISC-V virt defaults so the fallback is correct,
@@ -254,20 +217,20 @@ fn from_dtb(dtb_ptr: usize) -> PlatformInfo {
     )
     .unwrap_or_else(|| {
         log::warn!("[platform] PLIC not in DTB");
-        (DEFAULT_PLIC_BASE, DEFAULT_PLIC_SIZE)
+        (defaults.plic.base as usize, defaults.plic.size as usize)
     });
 
     let clint_base = reg_base(&fdt, &["sifive,clint0", "riscv,clint0", "thead,c900-clint"])
         .unwrap_or_else(|| {
             log::warn!("[platform] CLINT not in DTB");
-            DEFAULT_CLINT_BASE
+            defaults.clint.base as usize
         });
 
     let virtio_mmio = collect_virtio(&fdt);
 
     let rtc_base = reg_base(&fdt, &["google,goldfish-rtc"]).unwrap_or_else(|| {
         log::warn!("[platform] Goldfish RTC not in DTB, using default");
-        DEFAULT_RTC_BASE
+        defaults.rtc.base as usize
     });
 
     PlatformInfo {
@@ -336,6 +299,21 @@ fn collect_virtio(fdt: &fdt::Fdt) -> [Option<VirtioEntry>; 8] {
             entries[n] = Some(VirtioEntry { base, irq });
             n += 1;
         }
+    }
+    entries
+}
+
+#[cfg(target_arch = "riscv64")]
+fn virtio_slots(board: &cellos_boards::BoardDescriptor) -> [Option<VirtioEntry>; 8] {
+    let mut entries = [None, None, None, None, None, None, None, None];
+    let mut index = 0;
+    while index < board.virtio_mmio.len() && index < entries.len() {
+        let region = board.virtio_mmio[index];
+        entries[index] = Some(VirtioEntry {
+            base: region.base as usize,
+            irq: region.irq.unwrap_or(0),
+        });
+        index += 1;
     }
     entries
 }

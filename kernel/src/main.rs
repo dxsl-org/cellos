@@ -12,6 +12,7 @@ use core::panic::PanicInfo;
 // Core kernel modules
 pub mod acpi;
 pub mod audit;
+mod board;
 pub mod boot;
 pub mod cell;
 pub mod ed25519; // Ed25519 verify (no_std) for signed operator policy (P5 spike)
