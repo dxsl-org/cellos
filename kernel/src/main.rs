@@ -275,11 +275,38 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     log_info("Frame allocator initialized");
 
     // Limine does not guarantee HHDM mappings for firmware-owned memory. The
-    // parser requests a mapping for each RSDP/SDT range before dereferencing it,
-    // including firmware that labels ACPI storage as generic Reserved memory.
+    // parser requests a mapping for each RSDP/SDT range before dereferencing it.
+    // Child tables must stay inside ACPI reclaimable/NVS memory-map entries;
+    // only Limine's exact legacy RSDP pointer may live below 1 MiB.
     #[cfg(target_arch = "x86_64")]
     let acpi_info = {
+        let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
         let mut map_physical = |physical: usize, length: usize| {
+            let Some(end) = physical.checked_add(length) else {
+                return None;
+            };
+            if length == 0 {
+                return None;
+            }
+            let legacy_rsdp = physical == rsdp && rsdp < 0x10_0000 && end <= 0x10_0000;
+            let firmware_owned = mmap_entries.iter().any(|entry| {
+                let Some(entry_end) = entry.base.checked_add(entry.length) else {
+                    return false;
+                };
+                matches!(
+                    entry.ty,
+                    crate::boot::MemoryType::AcpiReclaimable | crate::boot::MemoryType::AcpiNvs
+                ) && physical >= entry.base
+                    && end <= entry_end
+            });
+            if !legacy_rsdp && !firmware_owned {
+                log::warn!(
+                    "[acpi] rejected non-firmware range {:#x}..{:#x}",
+                    physical,
+                    end
+                );
+                return None;
+            }
             let mut allocator = memory::frame::FRAME_ALLOCATOR.lock();
             let mut allocate = || {
                 allocator
@@ -298,7 +325,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
         };
 
-        let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
         let info = crate::acpi::parse(rsdp, &mut map_physical);
         log::info!(
             "[acpi] gates: madt={} hpet={} mcfg={}",

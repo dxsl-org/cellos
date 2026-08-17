@@ -163,9 +163,33 @@ pub fn parse(
     let revision = rsdp.revision;
 
     if revision >= 2 {
-        // XSDT path: 64-bit table pointers.
-        // SAFETY: RSDP v2 is at least size_of::<RsdpV2>() bytes; Limine guarantees it.
+        // ACPI 2.0+ extends the RSDP checksum across the length published in
+        // the v2 header. Do not trust the XSDT pointer until that full record
+        // has been mapped and validated.
         let rsdp_v2: RsdpV2 = unsafe { read_unaligned(rsdp_virt) };
+        let rsdp_length = rsdp_v2.length as usize;
+        if !(core::mem::size_of::<RsdpV2>()..=4096).contains(&rsdp_length) {
+            log::warn!(
+                "[acpi] RSDP v2 has implausible length {} — hardware gates closed",
+                rsdp_length
+            );
+            return info;
+        }
+        let Some(rsdp_v2_virt) = map_physical(rsdp_phys, rsdp_length) else {
+            log::warn!("[acpi] RSDP v2 mapping failed — hardware gates closed");
+            return info;
+        };
+        let extended_cksum = unsafe { table_checksum(rsdp_v2_virt, rsdp_length) };
+        if extended_cksum != 0 {
+            log::warn!(
+                "[acpi] RSDP v2 checksum failed ({}) — hardware gates closed",
+                extended_cksum
+            );
+            return info;
+        }
+
+        // XSDT path: 64-bit table pointers.
+        let rsdp_v2: RsdpV2 = unsafe { read_unaligned(rsdp_v2_virt) };
         let xsdt_phys = rsdp_v2.xsdt_address as usize;
         if xsdt_phys == 0 {
             log::warn!("[acpi] XSDT address is null — hardware gates closed");
@@ -428,7 +452,8 @@ fn parse_madt(virt: usize, length: usize, info: &mut AcpiInfo) {
 
 /// Parse MCFG (Memory Mapped Configuration Space) table.
 ///
-/// Reads the first allocation entry's `base_address` as the PCIe ECAM base.
+/// Selects the allocation entry that covers segment 0, bus 0. The current
+/// scanner is intentionally bus-0-only, so any other allocation remains closed.
 /// MCFG body layout (after 36-byte SDT header):
 ///   - 8 bytes reserved
 ///   - then N × 16-byte allocation entries:
@@ -443,14 +468,26 @@ fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
         return;
     }
 
-    // SAFETY: offset 44 is within the validated MCFG body.
-    let base_addr = unsafe { core::ptr::read_unaligned((virt + 44) as *const u64) };
-    if base_addr != 0 {
-        info.ecam_base = base_addr;
-        log::info!("[acpi] MCFG: PCIe ECAM base = {:#x}", base_addr);
-    } else {
-        log::warn!("[acpi] MCFG: first allocation base_address is 0 — PCIe gate closed");
+    let entry_count = (length - 44) / 16;
+    for index in 0..entry_count {
+        let entry = virt + 44 + index * 16;
+        // SAFETY: every field is within this validated 16-byte allocation entry.
+        let base_addr = unsafe { core::ptr::read_unaligned(entry as *const u64) };
+        let segment = unsafe { core::ptr::read_unaligned((entry + 8) as *const u16) };
+        let bus_start = unsafe { core::ptr::read_volatile((entry + 10) as *const u8) };
+        let bus_end = unsafe { core::ptr::read_volatile((entry + 11) as *const u8) };
+        if segment == 0
+            && bus_start == 0
+            && bus_end >= bus_start
+            && base_addr != 0
+            && base_addr & 0xF_FFFF == 0
+        {
+            info.ecam_base = base_addr;
+            log::info!("[acpi] MCFG: segment 0 bus 0 ECAM base = {:#x}", base_addr);
+            return;
+        }
     }
+    log::warn!("[acpi] MCFG has no valid segment 0 bus 0 allocation — PCIe gate closed");
 }
 
 // ---------------------------------------------------------------------------
