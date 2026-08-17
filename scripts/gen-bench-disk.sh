@@ -2,7 +2,7 @@
 # Creates a ViCell disk image for CI benchmarking (direct QEMU boot, no Limine).
 #
 # The disk contains only the ViCell cell bootstrap table at CELL_TABLE_BASE_LBA.
-# Boot: qemu-system-riscv64 -kernel <vicell-kernel> -drive file=bench-disk.img,...
+# Boot: qemu-system-riscv64 -kernel <cellos-kernel> -drive file=bench-disk.img,...
 # init reads the cell table → auto-spawns /bin/bench.
 #
 # Usage:

@@ -24,7 +24,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -73,7 +73,7 @@ fn hotswap_demo_v1_spawns_and_announces() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -104,7 +104,7 @@ fn hotswap_demo_v2_spawns_and_announces() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -132,7 +132,7 @@ fn hotswap_cli_preserves_demo_state() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
     qemu.send_line("hotswap-demo-v1 &");
     qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
@@ -173,7 +173,7 @@ fn supervisor_hotswap_preserves_demo_state() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
     qemu.send_line("hotswap-demo-v1 &");
     qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
@@ -223,7 +223,7 @@ fn supervisor_rejects_unauthorized_hotswap_sender() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
     qemu.send_line("hotswap-demo-v1 &");
     qemu.wait_for("[hotswap-demo-v1] ready", CMD_TIMEOUT)
@@ -262,7 +262,7 @@ fn peer_death_guardrail_is_bounded() {
         )
     });
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
     qemu.send_line("bench peer-death-guard");
     qemu.wait_for(

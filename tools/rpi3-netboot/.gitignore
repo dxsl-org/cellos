@@ -1,0 +1,6 @@
+/backups/
+/logs/
+/root/
+/state/
+/__pycache__/
+*.pyc

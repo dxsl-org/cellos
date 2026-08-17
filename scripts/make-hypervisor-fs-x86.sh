@@ -16,7 +16,7 @@
 # After running, build the hypervisor kernel:
 #   RUSTFLAGS="-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone" \
 #   EMBEDDED_OVERRIDE="kernel/src/embedded-hv-x86" \
-#   cargo build --release -p vicell-kernel --target x86_64-unknown-none
+#   cargo build --release -p cellos-kernel --target x86_64-unknown-none
 # then: ./run-x86.ps1 -NoBuild  (or qemu ... -cpu qemu64,+svm -accel tcg)
 #
 # Usage: bash scripts/make-hypervisor-fs-x86.sh [--skip-fetch]

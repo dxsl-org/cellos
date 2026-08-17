@@ -16,15 +16,15 @@
 #
 #   ARM64 (BTI + MTE):
 #     $env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
-#     cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat --features test-hooks
+#     cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat --features test-hooks
 #     $env:RUSTFLAGS = $null
 #     qemu-system-aarch64 -machine virt,gic-version=2 -cpu max,+mte -m 256M -nographic \
-#       -kernel target/aarch64-unknown-none-softfloat/release/vicell-kernel -no-reboot \
+#       -kernel target/aarch64-unknown-none-softfloat/release/cellos-kernel -no-reboot \
 #       -drive if=none,file=disk_arm_virt.img,format=raw,id=hd0 \
 #       -device virtio-blk-device,drive=hd0 2>&1 | Select-String "SELFTEST|BTI|MTE|cfi-test"
 #
 #   x86_64 (CET-IBT + PKU):
-#     cargo build --release -p vicell-kernel --target x86_64-unknown-none --features test-hooks
+#     cargo build --release -p cellos-kernel --target x86_64-unknown-none --features test-hooks
 #     # Then boot via run-x86.ps1 (builds ISO + launches QEMU -cpu max) and grep serial output
 #     # for "SELFTEST|CET|PKU|cfi-test"
 #

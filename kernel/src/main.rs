@@ -285,15 +285,29 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         frame_allocator.total_frames() * 4096
     );
 
-    // 2. Frame Allocator (Physical Memory)
-    // The local `frame_allocator` is moved into the global static.
-    // A mutable reference to the global static will be used for paging setup.
+    // Targets that already have usable memory attributes (or intentionally run
+    // without an MMU) can publish the allocator immediately. AArch64 must keep
+    // it local until paging is active because its Spinlock uses exclusive
+    // atomics that require Normal memory attributes; RV64 follows the same
+    // build-then-publish lifecycle.
+    #[cfg(any(
+        target_arch = "riscv32",
+        target_arch = "x86_64",
+        target_arch = "x86",
+        target_arch = "arm",
+    ))]
     unsafe {
         core::ptr::write(
             &mut *memory::frame::FRAME_ALLOCATOR.lock(),
             Some(frame_allocator),
         );
     }
+    #[cfg(any(
+        target_arch = "riscv32",
+        target_arch = "x86_64",
+        target_arch = "x86",
+        target_arch = "arm",
+    ))]
     log_info("Frame allocator initialized");
 
     // 3. Paging (Virtual Memory) Setup
@@ -308,22 +322,25 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         target_arch = "arm",
     )))]
     {
+        let mut frame_allocator = frame_allocator;
         log_info("Initializing paging...");
-        let mut locked_frame_allocator = memory::frame::FRAME_ALLOCATOR.lock();
-        let root_table_phys = memory::paging::init_kernel_paging(
-            locked_frame_allocator
-                .as_mut()
-                .expect("Frame allocator not initialized"),
-            mmap_entries,
-        )
-        .expect("Failed to initialize paging");
-        drop(locked_frame_allocator);
+        let root_table_phys =
+            memory::paging::init_kernel_paging(&mut frame_allocator, mmap_entries)
+                .expect("Failed to initialize paging");
         log_info("Paging initialized");
         log_info("Activating paging...");
         unsafe {
             memory::paging::activate_paging(root_table_phys);
         }
+        *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
+        unsafe {
+            core::ptr::write(
+                &mut *memory::frame::FRAME_ALLOCATOR.lock(),
+                Some(frame_allocator),
+            );
+        }
         log_info("Paging activated");
+        log_info("Frame allocator initialized");
         // Set sstatus.SUM=1 so S-mode (kernel) can access USER-mapped pages throughout
         // the kernel lifetime. VirtIO/peripheral MMIO is mapped USER=1 for Driver Cells
         // (U-mode). Without SUM=1 the kernel's tech-debt VirtIO drivers fault at early-boot
@@ -496,6 +513,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
     #[cfg(target_arch = "riscv64")]
     task::drivers::uart::init_input();
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        // IRQ delivery must start only after the heap-backed queue exists.
+        task::drivers::uart::init_input();
+        crate::hal::uart_bcm_mini::enable_rx_interrupt();
+    }
     // RV32 Nano / x86_64 bring-up: skip VirtIO MMIO probing (PCIe transport not yet ported).
     // x86_64 gets VirtIO via the PCI path in virtio_pci::init() below.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]

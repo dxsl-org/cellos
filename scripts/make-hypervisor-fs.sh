@@ -14,7 +14,7 @@
 # After running this script, rebuild the kernel with:
 #   RUSTFLAGS="-C relocation-model=pic" \
 #   EMBEDDED_OVERRIDE="kernel/src/embedded-hv" \
-#   cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat
+#   cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat
 #
 # Usage: bash scripts/make-hypervisor-fs.sh [--skip-fetch] [--gpu-test]
 
@@ -175,7 +175,7 @@ echo ""
 echo "Next — build the hypervisor kernel:"
 echo "  export RUSTFLAGS='-C relocation-model=pic -C target-feature=+bti,+paca,+pacg'"
 echo "  export EMBEDDED_OVERRIDE='$EMBEDDED_HV'"
-echo "  cargo build --release -p vicell-kernel --features qemu-virt-1g --target $TARGET"
+echo "  cargo build --release -p cellos-kernel --features qemu-virt-1g --target $TARGET"
 echo "  unset RUSTFLAGS EMBEDDED_OVERRIDE"
 echo ""
 echo "Then build the hypervisor disk:"

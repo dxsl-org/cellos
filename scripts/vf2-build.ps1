@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Build Cellos for VisionFive2 on Windows.
-# Produces target/.../vicell-kernel and delegates image creation to WSL2.
+# Produces target/.../cellos-kernel and delegates image creation to WSL2.
 #
 # Usage:
 #   .\scripts\vf2-build.ps1             # build kernel + create vf2-boot.img via WSL2
@@ -19,7 +19,7 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 if (-not $NoBuild) {
     Write-Host "[vf2-build] Building ViCell kernel for VisionFive2..."
     $env:RUSTFLAGS = "-C relocation-model=pic"
-    cargo build --release -p vicell-kernel `
+    cargo build --release -p cellos-kernel `
         --target riscv64gc-unknown-none-elf `
         --features board-vf2
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }

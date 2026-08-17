@@ -107,10 +107,27 @@ impl viConsole {
             route_byte!(c);
         }
 
-        // 1c. Poll PL011 UART RX on AArch64.
+        // 1c. Poll the board-selected AArch64 UART RX backend.
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
+            let Some(c) = crate::task::drivers::uart::getchar() else {
+                break;
+            };
+            route_byte!(c);
+        }
+
+        // Keep direct polling as a fallback for early boot and lost IRQ routing.
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
+            let Some(c) = crate::hal::uart_bcm_mini::poll_rx() else {
+                break;
+            };
+            route_byte!(c);
+        }
+
         // QEMU virt maps PL011 at 0x0900_0000; `-serial tcp:...` connects its
         // TX/RX to the TCP socket used by the integration-test harness.
-        #[cfg(target_arch = "aarch64")]
+        #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
         while self.buffer.len() < Self::MAX_BUFFERED || input_tid != 0 {
             let Some(c) = crate::hal::uart_pl011::poll_rx() else {
                 break;

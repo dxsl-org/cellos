@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Boot the ViCell x86_64 kernel in QEMU q35 (Limine BIOS ISO) and assert the
-# system reaches the interactive shell prompt ("ViCell >").
+# system reaches the interactive shell prompt ("Cellos >").
 #
 # Mirrors scripts/qemu-aarch64-test.sh for the x86_64 q35 machine.
 #
@@ -19,7 +19,7 @@ fi
 
 if [[ ! -f "$ISO" ]]; then
     echo "FAIL: ISO not found: $ISO" >&2
-    echo "  Build with: cargo build --release -p vicell-kernel --target x86_64-unknown-none && bash scripts/x86/make-iso-ci.sh" >&2
+    echo "  Build with: cargo build --release -p cellos-kernel --target x86_64-unknown-none && bash scripts/x86/make-iso-ci.sh" >&2
     exit 1
 fi
 
@@ -44,11 +44,11 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-x86_64.log; then
     exit 1
 fi
 
-if grep -q "ViCell >" qemu-x86_64.log; then
+if grep -q "Cellos >" qemu-x86_64.log; then
     echo "PASS: x86_64 shell prompt reached — full boot successful"
     exit 0
 fi
 
-echo "FAIL: 'ViCell >' prompt not seen within ${BOOT_WINDOW}s" >&2
+echo "FAIL: 'Cellos >' prompt not seen within ${BOOT_WINDOW}s" >&2
 tail -40 qemu-x86_64.log
 exit 1

@@ -32,7 +32,7 @@ pub trait ViApp: 'static + Sized {
 
     /// Window title (optional override).
     fn title(&self) -> &str {
-        "ViCell"
+        "Cellos"
     }
 }
 

@@ -6,7 +6,7 @@
 //!
 //! Prerequisites:
 //!   bash scripts/build-shell-test-ci.sh
-//!   → produces target/riscv64gc-unknown-none-elf/release/vicell-kernel-shell-test
+//!   → produces target/riscv64gc-unknown-none-elf/release/cellos-kernel-shell-test
 //!
 //! Run via:
 //!   cargo test --manifest-path tests/integration/Cargo.toml --test shell-utils
@@ -27,7 +27,7 @@ fn repo_root() -> PathBuf {
 
 fn shell_test_kernel() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-shell-test")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-shell-test")
         .to_string_lossy()
         .into_owned()
 }

@@ -19,7 +19,7 @@ Instead of launching QEMU normally, you must start the emulator with the `-s` an
 
 Manual QEMU command equivalent:
 ```bash
-qemu-system-aarch64 -machine raspi3b -m 1G -display none -serial null -serial stdio -kernel target/aarch64-unknown-none-softfloat/release/vicell-kernel -s -S
+qemu-system-aarch64 -machine raspi3b -m 1G -display none -serial null -serial stdio -kernel target/aarch64-unknown-none-softfloat/release/cellos-kernel -s -S
 ```
 
 ## 3. Hardware Debugging via JTAG (Raspberry Pi 3)
@@ -33,10 +33,10 @@ To debug directly on physical hardware, you configure the board to expose intern
 Open a separate terminal window and launch GDB loaded with the compiled kernel ELF executable containing debug symbols.
 
 > [!IMPORTANT]
-> Ensure you specify the unstripped ELF binary (`target/aarch64-unknown-none-softfloat/release/vicell-kernel` or `kernel8.elf`), **not** the raw disk image (`kernel8.img`). Raw images lack DWARF symbol tables.
+> Ensure you specify the unstripped ELF binary (`target/aarch64-unknown-none-softfloat/release/cellos-kernel` or `kernel8.elf`), **not** the raw disk image (`kernel8.img`). Raw images lack DWARF symbol tables.
 
 ```bash
-gdb-multiarch target/aarch64-unknown-none-softfloat/release/vicell-kernel
+gdb-multiarch target/aarch64-unknown-none-softfloat/release/cellos-kernel
 ```
 
 Inside the GDB console, connect to the target remote session:

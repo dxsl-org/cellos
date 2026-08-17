@@ -33,6 +33,9 @@ fn main() {
 
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let embedded_out = out_dir.join("embedded");
+    if embedded_out.exists() {
+        fs::remove_dir_all(&embedded_out).expect("clear stale embedded OUT_DIR");
+    }
     fs::create_dir_all(&embedded_out).expect("create embedded OUT_DIR");
 
     // Use arch-specific embedded directory when available, fall back to default.
@@ -101,7 +104,7 @@ fn main() {
 
         if !stripped {
             println!(
-                "cargo:warning=Could not strip {} (no strip tool available)",
+                "cargo:warning=Could not strip {} (tool unavailable or failed); retained unstripped input",
                 cell
             );
         }
@@ -131,10 +134,51 @@ fn emit_git_sha() {
 }
 
 fn try_strip(tool: &str, path: &PathBuf) -> bool {
-    Command::new(tool)
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let candidate = path.with_file_name(format!("{file_name}.{tool}.strip-candidate"));
+    if fs::copy(path, &candidate).is_err() {
+        return false;
+    }
+
+    let succeeded = Command::new(tool)
         .arg("--strip-debug")
-        .arg(path)
+        .arg(&candidate)
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .map(|status| status.success())
+        .unwrap_or(false);
+    let backup = path.with_file_name(format!("{file_name}.unstripped-backup"));
+    let installed = if succeeded && fs::copy(path, &backup).is_ok() {
+        if fs::copy(&candidate, path).is_ok() {
+            true
+        } else {
+            fs::copy(&backup, path).expect("restore unstripped embedded input");
+            false
+        }
+    } else {
+        false
+    };
+
+    let _ = fs::remove_file(&candidate);
+    let _ = fs::remove_file(&backup);
+    if let Some(parent) = candidate.parent() {
+        let prefix = candidate
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        if let Ok(entries) = fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.starts_with(prefix))
+                {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    installed
 }

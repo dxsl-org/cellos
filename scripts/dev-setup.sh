@@ -164,7 +164,7 @@ if $CHECK_ONLY; then
     || warn "kernel_fs.img MISSING or empty — kernel would boot with no cells"
 else
   bash scripts/build-boot-ramdisk-ci.sh || die "ramdisk assembly failed"
-  cargo build --release -p vicell-kernel \
+  cargo build --release -p cellos-kernel \
     --target riscv64gc-unknown-none-elf -Z build-std=core,alloc \
     || die "kernel build failed"
   info "kernel + ramdisk built ✓"
@@ -175,7 +175,7 @@ step "6/6 QEMU boot check"
 if $CHECK_ONLY; then
   warn "skipped in --check mode"
 elif command -v qemu-system-riscv64 &>/dev/null; then
-  bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/vicell-kernel \
+  bash scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel \
     || die "boot test failed — the environment builds but does not run"
   info "rv64 boot ✓"
 else

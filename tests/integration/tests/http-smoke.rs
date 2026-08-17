@@ -10,7 +10,7 @@
 //!   FAIL  — `[http-smoke] HTTP FAIL` seen OR neither PASS nor FAIL within timeout
 //!
 //! Prerequisites:
-//!   cargo build --release -p vicell-kernel  (RUSTFLAGS="-C relocation-model=pic")
+//!   cargo build --release -p cellos-kernel  (RUSTFLAGS="-C relocation-model=pic")
 //!   cargo build --release -p app-http-smoke
 //!   ./gen_disk.ps1                           (installs /bin/http-smoke on the disk)
 //!   qemu-system-riscv64 on PATH
@@ -40,7 +40,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -93,7 +93,7 @@ fn prerequisites_ok() -> bool {
 
     if !kernel_ok {
         eprintln!(
-            "SKIP http-smoke: kernel not built ({})\n  Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p vicell-kernel",
+            "SKIP http-smoke: kernel not built ({})\n  Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p cellos-kernel",
             kernel_path()
         );
     }
@@ -179,7 +179,7 @@ fn http_smoke_e2e() {
     // Boot QEMU with SLIRP (guest sees host at 10.0.2.2).
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!(
             "shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}",
             qemu.dump()

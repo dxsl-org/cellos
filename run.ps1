@@ -17,7 +17,7 @@ if (Get-Command $qemu -ErrorAction SilentlyContinue) {
 
 # Release kernel now only 4.4 MB (kernel_fs.img embedded separately).
 # 256 MB is sufficient: kernel(4.4MB) + heap(64MB) + cells + stacks.
-$kernel = "target/riscv64gc-unknown-none-elf/release/vicell-kernel"
+$kernel = "target/riscv64gc-unknown-none-elf/release/cellos-kernel"
 $disk   = "disk_v3.img"
 
 # ── Build-skew guard ──────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ if (-not $SkipDisk) {
 # the matching R_RISCV_RELATIVE relocations the kernel self-applies at _start.
 Write-Host "Building release kernel (RUSTFLAGS=relocation-model=pic)..."
 $env:RUSTFLAGS = "-C relocation-model=pic"
-cargo build --release -p vicell-kernel
+cargo build --release -p cellos-kernel
 $env:RUSTFLAGS = $null
 if (-not (Test-Path $kernel)) { Write-Host "Kernel build failed."; exit 1 }
 

@@ -159,10 +159,11 @@ use alloc::collections::VecDeque;
 
 // Global RX Buffer (Initialized late)
 pub static RX_BUFFER: Spinlock<Option<VecDeque<u8>>> = Spinlock::new(None);
+const MAX_RX_BUFFERED: usize = 4096;
 
 /// Initialize Input Buffer (Must be called after Heap Init)
 pub fn init_input() {
-    *RX_BUFFER.lock() = Some(VecDeque::with_capacity(128));
+    *RX_BUFFER.lock() = Some(VecDeque::with_capacity(MAX_RX_BUFFERED));
     log::info!("UART Input Buffer Initialized");
 }
 
@@ -246,7 +247,16 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                     };
                     (lsr, byte)
                 }
-                #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+                {
+                    let byte = crate::hal::uart_bcm_mini::poll_rx();
+                    (byte.map_or(0, |_| _LSR_RX_READY), byte)
+                }
+                #[cfg(not(any(
+                    target_arch = "x86_64",
+                    target_arch = "x86",
+                    all(target_arch = "aarch64", feature = "board-rpi3")
+                )))]
                 {
                     // MMIO path for RISC-V / AArch64.
                     let serial = SERIAL.lock();
@@ -270,7 +280,9 @@ pub extern "Rust" fn vi_handle_uart_irq() {
                 None => break,
                 Some(c) => {
                     let c = if c == b'\r' { b'\n' } else { c };
-                    buf.push_back(c);
+                    if buf.len() < MAX_RX_BUFFERED {
+                        buf.push_back(c);
+                    }
                 }
             }
         }

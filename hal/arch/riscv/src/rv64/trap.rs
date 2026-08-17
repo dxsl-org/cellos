@@ -164,7 +164,7 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 } else {
                     // True kernel fault (S-mode) or U-mode fault without a registered Cell.
                     panic!(
-                        "ViCell: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x}",
+                        "Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x}",
                         code, frame.sepc, frame.stval, frame.sstatus
                     );
                 }

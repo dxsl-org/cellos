@@ -3,9 +3,11 @@
 //! `virtio_blk`, `input_irq_ack`, and Driver Cells use `virtio_slots()` to
 //! iterate all VirtIO MMIO slots for the current platform.
 //!
-//! AArch64: scans all 32 slots at 0x0a000000, stride 0x200 (QEMU virt layout).
+//! AArch64 QEMU virt: scans all 32 slots at 0x0a000000, stride 0x200.
+//! Raspberry Pi 3 exposes no VirtIO MMIO window, so board-rpi3 yields no slots.
 //! QEMU assigns devices to slots in an implementation-defined order so we must
-//! probe all 32.  The identity map in paging.rs covers the full 0x0a004000 range.
+//! probe all 32 there.  The identity map in paging.rs covers the full
+//! 0x0a004000 range only on non-RPi3 AArch64 builds.
 //!
 //! RISC-V: reads DTB-confirmed slots from `platform::PLATFORM`.
 //! PCIe-only arches expose no VirtIO-MMIO slots.
@@ -21,7 +23,11 @@ pub struct VirtioSlot {
 
 /// Iterator over all VirtIO MMIO slots for the current platform.
 pub fn virtio_slots() -> impl Iterator<Item = VirtioSlot> {
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    {
+        Vec::new().into_iter()
+    }
+    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
     {
         // QEMU ARM virt: 32 VirtIO MMIO slots at 0x0a000000, 512 bytes each, SPI 16+i.
         // All 32 slots are identity-mapped by init_kernel_paging (0x0a000000..0x0a004000).

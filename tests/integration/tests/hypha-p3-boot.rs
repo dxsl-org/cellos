@@ -10,7 +10,7 @@
 //!   SKIP  — kernel/disk/qemu prerequisites not met
 //!
 //! Prerequisites:
-//!   RUSTFLAGS="-C relocation-model=pic" cargo build --release -p vicell-kernel
+//!   RUSTFLAGS="-C relocation-model=pic" cargo build --release -p cellos-kernel
 //!   cargo build --release -p hypha-core -p hypha-llm-gateway \
 //!                          -p hypha-tool-fs -p hypha-tool-sys -p hypha-tool-spawn
 //!   ./gen_disk.ps1
@@ -34,7 +34,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -53,7 +53,7 @@ fn prerequisites_ok() -> bool {
     if !kernel_ok {
         eprintln!(
             "SKIP hypha-p3-boot: kernel not built ({})\n  \
-             Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p vicell-kernel",
+             Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p cellos-kernel",
             kernel_path()
         );
     }
@@ -81,7 +81,7 @@ fn hypha_p3_tool_cells_spawn() {
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}", qemu.dump())
     });
 

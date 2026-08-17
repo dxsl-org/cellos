@@ -9,12 +9,12 @@ if (Get-Command $qemu -ErrorAction SilentlyContinue) {
     exit 1
 }
 
-$kernel = "target/riscv64gc-unknown-none-elf/release/vicell-kernel"
+$kernel = "target/riscv64gc-unknown-none-elf/release/cellos-kernel"
 $disk   = "disk_v3.img"
 
 Write-Host "Building release kernel..."
 $env:RUSTFLAGS = "-C relocation-model=pic"
-cargo build --release -p vicell-kernel
+cargo build --release -p cellos-kernel
 $env:RUSTFLAGS = $null
 if (-not (Test-Path $kernel)) { Write-Host "Kernel build failed."; exit 1 }
 

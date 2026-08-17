@@ -174,4 +174,4 @@ Write-Host "  kernel_fs.img created: ${kb} KB"
 
 Write-Host ""
 Write-Host "Done. Rebuild kernel to embed the new x86_64 cells:"
-Write-Host "  cargo build --release -p vicell-kernel --target x86_64-unknown-none -Z build-std=core,alloc"
+Write-Host "  cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc"

@@ -143,6 +143,30 @@ pub fn enforce(pages: &[(VAddr, Flags)], cell: &str) -> ViResult<()> {
         reject_wx_page(cell, va, flags)?;
     }
 
+    // AArch64 has non-coherent data and instruction caches. Relocations are the
+    // final writes to executable pages, so publish those bytes before removing
+    // WRITE and before another hart can dequeue the task.
+    #[cfg(target_arch = "aarch64")]
+    for &(va, flags) in pages {
+        if flags.bits() & Flags::EXECUTE != 0 {
+            let phys = crate::memory::paging::virt_to_phys(va).ok_or_else(|| {
+                log::error!(
+                    "[wx] '{}' executable page 0x{:X} disappeared before cache sync",
+                    cell,
+                    va
+                );
+                ViError::InvalidInput
+            })?;
+            let data_va = crate::memory::frame::phys_to_virt(phys);
+            // SAFETY: `data_va` is the physical alias used by segment copy and
+            // relocation; `va` maps that same page for the cell's instruction
+            // fetch. Both page-sized ranges are mapped and cannot overflow.
+            unsafe {
+                hal::sync_instruction_cache(data_va, va, crate::memory::paging::PAGE_SIZE);
+            }
+        }
+    }
+
     let mut lowered = 0usize;
     for &(va, flags) in pages {
         if flags.bits() & Flags::WRITE == 0 {

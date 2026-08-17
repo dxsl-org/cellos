@@ -12,7 +12,7 @@
 //!   FAIL  — `TLS handshake OK` → cert verification bypassed (ship-blocker).
 //!
 //! Prerequisites:
-//!   cargo build --release -p vicell-kernel (RUSTFLAGS="-C relocation-model=pic")
+//!   cargo build --release -p cellos-kernel (RUSTFLAGS="-C relocation-model=pic")
 //!   cargo build --release -p service-net       # default = tls-roots-embedded + tls-ca-private
 //!   cargo build --release -p app-https-demo
 //!   ./gen_disk.ps1                             # installs /bin/https-demo on the disk
@@ -35,7 +35,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -53,7 +53,7 @@ fn prerequisites_ok() -> bool {
         .is_ok();
     if !kernel_ok {
         eprintln!("SKIP tls-gate: kernel not built ({})", kernel_path());
-        eprintln!("      Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p vicell-kernel");
+        eprintln!("      Run: RUSTFLAGS=\"-C relocation-model=pic\" cargo build --release -p cellos-kernel");
     }
     if !disk_ok {
         eprintln!("SKIP tls-gate: disk_v3.img missing");
@@ -84,7 +84,7 @@ fn tls_gate_default_rejects_public_cert() {
     // FAT16 partition corruption between concurrent tests.
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n--- output ---\n{}", qemu.dump())
     });
 

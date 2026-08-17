@@ -93,7 +93,7 @@ jobs:
           cargo build --release \
             --target riscv64gc-unknown-none-elf \
             -Z build-std=core,alloc \
-            -p vicell-kernel
+            -p cellos-kernel
 
       - name: Generate bench disk image
         run: |
@@ -107,7 +107,7 @@ jobs:
         id: bench_run
         timeout-minutes: 10
         run: |
-          KERNEL=target/riscv64gc-unknown-none-elf/release/vicell-kernel
+          KERNEL=target/riscv64gc-unknown-none-elf/release/cellos-kernel
           # Direct boot: kernel ELF passed as -kernel (OpenSBI → kernel → init → bench).
           # bench-disk.img contains only the cell bootstrap table (/bin/bench).
           # init reads the cell table and auto-spawns /bin/bench.

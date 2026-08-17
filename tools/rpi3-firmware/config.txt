@@ -4,9 +4,10 @@
 # enable_uart=1:  Enable mini UART (UART1) on GPIO14/15 at 115200 baud
 #                 PL011 is routed to Bluetooth; mini UART → serial console
 #
-# DO NOT set core_freq here — BCM mini UART baud depends on VPU core clock.
-# Default VPU core clock = 250 MHz → BAUD_REG = 270 for 115200 baud.
+# The mini UART baud divisor depends on the VPU core clock. Real Pi 3 firmware
+# may select a different clock, so pin it to 250 MHz to keep 115200 baud stable.
 
 arm_64bit=1
 kernel=kernel8.img
 enable_uart=1
+core_freq=250

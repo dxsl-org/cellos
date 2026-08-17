@@ -24,7 +24,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -71,7 +71,7 @@ fn compositor_cursor_moves_on_mouse_event() {
     let mut qemu = QemuRunner::boot_with_pointer(&kernel_path(), &disk_path());
 
     // Wait for the shell prompt — full userspace stack is up by this point.
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!(
             "shell not reached: {e}\n--- serial output ---\n{}",
             qemu.dump()

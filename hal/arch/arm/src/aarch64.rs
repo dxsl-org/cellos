@@ -15,6 +15,8 @@ pub mod bcm2836_irq;
 #[cfg(target_arch = "aarch64")]
 pub mod boot;
 #[cfg(target_arch = "aarch64")]
+pub mod cache;
+#[cfg(target_arch = "aarch64")]
 pub mod cfi;
 #[cfg(target_arch = "aarch64")]
 pub mod context;
@@ -46,6 +48,8 @@ pub mod vcpu;
 #[cfg(target_arch = "aarch64")]
 pub mod vgic;
 
+#[cfg(target_arch = "aarch64")]
+pub use cache::sync_instruction_cache;
 #[cfg(target_arch = "aarch64")]
 pub use context::CpuContext as Context;
 #[cfg(target_arch = "aarch64")]

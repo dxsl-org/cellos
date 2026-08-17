@@ -291,7 +291,7 @@ extern "C" fn main() -> usize {
     }
 
     // No `-e`: interactive REPL (multi-line, history, Ctrl+C/D).
-    ostd::io::println("Lua 5.4 on ViCell  (Ctrl+D to exit)");
+    ostd::io::println("Lua 5.4 on Cellos  (Ctrl+D to exit)");
     // SAFETY: L is non-null and valid; run_repl drives the full REPL loop.
     unsafe {
         repl_session::run_repl(L);

@@ -22,7 +22,7 @@ fn prerequisites() -> Option<(String, String)> {
         return None;
     }
     let root = repo_root();
-    let kernel = root.join("target/aarch64-unknown-none-softfloat/release/vicell-kernel");
+    let kernel = root.join("target/aarch64-unknown-none-softfloat/release/cellos-kernel");
     let disk = root.join("disk_hv_arm_gui.img");
     let qemu = Command::new(qemu_binary_aarch64())
         .arg("--version")

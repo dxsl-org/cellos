@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Boot the ViCell kernel in QEMU and assert the system reaches a known-good state.
 #
-# With a disk image: asserts the full boot reaches the shell prompt ("ViCell >").
+# With a disk image: asserts the full boot reaches the shell prompt ("Cellos >").
 # Without a disk image: the system can't spawn cells from /bin/, but it should
 # still boot the kernel and mount the embedded FAT16 image — we assert on that.
 #
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-KERNEL="${1:-target/riscv64gc-unknown-none-elf/release/vicell-kernel}"
+KERNEL="${1:-target/riscv64gc-unknown-none-elf/release/cellos-kernel}"
 DISK="${2:-}"
 
 if [[ ! -f "$KERNEL" ]]; then
@@ -63,7 +63,7 @@ tr -d '\000' < qemu.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu.log
 if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu.log; then
   echo "FAIL: kernel panic / cell fault detected during boot"; grep -ai "fault\|PANIC" qemu.log | head; exit 1
 fi
-if grep -qa "ViCell >" qemu.log; then
+if grep -qa "Cellos >" qemu.log; then
   echo "PASS: shell prompt reached — full boot successful"; exit 0
 fi
 if [[ "$WANT_SHELL" -eq 0 ]] && grep -qia "FAT16 mounted successfully" qemu.log; then
@@ -71,7 +71,7 @@ if [[ "$WANT_SHELL" -eq 0 ]] && grep -qia "FAT16 mounted successfully" qemu.log;
 fi
 
 if [[ "$WANT_SHELL" -eq 1 ]]; then
-  echo "FAIL: shell prompt 'ViCell >' not seen within ${BOOT_WINDOW}s"
+  echo "FAIL: shell prompt 'Cellos >' not seen within ${BOOT_WINDOW}s"
 else
   echo "FAIL: 'FAT16 mounted successfully' not seen within ${BOOT_WINDOW}s"
 fi

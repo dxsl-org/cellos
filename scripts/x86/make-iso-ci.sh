@@ -11,12 +11,12 @@ set -euo pipefail
 ISO_OUT="${1:-build/vicell-x86.iso}"
 ISO_ROOT="build/x86-iso-root"
 LIMINE="limine/limine-8.7.0/bin"
-KERNEL="target/x86_64-unknown-none/release/vicell-kernel"
+KERNEL="target/x86_64-unknown-none/release/cellos-kernel"
 LIMINE_CONF="scripts/x86/limine.conf"
 
 if [[ ! -f "$KERNEL" ]]; then
     echo "FAIL: kernel ELF not found: $KERNEL" >&2
-    echo "  Build with: cargo build --release -p vicell-kernel --target x86_64-unknown-none -Z build-std=core,alloc" >&2
+    echo "  Build with: cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc" >&2
     exit 1
 fi
 

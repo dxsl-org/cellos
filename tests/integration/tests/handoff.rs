@@ -10,10 +10,10 @@
 //! so the tests run even before a `disk_v3.img` is generated.
 //!
 //! Prerequisites per arch:
-//!   RV64 : qemu-system-riscv64 + `cargo build --release -p vicell-kernel`
-//!   ARM64: qemu-system-aarch64 + `cargo build --target aarch64-unknown-none -p vicell-kernel --release`
-//!   RV32 : qemu-system-riscv32 + `cargo build --target riscv32imc-unknown-none-elf -p vicell-kernel --release`
-//!   x86  : `cargo build --target x86_64-unknown-none -p vicell-kernel --release` (no QEMU needed)
+//!   RV64 : qemu-system-riscv64 + `cargo build --release -p cellos-kernel`
+//!   ARM64: qemu-system-aarch64 + `cargo build --target aarch64-unknown-none -p cellos-kernel --release`
+//!   RV32 : qemu-system-riscv32 + `cargo build --target riscv32imc-unknown-none-elf -p cellos-kernel --release`
+//!   x86  : `cargo build --target x86_64-unknown-none -p cellos-kernel --release` (no QEMU needed)
 
 use std::path::PathBuf;
 use vicell_integration_tests::{
@@ -38,42 +38,42 @@ fn repo_root() -> PathBuf {
 
 fn rv64_kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
 fn aarch64_kernel_path() -> String {
     repo_root()
-        .join("target/aarch64-unknown-none/release/vicell-kernel")
+        .join("target/aarch64-unknown-none/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
 fn rv32_kernel_path() -> String {
     repo_root()
-        .join("target/riscv32imac-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv32imac-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
 fn aarch32_kernel_path() -> String {
     repo_root()
-        .join("target/armv7a-none-eabi/release/vicell-kernel")
+        .join("target/armv7a-none-eabi/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
 fn x86_32_kernel_path() -> String {
     repo_root()
-        .join("target/x86_32-unknown-none/release/vicell-kernel")
+        .join("target/x86_32-unknown-none/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
 fn x86_kernel_path() -> String {
     repo_root()
-        .join("target/x86_64-unknown-none/release/vicell-kernel")
+        .join("target/x86_64-unknown-none/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -112,7 +112,7 @@ fn aarch64_prerequisites_ok() -> bool {
         .is_ok();
     if !kernel_ok {
         eprintln!(
-            "SKIP: AArch64 kernel not built ({})\n  build: cargo build --target aarch64-unknown-none -p vicell-kernel --release",
+            "SKIP: AArch64 kernel not built ({})\n  build: cargo build --target aarch64-unknown-none -p cellos-kernel --release",
             aarch64_kernel_path()
         );
     }
@@ -130,7 +130,7 @@ fn rv32_prerequisites_ok() -> bool {
         .is_ok();
     if !kernel_ok {
         eprintln!(
-            "SKIP: RV32 kernel not built ({})\n  build: cargo build --target riscv32imac-unknown-none-elf -p vicell-kernel --release",
+            "SKIP: RV32 kernel not built ({})\n  build: cargo build --target riscv32imac-unknown-none-elf -p cellos-kernel --release",
             rv32_kernel_path()
         );
     }
@@ -148,7 +148,7 @@ fn aarch32_prerequisites_ok() -> bool {
         .is_ok();
     if !kernel_ok {
         eprintln!(
-            "SKIP: AArch32 kernel not built ({})\n  build: cargo build --target armv7a-none-eabi -p vicell-kernel --release",
+            "SKIP: AArch32 kernel not built ({})\n  build: cargo build --target armv7a-none-eabi -p cellos-kernel --release",
             aarch32_kernel_path()
         );
     }
@@ -166,7 +166,7 @@ fn x86_32_prerequisites_ok() -> bool {
         .is_ok();
     if !kernel_ok {
         eprintln!(
-            "SKIP: x86_32 kernel not built ({})\n  build: cargo build --target kernel/x86_32-unknown-none.json -p vicell-kernel --release -Z build-std=core,alloc",
+            "SKIP: x86_32 kernel not built ({})\n  build: cargo build --target kernel/x86_32-unknown-none.json -p cellos-kernel --release -Z build-std=core,alloc",
             x86_32_kernel_path()
         );
     }
@@ -405,7 +405,7 @@ fn handoff_x86_kernel_builds() {
     let path = PathBuf::from(x86_kernel_path());
     if !path.exists() {
         eprintln!(
-            "SKIP: x86_64 kernel not built ({})\n  build: cargo build --target x86_64-unknown-none -p vicell-kernel --release",
+            "SKIP: x86_64 kernel not built ({})\n  build: cargo build --target x86_64-unknown-none -p cellos-kernel --release",
             x86_kernel_path()
         );
         return;
@@ -481,7 +481,7 @@ fn handoff_x86_heap() {
 // MMU off, PL011 UART at 0x09000000. Bare physical addressing (no page tables).
 // No VirtIO devices — kernel idles after "Scheduler initialized".
 //
-// Build: cargo build --target armv7a-none-eabi -p vicell-kernel --release
+// Build: cargo build --target armv7a-none-eabi -p cellos-kernel --release
 // QEMU:  qemu-system-arm (4.x+)
 // ---------------------------------------------------------------------------
 
@@ -537,7 +537,7 @@ fn handoff_aarch32_scheduler_initialized() {
 // `_start` in protected mode; GDT/IDT initialised, COM1 UART at 0x3F8.
 // Bare physical addressing (CR0.PG=0). No VirtIO — kernel idles after init.
 //
-// Build: cargo build --target kernel/x86_32-unknown-none.json -p vicell-kernel --release -Z build-std=core,alloc
+// Build: cargo build --target kernel/x86_32-unknown-none.json -p cellos-kernel --release -Z build-std=core,alloc
 // QEMU:  qemu-system-i386 (4.x+)
 // ---------------------------------------------------------------------------
 

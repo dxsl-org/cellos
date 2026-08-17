@@ -95,7 +95,7 @@ pub extern "C" fn vi_trap_handler32(frame: &mut ViTrapFrame32) {
                     // vi_terminate_on_fault calls yield_cpu() — we should not reach here.
                 } else {
                     panic!(
-                        "ViCell/RV32: kernel exception scause={} sepc={:#x} stval={:#x}",
+                        "Cellos/RV32: kernel exception scause={} sepc={:#x} stval={:#x}",
                         code, frame.sepc, frame.stval
                     );
                 }

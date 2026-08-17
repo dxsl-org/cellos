@@ -19,7 +19,7 @@
 //!
 //! # Prerequisites
 //! - `qemu-system-riscv64` on PATH
-//! - `RUSTFLAGS="-C relocation-model=pic" cargo build --release -p vicell-kernel`
+//! - `RUSTFLAGS="-C relocation-model=pic" cargo build --release -p cellos-kernel`
 //! - `cargo build --release -p wx-test`
 //! - `./gen_disk.ps1` (installs `/bin/wx-test` on disk_v3.img)
 
@@ -48,7 +48,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -100,7 +100,7 @@ fn text_write_faults_and_terminates_cell() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -144,7 +144,7 @@ fn kernel_survives_the_faulting_cell() {
     }
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));

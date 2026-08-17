@@ -4,7 +4,7 @@ use ostd::prelude::*;
 use ostd::syscall;
 
 pub fn cmd_help() -> ViResult<()> {
-    crate::executor::shell_println("ViCell Shell v0.2.1 — built-in commands:");
+    crate::executor::shell_println("Cellos Shell v0.2.1 — built-in commands:");
     crate::executor::shell_println(
         "  Files:   ls  cat  wc  head  tail  grep  sed  awk  find  uniq  sort  mkdir  rmdir  rm",
     );

@@ -216,7 +216,7 @@ fn cell_main() {
         _ => {} // orchestrator falls through
     }
 
-    println("[bench] ViCell Performance Benchmark Suite v0.1");
+    println("[bench] Cellos Performance Benchmark Suite v0.1");
     println("[bench] gates: qemu ctx<100µs syscall<40µs; hardware ipc<50µs; mem<10MB");
     println("");
 

@@ -4,7 +4,7 @@
 #   1. Install qemu-system-aarch64 (e.g., via winget or QEMU installer).
 #   2. Build the aarch64 kernel:
 #        $env:RUSTFLAGS = "-C relocation-model=pic"
-#        cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat
+#        cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat
 #        $env:RUSTFLAGS = $null
 #   3. Build the aarch64 disk image:
 #        .\scripts\format-disk-arm.ps1
@@ -32,7 +32,7 @@ if (-not (Get-Command $qemu -ErrorAction SilentlyContinue)) {
 }
 
 $target  = "aarch64-unknown-none-softfloat"
-$kernel  = "target/$target/release/vicell-kernel"
+$kernel  = "target/$target/release/cellos-kernel"
 $disk    = "disk_arm_virt.img"
 
 Write-Host "Building aarch64 release kernel..."
@@ -44,7 +44,7 @@ Write-Host "Building aarch64 release kernel..."
 # IMPORTANT: RUSTFLAGS env var REPLACES (not merges with) config.toml rustflags
 # for the same target, so all desired features must be listed together here.
 $env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
-cargo build --release -p vicell-kernel --target $target
+cargo build --release -p cellos-kernel --target $target
 $env:RUSTFLAGS = $null
 
 if (-not (Test-Path $kernel)) {

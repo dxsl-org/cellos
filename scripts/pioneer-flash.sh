@@ -22,7 +22,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$REPO_ROOT/pioneer-boot.img"
-KERNEL="$REPO_ROOT/target/riscv64gc-unknown-none-elf/release/vicell-kernel"
+KERNEL="$REPO_ROOT/target/riscv64gc-unknown-none-elf/release/cellos-kernel"
 LIMINE_EFI="$REPO_ROOT/tools/limine-riscv64"
 
 # ── 1. Ensure Limine UEFI binary is present ────────────────────────────────────
@@ -36,7 +36,7 @@ fi
 echo "[pioneer-flash] Building Cellos kernel for Pioneer SG2042..."
 cd "$REPO_ROOT"
 RUSTFLAGS="-C relocation-model=pic" \
-    cargo build --release -p vicell-kernel \
+    cargo build --release -p cellos-kernel \
     --target riscv64gc-unknown-none-elf \
     --features board-pioneer
 
@@ -69,10 +69,10 @@ mount "${LOOP}p1" "$MNT"
 mkdir -p "$MNT/EFI/BOOT"
 cp "$LIMINE_EFI"                    "$MNT/EFI/BOOT/BOOTRISCV64.EFI"
 cp "$REPO_ROOT/limine-pioneer.conf" "$MNT/limine.conf"
-cp "$KERNEL"                        "$MNT/vicell-kernel"
+cp "$KERNEL"                        "$MNT/cellos-kernel"
 
 echo "[pioneer-flash] Boot partition contents:"
-ls -lh "$MNT/EFI/BOOT/BOOTRISCV64.EFI" "$MNT/limine.conf" "$MNT/vicell-kernel"
+ls -lh "$MNT/EFI/BOOT/BOOTRISCV64.EFI" "$MNT/limine.conf" "$MNT/cellos-kernel"
 
 umount "$MNT"
 losetup -d "$LOOP"

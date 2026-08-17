@@ -80,7 +80,7 @@ The script:
 1. Downloads `BOOTRISCV64.EFI` (Limine v12) via `scripts/download-limine.sh` if not cached
 2. Compiles the kernel with `--features board-pioneer --release`
 3. Creates a 256 MB GPT image with a 200 MB EFI System Partition
-4. Populates: `EFI/BOOT/BOOTRISCV64.EFI`, `limine.conf` (KASLR=no), `vicell-kernel`
+4. Populates: `EFI/BOOT/BOOTRISCV64.EFI`, `limine.conf` (KASLR=no), `cellos-kernel`
 
 Insert the USB drive into the Pioneer, set UEFI boot order to USB, and power on.
 
@@ -97,7 +97,7 @@ U-Boot SPL 2024.x (Pioneer SG2042)
 
 [Limine]
 Limine 12.x.x
-Loading /vicell-kernel ...
+Loading /cellos-kernel ...
 Booting ...
 
 [Cellos kernel]
@@ -141,7 +141,7 @@ Cellos>
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | No serial output | UART adapter wiring | Check GND/TX/RX; try swapping TX↔RX |
-| Limine not found | U-Boot UEFI support off | Upgrade Pioneer firmware; or `load usb 0:1 0x84000000 vicell-kernel; bootefi 0x84000000` at U-Boot prompt |
+| Limine not found | U-Boot UEFI support off | Upgrade Pioneer firmware; or `load usb 0:1 0x84000000 cellos-kernel; bootefi 0x84000000` at U-Boot prompt |
 | `[uart] RX/TX base = 0x10000000` | Wrong build — missing `board-pioneer` feature | Rebuild with `--features board-pioneer` |
 | Kernel stuck after `[boot]` | Wrong DRAM base in fallback | Ensure Limine UEFI boot is used (not bare SBI direct load) |
 | Input not echoed | SBI DBCN read returns -1 | OpenSBI version too old (< 1.2); upgrade firmware |
@@ -152,7 +152,7 @@ At the U-Boot `=>` prompt:
 
 ```
 # Assumes USB drive is device 0, partition 1
-load usb 0:1 0x84000000 vicell-kernel
+load usb 0:1 0x84000000 cellos-kernel
 bootefi 0x84000000
 ```
 

@@ -499,7 +499,7 @@ Write-Host "  kernel_fs.img: ${kfs_mb} MB"
 #     Must be done before creating disk_v3.img so the test runner picks up the latest kernel.
 Write-Host "Rebuilding kernel (embedding updated kernel_fs.img)..."
 $env:RUSTFLAGS = "-C relocation-model=pic"
-$kernOut = & cargo build --release -p vicell-kernel `
+$kernOut = & cargo build --release -p cellos-kernel `
     --target riscv64gc-unknown-none-elf `
     -Z build-std=core,alloc 2>&1
 $kernCode = $LASTEXITCODE                     # capture BEFORE the pipe (see Build-Cargo)

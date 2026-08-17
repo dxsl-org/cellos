@@ -11,7 +11,7 @@
 #        bash scripts/make-hypervisor-fs.sh --gpu-test
 #        $env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
 #        $env:EMBEDDED_OVERRIDE = "kernel\src\embedded-hv"
-#        cargo build --release -p vicell-kernel --features qemu-virt-1g `
+#        cargo build --release -p cellos-kernel --features qemu-virt-1g `
 #          --target aarch64-unknown-none-softfloat -Z build-std=core,alloc
 #        $env:RUSTFLAGS  = $null
 #        $env:EMBEDDED_OVERRIDE = $null
@@ -44,7 +44,7 @@ if (-not (Get-Command $qemu -ErrorAction SilentlyContinue)) {
 }
 
 $target  = "aarch64-unknown-none-softfloat"
-$kernel  = "target/$target/release/vicell-kernel"
+$kernel  = "target/$target/release/cellos-kernel"
 $disk    = if ($Gui) { "disk_hv_arm_gui.img" } else { "disk_hv_arm.img" }
 
 if (-not (Test-Path $kernel)) {
@@ -53,7 +53,7 @@ if (-not (Test-Path $kernel)) {
     Write-Host "  bash scripts/make-hypervisor-fs.sh --gpu-test"
     Write-Host "  `$env:RUSTFLAGS = '-C relocation-model=pic -C target-feature=+bti,+paca,+pacg'"
     Write-Host "  `$env:EMBEDDED_OVERRIDE = 'kernel\src\embedded-hv'"
-    Write-Host "  cargo build --release -p vicell-kernel --features qemu-virt-1g --target $target -Z build-std=core,alloc"
+    Write-Host "  cargo build --release -p cellos-kernel --features qemu-virt-1g --target $target -Z build-std=core,alloc"
     Write-Host "  `$env:RUSTFLAGS = `$null; `$env:EMBEDDED_OVERRIDE = `$null"
     exit 1
 }

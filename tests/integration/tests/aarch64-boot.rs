@@ -5,7 +5,7 @@
 //! Prerequisites:
 //!   - `qemu-system-aarch64` on PATH (or in the Windows default install path)
 //!   - Kernel built: `RUSTFLAGS="-C relocation-model=pic" cargo build --release
-//!                    --target aarch64-unknown-none-softfloat -p vicell-kernel`
+//!                    --target aarch64-unknown-none-softfloat -p cellos-kernel`
 //!   - Disk image: `disk_arm_virt.img` at repo root (built by `format-disk-arm.ps1`
 //!                 or by `tools/mkfat32.py`)
 //!
@@ -28,7 +28,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/aarch64-unknown-none-softfloat/release/vicell-kernel")
+        .join("target/aarch64-unknown-none-softfloat/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -60,14 +60,14 @@ fn prerequisites_ok() -> bool {
 }
 
 /// The kernel must boot and emit the scheduler-initialized banner, then bring up
-/// all services and reach the `ViCell >` shell prompt.
+/// all services and reach the `Cellos >` shell prompt.
 #[test]
 fn aarch64_boots_to_shell_prompt() {
     if !prerequisites_ok() {
         return;
     }
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("aarch64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
@@ -125,7 +125,7 @@ fn aarch64_echo_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("aarch64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo aarch64-ok");
@@ -150,7 +150,7 @@ fn aarch64_periph_demo_gpio() {
         return;
     }
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     qemu.send_line("periph-demo &");
@@ -179,7 +179,7 @@ fn aarch64_uart_input_delivery() {
         return;
     }
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Demos are on-demand: spawn input-test from the shell (mirrors the riscv

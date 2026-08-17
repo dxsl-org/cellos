@@ -73,7 +73,7 @@ fn cell_main() {
         sys_get_time, sys_lookup_service, sys_notify_on_exit, sys_recv, sys_register_service,
         sys_send, sys_spawn_from_path, SyscallResult,
     };
-    println("Init: Starting ViCell Orchestrator...");
+    println("Init: Starting Cellos Orchestrator...");
 
     // Supervised services in bring-up order — VFS first (it serves /bin/*).
     // tids[i] is the current live tid of paths[i] (None when down).

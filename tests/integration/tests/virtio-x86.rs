@@ -100,7 +100,7 @@ fn x86_virtio_pci_no_device_no_hang() {
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
     // Shell must still appear even without any VirtIO device attached.
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "x86_64 boot hung after VirtIO PCI probe with no device: {e}\n--- output ---\n{}",

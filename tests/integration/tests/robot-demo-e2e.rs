@@ -9,7 +9,7 @@
 //!
 //! Prerequisites:
 //!   - `qemu-system-aarch64` on PATH
-//!   - Kernel: `target/aarch64-unknown-none-softfloat/release/vicell-kernel`
+//!   - Kernel: `target/aarch64-unknown-none-softfloat/release/cellos-kernel`
 //!   - Disk: `disk_arm_virt.img` at repo root (built by `format-disk-arm.ps1`)
 //!
 //! Tests skip gracefully (exit 0) when any prerequisite is absent — same policy
@@ -38,7 +38,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/aarch64-unknown-none-softfloat/release/vicell-kernel")
+        .join("target/aarch64-unknown-none-softfloat/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }

@@ -14,12 +14,12 @@ param(
     [switch]$Build
 )
 
-$KernelElf = "target\riscv32imac-unknown-none-elf\release\vicell-kernel"
+$KernelElf = "target\riscv32imac-unknown-none-elf\release\cellos-kernel"
 
 if ($Build) {
     Write-Host "[run-rv32] Building kernel..."
     $env:RUSTFLAGS = ""   # non-PIE; no -Crelocation-model=pic for kernel
-    cargo build -p vicell-kernel --target riscv32imac-unknown-none-elf --release
+    cargo build -p cellos-kernel --target riscv32imac-unknown-none-elf --release
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 

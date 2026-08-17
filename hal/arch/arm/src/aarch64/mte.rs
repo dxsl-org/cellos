@@ -21,6 +21,11 @@
 
 use hal_mte::ViMte;
 
+#[cfg(feature = "board-rpi3")]
+use super::uart_bcm_mini as early_uart;
+#[cfg(not(feature = "board-rpi3"))]
+use super::uart_pl011 as early_uart;
+
 /// AArch64 MTE2 implementation of `ViMte`.
 pub struct AArch64Mte;
 
@@ -125,10 +130,10 @@ impl ViMte for AArch64Mte {
 /// Enable MTE if the hardware supports MTE2. Called from `AArch64Arch::init()`.
 ///
 /// Sets ATA, ATA0, TCF=sync, TCF0=sync in SCTLR_EL1 and emits an ISB.
-/// Logs the outcome via the PL011 UART.
+/// Logs the outcome via the active board's early UART.
 pub fn init() {
     if !AArch64Mte::is_available() {
-        super::uart_pl011::puts("[INFO] MTE: unavailable\n");
+        early_uart::puts("[INFO] MTE: unavailable\n");
         return;
     }
 
@@ -160,5 +165,5 @@ pub fn init() {
         core::arch::asm!("isb", options(nomem, nostack));
     }
 
-    super::uart_pl011::puts("[INFO] MTE: enabled (sync fault)\n");
+    early_uart::puts("[INFO] MTE: enabled (sync fault)\n");
 }

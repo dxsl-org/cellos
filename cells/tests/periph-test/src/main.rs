@@ -43,7 +43,7 @@ macro_rules! fail {
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[periph-test] ViCell peripheral integration tests");
+    println("[periph-test] Cellos peripheral integration tests");
     println("[periph-test] target: QEMU ARM virt (PL061 GPIO + PL011 UART)");
     println("");
 

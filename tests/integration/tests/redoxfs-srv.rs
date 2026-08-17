@@ -13,7 +13,7 @@
 //!    harness verifies it is announced as found in boot 2.
 //!
 //! Prerequisites:
-//!   scripts/build-srv-test-ci.sh  →  target/.../vicell-kernel-srv-test
+//!   scripts/build-srv-test-ci.sh  →  target/.../cellos-kernel-srv-test
 //!   scripts/mksrv-img.sh          →  build/disk_srv.img
 //!
 //! Run:
@@ -32,7 +32,7 @@ fn repo_root() -> PathBuf {
 
 fn srv_test_kernel() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-srv-test")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-srv-test")
         .to_string_lossy()
         .into_owned()
 }
@@ -41,7 +41,7 @@ fn srv_test_kernel() -> String {
 /// VFS behaves gracefully when no VirtIO-BLK device is present.
 fn test_hooks_kernel() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks")
         .to_string_lossy()
         .into_owned()
 }

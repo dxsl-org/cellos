@@ -134,19 +134,22 @@ impl InputDevice {
 
 /// Yields `(mmio_base, irq)` for each VirtIO MMIO slot on the current platform.
 fn virtio_slot_iter() -> impl Iterator<Item = (usize, u32)> {
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(all(target_arch = "aarch64", feature = "virtio-mmio"))]
     {
         const BASE: usize = 0x0a00_0000;
         const STRIDE: usize = 0x200;
         (0..32_usize).map(|i| (BASE + i * STRIDE, 16 + i as u32))
     }
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(all(target_arch = "riscv64", feature = "virtio-mmio"))]
     {
         const BASE: usize = 0x1000_1000;
         const STRIDE: usize = 0x1000;
         (0..8_usize).map(|i| (BASE + i * STRIDE, 1 + i as u32))
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]
+    #[cfg(not(all(
+        any(target_arch = "aarch64", target_arch = "riscv64"),
+        feature = "virtio-mmio"
+    )))]
     {
         core::iter::empty()
     }

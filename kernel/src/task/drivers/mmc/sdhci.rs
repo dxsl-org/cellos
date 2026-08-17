@@ -15,6 +15,10 @@ pub struct SdhciController {
     pub is_sdhc: bool,
     /// SDHCI spec version read from HOST_VERSION[2:0]; affects clock divider encoding.
     spec_ver: u8,
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    transfer_mode_shadow: u32,
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    last_write_ticks: u64,
 }
 
 impl SdhciController {
@@ -28,6 +32,10 @@ impl SdhciController {
             base,
             is_sdhc: false,
             spec_ver: 0,
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            transfer_mode_shadow: 0,
+            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            last_write_ticks: 0,
         };
         // SAFETY: base is the validated MMIO address passed by the caller.
         c.spec_ver = (c.read16(SDHCI_HOST_VERSION) & 0xFF) as u8;
@@ -37,33 +45,118 @@ impl SdhciController {
     // --- volatile MMIO helpers ---
 
     #[inline]
+    fn read8(&self, off: usize) -> u8 {
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        {
+            let shift = (off & 3) * 8;
+            (self.read32(off & !3) >> shift) as u8
+        }
+        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+        {
+            // SAFETY: base + off is within the SDHCI MMIO block mapped by the kernel.
+            unsafe { core::ptr::read_volatile((self.base + off) as *const u8) }
+        }
+    }
+    #[inline]
     fn read32(&self, off: usize) -> u32 {
         // SAFETY: base + off is within the SDHCI MMIO block mapped by the kernel.
         unsafe { core::ptr::read_volatile((self.base + off) as *const u32) }
     }
     #[inline]
     fn read16(&self, off: usize) -> u16 {
-        // SAFETY: same as read32.
-        unsafe { core::ptr::read_volatile((self.base + off) as *const u16) }
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        {
+            let shift = (off & 2) * 8;
+            (self.read32(off & !3) >> shift) as u16
+        }
+        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+        {
+            // SAFETY: same as read32.
+            unsafe { core::ptr::read_volatile((self.base + off) as *const u16) }
+        }
     }
     #[inline]
     fn write32(&mut self, off: usize, v: u32) {
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        self.space_bcm2835_write(off);
         // SAFETY: same as read32.
         unsafe { core::ptr::write_volatile((self.base + off) as *mut u32, v) }
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        {
+            self.last_write_ticks = Self::bcm2835_timer_ticks();
+        }
     }
     #[inline]
     fn write16(&mut self, off: usize, v: u16) {
-        // SAFETY: same as read32.
-        unsafe { core::ptr::write_volatile((self.base + off) as *mut u16, v) }
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        {
+            let shift = (off & 2) * 8;
+            let old = if off == SDHCI_COMMAND {
+                self.transfer_mode_shadow
+            } else {
+                self.read32(off & !3)
+            };
+            let combined = (old & !(0xffff << shift)) | ((v as u32) << shift);
+            if off == SDHCI_TRANSFER_MODE {
+                self.transfer_mode_shadow = combined;
+            } else {
+                self.write32(off & !3, combined);
+            }
+        }
+        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+        {
+            // SAFETY: same as read32.
+            unsafe { core::ptr::write_volatile((self.base + off) as *mut u16, v) }
+        }
     }
     #[inline]
     fn write8(&mut self, off: usize, v: u8) {
-        // SAFETY: same as read32.
-        unsafe { core::ptr::write_volatile((self.base + off) as *mut u8, v) }
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        {
+            let shift = (off & 3) * 8;
+            let old = self.read32(off & !3);
+            let combined = (old & !(0xff << shift)) | ((v as u32) << shift);
+            self.write32(off & !3, combined);
+        }
+        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+        {
+            // SAFETY: same as read32.
+            unsafe { core::ptr::write_volatile((self.base + off) as *mut u8, v) }
+        }
+    }
+
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    #[inline]
+    fn bcm2835_timer_ticks() -> u64 {
+        let ticks: u64;
+        // SAFETY: CNTPCT_EL0 is a read-only architectural counter available at EL1/EL2.
+        unsafe {
+            core::arch::asm!("mrs {}, cntpct_el0", out(reg) ticks, options(nomem, nostack));
+        }
+        ticks
+    }
+
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    fn space_bcm2835_write(&self, off: usize) {
+        if off == SDHCI_BUFFER || self.last_write_ticks == 0 {
+            return;
+        }
+
+        let frequency: u64;
+        // SAFETY: CNTFRQ_EL0 is a read-only architectural frequency register.
+        unsafe {
+            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
+        }
+        // BCM2835 Arasan may drop writes less than two 400 kHz SD-clock cycles apart.
+        // Six microseconds matches U-Boot's conservative two-cycle delay plus rounding.
+        let minimum_ticks = frequency.saturating_mul(6).div_ceil(1_000_000);
+        while Self::bcm2835_timer_ticks().wrapping_sub(self.last_write_ticks) < minimum_ticks {
+            core::hint::spin_loop();
+        }
     }
 
     /// Spin until `(read32(off) & mask) == 0`, or return `Err(Timeout)`.
-    fn poll_clear(&self, off: usize, mask: u32, timeout_us: u32) -> ViResult<()> {
+    fn poll_clear32(&self, off: usize, mask: u32, timeout_us: u32) -> ViResult<()> {
         let mut i = 0u32;
         while self.read32(off) & mask != 0 {
             if i >= timeout_us {
@@ -76,10 +169,36 @@ impl SdhciController {
         Ok(())
     }
 
+    /// Spin until `(read8(off) & mask) == 0`, or return `Err(Timeout)`.
+    fn poll_clear8(&self, off: usize, mask: u8, timeout_us: u32) -> ViResult<()> {
+        let mut i = 0u32;
+        while self.read8(off) & mask != 0 {
+            if i >= timeout_us {
+                return Err(ViError::WouldBlock);
+            }
+            i += 1;
+            core::hint::spin_loop();
+        }
+        Ok(())
+    }
+
     /// Spin until `(read32(off) & mask) != 0`, or return `Err(Timeout)`.
-    fn poll_set(&self, off: usize, mask: u32, timeout_us: u32) -> ViResult<()> {
+    fn poll_set32(&self, off: usize, mask: u32, timeout_us: u32) -> ViResult<()> {
         let mut i = 0u32;
         while self.read32(off) & mask == 0 {
+            if i >= timeout_us {
+                return Err(ViError::WouldBlock);
+            }
+            i += 1;
+            core::hint::spin_loop();
+        }
+        Ok(())
+    }
+
+    /// Spin until `(read16(off) & mask) != 0`, or return `Err(Timeout)`.
+    fn poll_set16(&self, off: usize, mask: u16, timeout_us: u32) -> ViResult<()> {
+        let mut i = 0u32;
+        while self.read16(off) & mask == 0 {
             if i >= timeout_us {
                 return Err(ViError::WouldBlock);
             }
@@ -96,10 +215,24 @@ impl SdhciController {
         self.read32(SDHCI_PRESENT_STATE)
     }
 
+    /// Emit one bounded register snapshot for real-board controller diagnosis.
+    pub fn log_register_snapshot(&self, stage: &str) {
+        log::info!(
+            "[sdhci-diag] {} host=0x{:04x} caps=0x{:08x} clock=0x{:04x} power=0x{:02x} present=0x{:08x} int=0x{:08x}",
+            stage,
+            self.read16(SDHCI_HOST_VERSION),
+            self.read32(SDHCI_CAPABILITIES),
+            self.read16(SDHCI_CLOCK_CONTROL),
+            self.read8(SDHCI_POWER_CONTROL),
+            self.read32(SDHCI_PRESENT_STATE),
+            self.read32(SDHCI_INT_STATUS),
+        );
+    }
+
     /// Reset the controller (all lines).
     pub fn reset_all(&mut self) -> ViResult<()> {
         self.write8(SDHCI_SOFT_RESET, RESET_ALL);
-        self.poll_clear(SDHCI_SOFT_RESET, RESET_ALL as u32, POLL_TIMEOUT_US)?;
+        self.poll_clear8(SDHCI_SOFT_RESET, RESET_ALL, POLL_TIMEOUT_US)?;
         Ok(())
     }
 
@@ -127,7 +260,7 @@ impl SdhciController {
 
         self.write16(SDHCI_CLOCK_CONTROL, clk);
         // Wait for internal clock to stabilise.
-        let _ = self.poll_set(SDHCI_CLOCK_CONTROL, CLK_INT_STABLE as u32, POLL_TIMEOUT_US);
+        let _ = self.poll_set16(SDHCI_CLOCK_CONTROL, CLK_INT_STABLE, POLL_TIMEOUT_US);
         // Enable SD clock to card.
         self.write16(SDHCI_CLOCK_CONTROL, clk | CLK_SD_EN);
     }
@@ -144,7 +277,7 @@ impl SdhciController {
         } else {
             PS_CMD_INHIBIT
         };
-        self.poll_clear(SDHCI_PRESENT_STATE, mask, POLL_TIMEOUT_US)
+        self.poll_clear32(SDHCI_PRESENT_STATE, mask, POLL_TIMEOUT_US)
     }
 }
 
@@ -180,7 +313,7 @@ impl ViMmcHost for SdhciController {
         self.write16(SDHCI_COMMAND, cmd_reg(cmd.index, resp_flags, cmd.has_data));
 
         // Wait for CMD_COMPLETE (bit 0) or an error.
-        self.poll_set(
+        self.poll_set32(
             SDHCI_INT_STATUS,
             INT_CMD_COMPLETE | INT_ERROR,
             POLL_TIMEOUT_US,
@@ -215,7 +348,7 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for BUFFER_READ_READY (data available in FIFO).
-        self.poll_set(SDHCI_INT_STATUS, INT_BUF_READ_READY, POLL_TIMEOUT_US)?;
+        self.poll_set32(SDHCI_INT_STATUS, INT_BUF_READ_READY, POLL_TIMEOUT_US)?;
         self.clear_int(INT_BUF_READ_READY);
 
         // Read 4 bytes at a time from the BUFFER port.
@@ -230,7 +363,7 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for TRANSFER_COMPLETE.
-        self.poll_set(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_TIMEOUT_US)?;
+        self.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_TIMEOUT_US)?;
         self.clear_int(INT_XFER_COMPLETE);
         Ok(())
     }
@@ -241,7 +374,7 @@ impl ViMmcHost for SdhciController {
         }
 
         // Wait for BUFFER_WRITE_READY (FIFO has space).
-        self.poll_set(SDHCI_INT_STATUS, INT_BUF_WRITE_READY, POLL_TIMEOUT_US)?;
+        self.poll_set32(SDHCI_INT_STATUS, INT_BUF_WRITE_READY, POLL_TIMEOUT_US)?;
         self.clear_int(INT_BUF_WRITE_READY);
 
         let chunks = buf.len() / 4;
@@ -254,7 +387,7 @@ impl ViMmcHost for SdhciController {
             self.write32(SDHCI_BUFFER, word);
         }
 
-        self.poll_set(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_TIMEOUT_US)?;
+        self.poll_set32(SDHCI_INT_STATUS, INT_XFER_COMPLETE, POLL_TIMEOUT_US)?;
         self.clear_int(INT_XFER_COMPLETE);
         Ok(())
     }
@@ -294,6 +427,9 @@ impl SdhciController {
         block_count: u16,
         transfer_mode: u16,
     ) {
+        // Reset leaves the timeout exponent at its minimum on Arasan. Program the
+        // conservative SDHCI maximum before every data command, as U-Boot does.
+        self.write8(SDHCI_TIMEOUT_CONTROL, TIMEOUT_MAX);
         self.write16(SDHCI_BLOCK_SIZE, block_size);
         self.write16(SDHCI_BLOCK_COUNT, block_count);
         self.write16(SDHCI_TRANSFER_MODE, transfer_mode);

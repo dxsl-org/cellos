@@ -7,7 +7,9 @@
 //! Call ordering invariant: `init` → `uart::init` → `hal::ARCH.init` (which calls
 //! `plic::init` internally). Any call to `with` before `init` panics.
 
-use crate::sync::Spinlock;
+mod boot_once;
+
+use boot_once::BootOnce;
 
 // ── QEMU virt defaults (riscv64 fallback) ─────────────────────────────────────
 // Only consumed by `PlatformInfo::qemu_defaults` and `from_dtb`, both riscv64-only
@@ -96,12 +98,23 @@ impl PlatformInfo {
 
 // ── Storage ────────────────────────────────────────────────────────────────────
 
-static PLATFORM: Spinlock<Option<PlatformInfo>> = Spinlock::new(None);
+static PLATFORM: BootOnce<PlatformInfo> = BootOnce::new();
+
+/// Publish immutable platform data while the boot CPU is the only running core.
+///
+/// Spinlocks are forbidden on this path: ARM64 reaches it before the MMU has
+/// assigned Normal memory attributes, so LL/SC may abort on real hardware.
+unsafe fn publish_boot(info: PlatformInfo) {
+    // SAFETY: every architecture calls `platform::init` once from `kmain`
+    // before interrupts, paging, or secondary-core startup.
+    unsafe { PLATFORM.initialize(info) };
+}
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
-/// Parse the DTB and store platform info. Must be called before `uart::init`,
-/// `plic::set_plic_base`, and `init_kernel_paging`. Safe with `dtb_ptr == 0`.
+/// Parse the DTB and store platform info. Must be called exactly once by the
+/// boot CPU before `uart::init`, interrupts, SMP, and `init_kernel_paging`.
+/// Safe with `dtb_ptr == 0`.
 #[cfg(target_arch = "riscv64")]
 pub fn init(sbi_dtb: usize) {
     #[allow(unused_mut)] // reason: only mutated under the board-pioneer feature below
@@ -131,7 +144,8 @@ pub fn init(sbi_dtb: usize) {
         info.rtc_base
     );
     hal::common::rtc::init(info.rtc_base);
-    *PLATFORM.lock() = Some(info);
+    // SAFETY: `kmain` invokes this once during single-core boot.
+    unsafe { publish_boot(info) };
 }
 
 // ── Raspberry Pi 3 defaults (BCM2837, aarch64, board-rpi3) ───────────────────
@@ -140,7 +154,7 @@ pub fn init(sbi_dtb: usize) {
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub fn init(_dtb_ptr: usize) {
     // RPi 3 has no Goldfish/PL031 RTC — uptime only via ARM counter, epoch=0.
-    *PLATFORM.lock() = Some(PlatformInfo {
+    let info = PlatformInfo {
         uart_base: 0x3F21_5040, // BCM mini UART IO register (AUX_MU_IO)
         uart_irq: 0,            // mini UART IRQ not used (polled I/O)
         plic_base: 0,
@@ -148,7 +162,9 @@ pub fn init(_dtb_ptr: usize) {
         clint_base: 0,
         virtio_mmio: [None; 8], // No VirtIO on RPi 3 — real hardware Driver Cells
         rtc_base: 0,            // No Goldfish RTC; epoch unknown without external RTC
-    });
+    };
+    // SAFETY: `kmain` invokes this once during single-core boot.
+    unsafe { publish_boot(info) };
     log::info!("[platform] RPi 3 BCM2837: UART=0x3F215040 periph=0x3F000000 RAM=960MiB");
 }
 
@@ -158,7 +174,7 @@ pub fn init(_dtb_ptr: usize) {
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 pub fn init(_dtb_ptr: usize) {
     hal::rtc::init_default();
-    *PLATFORM.lock() = Some(PlatformInfo {
+    let info = PlatformInfo {
         uart_base: 0x0900_0000,
         uart_irq: 1,
         plic_base: 0,
@@ -187,7 +203,9 @@ pub fn init(_dtb_ptr: usize) {
             None,
         ],
         rtc_base: 0x0902_0000,
-    });
+    };
+    // SAFETY: `kmain` invokes this once during single-core boot.
+    unsafe { publish_boot(info) };
 }
 
 #[cfg(not(any(target_arch = "riscv64", target_arch = "aarch64")))]
@@ -195,9 +213,8 @@ pub fn init(_dtb_ptr: usize) {}
 
 /// Borrow the platform info. Panics if `init` was not called.
 pub fn with<R>(f: impl FnOnce(&PlatformInfo) -> R) -> R {
-    let guard = PLATFORM.lock();
-    f(guard
-        .as_ref()
+    f(PLATFORM
+        .get()
         .expect("[platform] platform::init not called before platform::with"))
 }
 

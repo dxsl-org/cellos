@@ -54,6 +54,9 @@ pub const CLK_INT_EN: u16 = 1 << 0;
 pub const CLK_INT_STABLE: u16 = 1 << 1;
 pub const CLK_SD_EN: u16 = 1 << 2;
 
+// TIMEOUT_CONTROL exponent 0xE selects the longest standard SDHCI data timeout.
+pub const TIMEOUT_MAX: u8 = 0x0E;
+
 // POWER_CONTROL voltages
 pub const PWR_33V: u8 = 0x0E;
 pub const PWR_30V: u8 = 0x0C;

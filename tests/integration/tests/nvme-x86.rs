@@ -187,7 +187,7 @@ fn nvme_boot_reaches_shell_x86() {
     let disk = make_nvme_disk();
     let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             let _ = std::fs::remove_file(&disk);
             panic!(

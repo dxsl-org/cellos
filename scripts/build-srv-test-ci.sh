@@ -2,7 +2,7 @@
 # build-srv-test-ci.sh — Build the srv-test kernel for the RedoxFS /srv
 # integration test (Linux CI).
 #
-# Produces: target/riscv64gc-unknown-none-elf/release/vicell-kernel-srv-test
+# Produces: target/riscv64gc-unknown-none-elf/release/cellos-kernel-srv-test
 #
 # Key difference from build-test-hooks-ci.sh:
 #   - service-vfs is built WITHOUT --features test-hooks (full quota + full
@@ -122,7 +122,7 @@ RUSTFLAGS="-D warnings -C relocation-model=pic" \
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p vicell-kernel
+    -p cellos-kernel
 
-cp "$REL/vicell-kernel" "$REL/vicell-kernel-srv-test"
-echo "==> Done: $REL/vicell-kernel-srv-test"
+cp "$REL/cellos-kernel" "$REL/cellos-kernel-srv-test"
+echo "==> Done: $REL/cellos-kernel-srv-test"

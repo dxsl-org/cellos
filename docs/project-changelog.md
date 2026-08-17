@@ -2,6 +2,57 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-17] RPi3 MMC path real-board validated end to end
+
+The `board-rpi3` MMC lane now boots on a real Raspberry Pi 3 Model B v1.2 all the way into Cellos. The fix chain in the current hardware lane is the RPi3 SD pinmux quirk, the BCM2835 SDHCI access contract, the CMD9-before-CMD7 ordering, and the data-timeout setup before sector reads.
+
+On the board, the published image reached `Cellos >`, reported the SD card at `30318592` sectors, read the MBR partition table (P1-P4), mounted FAT16 and FAT32, mounted `/mnt/sd` and `/bin`, and returned a usable shell. This replaces the earlier CMD8-only failure mode with a full external-SD boot path.
+
+## [2026-08-17] Cellos runtime identity and kernel artifact aligned
+
+User-visible OS identity now consistently reports `Cellos`: the shell prompt,
+readiness/help banners, init/config/env output, demos, and UI defaults no longer
+expose the former product name. Shared no-std metadata makes `uname -a` report
+the compiled architecture instead of hardcoding `riscv64`.
+
+The Cargo package and boot artifact are now `cellos-kernel`; active build,
+image, bootloader, test, and current documentation paths moved with it. Existing
+`Vi*` Rust APIs, `__ViCell_*` ABI sections, syscall symbols, disk magic, and
+protocol constants remain unchanged. The rename also exposed a Windows/UNC
+build-script failure where an unsuccessful host `strip` could delete the copied
+embedded init; stripping now operates on a temporary copy and retains the
+original input on failure.
+
+The final TFTP image booted on a real Raspberry Pi 3 and returned `Cellos >`.
+Interactive hardware checks returned `Cellos`,
+`Cellos cellos-kernel 0.2.1 aarch64`, and `OS=Cellos` for `uname`, `uname -a`,
+and `env`, respectively. The shell help title also reports `Cellos Shell v0.2.1`.
+
+## [2026-08-17] RPi3 mini-UART input and static TFTP hardware lane verified
+
+The `board-rpi3` console RX path now polls the BCM2837 mini UART instead of the
+QEMU PL011 address; generic AArch64 retains PL011. Static guards cover both
+feature selections, generic and board release builds pass, and a real RPi3
+booted the published TFTP uImage, accepted `help` over COM4 through the kernel
+EV_ASCII/Input Service route, printed the full shell help listing, and returned
+to `ViCell >`. The same lane also keeps the RPi3 input service from probing the
+QEMU-only VirtIO window at `0x0A000000`.
+
+The final real-board RX fix moved AUX legacy IRQ 29 behind kernel RX-buffer
+initialization, then drains the mini UART FIFO in the IRQ handler while keeping
+direct polling as a fallback. That closes the 8-byte FIFO overrun that showed
+up under 115200-baud bursts and removes the old per-`Syscall::Log` warning
+path. Validation on the board passed raw `echo 123456789\r`, produced
+`1 1 11` for `echo board-rpi3 | wc\r`, and completed 100/100 burst commands in
+1658 ms. Published payload SHA-256: `0CD38BE9D19E23CCE1AA2B901395A9F5493304EF41546D36770AB4104216DBA6`;
+uImage SHA-256: `F5671B1DEB58DBA9E58064D6FE9D2FE0CC65A5C4B10D1F4A1E79A3C29BB91E7A`.
+
+Legacy raw UART probes were removed from the per-event `T<EC>`, timer `M`,
+scheduler `N`, and context-switch `A` hot paths. The real-board before/after
+gate reduced `T15` from 14,596 occurrences to zero and `ANM` to zero, while
+scheduler/init remained healthy and the interactive `help` gate still passed.
+Fault-only `FS0`-`FS3` diagnostics and bounded one-shot boot markers remain.
+
 ## [2026-08-09] Phase 04 file-handle ABI lands as an append-only VFS extension
 
 `VfsRequest` now appends `OpenFileAt` (23), `ReadFileHandle { max: u32 }` (24), and `CloseFile` (25); `VfsResponse::FileHandle` stays variant 9. `ViVfsFileHandle` is VFS-local, file-handle ownership is keyed by caller generation, handles are revoked on parent-dir / owner-death / close, and the file-handle table is not serialized across hot-swap. The wire path stays on ordinary attested message IPC only, with no fast arm, async, grant, or raw-pointer lifetime, and inline `Data` replies are bounded at 4000 bytes (`IPC_BUF_SIZE - 96`).

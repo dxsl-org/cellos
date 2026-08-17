@@ -7,7 +7,7 @@ XORRISO="$TOOLS/usr/bin/xorriso"
 ISO_ROOT=/mnt/d/ViCell/build/x86-iso-root
 ISO_OUT=/mnt/d/ViCell/build/vicell-x86.iso
 LIMINE=/mnt/d/ViCell/limine/limine-8.7.0/bin
-KERNEL=/mnt/d/ViCell/target/x86_64-unknown-none/release/vicell-kernel
+KERNEL=/mnt/d/ViCell/target/x86_64-unknown-none/release/cellos-kernel
 
 mkdir -p "$ISO_ROOT/EFI/BOOT"
 mkdir -p "$ISO_ROOT/boot/limine"

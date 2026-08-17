@@ -32,7 +32,7 @@ Việc phái sinh từ lần điều tra đó cũng đã xong: dòng fault từn
 
 **Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
 việc CI không build rv32. Sai: đã thử khai báo thiếu tham số trong `rv64/trap.rs` (target CI
-build mọi lần push) và `cargo check -p vicell-kernel` vẫn xanh. rustc **không** đối chiếu khai
+build mọi lần push) và `cargo check -p cellos-kernel` vẫn xanh. rustc **không** đối chiếu khai
 báo `extern "Rust"` với định nghĩa `#[no_mangle]` ở crate khác — `clashing_extern_declarations`
 chỉ so các khai báo trong cùng crate, còn linker chỉ khớp tên symbol chứ không khớp signature.
 Nên **không lane CI nào bắt được lỗi này**, và HAL hiện có 23 khai báo tay như vậy (14 symbol:

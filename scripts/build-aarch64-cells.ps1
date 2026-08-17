@@ -7,11 +7,26 @@
 #
 # Run from the Cellos root directory.
 
+param(
+    [switch]$BoardRpi3
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $target   = "aarch64-unknown-none-softfloat"
 $buildDir = "target\$target\release"
+$rpi3TargetDir = "target\rpi3-cells"
+$rpi3BuildDir = "$rpi3TargetDir\$target\release"
+$embeddedDir = if ($BoardRpi3) { "target\rpi3-embedded" } else { "kernel\src\embedded-aarch64" }
+
+function Assert-CellBuild([string]$Name, [int]$ExitCode) {
+    if ($ExitCode -eq 0) { return }
+    if ($BoardRpi3) {
+        throw "$Name build failed (exit $ExitCode); refusing to package stale artifacts"
+    }
+    Write-Warning "$Name build failed (exit $ExitCode)"
+}
 # pic: kernel/cell self-relocation. +bti,+paca,+pacg: BTI landing pads + PAC
 # return-address signing (must match the kernel's aarch64 codegen features).
 $rustflags = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
@@ -22,7 +37,7 @@ $rustflags = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
 # declarations (implementations come from compiler_builtins + the POSIX shim).
 # bindgen needs its OWN --target override: the Rust triple's "softfloat"
 # component is not a valid clang triple.
-$repoRoot = (Get-Location).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).ProviderPath
 if (-not $env:CC_aarch64_unknown_none_softfloat) {
     $env:CC_aarch64_unknown_none_softfloat = "C:\Program Files\LLVM\bin\clang.exe"
 }
@@ -44,42 +59,53 @@ $env:RUSTFLAGS = $rustflags
 
 Write-Host "Building app-shell..."
 cargo build --release -p app-shell --target $target 2>&1 | Select-Object -Last 8
-if ($LASTEXITCODE -ne 0) { Write-Warning "app-shell build failed (exit $LASTEXITCODE)" }
+Assert-CellBuild 'app-shell' $LASTEXITCODE
 
 Write-Host "Building service-vfs (littlefs /data via clang cross-compile)..."
 cargo build --release -p service-vfs --target $target 2>&1 | Select-Object -Last 8
-if ($LASTEXITCODE -ne 0) { Write-Warning "service-vfs build failed (exit $LASTEXITCODE)" }
+Assert-CellBuild 'service-vfs' $LASTEXITCODE
 
 Write-Host "Building service-config..."
 cargo build --release -p service-config --target $target 2>&1 | Select-Object -Last 8
-if ($LASTEXITCODE -ne 0) { Write-Warning "service-config build failed (exit $LASTEXITCODE)" }
+Assert-CellBuild 'service-config' $LASTEXITCODE
 
 Write-Host "Building app-sys-tools (ls/cat/echo/ps/kill)..."
 cargo build --release -p app-sys-tools --target $target 2>&1 | Select-Object -Last 5
-if ($LASTEXITCODE -ne 0) { Write-Warning "app-sys-tools build failed" }
+Assert-CellBuild 'app-sys-tools' $LASTEXITCODE
 
 Write-Host "Building service-input (UART EV_ASCII relay consumer)..."
-cargo build --release -p service-input --target $target 2>&1 | Select-Object -Last 5
-if ($LASTEXITCODE -ne 0) { Write-Warning "service-input build failed" }
+if ($BoardRpi3) {
+    $rpi3Input = "$rpi3BuildDir\service-input"
+    Remove-Item -LiteralPath $rpi3Input -Force -ErrorAction SilentlyContinue
+    cargo build --release -p service-input --no-default-features --target $target `
+        --target-dir $rpi3TargetDir 2>&1 | Select-Object -Last 5
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $rpi3Input)) {
+        throw 'RPi3 service-input build failed; refusing to package a stale artifact'
+    }
+} else {
+    cargo build --release -p service-input --target $target 2>&1 | Select-Object -Last 5
+    Assert-CellBuild 'service-input' $LASTEXITCODE
+}
 
 Write-Host "Building input-test (aarch64_uart_input_delivery gate)..."
 cargo build --release -p input-test --target $target 2>&1 | Select-Object -Last 5
-if ($LASTEXITCODE -ne 0) { Write-Warning "input-test build failed" }
+Assert-CellBuild 'input-test' $LASTEXITCODE
 
 Write-Host "Building periph-demo (aarch64_periph_demo_gpio gate)..."
 cargo build --release -p periph-demo --target $target 2>&1 | Select-Object -Last 5
-if ($LASTEXITCODE -ne 0) { Write-Warning "periph-demo build failed" }
+Assert-CellBuild 'periph-demo' $LASTEXITCODE
 
 Write-Host "Building app-init..."
 cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
-if ($LASTEXITCODE -ne 0) { Write-Warning "app-init build failed" }
+Assert-CellBuild 'app-init' $LASTEXITCODE
 $env:RUSTFLAGS = ""
 
 # Refresh the separately-embedded init ELF (kernel spawns it from embedded bytes).
 $initSrc = "$buildDir\app-init"
 if (Test-Path $initSrc) {
-    Copy-Item $initSrc "kernel\src\embedded-aarch64\init" -Force
-    Write-Host "  Refreshed kernel\src\embedded-aarch64\init"
+    New-Item -ItemType Directory -Path $embeddedDir -Force | Out-Null
+    Copy-Item $initSrc (Join-Path $embeddedDir 'init') -Force
+    Write-Host "  Refreshed $embeddedDir\init"
 }
 
 $cells = @(
@@ -96,10 +122,15 @@ $cells = @(
     @{ Bin = "kill";           Dst = "/bin/kill"        }
 )
 
-$imgArgs = @("kernel\src\embedded-aarch64\kernel_fs.img")
+$imagePath = Join-Path $embeddedDir 'kernel_fs.img'
+$imgArgs = @($imagePath)
 $found   = @()
 foreach ($c in $cells) {
-    $src = "$buildDir\$($c.Bin)"
+    $src = if ($BoardRpi3 -and $c.Bin -eq 'service-input') {
+        "$rpi3BuildDir\$($c.Bin)"
+    } else {
+        "$buildDir\$($c.Bin)"
+    }
     if (Test-Path $src) {
         $kb = [Math]::Round((Get-Item $src).Length / 1KB, 0)
         Write-Host "  Found: $($c.Bin) (${kb} KB) -> $($c.Dst)"
@@ -147,18 +178,24 @@ if ($LASTEXITCODE -ne 0) {
 Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 # Assert the layout instead of trusting the exit code: mkfat32 exits 0 for images
 # whose destination paths were mangled, and a missing /POLICY.BIN degrades silently.
-$layout = python tools\inspect_fat.py "kernel\src\embedded-aarch64\kernel_fs.img" 2>&1
+$layout = python tools\inspect_fat.py $imagePath 2>&1
 if (($layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false) {
     Write-Error "aarch64 kernel_fs.img has no /POLICY.BIN in the root directory"
     $layout | Write-Host
     exit 1
 }
-$kb = [Math]::Round((Get-Item "kernel\src\embedded-aarch64\kernel_fs.img").Length / 1KB, 0)
+$kb = [Math]::Round((Get-Item $imagePath).Length / 1KB, 0)
 Write-Host "  kernel_fs.img created: ${kb} KB"
 
 Write-Host ""
 Write-Host "Done. Rebuild the aarch64 kernel to embed the new cells:"
 Write-Host "  `$env:RUSTFLAGS = '-C relocation-model=pic -C target-feature=+bti,+paca,+pacg'"
-Write-Host "  cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat"
+if ($BoardRpi3) {
+    Write-Host "  `$env:EMBEDDED_OVERRIDE = 'target/rpi3-embedded'"
+    Write-Host "  cargo build --release -p cellos-kernel --features board-rpi3 --target aarch64-unknown-none-softfloat"
+    Write-Host "  `$env:EMBEDDED_OVERRIDE = `$null"
+} else {
+    Write-Host "  cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat"
+}
 Write-Host "  `$env:RUSTFLAGS = `$null"
 Write-Host "  .\run-arm-virt.ps1   (or the aarch64-boot integration suite)"

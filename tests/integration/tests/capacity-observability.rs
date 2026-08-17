@@ -15,7 +15,7 @@ fn repo_root() -> PathBuf {
 #[test]
 fn meminfo_denial_and_typed_spawn_oom_are_runtime_visible() {
     let root = repo_root();
-    let kernel = root.join("target/riscv64gc-unknown-none-elf/release/vicell-kernel");
+    let kernel = root.join("target/riscv64gc-unknown-none-elf/release/cellos-kernel");
     let disk = root.join("disk_v3.img");
     assert!(
         kernel.exists(),
@@ -35,7 +35,7 @@ fn meminfo_denial_and_typed_spawn_oom_are_runtime_visible() {
         &kernel.to_string_lossy(),
         &disk.to_string_lossy(),
     );
-    qemu.wait_for("=== ViCell shell ready", 45)
+    qemu.wait_for("=== Cellos shell ready", 45)
         .unwrap_or_else(|error| panic!("shell: {error}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_secs(1));
 

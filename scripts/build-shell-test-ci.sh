@@ -5,7 +5,7 @@
 # app-shell is compiled with --features shell_test, replacing the interactive
 # REPL with the deterministic scenario harness in shell_test.rs.
 #
-# Produces: target/riscv64gc-unknown-none-elf/release/vicell-kernel-shell-test
+# Produces: target/riscv64gc-unknown-none-elf/release/cellos-kernel-shell-test
 #
 # Prerequisites (the CI job installs these):
 #   apt: gcc-riscv64-unknown-elf libclang-dev qemu-system-misc
@@ -110,7 +110,7 @@ RUSTFLAGS="-D warnings -C relocation-model=pic" \
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
-    -p vicell-kernel
+    -p cellos-kernel
 
-cp "$REL/vicell-kernel" "$REL/vicell-kernel-shell-test"
-echo "==> Done: $REL/vicell-kernel-shell-test"
+cp "$REL/cellos-kernel" "$REL/cellos-kernel-shell-test"
+echo "==> Done: $REL/cellos-kernel-shell-test"

@@ -4,7 +4,7 @@
 #   1. Install qemu-system-aarch64 >= 7.0 (raspi3b support).
 #   2. Build the board-rpi3 kernel:
 #        $env:RUSTFLAGS = "-C relocation-model=pic"
-#        cargo build --release --features board-rpi3 -p vicell-kernel `
+#        cargo build --release --features board-rpi3 -p cellos-kernel `
 #            --target aarch64-unknown-none-softfloat
 #        $env:RUSTFLAGS = $null
 #
@@ -44,13 +44,13 @@ if (-not (Get-Command $qemu -ErrorAction SilentlyContinue)) {
 }
 
 $target = "aarch64-unknown-none-softfloat"
-$kernel  = "target/$target/release/vicell-kernel"
+$kernel  = "target/$target/release/cellos-kernel"
 
 Write-Host "[rpi3] Building board-rpi3 kernel..."
 # relocation-model=pic: kernel self-relocates at _start via GOT-indirect (ldr pseudo).
 # board-rpi3 feature: BCM2837 UART/GPIO/IRQ paths, linker-rpi3.ld (0x80000 load addr).
 $env:RUSTFLAGS = "-C relocation-model=pic"
-cargo build --release --features board-rpi3 -p vicell-kernel --target $target
+cargo build --release --features board-rpi3 -p cellos-kernel --target $target
 $env:RUSTFLAGS = $null
 
 if (-not (Test-Path $kernel)) {

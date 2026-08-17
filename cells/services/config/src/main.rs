@@ -32,7 +32,7 @@ impl ConfigStore {
     fn new() -> Self {
         let mut map = BTreeMap::new();
         map.insert(String::from("PATH"), String::from("/bin"));
-        map.insert(String::from("OS"), String::from("ViCell"));
+        map.insert(String::from("OS"), String::from("Cellos"));
         Self { map }
     }
 }

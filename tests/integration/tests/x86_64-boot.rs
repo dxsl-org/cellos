@@ -5,7 +5,7 @@
 //!
 //! Prerequisites:
 //!   - `qemu-system-x86_64` on PATH (or at the Windows default install path)
-//!   - ISO built: `cargo build --release --target x86_64-unknown-none -p vicell-kernel`
+//!   - ISO built: `cargo build --release --target x86_64-unknown-none -p cellos-kernel`
 //!                followed by `.\run-x86.ps1 -NoBuild -NoQemu`
 //!                → produces `build/vicell-x86.iso`
 //!
@@ -41,7 +41,7 @@ fn prerequisites_ok() -> bool {
         .is_ok();
     if !iso_exists {
         eprintln!(
-            "SKIP x86_64: ISO not built ({})\n  Run: cargo build --release --target x86_64-unknown-none -p vicell-kernel && .\\run-x86.ps1 -NoBuild -NoQemu",
+            "SKIP x86_64: ISO not built ({})\n  Run: cargo build --release --target x86_64-unknown-none -p cellos-kernel && .\\run-x86.ps1 -NoBuild -NoQemu",
             iso_path()
         );
     }
@@ -96,14 +96,14 @@ fn x86_init_spawns() {
 }
 
 /// The kernel must boot through init → config → shell and reach the
-/// interactive `ViCell >` prompt on COM1.
+/// interactive `Cellos >` prompt on COM1.
 #[test]
 fn x86_boots_to_shell_prompt() {
     if !prerequisites_ok() {
         return;
     }
     let qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
@@ -118,7 +118,7 @@ fn x86_echo_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo x86-ok");
@@ -136,7 +136,7 @@ fn x86_ls_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("ls /bin");
@@ -156,7 +156,7 @@ fn x86_ps_command() {
         return;
     }
     let mut qemu = QemuRunner::boot_x86_bios(&iso_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("x86_64 shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("ps");

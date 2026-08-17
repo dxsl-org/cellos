@@ -12,6 +12,7 @@
 //! P05: GPIO bank IRQs enabled when gpio-bcm cell claims the MMIO region.
 
 const IRQ_BASE: usize = 0x3F00_B200;
+const IRQ_PENDING1: usize = IRQ_BASE + 0x04;
 const IRQ_PENDING2: usize = IRQ_BASE + 0x08;
 const IRQ_ENABLE1: usize = IRQ_BASE + 0x10;
 const IRQ_ENABLE2: usize = IRQ_BASE + 0x14;
@@ -21,6 +22,7 @@ const IRQ_DISABLE2: usize = IRQ_BASE + 0x20;
 /// GPIO IRQ numbers in BCM2835 legacy numbering.
 pub const GPIO_BANK0_IRQ: u32 = 49; // pins 0–27 → Enable2 bit 17
 pub const GPIO_BANK1_IRQ: u32 = 50; // pins 28–45 → Enable2 bit 18
+pub const AUX_IRQ: u32 = 29;
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {
@@ -58,6 +60,11 @@ pub fn disable_irq(irq: u32) {
     } else if irq < 64 {
         wr(IRQ_DISABLE2, 1 << (irq - 32));
     }
+}
+
+/// Return whether the AUX block has asserted its legacy peripheral IRQ.
+pub fn is_aux_irq_pending() -> bool {
+    rd(IRQ_PENDING1) & (1 << AUX_IRQ) != 0
 }
 
 /// Identify a pending GPIO bank IRQ from the legacy controller.

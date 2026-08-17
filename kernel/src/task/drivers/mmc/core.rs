@@ -3,6 +3,8 @@ use super::sdhci::SdhciController;
 use hal_traits_mmc::{CardType, MmcCmd, RespType, ViMmcHost};
 use types::{ViError, ViResult};
 
+const IDENT_CLOCK_HZ: u32 = 400_000;
+
 /// Card identification and geometry, returned by [`MmcCore::init_card`].
 pub struct CardInfo {
     pub card_type: CardType,
@@ -43,14 +45,17 @@ impl MmcCore {
         if ps & PS_CARD_PRESENT == 0 {
             return Err(ViError::NotFound);
         }
+        self.host.log_register_snapshot("entry");
 
         // Step 1 — hardware reset, power on, 400 kHz identification clock.
         self.host.reset_all()?;
         self.host.power_on();
-        self.host.set_clock_hz(400_000)?;
+        self.host.set_clock_hz(IDENT_CLOCK_HZ)?;
+        self.host.log_register_snapshot("id-clock");
 
         // Step 2 — CMD0: GO_IDLE
         self.cmd0_go_idle()?;
+        self.host.log_register_snapshot("post-cmd0");
 
         // Step 3 — probe card type via CMD8
         let is_sd_v2 = self.cmd8_send_if_cond()?;
@@ -88,7 +93,7 @@ impl MmcCore {
         let is_block_addressed =
             matches!(card_type, CardType::Emmc | CardType::SdHc) || (ocr & (1 << 30) != 0);
 
-        // Step 5 — CMD2 (ALL_SEND_CID), CMD3 (SET_RELATIVE_ADDR), CMD7 (SELECT)
+        // Step 5 — CMD2 (ALL_SEND_CID), CMD3 (SET_RELATIVE_ADDR)
         self.cmd2_all_send_cid()?;
         let rca = match card_type {
             CardType::Emmc => {
@@ -100,15 +105,20 @@ impl MmcCore {
                 self.cmd3_set_rca(0)?
             }
         };
-        self.cmd7_select(rca)?;
-
-        // Step 6 — switch to 25 MHz data clock.
-        self.host.set_clock_hz(25_000_000)?;
-
-        // Step 7 — read sector count.
+        // SD CMD9 is valid while the card is in Standby; CMD7 moves it to Transfer.
+        // eMMC obtains capacity from EXT_CSD, which is read after selection.
         let sector_count = match card_type {
-            CardType::Emmc => self.emmc_read_ext_csd()?,
-            _ => self.sd_read_csd(rca)?,
+            CardType::Emmc => {
+                self.cmd7_select(rca)?;
+                self.host.set_clock_hz(25_000_000)?;
+                self.emmc_read_ext_csd()?
+            }
+            _ => {
+                let sectors = self.sd_read_csd(rca)?;
+                self.cmd7_select(rca)?;
+                self.host.set_clock_hz(25_000_000)?;
+                sectors
+            }
         };
 
         Ok(CardInfo {

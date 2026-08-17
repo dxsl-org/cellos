@@ -46,7 +46,7 @@ const TEMP_THRESHOLD_CX10: i32 = 250;
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[robot-demo] ViCell reference robot demo (G1 graduation criterion 8)");
+    println("[robot-demo] Cellos reference robot demo (G1 graduation criterion 8)");
 
     let gpio = match Pl061Gpio::open() {
         Ok(g) => g,

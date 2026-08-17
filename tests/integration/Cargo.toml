@@ -7,7 +7,7 @@
 #   cargo test --manifest-path tests/integration/Cargo.toml --target x86_64-pc-windows-msvc
 #
 # Prerequisites: qemu-system-riscv64 on PATH, and a release kernel + disk built:
-#   cargo build --release -p vicell-kernel
+#   cargo build --release -p cellos-kernel
 #   ./gen_disk.ps1
 [package]
 name = "vicell-integration-tests"

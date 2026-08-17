@@ -1,7 +1,7 @@
 //! End-to-end boot + interactive tests driven through QEMU serial.
 //!
 //! These require `qemu-system-riscv64` on PATH and pre-built artifacts:
-//!   cargo build --release -p vicell-kernel
+//!   cargo build --release -p cellos-kernel
 //!   ./gen_disk.ps1
 //!
 //! Paths are relative to the repo root (two levels up from this crate). The
@@ -28,14 +28,14 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
 
 fn test_hooks_kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks")
         .to_string_lossy()
         .into_owned()
 }
@@ -84,15 +84,15 @@ fn boots_to_shell_prompt() {
         return;
     }
     let qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Phase 03: a Ring-3 (U-mode) user task ran. The old dedicated ring-3 smoke
     // cell that printed "user_hello"/"U-mode" was retired once real service cells
     // replaced it; ring-3 execution is now proven by the shell prompt itself —
-    // only the U-mode shell prints "ViCell >" (waited on above via sys_log).
+    // only the U-mode shell prints "Cellos >" (waited on above via sys_log).
     assert!(
-        qemu.output_contains("ViCell >"),
+        qemu.output_contains("Cellos >"),
         "ring-3 user task did not run (no U-mode shell prompt)"
     );
     // Phase 13/14/16: services spawned via SpawnFromPath. Assert on the
@@ -130,7 +130,7 @@ fn shell_executes_echo() {
         return;
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}"));
     // Give the async readline a moment to start consuming serial input.
     std::thread::sleep(std::time::Duration::from_millis(500));
@@ -169,7 +169,7 @@ fn gpu_framebuffer_initialises() {
         panic!("GPU framebuffer setup did not complete: {e}\n--- output ---\n{}", qemu.dump())
     });
     // Boot must still reach the shell with the GPU attached (no hang).
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT).unwrap_or_else(|e| {
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT).unwrap_or_else(|e| {
         panic!("boot did not reach shell with GPU attached: {e}")
     });
 }
@@ -216,7 +216,7 @@ fn network_tcp_send_recv() {
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Wait for DHCP before asking nc to connect — avoids a race where the net
@@ -253,7 +253,7 @@ fn network_curl_http_get() {
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Gate on DHCP before connecting — avoids a race where the net cell has
@@ -283,7 +283,7 @@ fn network_tcp_listen_accept() {
     let (mut qemu, host_port) =
         QemuRunner::boot_with_hostfwd(&kernel_path(), &disk_path(), 9090);
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     qemu.wait_for("DHCP acquired", 40)
@@ -323,13 +323,13 @@ fn vfs_write_echo_redirect() {
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     qemu.send_line("echo PHASE_C_WRITE > /tmp/test.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not returned after write: {e}\n--- output ---\n{}", qemu.dump()));
 
     qemu.send_line("vcat /tmp/test.txt");
@@ -349,7 +349,7 @@ fn vfs_fat16_write_read() {
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Verify the VFS cell successfully mounted the Phase 2 FAT16 volume.
@@ -362,7 +362,7 @@ fn vfs_fat16_write_read() {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     qemu.send_line("echo PHASE_D_PERSIST > /data/test.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write did not return to prompt: {e}\n{}", qemu.dump()));
 
     qemu.send_line("vcat /data/test.txt");
@@ -385,14 +385,14 @@ fn vfs_fat16_reboot_persistence() {
     }
 
     // ── First boot: write the marker then shut down ───────────────────────────
-    // NOTE: `wait_for("ViCell >")` matches the earliest occurrence in accumulated
+    // NOTE: `wait_for("Cellos >")` matches the earliest occurrence in accumulated
     // output, so it may return before the command actually completes. This is
     // fine because the shell processes commands in FIFO order from its readline
     // buffer. Sending "shutdown" immediately after the write means the shell will
     // execute them in sequence: write first, then shutdown. Phase C demonstrates
     // this works for echo-redirect + vcat — the same mechanism applies here.
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("first boot prompt failed: {e}\n{}", qemu.dump()));
     assert!(
         qemu.output_contains("FAT32 /mnt/sd volume mounted"),
@@ -401,7 +401,7 @@ fn vfs_fat16_reboot_persistence() {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     qemu.send_line("echo REBOOT_OK > /data/persist.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write did not return to prompt: {e}\n{}", qemu.dump()));
 
     qemu.send_line("shutdown");
@@ -420,7 +420,7 @@ fn vfs_fat16_reboot_persistence() {
 
     // ── Second boot: verify persistence ──────────────────────────────────────
     let mut qemu2 = QemuRunner::boot(&kernel_path(), &persisted_disk.to_string_lossy());
-    qemu2.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu2.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("second boot prompt failed: {e}\n{}", qemu2.dump()));
     assert!(
         qemu2.output_contains("FAT32 /mnt/sd volume mounted"),
@@ -440,13 +440,13 @@ fn vfs_fat16_reboot_persistence() {
 fn vfs_write_large_content() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
     // Write a marker that is exactly 255 chars (>253-byte old cap).
     // The marker itself fits in a single echo line; shell passes it via write_file.
     qemu.send_line("echo PHASE_F_WIDE_WRITE_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA > /tmp/big.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
     qemu.send_line("vcat /tmp/big.txt");
     qemu.wait_for("PHASE_F_WIDE_WRITE", CMD_TIMEOUT)
@@ -458,20 +458,20 @@ fn vfs_write_large_content() {
 fn vfs_fat16_unlink() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("echo PHASE_F_DEL > /data/del.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
     qemu.send_line("vcat /data/del.txt");
     qemu.wait_for("PHASE_F_DEL", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("file exists: {e}\n{}", qemu.dump()));
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("post-vcat prompt: {e}\n{}", qemu.dump()));
     qemu.send_line("rm /data/del.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("rm: {e}\n{}", qemu.dump()));
     qemu.send_line("vcat /data/del.txt");
     qemu.wait_for("not found", CMD_TIMEOUT)
@@ -483,15 +483,15 @@ fn vfs_fat16_unlink() {
 fn vfs_fat16_subdir() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(std::time::Duration::from_millis(500));
     qemu.send_line("mkdir /data/sub");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("mkdir: {e}\n{}", qemu.dump()));
     qemu.send_line("echo PHASE_F_SUB > /data/sub/f.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write subdir: {e}\n{}", qemu.dump()));
     qemu.send_line("vcat /data/sub/f.txt");
     qemu.wait_for("PHASE_F_SUB", CMD_TIMEOUT)
@@ -508,7 +508,7 @@ fn block_io_denied_non_vfs() {
         return;
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt not reached: {e}\n{}", qemu.dump()));
     std::thread::sleep(std::time::Duration::from_millis(500));
 
@@ -536,7 +536,7 @@ fn vfs_fat16_subdir_persistence() {
 
     // ── First boot: mkdir + write into the subdir, then shut down ────────────
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("first boot prompt failed: {e}\n{}", qemu.dump()));
     assert!(
         qemu.output_contains("FAT32 /mnt/sd volume mounted"),
@@ -545,11 +545,11 @@ fn vfs_fat16_subdir_persistence() {
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     qemu.send_line("mkdir /data/pdir");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("mkdir did not return to prompt: {e}\n{}", qemu.dump()));
 
     qemu.send_line("echo SUBDIR_PERSIST > /data/pdir/f.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("subdir write did not return to prompt: {e}\n{}", qemu.dump()));
 
     qemu.send_line("shutdown");
@@ -565,7 +565,7 @@ fn vfs_fat16_subdir_persistence() {
 
     // ── Second boot: verify the subdir file persisted ─────────────────────────
     let mut qemu2 = QemuRunner::boot(&kernel_path(), &persisted_disk.to_string_lossy());
-    qemu2.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu2.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("second boot prompt failed: {e}\n{}", qemu2.dump()));
     assert!(
         qemu2.output_contains("FAT32 /mnt/sd volume mounted"),
@@ -597,17 +597,17 @@ fn vfs_fat16_subdir_persistence() {
 fn vfs_fat16_recursive_rmdir() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     qemu.send_line("mkdir /data/rr");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("mkdir: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("mkdir: {e}\n{}", qemu.dump()));
     qemu.send_line("echo X > /data/rr/f.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
     qemu.send_line("rm -r /data/rr");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("rm -r: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("rm -r: {e}\n{}", qemu.dump()));
     qemu.send_line("vcat /data/rr/f.txt");
     qemu.wait_for("not found", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("tree not deleted: {e}\n{}", qemu.dump()));
@@ -618,15 +618,15 @@ fn vfs_fat16_recursive_rmdir() {
 fn vfs_fat16_append() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     qemu.send_line("vwrite /data/big.txt AAA");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
     qemu.send_line("vappend /data/big.txt BBB");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("vappend: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("vappend: {e}\n{}", qemu.dump()));
     qemu.send_line("vcat /data/big.txt");
     qemu.wait_for("AAABBB", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append truncated/lost: {e}\n{}", qemu.dump()));
@@ -649,7 +649,7 @@ fn network_httpd_serves_file() {
     let (mut qemu, host_port) =
         QemuRunner::boot_with_hostfwd(&kernel_path(), &disk_path(), 9091);
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
         .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
@@ -658,7 +658,7 @@ fn network_httpd_serves_file() {
 
     // Write the file httpd will serve.
     qemu.send_line("vwrite /tmp/resp.txt HTTPD_OK");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
 
     // Start httpd in the background so the shell returns immediately.
@@ -699,14 +699,14 @@ fn network_httpd_dynamic_content() {
     let (mut qemu, host_port) =
         QemuRunner::boot_with_hostfwd(&kernel_path(), &disk_path(), 9092);
 
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
         .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(500));
 
     qemu.send_line("vwrite /tmp/v1.txt CONTENT_V1");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vwrite v1: {e}\n{}", qemu.dump()));
 
     qemu.send_line("httpd 9092 /tmp/v1.txt &");
@@ -733,7 +733,7 @@ fn network_httpd_dynamic_content() {
     // Overwrite the file — httpd must serve the new content without restart.
     //
     // SYNC NOTE: `wait_for` is a whole-buffer `contains`, so waiting for
-    // "ViCell >" here matches the PROMPTS ALREADY IN THE BUFFER and returns
+    // "Cellos >" here matches the PROMPTS ALREADY IN THE BUFFER and returns
     // instantly — the GET below then races the guest still typing/executing
     // vwrite (observed: ReadAsync interleaved with the vwrite echo). Chain an
     // `echo WROTE$?` and wait for its OUTPUT ("WROTE0") — the typed echo
@@ -760,14 +760,14 @@ fn network_httpd_dynamic_content() {
 fn shell_while_loop() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(Duration::from_millis(300));
 
     // (a) False condition: body must NOT execute.
     qemu.send_line("while vcat /no/such/file; do echo SHOULD_NOT_APPEAR; done");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("while false hung: {e}\n{}", qemu.dump()));
     // ": SHOULD_NOT_APPEAR" matches only an OUTPUT line ("USER: SHOULD_NOT_APPEAR"),
     // not the typed command's own serial echo — a bare substring check failed the
@@ -777,14 +777,14 @@ fn shell_while_loop() {
 
     // (b) True-once: write flag, run body (echo + rm), verify body ran, loop exits.
     qemu.send_line("vwrite /data/wflag.txt X");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vwrite flag: {e}\n{}", qemu.dump()));
 
     qemu.send_line("while vcat /data/wflag.txt; do echo WHILE_BODY; rm /data/wflag.txt; done");
     qemu.wait_for("WHILE_BODY", 15)
         .unwrap_or_else(|e| panic!("while body did not run: {e}\n--- output ---\n{}", qemu.dump()));
     // Loop must exit after rm deletes the flag (not hang).
-    qemu.wait_for("ViCell >", 15)
+    qemu.wait_for("Cellos >", 15)
         .unwrap_or_else(|e| panic!("while loop did not exit after rm: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
@@ -795,13 +795,13 @@ fn shell_while_loop() {
 fn shell_function_positional_args() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     // Define a function that echoes $1 $2.
     qemu.send_line("double() { echo $1 $2; }");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("def: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("def: {e}\n{}", qemu.dump()));
 
     qemu.send_line("double ALPHA BETA");
     qemu.wait_for("ALPHA BETA", CMD_TIMEOUT)
@@ -809,7 +809,7 @@ fn shell_function_positional_args() {
 
     // $# = arg count.
     qemu.send_line("argc() { echo $#; }");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("def argc: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("def argc: {e}\n{}", qemu.dump()));
     qemu.send_line("argc a b c");
     qemu.wait_for("3", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("$# not 3: {e}\n--- output ---\n{}", qemu.dump()));
@@ -824,12 +824,12 @@ fn shell_function_positional_args() {
 fn shell_case_statement() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     qemu.send_line("STATUS=ok");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
 
     // Exact match fires; fallback must NOT fire.
     // Negative checks match ": CASE_…" — the marker at the start of an OUTPUT
@@ -844,7 +844,7 @@ fn shell_case_statement() {
 
     // Unknown value hits the `*` fallback.
     qemu.send_line("STATUS=unknown");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
     qemu.send_line("case $STATUS in ok) echo CASE_EXACT2 ;; *) echo CASE_FALLBACK ;; esac");
     qemu.wait_for("CASE_FALLBACK", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("wildcard arm not taken: {e}\n{}", qemu.dump()));
@@ -857,7 +857,7 @@ fn shell_case_statement() {
 fn shell_echo_e() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -877,16 +877,16 @@ fn shell_echo_e() {
 fn shell_redirect_append() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     qemu.send_line("echo LINE_A > /tmp/append_test.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
 
     qemu.send_line("echo LINE_B >> /tmp/append_test.txt");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append: {e}\n{}", qemu.dump()));
 
     qemu.send_line("vcat /tmp/append_test.txt");
@@ -909,7 +909,7 @@ fn network_wget_downloads_to_vfs() {
     let (port, _server) = spawn_http_server();
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
         .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
@@ -919,11 +919,11 @@ fn network_wget_downloads_to_vfs() {
     qemu.send_line(&format!("wget http://10.0.2.2:{port}/ /tmp/wget_out.txt"));
     qemu.wait_for("saved", 20)
         .unwrap_or_else(|e| panic!("wget did not save: {e}\n{}", qemu.dump()));
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt after wget: {e}\n{}", qemu.dump()));
 
     // Same 500 ms guard this test already uses before its first send_line, and that
-    // five other tests in this file use before theirs. Seeing "ViCell >" on the serial
+    // five other tests in this file use before theirs. Seeing "Cellos >" on the serial
     // line does NOT mean the shell has posted its receive buffer, and until it does the
     // input cell's try_send DROPS keystrokes — which surfaces as a typo rather than a
     // dropped write: "vcat /tmp/x" arrives as "at /tmp/x" and the shell answers
@@ -948,7 +948,7 @@ fn mqtt_publish() {
     if !prerequisites_ok() { return; }
     let (port, payload_rx) = spawn_mqtt_broker(b"");
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
         .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
@@ -976,7 +976,7 @@ fn mqtt_subscribe() {
     if !prerequisites_ok() { return; }
     let (port, _rx) = spawn_mqtt_broker(b"BROKER_MSG");
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     qemu.wait_for("DHCP acquired", 40)
         .unwrap_or_else(|e| panic!("DHCP: {e}\n{}", qemu.dump()));
@@ -995,14 +995,14 @@ fn mqtt_subscribe() {
 fn shell_test_builtin() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(Duration::from_millis(300));
 
     // -f: existing file → 0 → then branch runs.
     qemu.send_line("vwrite /data/tf.txt X");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
     qemu.send_line("if [ -f /data/tf.txt ]; then echo FILE_EXISTS; fi");
     qemu.wait_for("FILE_EXISTS", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("test -f failed for existing file: {e}\n{}", qemu.dump()));
@@ -1014,7 +1014,7 @@ fn shell_test_builtin() {
 
     // String equality.
     qemu.send_line("VAL=hello");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
     qemu.send_line("if [ $VAL = hello ]; then echo STR_EQ_OK; fi");
     qemu.wait_for("STR_EQ_OK", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("[ = ] failed: {e}\n{}", qemu.dump()));
@@ -1031,13 +1031,13 @@ fn shell_test_builtin() {
 fn shell_function_define_and_call() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     // Define a function: body is between { and }.
     qemu.send_line("greet() { echo FUNC_CALLED; }");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("def: {e}\n{}", qemu.dump()));
 
     // Call it — must execute the body.
@@ -1059,14 +1059,14 @@ fn shell_function_define_and_call() {
 fn shell_midtoken_var_expansion() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     qemu.send_line("PROTO=http");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
     qemu.send_line("HOST=10.0.2.2");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
 
     // Both vars embedded within a single token.
     qemu.send_line("echo $PROTO://$HOST/api");
@@ -1079,18 +1079,18 @@ fn shell_midtoken_var_expansion() {
 fn shell_unset_var() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     qemu.send_line("FLAG=PRESENT");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
     qemu.send_line("echo STATUS $FLAG");
     qemu.wait_for("STATUS PRESENT", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("var not set: {e}\n{}", qemu.dump()));
 
     qemu.send_line("unset FLAG");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("unset: {e}\n{}", qemu.dump()));
+    qemu.wait_for("Cellos >", CMD_TIMEOUT).unwrap_or_else(|e| panic!("unset: {e}\n{}", qemu.dump()));
     qemu.send_line("echo STATUS $FLAG");
     // After unset, $FLAG expands to empty → echo prints "STATUS " (trailing space).
     qemu.wait_for("STATUS", CMD_TIMEOUT)
@@ -1112,7 +1112,7 @@ fn shell_unset_var() {
 fn shell_exit_code_var() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1128,7 +1128,7 @@ fn shell_exit_code_var() {
 
     // Failing command → $? == 1.
     qemu.send_line("vcat /no/such/file");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vcat: {e}\n{}", qemu.dump()));
     qemu.send_line("echo EXITCODE $?");
     qemu.wait_for("EXITCODE 1", CMD_TIMEOUT)
@@ -1143,7 +1143,7 @@ fn shell_exit_code_var() {
 fn shell_break_loop() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1152,7 +1152,7 @@ fn shell_break_loop() {
     qemu.wait_for("BODY", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("body did not run: {e}\n{}", qemu.dump()));
     // Must return to prompt (break exits the loop, not hang).
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("loop did not exit after break: {e}\n{}", qemu.dump()));
 }
 
@@ -1166,7 +1166,7 @@ fn shell_break_loop() {
 fn shell_and_operator() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1179,7 +1179,7 @@ fn shell_and_operator() {
 
     // False && True: right must NOT run.
     qemu.send_line("vcat /no/such/file && echo SHOULD_NOT_APPEAR");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt after failed &&: {e}\n{}", qemu.dump()));
     assert!(!qemu.output_contains(": SHOULD_NOT_APPEAR"),
         "&& ran right side despite left failing\n{}", qemu.dump());
@@ -1190,7 +1190,7 @@ fn shell_and_operator() {
 fn shell_or_operator() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1203,7 +1203,7 @@ fn shell_or_operator() {
     qemu.send_line("echo OR_LEFT || echo SHOULD_NOT_APPEAR_2");
     qemu.wait_for("OR_LEFT", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("left not seen: {e}\n{}", qemu.dump()));
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(!qemu.output_contains(": SHOULD_NOT_APPEAR_2"),
         "|| ran right side despite left succeeding\n{}", qemu.dump());
@@ -1221,7 +1221,7 @@ fn shell_or_operator() {
 fn shell_for_loop() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1233,7 +1233,7 @@ fn shell_for_loop() {
     qemu.wait_for("GAMMA", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("GAMMA not seen: {e}\n{}", qemu.dump()));
     // Loop must exit (not hang).
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("for loop did not exit: {e}\n{}", qemu.dump()));
 }
 
@@ -1247,7 +1247,7 @@ fn shell_for_loop() {
 fn shell_if_true_branch() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1269,7 +1269,7 @@ fn shell_if_true_branch() {
 fn shell_if_else_branch() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1302,13 +1302,13 @@ fn shell_if_else_branch() {
 fn shell_variable_assignment() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     // Set variable — shell must return to prompt without printing an error.
     qemu.send_line("VAR=HELLO_VAR");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("assignment did not return: {e}\n{}", qemu.dump()));
 
     // Echo — $VAR must expand to HELLO_VAR.
@@ -1326,17 +1326,17 @@ fn shell_variable_assignment() {
 fn shell_variable_persists() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     qemu.send_line("GREETING=HI_ViCell");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("set: {e}\n{}", qemu.dump()));
 
     // Override with a new value — last-write wins.
     qemu.send_line("GREETING=HELLO_ViCell");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("override: {e}\n{}", qemu.dump()));
 
     qemu.send_line("echo $GREETING");
@@ -1354,14 +1354,14 @@ fn shell_variable_persists() {
 fn shell_source_script() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     assert!(qemu.output_contains("FAT32 /mnt/sd volume mounted"), "FAT32 /mnt/sd not mounted\n{}", qemu.dump());
     std::thread::sleep(Duration::from_millis(500));
 
     // Write a one-line shell script (8.3-compatible filename).
     qemu.send_line("vwrite /data/run.sh echo SCRIPT_SOURCED");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("vwrite: {e}\n{}", qemu.dump()));
 
     qemu.send_line("source /data/run.sh");
@@ -1381,13 +1381,13 @@ fn shell_source_script() {
 fn shell_sleep_returns() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     qemu.send_line("sleep 1");
     // Must return within 10s (not hang).
-    qemu.wait_for("ViCell >", 10)
+    qemu.wait_for("Cellos >", 10)
         .unwrap_or_else(|e| panic!("sleep did not return: {e}\n{}", qemu.dump()));
 }
 
@@ -1400,20 +1400,20 @@ fn shell_sleep_returns() {
 fn shell_source_multi_command() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     // Build the script using echo > / >> so no Lua cell is involved.
     // `echo CMD >> file` appends "CMD\n" via Phase V append-redirect.
     qemu.send_line("echo echo BEFORE_SLEEP > /tmp/seq.sh");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
     qemu.send_line("echo sleep 1 >> /tmp/seq.sh");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append sleep: {e}\n{}", qemu.dump()));
     qemu.send_line("echo echo AFTER_SLEEP >> /tmp/seq.sh");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append after: {e}\n{}", qemu.dump()));
 
     qemu.send_line("source /tmp/seq.sh");
@@ -1432,13 +1432,13 @@ fn shell_source_multi_command() {
 fn shell_cmd_substitution() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
     // Basic: whole-token substitution with echo.
     qemu.send_line("OUT=$(echo CAPTURED_VALUE)");
-    qemu.wait_for("ViCell >", CMD_TIMEOUT)
+    qemu.wait_for("Cellos >", CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("assign: {e}\n{}", qemu.dump()));
     qemu.send_line("echo $OUT");
     qemu.wait_for("CAPTURED_VALUE", CMD_TIMEOUT)
@@ -1463,7 +1463,7 @@ fn shell_cmd_substitution() {
 fn console_long_line_with_backspace_no_stall() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1487,7 +1487,7 @@ fn console_near_depth_burst_is_lossless() {
         return;
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
@@ -1519,7 +1519,7 @@ fn shell_ready_hypha_burst_is_lossless() {
         return;
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("=== ViCell shell ready", BOOT_TIMEOUT)
+    qemu.wait_for("=== Cellos shell ready", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell readiness banner: {e}\n{}", qemu.dump()));
 
     qemu.send_bytes(b"hypha\n");
@@ -1563,7 +1563,7 @@ fn stack_sizing_paths_emit_kernel_and_user_watermarks() {
         return;
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&test_hooks_kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("test-hooks shell not ready: {e}\n{}", qemu.dump()));
 
     for command in ["help", "ls", "ps"] {
@@ -1694,7 +1694,7 @@ fn bench_all_pass() {
         return;
     }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell: {e}\n{}", qemu.dump()));
 
     // bench spawns its load/probe children via sys_spawn_pinned (kernel
@@ -1732,7 +1732,7 @@ fn input_keyboard_e2e() {
 
     // Wait for the shell prompt — full userspace stack (vfs, input, compositor,
     // robot-dashboard) is guaranteed to be running by this point.
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
 
     // Spawn robot-dashboard manually from shell, as init no longer spawns it
@@ -1776,7 +1776,7 @@ fn input_keyboard_e2e() {
 /// and receives a key event through `ostd::input` + `AppContext::Input`.
 ///
 /// Flow:
-///   1. Boot → `ViCell >` (full userspace running).
+///   1. Boot → `Cellos >` (full userspace running).
 ///   2. input-test starts (optional spawn in init), retries `request_input_focus()`
 ///      until it steals focus from robot-dashboard.
 ///   3. Inject "a" via QMP → VirtIO keyboard → input service → input-test.
@@ -1789,7 +1789,7 @@ fn input_bare_cell() {
         return;
     }
     let mut qemu = QemuRunner::boot(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell not reached: {e}\n{}", qemu.dump()));
 
     // Spawn input-test manually from shell
@@ -1831,7 +1831,7 @@ fn input_bare_cell() {
 fn posix_shim_getentropy() {
     if !prerequisites_ok() { return; }
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
     qemu.send_line("posix-shim-test");
@@ -1874,7 +1874,7 @@ fn posix_shim_net() {
     });
 
     let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt: {e}\n{}", qemu.dump()));
     // Gate on DHCP before running the shim — avoids a race where the TCP SYN
     // leaves the guest before an IP is assigned (source = 0.0.0.0).

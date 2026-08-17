@@ -9,7 +9,7 @@ use vicell_integration_tests::{qemu_binary, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
 const CMD_TIMEOUT: u64 = 60;
-const PROMPT: &str = "ViCell >";
+const PROMPT: &str = "Cellos >";
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -21,7 +21,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }

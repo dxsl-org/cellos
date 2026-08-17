@@ -1,6 +1,6 @@
 # Build a test-hooks kernel for VFS quota integration tests.
 #
-# Produces: target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks
+# Produces: target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks
 #
 # What differs from the production build:
 #   - service-vfs is compiled with --features test-hooks  (2 KiB quota)
@@ -88,13 +88,13 @@ Write-Host "   init binary:   $([math]::Round((Get-Item "$th_dir\init").Length /
 Write-Host "==> Building test-hooks kernel (riscv64, PIC)..."
 $env:EMBEDDED_OVERRIDE = $th_dir
 $env:RUSTFLAGS = "-C relocation-model=pic"
-cargo build --release -p vicell-kernel `
+cargo build --release -p cellos-kernel `
     --target riscv64gc-unknown-none-elf 2>&1 | Select-Object -Last 5
 Remove-Item Env:\EMBEDDED_OVERRIDE -ErrorAction SilentlyContinue
 Remove-Item Env:\RUSTFLAGS          -ErrorAction SilentlyContinue
 
-$kernel_src = "$rel\vicell-kernel"
-$kernel_dst = "$rel\vicell-kernel-test-hooks"
+$kernel_src = "$rel\cellos-kernel"
+$kernel_dst = "$rel\cellos-kernel-test-hooks"
 Copy-Item $kernel_src $kernel_dst -Force
 Write-Host "==> Test-hooks kernel: $kernel_dst"
 Write-Host "==> Done. Run integration tests with:"

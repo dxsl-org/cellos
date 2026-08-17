@@ -3,7 +3,7 @@ name = "app-bench"
 version = "0.1.0"
 edition = "2021"
 license.workspace = true
-description = "ViCell performance benchmark cell — measures context-switch, IPC, syscall, and memory targets"
+description = "Cellos performance benchmark cell — measures context-switch, IPC, syscall, and memory targets"
 
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }

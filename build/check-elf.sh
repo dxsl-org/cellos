@@ -1,5 +1,5 @@
 #!/bin/bash
-ELF=/mnt/d/ViCell/target/x86_64-unknown-none/release/vicell-kernel
+ELF=/mnt/d/ViCell/target/x86_64-unknown-none/release/cellos-kernel
 echo "=== file ==="
 file "$ELF"
 echo "=== readelf header ==="

@@ -9,7 +9,7 @@
 //! of which backend path is used, making /tmp quota tests valid.
 //!
 //! Prerequisites (run scripts/build-test-hooks-cells.ps1 first):
-//!   target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks
+//!   target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks
 //!
 //! Run:
 //!   cargo test --manifest-path tests/integration/Cargo.toml \
@@ -29,7 +29,7 @@ fn repo_root() -> PathBuf {
 /// Path to the test-hooks kernel produced by scripts/build-test-hooks-cells.ps1.
 fn test_hooks_kernel() -> String {
     repo_root()
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks")
         .to_string_lossy()
         .into_owned()
 }

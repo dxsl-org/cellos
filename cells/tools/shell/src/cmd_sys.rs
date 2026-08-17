@@ -15,11 +15,17 @@ pub fn cmd_pwd(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> 
 /// `uname [-a]` — print system identification.
 pub fn cmd_uname(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     let all = args.any(|a| a == "-a");
-    crate::executor::shell_println(if all {
-        "ViCell vicell-kernel 0.2.1 riscv64 ViCell"
+    if all {
+        crate::executor::shell_println(&alloc::format!(
+            "{} {} {} {}",
+            ostd::system_info::OS_NAME,
+            ostd::system_info::KERNEL_NAME,
+            ostd::system_info::KERNEL_VERSION,
+            ostd::system_info::ARCH,
+        ));
     } else {
-        "ViCell"
-    });
+        crate::executor::shell_println(ostd::system_info::OS_NAME);
+    }
     Ok(())
 }
 
@@ -39,7 +45,7 @@ pub fn cmd_free(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()>
 pub fn cmd_env(_args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<()> {
     crate::executor::shell_println("PATH=/bin");
     crate::executor::shell_println("SHELL=/bin/shell");
-    crate::executor::shell_println("OS=ViCell");
+    crate::executor::shell_println("OS=Cellos");
     Ok(())
 }
 

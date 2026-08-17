@@ -30,7 +30,7 @@ pub struct ViShell<'a> {
 impl<'a> ViShell<'a> {
     pub fn new() -> Self {
         Self {
-            prompt: "ViCell > ",
+            prompt: "Cellos > ",
             config: ConfigClient::new(),
             history: VecDeque::with_capacity(32),
             hist: History::new(),
@@ -48,7 +48,7 @@ impl<'a> ViShell<'a> {
         // than buried mid-scroll (which made the shell look dead). 200 × 10ms ≈ 2s.
         ostd::executor::sleep(200).await;
         ostd::io::println("");
-        ostd::io::println("=== ViCell shell ready — type 'help' for commands ===");
+        ostd::io::println("=== Cellos shell ready — type 'help' for commands ===");
 
         loop {
             // Show custom prompt if PATH set? Or USER?

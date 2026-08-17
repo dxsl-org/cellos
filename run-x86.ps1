@@ -14,7 +14,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-$KERNEL_ELF   = "target/x86_64-unknown-none/release/vicell-kernel"
+$KERNEL_ELF   = "target/x86_64-unknown-none/release/cellos-kernel"
 $ISO_ROOT     = "build/x86-iso-root"
 $ISO_OUT      = "build/vicell-x86.iso"
 $LIMINE_CFG   = "scripts/x86/limine.cfg"
@@ -56,7 +56,7 @@ if (-not $NoBuild) {
     # into the higher half.  Keep -red-zone disabled (required for x86_64 kernels
     # so interrupt handlers do not corrupt the System V ABI red zone).
     $env:RUSTFLAGS = "-C relocation-model=pic -C code-model=kernel -C target-feature=-red-zone"
-    cargo build --release -p vicell-kernel --target x86_64-unknown-none
+    cargo build --release -p cellos-kernel --target x86_64-unknown-none
     $env:RUSTFLAGS = $null
     if ($LASTEXITCODE -ne 0) { Write-Error "Cargo build failed"; exit 1 }
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # Build Cellos for Milk-V Pioneer (SG2042) on Windows.
-# Produces target/.../vicell-kernel and delegates image creation to WSL2.
+# Produces target/.../cellos-kernel and delegates image creation to WSL2.
 #
 # Usage:
 #   .\scripts\pioneer-build.ps1             # build kernel + create pioneer-boot.img via WSL2
@@ -18,7 +18,7 @@ $ErrorActionPreference = "Stop"
 if (-not $NoBuild) {
     Write-Host "[pioneer-build] Building Cellos kernel for Pioneer SG2042..."
     $env:RUSTFLAGS = "-C relocation-model=pic"
-    cargo build --release -p vicell-kernel `
+    cargo build --release -p cellos-kernel `
         --target riscv64gc-unknown-none-elf `
         --features board-pioneer
     if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }

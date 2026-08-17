@@ -3,7 +3,7 @@ name = "viui"
 version = "0.2.0"
 edition = "2021"
 license = "MIT"
-description = "ViCell native no_std UI toolkit — Elm architecture, direct pixel rendering"
+description = "Cellos native no_std UI toolkit — Elm architecture, direct pixel rendering"
 
 [lib]
 

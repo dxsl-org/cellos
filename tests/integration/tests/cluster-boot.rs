@@ -11,7 +11,7 @@
 //! ## Prerequisites
 //!
 //!   - `qemu-system-aarch64` on PATH (or `$ViCell_QEMU_AARCH64`).
-//!   - Kernel: `target/aarch64-unknown-none-softfloat/release/vicell-kernel`
+//!   - Kernel: `target/aarch64-unknown-none-softfloat/release/cellos-kernel`
 //!     (build: `RUSTFLAGS="-C relocation-model=pic ..." cargo build --release ...`).
 //!   - Disk: `disk_arm_virt.img` with `/bin/net-broker` signed and installed.
 //!     (build: `cargo build --release -p service-net-broker ...` then `.\gen_disk.ps1`).
@@ -37,7 +37,7 @@ fn repo_root() -> PathBuf {
 
 fn kernel_path() -> String {
     repo_root()
-        .join("target/aarch64-unknown-none-softfloat/release/vicell-kernel")
+        .join("target/aarch64-unknown-none-softfloat/release/cellos-kernel")
         .to_string_lossy()
         .into_owned()
 }
@@ -57,7 +57,7 @@ fn prerequisites_ok() -> bool {
     if !kernel_ok {
         eprintln!("SKIP cluster-boot: kernel not built ({})", kernel_path());
         eprintln!("  Run: RUSTFLAGS=\"-C relocation-model=pic -C target-feature=+bti,+paca,+pacg\"");
-        eprintln!("       cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat");
+        eprintln!("       cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat");
     }
     if !disk_ok {
         eprintln!("SKIP cluster-boot: disk_arm_virt.img missing");
@@ -89,7 +89,7 @@ fn cluster_broker_entropy_gate_passes() {
     let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
 
     // Wait for full boot first — init must start before the broker is spawned.
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!(
             "P07 GATE FAIL: shell prompt not reached within {BOOT_TIMEOUT}s: {e}\n\
              The broker cannot start before init completes service registration.\n\
@@ -135,7 +135,7 @@ fn cluster_broker_service_registered() {
     if !prerequisites_ok() { return; }
 
     let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("ViCell >", BOOT_TIMEOUT)
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
         .unwrap_or_else(|e| panic!("shell prompt not reached: {e}"));
 
     std::thread::sleep(std::time::Duration::from_millis(500));

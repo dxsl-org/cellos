@@ -28,7 +28,7 @@
 #
 # Usage:
 #   bash scripts/qemu-hypervisor-smoke.sh [kernel-elf] [disk.img]
-#   kernel-elf  default: target/aarch64-unknown-none-softfloat/release/vicell-kernel
+#   kernel-elf  default: target/aarch64-unknown-none-softfloat/release/cellos-kernel
 #   disk.img    default: disk_hv_arm.img
 #
 # Environment:
@@ -45,7 +45,7 @@
 
 set -euo pipefail
 
-KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/vicell-kernel}"
+KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel}"
 DISK="${2:-disk_hv_arm.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-180}"
 HV_SMOKE_MODE="${HV_SMOKE_MODE:-machinery}"

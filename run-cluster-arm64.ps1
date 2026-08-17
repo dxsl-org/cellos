@@ -16,7 +16,7 @@
 #   1. qemu-system-aarch64 on PATH (or set $env:ViCell_QEMU_AARCH64).
 #   2. Build the aarch64 kernel:
 #        $env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
-#        cargo build --release -p vicell-kernel --target aarch64-unknown-none-softfloat
+#        cargo build --release -p cellos-kernel --target aarch64-unknown-none-softfloat
 #        $env:RUSTFLAGS = $null
 #   3. Build and sign the net-broker cell:
 #        cargo build --release -p service-net-broker --target aarch64-unknown-none-softfloat
@@ -52,12 +52,12 @@ if (-not (Get-Command $qemu -ErrorAction SilentlyContinue)) {
 }
 
 $target = "aarch64-unknown-none-softfloat"
-$kernel = "target/$target/release/vicell-kernel"
+$kernel = "target/$target/release/cellos-kernel"
 
 if (-not (Test-Path $kernel)) {
     Write-Error "Kernel $kernel not found. Build with:"
     Write-Error '  $env:RUSTFLAGS="-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"'
-    Write-Error "  cargo build --release -p vicell-kernel --target $target"
+    Write-Error "  cargo build --release -p cellos-kernel --target $target"
     exit 1
 }
 if (-not (Test-Path $Node0Disk)) {

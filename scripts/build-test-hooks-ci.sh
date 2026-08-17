@@ -2,7 +2,7 @@
 # Build the test-hooks kernel for VFS quota integration tests (Linux CI).
 # Bash equivalent of scripts/build-test-hooks-cells.ps1 for Ubuntu runners.
 #
-# Produces: target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks
+# Produces: target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks
 #
 # Prerequisites (the CI job installs these):
 #   apt: gcc-riscv64-unknown-elf libclang-dev qemu-system-misc
@@ -125,7 +125,7 @@ cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
     --features test-hooks \
-    -p vicell-kernel
+    -p cellos-kernel
 
-cp "$REL/vicell-kernel" "$REL/vicell-kernel-test-hooks"
-echo "==> Done: $REL/vicell-kernel-test-hooks"
+cp "$REL/cellos-kernel" "$REL/cellos-kernel-test-hooks"
+echo "==> Done: $REL/cellos-kernel-test-hooks"

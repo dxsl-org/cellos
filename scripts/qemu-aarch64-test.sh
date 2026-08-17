@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Boot the ViCell AArch64 kernel in QEMU and assert the system reaches the shell
-# prompt ("ViCell >").
+# prompt ("Cellos >").
 #
 # Mirrors scripts/qemu-boot-test.sh for the ARM64 virt machine.
 #
 # Usage: scripts/qemu-aarch64-test.sh [kernel-elf] [disk.img]
-#   kernel-elf  default: target/aarch64-unknown-none-softfloat/release/vicell-kernel
+#   kernel-elf  default: target/aarch64-unknown-none-softfloat/release/cellos-kernel
 #   disk.img    default: disk_arm_virt.img
 
 set -euo pipefail
 
-KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/vicell-kernel}"
+KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel}"
 DISK="${2:-disk_arm_virt.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-55}"
 
@@ -21,7 +21,7 @@ fi
 
 if [[ ! -f "$KERNEL" ]]; then
     echo "FAIL: kernel ELF not found: $KERNEL" >&2
-    echo "  Build with: RUSTFLAGS='-C relocation-model=pic' cargo build --release --target aarch64-unknown-none-softfloat -p vicell-kernel" >&2
+    echo "  Build with: RUSTFLAGS='-C relocation-model=pic' cargo build --release --target aarch64-unknown-none-softfloat -p cellos-kernel" >&2
     exit 1
 fi
 
@@ -63,11 +63,11 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-aarch64.log; then
     exit 1
 fi
 
-if grep -q "ViCell >" qemu-aarch64.log; then
+if grep -q "Cellos >" qemu-aarch64.log; then
     echo "PASS: aarch64 shell prompt reached — full boot successful"
     exit 0
 fi
 
-echo "FAIL: 'ViCell >' prompt not seen within ${BOOT_WINDOW}s" >&2
+echo "FAIL: 'Cellos >' prompt not seen within ${BOOT_WINDOW}s" >&2
 tail -40 qemu-aarch64.log
 exit 1

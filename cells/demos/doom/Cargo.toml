@@ -3,7 +3,7 @@ name = "doom"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-only"
-description = "DOOM port via doomgeneric — runs on ViCell compositor with VirtIO keyboard input"
+description = "DOOM port via doomgeneric — runs on the Cellos compositor with VirtIO keyboard input"
 
 [[bin]]
 name = "doom"

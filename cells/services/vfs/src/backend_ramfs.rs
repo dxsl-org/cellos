@@ -45,7 +45,7 @@ impl RamFsBackend {
         let mut root = Box::new(RamFile::new_dir());
         root.children.insert(
             String::from("readme.txt"),
-            Box::new(RamFile::new_file(b"Welcome to ViCell!\n")),
+            Box::new(RamFile::new_file(b"Welcome to Cellos!\n")),
         );
         // /bin is served by BootFsProxy (kernel initramfs) since Phase 02 —
         // the embedded ELF copies that used to live here doubled every /bin

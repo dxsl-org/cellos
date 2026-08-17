@@ -49,7 +49,7 @@ fn complete_policy_has_no_false_positive() {
     let qemu = QemuRunner::boot_with_fresh_disk(&kernel.to_string_lossy(), &disk.to_string_lossy());
     qemu.wait_for("[policy] loaded + verified (23 entries", 40)
         .unwrap_or_else(|error| panic!("{error}\n--- output ---\n{}", qemu.dump()));
-    qemu.wait_for("ViCell >", 40)
+    qemu.wait_for("Cellos >", 40)
         .unwrap_or_else(|error| panic!("{error}\n--- output ---\n{}", qemu.dump()));
     assert!(
         !qemu.output_contains("privileged caps stripped"),

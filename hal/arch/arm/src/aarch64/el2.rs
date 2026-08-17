@@ -10,7 +10,7 @@
 //!          timer::init()      → CNTHP_* + enable_irq(26)
 
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 /// Set by `el2_mark_active()` at boot; read by `is_el2()` and assembly thunks.
 ///
@@ -18,6 +18,19 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// Named exactly `EL2_ACTIVE` because the assembly trampolines reference it by symbol name via ADRP.
 #[no_mangle]
 pub static EL2_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Source slot of the most recent lower-EL AArch64 vector entry.
+///
+/// The assembly wrappers store the architectural vector slot before preserving
+/// the existing dispatch path: 1=sync, 2=IRQ, 3=FIQ, 4=SError.
+#[no_mangle]
+pub static AARCH64_EL2_VECTOR_KIND: AtomicU8 = AtomicU8::new(0);
+
+/// Consume the lower-EL vector marker recorded by the assembly entry wrapper.
+#[inline]
+pub fn take_lower_vector_kind() -> u8 {
+    AARCH64_EL2_VECTOR_KIND.swap(0, Ordering::Relaxed)
+}
 
 /// Returns `true` if the kernel booted at EL2 (QEMU `virtualization=on`).
 #[inline]
@@ -225,7 +238,9 @@ __switch_el2:
 // Layout: 16 slots × 0x80, same as __vectors (trap.rs) but using _el2 sysregs
 // and unique trampoline names to avoid duplicate symbol linker errors.
 //
-// TrapFrame layout (same as EL1, 35 × 8 = 280 bytes):
+// TrapFrame payload is the same 35 × 8 = 280 bytes as EL1. Vector entries
+// allocate 36 × 8 = 288 bytes so SP remains 16-byte aligned; the last 8 bytes
+// are padding and do not change the field offsets below.
 //   x0..x30  → offsets 0..240
 //   elr_el1  → offset 248  (named elr_el1 in the struct; holds elr_el2 at runtime)
 //   spsr_el1 → offset 256
@@ -251,10 +266,10 @@ __vectors_el2:
     .balign 0x80; b vt_sync_el2_cur
     .balign 0x80; b vt_sync_el2_cur
     // ── Lower EL (AArch64) — Cell SVCs and timer IRQs ───────────────────────
-    .balign 0x80; b vt_sync_el2_lower
-    .balign 0x80; b vt_irq_el2_lower
-    .balign 0x80; b vt_sync_el2_lower  // FIQ from lower-EL
-    .balign 0x80; b vt_sync_el2_lower  // SError from lower-EL
+    .balign 0x80; b vt_sync_el2_lower_marked
+    .balign 0x80; b vt_irq_el2_lower_marked
+    .balign 0x80; b vt_fiq_el2_lower_marked
+    .balign 0x80; b vt_serror_el2_lower_marked
     // ── Lower EL (AArch32) — not supported ──────────────────────────────────
     .balign 0x80; b .
     .balign 0x80; b .
@@ -281,8 +296,29 @@ __vectors_el2:
     // as-is rather than changed without a way to exercise it.
     .section .text
     .balign 4
-vt_sync_el2_cur:
-    sub  sp, sp, #(35 * 8)
+
+    // Preserve the original vector-dispatch behavior while recording which
+    // lower-EL slot fired. x16/x17 are restored before entering the old target.
+    .macro mark_lower_vector label, kind, target
+\label:
+    sub  sp, sp, #16
+    stp  x16, x17, [sp]
+    adrp x16, AARCH64_EL2_VECTOR_KIND
+    add  x16, x16, :lo12:AARCH64_EL2_VECTOR_KIND
+    mov  w17, #\kind
+    strb w17, [x16]
+    ldp  x16, x17, [sp]
+    add  sp, sp, #16
+    b    \target
+    .endm
+
+    mark_lower_vector vt_sync_el2_lower_marked,   1, vt_sync_el2_lower
+    mark_lower_vector vt_irq_el2_lower_marked,    2, vt_irq_el2_lower
+    mark_lower_vector vt_fiq_el2_lower_marked,    3, vt_sync_el2_lower
+    mark_lower_vector vt_serror_el2_lower_marked, 4, vt_sync_el2_lower
+
+    vt_sync_el2_cur:
+    sub  sp, sp, #(36 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
     stp  x4,  x5,  [sp, #32]
@@ -326,7 +362,7 @@ vt_sync_el2_cur:
     ldp  x26, x27, [sp, #208]
     ldp  x28, x29, [sp, #224]
     ldr  x30,       [sp, #240]
-    add  sp, sp, #(35 * 8)
+    add  sp, sp, #(36 * 8)
     eret
 
     // ── Lower-EL sync: Cell SVC or guest EL1 trap ────────────────────────────
@@ -384,7 +420,7 @@ vt_irq_el2_lower:
 
     .balign 4
 vt_irq_el2_cur:
-    sub  sp, sp, #(35 * 8)
+    sub  sp, sp, #(36 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
     stp  x4,  x5,  [sp, #32]
@@ -428,7 +464,7 @@ vt_irq_el2_cur:
     ldp  x26, x27, [sp, #208]
     ldp  x28, x29, [sp, #224]
     ldr  x30,       [sp, #240]
-    add  sp, sp, #(35 * 8)
+    add  sp, sp, #(36 * 8)
     eret
 "#
 );

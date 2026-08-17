@@ -1,5 +1,7 @@
 pub mod core;
 pub mod emmc;
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+mod pinmux_rpi3;
 pub mod regs;
 pub mod sd;
 pub mod sdhci;
@@ -112,9 +114,13 @@ pub fn init_driver() {
         return;
     }
 
+    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    pinmux_rpi3::route_external_sd_to_arasan();
+
     // Try eMMC first, then SD card.
     // SAFETY: SDHCI_BASE is the kernel-mapped MMIO address for the configured board.
     // The MMIO region must be mapped before calling init_driver().
+    log::info!("[mmc-diag] probe=eMMC");
     let emmc = unsafe { EmmcBlock::probe(SDHCI_BASE) };
     match emmc {
         Ok(dev) => {
@@ -125,6 +131,7 @@ pub fn init_driver() {
         Err(e) => log::debug!("[mmc] eMMC probe failed ({:?}), trying SD...", e),
     }
 
+    log::info!("[mmc-diag] probe=SD");
     let sd = unsafe { SdBlock::probe(SDHCI_BASE) };
     match sd {
         Ok(dev) => {

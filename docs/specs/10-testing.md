@@ -176,14 +176,14 @@ remains pending alongside PTE-key and shared/grant-page semantics (Spec 19 Layer
 ```powershell
 # 1. Build aarch64 kernel with test-hooks
 $env:RUSTFLAGS = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
-cargo build --release -p vicell-kernel `
+cargo build --release -p cellos-kernel `
     --target aarch64-unknown-none-softfloat `
     --features test-hooks
 $env:RUSTFLAGS = $null
 
 # 2. Run with -cpu max,+mte and grep Layer-2 output
 qemu-system-aarch64 -machine virt,gic-version=2 -cpu "max,+mte" -m 256M -nographic `
-    -kernel target/aarch64-unknown-none-softfloat/release/vicell-kernel `
+    -kernel target/aarch64-unknown-none-softfloat/release/cellos-kernel `
     -drive if=none,file=disk_arm_virt.img,format=raw,id=hd0 `
     -device virtio-blk-device,drive=hd0 -no-reboot 2>&1 |
     Select-String "SELFTEST|BTI|MTE|cfi-test"
@@ -193,7 +193,7 @@ qemu-system-aarch64 -machine virt,gic-version=2 -cpu "max,+mte" -m 256M -nograph
 
 ```powershell
 # 1. Build x86_64 kernel with test-hooks
-cargo build --release -p vicell-kernel `
+cargo build --release -p cellos-kernel `
     --target x86_64-unknown-none `
     --features test-hooks
 

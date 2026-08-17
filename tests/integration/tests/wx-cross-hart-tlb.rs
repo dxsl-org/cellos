@@ -9,7 +9,7 @@ fn kernel_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
-        .join("target/riscv64gc-unknown-none-elf/release/vicell-kernel-test-hooks")
+        .join("target/riscv64gc-unknown-none-elf/release/cellos-kernel-test-hooks")
 }
 
 fn prerequisites_ok() -> bool {

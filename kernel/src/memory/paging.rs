@@ -81,6 +81,8 @@ pub fn tlb_flush_all() {
 /// Initialize the kernel page table for riscv64 and aarch64.
 ///
 /// Not used on x86_64 (separate path below) or bare-physical arches.
+/// The returned root is intentionally not published through `KERNEL_ROOT`:
+/// callers must activate it before acquiring global spinlocks on AArch64.
 #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 pub fn init_kernel_paging(
     allocator: &mut FrameAllocator,
@@ -321,7 +323,6 @@ pub fn init_kernel_paging(
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
 
-    *KERNEL_ROOT.lock() = Some(root_frame);
     Ok(root_frame)
 }
 

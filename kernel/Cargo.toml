@@ -1,5 +1,5 @@
 [package]
-name = "vicell-kernel"
+name = "cellos-kernel"
 version = "0.2.1"
 edition = "2021"
 license = "MPL-2.0"

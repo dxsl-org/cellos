@@ -448,6 +448,55 @@ pub extern "Rust" fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: 
     terminate_current_cell_on_fault(cause, pc, fault_addr);
 }
 
+/// Records AArch64 exception state and the backing instruction word before
+/// delegating to the architecture-neutral Cell fault teardown.
+///
+/// `spsr` is the saved lower-EL PSTATE from `SPSR_EL2`. The physical read uses
+/// the kernel's RAM alias so a stale or unsafe execution mapping cannot trigger
+/// a recursive exception while the original fault is still being handled.
+#[cfg(target_arch = "aarch64")]
+#[no_mangle]
+pub extern "Rust" fn vi_terminate_on_fault_aarch64(
+    cause: usize,
+    pc: usize,
+    fault_addr: usize,
+    spsr: usize,
+    vector_kind: usize,
+) {
+    let ec = cause >> 26;
+    let iss = cause & 0x01ff_ffff;
+    match crate::memory::paging::virt_to_phys(pc) {
+        Some(phys) => {
+            let word_phys = phys & !3;
+            let word = unsafe {
+                core::ptr::read_volatile(crate::memory::frame::phys_to_virt(word_phys) as *const u32)
+            };
+            log::error!(
+                "[fault-probe] a64 vector={} ec={:#x} iss={:#x} spsr={:#x} pc={:#x} far={:#x} pa={:#x} word_addr={:#x} word_pa={:#010x}",
+                vector_kind,
+                ec,
+                iss,
+                spsr,
+                pc,
+                fault_addr,
+                phys,
+                word_phys,
+                word
+            );
+        }
+        None => log::error!(
+            "[fault-probe] a64 vector={} ec={:#x} iss={:#x} spsr={:#x} pc={:#x} far={:#x} pa=unmapped",
+            vector_kind,
+            ec,
+            iss,
+            spsr,
+            pc,
+            fault_addr
+        ),
+    }
+    terminate_current_cell_on_fault(cause, pc, fault_addr);
+}
+
 /// Exposes `scheduler::current_cell_id` to the HAL trap handler.
 #[no_mangle]
 pub extern "Rust" fn vi_current_cell_id() -> usize {
@@ -734,13 +783,6 @@ pub fn yield_cpu() {
             core::arch::asm!("sti", options(nomem, nostack));
         }
     }
-    // Probe 'N': fires when pick_next() returns None (no task in ready queue).
-    // If 'N' appears repeatedly but 'A' never appears, init spawn failed.
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-    if switch_info.is_none() {
-        crate::hal::uart_bcm_mini::probe_put(b'N');
-    }
-
     if let Some((curr, next)) = switch_info {
         unsafe {
             let final_curr = if curr.is_null() {
@@ -771,11 +813,6 @@ pub fn yield_cpu() {
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
             }
-
-            // switch(current, next)
-            // Probe 'A': fires right before Context::switch, confirms the scheduler picked a task.
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            crate::hal::uart_bcm_mini::probe_put(b'A');
             crate::hal::arch::Context::switch(final_curr, final_next);
 
             // Execution resumes here when this context is switched BACK to.

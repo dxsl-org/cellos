@@ -83,26 +83,122 @@ pub fn init() {
     }
 }
 
+/// Snapshot both translation regimes and the controlling EL1/EL2 registers at
+/// an uncategorized RPi3 Cell exception. This is observation-only: `AT` records
+/// a result in `PAR_EL1` and never raises the translation fault it discovers.
+#[cfg(feature = "board-rpi3")]
+fn probe_uncategorized_el2_fault(frame: &TrapFrame, vector_kind: u8) {
+    if !super::el2::is_el2() {
+        return;
+    }
+
+    macro_rules! read_sysreg {
+        ($name:literal) => {{
+            let value: u64;
+            // SAFETY: this probe runs at EL2; all named registers are readable
+            // there and reads have no architectural side effects.
+            unsafe {
+                core::arch::asm!(
+                    concat!("mrs {}, ", $name),
+                    out(reg) value,
+                    options(nomem, nostack)
+                );
+            }
+            value
+        }};
+    }
+
+    let pc = frame.elr_el1;
+    let par_s1e0r: u64;
+    let par_s1e0r_tge0: u64;
+    let par_s1e2r: u64;
+    // SAFETY: EL2 may query both stage-1 regimes. Clearing TGE is bounded by
+    // this block and cannot expose an EL0 exception because the probe itself
+    // remains at EL2; restoring HCR before UART output preserves fault routing.
+    unsafe {
+        core::arch::asm!(
+            "isb",
+            "at s1e0r, {pc}",
+            "isb",
+            "mrs {par_tge1}, par_el1",
+            "mrs {hcr_saved}, hcr_el2",
+            "bic {hcr_tge0}, {hcr_saved}, #(1 << 27)",
+            "msr hcr_el2, {hcr_tge0}",
+            "isb",
+            "at s1e0r, {pc}",
+            "isb",
+            "mrs {par_tge0}, par_el1",
+            "msr hcr_el2, {hcr_saved}",
+            "isb",
+            pc = in(reg) pc,
+            par_tge1 = out(reg) par_s1e0r,
+            par_tge0 = out(reg) par_s1e0r_tge0,
+            hcr_saved = out(reg) _,
+            hcr_tge0 = out(reg) _,
+            options(nomem, nostack),
+        );
+        core::arch::asm!(
+            "isb",
+            "at s1e2r, {pc}",
+            "isb",
+            "mrs {par}, par_el1",
+            pc = in(reg) pc,
+            par = out(reg) par_s1e2r,
+            options(nomem, nostack),
+        );
+    }
+
+    let put_value = |name: &str, value: u64| {
+        super::uart_bcm_mini::puts(name);
+        super::uart_bcm_mini::probe_put(b'=');
+        for shift in (0..16).rev() {
+            let nibble = ((value >> (shift * 4)) & 0xf) as u8;
+            super::uart_bcm_mini::probe_put(if nibble < 10 {
+                b'0' + nibble
+            } else {
+                b'a' + nibble - 10
+            });
+        }
+        super::uart_bcm_mini::probe_put(b' ');
+    };
+
+    super::uart_bcm_mini::puts("\nFS0 ");
+    put_value("vec", vector_kind as u64);
+    put_value("x19", frame.regs[19]);
+    put_value("x20", frame.regs[20]);
+    put_value("hcr", read_sysreg!("hcr_el2"));
+    put_value("cptr", read_sysreg!("cptr_el2"));
+    put_value("mdcr", read_sysreg!("mdcr_el2"));
+    put_value("isr", read_sysreg!("isr_el1"));
+    put_value("daif", read_sysreg!("daif"));
+    super::uart_bcm_mini::puts("\nFS1 ");
+    put_value("sctlr", read_sysreg!("sctlr_el1"));
+    put_value("tcr", read_sysreg!("tcr_el1"));
+    put_value("ttbr0", read_sysreg!("ttbr0_el1"));
+    put_value("mair", read_sysreg!("mair_el1"));
+    put_value("cpacr", read_sysreg!("cpacr_el1"));
+    put_value("mdscr", read_sysreg!("mdscr_el1"));
+    put_value("par", par_s1e0r);
+    super::uart_bcm_mini::puts("\nFS2 ");
+    put_value("sctlr", read_sysreg!("sctlr_el2"));
+    put_value("tcr", read_sysreg!("tcr_el2"));
+    put_value("ttbr0", read_sysreg!("ttbr0_el2"));
+    put_value("mair", read_sysreg!("mair_el2"));
+    put_value("par", par_s1e2r);
+    super::uart_bcm_mini::puts("\nFS3 ");
+    put_value("par_tge0", par_s1e0r_tge0);
+    super::uart_bcm_mini::probe_put(b'\n');
+}
+
 /// Synchronous trap dispatcher — called from both EL1 and EL2 trampolines.
 #[no_mangle]
 pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
     let esr = frame.esr_el1; // field holds ESR_EL2 at EL2; naming is irrelevant here
     let ec = (esr >> 26) & 0x3F;
-    // Debug probe: confirm trap handler was entered (rpi3 only).
-    // Writes "T<hi><lo>" where hi/lo are hex nibbles of EC — visible even if
-    // the log subsystem is broken; uses identity-mapped BCM mini UART directly.
+    let vector_kind = super::el2::take_lower_vector_kind() as usize;
     #[cfg(feature = "board-rpi3")]
-    {
-        super::uart_bcm_mini::probe_put(b'T');
-        let hex = |n: u64| {
-            if n < 10 {
-                b'0' + n as u8
-            } else {
-                b'a' + n as u8 - 10
-            }
-        };
-        super::uart_bcm_mini::probe_put(hex((ec >> 4) & 0xF));
-        super::uart_bcm_mini::probe_put(hex(ec & 0xF));
+    if ec == 0 {
+        probe_uncategorized_el2_fault(frame, vector_kind as u8);
     }
     match ec {
         // EC 0x15 = SVC instruction from AArch64.
@@ -117,16 +213,24 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // Forward to the kernel fault handler: kills the cell, lets the OS continue.
         0x20 | 0x24 => {
             extern "Rust" {
-                fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
+                fn vi_terminate_on_fault_aarch64(
+                    cause: usize,
+                    pc: usize,
+                    fault_addr: usize,
+                    spsr: usize,
+                    vector_kind: usize,
+                );
             }
-            // SAFETY: vi_terminate_on_fault is #[no_mangle] in kernel::task.
+            // SAFETY: vi_terminate_on_fault_aarch64 is #[no_mangle] in kernel::task.
             // It force-unlocks all kernel locks, sends NotifyOnExit, and calls
             // yield_cpu() which switches away from this (now dead) cell.
             unsafe {
-                vi_terminate_on_fault(
-                    esr as usize,           // fault class (ESR_EL2)
-                    frame.elr_el1 as usize, // faulting instruction PC (ELR_EL2)
-                    frame.far_el1 as usize, // faulting address (FAR_EL2)
+                vi_terminate_on_fault_aarch64(
+                    esr as usize,            // fault class (ESR_EL2)
+                    frame.elr_el1 as usize,  // faulting instruction PC (ELR_EL2)
+                    frame.far_el1 as usize,  // faulting address (FAR_EL2)
+                    frame.spsr_el1 as usize, // lower-EL PSTATE (SPSR_EL2)
+                    vector_kind,
                 );
             }
         }
@@ -148,7 +252,13 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // bury the kernel bug.
         _ => {
             extern "Rust" {
-                fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
+                fn vi_terminate_on_fault_aarch64(
+                    cause: usize,
+                    pc: usize,
+                    fault_addr: usize,
+                    spsr: usize,
+                    vector_kind: usize,
+                );
                 fn vi_current_cell_id() -> usize;
             }
             // SAFETY: both are #[no_mangle] in kernel::task and linked via
@@ -158,10 +268,12 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
             if from_el0 && cell_id != 0 {
                 // SAFETY: as above — switches away from this (now dead) cell.
                 unsafe {
-                    vi_terminate_on_fault(
+                    vi_terminate_on_fault_aarch64(
                         esr as usize,
                         frame.elr_el1 as usize,
                         frame.far_el1 as usize,
+                        frame.spsr_el1 as usize,
+                        vector_kind,
                     );
                 }
             } else {
@@ -192,6 +304,8 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         fn vi_timer_tick();
         fn vi_handle_virtio_irq(irq: u32);
         fn vi_gpio_notify_irq();
+        #[cfg(feature = "board-rpi3")]
+        fn vi_handle_uart_irq();
     }
 
     #[cfg(feature = "board-rpi3")]
@@ -219,10 +333,6 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
             }
         };
         if src & timer_bits != 0 || timer_fired_by_status {
-            // Probe 'M': fires on every rpi3 timer IRQ (via BCM2836 source OR ISTATUS).
-            // Repeated M output → timer fires but init never reaches SVC (infinite loop at EL0).
-            // M never appears → BCM2836 IRQ not reaching CPU; context switches won't happen.
-            super::uart_bcm_mini::probe_put(b'M');
             super::timer::reset();
             // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
             unsafe {
@@ -236,14 +346,21 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         // the BCM2835 IRQ to the CPU nIRQ line without setting bit 8 in
         // CORE0_IRQ_SOURCE (the GPU routing register may not be fully emulated).
         if super::bcm2835_systimer::is_c1_pending() {
-            // Probe 'M': fires on every BCM2835 system timer tick.
-            // Repeated M → timer works; if M never appears → BCM2835 C1 not pending or
-            // IRQ never delivered to CPU.
-            super::uart_bcm_mini::probe_put(b'M');
             super::timer::reset(); // ack C1 + re-arm
                                    // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
             unsafe {
                 vi_timer_tick();
+            }
+            return;
+        }
+        // Like the system timer above, check the legacy pending bit directly:
+        // some raspi3 environments deliver nIRQ without reflecting GPU routing
+        // in CORE0_IRQ_SOURCE.
+        if super::bcm2835_legacy_irq::is_aux_irq_pending() {
+            // Draining AUX_MU_IO deasserts the level-triggered RX interrupt.
+            // SAFETY: vi_handle_uart_irq is #[no_mangle] in kernel UART drivers.
+            unsafe {
+                vi_handle_uart_irq();
             }
             return;
         }
@@ -445,7 +562,9 @@ __vectors:
     .balign 0x80; b .
 
     // ── Out-of-line trampolines ──────────────────────────────────────────────
-    // TrapFrame layout (35 * 8 = 280 bytes):
+    // TrapFrame payload is 35 * 8 = 280 bytes. Allocate 36 * 8 = 288 bytes so
+    // SP stays 16-byte aligned across the Rust handler call; the final 8 bytes
+    // are padding and all field offsets below remain unchanged.
     //   x0..x30  at offsets 0..240 (each 8 bytes)
     //   elr_el1  at 248
     //   spsr_el1 at 256
@@ -463,7 +582,7 @@ vt_sync_el0:
     // bug shipped once (RPi3 bring-up probes broke QEMU virt boot-to-shell).
     // Board debug probes belong behind #[cfg(feature = "board-…")] Rust
     // code, never in this shared assembly.
-    sub  sp, sp, #(35 * 8)
+    sub  sp, sp, #(36 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
     stp  x4,  x5,  [sp, #32]
@@ -507,7 +626,7 @@ vt_sync_el0:
     ldp  x26, x27, [sp, #208]
     ldp  x28, x29, [sp, #224]
     ldr  x30,       [sp, #240]
-    add  sp, sp, #(35 * 8)
+    add  sp, sp, #(36 * 8)
     eret
 
     // ── IRQ vectors ─────────────────────────────────────────────────────────
@@ -516,7 +635,7 @@ vt_sync_el0:
 vt_irq_sp0:
 vt_irq_spx:
 vt_irq_el0:
-    sub  sp, sp, #(35 * 8)
+    sub  sp, sp, #(36 * 8)
     stp  x0,  x1,  [sp, #0]
     stp  x2,  x3,  [sp, #16]
     stp  x4,  x5,  [sp, #32]
@@ -560,7 +679,7 @@ vt_irq_el0:
     ldp  x26, x27, [sp, #208]
     ldp  x28, x29, [sp, #224]
     ldr  x30,       [sp, #240]
-    add  sp, sp, #(35 * 8)
+    add  sp, sp, #(36 * 8)
     eret
 "#
 );

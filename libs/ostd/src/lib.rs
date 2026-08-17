@@ -92,6 +92,9 @@ pub mod font_atlas;
 /// Service discovery helpers (lookup / register well-known services).
 pub mod service;
 
+/// User-visible operating-system and architecture metadata.
+pub mod system_info;
+
 /// Hot-migration helpers — [`stash`][hotswap::stash] / [`restore`][hotswap::restore] /
 /// [`clear`][hotswap::clear] wrappers and the [`ViStateTransfer`][hotswap::ViStateTransfer]
 /// opt-in trait for cells that serialize state across a live hot-swap.

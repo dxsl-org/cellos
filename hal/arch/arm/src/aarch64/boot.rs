@@ -3,6 +3,9 @@
 //! Two EL paths share a single entry:
 //!   - EL2 (QEMU `virtualization=on`): `.el2_init` stays at EL2, sets HCR_EL2,
 //!     calls `el2_mark_active`, then `kmain`.
+//!   - EL2 (`board-rpi3` firmware): `.el2_init` drops to EL1h, then reuses the
+//!     normal `.el1_entry` path. Cortex-A53 has no VHE, so it cannot run the
+//!     kernel at EL2 with Cells at EL0 under `HCR_EL2.TGE=1`.
 //!   - EL1 (default QEMU without `-machine virt,virtualization=on`): `.el1_entry`
 //!     runs the existing EL1 setup and calls `kmain` without marking EL2.
 //!
@@ -10,6 +13,8 @@
 //! itself while the EL2 path folds them into `.el2_init`.
 
 use core::arch::global_asm;
+
+const BOARD_RPI3: usize = cfg!(feature = "board-rpi3") as usize;
 
 global_asm!(
     r#"
@@ -41,6 +46,26 @@ _start:
     b .el1_entry             // Already in EL1
 
 .el2_init:
+    // A non-VHE core cannot use the EL2-host/EL0-app translation regime. TGE=1
+    // makes SCTLR_EL1.M effectively zero, so a Cell fetch bypasses TTBR0_EL1.
+    // Enter EL1h before any Rust state is initialized and let all existing EL1
+    // paging, vector, timer, and context-switch paths remain authoritative.
+    .if {board_rpi3}
+    mov x0, #(1 << 31)       // HCR_EL2.RW=1, TGE=0: EL1 is AArch64
+    msr hcr_el2, x0
+    mov x0, #0x33ff          // CPTR_EL2 RES1 bits; no FP/SIMD traps to EL2
+    msr cptr_el2, x0
+    mov x0, #3               // EL1PCTEN | EL1PCEN
+    msr cnthctl_el2, x0
+    msr cntvoff_el2, xzr
+    mov x0, #0x3c5           // EL1h with D/A/I/F masked
+    msr spsr_el2, x0
+    adr x0, .el1_entry
+    msr elr_el2, x0
+    isb
+    eret
+    .endif
+
     // F2: set HCR_EL2 = RW(1<<31) | TGE(1<<27) FIRST.
     // TGE routes EL0 exceptions to VBAR_EL2 — required for Cell SVCs at EL2 host.
     // RW ensures any future EL1 guest runs AArch64 (also harmless now).
@@ -49,6 +74,11 @@ _start:
     orr x0, x0, #(1 << 27)
     msr hcr_el2, x0
     isb
+
+    // TPIDR_EL2 is the per-CPU live-vCPU marker. Firmware does not guarantee
+    // its reset value, so clear it before any normal Cell can trap from EL0.
+    // vcpu_enter_guest is the only path allowed to make it non-zero.
+    msr tpidr_el2, xzr
 
     // Enable FP/SIMD at EL2 host (CPTR_EL2=0 disables all traps).
     msr cptr_el2, xzr
@@ -137,5 +167,6 @@ _start:
     msr  daifset, #0xf          // mask all interrupts (prevent spurious wake)
     wfi
     b    .Lsecondary_park
-    "#
+    "#,
+    board_rpi3 = const BOARD_RPI3,
 );

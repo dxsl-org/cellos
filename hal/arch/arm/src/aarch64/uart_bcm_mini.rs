@@ -66,7 +66,8 @@ pub fn init() {
     // 2. Disable TX/RX while configuring.
     wr(AUX_MU_CNTL, 0);
 
-    // 3. Disable interrupts (polled I/O only).
+    // 3. Keep interrupts disabled until the kernel has allocated its RX buffer
+    // and the BCM2835 legacy interrupt controller is ready.
     wr(AUX_MU_IER, 0);
 
     // 4. 8-bit mode.
@@ -83,6 +84,16 @@ pub fn init() {
 
     // 8. Enable TX + RX.
     wr(AUX_MU_CNTL, 0b11);
+}
+
+/// Enable interrupt-backed RX after the kernel RX queue is initialized.
+///
+/// The mini UART FIFO holds only eight symbols, so 10 ms timer polling cannot
+/// reliably accept a normal 115200-baud host write. The IRQ handler drains the
+/// FIFO immediately; direct polling remains available as a fallback.
+pub fn enable_rx_interrupt() {
+    super::bcm2835_legacy_irq::enable_irq(super::bcm2835_legacy_irq::AUX_IRQ);
+    wr(AUX_MU_IER, 1);
 }
 
 /// Blocking write — waits until TX FIFO has space, then sends one byte.
