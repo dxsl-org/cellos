@@ -35,6 +35,7 @@ hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-f
 riscv = "0.16.0"
 fdt = "0.1"
 cellos-boards = { path = "../boards", version = "0.2.0" }
+hal-soc-riscv = { path = "../hal/soc/riscv", version = "0.2.0" }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["aarch64", "critical-section-impl"] }

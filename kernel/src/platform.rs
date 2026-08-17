@@ -10,6 +10,8 @@
 mod boot_once;
 
 use boot_once::BootOnce;
+#[cfg(target_arch = "riscv64")]
+use hal_soc_riscv::{RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -79,22 +81,8 @@ unsafe fn publish_boot(info: PlatformInfo) {
 /// Safe with `dtb_ptr == 0`.
 #[cfg(target_arch = "riscv64")]
 pub fn init(sbi_dtb: usize) {
-    #[allow(unused_mut)] // reason: only mutated under the board-pioneer feature below
-    let mut info = from_dtb(sbi_dtb);
-
-    // Pioneer SG2042: UART (snps,dw-apb-uart) lives at 0x7040_0000_0000 — a
-    // physical address that sv39 cannot map as a virtual address (bit 39 set).
-    // Force uart_base=0 so the kernel skips NS16550 MMIO entirely and falls back
-    // to SBI DBCN for all console I/O. PLIC/CLINT are detected from DTB above
-    // (thead,c900-plic / thead,c900-clint at the same base as QEMU defaults).
-    // RTC (snps,dw-apb-rtc) is similarly inaccessible; epoch defaults to 0.
-    #[cfg(feature = "board-pioneer")]
-    {
-        info.uart_base = 0; // SBI DBCN only
-        info.uart_irq = 0;
-        info.rtc_base = 0; // no Goldfish RTC; SG2042 RTC at sv39-inaccessible addr
-        info.virtio_mmio = [None; 8]; // no VirtIO on Pioneer
-    }
+    let profile = active_riscv_soc_profile();
+    let info = apply_riscv_soc_access_policy(from_dtb(sbi_dtb, profile), profile);
 
     log::info!(
         "[platform] UART={:#x} irq={} PLIC={:#x}+{:#x} CLINT={:#x} RTC={:#x}",
@@ -183,7 +171,64 @@ pub fn with<R>(f: impl FnOnce(&PlatformInfo) -> R) -> R {
 // ── DTB parser (riscv64 only) ──────────────────────────────────────────────────
 
 #[cfg(target_arch = "riscv64")]
-fn from_dtb(dtb_ptr: usize) -> PlatformInfo {
+fn active_riscv_soc_profile() -> &'static RiscvSocProfile {
+    #[cfg(feature = "board-pioneer")]
+    {
+        &hal_soc_riscv::SG2042
+    }
+    #[cfg(all(not(feature = "board-pioneer"), feature = "board-vf2"))]
+    {
+        &hal_soc_riscv::JH7110
+    }
+    #[cfg(all(not(feature = "board-pioneer"), not(feature = "board-vf2")))]
+    {
+        &hal_soc_riscv::GENERIC_VIRT
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+fn apply_riscv_soc_access_policy(
+    mut info: PlatformInfo,
+    profile: &'static RiscvSocProfile,
+) -> PlatformInfo {
+    match profile.uart_access {
+        UartAccessPolicy::Mmio => {}
+        UartAccessPolicy::SbiDbcnOnly => {
+            info.uart_base = 0;
+            info.uart_irq = 0;
+        }
+    }
+
+    match profile.rtc_access {
+        RtcAccessPolicy::Mmio => {}
+        RtcAccessPolicy::Unavailable => {
+            info.rtc_base = 0;
+        }
+    }
+
+    match profile.virtio_mmio {
+        VirtioMmioPolicy::Discover => {}
+        VirtioMmioPolicy::Absent => {
+            info.virtio_mmio = [None; 8];
+        }
+    }
+
+    info
+}
+
+#[cfg(target_arch = "riscv64")]
+fn virtio_mmio_entries_for_profile(
+    fdt: &fdt::Fdt,
+    profile: &'static RiscvSocProfile,
+) -> [Option<VirtioEntry>; 8] {
+    match profile.virtio_mmio {
+        VirtioMmioPolicy::Discover => collect_virtio(fdt),
+        VirtioMmioPolicy::Absent => [None; 8],
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
     if dtb_ptr == 0 {
         log::warn!("[platform] dtb_ptr=0, using QEMU defaults");
         return PlatformInfo::qemu_defaults();
@@ -200,35 +245,27 @@ fn from_dtb(dtb_ptr: usize) -> PlatformInfo {
     };
     let defaults = crate::board::selected();
 
-    let uart_base =
-        reg_base(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"]).unwrap_or_else(|| {
-            log::warn!("[platform] UART not in DTB");
-            defaults.uart.base as usize
-        });
-    let uart_irq = irq_first(&fdt, &["ns16550a", "ns16550", "snps,dw-apb-uart"])
-        .unwrap_or(defaults.uart.irq.unwrap_or(0));
+    let uart_base = reg_base(&fdt, profile.uart_compatibles).unwrap_or_else(|| {
+        log::warn!("[platform] UART not in DTB");
+        defaults.uart.base as usize
+    });
+    let uart_irq =
+        irq_first(&fdt, profile.uart_compatibles).unwrap_or(defaults.uart.irq.unwrap_or(0));
 
-    // T-Head C900 (SG2042/Pioneer) uses thead,c900-plic / thead,c900-clint.
-    // Their base addresses match the RISC-V virt defaults so the fallback is correct,
-    // but explicit detection here avoids the warning log on Pioneer boot.
-    let (plic_base, plic_size) = reg_base_size(
-        &fdt,
-        &["sifive,plic-1.0.0", "riscv,plic0", "thead,c900-plic"],
-    )
-    .unwrap_or_else(|| {
-        log::warn!("[platform] PLIC not in DTB");
-        (defaults.plic.base as usize, defaults.plic.size as usize)
+    let (plic_base, plic_size) =
+        reg_base_size(&fdt, profile.plic_compatibles).unwrap_or_else(|| {
+            log::warn!("[platform] PLIC not in DTB");
+            (defaults.plic.base as usize, defaults.plic.size as usize)
+        });
+
+    let clint_base = reg_base(&fdt, profile.clint_compatibles).unwrap_or_else(|| {
+        log::warn!("[platform] CLINT not in DTB");
+        defaults.clint.base as usize
     });
 
-    let clint_base = reg_base(&fdt, &["sifive,clint0", "riscv,clint0", "thead,c900-clint"])
-        .unwrap_or_else(|| {
-            log::warn!("[platform] CLINT not in DTB");
-            defaults.clint.base as usize
-        });
+    let virtio_mmio = virtio_mmio_entries_for_profile(&fdt, profile);
 
-    let virtio_mmio = collect_virtio(&fdt);
-
-    let rtc_base = reg_base(&fdt, &["google,goldfish-rtc"]).unwrap_or_else(|| {
+    let rtc_base = reg_base(&fdt, profile.rtc_compatibles).unwrap_or_else(|| {
         log::warn!("[platform] Goldfish RTC not in DTB, using default");
         defaults.rtc.base as usize
     });

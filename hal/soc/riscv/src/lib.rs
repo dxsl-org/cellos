@@ -1,0 +1,20 @@
+#![no_std]
+
+//! Immutable RISC-V SoC profile facts for early platform discovery.
+//!
+//! The crate is data-only: it carries compatible lookup lists and fail-closed
+//! access policies without embedding board wiring, memory maps, or driver code.
+
+mod access_policy;
+mod catalog;
+mod profile;
+
+pub use access_policy::{RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
+pub use catalog::{GENERIC_VIRT, JH7110, SG2042};
+pub use profile::RiscvSocProfile;
+
+#[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
+mod tests;

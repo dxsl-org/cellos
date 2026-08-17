@@ -33,6 +33,7 @@ members = [
     
     # HAL
     "hal/core",
+    "hal/soc/riscv",
     "hal/traits/arch",
     "hal/traits/timer",
     "hal/traits/interrupt",
