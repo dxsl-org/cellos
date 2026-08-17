@@ -2,6 +2,14 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-17] Root board descriptors land as the first board/HAL split slice
+
+The board-integration slice now lives in a root `boards/` workspace crate (`cellos-boards`) instead of HAL. The first migrated board is QEMU RV64, which now consumes an immutable no_std descriptor for identity, compatible strings, boot contract, fallback memory map, pinmux/PHY wiring, and shared-driver enablement. The DTS file is kept as an audit/reference asset; no `dtc` compilation claim is made here.
+
+Kernel consumers for the descriptor are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`. Shared drivers remain in `cells/drivers/`; `hal/soc/`, AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred.
+
+Verification for this slice passed `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel` (`PASS: FAT16 mounted — kernel booted (no disk)`).
+
 ## [2026-08-17] RPi3 MMC path real-board validated end to end
 
 The `board-rpi3` MMC lane now boots on a real Raspberry Pi 3 Model B v1.2 all the way into Cellos. The fix chain in the current hardware lane is the RPi3 SD pinmux quirk, the BCM2835 SDHCI access contract, the CMD9-before-CMD7 ordering, and the data-timeout setup before sector reads.

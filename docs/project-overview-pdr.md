@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-08-07 (docs refresh: supervisory hotswap closure verified, launch-edge and signing posture cross-checked, current focus updated)
+**Last Updated**: 2026-08-17 (docs refresh: supervisory hotswap closure verified, root `boards/` descriptor crate added for QEMU RV64, shared drivers stay in `cells/drivers/`, and `hal/soc/` remains deferred)
 
 ---
 
@@ -17,7 +17,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
-**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain multi-architecture HAL evidence across RV64/ARM/x86 support.
+**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain multi-architecture HAL evidence across RV64/ARM/x86 support. QEMU RV64 board policy now begins the move to root `boards/`; legacy board paths remain to be migrated.
 
 ---
 
@@ -86,6 +86,10 @@ Hardware Abstraction
 ├── hal/arch/arm        AArch64 FULL (Ring-3 smoke)
 └── hal/arch/x86        x86_64 FULL (Ring-3 smoke)
 
+Boards
+├── boards              Immutable board descriptors (`cellos-boards`, no_std; QEMU RV64 first)
+└── boards/qemu/...     Board-specific fallback assets and audit DTS files
+
 Public API (Stable ABI)
 ├── libs/types          Core types (VAddr, PAddr, ViError)
 ├── libs/api            Kernel-Cell boundary traits (ViFileSystem, ViDriver, etc.)
@@ -93,7 +97,7 @@ Public API (Stable ABI)
 
 Cells
 ├── cells/apps/         Applications (8 crates: init, shell, hello, utils, bench, sys-tools, net-tools, test-isolation)
-├── cells/drivers/      Hardware drivers (6 crates)
+├── cells/drivers/      Hardware drivers (6 crates; shared, not copied per board)
 ├── cells/services/     System services (6 crates)
 └── cells/runtimes/     VMs (2 crates: lua, micropython)
 ```

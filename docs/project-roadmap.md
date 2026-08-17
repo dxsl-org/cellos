@@ -24,6 +24,8 @@
 
 > **2026-08-08 supervisory migration update:** Phase 03 snapshot-trigger authority is complete; shell snapshot routes through Supervisor IPC, `Snapshot=420` is SupervisorCap-gated, QEMU proof remains NullBlock/unavailable on tested targets, and Phase 04 kernel cleanup is complete. Accepted followups are host-gated x86/AArch64 fresh boot lanes and host API coverage.
 
+> **2026-08-17 board-split update:** root `boards/` landed as a no_std descriptor crate and the RV64 QEMU boot path now consumes it for audited fallback data. Shared drivers remain in `cells/drivers/`; `hal/soc/`, AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred. Verified gates for this slice were `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel`.
+
 > **Midori Phase 02 runtime-closure update (2026-08-05):** the test-hooks QEMU lane now
 > proves metadata-only governed message-path `GetFile` positive before `SealPaths`, preserves
 > the existing post-seal denial marker, and still proves `ReadFileGrant` clamp/nonzero/post-seal

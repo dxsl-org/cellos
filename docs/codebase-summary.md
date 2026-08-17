@@ -4,7 +4,7 @@
 **Version**: 0.2.1-dev (Mycelium Era)
 **Language**: Rust (nightly, `no_std`)
 **Crates**: ~52 active workspace members
-**Last Updated**: 2026-08-08 (launch-edge deprivilege and exact launch-profile proofs added; hotswap boundary finalized; init respawn proof deferred)
+**Last Updated**: 2026-08-17 (launch-edge deprivilege and exact launch-profile proofs added; hotswap boundary finalized; root `boards/` descriptor crate added for QEMU RV64; init respawn proof deferred)
 
 ---
 
@@ -14,6 +14,7 @@
 |------|--------|---------------|
 | Kernel | 1 | Size in [generated metrics](code-metrics.generated.md); HotSwap mechanisms (400 retired/reserved; 401/413-415/419/421 live), scatter/gather IPC, lease caps, VirtIO VA→PA fix |
 | HAL | 10 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs |
+| Boards | 1 | `cellos-boards` no_std descriptor crate; QEMU RV64 migrated first; shared drivers stay in `cells/drivers/` |
 | Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
 | Apps | 8+ | shell (parser+executor+45+ built-ins+$(cmd)+args), bench, sys-tools, net-tools (6 bins), utils |
 | Drivers | 5 | disk, gpu, input, net (VirtIO NIC), serial |
@@ -72,6 +73,9 @@ Cellos/
 │       ├── riscv/          RV64 full + RV32 trait impls
 │       ├── arm/            AArch64 full + AArch32 trait impls
 │       └── x86/            x86_64 full impl (IDT, GDT, LAPIC, syscall/sysret)
+│
+├── boards/                 Root board descriptors (`cellos-boards`, no_std)
+│   └── qemu/virt-riscv64/  QEMU RV64 fallback descriptor + audit DTS asset
 │
 ├── libs/ (3 crates)
 │   ├── types/src/lib.rs    VAddr, PAddr, CellId, ViError, DirEntry + 10 host unit tests
