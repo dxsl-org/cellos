@@ -113,17 +113,17 @@
 <a href=#113 id=113 data-nosnippet>113</a>        Resp: serde::Deserialize&lt;<span class="lifetime">'b</span>&gt;,
 <a href=#114 id=114 data-nosnippet>114</a>    {
 <a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>tid = <span class="self">self</span>.resolve().ok_or(ViError::NotFound)<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span><span class="kw-2">mut </span>req_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">let </span>encoded = api::ipc::encode(req, <span class="kw-2">&amp;mut </span>req_buf).map_err(|<span class="kw">_</span>| ViError::InvalidArgument)<span class="question-mark">?</span>;
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">if let </span>syscall::SyscallResult::Err(<span class="kw">_</span>) = syscall::sys_send(tid, encoded) {
-<a href=#119 id=119 data-nosnippet>119</a>            <span class="self">self</span>.invalidate();
-<a href=#120 id=120 data-nosnippet>120</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ViError::IO);
-<a href=#121 id=121 data-nosnippet>121</a>        }
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">match </span>syscall::sys_recv(<span class="number">0</span>, resp_buf) {
-<a href=#123 id=123 data-nosnippet>123</a>            syscall::SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; {
-<a href=#124 id=124 data-nosnippet>124</a>                api::ipc::decode::&lt;Resp&gt;(resp_buf).map_err(|<span class="kw">_</span>| ViError::IO)
-<a href=#125 id=125 data-nosnippet>125</a>            }
-<a href=#126 id=126 data-nosnippet>126</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">Err</span>(ViError::IO),
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span><span class="kw-2">mut </span>send_buf = [<span class="number">0u8</span>; IPC_BUF_SIZE];
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">match </span><span class="kw">crate</span>::ipc::service_call_typed::&lt;Req, Resp&gt;(tid, req, <span class="kw-2">&amp;mut </span>send_buf, resp_buf) {
+<a href=#118 id=118 data-nosnippet>118</a>            <span class="prelude-val">Ok</span>(resp) =&gt; <span class="prelude-val">Ok</span>(resp),
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="prelude-val">Err</span>(<span class="kw">crate</span>::ipc::IpcError::Encode) =&gt; <span class="prelude-val">Err</span>(ViError::InvalidArgument),
+<a href=#120 id=120 data-nosnippet>120</a>            <span class="prelude-val">Err</span>(<span class="kw">crate</span>::ipc::IpcError::Decode) =&gt; <span class="prelude-val">Err</span>(ViError::IO),
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="prelude-val">Err</span>(<span class="kw">crate</span>::ipc::IpcError::Send)
+<a href=#122 id=122 data-nosnippet>122</a>            | <span class="prelude-val">Err</span>(<span class="kw">crate</span>::ipc::IpcError::Recv)
+<a href=#123 id=123 data-nosnippet>123</a>            | <span class="prelude-val">Err</span>(<span class="kw">crate</span>::ipc::IpcError::WrongSender) =&gt; {
+<a href=#124 id=124 data-nosnippet>124</a>                <span class="self">self</span>.invalidate();
+<a href=#125 id=125 data-nosnippet>125</a>                <span class="prelude-val">Err</span>(ViError::IO)
+<a href=#126 id=126 data-nosnippet>126</a>            }
 <a href=#127 id=127 data-nosnippet>127</a>        }
 <a href=#128 id=128 data-nosnippet>128</a>    }
 <a href=#129 id=129 data-nosnippet>129</a>}

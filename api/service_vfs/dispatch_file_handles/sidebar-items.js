@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["close_file","file_err","open_file","read_file"]};

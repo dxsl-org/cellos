@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["args_extract_str","cell_main","dispatch","handle","json_escape","json_obj_str","main"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};
+window.SIDEBAR_ITEMS = {"constant":["READ_FILE_MAX_BYTES","READ_FILE_RESULT_CHAR_LIMIT"],"fn":["args_extract_str","cell_main","dispatch","handle","json_escape","json_obj_str","main","read_file_result_json"],"static":["VICELL_MANIFEST","VICELL_SYSCALLS"]};

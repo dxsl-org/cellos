@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["STATIC_FILE_MAX_BYTES","VFS_MISSING_PATH_ERR_CODE"],"enum":["StaticFileResult"],"fn":["classify_static_file_preflight_wire","classify_static_file_read"]};

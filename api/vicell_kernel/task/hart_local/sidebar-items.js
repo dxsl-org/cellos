@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["current_cell_id","current_hart","current_hart_id","install","set_current_cell_id","write_tp"],"mod":["ready"],"static":["HART_LOCALS","HART_LOCAL_TP_ADDR"],"struct":["ViHartLocal"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["INVALID_RECV_PTR","QUOTA_CELL","RECEIVER","SENDER","TEST_CELL"],"fn":["all_producers_defer_foreign_writes","death_wake_precedes_later_message","fail","full_mailbox_refuses_without_wake","heap_payload_refunds_receiver_quota","prepare_receiver","quota_failure_is_fallible","reset","self_test","verify_delivery"]};

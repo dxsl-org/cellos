@@ -1,9 +1,9 @@
 (function() {
-    var type_impls = Object.fromEntries([["api",[]],["ostd",[]],["vicell_kernel",[]]]);
+    var type_impls = Object.fromEntries([["api",[]],["cellos_kernel",[]],["ostd",[]]]);
     if (window.register_type_impls) {
         window.register_type_impls(type_impls);
     } else {
         window.pending_type_impls = type_impls;
     }
 })()
-//{"start":55,"fragment_lengths":[10,12,21]}
+//{"start":55,"fragment_lengths":[10,21,12]}

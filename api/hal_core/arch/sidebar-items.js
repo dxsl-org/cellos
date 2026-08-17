@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["enable_interrupts","get_gp_tp","init","read_tp","set_kernel_stack","thread_trampoline","vi_set_sscratch","vi_trap_handler","write_tp"],"struct":["Context","ViTrapFrame"]};
+window.SIDEBAR_ITEMS = {"fn":["enable_interrupts","get_gp_tp","init","init_for_hart","read_tp","set_kernel_stack","thread_trampoline","vi_set_sscratch","vi_trap_handler","write_tp"],"struct":["Context","ViTrapFrame"]};

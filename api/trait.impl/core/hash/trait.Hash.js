@@ -1,9 +1,9 @@
 (function() {
-    const implementors = Object.fromEntries([["api",[["impl Hash for <a class=\"struct\" href=\"api/abi/cap/struct.CapId.html\" title=\"struct api::abi::cap::CapId\">CapId</a>",0],["impl Hash for <a class=\"struct\" href=\"api/abi/dir_handles/struct.ViDirHandle.html\" title=\"struct api::abi::dir_handles::ViDirHandle\">ViDirHandle</a>",0]]],["types",[["impl Hash for <a class=\"struct\" href=\"types/struct.CellId.html\" title=\"struct types::CellId\">CellId</a>",0]]],["vicell_kernel",[["impl Hash for <a class=\"struct\" href=\"vicell_kernel/task/tcb/struct.LeaseAttributes.html\" title=\"struct vicell_kernel::task::tcb::LeaseAttributes\">LeaseAttributes</a>",0]]]]);
+    const implementors = Object.fromEntries([["api",[["impl Hash for <a class=\"struct\" href=\"api/abi/cap/struct.CapId.html\" title=\"struct api::abi::cap::CapId\">CapId</a>",0],["impl Hash for <a class=\"struct\" href=\"api/abi/dir_handles/struct.ViDirHandle.html\" title=\"struct api::abi::dir_handles::ViDirHandle\">ViDirHandle</a>",0],["impl Hash for <a class=\"struct\" href=\"api/services/vfs_file_handles/struct.ViVfsFileHandle.html\" title=\"struct api::services::vfs_file_handles::ViVfsFileHandle\">ViVfsFileHandle</a>",0]]],["cellos_kernel",[["impl Hash for <a class=\"struct\" href=\"cellos_kernel/task/tcb/struct.LeaseAttributes.html\" title=\"struct cellos_kernel::task::tcb::LeaseAttributes\">LeaseAttributes</a>",0]]],["types",[["impl Hash for <a class=\"struct\" href=\"types/struct.CellId.html\" title=\"struct types::CellId\">CellId</a>",0]]]]);
     if (window.register_implementors) {
         window.register_implementors(implementors);
     } else {
         window.pending_implementors = implementors;
     }
 })()
-//{"start":59,"fragment_lengths":[297,128,199]}
+//{"start":59,"fragment_lengths":[490,199,128]}

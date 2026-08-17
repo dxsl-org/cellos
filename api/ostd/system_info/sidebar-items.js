@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ARCH","KERNEL_NAME","KERNEL_VERSION","OS_NAME"]};

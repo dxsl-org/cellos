@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_FILE_HANDLES_PER_CALLER"],"enum":["FileHandleError","FileState"],"struct":["FileEntry","FileHandleTable"]};

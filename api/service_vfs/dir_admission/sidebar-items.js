@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["admit"]};
+window.SIDEBAR_ITEMS = {"fn":["admit","prepare_contact"]};

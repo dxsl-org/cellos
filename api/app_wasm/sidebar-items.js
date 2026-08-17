@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_WASM_MODULE_BYTES"],"enum":["LoadWasmError"],"fn":["finalize_wasm_read"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Contact"]};
+window.SIDEBAR_ITEMS = {"enum":["Contact"],"mod":["revoke"]};

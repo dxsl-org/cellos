@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["load_wasm_bytes","load_wasm_bytes_with"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_HANDLES_PER_CELL"],"enum":["DirError"],"mod":["bind","lifecycle"],"struct":["CellState","DirEntry","DirTable"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_HANDLES_PER_CELL"],"enum":["DirError"],"mod":["bind","lifecycle"],"struct":["CellState","DirEntry","DirTable","RevokeOutcome"]};

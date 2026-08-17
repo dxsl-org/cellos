@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["IDENT_CLOCK_HZ"],"struct":["CardInfo","MmcCore"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"mod":["cell_quota","frame","heap","kaslr","page_protect","paging","pin","rt_heap","stage2","tests","vma"],"struct":["AllocationInfo"],"trait":["ViGlobalMemoryManager"]};
