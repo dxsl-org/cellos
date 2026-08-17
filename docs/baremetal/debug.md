@@ -22,6 +22,48 @@ Manual QEMU command equivalent:
 qemu-system-aarch64 -machine raspi3b -m 1G -display none -serial null -serial stdio -kernel target/aarch64-unknown-none-softfloat/release/cellos-kernel -s -S
 ```
 
+### x86_64 BIOS/UEFI smoke and serial capture
+
+Build the kernel, then create the repository-relative BIOS+UEFI El Torito ISO:
+
+```bash
+cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc
+bash scripts/x86/make-iso-ci.sh build/vicell-x86.iso
+BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
+```
+
+On Windows, the bounded UEFI/OVMF smoke is:
+
+```powershell
+pwsh -File build/boot-x86-uefi.ps1 -Iso build/vicell-x86.iso -Ovmf C:\path\to\OVMF_CODE.fd
+```
+
+The real-hardware diagnostic console is a PC-compatible 16550 COM1 at I/O
+`0x3F8`, IRQ4, configured as `115200 8N1`, no flow control. Use a real RS-232
+adapter for a DB9 port; a 3.3 V TTL adapter is not electrically compatible.
+
+The x86 hardware gate order is strict:
+
+1. Firmware loads Cellos and the boot banner appears.
+2. COM1 transmit and polled receive work without ACPI; keep this gate open
+   until IRQ4 receive is confirmed after MADT supplies the route.
+3. RSDP and checksummed MADT, MCFG, and HPET tables are reported. MADT is a
+   dependency of the pending COM1 IRQ4 witness, not permission to skip it.
+4. HPET and LAPIC timer initialization succeeds.
+5. x86 SMP startup and cross-core scheduling succeeds.
+6. PCIe topology is enumerated from MCFG.
+7. NVMe is discovered and performs bounded I/O.
+
+Ethernet is not an early bring-up gate. The e1000 Driver Cell accepts only
+Intel `8086:100e`; an `e1000e` endpoint can exercise the negative gate with
+`X86_NIC_MODEL=e1000e bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso`.
+
+Evidence status as of 2026-08-17: QEMU q35 BIOS and OVMF/UEFI reached the
+scheduler; ACPI-derived timer and bus-0 ECAM initialization passed; an emulated
+`8086:10d3` e1000e endpoint was rejected. Dell OptiPlex, N100/N5105, physical
+COM1 IRQ4, x86 SMP, PCIe behind bridges, NVMe, and DMAR/VT-d remain
+hardware-gated; this document does not claim they have run on physical hardware.
+
 ## 3. Hardware Debugging via JTAG (Raspberry Pi 3)
 To debug directly on physical hardware, you configure the board to expose internal JTAG test access port (TAP) signals.
 

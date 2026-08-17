@@ -52,6 +52,42 @@ có thể, sửa, rồi mới deploy lại.
 | Radxa ROCK 5B (RK3588) | ARM64 | NPU driver (RKNN) |
 | Sonata (CHERIoT) | RV32 | Cellos-Nano sub-track |
 
+### Lane `board-x86_64` trước khi có máy thật
+
+Mục tiêu đầu tiên là chẩn đoán được Dell OptiPlex hoặc máy công nghiệp
+N100/N5105 có COM1, không phải chứng minh network. Thứ tự gate bắt buộc là
+`boot → COM1 16550 (0x3F8/IRQ4) → ACPI → timer → SMP → PCIe → NVMe`.
+COM1 TX và polled RX không phụ thuộc ACPI. Vì route IRQ4 lấy từ MADT, ledger vẫn
+giữ gate COM1 ở trạng thái mở trong lúc đọc MADT và chỉ đóng gate này sau khi có
+witness IRQ4; không được dùng việc parse ACPI để bỏ qua kiểm tra COM1.
+
+Hiện trạng và ranh giới:
+
+- ACPI chỉ mở gate khi RSDP và bảng MADT/MCFG/HPET đã được map và checksum hợp lệ;
+  không có fallback ngầm sang địa chỉ QEMU q35.
+- Kernel tạm thời scan ECAM x86 từ MCFG vì Platform Cell chưa có kênh private
+  nhận ECAM runtime. Đây là giải pháp chuyển tiếp, không mở rộng public ABI.
+- Scanner hiện chỉ đi bus 0, chưa duyệt PCI-to-PCI bridge; NVMe sau bridge vẫn
+  là hardware/architecture gate.
+- x86 SMP chưa được triển khai. VT-d cũng đóng trong lane này cho đến khi địa
+  chỉ remapping unit được lấy từ ACPI DMAR thay vì `0xFED90000` của q35.
+- e1000 chỉ nhận Intel 82540EM `8086:100e`; I219/e1000e không thuộc phạm vi.
+
+Tạo media bằng đường dẫn tương đối từ root repo:
+
+```bash
+bash scripts/x86/make-iso-ci.sh build/vicell-x86.iso
+```
+
+File trên là ISO El Torito boot được theo BIOS và UEFI; repo không tự ghi vào
+block device. Chưa có bằng chứng raw-hybrid USB, vì vậy không chạy `dd` theo giả
+định. Nếu cần thử USB trên máy thật, chỉ dùng Rufus/Etcher sau khi người vận hành
+đối chiếu model, dung lượng và serial của thiết bị đích; ghi lại tool/mode và
+coi kết quả BIOS/UEFI USB là hardware-gated riêng.
+
+COM1 dùng `115200 8N1`, không flow control. Với DB9 chuẩn PC phải dùng adapter
+USB-RS-232; không nối trực tiếp adapter USB-TTL 3.3 V vào cổng RS-232.
+
 ---
 
 ## 3. Thiết bị cần mua
