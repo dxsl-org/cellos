@@ -2,11 +2,30 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-17] RISC-V SoC profiles land under `hal/soc`
+
+`hal/soc/riscv` now carries immutable, no_std SoC profile facts for generic QEMU
+virt, JH7110/VF2, and SG2042/Pioneer. The crate contains compatible-string lists
+and access policies only; it does not copy UART, PLIC, CLINT, RTC, VirtIO, SDHCI,
+or PCIe drivers, and board descriptors remain in the root `boards/` crate.
+
+The RV64 platform path now selects the active SoC profile before DTB parsing.
+Generic virt and JH7110 keep MMIO discovery enabled, while SG2042 preserves the
+Pioneer contract by forcing SBI DBCN-only console, disabling RTC MMIO, and
+publishing no VirtIO-MMIO slots.
+
+Verification for this slice passed `cargo fmt --all -- --check`,
+`cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu`,
+`cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64
+`cargo check` for default, `board-vf2`, `board-pioneer`, and combined
+`board-vf2 board-pioneer`, AArch64 default and `board-rpi3` checks, RV64 release
+kernel build, and `scripts/qemu-boot-test.sh` against the release kernel.
+
 ## [2026-08-17] Root board descriptors land as the first board/HAL split slice
 
 The board-integration slice now lives in a root `boards/` workspace crate (`cellos-boards`) instead of HAL. The first migrated board is QEMU RV64, which now consumes an immutable no_std descriptor for identity, compatible strings, boot contract, fallback memory map, pinmux/PHY wiring, and shared-driver enablement. The DTS file is kept as an audit/reference asset; no `dtc` compilation claim is made here.
 
-Kernel consumers for the descriptor are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`. Shared drivers remain in `cells/drivers/`; `hal/soc/`, AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred.
+Kernel consumers for the descriptor are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`. Shared drivers remain in `cells/drivers/`; `hal/soc/riscv` now owns the RISC-V SoC profile slice, while AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred.
 
 Verification for this slice passed `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel` (`PASS: FAT16 mounted — kernel booted (no disk)`).
 

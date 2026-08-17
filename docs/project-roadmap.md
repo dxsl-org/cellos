@@ -24,7 +24,16 @@
 
 > **2026-08-08 supervisory migration update:** Phase 03 snapshot-trigger authority is complete; shell snapshot routes through Supervisor IPC, `Snapshot=420` is SupervisorCap-gated, QEMU proof remains NullBlock/unavailable on tested targets, and Phase 04 kernel cleanup is complete. Accepted followups are host-gated x86/AArch64 fresh boot lanes and host API coverage.
 
-> **2026-08-17 board-split update:** root `boards/` landed as a no_std descriptor crate and the RV64 QEMU boot path now consumes it for audited fallback data. Shared drivers remain in `cells/drivers/`; `hal/soc/`, AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred. Verified gates for this slice were `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel`.
+> **2026-08-17 board-split update:** root `boards/` landed as a no_std descriptor crate and the RV64 QEMU boot path now consumes it for audited fallback data. Shared drivers remain in `cells/drivers/`; `hal/soc/riscv` now owns the SoC profile slice, while AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred. Verified gates for this slice were `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel`.
+
+> **2026-08-17 RISC-V SoC-profile update:** `hal/soc/riscv` is now the data-only
+> owner for RV64 SoC compatible lists and access policies. QEMU virt and
+> JH7110/VF2 keep MMIO discovery; SG2042/Pioneer stays fail-closed with SBI
+> DBCN-only console, no RTC MMIO, and no VirtIO-MMIO slots. Shared drivers remain
+> in `cells/drivers/`, board descriptors remain in root `boards/`, and
+> AArch64/RPi3/SDHCI extraction plus feature-collapse remain deferred. Verification
+> passed the hal-soc and board unit tests, RV64/AArch64 feature checks, RV64
+> release build, and QEMU release-kernel boot.
 
 > **Midori Phase 02 runtime-closure update (2026-08-05):** the test-hooks QEMU lane now
 > proves metadata-only governed message-path `GetFile` positive before `SealPaths`, preserves

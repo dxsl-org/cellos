@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-08-17 (docs refresh: supervisory hotswap closure verified, root `boards/` descriptor crate added for QEMU RV64, shared drivers stay in `cells/drivers/`, and `hal/soc/` remains deferred)
+**Last Updated**: 2026-08-17 (docs refresh: supervisory hotswap closure verified, root `boards/` descriptor crate added for QEMU RV64, shared drivers stay in `cells/drivers/`, and `hal/soc/riscv` now carries the RISC-V SoC profile slice)
 
 ---
 
@@ -17,7 +17,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
-**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain multi-architecture HAL evidence across RV64/ARM/x86 support. QEMU RV64 board policy now begins the move to root `boards/`; legacy board paths remain to be migrated.
+**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain multi-architecture HAL evidence across RV64/ARM/x86 support. QEMU RV64 board policy now lives in root `boards/`, `hal/soc/riscv` owns the SoC profile facts, and legacy board paths remain to be migrated.
 
 ---
 
@@ -82,6 +82,7 @@ Kernel & Core
 Hardware Abstraction
 ├── hal/core            Facade (feature-gated)
 ├── hal/traits/*        Pure trait definitions
+├── hal/soc/riscv       Data-only RISC-V SoC profiles (QEMU virt, JH7110, SG2042)
 ├── hal/arch/riscv      RV64 FULL, RV32 STUB
 ├── hal/arch/arm        AArch64 FULL (Ring-3 smoke)
 └── hal/arch/x86        x86_64 FULL (Ring-3 smoke)

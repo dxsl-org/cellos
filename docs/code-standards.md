@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-06-03
+**Last Updated**: 2026-08-17
 
 ---
 
@@ -403,6 +403,12 @@ cells/
 - **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
+
+### HAL / Board Ownership
+
+- Root `boards/` stays outside HAL; it owns immutable board descriptors and fallback assets.
+- `hal/soc/riscv` owns RISC-V SoC profile facts only: compatible-string sets and fail-closed access policies.
+- Shared drivers stay in `cells/drivers/`; do not copy UART, SDHCI, DW I2C/SPI, GIC/PLIC, or PCIe drivers per board.
 
 ### Visibility
 
