@@ -4,15 +4,14 @@
 //! Parses RSDP → XSDT/RSDT → MADT (APIC), MCFG (PCIe ECAM), HPET.
 //!
 //! Design invariants:
-//! - NEVER panics; every parse error → warn log → field keeps its default.
-//! - Called before paging, so all table access uses the `phys_to_virt` closure
-//!   (typically HHDM offset). Limine maps all RAM at HHDM+phys.
+//! - NEVER panics; every parse error leaves the affected hardware gate closed.
+//! - The caller maps each physical range before this parser dereferences it.
 //! - Only x86_64 needs this; other arches use DTB via `platform::init`.
 
 /// Parsed addresses from ACPI tables.
 ///
-/// Every field has a safe hardware-compatible default so boot succeeds even
-/// when the RSDP is absent or a table is malformed.
+/// A zero base means the corresponding firmware table was not validated. This
+/// is deliberately fail-closed: q35 addresses are not portable defaults.
 #[derive(Clone, Copy, Debug)]
 pub struct AcpiInfo {
     /// Local APIC MMIO base (MADT Local APIC Address field or type-5 override).
@@ -37,11 +36,11 @@ impl Default for AcpiInfo {
             *v = i as u32;
         }
         Self {
-            lapic_base: 0xFEE0_0000,
-            ioapic_base: 0xFEC0_0000,
+            lapic_base: 0,
+            ioapic_base: 0,
             ioapic_gsi_base: 0,
-            hpet_base: 0xFED0_0000,
-            ecam_base: 0xB000_0000,
+            hpet_base: 0,
+            ecam_base: 0,
             irq_overrides: overrides,
         }
     }
@@ -115,30 +114,36 @@ unsafe fn table_checksum(base: usize, len: usize) -> u8 {
 
 /// Parse ACPI tables starting from `rsdp_phys`.
 ///
-/// `phys_to_virt` converts a physical address to a kernel-accessible virtual
-/// address (typically `phys + HHDM_OFFSET` under Limine).
+/// `map_physical` must make `[phys, phys + len)` readable and return its virtual
+/// base. Returning `None` closes the affected hardware gates.
 ///
-/// Returns `AcpiInfo` with parsed values; any field that cannot be parsed keeps
-/// the QEMU q35 default so the system boots even if ACPI is partially broken.
+/// Returns `AcpiInfo` with parsed values; any field that cannot be validated
+/// remains zero so callers cannot accidentally touch q35-specific MMIO.
 ///
 /// # Panics
 /// Never — all errors produce a log warning and fall through to defaults.
-pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInfo {
+pub fn parse(
+    rsdp_phys: usize,
+    mut map_physical: impl FnMut(usize, usize) -> Option<usize>,
+) -> AcpiInfo {
     let mut info = AcpiInfo::default();
 
     if rsdp_phys == 0 {
-        log::warn!("[acpi] RSDP physical address is null — using defaults");
+        log::warn!("[acpi] RSDP physical address is null — hardware gates closed");
         return info;
     }
 
-    let rsdp_virt = phys_to_virt(rsdp_phys);
+    let Some(rsdp_virt) = map_physical(rsdp_phys, core::mem::size_of::<RsdpV2>()) else {
+        log::warn!("[acpi] RSDP mapping failed — hardware gates closed");
+        return info;
+    };
 
     // --- Validate RSDP signature ---
     // SAFETY: Limine guarantees the RSDP response contains a valid physical
     // address to the RSDP structure, mapped via HHDM. We read cautiously.
     let sig_bytes: [u8; 8] = unsafe { read_unaligned(rsdp_virt) };
     if &sig_bytes != b"RSD PTR " {
-        log::warn!("[acpi] RSDP signature mismatch — using defaults");
+        log::warn!("[acpi] RSDP signature mismatch — hardware gates closed");
         return info;
     }
 
@@ -147,7 +152,7 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
     let cksum = unsafe { table_checksum(rsdp_virt, 20) };
     if cksum != 0 {
         log::warn!(
-            "[acpi] RSDP v1 checksum failed ({}) — using defaults",
+            "[acpi] RSDP v1 checksum failed ({}) — hardware gates closed",
             cksum
         );
         return info;
@@ -163,25 +168,25 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
         let rsdp_v2: RsdpV2 = unsafe { read_unaligned(rsdp_virt) };
         let xsdt_phys = rsdp_v2.xsdt_address as usize;
         if xsdt_phys == 0 {
-            log::warn!("[acpi] XSDT address is null — using defaults");
+            log::warn!("[acpi] XSDT address is null — hardware gates closed");
             return info;
         }
-        // SAFETY: xsdt_phys is a physical address from RSDP v2; phys_to_virt
-        // maps it to a valid HHDM virtual address readable by the kernel.
+        // SAFETY: validate_sdt asks the mapper to cover the header and body
+        // before either range is dereferenced.
         unsafe {
-            parse_xsdt(xsdt_phys, &phys_to_virt, &mut info);
+            parse_xsdt(xsdt_phys, &mut map_physical, &mut info);
         }
     } else {
         // RSDT path: 32-bit table pointers.
         let rsdt_phys = rsdp.rsdt_address as usize;
         if rsdt_phys == 0 {
-            log::warn!("[acpi] RSDT address is null — using defaults");
+            log::warn!("[acpi] RSDT address is null — hardware gates closed");
             return info;
         }
-        // SAFETY: rsdt_phys is a physical address from RSDP v1; phys_to_virt
-        // maps it to a valid HHDM virtual address readable by the kernel.
+        // SAFETY: validate_sdt asks the mapper to cover the header and body
+        // before either range is dereferenced.
         unsafe {
-            parse_rsdt(rsdt_phys, &phys_to_virt, &mut info);
+            parse_rsdt(rsdt_phys, &mut map_physical, &mut info);
         }
     }
 
@@ -197,12 +202,15 @@ pub fn parse(rsdp_phys: usize, phys_to_virt: impl Fn(usize) -> usize) -> AcpiInf
 /// Returns `None` and logs a warning if the checksum fails.
 unsafe fn validate_sdt(
     phys: usize,
-    phys_to_virt: &impl Fn(usize) -> usize,
+    map_physical: &mut impl FnMut(usize, usize) -> Option<usize>,
 ) -> Option<(usize, usize)> {
-    let virt = phys_to_virt(phys);
+    let Some(header_virt) = map_physical(phys, 36) else {
+        log::warn!("[acpi] SDT header mapping failed at {:#x}", phys);
+        return None;
+    };
     // Read the length field at offset 4 (4 bytes into the header).
     // SAFETY: phys points to a valid SDT; length field is at offset 4.
-    let length = unsafe { core::ptr::read_unaligned((virt + 4) as *const u32) } as usize;
+    let length = unsafe { core::ptr::read_unaligned((header_virt + 4) as *const u32) } as usize;
     if !(36..=0x10_0000).contains(&length) {
         log::warn!(
             "[acpi] SDT at {:#x} has implausible length {} — skipping",
@@ -211,7 +219,11 @@ unsafe fn validate_sdt(
         );
         return None;
     }
-    // SAFETY: [virt, virt+length) is within a valid Limine HHDM-mapped region.
+    let Some(virt) = map_physical(phys, length) else {
+        log::warn!("[acpi] SDT body mapping failed at {:#x}", phys);
+        return None;
+    };
+    // SAFETY: the mapper confirmed [virt, virt+length) is readable.
     let cksum = unsafe { table_checksum(virt, length) };
     if cksum != 0 {
         log::warn!(
@@ -232,9 +244,13 @@ unsafe fn read_sig(virt: usize) -> [u8; 4] {
 }
 
 /// Iterate XSDT (64-bit pointer array) and dispatch each child SDT.
-unsafe fn parse_xsdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut AcpiInfo) {
-    let Some((virt, length)) = (unsafe { validate_sdt(phys, p2v) }) else {
-        log::warn!("[acpi] XSDT validation failed — using defaults");
+unsafe fn parse_xsdt(
+    phys: usize,
+    mapper: &mut impl FnMut(usize, usize) -> Option<usize>,
+    info: &mut AcpiInfo,
+) {
+    let Some((virt, length)) = (unsafe { validate_sdt(phys, mapper) }) else {
+        log::warn!("[acpi] XSDT validation failed — hardware gates closed");
         return;
     };
 
@@ -250,14 +266,18 @@ unsafe fn parse_xsdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut Acpi
         if child_phys == 0 {
             continue;
         }
-        dispatch_sdt(child_phys, p2v, info);
+        dispatch_sdt(child_phys, mapper, info);
     }
 }
 
 /// Iterate RSDT (32-bit pointer array) and dispatch each child SDT.
-unsafe fn parse_rsdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut AcpiInfo) {
-    let Some((virt, length)) = (unsafe { validate_sdt(phys, p2v) }) else {
-        log::warn!("[acpi] RSDT validation failed — using defaults");
+unsafe fn parse_rsdt(
+    phys: usize,
+    mapper: &mut impl FnMut(usize, usize) -> Option<usize>,
+    info: &mut AcpiInfo,
+) {
+    let Some((virt, length)) = (unsafe { validate_sdt(phys, mapper) }) else {
+        log::warn!("[acpi] RSDT validation failed — hardware gates closed");
         return;
     };
 
@@ -272,13 +292,17 @@ unsafe fn parse_rsdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut Acpi
         if child_phys == 0 {
             continue;
         }
-        dispatch_sdt(child_phys, p2v, info);
+        dispatch_sdt(child_phys, mapper, info);
     }
 }
 
 /// Validate and dispatch a child SDT by its 4-byte signature.
-fn dispatch_sdt(phys: usize, p2v: &impl Fn(usize) -> usize, info: &mut AcpiInfo) {
-    let Some((virt, length)) = (unsafe { validate_sdt(phys, p2v) }) else {
+fn dispatch_sdt(
+    phys: usize,
+    mapper: &mut impl FnMut(usize, usize) -> Option<usize>,
+    info: &mut AcpiInfo,
+) {
+    let Some((virt, length)) = (unsafe { validate_sdt(phys, mapper) }) else {
         return;
     };
     // SAFETY: virt is the start of a validated SDT.
@@ -425,7 +449,7 @@ fn parse_mcfg(virt: usize, length: usize, info: &mut AcpiInfo) {
         info.ecam_base = base_addr;
         log::info!("[acpi] MCFG: PCIe ECAM base = {:#x}", base_addr);
     } else {
-        log::warn!("[acpi] MCFG: first allocation base_address is 0 — keeping default");
+        log::warn!("[acpi] MCFG: first allocation base_address is 0 — PCIe gate closed");
     }
 }
 
@@ -456,7 +480,7 @@ fn parse_hpet(virt: usize, length: usize, info: &mut AcpiInfo) {
     if addr_space != 0 {
         // Non-zero address space means I/O ports or PCI config — not simple MMIO.
         log::warn!(
-            "[acpi] HPET GAS address_space_id={} (not MMIO) — keeping default",
+            "[acpi] HPET GAS address_space_id={} (not MMIO) — timer gate closed",
             addr_space
         );
         return;
@@ -469,6 +493,6 @@ fn parse_hpet(virt: usize, length: usize, info: &mut AcpiInfo) {
         info.hpet_base = hpet_addr;
         log::info!("[acpi] HPET: event timer block = {:#x}", hpet_addr);
     } else {
-        log::warn!("[acpi] HPET: GAS address is 0 — keeping default");
+        log::warn!("[acpi] HPET: GAS address is 0 — timer gate closed");
     }
 }

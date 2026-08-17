@@ -41,6 +41,18 @@ pub fn init() {
     outb(COM1 + 4, 0x0B); // MCR: OUT2 (enables IOAPIC IRQ delivery) + RTS + DSR
 }
 
+/// Poll one COM1 byte without requiring ACPI, LAPIC, or IOAPIC routing.
+///
+/// This is the pre-ACPI receive diagnostic path. Physical IRQ4 delivery is a
+/// separate sub-gate enabled by [`init_input_irq`] after MADT validation.
+pub fn poll_input() -> Option<u8> {
+    if inb(COM1 + 5) & 0x01 != 0 {
+        Some(inb(COM1))
+    } else {
+        None
+    }
+}
+
 /// Enable COM1 RX interrupts and route IOAPIC IRQ 4 → IDT vector 0x24.
 ///
 /// Preconditions: `init()` called, LAPIC and IOAPIC are initialised

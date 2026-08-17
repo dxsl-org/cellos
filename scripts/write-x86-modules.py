@@ -1,7 +1,9 @@
 """Write all x86_64 HAL sub-modules for Cellos Phase 09."""
 import os
 
-BASE = "d:/Cellos/hal/arch/x86/src/x86_64"
+BASE = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "hal", "arch", "x86", "src", "x86_64")
+)
 os.makedirs(BASE, exist_ok=True)
 
 # ── uart_16550.rs ─────────────────────────────────────────────────────────────
@@ -300,19 +302,36 @@ impl PageTable {
 """
 
 # ── apic.rs ───────────────────────────────────────────────────────────────────
-APIC = """//! Local APIC (0xFEE0_0000) and I/O APIC (0xFEC0_0000) MMIO drivers.
-const LAPIC:  usize = 0xFEE0_0000;
-const IOAPIC: usize = 0xFEC0_0000;
+APIC = """//! ACPI-configured Local APIC and I/O APIC MMIO drivers.
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+static LAPIC: AtomicUsize = AtomicUsize::new(0);
+static IOAPIC: AtomicUsize = AtomicUsize::new(0);
+
+pub fn set_lapic_phys(base: usize) { LAPIC.store(base, Ordering::Relaxed); }
+pub fn set_ioapic_phys(base: usize) { IOAPIC.store(base, Ordering::Relaxed); }
+
+fn lapic() -> usize {
+    let base = LAPIC.load(Ordering::Relaxed);
+    assert!(base != 0, "LAPIC used before validated MADT setup");
+    base
+}
+fn ioapic() -> usize {
+    let base = IOAPIC.load(Ordering::Relaxed);
+    assert!(base != 0, "IOAPIC used before validated MADT setup");
+    base
+}
 
 fn lw(reg: usize, v: u32) {
     // SAFETY: LAPIC MMIO is identity-mapped; write does not affect memory safety.
-    unsafe { core::ptr::write_volatile((LAPIC + reg) as *mut u32, v); }
+    unsafe { core::ptr::write_volatile((lapic() + reg) as *mut u32, v); }
 }
 fn iow(idx: u8, v: u32) {
     // SAFETY: IOAPIC MMIO is identity-mapped.
+    let base = ioapic();
     unsafe {
-        core::ptr::write_volatile(IOAPIC as *mut u32, idx as u32);
-        core::ptr::write_volatile((IOAPIC + 0x10) as *mut u32, v);
+        core::ptr::write_volatile(base as *mut u32, idx as u32);
+        core::ptr::write_volatile((base + 0x10) as *mut u32, v);
     }
 }
 

@@ -9,11 +9,13 @@
 //! command register before each probe and restored after to prevent the device
 //! from responding to MMIO accesses during the transient probe window.
 
+use ostd::io::println;
 use ostd::mmio::MmioRegion;
 use ostd::syscall::{sys_register_pci_device, sys_register_pcie_bar};
 
 // PCI type-0 config space offsets.
 const CFG_VENDOR_ID: usize = 0x00;
+const CFG_DEVICE_ID: usize = 0x02;
 const CFG_COMMAND: usize = 0x04;
 const CFG_CLASS_PROG: usize = 0x09;
 const CFG_SUBCLASS: usize = 0x0A;
@@ -113,7 +115,8 @@ pub fn scan_and_register(region: &MmioRegion) {
         let max_f = if hdr & 0x80 != 0 { 8u8 } else { 1u8 };
 
         for fun in 0u8..max_f {
-            if r16(region, dev, fun, CFG_VENDOR_ID) == 0xFFFF {
+            let vendor_id = r16(region, dev, fun, CFG_VENDOR_ID);
+            if vendor_id == 0xFFFF {
                 continue;
             }
             // Skip PCI-to-PCI bridges (header type 1) — they have no BARs.
@@ -125,6 +128,15 @@ pub fn scan_and_register(region: &MmioRegion) {
             let class = r8(region, dev, fun, CFG_CLASS_CODE);
             let subclass = r8(region, dev, fun, CFG_SUBCLASS);
             let prog_if = r8(region, dev, fun, CFG_CLASS_PROG);
+            let device_id = r16(region, dev, fun, CFG_DEVICE_ID);
+            if class == 0x02
+                && subclass == 0x00
+                && prog_if == 0x00
+                && (vendor_id != 0x8086 || device_id != 0x100E)
+            {
+                println("[platform] unsupported Ethernet identity — registration skipped");
+                continue;
+            }
             let cls: u32 = ((class as u32) << 16) | ((subclass as u32) << 8) | (prog_if as u32);
 
             let mut bar0_base: usize = 0;

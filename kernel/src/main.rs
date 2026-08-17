@@ -116,7 +116,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-    crate::hal::uart_16550::init();
+    {
+        crate::hal::uart_16550::init();
+        crate::hal::uart_16550::puts(
+            "[x86-gate] COM1 16550 0x3f8 ready: TX + polled RX; IRQ4 pending MADT\n",
+        );
+        if crate::hal::uart_16550::poll_input().is_some() {
+            crate::hal::uart_16550::puts("[x86-gate] COM1 polled RX observed\n");
+        }
+    }
 
     // Set HHDM base for LAPIC/IOAPIC MMIO access AND for phys_to_virt.
     // Limine maps RAM at HHDM_BASE+phys (no identity mapping of physical RAM).
@@ -129,53 +137,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Propagate the HHDM offset to the HAL PML4 walker so walk_create /
         // walk_read can dereference physical PTE addresses via HHDM virtual ptrs.
         crate::hal::paging::set_hhdm_offset(hhdm as usize);
-        // Limine maps only usable e820 RAM in the HHDM. The BIOS ROM area
-        // [0x9F000–0x100000) is reserved in e820 and absent from Limine's HHDM
-        // page table. ACPI RSDP is typically there (~0xf52e0 on q35).
-        // Map it now so phys_to_virt(rsdp) doesn't triple-fault before IDT is up.
-        // SAFETY: called after set_hhdm_offset; PML4 walker uses HHDM-mapped RAM.
-        unsafe {
-            crate::hal::paging::map_bios_area();
-        }
         // Initialise KASLR seed from HHDM entropy + RDTSC.
         crate::memory::kaslr::init_kaslr(hhdm);
     }
-
-    // Parse ACPI tables BEFORE paging init so we have the real MMIO addresses
-    // for LAPIC, IOAPIC, HPET, and PCIe ECAM.  Must run after HHDM offset is set
-    // (phys_to_virt requires it) but before init_kernel_paging_x86 maps MMIO.
-    //
-    // On failure or absent RSDP the parser returns QEMU q35 defaults so the
-    // system boots unchanged on emulated hardware.
-    #[cfg(target_arch = "x86_64")]
-    let acpi_info = {
-        use crate::memory::frame::phys_to_virt;
-        let early_puts = |s: &str| {
-            for c in s.bytes() {
-                crate::hal::uart_16550::putchar(c);
-            }
-        };
-        let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
-        // Limine 8.x maps only usable e820 RAM in its HHDM.  The BIOS ROM area
-        // [0x0000–0x100000) and ACPI-reserved regions near top-of-RAM are absent.
-        // Accessing those regions via HHDM before the IDT is live triple-faults.
-        // On QEMU q35 the RSDP is always in the BIOS area (< 1 MiB), and the XSDT
-        // lives in the ACPI-reserved window — neither is reachable this early.
-        // Use hardcoded q35 defaults here; TODO: re-parse after init_kernel_paging
-        // creates a full physical window that covers all e820 regions.
-        if rsdp != 0 && rsdp >= 0x10_0000 {
-            let info = crate::acpi::parse(rsdp, phys_to_virt);
-            early_puts("[INFO] ACPI tables parsed\n");
-            info
-        } else {
-            if rsdp == 0 {
-                early_puts("[INFO] ACPI RSDP absent — using q35 defaults\n");
-            } else {
-                early_puts("[INFO] ACPI RSDP in BIOS area — using q35 defaults\n");
-            }
-            crate::acpi::AcpiInfo::default()
-        }
-    };
 
     // 1. Initialize HAL (Architecture specific) - Early Trap Setup
     // x86_64: LAPIC is deferred until after paging sets up the MMIO mapping
@@ -310,6 +274,45 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     ))]
     log_info("Frame allocator initialized");
 
+    // Limine does not guarantee HHDM mappings for firmware-owned memory. The
+    // parser requests a mapping for each RSDP/SDT range before dereferencing it,
+    // including firmware that labels ACPI storage as generic Reserved memory.
+    #[cfg(target_arch = "x86_64")]
+    let acpi_info = {
+        let mut map_physical = |physical: usize, length: usize| {
+            let mut allocator = memory::frame::FRAME_ALLOCATOR.lock();
+            let mut allocate = || {
+                allocator
+                    .as_mut()
+                    .and_then(|frames| frames.allocate_frame())
+            };
+            // SAFETY: the published allocator owns returned frames and the live
+            // Limine page tables are reachable through the configured HHDM.
+            let mapped = unsafe {
+                crate::hal::paging::map_hhdm_firmware_range(physical, length, &mut allocate)
+            };
+            if mapped {
+                Some(crate::memory::frame::phys_to_virt(physical))
+            } else {
+                None
+            }
+        };
+
+        let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
+        let info = crate::acpi::parse(rsdp, &mut map_physical);
+        log::info!(
+            "[acpi] gates: madt={} hpet={} mcfg={}",
+            info.lapic_base != 0 && info.ioapic_base != 0,
+            info.hpet_base != 0,
+            info.ecam_base != 0
+        );
+        info
+    };
+
+    #[cfg(target_arch = "x86_64")]
+    let x86_timer_ready =
+        acpi_info.lapic_base != 0 && acpi_info.ioapic_base != 0 && acpi_info.hpet_base != 0;
+
     // 3. Paging (Virtual Memory) Setup
     // x86_64 bring-up: Limine's PML4 already maps RAM via HHDM and the kernel
     // at 0xFFFFFFFF80000000. We skip building + activating our own page tables
@@ -354,7 +357,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        // Set runtime ECAM base from ACPI before PCIe scan.
+        // Set runtime ECAM base from validated ACPI before PCIe scan. Zero
+        // keeps PCIe closed; there is no implicit q35 fallback.
         crate::task::drivers::pcie_ecam::set_ecam_base_x86(acpi_info.ecam_base as usize);
 
         log_info("Initializing x86_64 paging (kernel PML4)...");
@@ -397,18 +401,19 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 options(nomem, nostack)
             );
         }
-        // Propagate ACPI-parsed MMIO bases to the APIC driver before init_timers.
-        // Defaults are QEMU q35 values; on real hardware these may differ.
-        crate::hal::apic::set_lapic_phys(acpi_info.lapic_base);
-        crate::hal::apic::set_ioapic_phys(acpi_info.ioapic_base);
-        crate::hal::apic::set_irq_overrides(&acpi_info.irq_overrides, acpi_info.ioapic_gsi_base);
-        // Propagate HPET base to HAL timer init (runtime from ACPI, fallback to
-        // QEMU q35 default 0xFED0_0000 when ACPI is absent).
-        crate::hal::set_hpet_base(acpi_info.hpet_base as usize);
-        // HPET + calibrated LAPIC periodic timer: now safe because HPET, IOAPIC,
-        // and LAPIC are identity-mapped in our new PML4 at the ACPI-parsed bases.
-        crate::hal::init_timers();
-        log_info("x86_64 timers initialized (HPET + LAPIC)");
+        if x86_timer_ready {
+            crate::hal::apic::set_lapic_phys(acpi_info.lapic_base);
+            crate::hal::apic::set_ioapic_phys(acpi_info.ioapic_base);
+            crate::hal::apic::set_irq_overrides(
+                &acpi_info.irq_overrides,
+                acpi_info.ioapic_gsi_base,
+            );
+            crate::hal::set_hpet_base(acpi_info.hpet_base as usize);
+            crate::hal::init_timers();
+            log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
+        } else {
+            log::error!("[x86-gate] timer CLOSED: validated MADT + HPET required");
+        }
 
         // Tier 3b x86 VMM P01: enter root-of-virtualization on the BSP.
         // SVM first (TCG-testable); VMX only on genuine Intel (KVM/HW lane).
@@ -528,9 +533,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "x86_64")]
     {
         task::drivers::ramdisk::init_driver();
-        // Wire COM1 RX IRQ → IDT vector 0x24 → shell stdin.
-        // Must run after init_timers() (which initialises the LAPIC + IOAPIC).
-        crate::hal::uart_16550::init_input_irq();
+        // COM1 TX remains available without ACPI. RX IRQ requires the validated
+        // MADT/HPET gate because it is routed through IOAPIC/LAPIC.
+        if x86_timer_ready {
+            crate::hal::uart_16550::init_input_irq();
+        } else {
+            log::warn!("[x86-gate] COM1 IRQ4 CLOSED: interrupt/timer gate unavailable");
+        }
         // Initialise the RX buffer that vi_handle_uart_irq() writes into.
         task::drivers::uart::init_input();
         log_info("x86_64: ramdisk + UART RX IRQ initialised");
@@ -539,19 +548,27 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // PCIe ECAM scan + NVMe + e1000 + VirtIO PCI init.
     // ARM64 virt uses VirtIO MMIO (not PCIe); accessing 0x3F000000 on QEMU
     // virt 7+ triggers a Synchronous External Abort — skip on aarch64.
-    // x86_64 q35: ECAM base 0xB000_0000 is identity-mapped by init_kernel_paging_x86;
+    // x86_64: the validated ACPI MCFG bus-0 window is identity-mapped;
     // virtio_pci::init() probes vendor 0x1AF4 PCIe devices for BLK/NET.
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
-        // PCIe enumeration is now owned by the Platform Cell.
-        // It scans ECAM and calls sys_register_pci_device + sys_register_pcie_bar for each device.
-        // Arm deferred IOMMU init — fires once the IOMMU device entry appears in PCI_DEVICES.
+        #[cfg(target_arch = "x86_64")]
+        if acpi_info.ecam_base != 0 {
+            // Transitional no-ABI path: the Platform Cell cannot receive MCFG
+            // yet, so x86 enumeration stays kernel-side and uses the validated
+            // runtime base. Driver ownership remains in user-space cells.
+            task::drivers::pcie_ecam::init();
+        } else {
+            log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");
+        }
+        #[cfg(target_arch = "riscv64")]
         task::drivers::iommu::set_deferred_init_pending();
         // VirtIO PCI block init removed (G2 loader redesign phase 06). x86 block I/O
         // is served by the NVMe Driver Cell (F4); the kernel drives no block hardware.
         // activate_isolation() is now called inside iommu::try_deferred_init() once the
         // IOMMU device has been registered by the Platform Cell. The call below is a no-op
         // (IOMMU not yet initialized at this point in boot).
+        #[cfg(target_arch = "riscv64")]
         task::drivers::iommu::activate_isolation();
     }
 
@@ -764,12 +781,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
         }
 
-        // Spawn Platform Cell (PCIe ECAM scanner) before init so PCI_DEVICES is
-        // populated before init's NVMe/e1000 Driver Cells call sys_find_pcie_device.
-        // PCIe ECAM only on x86_64 q35 and RISC-V virt — ARM64 virt uses VirtIO MMIO.
+        // Spawn the RISC-V Platform Cell before init. x86_64 uses the
+        // ACPI-MCFG kernel scanner above until ECAM discovery has a private
+        // kernel-to-Platform-Cell channel that does not expand the public ABI.
         // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
         // that rely on sys_find_pcie_device will simply not find their device.
-        #[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
+        #[cfg(target_arch = "riscv64")]
         match crate::loader::spawn_from_path("/bin/platform", crate::task::cap::Spawner::Root) {
             Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
             Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
