@@ -3,7 +3,7 @@
     state: &amp;mut <a class="struct" href="struct.InputState.html" title="struct service_compositor::input_handler::InputState">InputState</a>,
     table: &amp;<a class="struct" href="../surface_table/struct.SurfaceTable.html" title="struct service_compositor::surface_table::SurfaceTable">SurfaceTable</a>,
     z_order: &amp;<a class="struct" href="../z_order/struct.ZOrder.html" title="struct service_compositor::z_order::ZOrder">ZOrder</a>,
-    pending_dirty: &amp;mut Option&lt;Rect&gt;,
+    pending_dirty: &amp;mut Option&lt;<a class="struct" href="../../api/services/display/struct.Rect.html" title="struct api::services::display::Rect">Rect</a>&gt;,
 )</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Dispatch a raw IPC buffer received from the input service.</p>
 <p>Only called when <code>sender == state.input_tid</code>.
 <code>buf[0]</code> must equal <code>INPUT_EVENT_OPCODE</code>.</p>

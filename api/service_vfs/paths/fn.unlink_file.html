@@ -2,7 +2,7 @@
     vfs: &amp;mut <a class="struct" href="../manager/struct.VfsManager.html" title="struct service_vfs::manager::VfsManager">VfsManager</a>,
     caller: <a class="struct" href="../caller/struct.Caller.html" title="struct service_vfs::caller::Caller">Caller</a>,
     path: &amp;str,
-) -&gt; VfsResponse&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Authorize and perform a delete of an absolute path, refunding its bytes.</p>
+) -&gt; <a class="enum" href="../../api/services/ipc/enum.VfsResponse.html" title="enum api::services::ipc::VfsResponse">VfsResponse</a>&lt;'a&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Authorize and perform a delete of an absolute path, refunding its bytes.</p>
 <p>Authorizes BEFORE <code>file_size</code>: an unauthorized caller must learn nothing, not
 even whether the file exists or how large it is. Credit goes to the cell that
 was charged, never the cell that asked — otherwise deleting another cell’s

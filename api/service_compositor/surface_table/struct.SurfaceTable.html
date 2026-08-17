@@ -9,7 +9,7 @@
     w: u32,
     h: u32,
     owner: usize,
-) -&gt; Result&lt;u64, ViError&gt;</h4></section></summary><div class="docblock"><p>Allocate a new surface slot and return its CapId.</p>
+) -&gt; Result&lt;u64, <a class="enum" href="../../types/enum.ViError.html" title="enum types::ViError">ViError</a>&gt;</h4></section></summary><div class="docblock"><p>Allocate a new surface slot and return its CapId.</p>
 <p><code>owner</code> is the TID of the creating cell (ownership checks + input routing).</p>
 <h5 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h5>
 <p>Returns <code>OutOfMemory</code> if <code>MAX_SURFACES</code> is already reached.</p>
