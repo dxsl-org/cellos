@@ -528,6 +528,118 @@ pub unsafe fn map_bios_area() {
     unsafe { write_cr3(cr3 as u64) };
 }
 
+/// Extend the live Limine HHDM over a firmware-owned physical range.
+///
+/// Missing pages are installed with 4 KiB leaves so mapping a small firmware
+/// record never aliases unrelated ROM or MMIO in the surrounding 2 MiB span.
+/// Existing 1 GiB, 2 MiB, or 4 KiB mappings are preserved. The allocator must
+/// return HHDM-accessible, zeroed-or-discardable 4 KiB frames for new page-table
+/// levels. This is intended for ACPI reclaim/NVS ranges before table parsing.
+///
+/// # Safety
+/// The caller must run at CPL0 after [`set_hhdm_offset`], and `allocator` must
+/// exclusively own every frame it returns.
+pub unsafe fn map_hhdm_firmware_range(
+    phys_start: usize,
+    length: usize,
+    allocator: &mut dyn FnMut() -> Option<usize>,
+) -> bool {
+    let hhdm = HHDM_OFFSET.load(Ordering::Relaxed);
+    if hhdm == 0 || hhdm & (0x20_0000 - 1) != 0 || length == 0 {
+        return false;
+    }
+    let Some(phys_end) = phys_start.checked_add(length) else {
+        return false;
+    };
+    if hhdm.checked_add(phys_end - 1).is_none() {
+        return false;
+    }
+    let start = phys_start & !(PAGE_SIZE - 1);
+    let Some(end) = phys_end.checked_add(PAGE_SIZE - 1) else {
+        return false;
+    };
+    let end = end & !(PAGE_SIZE - 1);
+    // SAFETY: reading the active CR3 is valid at CPL0.
+    let cr3 = unsafe { read_cr3() } as usize & !0xFFF;
+    let Some(pml4_virt) = cr3.checked_add(hhdm) else {
+        return false;
+    };
+    let pml4 = pml4_virt as *mut u64;
+
+    unsafe fn table_for(
+        entry: *mut u64,
+        hhdm: usize,
+        allocator: &mut dyn FnMut() -> Option<usize>,
+    ) -> Option<*mut u64> {
+        // SAFETY: `entry` belongs to a live page-table frame.
+        let current = unsafe { core::ptr::read_volatile(entry) };
+        if current & PTE_PRESENT != 0 {
+            if current & (1 << 7) != 0 {
+                return None;
+            }
+            let table = ((current & PTE_ADDR_MASK) as usize).checked_add(hhdm)?;
+            return Some(table as *mut u64);
+        }
+        let frame = allocator()?;
+        if frame & (PAGE_SIZE - 1) != 0 {
+            return None;
+        }
+        let table = frame.checked_add(hhdm)? as *mut u64;
+        // SAFETY: allocator returned an exclusively owned 4 KiB frame.
+        unsafe { core::ptr::write_bytes(table as *mut u8, 0, PAGE_SIZE) };
+        // SAFETY: installing a present writable page-table pointer is atomic.
+        unsafe {
+            core::ptr::write_volatile(entry, frame as u64 | PTE_PRESENT | PTE_WRITABLE);
+        }
+        Some(table)
+    }
+
+    let mut page = start;
+    while page < end {
+        let Some(va) = hhdm.checked_add(page) else {
+            return false;
+        };
+        let i3 = (va >> 39) & 0x1FF;
+        let i2 = (va >> 30) & 0x1FF;
+        let i1 = (va >> 21) & 0x1FF;
+        let i0 = (va >> 12) & 0x1FF;
+
+        // SAFETY: indices are bounded to one page-table frame.
+        let Some(pdpt) = (unsafe { table_for(pml4.add(i3), hhdm, allocator) }) else {
+            return false;
+        };
+        // A 1 GiB leaf already covers this range.
+        let pdpt_entry = unsafe { core::ptr::read_volatile(pdpt.add(i2)) };
+        if pdpt_entry & PTE_PRESENT != 0 && pdpt_entry & (1 << 7) != 0 {
+            page += PAGE_SIZE;
+            continue;
+        }
+        let Some(pd) = (unsafe { table_for(pdpt.add(i2), hhdm, allocator) }) else {
+            return false;
+        };
+        let pde = unsafe { pd.add(i1) };
+        let current_pde = unsafe { core::ptr::read_volatile(pde) };
+        if current_pde & PTE_PRESENT != 0 && current_pde & (1 << 7) != 0 {
+            page += PAGE_SIZE;
+            continue;
+        }
+        let Some(pt) = (unsafe { table_for(pde, hhdm, allocator) }) else {
+            return false;
+        };
+        let pte = unsafe { pt.add(i0) };
+        if unsafe { core::ptr::read_volatile(pte) } & PTE_PRESENT == 0 {
+            unsafe {
+                core::ptr::write_volatile(pte, page as u64 | PTE_PRESENT | PTE_WRITABLE | PTE_NX)
+            };
+        }
+        page += PAGE_SIZE;
+    }
+
+    // SAFETY: only additive HHDM mappings changed; reloading CR3 flushes stale misses.
+    unsafe { write_cr3(cr3 as u64) };
+    true
+}
+
 impl PageTable {
     fn get_or_alloc(
         &mut self,

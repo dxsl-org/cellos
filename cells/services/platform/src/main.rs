@@ -63,7 +63,7 @@ fn on_event(_ctx: &mut AppContext, event: AppEvent) {
 
 fn scan_ecam() {
     #[cfg(target_arch = "x86_64")]
-    const ECAM_BASE: usize = 0xB000_0000;
+    const ECAM_BASE: usize = 0;
     #[cfg(target_arch = "riscv64")]
     const ECAM_BASE: usize = 0x3000_0000;
     // ARM64 virt machine uses VirtIO MMIO, not PCIe ECAM — skip.
@@ -71,7 +71,7 @@ fn scan_ecam() {
     const ECAM_BASE: usize = 0;
 
     if ECAM_BASE == 0 {
-        println("[platform] no PCIe ECAM on this architecture — exiting");
+        println("[platform] ECAM unavailable; x86 requires kernel ACPI MCFG discovery");
         return;
     }
 

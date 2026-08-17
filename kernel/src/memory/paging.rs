@@ -396,7 +396,7 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
 // Strategy for init_kernel_paging:
 //   1. Allocate a new PML4 frame and zero it.
 //   2. Copy PML4 entries [256..512] from Limine's CR3 — preserves kernel+HHDM.
-//   3. Identity-map MMIO (VA = PA) so init_timers() can access 0xFED0_0000 etc.
+//   3. Identity-map validated ACPI MMIO (VA = PA) for timer/APIC access.
 //   4. Store root in KERNEL_ROOT and return phys address.
 //
 // The walk_create / walk_read helpers (in hal/arch/x86/src/x86_64/paging.rs)
@@ -410,9 +410,9 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
 /// set via `hal::paging::set_hhdm_offset`.
 ///
 /// Parameters:
-/// - `ioapic_base`: I/O APIC physical address (from ACPI MADT or default 0xFEC0_0000)
-/// - `hpet_base`:   HPET physical address (from ACPI HPET table or default 0xFED0_0000)
-/// - `lapic_base`:  Local APIC physical address (from ACPI MADT or default 0xFEE0_0000)
+/// - `ioapic_base`: I/O APIC physical address from validated ACPI MADT
+/// - `hpet_base`:   HPET physical address from the validated ACPI HPET table
+/// - `lapic_base`:  Local APIC physical address from validated ACPI MADT
 ///
 /// All three MMIO regions are identity-mapped (VA == PA) so `init_timers()` can
 /// access them directly after the CR3 switch.
@@ -468,14 +468,12 @@ pub fn init_kernel_paging_x86(
     //    the CR3 switch.  Physical addresses are below the 4GB boundary and NOT
     //    in the Limine HHDM window, so they must be explicitly identity-mapped.
     //
-    //    The bases come from ACPI parse (ioapic_base, hpet_base, lapic_base params)
-    //    with QEMU q35 defaults as fallback so boot works without ACPI.
-    //    VT-d IOMMU (0xFED9_0000) is always q35-specific; keep hardcoded.
+    //    The bases come from validated ACPI tables. A zero base is deliberately
+    //    skipped so malformed firmware cannot fall through to q35-specific MMIO.
     //
-    //    IOAPIC:  ioapic_base (default 0xFEC0_0000) — 4 KB
-    //    HPET:    hpet_base   (default 0xFED0_0000) — 4 KB
-    //    VT-d:    0xFED9_0000 (q35 Intel IOMMU)     — 4 KB
-    //    LAPIC:   lapic_base  (default 0xFEE0_0000) — 4 KB
+    //    IOAPIC:  ioapic_base (MADT)                — 4 KB
+    //    HPET:    hpet_base   (HPET table)          — 4 KB
+    //    LAPIC:   lapic_base  (MADT)                — 4 KB
     let ioapic_base_usize = ioapic_base as usize;
     let hpet_base_usize = hpet_base as usize;
     let lapic_base_usize = lapic_base as usize;
@@ -485,11 +483,13 @@ pub fn init_kernel_paging_x86(
     let mmio_regions: &[(usize, usize)] = &[
         (ioapic_base_usize, ioapic_base_usize + PAGE_SIZE), // IOAPIC (from ACPI)
         (hpet_base_usize, hpet_base_usize + PAGE_SIZE),     // HPET   (from ACPI)
-        (0xFED9_0000, 0xFED9_0000 + PAGE_SIZE),             // VT-d IOMMU (q35)
         (lapic_base_usize, lapic_base_usize + PAGE_SIZE),   // LAPIC  (from ACPI)
         (ecam_base_usize, ecam_base_usize + ECAM_BUS0_SIZE), // PCIe ECAM bus 0
     ];
     for &(start, end) in mmio_regions {
+        if start == 0 {
+            continue;
+        }
         let mut va = start;
         while va < end {
             let mut alloc_fn = || allocator.allocate_frame();
@@ -506,14 +506,16 @@ pub fn init_kernel_paging_x86(
     }
 
     // Sanity: verify the IOAPIC PTE was written correctly.
-    // Uses the runtime ioapic_base (parsed from ACPI or default 0xFEC0_0000).
+    // Uses the runtime ioapic_base parsed from validated ACPI.
     // SAFETY: pml4_virt is our valid new PML4.
-    debug_assert!(
-        unsafe { walk_read(pml4_virt as *const u64, ioapic_base_usize) }
-            .map(|e| e & PTE_PRESENT != 0)
-            .unwrap_or(false),
-        "IOAPIC identity-map sanity check failed"
-    );
+    if ioapic_base_usize != 0 {
+        debug_assert!(
+            unsafe { walk_read(pml4_virt as *const u64, ioapic_base_usize) }
+                .map(|e| e & PTE_PRESENT != 0)
+                .unwrap_or(false),
+            "IOAPIC identity-map sanity check failed"
+        );
+    }
 
     log::info!("[kernel] x86_64 paging: kernel PML4 built");
 

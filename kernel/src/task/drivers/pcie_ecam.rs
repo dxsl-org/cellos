@@ -3,9 +3,8 @@
 //! Scans bus 0, devices 0-31, probing functions per the header-type multi-function
 //! bit. Exposes a kernel-internal snapshot of discovered PCI devices.
 //!
-//! ECAM bases per machine (QEMU defaults — hardcoded for v1; ACPI MCFG parse
-//! and DTB `pci-host-ecam-generic` reg lookup are documented follow-ups):
-//!   x86_64 q35  : 0xB000_0000
+//! ECAM bases per machine:
+//!   x86_64      : runtime ACPI MCFG (no q35 fallback)
 //!   RISC-V virt : 0x3000_0000
 //!   ARM64 virt  : 0x3F00_0000
 //!
@@ -20,18 +19,9 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-// ── ECAM base addresses (QEMU machine defaults) ───────────────────────────────
-
-/// PCIe ECAM config-space base for x86_64 q35.
-///
-/// This is the compile-time fallback / QEMU q35 default.
-/// The runtime value (parsed from ACPI MCFG at boot) is stored in
-/// `X86_ECAM_BASE` and takes precedence when non-zero.
-pub const ECAM_BASE_X86: usize = 0xB000_0000;
-
 /// Runtime ECAM base for x86_64, set from ACPI MCFG parse before `init()`.
 ///
-/// Zero means "not set"; `ecam_base_x86()` falls back to `ECAM_BASE_X86`.
+/// Zero means the MCFG gate is closed.
 #[cfg(target_arch = "x86_64")]
 static X86_ECAM_BASE: AtomicUsize = AtomicUsize::new(0);
 
@@ -44,17 +34,11 @@ pub fn set_ecam_base_x86(base: usize) {
     X86_ECAM_BASE.store(base, Ordering::Relaxed);
 }
 
-/// Return the effective x86_64 ECAM base: runtime value (from ACPI) if set,
-/// otherwise the QEMU q35 compile-time default.
+/// Return the validated runtime x86_64 ECAM base, or zero when unavailable.
 #[cfg(target_arch = "x86_64")]
 #[inline]
 fn ecam_base_x86() -> usize {
-    let b = X86_ECAM_BASE.load(Ordering::Relaxed);
-    if b != 0 {
-        b
-    } else {
-        ECAM_BASE_X86
-    }
+    X86_ECAM_BASE.load(Ordering::Relaxed)
 }
 
 /// PCIe ECAM config-space base for RISC-V virt gpex.
@@ -539,6 +523,17 @@ unsafe fn scan(ecam_base: usize) {
                 prog_if,
                 bar0_addr
             );
+            if class == 0x02
+                && subclass == 0x00
+                && prog_if == 0x00
+                && (vid != 0x8086 || did != 0x100E)
+            {
+                log::warn!(
+                    "[e1000] unsupported Ethernet {:04x}:{:04x}; driver gate closed",
+                    vid,
+                    did
+                );
+            }
 
             devices.push(PciDevice {
                 bdf: (0, dev, fun),
@@ -564,8 +559,7 @@ unsafe fn scan(ecam_base: usize) {
 /// endpoint). Idempotent; safe to call more than once (later calls are no-ops).
 pub fn init() {
     // Determine ECAM base for the current architecture.
-    // x86_64: use runtime value from ACPI MCFG (set_ecam_base_x86), falling
-    //         back to the QEMU q35 default if ACPI was not parsed.
+    // x86_64: use only the runtime value from validated ACPI MCFG.
     #[cfg(target_arch = "x86_64")]
     let ecam_base = ecam_base_x86();
     #[cfg(target_arch = "riscv64")]
@@ -716,13 +710,25 @@ pub fn devices() -> Vec<PciDevice> {
     PCI_DEVICES.lock().clone()
 }
 
-/// Find the first device matching (class, subclass, prog_if), or `None`.
+/// Find the first supported device matching (class, subclass, prog_if).
 ///
 /// Example: NVMe = `find_class(0x01, 0x08, 0x02)`.
 pub fn find_class(class: u8, subclass: u8, prog_if: u8) -> Option<PciDevice> {
     PCI_DEVICES
         .lock()
         .iter()
-        .find(|d| d.class == class && d.subclass == subclass && d.prog_if == prog_if)
+        .find(|d| {
+            if d.class != class || d.subclass != subclass || d.prog_if != prog_if {
+                return false;
+            }
+            // The current Driver Cell implements only Intel 82540EM. Binding
+            // an I219/e1000e-class endpoint by generic Ethernet class would
+            // program an incompatible register model.
+            #[cfg(target_arch = "x86_64")]
+            if class == 0x02 && subclass == 0x00 && prog_if == 0x00 {
+                return d.vendor_id == 0x8086 && d.device_id == 0x100E;
+            }
+            true
+        })
         .cloned()
 }

@@ -3,13 +3,13 @@
 //! Limine does NOT identity-map MMIO regions; it only maps physical RAM via the
 //! HHDM.  All LAPIC/IOAPIC accesses use `HHDM_BASE + PHYS_ADDR`.
 //! `HHDM_BASE` is reset to 0 after `init_kernel_paging_x86` identity-maps MMIO.
-//! Physical bases default to QEMU q35 values; override from ACPI MADT via
+//! Physical bases remain zero until validated ACPI MADT data is installed via
 //! `set_lapic_phys` / `set_ioapic_phys` before `init_timers()`.
 use core::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 static HHDM_BASE: AtomicU64 = AtomicU64::new(0);
-static LAPIC_PHYS: AtomicUsize = AtomicUsize::new(0xFEE0_0000);
-static IOAPIC_PHYS: AtomicUsize = AtomicUsize::new(0xFEC0_0000);
+static LAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
+static IOAPIC_PHYS: AtomicUsize = AtomicUsize::new(0);
 
 /// ISA IRQ → GSI override table from ACPI MADT type-2 entries.
 /// Index = ISA IRQ (0–15); value = GSI. Identity-mapped by default.
@@ -40,13 +40,13 @@ pub fn set_hhdm_base(offset: u64) {
     HHDM_BASE.store(offset, Ordering::Relaxed);
 }
 
-/// Override the LAPIC physical base from ACPI MADT. Defaults to 0xFEE0_0000.
+/// Install the LAPIC physical base from validated ACPI MADT data.
 /// Call before `init_timers()`.
 pub fn set_lapic_phys(base: u64) {
     LAPIC_PHYS.store(base as usize, Ordering::Relaxed);
 }
 
-/// Override the I/O APIC physical base from ACPI MADT. Defaults to 0xFEC0_0000.
+/// Install the I/O APIC physical base from validated ACPI MADT data.
 /// Call before `init_timers()`.
 pub fn set_ioapic_phys(base: u64) {
     IOAPIC_PHYS.store(base as usize, Ordering::Relaxed);
@@ -65,11 +65,15 @@ pub fn set_irq_overrides(overrides: &[u32; 16], gsi_base: u32) {
 
 #[inline]
 fn lapic_base() -> usize {
-    (HHDM_BASE.load(Ordering::Relaxed) as usize) + LAPIC_PHYS.load(Ordering::Relaxed)
+    let phys = LAPIC_PHYS.load(Ordering::Relaxed);
+    assert!(phys != 0, "LAPIC used before validated MADT setup");
+    (HHDM_BASE.load(Ordering::Relaxed) as usize) + phys
 }
 #[inline]
 fn ioapic_base() -> usize {
-    (HHDM_BASE.load(Ordering::Relaxed) as usize) + IOAPIC_PHYS.load(Ordering::Relaxed)
+    let phys = IOAPIC_PHYS.load(Ordering::Relaxed);
+    assert!(phys != 0, "IOAPIC used before validated MADT setup");
+    (HHDM_BASE.load(Ordering::Relaxed) as usize) + phys
 }
 
 fn lw(reg: usize, v: u32) {

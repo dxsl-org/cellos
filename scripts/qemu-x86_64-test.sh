@@ -6,11 +6,22 @@
 #
 # Usage: BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh [iso]
 #   iso   default: build/vicell-x86.iso
+# Optional: X86_NIC_MODEL=e1000e runs the fail-closed NIC identity check.
 
 set -euo pipefail
 
 ISO="${1:-build/vicell-x86.iso}"
 BOOT_WINDOW="${BOOT_WINDOW:-90}"
+X86_NIC_MODEL="${X86_NIC_MODEL:-}"
+
+case "$X86_NIC_MODEL" in
+    "") NIC_ARGS=() ;;
+    e1000|e1000e) NIC_ARGS=(-device "$X86_NIC_MODEL") ;;
+    *)
+        echo "FAIL: X86_NIC_MODEL must be empty, e1000, or e1000e" >&2
+        exit 1
+        ;;
+esac
 
 if ! command -v qemu-system-x86_64 &>/dev/null; then
     echo "FAIL: qemu-system-x86_64 not found on PATH" >&2
@@ -33,6 +44,7 @@ timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -cdrom "$ISO" \
     -boot d \
     -no-reboot \
+    "${NIC_ARGS[@]}" \
     < /dev/null > qemu-x86_64.raw.log 2>&1 || true
 
 # Strip NULs and ANSI escape sequences so patterns match cleanly.
@@ -41,6 +53,12 @@ tr -d '\000' < qemu-x86_64.raw.log | sed 's/\x1b\[[0-9;]*m//g' > qemu-x86_64.log
 if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-x86_64.log; then
     echo "FAIL: kernel panic / cell fault detected during x86_64 boot" >&2
     grep -ai "fault\|PANIC" qemu-x86_64.log | head
+    exit 1
+fi
+
+if [[ "$X86_NIC_MODEL" == "e1000e" ]] \
+    && ! grep -q "\[e1000\] unsupported Ethernet 8086:10d3; driver gate closed" qemu-x86_64.log; then
+    echo "FAIL: e1000e endpoint was not rejected by vendor/device ID" >&2
     exit 1
 fi
 

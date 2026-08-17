@@ -85,7 +85,7 @@ pub mod arch {
 #[cfg(target_arch = "x86_64")]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-/// Runtime HPET MMIO base parsed from ACPI; 0 = use compile-time default.
+/// Runtime HPET MMIO base parsed from ACPI; 0 keeps the timer gate closed.
 ///
 /// Set by `set_hpet_base` (called from kmain after ACPI parse) before
 /// `init_timers` is invoked.
@@ -94,8 +94,7 @@ static HPET_MMIO_BASE: AtomicUsize = AtomicUsize::new(0);
 
 /// Store the HPET MMIO base address from ACPI for use by `init_timers`.
 ///
-/// Must be called before `init_timers()`. If never called (or called with 0),
-/// `init_timers` uses the QEMU q35 default 0xFED0_0000.
+/// Must be called with a validated non-zero base before `init_timers()`.
 #[cfg(target_arch = "x86_64")]
 pub fn set_hpet_base(base: usize) {
     HPET_MMIO_BASE.store(base, Ordering::Relaxed);
@@ -104,13 +103,18 @@ pub fn set_hpet_base(base: usize) {
 /// Post-paging timer init: LAPIC enable + HPET/PIT calibration.
 ///
 /// Must be called AFTER init_kernel_paging_x86, which identity-maps IOAPIC,
-/// HPET, and LAPIC at the addresses parsed from ACPI (or QEMU q35 defaults).
+/// HPET, and LAPIC at addresses parsed from validated ACPI tables.
 ///
 /// Resets the APIC HHDM_BASE to 0 so lapic_base() == physical LAPIC address
 /// (identity-mapped by init_kernel_paging_x86). Limine does not include MMIO
 /// in its HHDM, so the HHDM-offset address would fault after the CR3 switch.
 #[cfg(target_arch = "x86_64")]
 pub fn init_timers() {
+    let hpet_base = HPET_MMIO_BASE.load(Ordering::Relaxed);
+    if hpet_base == 0 {
+        return;
+    }
+
     // Switch LAPIC/IOAPIC accesses to the identity-mapped PAs we set up in our PML4.
     apic::set_hhdm_base(0);
 
@@ -118,19 +122,10 @@ pub fn init_timers() {
     apic::init_lapic();
     uart_16550::putchar(b'A'); // LAPIC enabled
 
-    // Init HPET using runtime base from ACPI (set_hpet_base), falling back to
-    // the QEMU q35 default if ACPI was not parsed or the address was zero.
+    // Init HPET using the validated runtime base from ACPI.
     // If hardware absent, HPET_PERIOD_FS stays 0 and calibrate_lapic falls back
     // to the 8254 PIT path automatically.
     // SAFETY: hpet_base is identity-mapped by init_kernel_paging_x86.
-    let hpet_base = {
-        let b = HPET_MMIO_BASE.load(Ordering::Relaxed);
-        if b != 0 {
-            b
-        } else {
-            0xFED0_0000
-        }
-    };
     unsafe {
         hpet::init(hpet_base);
     }
