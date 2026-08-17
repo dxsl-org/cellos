@@ -1,36 +1,30 @@
 # TODO
 
-SAS/LBI VFS Phases 02 and 03 are complete. Shell is the sole bounded `ReadFileGrant` pioneer and uses caller-owned lifetime, exact byte bounds, sender-masked replies, typed failure, and no `GetFile`/`DataPtr`/fast fallback; every other caller is characterized and deferred. Phase 04 file-handle work is now complete as an append-only ABI delta: `OpenFileAt` / `ReadFileHandle { max: u32 }` / `CloseFile` are appended, `ViVfsFileHandle` is service-local, and the handle path stays attested-message-only with no fast arm, async, grant, or raw-pointer lifetime. Validation is limited to API tests, existing test-hooks QEMU markers, and RV64/AArch64/x86_64 compile-only builds; no hardware claim; global coverage debt remains.
+1. Hoàn tất G1: làm một vertical slice GPIO/I²C sensor → Cell → output trên RPi3.
+2. Hoặc xử lý nợ kỹ thuật extern "Rust" viết tay có nguy cơ lệch chữ ký.
+3. Tránh code phình theo số board, Cellos nên hướng đến cấu trúc:
+```
+hal/arch/aarch64
+hal/arch/riscv64
 
-Lane hypervisor bất định — **đã xong** (PR #16). Nguyên nhân: `vt_irq_el2_lower`
-(`hal/arch/arm/src/aarch64/el2.rs`) dùng chung thân với `vt_irq_el2_cur` và không đọc
-`TPIDR_EL2`, nên tick timer rơi đúng lúc vCPU đang chạy bị xử lý ngay tại chỗ —
-`vi_timer_tick` → `yield_cpu` → context switch, đưa một Cell lên CPU ở EL0 trong khi
-`HCR_EL2.VM` còn bật (Stage-2 sống với VTTBR_EL2 của guest) và bank sysreg EL1 vẫn giữ
-`TTBR0_EL1`/`TCR_EL1`/`SCTLR_EL1`/`VBAR_EL1` của guest. Bank host chỉ được restore ở
-`run_vcpu_impl` bước 4, đường đó không bao giờ tới, nên mọi lần fetch lệnh của Cell abort với
-EC 0x20 / ISS 0x6. `HCR_EL2.IMO` route IRQ lên EL2 và IRQ đã route lên EL2 thì `PSTATE.I` của
-EL thấp hơn không mask được, nên guest chạy với DAIF mask hết vẫn không ngăn được.
+hal/soc/bcm27xx
+hal/soc/jh7110
+hal/soc/rk3588
 
-Hai kết luận trong bản ghi cũ ở đây đều **sai**, giữ lại để không ai lặp lại: chữ ký
-`[fault] Cell 2 terminated: scause=0x82000006` không phải lỗi VFS (Cell 2 chỉ tình cờ là cell
-bị schedule kế tiếp), và badge đỏ của main **có** phản ánh sức khoẻ code — nó chỉ ra một lỗi
-kernel thật. Tính bất định là do cần tick rơi đúng cửa sổ guest chạy *và* scheduler chọn đúng
-một Cell.
+boards/rpi3
+boards/visionfive2
+boards/rock5
+```
+Mỗi board chỉ nên chứa:
+- Board identity và compatible strings.
+- Boot/firmware contract.
+- Pinmux và PHY wiring.
+- DTB/fallback memory map.
+- Danh sách driver SoC cần bật.
 
-Sửa: vector IRQ lower-EL giờ check `TPIDR_EL2` như vector sync, thoát guest qua `vt_vcpu_trap`
-rồi báo `ViVmExit::Preempted`. Lane xanh 4/4 lần sau khi sửa, không lần nào còn `[fault] Cell`
-hay `panic-in-cell`. Fault phụ EC 0x22 (`elr=0x4153C0E9`, PC lệch 4 byte ở EL2) cũng biến mất
-cùng lúc, đúng như dự đoán rằng nó là hệ quả của cùng cửa sổ state nửa vời — không phải bug
-riêng. Chi tiết: `.agents/reports/debug-260729-1401-el2-irq-guest-preemption.md`.
+Driver UART, SDHCI, DesignWare I²C/SPI, GIC/PLIC và PCIe không được sao chép thành phiên bản riêng cho từng board.
 
-Việc phái sinh từ lần điều tra đó cũng đã xong: dòng fault từng in `ESR_EL2` dưới tên RISC-V
-`scause` — chính chỗ làm bản ghi cũ ở trên giải mã sai — nay dùng tên theo vai trò
-(`cause`/`pc`/`addr`) và có bảng đối chiếu từng kiến trúc trong rustdoc của
-`terminate_current_cell_on_fault`. Sửa kèm: `hal/arch/riscv/src/rv32/trap.rs` khai báo
-`vi_terminate_on_fault` thiếu một tham số so với định nghĩa, nên in ra rác làm địa chỉ fault.
-
-**Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
+4. **Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
 việc CI không build rv32. Sai: đã thử khai báo thiếu tham số trong `rv64/trap.rs` (target CI
 build mọi lần push) và `cargo check -p cellos-kernel` vẫn xanh. rustc **không** đối chiếu khai
 báo `extern "Rust"` với định nghĩa `#[no_mangle]` ở crate khác — `clashing_extern_declarations`
@@ -43,8 +37,7 @@ vì mỗi kiến trúc tự khai báo lại.
 
 Ghi kèm để ai định thêm lane rv32 biết trước: kernel **không** build được cho
 `riscv32imac-unknown-none-elf` — hai lỗi `E0308` có sẵn (`task/syscall.rs:3540`,
-`task.rs:483`, đều là `u32` vs `usize` do trap frame rv32 dùng `u32`). `hal-riscv` thì compile
-sạch.
+`task.rs:483`, đều là `u32` vs `usize` do trap frame rv32 dùng `u32`). `hal-riscv` thì compile sạch.
 
 Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.
 AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
@@ -99,4 +92,4 @@ UNVERIFIED — máy không có QEMU/cross toolchain". Tiền đề đó **sai**:
 tìm thấy `core` cho `x86_64-pc-windows-msvc` trước khi kịp khởi động QEMU.
 
 ## BUG
-`qemu_exit::AArch64Semihosting`
+1. `qemu_exit::AArch64Semihosting`

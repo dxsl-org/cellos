@@ -22,48 +22,6 @@ Manual QEMU command equivalent:
 qemu-system-aarch64 -machine raspi3b -m 1G -display none -serial null -serial stdio -kernel target/aarch64-unknown-none-softfloat/release/cellos-kernel -s -S
 ```
 
-### x86_64 BIOS/UEFI smoke and serial capture
-
-Build the kernel, then create the repository-relative BIOS+UEFI El Torito ISO:
-
-```bash
-cargo build --release -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc
-bash scripts/x86/make-iso-ci.sh build/vicell-x86.iso
-BOOT_WINDOW=90 bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso
-```
-
-On Windows, the bounded UEFI/OVMF smoke is:
-
-```powershell
-pwsh -File build/boot-x86-uefi.ps1 -Iso build/vicell-x86.iso -Ovmf C:\path\to\OVMF_CODE.fd
-```
-
-The real-hardware diagnostic console is a PC-compatible 16550 COM1 at I/O
-`0x3F8`, IRQ4, configured as `115200 8N1`, no flow control. Use a real RS-232
-adapter for a DB9 port; a 3.3 V TTL adapter is not electrically compatible.
-
-The x86 hardware gate order is strict:
-
-1. Firmware loads Cellos and the boot banner appears.
-2. COM1 transmit and polled receive work without ACPI; keep this gate open
-   until IRQ4 receive is confirmed after MADT supplies the route.
-3. RSDP and checksummed MADT, MCFG, and HPET tables are reported. MADT is a
-   dependency of the pending COM1 IRQ4 witness, not permission to skip it.
-4. HPET and LAPIC timer initialization succeeds.
-5. x86 SMP startup and cross-core scheduling succeeds.
-6. PCIe topology is enumerated from MCFG.
-7. NVMe is discovered and performs bounded I/O.
-
-Ethernet is not an early bring-up gate. The e1000 Driver Cell accepts only
-Intel `8086:100e`; an `e1000e` endpoint can exercise the negative gate with
-`X86_NIC_MODEL=e1000e bash scripts/qemu-x86_64-test.sh build/vicell-x86.iso`.
-
-Evidence status as of 2026-08-17: QEMU q35 BIOS and OVMF/UEFI reached the
-scheduler; ACPI-derived timer and bus-0 ECAM initialization passed; an emulated
-`8086:10d3` e1000e endpoint was rejected. Dell OptiPlex, N100/N5105, physical
-COM1 IRQ4, x86 SMP, PCIe behind bridges, NVMe, and DMAR/VT-d remain
-hardware-gated; this document does not claim they have run on physical hardware.
-
 ## 3. Hardware Debugging via JTAG (Raspberry Pi 3)
 To debug directly on physical hardware, you configure the board to expose internal JTAG test access port (TAP) signals.
 
@@ -111,3 +69,44 @@ Different target boards in the Cellos roadmap require distinct hardware debug in
 | **G2** | **Generic x86_64 PC**<br>*(Intel / AMD PC)* | x86_64 | **USB RS-232/UART** | N/A *(Intel DCI OpenIPC or QEMU GDB stub)* | `i386:x86-64` |
 | **G3** | **Radxa ROCK 5 / OPi 5+**<br>*(Rockchip RK3588)* | ARM64 | **ARM SWD / JTAG**: Dedicated SWD header or muxed SDMMC pins. | `target/rk3588.cfg` | `aarch64` |
 | **G3** | **SiFive P870 / X390**<br>*(Next-Gen RISC-V)* | RV64 | **SiFive Debug TAP**: Standard 10-pin RISC-V Debug connector. | `target/sifive_p870.cfg` | `riscv64` |
+
+## 6. Board Support Policy
+
+Cellos should admit new hardware by architecture first, then by SoC family, then by a single reference board. Do not try to support every market SBC with a unique board port.
+
+The rule of thumb is:
+
+- architecture gives the shared execution model;
+- SoC family gives the shared low-level IP blocks, clocks, resets, interrupt controller, timers, and storage/network controllers;
+- the board only captures wiring, power, boot straps, and peripheral placement.
+
+Device Tree helps describe topology and MMIO addresses, but it does not replace drivers. If two boards use the same SoC, most of the work should stay in the SoC layer and the DTB, not in duplicated per-board driver code.
+
+Recommended progression:
+
+| Priority | Board / SoC | Why it belongs |
+| :--- | :--- | :--- |
+| Current / near-term | Raspberry Pi 3 / BCM2837 | Existing ARM64 regression target; keep it as the small, known-good hardware baseline. |
+| Current / near-term | StarFive VisionFive 2 / JH7110 | RV64 G1 board already wired into the repo: `board-vf2`, JH7110 MMIO fallback, JH7110 SDHCI, and `scripts/vf2-flash.sh` all show active support. Prefer the 4 GB board, ideally revision 1.3B. |
+| Next / G1 sub-track | ESP32-C6 DevKitC-1 | First real Cellos-Nano bring-up target: official, inexpensive MCU-class RV32 hardware with a high-performance RV32 core up to 160 MHz, plus LP core, Wi-Fi 6, BLE, and IEEE 802.15.4. The existing G1 roadmap already names ESP32-C3/C6 as the RV32 Nano sub-track in `docs/project-roadmap.md`. |
+| Later / G1 sub-track | ESP32-P4 + ESP32-C6 board/module | Advanced Cellos-Nano target for HMI or robot-controller work. ESP32-P4 brings dual HP RV32 cores up to 400 MHz plus an LP RV32 core; the C6 acts as the managed wireless coprocessor, typically over SDIO with `esp-hosted`. M3-class modules commonly advertise 32 MB PSRAM and 16 MB flash, but treat `JC-ESP32P4-M3-DEV` or an equivalent as revision-sensitive until memory population, schematic, board revision, P4↔C6 interconnect, and C6 firmware evidence are verified. |
+| Later priority | Raspberry Pi 5 / BCM2712 | A modern, long-lived ARM64 reference once G1 is stable; useful for validating a newer ARM64 platform without changing the support model. |
+| G2 edge AI | One RK3588 board | Pick one reference board only, such as Radxa ROCK 5 or Orange Pi 5 Plus, and share the SoC drivers. Do not duplicate the same RK3588 work per board. |
+| Conditional | ASUS Tinker Board / RK3288 | Original Tinker Board is ARM32 and not a priority for the current roadmap. It only makes sense if the project deliberately needs ARM32 coverage. |
+| Conditional | ASUS Tinker V / Renesas RZ/Five | RV64, but only worth adding for a concrete industrial target such as CAN, RS232, or dual-LAN validation. |
+| Conditional | Newer ASUS/Rockchip Tinker-class boards | Add only when the SoC matches the roadmap or a real customer need; novelty alone is not enough. |
+| G2/server | Milk-V Pioneer / SG2042 | Keep this for server-scale or large-SMP work. It is not the first RV64 board to qualify. |
+
+Admission criteria before promoting a board:
+
+- The board adds architectural value, not just a newer sticker or a faster benchmark.
+- Firmware, boot chain, and upstream documentation are sufficient to bootstrap and debug it.
+- The board has a realistic lifecycle and availability window.
+- The SoC exposes reusable IP blocks or drivers that help more than one board.
+- The board maps to an actual milestone or customer need.
+
+Minimum qualification gates should be practical and explicit: boot, UART, timer, MMU where applicable, SMP where relevant, storage, network, GPIO, I2C, and reboot. If a board cannot clear those gates, it is not ready for first-class support.
+
+ESP32-C6 and ESP32-P4 belong in the Cellos-Nano path, not the RV64 SBC path. The current RV32 code is still QEMU `virt` / OpenSBI / S-mode oriented in `hal/arch/riscv/src/rv32.rs`, while Espressif bring-up will need direct MCU M-mode boot, SoC-specific interrupt/timer/boot/flash/PSRAM support, and PMP/APM-style isolation. That is why the C6 comes first as the simpler official devkit, and the P4+C6 board comes later after the C6 port proves the Nano baseline. `esp-hal` lowers peripheral bring-up risk, but it does not remove the need for a separate SoC port. For memory layout work, keep the RV32 Nano path aligned with the existing paging model in `kernel/src/memory/paging.rs`.
+
+The existing repository already points in this direction: `kernel/Cargo.toml` carries both `board-rpi3` and `board-vf2` features, `kernel/src/boot.rs` has a VF2 memory-map fallback, `kernel/src/task/drivers/mmc.rs` carries the JH7110 SDHCI path, `scripts/vf2-flash.sh` automates VF2 image creation, and `docs/specs/04-hardware.md` already treats VisionFive 2 as the RV64 G1 real-board target.
