@@ -1,47 +1,71 @@
 #!/usr/bin/env pwsh
-# Quick UEFI boot test — captures serial output for 15s then kills QEMU
-$ovmf   = "D:\ViCell\build\ovmf-x86.fd"
-$iso    = "D:\ViCell\build\vicell-x86.iso"
-$serial = "D:\ViCell\build\serial-x86.log"
+# Bounded QEMU/OVMF smoke for the repo-relative Cellos x86_64 ISO.
 
-# Clear previous log
-if (Test-Path $serial) { Remove-Item $serial }
+param(
+    [string]$Iso,
+    [string]$Ovmf,
+    [int]$TimeoutSeconds = 40
+)
 
-Write-Host "Booting ViCell x86_64 (UEFI) — serial log: $serial"
-Write-Host "Press Ctrl+C to stop early."
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-$p = Start-Process -FilePath "C:\Program Files\qemu\qemu-system-x86_64.exe" -ArgumentList @(
-    "-machine",  "q35",
-    "-cpu",      "qemu64",
-    "-m",        "256M",
-    "-drive",    "if=pflash,format=raw,readonly=on,file=$ovmf",
-    "-cdrom",    $iso,
-    "-boot",     "d",
-    "-serial",   "file:$serial",
-    "-display",  "none",
-    "-no-reboot"
-) -PassThru -NoNewWindow
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+if (-not $Iso) { $Iso = Join-Path $repoRoot 'build\vicell-x86.iso' }
+if (-not [IO.Path]::IsPathRooted($Iso)) { $Iso = Join-Path $repoRoot $Iso }
 
-# Wait up to 40 seconds for boot (includes Limine menu + kernel boot)
-$timeout = 40
-for ($i = 0; $i -lt $timeout; $i++) {
-    Start-Sleep 1
-    if (Test-Path $serial) {
-        $content = Get-Content $serial -Raw -ErrorAction SilentlyContinue
-        if ($content -match "Scheduler initialized|PANIC|page fault|triple fault") {
-            Write-Host "`n=== Early exit at ${i}s ==="
-            break
-        }
+if (-not $Ovmf -and $env:CELLOS_OVMF_CODE) { $Ovmf = $env:CELLOS_OVMF_CODE }
+if (-not $Ovmf) {
+    $Ovmf = @(
+        (Join-Path $repoRoot 'build\ovmf-x86.fd'),
+        'C:\Program Files\qemu\share\edk2-x86_64-code.fd',
+        'C:\Program Files\qemu\share\edk2-x86_64-secure-code.fd'
+    ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+}
+
+$qemu = if ($env:CELLOS_QEMU_X86) {
+    $env:CELLOS_QEMU_X86
+} elseif (Get-Command qemu-system-x86_64 -ErrorAction SilentlyContinue) {
+    (Get-Command qemu-system-x86_64).Source
+} elseif (Test-Path -LiteralPath 'C:\Program Files\qemu\qemu-system-x86_64.exe') {
+    'C:\Program Files\qemu\qemu-system-x86_64.exe'
+}
+
+if (-not $qemu) { throw 'qemu-system-x86_64 not found; set CELLOS_QEMU_X86.' }
+if (-not (Test-Path -LiteralPath $Iso)) { throw "Cellos ISO not found: $Iso" }
+if (-not $Ovmf -or -not (Test-Path -LiteralPath $Ovmf)) {
+    throw 'OVMF code image not found; pass -Ovmf or set CELLOS_OVMF_CODE.'
+}
+
+$serial = Join-Path $repoRoot 'build\serial-x86-uefi.log'
+if (Test-Path -LiteralPath $serial) { Clear-Content -LiteralPath $serial }
+
+Write-Host "Booting Cellos x86_64 UEFI smoke; serial log: $serial"
+$process = Start-Process -FilePath $qemu -ArgumentList @(
+    '-machine', 'q35',
+    '-cpu', 'qemu64,+pdpe1gb',
+    '-m', '256M',
+    '-drive', "if=pflash,format=raw,readonly=on,file=$Ovmf",
+    '-cdrom', $Iso,
+    '-boot', 'd',
+    '-serial', "file:$serial",
+    '-display', 'none',
+    '-no-reboot', '-no-shutdown'
+) -PassThru -WindowStyle Hidden
+
+$success = $false
+try {
+    for ($elapsed = 0; $elapsed -lt $TimeoutSeconds; $elapsed++) {
+        Start-Sleep -Seconds 1
+        if (-not (Test-Path -LiteralPath $serial)) { continue }
+        $content = Get-Content -LiteralPath $serial -Raw -ErrorAction SilentlyContinue
+        if ($content -match 'Scheduler initialized') { $success = $true; break }
+        if ($content -match 'PANIC|triple fault') { break }
     }
+} finally {
+    if (-not $process.HasExited) { $process.Kill() }
 }
 
-# Kill QEMU
-if (!$p.HasExited) { $p.Kill() }
-
-# Show full log
-if (Test-Path $serial) {
-    Write-Host "`n=== Full serial log ==="
-    Get-Content $serial
-} else {
-    Write-Host "No serial output captured."
-}
+if (Test-Path -LiteralPath $serial) { Get-Content -LiteralPath $serial }
+if (-not $success) { throw "UEFI smoke did not reach Scheduler initialized within ${TimeoutSeconds}s." }
+Write-Host 'UEFI_QEMU_READY'
