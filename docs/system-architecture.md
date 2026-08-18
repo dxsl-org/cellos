@@ -79,6 +79,8 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
   those facts without changing page permissions, register offsets, public IRQ
   contracts, timer policy, pinmux selection, diagnostic output, or shared
   mechanisms.
+- RPi3 kernel diagnostics reuse ARM HAL's FIFO-safe mini-UART byte writer; the
+  kernel does not maintain a second LSR/IO polling and write implementation.
 
 ---
 

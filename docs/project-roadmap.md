@@ -70,6 +70,12 @@
 > diagnostic output are unchanged. Baseline and final 11-gate matrices plus
 > review passed; RPi3 remains compile-only.
 
+> **2026-08-18 RPi3 UART-debug reuse update:** the kernel TrapFrame diagnostic
+> now uses ARM HAL's existing FIFO-safe mini-UART byte writer instead of
+> duplicating LSR/IO addresses, TX readiness polling, and MMIO writes. Byte
+> formatting and task setup remain unchanged. Baseline/final 11-gate matrices,
+> the scoped guard, and review passed; RPi3 remains compile-only.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context

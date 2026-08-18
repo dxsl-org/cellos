@@ -2,6 +2,17 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] RPi3 task diagnostics reuse the mini-UART driver
+
+The RPi3 TrapFrame diagnostic in `kernel/src/task.rs` now emits bytes through
+ARM HAL's FIFO-safe `uart_bcm_mini::probe_put` helper. Its private copies of the
+mini-UART LSR/IO addresses, TX-ready polling, and byte-write mechanism are gone.
+
+The AArch64/RPi3 cfg gate, hexadecimal order, labels, newlines, volatile stack
+read, and task setup order are unchanged. Baseline and final 11-gate matrices,
+the scoped duplication guard, and review passed; QEMU reached the RV64 FAT16
+boot witness. RPi3 remains compile-only for this slice.
+
 ## [2026-08-18] BCM2837 IRQ consumers finish topology migration
 
 The remaining scoped BCM IRQ consumers now derive GPIO pending-bank masks,
