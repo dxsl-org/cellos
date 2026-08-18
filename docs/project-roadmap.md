@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)  
 **Current Version**: 0.2.1-dev (Mycelium Era)  
 **Current Phase**: Phase 1 - Core Stability (Phase 23 complete) · **Active Stage**: G1 (Robot & Embedded)
-**Last Updated**: 2026-08-17 (generic completion contract verified; WaitCompletion remains additive with `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, and the TIMER userspace proof is deferred to Phase05; RV64 external IRQ delivery and scoped SUM ACK are now verified, the NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; Phase 00 public syscall landing is complete: `PauseService` 422 is SupervisorCap-gated with allowlist bit 49, `HotSwap` 400 is retired/reserved in Phase 04, `SpawnReplacement` 421 is additive with allowlist bit 57, `SupervisorCap` gates the replacement path via exact launch-profile + manifest/policy/boot-ceiling intersection, the kernel consumes one live frozen-task ceiling under `SCHEDULER -> SWAP_CEILINGS` and clears it on resume/all scheduler exits, and refreshed-image QEMU `supervisor_hotswap_preserves_demo_state` passed; Phase 01 supervisory atomic cutover is complete: `PauseService` now pairs with `Frozen` bounded FIFO, source→replacement kernel binding, compare-and-commit pause/commit/rollback, plain resume invalidation of stale bindings, supervisor barrier-then-kill-old order, runtime cached-sender FIFO proof plus old-TID rejection, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 02 supervisory hotswap closure is complete: the hotswap CLI is service-only, `/bin/hotswap` remains shell-only and capability-free, the supervisor rejects unauthorized senders with `0xFD` before parsing, and the QEMU hotswap-smoke suite now passes 15/15 with zero skips; Phase 03 lifecycle cleanup is complete: the approved narrow bridge is exact per-request VFS grant-copy lease plus current-caller-cell-only death watch, with `cargo fmt --all --check`, `cargo test -p types -p api --target x86_64-unknown-linux-gnu`, `bash scripts/build-test-hooks-ci.sh`, RV64 QEMU `vfs_lifetime_selftest_passes` 1/1, RV64 QEMU `riscv64_vfs_quota_all_pass` 1/1, RV64/AArch64/x86_64 production kernel builds, and standard/focused security review PASS; AArch64 test-hooks runtime remains unclaimed because the pre-existing `qemu_exit::AArch64Semihosting` compile issue is still host-gated; Phase 04 kernel cleanup is complete: legacy kernel orchestrator and direct wrapper are retired, API tests passed 75/75, release-kernel builds passed for riscv64/aarch64/x86_64, `gen_disk.ps1` rebuilt fresh images and refreshed `kernel/src/embedded/init`, hotswap-smoke passed 15/15, launch-profile passed 1/1, and accepted followups remain x86/AArch64 fresh boot packaging plus host API coverage 33.26 percent line / 0 percent branch; Phase07 post-shim stack sizing is now closed with six measured paths at 16 usable pages plus two guards, unknown paths remain 64, and x86 VirtIO-MMIO enumeration was fixed during the boot gate; 🆕 **Stage G5 overlay added** — Virtualization Platform: one VMM core + two profiles (Lite=speed/CoW-golden/snapshot · Wide=compat=today's Tier 3b); rust-vmm→Firecracker/Cloud-Hypervisor precedent (one core, feature-flagged, NOT two codebases); SAS/LBI leverages the kernel owning frame-allocator+Stage2Table directly — CoW-golden clone + reset-to-golden (O(dirty pages)), zero-copy Grant image load, per-cell IOMMU guest DMA confinement, device-backends-as-capability-scoped-cells; NEW risk logged: golden frame set is a shared trust anchor writable in kernel identity map → poisoning mitigation required; cold-boot ~150ms parity plausible on real HW, sub-10ms needs guest snapshot/restore; positioned as dual-purpose (first-party fleet instant-restart + agent-sandbox latency), NOT an untrusted-hosting moat. Research/design only, post-G4. · Earlier same day: **Phase 04 launch-edge deprivilege** — exact kernel launch profiles now gate shell/init/hypha/tool-spawn/supervisor/pinned edges; shell carries no ambient SpawnCap/gpio/uart, `SpawnFromMem` has no active profile, and the launch-profile integration proof plus boot selftest pass; init respawn proof is deferred because that path was not directly exercised. · Earlier same day: **Stage G4 overlay added** — full Rust std for Tier 1 apps via custom rustc target `x86_64-unknown-cellos` + pure-Rust PAL (Hermit model); async ecosystem via `polling`/`mio` backends over IPC readiness (no kernel epoll — Kernel Boundary Law); Route B std-over-mlibc REJECTED (C into Tier 1 TCB); `std::os::unix` deliberately absent → POSIX crates fail at compile → Tier 3 VM (doctrine firewall). Plan: .agents/260722-0917-g4-full-std-tier1/. · Earlier 2026-06-23: §L "Transport security by tier" locked after Noise red-team: native Cell↔Cell uses Noise at EVERY stage (KKpsk0 p2p + XChaCha20 gossip + fail-closed RNG gate); G1→G2 is an IDENTITY upgrade (K1 PSK → K3 per-node + DICE via KMS Cell), NOT a transport swap — native Tier-1 Cells never speak mTLS; mTLS ONLY at the Tier-3/interop boundary, sourced from the Tier 3b Linux VM or external LB, never X.509 PKI in kernel. 10-phase plan (P00 spikes GATE) at .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Robot swarm transport switched to Noise_KKpsk/NNpsk — net-broker + ClusterAuth updated accordingly; TLS server G2/parked plan added at §C. · Earlier: Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
+**Last Updated**: 2026-08-18 (generic completion contract verified; WaitCompletion remains additive with `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, and the TIMER userspace proof is deferred to Phase05; RV64 external IRQ delivery and scoped SUM ACK are now verified, the NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; Phase 00 public syscall landing is complete: `PauseService` 422 is SupervisorCap-gated with allowlist bit 49, `HotSwap` 400 is retired/reserved in Phase 04, `SpawnReplacement` 421 is additive with allowlist bit 57, `SupervisorCap` gates the replacement path via exact launch-profile + manifest/policy/boot-ceiling intersection, the kernel consumes one live frozen-task ceiling under `SCHEDULER -> SWAP_CEILINGS` and clears it on resume/all scheduler exits, and refreshed-image QEMU `supervisor_hotswap_preserves_demo_state` passed; Phase 01 supervisory atomic cutover is complete: `PauseService` now pairs with `Frozen` bounded FIFO, source→replacement kernel binding, compare-and-commit pause/commit/rollback, plain resume invalidation of stale bindings, supervisor barrier-then-kill-old order, runtime cached-sender FIFO proof plus old-TID rejection, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 02 supervisory hotswap closure is complete: the hotswap CLI is service-only, `/bin/hotswap` remains shell-only and capability-free, the supervisor rejects unauthorized senders with `0xFD` before parsing, and the QEMU hotswap-smoke suite now passes 15/15 with zero skips; Phase 03 lifecycle cleanup is complete: the approved narrow bridge is exact per-request VFS grant-copy lease plus current-caller-cell-only death watch, with `cargo fmt --all --check`, `cargo test -p types -p api --target x86_64-unknown-linux-gnu`, `bash scripts/build-test-hooks-ci.sh`, RV64 QEMU `vfs_lifetime_selftest_passes` 1/1, RV64 QEMU `riscv64_vfs_quota_all_pass` 1/1, RV64/AArch64/x86_64 production kernel builds, and standard/focused security review PASS; AArch64 test-hooks runtime remains unclaimed because the pre-existing `qemu_exit::AArch64Semihosting` compile issue is still host-gated; Phase 04 kernel cleanup is complete: legacy kernel orchestrator and direct wrapper are retired, API tests passed 75/75, release-kernel builds passed for riscv64/aarch64/x86_64, `gen_disk.ps1` rebuilt fresh images and refreshed `kernel/src/embedded/init`, hotswap-smoke passed 15/15, launch-profile passed 1/1, and accepted followups remain x86/AArch64 fresh boot packaging plus host API coverage 33.26 percent line / 0 percent branch; Phase07 post-shim stack sizing is now closed with six measured paths at 16 usable pages plus two guards, unknown paths remain 64, and x86 VirtIO-MMIO enumeration was fixed during the boot gate; 🆕 **Stage G5 overlay added** — Virtualization Platform: one VMM core + two profiles (Lite=speed/CoW-golden/snapshot · Wide=compat=today's Tier 3b); rust-vmm→Firecracker/Cloud-Hypervisor precedent (one core, feature-flagged, NOT two codebases); SAS/LBI leverages the kernel owning frame-allocator+Stage2Table directly — CoW-golden clone + reset-to-golden (O(dirty pages)), zero-copy Grant image load, per-cell IOMMU guest DMA confinement, device-backends-as-capability-scoped-cells; NEW risk logged: golden frame set is a shared trust anchor writable in kernel identity map → poisoning mitigation required; cold-boot ~150ms parity plausible on real HW, sub-10ms needs guest snapshot/restore; positioned as dual-purpose (first-party fleet instant-restart + agent-sandbox latency), NOT an untrusted-hosting moat. Research/design only, post-G4. · Earlier same day: **Phase 04 launch-edge deprivilege** — exact kernel launch profiles now gate shell/init/hypha/tool-spawn/supervisor/pinned edges; shell carries no ambient SpawnCap/gpio/uart, `SpawnFromMem` has no active profile, and the launch-profile integration proof plus boot selftest pass; init respawn proof is deferred because that path was not directly exercised. · Earlier same day: **Stage G4 overlay added** — full Rust std for Tier 1 apps via custom rustc target `x86_64-unknown-cellos` + pure-Rust PAL (Hermit model); async ecosystem via `polling`/`mio` backends over IPC readiness (no kernel epoll — Kernel Boundary Law); Route B std-over-mlibc REJECTED (C into Tier 1 TCB); `std::os::unix` deliberately absent → POSIX crates fail at compile → Tier 3 VM (doctrine firewall). Plan: .agents/260722-0917-g4-full-std-tier1/. · Earlier 2026-06-23: §L "Transport security by tier" locked after Noise red-team: native Cell↔Cell uses Noise at EVERY stage (KKpsk0 p2p + XChaCha20 gossip + fail-closed RNG gate); G1→G2 is an IDENTITY upgrade (K1 PSK → K3 per-node + DICE via KMS Cell), NOT a transport swap — native Tier-1 Cells never speak mTLS; mTLS ONLY at the Tier-3/interop boundary, sourced from the Tier 3b Linux VM or external LB, never X.509 PKI in kernel. 10-phase plan (P00 spikes GATE) at .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Robot swarm transport switched to Noise_KKpsk/NNpsk — net-broker + ClusterAuth updated accordingly; TLS server G2/parked plan added at §C. · Earlier: Distributed Cells — Swarm & Cluster designed: new §L. Decision = split into 2 problems sharing one foundation — G1 robot swarm (net-broker + 3 cluster modes + RemoteServiceProxy + merge/split federation + task-claiming gossip + degrade-to-standalone) = GO, sequence first; G2/G3 server cluster = separate, defer, lean on external k8s/LB (don't clone CNCF); Orchestrator re-specified STOP→split into local-only kernel coordinator + unprivileged cluster-agent Cell. Research in .agents/260623-0907-net-broker-robot-swarm/. · Earlier: Cell binary signing + M4.1 hot migration complete — Ed25519 verify-at-spawn gate, 5-step hotswap protocol, TaskState::Frozen, ViStateTransfer, 11/11 hotswap-smoke tests pass; zero-downtime deployment with cryptographic origin proof now available for G2/G3. MAX_CELL_ENTRIES bumped 32→64. · Earlier 2026-06-22: Per-Cell DMA isolation IOMMU overhaul complete — 3-level DDT + VT-d per-domain + sys_grant_dma(233); Thunderclap gap CLOSED. Net service TLS transport now detects connection close (no 30-second hangs). See docs/research/research-hardware-isolation.md + research-cell-security-permissions.md)
 
 > **2026-08-09 phase-note:** `.agents/260808-1544-wx-cross-hart-tlb-shootdown/phase-04-rv64-physical-hart-mapping-hsm-startup.md` is completed; `.agents/260808-1544-wx-cross-hart-tlb-shootdown/phase-03-evidence-and-closure-gates.md` is blocked while real RV64 hardware is host-gated and the AArch64/x86_64 hardware/runtime gates stay open.
 
@@ -23,6 +23,105 @@
 > closure-amendment package. Supervisory migration is complete.
 
 > **2026-08-08 supervisory migration update:** Phase 03 snapshot-trigger authority is complete; shell snapshot routes through Supervisor IPC, `Snapshot=420` is SupervisorCap-gated, QEMU proof remains NullBlock/unavailable on tested targets, and Phase 04 kernel cleanup is complete. Accepted followups are host-gated x86/AArch64 fresh boot lanes and host API coverage.
+
+> **2026-08-17 board-split update:** root `boards/` landed as a no_std descriptor crate and the RV64 QEMU boot path now consumes it for audited fallback data. Shared drivers remain in `cells/drivers/`; `hal/soc/riscv` now owns the SoC profile slice, while AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred. Verified gates for this slice were `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel`.
+
+> **2026-08-17 RISC-V SoC-profile update:** `hal/soc/riscv` is now the data-only
+> owner for RV64 SoC compatible lists and access policies. QEMU virt and
+> JH7110/VF2 keep MMIO discovery; SG2042/Pioneer stays fail-closed with SBI
+> DBCN-only console, no RTC MMIO, and no VirtIO-MMIO slots. Shared drivers remain
+> in `cells/drivers/`, board descriptors remain in root `boards/`, and
+> AArch64/RPi3/SDHCI extraction plus feature-collapse remain deferred. Verification
+> passed the hal-soc and board unit tests, RV64/AArch64 feature checks, RV64
+> release build, and QEMU release-kernel boot.
+
+> **2026-08-18 board-descriptor update:** root `boards/` now includes QEMU RV64
+> and Raspberry Pi 3 Model B descriptors. `BoardDescriptor` keeps UART mandatory
+> and makes PLIC/CLINT/RTC optional, the RPi3 fallback map ends exactly at
+> `0x3F000000`, and the kernel consumes board data through
+> `kernel/src/{board.rs,boot.rs,platform.rs}`. `hal/soc/bcm27xx` still owns the
+> BCM2837 facts; shared UART/SDHCI/GIC/PLIC/PCIe drivers remain single-copy.
+> RPi3 physical boot stays hardware-gated; this slice is compile-only.
+
+> **2026-08-18 BCM27xx MMIO-policy update:** `hal/soc/bcm27xx` now owns the
+> exact peripheral/local-controller spans and GPIO/AUX grant widths consumed by
+> RPi3 paging, the resource registry, and GPIO IRQ owner lookup. Existing page
+> permissions and allowlist widths remain unchanged; no IRQ/timer mechanism or
+> new MMIO authority moved. The 9-gate matrix passed through RV64 release and
+> QEMU FAT16 boot; this slice adds no physical-RPi3 runtime claim.
+
+> **2026-08-18 BCM27xx arch-base update:** RPi3-specific ARM HAL modules now
+> source mini-UART, GPIO, system-timer, legacy-IRQ, and local-controller bases
+> from `hal/soc/bcm27xx`. The optional dependency is activated only by
+> `board-rpi3`; register offsets, IRQ numbers, timer periods, and mechanisms
+> remain in `hal/arch/arm`. The 11-gate matrix passed through RV64 release and
+> QEMU FAT16 boot; RPi3 remains compile-only for this slice.
+
+> **2026-08-18 BCM27xx IRQ-topology update:** `hal/soc/bcm27xx` now owns
+> BCM2837 legacy IRQ numbers and BCM2836 Core0 source masks. ARM HAL public
+> constants remain compatible aliases; register offsets, C1 status/ack, the
+> 10 ms timer period, and interrupt mechanisms remain in `hal/arch/arm`. The
+> 11-gate matrix and review passed; RPi3 remains compile-only for this slice.
+
+> **2026-08-18 BCM27xx IRQ-consumer update:** GPIO pending-bank masks, RPi3
+> CNTP routing, and the kernel IRQ diagnostic now consume the centralized
+> BCM2837 topology instead of repeating controller addresses or source bits.
+> Register offsets, public constants, C1 status/ack, the 10 ms policy, and
+> diagnostic output are unchanged. Baseline and final 11-gate matrices plus
+> review passed; RPi3 remains compile-only.
+
+> **2026-08-18 RPi3 UART-debug reuse update:** the kernel TrapFrame diagnostic
+> now uses ARM HAL's existing FIFO-safe mini-UART byte writer instead of
+> duplicating LSR/IO addresses, TX readiness polling, and MMIO writes. Byte
+> formatting and task setup remain unchanged. Baseline/final 11-gate matrices,
+> the scoped guard, and review passed; RPi3 remains compile-only.
+
+> **2026-08-18 HAL-split catalog/RV64 update:** root `boards/` now has typed
+> descriptors for all seven current selections. RV64 chooses one descriptor/SoC
+> pair, boot fallback memory and platform policy consume it, and VF2/Pioneer
+> require a valid firmware DTB. Board/SoC tests, three RV64 compile lanes, the
+> release build, and QEMU FAT16 boot passed; physical boards remain compile-only.
+
+> **2026-08-18 ARM/SDHCI HAL-split update:** `hal/soc/arm-virt` now owns QEMU
+> AArch64 platform facts, `hal/soc/bcm27xx` covers BCM2711, and the shared SDHCI
+> implementation consumes runtime BCM2837/BCM2711/JH7110 access policy. RPi4
+> cell mappings are limited to disjoint GPIO/UART/SDHCI pages, with GIC
+> kernel-only and PCIe unadvertised. The 15-lane compile matrix and RV64 QEMU
+> witness passed. AArch64 QEMU reached `ViCell >`; the final closure slice later
+> corrected the stale test marker. Physical boards remain compile-only.
+
+> **2026-08-18 HAL-split closure:** the seven-board catalog now satisfies the
+> board-only completion contract: no SoC MMIO/IRQ fields remain in descriptors,
+> RV64 fallback MMIO lives in validated SoC profiles, enabled-driver data gates
+> shared initialization, required-DTB nodes fail closed, and incompatible board
+> features fail at compile time. CI owns the boundary and six-board matrix.
+> Host/compile/review gates, RV64 QEMU FAT16 boot, and AArch64 QEMU `ViCell >`
+> boot passed. Only physical VF2/Pioneer/RPi3/RPi4 runtime evidence remains
+> hardware-gated; it is not unfinished code separation.
+
+> **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
+> the active physical-hart context from the selected SoC profile and the device
+> IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context
+> policy data, and the shared PLIC
+> driver no longer hardcodes QEMU `context 1` or fixed IRQ enable ranges.
+> Verification passed `cargo fmt --all -- --check`, `cargo test -p hal-soc-riscv
+> --target x86_64-unknown-linux-gnu`, `cargo test -p cellos-boards --target
+> x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features
+> board-vf2`, `cargo check --features board-pioneer`, `cargo check --features
+> board-vf2,board-pioneer`, `cargo check --features board-rpi3`, `cargo build
+> --release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z
+> build-std=core,alloc`, and `bash scripts/qemu-boot-test.sh
+> target/riscv64gc-unknown-none-elf/release/cellos-kernel` (`PASS: FAT16 mounted
+> — kernel booted (no disk)`).
+> VF2, Pioneer, and RPi3 remain compile-only for this slice.
+
+> **2026-08-18 BCM27xx SoC-facts update:** `hal/soc/bcm27xx` now owns immutable
+> BCM2837 controller layout and SDHCI access-policy facts. Existing RPi3
+> platform/MMC code consumes those facts while the shared SDHCI mechanism stays
+> single-copy. Board identity, boot/fallback memory, SD pinmux selection, PHY
+> wiring, enabled-driver lists, IRQ/timer extraction, and feature collapse remain
+> outside this slice. The final matrix passed 12/12 gates, including AArch64
+> `board-rpi3` compile and RV64 QEMU boot; no new physical-RPi3 claim is made.
 
 > **Midori Phase 02 runtime-closure update (2026-08-05):** the test-hooks QEMU lane now
 > proves metadata-only governed message-path `GetFile` positive before `SealPaths`, preserves
@@ -187,6 +286,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | 📋 **TLS server-side accept** `[G2, optional]` | .agents/260623-1500-tls-server-accept | PARKED — plan complete, implement G2 when httpd needs to serve external HTTPS (curl/browser). Swarm uses Noise_KKpsk/NNpsk (separate plan). `tls-server` optional Cargo feature. | **G2** |
 | 🆕 **RTC / wall-clock** `[G1]` | new | ✅ COMPLETE 2026-06-07 — Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time | **G1** |
 | 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-08-17 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); real RPi3 Model B v1.2 lane now validated end to end with external SD boot to `Cellos >`, FAT16/FAT32 mounts, and `/mnt/sd` + `/bin` available; RPi4/VisionFive2 ready | **G1** |
+| 🆕 **Root board descriptors** (`boards/`) | board contract slice | ✅ COMPLETE 2026-08-18 — seven integration-only descriptors now include QEMU q35 x86_64; `hal/soc/x86` owns COM1/ISA and legacy firmware-window facts while ACPI-discovered MMIO stays fail-closed; shared drivers remain single-copy and CI enforces every board build lane; `boards/qemu/q35-i686`, `boards/qemu/virt-riscv32`, and `boards/qemu/virt-aarch32` are placeholder-only; QEMU is integration evidence only and physical boards remain hardware-gated | shared |
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
 | 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
 | Hot migration / zero-downtime + cell-signing mechanism | M4.1 + G.2 P2 | ✅ MECHANISMS COMPLETE 2026-06-23; Phase 00 public syscall landing is complete 2026-08-07 — `PauseService` 422 is SupervisorCap-gated with bit 49 and drains pre-pause ingress before Snapshot; `HotSwap` 400 is retired/reserved in Phase 04, `SpawnReplacement` 421 is additive with bit 57, the exact launch-profile intersection is enforced; Phase 01 supervisory atomic cutover is complete 2026-08-07 — paused+Frozen bounded FIFO, source→replacement binding, compare-and-commit rollback, plain resume invalidation of stale bindings, barrier-then-kill-old, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 04 kernel cleanup is complete 2026-08-08 — legacy kernel orchestrator and direct wrapper are retired, API tests passed 75/75, release-kernel builds passed for riscv64/aarch64/x86_64, `gen_disk.ps1` rebuilt fresh images and refreshed `kernel/src/embedded/init`, hotswap-smoke passed 15/15, launch-profile passed 1/1, and accepted followups remain x86/AArch64 fresh boot packaging plus host API coverage 33.26 percent line / 0 percent branch. | **G2** |

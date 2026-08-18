@@ -74,7 +74,7 @@ pub unsafe fn el2_hcr_init() {
 /// TCR_EL2 non-VHE encoding: bit31 and bit23 are RES1 (ARMv8.0 requirement).
 /// MAIR_EL2 mirrors the EL1 layout (index0=Device, index1=Normal-WB).
 ///
-/// UART sentinel bytes are written to PL011 at 0x09000000: `'M'` (0x4D) just
+/// UART sentinel bytes are written to the supplied PL011 base: `'M'` (0x4D) just
 /// before `SCTLR_EL2.M` is set and `'N'` (0x4E) immediately after. "M" alone
 /// on the console means the very first post-MMU instruction fetch aborted —
 /// check that no PTE in the active table sets bit 54 on kernel pages (it is
@@ -83,7 +83,7 @@ pub unsafe fn el2_hcr_init() {
 /// # Safety
 /// - `ttbr0_phys` must identity-cover the current PC and all page-table frames.
 /// - Must be called at EL2 after `el2_hcr_init()`.
-pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
+pub unsafe fn el2_mmu_init(ttbr0_phys: u64, uart_base: usize) {
     // Same MAIR as EL1: Device-nGnRnE at index 0, Normal-WB-WA at index 1.
     let mair: u64 = 0x0000_0000_0000_FF00;
     // TCR_EL2 (non-VHE):
@@ -114,7 +114,6 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
             "dsb nsh",
             "isb",
             // Sentinel 'M' before MMU-on — visible on UART even if SCTLR write faults.
-            "mov {uart}, #0x09000000",
             "mov {b}, #0x4D",      // ASCII 'M'
             "strb {b:w}, [{uart}]",
             // Enable MMU: SCTLR_EL2.M=1 (bit0), .C=1 (bit2), .I=1 (bit12).
@@ -131,7 +130,7 @@ pub unsafe fn el2_mmu_init(ttbr0_phys: u64) {
             mair  = in(reg) mair,
             tcr   = in(reg) tcr,
             ttbr0 = in(reg) ttbr0_phys,
-            uart  = out(reg) _,
+            uart  = in(reg) uart_base,
             b     = out(reg) _,
             scr   = out(reg) _,
             options(nostack),

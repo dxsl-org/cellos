@@ -98,6 +98,27 @@ jobs:
           -Z build-std=core,alloc
           -- -D warnings
 
+  board-configs:
+    name: Board configuration matrix
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-05-01
+          components: rust-src
+          targets: riscv64gc-unknown-none-elf,aarch64-unknown-none-softfloat,x86_64-unknown-none
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          key: board-configs
+
+      - name: Check HAL ownership and every board selection
+        run: bash scripts/check-board-configs.sh
+
   build:
     name: Build (${{ matrix.target }})
     runs-on: ubuntu-24.04

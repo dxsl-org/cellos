@@ -10,10 +10,12 @@ hal-mte         = { path = "../../traits/mte", version = "0.1.0" }
 hal-paging      = { path = "../../traits/paging", version = "0.1.0" }
 hal-hypervisor  = { path = "../../traits/hypervisor", version = "0.1.0" }
 types = { path = "../../../libs/types", version = "0.1.0" }
+hal-soc-arm-virt = { path = "../../soc/arm-virt", version = "0.2.0" }
 critical-section = { version = "1", optional = true, features = ["restore-state-usize"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
+hal-soc-bcm27xx = { path = "../../soc/bcm27xx", version = "0.2.0", optional = true }
 
 [features]
 default = []
@@ -24,4 +26,5 @@ cfi-bti = []
 mte = []
 # Raspberry Pi 3 (BCM2837) board target: selects BCM mini UART, BCM2836 local IRQ
 # controller, and auto-detected timer frequency instead of GIC + QEMU virt defaults.
-board-rpi3 = []
+board-rpi3 = ["dep:hal-soc-bcm27xx"]
+board-rpi4 = ["dep:hal-soc-bcm27xx"]

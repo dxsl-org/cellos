@@ -1,0 +1,29 @@
+/dts-v1/;
+
+/ {
+    compatible = "raspberrypi,3-model-b", "brcm,bcm2837";
+    #address-cells = <2>;
+    #size-cells = <2>;
+
+    chosen {
+        stdout-path = "/soc/serial@3f215040";
+    };
+
+    memory@0 {
+        device_type = "memory";
+        reg = <0x0 0x0 0x0 0x3f000000>;
+    };
+
+    soc {
+        compatible = "simple-bus";
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+
+        serial@3f215040 {
+            compatible = "brcm,bcm2835-aux-uart";
+            reg = <0x0 0x3f215040 0x0 0x4>;
+            status = "okay";
+        };
+    };
+};
