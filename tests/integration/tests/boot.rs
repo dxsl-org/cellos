@@ -881,18 +881,21 @@ fn shell_redirect_append() {
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("echo LINE_A > /tmp/append_test.txt");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
 
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("echo LINE_B >> /tmp/append_test.txt");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append: {e}\n{}", qemu.dump()));
 
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("vcat /tmp/append_test.txt");
-    qemu.wait_for("LINE_A", CMD_TIMEOUT)
+    qemu.wait_for_after("LINE_A", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("LINE_A not found: {e}\n{}", qemu.dump()));
-    qemu.wait_for("LINE_B", CMD_TIMEOUT)
+    qemu.wait_for_after("LINE_B", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("LINE_B not found after append: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
@@ -1406,21 +1409,25 @@ fn shell_source_multi_command() {
 
     // Build the script using echo > / >> so no Lua cell is involved.
     // `echo CMD >> file` appends "CMD\n" via Phase V append-redirect.
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("echo echo BEFORE_SLEEP > /tmp/seq.sh");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("write: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("echo sleep 1 >> /tmp/seq.sh");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append sleep: {e}\n{}", qemu.dump()));
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("echo echo AFTER_SLEEP >> /tmp/seq.sh");
-    qemu.wait_for("Cellos >", CMD_TIMEOUT)
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
         .unwrap_or_else(|e| panic!("append after: {e}\n{}", qemu.dump()));
 
+    let checkpoint = qemu.output_checkpoint();
     qemu.send_line("source /tmp/seq.sh");
-    qemu.wait_for("BEFORE_SLEEP", 10)
+    qemu.wait_for_after("BEFORE_SLEEP", checkpoint, 10)
         .unwrap_or_else(|e| panic!("BEFORE_SLEEP not seen: {e}\n--- output ---\n{}", qemu.dump()));
     // Allow up to 20s for sleep 1 to complete.
-    qemu.wait_for("AFTER_SLEEP", 20)
+    qemu.wait_for_after("AFTER_SLEEP", checkpoint, 20)
         .unwrap_or_else(|e| panic!("AFTER_SLEEP not seen: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
