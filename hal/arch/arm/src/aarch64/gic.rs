@@ -3,14 +3,8 @@
 //! Distributor: 0x08000000  CPU interface: 0x08010000
 //! Use  in QEMU to select GICv2.
 
-#[cfg(feature = "board-rpi4")]
-const GICD_BASE: usize = hal_soc_bcm27xx::BCM2711.mmio.gic_distributor_base;
-#[cfg(not(feature = "board-rpi4"))]
-const GICD_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.gic_distributor.base;
-#[cfg(feature = "board-rpi4")]
-const GICC_BASE: usize = hal_soc_bcm27xx::BCM2711.mmio.gic_cpu_base;
-#[cfg(not(feature = "board-rpi4"))]
-const GICC_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.gic_cpu.base;
+const GICD_BASE: usize = 0x0800_0000;
+const GICC_BASE: usize = 0x0801_0000;
 
 fn gicd(offset: usize) -> *mut u32 {
     (GICD_BASE + offset) as *mut u32
@@ -58,17 +52,12 @@ pub fn init() {
     // to the 32 VirtIO MMIO slots.  Without this, GICD_ISENABLER bit is 0 and
     // the GIC never delivers VirtIO interrupts even after claim/complete.
     // NIC is at slot 30 (SPI 46, GIC ID 78); Block at slot 31 (SPI 47, GIC ID 79).
-    #[cfg(not(feature = "board-rpi4"))]
-    {
-        let virtio = hal_soc_arm_virt::QEMU_ARM_VIRT.virtio;
-        let first = hal_soc_arm_virt::ArmVirtProfile::gic_id_for_spi(virtio.first_spi);
-        for i in first..first + virtio.count as u32 {
-            enable_irq(i);
-        }
-        enable_irq(hal_soc_arm_virt::ArmVirtProfile::gic_id_for_spi(
-            hal_soc_arm_virt::QEMU_ARM_VIRT.gpio.spi,
-        ));
+    for i in 48u32..80 {
+        enable_irq(i);
     }
+    // Enable GPIO PL061 IRQ: QEMU ARM virt assigns PL061 to SPI 7 (GIC ID 39).
+    // Required for edge-triggered GPIO interrupts to reach vi_aarch64_irq_handler.
+    enable_irq(39);
 
     // CPU interface: allow all priorities, enable.
     wr(gicc(GICC_PMR), 0xFF);

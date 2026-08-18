@@ -1,6 +1,5 @@
 use super::core::{CardInfo, MmcCore};
 use super::regs::*;
-use super::sdhci::SdhciAccessPolicy;
 use hal_traits_mmc::{CardType, ViMmcHost};
 use types::{ViError, ViResult};
 
@@ -19,9 +18,9 @@ impl EmmcBlock {
     ///
     /// # Safety
     /// `sdhci_base` must be a valid kernel-mapped MMIO address for the SDHCI register block.
-    pub unsafe fn probe(sdhci_base: usize, policy: SdhciAccessPolicy) -> ViResult<Self> {
+    pub unsafe fn probe(sdhci_base: usize) -> ViResult<Self> {
         // SAFETY: forwarded from caller contract.
-        let mut core = MmcCore::new(sdhci_base, policy);
+        let mut core = MmcCore::new(sdhci_base);
         let info = core.init_card()?;
         if info.card_type != CardType::Emmc {
             return Err(ViError::NotFound);

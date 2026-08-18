@@ -3,16 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-18 (HAL/SoC/board split covers seven selections including QEMU q35 x86_64; physical boards remain hardware-gated)
-
-> **Status refresh 2026-08-18**: the HAL split covers all seven current
-> board selections. Root `boards/` descriptors contain integration data only;
-> `hal/soc/{riscv,arm-virt,bcm27xx,x86}` owns immutable platform facts; `hal/arch`
-> and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
-> missing enabled hardware, typed driver lists gate initialization, and CI runs
-> the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
-> pass; QEMU q35 x86_64 is the current x86 integration board; VF2, Pioneer, RPi3,
-> and RPi4 remain physical-hardware-gated.
+**Last Updated**: 2026-08-08 (status refreshed: Phase06 stack guards and RV64 test-hooks overflow probe landed; production boot PASS on RV64/AArch64/x86_64; KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles and keeps `/bin/supervisor` inside the manifest/boot-ceiling/policy intersection under `SupervisorCap`; generic completion contract verified with `WaitCompletion` still additive over `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, Phase 05 landed the one-tick `Arc`-backed parked executor and the exact `[executor] dummy-waker=absent executor=parked source=TIMER PASS` witness, and the NET_RX source proof checks both source and result; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; Phase 00 public syscall landing is complete: `PauseService` 422 is SupervisorCap-gated with bit 49, legacy `HotSwap` 400 is retired/reserved and decodes `Unknown`; the hotswap CLI uses Supervisor IPC; `HotSwapReady`/`Snapshot` keep bit 32, `SpawnReplacement` 421 is additive with bit 57, `SupervisorCap` gates the replacement path under `SCHEDULER -> SWAP_CEILINGS`, resume/all scheduler exits clear the ceiling, and refreshed-image QEMU `supervisor_hotswap_preserves_demo_state` passed with `[hotswap-demo-v2] SpawnCap retained`; Phase 01 supervisory atomic cutover is complete: paused+Frozen bounded FIFO, source→replacement binding, compare-and-commit rollback, plain resume invalidation of stale bindings, barrier-then-kill-old, cached-sender FIFO proof, old-TID rejection, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 02 supervisory hotswap closure is complete: the hotswap CLI is service-only, `/bin/hotswap` stays shell-only and capability-free, the supervisor rejects unauthorized senders with `0xFD` before parsing, and the QEMU hotswap-smoke suite now passes 15/15 with zero skips; Phase 03 snapshot trigger authority is complete: `Snapshot` 420 keeps allowlist bit 32, shell→Supervisor zero-filled opcode-only IPC is exact, `SupervisorCap` gates mutation, NullBlock proves unavailability on QEMU, direct allowlisted non-supervisor denial is enforced, real MMC save/restore remains host-gated, the snapshot format and warm-boot restore path remain unchanged, and diff-aware verification finished 17/17; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
 
 ---
 
@@ -48,61 +39,6 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 │  Hardware (QEMU, Bare-metal)             │  Memory, CPU, Devices
 └─────────────────────────────────────────┘
 ```
-
----
-
-## Board Descriptors (`boards/`)
-
-`boards/` is a root workspace crate, not a HAL subdirectory. It holds immutable board descriptors for product-specific integration data and keeps hardware mechanism code elsewhere.
-
-- `cellos-boards` is `#![no_std]` and carries descriptor data only.
-- Each descriptor owns board identity, compatible strings, boot/firmware contract,
-  fallback memory map/DT asset, pinmux/PHY wiring, typed SoC identity, and the
-  list of shared drivers to enable. It contains no SoC MMIO or IRQ layout.
-- The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer,
-  Raspberry Pi 3/4, and QEMU q35 x86_64. Checked DTS assets are
-  audit/fallback data; x86 instead consumes Limine's memory map and validated
-  ACPI. `boards/qemu/q35-i686`, `boards/qemu/virt-riscv32`, and
-  `boards/qemu/virt-aarch32` are documentation-only and not part of the
-  catalog. Physical-board descriptors remain compile-only without matching runs.
-- Kernel consumers are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`.
-- Shared drivers remain in `cells/drivers/`; no UART/SDHCI/DW I2C/SPI/GIC/PLIC/PCIe driver is duplicated per board.
-- `hal/soc/riscv` owns validated RISC-V fallback MMIO and discovery policy.
-  Generic QEMU virt enables its audited UART/PLIC/CLINT/RTC/VirtIO fallback;
-  JH7110 requires firmware DTB nodes for enabled drivers and exposes no RTC or
-  VirtIO driver; SG2042 preserves SBI DBCN-only console and no RTC/VirtIO MMIO.
-- The RV64 PLIC split now keeps policy data in `hal/soc/riscv` and runtime
-  mechanism in `hal/arch/riscv`: the kernel resolves the physical-hart context
-  from the selected SoC profile and device IRQs from `PlatformInfo`, and the
-  shared PLIC driver no longer hardcodes QEMU context or enable-range assumptions.
-- `hal/soc/bcm27xx` owns immutable BCM2837 peripheral/GPIO/AUX/Arasan layout and
-  SDHCI word-access/write-spacing policy. It also owns exact peripheral and
-  local-controller spans, system-timer and legacy-IRQ bases, plus GPIO/AUX grant
-  widths and the immutable legacy/local IRQ topology. RPi3 paging, resource
-  allowlisting, platform, GPIO IRQ, MMC, ARM HAL, and kernel IRQ diagnostics use
-  those facts without changing page permissions, register offsets, public IRQ
-  contracts, timer policy, pinmux selection, diagnostic output, or shared
-  mechanisms.
-- RPi3 kernel diagnostics reuse ARM HAL's FIFO-safe mini-UART byte writer; the
-  kernel does not maintain a second LSR/IO polling and write implementation.
-- `hal/soc/arm-virt` owns QEMU AArch64 platform layout and IRQ facts. PL011,
-  GIC, paging, VirtIO, PCIe, RTC, GPIO, and resource consumers share those facts
-  without gaining board-specific mechanism copies.
-- `hal/soc/bcm27xx` also owns BCM2711 layout and grant widths. RPi4 exposes only
-  disjoint GPIO/UART/SDHCI pages to cells and keeps GIC mappings kernel-only.
-  PCIe is intentionally absent from its enabled-driver list until a BCM2711
-  host-controller path is implemented.
-- `hal/soc/x86` owns static PC-compatible COM1/ISA wiring and bounded legacy
-  BIOS/RSDP windows. The kernel selects that profile before early serial output;
-  validated ACPI remains the only source for LAPIC, IOAPIC, HPET, and PCIe ECAM
-  addresses, so every downstream timer/interrupt/PCIe gate still fails closed.
-- The shared SDHCI controller receives an immutable runtime access policy;
-  BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
-  access do not create per-board driver implementations.
-- `scripts/check-hal-boundaries.sh` rejects SoC imports/MMIO fields or shared
-  driver copies in board packages. `scripts/check-board-configs.sh` validates
-  all seven assets/build commands, compiles every selection, and proves conflicting
-  real-board features fail. CI runs this matrix on every change.
 
 ---
 
@@ -333,16 +269,7 @@ pub trait InterruptController {
 
 ### Implementations
 
-Board policy stays out of HAL mechanism code. `boards/` carries product
-descriptors, `hal/soc/riscv` carries immutable SoC profile facts, and the kernel
-composes both before boot/platform fallback decisions. RV64 features select one
-descriptor/SoC pair; required-DTB boards stop on absent or invalid firmware data.
-Shared drivers remain in `cells/drivers/`; AArch64 SoC facts and SDHCI policy
-remain for later migration slices.
-
 **RISC-V 64-bit (RV64) — Production boot PASS** ✅
-- `hal/soc/riscv` — Data-only SoC profiles for compatible strings and access
-  policies (`GENERIC_VIRT`, `JH7110`, `SG2042`)
 - `hal/arch/riscv/src/rv64/context.rs` — Trap frame, context switch
 - `hal/arch/riscv/src/rv64/paging.rs` — SV39 page table walker
 - `hal/arch/riscv/src/rv64/trap.rs` — Exception/interrupt handler
@@ -441,9 +368,7 @@ PLIC sets bit in Pending register
   ↓
 PLIC delivers IRQ to CPU
   ↓
-RV64 trap handler calls vi_handle_riscv_external_irq(irq)
-  ↓
-Kernel runtime router selects UART, VirtIO, or unknown handling from PlatformInfo
+Kernel trap handler calls vi_handle_virtio_irq(irq)
   ↓
 Device handler:
   - Process available data/requests

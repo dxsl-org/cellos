@@ -287,11 +287,8 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
 }
 
 /// GIC ID for the PL061 GPIO controller on QEMU ARM virt (SPI 7 = GIC ID 39).
-#[cfg(all(not(feature = "board-rpi3"), not(feature = "board-rpi4")))]
-const GPIO_GIC_ID: u32 =
-    hal_soc_arm_virt::ArmVirtProfile::gic_id_for_spi(hal_soc_arm_virt::QEMU_ARM_VIRT.gpio.spi);
-#[cfg(feature = "board-rpi4")]
-const GPIO_GIC_ID: u32 = u32::MAX;
+#[cfg(not(feature = "board-rpi3"))]
+const GPIO_GIC_ID: u32 = 39;
 
 /// IRQ handler — dispatches timer, GPIO, and VirtIO MMIO interrupts.
 ///
@@ -305,7 +302,6 @@ const GPIO_GIC_ID: u32 = u32::MAX;
 pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
     extern "Rust" {
         fn vi_timer_tick();
-        #[cfg(not(feature = "board-rpi4"))]
         fn vi_handle_virtio_irq(irq: u32);
         fn vi_gpio_notify_irq();
         #[cfg(feature = "board-rpi3")]
@@ -414,9 +410,8 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         } else if irq >= 32 && irq != 0x3FF {
             // SPI range (GIC ID ≥ 32): dispatch VirtIO; convert GIC ID → SPI number.
             // SAFETY: vi_handle_virtio_irq is #[no_mangle] in kernel/src/task/drivers.
-            #[cfg(not(feature = "board-rpi4"))]
             unsafe {
-                vi_handle_virtio_irq(irq - hal_soc_arm_virt::ArmVirtProfile::GIC_SPI_OFFSET);
+                vi_handle_virtio_irq(irq - 32);
             }
         }
         if irq != 0x3FF {
