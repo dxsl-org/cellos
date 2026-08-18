@@ -24,6 +24,7 @@ pub const GENERIC_VIRT: RiscvSocProfile = RiscvSocProfile {
 pub const JH7110: RiscvSocProfile = RiscvSocProfile {
     slug: "jh7110",
     plic_context: PlicContextPolicy::jh7110(),
+    rtc_access: RtcAccessPolicy::Unavailable,
     ..GENERIC_VIRT
 };
 

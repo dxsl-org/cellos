@@ -76,6 +76,12 @@
 > formatting and task setup remain unchanged. Baseline/final 11-gate matrices,
 > the scoped guard, and review passed; RPi3 remains compile-only.
 
+> **2026-08-18 HAL-split catalog/RV64 update:** root `boards/` now has typed
+> descriptors for all six current selections. RV64 chooses one descriptor/SoC
+> pair, boot fallback memory and platform policy consume it, and VF2/Pioneer
+> require a valid firmware DTB. Board/SoC tests, three RV64 compile lanes, the
+> release build, and QEMU FAT16 boot passed; physical boards remain compile-only.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context

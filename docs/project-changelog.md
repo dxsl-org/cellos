@@ -2,6 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] Board catalog and RISC-V selection become descriptor-driven
+
+The root `boards/` crate now contains typed, data-only descriptors and rebuild
+commands for QEMU virt on RV64/AArch64, VisionFive 2, Milk-V Pioneer, Raspberry
+Pi 3, and Raspberry Pi 4. `SocId` and `DriverId` replace string driver names;
+board packages still contain no register-level driver mechanisms.
+
+RV64 board features now select one descriptor/SoC pair in `kernel/src/board.rs`.
+Boot fallback memory and platform policy consume that pair, removing the VF2
+fallback table and feature table from kernel consumers. Required-DTB boards
+fail closed on missing or invalid firmware DTB, and JH7110 explicitly exposes
+no unsupported RTC fallback. Board/SoC tests, default/VF2/Pioneer checks, the
+release build, and QEMU FAT16 boot passed. Physical boards remain compile-only.
+
 ## [2026-08-18] RPi3 task diagnostics reuse the mini-UART driver
 
 The RPi3 TrapFrame diagnostic in `kernel/src/task.rs` now emits bytes through

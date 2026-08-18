@@ -59,12 +59,12 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 `boards/` is a root workspace crate, not a HAL subdirectory. It holds immutable board descriptors for product-specific integration data and keeps hardware mechanism code elsewhere.
 
 - `cellos-boards` is `#![no_std]` and carries descriptor data only.
-- Each descriptor owns board identity, compatible strings, boot/firmware contract, fallback memory map, pinmux/PHY wiring, and the list of shared drivers to enable. UART stays mandatory, while PLIC/CLINT/RTC are optional so one descriptor shape can model both QEMU RV64 and RPi3 without splitting drivers.
-- The first migrated boards are QEMU RV64 and Raspberry Pi 3 Model B; the QEMU fallback DTS asset is checked in for audit/reference, not claimed here as a compiled `dtc` artifact, and the RPi3 fallback map ends at `0x3F000000` so it stays clear of the BCM2837 MMIO region.
+- Each descriptor owns board identity, compatible strings, boot/firmware contract, fallback memory map, pinmux/PHY wiring, typed SoC identity, and the list of shared drivers to enable. UART stays mandatory, while PLIC/CLINT/RTC are optional so one shape covers the current catalog without splitting drivers.
+- The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer, Raspberry Pi 3, and Raspberry Pi 4. Checked DTS assets are audit/fallback data, not claimed as generated boot artifacts; physical-board descriptors remain compile-only without matching hardware runs.
 - Kernel consumers are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`.
 - Shared drivers remain in `cells/drivers/`; no UART/SDHCI/DW I2C/SPI/GIC/PLIC/PCIe driver is duplicated per board.
 - `hal/soc/riscv` now owns data-only RISC-V SoC profiles: generic QEMU virt and
-  JH7110 keep UART/RTC/VirtIO MMIO discovery enabled, while SG2042 preserves the
+  JH7110 keeps UART/VirtIO discovery but disables unsupported RTC fallback, while SG2042 preserves the
   Pioneer fail-closed contract by forcing SBI DBCN console only, no RTC MMIO,
   and no VirtIO-MMIO slots.
 - The RV64 PLIC split now keeps policy data in `hal/soc/riscv` and runtime
@@ -313,9 +313,10 @@ pub trait InterruptController {
 
 Board policy stays out of HAL mechanism code. `boards/` carries product
 descriptors, `hal/soc/riscv` carries immutable SoC profile facts, and the kernel
-composes both before boot/platform fallback decisions. Shared drivers remain in
-`cells/drivers/`; legacy AArch64/RPi3 and SDHCI branches remain until their later
-migration slices.
+composes both before boot/platform fallback decisions. RV64 features select one
+descriptor/SoC pair; required-DTB boards stop on absent or invalid firmware data.
+Shared drivers remain in `cells/drivers/`; AArch64 SoC facts and SDHCI policy
+remain for later migration slices.
 
 **RISC-V 64-bit (RV64) — Production boot PASS** ✅
 - `hal/soc/riscv` — Data-only SoC profiles for compatible strings and access

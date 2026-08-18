@@ -4,15 +4,19 @@ use crate::{
 };
 
 #[test]
-fn generic_and_jh7110_keep_mmio_discovery_enabled() {
+fn generic_and_jh7110_keep_supported_discovery_enabled() {
+    assert_eq!(GENERIC_VIRT.rtc_access, RtcAccessPolicy::Mmio);
+    assert!(GENERIC_VIRT.allows_rtc_mmio());
+
     for profile in [GENERIC_VIRT, JH7110] {
         assert_eq!(profile.uart_access, UartAccessPolicy::Mmio);
-        assert_eq!(profile.rtc_access, RtcAccessPolicy::Mmio);
         assert_eq!(profile.virtio_mmio, VirtioMmioPolicy::Discover);
         assert!(profile.allows_uart_mmio());
-        assert!(profile.allows_rtc_mmio());
         assert!(profile.discovers_virtio_mmio());
     }
+
+    assert_eq!(JH7110.rtc_access, RtcAccessPolicy::Unavailable);
+    assert!(!JH7110.allows_rtc_mmio());
 }
 
 #[test]

@@ -44,16 +44,18 @@ impl PlatformInfo {
     /// Only called from `from_dtb`, which is riscv64-only (the DTB parser section
     /// below). Gated to avoid a dead-code warning on aarch64/x86_64.
     #[cfg(target_arch = "riscv64")]
-    fn qemu_defaults() -> Self {
+    fn board_defaults(profile: &'static RiscvSocProfile) -> Self {
         let board = crate::board::selected();
-        Self::from_board(board)
+        Self::from_board(board, profile)
     }
 
     #[cfg(target_arch = "riscv64")]
-    fn from_board(board: &cellos_boards::BoardDescriptor) -> Self {
+    fn from_board(
+        board: &cellos_boards::BoardDescriptor,
+        profile: &'static RiscvSocProfile,
+    ) -> Self {
         let plic = required_riscv_mmio(board.plic, "PLIC");
         let clint = required_riscv_mmio(board.clint, "CLINT");
-        let rtc = required_riscv_mmio(board.rtc, "RTC");
         Self {
             uart_base: board.uart.base as usize,
             uart_irq: board.uart.irq.unwrap_or(0),
@@ -61,7 +63,7 @@ impl PlatformInfo {
             plic_size: plic.size as usize,
             clint_base: clint.base as usize,
             virtio_mmio: virtio_slots(board),
-            rtc_base: rtc.base as usize,
+            rtc_base: rtc_fallback_base(board, profile),
         }
     }
 
@@ -143,7 +145,7 @@ unsafe fn publish_boot(info: PlatformInfo) {
 /// Safe with `dtb_ptr == 0`.
 #[cfg(target_arch = "riscv64")]
 pub fn init(sbi_dtb: usize) {
-    let profile = active_riscv_soc_profile();
+    let profile = crate::board::selected_riscv64_soc();
     let info = apply_riscv_soc_access_policy(from_dtb(sbi_dtb, profile), profile);
 
     log::info!(
@@ -248,7 +250,7 @@ pub fn riscv_plic_init_data() -> Option<(usize, [u32; RISCV_PLIC_IRQ_CAPACITY], 
 pub fn riscv_plic_context_for_current_hart() -> Option<usize> {
     let logical_hart = crate::task::hart_local::current_hart_id();
     let physical_hart = crate::task::smp::logical_to_physical(logical_hart)?;
-    active_riscv_soc_profile().plic_context_for_physical_hart(physical_hart)
+    crate::board::selected_riscv64_soc().plic_context_for_physical_hart(physical_hart)
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -257,22 +259,6 @@ pub fn virtio_mmio_base_for_irq(irq: u32) -> Option<usize> {
 }
 
 // ── DTB parser (riscv64 only) ──────────────────────────────────────────────────
-
-#[cfg(target_arch = "riscv64")]
-fn active_riscv_soc_profile() -> &'static RiscvSocProfile {
-    #[cfg(feature = "board-pioneer")]
-    {
-        &hal_soc_riscv::SG2042
-    }
-    #[cfg(all(not(feature = "board-pioneer"), feature = "board-vf2"))]
-    {
-        &hal_soc_riscv::JH7110
-    }
-    #[cfg(all(not(feature = "board-pioneer"), not(feature = "board-vf2")))]
-    {
-        &hal_soc_riscv::GENERIC_VIRT
-    }
-}
 
 #[cfg(target_arch = "riscv64")]
 fn apply_riscv_soc_access_policy(
@@ -317,9 +303,13 @@ fn virtio_mmio_entries_for_profile(
 
 #[cfg(target_arch = "riscv64")]
 fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
+    let board = crate::board::selected();
     if dtb_ptr == 0 {
-        log::warn!("[platform] dtb_ptr=0, using QEMU defaults");
-        return PlatformInfo::qemu_defaults();
+        if board.boot.requires_firmware_dtb {
+            panic!("[platform] selected board requires a firmware DTB");
+        }
+        log::warn!("[platform] dtb_ptr=0, using board defaults");
+        return PlatformInfo::board_defaults(profile);
     }
     // SAFETY: dtb_ptr is the FDT physical address passed by OpenSBI (a1) or
     // retrieved from a Limine DtbResponse. fdt::Fdt::from_ptr validates FDT
@@ -327,11 +317,14 @@ fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
     let fdt = match unsafe { fdt::Fdt::from_ptr(dtb_ptr as *const u8) } {
         Ok(f) => f,
         Err(e) => {
-            log::warn!("[platform] DTB parse error ({:?}), using QEMU defaults", e);
-            return PlatformInfo::qemu_defaults();
+            if board.boot.requires_firmware_dtb {
+                panic!("[platform] required firmware DTB is invalid: {:?}", e);
+            }
+            log::warn!("[platform] DTB parse error ({:?}), using board defaults", e);
+            return PlatformInfo::board_defaults(profile);
         }
     };
-    let defaults = crate::board::selected();
+    let defaults = board;
 
     let uart_base = reg_base(&fdt, profile.uart_compatibles).unwrap_or_else(|| {
         log::warn!("[platform] UART not in DTB");
@@ -354,10 +347,8 @@ fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
 
     let virtio_mmio = virtio_mmio_entries_for_profile(&fdt, profile);
 
-    let rtc_base = reg_base(&fdt, profile.rtc_compatibles).unwrap_or_else(|| {
-        log::warn!("[platform] Goldfish RTC not in DTB, using default");
-        required_riscv_mmio(defaults.rtc, "RTC").base as usize
-    });
+    let rtc_base = reg_base(&fdt, profile.rtc_compatibles)
+        .unwrap_or_else(|| rtc_fallback_base(defaults, profile));
 
     PlatformInfo {
         uart_base,
@@ -367,6 +358,17 @@ fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
         clint_base,
         virtio_mmio,
         rtc_base,
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+fn rtc_fallback_base(
+    board: &cellos_boards::BoardDescriptor,
+    profile: &'static RiscvSocProfile,
+) -> usize {
+    match profile.rtc_access {
+        RtcAccessPolicy::Mmio => required_riscv_mmio(board.rtc, "RTC").base as usize,
+        RtcAccessPolicy::Unavailable => 0,
     }
 }
 

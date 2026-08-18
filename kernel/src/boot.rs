@@ -2,7 +2,7 @@
 
 use crate::*;
 #[cfg(any(
-    all(target_arch = "riscv64", not(feature = "board-vf2")),
+    target_arch = "riscv64",
     all(target_arch = "aarch64", feature = "board-rpi3")
 ))]
 use cellos_boards::MemoryRangeKind;
@@ -242,13 +242,13 @@ impl BootInfo for SimpleBootInfo {
     }
 }
 
-// RISC-V QEMU virt (256 MB at 0x8000_0000):
-// MMIO regions are mapped by init_kernel_paging; RAM regions only here.
-#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
-const DEFAULT_RISCV64_BOARD: &cellos_boards::BoardDescriptor =
-    crate::board::default_riscv64_board();
+// RISC-V fallback RAM comes from the one selected board descriptor. Firmware
+// DTB/Limine data remains authoritative whenever it is available.
+#[cfg(target_arch = "riscv64")]
+const SELECTED_RISCV64_BOARD: &cellos_boards::BoardDescriptor =
+    crate::board::selected_riscv64_board();
 #[cfg(any(
-    all(target_arch = "riscv64", not(feature = "board-vf2")),
+    target_arch = "riscv64",
     all(target_arch = "aarch64", feature = "board-rpi3")
 ))]
 const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
@@ -260,7 +260,7 @@ const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
     }
 }
 #[cfg(any(
-    all(target_arch = "riscv64", not(feature = "board-vf2")),
+    target_arch = "riscv64",
     all(target_arch = "aarch64", feature = "board-rpi3")
 ))]
 const fn fallback_memory_entry(
@@ -274,16 +274,16 @@ const fn fallback_memory_entry(
         ty: fallback_memory_type(range.kind),
     }
 }
-#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+#[cfg(target_arch = "riscv64")]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    fallback_memory_entry(DEFAULT_RISCV64_BOARD, 0),
-    fallback_memory_entry(DEFAULT_RISCV64_BOARD, 1),
-    fallback_memory_entry(DEFAULT_RISCV64_BOARD, 2),
+    fallback_memory_entry(SELECTED_RISCV64_BOARD, 0),
+    fallback_memory_entry(SELECTED_RISCV64_BOARD, 1),
+    fallback_memory_entry(SELECTED_RISCV64_BOARD, 2),
 ];
-#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+#[cfg(target_arch = "riscv64")]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &FALLBACK_MEMORY_MAP,
-    kernel_phys_base: DEFAULT_RISCV64_BOARD.fallback_memory[1].base,
+    kernel_phys_base: SELECTED_RISCV64_BOARD.fallback_memory[1].base,
     hhdm_offset: 0x0,
 };
 
@@ -298,35 +298,6 @@ static mut DTB_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &[],
     kernel_phys_base: 0,
     hhdm_offset: 0,
-};
-
-// StarFive VisionFive2 / JH7110 (DRAM at 0x4000_0000).
-// PLIC/UART/CLINT addresses are identical to QEMU virt — no paging.rs changes needed.
-// This fallback is only used when Limine fails to parse the device tree; under normal
-// Limine UEFI boot, the firmware provides the correct memory map directly.
-#[cfg(all(target_arch = "riscv64", feature = "board-vf2"))]
-static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    MemoryMapEntry {
-        base: 0x4000_0000,
-        length: 0x0020_0000,
-        ty: MemoryType::Bootloader,
-    }, // OpenSBI (2 MB)
-    MemoryMapEntry {
-        base: 0x4020_0000,
-        length: 0x0400_0000,
-        ty: MemoryType::Kernel,
-    }, // Kernel  (4 MB)
-    MemoryMapEntry {
-        base: 0x4420_0000,
-        length: 0x0BE0_0000,
-        ty: MemoryType::Usable,
-    }, // Usable (~192 MB)
-];
-#[cfg(all(target_arch = "riscv64", feature = "board-vf2"))]
-pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
-    memory_map: &FALLBACK_MEMORY_MAP,
-    kernel_phys_base: 0x4020_0000,
-    hhdm_offset: 0x0,
 };
 
 // RISC-V 32-bit QEMU virt (128MB at 0x8000_0000, OpenSBI at 0x8000_0000, kernel at 0x8020_0000):
