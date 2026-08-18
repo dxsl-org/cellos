@@ -284,9 +284,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     let acpi_info = {
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
         let mut map_physical = |physical: usize, length: usize| {
-            let Some(end) = physical.checked_add(length) else {
-                return None;
-            };
+            let end = physical.checked_add(length)?;
             if length == 0 {
                 return None;
             }
