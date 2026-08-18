@@ -303,16 +303,20 @@ pub fn tick() {
 
 pub(crate) fn stack_pages_for(name: &str) -> usize {
     match name {
-        "init" | "shell" | "vfs" | "vfs-test" | "net" | "virtio-net" => MEASURED_STACK_PAGES,
+        // RedoxFS transactions exceed the pre-RedoxFS 64 KiB measurement and
+        // must retain the conservative stack until a new watermark is captured.
+        "vfs" => STACK_PAGES,
+        "init" | "shell" | "vfs-test" | "net" | "virtio-net" => MEASURED_STACK_PAGES,
         _ => STACK_PAGES,
     }
 }
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn stack_sizing_policy_self_test() -> bool {
-    ["init", "shell", "vfs", "vfs-test", "net", "virtio-net"]
+    ["init", "shell", "vfs-test", "net", "virtio-net"]
         .into_iter()
         .all(|name| stack_pages_for(name) == MEASURED_STACK_PAGES)
+        && stack_pages_for("vfs") == STACK_PAGES
         && stack_pages_for("unmeasured-path") == STACK_PAGES
 }
 
