@@ -20,15 +20,11 @@ const CORE0_TIMERS_IRQ: usize = LOCAL_CTRL_BASE + 0x40; // enable timer IRQs →
 const CORE0_IRQ_SOURCE: usize = LOCAL_CTRL_BASE + 0x60; // read: which IRQ fired on Core 0
 const CORE0_FIQ_SOURCE: usize = LOCAL_CTRL_BASE + 0x70; // FIQ source (should be 0 — we use IRQ)
 
-// Bits in CORE0_TIMERS_IRQ
-const TIMER_NS_PHYS_IRQ: u32 = 1 << 1; // nCNTPNSIRQ (EL1 Non-secure physical, PPI 30)
-const TIMER_HP_IRQ: u32 = 1 << 2; // nCNTHPIRQ  (EL2 Hypervisor physical,  PPI 26)
-
 // Bits in CORE0_IRQ_SOURCE (exported for trap.rs dispatch)
-pub const IRQ_SRC_TIMER_NS: u32 = 1 << 1; // Non-secure physical timer fired
-pub const IRQ_SRC_TIMER_HP: u32 = 1 << 2; // Hypervisor physical timer fired
+pub const IRQ_SRC_TIMER_NS: u32 = hal_soc_bcm27xx::BCM2837.irq.local_timer_ns_mask;
+pub const IRQ_SRC_TIMER_HP: u32 = hal_soc_bcm27xx::BCM2837.irq.local_timer_hp_mask;
 /// GPU (peripheral) IRQ: routes BCM2835 legacy controller pending IRQs.
-pub const IRQ_SRC_GPU: u32 = 1 << 8;
+pub const IRQ_SRC_GPU: u32 = hal_soc_bcm27xx::BCM2837.irq.local_gpu_mask;
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {

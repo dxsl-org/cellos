@@ -34,3 +34,32 @@ fn bcm2837_exposes_arasan_word_access_policy() {
     assert!(BCM2837.sdhci.word_access_only);
     assert_eq!(BCM2837.sdhci.minimum_write_spacing_us, 6);
 }
+
+#[test]
+fn bcm2837_irq_topology_matches_arm_hal_contract() {
+    let irq = BCM2837.irq;
+
+    assert!(irq.is_valid());
+    assert_eq!(irq.system_timer_c1, 1);
+    assert_eq!(irq.aux, 29);
+    assert_eq!(irq.gpio_bank0, 49);
+    assert_eq!(irq.gpio_bank1, 50);
+    assert_eq!(irq.local_timer_ns_mask, 1 << 1);
+    assert_eq!(irq.local_timer_hp_mask, 1 << 2);
+    assert_eq!(irq.local_gpu_mask, 1 << 8);
+}
+
+#[test]
+fn irq_topology_rejects_invalid_legacy_and_local_routes() {
+    let mut irq = BCM2837.irq;
+    irq.aux = irq.system_timer_c1;
+    assert!(!irq.is_valid());
+
+    irq = BCM2837.irq;
+    irq.gpio_bank1 = 64;
+    assert!(!irq.is_valid());
+
+    irq = BCM2837.irq;
+    irq.local_gpu_mask = irq.local_timer_ns_mask;
+    assert!(!irq.is_valid());
+}

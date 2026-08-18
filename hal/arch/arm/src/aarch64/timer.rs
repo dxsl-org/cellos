@@ -18,6 +18,8 @@ const RPI3_UART_IO: usize = hal_soc_bcm27xx::BCM2837.mmio.mini_uart_io;
 const RPI3_SYSTIMER_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.system_timer_base;
 #[cfg(feature = "board-rpi3")]
 const RPI3_LEGACY_IRQ_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.legacy_irq_base;
+#[cfg(feature = "board-rpi3")]
+const RPI3_SYSTIMER_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.system_timer_c1;
 
 /// Compute 10 ms quantum by reading the actual timer frequency from CNTFRQ_EL0.
 fn ticks_per_quantum() -> u64 {
@@ -182,7 +184,11 @@ fn rpi3_timer_diagnostic() {
     unsafe {
         core::ptr::write_volatile(
             uart,
-            if pending & (1 << 1) != 0 { b'S' } else { b'U' } as u32,
+            if pending & (1 << RPI3_SYSTIMER_IRQ) != 0 {
+                b'S'
+            } else {
+                b'U'
+            } as u32,
         );
     }
 }

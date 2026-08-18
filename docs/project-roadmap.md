@@ -57,6 +57,12 @@
 > remain in `hal/arch/arm`. The 11-gate matrix passed through RV64 release and
 > QEMU FAT16 boot; RPi3 remains compile-only for this slice.
 
+> **2026-08-18 BCM27xx IRQ-topology update:** `hal/soc/bcm27xx` now owns
+> BCM2837 legacy IRQ numbers and BCM2836 Core0 source masks. ARM HAL public
+> constants remain compatible aliases; register offsets, C1 status/ack, the
+> 10 ms timer period, and interrupt mechanisms remain in `hal/arch/arm`. The
+> 11-gate matrix and review passed; RPi3 remains compile-only for this slice.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context

@@ -1,4 +1,4 @@
-use crate::SdhciAccessPolicy;
+use crate::{Bcm27xxIrqTopology, SdhciAccessPolicy};
 
 /// Immutable controller layout for one BCM27xx SoC generation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -35,6 +35,7 @@ impl Bcm27xxMmioLayout {
 pub struct Bcm27xxSocProfile {
     pub slug: &'static str,
     pub mmio: Bcm27xxMmioLayout,
+    pub irq: Bcm27xxIrqTopology,
     pub sdhci: SdhciAccessPolicy,
 }
 
@@ -53,6 +54,15 @@ pub const BCM2837: Bcm27xxSocProfile = Bcm27xxSocProfile {
         aux_grant_size: 0x1000,
         mini_uart_io: 0x3F21_5040,
         sdhci_base: 0x3F30_0000,
+    },
+    irq: Bcm27xxIrqTopology {
+        system_timer_c1: 1,
+        aux: 29,
+        gpio_bank0: 49,
+        gpio_bank1: 50,
+        local_timer_ns_mask: 1 << 1,
+        local_timer_hp_mask: 1 << 2,
+        local_gpu_mask: 1 << 8,
     },
     sdhci: SdhciAccessPolicy {
         word_access_only: true,

@@ -2,6 +2,19 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] BCM2837 IRQ topology becomes SoC data
+
+`hal/soc/bcm27xx` now owns immutable BCM2837 legacy IRQ numbers for system
+timer C1, AUX, and the two GPIO banks, plus BCM2836 Core0 source masks for the
+NS/HP timers and GPU pass-through. Validation requires legacy routes to be
+in-range and unique and local masks to be one-hot and disjoint.
+
+ARM HAL preserves its public IRQ constants as aliases and keeps all register
+offsets, C1 status/ack behavior, the 10 ms period, and enable/dispatch mechanisms
+unchanged. Verification passed 5 BCM27xx tests, 9 board tests, 3 RISC-V SoC
+tests, AArch64 HAL/kernel default and RPi3 checks, RV64 default/release, and QEMU
+FAT16 boot. No new physical-RPi3 runtime claim is made.
+
 ## [2026-08-18] ARM HAL consumes BCM2837 controller bases
 
 `hal/soc/bcm27xx` now owns the BCM2837 system-timer and legacy-IRQ controller

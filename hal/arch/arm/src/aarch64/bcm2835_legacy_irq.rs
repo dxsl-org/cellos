@@ -20,9 +20,9 @@ const IRQ_DISABLE1: usize = IRQ_BASE + 0x1C;
 const IRQ_DISABLE2: usize = IRQ_BASE + 0x20;
 
 /// GPIO IRQ numbers in BCM2835 legacy numbering.
-pub const GPIO_BANK0_IRQ: u32 = 49; // pins 0–27 → Enable2 bit 17
-pub const GPIO_BANK1_IRQ: u32 = 50; // pins 28–45 → Enable2 bit 18
-pub const AUX_IRQ: u32 = 29;
+pub const GPIO_BANK0_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.gpio_bank0;
+pub const GPIO_BANK1_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.gpio_bank1;
+pub const AUX_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.aux;
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {
