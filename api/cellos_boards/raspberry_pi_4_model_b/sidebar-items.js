@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["RASPBERRY_PI_4_MODEL_B"]};

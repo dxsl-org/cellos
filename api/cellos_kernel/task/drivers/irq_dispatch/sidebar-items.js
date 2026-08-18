@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["UNKNOWN_IRQ_WARN_LIMIT"],"enum":["ExternalIrqRoute"],"fn":["vi_handle_riscv_external_irq","vi_riscv_plic_context","warn_unknown_irq"],"static":["UNKNOWN_RV64_IRQ_WARNINGS"]};
