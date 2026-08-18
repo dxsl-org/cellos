@@ -1,0 +1,13 @@
+[package]
+name = "hal-soc-riscv"
+version = "0.2.0"
+edition = "2021"
+license = "MPL-2.0"
+
+[dependencies]
+
+[features]
+default = []
+
+[lib]
+crate-type = ["rlib"]

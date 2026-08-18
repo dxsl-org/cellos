@@ -5,7 +5,10 @@
 //! All register access goes through volatile MMIO writes.
 
 /// PL011 base address on QEMU virt.
-pub const PL011_BASE: usize = 0x0900_0000;
+#[cfg(feature = "board-rpi4")]
+pub const PL011_BASE: usize = hal_soc_bcm27xx::BCM2711.mmio.uart_base;
+#[cfg(not(feature = "board-rpi4"))]
+pub const PL011_BASE: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base;
 
 // PL011 register offsets (byte offsets from base).
 const UARTDR: usize = 0x000; // Data Register

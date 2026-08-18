@@ -13,7 +13,7 @@
 //!
 //! Interrupt number: IRQ 1 → Enable1 bit 1 in BCM2835 interrupt controller.
 
-const SYSTIMER_BASE: usize = 0x3F00_3000;
+const SYSTIMER_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.system_timer_base;
 const SYSTIMER_CS: usize = SYSTIMER_BASE; // control/status (w1c bits 0–3)
 const SYSTIMER_CLO: usize = SYSTIMER_BASE + 0x04; // free-running counter, lower 32 bits
 const SYSTIMER_C1: usize = SYSTIMER_BASE + 0x10; // compare register 1
@@ -21,9 +21,10 @@ const SYSTIMER_C1: usize = SYSTIMER_BASE + 0x10; // compare register 1
 /// 10 ms @ 1 MHz = 10 000 ticks.
 const PERIOD: u32 = 10_000;
 
-const IRQ_BASE: usize = 0x3F00_B200;
+const IRQ_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.legacy_irq_base;
 const IRQ_PENDING1: usize = IRQ_BASE + 0x04; // pending bits for IRQs 0–31
 const IRQ_ENABLE1: usize = IRQ_BASE + 0x10; // enable  bits for IRQs 0–31
+const TIMER_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.system_timer_c1;
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {
@@ -47,7 +48,7 @@ pub fn init() {
     wr(SYSTIMER_C1, now.wrapping_add(PERIOD));
     // Enable C1 interrupt in the BCM2835 peripheral interrupt controller.
     // IRQ 1 = bit 1 of Enable_IRQs_1.
-    wr(IRQ_ENABLE1, 1 << 1);
+    wr(IRQ_ENABLE1, 1 << TIMER_IRQ);
 }
 
 /// Acknowledge C1 match and re-arm for the next period.
@@ -70,5 +71,5 @@ pub fn ack_and_rearm() {
 /// within the GPU IRQ path (bit 8 of CORE0_IRQ_SOURCE).
 #[inline]
 pub fn is_c1_pending() -> bool {
-    rd(IRQ_PENDING1) & (1 << 1) != 0
+    rd(IRQ_PENDING1) & (1 << TIMER_IRQ) != 0
 }
