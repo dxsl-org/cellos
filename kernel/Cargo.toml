@@ -46,6 +46,8 @@ fdt = "0.1"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["x86_64", "critical-section-impl"] }
+cellos-boards = { path = "../boards", version = "0.2.0" }
+hal-soc-x86 = { path = "../hal/soc/x86", version = "0.2.0" }
 
 [target.'cfg(target_arch = "arm")'.dependencies]
 hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["arm", "critical-section-impl"] }

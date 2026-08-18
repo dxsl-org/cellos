@@ -1,3 +1,4 @@
+use crate::generic_x86_64_pc::GENERIC_X86_64_PC;
 use crate::milk_v_pioneer::MILK_V_PIONEER;
 use crate::qemu_virt_aarch64::QEMU_VIRT_AARCH64;
 use crate::qemu_virt_riscv64::QEMU_VIRT_RISCV64;
@@ -47,10 +48,13 @@ fn catalog_covers_every_current_board_selection() {
         MILK_V_PIONEER,
         RASPBERRY_PI_3_MODEL_B,
         RASPBERRY_PI_4_MODEL_B,
+        GENERIC_X86_64_PC,
     ];
     for board in boards {
         assert_eq!(board.validate(), Ok(()), "{}", board.slug);
-        assert!(!board.boot.fallback_dts_path.is_empty());
+        if board.boot.boot_protocol != crate::BootProtocol::LimineMemoryMapAndAcpi {
+            assert!(!board.boot.fallback_dts_path.is_empty());
+        }
     }
 }
 
@@ -66,4 +70,9 @@ fn soc_and_driver_selection_is_typed() {
     assert!(!MILK_V_PIONEER.has_driver(DriverId::VirtioMmio));
     assert_eq!(RASPBERRY_PI_4_MODEL_B.soc, SocId::Bcm2711);
     assert!(RASPBERRY_PI_4_MODEL_B.has_driver(DriverId::SdhciArasan));
+    assert_eq!(GENERIC_X86_64_PC.soc, SocId::GenericX86Pc);
+    assert!(GENERIC_X86_64_PC.has_driver(DriverId::Uart16550PortIo));
+    assert!(GENERIC_X86_64_PC.has_driver(DriverId::PcieEcam));
+    assert!(GENERIC_X86_64_PC.fallback_memory.is_empty());
+    assert_eq!(GENERIC_X86_64_PC.validate_for(Architecture::X86_64), Ok(()));
 }

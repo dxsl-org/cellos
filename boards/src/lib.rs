@@ -24,6 +24,9 @@ pub mod raspberry_pi_3_model_b;
 #[path = "../raspberry-pi/4-model-b/board.rs"]
 pub mod raspberry_pi_4_model_b;
 
+#[path = "../generic/x86_64-pc/board.rs"]
+pub mod generic_x86_64_pc;
+
 pub use descriptor::*;
 
 pub fn qemu_virt_riscv64() -> &'static BoardDescriptor {
@@ -49,4 +52,8 @@ pub fn raspberry_pi_3_model_b() -> &'static BoardDescriptor {
 
 pub fn raspberry_pi_4_model_b() -> &'static BoardDescriptor {
     &raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B
+}
+
+pub fn generic_x86_64_pc() -> &'static BoardDescriptor {
+    &generic_x86_64_pc::GENERIC_X86_64_PC
 }

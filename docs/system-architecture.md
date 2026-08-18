@@ -3,14 +3,14 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-18 (HAL/SoC/board split complete for all six current selections; RV64 and AArch64 QEMU runtime witnesses pass; physical boards remain hardware-gated)
+**Last Updated**: 2026-08-18 (HAL/SoC/board split covers seven selections including generic x86_64 PC; physical boards remain hardware-gated)
 
-> **Status refresh 2026-08-18**: the HAL split is complete for all six current
+> **Status refresh 2026-08-18**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
-> `hal/soc/{riscv,arm-virt,bcm27xx}` owns immutable platform facts; `hal/arch`
+> `hal/soc/{riscv,arm-virt,bcm27xx,x86}` owns immutable platform facts; `hal/arch`
 > and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
-> the ownership plus six-board build matrix. RV64 and AArch64 QEMU runtime gates
+> the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
 > pass; VF2, Pioneer, RPi3, and RPi4 remain physical-hardware-gated.
 
 ---
@@ -58,7 +58,10 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 - Each descriptor owns board identity, compatible strings, boot/firmware contract,
   fallback memory map/DT asset, pinmux/PHY wiring, typed SoC identity, and the
   list of shared drivers to enable. It contains no SoC MMIO or IRQ layout.
-- The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer, Raspberry Pi 3, and Raspberry Pi 4. Checked DTS assets are audit/fallback data, not claimed as generated boot artifacts; physical-board descriptors remain compile-only without matching hardware runs.
+- The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer,
+  Raspberry Pi 3/4, and generic x86_64 ACPI PC. Checked DTS assets are
+  audit/fallback data; x86 instead consumes Limine's memory map and validated
+  ACPI. Physical-board descriptors remain compile-only without matching runs.
 - Kernel consumers are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`.
 - Shared drivers remain in `cells/drivers/`; no UART/SDHCI/DW I2C/SPI/GIC/PLIC/PCIe driver is duplicated per board.
 - `hal/soc/riscv` owns validated RISC-V fallback MMIO and discovery policy.
@@ -86,12 +89,16 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
   disjoint GPIO/UART/SDHCI pages to cells and keeps GIC mappings kernel-only.
   PCIe is intentionally absent from its enabled-driver list until a BCM2711
   host-controller path is implemented.
+- `hal/soc/x86` owns static PC-compatible COM1/ISA wiring and bounded legacy
+  BIOS/RSDP windows. The kernel selects that profile before early serial output;
+  validated ACPI remains the only source for LAPIC, IOAPIC, HPET, and PCIe ECAM
+  addresses, so every downstream timer/interrupt/PCIe gate still fails closed.
 - The shared SDHCI controller receives an immutable runtime access policy;
   BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
   access do not create per-board driver implementations.
 - `scripts/check-hal-boundaries.sh` rejects SoC imports/MMIO fields or shared
   driver copies in board packages. `scripts/check-board-configs.sh` validates
-  all six assets/build commands, compiles every selection, and proves conflicting
+  all seven assets/build commands, compiles every selection, and proves conflicting
   real-board features fail. CI runs this matrix on every change.
 
 ---

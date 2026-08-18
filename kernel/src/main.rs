@@ -126,16 +126,24 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     crate::hal::uart_pl011::init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
+    #[cfg(target_arch = "x86_64")]
     {
+        let board = crate::board::selected();
+        if !board.has_driver(cellos_boards::DriverId::Uart16550PortIo) {
+            panic!("[board] selected x86 board does not enable the early UART");
+        }
+        let soc = crate::board::selected_x86_64_soc();
+        crate::hal::uart_16550::configure(soc.com1.base, soc.com1.irq);
         crate::hal::uart_16550::init();
         crate::hal::uart_16550::puts(
-            "[x86-gate] COM1 16550 0x3f8 ready: TX + polled RX; IRQ4 pending MADT\n",
+            "[x86-gate] configured 16550 ready: TX + polled RX; IRQ pending MADT\n",
         );
         if crate::hal::uart_16550::poll_input().is_some() {
             crate::hal::uart_16550::puts("[x86-gate] COM1 polled RX observed\n");
         }
     }
+    #[cfg(target_arch = "x86")]
+    crate::hal::uart_16550::init();
 
     // Set HHDM base for LAPIC/IOAPIC MMIO access AND for phys_to_virt.
     // Limine maps RAM at HHDM_BASE+phys (no identity mapping of physical RAM).
@@ -284,11 +292,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // parser requests a mapping for each RSDP/SDT range before dereferencing it.
     // Child tables must stay inside ACPI reclaimable/NVS or firmware-reserved
     // memory-map entries. Legacy BIOS ACPI records may live in the bounded
-    // 0x80000..0x100000 firmware window. Some BIOSes, including q35, report
-    // other SDTs as Reserved, so table checksums remain the final trust gate.
+    // windows supplied by the selected x86 platform profile. Some BIOSes,
+    // including q35, report other SDTs as Reserved, so table checksums remain
+    // the final trust gate.
     #[cfg(target_arch = "x86_64")]
     let acpi_info = {
         let rsdp = crate::boot::limine::get_rsdp_ptr().unwrap_or(0);
+        let soc = crate::board::selected_x86_64_soc();
         let mut map_physical = |physical: usize, length: usize| {
             let Some(end) = physical.checked_add(length) else {
                 return None;
@@ -296,8 +306,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             if length == 0 {
                 return None;
             }
-            let legacy_firmware = physical >= 0x8_0000 && physical < 0x10_0000 && end <= 0x10_0000;
-            let legacy_rsdp = physical == rsdp && rsdp < 0x8_0000 && end <= 0x10_0000;
+            let legacy_firmware = soc.legacy_bios_window.contains(physical, length);
+            let legacy_rsdp = physical == rsdp && soc.legacy_rsdp_window.contains(physical, length);
             let firmware_owned = mmap_entries.iter().any(|entry| {
                 let Some(entry_end) = entry.base.checked_add(entry.length) else {
                     return false;
@@ -347,8 +357,31 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     };
 
     #[cfg(target_arch = "x86_64")]
-    let x86_timer_ready =
-        acpi_info.lapic_base != 0 && acpi_info.ioapic_base != 0 && acpi_info.hpet_base != 0;
+    let x86_ioapic_base = if crate::board::selected().has_driver(cellos_boards::DriverId::IoApic) {
+        acpi_info.ioapic_base
+    } else {
+        0
+    };
+    #[cfg(target_arch = "x86_64")]
+    let x86_lapic_base = if x86_ioapic_base != 0 {
+        acpi_info.lapic_base
+    } else {
+        0
+    };
+    #[cfg(target_arch = "x86_64")]
+    let x86_hpet_base = if crate::board::selected().has_driver(cellos_boards::DriverId::Hpet) {
+        acpi_info.hpet_base
+    } else {
+        0
+    };
+    #[cfg(target_arch = "x86_64")]
+    let x86_ecam_base = if crate::board::selected().has_driver(cellos_boards::DriverId::PcieEcam) {
+        acpi_info.ecam_base
+    } else {
+        0
+    };
+    #[cfg(target_arch = "x86_64")]
+    let x86_timer_ready = x86_lapic_base != 0 && x86_ioapic_base != 0 && x86_hpet_base != 0;
 
     // 3. Paging (Virtual Memory) Setup
     // x86_64 bring-up: Limine's PML4 already maps RAM via HHDM and the kernel
@@ -396,7 +429,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     {
         // Set runtime ECAM base from validated ACPI before PCIe scan. Zero
         // keeps PCIe closed; there is no implicit q35 fallback.
-        crate::task::drivers::pcie_ecam::set_ecam_base_x86(acpi_info.ecam_base as usize);
+        crate::task::drivers::pcie_ecam::set_ecam_base_x86(x86_ecam_base as usize);
 
         log_info("Initializing x86_64 paging (kernel PML4)...");
         let root_table_phys = {
@@ -405,10 +438,10 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                 locked_frame_allocator
                     .as_mut()
                     .expect("Frame allocator not initialized"),
-                acpi_info.ioapic_base,
-                acpi_info.hpet_base,
-                acpi_info.lapic_base,
-                acpi_info.ecam_base,
+                x86_ioapic_base,
+                x86_hpet_base,
+                x86_lapic_base,
+                x86_ecam_base,
             )
             .expect("Failed to initialize x86_64 kernel PML4")
         };
@@ -420,32 +453,17 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         unsafe {
             memory::paging::activate_paging(root_table_phys);
         }
-        // Immediate port-I/O probe after activate_paging — if 'Q' appears on serial,
-        // the CR3 switch succeeded and execution reached kmain.  Uses direct out instruction
-        // (no Rust function call) so it cannot be affected by any post-switch state issue.
-        // SAFETY: port I/O to COM1 (0x3F8) is always valid from ring-0.
-        unsafe {
-            core::arch::asm!(
-                "99: in al, dx",
-                "test al, 0x20",
-                "jz 99b",
-                "mov dx, {thr}",
-                "mov al, 0x51",   // 'Q'
-                "out dx, al",
-                thr = const 0x3F8u16,
-                in("dx") 0x3FDu16,
-                out("al") _,
-                options(nomem, nostack)
-            );
-        }
+        // Immediate configured port-I/O probe after activate_paging. If 'Q'
+        // appears, the CR3 switch returned to kmain with the UART mechanism live.
+        crate::hal::uart_16550::putchar(b'Q');
         if x86_timer_ready {
-            crate::hal::apic::set_lapic_phys(acpi_info.lapic_base);
-            crate::hal::apic::set_ioapic_phys(acpi_info.ioapic_base);
+            crate::hal::apic::set_lapic_phys(x86_lapic_base);
+            crate::hal::apic::set_ioapic_phys(x86_ioapic_base);
             crate::hal::apic::set_irq_overrides(
                 &acpi_info.irq_overrides,
                 acpi_info.ioapic_gsi_base,
             );
-            crate::hal::set_hpet_base(acpi_info.hpet_base as usize);
+            crate::hal::set_hpet_base(x86_hpet_base as usize);
             crate::hal::init_timers();
             log_info("x86_64 timers initialized from ACPI (HPET + LAPIC)");
         } else {
@@ -587,7 +605,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         if x86_timer_ready {
             crate::hal::uart_16550::init_input_irq();
         } else {
-            log::warn!("[x86-gate] COM1 IRQ4 CLOSED: interrupt/timer gate unavailable");
+            log::warn!("[x86-gate] configured UART IRQ CLOSED: interrupt/timer unavailable");
         }
         // Initialise the RX buffer that vi_handle_uart_irq() writes into.
         task::drivers::uart::init_input();
@@ -602,7 +620,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(any(target_arch = "riscv64", target_arch = "x86_64"))]
     {
         #[cfg(target_arch = "x86_64")]
-        if acpi_info.ecam_base != 0 {
+        if x86_ecam_base != 0 {
             // Transitional no-ABI path: the Platform Cell cannot receive MCFG
             // yet, so x86 enumeration stays kernel-side and uses the validated
             // runtime base. Driver ownership remains in user-space cells.

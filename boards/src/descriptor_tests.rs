@@ -42,6 +42,19 @@ fn rejects_empty_compatibles() {
 }
 
 #[test]
+fn rejects_missing_fallback_dts_for_device_tree_boot() {
+    static MEMORY: [MemoryRange; 1] = [MemoryRange {
+        name: "kernel",
+        base: 0x8000_0000,
+        size: 0x1000,
+        kind: MemoryRangeKind::Kernel,
+    }];
+    let mut board = descriptor(&TEST_COMPATIBLES, &MEMORY);
+    board.boot.fallback_dts_path = "";
+    assert_eq!(board.validate(), Err(ValidationError::MissingFallbackDts));
+}
+
+#[test]
 fn rejects_overlapping_fallback_ranges() {
     static MEMORY: [MemoryRange; 2] = [
         MemoryRange {

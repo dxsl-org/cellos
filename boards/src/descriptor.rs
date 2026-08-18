@@ -13,6 +13,7 @@ pub enum SocId {
     QemuArmVirt,
     Bcm2837,
     Bcm2711,
+    GenericX86Pc,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,6 +37,11 @@ pub enum DriverId {
     SdhciDwCqe,
     GpioBcm2837,
     GpioBcm2711,
+    Uart16550PortIo,
+    IoApic,
+    Hpet,
+    NvmePci,
+    EthernetE1000,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -43,12 +49,14 @@ pub enum FirmwareInterface {
     OpenSbi,
     Uefi,
     VideoCore,
+    BiosOrUefi,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BootProtocol {
     FlattenedDeviceTree,
     DeviceTreeWithFallbackMap,
+    LimineMemoryMapAndAcpi,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -99,6 +107,7 @@ pub struct BoardDescriptor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidationError {
     EmptyCompatibles,
+    MissingFallbackDts,
     MissingFallbackMemory,
     MissingEnabledDrivers,
     KernelLoadOutsideFallback,
@@ -125,7 +134,14 @@ impl BoardDescriptor {
         if self.compatibles.is_empty() || self.compatibles.iter().any(|value| value.is_empty()) {
             return Err(ValidationError::EmptyCompatibles);
         }
-        if self.fallback_memory.is_empty() {
+        let limine_memory_map = matches!(
+            self.boot.boot_protocol,
+            BootProtocol::LimineMemoryMapAndAcpi
+        );
+        if !limine_memory_map && self.boot.fallback_dts_path.is_empty() {
+            return Err(ValidationError::MissingFallbackDts);
+        }
+        if !limine_memory_map && self.fallback_memory.is_empty() {
             return Err(ValidationError::MissingFallbackMemory);
         }
         if self.enabled_drivers.is_empty() {
@@ -154,11 +170,13 @@ impl BoardDescriptor {
                 ));
             }
         }
-        if !self.fallback_memory.iter().any(|range| {
-            range.kind == MemoryRangeKind::Kernel
-                && self.boot.kernel_load_base >= range.base
-                && self.boot.kernel_load_base < range.base.saturating_add(range.size)
-        }) {
+        if !limine_memory_map
+            && !self.fallback_memory.iter().any(|range| {
+                range.kind == MemoryRangeKind::Kernel
+                    && self.boot.kernel_load_base >= range.base
+                    && self.boot.kernel_load_base < range.base.saturating_add(range.size)
+            })
+        {
             return Err(ValidationError::KernelLoadOutsideFallback);
         }
         Ok(())

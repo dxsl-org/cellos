@@ -1,4 +1,8 @@
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 use cellos_boards::{Architecture, BoardDescriptor, ValidationError};
 
 #[cfg(all(target_arch = "riscv64", feature = "board-pioneer"))]
@@ -51,9 +55,39 @@ pub(crate) fn selected_riscv64_soc() -> &'static hal_soc_riscv::RiscvSocProfile 
     }
 }
 
-#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 fn invalid_descriptor(error: ValidationError) -> ! {
     panic!("[board] invalid descriptor: {:?}", error)
+}
+
+#[cfg(target_arch = "x86_64")]
+const GENERIC_X86_64_PC: &BoardDescriptor = &cellos_boards::generic_x86_64_pc::GENERIC_X86_64_PC;
+
+#[cfg(target_arch = "x86_64")]
+/// Validates the board contract before early boot consumes platform facts.
+pub(crate) fn selected() -> &'static BoardDescriptor {
+    match GENERIC_X86_64_PC.validate_for(Architecture::X86_64) {
+        Ok(()) => GENERIC_X86_64_PC,
+        Err(error) => invalid_descriptor(error),
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+/// Returns the validated PC platform profile paired with the selected board.
+pub(crate) fn selected_x86_64_soc() -> &'static hal_soc_x86::X86PcProfile {
+    use cellos_boards::SocId;
+
+    match selected().soc {
+        SocId::GenericX86Pc => match hal_soc_x86::GENERIC_PC.validate() {
+            Ok(()) => &hal_soc_x86::GENERIC_PC,
+            Err(error) => panic!("[board] invalid x86 SoC profile: {:?}", error),
+        },
+        _ => panic!("[board] x86 descriptor has incompatible SoC identity"),
+    }
 }
 
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]

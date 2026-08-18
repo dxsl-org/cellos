@@ -42,4 +42,21 @@ if ! grep -q 'pub fn has_driver' boards/src/descriptor.rs; then
     fail 'typed driver selection query is missing'
 fi
 
+if grep -nE '0x0?3[fF]8|const COM1|const UART_IRQ' \
+    hal/arch/x86/src/x86_64/uart_16550.rs kernel/src/main.rs; then
+    fail 'x86 COM1 and ISA IRQ facts belong under hal/soc/x86'
+fi
+
+if grep -nE 'physical >= 0x8_0000|end <= 0x10_0000|rsdp < 0x8_0000' kernel/src/main.rs; then
+    fail 'x86 legacy firmware windows belong under hal/soc/x86'
+fi
+
+if ! grep -q 'pub const GENERIC_PC: X86PcProfile' hal/soc/x86/src/lib.rs; then
+    fail 'the generic x86 platform profile is missing'
+fi
+
+if grep -q 'hal.soc.x86\|hal-soc-x86' hal/arch/x86/Cargo.toml; then
+    fail 'x86 architecture mechanisms must not depend on SoC policy'
+fi
+
 printf 'PASS: HAL/SoC/board boundaries are intact\n'

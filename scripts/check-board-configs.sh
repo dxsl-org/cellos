@@ -69,6 +69,7 @@ board_dirs=(
     "boards/milk-v/pioneer"
     "boards/raspberry-pi/3-model-b"
     "boards/raspberry-pi/4-model-b"
+    "boards/generic/x86_64-pc"
 )
 
 for dir in "${board_dirs[@]}"; do
@@ -101,11 +102,14 @@ check_readme_command \
 check_readme_command \
     "boards/raspberry-pi/4-model-b/README.md" \
     'cargo build -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4'
+check_readme_command \
+    "boards/generic/x86_64-pc/README.md" \
+    'cargo build -p cellos-kernel --release --target x86_64-unknown-none'
 
 run bash scripts/check-hal-boundaries.sh
 
-record_run boards-crate \
-    run cargo check -p cellos-boards --target x86_64-unknown-linux-gnu
+record_run board-host-contracts \
+    run cargo test -p cellos-boards -p hal-soc-x86 --target x86_64-unknown-linux-gnu
 record_run qemu-rv64 \
     run cargo check -p cellos-kernel --target riscv64gc-unknown-none-elf
 record_run qemu-aarch64 \
@@ -118,6 +122,8 @@ record_run rpi3 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3
 record_run rpi4 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4
+record_run generic-x86-64-pc \
+    run cargo check -p cellos-kernel --target x86_64-unknown-none
 
 expect_compile_error \
     riscv-conflict \

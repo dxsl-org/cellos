@@ -62,6 +62,9 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
   and enabled shared-driver selection.
 - Immutable SoC MMIO, IRQ topology, controller presence, and access quirks live
   under `hal/soc/`.
+- For x86 PC-compatible targets, `hal/soc/x86` owns static port/ISA wiring and
+  bounded legacy firmware windows. LAPIC, IOAPIC, HPET, and ECAM addresses must
+  come from validated ACPI and remain unavailable when firmware evidence fails.
 - Register access, interrupt programming, and CPU-architecture mechanisms live
   under `hal/arch/`; shared device mechanisms remain single-copy in the kernel
   integration layer or `cells/drivers/`.
@@ -423,6 +426,8 @@ cells/
 
 - Root `boards/` stays outside HAL; it owns immutable board descriptors and fallback assets.
 - `hal/soc/riscv` owns RISC-V SoC profile facts only: compatible-string sets and fail-closed access policies.
+- `hal/soc/x86` owns PC-compatible COM/ISA wiring and legacy firmware windows;
+  ACPI-discovered MMIO stays fail-closed in the kernel integration boundary.
 - Shared drivers stay in `cells/drivers/`; do not copy UART, SDHCI, DW I2C/SPI, GIC/PLIC, or PCIe drivers per board.
 
 ### Visibility

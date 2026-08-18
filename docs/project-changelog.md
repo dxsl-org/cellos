@@ -2,6 +2,24 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] Generic x86 PC joins the board and SoC ownership model
+
+The previously merged x86 hardware lane now has a generic ACPI PC descriptor
+under `boards/` and a data-only `hal/soc/x86` profile. The descriptor records
+Limine BIOS/UEFI boot, symbolic COM/PCIe wiring, and the shared UART, IOAPIC,
+HPET, PCIe, NVMe, and e1000 driver selection without embedding hardware
+addresses.
+
+`hal/soc/x86` owns the static COM1 port/ISA IRQ and bounded legacy BIOS/RSDP
+windows. The existing x86 UART mechanism is configured from that profile, and
+the kernel no longer duplicates COM1 or low-firmware constants. LAPIC, IOAPIC,
+HPET, and ECAM addresses still come only from validated ACPI; missing or invalid
+firmware therefore keeps timer, interrupt, and PCIe gates closed. The board
+matrix and boundary guard now cover all seven selections. QEMU remains an
+integration witness; no new physical x86 qualification is claimed. Verification
+passed 27 host tests, the seven-board build matrix, the x86 release build, a
+fresh BIOS shell boot, and an OVMF boot through scheduler initialization.
+
 ## [2026-08-18] HAL/SoC/board split is complete for the current catalog
 
 `BoardDescriptor` now contains only identity/compatibles, the boot and firmware
