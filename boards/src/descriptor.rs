@@ -6,6 +6,38 @@ pub enum Architecture {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SocId {
+    GenericRiscvVirt,
+    Jh7110,
+    Sg2042,
+    QemuArmVirt,
+    Bcm2837,
+    Bcm2711,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DriverId {
+    ConsoleSbiDbcn,
+    UartNs16550a,
+    UartDwApb,
+    UartPl011,
+    UartBcmMini,
+    PlicSifive,
+    ClintSifive,
+    GicV2,
+    IrqBcm2836Local,
+    IrqBcm2835Legacy,
+    TimerBcm2835System,
+    RtcGoldfish,
+    VirtioMmio,
+    PcieEcam,
+    SdhciArasan,
+    SdhciDwCqe,
+    GpioBcm2837,
+    GpioBcm2711,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FirmwareInterface {
     OpenSbi,
     Uefi,
@@ -62,6 +94,7 @@ pub struct BoardDescriptor {
     pub vendor: &'static str,
     pub model: &'static str,
     pub architecture: Architecture,
+    pub soc: SocId,
     pub compatibles: &'static [&'static str],
     pub boot: BootContract,
     pub fallback_memory: &'static [MemoryRange],
@@ -71,16 +104,17 @@ pub struct BoardDescriptor {
     pub rtc: Option<MmioRegion>,
     pub virtio_mmio: &'static [MmioRegion],
     pub wiring: WiringLayout,
-    pub enabled_drivers: &'static [&'static str],
+    pub enabled_drivers: &'static [DriverId],
 }
 
-pub const MAX_VIRTIO_MMIO_SLOTS: usize = 8;
+pub const MAX_VIRTIO_MMIO_SLOTS: usize = 32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidationError {
     EmptyCompatibles,
     MissingFallbackMemory,
     MissingEnabledDrivers,
+    DuplicateEnabledDriver(DriverId),
     TooManyVirtioSlots {
         found: usize,
         max: usize,
@@ -99,6 +133,11 @@ pub enum ValidationError {
 }
 
 impl BoardDescriptor {
+    /// Reports whether the selected board enables a shared driver mechanism.
+    pub fn has_driver(&self, driver: DriverId) -> bool {
+        self.enabled_drivers.contains(&driver)
+    }
+
     /// Checks that build-time board data is safe to consume as fallback state.
     ///
     /// Returns the first structural violation; validation performs no allocation.
@@ -111,6 +150,11 @@ impl BoardDescriptor {
         }
         if self.enabled_drivers.is_empty() {
             return Err(ValidationError::MissingEnabledDrivers);
+        }
+        for (index, driver) in self.enabled_drivers.iter().enumerate() {
+            if self.enabled_drivers[..index].contains(driver) {
+                return Err(ValidationError::DuplicateEnabledDriver(*driver));
+            }
         }
         if self.virtio_mmio.len() > MAX_VIRTIO_MMIO_SLOTS {
             return Err(ValidationError::TooManyVirtioSlots {

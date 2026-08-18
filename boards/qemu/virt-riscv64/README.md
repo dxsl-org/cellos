@@ -21,3 +21,7 @@ It does not include:
 The kernel consumes this descriptor from boot/platform code. Firmware DTB data
 remains authoritative when present; this package supplies audited fallbacks for
 direct-kernel boot and incomplete DTBs.
+
+```sh
+cargo build -p cellos-kernel --target riscv64gc-unknown-none-elf
+```

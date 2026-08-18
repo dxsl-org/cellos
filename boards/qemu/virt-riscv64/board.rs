@@ -1,15 +1,15 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, FirmwareInterface, MemoryRange,
-    MemoryRangeKind, MmioRegion, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
+    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["riscv-virtio", "qemu,virt"];
-const ENABLED_DRIVERS: [&str; 5] = [
-    "uart-ns16550a",
-    "plic-sifive",
-    "clint-sifive",
-    "rtc-goldfish",
-    "virtio-mmio",
+const ENABLED_DRIVERS: [DriverId; 5] = [
+    DriverId::UartNs16550a,
+    DriverId::PlicSifive,
+    DriverId::ClintSifive,
+    DriverId::RtcGoldfish,
+    DriverId::VirtioMmio,
 ];
 const EMPTY_WIRING: WiringLayout = WiringLayout {
     pinmux_groups: &[],
@@ -97,6 +97,7 @@ pub const QEMU_VIRT_RISCV64: BoardDescriptor = BoardDescriptor {
     vendor: "qemu",
     model: "virt-riscv64",
     architecture: Architecture::Riscv64,
+    soc: SocId::GenericRiscvVirt,
     compatibles: &BOARD_COMPATIBLES,
     boot: BootContract {
         firmware: FirmwareInterface::OpenSbi,

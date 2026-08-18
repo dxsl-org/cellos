@@ -1,16 +1,16 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, FirmwareInterface, MemoryRange,
-    MemoryRangeKind, MmioRegion, WiringLayout,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
+    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["raspberrypi,3-model-b", "brcm,bcm2837"];
-const ENABLED_DRIVERS: [&str; 6] = [
-    "uart-bcm-mini",
-    "irq-bcm2836-local",
-    "irq-bcm2835-legacy",
-    "timer-bcm2835-system",
-    "sdhci-arasan",
-    "gpio-bcm2837",
+const ENABLED_DRIVERS: [DriverId; 6] = [
+    DriverId::UartBcmMini,
+    DriverId::IrqBcm2836Local,
+    DriverId::IrqBcm2835Legacy,
+    DriverId::TimerBcm2835System,
+    DriverId::SdhciArasan,
+    DriverId::GpioBcm2837,
 ];
 const PINMUX_GROUPS: [&str; 2] = ["uart-gpio14-15-alt5", "sd-gpio48-53-alt3"];
 const WIRING: WiringLayout = WiringLayout {
@@ -43,6 +43,7 @@ pub const RASPBERRY_PI_3_MODEL_B: BoardDescriptor = BoardDescriptor {
     vendor: "raspberry-pi",
     model: "3-model-b",
     architecture: Architecture::Aarch64,
+    soc: SocId::Bcm2837,
     compatibles: &BOARD_COMPATIBLES,
     boot: BootContract {
         firmware: FirmwareInterface::VideoCore,

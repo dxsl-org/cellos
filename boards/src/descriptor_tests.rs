@@ -1,6 +1,7 @@
 use crate::{
-    Architecture, BoardDescriptor, BootContract, BootProtocol, FirmwareInterface, MemoryRange,
-    MemoryRangeKind, MmioRegion, ValidationError, WiringLayout, MAX_VIRTIO_MMIO_SLOTS,
+    Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
+    MemoryRange, MemoryRangeKind, MmioRegion, SocId, ValidationError, WiringLayout,
+    MAX_VIRTIO_MMIO_SLOTS,
 };
 
 static EMPTY: [&str; 0] = [];
@@ -9,6 +10,7 @@ static EMPTY_WIRING: WiringLayout = WiringLayout {
     pinmux_groups: &[],
     phy_links: &[],
 };
+static TEST_DRIVERS: [DriverId; 1] = [DriverId::UartNs16550a];
 static TEST_COMPATIBLES: [&str; 1] = ["test,board"];
 const TEST_MMIO: [MmioRegion; 1] = [MmioRegion {
     compatible: "test,mmio",
@@ -26,6 +28,7 @@ fn descriptor(
         vendor: "cellos",
         model: "test",
         architecture: Architecture::Riscv64,
+        soc: SocId::GenericRiscvVirt,
         compatibles,
         boot: BootContract {
             firmware: FirmwareInterface::OpenSbi,
@@ -49,7 +52,7 @@ fn descriptor(
         }),
         virtio_mmio: &TEST_MMIO,
         wiring: EMPTY_WIRING,
-        enabled_drivers: &["test-driver"],
+        enabled_drivers: &TEST_DRIVERS,
     }
 }
 
@@ -154,11 +157,34 @@ fn rejects_more_virtio_slots_than_kernel_capacity() {
         size: 0x1000,
         kind: MemoryRangeKind::Usable,
     }];
-    static VIRTIO: [MmioRegion; MAX_VIRTIO_MMIO_SLOTS + 1] = [TEST_MMIO[0]; 9];
+    static VIRTIO: [MmioRegion; MAX_VIRTIO_MMIO_SLOTS + 1] =
+        [TEST_MMIO[0]; MAX_VIRTIO_MMIO_SLOTS + 1];
     let mut board = descriptor(&TEST_COMPATIBLES, &MEMORY);
     board.virtio_mmio = &VIRTIO;
     assert_eq!(
         board.validate(),
-        Err(ValidationError::TooManyVirtioSlots { found: 9, max: 8 })
+        Err(ValidationError::TooManyVirtioSlots {
+            found: MAX_VIRTIO_MMIO_SLOTS + 1,
+            max: MAX_VIRTIO_MMIO_SLOTS,
+        })
+    );
+}
+
+#[test]
+fn rejects_duplicate_enabled_drivers() {
+    static MEMORY: [MemoryRange; 1] = [MemoryRange {
+        name: "usable",
+        base: 0x8000_0000,
+        size: 0x1000,
+        kind: MemoryRangeKind::Usable,
+    }];
+    static DRIVERS: [DriverId; 2] = [DriverId::UartNs16550a; 2];
+    let mut board = descriptor(&TEST_COMPATIBLES, &MEMORY);
+    board.enabled_drivers = &DRIVERS;
+    assert_eq!(
+        board.validate(),
+        Err(ValidationError::DuplicateEnabledDriver(
+            DriverId::UartNs16550a
+        ))
     );
 }

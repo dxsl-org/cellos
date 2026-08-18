@@ -8,3 +8,7 @@ a generated or compiled boot artifact.
 Board data owns identity, firmware/boot expectations, fallback RAM, pinmux
 group names, and enabled shared drivers. BCM2837 controller layout and SDHCI
 access constraints remain in `hal/soc/bcm27xx`.
+
+```sh
+cargo build -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3
+```
