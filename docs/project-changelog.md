@@ -2,6 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] BCM2837 MMIO spans become SoC profile data
+
+`hal/soc/bcm27xx` now owns the exact BCM2837 peripheral and local-controller
+spans plus the GPIO and AUX grant widths. RPi3 paging, resource allowlisting,
+and GPIO IRQ owner lookup consume these immutable facts instead of repeating
+addresses and sizes in kernel modules.
+
+The refactor preserves the existing USER-accessible peripheral mapping,
+kernel-only local-controller mapping, and exact GPIO/AUX allowlist widths. It
+moves no IRQ/timer mechanism and grants no new MMIO access. Verification passed
+3 BCM27xx tests, 9 board tests, 3 RISC-V SoC tests, AArch64 default/RPi3 and
+RV64 checks, the RV64 release build, and QEMU FAT16 boot. Physical RPi3 behavior
+is not newly claimed by this slice.
+
 ## [2026-08-18] RPi3 board descriptors join the root `boards/` crate
 
 `boards/raspberry-pi/3-model-b` now carries the Raspberry Pi 3 Model B board

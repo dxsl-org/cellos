@@ -72,9 +72,11 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
   from the selected SoC profile and device IRQs from `PlatformInfo`, and the
   shared PLIC driver no longer hardcodes QEMU context or enable-range assumptions.
 - `hal/soc/bcm27xx` owns immutable BCM2837 peripheral/GPIO/AUX/Arasan layout and
-  SDHCI word-access/write-spacing policy. RPi3 platform and MMC consumers use
-  those facts without moving pinmux selection or duplicating the shared SDHCI
-  mechanism.
+  SDHCI word-access/write-spacing policy. It also owns exact peripheral and
+  local-controller spans plus GPIO/AUX grant widths; RPi3 paging, resource
+  allowlisting, platform, GPIO IRQ, and MMC consumers use those facts without
+  changing page permissions, moving pinmux selection, or duplicating shared
+  mechanisms.
 
 ---
 

@@ -43,6 +43,13 @@
 > BCM2837 facts; shared UART/SDHCI/GIC/PLIC/PCIe drivers remain single-copy.
 > RPi3 physical boot stays hardware-gated; this slice is compile-only.
 
+> **2026-08-18 BCM27xx MMIO-policy update:** `hal/soc/bcm27xx` now owns the
+> exact peripheral/local-controller spans and GPIO/AUX grant widths consumed by
+> RPi3 paging, the resource registry, and GPIO IRQ owner lookup. Existing page
+> permissions and allowlist widths remain unchanged; no IRQ/timer mechanism or
+> new MMIO authority moved. The 9-gate matrix passed through RV64 release and
+> QEMU FAT16 boot; this slice adds no physical-RPi3 runtime claim.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context
