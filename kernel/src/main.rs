@@ -112,7 +112,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     task::drivers::uart::init();
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     crate::hal::uart_bcm_mini::init();
-    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        not(feature = "board-rpi3"),
+        not(feature = "board-rpi4")
+    ))]
     crate::hal::uart_pl011::init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
@@ -547,7 +551,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
 
     // 6. Logger & Drivers & FS
     task::drivers::uart::init(); // registers log backend on all arches
-    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        not(feature = "board-rpi3"),
+        not(feature = "board-rpi4")
+    ))]
     {
         let (start, end) = boot::fallback_dtb_ram_range();
         log::info!("[boot] DTB RAM range {:#x}..{:#x}", start, end);

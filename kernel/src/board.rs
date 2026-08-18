@@ -1,7 +1,4 @@
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 use cellos_boards::{Architecture, BoardDescriptor, ValidationError};
 
 #[cfg(all(target_arch = "riscv64", feature = "board-pioneer"))]
@@ -49,10 +46,7 @@ pub(crate) fn selected_riscv64_soc() -> &'static hal_soc_riscv::RiscvSocProfile 
     }
 }
 
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 fn invalid_descriptor(error: ValidationError) -> ! {
     panic!("[board] invalid descriptor: {:?}", error)
 }
@@ -72,6 +66,55 @@ pub(crate) const fn default_rpi3_board() -> &'static BoardDescriptor {
 pub(crate) fn selected_rpi3() -> &'static BoardDescriptor {
     match DEFAULT_RPI3_BOARD.validate_for(Architecture::Aarch64) {
         Ok(()) => DEFAULT_RPI3_BOARD,
+        Err(error) => invalid_descriptor(error),
+    }
+}
+
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
+const QEMU_ARM_VIRT_BOARD: &BoardDescriptor = &cellos_boards::qemu_virt_aarch64::QEMU_VIRT_AARCH64;
+
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
+pub(crate) const fn default_qemu_arm_virt_board() -> &'static BoardDescriptor {
+    QEMU_ARM_VIRT_BOARD
+}
+
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
+pub(crate) fn selected_qemu_arm_virt() -> &'static BoardDescriptor {
+    match QEMU_ARM_VIRT_BOARD.validate_for(Architecture::Aarch64) {
+        Ok(()) => {
+            if QEMU_ARM_VIRT_BOARD.uart.irq != Some(hal_soc_arm_virt::QEMU_ARM_VIRT.uart.spi) {
+                panic!("[board] QEMU ARM UART IRQ does not match the SoC profile");
+            }
+            QEMU_ARM_VIRT_BOARD
+        }
+        Err(error) => invalid_descriptor(error),
+    }
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+const RPI4_BOARD: &BoardDescriptor = &cellos_boards::raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B;
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+pub(crate) const fn default_rpi4_board() -> &'static BoardDescriptor {
+    RPI4_BOARD
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+pub(crate) fn selected_rpi4() -> &'static BoardDescriptor {
+    match RPI4_BOARD.validate_for(Architecture::Aarch64) {
+        Ok(()) => RPI4_BOARD,
         Err(error) => invalid_descriptor(error),
     }
 }

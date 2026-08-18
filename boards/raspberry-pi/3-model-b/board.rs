@@ -50,6 +50,7 @@ pub const RASPBERRY_PI_3_MODEL_B: BoardDescriptor = BoardDescriptor {
         boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
         requires_firmware_dtb: false,
         fallback_dts_path: "boards/raspberry-pi/3-model-b/raspberry-pi-3-model-b.dts",
+        kernel_load_base: 0x0008_0000,
     },
     fallback_memory: &FALLBACK_MEMORY,
     uart: UART,

@@ -5,6 +5,12 @@ use types::{ViError, ViResult};
 /// Polling timeout for CMD_COMPLETE and DAT transfers (~500 ms at 1 iteration/µs).
 const POLL_TIMEOUT_US: u32 = 500_000;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SdhciAccessPolicy {
+    pub word_access_only: bool,
+    pub minimum_write_spacing_us: u32,
+}
+
 /// SDHCI host controller — PIO polling mode, no DMA, no interrupts.
 ///
 /// The `base` field is the kernel-mapped virtual address of the SDHCI register block.
@@ -15,9 +21,8 @@ pub struct SdhciController {
     pub is_sdhc: bool,
     /// SDHCI spec version read from HOST_VERSION[2:0]; affects clock divider encoding.
     spec_ver: u8,
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+    policy: SdhciAccessPolicy,
     transfer_mode_shadow: u32,
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     last_write_ticks: u64,
 }
 
@@ -27,14 +32,13 @@ impl SdhciController {
     /// # Safety
     /// `base` must be a valid kernel-mapped MMIO address for the SDHCI register block.
     /// The address must remain valid for the lifetime of `Self`.
-    pub unsafe fn new(base: usize) -> Self {
+    pub unsafe fn new(base: usize, policy: SdhciAccessPolicy) -> Self {
         let mut c = Self {
             base,
             is_sdhc: false,
             spec_ver: 0,
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+            policy,
             transfer_mode_shadow: 0,
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
             last_write_ticks: 0,
         };
         // SAFETY: base is the validated MMIO address passed by the caller.
@@ -46,8 +50,7 @@ impl SdhciController {
 
     #[inline]
     fn read8(&self, off: usize) -> u8 {
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
+        if self.policy.word_access_only {
             let shift = (off & 3) * 8;
             return (self.read32(off & !3) >> shift) as u8;
         }
@@ -61,8 +64,7 @@ impl SdhciController {
     }
     #[inline]
     fn read16(&self, off: usize) -> u16 {
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
+        if self.policy.word_access_only {
             let shift = (off & 2) * 8;
             return (self.read32(off & !3) >> shift) as u16;
         }
@@ -71,19 +73,14 @@ impl SdhciController {
     }
     #[inline]
     fn write32(&mut self, off: usize, v: u32) {
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        self.space_bcm2835_write(off);
+        self.space_controller_write(off);
         // SAFETY: same as read32.
         unsafe { core::ptr::write_volatile((self.base + off) as *mut u32, v) }
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        {
-            self.last_write_ticks = Self::bcm2835_timer_ticks();
-        }
+        self.last_write_ticks = Self::controller_timer_ticks();
     }
     #[inline]
     fn write16(&mut self, off: usize, v: u16) {
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
+        if self.policy.word_access_only {
             let shift = (off & 2) * 8;
             let old = if off == SDHCI_COMMAND {
                 self.transfer_mode_shadow
@@ -103,8 +100,7 @@ impl SdhciController {
     }
     #[inline]
     fn write8(&mut self, off: usize, v: u8) {
-        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
+        if self.policy.word_access_only {
             let shift = (off & 3) * 8;
             let old = self.read32(off & !3);
             let combined = (old & !(0xff << shift)) | ((v as u32) << shift);
@@ -115,33 +111,45 @@ impl SdhciController {
         unsafe { core::ptr::write_volatile((self.base + off) as *mut u8, v) }
     }
 
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     #[inline]
-    fn bcm2835_timer_ticks() -> u64 {
-        let ticks: u64;
-        // SAFETY: CNTPCT_EL0 is a read-only architectural counter available at EL1/EL2.
-        unsafe {
-            core::arch::asm!("mrs {}, cntpct_el0", out(reg) ticks, options(nomem, nostack));
+    fn controller_timer_ticks() -> u64 {
+        #[cfg(target_arch = "aarch64")]
+        {
+            let ticks: u64;
+            // SAFETY: CNTPCT_EL0 is a read-only architectural counter available at EL1/EL2.
+            unsafe {
+                core::arch::asm!("mrs {}, cntpct_el0", out(reg) ticks, options(nomem, nostack));
+            }
+            ticks
         }
-        ticks
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            0
+        }
     }
 
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-    fn space_bcm2835_write(&self, off: usize) {
-        if off == SDHCI_BUFFER || self.last_write_ticks == 0 {
+    fn space_controller_write(&self, off: usize) {
+        if off == SDHCI_BUFFER
+            || self.last_write_ticks == 0
+            || self.policy.minimum_write_spacing_us == 0
+        {
             return;
         }
 
-        let frequency: u64;
-        // SAFETY: CNTFRQ_EL0 is a read-only architectural frequency register.
-        unsafe {
-            core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
-        }
-        // BCM2835 Arasan may drop writes less than two 400 kHz SD-clock cycles apart.
-        let spacing_us = u64::from(hal_soc_bcm27xx::BCM2837.sdhci.minimum_write_spacing_us);
-        let minimum_ticks = frequency.saturating_mul(spacing_us).div_ceil(1_000_000);
-        while Self::bcm2835_timer_ticks().wrapping_sub(self.last_write_ticks) < minimum_ticks {
-            core::hint::spin_loop();
+        #[cfg(target_arch = "aarch64")]
+        {
+            let frequency: u64;
+            // SAFETY: CNTFRQ_EL0 is a read-only architectural frequency register.
+            unsafe {
+                core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
+            }
+            // BCM2835 Arasan may drop writes less than two 400 kHz SD-clock cycles apart.
+            let spacing_us = u64::from(self.policy.minimum_write_spacing_us);
+            let minimum_ticks = frequency.saturating_mul(spacing_us).div_ceil(1_000_000);
+            while Self::controller_timer_ticks().wrapping_sub(self.last_write_ticks) < minimum_ticks
+            {
+                core::hint::spin_loop();
+            }
         }
     }
 

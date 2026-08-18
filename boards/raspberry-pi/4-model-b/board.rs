@@ -4,13 +4,12 @@ use crate::{
 };
 
 const COMPATIBLES: [&str; 2] = ["raspberrypi,4-model-b", "brcm,bcm2711"];
-const DRIVERS: [DriverId; 6] = [
+const DRIVERS: [DriverId; 5] = [
     DriverId::UartPl011,
     DriverId::GicV2,
     DriverId::TimerBcm2835System,
     DriverId::SdhciArasan,
     DriverId::GpioBcm2711,
-    DriverId::PcieEcam,
 ];
 const MEMORY: [MemoryRange; 2] = [
     MemoryRange {
@@ -39,12 +38,13 @@ pub const RASPBERRY_PI_4_MODEL_B: BoardDescriptor = BoardDescriptor {
         boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
         requires_firmware_dtb: true,
         fallback_dts_path: "boards/raspberry-pi/4-model-b/raspberry-pi-4-model-b.dts",
+        kernel_load_base: 0x0008_0000,
     },
     fallback_memory: &MEMORY,
     uart: MmioRegion {
         compatible: "arm,pl011",
-        base: 0xFE20_1000,
-        size: 0x1000,
+        base: hal_soc_bcm27xx::BCM2711.mmio.uart_base as u64,
+        size: hal_soc_bcm27xx::BCM2711.mmio.uart_grant_size as u64,
         irq: None,
     },
     plic: None,

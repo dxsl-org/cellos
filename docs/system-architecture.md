@@ -81,6 +81,16 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
   mechanisms.
 - RPi3 kernel diagnostics reuse ARM HAL's FIFO-safe mini-UART byte writer; the
   kernel does not maintain a second LSR/IO polling and write implementation.
+- `hal/soc/arm-virt` owns QEMU AArch64 platform layout and IRQ facts. PL011,
+  GIC, paging, VirtIO, PCIe, RTC, GPIO, and resource consumers share those facts
+  without gaining board-specific mechanism copies.
+- `hal/soc/bcm27xx` also owns BCM2711 layout and grant widths. RPi4 exposes only
+  disjoint GPIO/UART/SDHCI pages to cells and keeps GIC mappings kernel-only.
+  PCIe is intentionally absent from its enabled-driver list until a BCM2711
+  host-controller path is implemented.
+- The shared SDHCI controller receives an immutable runtime access policy;
+  BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
+  access do not create per-board driver implementations.
 
 ---
 

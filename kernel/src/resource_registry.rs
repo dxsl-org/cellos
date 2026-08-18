@@ -68,10 +68,36 @@ const ALLOWED: &[(usize, usize, u8)] = &[
     // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
 ];
 
-#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
 const ALLOWED: &[(usize, usize, u8)] = &[
-    (0x0900_0000, 0x1000, DEV_UART), // PL011 UART0  — QEMU ARM virt
-    (0x0903_0000, 0x1000, DEV_GPIO), // PL061 GPIO   — QEMU ARM virt
+    (
+        hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base,
+        hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.size,
+        DEV_UART,
+    ),
+    (
+        hal_soc_arm_virt::QEMU_ARM_VIRT.gpio.mmio.base,
+        hal_soc_arm_virt::QEMU_ARM_VIRT.gpio.mmio.size,
+        DEV_GPIO,
+    ),
+];
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+const ALLOWED: &[(usize, usize, u8)] = &[
+    (
+        hal_soc_bcm27xx::BCM2711.mmio.uart_base,
+        hal_soc_bcm27xx::BCM2711.mmio.uart_grant_size,
+        DEV_UART,
+    ),
+    (
+        hal_soc_bcm27xx::BCM2711.mmio.gpio_base,
+        hal_soc_bcm27xx::BCM2711.mmio.gpio_grant_size,
+        DEV_GPIO,
+    ),
 ];
 
 /// SiFive GPIO0 for QEMU `sifive_u` machine (FU540/FU740).

@@ -5,3 +5,5 @@ edition = "2021"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
+hal-soc-arm-virt = { path = "../hal/soc/arm-virt", version = "0.2.0" }
+hal-soc-bcm27xx = { path = "../hal/soc/bcm27xx", version = "0.2.0" }

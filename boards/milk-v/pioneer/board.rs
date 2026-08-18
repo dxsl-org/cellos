@@ -42,6 +42,7 @@ pub const MILK_V_PIONEER: BoardDescriptor = BoardDescriptor {
         boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
         requires_firmware_dtb: true,
         fallback_dts_path: "boards/milk-v/pioneer/milk-v-pioneer.dts",
+        kernel_load_base: 0x8020_0000,
     },
     fallback_memory: &MEMORY,
     uart: MmioRegion {

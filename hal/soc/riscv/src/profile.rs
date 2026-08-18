@@ -1,4 +1,6 @@
-use crate::{PlicContextPolicy, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
+use crate::{
+    PlicContextPolicy, RiscvSdhciProfile, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy,
+};
 
 /// Immutable SoC-profile facts used by the RV64 platform path.
 ///
@@ -15,6 +17,7 @@ pub struct RiscvSocProfile {
     pub uart_access: UartAccessPolicy,
     pub rtc_access: RtcAccessPolicy,
     pub virtio_mmio: VirtioMmioPolicy,
+    pub sdhci: Option<RiscvSdhciProfile>,
 }
 
 impl RiscvSocProfile {

@@ -1,5 +1,6 @@
 use crate::{
-    PlicContextPolicy, RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy,
+    PlicContextPolicy, RiscvSdhciProfile, RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy,
+    VirtioMmioPolicy,
 };
 
 const UART_COMPATIBLES: &[&str] = &["ns16550a", "ns16550", "snps,dw-apb-uart"];
@@ -18,6 +19,7 @@ pub const GENERIC_VIRT: RiscvSocProfile = RiscvSocProfile {
     uart_access: UartAccessPolicy::Mmio,
     rtc_access: RtcAccessPolicy::Mmio,
     virtio_mmio: VirtioMmioPolicy::Discover,
+    sdhci: None,
 };
 
 /// JH7110 currently reuses the same DTB lookup families as the generic path.
@@ -25,6 +27,11 @@ pub const JH7110: RiscvSocProfile = RiscvSocProfile {
     slug: "jh7110",
     plic_context: PlicContextPolicy::jh7110(),
     rtc_access: RtcAccessPolicy::Unavailable,
+    sdhci: Some(RiscvSdhciProfile {
+        base: 0x1604_0000,
+        word_access_only: false,
+        minimum_write_spacing_us: 0,
+    }),
     ..GENERIC_VIRT
 };
 
@@ -40,4 +47,5 @@ pub const SG2042: RiscvSocProfile = RiscvSocProfile {
     uart_access: UartAccessPolicy::SbiDbcnOnly,
     rtc_access: RtcAccessPolicy::Unavailable,
     virtio_mmio: VirtioMmioPolicy::Absent,
+    sdhci: None,
 };

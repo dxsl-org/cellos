@@ -17,6 +17,7 @@ fn generic_and_jh7110_keep_supported_discovery_enabled() {
 
     assert_eq!(JH7110.rtc_access, RtcAccessPolicy::Unavailable);
     assert!(!JH7110.allows_rtc_mmio());
+    assert_eq!(JH7110.sdhci.expect("JH7110 SDHCI").base, 0x1604_0000);
 }
 
 #[test]

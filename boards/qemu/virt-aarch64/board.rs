@@ -11,37 +11,37 @@ const DRIVERS: [DriverId; 5] = [
     DriverId::VirtioMmio,
     DriverId::PcieEcam,
 ];
-const MEMORY: [MemoryRange; 2] = [
-    MemoryRange {
-        name: "kernel",
-        base: 0x4000_0000,
-        size: 0x0200_0000,
-        kind: MemoryRangeKind::Kernel,
-    },
-    MemoryRange {
-        name: "usable",
-        base: 0x4200_0000,
-        size: 0x0E00_0000,
-        kind: MemoryRangeKind::Usable,
-    },
-];
+pub const FALLBACK_KERNEL: MemoryRange = MemoryRange {
+    name: "kernel",
+    base: 0x4000_0000,
+    size: 0x0200_0000,
+    kind: MemoryRangeKind::Kernel,
+};
+pub const FALLBACK_USABLE: MemoryRange = MemoryRange {
+    name: "usable",
+    base: 0x4200_0000,
+    size: 0x0E00_0000,
+    kind: MemoryRangeKind::Usable,
+};
+const MEMORY: [MemoryRange; 2] = [FALLBACK_KERNEL, FALLBACK_USABLE];
 const UART: MmioRegion = MmioRegion {
     compatible: "arm,pl011",
-    base: 0x0900_0000,
-    size: 0x1000,
-    irq: Some(1),
+    base: hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base as u64,
+    size: hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.size as u64,
+    irq: Some(hal_soc_arm_virt::QEMU_ARM_VIRT.uart.spi),
 };
 const fn virtio_mmio_slots() -> [MmioRegion; 32] {
+    let layout = hal_soc_arm_virt::QEMU_ARM_VIRT.virtio;
     let mut slots = [MmioRegion {
         compatible: "virtio,mmio",
         base: 0,
-        size: 0x200,
+        size: layout.stride as u64,
         irq: None,
     }; 32];
     let mut index = 0;
     while index < slots.len() {
-        slots[index].base = 0x0A00_0000 + index as u64 * 0x200;
-        slots[index].irq = Some(16 + index as u32);
+        slots[index].base = layout.base as u64 + index as u64 * layout.stride as u64;
+        slots[index].irq = Some(layout.first_spi + index as u32);
         index += 1;
     }
     slots
@@ -60,6 +60,7 @@ pub const QEMU_VIRT_AARCH64: BoardDescriptor = BoardDescriptor {
         boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
         requires_firmware_dtb: false,
         fallback_dts_path: "boards/qemu/virt-aarch64/qemu-virt-aarch64.dts",
+        kernel_load_base: 0x4008_0000,
     },
     fallback_memory: &MEMORY,
     uart: UART,
@@ -67,8 +68,8 @@ pub const QEMU_VIRT_AARCH64: BoardDescriptor = BoardDescriptor {
     clint: None,
     rtc: Some(MmioRegion {
         compatible: "google,goldfish-rtc",
-        base: 0x0902_0000,
-        size: 0x1000,
+        base: hal_soc_arm_virt::QEMU_ARM_VIRT.rtc.base as u64,
+        size: hal_soc_arm_virt::QEMU_ARM_VIRT.rtc.size as u64,
         irq: None,
     }),
     virtio_mmio: &VIRTIO_MMIO,

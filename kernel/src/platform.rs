@@ -192,38 +192,41 @@ pub fn init(_dtb_ptr: usize) {
 // ── QEMU ARM virt defaults (aarch64) ─────────────────────────────────────────
 // QEMU ARM virt: 32 VirtIO MMIO slots at 0x0a000000, 512 bytes each, SPI 16+i.
 // Goldfish RTC at 0x0902_0000 on ARM virt; UART (PL011) at 0x0900_0000.
-#[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
 pub fn init(_dtb_ptr: usize) {
+    let board = crate::board::selected_qemu_arm_virt();
     hal::rtc::init_default();
     let info = PlatformInfo {
-        uart_base: 0x0900_0000,
-        uart_irq: 1,
+        uart_base: board.uart.base as usize,
+        uart_irq: board
+            .uart
+            .irq
+            .expect("validated QEMU ARM descriptor requires UART IRQ"),
         plic_base: 0,
         plic_size: 0,
         clint_base: 0,
-        virtio_mmio: [
-            Some(VirtioEntry {
-                base: 0x0a00_0000,
-                irq: 16,
-            }),
-            Some(VirtioEntry {
-                base: 0x0a00_0200,
-                irq: 17,
-            }),
-            Some(VirtioEntry {
-                base: 0x0a00_0400,
-                irq: 18,
-            }),
-            Some(VirtioEntry {
-                base: 0x0a00_0600,
-                irq: 19,
-            }),
-            None,
-            None,
-            None,
-            None,
-        ],
-        rtc_base: 0x0902_0000,
+        virtio_mmio: virtio_slots_limited(board, 4),
+        rtc_base: board.rtc.map_or(0, |rtc| rtc.base as usize),
+    };
+    // SAFETY: `kmain` invokes this once during single-core boot.
+    unsafe { publish_boot(info) };
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+pub fn init(_dtb_ptr: usize) {
+    let board = crate::board::selected_rpi4();
+    let info = PlatformInfo {
+        uart_base: board.uart.base as usize,
+        uart_irq: board.uart.irq.unwrap_or(0),
+        plic_base: 0,
+        plic_size: 0,
+        clint_base: 0,
+        virtio_mmio: [None; 8],
+        rtc_base: 0,
     };
     // SAFETY: `kmain` invokes this once during single-core boot.
     unsafe { publish_boot(info) };
@@ -436,9 +439,20 @@ fn collect_virtio(fdt: &fdt::Fdt) -> [Option<VirtioEntry>; 8] {
     all(target_arch = "aarch64", feature = "board-rpi3")
 ))]
 fn virtio_slots(board: &cellos_boards::BoardDescriptor) -> [Option<VirtioEntry>; 8] {
+    virtio_slots_limited(board, 8)
+}
+
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
+fn virtio_slots_limited(
+    board: &cellos_boards::BoardDescriptor,
+    limit: usize,
+) -> [Option<VirtioEntry>; 8] {
     let mut entries = [None, None, None, None, None, None, None, None];
     let mut index = 0;
-    while index < board.virtio_mmio.len() && index < entries.len() {
+    while index < board.virtio_mmio.len() && index < entries.len() && index < limit {
         let region = board.virtio_mmio[index];
         entries[index] = Some(VirtioEntry {
             base: region.base as usize,

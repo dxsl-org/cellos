@@ -82,6 +82,14 @@
 > require a valid firmware DTB. Board/SoC tests, three RV64 compile lanes, the
 > release build, and QEMU FAT16 boot passed; physical boards remain compile-only.
 
+> **2026-08-18 ARM/SDHCI HAL-split update:** `hal/soc/arm-virt` now owns QEMU
+> AArch64 platform facts, `hal/soc/bcm27xx` covers BCM2711, and the shared SDHCI
+> implementation consumes runtime BCM2837/BCM2711/JH7110 access policy. RPi4
+> cell mappings are limited to disjoint GPIO/UART/SDHCI pages, with GIC
+> kernel-only and PCIe unadvertised. The 15-lane compile matrix and RV64 QEMU
+> witness passed. AArch64 QEMU reached `ViCell >`, but its stale-marker script is
+> not counted green; physical boards remain compile-only.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context

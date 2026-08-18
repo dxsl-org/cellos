@@ -2,6 +2,22 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] ARM platform facts and SDHCI policy move behind SoC profiles
+
+`hal/soc/arm-virt` now owns QEMU AArch64 GIC, PL011, RTC, GPIO,
+VirtIO-MMIO, platform-bus, and bus-0 ECAM layout data. Shared ARM HAL and
+kernel consumers use that profile, while the QEMU board package retains only
+its integration contract and fallback assets.
+
+`hal/soc/bcm27xx` now also models BCM2711, and the single SDHCI mechanism takes
+runtime access policy selected from BCM2837, BCM2711, or JH7110 data. RPi4 maps
+disjoint GPIO, UART, and SDHCI windows for cells and maps GIC interfaces
+kernel-only; it does not advertise PCIe until a real BCM2711 host path exists.
+The 15-lane host/cross-target matrix, focused security review, RV64 release
+build, and RV64 QEMU FAT16 witness passed. QEMU AArch64 reached the ViCell shell,
+but its script still expects the stale `Cellos >` marker, so that script gate is
+not claimed green. Physical boards remain compile-only.
+
 ## [2026-08-18] Board catalog and RISC-V selection become descriptor-driven
 
 The root `boards/` crate now contains typed, data-only descriptors and rebuild

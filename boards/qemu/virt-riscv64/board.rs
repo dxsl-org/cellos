@@ -104,6 +104,7 @@ pub const QEMU_VIRT_RISCV64: BoardDescriptor = BoardDescriptor {
         boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
         requires_firmware_dtb: false,
         fallback_dts_path: "boards/qemu/virt-riscv64/qemu-virt-riscv64.dts",
+        kernel_load_base: 0x8020_0000,
     },
     fallback_memory: &FALLBACK_MEMORY,
     uart: UART,

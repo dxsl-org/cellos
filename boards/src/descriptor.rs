@@ -64,6 +64,7 @@ pub struct BootContract {
     pub boot_protocol: BootProtocol,
     pub requires_firmware_dtb: bool,
     pub fallback_dts_path: &'static str,
+    pub kernel_load_base: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,6 +115,7 @@ pub enum ValidationError {
     EmptyCompatibles,
     MissingFallbackMemory,
     MissingEnabledDrivers,
+    KernelLoadOutsideFallback,
     DuplicateEnabledDriver(DriverId),
     TooManyVirtioSlots {
         found: usize,
@@ -205,6 +207,13 @@ impl BoardDescriptor {
                     ));
                 }
             }
+        }
+        if !self.fallback_memory.iter().any(|range| {
+            range.kind == MemoryRangeKind::Kernel
+                && self.boot.kernel_load_base >= range.base
+                && self.boot.kernel_load_base < range.base.saturating_add(range.size)
+        }) {
+            return Err(ValidationError::KernelLoadOutsideFallback);
         }
         Ok(())
     }

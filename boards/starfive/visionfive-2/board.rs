@@ -43,6 +43,7 @@ pub const STARFIVE_VISIONFIVE_2: BoardDescriptor = BoardDescriptor {
         boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
         requires_firmware_dtb: true,
         fallback_dts_path: "boards/starfive/visionfive-2/starfive-visionfive-2.dts",
+        kernel_load_base: 0x4020_0000,
     },
     fallback_memory: &MEMORY,
     uart: MmioRegion {

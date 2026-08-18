@@ -34,6 +34,7 @@ members = [
     # HAL
     "hal/core",
     "hal/soc/bcm27xx",
+    "hal/soc/arm-virt",
     "hal/soc/riscv",
     "hal/traits/arch",
     "hal/traits/timer",

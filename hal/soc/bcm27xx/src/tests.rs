@@ -1,4 +1,4 @@
-use crate::BCM2837;
+use crate::{BCM2711, BCM2837};
 
 #[test]
 fn bcm2837_controller_addresses_match_peripheral_offsets() {
@@ -62,4 +62,29 @@ fn irq_topology_rejects_invalid_legacy_and_local_routes() {
     irq = BCM2837.irq;
     irq.local_gpu_mask = irq.local_timer_ns_mask;
     assert!(!irq.is_valid());
+}
+
+#[test]
+fn bcm2711_exposes_bounded_gic_and_emmc2_layout() {
+    let mmio = BCM2711.mmio;
+    let end = mmio.peripheral_end().expect("BCM2711 aperture overflow");
+
+    assert_eq!(end, 0x1_0000_0000);
+    assert_eq!(mmio.gpio_grant_size, 0x1000);
+    assert_eq!(mmio.uart_base, mmio.gpio_base + 0x1000);
+    assert_eq!(mmio.uart_grant_size, 0x1000);
+    assert_eq!(mmio.sdhci_base, 0xFE34_0000);
+    assert_eq!(mmio.sdhci_grant_size, 0x1000);
+    assert!(mmio.gpio_base + mmio.gpio_grant_size <= end);
+    assert!(mmio.sdhci_base + mmio.sdhci_grant_size <= end);
+    assert!(mmio.gpio_base + mmio.gpio_grant_size <= mmio.uart_base);
+    assert!(mmio.uart_base + mmio.uart_grant_size <= mmio.sdhci_base);
+    assert!(mmio.gic_distributor_base < end);
+    assert!(mmio.gic_cpu_base < end);
+    assert_eq!(mmio.gic_distributor_size, 0x1000);
+    assert_eq!(mmio.gic_cpu_size, 0x1000);
+    assert!(mmio.gic_distributor_base + mmio.gic_distributor_size <= mmio.gic_cpu_base);
+    assert!(mmio.gic_cpu_base + mmio.gic_cpu_size <= end);
+    assert!(!BCM2711.sdhci.word_access_only);
+    assert_eq!(BCM2711.sdhci.minimum_write_spacing_us, 0);
 }

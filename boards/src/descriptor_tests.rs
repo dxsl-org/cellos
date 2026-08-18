@@ -35,6 +35,7 @@ fn descriptor(
             boot_protocol: BootProtocol::DeviceTreeWithFallbackMap,
             requires_firmware_dtb: true,
             fallback_dts_path: "boards/test.dts",
+            kernel_load_base: memory.first().map_or(0, |range| range.base),
         },
         fallback_memory: memory,
         uart: TEST_MMIO[0],
@@ -122,7 +123,7 @@ fn rejects_wrong_architecture() {
         name: "usable",
         base: 0x8000_0000,
         size: 0x1000,
-        kind: MemoryRangeKind::Usable,
+        kind: MemoryRangeKind::Kernel,
     }];
     let board = descriptor(&TEST_COMPATIBLES, &MEMORY);
     assert_eq!(
@@ -186,5 +187,21 @@ fn rejects_duplicate_enabled_drivers() {
         Err(ValidationError::DuplicateEnabledDriver(
             DriverId::UartNs16550a
         ))
+    );
+}
+
+#[test]
+fn rejects_kernel_load_outside_kernel_fallback() {
+    static MEMORY: [MemoryRange; 1] = [MemoryRange {
+        name: "kernel",
+        base: 0x8000_0000,
+        size: 0x1000,
+        kind: MemoryRangeKind::Kernel,
+    }];
+    let mut board = descriptor(&TEST_COMPATIBLES, &MEMORY);
+    board.boot.kernel_load_base = 0x9000_0000;
+    assert_eq!(
+        board.validate(),
+        Err(ValidationError::KernelLoadOutsideFallback)
     );
 }
