@@ -1,30 +1,10 @@
 # TODO
 
 1. Hoàn tất G1: làm một vertical slice GPIO/I²C sensor → Cell → output trên RPi3.
+
 2. Hoặc xử lý nợ kỹ thuật extern "Rust" viết tay có nguy cơ lệch chữ ký.
-3. Tránh code phình theo số board, Cellos nên hướng đến cấu trúc:
-```
-hal/arch/aarch64
-hal/arch/riscv64
 
-hal/soc/bcm27xx
-hal/soc/jh7110
-hal/soc/rk3588
-
-boards/rpi3
-boards/visionfive2
-boards/rock5
-```
-Mỗi board chỉ nên chứa:
-- Board identity và compatible strings.
-- Boot/firmware contract.
-- Pinmux và PHY wiring.
-- DTB/fallback memory map.
-- Danh sách driver SoC cần bật.
-
-Driver UART, SDHCI, DesignWare I²C/SPI, GIC/PLIC và PCIe không được sao chép thành phiên bản riêng cho từng board.
-
-4. **Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
+3. **Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
 việc CI không build rv32. Sai: đã thử khai báo thiếu tham số trong `rv64/trap.rs` (target CI
 build mọi lần push) và `cargo check -p cellos-kernel` vẫn xanh. rustc **không** đối chiếu khai
 báo `extern "Rust"` với định nghĩa `#[no_mangle]` ở crate khác — `clashing_extern_declarations`
@@ -35,15 +15,15 @@ cái là một chỗ signature có thể lệch âm thầm. Cách sửa bền l�
 nơi compiler kiểm được (crate trait dùng chung / macro sinh cả khai báo lẫn định nghĩa), thay
 vì mỗi kiến trúc tự khai báo lại.
 
-Ghi kèm để ai định thêm lane rv32 biết trước: kernel **không** build được cho
+4. Ghi kèm để ai định thêm lane rv32 biết trước: kernel **không** build được cho
 `riscv32imac-unknown-none-elf` — hai lỗi `E0308` có sẵn (`task/syscall.rs:3540`,
 `task.rs:483`, đều là `u32` vs `usize` do trap frame rv32 dùng `u32`). `hal-riscv` thì compile sạch.
 
-Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.
-AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
-Desktop đầy đủ (compositor + mouse, windowed) — 📋; VFS scale (ext4/large disk) — 📋; 
+5. Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.
+6. AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
+7. Desktop đầy đủ (compositor + mouse, windowed) — 📋; VFS scale (ext4/large disk) — 📋; 
 App Platform Layers §J: L1 SDK ✅, còn L0 docs / L2 middleware / L3 tooling / L4 observability — 📋.
-Cell-to-Cell Anywhere phần G2 (P04-P08: HyParView, hole-punch, K2/K3 DICE)
+8. Cell-to-Cell Anywhere phần G2 (P04-P08: HyParView, hole-punch, K2/K3 DICE)
 ---
 
 ## Từ đợt audit mô tả kiến trúc (2026-07-31)
