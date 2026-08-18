@@ -14,6 +14,7 @@ critical-section = { version = "1", optional = true, features = ["restore-state-
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64-cpu = "11"
+hal-soc-bcm27xx = { path = "../../soc/bcm27xx", version = "0.2.0", optional = true }
 
 [features]
 default = []
@@ -24,4 +25,4 @@ cfi-bti = []
 mte = []
 # Raspberry Pi 3 (BCM2837) board target: selects BCM mini UART, BCM2836 local IRQ
 # controller, and auto-detected timer frequency instead of GIC + QEMU virt defaults.
-board-rpi3 = []
+board-rpi3 = ["dep:hal-soc-bcm27xx"]

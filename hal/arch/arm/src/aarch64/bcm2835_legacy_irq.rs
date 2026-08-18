@@ -11,7 +11,7 @@
 //! P04: Init (disable all) + GPIO bank enable/disable + pending identify.
 //! P05: GPIO bank IRQs enabled when gpio-bcm cell claims the MMIO region.
 
-const IRQ_BASE: usize = 0x3F00_B200;
+const IRQ_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.legacy_irq_base;
 const IRQ_PENDING1: usize = IRQ_BASE + 0x04;
 const IRQ_PENDING2: usize = IRQ_BASE + 0x08;
 const IRQ_ENABLE1: usize = IRQ_BASE + 0x10;

@@ -8,7 +8,7 @@
 //!
 //! Reference: BCM2836 ARM-local peripherals datasheet §4 (Broadcom).
 
-const LOCAL_CTRL_BASE: usize = 0x4000_0000;
+const LOCAL_CTRL_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.local_controller_base;
 
 // BCM2836 QA7_rev3.4 datasheet §4 register map (confirmed by Linux + QEMU sources):
 //   0x40 = Core 0 Timers Interrupt Control  (bits[3:0]=IRQ, bits[7:4]=FIQ routing per timer)

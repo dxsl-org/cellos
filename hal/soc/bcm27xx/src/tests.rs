@@ -5,6 +5,8 @@ fn bcm2837_controller_addresses_match_peripheral_offsets() {
     let mmio = BCM2837.mmio;
 
     assert_eq!(BCM2837.slug, "bcm2837");
+    assert_eq!(mmio.system_timer_base, mmio.peripheral_base + 0x3000);
+    assert_eq!(mmio.legacy_irq_base, mmio.peripheral_base + 0xB200);
     assert_eq!(mmio.gpio_base, mmio.peripheral_base + 0x20_0000);
     assert_eq!(mmio.aux_base, mmio.peripheral_base + 0x21_5000);
     assert_eq!(mmio.mini_uart_io, mmio.aux_base + 0x40);
@@ -21,6 +23,8 @@ fn bcm2837_mapping_and_grant_spans_are_bounded() {
     assert_eq!(mmio.local_controller_end(), Some(0x4000_1000));
     assert_eq!(mmio.gpio_grant_size, 0x1_0000);
     assert_eq!(mmio.aux_grant_size, 0x1000);
+    assert!(mmio.system_timer_base < peripheral_end);
+    assert!(mmio.legacy_irq_base < peripheral_end);
     assert!(mmio.gpio_base + mmio.gpio_grant_size <= peripheral_end);
     assert!(mmio.aux_base + mmio.aux_grant_size <= peripheral_end);
 }

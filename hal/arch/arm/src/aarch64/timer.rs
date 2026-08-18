@@ -12,6 +12,13 @@
 /// Fallback ticks-per-quantum for QEMU virt (~10 ms @ 62.5 MHz).
 const TICKS_PER_QUANTUM_QEMU: u64 = 625_000;
 
+#[cfg(feature = "board-rpi3")]
+const RPI3_UART_IO: usize = hal_soc_bcm27xx::BCM2837.mmio.mini_uart_io;
+#[cfg(feature = "board-rpi3")]
+const RPI3_SYSTIMER_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.system_timer_base;
+#[cfg(feature = "board-rpi3")]
+const RPI3_LEGACY_IRQ_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.legacy_irq_base;
+
 /// Compute 10 ms quantum by reading the actual timer frequency from CNTFRQ_EL0.
 fn ticks_per_quantum() -> u64 {
     let freq: u64;
@@ -118,7 +125,7 @@ pub fn init() {
 /// Diagnostic: verify BCM2835 system timer fires on QEMU raspi3b.
 ///
 /// Runs immediately after timer::init(), with IRQs still masked (DAIF.I=1).
-/// Writes three characters to BCM AUX mini UART (0x3F215040, -serial stdio):
+/// Writes three characters to the BCM AUX mini UART (`-serial stdio`):
 ///
 /// | Char | Meaning |
 /// |------|---------|
@@ -134,18 +141,18 @@ pub fn init() {
 /// `COU` → C1 armed but compare never matched within poll budget.
 #[cfg(feature = "board-rpi3")]
 fn rpi3_timer_diagnostic() {
-    let uart = 0x3F21_5040 as *mut u32;
+    let uart = RPI3_UART_IO as *mut u32;
 
     // --- Test 1: does BCM2835 CLO (free-running 1 MHz counter) advance? ---
-    // SAFETY: 0x3F003004 = SYSTIMER_CLO; identity-mapped MMIO.
-    let t0 = unsafe { core::ptr::read_volatile(0x3F00_3004 as *const u32) };
+    // SAFETY: SYSTIMER_CLO is identity-mapped MMIO.
+    let t0 = unsafe { core::ptr::read_volatile((RPI3_SYSTIMER_BASE + 0x04) as *const u32) };
     for _ in 0..5_000u32 {
         unsafe {
             core::arch::asm!("nop", options(nomem, nostack));
         }
     }
-    let t1 = unsafe { core::ptr::read_volatile(0x3F00_3004 as *const u32) };
-    // SAFETY: 0x3F215040 is BCM AUX mini UART, identity-mapped IO.
+    let t1 = unsafe { core::ptr::read_volatile((RPI3_SYSTIMER_BASE + 0x04) as *const u32) };
+    // SAFETY: BCM AUX mini UART is identity-mapped IO.
     unsafe {
         core::ptr::write_volatile(uart, if t1 > t0 { b'C' } else { b'J' } as u32);
     }
@@ -155,8 +162,8 @@ fn rpi3_timer_diagnostic() {
     // 1M poll iters at QEMU speed >> 10 ms — C1 must have fired by now.
     let mut c1_fired = false;
     for _ in 0..1_000_000u32 {
-        // SAFETY: 0x3F003000 = SYSTIMER_CS; identity-mapped MMIO.
-        let cs = unsafe { core::ptr::read_volatile(0x3F00_3000 as *const u32) };
+        // SAFETY: SYSTIMER_CS is identity-mapped MMIO.
+        let cs = unsafe { core::ptr::read_volatile(RPI3_SYSTIMER_BASE as *const u32) };
         if cs & (1 << 1) != 0 {
             c1_fired = true;
             break;
@@ -168,9 +175,9 @@ fn rpi3_timer_diagnostic() {
     }
 
     // --- Test 3: is IRQ 1 visible in BCM2835 IRQ_PENDING1? ---
-    // After C1 fires the BCM2835 sets bit 1 of IRQ_PENDING1 (0x3F00B204).
+    // After C1 fires the BCM2835 sets bit 1 of IRQ_PENDING1.
     // SAFETY: identity-mapped MMIO.
-    let pending = unsafe { core::ptr::read_volatile(0x3F00_B204 as *const u32) };
+    let pending = unsafe { core::ptr::read_volatile((RPI3_LEGACY_IRQ_BASE + 0x04) as *const u32) };
     // SAFETY: same UART address.
     unsafe {
         core::ptr::write_volatile(
