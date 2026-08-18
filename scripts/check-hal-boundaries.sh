@@ -51,8 +51,8 @@ if grep -nE 'physical >= 0x8_0000|end <= 0x10_0000|rsdp < 0x8_0000' kernel/src/m
     fail 'x86 legacy firmware windows belong under hal/soc/x86'
 fi
 
-if ! grep -q 'pub const GENERIC_PC: X86PcProfile' hal/soc/x86/src/lib.rs; then
-    fail 'the generic x86 platform profile is missing'
+if ! grep -q 'pub const QEMU_Q35: X86PlatformProfile' hal/soc/x86/src/lib.rs; then
+    fail 'the q35 x86 platform profile is missing'
 fi
 
 if grep -q 'hal.soc.x86\|hal-soc-x86' hal/arch/x86/Cargo.toml; then

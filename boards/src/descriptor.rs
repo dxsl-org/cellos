@@ -11,9 +11,9 @@ pub enum SocId {
     Jh7110,
     Sg2042,
     QemuArmVirt,
+    QemuX86Q35,
     Bcm2837,
     Bcm2711,
-    GenericX86Pc,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

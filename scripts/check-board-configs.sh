@@ -69,13 +69,35 @@ board_dirs=(
     "boards/milk-v/pioneer"
     "boards/raspberry-pi/3-model-b"
     "boards/raspberry-pi/4-model-b"
-    "boards/generic/x86_64-pc"
+    "boards/qemu/q35-x86_64"
 )
 
 for dir in "${board_dirs[@]}"; do
     check_file "$dir/README.md"
     check_file "$dir/board.rs"
 done
+
+placeholder_dirs=(
+    "boards/qemu/q35-i686"
+    "boards/qemu/virt-riscv32"
+    "boards/qemu/virt-aarch32"
+)
+
+for dir in "${placeholder_dirs[@]}"; do
+    check_file "$dir/README.md"
+    unexpected_entry="$(find "$dir" -mindepth 1 -maxdepth 1 ! -path "$dir/README.md" -print -quit)"
+    if [[ -n "$unexpected_entry" ]]; then
+        printf 'placeholder board must contain README.md only: %s\n' "$unexpected_entry" >&2
+        exit 1
+    fi
+done
+
+if find Cargo.toml Cargo.lock boards/Cargo.toml boards/src kernel hal .github -type f \
+    \( -name '*.rs' -o -name '*.sh' -o -name '*.md' -o -name 'Cargo.toml' -o -name 'ci.yml' \) \
+    -print0 | xargs -0 grep -nE 'q35-i686|virt-riscv32|virt-aarch32' 2>/dev/null; then
+    printf 'placeholder boards must not be registered outside their READMEs\n' >&2
+    exit 1
+fi
 
 check_file "boards/qemu/virt-riscv64/qemu-virt-riscv64.dts"
 check_file "boards/qemu/virt-aarch64/qemu-virt-aarch64.dts"
@@ -103,7 +125,7 @@ check_readme_command \
     "boards/raspberry-pi/4-model-b/README.md" \
     'cargo build -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4'
 check_readme_command \
-    "boards/generic/x86_64-pc/README.md" \
+    "boards/qemu/q35-x86_64/README.md" \
     'cargo build -p cellos-kernel --release --target x86_64-unknown-none'
 
 run bash scripts/check-hal-boundaries.sh
@@ -122,7 +144,7 @@ record_run rpi3 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi3
 record_run rpi4 \
     run cargo check -p cellos-kernel --target aarch64-unknown-none-softfloat --features board-rpi4
-record_run generic-x86-64-pc \
+record_run qemu-q35-x86-64 \
     run cargo check -p cellos-kernel --target x86_64-unknown-none
 
 expect_compile_error \

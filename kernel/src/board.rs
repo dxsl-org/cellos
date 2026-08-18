@@ -65,25 +65,25 @@ fn invalid_descriptor(error: ValidationError) -> ! {
 }
 
 #[cfg(target_arch = "x86_64")]
-const GENERIC_X86_64_PC: &BoardDescriptor = &cellos_boards::generic_x86_64_pc::GENERIC_X86_64_PC;
+const QEMU_Q35_X86_64: &BoardDescriptor = &cellos_boards::qemu_q35_x86_64::QEMU_Q35_X86_64;
 
 #[cfg(target_arch = "x86_64")]
 /// Validates the board contract before early boot consumes platform facts.
 pub(crate) fn selected() -> &'static BoardDescriptor {
-    match GENERIC_X86_64_PC.validate_for(Architecture::X86_64) {
-        Ok(()) => GENERIC_X86_64_PC,
+    match QEMU_Q35_X86_64.validate_for(Architecture::X86_64) {
+        Ok(()) => QEMU_Q35_X86_64,
         Err(error) => invalid_descriptor(error),
     }
 }
 
 #[cfg(target_arch = "x86_64")]
-/// Returns the validated PC platform profile paired with the selected board.
-pub(crate) fn selected_x86_64_soc() -> &'static hal_soc_x86::X86PcProfile {
+/// Returns the validated x86 platform profile paired with the selected board.
+pub(crate) fn selected_x86_64_soc() -> &'static hal_soc_x86::X86PlatformProfile {
     use cellos_boards::SocId;
 
     match selected().soc {
-        SocId::GenericX86Pc => match hal_soc_x86::GENERIC_PC.validate() {
-            Ok(()) => &hal_soc_x86::GENERIC_PC,
+        SocId::QemuX86Q35 => match hal_soc_x86::QEMU_Q35.validate() {
+            Ok(()) => &hal_soc_x86::QEMU_Q35,
             Err(error) => panic!("[board] invalid x86 SoC profile: {:?}", error),
         },
         _ => panic!("[board] x86 descriptor has incompatible SoC identity"),

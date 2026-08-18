@@ -2,13 +2,12 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-18] Generic x86 PC joins the board and SoC ownership model
+## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 
-The previously merged x86 hardware lane now has a generic ACPI PC descriptor
-under `boards/` and a data-only `hal/soc/x86` profile. The descriptor records
-Limine BIOS/UEFI boot, symbolic COM/PCIe wiring, and the shared UART, IOAPIC,
-HPET, PCIe, NVMe, and e1000 driver selection without embedding hardware
-addresses.
+The previously merged x86 hardware lane now has a QEMU q35 descriptor under
+`boards/` and a data-only `hal/soc/x86` profile. The descriptor records Limine
+BIOS/UEFI boot, symbolic COM/PCIe wiring, and the shared UART, IOAPIC, HPET,
+PCIe, NVMe, and e1000 driver selection without embedding hardware addresses.
 
 `hal/soc/x86` owns the static COM1 port/ISA IRQ and bounded legacy BIOS/RSDP
 windows. The existing x86 UART mechanism is configured from that profile, and
@@ -19,6 +18,9 @@ matrix and boundary guard now cover all seven selections. QEMU remains an
 integration witness; no new physical x86 qualification is claimed. Verification
 passed 27 host tests, the seven-board build matrix, the x86 release build, a
 fresh BIOS shell boot, and an OVMF boot through scheduler initialization.
+`boards/qemu/q35-i686`, `boards/qemu/virt-riscv32`, and
+`boards/qemu/virt-aarch32` exist only as README placeholders and are
+intentionally absent from registration, CI, and runtime claims.
 
 ## [2026-08-18] HAL/SoC/board split is complete for the current catalog
 

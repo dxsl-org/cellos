@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-18 (HAL/SoC/board split covers seven selections including generic x86_64 PC; physical boards remain hardware-gated)
+**Last Updated**: 2026-08-18 (HAL/SoC/board split covers seven selections including QEMU q35 x86_64; physical boards remain hardware-gated)
 
 > **Status refresh 2026-08-18**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
@@ -11,7 +11,8 @@
 > and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
-> pass; VF2, Pioneer, RPi3, and RPi4 remain physical-hardware-gated.
+> pass; QEMU q35 x86_64 is the current x86 integration board; VF2, Pioneer, RPi3,
+> and RPi4 remain physical-hardware-gated.
 
 ---
 
@@ -59,9 +60,11 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
   fallback memory map/DT asset, pinmux/PHY wiring, typed SoC identity, and the
   list of shared drivers to enable. It contains no SoC MMIO or IRQ layout.
 - The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer,
-  Raspberry Pi 3/4, and generic x86_64 ACPI PC. Checked DTS assets are
+  Raspberry Pi 3/4, and QEMU q35 x86_64. Checked DTS assets are
   audit/fallback data; x86 instead consumes Limine's memory map and validated
-  ACPI. Physical-board descriptors remain compile-only without matching runs.
+  ACPI. `boards/qemu/q35-i686`, `boards/qemu/virt-riscv32`, and
+  `boards/qemu/virt-aarch32` are documentation-only and not part of the
+  catalog. Physical-board descriptors remain compile-only without matching runs.
 - Kernel consumers are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`.
 - Shared drivers remain in `cells/drivers/`; no UART/SDHCI/DW I2C/SPI/GIC/PLIC/PCIe driver is duplicated per board.
 - `hal/soc/riscv` owns validated RISC-V fallback MMIO and discovery policy.

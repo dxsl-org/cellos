@@ -24,8 +24,8 @@ pub mod raspberry_pi_3_model_b;
 #[path = "../raspberry-pi/4-model-b/board.rs"]
 pub mod raspberry_pi_4_model_b;
 
-#[path = "../generic/x86_64-pc/board.rs"]
-pub mod generic_x86_64_pc;
+#[path = "../qemu/q35-x86_64/board.rs"]
+pub mod qemu_q35_x86_64;
 
 pub use descriptor::*;
 
@@ -54,6 +54,6 @@ pub fn raspberry_pi_4_model_b() -> &'static BoardDescriptor {
     &raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B
 }
 
-pub fn generic_x86_64_pc() -> &'static BoardDescriptor {
-    &generic_x86_64_pc::GENERIC_X86_64_PC
+pub fn qemu_q35_x86_64() -> &'static BoardDescriptor {
+    &qemu_q35_x86_64::QEMU_Q35_X86_64
 }

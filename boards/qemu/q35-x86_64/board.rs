@@ -3,7 +3,7 @@ use crate::{
     WiringLayout,
 };
 
-const COMPATIBLES: [&str; 2] = ["cellos,generic-x86_64-pc", "acpi,pnp0a08"];
+const COMPATIBLES: [&str; 2] = ["cellos,qemu-q35-x86_64", "qemu,q35"];
 const DRIVERS: [DriverId; 6] = [
     DriverId::Uart16550PortIo,
     DriverId::IoApic,
@@ -13,13 +13,13 @@ const DRIVERS: [DriverId; 6] = [
     DriverId::EthernetE1000,
 ];
 
-/// Generic PC-compatible x86_64 integration contract.
-pub const GENERIC_X86_64_PC: BoardDescriptor = BoardDescriptor {
-    slug: "generic-x86_64-pc",
-    vendor: "pc-compatible",
-    model: "ACPI x86_64 PC",
+/// QEMU q35 x86_64 integration contract.
+pub const QEMU_Q35_X86_64: BoardDescriptor = BoardDescriptor {
+    slug: "qemu-q35-x86_64",
+    vendor: "qemu",
+    model: "q35",
     architecture: Architecture::X86_64,
-    soc: SocId::GenericX86Pc,
+    soc: SocId::QemuX86Q35,
     compatibles: &COMPATIBLES,
     boot: BootContract {
         firmware: FirmwareInterface::BiosOrUefi,
@@ -31,7 +31,7 @@ pub const GENERIC_X86_64_PC: BoardDescriptor = BoardDescriptor {
     fallback_memory: &[],
     wiring: WiringLayout {
         pinmux_groups: &[],
-        phy_links: &["legacy-com1", "acpi-pcie-root"],
+        phy_links: &["legacy-com1", "q35-pcie-root"],
     },
     enabled_drivers: &DRIVERS,
 };

@@ -1,6 +1,6 @@
 #![no_std]
 
-//! Immutable PC-compatible x86 platform facts.
+//! Immutable x86 machine facts owned by `hal/soc/x86`.
 //!
 //! ACPI-discovered LAPIC, IOAPIC, HPET, and PCIe ECAM addresses deliberately
 //! do not appear here: invalid or missing firmware must keep those gates closed.
@@ -38,15 +38,15 @@ pub struct PortIoDevice {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-/// Immutable facts shared by PC-compatible x86_64 boards.
-pub struct X86PcProfile {
+/// Immutable x86 machine facts consumed before ACPI discovery succeeds.
+pub struct X86PlatformProfile {
     pub slug: &'static str,
     pub com1: PortIoDevice,
     pub legacy_bios_window: AddressRange,
     pub legacy_rsdp_window: AddressRange,
 }
 
-impl X86PcProfile {
+impl X86PlatformProfile {
     /// Validates port wiring and bounded firmware-window relationships.
     pub fn validate(self) -> Result<(), ValidationError> {
         if self.com1.base == 0 {
@@ -81,9 +81,9 @@ pub enum ValidationError {
     BiosWindowOutsideRsdpWindow,
 }
 
-/// Generic ACPI PC facts used by the current x86_64 board descriptor.
-pub const GENERIC_PC: X86PcProfile = X86PcProfile {
-    slug: "generic-x86_64-pc",
+/// QEMU q35 platform facts used by the current x86_64 board descriptor.
+pub const QEMU_Q35: X86PlatformProfile = X86PlatformProfile {
+    slug: "qemu-q35-x86_64",
     com1: PortIoDevice {
         base: 0x03F8,
         irq: 4,

@@ -1,5 +1,5 @@
-use crate::generic_x86_64_pc::GENERIC_X86_64_PC;
 use crate::milk_v_pioneer::MILK_V_PIONEER;
+use crate::qemu_q35_x86_64::QEMU_Q35_X86_64;
 use crate::qemu_virt_aarch64::QEMU_VIRT_AARCH64;
 use crate::qemu_virt_riscv64::QEMU_VIRT_RISCV64;
 use crate::raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B;
@@ -48,7 +48,7 @@ fn catalog_covers_every_current_board_selection() {
         MILK_V_PIONEER,
         RASPBERRY_PI_3_MODEL_B,
         RASPBERRY_PI_4_MODEL_B,
-        GENERIC_X86_64_PC,
+        QEMU_Q35_X86_64,
     ];
     for board in boards {
         assert_eq!(board.validate(), Ok(()), "{}", board.slug);
@@ -70,9 +70,15 @@ fn soc_and_driver_selection_is_typed() {
     assert!(!MILK_V_PIONEER.has_driver(DriverId::VirtioMmio));
     assert_eq!(RASPBERRY_PI_4_MODEL_B.soc, SocId::Bcm2711);
     assert!(RASPBERRY_PI_4_MODEL_B.has_driver(DriverId::SdhciArasan));
-    assert_eq!(GENERIC_X86_64_PC.soc, SocId::GenericX86Pc);
-    assert!(GENERIC_X86_64_PC.has_driver(DriverId::Uart16550PortIo));
-    assert!(GENERIC_X86_64_PC.has_driver(DriverId::PcieEcam));
-    assert!(GENERIC_X86_64_PC.fallback_memory.is_empty());
-    assert_eq!(GENERIC_X86_64_PC.validate_for(Architecture::X86_64), Ok(()));
+    assert_eq!(QEMU_Q35_X86_64.soc, SocId::QemuX86Q35);
+    assert_eq!(QEMU_Q35_X86_64.vendor, "qemu");
+    assert_eq!(QEMU_Q35_X86_64.model, "q35");
+    assert_eq!(
+        QEMU_Q35_X86_64.compatibles,
+        &["cellos,qemu-q35-x86_64", "qemu,q35"]
+    );
+    assert!(QEMU_Q35_X86_64.has_driver(DriverId::Uart16550PortIo));
+    assert!(QEMU_Q35_X86_64.has_driver(DriverId::PcieEcam));
+    assert!(QEMU_Q35_X86_64.fallback_memory.is_empty());
+    assert_eq!(QEMU_Q35_X86_64.validate_for(Architecture::X86_64), Ok(()));
 }
