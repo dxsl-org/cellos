@@ -1,4 +1,4 @@
-use crate::{RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
+use crate::{PlicContextPolicy, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
 
 /// Immutable SoC-profile facts used by the RV64 platform path.
 ///
@@ -11,6 +11,7 @@ pub struct RiscvSocProfile {
     pub plic_compatibles: &'static [&'static str],
     pub clint_compatibles: &'static [&'static str],
     pub rtc_compatibles: &'static [&'static str],
+    pub plic_context: PlicContextPolicy,
     pub uart_access: UartAccessPolicy,
     pub rtc_access: RtcAccessPolicy,
     pub virtio_mmio: VirtioMmioPolicy,
@@ -30,5 +31,11 @@ impl RiscvSocProfile {
     /// Returns true when the profile should scan DTB VirtIO MMIO nodes.
     pub const fn discovers_virtio_mmio(self) -> bool {
         matches!(self.virtio_mmio, VirtioMmioPolicy::Discover)
+    }
+
+    /// Returns the S-mode PLIC context for a physical hart, or `None` when absent.
+    pub const fn plic_context_for_physical_hart(self, physical_hart: usize) -> Option<usize> {
+        self.plic_context
+            .s_mode_context_for_physical_hart(physical_hart)
     }
 }

@@ -104,7 +104,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // Parse DTB for MMIO bases before any driver or paging init.
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     crate::platform::init(dtb);
-    // Set runtime PLIC base before hal::ARCH.init() calls plic::init() internally.
+    // Set runtime PLIC base before the later RV64 PLIC initialization consumes it.
     #[cfg(target_arch = "riscv64")]
     crate::platform::with(|p| hal::common::plic::set_plic_base(p.plic_base));
     // 0. Initialize UART immediately for early logging
@@ -538,7 +538,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 5. Hardware Abstraction Layer (HAL) Initialization
     // GDT/IDT/SYSCALL already done at step 1. Initialize PLIC for RISC-V external IRQs.
     #[cfg(target_arch = "riscv64")]
-    crate::hal::common::plic::init();
+    if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
+        crate::hal::common::plic::init(context, &irqs[..irq_count]);
+    } else {
+        log::warn!("[plic] no active RV64 context mapping; external IRQs stay disabled");
+    }
     log_info("HAL initialized (PLIC enabled)");
 
     // 6. Logger & Drivers & FS

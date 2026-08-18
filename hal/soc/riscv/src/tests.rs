@@ -1,4 +1,7 @@
-use crate::{RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy, GENERIC_VIRT, JH7110, SG2042};
+use crate::{
+    PlicContextPolicy, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy, GENERIC_VIRT, JH7110,
+    SG2042,
+};
 
 #[test]
 fn generic_and_jh7110_keep_mmio_discovery_enabled() {
@@ -10,6 +13,25 @@ fn generic_and_jh7110_keep_mmio_discovery_enabled() {
         assert!(profile.allows_rtc_mmio());
         assert!(profile.discovers_virtio_mmio());
     }
+}
+
+#[test]
+fn profiles_map_physical_harts_to_their_checked_plic_contexts() {
+    for profile in [GENERIC_VIRT, SG2042] {
+        assert_eq!(
+            profile.plic_context,
+            PlicContextPolicy::machine_then_supervisor()
+        );
+        assert_eq!(profile.plic_context_for_physical_hart(0), Some(1));
+        assert_eq!(profile.plic_context_for_physical_hart(1), Some(3));
+        assert_eq!(profile.plic_context_for_physical_hart(usize::MAX), None);
+    }
+
+    assert_eq!(JH7110.plic_context, PlicContextPolicy::jh7110());
+    assert_eq!(JH7110.plic_context_for_physical_hart(0), None);
+    assert_eq!(JH7110.plic_context_for_physical_hart(1), Some(2));
+    assert_eq!(JH7110.plic_context_for_physical_hart(2), Some(4));
+    assert_eq!(JH7110.plic_context_for_physical_hart(usize::MAX), None);
 }
 
 #[test]

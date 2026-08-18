@@ -1,7 +1,10 @@
 //! Boot protocol interfaces.
 
 use crate::*;
-#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+#[cfg(any(
+    all(target_arch = "riscv64", not(feature = "board-vf2")),
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 use cellos_boards::MemoryRangeKind;
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -244,7 +247,10 @@ impl BootInfo for SimpleBootInfo {
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 const DEFAULT_RISCV64_BOARD: &cellos_boards::BoardDescriptor =
     crate::board::default_riscv64_board();
-#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
+#[cfg(any(
+    all(target_arch = "riscv64", not(feature = "board-vf2")),
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
     match kind {
         MemoryRangeKind::Bootloader => MemoryType::Bootloader,
@@ -253,9 +259,15 @@ const fn fallback_memory_type(kind: MemoryRangeKind) -> MemoryType {
         MemoryRangeKind::Reserved => MemoryType::Reserved,
     }
 }
-#[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
-const fn fallback_memory_entry(index: usize) -> MemoryMapEntry {
-    let range = DEFAULT_RISCV64_BOARD.fallback_memory[index];
+#[cfg(any(
+    all(target_arch = "riscv64", not(feature = "board-vf2")),
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
+const fn fallback_memory_entry(
+    board: &cellos_boards::BoardDescriptor,
+    index: usize,
+) -> MemoryMapEntry {
+    let range = board.fallback_memory[index];
     MemoryMapEntry {
         base: range.base as usize,
         length: range.size as usize,
@@ -264,9 +276,9 @@ const fn fallback_memory_entry(index: usize) -> MemoryMapEntry {
 }
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 3] = [
-    fallback_memory_entry(0),
-    fallback_memory_entry(1),
-    fallback_memory_entry(2),
+    fallback_memory_entry(DEFAULT_RISCV64_BOARD, 0),
+    fallback_memory_entry(DEFAULT_RISCV64_BOARD, 1),
+    fallback_memory_entry(DEFAULT_RISCV64_BOARD, 2),
 ];
 #[cfg(all(target_arch = "riscv64", not(feature = "board-vf2")))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
@@ -344,28 +356,20 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
-// AArch64 RPi 3 (BCM2837): kernel at 0x80000, RAM 0..0x3F000000 before MMIO.
+// AArch64 RPi 3 (BCM2837): kernel at 0x80000, RAM below 0x3F000000 MMIO.
 // VideoCore firmware loads kernel8.img at 0x80000; GPU reserves top 64 MiB but
 // on QEMU raspi3b with -m 1G the full range below the peripheral base is usable.
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+const DEFAULT_RPI3_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_rpi3_board();
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
-    // Kernel: 0x80000 — 0x1080000 (16 MiB, covers binary + embedded init ELF)
-    MemoryMapEntry {
-        base: 0x0008_0000,
-        length: 0x0100_0000,
-        ty: MemoryType::Kernel,
-    },
-    // Usable: 0x1080000 — 0x3F000000 (~989 MiB, before BCM2837 peripheral MMIO)
-    MemoryMapEntry {
-        base: 0x0108_0000,
-        length: 0x3EF8_0000,
-        ty: MemoryType::Usable,
-    },
+    fallback_memory_entry(DEFAULT_RPI3_BOARD, 0),
+    fallback_memory_entry(DEFAULT_RPI3_BOARD, 1),
 ];
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &FALLBACK_MEMORY_MAP,
-    kernel_phys_base: 0x0008_0000,
+    kernel_phys_base: DEFAULT_RPI3_BOARD.fallback_memory[0].base,
     hhdm_offset: 0x0,
 };
 

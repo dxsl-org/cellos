@@ -9,6 +9,7 @@ pub enum Architecture {
 pub enum FirmwareInterface {
     OpenSbi,
     Uefi,
+    VideoCore,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,9 +66,9 @@ pub struct BoardDescriptor {
     pub boot: BootContract,
     pub fallback_memory: &'static [MemoryRange],
     pub uart: MmioRegion,
-    pub plic: MmioRegion,
-    pub clint: MmioRegion,
-    pub rtc: MmioRegion,
+    pub plic: Option<MmioRegion>,
+    pub clint: Option<MmioRegion>,
+    pub rtc: Option<MmioRegion>,
     pub virtio_mmio: &'static [MmioRegion],
     pub wiring: WiringLayout,
     pub enabled_drivers: &'static [&'static str],
@@ -117,7 +118,9 @@ impl BoardDescriptor {
                 max: MAX_VIRTIO_MMIO_SLOTS,
             });
         }
-        for region in [self.uart, self.plic, self.clint, self.rtc] {
+        for region in core::iter::once(self.uart)
+            .chain([self.plic, self.clint, self.rtc].into_iter().flatten())
+        {
             if region.size == 0 {
                 return Err(ValidationError::ZeroSizedMmioCore(region.compatible));
             }

@@ -47,15 +47,12 @@ impl SdhciController {
     #[inline]
     fn read8(&self, off: usize) -> u8 {
         #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        {
+        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
             let shift = (off & 3) * 8;
-            (self.read32(off & !3) >> shift) as u8
+            return (self.read32(off & !3) >> shift) as u8;
         }
-        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
-        {
-            // SAFETY: base + off is within the SDHCI MMIO block mapped by the kernel.
-            unsafe { core::ptr::read_volatile((self.base + off) as *const u8) }
-        }
+        // SAFETY: base + off is within the SDHCI MMIO block mapped by the kernel.
+        unsafe { core::ptr::read_volatile((self.base + off) as *const u8) }
     }
     #[inline]
     fn read32(&self, off: usize) -> u32 {
@@ -65,15 +62,12 @@ impl SdhciController {
     #[inline]
     fn read16(&self, off: usize) -> u16 {
         #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        {
+        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
             let shift = (off & 2) * 8;
-            (self.read32(off & !3) >> shift) as u16
+            return (self.read32(off & !3) >> shift) as u16;
         }
-        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
-        {
-            // SAFETY: same as read32.
-            unsafe { core::ptr::read_volatile((self.base + off) as *const u16) }
-        }
+        // SAFETY: same as read32.
+        unsafe { core::ptr::read_volatile((self.base + off) as *const u16) }
     }
     #[inline]
     fn write32(&mut self, off: usize, v: u32) {
@@ -89,7 +83,7 @@ impl SdhciController {
     #[inline]
     fn write16(&mut self, off: usize, v: u16) {
         #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        {
+        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
             let shift = (off & 2) * 8;
             let old = if off == SDHCI_COMMAND {
                 self.transfer_mode_shadow
@@ -102,27 +96,23 @@ impl SdhciController {
             } else {
                 self.write32(off & !3, combined);
             }
+            return;
         }
-        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
-        {
-            // SAFETY: same as read32.
-            unsafe { core::ptr::write_volatile((self.base + off) as *mut u16, v) }
-        }
+        // SAFETY: same as read32.
+        unsafe { core::ptr::write_volatile((self.base + off) as *mut u16, v) }
     }
     #[inline]
     fn write8(&mut self, off: usize, v: u8) {
         #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-        {
+        if hal_soc_bcm27xx::BCM2837.sdhci.word_access_only {
             let shift = (off & 3) * 8;
             let old = self.read32(off & !3);
             let combined = (old & !(0xff << shift)) | ((v as u32) << shift);
             self.write32(off & !3, combined);
+            return;
         }
-        #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
-        {
-            // SAFETY: same as read32.
-            unsafe { core::ptr::write_volatile((self.base + off) as *mut u8, v) }
-        }
+        // SAFETY: same as read32.
+        unsafe { core::ptr::write_volatile((self.base + off) as *mut u8, v) }
     }
 
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
@@ -148,8 +138,8 @@ impl SdhciController {
             core::arch::asm!("mrs {}, cntfrq_el0", out(reg) frequency, options(nomem, nostack));
         }
         // BCM2835 Arasan may drop writes less than two 400 kHz SD-clock cycles apart.
-        // Six microseconds matches U-Boot's conservative two-cycle delay plus rounding.
-        let minimum_ticks = frequency.saturating_mul(6).div_ceil(1_000_000);
+        let spacing_us = u64::from(hal_soc_bcm27xx::BCM2837.sdhci.minimum_write_spacing_us);
+        let minimum_ticks = frequency.saturating_mul(spacing_us).div_ceil(1_000_000);
         while Self::bcm2835_timer_ticks().wrapping_sub(self.last_write_ticks) < minimum_ticks {
             core::hint::spin_loop();
         }

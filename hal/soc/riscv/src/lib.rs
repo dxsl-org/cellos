@@ -7,10 +7,12 @@
 
 mod access_policy;
 mod catalog;
+mod plic_policy;
 mod profile;
 
 pub use access_policy::{RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
 pub use catalog::{GENERIC_VIRT, JH7110, SG2042};
+pub use plic_policy::PlicContextPolicy;
 pub use profile::RiscvSocProfile;
 
 #[cfg(test)]

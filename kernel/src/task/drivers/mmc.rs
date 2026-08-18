@@ -23,13 +23,17 @@ use types::{ViError, ViResult};
 #[cfg(feature = "board-rpi4")]
 const SDHCI_BASE: usize = 0xFE34_0000; // BCM2711 Arasan eMMC2
 
-#[cfg(feature = "board-rpi3")]
-const SDHCI_BASE: usize = 0x3F30_0000; // BCM2837 Arasan SDHCI eMMC
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+const SDHCI_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.sdhci_base;
 
 #[cfg(feature = "board-vf2")]
 const SDHCI_BASE: usize = 0x1604_0000; // JH7110 SDHCI (SDIO1)
 
-#[cfg(not(any(feature = "board-rpi4", feature = "board-rpi3", feature = "board-vf2")))]
+#[cfg(not(any(
+    feature = "board-rpi4",
+    all(target_arch = "aarch64", feature = "board-rpi3"),
+    feature = "board-vf2"
+)))]
 const SDHCI_BASE: usize = 0x0; // no real board configured
 
 // ---------------------------------------------------------------------------

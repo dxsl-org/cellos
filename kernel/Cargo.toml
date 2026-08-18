@@ -39,6 +39,8 @@ hal-soc-riscv = { path = "../hal/soc/riscv", version = "0.2.0" }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 hal = { path = "../hal/core", version = "0.2.0", package = "hal-core", default-features = false, features = ["aarch64", "critical-section-impl"] }
+hal-soc-bcm27xx = { path = "../hal/soc/bcm27xx", version = "0.2.0" }
+cellos-boards = { path = "../boards", version = "0.2.0" }
 fdt = "0.1"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]

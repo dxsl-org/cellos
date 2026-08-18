@@ -1,4 +1,6 @@
-use crate::{RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
+use crate::{
+    PlicContextPolicy, RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy,
+};
 
 const UART_COMPATIBLES: &[&str] = &["ns16550a", "ns16550", "snps,dw-apb-uart"];
 const PLIC_COMPATIBLES: &[&str] = &["sifive,plic-1.0.0", "riscv,plic0", "thead,c900-plic"];
@@ -12,6 +14,7 @@ pub const GENERIC_VIRT: RiscvSocProfile = RiscvSocProfile {
     plic_compatibles: PLIC_COMPATIBLES,
     clint_compatibles: CLINT_COMPATIBLES,
     rtc_compatibles: RTC_COMPATIBLES,
+    plic_context: PlicContextPolicy::machine_then_supervisor(),
     uart_access: UartAccessPolicy::Mmio,
     rtc_access: RtcAccessPolicy::Mmio,
     virtio_mmio: VirtioMmioPolicy::Discover,
@@ -20,6 +23,7 @@ pub const GENERIC_VIRT: RiscvSocProfile = RiscvSocProfile {
 /// JH7110 currently reuses the same DTB lookup families as the generic path.
 pub const JH7110: RiscvSocProfile = RiscvSocProfile {
     slug: "jh7110",
+    plic_context: PlicContextPolicy::jh7110(),
     ..GENERIC_VIRT
 };
 
@@ -31,6 +35,7 @@ pub const SG2042: RiscvSocProfile = RiscvSocProfile {
     plic_compatibles: PLIC_COMPATIBLES,
     clint_compatibles: CLINT_COMPATIBLES,
     rtc_compatibles: RTC_COMPATIBLES,
+    plic_context: PlicContextPolicy::machine_then_supervisor(),
     uart_access: UartAccessPolicy::SbiDbcnOnly,
     rtc_access: RtcAccessPolicy::Unavailable,
     virtio_mmio: VirtioMmioPolicy::Absent,

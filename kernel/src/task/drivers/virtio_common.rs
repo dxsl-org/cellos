@@ -129,9 +129,7 @@ fn ack_unclaimed(irq: u32) -> bool {
         .contains(&irq)
         .then_some(0x0a00_0000usize + (irq as usize - 16) * 0x200);
     #[cfg(target_arch = "riscv64")]
-    let base = (1..9)
-        .contains(&irq)
-        .then_some(0x1000_1000usize + (irq as usize - 1) * 0x1000);
+    let base = crate::platform::virtio_mmio_base_for_irq(irq);
     // x86_64 routes VirtIO through PCI MSI-X, not a fixed MMIO IRQ window, so
     // there is no slot base to derive and nothing to acknowledge here.
     #[cfg(not(any(target_arch = "aarch64", target_arch = "riscv64")))]

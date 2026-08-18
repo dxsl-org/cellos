@@ -13,6 +13,9 @@ use boot_once::BootOnce;
 #[cfg(target_arch = "riscv64")]
 use hal_soc_riscv::{RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
 
+#[cfg(target_arch = "riscv64")]
+pub const RISCV_PLIC_IRQ_CAPACITY: usize = 9;
+
 // ── Public types ───────────────────────────────────────────────────────────────
 
 /// A VirtIO MMIO device found in the DTB.
@@ -48,15 +51,74 @@ impl PlatformInfo {
 
     #[cfg(target_arch = "riscv64")]
     fn from_board(board: &cellos_boards::BoardDescriptor) -> Self {
+        let plic = required_riscv_mmio(board.plic, "PLIC");
+        let clint = required_riscv_mmio(board.clint, "CLINT");
+        let rtc = required_riscv_mmio(board.rtc, "RTC");
         Self {
             uart_base: board.uart.base as usize,
             uart_irq: board.uart.irq.unwrap_or(0),
-            plic_base: board.plic.base as usize,
-            plic_size: board.plic.size as usize,
-            clint_base: board.clint.base as usize,
+            plic_base: plic.base as usize,
+            plic_size: plic.size as usize,
+            clint_base: clint.base as usize,
             virtio_mmio: virtio_slots(board),
-            rtc_base: board.rtc.base as usize,
+            rtc_base: rtc.base as usize,
         }
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    fn riscv_plic_irqs(&self) -> ([u32; RISCV_PLIC_IRQ_CAPACITY], usize) {
+        let mut irqs = [0; RISCV_PLIC_IRQ_CAPACITY];
+        let mut len = 0;
+
+        if self.riscv_irq_owner_count(self.uart_irq) == 1 {
+            push_irq(&mut irqs, &mut len, self.uart_irq);
+        }
+        let mut index = 0;
+        while index < self.virtio_mmio.len() {
+            if let Some(entry) = self.virtio_mmio[index] {
+                if self.riscv_irq_owner_count(entry.irq) == 1 {
+                    push_irq(&mut irqs, &mut len, entry.irq);
+                }
+            }
+            index += 1;
+        }
+
+        (irqs, len)
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    fn virtio_mmio_base_for_irq(&self, irq: u32) -> Option<usize> {
+        let mut found = None;
+        let mut index = 0;
+        while index < self.virtio_mmio.len() {
+            if let Some(entry) = self.virtio_mmio[index] {
+                if entry.irq == irq {
+                    if found.is_some() {
+                        return None;
+                    }
+                    found = Some(entry.base);
+                }
+            }
+            index += 1;
+        }
+        found
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    pub(crate) fn riscv_irq_owner_count(&self, irq: u32) -> usize {
+        if irq == 0 {
+            return 0;
+        }
+
+        let mut owners = usize::from(self.uart_irq == irq);
+        let mut index = 0;
+        while index < self.virtio_mmio.len() {
+            if self.virtio_mmio[index].is_some_and(|entry| entry.irq == irq) {
+                owners += 1;
+            }
+            index += 1;
+        }
+        owners
     }
 }
 
@@ -103,19 +165,26 @@ pub fn init(sbi_dtb: usize) {
 // Mini UART IO register at 0x3F215040 (AUX_MU_IO).
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 pub fn init(_dtb_ptr: usize) {
+    let board = crate::board::selected_rpi3();
+    let soc = hal_soc_bcm27xx::BCM2837;
     // RPi 3 has no Goldfish/PL031 RTC — uptime only via ARM counter, epoch=0.
     let info = PlatformInfo {
-        uart_base: 0x3F21_5040, // BCM mini UART IO register (AUX_MU_IO)
-        uart_irq: 0,            // mini UART IRQ not used (polled I/O)
-        plic_base: 0,
-        plic_size: 0,
-        clint_base: 0,
-        virtio_mmio: [None; 8], // No VirtIO on RPi 3 — real hardware Driver Cells
-        rtc_base: 0,            // No Goldfish RTC; epoch unknown without external RTC
+        uart_base: board.uart.base as usize,
+        uart_irq: board.uart.irq.unwrap_or(0),
+        plic_base: board.plic.map_or(0, |region| region.base as usize),
+        plic_size: board.plic.map_or(0, |region| region.size as usize),
+        clint_base: board.clint.map_or(0, |region| region.base as usize),
+        virtio_mmio: virtio_slots(board),
+        rtc_base: board.rtc.map_or(0, |region| region.base as usize),
     };
     // SAFETY: `kmain` invokes this once during single-core boot.
     unsafe { publish_boot(info) };
-    log::info!("[platform] RPi 3 BCM2837: UART=0x3F215040 periph=0x3F000000 RAM=960MiB");
+    log::info!(
+        "[platform] RPi 3 BCM2837: UART={:#x} periph={:#x} fallback-end={:#x}",
+        board.uart.base,
+        soc.mmio.peripheral_base,
+        board.fallback_memory[1].base + board.fallback_memory[1].size
+    );
 }
 
 // ── QEMU ARM virt defaults (aarch64) ─────────────────────────────────────────
@@ -166,6 +235,25 @@ pub fn with<R>(f: impl FnOnce(&PlatformInfo) -> R) -> R {
     f(PLATFORM
         .get()
         .expect("[platform] platform::init not called before platform::with"))
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn riscv_plic_init_data() -> Option<(usize, [u32; RISCV_PLIC_IRQ_CAPACITY], usize)> {
+    let context = riscv_plic_context_for_current_hart()?;
+    let (irqs, len) = with(|platform| platform.riscv_plic_irqs());
+    Some((context, irqs, len))
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn riscv_plic_context_for_current_hart() -> Option<usize> {
+    let logical_hart = crate::task::hart_local::current_hart_id();
+    let physical_hart = crate::task::smp::logical_to_physical(logical_hart)?;
+    active_riscv_soc_profile().plic_context_for_physical_hart(physical_hart)
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn virtio_mmio_base_for_irq(irq: u32) -> Option<usize> {
+    with(|platform| platform.virtio_mmio_base_for_irq(irq))
 }
 
 // ── DTB parser (riscv64 only) ──────────────────────────────────────────────────
@@ -255,19 +343,20 @@ fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
     let (plic_base, plic_size) =
         reg_base_size(&fdt, profile.plic_compatibles).unwrap_or_else(|| {
             log::warn!("[platform] PLIC not in DTB");
-            (defaults.plic.base as usize, defaults.plic.size as usize)
+            let plic = required_riscv_mmio(defaults.plic, "PLIC");
+            (plic.base as usize, plic.size as usize)
         });
 
     let clint_base = reg_base(&fdt, profile.clint_compatibles).unwrap_or_else(|| {
         log::warn!("[platform] CLINT not in DTB");
-        defaults.clint.base as usize
+        required_riscv_mmio(defaults.clint, "CLINT").base as usize
     });
 
     let virtio_mmio = virtio_mmio_entries_for_profile(&fdt, profile);
 
     let rtc_base = reg_base(&fdt, profile.rtc_compatibles).unwrap_or_else(|| {
         log::warn!("[platform] Goldfish RTC not in DTB, using default");
-        defaults.rtc.base as usize
+        required_riscv_mmio(defaults.rtc, "RTC").base as usize
     });
 
     PlatformInfo {
@@ -340,7 +429,10 @@ fn collect_virtio(fdt: &fdt::Fdt) -> [Option<VirtioEntry>; 8] {
     entries
 }
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 fn virtio_slots(board: &cellos_boards::BoardDescriptor) -> [Option<VirtioEntry>; 8] {
     let mut entries = [None, None, None, None, None, None, None, None];
     let mut index = 0;
@@ -353,4 +445,32 @@ fn virtio_slots(board: &cellos_boards::BoardDescriptor) -> [Option<VirtioEntry>;
         index += 1;
     }
     entries
+}
+
+#[cfg(target_arch = "riscv64")]
+fn required_riscv_mmio(
+    region: Option<cellos_boards::MmioRegion>,
+    name: &'static str,
+) -> cellos_boards::MmioRegion {
+    region.unwrap_or_else(|| panic!("[board] RISC-V fallback is missing {}", name))
+}
+
+#[cfg(target_arch = "riscv64")]
+fn push_irq(irqs: &mut [u32; RISCV_PLIC_IRQ_CAPACITY], len: &mut usize, irq: u32) {
+    if irq == 0 {
+        return;
+    }
+
+    let mut index = 0;
+    while index < *len {
+        if irqs[index] == irq {
+            return;
+        }
+        index += 1;
+    }
+
+    if *len < irqs.len() {
+        irqs[*len] = irq;
+        *len += 1;
+    }
 }

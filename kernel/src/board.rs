@@ -1,4 +1,7 @@
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 use cellos_boards::{Architecture, BoardDescriptor, ValidationError};
 
 #[cfg(target_arch = "riscv64")]
@@ -20,7 +23,29 @@ pub(crate) fn selected() -> &'static BoardDescriptor {
     }
 }
 
-#[cfg(target_arch = "riscv64")]
+#[cfg(any(
+    target_arch = "riscv64",
+    all(target_arch = "aarch64", feature = "board-rpi3")
+))]
 fn invalid_descriptor(error: ValidationError) -> ! {
-    panic!("[board] invalid riscv64 descriptor: {:?}", error)
+    panic!("[board] invalid descriptor: {:?}", error)
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+const DEFAULT_RPI3_BOARD: &BoardDescriptor =
+    &cellos_boards::raspberry_pi_3_model_b::RASPBERRY_PI_3_MODEL_B;
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+/// Returns the compiled-in RPi3 descriptor used by const fallback boot data.
+pub(crate) const fn default_rpi3_board() -> &'static BoardDescriptor {
+    DEFAULT_RPI3_BOARD
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+/// Returns the validated RPi3 descriptor before platform drivers consume it.
+pub(crate) fn selected_rpi3() -> &'static BoardDescriptor {
+    match DEFAULT_RPI3_BOARD.validate_for(Architecture::Aarch64) {
+        Ok(()) => DEFAULT_RPI3_BOARD,
+        Err(error) => invalid_descriptor(error),
+    }
 }

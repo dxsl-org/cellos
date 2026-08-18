@@ -16,6 +16,8 @@ pub mod uart;
 // Drivers
 pub mod block;
 pub mod console_drv;
+#[cfg(target_arch = "riscv64")]
+pub mod irq_dispatch;
 pub mod mmc;
 pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_common;

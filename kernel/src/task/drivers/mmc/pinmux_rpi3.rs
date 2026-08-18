@@ -1,4 +1,4 @@
-const GPIO_BASE: usize = 0x3F20_0000;
+const GPIO_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.gpio_base;
 const GPIO_INPUT: u32 = 0;
 const GPIO_ALT3: u32 = 7;
 
