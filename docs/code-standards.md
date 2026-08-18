@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-17
+**Last Updated**: 2026-08-18
 
 ---
 
@@ -54,6 +54,21 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
 - Never hardcode pointer sizes (`usize`, `u64`)
 - Always use `VAddr` for virtual addresses, `PAddr` for physical
 - Test on RV32, RV64, and ARM targets (compile checks at minimum)
+
+### Hardware Platform Ownership
+
+- Root `boards/` packages contain only identity/compatibles, boot/firmware
+  contract, pinmux/PHY wiring, fallback memory/DT assets, typed SoC identity,
+  and enabled shared-driver selection.
+- Immutable SoC MMIO, IRQ topology, controller presence, and access quirks live
+  under `hal/soc/`.
+- Register access, interrupt programming, and CPU-architecture mechanisms live
+  under `hal/arch/`; shared device mechanisms remain single-copy in the kernel
+  integration layer or `cells/drivers/`.
+- Cargo board features select integration data. They must not fork UART, SDHCI,
+  DesignWare I2C/SPI, GIC/PLIC, VirtIO, or PCIe mechanisms.
+- Run `bash scripts/check-board-configs.sh` after changing a board, SoC profile,
+  driver-selection boundary, or build feature.
 
 ### Law 4: Unsafe Code Management
 

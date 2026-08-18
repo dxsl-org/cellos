@@ -2,6 +2,24 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] HAL/SoC/board split is complete for the current catalog
+
+`BoardDescriptor` now contains only identity/compatibles, the boot and firmware
+contract, fallback memory/DT asset, pinmux/PHY wiring, typed SoC identity, and
+the enabled shared-driver list. UART, PLIC, CLINT, RTC, and VirtIO MMIO fallback
+facts moved out of board packages and into validated SoC profiles.
+
+Typed driver checks now gate PLIC, SDHCI, and VirtIO initialization. Required-DTB
+boards fail closed when enabled UART/PLIC/CLINT nodes are absent, conflicting
+board features fail at compile time, and every board README/configuration is
+covered by `scripts/check-board-configs.sh`. CI runs that matrix together with
+the ownership guard. QEMU ARM's RTC contract was corrected to PL031 at
+`0x0901_0000`, matching upstream QEMU.
+
+Host tests, all six board compile lanes, x86_64 compile, boundary/review gates,
+RV64 FAT16 boot, and AArch64 `ViCell >` boot passed. VF2, Pioneer, RPi3, and
+RPi4 remain compile-only pending matching physical hardware runs.
+
 ## [2026-08-18] ARM platform facts and SDHCI policy move behind SoC profiles
 
 `hal/soc/arm-virt` now owns QEMU AArch64 GIC, PL011, RTC, GPIO,
@@ -14,9 +32,9 @@ runtime access policy selected from BCM2837, BCM2711, or JH7110 data. RPi4 maps
 disjoint GPIO, UART, and SDHCI windows for cells and maps GIC interfaces
 kernel-only; it does not advertise PCIe until a real BCM2711 host path exists.
 The 15-lane host/cross-target matrix, focused security review, RV64 release
-build, and RV64 QEMU FAT16 witness passed. QEMU AArch64 reached the ViCell shell,
-but its script still expects the stale `Cellos >` marker, so that script gate is
-not claimed green. Physical boards remain compile-only.
+build, and RV64 QEMU FAT16 witness passed. QEMU AArch64 reached the ViCell shell;
+the stale script marker was corrected in the final boundary-closure slice.
+Physical boards remain compile-only.
 
 ## [2026-08-18] Board catalog and RISC-V selection become descriptor-driven
 

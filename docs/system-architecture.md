@@ -3,19 +3,15 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-18 (status refreshed: Phase06 stack guards and RV64 test-hooks overflow probe landed; production boot PASS on RV64/AArch64/x86_64; KASLR / ARM64 / ViUI v2 / reliability / Tier 3b VM / cell-signing all shipped; fixed-priority scheduler shipped with RT-hart routing; launch-edge deprivilege added exact shell/init/hypha/tool-spawn/supervisor/pinned profiles and keeps `/bin/supervisor` inside the manifest/boot-ceiling/policy intersection under `SupervisorCap`; generic completion contract verified with `WaitCompletion` still additive over `NET_RX` plus finite `TIMER` only, source masks fail closed, the v1 source field uses bytes 12..16 inside the 24-byte record, task-death cleanup runs outside the scheduler lock, `Recv*`/`WaitForEvent` remain intact, Phase 05 landed the one-tick `Arc`-backed parked executor and the exact `[executor] dummy-waker=absent executor=parked source=TIMER PASS` witness, and the NET_RX source proof checks both source and result; Midori Phase 02 runtime closure now includes caller-visible dead-peer errors, sender requeue/result reset, and RecvScatter mailbox-only guardrail; RV64 now enables external IRQ delivery, VirtIO ACK uses scoped SUM + exact InterruptStatus, NIC owner/device-type binding points the NET_RX source, the runtime witness requires a real RX drain, and shared death/hotswap clears driver roles; root `boards/` landed as a no_std descriptor crate for QEMU RV64 only, with shared drivers still living in `cells/drivers/`, `hal/soc/riscv` now owning the SoC profile slice, and RV64 PLIC routing now consumes runtime PlatformInfo data instead of QEMU-fixed IRQ/context policy; Phase 00 public syscall landing is complete: `PauseService` 422 is SupervisorCap-gated with bit 49, legacy `HotSwap` 400 is retired/reserved and decodes `Unknown`; the hotswap CLI uses Supervisor IPC; `HotSwapReady`/`Snapshot` keep bit 32, `SpawnReplacement` 421 is additive with bit 57, `SupervisorCap` gates the replacement path under `SCHEDULER -> SWAP_CEILINGS`, resume/all scheduler exits clear the ceiling, and refreshed-image QEMU `supervisor_hotswap_preserves_demo_state` passed with `[hotswap-demo-v2] SpawnCap retained`; Phase 01 supervisory atomic cutover is complete: paused+Frozen bounded FIFO, source→replacement binding, compare-and-commit rollback, plain resume invalidation of stale bindings, barrier-then-kill-old, cached-sender FIFO proof, old-TID rejection, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 02 supervisory hotswap closure is complete: the hotswap CLI is service-only, `/bin/hotswap` stays shell-only and capability-free, the supervisor rejects unauthorized senders with `0xFD` before parsing, and the QEMU hotswap-smoke suite now passes 15/15 with zero skips; Phase 03 snapshot trigger authority is complete: `Snapshot` 420 keeps allowlist bit 32, shell→Supervisor zero-filled opcode-only IPC is exact, `SupervisorCap` gates mutation, NullBlock proves unavailability on QEMU, direct allowlisted non-supervisor denial is enforced, real MMC save/restore remains host-gated, the snapshot format and warm-boot restore path remain unchanged, and diff-aware verification finished 17/17; TLSF pool initialised but unused; strict guest lane remains hardware-gated; Dual-VFS, native Lua/MicroPython, Slint dropped)
+**Last Updated**: 2026-08-18 (HAL/SoC/board split complete for all six current selections; RV64 and AArch64 QEMU runtime witnesses pass; physical boards remain hardware-gated)
 
-> **Status refresh 2026-08-18**: `hal/soc/riscv` now holds immutable RISC-V
-> SoC profile facts for QEMU virt, JH7110/VF2, and SG2042/Pioneer. It is
-> data-only: compatible-string lists and fail-closed access policies, with no
-> driver implementations, board descriptors, pinmux, PHY wiring, or memory maps.
-> `hal/soc/bcm27xx` follows the same boundary for BCM2837 controller layout and
-> SDHCI access constraints; RPi3 board wiring and boot data remain board-owned.
-> `boards/` now carries both the QEMU RV64 and Raspberry Pi 3 Model B board
-> descriptors, with UART mandatory and PLIC/CLINT/RTC optional on the board
-> contract so the same descriptor shape can cover both machines without copying
-> shared drivers. The RPi3 fallback map ends exactly at `0x3F000000` to avoid
-> the BCM2837 MMIO aperture.
+> **Status refresh 2026-08-18**: the HAL split is complete for all six current
+> board selections. Root `boards/` descriptors contain integration data only;
+> `hal/soc/{riscv,arm-virt,bcm27xx}` owns immutable platform facts; `hal/arch`
+> and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
+> missing enabled hardware, typed driver lists gate initialization, and CI runs
+> the ownership plus six-board build matrix. RV64 and AArch64 QEMU runtime gates
+> pass; VF2, Pioneer, RPi3, and RPi4 remain physical-hardware-gated.
 
 ---
 
@@ -59,14 +55,16 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 `boards/` is a root workspace crate, not a HAL subdirectory. It holds immutable board descriptors for product-specific integration data and keeps hardware mechanism code elsewhere.
 
 - `cellos-boards` is `#![no_std]` and carries descriptor data only.
-- Each descriptor owns board identity, compatible strings, boot/firmware contract, fallback memory map, pinmux/PHY wiring, typed SoC identity, and the list of shared drivers to enable. UART stays mandatory, while PLIC/CLINT/RTC are optional so one shape covers the current catalog without splitting drivers.
+- Each descriptor owns board identity, compatible strings, boot/firmware contract,
+  fallback memory map/DT asset, pinmux/PHY wiring, typed SoC identity, and the
+  list of shared drivers to enable. It contains no SoC MMIO or IRQ layout.
 - The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer, Raspberry Pi 3, and Raspberry Pi 4. Checked DTS assets are audit/fallback data, not claimed as generated boot artifacts; physical-board descriptors remain compile-only without matching hardware runs.
 - Kernel consumers are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`.
 - Shared drivers remain in `cells/drivers/`; no UART/SDHCI/DW I2C/SPI/GIC/PLIC/PCIe driver is duplicated per board.
-- `hal/soc/riscv` now owns data-only RISC-V SoC profiles: generic QEMU virt and
-  JH7110 keeps UART/VirtIO discovery but disables unsupported RTC fallback, while SG2042 preserves the
-  Pioneer fail-closed contract by forcing SBI DBCN console only, no RTC MMIO,
-  and no VirtIO-MMIO slots.
+- `hal/soc/riscv` owns validated RISC-V fallback MMIO and discovery policy.
+  Generic QEMU virt enables its audited UART/PLIC/CLINT/RTC/VirtIO fallback;
+  JH7110 requires firmware DTB nodes for enabled drivers and exposes no RTC or
+  VirtIO driver; SG2042 preserves SBI DBCN-only console and no RTC/VirtIO MMIO.
 - The RV64 PLIC split now keeps policy data in `hal/soc/riscv` and runtime
   mechanism in `hal/arch/riscv`: the kernel resolves the physical-hart context
   from the selected SoC profile and device IRQs from `PlatformInfo`, and the
@@ -91,6 +89,10 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 - The shared SDHCI controller receives an immutable runtime access policy;
   BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
   access do not create per-board driver implementations.
+- `scripts/check-hal-boundaries.sh` rejects SoC imports/MMIO fields or shared
+  driver copies in board packages. `scripts/check-board-configs.sh` validates
+  all six assets/build commands, compiles every selection, and proves conflicting
+  real-board features fail. CI runs this matrix on every change.
 
 ---
 

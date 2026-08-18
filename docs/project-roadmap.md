@@ -87,8 +87,17 @@
 > implementation consumes runtime BCM2837/BCM2711/JH7110 access policy. RPi4
 > cell mappings are limited to disjoint GPIO/UART/SDHCI pages, with GIC
 > kernel-only and PCIe unadvertised. The 15-lane compile matrix and RV64 QEMU
-> witness passed. AArch64 QEMU reached `ViCell >`, but its stale-marker script is
-> not counted green; physical boards remain compile-only.
+> witness passed. AArch64 QEMU reached `ViCell >`; the final closure slice later
+> corrected the stale test marker. Physical boards remain compile-only.
+
+> **2026-08-18 HAL-split closure:** the six-board catalog now satisfies the
+> board-only completion contract: no SoC MMIO/IRQ fields remain in descriptors,
+> RV64 fallback MMIO lives in validated SoC profiles, enabled-driver data gates
+> shared initialization, required-DTB nodes fail closed, and incompatible board
+> features fail at compile time. CI owns the boundary and six-board matrix.
+> Host/compile/review gates, RV64 QEMU FAT16 boot, and AArch64 QEMU `ViCell >`
+> boot passed. Only physical VF2/Pioneer/RPi3/RPi4 runtime evidence remains
+> hardware-gated; it is not unfinished code separation.
 
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
@@ -277,7 +286,7 @@ Cellos ships in product stages defined by target hardware. The mapping principle
 | 📋 **TLS server-side accept** `[G2, optional]` | .agents/260623-1500-tls-server-accept | PARKED — plan complete, implement G2 when httpd needs to serve external HTTPS (curl/browser). Swarm uses Noise_KKpsk/NNpsk (separate plan). `tls-server` optional Cargo feature. | **G2** |
 | 🆕 **RTC / wall-clock** `[G1]` | new | ✅ COMPLETE 2026-06-07 — Goldfish RTC (RISC-V/ARM64) + CMOS RTC (x86_64); GetTime op=2/3 for epoch_ns/epoch_secs; date binary shows real UTC time | **G1** |
 | 🆕 **MMC subsystem** (SDHCI PIO) `[G1 ext / G2]` | Phase M2.6 | ✅ COMPLETE 2026-08-17 — 5 phases done (card init, eMMC/SD variants, PL180 impl, QEMU VirtIO + real SBC routing); real RPi3 Model B v1.2 lane now validated end to end with external SD boot to `Cellos >`, FAT16/FAT32 mounts, and `/mnt/sd` + `/bin` available; RPi4/VisionFive2 ready | **G1** |
-| 🆕 **Root board descriptors** (`boards/`) | board contract slice | ✅ COMPLETE 2026-08-18 — QEMU RV64 + Raspberry Pi 3 Model B descriptors now own board identity, VideoCore/firmware contract, fallback memory, pinmux/PHY wiring, and shared-driver enablement; UART is mandatory, PLIC/CLINT/RTC optional; `hal/soc/bcm27xx` retains BCM2837 facts; RPi3 physical boot remains hardware-gated/compile-only | shared |
+| 🆕 **Root board descriptors** (`boards/`) | board contract slice | ✅ COMPLETE 2026-08-18 — six integration-only descriptors contain no SoC MMIO/IRQ facts; `hal/soc/` owns hardware facts, shared drivers remain single-copy, and CI enforces boundaries plus every board build lane; QEMU RV64/AArch64 boot witnesses pass while physical boards remain hardware-gated/compile-only | shared |
 | 🆕 **Large-buffer IPC** `[shared, G3 prerequisite]` | Phase M2.7 | ✅ COMPLETE 2026-06-07 — MAX_GRANT_PAGES lifted 16→4096 (16MB cap), grant reaper on task death, GrantRegister/Unregister syscalls 215/216 shipped | **G2/G3** |
 | 🆕 **Compositor Grant surfaces** `[M2.4 partial]` | Phases 01–05 | ✅ COMPLETE 2026-06-09 — zero-copy surfaces, damage-driven render, FONT8X8, ViSurface wrapper; replaces WRITE_PIXELS IPC with Grant shared memory | **G2** |
 | Hot migration / zero-downtime + cell-signing mechanism | M4.1 + G.2 P2 | ✅ MECHANISMS COMPLETE 2026-06-23; Phase 00 public syscall landing is complete 2026-08-07 — `PauseService` 422 is SupervisorCap-gated with bit 49 and drains pre-pause ingress before Snapshot; `HotSwap` 400 is retired/reserved in Phase 04, `SpawnReplacement` 421 is additive with bit 57, the exact launch-profile intersection is enforced; Phase 01 supervisory atomic cutover is complete 2026-08-07 — paused+Frozen bounded FIFO, source→replacement binding, compare-and-commit rollback, plain resume invalidation of stale bindings, barrier-then-kill-old, and final QEMU hotswap-smoke 13/13 with reviews PASS/CLEAR; Phase 04 kernel cleanup is complete 2026-08-08 — legacy kernel orchestrator and direct wrapper are retired, API tests passed 75/75, release-kernel builds passed for riscv64/aarch64/x86_64, `gen_disk.ps1` rebuilt fresh images and refreshed `kernel/src/embedded/init`, hotswap-smoke passed 15/15, launch-profile passed 1/1, and accepted followups remain x86/AArch64 fresh boot packaging plus host API coverage 33.26 percent line / 0 percent branch. | **G2** |
