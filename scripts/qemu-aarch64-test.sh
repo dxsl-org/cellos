@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the ViCell AArch64 kernel in QEMU and assert the system reaches the shell
+# Boot the Cellos AArch64 kernel in QEMU and assert the system reaches the shell
 # prompt ("Cellos >").
 #
 # Mirrors scripts/qemu-boot-test.sh for the ARM64 virt machine.

@@ -1096,41 +1096,39 @@ pub fn spawn_from_mem(
             // '2'<sepc hex>:     what was written to [tf_ptr+264] (should == entry_va).
             // '3'<entry hex>:    entry_va value (expected sepc).
             // '4'<kstack_top>:   kstack_top (tf_ptr should be kstack_top - 288).
-            // Uses FIFO-safe writes (waits for LSR TX-empty bit) to prevent byte
-            // drops when the TX FIFO is still draining from a prior log message.
+            // Uses the HAL's FIFO-safe byte writer so task setup reuses the
+            // shared mini-UART readiness contract.
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            unsafe {
-                let lsr = 0x3F21_5054 as *const u32;
-                let io = 0x3F21_5040 as *mut u32;
-                macro_rules! fifo_put {
-                    ($byte:expr) => {{
-                        while core::ptr::read_volatile(lsr) & (1 << 5) == 0 {}
-                        core::ptr::write_volatile(io, $byte as u32);
-                    }};
-                }
+            {
                 macro_rules! fifo_hex {
                     ($val:expr) => {{
                         let v: u64 = $val;
                         // Correct: shifts 60,56,...,4,0 (16 nibbles, MSB first).
                         for i in (0..16usize).rev() {
                             let n = ((v >> (i * 4)) & 0xF) as u8;
-                            fifo_put!(if n < 10 { b'0' + n } else { b'a' + n - 10 });
+                            crate::hal::uart_bcm_mini::probe_put(if n < 10 {
+                                b'0' + n
+                            } else {
+                                b'a' + n - 10
+                            });
                         }
                     }};
                 }
-                fifo_put!(b'1');
+                crate::hal::uart_bcm_mini::probe_put(b'1');
                 fifo_hex!(tf_ptr as u64);
-                fifo_put!(b'\n');
-                fifo_put!(b'2');
-                let sepc_on_kstack = core::ptr::read_volatile((tf_ptr + 264) as *const u64);
+                crate::hal::uart_bcm_mini::probe_put(b'\n');
+                crate::hal::uart_bcm_mini::probe_put(b'2');
+                // SAFETY: the TrapFrame was copied to this live kernel-stack slot above.
+                let sepc_on_kstack =
+                    unsafe { core::ptr::read_volatile((tf_ptr + 264) as *const u64) };
                 fifo_hex!(sepc_on_kstack);
-                fifo_put!(b'\n');
-                fifo_put!(b'3');
+                crate::hal::uart_bcm_mini::probe_put(b'\n');
+                crate::hal::uart_bcm_mini::probe_put(b'3');
                 fifo_hex!(entry_va as u64);
-                fifo_put!(b'\n');
-                fifo_put!(b'4');
+                crate::hal::uart_bcm_mini::probe_put(b'\n');
+                crate::hal::uart_bcm_mini::probe_put(b'4');
                 fifo_hex!(kstack_top as u64);
-                fifo_put!(b'\n');
+                crate::hal::uart_bcm_mini::probe_put(b'\n');
             }
 
             // Point Context to Kernel Stack (sp field exists on all Context types)

@@ -19,6 +19,7 @@ exclude = [
 ]
 members = [
     "kernel",
+    "boards",
     "libs/types",
     "libs/api",
     "libs/ostd",
@@ -32,6 +33,10 @@ members = [
     
     # HAL
     "hal/core",
+    "hal/soc/bcm27xx",
+    "hal/soc/arm-virt",
+    "hal/soc/riscv",
+    "hal/soc/x86",
     "hal/traits/arch",
     "hal/traits/timer",
     "hal/traits/interrupt",

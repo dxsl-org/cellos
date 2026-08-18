@@ -1,13 +1,8 @@
 //! Goldfish RTC driver for AArch64 (QEMU virt machine).
 //!
-//! QEMU ARM64 virt: Goldfish RTC at 0x0901_0000 (discoverable via DTB
-//! compatible = "google,goldfish-rtc"). Call `init_default()` to use the
-//! QEMU virt default when DTB parsing is not yet available for ARM64.
+//! The SoC integration layer supplies the selected MMIO base during boot.
 
 use core::sync::atomic::{AtomicUsize, Ordering};
-
-/// QEMU ARM64 virt machine Goldfish RTC MMIO base.
-const QEMU_VIRT_RTC_BASE: usize = 0x0901_0000;
 
 static BASE: AtomicUsize = AtomicUsize::new(0);
 
@@ -17,13 +12,6 @@ static BASE: AtomicUsize = AtomicUsize::new(0);
 /// `base` must point to a valid 4 KB MMIO window.
 pub fn init(base: usize) {
     BASE.store(base, Ordering::Release);
-}
-
-/// Initialize with the QEMU virt default if no address was set yet.
-pub fn init_default() {
-    if BASE.load(Ordering::Acquire) == 0 {
-        BASE.store(QEMU_VIRT_RTC_BASE, Ordering::Release);
-    }
 }
 
 /// Nanoseconds since Unix epoch; `0` if RTC not initialized.

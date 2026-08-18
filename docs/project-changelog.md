@@ -2,6 +2,231 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
+
+The previously merged x86 hardware lane now has a QEMU q35 descriptor under
+`boards/` and a data-only `hal/soc/x86` profile. The descriptor records Limine
+BIOS/UEFI boot, symbolic COM/PCIe wiring, and the shared UART, IOAPIC, HPET,
+PCIe, NVMe, and e1000 driver selection without embedding hardware addresses.
+
+`hal/soc/x86` owns the static COM1 port/ISA IRQ and bounded legacy BIOS/RSDP
+windows. The existing x86 UART mechanism is configured from that profile, and
+the kernel no longer duplicates COM1 or low-firmware constants. LAPIC, IOAPIC,
+HPET, and ECAM addresses still come only from validated ACPI; missing or invalid
+firmware therefore keeps timer, interrupt, and PCIe gates closed. The board
+matrix and boundary guard now cover all seven selections. QEMU remains an
+integration witness; no new physical x86 qualification is claimed. Verification
+passed 27 host tests, the seven-board build matrix, the x86 release build, a
+fresh BIOS shell boot, and an OVMF boot through scheduler initialization.
+`boards/qemu/q35-i686`, `boards/qemu/virt-riscv32`, and
+`boards/qemu/virt-aarch32` exist only as README placeholders and are
+intentionally absent from registration, CI, and runtime claims.
+
+## [2026-08-18] HAL/SoC/board split is complete for the current catalog
+
+`BoardDescriptor` now contains only identity/compatibles, the boot and firmware
+contract, fallback memory/DT asset, pinmux/PHY wiring, typed SoC identity, and
+the enabled shared-driver list. UART, PLIC, CLINT, RTC, and VirtIO MMIO fallback
+facts moved out of board packages and into validated SoC profiles.
+
+Typed driver checks now gate PLIC, SDHCI, and VirtIO initialization. Required-DTB
+boards fail closed when enabled UART/PLIC/CLINT nodes are absent, conflicting
+board features fail at compile time, and every board README/configuration is
+covered by `scripts/check-board-configs.sh`. CI runs that matrix together with
+the ownership guard. QEMU ARM's RTC contract was corrected to PL031 at
+`0x0901_0000`, matching upstream QEMU.
+
+Host tests, all six board compile lanes, x86_64 compile, boundary/review gates,
+RV64 FAT16 boot, and AArch64 `ViCell >` boot passed. VF2, Pioneer, RPi3, and
+RPi4 remain compile-only pending matching physical hardware runs.
+
+## [2026-08-18] ARM platform facts and SDHCI policy move behind SoC profiles
+
+`hal/soc/arm-virt` now owns QEMU AArch64 GIC, PL011, RTC, GPIO,
+VirtIO-MMIO, platform-bus, and bus-0 ECAM layout data. Shared ARM HAL and
+kernel consumers use that profile, while the QEMU board package retains only
+its integration contract and fallback assets.
+
+`hal/soc/bcm27xx` now also models BCM2711, and the single SDHCI mechanism takes
+runtime access policy selected from BCM2837, BCM2711, or JH7110 data. RPi4 maps
+disjoint GPIO, UART, and SDHCI windows for cells and maps GIC interfaces
+kernel-only; it does not advertise PCIe until a real BCM2711 host path exists.
+The 15-lane host/cross-target matrix, focused security review, RV64 release
+build, and RV64 QEMU FAT16 witness passed. QEMU AArch64 reached the ViCell shell;
+the stale script marker was corrected in the final boundary-closure slice.
+Physical boards remain compile-only.
+
+## [2026-08-18] Board catalog and RISC-V selection become descriptor-driven
+
+The root `boards/` crate now contains typed, data-only descriptors and rebuild
+commands for QEMU virt on RV64/AArch64, VisionFive 2, Milk-V Pioneer, Raspberry
+Pi 3, and Raspberry Pi 4. `SocId` and `DriverId` replace string driver names;
+board packages still contain no register-level driver mechanisms.
+
+RV64 board features now select one descriptor/SoC pair in `kernel/src/board.rs`.
+Boot fallback memory and platform policy consume that pair, removing the VF2
+fallback table and feature table from kernel consumers. Required-DTB boards
+fail closed on missing or invalid firmware DTB, and JH7110 explicitly exposes
+no unsupported RTC fallback. Board/SoC tests, default/VF2/Pioneer checks, the
+release build, and QEMU FAT16 boot passed. Physical boards remain compile-only.
+
+## [2026-08-18] RPi3 task diagnostics reuse the mini-UART driver
+
+The RPi3 TrapFrame diagnostic in `kernel/src/task.rs` now emits bytes through
+ARM HAL's FIFO-safe `uart_bcm_mini::probe_put` helper. Its private copies of the
+mini-UART LSR/IO addresses, TX-ready polling, and byte-write mechanism are gone.
+
+The AArch64/RPi3 cfg gate, hexadecimal order, labels, newlines, volatile stack
+read, and task setup order are unchanged. Baseline and final 11-gate matrices,
+the scoped duplication guard, and review passed; QEMU reached the RV64 FAT16
+boot witness. RPi3 remains compile-only for this slice.
+
+## [2026-08-18] BCM2837 IRQ consumers finish topology migration
+
+The remaining scoped BCM IRQ consumers now derive GPIO pending-bank masks,
+the RPi3 CNTP route, controller bases, and diagnostic source masks from the
+central `hal/soc/bcm27xx` profile. ARM HAL and the kernel diagnostic no longer
+repeat those topology values.
+
+Register offsets, public IRQ constants, C1 status/ack behavior, the 10 ms timer
+policy, and diagnostic bytes are unchanged. Baseline and final 11-gate matrices
+passed, including the RV64 QEMU FAT16 boot witness, and review passed without a
+blocker. RPi3 remains compile-only for this slice.
+
+## [2026-08-18] BCM2837 IRQ topology becomes SoC data
+
+`hal/soc/bcm27xx` now owns immutable BCM2837 legacy IRQ numbers for system
+timer C1, AUX, and the two GPIO banks, plus BCM2836 Core0 source masks for the
+NS/HP timers and GPU pass-through. Validation requires legacy routes to be
+in-range and unique and local masks to be one-hot and disjoint.
+
+ARM HAL preserves its public IRQ constants as aliases and keeps all register
+offsets, C1 status/ack behavior, the 10 ms period, and enable/dispatch mechanisms
+unchanged. Verification passed 5 BCM27xx tests, 9 board tests, 3 RISC-V SoC
+tests, AArch64 HAL/kernel default and RPi3 checks, RV64 default/release, and QEMU
+FAT16 boot. No new physical-RPi3 runtime claim is made.
+
+## [2026-08-18] ARM HAL consumes BCM2837 controller bases
+
+`hal/soc/bcm27xx` now owns the BCM2837 system-timer and legacy-IRQ controller
+bases. The RPi3 mini-UART, legacy IRQ, system timer, local interrupt controller,
+and timer diagnostics in `hal/arch/arm` consume SoC-owned bases through an
+optional dependency activated only by `board-rpi3`.
+
+Register offsets, IRQ numbers, the timer period, pinmux behavior, and all driver
+mechanisms remain in ARM HAL and are unchanged. Verification passed 3 BCM27xx
+tests, 9 board tests, 3 RISC-V SoC tests, AArch64 HAL/kernel default and RPi3
+checks, RV64 default/release, and QEMU FAT16 boot. This slice makes no new
+physical-RPi3 runtime claim.
+
+## [2026-08-18] BCM2837 MMIO spans become SoC profile data
+
+`hal/soc/bcm27xx` now owns the exact BCM2837 peripheral and local-controller
+spans plus the GPIO and AUX grant widths. RPi3 paging, resource allowlisting,
+and GPIO IRQ owner lookup consume these immutable facts instead of repeating
+addresses and sizes in kernel modules.
+
+The refactor preserves the existing USER-accessible peripheral mapping,
+kernel-only local-controller mapping, and exact GPIO/AUX allowlist widths. It
+moves no IRQ/timer mechanism and grants no new MMIO access. Verification passed
+3 BCM27xx tests, 9 board tests, 3 RISC-V SoC tests, AArch64 default/RPi3 and
+RV64 checks, the RV64 release build, and QEMU FAT16 boot. Physical RPi3 behavior
+is not newly claimed by this slice.
+
+## [2026-08-18] RPi3 board descriptors join the root `boards/` crate
+
+`boards/raspberry-pi/3-model-b` now carries the Raspberry Pi 3 Model B board
+contract alongside the existing QEMU RV64 descriptor. Board-owned data includes
+the VideoCore boot/firmware contract, compatible strings, pinmux and PHY
+wiring, the fallback memory map, and the enabled shared-driver list.
+
+`BoardDescriptor` now keeps UART mandatory while making PLIC, CLINT, and RTC
+optional so the same shape can cover both QEMU and RPi3 without duplicating
+UART, SDHCI, GIC, PLIC, or PCIe driver code. The RPi3 fallback memory map ends
+exactly at `0x3F000000`, avoiding the prior 16 MiB overlap with BCM MMIO space.
+
+`kernel/src/board.rs`, `kernel/src/platform.rs`, and `kernel/src/boot.rs`
+consume the descriptor; `hal/soc/bcm27xx` still owns the BCM2837 SoC facts. The
+slice verified with formatting, board/SoC feature checks, the RV64 release
+kernel build, and QEMU boot. RPi3 physical boot remains hardware-gated; this
+slice is compile-only.
+
+## [2026-08-17] RISC-V SoC profiles land under `hal/soc`
+
+`hal/soc/riscv` now carries immutable, no_std SoC profile facts for generic QEMU
+virt, JH7110/VF2, and SG2042/Pioneer. The crate contains compatible-string lists
+and access policies only; it does not copy UART, PLIC, CLINT, RTC, VirtIO, SDHCI,
+or PCIe drivers, and board descriptors remain in the root `boards/` crate.
+
+The RV64 platform path now selects the active SoC profile before DTB parsing.
+Generic virt and JH7110 keep MMIO discovery enabled, while SG2042 preserves the
+Pioneer contract by forcing SBI DBCN-only console, disabling RTC MMIO, and
+publishing no VirtIO-MMIO slots.
+
+Verification for this slice passed `cargo fmt --all -- --check`,
+`cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu`,
+`cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64
+`cargo check` for default, `board-vf2`, `board-pioneer`, and combined
+`board-vf2 board-pioneer`, AArch64 default and `board-rpi3` checks, RV64 release
+kernel build, and `scripts/qemu-boot-test.sh` against the release kernel.
+
+## [2026-08-18] RISC-V PLIC routing becomes runtime-data driven
+
+`hal/arch/riscv` no longer hardcodes the RV64 PLIC context or IRQ enable set.
+The kernel now derives the active PLIC context from the selected SoC profile and
+the device IRQ list from runtime `PlatformInfo`. `hal/soc/riscv` owns the
+checked physical-hart-to-S-mode-context policy for each current RV64 SoC
+profile. The shared PLIC mechanism keeps its single implementation; only
+runtime policy data moved.
+
+The RV64 trap path now dispatches external IRQs through a kernel-owned runtime
+router that resolves UART and VirtIO handlers from the active platform state,
+and the VirtIO ACK path uses runtime IRQ lookup instead of QEMU slot arithmetic.
+Ambiguous IRQ ownership in malformed platform data fails closed: shared sources
+are neither enabled nor routed.
+
+Verification for this slice passed `cargo fmt --all -- --check`,
+`cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu`,
+`cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64
+`cargo check`, `cargo check --features board-vf2`,
+`cargo check --features board-pioneer`, `cargo check --features
+board-vf2,board-pioneer`, `cargo check --features board-rpi3`, `cargo build
+--release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z
+build-std=core,alloc`, and `bash scripts/qemu-boot-test.sh
+target/riscv64gc-unknown-none-elf/release/cellos-kernel` (`PASS: FAT16 mounted
+— kernel booted (no disk)`).
+
+VF2, Pioneer, and RPi3 remain compile-only in this verification pass; no new
+physical-board runtime claim is made.
+
+## [2026-08-18] BCM2837 SoC facts move under `hal/soc`
+
+`hal/soc/bcm27xx` is now a `no_std`, data-only crate for immutable BCM2837
+controller layout and SDHCI access policy. The existing RPi3 platform and MMC
+paths consume its peripheral, GPIO, AUX mini-UART, Arasan SDHCI, word-access,
+and minimum-write-spacing facts. The shared SDHCI mechanism remains single-copy
+in the kernel; no board-specific driver was created.
+
+Board identity, boot/firmware contract, fallback memory, SD pinmux selection,
+PHY wiring, and enabled-driver lists remain outside the SoC crate. RPi3 board
+descriptor migration, IRQ/timer extraction, and feature collapse remain
+separate follow-up slices.
+
+Verification passed formatting, 2 BCM27xx SoC tests, 3 RISC-V SoC tests, 8
+board-descriptor tests, RV64 default/VF2/Pioneer/combined checks, AArch64
+default/RPi3 checks, the RV64 release build, and QEMU boot (`PASS: FAT16 mounted
+— kernel booted (no disk)`). Review passed after matching the RPi3 SDHCI
+dependency use to the AArch64 target. This slice adds no new physical-RPi3
+runtime claim.
+
+## [2026-08-17] Root board descriptors land as the first board/HAL split slice
+
+The board-integration slice now lives in a root `boards/` workspace crate (`cellos-boards`) instead of HAL. The first migrated board is QEMU RV64, which now consumes an immutable no_std descriptor for identity, compatible strings, boot contract, fallback memory map, pinmux/PHY wiring, and shared-driver enablement. The DTS file is kept as an audit/reference asset; no `dtc` compilation claim is made here.
+
+Kernel consumers for the descriptor are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`. Shared drivers remain in `cells/drivers/`; `hal/soc/riscv` now owns the RISC-V SoC profile slice, while AArch64/RPi3 board extraction, SDHCI, and feature-collapse remain deferred.
+
+Verification for this slice passed `cargo fmt --all --check`, `cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64 `cargo check`, `cargo check --features board-vf2`, `cargo check --features board-rpi3`, `cargo build --release -p cellos-kernel --target riscv64gc-unknown-none-elf`, and `scripts/qemu-boot-test.sh target/riscv64gc-unknown-none-elf/release/cellos-kernel` (`PASS: FAT16 mounted — kernel booted (no disk)`).
+
 ## [2026-08-17] RPi3 MMC path real-board validated end to end
 
 The `board-rpi3` MMC lane now boots on a real Raspberry Pi 3 Model B v1.2 all the way into Cellos. The fix chain in the current hardware lane is the RPi3 SD pinmux quirk, the BCM2835 SDHCI access contract, the CMD9-before-CMD7 ordering, and the data-timeout setup before sector reads.

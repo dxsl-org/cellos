@@ -14,7 +14,7 @@
 
 use core::arch::global_asm;
 
-const BOARD_RPI3: usize = cfg!(feature = "board-rpi3") as usize;
+const BOARD_BCM: usize = cfg!(any(feature = "board-rpi3", feature = "board-rpi4")) as usize;
 
 global_asm!(
     r#"
@@ -50,7 +50,7 @@ _start:
     // makes SCTLR_EL1.M effectively zero, so a Cell fetch bypasses TTBR0_EL1.
     // Enter EL1h before any Rust state is initialized and let all existing EL1
     // paging, vector, timer, and context-switch paths remain authoritative.
-    .if {board_rpi3}
+    .if {board_bcm}
     mov x0, #(1 << 31)       // HCR_EL2.RW=1, TGE=0: EL1 is AArch64
     msr hcr_el2, x0
     mov x0, #0x33ff          // CPTR_EL2 RES1 bits; no FP/SIMD traps to EL2
@@ -100,12 +100,6 @@ _start:
     str  xzr, [x0], #8
     b    1b
 2:
-    // UART sentinel 'E': on QEMU virt this reaches PL011 and confirms EL2 init.
-    // On board-rpi3 (MMU off, no PL011) this writes to RAM@0x09000000 — harmless.
-    mov  x0, #0x09000000
-    mov  w1, #0x45          // ASCII 'E'
-    strb w1, [x0]
-
     // Mark EL2_ACTIVE = true and jump to kmain.
     bl   el2_mark_active
     mov  x0, #0             // hartid = 0
@@ -168,5 +162,5 @@ _start:
     wfi
     b    .Lsecondary_park
     "#,
-    board_rpi3 = const BOARD_RPI3,
+    board_bcm = const BOARD_BCM,
 );

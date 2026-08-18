@@ -7,7 +7,7 @@
 //! available on GPIO14/15 once `enable_uart=1` is set in `config.txt`
 //! (VideoCore pre-configures the pin-mux; `init()` also does it explicitly).
 
-const AUX_BASE: usize = 0x3F21_5000;
+const AUX_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.aux_base;
 const AUX_ENABLES: usize = AUX_BASE + 0x004;
 const AUX_MU_IO: usize = AUX_BASE + 0x040;
 const AUX_MU_IER: usize = AUX_BASE + 0x044;
@@ -19,7 +19,7 @@ const AUX_MU_CNTL: usize = AUX_BASE + 0x060;
 const AUX_MU_BAUD: usize = AUX_BASE + 0x068;
 
 // BCM GPIO base for pin-mux setup.
-const GPIO_BASE: usize = 0x3F20_0000;
+const GPIO_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.gpio_base;
 const GPFSEL1: usize = GPIO_BASE + 0x004; // function select for GPIO 10-19
 
 // LSR bit 5: TX FIFO has space.  Bit 0: RX data ready.
