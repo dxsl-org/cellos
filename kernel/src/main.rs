@@ -948,8 +948,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // If G never fires but K shows pend=1 and src=0: QEMU does not route BCM2835→BCM2836.
     #[cfg(feature = "board-rpi3")]
     {
-        let src_raw = unsafe { core::ptr::read_volatile(0x4000_0060usize as *const u32) };
-        let pend = unsafe { core::ptr::read_volatile(0x3F00_B204usize as *const u32) };
+        let soc = hal_soc_bcm27xx::BCM2837;
+        // SAFETY: both BCM controller apertures are identity-mapped before IRQs are enabled.
+        let src_raw = unsafe {
+            core::ptr::read_volatile((soc.mmio.local_controller_base + 0x60) as *const u32)
+        };
+        let pend =
+            unsafe { core::ptr::read_volatile((soc.mmio.legacy_irq_base + 0x04) as *const u32) };
         let hex = |n: u32| -> u8 {
             if n < 10 {
                 b'0' + n as u8
@@ -958,8 +963,16 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
         };
         crate::hal::uart_bcm_mini::probe_put(b'K');
-        crate::hal::uart_bcm_mini::probe_put(if src_raw & (1 << 8) != 0 { b'1' } else { b'0' });
-        crate::hal::uart_bcm_mini::probe_put(if pend & (1 << 1) != 0 { b'1' } else { b'0' });
+        crate::hal::uart_bcm_mini::probe_put(if src_raw & soc.irq.local_gpu_mask != 0 {
+            b'1'
+        } else {
+            b'0'
+        });
+        crate::hal::uart_bcm_mini::probe_put(if pend & (1 << soc.irq.system_timer_c1) != 0 {
+            b'1'
+        } else {
+            b'0'
+        });
         crate::hal::uart_bcm_mini::probe_put(hex(src_raw & 0xF));
     }
 

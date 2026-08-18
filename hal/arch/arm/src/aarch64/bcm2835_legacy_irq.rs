@@ -23,6 +23,8 @@ const IRQ_DISABLE2: usize = IRQ_BASE + 0x20;
 pub const GPIO_BANK0_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.gpio_bank0;
 pub const GPIO_BANK1_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.gpio_bank1;
 pub const AUX_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.aux;
+const GPIO_BANK0_PENDING2_MASK: u32 = 1 << (GPIO_BANK0_IRQ - 32);
+const GPIO_BANK1_PENDING2_MASK: u32 = 1 << (GPIO_BANK1_IRQ - 32);
 
 #[inline(always)]
 fn wr(addr: usize, val: u32) {
@@ -73,10 +75,10 @@ pub fn is_aux_irq_pending() -> bool {
 /// Called from `vi_aarch64_irq_handler` when `IRQ_SRC_GPU` is set.
 pub fn identify_gpio_irq() -> Option<u32> {
     let p2 = rd(IRQ_PENDING2);
-    if p2 & (1 << 17) != 0 {
+    if p2 & GPIO_BANK0_PENDING2_MASK != 0 {
         return Some(GPIO_BANK0_IRQ);
     }
-    if p2 & (1 << 18) != 0 {
+    if p2 & GPIO_BANK1_PENDING2_MASK != 0 {
         return Some(GPIO_BANK1_IRQ);
     }
     None

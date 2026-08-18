@@ -2,6 +2,18 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] BCM2837 IRQ consumers finish topology migration
+
+The remaining scoped BCM IRQ consumers now derive GPIO pending-bank masks,
+the RPi3 CNTP route, controller bases, and diagnostic source masks from the
+central `hal/soc/bcm27xx` profile. ARM HAL and the kernel diagnostic no longer
+repeat those topology values.
+
+Register offsets, public IRQ constants, C1 status/ack behavior, the 10 ms timer
+policy, and diagnostic bytes are unchanged. Baseline and final 11-gate matrices
+passed, including the RV64 QEMU FAT16 boot witness, and review passed without a
+blocker. RPi3 remains compile-only for this slice.
+
 ## [2026-08-18] BCM2837 IRQ topology becomes SoC data
 
 `hal/soc/bcm27xx` now owns immutable BCM2837 legacy IRQ numbers for system

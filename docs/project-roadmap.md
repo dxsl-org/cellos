@@ -63,6 +63,13 @@
 > 10 ms timer period, and interrupt mechanisms remain in `hal/arch/arm`. The
 > 11-gate matrix and review passed; RPi3 remains compile-only for this slice.
 
+> **2026-08-18 BCM27xx IRQ-consumer update:** GPIO pending-bank masks, RPi3
+> CNTP routing, and the kernel IRQ diagnostic now consume the centralized
+> BCM2837 topology instead of repeating controller addresses or source bits.
+> Register offsets, public constants, C1 status/ack, the 10 ms policy, and
+> diagnostic output are unchanged. Baseline and final 11-gate matrices plus
+> review passed; RPi3 remains compile-only.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context

@@ -72,7 +72,7 @@ pub fn init() {
                 );
             }
             // Route CNTP PPI (nCNTPNSIRQ, bit 1) to Core 0 IRQ line.
-            super::bcm2836_irq::add_timer_enable(1 << 1);
+            super::bcm2836_irq::add_timer_enable(super::bcm2836_irq::IRQ_SRC_TIMER_NS);
         }
     }
 
