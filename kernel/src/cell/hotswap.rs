@@ -277,7 +277,7 @@ pub(crate) fn commit_hotswap_barrier(
         if let Some(target) = sched.tasks.get_mut(&target_tid) {
             target.state = TaskState::Ready;
             if let Some((sender_tid, sender_cell_id, sender_generation)) = sender_context {
-                target.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+                target.set_received_caller_context(sender_tid, sender_cell_id, sender_generation);
             } else {
                 target.clear_current_caller_context();
             }

@@ -547,6 +547,31 @@ impl Task {
         self.next_caller_request_generation = self.next_caller_request_generation.saturating_add(1);
     }
 
+    pub fn set_received_caller_context(
+        &mut self,
+        sender_tid: usize,
+        sender_cell_id: u64,
+        sender_generation: u64,
+    ) {
+        // VFS may perform nested IPC while serving a request. Its outer caller
+        // remains the authority for grants and owner-death watches until VFS
+        // sends that caller's response; a storage reply must not replace it.
+        if crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize)
+            && self.current_caller.is_some()
+        {
+            return;
+        }
+        self.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+    }
+
+    pub fn begin_receive_context(&mut self, mask: usize) {
+        // VFS uses a wildcard receive only at its public request loop. Masked
+        // receives are nested dependency replies and keep the outer authority.
+        if mask == 0 && crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize) {
+            self.clear_current_caller_context();
+        }
+    }
+
     pub fn allows_current_caller_owner_watch(&self, watched: usize) -> bool {
         self.current_caller_cell_id != 0 && watched == self.current_caller_cell_id as usize
     }

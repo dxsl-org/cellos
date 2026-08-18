@@ -559,15 +559,41 @@ fn vfs_owner_watch() -> bool {
             .map(|task| task.cell_generation)
             .unwrap_or(0)
     };
+    let message = [0u8; 1];
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if let Some(task) = sched.tasks.get_mut(&CLIENT_WORKER_TID) {
+            task.cell_generation = owner_generation;
+        }
         if let Some(task) = sched.tasks.get_mut(&VFS_WORKER_TID) {
-            task.set_current_caller_context(
-                CLIENT_WORKER_TID,
-                CLIENT_OWNER_TID as u64,
-                owner_generation,
-            );
+            task.set_current_caller_context(OTHER_TID, OTHER_TID as u64, owner_generation);
+            task.begin_receive_context(0);
         }
     }
+    set_recv_waiting(VFS_WORKER_TID, CLIENT_WORKER_TID);
+    let initial_delivery = handle_syscall(
+        CLIENT_WORKER_TID,
+        Syscall::Send {
+            target: VFS_WORKER_TID,
+            msg_ptr: message.as_ptr() as usize,
+            msg_len: message.len(),
+        },
+    );
+    set_recv_waiting(VFS_WORKER_TID, OTHER_TID);
+    let nested_delivery = handle_syscall(
+        OTHER_TID,
+        Syscall::Send {
+            target: VFS_WORKER_TID,
+            msg_ptr: message.as_ptr() as usize,
+            msg_len: message.len(),
+        },
+    );
+    let outer_context_preserved = super::SCHEDULER.lock().as_ref().is_some_and(|sched| {
+        sched.tasks.get(&VFS_WORKER_TID).is_some_and(|task| {
+            task.current_caller == Some(CLIENT_WORKER_TID)
+                && task.current_caller_cell_id == CLIENT_OWNER_TID as u64
+                && task.current_caller_cell_generation == owner_generation
+        })
+    });
 
     let allowed = handle_syscall(
         VFS_WORKER_TID,
@@ -631,6 +657,12 @@ fn vfs_owner_watch() -> bool {
     remove(CLIENT_WORKER_TID);
     remove(OTHER_TID);
 
+    if initial_delivery != Ok(0) || nested_delivery != Ok(0) {
+        return fail("watch", "nested IPC delivery setup failed");
+    }
+    if !outer_context_preserved {
+        return fail("watch", "nested IPC replaced the outer VFS caller context");
+    }
     if allowed != Ok(0) {
         return fail(
             "watch",

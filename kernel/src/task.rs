@@ -1528,7 +1528,7 @@ pub fn ipc_send(
                 queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
                     .map_err(|_| IpcSendError::Backpressure)?;
                 target.state = TaskState::Ready;
-                target.set_current_caller_context(caller_id, sender_cell_id, sender_generation);
+                target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
@@ -1595,7 +1595,7 @@ pub fn ipc_post_nonblock(
             queue_pending_msg(t, sender_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
             if target_ready {
                 t.state = TaskState::Ready;
-                t.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
+                t.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
         }
         if target_ready {
@@ -1651,7 +1651,7 @@ pub fn ipc_recv(
 
             let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
+                caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
             return Ok(sender_id);
         } else {
@@ -1711,7 +1711,7 @@ pub fn ipc_try_recv(
 
             let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
+                caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
             return Ok(sender_id);
         } else {
@@ -1758,7 +1758,7 @@ pub fn ipc_try_send(
                 let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
                 queue_pending_msg(target, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
                 target.state = TaskState::Ready;
-                target.set_current_caller_context(caller_id, sender_cell_id, sender_generation);
+                target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
