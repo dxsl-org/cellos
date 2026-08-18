@@ -17,7 +17,7 @@
 /// GPIO MMIO base — PL061 on QEMU ARM virt, BCM2837 on Raspberry Pi 3.
 /// Must match the allowlist entry in resource_registry.rs for the current target.
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-const GPIO_MMIO_BASE: usize = 0x3F20_0000; // BCM2837 GPIO — RPi 3
+const GPIO_MMIO_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.gpio_base;
 
 #[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
 const GPIO_MMIO_BASE: usize = 0x0903_0000; // PL061 GPIO — QEMU ARM virt

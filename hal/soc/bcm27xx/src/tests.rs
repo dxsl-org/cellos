@@ -12,6 +12,20 @@ fn bcm2837_controller_addresses_match_peripheral_offsets() {
 }
 
 #[test]
+fn bcm2837_mapping_and_grant_spans_are_bounded() {
+    let mmio = BCM2837.mmio;
+    let peripheral_end = mmio.peripheral_end().expect("peripheral span overflow");
+
+    assert_eq!(peripheral_end, 0x4000_0000);
+    assert_eq!(mmio.local_controller_base, peripheral_end);
+    assert_eq!(mmio.local_controller_end(), Some(0x4000_1000));
+    assert_eq!(mmio.gpio_grant_size, 0x1_0000);
+    assert_eq!(mmio.aux_grant_size, 0x1000);
+    assert!(mmio.gpio_base + mmio.gpio_grant_size <= peripheral_end);
+    assert!(mmio.aux_base + mmio.aux_grant_size <= peripheral_end);
+}
+
+#[test]
 fn bcm2837_exposes_arasan_word_access_policy() {
     assert!(BCM2837.sdhci.word_access_only);
     assert_eq!(BCM2837.sdhci.minimum_write_spacing_us, 6);

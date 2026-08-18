@@ -55,9 +55,17 @@ pub const DEV_ADC: u8 = 1 << 4;
 /// grab the UART window and vice-versa.
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 const ALLOWED: &[(usize, usize, u8)] = &[
-    (0x3F20_0000, 0x1_0000, DEV_GPIO), // BCM2837 GPIO — Raspberry Pi 3 (54 pins)
-    (0x3F21_5000, 0x0_1000, DEV_UART), // BCM mini UART (AUX block) — RPi 3
-                                       // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
+    (
+        hal_soc_bcm27xx::BCM2837.mmio.gpio_base,
+        hal_soc_bcm27xx::BCM2837.mmio.gpio_grant_size,
+        DEV_GPIO,
+    ),
+    (
+        hal_soc_bcm27xx::BCM2837.mmio.aux_base,
+        hal_soc_bcm27xx::BCM2837.mmio.aux_grant_size,
+        DEV_UART,
+    ),
+    // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
 ];
 
 #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]

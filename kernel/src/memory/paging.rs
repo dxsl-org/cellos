@@ -262,7 +262,14 @@ pub fn init_kernel_paging(
     }
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     {
-        // BCM2837 peripheral space 0x3F000000–0x3FFFFFFF (16 MiB): kernel-only MMIO.
+        let mmio = hal_soc_bcm27xx::BCM2837.mmio;
+        let peripheral_end = mmio
+            .peripheral_end()
+            .expect("BCM2837 peripheral span must not overflow");
+        let local_controller_end = mmio
+            .local_controller_end()
+            .expect("BCM2837 local-controller span must not overflow");
+        // BCM2837 peripheral space 0x3F000000–0x3FFFFFFF (16 MiB): cell MMIO.
         // Covers mini UART, GPIO, I2C, SPI, EMMC — kernel maps them all; individual
         // cells receive sub-regions via sys_request_mmio / resource_registry.
         let cell_mmio_flags = PageFlags::from_bits(
@@ -275,11 +282,21 @@ pub fn init_kernel_paging(
                 | PageFlags::DIRTY,
         );
         root_table
-            .identity_map(0x3F00_0000, 0x4000_0000, cell_mmio_flags, &mut alloc_fn)
+            .identity_map(
+                mmio.peripheral_base,
+                peripheral_end,
+                cell_mmio_flags,
+                &mut alloc_fn,
+            )
             .map_err(|_| PageTableError::OutOfMemory)?;
         // BCM2836 local interrupt controller 0x40000000–0x40001000 (kernel-only).
         root_table
-            .identity_map(0x4000_0000, 0x4000_1000, mmio_flags, &mut alloc_fn)
+            .identity_map(
+                mmio.local_controller_base,
+                local_controller_end,
+                mmio_flags,
+                &mut alloc_fn,
+            )
             .map_err(|_| PageTableError::OutOfMemory)?;
     }
 
