@@ -28,6 +28,7 @@ impl<T> BootOnce<T> {
     /// # Safety
     /// The caller must guarantee exclusive boot-time access with no concurrent
     /// readers or initializers. A repeated sequential call is rejected.
+    #[cfg(any(test, target_arch = "riscv64", target_arch = "aarch64"))]
     pub(super) unsafe fn initialize(&self, value: T) {
         assert!(
             !self.initialized.load(Ordering::Relaxed),

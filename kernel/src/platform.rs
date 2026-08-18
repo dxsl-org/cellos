@@ -104,6 +104,7 @@ static PLATFORM: BootOnce<PlatformInfo> = BootOnce::new();
 ///
 /// Spinlocks are forbidden on this path: ARM64 reaches it before the MMU has
 /// assigned Normal memory attributes, so LL/SC may abort on real hardware.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
 unsafe fn publish_boot(info: PlatformInfo) {
     // SAFETY: every architecture calls `platform::init` once from `kmain`
     // before interrupts, paging, or secondary-core startup.

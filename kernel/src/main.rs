@@ -288,7 +288,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             if length == 0 {
                 return None;
             }
-            let legacy_firmware = physical >= 0x8_0000 && physical < 0x10_0000 && end <= 0x10_0000;
+            let legacy_firmware = (0x8_0000..0x10_0000).contains(&physical) && end <= 0x10_0000;
             let legacy_rsdp = physical == rsdp && rsdp < 0x8_0000 && end <= 0x10_0000;
             let firmware_owned = mmap_entries.iter().any(|entry| {
                 let Some(entry_end) = entry.base.checked_add(entry.length) else {
