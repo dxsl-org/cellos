@@ -2,6 +2,19 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] ARM HAL consumes BCM2837 controller bases
+
+`hal/soc/bcm27xx` now owns the BCM2837 system-timer and legacy-IRQ controller
+bases. The RPi3 mini-UART, legacy IRQ, system timer, local interrupt controller,
+and timer diagnostics in `hal/arch/arm` consume SoC-owned bases through an
+optional dependency activated only by `board-rpi3`.
+
+Register offsets, IRQ numbers, the timer period, pinmux behavior, and all driver
+mechanisms remain in ARM HAL and are unchanged. Verification passed 3 BCM27xx
+tests, 9 board tests, 3 RISC-V SoC tests, AArch64 HAL/kernel default and RPi3
+checks, RV64 default/release, and QEMU FAT16 boot. This slice makes no new
+physical-RPi3 runtime claim.
+
 ## [2026-08-18] BCM2837 MMIO spans become SoC profile data
 
 `hal/soc/bcm27xx` now owns the exact BCM2837 peripheral and local-controller

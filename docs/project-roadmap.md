@@ -50,6 +50,13 @@
 > new MMIO authority moved. The 9-gate matrix passed through RV64 release and
 > QEMU FAT16 boot; this slice adds no physical-RPi3 runtime claim.
 
+> **2026-08-18 BCM27xx arch-base update:** RPi3-specific ARM HAL modules now
+> source mini-UART, GPIO, system-timer, legacy-IRQ, and local-controller bases
+> from `hal/soc/bcm27xx`. The optional dependency is activated only by
+> `board-rpi3`; register offsets, IRQ numbers, timer periods, and mechanisms
+> remain in `hal/arch/arm`. The 11-gate matrix passed through RV64 release and
+> QEMU FAT16 boot; RPi3 remains compile-only for this slice.
+
 > **2026-08-18 RISC-V PLIC runtime-data update:** `hal/arch/riscv` now consumes
 > the active physical-hart context from the selected SoC profile and the device
 > IRQ list from kernel `PlatformInfo`. `hal/soc/riscv` owns checked PLIC context
