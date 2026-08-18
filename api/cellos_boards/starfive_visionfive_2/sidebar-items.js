@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["STARFIVE_VISIONFIVE_2"]};

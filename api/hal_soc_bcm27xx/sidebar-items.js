@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["BCM2711","BCM2837"],"struct":["Bcm2711MmioLayout","Bcm2711SocProfile","Bcm27xxIrqTopology","Bcm27xxMmioLayout","Bcm27xxSocProfile","SdhciAccessPolicy"]};

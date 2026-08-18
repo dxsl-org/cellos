@@ -547,29 +547,54 @@
 <a href=#547 id=547 data-nosnippet>547</a>        <span class="self">self</span>.next_caller_request_generation = <span class="self">self</span>.next_caller_request_generation.saturating_add(<span class="number">1</span>);
 <a href=#548 id=548 data-nosnippet>548</a>    }
 <a href=#549 id=549 data-nosnippet>549</a>
-<a href=#550 id=550 data-nosnippet>550</a>    <span class="kw">pub fn </span>allows_current_caller_owner_watch(<span class="kw-2">&amp;</span><span class="self">self</span>, watched: usize) -&gt; bool {
-<a href=#551 id=551 data-nosnippet>551</a>        <span class="self">self</span>.current_caller_cell_id != <span class="number">0 </span>&amp;&amp; watched == <span class="self">self</span>.current_caller_cell_id <span class="kw">as </span>usize
-<a href=#552 id=552 data-nosnippet>552</a>    }
-<a href=#553 id=553 data-nosnippet>553</a>
-<a href=#554 id=554 data-nosnippet>554</a>    <span class="kw">pub fn </span>clear_current_caller_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#555 id=555 data-nosnippet>555</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">None</span>;
-<a href=#556 id=556 data-nosnippet>556</a>        <span class="self">self</span>.current_caller_cell_id = <span class="number">0</span>;
-<a href=#557 id=557 data-nosnippet>557</a>        <span class="self">self</span>.current_caller_cell_generation = <span class="number">0</span>;
-<a href=#558 id=558 data-nosnippet>558</a>        <span class="self">self</span>.current_caller_request_generation = <span class="number">0</span>;
-<a href=#559 id=559 data-nosnippet>559</a>    }
-<a href=#560 id=560 data-nosnippet>560</a>
-<a href=#561 id=561 data-nosnippet>561</a>    <span class="kw">pub fn </span>clear_current_caller_context_if(
-<a href=#562 id=562 data-nosnippet>562</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#563 id=563 data-nosnippet>563</a>        sender_tid: usize,
-<a href=#564 id=564 data-nosnippet>564</a>        request_generation: u64,
-<a href=#565 id=565 data-nosnippet>565</a>    ) -&gt; bool {
-<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">if </span><span class="self">self</span>.current_caller == <span class="prelude-val">Some</span>(sender_tid)
-<a href=#567 id=567 data-nosnippet>567</a>            &amp;&amp; <span class="self">self</span>.current_caller_request_generation == request_generation
-<a href=#568 id=568 data-nosnippet>568</a>        {
-<a href=#569 id=569 data-nosnippet>569</a>            <span class="self">self</span>.clear_current_caller_context();
-<a href=#570 id=570 data-nosnippet>570</a>            <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#571 id=571 data-nosnippet>571</a>        }
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="bool-val">false
-<a href=#573 id=573 data-nosnippet>573</a>    </span>}
-<a href=#574 id=574 data-nosnippet>574</a>}
+<a href=#550 id=550 data-nosnippet>550</a>    <span class="kw">pub fn </span>set_received_caller_context(
+<a href=#551 id=551 data-nosnippet>551</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#552 id=552 data-nosnippet>552</a>        sender_tid: usize,
+<a href=#553 id=553 data-nosnippet>553</a>        sender_cell_id: u64,
+<a href=#554 id=554 data-nosnippet>554</a>        sender_generation: u64,
+<a href=#555 id=555 data-nosnippet>555</a>    ) {
+<a href=#556 id=556 data-nosnippet>556</a>        <span class="comment">// VFS may perform nested IPC while serving a request. Its outer caller
+<a href=#557 id=557 data-nosnippet>557</a>        // remains the authority for grants and owner-death watches until VFS
+<a href=#558 id=558 data-nosnippet>558</a>        // sends that caller's response; a storage reply must not replace it.
+<a href=#559 id=559 data-nosnippet>559</a>        </span><span class="kw">if </span><span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize)
+<a href=#560 id=560 data-nosnippet>560</a>            &amp;&amp; <span class="self">self</span>.current_caller.is_some()
+<a href=#561 id=561 data-nosnippet>561</a>        {
+<a href=#562 id=562 data-nosnippet>562</a>            <span class="kw">return</span>;
+<a href=#563 id=563 data-nosnippet>563</a>        }
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="self">self</span>.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+<a href=#565 id=565 data-nosnippet>565</a>    }
+<a href=#566 id=566 data-nosnippet>566</a>
+<a href=#567 id=567 data-nosnippet>567</a>    <span class="kw">pub fn </span>begin_receive_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>, mask: usize) {
+<a href=#568 id=568 data-nosnippet>568</a>        <span class="comment">// VFS uses a wildcard receive only at its public request loop. Masked
+<a href=#569 id=569 data-nosnippet>569</a>        // receives are nested dependency replies and keep the outer authority.
+<a href=#570 id=570 data-nosnippet>570</a>        </span><span class="kw">if </span>mask == <span class="number">0 </span>&amp;&amp; <span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
+<a href=#571 id=571 data-nosnippet>571</a>            <span class="self">self</span>.clear_current_caller_context();
+<a href=#572 id=572 data-nosnippet>572</a>        }
+<a href=#573 id=573 data-nosnippet>573</a>    }
+<a href=#574 id=574 data-nosnippet>574</a>
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="kw">pub fn </span>allows_current_caller_owner_watch(<span class="kw-2">&amp;</span><span class="self">self</span>, watched: usize) -&gt; bool {
+<a href=#576 id=576 data-nosnippet>576</a>        <span class="self">self</span>.current_caller_cell_id != <span class="number">0 </span>&amp;&amp; watched == <span class="self">self</span>.current_caller_cell_id <span class="kw">as </span>usize
+<a href=#577 id=577 data-nosnippet>577</a>    }
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a>    <span class="kw">pub fn </span>clear_current_caller_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">None</span>;
+<a href=#581 id=581 data-nosnippet>581</a>        <span class="self">self</span>.current_caller_cell_id = <span class="number">0</span>;
+<a href=#582 id=582 data-nosnippet>582</a>        <span class="self">self</span>.current_caller_cell_generation = <span class="number">0</span>;
+<a href=#583 id=583 data-nosnippet>583</a>        <span class="self">self</span>.current_caller_request_generation = <span class="number">0</span>;
+<a href=#584 id=584 data-nosnippet>584</a>    }
+<a href=#585 id=585 data-nosnippet>585</a>
+<a href=#586 id=586 data-nosnippet>586</a>    <span class="kw">pub fn </span>clear_current_caller_context_if(
+<a href=#587 id=587 data-nosnippet>587</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#588 id=588 data-nosnippet>588</a>        sender_tid: usize,
+<a href=#589 id=589 data-nosnippet>589</a>        request_generation: u64,
+<a href=#590 id=590 data-nosnippet>590</a>    ) -&gt; bool {
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="kw">if </span><span class="self">self</span>.current_caller == <span class="prelude-val">Some</span>(sender_tid)
+<a href=#592 id=592 data-nosnippet>592</a>            &amp;&amp; <span class="self">self</span>.current_caller_request_generation == request_generation
+<a href=#593 id=593 data-nosnippet>593</a>        {
+<a href=#594 id=594 data-nosnippet>594</a>            <span class="self">self</span>.clear_current_caller_context();
+<a href=#595 id=595 data-nosnippet>595</a>            <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#596 id=596 data-nosnippet>596</a>        }
+<a href=#597 id=597 data-nosnippet>597</a>        <span class="bool-val">false
+<a href=#598 id=598 data-nosnippet>598</a>    </span>}
+<a href=#599 id=599 data-nosnippet>599</a>}
 </code></pre></div></section></main></body></html>

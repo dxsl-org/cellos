@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["SELECTED_RISCV64_BOARD"],"fn":["active","invalid_descriptor","selected","selected_riscv64_board","selected_riscv64_soc"]};

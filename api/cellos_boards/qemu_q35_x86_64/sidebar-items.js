@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["QEMU_Q35_X86_64"]};

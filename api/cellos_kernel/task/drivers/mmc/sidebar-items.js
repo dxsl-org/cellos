@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["MmcDevice"],"fn":["force_unlock_locks","init_driver","is_present","selected_sdhci_config"],"mod":["core","emmc","regs","sd","sdhci"],"static":["MMC_DEVICE"],"struct":["MmcBlock","SdhciConfig"]};
+window.SIDEBAR_ITEMS = {"constant":["SDHCI_BASE"],"enum":["MmcDevice"],"fn":["force_unlock_locks","init_driver","is_present"],"mod":["core","emmc","regs","sd","sdhci"],"static":["MMC_DEVICE"],"struct":["MmcBlock"]};

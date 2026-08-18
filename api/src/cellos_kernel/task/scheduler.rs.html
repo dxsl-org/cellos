@@ -629,7 +629,7 @@
 <a href=#629 id=629 data-nosnippet>629</a>                    // RESUMES, in the watcher's own syscall context — writing a USER buffer
 <a href=#630 id=630 data-nosnippet>630</a>                    // from here (the trap/fault context) faults (S-mode store to a U page,
 <a href=#631 id=631 data-nosnippet>631</a>                    // SSTATUS.SUM not set).
-<a href=#632 id=632 data-nosnippet>632</a>                    </span>wt.set_current_caller_context(tid, dead_caller.<span class="number">0</span>, dead_caller.<span class="number">1</span>);
+<a href=#632 id=632 data-nosnippet>632</a>                    </span>wt.set_received_caller_context(tid, dead_caller.<span class="number">0</span>, dead_caller.<span class="number">1</span>);
 <a href=#633 id=633 data-nosnippet>633</a>                    wt.pending_exit_reason = <span class="prelude-val">Some</span>(exit_reason);
 <a href=#634 id=634 data-nosnippet>634</a>                    wt.state = TaskState::Ready;
 <a href=#635 id=635 data-nosnippet>635</a>                    woken_watchers.push(w);
