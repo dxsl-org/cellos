@@ -2,6 +2,24 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-18] RPi3 board descriptors join the root `boards/` crate
+
+`boards/raspberry-pi/3-model-b` now carries the Raspberry Pi 3 Model B board
+contract alongside the existing QEMU RV64 descriptor. Board-owned data includes
+the VideoCore boot/firmware contract, compatible strings, pinmux and PHY
+wiring, the fallback memory map, and the enabled shared-driver list.
+
+`BoardDescriptor` now keeps UART mandatory while making PLIC, CLINT, and RTC
+optional so the same shape can cover both QEMU and RPi3 without duplicating
+UART, SDHCI, GIC, PLIC, or PCIe driver code. The RPi3 fallback memory map ends
+exactly at `0x3F000000`, avoiding the prior 16 MiB overlap with BCM MMIO space.
+
+`kernel/src/board.rs`, `kernel/src/platform.rs`, and `kernel/src/boot.rs`
+consume the descriptor; `hal/soc/bcm27xx` still owns the BCM2837 SoC facts. The
+slice verified with formatting, board/SoC feature checks, the RV64 release
+kernel build, and QEMU boot. RPi3 physical boot remains hardware-gated; this
+slice is compile-only.
+
 ## [2026-08-17] RISC-V SoC profiles land under `hal/soc`
 
 `hal/soc/riscv` now carries immutable, no_std SoC profile facts for generic QEMU
@@ -20,6 +38,55 @@ Verification for this slice passed `cargo fmt --all -- --check`,
 `cargo check` for default, `board-vf2`, `board-pioneer`, and combined
 `board-vf2 board-pioneer`, AArch64 default and `board-rpi3` checks, RV64 release
 kernel build, and `scripts/qemu-boot-test.sh` against the release kernel.
+
+## [2026-08-18] RISC-V PLIC routing becomes runtime-data driven
+
+`hal/arch/riscv` no longer hardcodes the RV64 PLIC context or IRQ enable set.
+The kernel now derives the active PLIC context from the selected SoC profile and
+the device IRQ list from runtime `PlatformInfo`. `hal/soc/riscv` owns the
+checked physical-hart-to-S-mode-context policy for each current RV64 SoC
+profile. The shared PLIC mechanism keeps its single implementation; only
+runtime policy data moved.
+
+The RV64 trap path now dispatches external IRQs through a kernel-owned runtime
+router that resolves UART and VirtIO handlers from the active platform state,
+and the VirtIO ACK path uses runtime IRQ lookup instead of QEMU slot arithmetic.
+Ambiguous IRQ ownership in malformed platform data fails closed: shared sources
+are neither enabled nor routed.
+
+Verification for this slice passed `cargo fmt --all -- --check`,
+`cargo test -p hal-soc-riscv --target x86_64-unknown-linux-gnu`,
+`cargo test -p cellos-boards --target x86_64-unknown-linux-gnu`, RV64/AArch64
+`cargo check`, `cargo check --features board-vf2`,
+`cargo check --features board-pioneer`, `cargo check --features
+board-vf2,board-pioneer`, `cargo check --features board-rpi3`, `cargo build
+--release -p cellos-kernel --target riscv64gc-unknown-none-elf -Z
+build-std=core,alloc`, and `bash scripts/qemu-boot-test.sh
+target/riscv64gc-unknown-none-elf/release/cellos-kernel` (`PASS: FAT16 mounted
+— kernel booted (no disk)`).
+
+VF2, Pioneer, and RPi3 remain compile-only in this verification pass; no new
+physical-board runtime claim is made.
+
+## [2026-08-18] BCM2837 SoC facts move under `hal/soc`
+
+`hal/soc/bcm27xx` is now a `no_std`, data-only crate for immutable BCM2837
+controller layout and SDHCI access policy. The existing RPi3 platform and MMC
+paths consume its peripheral, GPIO, AUX mini-UART, Arasan SDHCI, word-access,
+and minimum-write-spacing facts. The shared SDHCI mechanism remains single-copy
+in the kernel; no board-specific driver was created.
+
+Board identity, boot/firmware contract, fallback memory, SD pinmux selection,
+PHY wiring, and enabled-driver lists remain outside the SoC crate. RPi3 board
+descriptor migration, IRQ/timer extraction, and feature collapse remain
+separate follow-up slices.
+
+Verification passed formatting, 2 BCM27xx SoC tests, 3 RISC-V SoC tests, 8
+board-descriptor tests, RV64 default/VF2/Pioneer/combined checks, AArch64
+default/RPi3 checks, the RV64 release build, and QEMU boot (`PASS: FAT16 mounted
+— kernel booted (no disk)`). Review passed after matching the RPi3 SDHCI
+dependency use to the AArch64 target. This slice adds no new physical-RPi3
+runtime claim.
 
 ## [2026-08-17] Root board descriptors land as the first board/HAL split slice
 
