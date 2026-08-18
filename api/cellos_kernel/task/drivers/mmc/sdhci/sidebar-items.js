@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["POLL_TIMEOUT_US"],"struct":["SdhciController"]};
+window.SIDEBAR_ITEMS = {"constant":["POLL_TIMEOUT_US"],"struct":["SdhciAccessPolicy","SdhciController"]};

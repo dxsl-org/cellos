@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["QEMU_ARM_VIRT"],"enum":["ValidationError"],"struct":["ArmVirtProfile","IrqMmio","MmioRange","VirtioMmioLayout"]};
