@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Boot the ViCell AArch64 kernel in QEMU and assert the system reaches the shell
-# prompt ("ViCell >").
+# prompt ("Cellos >").
 #
 # Mirrors scripts/qemu-boot-test.sh for the ARM64 virt machine.
 #
@@ -63,11 +63,11 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-aarch64.log; then
     exit 1
 fi
 
-if grep -q "ViCell >" qemu-aarch64.log; then
+if grep -q "Cellos >" qemu-aarch64.log; then
     echo "PASS: aarch64 shell prompt reached — full boot successful"
     exit 0
 fi
 
-echo "FAIL: 'ViCell >' prompt not seen within ${BOOT_WINDOW}s" >&2
+echo "FAIL: 'Cellos >' prompt not seen within ${BOOT_WINDOW}s" >&2
 tail -40 qemu-aarch64.log
 exit 1

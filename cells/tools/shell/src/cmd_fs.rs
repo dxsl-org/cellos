@@ -326,10 +326,7 @@ pub fn cmd_vappend(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResu
 
 fn vfs_read_size(path: &str) -> ViResult<usize> {
     let mut vfs = ostd::clients::VfsClient::new();
-    let (size, is_dir) = match vfs.stat(path) {
-        Ok(stat) => stat,
-        Err(err) => return Err(err),
-    };
+    let (size, is_dir) = vfs.stat(path)?;
     if is_dir {
         return Err(ViError::IsADirectory);
     }
@@ -394,10 +391,9 @@ pub fn cmd_vcat(mut args: crate::text_engine::args::LegacyArgs<'_>) -> ViResult<
         }
     };
     let mut buf = [0u8; 4096];
-    let n = read_file_vfs_result(path, &mut buf).map_err(|error| {
+    let n = read_file_vfs_result(path, &mut buf).inspect_err(|_| {
         ostd::io::print("vcat: cannot read: ");
         ostd::io::println(path);
-        error
     })?;
     if let Ok(s) = core::str::from_utf8(&buf[..n]) {
         crate::executor::shell_print(s);

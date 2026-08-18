@@ -629,7 +629,7 @@ impl Scheduler {
                     // RESUMES, in the watcher's own syscall context — writing a USER buffer
                     // from here (the trap/fault context) faults (S-mode store to a U page,
                     // SSTATUS.SUM not set).
-                    wt.set_current_caller_context(tid, dead_caller.0, dead_caller.1);
+                    wt.set_received_caller_context(tid, dead_caller.0, dead_caller.1);
                     wt.pending_exit_reason = Some(exit_reason);
                     wt.state = TaskState::Ready;
                     woken_watchers.push(w);

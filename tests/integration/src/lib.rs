@@ -1519,6 +1519,40 @@ impl QemuRunner {
         }
     }
 
+    /// Return a boundary that can exclude already-captured serial output from a
+    /// later wait.
+    pub fn output_checkpoint(&self) -> usize {
+        self.output.lock().unwrap().len()
+    }
+
+    /// Wait for `pattern` only in output captured at or after `checkpoint`.
+    pub fn wait_for_after(
+        &self,
+        pattern: &str,
+        checkpoint: usize,
+        timeout_secs: u64,
+    ) -> Result<String, String> {
+        let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+        loop {
+            let found = {
+                let output = self.output.lock().unwrap();
+                output
+                    .get(checkpoint..)
+                    .is_some_and(|fresh| fresh.contains(pattern))
+            };
+            if found {
+                return Ok(pattern.to_string());
+            }
+            if Instant::now() > deadline {
+                return Err(format!(
+                    "timeout: fresh pattern {:?} not seen in {}s",
+                    pattern, timeout_secs
+                ));
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
     /// Send `line` (a newline is appended) to the guest serial console.
     pub fn send_line(&mut self, line: &str) {
         if let Some(w) = self.writer.as_mut() {

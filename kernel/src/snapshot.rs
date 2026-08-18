@@ -329,13 +329,7 @@ pub fn try_restore() -> bool {
     // This MUST happen after frame restore because init_driver() writes device
     // registers that were cleared by hardware reset.
     #[cfg(target_arch = "riscv64")]
-    if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
-        crate::hal::common::plic::init(context, &irqs[..irq_count]);
-    } else {
-        log::warn!(
-            "[plic] no active RV64 context mapping during restore; external IRQs stay disabled"
-        );
-    }
+    crate::hal::common::plic::init();
 
     // Re-run VirtIO init: device registers were reset by power cycle, so the
     // virtqueue / descriptor-ring state inside the restored BLOCK_DEVICE struct

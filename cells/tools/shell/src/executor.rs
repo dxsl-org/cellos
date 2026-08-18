@@ -829,11 +829,10 @@ fn cmd_source(args: &[String], jobs: &mut Jobs) -> ViResult<()> {
             return Ok(());
         }
     };
-    let bytes = crate::cmd_fs::read_file_vfs_owned(path, 4096).map_err(|error| {
+    let bytes = crate::cmd_fs::read_file_vfs_owned(path, 4096).inspect_err(|_| {
         ostd::io::print("source: cannot open '");
         ostd::io::print(path);
         ostd::io::println("'");
-        error
     })?;
     let content = core::str::from_utf8(&bytes).unwrap_or("");
     for line in content.lines() {

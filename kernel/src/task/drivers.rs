@@ -16,8 +16,6 @@ pub mod uart;
 // Drivers
 pub mod block;
 pub mod console_drv;
-#[cfg(target_arch = "riscv64")]
-pub mod irq_dispatch;
 pub mod mmc;
 pub mod ramdisk; // RAM Disk workaround for VirtIO hang
 pub mod virtio_common;
@@ -61,21 +59,12 @@ pub fn init() {
                             // boot-time block reads (snapshot restore, verify_mbr, EarlyLoader::probe) degrade
                             // gracefully (block::read_sector → Err on the null device). MMC (SDHCI) still
                             // initialises for real boards.
-    #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
-    {
-        let board = crate::board::active();
-        if board.has_driver(cellos_boards::DriverId::SdhciArasan)
-            || board.has_driver(cellos_boards::DriverId::SdhciDwCqe)
-        {
-            mmc::init_driver();
-        }
-        // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so Driver Cells
-        // can request only slots enabled by the active board contract.
-        if board.has_driver(cellos_boards::DriverId::VirtioMmio) {
-            for slot in virtio_common::virtio_slots() {
-                crate::resource_registry::register_pcie_bar(slot.base, 0x200);
-            }
-        }
+    mmc::init_driver(); // MMC/SD — no-op on QEMU (no SDHCI); probes SDHCI on real board
+                        // Pre-populate PCIE_BARS with VirtIO MMIO slot addresses so virtio-net Driver Cell
+                        // can claim them via sys_request_mmio (PcieDriverCap path). Must run before
+                        // virtio_net::init_driver so the BAR table is ready before net IPC begins.
+    for slot in virtio_common::virtio_slots() {
+        crate::resource_registry::register_pcie_bar(slot.base, 0x200);
     }
     // VirtIO NIC is now served by the virtio-net Driver Cell (P06 complete).
     // VirtIO RNG init deferred: full MMIO probe hangs on RISC-V when probing

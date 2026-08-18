@@ -102,14 +102,21 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
             9 => {
                 // S-mode external interrupt (PLIC)
                 // Claim first, dispatch handler, complete AFTER handler per PLIC spec.
-                if let Some((context, irq)) = plic_claim() {
-                    // SAFETY: the kernel-owned dispatcher is linked via `extern "Rust"`
-                    // and must stay allocation-free in interrupt-adjacent paths.
-                    unsafe {
-                        vi_handle_riscv_external_irq(irq);
+                if let Some(irq) = plic_claim() {
+                    if (1..=8).contains(&irq) {
+                        // SAFETY: vi_handle_virtio_irq is defined in kernel/src/task/drivers/virtio_blk.rs
+                        // and linked via extern "Rust". The irq argument is a valid PLIC claim value (1-8).
+                        unsafe {
+                            vi_handle_virtio_irq(irq);
+                        }
+                    } else if irq == 10 {
+                        // SAFETY: vi_handle_uart_irq is defined in the kernel and linked via extern "Rust".
+                        unsafe {
+                            vi_handle_uart_irq();
+                        }
                     }
                     // PLIC complete must come AFTER the device handler has run.
-                    plic_complete(context, irq);
+                    plic_complete(irq);
                 }
             }
             _ => {
@@ -166,18 +173,24 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
     }
 }
 
-fn plic_claim() -> Option<(usize, u32)> {
-    // SAFETY: the kernel exports a no-allocation hart-local lookup. `usize::MAX`
-    // is its fail-closed sentinel when no SoC context mapping is available.
-    let context = unsafe { vi_riscv_plic_context() };
-    if context == usize::MAX {
-        return None;
+/// Claim the highest-priority pending IRQ from PLIC (S-mode context 1).
+/// Returns the IRQ number, or None if no interrupt is pending.
+/// The caller MUST call `plic_complete(irq)` after the device handler returns.
+fn plic_claim() -> Option<u32> {
+    use crate::common::plic::PLIC;
+    let irq = PLIC.claim(1);
+    if irq != 0 {
+        Some(irq)
+    } else {
+        None
     }
-    crate::common::plic::claim(context).map(|irq| (context, irq))
 }
 
-fn plic_complete(context: usize, irq: u32) {
-    crate::common::plic::complete(context, irq);
+/// Notify PLIC that IRQ handling is complete (S-mode context 1).
+/// Must be called AFTER the device handler has finished.
+fn plic_complete(irq: u32) {
+    use crate::common::plic::PLIC;
+    PLIC.complete(1, irq);
 }
 
 /// Handle syscall from userspace (Vi prefix per Luật 6)
@@ -191,8 +204,8 @@ fn vi_handle_syscall(frame: &mut ViTrapFrame) {
 }
 
 extern "Rust" {
-    fn vi_riscv_plic_context() -> usize;
-    fn vi_handle_riscv_external_irq(irq: u32);
+    fn vi_handle_virtio_irq(irq: u32);
+    fn vi_handle_uart_irq();
     /// Called on every S-mode timer interrupt.  Defined in `kernel::task`.
     fn vi_timer_tick();
     /// Terminate the currently-executing Cell on hardware fault.  Defined in `kernel::task`.

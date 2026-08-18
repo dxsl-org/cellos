@@ -303,16 +303,20 @@ pub fn tick() {
 
 pub(crate) fn stack_pages_for(name: &str) -> usize {
     match name {
-        "init" | "shell" | "vfs" | "vfs-test" | "net" | "virtio-net" => MEASURED_STACK_PAGES,
+        // RedoxFS transactions exceed the pre-RedoxFS 64 KiB measurement and
+        // must retain the conservative stack until a new watermark is captured.
+        "vfs" => STACK_PAGES,
+        "init" | "shell" | "vfs-test" | "net" | "virtio-net" => MEASURED_STACK_PAGES,
         _ => STACK_PAGES,
     }
 }
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn stack_sizing_policy_self_test() -> bool {
-    ["init", "shell", "vfs", "vfs-test", "net", "virtio-net"]
+    ["init", "shell", "vfs-test", "net", "virtio-net"]
         .into_iter()
         .all(|name| stack_pages_for(name) == MEASURED_STACK_PAGES)
+        && stack_pages_for("vfs") == STACK_PAGES
         && stack_pages_for("unmeasured-path") == STACK_PAGES
 }
 
@@ -1092,39 +1096,41 @@ pub fn spawn_from_mem(
             // '2'<sepc hex>:     what was written to [tf_ptr+264] (should == entry_va).
             // '3'<entry hex>:    entry_va value (expected sepc).
             // '4'<kstack_top>:   kstack_top (tf_ptr should be kstack_top - 288).
-            // Uses the HAL's FIFO-safe byte writer so task setup reuses the
-            // shared mini-UART readiness contract.
+            // Uses FIFO-safe writes (waits for LSR TX-empty bit) to prevent byte
+            // drops when the TX FIFO is still draining from a prior log message.
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            {
+            unsafe {
+                let lsr = 0x3F21_5054 as *const u32;
+                let io = 0x3F21_5040 as *mut u32;
+                macro_rules! fifo_put {
+                    ($byte:expr) => {{
+                        while core::ptr::read_volatile(lsr) & (1 << 5) == 0 {}
+                        core::ptr::write_volatile(io, $byte as u32);
+                    }};
+                }
                 macro_rules! fifo_hex {
                     ($val:expr) => {{
                         let v: u64 = $val;
                         // Correct: shifts 60,56,...,4,0 (16 nibbles, MSB first).
                         for i in (0..16usize).rev() {
                             let n = ((v >> (i * 4)) & 0xF) as u8;
-                            crate::hal::uart_bcm_mini::probe_put(if n < 10 {
-                                b'0' + n
-                            } else {
-                                b'a' + n - 10
-                            });
+                            fifo_put!(if n < 10 { b'0' + n } else { b'a' + n - 10 });
                         }
                     }};
                 }
-                crate::hal::uart_bcm_mini::probe_put(b'1');
+                fifo_put!(b'1');
                 fifo_hex!(tf_ptr as u64);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-                crate::hal::uart_bcm_mini::probe_put(b'2');
-                // SAFETY: the TrapFrame was copied to this live kernel-stack slot above.
-                let sepc_on_kstack =
-                    unsafe { core::ptr::read_volatile((tf_ptr + 264) as *const u64) };
+                fifo_put!(b'\n');
+                fifo_put!(b'2');
+                let sepc_on_kstack = core::ptr::read_volatile((tf_ptr + 264) as *const u64);
                 fifo_hex!(sepc_on_kstack);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-                crate::hal::uart_bcm_mini::probe_put(b'3');
+                fifo_put!(b'\n');
+                fifo_put!(b'3');
                 fifo_hex!(entry_va as u64);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-                crate::hal::uart_bcm_mini::probe_put(b'4');
+                fifo_put!(b'\n');
+                fifo_put!(b'4');
                 fifo_hex!(kstack_top as u64);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
+                fifo_put!(b'\n');
             }
 
             // Point Context to Kernel Stack (sp field exists on all Context types)
@@ -1522,7 +1528,7 @@ pub fn ipc_send(
                 queue_pending_msg(target, caller_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)
                     .map_err(|_| IpcSendError::Backpressure)?;
                 target.state = TaskState::Ready;
-                target.set_current_caller_context(caller_id, sender_cell_id, sender_generation);
+                target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);
@@ -1589,7 +1595,7 @@ pub fn ipc_post_nonblock(
             queue_pending_msg(t, sender_id, msg, tcb::HOTSWAP_MSG_QUEUE_DEPTH)?;
             if target_ready {
                 t.state = TaskState::Ready;
-                t.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
+                t.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
         }
         if target_ready {
@@ -1645,7 +1651,7 @@ pub fn ipc_recv(
 
             let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
+                caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
             return Ok(sender_id);
         } else {
@@ -1705,7 +1711,7 @@ pub fn ipc_try_recv(
 
             let (sender_cell_id, sender_generation) = sender_context(sched, sender_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
-                caller.set_current_caller_context(sender_id, sender_cell_id, sender_generation);
+                caller.set_received_caller_context(sender_id, sender_cell_id, sender_generation);
             }
             return Ok(sender_id);
         } else {
@@ -1752,7 +1758,7 @@ pub fn ipc_try_send(
                 let msg = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len) };
                 queue_pending_msg(target, caller_id, msg, tcb::INPUT_EVENT_QUEUE_DEPTH)?;
                 target.state = TaskState::Ready;
-                target.set_current_caller_context(caller_id, sender_cell_id, sender_generation);
+                target.set_received_caller_context(caller_id, sender_cell_id, sender_generation);
             }
             let prio = sched.push_ready(target_id);
             sched.pend_preempt_if_needed(prio);

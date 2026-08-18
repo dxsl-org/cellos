@@ -47,12 +47,7 @@ pub const ECAM_BASE_RISCV: usize = 0x3000_0000;
 
 /// PCIe ECAM config-space base for ARM64 virt gpex.
 /// Source: QEMU virt machine DTS — `pcie@3f000000`.
-#[cfg(all(
-    target_arch = "aarch64",
-    not(feature = "board-rpi3"),
-    not(feature = "board-rpi4")
-))]
-pub const ECAM_BASE_AARCH64: usize = hal_soc_arm_virt::QEMU_ARM_VIRT.pcie_ecam_bus0.base;
+pub const ECAM_BASE_AARCH64: usize = 0x3F00_0000;
 
 /// Bus 0 ECAM window size (1 MiB = 32 devices × 8 functions × 4 KiB).
 pub const ECAM_BUS0_SIZE: usize = 0x10_0000; // 1 MiB
@@ -569,17 +564,8 @@ pub fn init() {
     let ecam_base = ecam_base_x86();
     #[cfg(target_arch = "riscv64")]
     let ecam_base = ECAM_BASE_RISCV;
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
+    #[cfg(target_arch = "aarch64")]
     let ecam_base = ECAM_BASE_AARCH64;
-    #[cfg(all(
-        target_arch = "aarch64",
-        any(feature = "board-rpi3", feature = "board-rpi4")
-    ))]
-    let ecam_base = 0usize;
     #[cfg(not(any(
         target_arch = "x86_64",
         target_arch = "riscv64",

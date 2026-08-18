@@ -3,8 +3,8 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Version**: 0.2.1-dev (Mycelium Era)
 **Language**: Rust (nightly, `no_std`)
-**Crates**: ~53 active workspace members
-**Last Updated**: 2026-08-17 (launch-edge deprivilege and exact launch-profile proofs added; hotswap boundary finalized; root `boards/` descriptor crate added for QEMU RV64; `hal/soc/riscv` now carries data-only RISC-V SoC profiles)
+**Crates**: ~52 active workspace members
+**Last Updated**: 2026-08-08 (launch-edge deprivilege and exact launch-profile proofs added; hotswap boundary finalized; init respawn proof deferred)
 
 ---
 
@@ -13,8 +13,7 @@
 | Area | Crates | Key Highlights |
 |------|--------|---------------|
 | Kernel | 1 | Size in [generated metrics](code-metrics.generated.md); HotSwap mechanisms (400 retired/reserved; 401/413-415/419/421 live), scatter/gather IPC, lease caps, VirtIO VA→PA fix |
-| HAL | 11 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs, RISC-V SoC profiles |
-| Boards | 1 | `cellos-boards` no_std descriptor crate; QEMU RV64 migrated first; `hal/soc/riscv` keeps SoC facts data-only; shared drivers stay in `cells/drivers/` |
+| HAL | 10 | RV64 full, AArch64 + x86_64 full (Ring-3 smoke), RV32 + AArch32 stubs |
 | Libraries | 3 | `types`, `api` (display/input/hotswap APIs), `ostd` (repl, gpu, hotswap wrappers) |
 | Apps | 8+ | shell (parser+executor+45+ built-ins+$(cmd)+args), bench, sys-tools, net-tools (6 bins), utils |
 | Drivers | 5 | disk, gpu, input, net (VirtIO NIC), serial |
@@ -66,18 +65,13 @@ Cellos/
 │   ├── fs/fat.rs           FAT32 via `fatfs` crate
 │   └── fs.rs               FS facade
 │
-├── hal/ (11 crates)
+├── hal/ (10 crates)
 │   ├── core/               Feature-gated arch facade
 │   ├── traits/             6 pure trait crates (arch, paging, interrupt, timer, uart, display)
-│   ├── soc/
-│   │   └── riscv/          Data-only SoC profiles (QEMU virt, JH7110, SG2042)
 │   └── arch/
 │       ├── riscv/          RV64 full + RV32 trait impls
 │       ├── arm/            AArch64 full + AArch32 trait impls
 │       └── x86/            x86_64 full impl (IDT, GDT, LAPIC, syscall/sysret)
-│
-├── boards/                 Root board descriptors (`cellos-boards`, no_std)
-│   └── qemu/virt-riscv64/  QEMU RV64 fallback descriptor + audit DTS asset
 │
 ├── libs/ (3 crates)
 │   ├── types/src/lib.rs    VAddr, PAddr, CellId, ViError, DirEntry + 10 host unit tests

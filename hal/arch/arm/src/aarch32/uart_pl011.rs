@@ -3,7 +3,7 @@
 //! Register accesses use 32-bit volatile MMIO writes (ARM32 has no 64-bit registers).
 //! Base address and baud settings are identical to the AArch64 version.
 
-const PL011_BASE: u32 = hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base as u32;
+const PL011_BASE: u32 = 0x0900_0000; // QEMU ARM virt machine PL011
 
 const UARTDR: u32 = PL011_BASE; // Data Register (TX/RX)
 const UARTFR: u32 = PL011_BASE + 0x018; // Flag Register

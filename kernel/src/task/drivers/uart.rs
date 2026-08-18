@@ -209,7 +209,7 @@ pub fn poll_rhr() -> Option<u8> {
 /// Called from the UART RX IRQ handler.
 ///
 /// On RISC-V / AArch64: reads from the MMIO base stored in SERIAL.
-/// On x86_64: delegates to the configured HAL port-I/O UART mechanism.
+/// On x86_64: reads directly from COM1 port I/O (port 0x3F8).
 /// Handles CR→LF normalisation and pushes bytes into RX_BUFFER for the shell.
 #[no_mangle]
 pub extern "Rust" fn vi_handle_uart_irq() {
@@ -218,34 +218,30 @@ pub extern "Rust" fn vi_handle_uart_irq() {
         loop {
             // Read LSR (offset 5) to check Data Ready (bit 0).
             let (lsr, rhr_byte): (u8, Option<u8>) = {
-                #[cfg(target_arch = "x86_64")]
+                #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
                 {
-                    let byte = crate::hal::uart_16550::poll_input();
-                    (byte.map_or(0, |_| _LSR_RX_READY), byte)
-                }
-                #[cfg(target_arch = "x86")]
-                {
+                    // Port I/O path for x86.
                     let lsr = unsafe {
-                        let value: u8;
+                        let v: u8;
                         core::arch::asm!(
                             "in al, dx",
                             in("dx") (0x3F8u16 + LSR as u16),
-                            out("al") value,
+                            out("al") v,
                             options(nomem, nostack)
                         );
-                        value
+                        v
                     };
                     let byte = if lsr & _LSR_RX_READY != 0 {
-                        let value: u8;
+                        let c: u8;
                         unsafe {
                             core::arch::asm!(
                                 "in al, dx",
                                 in("dx") 0x3F8u16,
-                                out("al") value,
+                                out("al") c,
                                 options(nomem, nostack)
                             );
                         }
-                        Some(value)
+                        Some(c)
                     } else {
                         None
                     };

@@ -1,5 +1,5 @@
 use super::regs::*;
-use super::sdhci::{SdhciAccessPolicy, SdhciController};
+use super::sdhci::SdhciController;
 use hal_traits_mmc::{CardType, MmcCmd, RespType, ViMmcHost};
 use types::{ViError, ViResult};
 
@@ -24,10 +24,10 @@ impl MmcCore {
     ///
     /// # Safety
     /// `sdhci_base` must be a valid kernel-mapped MMIO address for the SDHCI register block.
-    pub unsafe fn new(sdhci_base: usize, policy: SdhciAccessPolicy) -> Self {
+    pub unsafe fn new(sdhci_base: usize) -> Self {
         // SAFETY: forwarded from caller contract.
         Self {
-            host: SdhciController::new(sdhci_base, policy),
+            host: SdhciController::new(sdhci_base),
         }
     }
 
