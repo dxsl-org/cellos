@@ -357,14 +357,26 @@ pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     hhdm_offset: 0x0,
 };
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 const DEFAULT_RPI4_BOARD: &cellos_boards::BoardDescriptor = crate::board::default_rpi4_board();
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 static FALLBACK_MEMORY_MAP: [MemoryMapEntry; 2] = [
     fallback_memory_entry(DEFAULT_RPI4_BOARD, 0),
     fallback_memory_entry(DEFAULT_RPI4_BOARD, 1),
 ];
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 pub static FALLBACK_BOOT_INFO: SimpleBootInfo = SimpleBootInfo {
     memory_map: &FALLBACK_MEMORY_MAP,
     kernel_phys_base: DEFAULT_RPI4_BOARD.boot.kernel_load_base,

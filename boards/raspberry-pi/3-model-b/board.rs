@@ -1,6 +1,6 @@
 use crate::{
     Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
+    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["raspberrypi,3-model-b", "brcm,bcm2837"];
@@ -31,13 +31,6 @@ const FALLBACK_MEMORY: [MemoryRange; 2] = [
         kind: MemoryRangeKind::Usable,
     },
 ];
-const UART: MmioRegion = MmioRegion {
-    compatible: "brcm,bcm2835-aux-uart",
-    base: 0x3F21_5040,
-    size: 4,
-    irq: None,
-};
-
 pub const RASPBERRY_PI_3_MODEL_B: BoardDescriptor = BoardDescriptor {
     slug: "raspberry-pi-3-model-b",
     vendor: "raspberry-pi",
@@ -53,11 +46,6 @@ pub const RASPBERRY_PI_3_MODEL_B: BoardDescriptor = BoardDescriptor {
         kernel_load_base: 0x0008_0000,
     },
     fallback_memory: &FALLBACK_MEMORY,
-    uart: UART,
-    plic: None,
-    clint: None,
-    rtc: None,
-    virtio_mmio: &[],
     wiring: WIRING,
     enabled_drivers: &ENABLED_DRIVERS,
 };

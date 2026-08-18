@@ -3,7 +3,6 @@
 
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-pub const PLIC_BASE: usize = 0x0c00_0000;
 pub const PLIC_PRIORITY_BASE: usize = 0x0;
 pub const PLIC_PENDING_BASE: usize = 0x1000;
 pub const PLIC_ENABLE_BASE: usize = 0x2000;
@@ -14,8 +13,7 @@ pub const PLIC_THRESHOLD_AND_CLAIM_BASE: usize = 0x20_0000;
 // this shared register-access mechanism.
 
 /// Runtime PLIC base address. Updated before `init()` via `set_plic_base()`.
-/// Defaults to QEMU virt layout (0x0C00_0000).
-static PLIC_RUNTIME_BASE: AtomicUsize = AtomicUsize::new(PLIC_BASE);
+static PLIC_RUNTIME_BASE: AtomicUsize = AtomicUsize::new(0);
 
 /// Override the PLIC base address before `init()` is called (called from kernel
 /// after DTB parsing populates `platform::PlatformInfo`).
@@ -26,12 +24,17 @@ pub fn set_plic_base(base: usize) {
 pub struct Plic;
 
 impl Plic {
-    pub const fn new(_base: usize) -> Self {
+    pub const fn new() -> Self {
         Self
     }
 
     fn base() -> usize {
-        PLIC_RUNTIME_BASE.load(Ordering::Relaxed)
+        let base = PLIC_RUNTIME_BASE.load(Ordering::Relaxed);
+        assert!(
+            base != 0,
+            "PLIC base must be selected before register access"
+        );
+        base
     }
 
     /// Set priority for a specific IRQ.
@@ -89,7 +92,7 @@ impl Plic {
 }
 
 // Global PLIC instance (zero-size; all state in PLIC_RUNTIME_BASE).
-pub static PLIC: Plic = Plic::new(PLIC_BASE);
+pub static PLIC: Plic = Plic::new();
 
 /// Initialize the active S-mode PLIC context and enable the provided IRQs.
 ///

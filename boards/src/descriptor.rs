@@ -29,6 +29,7 @@ pub enum DriverId {
     IrqBcm2835Legacy,
     TimerBcm2835System,
     RtcGoldfish,
+    RtcPl031,
     VirtioMmio,
     PcieEcam,
     SdhciArasan,
@@ -76,14 +77,6 @@ pub struct MemoryRange {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MmioRegion {
-    pub compatible: &'static str,
-    pub base: u64,
-    pub size: u64,
-    pub irq: Option<u32>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WiringLayout {
     pub pinmux_groups: &'static [&'static str],
     pub phy_links: &'static [&'static str],
@@ -99,16 +92,9 @@ pub struct BoardDescriptor {
     pub compatibles: &'static [&'static str],
     pub boot: BootContract,
     pub fallback_memory: &'static [MemoryRange],
-    pub uart: MmioRegion,
-    pub plic: Option<MmioRegion>,
-    pub clint: Option<MmioRegion>,
-    pub rtc: Option<MmioRegion>,
-    pub virtio_mmio: &'static [MmioRegion],
     pub wiring: WiringLayout,
     pub enabled_drivers: &'static [DriverId],
 }
-
-pub const MAX_VIRTIO_MMIO_SLOTS: usize = 32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ValidationError {
@@ -117,17 +103,9 @@ pub enum ValidationError {
     MissingEnabledDrivers,
     KernelLoadOutsideFallback,
     DuplicateEnabledDriver(DriverId),
-    TooManyVirtioSlots {
-        found: usize,
-        max: usize,
-    },
     ZeroSizedFallbackRange(&'static str),
     OverflowingFallbackRange(&'static str),
     OverlappingFallbackRange(&'static str, &'static str),
-    ZeroSizedMmioCore(&'static str),
-    ZeroSizedMmioRange(&'static str),
-    OverflowingMmioRange(&'static str),
-    UnsortedMmioRange(&'static str, &'static str),
     ArchitectureMismatch {
         expected: Architecture,
         found: Architecture,
@@ -158,22 +136,6 @@ impl BoardDescriptor {
                 return Err(ValidationError::DuplicateEnabledDriver(*driver));
             }
         }
-        if self.virtio_mmio.len() > MAX_VIRTIO_MMIO_SLOTS {
-            return Err(ValidationError::TooManyVirtioSlots {
-                found: self.virtio_mmio.len(),
-                max: MAX_VIRTIO_MMIO_SLOTS,
-            });
-        }
-        for region in core::iter::once(self.uart)
-            .chain([self.plic, self.clint, self.rtc].into_iter().flatten())
-        {
-            if region.size == 0 {
-                return Err(ValidationError::ZeroSizedMmioCore(region.compatible));
-            }
-            if region.base.checked_add(region.size).is_none() {
-                return Err(ValidationError::OverflowingMmioRange(region.compatible));
-            }
-        }
         for range in self.fallback_memory {
             if range.size == 0 {
                 return Err(ValidationError::ZeroSizedFallbackRange(range.name));
@@ -190,22 +152,6 @@ impl BoardDescriptor {
                     previous.name,
                     current.name,
                 ));
-            }
-        }
-        for (index, region) in self.virtio_mmio.iter().enumerate() {
-            if region.size == 0 {
-                return Err(ValidationError::ZeroSizedMmioRange(region.compatible));
-            }
-            if region.base.checked_add(region.size).is_none() {
-                return Err(ValidationError::OverflowingMmioRange(region.compatible));
-            }
-            if let Some(previous) = index.checked_sub(1).map(|i| self.virtio_mmio[i]) {
-                if region.base <= previous.base {
-                    return Err(ValidationError::UnsortedMmioRange(
-                        previous.compatible,
-                        region.compatible,
-                    ));
-                }
             }
         }
         if !self.fallback_memory.iter().any(|range| {

@@ -1,6 +1,6 @@
 use crate::{
     Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
+    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["starfive,visionfive-2-v1.3b", "starfive,jh7110"];
@@ -46,26 +46,6 @@ pub const STARFIVE_VISIONFIVE_2: BoardDescriptor = BoardDescriptor {
         kernel_load_base: 0x4020_0000,
     },
     fallback_memory: &MEMORY,
-    uart: MmioRegion {
-        compatible: "snps,dw-apb-uart",
-        base: 0x1000_0000,
-        size: 0x100,
-        irq: Some(10),
-    },
-    plic: Some(MmioRegion {
-        compatible: "sifive,plic-1.0.0",
-        base: 0x0C00_0000,
-        size: 0x0400_0000,
-        irq: None,
-    }),
-    clint: Some(MmioRegion {
-        compatible: "sifive,clint0",
-        base: 0x0200_0000,
-        size: 0x0001_0000,
-        irq: None,
-    }),
-    rtc: None,
-    virtio_mmio: &[],
     wiring: WiringLayout {
         pinmux_groups: &[],
         phy_links: &["sdio1"],

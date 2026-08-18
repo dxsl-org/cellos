@@ -5,6 +5,16 @@
 #![no_main]
 #![feature(alloc_error_handler)]
 
+#[cfg(all(feature = "board-vf2", feature = "board-pioneer"))]
+compile_error!(
+    "Conflicting RISC-V board features: `board-vf2` and `board-pioneer` cannot be enabled together."
+);
+
+#[cfg(all(feature = "board-rpi3", feature = "board-rpi4"))]
+compile_error!(
+    "Conflicting AArch64 board features: `board-rpi3` and `board-rpi4` cannot be enabled together."
+);
+
 extern crate alloc;
 
 use core::panic::PanicInfo;
@@ -112,11 +122,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     task::drivers::uart::init();
     #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
     crate::hal::uart_bcm_mini::init();
-    #[cfg(all(
-        target_arch = "aarch64",
-        not(feature = "board-rpi3"),
-        not(feature = "board-rpi4")
-    ))]
+    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
     crate::hal::uart_pl011::init();
     #[cfg(target_arch = "arm")]
     crate::hal::uart_pl011::init();
@@ -160,11 +166,6 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
     #[cfg(not(target_arch = "x86_64"))]
     hal::ARCH.init();
-    // Initialize Goldfish RTC for wall-clock time on QEMU ARM64 virt.
-    // board-rpi3 has no Goldfish RTC (BCM2837); leave BASE=0 (epoch unknown).
-    #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-    hal::rtc::init_default();
-
     // Define puts helper — arch-specific character output.
     let puts = |s: &str| {
         for c in s.bytes() {
@@ -542,10 +543,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     // 5. Hardware Abstraction Layer (HAL) Initialization
     // GDT/IDT/SYSCALL already done at step 1. Initialize PLIC for RISC-V external IRQs.
     #[cfg(target_arch = "riscv64")]
-    if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
-        crate::hal::common::plic::init(context, &irqs[..irq_count]);
+    if crate::board::active().has_driver(cellos_boards::DriverId::PlicSifive) {
+        if let Some((context, irqs, irq_count)) = crate::platform::riscv_plic_init_data() {
+            crate::hal::common::plic::init(context, &irqs[..irq_count]);
+        } else {
+            log::warn!("[plic] no active RV64 context mapping; external IRQs stay disabled");
+        }
     } else {
-        log::warn!("[plic] no active RV64 context mapping; external IRQs stay disabled");
+        log::info!("[plic] disabled by active board descriptor");
     }
     log_info("HAL initialized (PLIC enabled)");
 

@@ -34,7 +34,11 @@ fn selected_sdhci_config() -> Option<SdhciConfig> {
             },
         });
     }
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        feature = "board-rpi4",
+        not(feature = "board-rpi3")
+    ))]
     {
         let soc = hal_soc_bcm27xx::BCM2711;
         return Some(SdhciConfig {
@@ -147,7 +151,11 @@ pub fn init_driver() {
         hal_soc_bcm27xx::BCM2837.mmio.gpio_base,
         crate::board::selected_rpi3().wiring,
     );
-    #[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        feature = "board-rpi4",
+        not(feature = "board-rpi3")
+    ))]
     pinmux_bcm::apply(
         hal_soc_bcm27xx::BCM2711.mmio.gpio_base,
         crate::board::selected_rpi4().wiring,

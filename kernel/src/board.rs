@@ -34,6 +34,11 @@ pub(crate) fn selected() -> &'static BoardDescriptor {
 }
 
 #[cfg(target_arch = "riscv64")]
+pub(crate) fn active() -> &'static BoardDescriptor {
+    selected()
+}
+
+#[cfg(target_arch = "riscv64")]
 /// Returns the SoC policy paired with the selected RISC-V board descriptor.
 pub(crate) fn selected_riscv64_soc() -> &'static hal_soc_riscv::RiscvSocProfile {
     use cellos_boards::SocId;
@@ -70,6 +75,11 @@ pub(crate) fn selected_rpi3() -> &'static BoardDescriptor {
     }
 }
 
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub(crate) fn active() -> &'static BoardDescriptor {
+    selected_rpi3()
+}
+
 #[cfg(all(
     target_arch = "aarch64",
     not(feature = "board-rpi3"),
@@ -93,28 +103,53 @@ pub(crate) const fn default_qemu_arm_virt_board() -> &'static BoardDescriptor {
 ))]
 pub(crate) fn selected_qemu_arm_virt() -> &'static BoardDescriptor {
     match QEMU_ARM_VIRT_BOARD.validate_for(Architecture::Aarch64) {
-        Ok(()) => {
-            if QEMU_ARM_VIRT_BOARD.uart.irq != Some(hal_soc_arm_virt::QEMU_ARM_VIRT.uart.spi) {
-                panic!("[board] QEMU ARM UART IRQ does not match the SoC profile");
-            }
-            QEMU_ARM_VIRT_BOARD
-        }
+        Ok(()) => QEMU_ARM_VIRT_BOARD,
         Err(error) => invalid_descriptor(error),
     }
 }
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
+pub(crate) fn active() -> &'static BoardDescriptor {
+    selected_qemu_arm_virt()
+}
+
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 const RPI4_BOARD: &BoardDescriptor = &cellos_boards::raspberry_pi_4_model_b::RASPBERRY_PI_4_MODEL_B;
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 pub(crate) const fn default_rpi4_board() -> &'static BoardDescriptor {
     RPI4_BOARD
 }
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 pub(crate) fn selected_rpi4() -> &'static BoardDescriptor {
     match RPI4_BOARD.validate_for(Architecture::Aarch64) {
         Ok(()) => RPI4_BOARD,
         Err(error) => invalid_descriptor(error),
     }
+}
+
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
+pub(crate) fn active() -> &'static BoardDescriptor {
+    selected_rpi4()
 }

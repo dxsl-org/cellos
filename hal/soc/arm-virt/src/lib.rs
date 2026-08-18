@@ -167,7 +167,7 @@ pub const QEMU_ARM_VIRT: ArmVirtProfile = ArmVirtProfile {
         spi: 1,
     },
     rtc: MmioRange {
-        base: 0x0902_0000,
+        base: 0x0901_0000,
         size: 0x1000,
     },
     gpio: IrqMmio {

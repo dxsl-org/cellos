@@ -19,7 +19,11 @@
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 const GPIO_MMIO_BASE: usize = hal_soc_bcm27xx::BCM2837.mmio.gpio_base;
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 const GPIO_MMIO_BASE: usize = hal_soc_bcm27xx::BCM2711.mmio.gpio_base;
 
 #[cfg(all(

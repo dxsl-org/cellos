@@ -14,7 +14,7 @@ fn qemu_layout_is_structurally_valid() {
 #[test]
 fn qemu_layout_preserves_existing_public_windows() {
     assert_eq!(QEMU_ARM_VIRT.uart.mmio.base, 0x0900_0000);
-    assert_eq!(QEMU_ARM_VIRT.rtc.base, 0x0902_0000);
+    assert_eq!(QEMU_ARM_VIRT.rtc.base, 0x0901_0000);
     assert_eq!(QEMU_ARM_VIRT.gpio.mmio.base, 0x0903_0000);
     assert_eq!(QEMU_ARM_VIRT.pcie_ecam_bus0.base, 0x3F00_0000);
 }

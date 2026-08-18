@@ -217,7 +217,7 @@ impl PageTableTrait for PageTable {
         if super::el2::is_el2() {
             // SAFETY: identity-covering table required; EL2_ACTIVE guarantees EL2.
             unsafe {
-                super::el2::el2_mmu_init(ttbr0);
+                super::el2::el2_mmu_init(ttbr0, hal_soc_arm_virt::QEMU_ARM_VIRT.uart.mmio.base);
             }
             return;
         }

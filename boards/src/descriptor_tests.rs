@@ -1,7 +1,6 @@
 use crate::{
     Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, MmioRegion, SocId, ValidationError, WiringLayout,
-    MAX_VIRTIO_MMIO_SLOTS,
+    MemoryRange, MemoryRangeKind, SocId, ValidationError, WiringLayout,
 };
 
 static EMPTY: [&str; 0] = [];
@@ -12,13 +11,6 @@ static EMPTY_WIRING: WiringLayout = WiringLayout {
 };
 static TEST_DRIVERS: [DriverId; 1] = [DriverId::UartNs16550a];
 static TEST_COMPATIBLES: [&str; 1] = ["test,board"];
-const TEST_MMIO: [MmioRegion; 1] = [MmioRegion {
-    compatible: "test,mmio",
-    base: 0x1000_0000,
-    size: 0x1000,
-    irq: Some(1),
-}];
-
 fn descriptor(
     compatibles: &'static [&'static str],
     memory: &'static [MemoryRange],
@@ -38,20 +30,6 @@ fn descriptor(
             kernel_load_base: memory.first().map_or(0, |range| range.base),
         },
         fallback_memory: memory,
-        uart: TEST_MMIO[0],
-        plic: Some(MmioRegion {
-            irq: None,
-            ..TEST_MMIO[0]
-        }),
-        clint: Some(MmioRegion {
-            irq: None,
-            ..TEST_MMIO[0]
-        }),
-        rtc: Some(MmioRegion {
-            irq: None,
-            ..TEST_MMIO[0]
-        }),
-        virtio_mmio: &TEST_MMIO,
         wiring: EMPTY_WIRING,
         enabled_drivers: &TEST_DRIVERS,
     }
@@ -102,22 +80,6 @@ fn rejects_zero_sized_fallback_ranges() {
 }
 
 #[test]
-fn rejects_zero_sized_core_mmio_regions() {
-    static MEMORY: [MemoryRange; 1] = [MemoryRange {
-        name: "usable",
-        base: 0x8420_0000,
-        size: 0x1000,
-        kind: MemoryRangeKind::Usable,
-    }];
-    let mut board = descriptor(&TEST_COMPATIBLES, &MEMORY);
-    board.rtc.as_mut().unwrap().size = 0;
-    assert_eq!(
-        board.validate(),
-        Err(ValidationError::ZeroSizedMmioCore("test,mmio"))
-    );
-}
-
-#[test]
 fn rejects_wrong_architecture() {
     static MEMORY: [MemoryRange; 1] = [MemoryRange {
         name: "usable",
@@ -147,27 +109,6 @@ fn rejects_overflowing_fallback_ranges() {
     assert_eq!(
         board.validate(),
         Err(ValidationError::OverflowingFallbackRange("overflow"))
-    );
-}
-
-#[test]
-fn rejects_more_virtio_slots_than_kernel_capacity() {
-    static MEMORY: [MemoryRange; 1] = [MemoryRange {
-        name: "usable",
-        base: 0x8000_0000,
-        size: 0x1000,
-        kind: MemoryRangeKind::Usable,
-    }];
-    static VIRTIO: [MmioRegion; MAX_VIRTIO_MMIO_SLOTS + 1] =
-        [TEST_MMIO[0]; MAX_VIRTIO_MMIO_SLOTS + 1];
-    let mut board = descriptor(&TEST_COMPATIBLES, &MEMORY);
-    board.virtio_mmio = &VIRTIO;
-    assert_eq!(
-        board.validate(),
-        Err(ValidationError::TooManyVirtioSlots {
-            found: MAX_VIRTIO_MMIO_SLOTS + 1,
-            max: MAX_VIRTIO_MMIO_SLOTS,
-        })
     );
 }
 

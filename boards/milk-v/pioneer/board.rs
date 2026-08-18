@@ -1,6 +1,6 @@
 use crate::{
     Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
+    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["sophgo,pioneer", "sophgo,sg2042"];
@@ -45,26 +45,6 @@ pub const MILK_V_PIONEER: BoardDescriptor = BoardDescriptor {
         kernel_load_base: 0x8020_0000,
     },
     fallback_memory: &MEMORY,
-    uart: MmioRegion {
-        compatible: "snps,dw-apb-uart",
-        base: 0x70_4000_0000,
-        size: 0x1000,
-        irq: None,
-    },
-    plic: Some(MmioRegion {
-        compatible: "thead,c900-plic",
-        base: 0x0C00_0000,
-        size: 0x0400_0000,
-        irq: None,
-    }),
-    clint: Some(MmioRegion {
-        compatible: "thead,c900-clint",
-        base: 0x0200_0000,
-        size: 0x0001_0000,
-        irq: None,
-    }),
-    rtc: None,
-    virtio_mmio: &[],
     wiring: WiringLayout {
         pinmux_groups: &[],
         phy_links: &[],

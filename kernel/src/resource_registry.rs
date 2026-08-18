@@ -86,7 +86,11 @@ const ALLOWED: &[(usize, usize, u8)] = &[
     ),
 ];
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 const ALLOWED: &[(usize, usize, u8)] = &[
     (
         hal_soc_bcm27xx::BCM2711.mmio.uart_base,

@@ -1,6 +1,6 @@
 use crate::{
     Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
+    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["riscv-virtio", "qemu,virt"];
@@ -35,62 +35,6 @@ const FALLBACK_MEMORY: [MemoryRange; 3] = [
         kind: MemoryRangeKind::Usable,
     },
 ];
-const UART: MmioRegion = MmioRegion {
-    compatible: "ns16550a",
-    base: 0x1000_0000,
-    size: 0x100,
-    irq: Some(10),
-};
-const PLIC: MmioRegion = MmioRegion {
-    compatible: "sifive,plic-1.0.0",
-    base: 0x0C00_0000,
-    size: 0x0400_0000,
-    irq: None,
-};
-const CLINT: MmioRegion = MmioRegion {
-    compatible: "sifive,clint0",
-    base: 0x0200_0000,
-    size: 0x0001_0000,
-    irq: None,
-};
-const RTC: MmioRegion = MmioRegion {
-    compatible: "google,goldfish-rtc",
-    base: 0x0010_1000,
-    size: 0x1000,
-    irq: None,
-};
-const VIRTIO_MMIO: [MmioRegion; 5] = [
-    MmioRegion {
-        compatible: "virtio,mmio",
-        base: 0x1000_1000,
-        size: 0x1000,
-        irq: Some(1),
-    },
-    MmioRegion {
-        compatible: "virtio,mmio",
-        base: 0x1000_2000,
-        size: 0x1000,
-        irq: Some(2),
-    },
-    MmioRegion {
-        compatible: "virtio,mmio",
-        base: 0x1000_3000,
-        size: 0x1000,
-        irq: Some(3),
-    },
-    MmioRegion {
-        compatible: "virtio,mmio",
-        base: 0x1000_4000,
-        size: 0x1000,
-        irq: Some(4),
-    },
-    MmioRegion {
-        compatible: "virtio,mmio",
-        base: 0x1000_5000,
-        size: 0x1000,
-        irq: Some(5),
-    },
-];
 
 pub const QEMU_VIRT_RISCV64: BoardDescriptor = BoardDescriptor {
     slug: "qemu-virt-riscv64",
@@ -107,11 +51,6 @@ pub const QEMU_VIRT_RISCV64: BoardDescriptor = BoardDescriptor {
         kernel_load_base: 0x8020_0000,
     },
     fallback_memory: &FALLBACK_MEMORY,
-    uart: UART,
-    plic: Some(PLIC),
-    clint: Some(CLINT),
-    rtc: Some(RTC),
-    virtio_mmio: &VIRTIO_MMIO,
     wiring: EMPTY_WIRING,
     enabled_drivers: &ENABLED_DRIVERS,
 };

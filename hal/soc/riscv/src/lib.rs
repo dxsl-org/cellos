@@ -7,12 +7,14 @@
 
 mod access_policy;
 mod catalog;
+mod mmio;
 mod plic_policy;
 mod profile;
 mod sdhci_policy;
 
 pub use access_policy::{RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy};
 pub use catalog::{GENERIC_VIRT, JH7110, SG2042};
+pub use mmio::{RiscvFallbackMmio, RiscvMmioRegion};
 pub use plic_policy::PlicContextPolicy;
 pub use profile::RiscvSocProfile;
 pub use sdhci_policy::RiscvSdhciProfile;

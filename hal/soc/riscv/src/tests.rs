@@ -1,6 +1,6 @@
 use crate::{
-    PlicContextPolicy, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy, GENERIC_VIRT, JH7110,
-    SG2042,
+    PlicContextPolicy, RiscvMmioRegion, RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy,
+    GENERIC_VIRT, JH7110, SG2042,
 };
 
 #[test]
@@ -49,4 +49,43 @@ fn sg2042_disables_mmio_uart_rtc_and_virtio() {
     assert!(!SG2042.allows_uart_mmio());
     assert!(!SG2042.allows_rtc_mmio());
     assert!(!SG2042.discovers_virtio_mmio());
+}
+
+#[test]
+fn fallback_mmio_is_soc_owned_and_structurally_valid() {
+    for profile in [GENERIC_VIRT, JH7110, SG2042] {
+        assert!(profile.fallback_mmio.is_valid(), "{}", profile.slug);
+        assert_eq!(profile.fallback_mmio.plic.base, 0x0C00_0000);
+        assert_eq!(profile.fallback_mmio.clint.base, 0x0200_0000);
+    }
+
+    let generic = GENERIC_VIRT.fallback_mmio;
+    assert_eq!(generic.uart.expect("generic UART").base, 0x1000_0000);
+    assert_eq!(generic.uart.expect("generic UART").irq, Some(10));
+    assert_eq!(generic.rtc.expect("generic RTC").base, 0x0010_1000);
+    assert_eq!(generic.virtio.len(), 5);
+    assert_eq!(generic.virtio[4].irq, Some(5));
+
+    assert!(JH7110.fallback_mmio.rtc.is_none());
+    assert!(JH7110.fallback_mmio.virtio.is_empty());
+    assert_eq!(
+        SG2042.fallback_mmio.uart.expect("Pioneer UART").base,
+        0x70_4000_0000
+    );
+}
+
+#[test]
+fn mmio_region_rejects_zero_and_overflow() {
+    assert!(!RiscvMmioRegion {
+        base: 0,
+        size: 0x1000,
+        irq: None,
+    }
+    .is_valid());
+    assert!(!RiscvMmioRegion {
+        base: usize::MAX,
+        size: 2,
+        irq: None,
+    }
+    .is_valid());
 }

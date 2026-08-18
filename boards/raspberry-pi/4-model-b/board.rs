@@ -1,6 +1,6 @@
 use crate::{
     Architecture, BoardDescriptor, BootContract, BootProtocol, DriverId, FirmwareInterface,
-    MemoryRange, MemoryRangeKind, MmioRegion, SocId, WiringLayout,
+    MemoryRange, MemoryRangeKind, SocId, WiringLayout,
 };
 
 const COMPATIBLES: [&str; 2] = ["raspberrypi,4-model-b", "brcm,bcm2711"];
@@ -41,16 +41,6 @@ pub const RASPBERRY_PI_4_MODEL_B: BoardDescriptor = BoardDescriptor {
         kernel_load_base: 0x0008_0000,
     },
     fallback_memory: &MEMORY,
-    uart: MmioRegion {
-        compatible: "arm,pl011",
-        base: hal_soc_bcm27xx::BCM2711.mmio.uart_base as u64,
-        size: hal_soc_bcm27xx::BCM2711.mmio.uart_grant_size as u64,
-        irq: None,
-    },
-    plic: None,
-    clint: None,
-    rtc: None,
-    virtio_mmio: &[],
     wiring: WiringLayout {
         pinmux_groups: &["uart-gpio14-15-alt0", "emmc2-gpio48-53-alt3"],
         phy_links: &["bcm54213pe-gigabit-ethernet"],

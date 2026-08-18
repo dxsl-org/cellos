@@ -45,25 +45,16 @@ impl PlatformInfo {
     /// below). Gated to avoid a dead-code warning on aarch64/x86_64.
     #[cfg(target_arch = "riscv64")]
     fn board_defaults(profile: &'static RiscvSocProfile) -> Self {
-        let board = crate::board::selected();
-        Self::from_board(board, profile)
-    }
-
-    #[cfg(target_arch = "riscv64")]
-    fn from_board(
-        board: &cellos_boards::BoardDescriptor,
-        profile: &'static RiscvSocProfile,
-    ) -> Self {
-        let plic = required_riscv_mmio(board.plic, "PLIC");
-        let clint = required_riscv_mmio(board.clint, "CLINT");
+        let fallback = profile.fallback_mmio;
+        let uart = required_riscv_mmio(fallback.uart, "UART");
         Self {
-            uart_base: board.uart.base as usize,
-            uart_irq: board.uart.irq.unwrap_or(0),
-            plic_base: plic.base as usize,
-            plic_size: plic.size as usize,
-            clint_base: clint.base as usize,
-            virtio_mmio: virtio_slots(board),
-            rtc_base: rtc_fallback_base(board, profile),
+            uart_base: uart.base,
+            uart_irq: uart.irq.unwrap_or(0),
+            plic_base: fallback.plic.base,
+            plic_size: fallback.plic.size,
+            clint_base: fallback.clint.base,
+            virtio_mmio: riscv_virtio_slots(fallback.virtio),
+            rtc_base: rtc_fallback_base(profile),
         }
     }
 
@@ -171,19 +162,19 @@ pub fn init(_dtb_ptr: usize) {
     let soc = hal_soc_bcm27xx::BCM2837;
     // RPi 3 has no Goldfish/PL031 RTC — uptime only via ARM counter, epoch=0.
     let info = PlatformInfo {
-        uart_base: board.uart.base as usize,
-        uart_irq: board.uart.irq.unwrap_or(0),
-        plic_base: board.plic.map_or(0, |region| region.base as usize),
-        plic_size: board.plic.map_or(0, |region| region.size as usize),
-        clint_base: board.clint.map_or(0, |region| region.base as usize),
-        virtio_mmio: virtio_slots(board),
-        rtc_base: board.rtc.map_or(0, |region| region.base as usize),
+        uart_base: soc.mmio.mini_uart_io,
+        uart_irq: 0,
+        plic_base: 0,
+        plic_size: 0,
+        clint_base: 0,
+        virtio_mmio: [None; 8],
+        rtc_base: 0,
     };
     // SAFETY: `kmain` invokes this once during single-core boot.
     unsafe { publish_boot(info) };
     log::info!(
         "[platform] RPi 3 BCM2837: UART={:#x} periph={:#x} fallback-end={:#x}",
-        board.uart.base,
+        soc.mmio.mini_uart_io,
         soc.mmio.peripheral_base,
         board.fallback_memory[1].base + board.fallback_memory[1].size
     );
@@ -191,37 +182,40 @@ pub fn init(_dtb_ptr: usize) {
 
 // ── QEMU ARM virt defaults (aarch64) ─────────────────────────────────────────
 // QEMU ARM virt: 32 VirtIO MMIO slots at 0x0a000000, 512 bytes each, SPI 16+i.
-// Goldfish RTC at 0x0902_0000 on ARM virt; UART (PL011) at 0x0900_0000.
+// PL031 RTC at 0x0901_0000 on ARM virt; UART (PL011) at 0x0900_0000.
 #[cfg(all(
     target_arch = "aarch64",
     not(feature = "board-rpi3"),
     not(feature = "board-rpi4")
 ))]
 pub fn init(_dtb_ptr: usize) {
-    let board = crate::board::selected_qemu_arm_virt();
-    hal::rtc::init_default();
+    let _board = crate::board::selected_qemu_arm_virt();
+    let soc = hal_soc_arm_virt::QEMU_ARM_VIRT;
+    hal::rtc::init(soc.rtc.base);
     let info = PlatformInfo {
-        uart_base: board.uart.base as usize,
-        uart_irq: board
-            .uart
-            .irq
-            .expect("validated QEMU ARM descriptor requires UART IRQ"),
+        uart_base: soc.uart.mmio.base,
+        uart_irq: soc.uart.spi,
         plic_base: 0,
         plic_size: 0,
         clint_base: 0,
-        virtio_mmio: virtio_slots_limited(board, 4),
-        rtc_base: board.rtc.map_or(0, |rtc| rtc.base as usize),
+        virtio_mmio: arm_virtio_slots(soc.virtio, 4),
+        rtc_base: soc.rtc.base,
     };
     // SAFETY: `kmain` invokes this once during single-core boot.
     unsafe { publish_boot(info) };
 }
 
-#[cfg(all(target_arch = "aarch64", feature = "board-rpi4"))]
+#[cfg(all(
+    target_arch = "aarch64",
+    feature = "board-rpi4",
+    not(feature = "board-rpi3")
+))]
 pub fn init(_dtb_ptr: usize) {
-    let board = crate::board::selected_rpi4();
+    let _board = crate::board::selected_rpi4();
+    let soc = hal_soc_bcm27xx::BCM2711;
     let info = PlatformInfo {
-        uart_base: board.uart.base as usize,
-        uart_irq: board.uart.irq.unwrap_or(0),
+        uart_base: soc.mmio.uart_base,
+        uart_irq: 0,
         plic_base: 0,
         plic_size: 0,
         clint_base: 0,
@@ -327,31 +321,54 @@ fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
             return PlatformInfo::board_defaults(profile);
         }
     };
-    let defaults = board;
+    let defaults = profile.fallback_mmio;
 
+    let requires_uart = board.boot.requires_firmware_dtb
+        && (board.has_driver(cellos_boards::DriverId::UartNs16550a)
+            || board.has_driver(cellos_boards::DriverId::UartDwApb));
     let uart_base = reg_base(&fdt, profile.uart_compatibles).unwrap_or_else(|| {
+        if requires_uart {
+            panic!("[platform] required firmware DTB is missing UART MMIO");
+        }
         log::warn!("[platform] UART not in DTB");
-        defaults.uart.base as usize
+        required_riscv_mmio(defaults.uart, "UART").base
     });
-    let uart_irq =
-        irq_first(&fdt, profile.uart_compatibles).unwrap_or(defaults.uart.irq.unwrap_or(0));
+    let uart_irq = irq_first(&fdt, profile.uart_compatibles).unwrap_or_else(|| {
+        if requires_uart {
+            panic!("[platform] required firmware DTB is missing UART IRQ");
+        }
+        required_riscv_mmio(defaults.uart, "UART").irq.unwrap_or(0)
+    });
 
     let (plic_base, plic_size) =
         reg_base_size(&fdt, profile.plic_compatibles).unwrap_or_else(|| {
+            if board.boot.requires_firmware_dtb
+                && board.has_driver(cellos_boards::DriverId::PlicSifive)
+            {
+                panic!("[platform] required firmware DTB is missing PLIC MMIO");
+            }
             log::warn!("[platform] PLIC not in DTB");
-            let plic = required_riscv_mmio(defaults.plic, "PLIC");
-            (plic.base as usize, plic.size as usize)
+            (defaults.plic.base, defaults.plic.size)
         });
 
     let clint_base = reg_base(&fdt, profile.clint_compatibles).unwrap_or_else(|| {
+        if board.boot.requires_firmware_dtb
+            && board.has_driver(cellos_boards::DriverId::ClintSifive)
+        {
+            panic!("[platform] required firmware DTB is missing CLINT MMIO");
+        }
         log::warn!("[platform] CLINT not in DTB");
-        required_riscv_mmio(defaults.clint, "CLINT").base as usize
+        defaults.clint.base
     });
 
-    let virtio_mmio = virtio_mmio_entries_for_profile(&fdt, profile);
+    let virtio_mmio = if board.has_driver(cellos_boards::DriverId::VirtioMmio) {
+        virtio_mmio_entries_for_profile(&fdt, profile)
+    } else {
+        [None; 8]
+    };
 
-    let rtc_base = reg_base(&fdt, profile.rtc_compatibles)
-        .unwrap_or_else(|| rtc_fallback_base(defaults, profile));
+    let rtc_base =
+        reg_base(&fdt, profile.rtc_compatibles).unwrap_or_else(|| rtc_fallback_base(profile));
 
     PlatformInfo {
         uart_base,
@@ -365,12 +382,9 @@ fn from_dtb(dtb_ptr: usize, profile: &'static RiscvSocProfile) -> PlatformInfo {
 }
 
 #[cfg(target_arch = "riscv64")]
-fn rtc_fallback_base(
-    board: &cellos_boards::BoardDescriptor,
-    profile: &'static RiscvSocProfile,
-) -> usize {
+fn rtc_fallback_base(profile: &'static RiscvSocProfile) -> usize {
     match profile.rtc_access {
-        RtcAccessPolicy::Mmio => required_riscv_mmio(board.rtc, "RTC").base as usize,
+        RtcAccessPolicy::Mmio => required_riscv_mmio(profile.fallback_mmio.rtc, "RTC").base,
         RtcAccessPolicy::Unavailable => 0,
     }
 }
@@ -384,7 +398,7 @@ fn reg_base(fdt: &fdt::Fdt, compat: &[&str]) -> Option<usize> {
 fn reg_base_size(fdt: &fdt::Fdt, compat: &[&str]) -> Option<(usize, usize)> {
     let node = fdt.find_compatible(compat)?;
     let r = node.reg()?.next()?;
-    Some((r.starting_address as usize, r.size.unwrap_or(0x1000)))
+    Some((r.starting_address as usize, r.size?))
 }
 
 /// Read the first cell of the `interrupts` property as a big-endian u32.
@@ -434,28 +448,14 @@ fn collect_virtio(fdt: &fdt::Fdt) -> [Option<VirtioEntry>; 8] {
     entries
 }
 
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
-fn virtio_slots(board: &cellos_boards::BoardDescriptor) -> [Option<VirtioEntry>; 8] {
-    virtio_slots_limited(board, 8)
-}
-
-#[cfg(any(
-    target_arch = "riscv64",
-    all(target_arch = "aarch64", feature = "board-rpi3")
-))]
-fn virtio_slots_limited(
-    board: &cellos_boards::BoardDescriptor,
-    limit: usize,
-) -> [Option<VirtioEntry>; 8] {
+#[cfg(target_arch = "riscv64")]
+fn riscv_virtio_slots(regions: &[hal_soc_riscv::RiscvMmioRegion]) -> [Option<VirtioEntry>; 8] {
     let mut entries = [None, None, None, None, None, None, None, None];
     let mut index = 0;
-    while index < board.virtio_mmio.len() && index < entries.len() && index < limit {
-        let region = board.virtio_mmio[index];
+    while index < regions.len() && index < entries.len() {
+        let region = regions[index];
         entries[index] = Some(VirtioEntry {
-            base: region.base as usize,
+            base: region.base,
             irq: region.irq.unwrap_or(0),
         });
         index += 1;
@@ -465,10 +465,33 @@ fn virtio_slots_limited(
 
 #[cfg(target_arch = "riscv64")]
 fn required_riscv_mmio(
-    region: Option<cellos_boards::MmioRegion>,
+    region: Option<hal_soc_riscv::RiscvMmioRegion>,
     name: &'static str,
-) -> cellos_boards::MmioRegion {
+) -> hal_soc_riscv::RiscvMmioRegion {
     region.unwrap_or_else(|| panic!("[board] RISC-V fallback is missing {}", name))
+}
+
+#[cfg(all(
+    target_arch = "aarch64",
+    not(feature = "board-rpi3"),
+    not(feature = "board-rpi4")
+))]
+fn arm_virtio_slots(
+    layout: hal_soc_arm_virt::VirtioMmioLayout,
+    limit: usize,
+) -> [Option<VirtioEntry>; 8] {
+    let mut entries = [None, None, None, None, None, None, None, None];
+    let mut index = 0;
+    while index < layout.count && index < entries.len() && index < limit {
+        entries[index] = Some(VirtioEntry {
+            base: layout
+                .slot_base(index)
+                .expect("validated ARM VirtIO layout"),
+            irq: layout.first_spi + index as u32,
+        });
+        index += 1;
+    }
+    entries
 }
 
 #[cfg(target_arch = "riscv64")]

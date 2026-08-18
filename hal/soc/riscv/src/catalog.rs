@@ -1,12 +1,72 @@
 use crate::{
-    PlicContextPolicy, RiscvSdhciProfile, RiscvSocProfile, RtcAccessPolicy, UartAccessPolicy,
-    VirtioMmioPolicy,
+    PlicContextPolicy, RiscvFallbackMmio, RiscvMmioRegion, RiscvSdhciProfile, RiscvSocProfile,
+    RtcAccessPolicy, UartAccessPolicy, VirtioMmioPolicy,
 };
 
 const UART_COMPATIBLES: &[&str] = &["ns16550a", "ns16550", "snps,dw-apb-uart"];
 const PLIC_COMPATIBLES: &[&str] = &["sifive,plic-1.0.0", "riscv,plic0", "thead,c900-plic"];
 const CLINT_COMPATIBLES: &[&str] = &["sifive,clint0", "riscv,clint0", "thead,c900-clint"];
 const RTC_COMPATIBLES: &[&str] = &["google,goldfish-rtc"];
+
+const PLIC: RiscvMmioRegion = RiscvMmioRegion {
+    base: 0x0C00_0000,
+    size: 0x0400_0000,
+    irq: None,
+};
+const CLINT: RiscvMmioRegion = RiscvMmioRegion {
+    base: 0x0200_0000,
+    size: 0x0001_0000,
+    irq: None,
+};
+const GENERIC_UART: RiscvMmioRegion = RiscvMmioRegion {
+    base: 0x1000_0000,
+    size: 0x100,
+    irq: Some(10),
+};
+const PIONEER_UART: RiscvMmioRegion = RiscvMmioRegion {
+    base: 0x70_4000_0000,
+    size: 0x1000,
+    irq: None,
+};
+const RTC: RiscvMmioRegion = RiscvMmioRegion {
+    base: 0x0010_1000,
+    size: 0x1000,
+    irq: None,
+};
+const VIRTIO: [RiscvMmioRegion; 5] = [
+    RiscvMmioRegion {
+        base: 0x1000_1000,
+        size: 0x1000,
+        irq: Some(1),
+    },
+    RiscvMmioRegion {
+        base: 0x1000_2000,
+        size: 0x1000,
+        irq: Some(2),
+    },
+    RiscvMmioRegion {
+        base: 0x1000_3000,
+        size: 0x1000,
+        irq: Some(3),
+    },
+    RiscvMmioRegion {
+        base: 0x1000_4000,
+        size: 0x1000,
+        irq: Some(4),
+    },
+    RiscvMmioRegion {
+        base: 0x1000_5000,
+        size: 0x1000,
+        irq: Some(5),
+    },
+];
+const GENERIC_FALLBACK: RiscvFallbackMmio = RiscvFallbackMmio {
+    uart: Some(GENERIC_UART),
+    plic: PLIC,
+    clint: CLINT,
+    rtc: Some(RTC),
+    virtio: &VIRTIO,
+};
 
 /// Generic QEMU `virt`-style baseline with DTB-driven MMIO discovery enabled.
 pub const GENERIC_VIRT: RiscvSocProfile = RiscvSocProfile {
@@ -19,6 +79,7 @@ pub const GENERIC_VIRT: RiscvSocProfile = RiscvSocProfile {
     uart_access: UartAccessPolicy::Mmio,
     rtc_access: RtcAccessPolicy::Mmio,
     virtio_mmio: VirtioMmioPolicy::Discover,
+    fallback_mmio: GENERIC_FALLBACK,
     sdhci: None,
 };
 
@@ -27,6 +88,11 @@ pub const JH7110: RiscvSocProfile = RiscvSocProfile {
     slug: "jh7110",
     plic_context: PlicContextPolicy::jh7110(),
     rtc_access: RtcAccessPolicy::Unavailable,
+    fallback_mmio: RiscvFallbackMmio {
+        rtc: None,
+        virtio: &[],
+        ..GENERIC_FALLBACK
+    },
     sdhci: Some(RiscvSdhciProfile {
         base: 0x1604_0000,
         word_access_only: false,
@@ -47,5 +113,12 @@ pub const SG2042: RiscvSocProfile = RiscvSocProfile {
     uart_access: UartAccessPolicy::SbiDbcnOnly,
     rtc_access: RtcAccessPolicy::Unavailable,
     virtio_mmio: VirtioMmioPolicy::Absent,
+    fallback_mmio: RiscvFallbackMmio {
+        uart: Some(PIONEER_UART),
+        plic: PLIC,
+        clint: CLINT,
+        rtc: None,
+        virtio: &[],
+    },
     sdhci: None,
 };
