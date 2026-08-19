@@ -10,8 +10,10 @@ pub mod bench_oracle;
 pub mod export_registry;
 pub mod local_ingress;
 pub mod local_queue;
+pub mod local_runtime_metrics;
 mod peer_config;
 pub mod reply_pump;
+pub mod runtime_roles;
 
 #[cfg(target_os = "none")]
 pub mod identity;

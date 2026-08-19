@@ -35,7 +35,10 @@ impl BrokerState {
     }
 
     pub(super) fn alloc_request_id(&mut self) -> Option<u64> {
-        let candidate = self.next_request_id.max(1);
+        let candidate = self.next_request_id;
+        if candidate == 0 {
+            return None;
+        }
         self.next_request_id = candidate.wrapping_add(1);
         if self
             .inflight
@@ -93,6 +96,10 @@ impl BrokerState {
 
     pub fn note_try_send_busy(&mut self) {
         self.counters.try_send_busy += 1;
+    }
+
+    pub fn note_heartbeat_miss(&mut self) {
+        self.counters.heartbeat_miss += 1;
     }
 
     pub fn note_network_poll(&mut self) {

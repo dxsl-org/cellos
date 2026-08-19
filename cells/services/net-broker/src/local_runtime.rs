@@ -1,12 +1,17 @@
 use crate::relay::RelayClient;
 use ostd::sync::Mutex;
-use ostd::syscall::{sys_recv_attested, sys_spawn, sys_try_send, SyscallResult};
-use service_net_broker::local_ingress::parse_request;
+use ostd::syscall::{sys_get_time_ms, sys_recv_attested, sys_spawn, sys_try_send, SyscallResult};
+use service_net_broker::bench_oracle::{
+    self, encode_hold_command, encode_snapshot_payload, OracleCommand, STATIC_FOOTPRINT_BYTES,
+};
+use service_net_broker::local_ingress::{parse_request, ReplyStatus, MAX_REPLY_BODY};
 use service_net_broker::local_queue::{
     BrokerState, CompletionError, IngressDecision, QueuedReply, REPLY_TRY_SEND_BUDGET,
     WORKER_HEARTBEAT_MS,
 };
+use service_net_broker::local_runtime_metrics::heartbeat_gap_miss;
 use service_net_broker::reply_pump::{dispatch_or_queue, pump_turn, TrySendResult};
+use service_net_broker::runtime_roles::{start_runtime_roles, RuntimeRole};
 
 const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
 const NETWORK_HEARTBEAT_MS: u64 = 500;
@@ -38,15 +43,11 @@ pub fn receive_once() {
 }
 
 fn start_runtime_threads() {
-    expect_spawn("local-worker", worker_entry);
-    expect_spawn("reply-pump", reply_entry);
-    expect_spawn("network-poller", network_entry);
-}
-
-fn expect_spawn(name: &str, entry: extern "C" fn(usize)) {
-    match sys_spawn(entry as usize, 0) {
-        SyscallResult::Ok(_) => {}
-        SyscallResult::Err(_) => panic!("[net-broker] required role spawn failed: {name}"),
+    if let Err(role) = start_runtime_roles(|role| match spawn_role(role) {
+        SyscallResult::Ok(_) => Ok(()),
+        SyscallResult::Err(_) => Err(()),
+    }) {
+        panic!("[net-broker] required role spawn failed: {}", role.name());
     }
 }
 
@@ -56,7 +57,7 @@ extern "C" fn worker_entry(_arg: usize) {
         let next = { BROKER_STATE.lock().take_next_request() };
         match next {
             Some(request) => {
-                let reply = QueuedReply::success(&request);
+                let reply = process_request(&request);
                 loop {
                     match BROKER_STATE.lock().complete_request(&request, reply) {
                         Ok(()) => break,
@@ -83,8 +84,14 @@ extern "C" fn reply_entry(_arg: usize) {
 }
 
 extern "C" fn network_entry(_arg: usize) {
+    let mut last_poll_ms = None;
     loop {
         ostd::syscall::sys_heartbeat(NETWORK_HEARTBEAT_MS);
+        let now_ms = sys_get_time_ms();
+        if heartbeat_gap_miss(last_poll_ms, now_ms) {
+            BROKER_STATE.lock().note_heartbeat_miss();
+        }
+        last_poll_ms = now_ms;
         if let Some(relay_client) = RELAY_CLIENT.lock().as_ref() {
             let _ = relay_client.is_connected();
         }
@@ -101,4 +108,60 @@ fn try_send_reply(reply: &QueuedReply) -> TrySendResult {
         SyscallResult::Ok(_) => TrySendResult::Delivered,
         SyscallResult::Err(_) => TrySendResult::Busy,
     }
+}
+
+fn spawn_role(role: RuntimeRole) -> SyscallResult {
+    let entry = match role {
+        RuntimeRole::LocalWorker => worker_entry,
+        RuntimeRole::ReplyPump => reply_entry,
+        RuntimeRole::NetworkPoller => network_entry,
+    };
+    sys_spawn(entry as usize, 0)
+}
+
+fn process_request(request: &service_net_broker::local_queue::WorkerRequest) -> QueuedReply {
+    match bench_oracle::parse_command(&request.payload[..request.payload_len]) {
+        Ok(OracleCommand::Echo(_)) => reply_with_payload(
+            request,
+            ReplyStatus::Success,
+            &request.payload[..request.payload_len],
+        ),
+        Ok(OracleCommand::Snapshot) => {
+            let mut payload = [0u8; MAX_REPLY_BODY];
+            let mut snapshot = [0u8; bench_oracle::SNAPSHOT_BYTES];
+            let counters = BROKER_STATE.lock().counters;
+            encode_snapshot_payload(&counters, STATIC_FOOTPRINT_BYTES as u64, &mut snapshot);
+            payload[..snapshot.len()].copy_from_slice(&snapshot);
+            reply_with_payload(request, ReplyStatus::Success, &payload[..snapshot.len()])
+        }
+        Ok(OracleCommand::Hold { work_turns }) => {
+            run_bounded_hold(work_turns);
+            let mut payload = [0u8; 3];
+            let len = encode_hold_command(work_turns, &mut payload).unwrap_or(0);
+            reply_with_payload(request, ReplyStatus::Success, &payload[..len])
+        }
+        Err(_) => reply_with_payload(request, ReplyStatus::Indeterminate, &[]),
+    }
+}
+
+fn run_bounded_hold(work_turns: u16) {
+    for _ in 0..work_turns {
+        ostd::syscall::sys_heartbeat(WORKER_HEARTBEAT_MS);
+        ostd::task::yield_now();
+    }
+}
+
+fn reply_with_payload(
+    request: &service_net_broker::local_queue::WorkerRequest,
+    status: ReplyStatus,
+    payload: &[u8],
+) -> QueuedReply {
+    QueuedReply::new(
+        request.key.caller_tid,
+        request.key.request_id,
+        request.client_sequence,
+        status,
+        payload,
+        request.order,
+    )
 }
