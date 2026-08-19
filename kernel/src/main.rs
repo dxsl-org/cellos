@@ -711,6 +711,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         } else {
             log_info("thread-quota self-test FAIL");
         }
+        match task::thread_user_entry_selftest::self_test() {
+            Some(true) => log_info("thread-user-entry self-test PASS (U-mode entry+arg+exit)"),
+            Some(false) => log_info("thread-user-entry self-test FAIL"),
+            None => log_info("thread-user-entry self-test SKIP (RV64 runtime gate only)"),
+        }
         if task::completion_selftest::self_test() {
             log_info("completion-queue self-test PASS (reserve, land, bound, defer)");
         } else {

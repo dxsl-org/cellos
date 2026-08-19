@@ -1,10 +1,10 @@
 //! Boot self-test for thread-stack quota accounting.
 //!
-//! A thread's kernel stack is real memory held for the thread's whole life. If it
-//! is not charged to the cell that asked for the thread, a cell can grow its true
-//! footprint by a quarter of a megabyte at a time while every number the kernel
-//! reports about it stays still — and the only remaining bound is the thread count,
-//! which says nothing about memory.
+//! A thread's kernel and user stacks are real memory held for the thread's whole
+//! life. If they are not charged to the cell that asked for the thread, a cell
+//! can grow its true footprint while every number the kernel reports about it
+//! stays still — and the only remaining bound is the thread count, which says
+//! nothing about memory.
 //!
 //! Two directions are proven here, because getting one right and the other wrong is
 //! worse than neither: a charge that is never released turns the quota into a slow
@@ -30,9 +30,9 @@ const PARENT_TID: usize = 9201;
 /// this point in boot, and the test deregisters it before anything can.
 const QUOTA_CELL: u64 = (cell_quota::MAX_CELLS - 1) as u64;
 
-/// Bytes one thread stack occupies: usable pages plus the stack policy's guards.
+/// Bytes one thread occupies: kernel stack plus user stack, each with guards.
 fn stack_charge_bytes() -> usize {
-    (crate::task::STACK_PAGES + crate::task::stack::STACK_GUARD_PAGES)
+    2 * (crate::task::stack_pages_for("thread") + crate::task::stack::STACK_GUARD_PAGES)
         * crate::memory::paging::PAGE_SIZE
 }
 
@@ -117,7 +117,7 @@ fn charge_then_release(expected: usize) -> bool {
     ok
 }
 
-/// A cell whose quota cannot absorb another stack is refused, and the refusal
+/// A cell whose quota cannot absorb another thread's stacks is refused, and the refusal
 /// leaves no charge behind.
 fn refused_when_unaffordable() -> bool {
     // One page of quota — below a stack by three orders of magnitude, so the
