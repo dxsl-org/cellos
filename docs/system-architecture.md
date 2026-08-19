@@ -11,8 +11,9 @@
 > and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
-> pass; QEMU q35 x86_64 is the current x86 integration board; VF2, Pioneer, RPi3,
-> and RPi4 remain physical-hardware-gated.
+> pass; QEMU q35 x86_64 is the current x86 integration board. RPi3 has merged
+> physical smoke and external-SD boot evidence; VF2, Pioneer, and RPi4 remain
+> physical-hardware-gated.
 
 > **Status refresh 2026-08-19**: HAL↔kernel Rust ABI hooks are now single-sourced
 > in `hal/traits/arch/src/kernel_abi.rs`; HAL arch crates import the shared
@@ -788,7 +789,8 @@ libs/viui/             (no_std, umbrella) ✅ — re-exports all above + viui_ma
 
 **P06 Proc Macro** (2026-06-08): `libs/viui-macros/` ships with `vi_design!` macro for inline component prototyping. `libs/viui` re-exports both paths (build.rs + macro); users import once, use both. Codegen redesigned to wrap each component in `mod __vi_generated_<Name>` to prevent symbol collisions.
 
-Design brief: [.agents/brainstorms/260608-viui-nextgen-architecture.md](.agents/brainstorms/260608-viui-nextgen-architecture.md)
+The original ViUI design brief is retained in the local, gitignored `.agents/`
+workspace; this section is the repository-owned architectural summary.
 
 ---
 
@@ -1010,8 +1012,8 @@ do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guar
 > broker boot and NodeId generation are wired, transport/relay modules compile, typed
 > forwarding remains a stub, and no two-node runtime is proven. Once generated,
 > `docs/spec-status.generated.md` is the sole owner of volatile implementation status.
-> Research and historical design input:
-> [.agents/260623-remote-cell-ipc-research/](../.agents/260623-remote-cell-ipc-research/).
+> Research and historical design input remains in the local, gitignored
+> `.agents/260623-remote-cell-ipc-research/` workspace.
 
 ### Foundational principle: LBI stops at the machine boundary
 
@@ -1039,7 +1041,7 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 
 **Hard rules (architectural invariants):**
 - Native Tier-1 Cells **never speak mTLS** — Noise is the lingua franca at every stage; G1→G2 is an *identity* upgrade (K1→K3), not a transport swap.
-- mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3b Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. (The parked [TLS-server-accept plan](../.agents/260623-1500-tls-server-accept/) is an edge-only fallback for nodes that cannot terminate TLS externally.)
+- mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3b Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. The parked local `.agents/260623-1500-tls-server-accept/` plan is an edge-only fallback for nodes that cannot terminate TLS externally.
 - **Profile-specific entropy gate**: default development/QEMU builds may enable
   `dev-weak-rng`, which supplies predictable xorshift bytes with a warning. Fleet and
   production artifacts must forbid that feature; without trusted entropy `GetRandom`

@@ -59,7 +59,7 @@ Both scripts are idempotent — safe to run again after a toolchain update.
 | mtools | any | needed for `scripts/format-disk.ps1` |
 
 For detailed setup help — including a **Common Errors table** — see
-[docs/ONBOARDING.md](docs/ONBOARDING.md).
+[docs/getting-started.md](docs/getting-started.md).
 
 ---
 
@@ -105,8 +105,8 @@ context, acceptance criteria, and relevant files.
 
 ### 2 — Read the relevant spec
 
-Check [CLAUDE.md](CLAUDE.md) → "Before Coding — Read Specifications" to find which
-`docs/0N-*.md` file covers your area.  Spend 5–10 minutes on it.
+Check [docs/code-standards.md](docs/code-standards.md) and the relevant file
+under `docs/specs/`. Spend 5–10 minutes on it.
 
 ### 3 — Create a branch
 
@@ -237,9 +237,9 @@ Key files: `libs/viui/` · Spec: `docs/specs/14-viui.md` · Phases: `.agents/260
 
 - [`good-first-issue`](../../issues?q=label%3Agood-first-issue) — curated issues
   with full context
-- [docs/ONBOARDING.md](docs/ONBOARDING.md) — full setup guide + common errors
+- [docs/getting-started.md](docs/getting-started.md) — full setup guide + common errors
 - [docs/FAQ.md](docs/FAQ.md) — architecture questions answered
-- [docs/ROADMAP.md](docs/ROADMAP.md) — where the project is headed
+- [docs/project-roadmap.md](docs/project-roadmap.md) — where the project is headed
 
 ---
 
@@ -247,7 +247,7 @@ Key files: `libs/viui/` · Spec: `docs/specs/14-viui.md` · Phases: `.agents/260
 
 - **GitHub Discussions** — Q&A, ideas, show-and-tell
 - **GitHub Issues** — bug reports and feature requests
-- Review the [Common Errors table](docs/ONBOARDING.md#common-errors--fixes) before
+- Review the [getting-help section](docs/getting-started.md#getting-help) before
   opening a new thread
 
 We aim to respond to PRs and issues within 3 business days.

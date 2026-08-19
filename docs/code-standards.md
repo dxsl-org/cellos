@@ -15,7 +15,8 @@
 - **Rule**: Any changes require 2x explicit user confirmation
 - **Reason**: These define the stable ABI between kernel and Cells
 - **Implementation**:
-  - Use `#[repr(C)]` for all public traits to ensure C compatibility
+  - Use `#[repr(C)]` on public structs/enums that cross the ABI boundary
+  - Keep public trait method signatures additive and document wire/layout assumptions explicitly
   - Document trait contract in doc comments
   - Preserve method signatures when extending traits
 
@@ -79,10 +80,14 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
 
 ### Law 4: Unsafe Code Management
 
-**Cells**:
+**Ordinary Rust Cells**:
 ```rust
 #![forbid(unsafe_code)]  // ABSOLUTE
 ```
+
+Driver, runtime, shim, and FFI cells may carry reviewed unsafe only when listed
+in the unsafe allowlist / signing policy checks. Do not describe Cellos as
+"every Cell forbids unsafe" without that exception.
 
 **Kernel & HAL**:
 - Unsafe only for hardware I/O (CSRs, MMIO)
@@ -422,7 +427,7 @@ cells/
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
 - **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
 - **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
-- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython)
+- **runtimes/** — Scripting language interpreters and VMs (Lua; MicroPython is historical only)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
 
@@ -640,7 +645,7 @@ pub trait ViAsyncFileSystem {
 | No mod.rs | ❌ FORBIDDEN | CI lint |
 | Owned buffers in async | ❌ FORBIDDEN | Compiler error |
 | Unsafe requires SAFETY comment | ❌ FORBIDDEN | Code review |
-| Cells can't use unsafe | ❌ FORBIDDEN | `#![forbid(unsafe_code)]` |
+| Ordinary Rust Cells can't use unsafe | ❌ FORBIDDEN | `#![forbid(unsafe_code)]`; audited FFI/runtime/driver exceptions only |
 | Vi prefix for public traits | ✅ REQUIRED | Code review |
 | Result<T, E> over panic! | ✅ REQUIRED | Code review |
 | Implement Drop | ✅ REQUIRED | Code review |

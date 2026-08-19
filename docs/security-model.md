@@ -23,7 +23,7 @@ relies on:
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cell forges another Cell's CellId in IPC | Kernel verifies sender ID from TCB on every message; user cannot inject arbitrary sender values | ✅ Mitigated |
-| Cell constructs a valid CapId by guessing | CapIds are kernel-assigned opaque u64 values; 64-bit ID space makes guessing infeasible | ✅ Mitigated |
+| Cell guesses a service-local socket CapId | The net service currently allocates predictable CapIds without binding lookup to the caller, so another network-capable Cell may address a live socket owned by a peer | ❌ Open — see [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
 | Malformed ELF binary spawns as a different Cell | ELF header validated before execution; Cell registry assigns IDs monotonically | ✅ Mitigated |
 
 ### Tampering
@@ -51,7 +51,7 @@ relies on:
 |--------|-----------|--------|
 | Cell allocates unbounded memory | Frame allocator has a hard cap (total usable RAM); OOM kills the cell | ✅ Mitigated |
 | Cell floods IPC queue | Message queue is bounded; sender blocks when full (future Phase 20) | 🔶 Partial |
-| Lua/MicroPython script infinite loop | Cell exit triggered by kernel timeout (future scheduler enhancement) | ❌ Deferred |
+| Lua script infinite loop | Cell exit triggered by kernel timeout (future scheduler enhancement); MicroPython is an archived runtime experiment, not a current workspace member | ❌ Deferred |
 
 ### Elevation of Privilege
 | Threat | Mitigation | Status |
@@ -61,6 +61,12 @@ relies on:
 | Malformed syscall arguments overflow kernel buffers | All syscall arg lengths validated via `validate_user_buf` before dereference | ✅ Mitigated |
 
 ## Known Architecture Risks
+
+The maintained severity-ranked inventory is
+[roadmap/open-risk-register.md](roadmap/open-risk-register.md). In particular,
+production signing still requires an immutable provisioned key and mandatory
+release policy, while the net service must owner-bind socket handles before it
+can be treated as a capability boundary.
 
 ### Spectre v1/v2 — SAS Worst-Case Scenario
 **Severity: Critical (research/trusted-environment only)**

@@ -99,7 +99,7 @@ For multi-arch builds (ARM64, x86), see [getting-started.md](getting-started.md)
 - **Tier 1 + ViUI**: `cells/apps/robot-dashboard/src/main.rs`
 - **Tier 1 Extended**: `cells/apps/silo-test/src/main.rs`
 - **Tier 1b C**: `cells/apps/mlibc-smoke/src/main.rs`
-- **Tier 1b POSIX**: `cells/apps/posix-shim-test/src/main.rs`
+- **Tier 1b POSIX**: `cells/tests/posix-shim-test/src/main.rs`
 - **Tier 1b Lua**: `cells/runtimes/lua/src/main.rs`
 
 ---
@@ -130,4 +130,3 @@ A: Only `/bin/*` Cells with `spawn = true` in the manifest. See Phase 30 (projec
 
 **Q: What about real-time performance?**
 A: Tier 1 is native (~1 μs syscall latency on QEMU). Use `sys_heartbeat()` for watchdog-style deadlines.
-

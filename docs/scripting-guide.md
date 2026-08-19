@@ -1,7 +1,9 @@
 # Cellos Scripting Guide
 
-Cellos supports two embedded scripting runtimes: **Lua 5.4** (verified) and **MicroPython 1.24.1** (verified).
-Both run as native Cells with direct access to the VFS and IPC APIs.
+Cellos currently ships one active native scripting runtime: **Lua 5.4**.
+Older roadmap text records a MicroPython experiment, but MicroPython is not a
+current Cargo workspace member and should not be documented as a supported
+runtime.
 
 ---
 
@@ -51,7 +53,8 @@ end
 
 ### VFS I/O
 
-The `io.open` binding wraps the VFS service IPC.  Read-only access works in v1.0.
+The `io.open` wrapper uses the current `vfs` IPC bindings. Read and buffered
+write/append modes are available in the Lua runtime.
 
 ```lua
 local f = io.open("/readme.txt", "r")
@@ -64,18 +67,12 @@ else
 end
 ```
 
-Write access requires the FAT32 VFS integration (Phase 13 FAT32 milestone).
+Writes are committed through `vfs.write` or `vfs.append` when the handle closes.
 
 ### os.execute
 
-Spawn a shell command (stub in v1.0 — prints the command, returns 0):
-
-```lua
-local rc = os.execute("ls /bin")
-print("exit:", rc)
-```
-
-Full shell spawning via `SpawnFromPath` is wired in Phase 17a.
+`os.execute` is disabled (`nil`) by the Lua sandbox, together with `io.popen`
+and the `debug` library. Native scripts cannot launch arbitrary shell commands.
 
 ### Multi-line Input
 
@@ -116,67 +113,24 @@ end
 
 ---
 
-## MicroPython 1.24.1 (Verified)
+## Python / MicroPython Status
 
-MicroPython is available as `/bin/python` with an interactive REPL and script runner.
-The runtime includes a 256 KB heap and FFI bindings to the VFS and IPC APIs.
-
-### Starting the REPL
-
-```
-Cellos> python
-MicroPython v1.24.1 on Cellos  (Ctrl+D to exit)
->>> 
-```
-
-### Example Script
-
-```python
->>> import os
->>> os.listdir("/bin")
-['shell', 'lua', 'python', 'cat', 'ls', ...]
->>> f = open("/readme.txt")
->>> print(f.read())
-Welcome to Cellos!
-```
-
-### Supported Modules
-
-Standard library modules: `sys`, `os`, `math`, `random`, `json`, `struct`, `hashlib`.
-File I/O works via VFS syscalls (read and write).
-
-**Network Module (`vnet`)**:
-
-```python
->>> import vnet
->>> vnet.resolve("gateway")      # Static table: returns "10.0.2.2"
->>> vnet.resolve("google.com")   # DNS query via UDP: returns resolved IP
->>> cap = vnet.socket_tcp()      # Create TCP socket
->>> vnet.connect(cap, "10.0.2.2", 80)
->>> vnet.send(cap, b"GET / HTTP/1.0\r\n\r\n")
->>> vnet.recv(cap, 4096)         # Read up to 4096 bytes
->>> vnet.close(cap)
-```
-
-### Running Python Scripts
-
-```
-Cellos> exec /bin/python /scripts/hello.py
-```
+Native MicroPython is historical only. For Python workloads, use the Tier 3
+Linux VM path rather than assuming `/bin/python` exists in the native Cellos
+image.
 
 ---
 
 ## Examples Directory
 
-Place `.lua` and `.py` scripts under `/scripts/` on the disk image.
+Place `.lua` scripts under `/scripts/` on the disk image.
 Use `scripts/format-disk.ps1` to bake them in.
 
 ```
 disk.img
 └── scripts/
     ├── hello.lua
-    ├── fib.lua
-    └── hello.py  (planned)
+    └── fib.lua
 ```
 
 ---
@@ -197,11 +151,10 @@ disk.img
 |---------|--------|
 | **Lua** `io.open` read | ✅ Works (VFS IPC) |
 | **Lua** `io.open` write | ✅ Works via vfs.write() IPC |
-| **Lua** `os.execute` | Calls `sys_spawn_from_path` (verified) |
-| **MicroPython** `open` read | ✅ Works (VFS IPC) |
-| **MicroPython** `open` write | ✅ Works via vfs.write() IPC |
-| **Both** arg passing to scripts | ✅ Works (spawn_args early-read pattern) |
-| **Both** history persistence | 🚧 Phase 17a (VFS write) |
+| **Lua** `os.execute` | Disabled by the runtime sandbox |
+| **Python/MicroPython native runtime** | Historical only; use Tier 3 Linux VM for Python |
+| **Lua** arg passing to scripts | ✅ Works (spawn_args early-read pattern) |
+| **Lua** history persistence | 🚧 Phase 17a (VFS write) |
 | **Lua** `require` / `package.path` | Stub (no VFS directory scan yet) |
 
 ---
