@@ -13,9 +13,9 @@ use ostd::task::yield_now;
 use service_net_broker::bench_oracle::OracleSnapshot;
 
 mod calibration;
+mod lifecycle;
 mod support;
 use support::{broker_snapshot, recv_posted, recv_summary, spawn_and_ready};
-
 pub fn run() -> ! {
     println("[c2c-broker-oracle] START");
     let mut broker_tid = calibration::run();
@@ -68,7 +68,7 @@ pub fn run() -> ! {
     }
     run_soak();
     run_overflow();
-    ostd::syscall::sys_exit(role_gate as usize ^ 1);
+    ostd::syscall::sys_exit((role_gate && lifecycle::run()) as usize ^ 1);
 }
 
 fn run_soak() {

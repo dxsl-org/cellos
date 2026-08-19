@@ -15,6 +15,9 @@ use service_net_broker::runtime_roles::{start_runtime_roles, RuntimeRole};
 
 #[path = "local_runtime/request_dispatch.rs"]
 mod request_dispatch;
+#[cfg(feature = "restart-oracle")]
+#[path = "local_runtime/restart_oracle.rs"]
+mod restart_oracle;
 
 use request_dispatch::process_request;
 
@@ -47,10 +50,15 @@ pub fn receive_once() {
     let mut buf = [0u8; IPC_BUF_SIZE];
     match sys_recv_attested(0, &mut buf) {
         SyscallResult::Ok(sender) if sender > 0 => {
+            let identity = api::caller_identity::CallerIdentity::from_recv_buf(&buf);
+            let parsed = parse_request(&buf);
+            #[cfg(feature = "restart-oracle")]
+            if restart_oracle::request_matches(sender, identity.as_ref(), parsed.as_ref().ok()) {
+                restart_oracle::shutdown();
+            }
             let immediate = {
                 let mut state = lock_broker_state(false);
-                let identity = api::caller_identity::CallerIdentity::from_recv_buf(&buf);
-                state.handle_ingress(sender, identity, parse_request(&buf))
+                state.handle_ingress(sender, identity, parsed)
             };
             if let IngressDecision::Immediate(reply) = immediate {
                 send_or_queue(reply, false);
@@ -71,6 +79,8 @@ fn start_runtime_threads() {
 
 extern "C" fn worker_entry(_arg: usize) {
     loop {
+        #[cfg(feature = "restart-oracle")]
+        restart_oracle::exit_role_if_requested();
         ostd::syscall::sys_heartbeat(WORKER_HEARTBEAT_TICKS);
         let next = { lock_broker_state(true).take_next_request() };
         match next {
@@ -95,6 +105,8 @@ extern "C" fn worker_entry(_arg: usize) {
 
 extern "C" fn reply_entry(_arg: usize) {
     loop {
+        #[cfg(feature = "restart-oracle")]
+        restart_oracle::exit_role_if_requested();
         ostd::syscall::sys_heartbeat(WORKER_HEARTBEAT_TICKS);
         pump_reply_turn();
         ostd::task::yield_now();
@@ -104,6 +116,8 @@ extern "C" fn reply_entry(_arg: usize) {
 extern "C" fn network_entry(_arg: usize) {
     let mut last_poll_ms = None;
     loop {
+        #[cfg(feature = "restart-oracle")]
+        restart_oracle::exit_role_if_requested();
         ostd::syscall::sys_heartbeat(NETWORK_HEARTBEAT_TICKS);
         let now_ms = sys_get_time_ms();
         if heartbeat_gap_miss(last_poll_ms, now_ms) {

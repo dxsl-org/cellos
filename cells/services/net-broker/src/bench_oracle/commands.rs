@@ -24,6 +24,8 @@ pub enum OracleError {
 pub const OP_ECHO: u8 = 0x01;
 pub const OP_SNAPSHOT: u8 = 0x02;
 pub const OP_HOLD: u8 = 0x03;
+#[cfg(feature = "restart-oracle")]
+pub const OP_RESTART: u8 = 0x7E;
 pub const OP_TIMED_ECHO_REPLY: u8 = 0x81;
 pub const TIMED_ECHO_TRAILER_BYTES: usize = 16;
 

@@ -27,6 +27,15 @@ pub fn encode_snapshot_request(client_sequence: u64, out: &mut [u8]) -> Result<u
     encode_request(client_sequence, OracleCommand::Snapshot, out)
 }
 
+#[cfg(feature = "restart-oracle")]
+pub fn encode_restart_request(client_sequence: u64, out: &mut [u8]) -> Result<usize, OracleError> {
+    encode_request(
+        client_sequence,
+        OracleCommand::Echo(&[super::OP_RESTART]),
+        out,
+    )
+}
+
 pub fn encode_hold_request(
     client_sequence: u64,
     work_turns: u16,

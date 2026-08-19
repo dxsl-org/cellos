@@ -12,12 +12,16 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "restart-oracle")]
+pub use commands::OP_RESTART;
 pub use commands::{
     decode_timed_echo_reply, encode_echo_command, encode_hold_command, encode_snapshot_command,
     encode_timed_echo_reply, parse_command, stamp_timed_echo_reply, OracleCommand, OracleError,
     TimedEchoTimestamps, MAX_HOLD_TURNS, OP_ECHO, OP_HOLD, OP_SNAPSHOT, OP_TIMED_ECHO_REPLY,
     TIMED_ECHO_TRAILER_BYTES,
 };
+#[cfg(feature = "restart-oracle")]
+pub use frames::encode_restart_request;
 pub use frames::{
     decode_reply_frame, encode_echo_request, encode_hold_request, encode_snapshot_request,
     stamp_timed_echo_reply_frame, DecodedReply,

@@ -145,6 +145,14 @@ fn request_and_reply_frames_round_trip() {
     assert_eq!(u16::from_le_bytes(req[8..10].try_into().unwrap()), 4);
     assert_eq!(&req[10..req_len], &[OP_ECHO, b'a', b'b', b'c']);
 
+    #[cfg(feature = "restart-oracle")]
+    {
+        let restart_len = encode_restart_request(10, &mut req).expect("restart frame encodes");
+        assert_eq!(u64::from_le_bytes(req[..8].try_into().unwrap()), 10);
+        assert_eq!(u16::from_le_bytes(req[8..10].try_into().unwrap()), 2);
+        assert_eq!(&req[10..restart_len], &[OP_ECHO, OP_RESTART]);
+    }
+
     let mut reply = [0u8; api::ipc::IPC_BUF_SIZE];
     let reply_len = crate::local_ingress::encode_reply(
         crate::local_ingress::ReplyStatus::Busy,
