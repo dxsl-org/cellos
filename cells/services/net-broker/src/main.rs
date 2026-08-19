@@ -13,8 +13,9 @@
 //!
 //! ## Design invariants (from plan.md + docs/specs/14-distributed.md)
 //! 1. Broker runs at **NORMAL** priority (init spawns without SpawnPinned).
-//! 2. Re-arms `sys_heartbeat(500)` at the TOP of every dispatch-loop iteration,
-//!    including inside any blocking/spin-poll sub-loop (P04 Noise handshake).
+//! 2. Spawned runtime roles re-arm `sys_heartbeat(1000)` at each cooperative
+//!    turn. Main ingress blocks in `sys_recv_attested` and stays unarmed while
+//!    legitimately idle.
 //! 3. Init registers service::NET_BROKER on the broker's behalf; the broker does
 //!    not self-register (it lacks SpawnCap).
 //! 4. No blocking recv at Init — sockets can be set up, but the first RECV must
@@ -135,6 +136,7 @@ fn cell_main() {
     let relay_client = RelayClient::new(identity.node_id, relay_ip, relay_port);
 
     local_runtime::init(relay_client);
+    println("[net-broker] local runtime roles ready");
 
     loop {
         local_runtime::receive_once();

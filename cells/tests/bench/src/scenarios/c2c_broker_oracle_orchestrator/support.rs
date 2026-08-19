@@ -58,7 +58,7 @@ pub fn broker_snapshot(sequence: u64) -> Option<OracleSnapshot> {
     let mut rx = [0u8; IPC_BUF_SIZE];
     let len = encode_snapshot_request(sequence, &mut tx).ok()?;
     matches!(sys_send(broker_tid, &tx[..len]), SyscallResult::Ok(_)).then_some(())?;
-    matches!(sys_recv(broker_tid, &mut rx), SyscallResult::Ok(_)).then_some(())?;
+    super::super::c2c_broker_oracle::recv_from_broker(broker_tid, &mut rx).then_some(())?;
     let reply = decode_reply_frame(&rx).ok()?;
     (reply.status == ReplyStatus::Success).then_some(())?;
     decode_snapshot_payload(reply.payload).ok()

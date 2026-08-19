@@ -7,7 +7,9 @@ pub const PER_CALLER_WINDOW: usize = 4;
 pub const IN_FLIGHT_CAP: usize = 32;
 pub const STALE_REPLY_RING_CAP: usize = 64;
 pub const REPLY_TRY_SEND_BUDGET: usize = 8;
-pub const WORKER_HEARTBEAT_MS: u64 = 500;
+// The broker's bounded saturation probe can occupy 512 cooperative turns, so
+// its roles need a local deadline with scheduling margin.
+pub const WORKER_HEARTBEAT_TICKS: u64 = 1_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RequestKey {

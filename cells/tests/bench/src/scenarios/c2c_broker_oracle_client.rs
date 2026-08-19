@@ -4,7 +4,7 @@ use super::c2c_broker_oracle_wire::{
     SUMMARY_BYTES,
 };
 use crate::framework::timer::ticks_to_ns;
-use ostd::syscall::{sys_get_time, sys_recv, sys_send, SyscallResult};
+use ostd::syscall::{sys_get_time, sys_send, SyscallResult};
 use service_net_broker::bench_oracle::{
     decode_reply_frame, encode_echo_request, encode_hold_request, MAX_HOLD_TURNS,
 };
@@ -67,9 +67,10 @@ fn run_sync(broker_tid: usize, config: ClientConfig) -> ClientSummary {
             summary.indeterminate += 1;
             continue;
         }
-        let latency = match sys_recv(broker_tid, &mut rx) {
-            SyscallResult::Ok(_) => Some(ticks_to_ns(sys_get_time().saturating_sub(start))),
-            SyscallResult::Err(_) => None,
+        let latency = if super::c2c_broker_oracle::recv_from_broker(broker_tid, &mut rx) {
+            Some(ticks_to_ns(sys_get_time().saturating_sub(start)))
+        } else {
+            None
         };
         update_summary(&mut summary, sequence, &rx, latency, config);
     }
@@ -112,7 +113,7 @@ fn run_async(parent_tid: usize, broker_tid: usize, config: ClientConfig) -> Clie
         wait_drain(parent_tid);
     }
     for _ in 0..replies_expected {
-        if !matches!(sys_recv(broker_tid, &mut rx), SyscallResult::Ok(_)) {
+        if !super::c2c_broker_oracle::recv_from_broker(broker_tid, &mut rx) {
             summary.indeterminate += 1;
             continue;
         }

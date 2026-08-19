@@ -28,8 +28,8 @@ fn parses_echo_snapshot_and_hold_commands() {
     );
     assert_eq!(parse_command(&[OP_SNAPSHOT]), Ok(OracleCommand::Snapshot));
     assert_eq!(
-        parse_command(&[OP_HOLD, 0x34, 0x02]),
-        Ok(OracleCommand::Hold { work_turns: 0x0234 })
+        parse_command(&[OP_HOLD, 0x34, 0x01]),
+        Ok(OracleCommand::Hold { work_turns: 0x0134 })
     );
 }
 

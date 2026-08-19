@@ -23,7 +23,9 @@ pub enum OracleError {
 pub const OP_ECHO: u8 = 0x01;
 pub const OP_SNAPSHOT: u8 = 0x02;
 pub const OP_HOLD: u8 = 0x03;
-pub const MAX_HOLD_TURNS: u16 = 4_096;
+// Keep saturation long enough to fill ingress without exceeding the broker's
+// role heartbeat window on a cooperative single-hart scheduler.
+pub const MAX_HOLD_TURNS: u16 = 512;
 
 pub fn encode_echo_command(payload: &[u8], out: &mut [u8]) -> Result<usize, OracleError> {
     if out.len() < payload.len() + 1 {
