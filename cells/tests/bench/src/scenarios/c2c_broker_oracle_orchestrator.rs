@@ -12,13 +12,13 @@ use ostd::syscall::sys_send;
 use ostd::task::yield_now;
 use service_net_broker::bench_oracle::OracleSnapshot;
 
+mod calibration;
 mod support;
-
 use support::{broker_snapshot, recv_posted, recv_summary, spawn_and_ready};
 
 pub fn run() -> ! {
     println("[c2c-broker-oracle] START");
-    let mut broker_tid = 0usize;
+    let mut broker_tid = calibration::run();
     let mut role_gate = false;
     for (stage_idx, n) in SWEEP_LEVELS.into_iter().enumerate() {
         let mut latencies = [0u64; MAX_CLIENTS];

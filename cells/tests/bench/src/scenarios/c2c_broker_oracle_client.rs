@@ -10,6 +10,7 @@ use service_net_broker::bench_oracle::{
     MAX_HOLD_TURNS,
 };
 
+mod calibration;
 mod support;
 
 use support::{
@@ -43,6 +44,7 @@ pub fn run_client() -> ! {
     let summary = match config.mode {
         ClientMode::EchoSync => run_sync(broker_tid, config),
         ClientMode::EchoAsync | ClientMode::HoldAsync => run_async(parent_tid, broker_tid, config),
+        ClientMode::EchoCalibrate => calibration::run(broker_tid, config),
     };
     finish(parent_tid, summary, summary.correlation as usize);
 }

@@ -3,9 +3,15 @@ use alloc::format;
 use ostd::io::println;
 use service_net_broker::bench_oracle::OracleSnapshot;
 
+mod calibration;
+
+pub use calibration::print_calibration_line;
+
 pub const MAX_CLIENTS: usize = 16;
 /// Phase 01 direct-IPC regression reference; this is not a broker E2E ceiling.
 pub const DIRECT_IPC_REFERENCE_P99_NS: u64 = 147_000;
+pub const BROKER_CALIBRATION_WARMUP: u16 = 100;
+pub const BROKER_CALIBRATION_SAMPLES: u16 = 1_000;
 pub const SOAK_CALLS: u16 = 10_000;
 pub const SWEEP_LEVELS: [usize; 5] = [1, 2, 4, 8, 16];
 
