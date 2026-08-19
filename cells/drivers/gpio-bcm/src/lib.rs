@@ -21,7 +21,7 @@ use types::{ViError, ViResult};
 /// BCM2837 GPIO MMIO base on Raspberry Pi 3.
 pub const BCM_GPIO_BASE: usize = 0x3F20_0000;
 /// MMIO region size mapped for GPIO access.
-pub const BCM_GPIO_SIZE: usize = 0x0001_0000; // 64 KiB (covers GPPUDCLK1 at 0x9C)
+pub const BCM_GPIO_SIZE: usize = 0x1000; // 4 KiB covers all used GPIO registers through 0x9C
 
 // Register offsets (u32, byte-addressed)
 const GPFSEL: [usize; 6] = [0x00, 0x04, 0x08, 0x0C, 0x10, 0x14]; // function select

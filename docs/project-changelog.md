@@ -38,6 +38,27 @@ assertion, and `scripts/check-hal-boundaries.sh` now fails any new local HAL
 `bash scripts/check-hal-boundaries.sh`, and `git diff --check`. No public ABI
 changed and no physical-RPi3 claim was added.
 
+## [2026-08-19] G1 BCM I2C/SPI controller slice enters hardware-gated integration
+
+Cell manifests, launch ceilings, signed policy, and the resource registry now
+carry distinct I2C and SPI device classes. RPi3 grants exact 4-KiB BSC1 and
+SPI0 windows, keeps GPIO disjoint, and applies descriptor-selected ALT0 pinmux
+before Driver Cells start. Shared polling BCM BSC1 and SPI0 crates implement
+bounded error paths; the BSC combined-transfer sequence waits for an active
+empty FIFO before queueing bytes and arming the repeated start.
+
+Driver Cell teardown now clears all well-known roles through one lifecycle
+entrypoint, and NIC owner plus proven IRQ are published atomically. QEMU image
+packaging now includes the current boot-critical cells and assertions for block,
+input, and GPU registration. Live RV64 and AArch64 boots reach the shell with
+the full baseline and also degrade cleanly when optional GPU/NIC devices are
+omitted. The RPi3 builder now uses host-native paths/tool defaults, fails closed
+on missing required cells, and stages a verified current-head TFTP payload.
+Physical RPi3 TFTP boot now passes with SD discovery, all four MBR partitions,
+FAT16 and `/mnt/sd` mounts, kernel-push Input Service, and shell readiness.
+Interactive `help` and a numbered 100-command UART burst returned without loss.
+Only the wired GPIO/I2C/SPI promotion remains explicitly hardware-gated.
+
 ## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 
 The previously merged x86 hardware lane now has a QEMU q35 descriptor under

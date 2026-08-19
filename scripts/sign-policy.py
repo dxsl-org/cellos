@@ -54,7 +54,14 @@ FLAG_MAINTENANCE_PERMITTED = 1 << 0
 # blocks a legitimate re-bake; if it is the looser one it emits a blob the kernel
 # scores Invalid, which is the fleet-wide DenyAll described above. Bit values come
 # from the DEV_* constants in kernel/src/resource_registry.rs.
-MMIO_MASK = 0b11111    # DEV_UART=1 | DEV_GPIO=2 | DEV_PCIE=4 | DEV_CAN=8 | DEV_ADC=16
+DEV_UART = 1 << 0
+DEV_GPIO = 1 << 1
+DEV_PCIE = 1 << 2
+DEV_CAN = 1 << 3
+DEV_ADC = 1 << 4
+DEV_I2C = 1 << 5
+DEV_SPI = 1 << 6
+MMIO_MASK = DEV_UART | DEV_GPIO | DEV_PCIE | DEV_CAN | DEV_ADC | DEV_I2C | DEV_SPI
 REGION_MASK = 0b1111   # P1=1 | P4=2 | SRV=4 | /bin/vfs cell-store=8
 
 # Operator policy: the CEILING each path may hold. It intersects the manifest
@@ -75,7 +82,7 @@ DEV_POLICY = [
     # today. It stays maximal on purpose: init's own caps are the CEILING for
     # every cell it spawns, so a narrow entry here would starve its children if
     # that exemption is ever removed.
-    ("/bin/init",        1, 1, 1, 0, 3, 0b111, 1, 1, 1),
+    ("/bin/init",        1, 1, 1, 0, DEV_UART | DEV_GPIO | DEV_I2C | DEV_SPI, 0b111, 1, 1, 1),
     # Kernel-spawned (Root, exempt); listed so the intent is reviewable.
     ("/bin/platform",    0, 0, 0, 0, 0, 0,     0, 1, 0),
     # ── core services ─────────────────────────────────────────────────────────
@@ -98,8 +105,8 @@ DEV_POLICY = [
     ("/bin/periph-demo", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/periph-test", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/robot-demo",  0, 1, 0, 0, 2, 0,     0, 0, 0),
-    ("/bin/sensor-demo", 0, 0, 0, 0, 2, 0,     0, 0, 0),
-    ("/bin/spi-demo",    0, 0, 0, 0, 2, 0,     0, 0, 0),
+    ("/bin/sensor-demo", 0, 0, 0, 0, DEV_GPIO | DEV_I2C, 0,    0, 0, 0),
+    ("/bin/spi-demo",    0, 0, 0, 0, DEV_GPIO | DEV_SPI, 0,    0, 0, 0),
     ("/bin/pwm-demo",    0, 0, 0, 0, 2, 0,     0, 0, 0),
     ("/bin/gpio-test-rv",0, 0, 0, 0, 2, 0,     0, 0, 0),
     ("/bin/bench",       0, 0, 1, 0, 0, 0,     0, 0, 0),

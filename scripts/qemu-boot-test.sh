@@ -16,6 +16,9 @@ set -euo pipefail
 
 KERNEL="${1:-target/riscv64gc-unknown-none-elf/release/cellos-kernel}"
 DISK="${2:-}"
+ASSERT_PHASE04_BASELINE="${ASSERT_PHASE04_BASELINE:-0}"
+OMIT_OPTIONAL_DEVICES="${OMIT_OPTIONAL_DEVICES:-0}"
+MARKER_HELPER="$(dirname "$0")/assert-boot-markers.sh"
 
 if [[ ! -f "$KERNEL" ]]; then
   echo "FAIL: kernel ELF not found: $KERNEL"
@@ -38,11 +41,15 @@ if [[ -n "$DISK" && -f "$DISK" ]]; then
   QEMU_ARGS+=(
     -drive "file=$DISK,format=raw,id=hd0,if=none"
     -device virtio-blk-device,drive=hd0
-    -netdev user,id=net0
-    -device virtio-net-device,netdev=net0
     -device virtio-keyboard-device
-    -device virtio-gpu-device
   )
+  if [[ "$OMIT_OPTIONAL_DEVICES" != "1" ]]; then
+    QEMU_ARGS+=(
+      -netdev user,id=net0
+      -device virtio-net-device,netdev=net0
+      -device virtio-gpu-device
+    )
+  fi
 fi
 
 echo "[qemu-test] Booting (want_shell=$WANT_SHELL): ${QEMU_ARGS[*]}"
@@ -64,6 +71,16 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu.log; then
   echo "FAIL: kernel panic / cell fault detected during boot"; grep -ai "fault\|PANIC" qemu.log | head; exit 1
 fi
 if grep -qa "Cellos >" qemu.log; then
+  if [[ "$WANT_SHELL" -eq 1 && "$ASSERT_PHASE04_BASELINE" == "1" ]]; then
+    REQUIRED_MARKERS=(
+      "block registration:::[driver_cell] block driver registered" \
+      "input registration:::[input] registered input service TID"
+    )
+    if [[ "$OMIT_OPTIONAL_DEVICES" != "1" ]]; then
+      REQUIRED_MARKERS+=("gpu readiness:::VirtIO GPU Driver Cell registered")
+    fi
+    bash "$MARKER_HELPER" qemu.log "riscv64-qemu" "${REQUIRED_MARKERS[@]}"
+  fi
   echo "PASS: shell prompt reached — full boot successful"; exit 0
 fi
 if [[ "$WANT_SHELL" -eq 0 ]] && grep -qia "FAT16 mounted successfully" qemu.log; then

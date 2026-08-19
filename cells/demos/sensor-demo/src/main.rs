@@ -8,24 +8,36 @@ mod sht3x;
 
 use api::declare_manifest;
 use driver_gpio::Pl061Gpio;
+use driver_i2c_bcm::BcmBscI2c;
 use driver_i2c_gpio::BitBangI2c;
 use hal_i2c::ViI2c;
 use ostd::io::println;
 use ostd::syscall::sys_recv_timeout;
 
-// Declare gpio capability so the kernel grants PL061 MMIO access at spawn.
+// BCM hardware I2C is preferred on RPi3; GPIO remains the QEMU fallback.
 declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
     gpio = true,
-    uart = false
+    uart = false,
+    hypervisor = false,
+    i2c = true,
+    spi = false
 );
 
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[sensor-demo] SHT3x via bit-bang I2C (pin 0=SCL, pin 1=SDA, addr 0x44)");
+    println("[sensor-demo] SHT3x I2C probe (addr 0x44)");
+
+    if let Ok(mut i2c) = BcmBscI2c::open() {
+        println("[sensor-demo] using BCM BSC1 hardware controller");
+        if run_with_i2c(&mut i2c, false) {
+            return;
+        }
+        println("[sensor-demo] BCM BSC1 transaction failed — trying GPIO fallback");
+    }
 
     match Pl061Gpio::open() {
         Ok(gpio) => run_with_gpio(gpio),
@@ -41,21 +53,30 @@ const DEMO_CYCLES: u32 = 3;
 
 fn run_with_gpio(gpio: Pl061Gpio) {
     let mut i2c = BitBangI2c::new(gpio);
-    for tick in 0..DEMO_CYCLES {
-        let r = poll_sensor(&mut i2c, tick);
-        print_reading(&r);
-        sleep_1s();
-    }
+    println("[sensor-demo] using GPIO bit-bang fallback");
+    let _ = run_with_i2c(&mut i2c, true);
 }
 
-fn poll_sensor(i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>, tick: u32) -> sht3x::Reading {
+fn run_with_i2c(i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>, synthetic_on_error: bool) -> bool {
+    for tick in 0..DEMO_CYCLES {
+        match poll_sensor(i2c, tick) {
+            Ok(reading) => print_reading(&reading),
+            Err(_) if synthetic_on_error => print_reading(&sht3x::synthetic(tick)),
+            Err(_) => return false,
+        }
+        sleep_1s();
+    }
+    true
+}
+
+fn poll_sensor(
+    i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>,
+    tick: u32,
+) -> Result<sht3x::Reading, hal_i2c::I2cError> {
     // SHT3x high-precision single-shot: write [0x2C, 0x06], read 6 bytes.
     let mut buf = [0u8; 6];
-    match i2c.write_read(0x44, &[0x2C, 0x06], &mut buf) {
-        Ok(()) => sht3x::parse(&buf).unwrap_or_else(|| sht3x::synthetic(tick)),
-        // NackAddress: no slave on bus — expected in QEMU without a real sensor.
-        Err(_) => sht3x::synthetic(tick),
-    }
+    i2c.write_read(0x44, &[0x2C, 0x06], &mut buf)?;
+    Ok(sht3x::parse(&buf).unwrap_or_else(|| sht3x::synthetic(tick)))
 }
 
 fn print_reading(r: &sht3x::Reading) {

@@ -3861,9 +3861,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if is_crit {
                 return Err(SyscallError::PermissionDenied);
             }
-            // Deregister driver statics if this cell is a registered driver.
-            crate::task::drivers::driver_cell::deregister_block_driver(target_tid);
-            crate::task::drivers::driver_cell::deregister_nic_driver(target_tid);
             crate::cell::hotswap::exit_task_internal(target_tid, cell_id);
             Ok(exit_code as usize)
         }

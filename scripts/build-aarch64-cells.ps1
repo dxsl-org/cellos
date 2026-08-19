@@ -14,11 +14,27 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$pythonArgs = @()
+$python = if ($IsWindows -and (Get-Command py -ErrorAction SilentlyContinue)) {
+    $pythonArgs = @('-3')
+    'py'
+} elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+    'python3'
+} elseif (Get-Command python -ErrorAction SilentlyContinue) {
+    'python'
+} else {
+    throw 'Python 3 is required to build the embedded image'
+}
+
 $target   = "aarch64-unknown-none-softfloat"
-$buildDir = "target\$target\release"
-$rpi3TargetDir = "target\rpi3-cells"
-$rpi3BuildDir = "$rpi3TargetDir\$target\release"
-$embeddedDir = if ($BoardRpi3) { "target\rpi3-embedded" } else { "kernel\src\embedded-aarch64" }
+$buildDir = Join-Path 'target' $target 'release'
+$rpi3TargetDir = Join-Path 'target' 'rpi3-cells'
+$rpi3BuildDir = Join-Path $rpi3TargetDir $target 'release'
+$embeddedDir = if ($BoardRpi3) {
+    Join-Path 'target' 'rpi3-embedded'
+} else {
+    Join-Path 'kernel' 'src' 'embedded-aarch64'
+}
 
 function Assert-CellBuild([string]$Name, [int]$ExitCode) {
     if ($ExitCode -eq 0) { return }
@@ -39,15 +55,23 @@ $rustflags = "-C relocation-model=pic -C target-feature=+bti,+paca,+pacg"
 # component is not a valid clang triple.
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).ProviderPath
 if (-not $env:CC_aarch64_unknown_none_softfloat) {
-    $env:CC_aarch64_unknown_none_softfloat = "C:\Program Files\LLVM\bin\clang.exe"
+    $env:CC_aarch64_unknown_none_softfloat = if ($IsLinux) {
+        'clang'
+    } else {
+        'C:\Program Files\LLVM\bin\clang.exe'
+    }
 }
 if (-not $env:CFLAGS_aarch64_unknown_none_softfloat) {
+    $freestandingInclude = Join-Path $repoRoot 'third_party' 'freestanding-include'
     $env:CFLAGS_aarch64_unknown_none_softfloat =
-        "--target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I$repoRoot\third_party\freestanding-include"
+        "--target=aarch64-unknown-none-elf -ffreestanding -mgeneral-regs-only -DLFS_NO_INTRINSICS -I$freestandingInclude"
 }
 if (-not $env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat) {
-    $env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat =
+    $env:BINDGEN_EXTRA_CLANG_ARGS_aarch64_unknown_none_softfloat = if ($IsLinux) {
+        '--target=aarch64-linux-gnu --sysroot=/usr/aarch64-linux-gnu'
+    } else {
         "--target=aarch64-unknown-none-elf -I$repoRoot\third_party\freestanding-include"
+    }
 }
 if (-not $env:LIBCLANG_PATH) {
     $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
@@ -55,6 +79,8 @@ if (-not $env:LIBCLANG_PATH) {
 }
 
 Write-Host "=== Building aarch64 cells (release) ==="
+$previousRustflags = $env:RUSTFLAGS
+try {
 $env:RUSTFLAGS = $rustflags
 
 Write-Host "Building app-shell..."
@@ -75,7 +101,7 @@ Assert-CellBuild 'app-sys-tools' $LASTEXITCODE
 
 Write-Host "Building service-input (UART EV_ASCII relay consumer)..."
 if ($BoardRpi3) {
-    $rpi3Input = "$rpi3BuildDir\service-input"
+    $rpi3Input = Join-Path $rpi3BuildDir 'service-input'
     Remove-Item -LiteralPath $rpi3Input -Force -ErrorAction SilentlyContinue
     cargo build --release -p service-input --no-default-features --target $target `
         --target-dir $rpi3TargetDir 2>&1 | Select-Object -Last 5
@@ -98,10 +124,12 @@ Assert-CellBuild 'periph-demo' $LASTEXITCODE
 Write-Host "Building app-init..."
 cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'app-init' $LASTEXITCODE
-$env:RUSTFLAGS = ""
+} finally {
+    $env:RUSTFLAGS = $previousRustflags
+}
 
 # Refresh the separately-embedded init ELF (kernel spawns it from embedded bytes).
-$initSrc = "$buildDir\app-init"
+$initSrc = Join-Path $buildDir 'app-init'
 if (Test-Path $initSrc) {
     New-Item -ItemType Directory -Path $embeddedDir -Force | Out-Null
     Copy-Item $initSrc (Join-Path $embeddedDir 'init') -Force
@@ -127,9 +155,9 @@ $imgArgs = @($imagePath)
 $found   = @()
 foreach ($c in $cells) {
     $src = if ($BoardRpi3 -and $c.Bin -eq 'service-input') {
-        "$rpi3BuildDir\$($c.Bin)"
+        Join-Path $rpi3BuildDir $c.Bin
     } else {
-        "$buildDir\$($c.Bin)"
+        Join-Path $buildDir $c.Bin
     }
     if (Test-Path $src) {
         $kb = [Math]::Round((Get-Item $src).Length / 1KB, 0)
@@ -142,9 +170,10 @@ foreach ($c in $cells) {
     }
 }
 
-if ($found.Count -eq 0) {
-    Write-Error "No aarch64 cell binaries built — kernel_fs.img not updated."
-    exit 1
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input')) {
+    if ($required -notin $found) {
+        throw "Required aarch64 cell missing from image inputs: $required"
+    }
 }
 
 # Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
@@ -160,7 +189,7 @@ if ($found.Count -eq 0) {
 # same string works under PowerShell on both platforms.
 $policyTmp = "target/ViCell_aarch64_POLICY.BIN"
 New-Item -ItemType Directory -Force (Split-Path $policyTmp) | Out-Null
-python scripts\sign-policy.py --out $policyTmp
+& $python @pythonArgs (Join-Path 'scripts' 'sign-policy.py') --out $policyTmp
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policyTmp)) {
     Write-Error "sign-policy.py failed — need 'pip install cryptography'."
     exit 1
@@ -170,7 +199,7 @@ $imgArgs += @($policyTmp, "/POLICY.BIN")
 
 Write-Host ""
 Write-Host "=== Creating aarch64 kernel_fs.img ==="
-python tools\mkfat32.py @imgArgs
+& $python @pythonArgs (Join-Path 'tools' 'mkfat32.py') @imgArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "mkfat32.py failed (exit $LASTEXITCODE)"
     exit 1
@@ -178,11 +207,13 @@ if ($LASTEXITCODE -ne 0) {
 Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 # Assert the layout instead of trusting the exit code: mkfat32 exits 0 for images
 # whose destination paths were mangled, and a missing /POLICY.BIN degrades silently.
-$layout = python tools\inspect_fat.py $imagePath 2>&1
-if (($layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false) {
-    Write-Error "aarch64 kernel_fs.img has no /POLICY.BIN in the root directory"
-    $layout | Write-Host
-    exit 1
+$layout = & $python @pythonArgs (Join-Path 'tools' 'inspect_fat.py') $imagePath 2>&1
+foreach ($requiredMarker in @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'")) {
+    if (($layout | Select-String -Quiet -SimpleMatch $requiredMarker) -eq $false) {
+        Write-Error "aarch64 kernel_fs.img missing required entry: $requiredMarker"
+        $layout | Write-Host
+        exit 1
+    }
 }
 $kb = [Math]::Round((Get-Item $imagePath).Length / 1KB, 0)
 Write-Host "  kernel_fs.img created: ${kb} KB"
