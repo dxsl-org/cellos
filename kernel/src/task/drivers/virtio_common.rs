@@ -202,3 +202,6 @@ pub extern "Rust" fn vi_handle_virtio_irq(irq: u32) {
         irq
     );
 }
+
+#[cfg(target_arch = "aarch64")]
+const _: crate::hal::HandleVirtioIrq = vi_handle_virtio_irq;

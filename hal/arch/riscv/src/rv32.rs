@@ -34,8 +34,8 @@ pub mod boot;
 #[cfg(target_arch = "riscv32")]
 pub mod arch {
     // ViTrapFrame alias: kernel code uses `hal::arch::ViTrapFrame` on both arches.
-    pub use crate::rv32::trap::ViTrapFrame32 as ViTrapFrame;
     pub use crate::rv32::trap::*;
+    pub use hal_arch_trait::ViTrapFrame32 as ViTrapFrame;
     // Context alias: Rv32Context is defined in the parent rv32 module.
     pub use crate::rv32::Rv32Context as Context;
     extern "C" {

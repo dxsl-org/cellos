@@ -199,20 +199,8 @@ impl ViHypervisor for AArch64Hypervisor {
 /// the call sites in task.rs and scheduler.rs.
 #[cfg(target_arch = "aarch64")]
 pub mod arch {
-    /// Unified abstract trap frame — same field names as the RISC-V ViTrapFrame
-    /// so the kernel's scheduling code compiles without modification.
-    /// `sepc` maps to ELR_EL1, `sstatus` to SPSR_EL1.
-    #[derive(Default, Clone, Copy, Debug)]
-    #[repr(C)]
-    pub struct ViTrapFrame {
-        pub regs: [usize; 32],
-        pub sstatus: usize,
-        pub sepc: usize,
-        pub stval: usize,
-        pub scause: usize,
-    }
-
     pub use super::context::CpuContext as Context;
+    pub use hal_arch_trait::ViTrapFrame;
 
     /// Initialise the ARM64 exception vector table.
     pub fn init() {

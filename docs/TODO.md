@@ -1,8 +1,13 @@
+
+# BUG
+1. `qemu_exit::AArch64Semihosting`
+
+
 # TODO
 
-1. Hoàn tất G1: làm một vertical slice GPIO/I²C sensor → Cell → output trên RPi3.
+0. Khi smoke RPi3 kết thúc, duyệt triển khai: $hc-cook /home/dmin/cellos/.agents/260819-1416-port-common-drivers-g1-g2-g3/plan.md
 
-2. Hoặc xử lý nợ kỹ thuật extern "Rust" viết tay có nguy cơ lệch chữ ký.
+1. Hoàn tất G1: làm một vertical slice GPIO/I²C sensor → Cell → output trên RPi3.
 
 3. **Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
 việc CI không build rv32. Sai: đã thử khai báo thiếu tham số trong `rv64/trap.rs` (target CI
@@ -19,57 +24,17 @@ vì mỗi kiến trúc tự khai báo lại.
 `riscv32imac-unknown-none-elf` — hai lỗi `E0308` có sẵn (`task/syscall.rs:3540`,
 `task.rs:483`, đều là `u32` vs `usize` do trap frame rv32 dùng `u32`). `hal-riscv` thì compile sạch.
 
-5. Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.
 6. AI inference server demo (HTTP → NPU cell → response, P99 bound) = G2 Level A, chính là bước cần board RK3588 — đây là mắt xích nối G2 sang G3.
 7. Desktop đầy đủ (compositor + mouse, windowed) — 📋; VFS scale (ext4/large disk) — 📋; 
 App Platform Layers §J: L1 SDK ✅, còn L0 docs / L2 middleware / L3 tooling / L4 observability — 📋.
-8. Cell-to-Cell Anywhere phần G2 (P04-P08: HyParView, hole-punch, K2/K3 DICE)
----
 
-## Từ đợt audit mô tả kiến trúc (2026-07-31)
-
-Bốn việc dưới đây phát sinh từ đợt đối chiếu spec với code; mỗi việc kèm bằng chứng vì lý do
-tại sao nó không hiển nhiên. Docket đầy đủ (D1–D25, 8 mục đã chốt) nằm ở
-`.agents/reports/decision-docket-260730.md` — **gitignored**, nên phần cần sống lâu ghi ở đây.
-
-**A1 — RISC-V đọc memory node của DTB thay vì `FALLBACK_MEMORY_MAP`.** `kernel/src/boot.rs`
-khai cứng vùng usable = `0x0BE0_0000` = **190 MiB** cho "QEMU virt (256 MB)", và không có
-đường nào đọc DTB. Cấp cho guest 2 GiB thì kernel vẫn chỉ thấy 190 MiB. Đo được: spawn cell
-đậu (parked) tới khi bị từ chối dừng ở **n = 9**, dù `MAX_CELLS` đã nâng 512 và còn 512 VA
-slot — trần thật là RAM nhìn thấy được, không phải hằng số nào ta hay bàn. Đây không chỉ chặn
-profile per-request server: **mọi deployment đang âm thầm bỏ RAM trên 190 MiB.** Rẻ nhất, đòn
-bẩy lớn nhất.
-
-**A2 — DONE 2026-08-01: cell-spawn OOM có mã riêng và log chẩn đoán.** Bốn syscall spawn
-cell trả additive `-2` cho OOM, ostd giải mã thành `SyscallError::OutOfMemory`; lỗi generic vẫn
-là `-1`, opcode cũ không đổi. Runtime probe xác nhận log nguồn cấp phát + caller/path, không
-panic và shell tiếp tục hoạt động.
-
-**A3 — DONE 2026-08-01: MemInfo và benchmark dùng số thật.** `MemInfo=243`, allowlist bit 56,
-trả `ViMemInfoV1` 32 byte theo opt-in vì đây là telemetry xuyên cell. Frame allocator kế toán
-chính xác theo bitmap transition. Benchmark đo **135.782.400 byte (129,49 MiB)**
-allocator-committed, nên mục tiêu `<10 MiB` hiện **FAIL thật** thay vì PASS giả.
-
-**Follow-up dung lượng:** giảm 129,49 MiB xuống dưới 10 MiB là việc tối ưu riêng; không đổi
-định nghĩa metric hoặc threshold để làm gate xanh. `capacity-probe` có tính phá huỷ chỉ được
-include/sign khi build test-mode với `CELLOS_INCLUDE_CAPACITY_PROBE=1`; image mặc định loại nó.
-
-**D5 — QUEUED: profile per-request server.** Giữ mục tiêu qualification 1000 Cell cô lập đồng
-thời, nhưng không coi đó là capacity hiện tại. Đo N=64/128/256/512 trước; sau Midori mới xét
-shared `.text`/`.rodata` bất biến, stack demand-page, quota riêng theo profile và bảng động.
-Large-app với mặc định 64 Cell không đổi.
-
-**A4 — chạy lại cổng runtime mà phase 09 và 11 để ngỏ.** Cả hai đóng với lý do "runtime
-UNVERIFIED — máy không có QEMU/cross toolchain". Tiền đề đó **sai**: QEMU cả ba arch và
-`riscv64-unknown-elf-*` đều có. Hai vấn đề thật đều nhỏ — `build.rs` khai cứng tên
-`riscv-none-elf-*` khi biến `CC_<target>` chưa set, và `gen_disk.ps1` soạn
-`CFLAGS_riscv64gc_unknown_none_elf` nhưng không truyền được sang cargo (littlefs thiếu
-`string.h`). Phase 10 đã verify theo đường này ngày 2026-07-31: `wx-text-write` 2/2 PASS, suite
-`boot` 54/54 PASS. Cách làm ghi ở `.agents/reports/qemu-build-unblock-260731.md`.
-
-**Lưu ý cho integration test trên Linux**: cần `--target x86_64-unknown-linux-gnu`. Bản
-`.cargo/config.toml` trong repo mặc định target Windows, nên `cargo test` trần sẽ fail vì không
-tìm thấy `core` cho `x86_64-pc-windows-msvc` trước khi kịp khởi động QEMU.
-
-## BUG
-1. `qemu_exit::AArch64Semihosting`
+### Cell-to-Cell Anywhere
+1. Chốt/commit slice HAL đang dở; worktree hiện có nhiều thay đổi kernel/HAL, không nên trộn VM vào cùng trạng thái.
+   **xử lý nợ kỹ thuật extern "Rust" viết tay có nguy cơ lệch chữ ký.**
+2. Đồng bộ tài liệu với code thực tế và tạo smoke x86 tái lập được.
+3. Mở nhánh riêng, ví dụ feat/g2-tier3b-vm-closure.
+4. Dùng ARM64 làm đường ngắn nhất để đóng gate: Alpine → nginx → HTTP request/response có log.
+   **Gate graduation "nginx chạy thật trong Linux VM" — chưa verify.**
+5. Sau đó nối VirtIO MMIO/block/net cho x86.
+6. Tiếp theo mới làm persistent disk, Ubuntu/glibc và các lane AMD/Intel hardware.
+Kết luận ngắn: GO cho Tier 3b G2 ngay bây giờ, nhưng dưới dạng hoàn thiện VMM hiện có; NO-GO cho việc nhảy thẳng sang G5 snapshot/CoW.

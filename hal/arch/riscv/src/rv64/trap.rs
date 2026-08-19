@@ -2,23 +2,11 @@
 //! Uses Vi prefix per project conventions (Luật 6).
 //! TrapFrame uses borrowing (&mut) per Luật 8.
 
-/// Trap frame saved on stack during exception/interrupt.
-/// Must match the layout in trap.S exactly!
-#[derive(Debug, Clone, Copy, Default)]
-#[repr(C)]
-pub struct ViTrapFrame {
-    pub regs: [usize; 32], // x0-x31 (x0 always 0 but slot exists)
-    pub sstatus: usize,
-    pub sepc: usize,
-    pub stval: usize,
-    pub scause: usize,
-}
-
-impl ViTrapFrame {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
+pub use hal_arch_trait::ViTrapFrame;
+use hal_arch_trait::{
+    vi_current_cell_id, vi_handle_riscv_external_irq, vi_riscv_plic_context, vi_terminate_on_fault,
+    vi_timer_tick, vi_tlb_shootdown_test_fault, ViCell_syscall_dispatch,
+};
 
 // External assembly functions
 extern "C" {
@@ -182,24 +170,5 @@ fn plic_complete(context: usize, irq: u32) {
 
 /// Handle syscall from userspace (Vi prefix per Luật 6)
 fn vi_handle_syscall(frame: &mut ViTrapFrame) {
-    extern "Rust" {
-        fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame);
-    }
-    unsafe {
-        ViCell_syscall_dispatch(frame);
-    }
-}
-
-extern "Rust" {
-    fn vi_riscv_plic_context() -> usize;
-    fn vi_handle_riscv_external_irq(irq: u32);
-    /// Called on every S-mode timer interrupt.  Defined in `kernel::task`.
-    fn vi_timer_tick();
-    /// Terminate the currently-executing Cell on hardware fault.  Defined in `kernel::task`.
-    fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
-    /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell).
-    fn vi_current_cell_id() -> usize;
-    /// Returns true only when a test-hooks shootdown probe consumed its exact
-    /// expected S-mode store fault; production kernels always return false.
-    fn vi_tlb_shootdown_test_fault(frame: &mut ViTrapFrame) -> bool;
+    ViCell_syscall_dispatch(frame);
 }

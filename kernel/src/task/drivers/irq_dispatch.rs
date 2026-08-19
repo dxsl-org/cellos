@@ -3,6 +3,11 @@ use core::sync::atomic::{AtomicU8, Ordering};
 const UNKNOWN_IRQ_WARN_LIMIT: u8 = 4;
 static UNKNOWN_RV64_IRQ_WARNINGS: AtomicU8 = AtomicU8::new(0);
 
+#[cfg(target_arch = "riscv64")]
+const _: crate::hal::RiscvPlicContext = vi_riscv_plic_context;
+#[cfg(target_arch = "riscv64")]
+const _: crate::hal::HandleRiscvExternalIrq = vi_handle_riscv_external_irq;
+
 enum ExternalIrqRoute {
     Uart,
     Virtio,
