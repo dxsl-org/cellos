@@ -909,7 +909,7 @@
 <a href=#909 id=909 data-nosnippet>909</a><span class="comment">// ─── Page-fault handler (x86_64) ─────────────────────────────────────────────
 <a href=#910 id=910 data-nosnippet>910</a>
 <a href=#911 id=911 data-nosnippet>911</a></span><span class="doccomment">/// HAL-visible entry point: called by the IDT error-code handler via the
-<a href=#912 id=912 data-nosnippet>912</a>/// `extern "Rust" fn vi_handle_page_fault` declaration in `hal/arch/x86/idt.rs`.
+<a href=#912 id=912 data-nosnippet>912</a>/// shared `vi_handle_page_fault` declaration in `hal/traits/arch/src/kernel_abi.rs`.
 <a href=#913 id=913 data-nosnippet>913</a>///
 <a href=#914 id=914 data-nosnippet>914</a>/// Decision tree:
 <a href=#915 id=915 data-nosnippet>915</a>///   - Kernel-mode fault: panic — a true kernel bug.
@@ -1031,40 +1031,43 @@
 <a href=#1031 id=1031 data-nosnippet>1031</a>    }
 <a href=#1032 id=1032 data-nosnippet>1032</a>}
 <a href=#1033 id=1033 data-nosnippet>1033</a>
-<a href=#1034 id=1034 data-nosnippet>1034</a><span class="doccomment">/// Terminate the cell that took an unserviceable user-mode #PF, or panic if the
-<a href=#1035 id=1035 data-nosnippet>1035</a>/// fault cannot be attributed to one.
-<a href=#1036 id=1036 data-nosnippet>1036</a>///
-<a href=#1037 id=1037 data-nosnippet>1037</a>/// Brings x86_64 in line with the riscv64 (`rv64/trap.rs`) and aarch64
-<a href=#1038 id=1038 data-nosnippet>1038</a>/// (`aarch64/trap.rs`) handlers, which already kill the faulting cell and keep
-<a href=#1039 id=1039 data-nosnippet>1039</a>/// the kernel running. Panicking here would turn every cell-level memory bug —
-<a href=#1040 id=1040 data-nosnippet>1040</a>/// including the W^X violation this phase deliberately creates — into a
-<a href=#1041 id=1041 data-nosnippet>1041</a>/// whole-system halt.
-<a href=#1042 id=1042 data-nosnippet>1042</a>///
-<a href=#1043 id=1043 data-nosnippet>1043</a>/// A non-zero cell id is required: a user-mode fault with no cell context means
-<a href=#1044 id=1044 data-nosnippet>1044</a>/// the scheduler state is inconsistent, and killing "the current cell" would
-<a href=#1045 id=1045 data-nosnippet>1045</a>/// destroy an innocent task or nothing at all.
-<a href=#1046 id=1046 data-nosnippet>1046</a>///
-<a href=#1047 id=1047 data-nosnippet>1047</a>/// Does not return when a cell is killed — `terminate_current_cell_on_fault`
-<a href=#1048 id=1048 data-nosnippet>1048</a>/// ends in `yield_cpu()`, which switches to another task.
-<a href=#1049 id=1049 data-nosnippet>1049</a></span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
-<a href=#1050 id=1050 data-nosnippet>1050</a></span><span class="kw">fn </span>fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: <span class="kw-2">&amp;</span>str) {
-<a href=#1051 id=1051 data-nosnippet>1051</a>    <span class="kw">let </span>cell_id = <span class="kw">crate</span>::task::hart_local::current_cell_id();
-<a href=#1052 id=1052 data-nosnippet>1052</a>    <span class="kw">if </span>cell_id == <span class="number">0 </span>{
-<a href=#1053 id=1053 data-nosnippet>1053</a>        <span class="macro">panic!</span>(
-<a href=#1054 id=1054 data-nosnippet>1054</a>            <span class="string">"[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {} and no cell owns the fault"</span>,
-<a href=#1055 id=1055 data-nosnippet>1055</a>            va, error_code, rip, cs, why
-<a href=#1056 id=1056 data-nosnippet>1056</a>        );
-<a href=#1057 id=1057 data-nosnippet>1057</a>    }
-<a href=#1058 id=1058 data-nosnippet>1058</a>    <span class="macro">log::error!</span>(
-<a href=#1059 id=1059 data-nosnippet>1059</a>        <span class="string">"[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {}"</span>,
-<a href=#1060 id=1060 data-nosnippet>1060</a>        va,
-<a href=#1061 id=1061 data-nosnippet>1061</a>        error_code,
-<a href=#1062 id=1062 data-nosnippet>1062</a>        rip,
-<a href=#1063 id=1063 data-nosnippet>1063</a>        cs,
-<a href=#1064 id=1064 data-nosnippet>1064</a>        why
-<a href=#1065 id=1065 data-nosnippet>1065</a>    );
-<a href=#1066 id=1066 data-nosnippet>1066</a>    <span class="comment">// `cause` carries the raw #PF error code, mirroring how riscv64 passes
-<a href=#1067 id=1067 data-nosnippet>1067</a>    // `scause` and aarch64 passes `ESR_EL2` into the same reporting path.
-<a href=#1068 id=1068 data-nosnippet>1068</a>    </span><span class="kw">crate</span>::task::terminate_current_cell_on_fault(error_code <span class="kw">as </span>usize, rip <span class="kw">as </span>usize, va);
-<a href=#1069 id=1069 data-nosnippet>1069</a>}
+<a href=#1034 id=1034 data-nosnippet>1034</a><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
+<a href=#1035 id=1035 data-nosnippet>1035</a></span><span class="kw">const _</span>: <span class="kw">crate</span>::hal::HandlePageFault = vi_handle_page_fault;
+<a href=#1036 id=1036 data-nosnippet>1036</a>
+<a href=#1037 id=1037 data-nosnippet>1037</a><span class="doccomment">/// Terminate the cell that took an unserviceable user-mode #PF, or panic if the
+<a href=#1038 id=1038 data-nosnippet>1038</a>/// fault cannot be attributed to one.
+<a href=#1039 id=1039 data-nosnippet>1039</a>///
+<a href=#1040 id=1040 data-nosnippet>1040</a>/// Brings x86_64 in line with the riscv64 (`rv64/trap.rs`) and aarch64
+<a href=#1041 id=1041 data-nosnippet>1041</a>/// (`aarch64/trap.rs`) handlers, which already kill the faulting cell and keep
+<a href=#1042 id=1042 data-nosnippet>1042</a>/// the kernel running. Panicking here would turn every cell-level memory bug —
+<a href=#1043 id=1043 data-nosnippet>1043</a>/// including the W^X violation this phase deliberately creates — into a
+<a href=#1044 id=1044 data-nosnippet>1044</a>/// whole-system halt.
+<a href=#1045 id=1045 data-nosnippet>1045</a>///
+<a href=#1046 id=1046 data-nosnippet>1046</a>/// A non-zero cell id is required: a user-mode fault with no cell context means
+<a href=#1047 id=1047 data-nosnippet>1047</a>/// the scheduler state is inconsistent, and killing "the current cell" would
+<a href=#1048 id=1048 data-nosnippet>1048</a>/// destroy an innocent task or nothing at all.
+<a href=#1049 id=1049 data-nosnippet>1049</a>///
+<a href=#1050 id=1050 data-nosnippet>1050</a>/// Does not return when a cell is killed — `terminate_current_cell_on_fault`
+<a href=#1051 id=1051 data-nosnippet>1051</a>/// ends in `yield_cpu()`, which switches to another task.
+<a href=#1052 id=1052 data-nosnippet>1052</a></span><span class="attr">#[cfg(target_arch = <span class="string">"x86_64"</span>)]
+<a href=#1053 id=1053 data-nosnippet>1053</a></span><span class="kw">fn </span>fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: <span class="kw-2">&amp;</span>str) {
+<a href=#1054 id=1054 data-nosnippet>1054</a>    <span class="kw">let </span>cell_id = <span class="kw">crate</span>::task::hart_local::current_cell_id();
+<a href=#1055 id=1055 data-nosnippet>1055</a>    <span class="kw">if </span>cell_id == <span class="number">0 </span>{
+<a href=#1056 id=1056 data-nosnippet>1056</a>        <span class="macro">panic!</span>(
+<a href=#1057 id=1057 data-nosnippet>1057</a>            <span class="string">"[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {} and no cell owns the fault"</span>,
+<a href=#1058 id=1058 data-nosnippet>1058</a>            va, error_code, rip, cs, why
+<a href=#1059 id=1059 data-nosnippet>1059</a>        );
+<a href=#1060 id=1060 data-nosnippet>1060</a>    }
+<a href=#1061 id=1061 data-nosnippet>1061</a>    <span class="macro">log::error!</span>(
+<a href=#1062 id=1062 data-nosnippet>1062</a>        <span class="string">"[#PF user] va={:#x} error_code={:#x} rip={:#x} cs={:#x} — {}"</span>,
+<a href=#1063 id=1063 data-nosnippet>1063</a>        va,
+<a href=#1064 id=1064 data-nosnippet>1064</a>        error_code,
+<a href=#1065 id=1065 data-nosnippet>1065</a>        rip,
+<a href=#1066 id=1066 data-nosnippet>1066</a>        cs,
+<a href=#1067 id=1067 data-nosnippet>1067</a>        why
+<a href=#1068 id=1068 data-nosnippet>1068</a>    );
+<a href=#1069 id=1069 data-nosnippet>1069</a>    <span class="comment">// `cause` carries the raw #PF error code, mirroring how riscv64 passes
+<a href=#1070 id=1070 data-nosnippet>1070</a>    // `scause` and aarch64 passes `ESR_EL2` into the same reporting path.
+<a href=#1071 id=1071 data-nosnippet>1071</a>    </span><span class="kw">crate</span>::task::terminate_current_cell_on_fault(error_code <span class="kw">as </span>usize, rip <span class="kw">as </span>usize, va);
+<a href=#1072 id=1072 data-nosnippet>1072</a>}
 </code></pre></div></section></main></body></html>

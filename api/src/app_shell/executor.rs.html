@@ -778,338 +778,311 @@
 <a href=#778 id=778 data-nosnippet>778</a>
 <a href=#779 id=779 data-nosnippet>779</a><span class="doccomment">/// `read [VAR]` — read one line from stdin (fd 0) into `$VAR` (default: `$REPLY`).
 <a href=#780 id=780 data-nosnippet>780</a>///
-<a href=#781 id=781 data-nosnippet>781</a>/// Blocks until a newline is received.  Uses `sys_read(0, ..)` — the same
-<a href=#782 id=782 data-nosnippet>782</a>/// mechanism as `AsyncStdin::read_line` minus the async/ANSI machinery.
+<a href=#781 id=781 data-nosnippet>781</a>/// Blocks until a newline is received through the same focus-aware input-service
+<a href=#782 id=782 data-nosnippet>782</a>/// path as the interactive REPL.
 <a href=#783 id=783 data-nosnippet>783</a></span><span class="kw">fn </span>cmd_read(args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; ViResult&lt;()&gt; {
 <a href=#784 id=784 data-nosnippet>784</a>    <span class="kw">let </span>var = args.first().copied().unwrap_or(<span class="string">"REPLY"</span>);
-<a href=#785 id=785 data-nosnippet>785</a>    <span class="kw">let </span><span class="kw-2">mut </span>line = alloc::vec::Vec::&lt;u8&gt;::new();
-<a href=#786 id=786 data-nosnippet>786</a>    <span class="kw">loop </span>{
-<a href=#787 id=787 data-nosnippet>787</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = [<span class="number">0u8</span>; <span class="number">1</span>];
-<a href=#788 id=788 data-nosnippet>788</a>        <span class="kw">match </span>ostd::syscall::sys_read(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>c) {
-<a href=#789 id=789 data-nosnippet>789</a>            <span class="prelude-val">Ok</span>(n) <span class="kw">if </span>n &gt; <span class="number">0 </span>=&gt; {
-<a href=#790 id=790 data-nosnippet>790</a>                <span class="kw">match </span>c[<span class="number">0</span>] {
-<a href=#791 id=791 data-nosnippet>791</a>                    <span class="string">b'\n' </span>| <span class="string">b'\r' </span>=&gt; <span class="kw">break</span>,
-<a href=#792 id=792 data-nosnippet>792</a>                    <span class="number">0x7F </span>| <span class="number">0x08 </span><span class="kw">if </span>!line.is_empty() =&gt; {
-<a href=#793 id=793 data-nosnippet>793</a>                        <span class="comment">// Backspace — erase last char.
-<a href=#794 id=794 data-nosnippet>794</a>                        </span>line.pop();
-<a href=#795 id=795 data-nosnippet>795</a>                        ostd::io::print(<span class="string">"\x08 \x08"</span>);
-<a href=#796 id=796 data-nosnippet>796</a>                    }
-<a href=#797 id=797 data-nosnippet>797</a>                    b <span class="kw">if </span>line.len() &lt; <span class="number">127 </span>=&gt; {
-<a href=#798 id=798 data-nosnippet>798</a>                        line.push(b);
-<a href=#799 id=799 data-nosnippet>799</a>                        <span class="comment">// Echo the character so the user sees what they type.
-<a href=#800 id=800 data-nosnippet>800</a>                        </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(core::slice::from_ref(<span class="kw-2">&amp;</span>b)) {
-<a href=#801 id=801 data-nosnippet>801</a>                            ostd::io::print(s);
-<a href=#802 id=802 data-nosnippet>802</a>                        }
-<a href=#803 id=803 data-nosnippet>803</a>                    }
-<a href=#804 id=804 data-nosnippet>804</a>                    <span class="kw">_ </span>=&gt; {}
-<a href=#805 id=805 data-nosnippet>805</a>                }
-<a href=#806 id=806 data-nosnippet>806</a>            }
-<a href=#807 id=807 data-nosnippet>807</a>            <span class="kw">_ </span>=&gt; {
-<a href=#808 id=808 data-nosnippet>808</a>                ostd::syscall::sys_yield();
-<a href=#809 id=809 data-nosnippet>809</a>            }
-<a href=#810 id=810 data-nosnippet>810</a>        }
-<a href=#811 id=811 data-nosnippet>811</a>    }
-<a href=#812 id=812 data-nosnippet>812</a>    ostd::io::println(<span class="string">""</span>); <span class="comment">// newline after input
-<a href=#813 id=813 data-nosnippet>813</a>    </span><span class="kw">if let </span><span class="prelude-val">Ok</span>(s) = core::str::from_utf8(<span class="kw-2">&amp;</span>line) {
-<a href=#814 id=814 data-nosnippet>814</a>        set_var(var, s);
-<a href=#815 id=815 data-nosnippet>815</a>    }
-<a href=#816 id=816 data-nosnippet>816</a>    <span class="prelude-val">Ok</span>(())
-<a href=#817 id=817 data-nosnippet>817</a>}
-<a href=#818 id=818 data-nosnippet>818</a>
-<a href=#819 id=819 data-nosnippet>819</a><span class="doccomment">/// `source &lt;path&gt;` — read a shell script from VFS and execute each line.
-<a href=#820 id=820 data-nosnippet>820</a>///
-<a href=#821 id=821 data-nosnippet>821</a>/// Lines starting with `#` and blank lines are skipped. The script runs in the
-<a href=#822 id=822 data-nosnippet>822</a>/// current shell's Jobs context, so spawns from the script are tracked normally.
-<a href=#823 id=823 data-nosnippet>823</a>/// Maximum script size is 4096 bytes (same limit as VFS OP_READ reply).
-<a href=#824 id=824 data-nosnippet>824</a></span><span class="kw">fn </span>cmd_source(args: <span class="kw-2">&amp;</span>[String], jobs: <span class="kw-2">&amp;mut </span>Jobs) -&gt; ViResult&lt;()&gt; {
-<a href=#825 id=825 data-nosnippet>825</a>    <span class="kw">let </span>path = <span class="kw">match </span>args.first() {
-<a href=#826 id=826 data-nosnippet>826</a>        <span class="prelude-val">Some</span>(p) =&gt; p.as_str(),
-<a href=#827 id=827 data-nosnippet>827</a>        <span class="prelude-val">None </span>=&gt; {
-<a href=#828 id=828 data-nosnippet>828</a>            ostd::io::println(<span class="string">"Usage: source &lt;path&gt;"</span>);
-<a href=#829 id=829 data-nosnippet>829</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
-<a href=#830 id=830 data-nosnippet>830</a>        }
-<a href=#831 id=831 data-nosnippet>831</a>    };
-<a href=#832 id=832 data-nosnippet>832</a>    <span class="kw">let </span>bytes = <span class="kw">crate</span>::cmd_fs::read_file_vfs_owned(path, <span class="number">4096</span>).inspect_err(|<span class="kw">_</span>| {
-<a href=#833 id=833 data-nosnippet>833</a>        ostd::io::print(<span class="string">"source: cannot open '"</span>);
-<a href=#834 id=834 data-nosnippet>834</a>        ostd::io::print(path);
-<a href=#835 id=835 data-nosnippet>835</a>        ostd::io::println(<span class="string">"'"</span>);
-<a href=#836 id=836 data-nosnippet>836</a>    })<span class="question-mark">?</span>;
-<a href=#837 id=837 data-nosnippet>837</a>    <span class="kw">let </span>content = core::str::from_utf8(<span class="kw-2">&amp;</span>bytes).unwrap_or(<span class="string">""</span>);
-<a href=#838 id=838 data-nosnippet>838</a>    <span class="kw">for </span>line <span class="kw">in </span>content.lines() {
-<a href=#839 id=839 data-nosnippet>839</a>        <span class="kw">let </span>line = line.trim();
-<a href=#840 id=840 data-nosnippet>840</a>        <span class="kw">if </span>line.is_empty() || line.starts_with(<span class="string">'#'</span>) {
-<a href=#841 id=841 data-nosnippet>841</a>            <span class="kw">continue</span>;
-<a href=#842 id=842 data-nosnippet>842</a>        }
-<a href=#843 id=843 data-nosnippet>843</a>        <span class="kw">let </span>ast = <span class="kw">crate</span>::parser::parse(line);
-<a href=#844 id=844 data-nosnippet>844</a>        execute(<span class="kw-2">&amp;</span>ast, jobs);
-<a href=#845 id=845 data-nosnippet>845</a>    }
-<a href=#846 id=846 data-nosnippet>846</a>    <span class="prelude-val">Ok</span>(())
-<a href=#847 id=847 data-nosnippet>847</a>}
-<a href=#848 id=848 data-nosnippet>848</a>
-<a href=#849 id=849 data-nosnippet>849</a><span class="doccomment">/// Attempt to spawn an external binary from `/bin/&lt;prog&gt;`.
-<a href=#850 id=850 data-nosnippet>850</a>///
-<a href=#851 id=851 data-nosnippet>851</a>/// Arguments are published via `sys_set_spawn_args` (a reserved state-stash
-<a href=#852 id=852 data-nosnippet>852</a>/// slot) for the spawned cell to read on startup — `sys_spawn_from_path` does
-<a href=#853 id=853 data-nosnippet>853</a>/// not yet carry argv on the new cell's stack. We always set the slot (empty
-<a href=#854 id=854 data-nosnippet>854</a>/// when there are no args) so the cell never reads a previous command's args.
-<a href=#855 id=855 data-nosnippet>855</a></span><span class="kw">fn </span>spawn_external(prog: <span class="kw-2">&amp;</span>str, args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
-<a href=#856 id=856 data-nosnippet>856</a>    <span class="kw">if </span>!ostd::set_spawn_argv(args) {
-<a href=#857 id=857 data-nosnippet>857</a>        shell_println(<span class="string">"shell: external argv exceeds 512-byte transport limit"</span>);
-<a href=#858 id=858 data-nosnippet>858</a>        <span class="kw">return </span><span class="number">1</span>;
-<a href=#859 id=859 data-nosnippet>859</a>    }
-<a href=#860 id=860 data-nosnippet>860</a>
-<a href=#861 id=861 data-nosnippet>861</a>    <span class="kw">let </span><span class="kw-2">mut </span>path = alloc::string::String::from(<span class="string">"/bin/"</span>);
-<a href=#862 id=862 data-nosnippet>862</a>    path.push_str(prog);
-<a href=#863 id=863 data-nosnippet>863</a>    <span class="kw">match </span>syscall::sys_spawn_from_path(<span class="kw-2">&amp;</span>path) {
-<a href=#864 id=864 data-nosnippet>864</a>        syscall::SyscallResult::Ok(tid) =&gt; {
-<a href=#865 id=865 data-nosnippet>865</a>            <span class="comment">// Backgrounded (`cmd &amp;`): do NOT sys_wait. A long-running external
-<a href=#866 id=866 data-nosnippet>866</a>            // cell (httpd) would otherwise park the shell forever, so no later
-<a href=#867 id=867 data-nosnippet>867</a>            // command runs. The child keeps the shell's focus grant; that is
-<a href=#868 id=868 data-nosnippet>868</a>            // acceptable for a server that never reads the keyboard. Foreground
-<a href=#869 id=869 data-nosnippet>869</a>            // spawns fall through to the focus-handoff + sys_wait below.
-<a href=#870 id=870 data-nosnippet>870</a>            </span><span class="kw">if </span>state::bg_spawn() {
-<a href=#871 id=871 data-nosnippet>871</a>                <span class="kw">return </span><span class="number">0</span>;
-<a href=#872 id=872 data-nosnippet>872</a>            }
-<a href=#873 id=873 data-nosnippet>873</a>            <span class="comment">// Drain any pending input-service IPC events before ClearFocus.
-<a href=#874 id=874 data-nosnippet>874</a>            // Shell reads UART via sys_read(0), so Enter arrives via BOTH the ring
-<a href=#875 id=875 data-nosnippet>875</a>            // buffer (consumed in read_line) AND input-service EV_ASCII IPC. The IPC
-<a href=#876 id=876 data-nosnippet>876</a>            // path blocks input service in sys_send(shell, Enter_event) while shell
-<a href=#877 id=877 data-nosnippet>877</a>            // is not in sys_recv. drain_pending_input_events() uses sys_try_recv with
-<a href=#878 id=878 data-nosnippet>878</a>            // mask=input_tid (the correct G18 wildcard) to drain the queued message,
-<a href=#879 id=879 data-nosnippet>879</a>            // unblocking input service so release_focus does not deadlock.
-<a href=#880 id=880 data-nosnippet>880</a>            </span>ostd::input::drain_pending_input_events();
-<a href=#881 id=881 data-nosnippet>881</a>            <span class="comment">// Release keyboard focus before blocking in sys_wait. While the shell
-<a href=#882 id=882 data-nosnippet>882</a>            // is in sys_wait it is NOT in sys_recv, so the input service would
-<a href=#883 id=883 data-nosnippet>883</a>            // block indefinitely trying to dispatch key events to this cell and
-<a href=#884 id=884 data-nosnippet>884</a>            // eventually be killed by its own heartbeat watchdog (G18 deadlock).
-<a href=#885 id=885 data-nosnippet>885</a>            </span>ostd::input::release_focus();
-<a href=#886 id=886 data-nosnippet>886</a>            <span class="comment">// Foreground: block until the child exits so it owns the console
-<a href=#887 id=887 data-nosnippet>887</a>            // (stdin/UART). Without this the shell loops back to read the next
-<a href=#888 id=888 data-nosnippet>888</a>            // line and races interactive children (e.g. `hypha`) for keystrokes.
-<a href=#889 id=889 data-nosnippet>889</a>            // Fast commands return immediately (kernel Wait short-circuits when
-<a href=#890 id=890 data-nosnippet>890</a>            // the child is already Terminated). Background (`&amp;`) already runs
-<a href=#891 id=891 data-nosnippet>891</a>            // synchronously in G1, so this does not regress it.
-<a href=#892 id=892 data-nosnippet>892</a>            </span><span class="kw">let </span>code = <span class="kw">match </span>syscall::sys_wait(tid) {
-<a href=#893 id=893 data-nosnippet>893</a>                syscall::SyscallResult::Ok(code) =&gt; code <span class="kw">as </span>i32,
-<a href=#894 id=894 data-nosnippet>894</a>                syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; <span class="number">0</span>,
-<a href=#895 id=895 data-nosnippet>895</a>            };
-<a href=#896 id=896 data-nosnippet>896</a>            <span class="comment">// Re-acquire focus for the next interactive prompt.
-<a href=#897 id=897 data-nosnippet>897</a>            </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10 </span>{
-<a href=#898 id=898 data-nosnippet>898</a>                <span class="kw">if </span>ostd::input::request_focus() {
-<a href=#899 id=899 data-nosnippet>899</a>                    <span class="kw">break</span>;
-<a href=#900 id=900 data-nosnippet>900</a>                }
-<a href=#901 id=901 data-nosnippet>901</a>            }
-<a href=#902 id=902 data-nosnippet>902</a>            code
-<a href=#903 id=903 data-nosnippet>903</a>        }
-<a href=#904 id=904 data-nosnippet>904</a>        syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; {
-<a href=#905 id=905 data-nosnippet>905</a>            ostd::io::print(<span class="string">"shell: command not found: "</span>);
-<a href=#906 id=906 data-nosnippet>906</a>            ostd::io::println(prog);
-<a href=#907 id=907 data-nosnippet>907</a>            <span class="number">127
-<a href=#908 id=908 data-nosnippet>908</a>        </span>}
-<a href=#909 id=909 data-nosnippet>909</a>    }
-<a href=#910 id=910 data-nosnippet>910</a>}
-<a href=#911 id=911 data-nosnippet>911</a>
-<a href=#912 id=912 data-nosnippet>912</a><span class="kw">fn </span>cmd_grep_args(args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
-<a href=#913 id=913 data-nosnippet>913</a>    <span class="kw">crate</span>::text_tools::grep::run(args)
-<a href=#914 id=914 data-nosnippet>914</a>}
-<a href=#915 id=915 data-nosnippet>915</a>
-<a href=#916 id=916 data-nosnippet>916</a><span class="kw">fn </span>cmd_sed_args(args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
-<a href=#917 id=917 data-nosnippet>917</a>    <span class="kw">let </span><span class="kw-2">mut </span>cursor = ArgCursor::new(args);
-<a href=#918 id=918 data-nosnippet>918</a>    <span class="kw">let </span><span class="kw-2">mut </span>suppress = <span class="bool-val">false</span>;
-<a href=#919 id=919 data-nosnippet>919</a>    <span class="kw">let </span>expr = <span class="kw">loop </span>{
-<a href=#920 id=920 data-nosnippet>920</a>        <span class="kw">match </span>cursor.next() {
-<a href=#921 id=921 data-nosnippet>921</a>            <span class="prelude-val">Some</span>(<span class="string">"-n"</span>) =&gt; suppress = <span class="bool-val">true</span>,
-<a href=#922 id=922 data-nosnippet>922</a>            <span class="prelude-val">Some</span>(arg) =&gt; <span class="kw">break </span>String::from(arg),
-<a href=#923 id=923 data-nosnippet>923</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span>UtilityStatus::Error.exit_code(),
-<a href=#924 id=924 data-nosnippet>924</a>        }
-<a href=#925 id=925 data-nosnippet>925</a>    };
-<a href=#926 id=926 data-nosnippet>926</a>    <span class="kw">let </span>path = cursor.next_owned();
-<a href=#927 id=927 data-nosnippet>927</a>    <span class="kw">if </span>cursor.next().is_some() {
-<a href=#928 id=928 data-nosnippet>928</a>        shell_println(<span class="string">"sed: only one input file is supported"</span>);
-<a href=#929 id=929 data-nosnippet>929</a>        <span class="kw">return </span>UtilityStatus::Error.exit_code();
-<a href=#930 id=930 data-nosnippet>930</a>    }
-<a href=#931 id=931 data-nosnippet>931</a>    <span class="kw">let </span>text = <span class="kw">match </span>read_utility_text(<span class="string">"sed"</span>, path.as_deref()) {
-<a href=#932 id=932 data-nosnippet>932</a>        <span class="prelude-val">Ok</span>(text) =&gt; text,
-<a href=#933 id=933 data-nosnippet>933</a>        <span class="prelude-val">Err</span>(code) =&gt; <span class="kw">return </span>code,
+<a href=#785 id=785 data-nosnippet>785</a>    <span class="kw">let </span><span class="kw-2">mut </span>line = String::new();
+<a href=#786 id=786 data-nosnippet>786</a>    ostd::io::stdin().read_line(<span class="kw-2">&amp;mut </span>line)<span class="question-mark">?</span>;
+<a href=#787 id=787 data-nosnippet>787</a>    <span class="kw">let </span>value = line.trim_end_matches(<span class="kw-2">&amp;</span>[<span class="string">'\r'</span>, <span class="string">'\n'</span>][..]);
+<a href=#788 id=788 data-nosnippet>788</a>    set_var(var, value);
+<a href=#789 id=789 data-nosnippet>789</a>    <span class="prelude-val">Ok</span>(())
+<a href=#790 id=790 data-nosnippet>790</a>}
+<a href=#791 id=791 data-nosnippet>791</a>
+<a href=#792 id=792 data-nosnippet>792</a><span class="doccomment">/// `source &lt;path&gt;` — read a shell script from VFS and execute each line.
+<a href=#793 id=793 data-nosnippet>793</a>///
+<a href=#794 id=794 data-nosnippet>794</a>/// Lines starting with `#` and blank lines are skipped. The script runs in the
+<a href=#795 id=795 data-nosnippet>795</a>/// current shell's Jobs context, so spawns from the script are tracked normally.
+<a href=#796 id=796 data-nosnippet>796</a>/// Maximum script size is 4096 bytes (same limit as VFS OP_READ reply).
+<a href=#797 id=797 data-nosnippet>797</a></span><span class="kw">fn </span>cmd_source(args: <span class="kw-2">&amp;</span>[String], jobs: <span class="kw-2">&amp;mut </span>Jobs) -&gt; ViResult&lt;()&gt; {
+<a href=#798 id=798 data-nosnippet>798</a>    <span class="kw">let </span>path = <span class="kw">match </span>args.first() {
+<a href=#799 id=799 data-nosnippet>799</a>        <span class="prelude-val">Some</span>(p) =&gt; p.as_str(),
+<a href=#800 id=800 data-nosnippet>800</a>        <span class="prelude-val">None </span>=&gt; {
+<a href=#801 id=801 data-nosnippet>801</a>            ostd::io::println(<span class="string">"Usage: source &lt;path&gt;"</span>);
+<a href=#802 id=802 data-nosnippet>802</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
+<a href=#803 id=803 data-nosnippet>803</a>        }
+<a href=#804 id=804 data-nosnippet>804</a>    };
+<a href=#805 id=805 data-nosnippet>805</a>    <span class="kw">let </span>bytes = <span class="kw">crate</span>::cmd_fs::read_file_vfs_owned(path, <span class="number">4096</span>).inspect_err(|<span class="kw">_</span>| {
+<a href=#806 id=806 data-nosnippet>806</a>        ostd::io::print(<span class="string">"source: cannot open '"</span>);
+<a href=#807 id=807 data-nosnippet>807</a>        ostd::io::print(path);
+<a href=#808 id=808 data-nosnippet>808</a>        ostd::io::println(<span class="string">"'"</span>);
+<a href=#809 id=809 data-nosnippet>809</a>    })<span class="question-mark">?</span>;
+<a href=#810 id=810 data-nosnippet>810</a>    <span class="kw">let </span>content = core::str::from_utf8(<span class="kw-2">&amp;</span>bytes).unwrap_or(<span class="string">""</span>);
+<a href=#811 id=811 data-nosnippet>811</a>    <span class="kw">for </span>line <span class="kw">in </span>content.lines() {
+<a href=#812 id=812 data-nosnippet>812</a>        <span class="kw">let </span>line = line.trim();
+<a href=#813 id=813 data-nosnippet>813</a>        <span class="kw">if </span>line.is_empty() || line.starts_with(<span class="string">'#'</span>) {
+<a href=#814 id=814 data-nosnippet>814</a>            <span class="kw">continue</span>;
+<a href=#815 id=815 data-nosnippet>815</a>        }
+<a href=#816 id=816 data-nosnippet>816</a>        <span class="kw">let </span>ast = <span class="kw">crate</span>::parser::parse(line);
+<a href=#817 id=817 data-nosnippet>817</a>        execute(<span class="kw-2">&amp;</span>ast, jobs);
+<a href=#818 id=818 data-nosnippet>818</a>    }
+<a href=#819 id=819 data-nosnippet>819</a>    <span class="prelude-val">Ok</span>(())
+<a href=#820 id=820 data-nosnippet>820</a>}
+<a href=#821 id=821 data-nosnippet>821</a>
+<a href=#822 id=822 data-nosnippet>822</a><span class="doccomment">/// Attempt to spawn an external binary from `/bin/&lt;prog&gt;`.
+<a href=#823 id=823 data-nosnippet>823</a>///
+<a href=#824 id=824 data-nosnippet>824</a>/// Arguments are published via `sys_set_spawn_args` (a reserved state-stash
+<a href=#825 id=825 data-nosnippet>825</a>/// slot) for the spawned cell to read on startup — `sys_spawn_from_path` does
+<a href=#826 id=826 data-nosnippet>826</a>/// not yet carry argv on the new cell's stack. We always set the slot (empty
+<a href=#827 id=827 data-nosnippet>827</a>/// when there are no args) so the cell never reads a previous command's args.
+<a href=#828 id=828 data-nosnippet>828</a></span><span class="kw">fn </span>spawn_external(prog: <span class="kw-2">&amp;</span>str, args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
+<a href=#829 id=829 data-nosnippet>829</a>    <span class="kw">if </span>!ostd::set_spawn_argv(args) {
+<a href=#830 id=830 data-nosnippet>830</a>        shell_println(<span class="string">"shell: external argv exceeds 512-byte transport limit"</span>);
+<a href=#831 id=831 data-nosnippet>831</a>        <span class="kw">return </span><span class="number">1</span>;
+<a href=#832 id=832 data-nosnippet>832</a>    }
+<a href=#833 id=833 data-nosnippet>833</a>
+<a href=#834 id=834 data-nosnippet>834</a>    <span class="kw">let </span><span class="kw-2">mut </span>path = alloc::string::String::from(<span class="string">"/bin/"</span>);
+<a href=#835 id=835 data-nosnippet>835</a>    path.push_str(prog);
+<a href=#836 id=836 data-nosnippet>836</a>    <span class="kw">match </span>syscall::sys_spawn_from_path(<span class="kw-2">&amp;</span>path) {
+<a href=#837 id=837 data-nosnippet>837</a>        syscall::SyscallResult::Ok(tid) =&gt; {
+<a href=#838 id=838 data-nosnippet>838</a>            <span class="comment">// Backgrounded (`cmd &amp;`): do NOT sys_wait. A long-running external
+<a href=#839 id=839 data-nosnippet>839</a>            // cell (httpd) would otherwise park the shell forever, so no later
+<a href=#840 id=840 data-nosnippet>840</a>            // command runs. The child keeps the shell's focus grant; that is
+<a href=#841 id=841 data-nosnippet>841</a>            // acceptable for a server that never reads the keyboard. Foreground
+<a href=#842 id=842 data-nosnippet>842</a>            // spawns fall through to the focus-handoff + sys_wait below.
+<a href=#843 id=843 data-nosnippet>843</a>            </span><span class="kw">if </span>state::bg_spawn() {
+<a href=#844 id=844 data-nosnippet>844</a>                <span class="kw">return </span><span class="number">0</span>;
+<a href=#845 id=845 data-nosnippet>845</a>            }
+<a href=#846 id=846 data-nosnippet>846</a>            <span class="comment">// Drain any pending input-service IPC events before ClearFocus.
+<a href=#847 id=847 data-nosnippet>847</a>            // Shell reads UART via sys_read(0), so Enter arrives via BOTH the ring
+<a href=#848 id=848 data-nosnippet>848</a>            // buffer (consumed in read_line) AND input-service EV_ASCII IPC. The IPC
+<a href=#849 id=849 data-nosnippet>849</a>            // path blocks input service in sys_send(shell, Enter_event) while shell
+<a href=#850 id=850 data-nosnippet>850</a>            // is not in sys_recv. drain_pending_input_events() uses sys_try_recv with
+<a href=#851 id=851 data-nosnippet>851</a>            // mask=input_tid (the correct G18 wildcard) to drain the queued message,
+<a href=#852 id=852 data-nosnippet>852</a>            // unblocking input service so release_focus does not deadlock.
+<a href=#853 id=853 data-nosnippet>853</a>            </span>ostd::input::drain_pending_input_events();
+<a href=#854 id=854 data-nosnippet>854</a>            <span class="comment">// Release keyboard focus before blocking in sys_wait. While the shell
+<a href=#855 id=855 data-nosnippet>855</a>            // is in sys_wait it is NOT in sys_recv, so the input service would
+<a href=#856 id=856 data-nosnippet>856</a>            // block indefinitely trying to dispatch key events to this cell and
+<a href=#857 id=857 data-nosnippet>857</a>            // eventually be killed by its own heartbeat watchdog (G18 deadlock).
+<a href=#858 id=858 data-nosnippet>858</a>            </span>ostd::input::release_focus();
+<a href=#859 id=859 data-nosnippet>859</a>            <span class="comment">// Foreground: block until the child exits so it owns the console
+<a href=#860 id=860 data-nosnippet>860</a>            // (stdin/UART). Without this the shell loops back to read the next
+<a href=#861 id=861 data-nosnippet>861</a>            // line and races interactive children (e.g. `hypha`) for keystrokes.
+<a href=#862 id=862 data-nosnippet>862</a>            // Fast commands return immediately (kernel Wait short-circuits when
+<a href=#863 id=863 data-nosnippet>863</a>            // the child is already Terminated). Background (`&amp;`) already runs
+<a href=#864 id=864 data-nosnippet>864</a>            // synchronously in G1, so this does not regress it.
+<a href=#865 id=865 data-nosnippet>865</a>            </span><span class="kw">let </span>code = <span class="kw">match </span>syscall::sys_wait(tid) {
+<a href=#866 id=866 data-nosnippet>866</a>                syscall::SyscallResult::Ok(code) =&gt; code <span class="kw">as </span>i32,
+<a href=#867 id=867 data-nosnippet>867</a>                syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; <span class="number">0</span>,
+<a href=#868 id=868 data-nosnippet>868</a>            };
+<a href=#869 id=869 data-nosnippet>869</a>            <span class="comment">// Re-acquire focus for the next interactive prompt.
+<a href=#870 id=870 data-nosnippet>870</a>            </span><span class="kw">for _ in </span><span class="number">0</span>..<span class="number">10 </span>{
+<a href=#871 id=871 data-nosnippet>871</a>                <span class="kw">if </span>ostd::input::request_focus() {
+<a href=#872 id=872 data-nosnippet>872</a>                    <span class="kw">break</span>;
+<a href=#873 id=873 data-nosnippet>873</a>                }
+<a href=#874 id=874 data-nosnippet>874</a>            }
+<a href=#875 id=875 data-nosnippet>875</a>            code
+<a href=#876 id=876 data-nosnippet>876</a>        }
+<a href=#877 id=877 data-nosnippet>877</a>        syscall::SyscallResult::Err(<span class="kw">_</span>) =&gt; {
+<a href=#878 id=878 data-nosnippet>878</a>            ostd::io::print(<span class="string">"shell: command not found: "</span>);
+<a href=#879 id=879 data-nosnippet>879</a>            ostd::io::println(prog);
+<a href=#880 id=880 data-nosnippet>880</a>            <span class="number">127
+<a href=#881 id=881 data-nosnippet>881</a>        </span>}
+<a href=#882 id=882 data-nosnippet>882</a>    }
+<a href=#883 id=883 data-nosnippet>883</a>}
+<a href=#884 id=884 data-nosnippet>884</a>
+<a href=#885 id=885 data-nosnippet>885</a><span class="kw">fn </span>cmd_grep_args(args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
+<a href=#886 id=886 data-nosnippet>886</a>    <span class="kw">crate</span>::text_tools::grep::run(args)
+<a href=#887 id=887 data-nosnippet>887</a>}
+<a href=#888 id=888 data-nosnippet>888</a>
+<a href=#889 id=889 data-nosnippet>889</a><span class="kw">fn </span>cmd_sed_args(args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
+<a href=#890 id=890 data-nosnippet>890</a>    <span class="kw">let </span><span class="kw-2">mut </span>cursor = ArgCursor::new(args);
+<a href=#891 id=891 data-nosnippet>891</a>    <span class="kw">let </span><span class="kw-2">mut </span>suppress = <span class="bool-val">false</span>;
+<a href=#892 id=892 data-nosnippet>892</a>    <span class="kw">let </span>expr = <span class="kw">loop </span>{
+<a href=#893 id=893 data-nosnippet>893</a>        <span class="kw">match </span>cursor.next() {
+<a href=#894 id=894 data-nosnippet>894</a>            <span class="prelude-val">Some</span>(<span class="string">"-n"</span>) =&gt; suppress = <span class="bool-val">true</span>,
+<a href=#895 id=895 data-nosnippet>895</a>            <span class="prelude-val">Some</span>(arg) =&gt; <span class="kw">break </span>String::from(arg),
+<a href=#896 id=896 data-nosnippet>896</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span>UtilityStatus::Error.exit_code(),
+<a href=#897 id=897 data-nosnippet>897</a>        }
+<a href=#898 id=898 data-nosnippet>898</a>    };
+<a href=#899 id=899 data-nosnippet>899</a>    <span class="kw">let </span>path = cursor.next_owned();
+<a href=#900 id=900 data-nosnippet>900</a>    <span class="kw">if </span>cursor.next().is_some() {
+<a href=#901 id=901 data-nosnippet>901</a>        shell_println(<span class="string">"sed: only one input file is supported"</span>);
+<a href=#902 id=902 data-nosnippet>902</a>        <span class="kw">return </span>UtilityStatus::Error.exit_code();
+<a href=#903 id=903 data-nosnippet>903</a>    }
+<a href=#904 id=904 data-nosnippet>904</a>    <span class="kw">let </span>text = <span class="kw">match </span>read_utility_text(<span class="string">"sed"</span>, path.as_deref()) {
+<a href=#905 id=905 data-nosnippet>905</a>        <span class="prelude-val">Ok</span>(text) =&gt; text,
+<a href=#906 id=906 data-nosnippet>906</a>        <span class="prelude-val">Err</span>(code) =&gt; <span class="kw">return </span>code,
+<a href=#907 id=907 data-nosnippet>907</a>    };
+<a href=#908 id=908 data-nosnippet>908</a>    <span class="kw">let </span>output = <span class="kw">match </span>sed::execute(<span class="kw-2">&amp;</span>expr, suppress, <span class="kw-2">&amp;</span>text) {
+<a href=#909 id=909 data-nosnippet>909</a>        <span class="prelude-val">Ok</span>(output) =&gt; output,
+<a href=#910 id=910 data-nosnippet>910</a>        <span class="prelude-val">Err</span>(err) =&gt; {
+<a href=#911 id=911 data-nosnippet>911</a>            shell_print(<span class="string">"sed: "</span>);
+<a href=#912 id=912 data-nosnippet>912</a>            shell_println(err.message());
+<a href=#913 id=913 data-nosnippet>913</a>            <span class="kw">return </span>UtilityStatus::Error.exit_code();
+<a href=#914 id=914 data-nosnippet>914</a>        }
+<a href=#915 id=915 data-nosnippet>915</a>    };
+<a href=#916 id=916 data-nosnippet>916</a>    <span class="kw">for </span>line <span class="kw">in </span>output {
+<a href=#917 id=917 data-nosnippet>917</a>        shell_println(<span class="kw-2">&amp;</span>line);
+<a href=#918 id=918 data-nosnippet>918</a>    }
+<a href=#919 id=919 data-nosnippet>919</a>    UtilityStatus::Selected.exit_code()
+<a href=#920 id=920 data-nosnippet>920</a>}
+<a href=#921 id=921 data-nosnippet>921</a>
+<a href=#922 id=922 data-nosnippet>922</a><span class="kw">fn </span>cmd_awk_args(args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
+<a href=#923 id=923 data-nosnippet>923</a>    <span class="kw">let </span><span class="kw-2">mut </span>cursor = ArgCursor::new(args);
+<a href=#924 id=924 data-nosnippet>924</a>    <span class="kw">let </span><span class="kw-2">mut </span>separator = <span class="prelude-val">None</span>;
+<a href=#925 id=925 data-nosnippet>925</a>    <span class="kw">let </span>program = <span class="kw">loop </span>{
+<a href=#926 id=926 data-nosnippet>926</a>        <span class="kw">match </span>cursor.next() {
+<a href=#927 id=927 data-nosnippet>927</a>            <span class="prelude-val">Some</span>(<span class="string">"-F"</span>) =&gt; separator = cursor.next_owned(),
+<a href=#928 id=928 data-nosnippet>928</a>            <span class="prelude-val">Some</span>(arg) <span class="kw">if </span>arg.starts_with(<span class="string">"-F"</span>) &amp;&amp; arg.len() &gt; <span class="number">2 </span>=&gt; {
+<a href=#929 id=929 data-nosnippet>929</a>                separator = <span class="prelude-val">Some</span>(String::from(<span class="kw-2">&amp;</span>arg[<span class="number">2</span>..]));
+<a href=#930 id=930 data-nosnippet>930</a>            }
+<a href=#931 id=931 data-nosnippet>931</a>            <span class="prelude-val">Some</span>(arg) =&gt; <span class="kw">break </span>String::from(arg),
+<a href=#932 id=932 data-nosnippet>932</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span>UtilityStatus::Error.exit_code(),
+<a href=#933 id=933 data-nosnippet>933</a>        }
 <a href=#934 id=934 data-nosnippet>934</a>    };
-<a href=#935 id=935 data-nosnippet>935</a>    <span class="kw">let </span>output = <span class="kw">match </span>sed::execute(<span class="kw-2">&amp;</span>expr, suppress, <span class="kw-2">&amp;</span>text) {
-<a href=#936 id=936 data-nosnippet>936</a>        <span class="prelude-val">Ok</span>(output) =&gt; output,
-<a href=#937 id=937 data-nosnippet>937</a>        <span class="prelude-val">Err</span>(err) =&gt; {
-<a href=#938 id=938 data-nosnippet>938</a>            shell_print(<span class="string">"sed: "</span>);
-<a href=#939 id=939 data-nosnippet>939</a>            shell_println(err.message());
-<a href=#940 id=940 data-nosnippet>940</a>            <span class="kw">return </span>UtilityStatus::Error.exit_code();
-<a href=#941 id=941 data-nosnippet>941</a>        }
-<a href=#942 id=942 data-nosnippet>942</a>    };
-<a href=#943 id=943 data-nosnippet>943</a>    <span class="kw">for </span>line <span class="kw">in </span>output {
-<a href=#944 id=944 data-nosnippet>944</a>        shell_println(<span class="kw-2">&amp;</span>line);
-<a href=#945 id=945 data-nosnippet>945</a>    }
-<a href=#946 id=946 data-nosnippet>946</a>    UtilityStatus::Selected.exit_code()
-<a href=#947 id=947 data-nosnippet>947</a>}
-<a href=#948 id=948 data-nosnippet>948</a>
-<a href=#949 id=949 data-nosnippet>949</a><span class="kw">fn </span>cmd_awk_args(args: <span class="kw-2">&amp;</span>[String]) -&gt; i32 {
-<a href=#950 id=950 data-nosnippet>950</a>    <span class="kw">let </span><span class="kw-2">mut </span>cursor = ArgCursor::new(args);
-<a href=#951 id=951 data-nosnippet>951</a>    <span class="kw">let </span><span class="kw-2">mut </span>separator = <span class="prelude-val">None</span>;
-<a href=#952 id=952 data-nosnippet>952</a>    <span class="kw">let </span>program = <span class="kw">loop </span>{
-<a href=#953 id=953 data-nosnippet>953</a>        <span class="kw">match </span>cursor.next() {
-<a href=#954 id=954 data-nosnippet>954</a>            <span class="prelude-val">Some</span>(<span class="string">"-F"</span>) =&gt; separator = cursor.next_owned(),
-<a href=#955 id=955 data-nosnippet>955</a>            <span class="prelude-val">Some</span>(arg) <span class="kw">if </span>arg.starts_with(<span class="string">"-F"</span>) &amp;&amp; arg.len() &gt; <span class="number">2 </span>=&gt; {
-<a href=#956 id=956 data-nosnippet>956</a>                separator = <span class="prelude-val">Some</span>(String::from(<span class="kw-2">&amp;</span>arg[<span class="number">2</span>..]));
-<a href=#957 id=957 data-nosnippet>957</a>            }
-<a href=#958 id=958 data-nosnippet>958</a>            <span class="prelude-val">Some</span>(arg) =&gt; <span class="kw">break </span>String::from(arg),
-<a href=#959 id=959 data-nosnippet>959</a>            <span class="prelude-val">None </span>=&gt; <span class="kw">return </span>UtilityStatus::Error.exit_code(),
-<a href=#960 id=960 data-nosnippet>960</a>        }
-<a href=#961 id=961 data-nosnippet>961</a>    };
-<a href=#962 id=962 data-nosnippet>962</a>    <span class="kw">if </span>!awk::looks_like_program(<span class="kw-2">&amp;</span>program) {
-<a href=#963 id=963 data-nosnippet>963</a>        <span class="kw">let </span>joined = args.join(<span class="string">" "</span>);
-<a href=#964 id=964 data-nosnippet>964</a>        <span class="kw">return match </span><span class="kw">crate</span>::cmd_fs::cmd_awk(joined.split_whitespace()) {
-<a href=#965 id=965 data-nosnippet>965</a>            <span class="prelude-val">Ok</span>(()) =&gt; UtilityStatus::Selected.exit_code(),
-<a href=#966 id=966 data-nosnippet>966</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; UtilityStatus::Error.exit_code(),
-<a href=#967 id=967 data-nosnippet>967</a>        };
-<a href=#968 id=968 data-nosnippet>968</a>    }
-<a href=#969 id=969 data-nosnippet>969</a>    <span class="kw">let </span>path = cursor.next_owned();
-<a href=#970 id=970 data-nosnippet>970</a>    <span class="kw">if </span>cursor.next().is_some() {
-<a href=#971 id=971 data-nosnippet>971</a>        shell_println(<span class="string">"awk: only one input file is supported"</span>);
-<a href=#972 id=972 data-nosnippet>972</a>        <span class="kw">return </span>UtilityStatus::Error.exit_code();
-<a href=#973 id=973 data-nosnippet>973</a>    }
-<a href=#974 id=974 data-nosnippet>974</a>    <span class="kw">let </span>text = <span class="kw">match </span>read_utility_text(<span class="string">"awk"</span>, path.as_deref()) {
-<a href=#975 id=975 data-nosnippet>975</a>        <span class="prelude-val">Ok</span>(text) =&gt; text,
-<a href=#976 id=976 data-nosnippet>976</a>        <span class="prelude-val">Err</span>(code) =&gt; <span class="kw">return </span>code,
-<a href=#977 id=977 data-nosnippet>977</a>    };
-<a href=#978 id=978 data-nosnippet>978</a>    <span class="kw">let </span>separator = <span class="kw">match </span>awk::Separator::from_flag(separator.as_deref()) {
-<a href=#979 id=979 data-nosnippet>979</a>        <span class="prelude-val">Ok</span>(separator) =&gt; separator,
-<a href=#980 id=980 data-nosnippet>980</a>        <span class="prelude-val">Err</span>(err) =&gt; {
-<a href=#981 id=981 data-nosnippet>981</a>            shell_print(<span class="string">"awk: "</span>);
-<a href=#982 id=982 data-nosnippet>982</a>            shell_println(err.message());
-<a href=#983 id=983 data-nosnippet>983</a>            <span class="kw">return </span>UtilityStatus::Error.exit_code();
-<a href=#984 id=984 data-nosnippet>984</a>        }
-<a href=#985 id=985 data-nosnippet>985</a>    };
-<a href=#986 id=986 data-nosnippet>986</a>    <span class="kw">let </span>output = <span class="kw">match </span>awk::execute(<span class="kw-2">&amp;</span>program, separator, <span class="kw-2">&amp;</span>text) {
-<a href=#987 id=987 data-nosnippet>987</a>        <span class="prelude-val">Ok</span>(output) =&gt; output,
-<a href=#988 id=988 data-nosnippet>988</a>        <span class="prelude-val">Err</span>(err) =&gt; {
-<a href=#989 id=989 data-nosnippet>989</a>            shell_print(<span class="string">"awk: "</span>);
-<a href=#990 id=990 data-nosnippet>990</a>            shell_println(err.message());
-<a href=#991 id=991 data-nosnippet>991</a>            <span class="kw">return </span>UtilityStatus::Error.exit_code();
-<a href=#992 id=992 data-nosnippet>992</a>        }
-<a href=#993 id=993 data-nosnippet>993</a>    };
-<a href=#994 id=994 data-nosnippet>994</a>    <span class="kw">for </span>line <span class="kw">in </span>output {
-<a href=#995 id=995 data-nosnippet>995</a>        shell_println(<span class="kw-2">&amp;</span>line);
-<a href=#996 id=996 data-nosnippet>996</a>    }
-<a href=#997 id=997 data-nosnippet>997</a>    UtilityStatus::Selected.exit_code()
-<a href=#998 id=998 data-nosnippet>998</a>}
-<a href=#999 id=999 data-nosnippet>999</a>
-<a href=#1000 id=1000 data-nosnippet>1000</a><span class="kw">fn </span>read_utility_text(name: <span class="kw-2">&amp;</span>str, path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, i32&gt; {
-<a href=#1001 id=1001 data-nosnippet>1001</a>    <span class="kw">let </span>bytes = <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = path {
-<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="kw">match </span>read_path_bytes(path) {
-<a href=#1003 id=1003 data-nosnippet>1003</a>            <span class="prelude-val">Ok</span>(bytes) =&gt; bytes,
-<a href=#1004 id=1004 data-nosnippet>1004</a>            <span class="prelude-val">Err</span>(UtilityReadError::Io) =&gt; {
-<a href=#1005 id=1005 data-nosnippet>1005</a>                ostd::io::print(name);
-<a href=#1006 id=1006 data-nosnippet>1006</a>                ostd::io::print(<span class="string">": cannot open '"</span>);
-<a href=#1007 id=1007 data-nosnippet>1007</a>                ostd::io::print(path);
-<a href=#1008 id=1008 data-nosnippet>1008</a>                ostd::io::println(<span class="string">"'"</span>);
-<a href=#1009 id=1009 data-nosnippet>1009</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
-<a href=#1010 id=1010 data-nosnippet>1010</a>            }
-<a href=#1011 id=1011 data-nosnippet>1011</a>            <span class="prelude-val">Err</span>(UtilityReadError::InputTooLarge) =&gt; {
-<a href=#1012 id=1012 data-nosnippet>1012</a>                shell_print(name);
-<a href=#1013 id=1013 data-nosnippet>1013</a>                shell_println(<span class="string">": input exceeds 65536-byte limit"</span>);
-<a href=#1014 id=1014 data-nosnippet>1014</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
-<a href=#1015 id=1015 data-nosnippet>1015</a>            }
-<a href=#1016 id=1016 data-nosnippet>1016</a>            <span class="prelude-val">Err</span>(UtilityReadError::AllocationFailed) =&gt; {
-<a href=#1017 id=1017 data-nosnippet>1017</a>                shell_print(name);
-<a href=#1018 id=1018 data-nosnippet>1018</a>                shell_println(<span class="string">": input allocation failed"</span>);
-<a href=#1019 id=1019 data-nosnippet>1019</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
-<a href=#1020 id=1020 data-nosnippet>1020</a>            }
-<a href=#1021 id=1021 data-nosnippet>1021</a>        }
-<a href=#1022 id=1022 data-nosnippet>1022</a>    } <span class="kw">else </span>{
-<a href=#1023 id=1023 data-nosnippet>1023</a>        <span class="kw">let </span>stdin = shell_stdin();
-<a href=#1024 id=1024 data-nosnippet>1024</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
-<a href=#1025 id=1025 data-nosnippet>1025</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = extend_input(<span class="kw-2">&amp;mut </span>bytes, <span class="kw-2">&amp;</span>stdin) {
-<a href=#1026 id=1026 data-nosnippet>1026</a>            shell_print(name);
-<a href=#1027 id=1027 data-nosnippet>1027</a>            shell_println(<span class="kw">match </span>err {
-<a href=#1028 id=1028 data-nosnippet>1028</a>                InputBufferError::TooLarge =&gt; <span class="string">": input exceeds 65536-byte limit"</span>,
-<a href=#1029 id=1029 data-nosnippet>1029</a>                InputBufferError::AllocationFailed =&gt; <span class="string">": input allocation failed"</span>,
-<a href=#1030 id=1030 data-nosnippet>1030</a>            });
-<a href=#1031 id=1031 data-nosnippet>1031</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
-<a href=#1032 id=1032 data-nosnippet>1032</a>        }
-<a href=#1033 id=1033 data-nosnippet>1033</a>        bytes
-<a href=#1034 id=1034 data-nosnippet>1034</a>    };
-<a href=#1035 id=1035 data-nosnippet>1035</a>    core::str::from_utf8(<span class="kw-2">&amp;</span>bytes).map(String::from).map_err(|<span class="kw">_</span>| {
-<a href=#1036 id=1036 data-nosnippet>1036</a>        shell_print(name);
-<a href=#1037 id=1037 data-nosnippet>1037</a>        shell_println(<span class="string">": input is not valid UTF-8"</span>);
-<a href=#1038 id=1038 data-nosnippet>1038</a>        UtilityStatus::Error.exit_code()
-<a href=#1039 id=1039 data-nosnippet>1039</a>    })
-<a href=#1040 id=1040 data-nosnippet>1040</a>}
+<a href=#935 id=935 data-nosnippet>935</a>    <span class="kw">if </span>!awk::looks_like_program(<span class="kw-2">&amp;</span>program) {
+<a href=#936 id=936 data-nosnippet>936</a>        <span class="kw">let </span>joined = args.join(<span class="string">" "</span>);
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="kw">return match </span><span class="kw">crate</span>::cmd_fs::cmd_awk(joined.split_whitespace()) {
+<a href=#938 id=938 data-nosnippet>938</a>            <span class="prelude-val">Ok</span>(()) =&gt; UtilityStatus::Selected.exit_code(),
+<a href=#939 id=939 data-nosnippet>939</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; UtilityStatus::Error.exit_code(),
+<a href=#940 id=940 data-nosnippet>940</a>        };
+<a href=#941 id=941 data-nosnippet>941</a>    }
+<a href=#942 id=942 data-nosnippet>942</a>    <span class="kw">let </span>path = cursor.next_owned();
+<a href=#943 id=943 data-nosnippet>943</a>    <span class="kw">if </span>cursor.next().is_some() {
+<a href=#944 id=944 data-nosnippet>944</a>        shell_println(<span class="string">"awk: only one input file is supported"</span>);
+<a href=#945 id=945 data-nosnippet>945</a>        <span class="kw">return </span>UtilityStatus::Error.exit_code();
+<a href=#946 id=946 data-nosnippet>946</a>    }
+<a href=#947 id=947 data-nosnippet>947</a>    <span class="kw">let </span>text = <span class="kw">match </span>read_utility_text(<span class="string">"awk"</span>, path.as_deref()) {
+<a href=#948 id=948 data-nosnippet>948</a>        <span class="prelude-val">Ok</span>(text) =&gt; text,
+<a href=#949 id=949 data-nosnippet>949</a>        <span class="prelude-val">Err</span>(code) =&gt; <span class="kw">return </span>code,
+<a href=#950 id=950 data-nosnippet>950</a>    };
+<a href=#951 id=951 data-nosnippet>951</a>    <span class="kw">let </span>separator = <span class="kw">match </span>awk::Separator::from_flag(separator.as_deref()) {
+<a href=#952 id=952 data-nosnippet>952</a>        <span class="prelude-val">Ok</span>(separator) =&gt; separator,
+<a href=#953 id=953 data-nosnippet>953</a>        <span class="prelude-val">Err</span>(err) =&gt; {
+<a href=#954 id=954 data-nosnippet>954</a>            shell_print(<span class="string">"awk: "</span>);
+<a href=#955 id=955 data-nosnippet>955</a>            shell_println(err.message());
+<a href=#956 id=956 data-nosnippet>956</a>            <span class="kw">return </span>UtilityStatus::Error.exit_code();
+<a href=#957 id=957 data-nosnippet>957</a>        }
+<a href=#958 id=958 data-nosnippet>958</a>    };
+<a href=#959 id=959 data-nosnippet>959</a>    <span class="kw">let </span>output = <span class="kw">match </span>awk::execute(<span class="kw-2">&amp;</span>program, separator, <span class="kw-2">&amp;</span>text) {
+<a href=#960 id=960 data-nosnippet>960</a>        <span class="prelude-val">Ok</span>(output) =&gt; output,
+<a href=#961 id=961 data-nosnippet>961</a>        <span class="prelude-val">Err</span>(err) =&gt; {
+<a href=#962 id=962 data-nosnippet>962</a>            shell_print(<span class="string">"awk: "</span>);
+<a href=#963 id=963 data-nosnippet>963</a>            shell_println(err.message());
+<a href=#964 id=964 data-nosnippet>964</a>            <span class="kw">return </span>UtilityStatus::Error.exit_code();
+<a href=#965 id=965 data-nosnippet>965</a>        }
+<a href=#966 id=966 data-nosnippet>966</a>    };
+<a href=#967 id=967 data-nosnippet>967</a>    <span class="kw">for </span>line <span class="kw">in </span>output {
+<a href=#968 id=968 data-nosnippet>968</a>        shell_println(<span class="kw-2">&amp;</span>line);
+<a href=#969 id=969 data-nosnippet>969</a>    }
+<a href=#970 id=970 data-nosnippet>970</a>    UtilityStatus::Selected.exit_code()
+<a href=#971 id=971 data-nosnippet>971</a>}
+<a href=#972 id=972 data-nosnippet>972</a>
+<a href=#973 id=973 data-nosnippet>973</a><span class="kw">fn </span>read_utility_text(name: <span class="kw-2">&amp;</span>str, path: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;String, i32&gt; {
+<a href=#974 id=974 data-nosnippet>974</a>    <span class="kw">let </span>bytes = <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = path {
+<a href=#975 id=975 data-nosnippet>975</a>        <span class="kw">match </span>read_path_bytes(path) {
+<a href=#976 id=976 data-nosnippet>976</a>            <span class="prelude-val">Ok</span>(bytes) =&gt; bytes,
+<a href=#977 id=977 data-nosnippet>977</a>            <span class="prelude-val">Err</span>(UtilityReadError::Io) =&gt; {
+<a href=#978 id=978 data-nosnippet>978</a>                ostd::io::print(name);
+<a href=#979 id=979 data-nosnippet>979</a>                ostd::io::print(<span class="string">": cannot open '"</span>);
+<a href=#980 id=980 data-nosnippet>980</a>                ostd::io::print(path);
+<a href=#981 id=981 data-nosnippet>981</a>                ostd::io::println(<span class="string">"'"</span>);
+<a href=#982 id=982 data-nosnippet>982</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
+<a href=#983 id=983 data-nosnippet>983</a>            }
+<a href=#984 id=984 data-nosnippet>984</a>            <span class="prelude-val">Err</span>(UtilityReadError::InputTooLarge) =&gt; {
+<a href=#985 id=985 data-nosnippet>985</a>                shell_print(name);
+<a href=#986 id=986 data-nosnippet>986</a>                shell_println(<span class="string">": input exceeds 65536-byte limit"</span>);
+<a href=#987 id=987 data-nosnippet>987</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
+<a href=#988 id=988 data-nosnippet>988</a>            }
+<a href=#989 id=989 data-nosnippet>989</a>            <span class="prelude-val">Err</span>(UtilityReadError::AllocationFailed) =&gt; {
+<a href=#990 id=990 data-nosnippet>990</a>                shell_print(name);
+<a href=#991 id=991 data-nosnippet>991</a>                shell_println(<span class="string">": input allocation failed"</span>);
+<a href=#992 id=992 data-nosnippet>992</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
+<a href=#993 id=993 data-nosnippet>993</a>            }
+<a href=#994 id=994 data-nosnippet>994</a>        }
+<a href=#995 id=995 data-nosnippet>995</a>    } <span class="kw">else </span>{
+<a href=#996 id=996 data-nosnippet>996</a>        <span class="kw">let </span>stdin = shell_stdin();
+<a href=#997 id=997 data-nosnippet>997</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
+<a href=#998 id=998 data-nosnippet>998</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = extend_input(<span class="kw-2">&amp;mut </span>bytes, <span class="kw-2">&amp;</span>stdin) {
+<a href=#999 id=999 data-nosnippet>999</a>            shell_print(name);
+<a href=#1000 id=1000 data-nosnippet>1000</a>            shell_println(<span class="kw">match </span>err {
+<a href=#1001 id=1001 data-nosnippet>1001</a>                InputBufferError::TooLarge =&gt; <span class="string">": input exceeds 65536-byte limit"</span>,
+<a href=#1002 id=1002 data-nosnippet>1002</a>                InputBufferError::AllocationFailed =&gt; <span class="string">": input allocation failed"</span>,
+<a href=#1003 id=1003 data-nosnippet>1003</a>            });
+<a href=#1004 id=1004 data-nosnippet>1004</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityStatus::Error.exit_code());
+<a href=#1005 id=1005 data-nosnippet>1005</a>        }
+<a href=#1006 id=1006 data-nosnippet>1006</a>        bytes
+<a href=#1007 id=1007 data-nosnippet>1007</a>    };
+<a href=#1008 id=1008 data-nosnippet>1008</a>    core::str::from_utf8(<span class="kw-2">&amp;</span>bytes).map(String::from).map_err(|<span class="kw">_</span>| {
+<a href=#1009 id=1009 data-nosnippet>1009</a>        shell_print(name);
+<a href=#1010 id=1010 data-nosnippet>1010</a>        shell_println(<span class="string">": input is not valid UTF-8"</span>);
+<a href=#1011 id=1011 data-nosnippet>1011</a>        UtilityStatus::Error.exit_code()
+<a href=#1012 id=1012 data-nosnippet>1012</a>    })
+<a href=#1013 id=1013 data-nosnippet>1013</a>}
+<a href=#1014 id=1014 data-nosnippet>1014</a>
+<a href=#1015 id=1015 data-nosnippet>1015</a><span class="kw">enum </span>UtilityReadError {
+<a href=#1016 id=1016 data-nosnippet>1016</a>    Io,
+<a href=#1017 id=1017 data-nosnippet>1017</a>    InputTooLarge,
+<a href=#1018 id=1018 data-nosnippet>1018</a>    AllocationFailed,
+<a href=#1019 id=1019 data-nosnippet>1019</a>}
+<a href=#1020 id=1020 data-nosnippet>1020</a>
+<a href=#1021 id=1021 data-nosnippet>1021</a><span class="kw">fn </span>read_path_bytes(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, UtilityReadError&gt; {
+<a href=#1022 id=1022 data-nosnippet>1022</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>((size, is_dir)) = <span class="kw">crate</span>::cmd_fs::stat_file_vfs(path) {
+<a href=#1023 id=1023 data-nosnippet>1023</a>        <span class="kw">if </span>is_dir {
+<a href=#1024 id=1024 data-nosnippet>1024</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityReadError::Io);
+<a href=#1025 id=1025 data-nosnippet>1025</a>        }
+<a href=#1026 id=1026 data-nosnippet>1026</a>        <span class="kw">if </span>size &gt; MAX_INPUT_BYTES {
+<a href=#1027 id=1027 data-nosnippet>1027</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityReadError::InputTooLarge);
+<a href=#1028 id=1028 data-nosnippet>1028</a>        }
+<a href=#1029 id=1029 data-nosnippet>1029</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
+<a href=#1030 id=1030 data-nosnippet>1030</a>        bytes
+<a href=#1031 id=1031 data-nosnippet>1031</a>            .try_reserve_exact(size)
+<a href=#1032 id=1032 data-nosnippet>1032</a>            .map_err(|<span class="kw">_</span>| UtilityReadError::AllocationFailed)<span class="question-mark">?</span>;
+<a href=#1033 id=1033 data-nosnippet>1033</a>        bytes.resize(size, <span class="number">0</span>);
+<a href=#1034 id=1034 data-nosnippet>1034</a>        <span class="kw">if </span>size == <span class="number">0 </span>{
+<a href=#1035 id=1035 data-nosnippet>1035</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(bytes);
+<a href=#1036 id=1036 data-nosnippet>1036</a>        }
+<a href=#1037 id=1037 data-nosnippet>1037</a>        <span class="kw">if </span><span class="kw">crate</span>::cmd_fs::read_file_vfs_known_size(path, size, <span class="kw-2">&amp;mut </span>bytes) == <span class="prelude-val">Ok</span>(size) {
+<a href=#1038 id=1038 data-nosnippet>1038</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(bytes);
+<a href=#1039 id=1039 data-nosnippet>1039</a>        }
+<a href=#1040 id=1040 data-nosnippet>1040</a>    }
 <a href=#1041 id=1041 data-nosnippet>1041</a>
-<a href=#1042 id=1042 data-nosnippet>1042</a><span class="kw">enum </span>UtilityReadError {
-<a href=#1043 id=1043 data-nosnippet>1043</a>    Io,
-<a href=#1044 id=1044 data-nosnippet>1044</a>    InputTooLarge,
-<a href=#1045 id=1045 data-nosnippet>1045</a>    AllocationFailed,
-<a href=#1046 id=1046 data-nosnippet>1046</a>}
-<a href=#1047 id=1047 data-nosnippet>1047</a>
-<a href=#1048 id=1048 data-nosnippet>1048</a><span class="kw">fn </span>read_path_bytes(path: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;u8&gt;, UtilityReadError&gt; {
-<a href=#1049 id=1049 data-nosnippet>1049</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>((size, is_dir)) = <span class="kw">crate</span>::cmd_fs::stat_file_vfs(path) {
-<a href=#1050 id=1050 data-nosnippet>1050</a>        <span class="kw">if </span>is_dir {
-<a href=#1051 id=1051 data-nosnippet>1051</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityReadError::Io);
-<a href=#1052 id=1052 data-nosnippet>1052</a>        }
-<a href=#1053 id=1053 data-nosnippet>1053</a>        <span class="kw">if </span>size &gt; MAX_INPUT_BYTES {
-<a href=#1054 id=1054 data-nosnippet>1054</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityReadError::InputTooLarge);
-<a href=#1055 id=1055 data-nosnippet>1055</a>        }
-<a href=#1056 id=1056 data-nosnippet>1056</a>        <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
-<a href=#1057 id=1057 data-nosnippet>1057</a>        bytes
-<a href=#1058 id=1058 data-nosnippet>1058</a>            .try_reserve_exact(size)
-<a href=#1059 id=1059 data-nosnippet>1059</a>            .map_err(|<span class="kw">_</span>| UtilityReadError::AllocationFailed)<span class="question-mark">?</span>;
-<a href=#1060 id=1060 data-nosnippet>1060</a>        bytes.resize(size, <span class="number">0</span>);
-<a href=#1061 id=1061 data-nosnippet>1061</a>        <span class="kw">if </span>size == <span class="number">0 </span>{
-<a href=#1062 id=1062 data-nosnippet>1062</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(bytes);
-<a href=#1063 id=1063 data-nosnippet>1063</a>        }
-<a href=#1064 id=1064 data-nosnippet>1064</a>        <span class="kw">if </span><span class="kw">crate</span>::cmd_fs::read_file_vfs_known_size(path, size, <span class="kw-2">&amp;mut </span>bytes) == <span class="prelude-val">Ok</span>(size) {
-<a href=#1065 id=1065 data-nosnippet>1065</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(bytes);
-<a href=#1066 id=1066 data-nosnippet>1066</a>        }
-<a href=#1067 id=1067 data-nosnippet>1067</a>    }
-<a href=#1068 id=1068 data-nosnippet>1068</a>
-<a href=#1069 id=1069 data-nosnippet>1069</a>    <span class="kw">let </span>fd = syscall::sys_open(path).map_err(|<span class="kw">_</span>| UtilityReadError::Io)<span class="question-mark">?</span>;
-<a href=#1070 id=1070 data-nosnippet>1070</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
-<a href=#1071 id=1071 data-nosnippet>1071</a>    <span class="kw">let </span><span class="kw-2">mut </span>chunk = [<span class="number">0u8</span>; <span class="number">512</span>];
-<a href=#1072 id=1072 data-nosnippet>1072</a>    <span class="kw">loop </span>{
-<a href=#1073 id=1073 data-nosnippet>1073</a>        <span class="kw">match </span>syscall::sys_read(fd, <span class="kw-2">&amp;mut </span>chunk) {
-<a href=#1074 id=1074 data-nosnippet>1074</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>) =&gt; <span class="kw">break</span>,
-<a href=#1075 id=1075 data-nosnippet>1075</a>            <span class="prelude-val">Ok</span>(n) =&gt; {
-<a href=#1076 id=1076 data-nosnippet>1076</a>                <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = extend_input(<span class="kw-2">&amp;mut </span>bytes, <span class="kw-2">&amp;</span>chunk[..n]) {
-<a href=#1077 id=1077 data-nosnippet>1077</a>                    syscall::sys_close(fd);
-<a href=#1078 id=1078 data-nosnippet>1078</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">match </span>err {
-<a href=#1079 id=1079 data-nosnippet>1079</a>                        InputBufferError::TooLarge =&gt; UtilityReadError::InputTooLarge,
-<a href=#1080 id=1080 data-nosnippet>1080</a>                        InputBufferError::AllocationFailed =&gt; UtilityReadError::AllocationFailed,
-<a href=#1081 id=1081 data-nosnippet>1081</a>                    });
-<a href=#1082 id=1082 data-nosnippet>1082</a>                }
-<a href=#1083 id=1083 data-nosnippet>1083</a>            }
-<a href=#1084 id=1084 data-nosnippet>1084</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
-<a href=#1085 id=1085 data-nosnippet>1085</a>                syscall::sys_close(fd);
-<a href=#1086 id=1086 data-nosnippet>1086</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityReadError::Io);
-<a href=#1087 id=1087 data-nosnippet>1087</a>            }
-<a href=#1088 id=1088 data-nosnippet>1088</a>        }
-<a href=#1089 id=1089 data-nosnippet>1089</a>    }
-<a href=#1090 id=1090 data-nosnippet>1090</a>    syscall::sys_close(fd);
-<a href=#1091 id=1091 data-nosnippet>1091</a>    <span class="prelude-val">Ok</span>(bytes)
-<a href=#1092 id=1092 data-nosnippet>1092</a>}
-<a href=#1093 id=1093 data-nosnippet>1093</a>
-<a href=#1094 id=1094 data-nosnippet>1094</a><span class="attr">#[cfg(test)]
-<a href=#1095 id=1095 data-nosnippet>1095</a></span><span class="kw">mod </span>tests {
-<a href=#1096 id=1096 data-nosnippet>1096</a>    <span class="kw">use </span>super::{expand_word, set_var};
-<a href=#1097 id=1097 data-nosnippet>1097</a>    <span class="kw">use </span><span class="kw">crate</span>::parser::{parse, Ast};
-<a href=#1098 id=1098 data-nosnippet>1098</a>
-<a href=#1099 id=1099 data-nosnippet>1099</a>    <span class="kw">fn </span>expanded_arg(line: <span class="kw-2">&amp;</span>str) -&gt; alloc::string::String {
-<a href=#1100 id=1100 data-nosnippet>1100</a>        <span class="kw">match </span>parse(line) {
-<a href=#1101 id=1101 data-nosnippet>1101</a>            Ast::Simple(cmd) =&gt; expand_word(<span class="kw-2">&amp;</span>cmd.argv[<span class="number">1</span>]),
-<a href=#1102 id=1102 data-nosnippet>1102</a>            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"expected Simple"</span>),
-<a href=#1103 id=1103 data-nosnippet>1103</a>        }
-<a href=#1104 id=1104 data-nosnippet>1104</a>    }
-<a href=#1105 id=1105 data-nosnippet>1105</a>
-<a href=#1106 id=1106 data-nosnippet>1106</a>    <span class="attr">#[test]
-<a href=#1107 id=1107 data-nosnippet>1107</a>    </span><span class="kw">fn </span>mixed_quote_expansion_is_segment_local() {
-<a href=#1108 id=1108 data-nosnippet>1108</a>        set_var(<span class="string">"HOME"</span>, <span class="string">"/home/test"</span>);
-<a href=#1109 id=1109 data-nosnippet>1109</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo pre'$HOME'"</span>), <span class="string">"pre$HOME"</span>);
-<a href=#1110 id=1110 data-nosnippet>1110</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo '$HOME'suffix"</span>), <span class="string">"$HOMEsuffix"</span>);
-<a href=#1111 id=1111 data-nosnippet>1111</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo $HOME\"/bin\""</span>), <span class="string">"/home/test/bin"</span>);
-<a href=#1112 id=1112 data-nosnippet>1112</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo \"\""</span>), <span class="string">""</span>);
-<a href=#1113 id=1113 data-nosnippet>1113</a>    }
-<a href=#1114 id=1114 data-nosnippet>1114</a>}
+<a href=#1042 id=1042 data-nosnippet>1042</a>    <span class="kw">let </span>fd = syscall::sys_open(path).map_err(|<span class="kw">_</span>| UtilityReadError::Io)<span class="question-mark">?</span>;
+<a href=#1043 id=1043 data-nosnippet>1043</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = Vec::new();
+<a href=#1044 id=1044 data-nosnippet>1044</a>    <span class="kw">let </span><span class="kw-2">mut </span>chunk = [<span class="number">0u8</span>; <span class="number">512</span>];
+<a href=#1045 id=1045 data-nosnippet>1045</a>    <span class="kw">loop </span>{
+<a href=#1046 id=1046 data-nosnippet>1046</a>        <span class="kw">match </span>syscall::sys_read(fd, <span class="kw-2">&amp;mut </span>chunk) {
+<a href=#1047 id=1047 data-nosnippet>1047</a>            <span class="prelude-val">Ok</span>(<span class="number">0</span>) =&gt; <span class="kw">break</span>,
+<a href=#1048 id=1048 data-nosnippet>1048</a>            <span class="prelude-val">Ok</span>(n) =&gt; {
+<a href=#1049 id=1049 data-nosnippet>1049</a>                <span class="kw">if let </span><span class="prelude-val">Err</span>(err) = extend_input(<span class="kw-2">&amp;mut </span>bytes, <span class="kw-2">&amp;</span>chunk[..n]) {
+<a href=#1050 id=1050 data-nosnippet>1050</a>                    syscall::sys_close(fd);
+<a href=#1051 id=1051 data-nosnippet>1051</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="kw">match </span>err {
+<a href=#1052 id=1052 data-nosnippet>1052</a>                        InputBufferError::TooLarge =&gt; UtilityReadError::InputTooLarge,
+<a href=#1053 id=1053 data-nosnippet>1053</a>                        InputBufferError::AllocationFailed =&gt; UtilityReadError::AllocationFailed,
+<a href=#1054 id=1054 data-nosnippet>1054</a>                    });
+<a href=#1055 id=1055 data-nosnippet>1055</a>                }
+<a href=#1056 id=1056 data-nosnippet>1056</a>            }
+<a href=#1057 id=1057 data-nosnippet>1057</a>            <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {
+<a href=#1058 id=1058 data-nosnippet>1058</a>                syscall::sys_close(fd);
+<a href=#1059 id=1059 data-nosnippet>1059</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(UtilityReadError::Io);
+<a href=#1060 id=1060 data-nosnippet>1060</a>            }
+<a href=#1061 id=1061 data-nosnippet>1061</a>        }
+<a href=#1062 id=1062 data-nosnippet>1062</a>    }
+<a href=#1063 id=1063 data-nosnippet>1063</a>    syscall::sys_close(fd);
+<a href=#1064 id=1064 data-nosnippet>1064</a>    <span class="prelude-val">Ok</span>(bytes)
+<a href=#1065 id=1065 data-nosnippet>1065</a>}
+<a href=#1066 id=1066 data-nosnippet>1066</a>
+<a href=#1067 id=1067 data-nosnippet>1067</a><span class="attr">#[cfg(test)]
+<a href=#1068 id=1068 data-nosnippet>1068</a></span><span class="kw">mod </span>tests {
+<a href=#1069 id=1069 data-nosnippet>1069</a>    <span class="kw">use </span>super::{expand_word, set_var};
+<a href=#1070 id=1070 data-nosnippet>1070</a>    <span class="kw">use </span><span class="kw">crate</span>::parser::{parse, Ast};
+<a href=#1071 id=1071 data-nosnippet>1071</a>
+<a href=#1072 id=1072 data-nosnippet>1072</a>    <span class="kw">fn </span>expanded_arg(line: <span class="kw-2">&amp;</span>str) -&gt; alloc::string::String {
+<a href=#1073 id=1073 data-nosnippet>1073</a>        <span class="kw">match </span>parse(line) {
+<a href=#1074 id=1074 data-nosnippet>1074</a>            Ast::Simple(cmd) =&gt; expand_word(<span class="kw-2">&amp;</span>cmd.argv[<span class="number">1</span>]),
+<a href=#1075 id=1075 data-nosnippet>1075</a>            <span class="kw">_ </span>=&gt; <span class="macro">panic!</span>(<span class="string">"expected Simple"</span>),
+<a href=#1076 id=1076 data-nosnippet>1076</a>        }
+<a href=#1077 id=1077 data-nosnippet>1077</a>    }
+<a href=#1078 id=1078 data-nosnippet>1078</a>
+<a href=#1079 id=1079 data-nosnippet>1079</a>    <span class="attr">#[test]
+<a href=#1080 id=1080 data-nosnippet>1080</a>    </span><span class="kw">fn </span>mixed_quote_expansion_is_segment_local() {
+<a href=#1081 id=1081 data-nosnippet>1081</a>        set_var(<span class="string">"HOME"</span>, <span class="string">"/home/test"</span>);
+<a href=#1082 id=1082 data-nosnippet>1082</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo pre'$HOME'"</span>), <span class="string">"pre$HOME"</span>);
+<a href=#1083 id=1083 data-nosnippet>1083</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo '$HOME'suffix"</span>), <span class="string">"$HOMEsuffix"</span>);
+<a href=#1084 id=1084 data-nosnippet>1084</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo $HOME\"/bin\""</span>), <span class="string">"/home/test/bin"</span>);
+<a href=#1085 id=1085 data-nosnippet>1085</a>        <span class="macro">assert_eq!</span>(expanded_arg(<span class="string">"echo \"\""</span>), <span class="string">""</span>);
+<a href=#1086 id=1086 data-nosnippet>1086</a>    }
+<a href=#1087 id=1087 data-nosnippet>1087</a>}
 </code></pre></div></section></main></body></html>

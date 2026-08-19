@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"trait":["Arch","BootController"]};
+window.SIDEBAR_ITEMS = {"mod":["kernel_abi"],"trait":["Arch","BootController"]};

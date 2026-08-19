@@ -175,17 +175,17 @@
 <a href=#175 id=175 data-nosnippet>175</a>/// tick, in order, before any new FIFO bytes are consumed.
 <a href=#176 id=176 data-nosnippet>176</a></span><span class="kw">static </span>PENDING_ASCII: Spinlock&lt;VecDeque&lt;u8&gt;&gt; = Spinlock::new(VecDeque::new());
 <a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a><span class="doccomment">/// Relay a UART byte to the input service as an EV_ASCII press+release pair.
+<a href=#178 id=178 data-nosnippet>178</a><span class="doccomment">/// Relay a UART byte to the input service as one EV_ASCII press event.
 <a href=#179 id=179 data-nosnippet>179</a>///
-<a href=#180 id=180 data-nosnippet>180</a>/// Uses `ipc_post_nonblock` so bytes arriving in a burst (all 6 chars of "hypha\n"
-<a href=#181 id=181 data-nosnippet>181</a>/// in one timer tick) are queued into `pending_msgs` rather than dropped. The
-<a href=#182 id=182 data-nosnippet>182</a>/// input service drains pending_msgs at the start of each `sys_recv_timeout` call,
-<a href=#183 id=183 data-nosnippet>183</a>/// guaranteeing all bytes are delivered even if input service is mid-dispatch.
+<a href=#180 id=180 data-nosnippet>180</a>/// Uses the kernel's 64-message nonblocking post so short bursts are queued while
+<a href=#181 id=181 data-nosnippet>181</a>/// the input service is blocked delivering a keyboard event to the focused cell.
+<a href=#182 id=182 data-nosnippet>182</a>/// Longer bursts remain ordered in `PENDING_ASCII` and the IRQ RX ring until the
+<a href=#183 id=183 data-nosnippet>183</a>/// input service catches up.
 <a href=#184 id=184 data-nosnippet>184</a>///
 <a href=#185 id=185 data-nosnippet>185</a>/// Returns `false` when the PRESS event could not be queued (input service
 <a href=#186 id=186 data-nosnippet>186</a>/// pending_msgs full) — the caller must retain the byte and retry later. The
-<a href=#187 id=187 data-nosnippet>187</a>/// RELEASE event is best-effort: shells act on `KeyState::Pressed` only, so a
-<a href=#188 id=188 data-nosnippet>188</a>/// lost release is harmless, while a lost press is a lost keystroke.
+<a href=#187 id=187 data-nosnippet>187</a>/// UART ASCII is edge-triggered text input, so only a Press event is emitted.
+<a href=#188 id=188 data-nosnippet>188</a>/// Sending a synthetic Release doubles queue pressure while shells ignore it.
 <a href=#189 id=189 data-nosnippet>189</a>///
 <a href=#190 id=190 data-nosnippet>190</a>/// Delivery copies into an owned kernel mailbox entry. The resumed input task
 <a href=#191 id=191 data-nosnippet>191</a>/// drains that entry into its own user buffer, so this interrupt-side path never
@@ -203,24 +203,18 @@
 <a href=#203 id=203 data-nosnippet>203</a>    msg[<span class="number">0</span>] = WIRE_ASCII;
 <a href=#204 id=204 data-nosnippet>204</a>    msg[<span class="number">1</span>..<span class="number">5</span>].copy_from_slice(<span class="kw-2">&amp;</span>(byte <span class="kw">as </span>u32).to_le_bytes());
 <a href=#205 id=205 data-nosnippet>205</a>    msg[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">1u32</span>.to_le_bytes()); <span class="comment">// press
-<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">let </span>press_ok = <span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]).is_ok();
-<a href=#207 id=207 data-nosnippet>207</a>    <span class="kw">if </span>press_ok {
-<a href=#208 id=208 data-nosnippet>208</a>        msg[<span class="number">5</span>..<span class="number">9</span>].copy_from_slice(<span class="kw-2">&amp;</span><span class="number">0u32</span>.to_le_bytes()); <span class="comment">// release (best-effort)
-<a href=#209 id=209 data-nosnippet>209</a>        </span><span class="kw">let _ </span>= <span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]);
-<a href=#210 id=210 data-nosnippet>210</a>    }
-<a href=#211 id=211 data-nosnippet>211</a>
-<a href=#212 id=212 data-nosnippet>212</a>    press_ok
-<a href=#213 id=213 data-nosnippet>213</a>}
-<a href=#214 id=214 data-nosnippet>214</a>
-<a href=#215 id=215 data-nosnippet>215</a><span class="kw">pub static </span>CONSOLE: Spinlock&lt;viConsole&gt; = Spinlock::new(viConsole {
-<a href=#216 id=216 data-nosnippet>216</a>    buffer: VecDeque::new(),
-<a href=#217 id=217 data-nosnippet>217</a>});
-<a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a><span class="kw">pub fn </span>init() {
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="comment">// Nothing special to init for SBI Console so far
-<a href=#221 id=221 data-nosnippet>221</a>    // But we might want to clear buffer
-<a href=#222 id=222 data-nosnippet>222</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>cons = CONSOLE.lock();
-<a href=#223 id=223 data-nosnippet>223</a>    cons.buffer.clear();
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="macro">log::info!</span>(<span class="string">"Console: Input Driver Initialized."</span>);
-<a href=#225 id=225 data-nosnippet>225</a>}
+<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">crate</span>::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, <span class="kw-2">&amp;</span>msg[..<span class="number">9</span>]).is_ok()
+<a href=#207 id=207 data-nosnippet>207</a>}
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a><span class="kw">pub static </span>CONSOLE: Spinlock&lt;viConsole&gt; = Spinlock::new(viConsole {
+<a href=#210 id=210 data-nosnippet>210</a>    buffer: VecDeque::new(),
+<a href=#211 id=211 data-nosnippet>211</a>});
+<a href=#212 id=212 data-nosnippet>212</a>
+<a href=#213 id=213 data-nosnippet>213</a><span class="kw">pub fn </span>init() {
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="comment">// Nothing special to init for SBI Console so far
+<a href=#215 id=215 data-nosnippet>215</a>    // But we might want to clear buffer
+<a href=#216 id=216 data-nosnippet>216</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>cons = CONSOLE.lock();
+<a href=#217 id=217 data-nosnippet>217</a>    cons.buffer.clear();
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="macro">log::info!</span>(<span class="string">"Console: Input Driver Initialized."</span>);
+<a href=#219 id=219 data-nosnippet>219</a>}
 </code></pre></div></section></main></body></html>

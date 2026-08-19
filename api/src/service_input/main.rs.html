@@ -226,7 +226,7 @@
 <a href=#226 id=226 data-nosnippet>226</a>                <span class="kw">return</span>;
 <a href=#227 id=227 data-nosnippet>227</a>            }
 <a href=#228 id=228 data-nosnippet>228</a>            <span class="kw">let </span>(keysym, character) = translate(code, modifiers.snapshot());
-<a href=#229 id=229 data-nosnippet>229</a>            dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
+<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">if </span>!dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
 <a href=#230 id=230 data-nosnippet>230</a>                timestamp_ticks: sys_get_time(),
 <a href=#231 id=231 data-nosnippet>231</a>                scancode: code,
 <a href=#232 id=232 data-nosnippet>232</a>                keysym,
@@ -234,84 +234,88 @@
 <a href=#234 id=234 data-nosnippet>234</a>                modifiers: modifiers.snapshot(),
 <a href=#235 id=235 data-nosnippet>235</a>                state,
 <a href=#236 id=236 data-nosnippet>236</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
-<a href=#237 id=237 data-nosnippet>237</a>            }));
-<a href=#238 id=238 data-nosnippet>238</a>        }
-<a href=#239 id=239 data-nosnippet>239</a>        <span class="number">1 </span>=&gt; {
-<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_rel(code, value) {
-<a href=#241 id=241 data-nosnippet>241</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
-<a href=#242 id=242 data-nosnippet>242</a>            }
-<a href=#243 id=243 data-nosnippet>243</a>        }
-<a href=#244 id=244 data-nosnippet>244</a>        <span class="number">2 </span>=&gt; {
-<a href=#245 id=245 data-nosnippet>245</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_abs(code, value) {
-<a href=#246 id=246 data-nosnippet>246</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
-<a href=#247 id=247 data-nosnippet>247</a>            }
-<a href=#248 id=248 data-nosnippet>248</a>        }
-<a href=#249 id=249 data-nosnippet>249</a>        EV_ASCII =&gt; {
-<a href=#250 id=250 data-nosnippet>250</a>            <span class="comment">// UART byte relayed by the kernel console driver.
-<a href=#251 id=251 data-nosnippet>251</a>            // `code` carries the raw ASCII code point; skip scancode translation.
-<a href=#252 id=252 data-nosnippet>252</a>            // Map C0 control chars to semantic KeySyms so GUI apps get proper events
-<a href=#253 id=253 data-nosnippet>253</a>            // regardless of whether input originates from VirtIO or UART terminal.
-<a href=#254 id=254 data-nosnippet>254</a>            </span><span class="kw">let </span>state = <span class="kw">if </span>value &gt; <span class="number">0 </span>{
-<a href=#255 id=255 data-nosnippet>255</a>                KeyState::Pressed
-<a href=#256 id=256 data-nosnippet>256</a>            } <span class="kw">else </span>{
-<a href=#257 id=257 data-nosnippet>257</a>                KeyState::Released
-<a href=#258 id=258 data-nosnippet>258</a>            };
-<a href=#259 id=259 data-nosnippet>259</a>            <span class="kw">let </span>(keysym, character) = <span class="kw">match </span>code {
-<a href=#260 id=260 data-nosnippet>260</a>                <span class="number">0x1B </span>=&gt; (KeySym::Escape, <span class="number">0</span>),
-<a href=#261 id=261 data-nosnippet>261</a>                <span class="number">0x0D </span>| <span class="number">0x0A </span>=&gt; (KeySym::Return, code),
-<a href=#262 id=262 data-nosnippet>262</a>                <span class="number">0x08 </span>| <span class="number">0x7F </span>=&gt; (KeySym::Backspace, code),
-<a href=#263 id=263 data-nosnippet>263</a>                <span class="number">0x09 </span>=&gt; (KeySym::Tab, code),
-<a href=#264 id=264 data-nosnippet>264</a>                <span class="kw">_ </span>=&gt; (KeySym::Printable, code),
-<a href=#265 id=265 data-nosnippet>265</a>            };
-<a href=#266 id=266 data-nosnippet>266</a>            dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
-<a href=#267 id=267 data-nosnippet>267</a>                timestamp_ticks: sys_get_time(),
-<a href=#268 id=268 data-nosnippet>268</a>                scancode: <span class="number">0</span>,
-<a href=#269 id=269 data-nosnippet>269</a>                keysym,
-<a href=#270 id=270 data-nosnippet>270</a>                character,
-<a href=#271 id=271 data-nosnippet>271</a>                modifiers: modifiers.snapshot(),
-<a href=#272 id=272 data-nosnippet>272</a>                state,
-<a href=#273 id=273 data-nosnippet>273</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
-<a href=#274 id=274 data-nosnippet>274</a>            }));
-<a href=#275 id=275 data-nosnippet>275</a>        }
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">_ </span>=&gt; {} <span class="comment">// unknown opcode — drop silently
-<a href=#277 id=277 data-nosnippet>277</a>    </span>}
-<a href=#278 id=278 data-nosnippet>278</a>}
-<a href=#279 id=279 data-nosnippet>279</a>
-<a href=#280 id=280 data-nosnippet>280</a><span class="doccomment">/// Handle a typed `InputRequest` from a compositor or shell cell (sender &gt; 0).
-<a href=#281 id=281 data-nosnippet>281</a></span><span class="kw">fn </span>handle_typed_request(
-<a href=#282 id=282 data-nosnippet>282</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
-<a href=#283 id=283 data-nosnippet>283</a>    sender: usize,
-<a href=#284 id=284 data-nosnippet>284</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
-<a href=#285 id=285 data-nosnippet>285</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
-<a href=#286 id=286 data-nosnippet>286</a>) {
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
-<a href=#288 id=288 data-nosnippet>288</a>    <span class="kw">match </span>api::ipc::decode::&lt;InputRequest&gt;(buf) {
-<a href=#289 id=289 data-nosnippet>289</a>        <span class="prelude-val">Ok</span>(InputRequest::SetFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
-<a href=#290 id=290 data-nosnippet>290</a>            modifiers.reset_transient();
-<a href=#291 id=291 data-nosnippet>291</a>            <span class="comment">// Use kernel-verified sender TID instead of the cell_tid field to
-<a href=#292 id=292 data-nosnippet>292</a>            // prevent a cell from redirecting focus to an arbitrary TID.
-<a href=#293 id=293 data-nosnippet>293</a>            </span>dispatcher.set_focus(sender);
-<a href=#294 id=294 data-nosnippet>294</a>            <span class="comment">// Fire-and-forget: no reply. Focus is set atomically on receipt.
-<a href=#295 id=295 data-nosnippet>295</a>            // A blocking reply would deadlock when the focused cell is not yet
-<a href=#296 id=296 data-nosnippet>296</a>            // in sys_recv (startup race — G18 deadlock fix).
-<a href=#297 id=297 data-nosnippet>297</a>        </span>}
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="prelude-val">Ok</span>(InputRequest::GetFocus) =&gt; {
-<a href=#299 id=299 data-nosnippet>299</a>            <span class="kw">let </span>focused = dispatcher.focus() <span class="kw">as </span>u32;
-<a href=#300 id=300 data-nosnippet>300</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>InputResponse::Focus(focused), <span class="kw-2">&amp;mut </span>resp_buf) {
-<a href=#301 id=301 data-nosnippet>301</a>                <span class="comment">// GetFocus is only called by compositor (never during startup race).
-<a href=#302 id=302 data-nosnippet>302</a>                // Use sys_try_send to be safe — compositor is in recv waiting for this.
-<a href=#303 id=303 data-nosnippet>303</a>                </span><span class="kw">let _ </span>= sys_try_send(sender, encoded);
-<a href=#304 id=304 data-nosnippet>304</a>            }
-<a href=#305 id=305 data-nosnippet>305</a>        }
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="prelude-val">Ok</span>(InputRequest::ClearFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
-<a href=#307 id=307 data-nosnippet>307</a>            <span class="comment">// Use kernel-verified sender TID (same as SetFocus) — prevents a cell
-<a href=#308 id=308 data-nosnippet>308</a>            // from clearing another cell's focus. When sender == focused, drop focus.
-<a href=#309 id=309 data-nosnippet>309</a>            </span><span class="kw">if </span>dispatcher.focus() == sender {
-<a href=#310 id=310 data-nosnippet>310</a>                dispatcher.set_focus(<span class="number">0</span>);
-<a href=#311 id=311 data-nosnippet>311</a>            }
-<a href=#312 id=312 data-nosnippet>312</a>            <span class="comment">// Fire-and-forget: no reply. Same rationale as SetFocus.
-<a href=#313 id=313 data-nosnippet>313</a>        </span>}
-<a href=#314 id=314 data-nosnippet>314</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {} <span class="comment">// unknown message — drop silently
-<a href=#315 id=315 data-nosnippet>315</a>    </span>}
-<a href=#316 id=316 data-nosnippet>316</a>}
+<a href=#237 id=237 data-nosnippet>237</a>            })) {
+<a href=#238 id=238 data-nosnippet>238</a>                println(<span class="string">"[input] WARNING: clearing failed keyboard focus"</span>);
+<a href=#239 id=239 data-nosnippet>239</a>            }
+<a href=#240 id=240 data-nosnippet>240</a>        }
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="number">1 </span>=&gt; {
+<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_rel(code, value) {
+<a href=#243 id=243 data-nosnippet>243</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
+<a href=#244 id=244 data-nosnippet>244</a>            }
+<a href=#245 id=245 data-nosnippet>245</a>        }
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="number">2 </span>=&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(ev) = mouse.apply_abs(code, value) {
+<a href=#248 id=248 data-nosnippet>248</a>                dispatcher.dispatch_mouse(<span class="kw-2">&amp;</span>ev);
+<a href=#249 id=249 data-nosnippet>249</a>            }
+<a href=#250 id=250 data-nosnippet>250</a>        }
+<a href=#251 id=251 data-nosnippet>251</a>        EV_ASCII =&gt; {
+<a href=#252 id=252 data-nosnippet>252</a>            <span class="comment">// UART byte relayed by the kernel console driver.
+<a href=#253 id=253 data-nosnippet>253</a>            // `code` carries the raw ASCII code point; skip scancode translation.
+<a href=#254 id=254 data-nosnippet>254</a>            // Map C0 control chars to semantic KeySyms so GUI apps get proper events
+<a href=#255 id=255 data-nosnippet>255</a>            // regardless of whether input originates from VirtIO or UART terminal.
+<a href=#256 id=256 data-nosnippet>256</a>            </span><span class="kw">let </span>state = <span class="kw">if </span>value &gt; <span class="number">0 </span>{
+<a href=#257 id=257 data-nosnippet>257</a>                KeyState::Pressed
+<a href=#258 id=258 data-nosnippet>258</a>            } <span class="kw">else </span>{
+<a href=#259 id=259 data-nosnippet>259</a>                KeyState::Released
+<a href=#260 id=260 data-nosnippet>260</a>            };
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="kw">let </span>(keysym, character) = <span class="kw">match </span>code {
+<a href=#262 id=262 data-nosnippet>262</a>                <span class="number">0x1B </span>=&gt; (KeySym::Escape, <span class="number">0</span>),
+<a href=#263 id=263 data-nosnippet>263</a>                <span class="number">0x0D </span>| <span class="number">0x0A </span>=&gt; (KeySym::Return, code),
+<a href=#264 id=264 data-nosnippet>264</a>                <span class="number">0x08 </span>| <span class="number">0x7F </span>=&gt; (KeySym::Backspace, code),
+<a href=#265 id=265 data-nosnippet>265</a>                <span class="number">0x09 </span>=&gt; (KeySym::Tab, code),
+<a href=#266 id=266 data-nosnippet>266</a>                <span class="kw">_ </span>=&gt; (KeySym::Printable, code),
+<a href=#267 id=267 data-nosnippet>267</a>            };
+<a href=#268 id=268 data-nosnippet>268</a>            <span class="kw">if </span>!dispatcher.dispatch(<span class="kw-2">&amp;</span>InputEvent::Key(KeyEvent {
+<a href=#269 id=269 data-nosnippet>269</a>                timestamp_ticks: sys_get_time(),
+<a href=#270 id=270 data-nosnippet>270</a>                scancode: <span class="number">0</span>,
+<a href=#271 id=271 data-nosnippet>271</a>                keysym,
+<a href=#272 id=272 data-nosnippet>272</a>                character,
+<a href=#273 id=273 data-nosnippet>273</a>                modifiers: modifiers.snapshot(),
+<a href=#274 id=274 data-nosnippet>274</a>                state,
+<a href=#275 id=275 data-nosnippet>275</a>                _pad: [<span class="number">0</span>; <span class="number">2</span>],
+<a href=#276 id=276 data-nosnippet>276</a>            })) {
+<a href=#277 id=277 data-nosnippet>277</a>                println(<span class="string">"[input] WARNING: clearing failed keyboard focus"</span>);
+<a href=#278 id=278 data-nosnippet>278</a>            }
+<a href=#279 id=279 data-nosnippet>279</a>        }
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="kw">_ </span>=&gt; {} <span class="comment">// unknown opcode — drop silently
+<a href=#281 id=281 data-nosnippet>281</a>    </span>}
+<a href=#282 id=282 data-nosnippet>282</a>}
+<a href=#283 id=283 data-nosnippet>283</a>
+<a href=#284 id=284 data-nosnippet>284</a><span class="doccomment">/// Handle a typed `InputRequest` from a compositor or shell cell (sender &gt; 0).
+<a href=#285 id=285 data-nosnippet>285</a></span><span class="kw">fn </span>handle_typed_request(
+<a href=#286 id=286 data-nosnippet>286</a>    buf: <span class="kw-2">&amp;</span>[u8; IPC_BUF_SIZE],
+<a href=#287 id=287 data-nosnippet>287</a>    sender: usize,
+<a href=#288 id=288 data-nosnippet>288</a>    modifiers: <span class="kw-2">&amp;mut </span>ModifierState,
+<a href=#289 id=289 data-nosnippet>289</a>    dispatcher: <span class="kw-2">&amp;mut </span>Dispatcher,
+<a href=#290 id=290 data-nosnippet>290</a>) {
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; <span class="number">64</span>];
+<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">match </span>api::ipc::decode::&lt;InputRequest&gt;(buf) {
+<a href=#293 id=293 data-nosnippet>293</a>        <span class="prelude-val">Ok</span>(InputRequest::SetFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
+<a href=#294 id=294 data-nosnippet>294</a>            modifiers.reset_transient();
+<a href=#295 id=295 data-nosnippet>295</a>            <span class="comment">// Use kernel-verified sender TID instead of the cell_tid field to
+<a href=#296 id=296 data-nosnippet>296</a>            // prevent a cell from redirecting focus to an arbitrary TID.
+<a href=#297 id=297 data-nosnippet>297</a>            </span>dispatcher.set_focus(sender);
+<a href=#298 id=298 data-nosnippet>298</a>            <span class="comment">// Fire-and-forget: no reply. Focus is set atomically on receipt.
+<a href=#299 id=299 data-nosnippet>299</a>            // A blocking reply would deadlock when the focused cell is not yet
+<a href=#300 id=300 data-nosnippet>300</a>            // in sys_recv (startup race — G18 deadlock fix).
+<a href=#301 id=301 data-nosnippet>301</a>        </span>}
+<a href=#302 id=302 data-nosnippet>302</a>        <span class="prelude-val">Ok</span>(InputRequest::GetFocus) =&gt; {
+<a href=#303 id=303 data-nosnippet>303</a>            <span class="kw">let </span>focused = dispatcher.focus() <span class="kw">as </span>u32;
+<a href=#304 id=304 data-nosnippet>304</a>            <span class="kw">if let </span><span class="prelude-val">Ok</span>(encoded) = api::ipc::encode(<span class="kw-2">&amp;</span>InputResponse::Focus(focused), <span class="kw-2">&amp;mut </span>resp_buf) {
+<a href=#305 id=305 data-nosnippet>305</a>                <span class="comment">// GetFocus is only called by compositor (never during startup race).
+<a href=#306 id=306 data-nosnippet>306</a>                // Use sys_try_send to be safe — compositor is in recv waiting for this.
+<a href=#307 id=307 data-nosnippet>307</a>                </span><span class="kw">let _ </span>= sys_try_send(sender, encoded);
+<a href=#308 id=308 data-nosnippet>308</a>            }
+<a href=#309 id=309 data-nosnippet>309</a>        }
+<a href=#310 id=310 data-nosnippet>310</a>        <span class="prelude-val">Ok</span>(InputRequest::ClearFocus { cell_tid: <span class="kw">_ </span>}) =&gt; {
+<a href=#311 id=311 data-nosnippet>311</a>            <span class="comment">// Use kernel-verified sender TID (same as SetFocus) — prevents a cell
+<a href=#312 id=312 data-nosnippet>312</a>            // from clearing another cell's focus. When sender == focused, drop focus.
+<a href=#313 id=313 data-nosnippet>313</a>            </span><span class="kw">if </span>dispatcher.focus() == sender {
+<a href=#314 id=314 data-nosnippet>314</a>                dispatcher.set_focus(<span class="number">0</span>);
+<a href=#315 id=315 data-nosnippet>315</a>            }
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="comment">// Fire-and-forget: no reply. Same rationale as SetFocus.
+<a href=#317 id=317 data-nosnippet>317</a>        </span>}
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; {} <span class="comment">// unknown message — drop silently
+<a href=#319 id=319 data-nosnippet>319</a>    </span>}
+<a href=#320 id=320 data-nosnippet>320</a>}
 </code></pre></div></section></main></body></html>
