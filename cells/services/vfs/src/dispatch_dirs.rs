@@ -137,6 +137,7 @@ fn open_dir<'a>(
     }
     match vfs.stat(&path) {
         Some((_, true)) => {}
+        _ if vfs.is_mount_ancestor(&path) => {}
         _ => return VfsResponse::Err(ERR_IO),
     }
     match vfs.dirs.insert(caller, path, Some(dir.0)) {

@@ -4,15 +4,20 @@ $buildScript = Join-Path $PSScriptRoot 'build-rpi3-uboot-static.sh'
 $cellBuildScript = Join-Path $PSScriptRoot '..\..\scripts\build-aarch64-cells.ps1'
 $inputManifest = Join-Path $PSScriptRoot '..\..\cells\services\input\Cargo.toml'
 $inputSource = Join-Path $PSScriptRoot '..\..\cells\services\input\src\virtio_device.rs'
+$inputDispatcherSource = Join-Path $PSScriptRoot '..\..\cells\services\input\src\dispatcher.rs'
+$shellExecutorSource = Join-Path $PSScriptRoot '..\..\cells\tools\shell\src\executor.rs'
 $consoleSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\drivers\console_drv.rs'
+$uartSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\drivers\uart.rs'
 $trapSource = Join-Path $PSScriptRoot '..\..\hal\arch\arm\src\aarch64\trap.rs'
 $miniUartSource = Join-Path $PSScriptRoot '..\..\hal\arch\arm\src\aarch64\uart_bcm_mini.rs'
 $legacyIrqSource = Join-Path $PSScriptRoot '..\..\hal\arch\arm\src\aarch64\bcm2835_legacy_irq.rs'
+$bcm27xxProfileSource = Join-Path $PSScriptRoot '..\..\hal\soc\bcm27xx\src\profile.rs'
 $syscallSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\syscall.rs'
 $taskSource = Join-Path $PSScriptRoot '..\..\kernel\src\task.rs'
+$tcbSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\tcb.rs'
 $mmcCoreSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\drivers\mmc\core.rs'
 $sdhciSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\drivers\mmc\sdhci.rs'
-$mmcPinmuxSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\drivers\mmc\pinmux_rpi3.rs'
+$mmcPinmuxSource = Join-Path $PSScriptRoot '..\..\kernel\src\task\drivers\mmc\pinmux_bcm.rs'
 $tokens = $null
 $errors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile(
@@ -102,19 +107,30 @@ if ($consoleRustSource -notmatch '(?s)cfg\(all\(target_arch = "aarch64", feature
 if ($consoleRustSource -notmatch '(?s)cfg\(all\(target_arch = "aarch64", not\(feature = "board-rpi3"\)\)\).*?uart_pl011::poll_rx') {
     throw 'Generic AArch64 console input must retain the QEMU PL011 path'
 }
+if ($consoleRustSource -notmatch '(?s)fn relay_ascii_to_input.*?ipc_post_nonblock\(' -or
+    $consoleRustSource -match '(?s)fn relay_ascii_to_input.*?ipc_post_nonblock_bounded\(' -or
+    $consoleRustSource -match '(?s)fn relay_ascii_to_input.*?copy_from_slice\(&0u32\.to_le_bytes\(\)\)') {
+    throw 'RPi3 UART relay must preserve the 64-event first-hop bound without synthetic release events'
+}
 $miniUartRustSource = Get-Content -Raw -LiteralPath $miniUartSource
 $legacyIrqRustSource = Get-Content -Raw -LiteralPath $legacyIrqSource
+$bcm27xxProfileRustSource = Get-Content -Raw -LiteralPath $bcm27xxProfileSource
 if ($miniUartRustSource -notmatch 'enable_rx_interrupt' -or
-    $miniUartRustSource -notmatch 'wr\(AUX_MU_IER, 1\)') {
+    $miniUartRustSource -notmatch 'wr\(AUX_MU_IER, 1\)' -or
+    $miniUartRustSource -notmatch '(?s)pub fn try_putchar.*?return false.*?wr\(AUX_MU_IO') {
     throw 'RPi3 mini UART must enable interrupt-backed RX'
 }
-if ($legacyIrqRustSource -notmatch 'AUX_IRQ: u32 = 29' -or
+if ($legacyIrqRustSource -notmatch 'AUX_IRQ: u32 = hal_soc_bcm27xx::BCM2837\.irq\.aux' -or
+    $bcm27xxProfileRustSource -notmatch 'aux:\s*29' -or
     $legacyIrqRustSource -notmatch 'is_aux_irq_pending') {
     throw 'RPi3 legacy controller must route AUX IRQ 29'
 }
 $trapRustSource = Get-Content -Raw -LiteralPath $trapSource
 if ($trapRustSource -notmatch '(?s)is_aux_irq_pending\(\).*?vi_handle_uart_irq\(\)') {
     throw 'RPi3 trap path must drain the mini UART RX interrupt'
+}
+if ($trapRustSource -notmatch '(?s)timer::reset\(\);\s*if aux_pending \{.*?vi_handle_uart_irq\(\);.*?vi_timer_tick\(\);') {
+    throw 'RPi3 timer IRQ must drain a co-pending mini UART before the scheduler tick'
 }
 if ($trapRustSource -match 'probe_put\(b''T''\)' -or
     $trapRustSource -match 'probe_put\(b''M''\)') {
@@ -129,9 +145,34 @@ if ($taskRustSource -match 'probe_put\(b''A''\)' -or
     $taskRustSource -match 'probe_put\(b''N''\)') {
     throw 'RPi3 scheduler hot paths must not emit raw per-event UART markers'
 }
+$uartRustSource = Get-Content -Raw -LiteralPath $uartSource
+if ($uartRustSource -notmatch '(?s)fn write_rpi3_console_byte.*?vi_handle_uart_irq\(\).*?try_putchar\(byte\)') {
+    throw 'RPi3 synchronous console TX must drain RX while waiting for FIFO space'
+}
 $syscallRustSource = Get-Content -Raw -LiteralPath $syscallSource
 if ($syscallRustSource -match '\[rpi3\] Log syscall') {
     throw 'RPi3 console must not synchronously warn for every user log syscall'
+}
+if ($syscallRustSource -notmatch '(?s)Syscall::RecvTimeout.*?let drained = .*?begin_receive_context\(mask\).*?pending_msgs' -or
+    $syscallRustSource -notmatch '(?s)Syscall::TryRecv.*?let drained = .*?begin_receive_context\(mask\).*?pending_msgs') {
+    throw 'Receive-context maintenance must reuse the pending-message scheduler lock'
+}
+$tcbRustSource = Get-Content -Raw -LiteralPath $tcbSource
+if ($tcbRustSource -notmatch 'INPUT_EVENT_QUEUE_DEPTH: usize = 512') {
+    throw 'RPi3 input backpressure must retain the bounded 512-event scheduling cushion'
+}
+$inputDispatcherRustSource = Get-Content -Raw -LiteralPath $inputDispatcherSource
+if ($inputDispatcherRustSource -notmatch '(?s)fn send_keyboard_event.*?sys_send\(target, &buf\)' -or
+    $inputDispatcherRustSource -notmatch '(?s)fn try_send_event.*?sys_try_send\(target, &buf\)' -or
+    $inputDispatcherRustSource -notmatch 'SyscallResult::Ok\(0\) => Ok\(\(\)\)') {
+    throw 'Input service must block keyboard delivery while keeping mouse dispatch nonblocking'
+}
+$shellExecutorRustSource = Get-Content -Raw -LiteralPath $shellExecutorSource
+$cmdReadMatch = [regex]::Match($shellExecutorRustSource, '(?s)fn cmd_read.*?(?=\r?\n/// `source)')
+if (-not $cmdReadMatch.Success -or
+    $cmdReadMatch.Value -notmatch 'ostd::io::stdin\(\)\.read_line' -or
+    $cmdReadMatch.Value -match 'sys_read\(0') {
+    throw 'Shell read builtin must receive through the focus-aware input service path'
 }
 $mmcCoreRustSource = Get-Content -Raw -LiteralPath $mmcCoreSource
 if ($mmcCoreRustSource -notmatch 'const IDENT_CLOCK_HZ: u32 = 400_000;') {
@@ -142,8 +183,12 @@ if ($mmcCoreRustSource -notmatch '(?s)let sectors = self\.sd_read_csd\(rca\)\?;\
 }
 $sdhciRustSource = Get-Content -Raw -LiteralPath $sdhciSource
 if ($sdhciRustSource -notmatch 'transfer_mode_shadow' -or
-    $sdhciRustSource -notmatch 'space_bcm2835_write' -or
-    $sdhciRustSource -notmatch 'off == SDHCI_BUFFER') {
+    $sdhciRustSource -notmatch 'space_controller_write' -or
+    $sdhciRustSource -notmatch 'off != SDHCI_BUFFER' -or
+    $sdhciRustSource -notmatch 'policy\.word_access_only' -or
+    $sdhciRustSource -notmatch 'policy\.minimum_write_spacing_us' -or
+    $bcm27xxProfileRustSource -notmatch 'word_access_only:\s*true' -or
+    $bcm27xxProfileRustSource -notmatch 'minimum_write_spacing_us:\s*6') {
     throw 'RPi3 Arasan accesses must retain 32-bit command shadowing and write spacing'
 }
 if ($sdhciRustSource -notmatch '(?s)fn setup_data_transfer\(.*?write8\(SDHCI_TIMEOUT_CONTROL, TIMEOUT_MAX\);.*?write16\(SDHCI_BLOCK_SIZE, block_size\);.*?write16\(SDHCI_BLOCK_COUNT, block_count\);.*?write16\(SDHCI_TRANSFER_MODE, transfer_mode\);') {

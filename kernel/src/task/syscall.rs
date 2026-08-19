@@ -1557,11 +1557,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
             attest_caller,
         } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.begin_receive_context(mask);
-                }
-            }
             // Identity trailer, when requested, is written at each delivery point
             // AFTER the payload copy and AFTER the scheduler lock is dropped —
             // `attested_identity_of` takes that lock itself.
@@ -1577,6 +1572,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let mut queued_death = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    // Keep VFS caller-context maintenance inside the receive path's
+                    // existing critical section. UART input performs one receive per
+                    // event, so a separate scheduler lock here starves its tiny FIFO.
+                    t.begin_receive_context(mask);
                     if !t.pending_deaths.is_empty() {
                         let (dead_tid, reason) = t.pending_deaths.remove(0);
                         // Deliver the exit reason as the recv payload (NotifyOnExit
@@ -1852,11 +1851,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
             deadline,
         } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.begin_receive_context(mask);
-                }
-            }
             // Drain pending_msgs first (same as Recv). ipc_post_nonblock queues
             // bytes here when the target is busy (e.g. UART burst fills pending_msgs
             // while input service is mid-dispatch). Without this drain, RecvTimeout
@@ -1867,6 +1861,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 // above: a masked RecvTimeout must not consume queued input
                 // events meant for the wildcard read loop.
                 let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
+                    t.begin_receive_context(mask);
                     let slot = t
                         .pending_msgs
                         .iter()
@@ -1981,11 +1976,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.begin_receive_context(mask);
-                }
-            }
             // Drain pending_msgs first (same as Recv / RecvTimeout). ipc_try_send
             // queues input events here when the focused cell is busy-polling (not
             // in Recv). Without this drain a cell that receives via sys_try_recv —
@@ -1994,6 +1984,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Honour the recv mask exactly like the blocking paths.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
+                    t.begin_receive_context(mask);
                     let slot = t
                         .pending_msgs
                         .iter()

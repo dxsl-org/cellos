@@ -12,14 +12,13 @@
 //!
 //! ## Send-failure handling
 //!
-//! Keyboard dispatch is fire-and-forget: `dispatch()` ignores send failures and
-//! leaves focus unchanged until another cell calls `SetFocus`. Mouse routing
-//! uses a separate cached compositor endpoint and clears only that cache when a
-//! pointer send fails, forcing a later re-lookup after compositor restart.
+//! Keyboard dispatch uses blocking IPC so pressure propagates upstream without
+//! dropping events. Mouse routing remains fire-and-forget through a separate
+//! cached compositor endpoint.
 
 use api::input::{encode_event, InputEvent, INPUT_EVENT_IPC_SIZE};
 use api::syscall::service;
-use ostd::syscall::{sys_lookup_service, sys_try_send};
+use ostd::syscall::{sys_lookup_service, sys_send, sys_try_send};
 
 /// Opcode prefix byte sent to the focused cell's IPC endpoint.
 pub const INPUT_EVENT_OPCODE: u8 = 0x10;
@@ -65,21 +64,23 @@ impl Dispatcher {
 
     /// Send a translated `InputEvent` to the focused cell.
     ///
-    /// Send failure does not mutate focus; a later `SetFocus` decides who owns
-    /// the keyboard next.
+    /// Blocking delivery preserves ordering and applies backpressure until the
+    /// focused cell receives the event or the kernel confirms the target failed.
     ///
     /// The IPC message format is:
     /// ```text
     /// byte[0]   = INPUT_EVENT_OPCODE (0x10)
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
-    pub fn dispatch(&mut self, event: &InputEvent) {
+    pub fn dispatch(&mut self, event: &InputEvent) -> bool {
         if self.focused == 0 {
-            return; // no focus — drop silently
+            return true; // no focus — drop silently
         }
-        let _ = Self::send_event(self.focused, event);
-        // NOTE: no per-dispatch logging — it would print a line on the shared
-        // console for every keystroke, burying the shell prompt the user types at.
+        if Self::send_keyboard_event(self.focused, event).is_ok() {
+            return true;
+        }
+        self.focused = 0;
+        false
     }
 
     /// Send a mouse event (`MouseMove`/`MouseButton`/`MouseScroll`) to the
@@ -101,31 +102,41 @@ impl Dispatcher {
                 None => return, // compositor not up yet — drop
             }
         }
-        if Self::send_event(self.compositor_tid, event).is_err() {
+        if Self::try_send_event(self.compositor_tid, event).is_err() {
             self.compositor_tid = 0; // stale TID — re-resolve on next event
         }
     }
 
-    /// Encode and try-send one event to `target`.
+    fn send_keyboard_event(target: usize, event: &InputEvent) -> Result<(), ()> {
+        let buf = Self::encode(event);
+        match sys_send(target, &buf) {
+            ostd::syscall::SyscallResult::Ok(0) => Ok(()),
+            _ => Err(()),
+        }
+    }
+
+    /// Encode and try-send one mouse event to `target`.
     ///
     /// The IPC message format is:
     /// ```text
     /// byte[0]   = INPUT_EVENT_OPCODE (0x10)
     /// byte[1..] = encode_event() output (see libs/api/src/input.rs)
     /// ```
-    fn send_event(target: usize, event: &InputEvent) -> Result<(), ()> {
+    fn try_send_event(target: usize, event: &InputEvent) -> Result<(), ()> {
+        let buf = Self::encode(event);
+        match sys_try_send(target, &buf) {
+            ostd::syscall::SyscallResult::Ok(0) => Ok(()),
+            _ => Err(()),
+        }
+    }
+
+    fn encode(event: &InputEvent) -> [u8; INPUT_EVENT_IPC_SIZE + 1] {
         let mut buf = [0u8; INPUT_EVENT_IPC_SIZE + 1];
         buf[0] = INPUT_EVENT_OPCODE;
         let mut payload = [0u8; INPUT_EVENT_IPC_SIZE];
         encode_event(event, &mut payload);
         buf[1..INPUT_EVENT_IPC_SIZE + 1].copy_from_slice(&payload);
-
-        // Non-blocking dispatch: if the target is not receiving and the kernel
-        // cannot queue into its bounded receiver mailbox, the event is dropped.
-        match sys_try_send(target, &buf) {
-            ostd::syscall::SyscallResult::Ok(_) => Ok(()),
-            _ => Err(()),
-        }
+        buf
     }
 }
 

@@ -175,17 +175,17 @@ impl viConsole {
 /// tick, in order, before any new FIFO bytes are consumed.
 static PENDING_ASCII: Spinlock<VecDeque<u8>> = Spinlock::new(VecDeque::new());
 
-/// Relay a UART byte to the input service as an EV_ASCII press+release pair.
+/// Relay a UART byte to the input service as one EV_ASCII press event.
 ///
-/// Uses `ipc_post_nonblock` so bytes arriving in a burst (all 6 chars of "hypha\n"
-/// in one timer tick) are queued into `pending_msgs` rather than dropped. The
-/// input service drains pending_msgs at the start of each `sys_recv_timeout` call,
-/// guaranteeing all bytes are delivered even if input service is mid-dispatch.
+/// Uses the kernel's 64-message nonblocking post so short bursts are queued while
+/// the input service is blocked delivering a keyboard event to the focused cell.
+/// Longer bursts remain ordered in `PENDING_ASCII` and the IRQ RX ring until the
+/// input service catches up.
 ///
 /// Returns `false` when the PRESS event could not be queued (input service
 /// pending_msgs full) — the caller must retain the byte and retry later. The
-/// RELEASE event is best-effort: shells act on `KeyState::Pressed` only, so a
-/// lost release is harmless, while a lost press is a lost keystroke.
+/// UART ASCII is edge-triggered text input, so only a Press event is emitted.
+/// Sending a synthetic Release doubles queue pressure while shells ignore it.
 ///
 /// Delivery copies into an owned kernel mailbox entry. The resumed input task
 /// drains that entry into its own user buffer, so this interrupt-side path never
@@ -203,13 +203,7 @@ fn relay_ascii_to_input(input_tid: usize, byte: u8) -> bool {
     msg[0] = WIRE_ASCII;
     msg[1..5].copy_from_slice(&(byte as u32).to_le_bytes());
     msg[5..9].copy_from_slice(&1u32.to_le_bytes()); // press
-    let press_ok = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]).is_ok();
-    if press_ok {
-        msg[5..9].copy_from_slice(&0u32.to_le_bytes()); // release (best-effort)
-        let _ = crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]);
-    }
-
-    press_ok
+    crate::task::ipc_post_nonblock(KERNEL_UART_SENDER, input_tid, &msg[..9]).is_ok()
 }
 
 pub static CONSOLE: Spinlock<viConsole> = Spinlock::new(viConsole {
