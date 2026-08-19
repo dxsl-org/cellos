@@ -176,7 +176,6 @@ impl BrokerState {
 
     pub fn requeue_reply(&mut self, mut reply: QueuedReply) -> bool {
         if self.reply_len() >= LOCAL_REPLY_QUEUE_CAP {
-            self.counters.terminal += 1;
             return false;
         }
         reply.order = self.bump_reply_order();

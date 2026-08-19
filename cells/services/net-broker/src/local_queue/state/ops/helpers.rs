@@ -98,6 +98,10 @@ impl BrokerState {
         self.counters.try_send_busy += 1;
     }
 
+    pub fn note_terminal_reply(&mut self) {
+        self.counters.terminal += 1;
+    }
+
     pub fn note_heartbeat_miss(&mut self) {
         self.counters.heartbeat_miss += 1;
     }
