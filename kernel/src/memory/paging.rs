@@ -1031,6 +1031,9 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
     }
 }
 
+#[cfg(target_arch = "x86_64")]
+const _: crate::hal::HandlePageFault = vi_handle_page_fault;
+
 /// Terminate the cell that took an unserviceable user-mode #PF, or panic if the
 /// fault cannot be attributed to one.
 ///
