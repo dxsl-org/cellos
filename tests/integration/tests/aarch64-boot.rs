@@ -139,8 +139,8 @@ fn aarch64_echo_command() {
 /// philosophy — no boot-output pollution), so the test launches it from the
 /// shell like a user would. It exercises the PL061 GPIO controller at
 /// 0x0903_0000 and the PL011 UART at 0x0900_0000 on the QEMU ARM virt
-/// machine. The test only verifies that GPIO was opened successfully — UART
-/// TX also runs but its output merges with the serial console stream.
+/// machine. It also proves the pinned child receives its worker sentinel,
+/// preventing the demo from recursively spawning itself.
 ///
 /// Prerequisites: `/bin/periph-demo` in the aarch64 embedded ramdisk
 /// (scripts/build-aarch64-cells.ps1).
@@ -156,6 +156,12 @@ fn aarch64_periph_demo_gpio() {
     qemu.send_line("periph-demo &");
     qemu.wait_for("[periph-demo] GPIO PL061 opened", 30)
         .unwrap_or_else(|e| panic!("periph-demo GPIO not seen: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("[periph-demo] UART PL011 opened", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("periph-demo UART not seen: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("[periph-demo] spawning pinned-poll cell on hart 0", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("periph-demo pinned spawn not seen: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.wait_for("[periph-demo] pinned-poll worker active on hart 0", CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("periph-demo pinned worker not seen: {e}\n--- output ---\n{}", qemu.dump()));
 }
 
 /// UART → input-service → app delivery on AArch64.

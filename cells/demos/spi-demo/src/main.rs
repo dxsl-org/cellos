@@ -35,7 +35,7 @@ fn cell_main() {
 
     if let Ok(mut spi) = BcmSpi0::open() {
         println("[spi-demo] using BCM SPI0 hardware controller");
-        return run_spi_demo(&mut spi);
+        return run_spi_demo(&mut spi, true);
     }
 
     match Pl061Gpio::open() {
@@ -52,10 +52,10 @@ fn cell_main() {
 fn run_gpio_spi_demo(gpio: Pl061Gpio) {
     let mut spi = BitBangSpi::new(gpio);
     println("[spi-demo] using GPIO bit-bang fallback");
-    run_spi_demo(&mut spi);
+    run_spi_demo(&mut spi, false);
 }
 
-fn run_spi_demo(spi: &mut impl ViSpi<Error = SpiError>) {
+fn run_spi_demo(spi: &mut impl ViSpi<Error = SpiError>, require_loopback: bool) {
     // ── TX-only write: primary assertion ─────────────────────────────────────
     // write() clocks out bytes via MOSI/SCK/CS without sampling MISO.
     // On QEMU this validates the full GPIO MMIO path.
@@ -73,12 +73,24 @@ fn run_spi_demo(spi: &mut impl ViSpi<Error = SpiError>) {
     let mut rx = [0xFFu8; 2];
     match spi.transfer(&[0xAA, 0x55], &mut rx) {
         Ok(()) => {
-            let msg = alloc::format!(
-                "[spi-demo] SPI transfer OK: sent 0xAA 0x55, recv 0x{:02X} 0x{:02X} (QEMU MISO=0)",
-                rx[0],
-                rx[1]
-            );
-            println(&msg);
+            if require_loopback {
+                if rx == [0xAA, 0x55] {
+                    println("[phase03-spi] PASS: BCM SPI0 MOSI-MISO loopback AA55");
+                } else {
+                    let msg = alloc::format!(
+                        "[phase03-spi] FAIL: expected AA55, received {:02X}{:02X}",
+                        rx[0],
+                        rx[1]
+                    );
+                    println(&msg);
+                }
+            } else {
+                let msg = alloc::format!(
+                    "[spi-demo] SPI transfer OK: sent 0xAA 0x55, recv 0x{:02X} 0x{:02X} (QEMU MISO=0)",
+                    rx[0], rx[1]
+                );
+                println(&msg);
+            }
         }
         Err(_) => {
             println("[spi-demo] SPI BusError — transfer failed");

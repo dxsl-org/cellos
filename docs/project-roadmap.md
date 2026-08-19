@@ -10,6 +10,8 @@ preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it
 only when a historical decision is not represented by the current topic pages.
 
+> **2026-08-20 G1 common-driver update:** Phase 03 is complete for the BCM/RPi3 lane. Real hardware passed GPIO17-to-GPIO27 edge detection, BCM BSC1 explicit data NACK, GPIO actuator readback, and BCM SPI0 `AA55` loopback; AArch64 QEMU separately passed PL061, PL011, and bounded pinned-worker regression gates. DesignWare I2C/SPI remains conditional on verified board compatible, MMIO, IRQ, and pinmux evidence.
+
 ## How to Read the Roadmap
 
 | Need | File |

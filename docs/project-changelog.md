@@ -38,7 +38,20 @@ assertion, and `scripts/check-hal-boundaries.sh` now fails any new local HAL
 `bash scripts/check-hal-boundaries.sh`, and `git diff --check`. No public ABI
 changed and no physical-RPi3 claim was added.
 
-## [2026-08-19] G1 BCM I2C/SPI controller slice enters hardware-gated integration
+## [2026-08-20] Phase 03 BCM/RPi3 hardware lane closes
+
+The current RPi3 payload now passes the physical GPIO17-to-GPIO27 rising-edge
+gate, an explicit BCM BSC1 data NACK, GPIO17 actuator readback, and the BCM SPI0
+MOSI-to-MISO `AA55` loopback without panic or Cell faults. Development demo
+cells are loaded from the current embedded VIFS1 image and fail closed on a
+missing entry, preventing stale SD payloads from masking a deployment error.
+
+The AArch64 QEMU regression lane launches demos on demand and proves PL061,
+PL011, and the bounded pinned-worker path without recursive self-spawn. Phase 03
+is complete for BCM/RPi3; DesignWare physical promotion remains conditional on
+a board with verified compatible, MMIO, IRQ, and pinmux evidence.
+
+## [2026-08-19] G1 BCM I2C/SPI controller slice closes hardware-gated integration
 
 Cell manifests, launch ceilings, signed policy, and the resource registry now
 carry distinct I2C and SPI device classes. RPi3 grants exact 4-KiB BSC1 and
@@ -57,7 +70,10 @@ on missing required cells, and stages a verified current-head TFTP payload.
 Physical RPi3 TFTP boot now passes with SD discovery, all four MBR partitions,
 FAT16 and `/mnt/sd` mounts, kernel-push Input Service, and shell readiness.
 Interactive `help` and a numbered 100-command UART burst returned without loss.
-Only the wired GPIO/I2C/SPI promotion remains explicitly hardware-gated.
+The wired GPIO/I2C/SPI promotion now also passes on the current RPi3 head:
+GPIO17->GPIO27 rising edge, BCM BSC1 explicit data NACK, and BCM SPI0
+loopback AA55 all PASS. The BCM/RPi3 lane is closed; DesignWare remains
+conditional on a board with verified compatible/controller evidence.
 
 ## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 

@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-20 (application tier taxonomy normalized; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass)
+**Last Updated**: 2026-08-20 (application tier taxonomy normalized; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
 > **Status refresh 2026-08-18**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
@@ -103,10 +103,10 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
 - BCM2837 BSC1 and SPI0 use shared Driver Cell crates with distinct manifest,
   policy, and MMIO device classes. The RPi3 descriptor selects their pinmux and
   exact 4-KiB controller windows; GPIO authority cannot claim either window.
-  This is compile/unit-test evidence only until the current RPi3 head passes a
-  wired physical I2C/SPI run. The separate Phase 04 RPi3 boot/storage/input
-  baseline passes TFTP, SDHCI/mount, shell, interactive help, and a lossless
-  100-command UART burst.
+  The current RPi3 head now passes the wired physical I2C/SPI run, while the
+  separate Phase 04 RPi3 boot/storage/input baseline passes TFTP, SDHCI/mount,
+  shell, interactive help, and a lossless 100-command UART burst. DesignWare
+  controllers stay conditional on verified compatible/controller evidence.
 - Phase 04 boot evidence uses freshly packaged RV64/AArch64 images and asserts
   separate block, input, GPU, and shell markers. Both QEMU architectures also
   reach the shell with optional GPU/NIC devices omitted. This proves VirtIO

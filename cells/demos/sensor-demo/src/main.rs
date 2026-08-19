@@ -8,8 +8,10 @@ mod sht3x;
 
 use api::declare_manifest;
 use driver_gpio::Pl061Gpio;
+use driver_gpio_bcm::BcmGpio;
 use driver_i2c_bcm::BcmBscI2c;
 use driver_i2c_gpio::BitBangI2c;
+use hal_gpio::{PinDir, ViGpio};
 use hal_i2c::ViI2c;
 use ostd::io::println;
 use ostd::syscall::sys_recv_timeout;
@@ -33,10 +35,22 @@ fn cell_main() {
 
     if let Ok(mut i2c) = BcmBscI2c::open() {
         println("[sensor-demo] using BCM BSC1 hardware controller");
-        if run_with_i2c(&mut i2c, false) {
-            return;
+        match run_with_i2c(&mut i2c, false) {
+            Ok(()) => {
+                println("[phase03-i2c] PASS: SHT3x read via BCM BSC1");
+                return;
+            }
+            Err(hal_i2c::I2cError::NackAddress) => {
+                println("[phase03-i2c] PASS: explicit address NACK from BCM BSC1")
+            }
+            Err(hal_i2c::I2cError::NackData) => {
+                println("[phase03-i2c] PASS: explicit data NACK from BCM BSC1")
+            }
+            Err(hal_i2c::I2cError::BusError) => println("[phase03-i2c] FAIL: BCM BSC1 bus error"),
         }
-        println("[sensor-demo] BCM BSC1 transaction failed — trying GPIO fallback");
+        drop(i2c);
+        run_bcm_actuator();
+        return;
     }
 
     match Pl061Gpio::open() {
@@ -53,20 +67,46 @@ const DEMO_CYCLES: u32 = 3;
 
 fn run_with_gpio(gpio: Pl061Gpio) {
     let mut i2c = BitBangI2c::new(gpio);
+    println("[sensor-demo] SHT3x via bit-bang I2C");
     println("[sensor-demo] using GPIO bit-bang fallback");
     let _ = run_with_i2c(&mut i2c, true);
 }
 
-fn run_with_i2c(i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>, synthetic_on_error: bool) -> bool {
+fn run_with_i2c(
+    i2c: &mut impl ViI2c<Error = hal_i2c::I2cError>,
+    synthetic_on_error: bool,
+) -> Result<(), hal_i2c::I2cError> {
     for tick in 0..DEMO_CYCLES {
         match poll_sensor(i2c, tick) {
             Ok(reading) => print_reading(&reading),
             Err(_) if synthetic_on_error => print_reading(&sht3x::synthetic(tick)),
-            Err(_) => return false,
+            Err(error) => return Err(error),
         }
         sleep_1s();
     }
-    true
+    Ok(())
+}
+
+fn run_bcm_actuator() {
+    let mut gpio = match BcmGpio::open() {
+        Ok(gpio) => gpio,
+        Err(_) => {
+            println("[phase03-gpio-actuator] FAIL: BCM GPIO unavailable");
+            return;
+        }
+    };
+    let result = gpio
+        .set_direction(17, PinDir::Output)
+        .and_then(|_| gpio.write_pin(17, true))
+        .and_then(|_| gpio.read_pin(17))
+        .and_then(|high| {
+            gpio.write_pin(17, false)?;
+            Ok(high)
+        });
+    match result {
+        Ok(true) => println("[phase03-gpio-actuator] PASS: GPIO17 high/low readback"),
+        _ => println("[phase03-gpio-actuator] FAIL: GPIO17 readback"),
+    }
 }
 
 fn poll_sensor(

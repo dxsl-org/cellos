@@ -180,7 +180,7 @@ foreach ($c in $cells) {
     }
 }
 
-foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input', 'sensor-demo', 'spi-demo')) {
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input', 'periph-demo', 'sensor-demo', 'spi-demo')) {
     if ($required -notin $found) {
         throw "Required aarch64 cell missing from image inputs: $required"
     }
@@ -218,7 +218,7 @@ Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 # Assert the layout instead of trusting the exit code: mkfat32 exits 0 for images
 # whose destination paths were mangled, and a missing /POLICY.BIN degrades silently.
 $layout = & $python @pythonArgs (Join-Path 'tools' 'inspect_fat.py') $imagePath 2>&1
-foreach ($requiredMarker in @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'", "LFN 'sensor-demo'", "LFN 'spi-demo'")) {
+foreach ($requiredMarker in @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'", "LFN 'periph-demo'", "LFN 'sensor-demo'", "LFN 'spi-demo'")) {
     if (($layout | Select-String -Quiet -SimpleMatch $requiredMarker) -eq $false) {
         Write-Error "aarch64 kernel_fs.img missing required entry: $requiredMarker"
         $layout | Write-Host
