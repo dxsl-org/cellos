@@ -1,6 +1,6 @@
 # Cellos Performance Baseline Report
 
-> **Status:** Capacity measured; fixed-priority scheduler shipped; consolidated latency baseline still pending.
+> **Status:** Capacity measured; fixed-priority scheduler shipped; local direct IPC QEMU baseline frozen; consolidated hardware-qualified latency baseline still pending.
 > Updated weekly by `.github/workflows/perf.yml`.
 
 ---
@@ -58,25 +58,26 @@ test-mode build used for MemInfo and bounded destructive OOM verification.
 
 ## Baseline Measurements
 
-> **Not yet available** — requires the first complete QEMU CI run.
+> **Phase 01 result:** local direct IPC QEMU baseline is now frozen at 51,200 ns p50 / 140,000 ns p99 median across three runs on QEMU `virt`, 256 MiB, two hart-threads under TCG, with 147,000 ns as the 5% regression ceiling. This capture is separate from the scheduled `-smp 1 -m 128M` job above. QEMU remains repeatable trend evidence, not hardware qualification.
 >
 > Run `./scripts/dev-setup.sh` then boot via `./run.ps1` and observe `[bench]`
-> lines in the serial output to capture initial numbers.
+> lines in the serial output to capture or extend the historical series.
 
 Expected rough order-of-magnitude for QEMU (10 MHz `mtime`):
 
 | Scenario | Expected p50 | Expected p99 | Target |
 |----------|-------------|-------------|--------|
 | `context_switch` | ~20 µs | ~40 µs | < 100 µs |
-| `ipc_send_recv` | 48.5 µs measured | 86.6 µs measured | QEMU trend only; hardware target < 50 µs |
+| `ipc_send_recv` | 51.2 µs measured | 140.0 µs measured | QEMU trend only; hardware target < 50 µs |
 | `syscall_yield` | ~5 µs | ~10 µs | < 10 µs |
 | `memory_footprint` | 129.49 MiB | — | < 10 MiB — FAIL |
 
 ## Performance Baseline — Status
 
 **Current status: PARTIALLY MEASURED.** Capacity observability has a real RV64 measurement,
-and D1 captured one QEMU IPC run (48.5 µs p50 / 86.6 µs p99). A consolidated QEMU history and
-the named-board hardware qualification run remain open.
+and Phase 01 froze a local direct IPC QEMU baseline at 51.2 µs p50 / 140.0 µs p99 median with
+a 147.0 µs ceiling. A consolidated QEMU history and the named-board hardware qualification run
+remain open.
 
 On 2026-08-01, `/bin/bench` reported:
 
@@ -100,12 +101,12 @@ is included and signed only when `CELLOS_INCLUDE_CAPACITY_PROBE=1`; default imag
 ## Spec vs. Implementation Gap
 
 The ruled Tier-1 direct-dispatch rewrite is not reachable in current separately linked Cells.
-The measured message path spends about 0.64 µs on request encode plus reply decode and 48.5 µs
-p50 on the full rendezvous in QEMU; the table tracks shipped evidence separately from the target.
+The measured message path spends 51.2 µs p50 on the full rendezvous in QEMU; the table tracks
+shipped evidence separately from the target.
 
 | Metric | Spec Target | PDR Target (p99) | Estimated Current | Measured |
 |--------|------------|-----------------|-------------------|---------|
-| IPC round-trip | Future Tier-1 direct dispatch; unmeasured | < 50 µs on qualified hardware | Message rendezvous | QEMU: 48.5 µs p50 / 86.6 µs p99 |
+| IPC round-trip | Future Tier-1 direct dispatch; unmeasured | < 50 µs on qualified hardware | Message rendezvous | QEMU: 51.2 µs p50 / 140.0 µs p99 |
 | Context switch | — | < 100 µs | ~40 µs (estimated) | ❌ Not yet |
 | Syscall yield | — | < 10 µs | ~10 µs (estimated) | ❌ Not yet |
 | Allocator commitment | — | < 10 MiB | 129.49 MiB | ❌ FAIL (measured 2026-08-01) |
