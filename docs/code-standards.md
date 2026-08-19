@@ -417,7 +417,7 @@ cells/
 - **apps/** — Interactive/rich user applications with persistent UI (dashboards, productivity tools)
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
 - **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
-- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
+- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor, broker-style cells). Any cross-machine broker must fail closed by default; readable config is never authorization or secret storage.
 - **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)

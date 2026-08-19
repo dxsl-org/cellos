@@ -2,6 +2,18 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-19] Cell-to-Cell Anywhere Phase 02A lands the fail-closed export registry slice
+
+`cells/services/net-broker` now loads the boot-provisioned non-secret registry at
+`/etc/cellos/c2c-exports.cfg`, parses strict ASCII `key=value` export stanzas,
+and exposes only the disabled reason plus export count to the rest of the broker.
+Remote/public exports stay disabled until secure node identity exists, so Phase
+02B durable identity storage remains blocked by the current VFS authority model.
+Local IPC and relay routing are unchanged. Verification stayed on the QEMU and
+host-test lane: 25 host tests passed, the three target compile checks passed,
+formatting/diff checks passed, and the QEMU-TCG boot log showed the registry
+absent path with remote disabled. No hardware evidence is claimed.
+
 ## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 
 The previously merged x86 hardware lane now has a QEMU q35 descriptor under
