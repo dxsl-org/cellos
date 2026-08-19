@@ -5298,6 +5298,9 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     frame.regs[10] = encode_syscall_result(result, usize::MAX, supports_typed_oom);
 }
 
+#[cfg(not(target_arch = "riscv32"))]
+const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
+
 #[cfg(target_arch = "riscv32")]
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -5351,6 +5354,9 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 
     frame.regs[10] = encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32;
 }
+
+#[cfg(target_arch = "riscv32")]
+const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 
 #[cfg(test)]
 mod tests {

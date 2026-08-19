@@ -2,6 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-19] HAL↔kernel Rust ABI signatures become single-sourced
+
+`hal/traits/arch/src/kernel_abi.rs` now owns the shared `extern "Rust"` hook
+signatures for HAL arch code and the kernel. The HAL side imports those
+declarations instead of re-declaring local ABI blocks, and the file now carries
+declaration-side const assertions for each hook plus a documented dispatcher
+frame contract. Kernel-side x86 page-fault handling adds the matching
+assertion, and `scripts/check-hal-boundaries.sh` now fails any new local HAL
+`extern "Rust"` declarations. Verification passed `cargo fmt --all --check`,
+`cargo check -p hal-arch-trait --target x86_64-unknown-linux-gnu`,
+`cargo check -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc`,
+`bash scripts/check-hal-boundaries.sh`, and `git diff --check`. No public ABI
+changed and no physical-RPi3 claim was added.
+
 ## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 
 The previously merged x86 hardware lane now has a QEMU q35 descriptor under

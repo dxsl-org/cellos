@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-19
 
 ---
 
@@ -62,6 +62,10 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
   and enabled shared-driver selection.
 - Immutable SoC MMIO, IRQ topology, controller presence, and access quirks live
   under `hal/soc/`.
+- Shared HAL↔kernel Rust ABI declarations live in `hal/traits/arch/src/kernel_abi.rs`.
+  Architecture code must import that shared module instead of re-declaring
+  local `extern "Rust"` blocks, and declaration sites should keep compile-time
+  assertions close to the hook they validate.
 - For x86 PC-compatible targets, `hal/soc/x86` owns static port/ISA wiring and
   bounded legacy firmware windows. LAPIC, IOAPIC, HPET, and ECAM addresses must
   come from validated ACPI and remain unavailable when firmware evidence fails.

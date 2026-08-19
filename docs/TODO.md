@@ -2,18 +2,9 @@
 
 1. Hoàn tất G1: làm một vertical slice GPIO/I²C sensor → Cell → output trên RPi3.
 
-2. Hoặc xử lý nợ kỹ thuật extern "Rust" viết tay có nguy cơ lệch chữ ký.
-
-3. **Chưa làm — lỗ hổng cấu trúc, không phải lỗ hổng CI.** Ban đầu tôi quy lỗi arity trên cho
-việc CI không build rv32. Sai: đã thử khai báo thiếu tham số trong `rv64/trap.rs` (target CI
-build mọi lần push) và `cargo check -p cellos-kernel` vẫn xanh. rustc **không** đối chiếu khai
-báo `extern "Rust"` với định nghĩa `#[no_mangle]` ở crate khác — `clashing_extern_declarations`
-chỉ so các khai báo trong cùng crate, còn linker chỉ khớp tên symbol chứ không khớp signature.
-Nên **không lane CI nào bắt được lỗi này**, và HAL hiện có 23 khai báo tay như vậy (14 symbol:
-`vi_terminate_on_fault`, `vi_timer_tick`, `vi_trap_handler`, `ViCell_syscall_dispatch`, …), mỗi
-cái là một chỗ signature có thể lệch âm thầm. Cách sửa bền là để signature tồn tại đúng một
-nơi compiler kiểm được (crate trait dùng chung / macro sinh cả khai báo lẫn định nghĩa), thay
-vì mỗi kiến trúc tự khai báo lại.
+2. **Đã đóng — HAL↔kernel Rust ABI có một nguồn chữ ký.** Các hook nằm tại
+`hal/traits/arch/src/kernel_abi.rs`; assertions khóa cả declaration và kernel export vào cùng
+type, còn HAL boundary check cấm kiến trúc khai báo `extern "Rust"` riêng.
 
 4. Ghi kèm để ai định thêm lane rv32 biết trước: kernel **không** build được cho
 `riscv32imac-unknown-none-elf` — hai lỗi `E0308` có sẵn (`task/syscall.rs:3540`,

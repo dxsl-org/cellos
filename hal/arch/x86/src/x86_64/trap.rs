@@ -45,29 +45,7 @@
 //!
 //! Total size: 32×8 + 4×8 = **288 bytes**.
 
-#[derive(Debug, Clone, Copy, Default)]
-#[repr(C)]
-pub struct ViTrapFrame {
-    /// General-purpose register slots (matches RISC-V count for kernel compat).
-    /// Populated by the x86_64 syscall / interrupt entry asm (Phase 05).
-    /// See module doc for the authoritative index→register mapping.
-    pub regs: [usize; 32],
-    /// RFLAGS — initialised to 0x202 (IF=1, reserved=1) for new user tasks.
-    pub sstatus: usize,
-    /// User RIP — entry point for new tasks; return address for syscalls.
-    pub sepc: usize,
-    /// CR2 on #PF, 0 otherwise.
-    pub stval: usize,
-    /// Interrupt / exception vector number.
-    pub scause: usize,
-}
-
-// Compile-time guard: ViTrapFrame must be exactly 288 bytes.
-// 32 regs × 8 bytes + 4 fields × 8 bytes = 256 + 32 = 288.
-const _: () = assert!(
-    core::mem::size_of::<ViTrapFrame>() == 288,
-    "ViTrapFrame size mismatch — update the index map in trap.rs"
-);
+pub use hal_arch_trait::ViTrapFrame;
 
 /// Returns `(0, 0)` — x86_64 has no RISC-V GP/TP registers.
 #[inline(always)]

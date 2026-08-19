@@ -5,6 +5,14 @@
 //! The runtime dispatch is driven by `EL2_ACTIVE` (set in el2.rs at boot).
 
 use core::arch::global_asm;
+#[cfg(feature = "board-rpi3")]
+use hal_arch_trait::vi_handle_uart_irq;
+#[cfg(all(not(feature = "board-rpi3"), not(feature = "board-rpi4")))]
+use hal_arch_trait::vi_handle_virtio_irq;
+use hal_arch_trait::{
+    vi_current_cell_id, vi_gpio_notify_irq, vi_terminate_on_fault_aarch64, vi_timer_tick,
+    ViCell_syscall_dispatch, ViTrapFrame,
+};
 
 /// Saved register state on entry to a trap handler.
 ///
@@ -22,25 +30,9 @@ pub struct TrapFrame {
     pub esr_el1: u64,  // offset 272
 }
 
-/// Mirror of `hal_riscv::rv64::trap::ViTrapFrame` — same `#[repr(C)]` layout.
-/// Needed because hal-arm does not depend on hal-riscv; both are `#[repr(C)]`
-/// so the binary call to `ViCell_syscall_dispatch` is well-defined by layout.
-#[derive(Default, Clone, Copy)]
-#[repr(C)]
-struct ViTrapFrameBridge {
-    pub regs: [usize; 32],
-    pub sstatus: usize,
-    pub sepc: usize,
-    pub stval: usize,
-    pub scause: usize,
-}
-
 /// Bridge ARM64 SVC registers into the kernel's generic syscall dispatcher.
 fn svc_dispatch(frame: &mut TrapFrame) {
-    extern "Rust" {
-        fn ViCell_syscall_dispatch(frame: &mut ViTrapFrameBridge);
-    }
-    let mut vtf = ViTrapFrameBridge::default();
+    let mut vtf = ViTrapFrame::default();
     vtf.regs[17] = frame.regs[0] as usize; // syscall number (x0)
     vtf.regs[10] = frame.regs[1] as usize; // a0 (x1)
     vtf.regs[11] = frame.regs[2] as usize; // a1 (x2)
@@ -49,12 +41,7 @@ fn svc_dispatch(frame: &mut TrapFrame) {
                                            // elr_el1 holds ELR_EL1 at EL1, or ELR_EL2 at EL2 — both are the
                                            // return address past the SVC instruction that the kernel needs.
     vtf.sepc = frame.elr_el1 as usize;
-    // SAFETY: ViTrapFrameBridge is layout-identical to hal_riscv::ViTrapFrame
-    // (both #[repr(C)], same fields and order). The kernel side is #[no_mangle]
-    // extern "Rust" and will be resolved to the same symbol at link time.
-    unsafe {
-        ViCell_syscall_dispatch(&mut vtf);
-    }
+    ViCell_syscall_dispatch(&mut vtf);
     frame.regs[0] = vtf.regs[10] as u64; // return value → x0
 }
 
@@ -212,15 +199,6 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // arrive from EL0 in our setup (there is no EL1 guest).
         // Forward to the kernel fault handler: kills the cell, lets the OS continue.
         0x20 | 0x24 => {
-            extern "Rust" {
-                fn vi_terminate_on_fault_aarch64(
-                    cause: usize,
-                    pc: usize,
-                    fault_addr: usize,
-                    spsr: usize,
-                    vector_kind: usize,
-                );
-            }
             // SAFETY: vi_terminate_on_fault_aarch64 is #[no_mangle] in kernel::task.
             // It force-unlocks all kernel locks, sends NotifyOnExit, and calls
             // yield_cpu() which switches away from this (now dead) cell.
@@ -251,16 +229,6 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // and misreading that as a cell fault would silently kill the cell and
         // bury the kernel bug.
         _ => {
-            extern "Rust" {
-                fn vi_terminate_on_fault_aarch64(
-                    cause: usize,
-                    pc: usize,
-                    fault_addr: usize,
-                    spsr: usize,
-                    vector_kind: usize,
-                );
-                fn vi_current_cell_id() -> usize;
-            }
             // SAFETY: both are #[no_mangle] in kernel::task and linked via
             // extern "Rust"; see the 0x20 | 0x24 arm for the teardown contract.
             let cell_id = unsafe { vi_current_cell_id() };
@@ -303,15 +271,6 @@ const GPIO_GIC_ID: u32 = u32::MAX;
 /// GPIO PL061: GIC ID 39 (SPI 7); VirtIO MMIO: GIC IDs 48..79 (SPI 16..47).
 #[no_mangle]
 pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
-    extern "Rust" {
-        fn vi_timer_tick();
-        #[cfg(not(feature = "board-rpi4"))]
-        fn vi_handle_virtio_irq(irq: u32);
-        fn vi_gpio_notify_irq();
-        #[cfg(feature = "board-rpi3")]
-        fn vi_handle_uart_irq();
-    }
-
     #[cfg(feature = "board-rpi3")]
     {
         let src = super::bcm2836_irq::irq_source();

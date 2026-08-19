@@ -30,9 +30,9 @@
 //! Note: regs[10..15] hold syscall args in this path, NOT the x86-specific
 //! register assignment from the exception-path doc in trap.rs (which is only
 //! authoritative for `__trap_exit` context restoration, not for SYSCALL entry).
-use super::trap::ViTrapFrame;
 use core::arch::asm;
 use core::arch::global_asm;
+use hal_arch_trait::ViCell_syscall_dispatch;
 
 const IA32_EFER: u32 = 0xC000_0080;
 const IA32_STAR: u32 = 0xC000_0081;
@@ -63,6 +63,8 @@ static mut CPU_LOCAL: CpuLocal = CpuLocal {
     pku_value: 0,
     _pad: 0,
 };
+
+const _: hal_arch_trait::SyscallDispatch = ViCell_syscall_dispatch;
 
 fn rdmsr(msr: u32) -> u64 {
     let lo: u32;
@@ -150,21 +152,6 @@ pub fn set_task_pku(val: u32) {
     unsafe {
         CPU_LOCAL.pku_value = val;
     }
-}
-
-extern "Rust" {
-    // SAFETY: `ViCell_syscall_dispatch` is defined in kernel/src/task/syscall.rs
-    // with `#[no_mangle] pub extern "Rust"`.  It is called only from
-    // `syscall_entry` below, which has already built the full ViTrapFrame on
-    // the kernel stack and passes a valid `&mut ViTrapFrame` pointer in RDI.
-    //
-    // allow(dead_code): this declaration is never referenced from Rust — the
-    // `global_asm!` stub below calls it directly by symbol name (`call
-    // ViCell_syscall_dispatch`), so the linker resolves it even though rustc
-    // sees no caller. The `extern "Rust"` block exists solely to assert the
-    // ABI/signature contract with kernel/src/task/syscall.rs at compile time.
-    #[allow(dead_code)]
-    fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame);
 }
 
 // The syscall_entry stub is written in AT&T syntax. Rust's global_asm!
