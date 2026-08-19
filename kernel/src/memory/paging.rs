@@ -909,7 +909,7 @@ pub fn virt_to_phys(vaddr: VAddr) -> Option<PhysAddr> {
 // ─── Page-fault handler (x86_64) ─────────────────────────────────────────────
 
 /// HAL-visible entry point: called by the IDT error-code handler via the
-/// `extern "Rust" fn vi_handle_page_fault` declaration in `hal/arch/x86/idt.rs`.
+/// shared `vi_handle_page_fault` declaration in `hal/traits/arch/src/kernel_abi.rs`.
 ///
 /// Decision tree:
 ///   - Kernel-mode fault: panic — a true kernel bug.
@@ -1030,6 +1030,9 @@ pub extern "Rust" fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, 
         }
     }
 }
+
+#[cfg(target_arch = "x86_64")]
+const _: crate::hal::HandlePageFault = vi_handle_page_fault;
 
 /// Terminate the cell that took an unserviceable user-mode #PF, or panic if the
 /// fault cannot be attributed to one.

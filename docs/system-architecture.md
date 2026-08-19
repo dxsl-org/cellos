@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos  
 **Level**: High-level (conceptual + key components)  
 **Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-18 (HAL/SoC/board split covers seven selections including QEMU q35 x86_64; physical boards remain hardware-gated)
+**Last Updated**: 2026-08-19 (HAL/SoC/board split covers seven selections including QEMU q35 x86_64; physical boards remain hardware-gated)
 
 > **Status refresh 2026-08-18**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
@@ -13,6 +13,13 @@
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
 > pass; QEMU q35 x86_64 is the current x86 integration board; VF2, Pioneer, RPi3,
 > and RPi4 remain physical-hardware-gated.
+
+> **Status refresh 2026-08-19**: HAL↔kernel Rust ABI hooks are now single-sourced
+> in `hal/traits/arch/src/kernel_abi.rs`; HAL arch crates import the shared
+> declarations instead of hand-writing local `extern "Rust"` blocks, and the
+> x86 page-fault hook is declared with a matching compile-time assertion. The
+> boundary script now rejects new local HAL ABI blocks. This is a structural
+> cleanup only: no public ABI changed and no physical-board claim was added.
 
 ---
 
