@@ -2,6 +2,17 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-19] Documentation is reconciled with the current codebase
+
+The roadmap is now a short entrypoint with separate current-focus, product,
+hardware, runtime/platform, milestone, completion-history, and risk-register
+pages. Current docs now reflect the board/SoC/HAL ownership split, the
+single-source HAL↔kernel Rust ABI, Lua as the only active native runtime, and
+the merged RPi3 evidence without promoting other physical boards. A static
+code review also records open socket ownership, TLS framing, runtime allowlist,
+production signing, net-broker, POSIX, and CI-gating risks. This was a docs-only
+reconciliation; no implementation or runtime test claim is added.
+
 ## [2026-08-19] HAL↔kernel Rust ABI signatures become single-sourced
 
 `hal/traits/arch/src/kernel_abi.rs` now owns the shared `extern "Rust"` hook

@@ -1,5 +1,5 @@
 # Anti-Patterns to Avoid
-> Part of [Cellos Patterns](../patterns.md)
+> Part of [Cellos Patterns](../PATTERNS.md)
 
 ## Unsafe Code in Cells
 

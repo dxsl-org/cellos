@@ -115,4 +115,4 @@ The v1.0 target window is **2027 H1**.  The criteria are:
 - CI is green on every PR
 - Public docs site is live
 
-See [`docs/ROADMAP.md`](ROADMAP.md) for the full milestone breakdown.
+See [`docs/project-roadmap.md`](project-roadmap.md) for the current roadmap index.

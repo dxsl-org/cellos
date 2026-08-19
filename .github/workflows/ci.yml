@@ -734,7 +734,7 @@ jobs:
           key: vfs-quota
 
       - name: Install dependencies
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
@@ -776,7 +776,7 @@ jobs:
           key: redoxfs-srv
 
       - name: Install dependencies
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
@@ -885,14 +885,14 @@ jobs:
           key: shell-utils
 
       - name: Install dependencies
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
             qemu-system-misc gcc-riscv64-unknown-elf libclang-dev
 
       # Own step, not appended to the apt install above: that step already spends its
-      # whole 10-minute budget fetching gcc-riscv64-unknown-elf on a slow mirror, and
+      # whole dependency-install budget fetching the cross toolchain on a slow mirror,
       # a timeout there must not read as a policy/signing failure.
       - name: Install Python cryptography (cell + policy signing)
         timeout-minutes: 5
@@ -948,7 +948,7 @@ jobs:
           key: boot-suite
 
       - name: Install dependencies
-        timeout-minutes: 10
+        timeout-minutes: 20
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q \
