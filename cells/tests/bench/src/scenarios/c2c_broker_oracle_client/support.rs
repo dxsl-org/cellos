@@ -34,11 +34,7 @@ pub fn payload_matches(config: ClientConfig, payload: &[u8]) -> bool {
                 && payload[0] == service_net_broker::bench_oracle::OP_HOLD
                 && payload[1..3] == config.hold_turns.to_le_bytes()
         }
-        _ => {
-            payload.len() == ECHO_BODY.len() + 1
-                && payload[0] == service_net_broker::bench_oracle::OP_ECHO
-                && payload[1..] == *ECHO_BODY
-        }
+        _ => service_net_broker::bench_oracle::decode_timed_echo_reply(payload, ECHO_BODY).is_ok(),
     }
 }
 

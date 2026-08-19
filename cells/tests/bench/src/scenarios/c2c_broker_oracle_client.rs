@@ -6,7 +6,8 @@ use super::c2c_broker_oracle_wire::{
 use crate::framework::timer::ticks_to_ns;
 use ostd::syscall::{sys_get_time, sys_send, SyscallResult};
 use service_net_broker::bench_oracle::{
-    decode_reply_frame, encode_echo_request, encode_hold_request, MAX_HOLD_TURNS,
+    decode_reply_frame, decode_timed_echo_reply, encode_echo_request, encode_hold_request,
+    MAX_HOLD_TURNS,
 };
 
 mod support;
@@ -72,6 +73,19 @@ fn run_sync(broker_tid: usize, config: ClientConfig) -> ClientSummary {
             let received = sys_get_time();
             summary.send_latency_ns = ticks_to_ns(sent.saturating_sub(start));
             summary.reply_wait_ns = ticks_to_ns(received.saturating_sub(sent));
+            if let Ok(reply) = decode_reply_frame(&rx) {
+                if let Ok(timestamps) = decode_timed_echo_reply(reply.payload, ECHO_BODY) {
+                    let worker_done = timestamps.worker_done_ticks;
+                    let reply_sent = timestamps.reply_send_ticks;
+                    if reply_sent >= worker_done {
+                        summary.worker_latency_ns = ticks_to_ns(worker_done.saturating_sub(sent));
+                        summary.reply_pump_latency_ns =
+                            ticks_to_ns(reply_sent.saturating_sub(worker_done));
+                        summary.client_wake_latency_ns =
+                            ticks_to_ns(received.saturating_sub(reply_sent));
+                    }
+                }
+            }
             Some(ticks_to_ns(received.saturating_sub(start)))
         } else {
             None

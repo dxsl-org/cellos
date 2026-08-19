@@ -59,6 +59,68 @@ fn encoders_enforce_bounds() {
 }
 
 #[test]
+fn timed_echo_reply_round_trips_worker_and_send_timestamps() {
+    let mut out = [0u8; 32];
+    let len = encode_timed_echo_reply(b"abc", 0x1122_3344_5566_7788, &mut out)
+        .expect("timed echo encodes");
+    assert_eq!(len, 1 + 3 + TIMED_ECHO_TRAILER_BYTES);
+    assert_eq!(
+        decode_timed_echo_reply(&out[..len], b"abc"),
+        Ok(TimedEchoTimestamps {
+            worker_done_ticks: 0x1122_3344_5566_7788,
+            reply_send_ticks: 0,
+        })
+    );
+    stamp_timed_echo_reply(&mut out[..len], 0x8877_6655_4433_2211)
+        .expect("reply send timestamp stamps");
+    assert_eq!(
+        decode_timed_echo_reply(&out[..len], b"abc"),
+        Ok(TimedEchoTimestamps {
+            worker_done_ticks: 0x1122_3344_5566_7788,
+            reply_send_ticks: 0x8877_6655_4433_2211,
+        })
+    );
+    assert_eq!(
+        decode_timed_echo_reply(&out[..len - 1], b"abc"),
+        Err(OracleError::TruncatedReply)
+    );
+
+    let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+    let frame_len = crate::local_ingress::encode_reply(
+        crate::local_ingress::ReplyStatus::Success,
+        1,
+        2,
+        &out[..len],
+        &mut frame,
+    );
+    stamp_timed_echo_reply_frame(&mut frame[..frame_len], 99).expect("frame stamps");
+    let decoded = decode_reply_frame(&frame[..frame_len]).expect("frame decodes");
+    assert_eq!(
+        decode_timed_echo_reply(decoded.payload, b"abc")
+            .expect("timed payload decodes")
+            .reply_send_ticks,
+        99
+    );
+}
+
+#[test]
+fn reply_send_stamp_does_not_mutate_snapshot_payload() {
+    let mut snapshot = [0u8; SNAPSHOT_BYTES];
+    encode_snapshot_payload(&sample_counters(), 77, &mut snapshot);
+    let mut frame = [0u8; api::ipc::IPC_BUF_SIZE];
+    let frame_len = crate::local_ingress::encode_reply(
+        crate::local_ingress::ReplyStatus::Success,
+        1,
+        2,
+        &snapshot,
+        &mut frame,
+    );
+    let before = frame;
+    assert!(stamp_timed_echo_reply_frame(&mut frame[..frame_len], 99).is_err());
+    assert_eq!(frame, before);
+}
+
+#[test]
 fn snapshot_payload_is_fixed_width_and_little_endian() {
     let mut out = [0u8; SNAPSHOT_BYTES];
     encode_snapshot_payload(&sample_counters(), 77, &mut out);

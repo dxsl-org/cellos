@@ -1,5 +1,6 @@
 use super::commands::{
-    encode_echo_command, encode_hold_command, encode_snapshot_command, OracleCommand, OracleError,
+    encode_echo_command, encode_hold_command, encode_snapshot_command, stamp_timed_echo_reply,
+    OracleCommand, OracleError,
 };
 use crate::local_ingress::{
     ReplyStatus, LOCAL_PAYLOAD_CAP, MAX_REQUEST_BODY, REQUEST_HEADER_LEN, RESPONSE_HEADER_LEN,
@@ -58,6 +59,25 @@ pub fn decode_reply_frame(buf: &[u8]) -> Result<DecodedReply<'_>, OracleError> {
         client_sequence,
         payload: &buf[RESPONSE_HEADER_LEN..RESPONSE_HEADER_LEN + payload_len],
     })
+}
+
+pub fn stamp_timed_echo_reply_frame(
+    frame: &mut [u8],
+    reply_send_ticks: u64,
+) -> Result<(), OracleError> {
+    if frame.len() < RESPONSE_HEADER_LEN || frame.first().copied() != Some(STATUS_TAG) {
+        return Err(OracleError::InvalidReplyTag);
+    }
+    let payload_len = u16::from_le_bytes(
+        frame[18..20]
+            .try_into()
+            .map_err(|_| OracleError::TruncatedReply)?,
+    ) as usize;
+    let end = RESPONSE_HEADER_LEN + payload_len;
+    if payload_len > crate::local_ingress::MAX_REPLY_BODY || end > frame.len() {
+        return Err(OracleError::TruncatedReply);
+    }
+    stamp_timed_echo_reply(&mut frame[RESPONSE_HEADER_LEN..end], reply_send_ticks)
 }
 
 fn encode_request(

@@ -26,6 +26,9 @@ pub struct ClientSummary {
     pub latency_ns: u64,
     pub send_latency_ns: u64,
     pub reply_wait_ns: u64,
+    pub worker_latency_ns: u64,
+    pub reply_pump_latency_ns: u64,
+    pub client_wake_latency_ns: u64,
 }
 
 pub const CONFIG_BYTES: usize = 15;
@@ -33,7 +36,7 @@ pub const READY_BYTES: usize = 9;
 pub const POSTED_BYTES: usize = 3;
 pub const START_BYTES: usize = 1;
 pub const DRAIN_BYTES: usize = 1;
-pub const SUMMARY_BYTES: usize = 35;
+pub const SUMMARY_BYTES: usize = 59;
 
 const TAG_CONFIG: u8 = 0x41;
 const TAG_READY: u8 = 0x42;
@@ -124,6 +127,9 @@ pub fn encode_summary(summary: ClientSummary, out: &mut [u8; SUMMARY_BYTES]) {
     out[11..19].copy_from_slice(&summary.latency_ns.to_le_bytes());
     out[19..27].copy_from_slice(&summary.send_latency_ns.to_le_bytes());
     out[27..35].copy_from_slice(&summary.reply_wait_ns.to_le_bytes());
+    out[35..43].copy_from_slice(&summary.worker_latency_ns.to_le_bytes());
+    out[43..51].copy_from_slice(&summary.reply_pump_latency_ns.to_le_bytes());
+    out[51..59].copy_from_slice(&summary.client_wake_latency_ns.to_le_bytes());
 }
 
 pub fn decode_summary(buf: &[u8]) -> Option<ClientSummary> {
@@ -139,5 +145,8 @@ pub fn decode_summary(buf: &[u8]) -> Option<ClientSummary> {
         latency_ns: u64::from_le_bytes(buf[11..19].try_into().ok()?),
         send_latency_ns: u64::from_le_bytes(buf[19..27].try_into().ok()?),
         reply_wait_ns: u64::from_le_bytes(buf[27..35].try_into().ok()?),
+        worker_latency_ns: u64::from_le_bytes(buf[35..43].try_into().ok()?),
+        reply_pump_latency_ns: u64::from_le_bytes(buf[43..51].try_into().ok()?),
+        client_wake_latency_ns: u64::from_le_bytes(buf[51..59].try_into().ok()?),
     })
 }

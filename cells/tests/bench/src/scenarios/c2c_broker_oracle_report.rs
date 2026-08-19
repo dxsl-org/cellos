@@ -83,6 +83,9 @@ pub fn print_sweep_line(
     p99: u64,
     send_p99: u64,
     reply_wait_p99: u64,
+    worker_p99: u64,
+    reply_pump_p99: u64,
+    client_wake_p99: u64,
 ) {
     let calibration = if total.success == total.attempted
         && total.busy == 0
@@ -100,7 +103,7 @@ pub fn print_sweep_line(
         "BLOCKED"
     };
     println(&format!(
-        "[c2c-broker-oracle] sweep n={} attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} p50_ns={} p99_ns={} send_p99_ns={} reply_wait_p99_ns={} calibration={} direct_ipc_ref_ns={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={}",
+        "[c2c-broker-oracle] sweep n={} attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} p50_ns={} p99_ns={} send_p99_ns={} reply_wait_p99_ns={} worker_p99_ns={} reply_pump_p99_ns={} client_wake_p99_ns={} calibration={} direct_ipc_ref_ns={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={}",
         n,
         total.attempted,
         total.success,
@@ -113,6 +116,9 @@ pub fn print_sweep_line(
         p99,
         send_p99,
         reply_wait_p99,
+        worker_p99,
+        reply_pump_p99,
+        client_wake_p99,
         calibration,
         DIRECT_IPC_REFERENCE_P99_NS,
         delta.network_progress,

@@ -13,12 +13,14 @@ mod snapshot;
 mod tests;
 
 pub use commands::{
-    encode_echo_command, encode_hold_command, encode_snapshot_command, parse_command,
-    OracleCommand, OracleError, MAX_HOLD_TURNS, OP_ECHO, OP_HOLD, OP_SNAPSHOT,
+    decode_timed_echo_reply, encode_echo_command, encode_hold_command, encode_snapshot_command,
+    encode_timed_echo_reply, parse_command, stamp_timed_echo_reply, OracleCommand, OracleError,
+    TimedEchoTimestamps, MAX_HOLD_TURNS, OP_ECHO, OP_HOLD, OP_SNAPSHOT, OP_TIMED_ECHO_REPLY,
+    TIMED_ECHO_TRAILER_BYTES,
 };
 pub use frames::{
     decode_reply_frame, encode_echo_request, encode_hold_request, encode_snapshot_request,
-    DecodedReply,
+    stamp_timed_echo_reply_frame, DecodedReply,
 };
 pub use snapshot::{
     decode_snapshot_payload, encode_snapshot_payload, OracleSnapshot, SNAPSHOT_BYTES,

@@ -18,11 +18,20 @@ pub enum OracleError {
     TruncatedReply,
     SnapshotVersionMismatch,
     SnapshotSizeMismatch,
+    EchoPayloadMismatch,
 }
 
 pub const OP_ECHO: u8 = 0x01;
 pub const OP_SNAPSHOT: u8 = 0x02;
 pub const OP_HOLD: u8 = 0x03;
+pub const OP_TIMED_ECHO_REPLY: u8 = 0x81;
+pub const TIMED_ECHO_TRAILER_BYTES: usize = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TimedEchoTimestamps {
+    pub worker_done_ticks: u64,
+    pub reply_send_ticks: u64,
+}
 // Keep saturation long enough to fill ingress without exceeding the broker's
 // role heartbeat window on a cooperative single-hart scheduler.
 pub const MAX_HOLD_TURNS: u16 = 512;
@@ -34,6 +43,65 @@ pub fn encode_echo_command(payload: &[u8], out: &mut [u8]) -> Result<usize, Orac
     out[0] = OP_ECHO;
     out[1..1 + payload.len()].copy_from_slice(payload);
     Ok(payload.len() + 1)
+}
+
+pub fn encode_timed_echo_reply(
+    payload: &[u8],
+    worker_done_ticks: u64,
+    out: &mut [u8],
+) -> Result<usize, OracleError> {
+    let command_len = 1 + payload.len();
+    let reply_len = command_len + TIMED_ECHO_TRAILER_BYTES;
+    if out.len() < reply_len {
+        return Err(OracleError::OutputTooSmall);
+    }
+    out[0] = OP_TIMED_ECHO_REPLY;
+    out[1..command_len].copy_from_slice(payload);
+    out[command_len..command_len + 8].copy_from_slice(&worker_done_ticks.to_le_bytes());
+    out[command_len + 8..reply_len].fill(0);
+    Ok(reply_len)
+}
+
+pub fn decode_timed_echo_reply(
+    payload: &[u8],
+    expected_body: &[u8],
+) -> Result<TimedEchoTimestamps, OracleError> {
+    let expected_len = 1 + expected_body.len() + TIMED_ECHO_TRAILER_BYTES;
+    if payload.len() != expected_len || payload.first().copied() != Some(OP_TIMED_ECHO_REPLY) {
+        return Err(OracleError::TruncatedReply);
+    }
+    if payload.get(1..1 + expected_body.len()) != Some(expected_body) {
+        return Err(OracleError::EchoPayloadMismatch);
+    }
+    let trailer: [u8; TIMED_ECHO_TRAILER_BYTES] = payload
+        .get(1 + expected_body.len()..expected_len)
+        .ok_or(OracleError::TruncatedReply)?
+        .try_into()
+        .map_err(|_| OracleError::TruncatedReply)?;
+    let worker_done = trailer[..8]
+        .try_into()
+        .map_err(|_| OracleError::TruncatedReply)?;
+    let reply_send = trailer[8..]
+        .try_into()
+        .map_err(|_| OracleError::TruncatedReply)?;
+    Ok(TimedEchoTimestamps {
+        worker_done_ticks: u64::from_le_bytes(worker_done),
+        reply_send_ticks: u64::from_le_bytes(reply_send),
+    })
+}
+
+pub fn stamp_timed_echo_reply(
+    payload: &mut [u8],
+    reply_send_ticks: u64,
+) -> Result<(), OracleError> {
+    if payload.len() < 1 + TIMED_ECHO_TRAILER_BYTES
+        || payload.first().copied() != Some(OP_TIMED_ECHO_REPLY)
+    {
+        return Err(OracleError::TruncatedReply);
+    }
+    let stamp_offset = payload.len() - 8;
+    payload[stamp_offset..].copy_from_slice(&reply_send_ticks.to_le_bytes());
+    Ok(())
 }
 
 pub fn encode_snapshot_command(out: &mut [u8]) -> Result<usize, OracleError> {
