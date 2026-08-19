@@ -22,10 +22,10 @@ use ostd::service::NetRef;
 use ostd::syscall::sys_heartbeat;
 use ostd::{ViError, ViResult};
 
-use crate::identity::BrokerIdentity;
 use crate::relay::RelayClient;
 use crate::rng::BrokerRng;
 use crate::transport::{ConnectionPool, NoiseSession, StaticKeypair};
+use service_net_broker::identity::BrokerIdentity;
 
 const HEARTBEAT_MS: u64 = 500;
 const CONNECT_TIMEOUT_MS: u32 = 2000;

@@ -54,7 +54,6 @@ api::declare_syscalls![
 ];
 
 mod connection_manager;
-mod identity;
 mod relay;
 mod rng;
 mod stun;
@@ -66,11 +65,12 @@ mod gossip;
 mod lease;
 mod routing;
 
-use identity::BrokerIdentity;
 use ostd::io::{print, println};
 use ostd::syscall::{sys_heartbeat, sys_try_recv, SyscallResult};
 use relay::RelayClient;
 use rng::BrokerRng;
+use service_net_broker::export_registry::RemoteDisabledReason;
+use service_net_broker::identity::BrokerIdentity;
 use transport::StaticKeypair;
 
 fn print_hex_byte(b: u8) {
@@ -105,10 +105,25 @@ fn cell_main() {
     let static_kp = StaticKeypair::generate(&mut rng);
     let mut identity = BrokerIdentity::from_static_pub(static_kp.public_bytes());
     identity.load_config();
+    identity.load_export_registry();
 
-    // Log the first 4 bytes of NodeId as a boot identifier.
+    match identity.remote_exports().disabled_reason() {
+        RemoteDisabledReason::RegistryAbsent => {
+            println("[net-broker] c2c exports: absent; remote disabled");
+        }
+        RemoteDisabledReason::RegistryInvalid => {
+            println("[net-broker] c2c exports: invalid; remote disabled");
+        }
+        RemoteDisabledReason::NoSecureIdentity => {
+            print("[net-broker] c2c exports: ");
+            ostd::io::print_usize(identity.remote_exports().export_count());
+            println(" loaded, remote disabled (no secure identity)");
+        }
+    }
+
+    // Log the first 4 bytes of the per-run NodeId for local diagnostics only.
     let nid = identity.node_id.0;
-    print("[net-broker] NodeId prefix: ");
+    print("[net-broker] ephemeral NodeId prefix (diagnostic only; remote disabled): ");
     for b in &nid[..4] {
         print_hex_byte(*b);
     }
