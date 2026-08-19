@@ -43,17 +43,20 @@ api::declare_cluster!(mode = Private, name = "robots");
 api::declare_syscalls![
     Send,
     Recv,
-    TryRecv,
+    TrySend,
     Reply,
     Log,
     Heartbeat,
     LookupService,
     GetTime,
     GetRandom,
+    Spawn,
+    Yield,
     WaitForEvent,
 ];
 
 mod connection_manager;
+mod local_runtime;
 mod relay;
 mod rng;
 mod stun;
@@ -66,7 +69,6 @@ mod lease;
 mod routing;
 
 use ostd::io::{print, println};
-use ostd::syscall::{sys_heartbeat, sys_try_recv, SyscallResult};
 use relay::RelayClient;
 use rng::BrokerRng;
 use service_net_broker::export_registry::RemoteDisabledReason;
@@ -84,12 +86,6 @@ fn print_hex_byte(b: u8) {
         print(s);
     }
 }
-
-/// IPC buffer for incoming dispatch requests.
-const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
-
-/// Heartbeat interval in milliseconds — re-armed every dispatch-loop iteration.
-const HEARTBEAT_MS: u64 = 500;
 
 ostd::cell_main!(cell_main);
 
@@ -138,35 +134,9 @@ fn cell_main() {
     let relay_port = relay_config.map(|(_, pt)| pt).unwrap_or(0);
     let relay_client = RelayClient::new(identity.node_id, relay_ip, relay_port);
 
-    let mut buf = [0u8; IPC_BUF_SIZE];
+    local_runtime::init(relay_client);
 
     loop {
-        // INVARIANT: heartbeat re-armed at top of every iteration.
-        sys_heartbeat(HEARTBEAT_MS);
-
-        // Poll relay for inbound frames (non-blocking).
-        // TODO: wire incoming relay frames into routing dispatch.
-        let _ = relay_client.is_connected();
-
-        // TODO P05: check beacon timer; send LAN multicast beacon if due.
-        // TODO P05: try_recv beacon UDP socket.
-        // TODO P08: tick lease renewal / peer-loss sweep.
-
-        buf.fill(0);
-        match sys_try_recv(0, &mut buf) {
-            SyscallResult::Ok(sender) if sender > 0 => {
-                dispatch(&buf, sender);
-            }
-            _ => {
-                ostd::task::yield_now();
-            }
-        }
+        local_runtime::receive_once();
     }
-}
-
-/// Dispatch an incoming IPC message. Extended per phase.
-fn dispatch(_buf: &[u8], _sender: usize) {
-    // TODO P06: route RemoteServiceProxy calls via routing matrix.
-    // TODO P08: handle lease request / renew / release.
-    // TODO P09: handle enrollment / merge-split messages.
 }
