@@ -24,6 +24,8 @@ pub struct ClientSummary {
     pub indeterminate: u16,
     pub correlation: u16,
     pub latency_ns: u64,
+    pub send_latency_ns: u64,
+    pub reply_wait_ns: u64,
 }
 
 pub const CONFIG_BYTES: usize = 15;
@@ -31,7 +33,7 @@ pub const READY_BYTES: usize = 9;
 pub const POSTED_BYTES: usize = 3;
 pub const START_BYTES: usize = 1;
 pub const DRAIN_BYTES: usize = 1;
-pub const SUMMARY_BYTES: usize = 19;
+pub const SUMMARY_BYTES: usize = 35;
 
 const TAG_CONFIG: u8 = 0x41;
 const TAG_READY: u8 = 0x42;
@@ -120,6 +122,8 @@ pub fn encode_summary(summary: ClientSummary, out: &mut [u8; SUMMARY_BYTES]) {
     out[7..9].copy_from_slice(&summary.indeterminate.to_le_bytes());
     out[9..11].copy_from_slice(&summary.correlation.to_le_bytes());
     out[11..19].copy_from_slice(&summary.latency_ns.to_le_bytes());
+    out[19..27].copy_from_slice(&summary.send_latency_ns.to_le_bytes());
+    out[27..35].copy_from_slice(&summary.reply_wait_ns.to_le_bytes());
 }
 
 pub fn decode_summary(buf: &[u8]) -> Option<ClientSummary> {
@@ -133,5 +137,7 @@ pub fn decode_summary(buf: &[u8]) -> Option<ClientSummary> {
         indeterminate: u16::from_le_bytes(buf[7..9].try_into().ok()?),
         correlation: u16::from_le_bytes(buf[9..11].try_into().ok()?),
         latency_ns: u64::from_le_bytes(buf[11..19].try_into().ok()?),
+        send_latency_ns: u64::from_le_bytes(buf[19..27].try_into().ok()?),
+        reply_wait_ns: u64::from_le_bytes(buf[27..35].try_into().ok()?),
     })
 }

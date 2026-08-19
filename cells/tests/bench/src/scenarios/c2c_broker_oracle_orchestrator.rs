@@ -22,16 +22,22 @@ pub fn run() -> ! {
     let mut role_gate = false;
     for (stage_idx, n) in SWEEP_LEVELS.into_iter().enumerate() {
         let mut latencies = [0u64; MAX_CLIENTS];
+        let mut send_latencies = [0u64; MAX_CLIENTS];
+        let mut reply_waits = [0u64; MAX_CLIENTS];
         let (summaries, observed_tid, before, after) =
             run_stage(n, stage_idx as u64, ClientMode::EchoSync, 1, 0, false);
         broker_tid = broker_tid.max(observed_tid);
         let total = aggregate(&summaries[..n]);
         for (idx, summary) in summaries[..n].iter().enumerate() {
             latencies[idx] = summary.latency_ns;
+            send_latencies[idx] = summary.send_latency_ns;
+            reply_waits[idx] = summary.reply_wait_ns;
         }
         let delta = snapshot_delta(before, after);
         let (p50, p99) = percentile_pair(&mut latencies, n);
-        print_sweep_line(n, total, delta, p50, p99);
+        let (_, send_p99) = percentile_pair(&mut send_latencies, n);
+        let (_, reply_wait_p99) = percentile_pair(&mut reply_waits, n);
+        print_sweep_line(n, total, delta, p50, p99, send_p99, reply_wait_p99);
         if !role_gate && total.success > 0 && delta.network_progress > 0 {
             role_gate = true;
             print_role_gate(true, observed_tid);

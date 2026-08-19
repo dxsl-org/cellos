@@ -4,7 +4,8 @@ use ostd::io::println;
 use service_net_broker::bench_oracle::OracleSnapshot;
 
 pub const MAX_CLIENTS: usize = 16;
-pub const P99_CEILING_NS: u64 = 147_000;
+/// Phase 01 direct-IPC regression reference; this is not a broker E2E ceiling.
+pub const DIRECT_IPC_REFERENCE_P99_NS: u64 = 147_000;
 pub const SOAK_CALLS: u16 = 10_000;
 pub const SWEEP_LEVELS: [usize; 5] = [1, 2, 4, 8, 16];
 
@@ -74,18 +75,32 @@ pub fn print_role_gate(pass: bool, broker_tid: usize) {
     ));
 }
 
-pub fn print_sweep_line(n: usize, total: ClientSummary, delta: SnapshotDelta, p50: u64, p99: u64) {
-    let ceiling = if p99 <= P99_CEILING_NS
+pub fn print_sweep_line(
+    n: usize,
+    total: ClientSummary,
+    delta: SnapshotDelta,
+    p50: u64,
+    p99: u64,
+    send_p99: u64,
+    reply_wait_p99: u64,
+) {
+    let calibration = if total.success == total.attempted
         && total.busy == 0
         && total.indeterminate == 0
         && total.correlation == 0
+        && delta.terminal == 0
+        && delta.indeterminate == 0
+        && delta.duplicate == 0
+        && delta.stale_reply == 0
+        && delta.heartbeat_miss == 0
+        && delta.watchdog_expired == 0
     {
-        "PASS"
+        "REQUIRED"
     } else {
-        "FAIL"
+        "BLOCKED"
     };
     println(&format!(
-        "[c2c-broker-oracle] sweep n={} attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} p50_ns={} p99_ns={} ceiling={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={}",
+        "[c2c-broker-oracle] sweep n={} attempted={} success={} busy={} indeterminate={} duplicate={} stale={} correlation={} p50_ns={} p99_ns={} send_p99_ns={} reply_wait_p99_ns={} calibration={} direct_ipc_ref_ns={} network_progress_delta={} heartbeat_miss_delta={} watchdog_expired_delta={}",
         n,
         total.attempted,
         total.success,
@@ -96,7 +111,10 @@ pub fn print_sweep_line(n: usize, total: ClientSummary, delta: SnapshotDelta, p5
         total.correlation,
         p50,
         p99,
-        ceiling,
+        send_p99,
+        reply_wait_p99,
+        calibration,
+        DIRECT_IPC_REFERENCE_P99_NS,
         delta.network_progress,
         delta.heartbeat_miss,
         delta.watchdog_expired

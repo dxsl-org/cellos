@@ -67,8 +67,12 @@ fn run_sync(broker_tid: usize, config: ClientConfig) -> ClientSummary {
             summary.indeterminate += 1;
             continue;
         }
+        let sent = sys_get_time();
         let latency = if super::c2c_broker_oracle::recv_from_broker(broker_tid, &mut rx) {
-            Some(ticks_to_ns(sys_get_time().saturating_sub(start)))
+            let received = sys_get_time();
+            summary.send_latency_ns = ticks_to_ns(sent.saturating_sub(start));
+            summary.reply_wait_ns = ticks_to_ns(received.saturating_sub(sent));
+            Some(ticks_to_ns(received.saturating_sub(start)))
         } else {
             None
         };
