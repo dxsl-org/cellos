@@ -778,41 +778,14 @@ fn cmd_test(args: &[&str]) -> ViResult<()> {
 
 /// `read [VAR]` — read one line from stdin (fd 0) into `$VAR` (default: `$REPLY`).
 ///
-/// Blocks until a newline is received.  Uses `sys_read(0, ..)` — the same
-/// mechanism as `AsyncStdin::read_line` minus the async/ANSI machinery.
+/// Blocks until a newline is received through the same focus-aware input-service
+/// path as the interactive REPL.
 fn cmd_read(args: &[&str]) -> ViResult<()> {
     let var = args.first().copied().unwrap_or("REPLY");
-    let mut line = alloc::vec::Vec::<u8>::new();
-    loop {
-        let mut c = [0u8; 1];
-        match ostd::syscall::sys_read(0, &mut c) {
-            Ok(n) if n > 0 => {
-                match c[0] {
-                    b'\n' | b'\r' => break,
-                    0x7F | 0x08 if !line.is_empty() => {
-                        // Backspace — erase last char.
-                        line.pop();
-                        ostd::io::print("\x08 \x08");
-                    }
-                    b if line.len() < 127 => {
-                        line.push(b);
-                        // Echo the character so the user sees what they type.
-                        if let Ok(s) = core::str::from_utf8(core::slice::from_ref(&b)) {
-                            ostd::io::print(s);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            _ => {
-                ostd::syscall::sys_yield();
-            }
-        }
-    }
-    ostd::io::println(""); // newline after input
-    if let Ok(s) = core::str::from_utf8(&line) {
-        set_var(var, s);
-    }
+    let mut line = String::new();
+    ostd::io::stdin().read_line(&mut line)?;
+    let value = line.trim_end_matches(&['\r', '\n'][..]);
+    set_var(var, value);
     Ok(())
 }
 

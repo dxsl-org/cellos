@@ -1486,8 +1486,8 @@ fn console_long_line_with_backspace_no_stall() {
         "backspace correction did not take effect (expected HELLO)\n--- output ---\n{}", qemu.dump());
 }
 
-/// A single UART burst near `INPUT_EVENT_QUEUE_DEPTH` must survive the
-/// `ipc_post_nonblock` → pending mailbox → resumed `RecvTimeout` path intact.
+/// A multi-hundred-byte UART burst must survive the bounded first hop and
+/// blocking input-service delivery path intact.
 #[test]
 fn console_near_depth_burst_is_lossless() {
     if !prerequisites_ok() {
@@ -1498,11 +1498,10 @@ fn console_near_depth_burst_is_lossless() {
         .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
     std::thread::sleep(Duration::from_millis(300));
 
-    // 247 UART bytes produce 494 press/release events, close to the 512-entry
-    // input mailbox bound without crossing it.
+    // Terminal ASCII is edge-triggered and produces one press event per byte.
     let payload = "A".repeat(220);
     let command = format!("echo {payload} && echo IPC_BURST_OK\n");
-    assert_eq!(command.len(), 247, "burst size drifted away from the queue boundary");
+    assert_eq!(command.len(), 247, "burst payload size drifted");
     qemu.send_bytes(command.as_bytes());
 
     qemu.wait_for("IPC_BURST_OK", CMD_TIMEOUT).unwrap_or_else(|e| {
@@ -1516,6 +1515,46 @@ fn console_near_depth_burst_is_lossless() {
         "near-depth UART burst lost payload bytes\n--- output ---\n{}",
         qemu.dump()
     );
+}
+
+/// One host write containing 100 commands must remain ordered and leave the
+/// shell responsive. Exact `USER:` output-line matches distinguish executed
+/// output from the shell's echoed command line.
+#[test]
+fn console_100_command_burst_is_lossless() {
+    if !prerequisites_ok() {
+        return;
+    }
+    let mut qemu = QemuRunner::boot_with_fresh_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("prompt: {e}\n{}", qemu.dump()));
+    std::thread::sleep(Duration::from_millis(300));
+
+    let mut burst = String::new();
+    for index in 0..100 {
+        burst.push_str(&format!("echo burst-{index}\n"));
+    }
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_bytes(burst.as_bytes());
+    qemu.wait_for_after("USER: burst-99", checkpoint, 30)
+        .unwrap_or_else(|e| panic!("100-command burst stalled: {e}\n--- output ---\n{}", qemu.dump()));
+
+    let output = qemu.dump();
+    let fresh = output.get(checkpoint..).unwrap_or_default();
+    for index in 0..100 {
+        let marker = format!("USER: burst-{index}");
+        assert!(
+            fresh
+                .lines()
+                .any(|line| line.trim_end_matches('\r').trim() == marker),
+            "100-command burst lost marker {index}\n--- output ---\n{fresh}"
+        );
+    }
+
+    let responsive = qemu.output_checkpoint();
+    qemu.send_bytes(b"echo responsive-42\n");
+    qemu.wait_for_after("USER: responsive-42", responsive, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell did not recover after burst: {e}\n{}", qemu.dump()));
 }
 
 /// The first shell command must survive as one UART burst immediately after

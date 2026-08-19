@@ -78,7 +78,7 @@ for dir in "${board_dirs[@]}"; do
 done
 
 placeholder_dirs=(
-    "boards/qemu/q35-i686"
+    "boards/qemu/q35-x86_32"
     "boards/qemu/virt-riscv32"
     "boards/qemu/virt-aarch32"
 )
@@ -94,7 +94,7 @@ done
 
 if find Cargo.toml Cargo.lock boards/Cargo.toml boards/src kernel hal .github -type f \
     \( -name '*.rs' -o -name '*.sh' -o -name '*.md' -o -name 'Cargo.toml' -o -name 'ci.yml' \) \
-    -print0 | xargs -0 grep -nE 'q35-i686|virt-riscv32|virt-aarch32' 2>/dev/null; then
+    -print0 | xargs -0 grep -nE 'q35-x86_32|virt-riscv32|virt-aarch32' 2>/dev/null; then
     printf 'placeholder boards must not be registered outside their READMEs\n' >&2
     exit 1
 fi

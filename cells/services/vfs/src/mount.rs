@@ -67,6 +67,24 @@ impl MountTable {
             .map(|(i, _)| self.entries[i].backend)
     }
 
+    /// Whether `path` is a strict directory ancestor of a registered mount.
+    ///
+    /// Handle-addressed clients traverse one component at a time. Such a client
+    /// must be able to derive `/mnt` before it can reach a `/mnt/sd` mount, even
+    /// when the root backend does not materialize that structural directory.
+    pub fn is_mount_ancestor(&self, path: &str) -> bool {
+        if path == "/" || !path.starts_with('/') || path.ends_with('/') {
+            return false;
+        }
+        self.entries.iter().any(|entry| {
+            entry.prefix.len() > path.len()
+                && entry
+                    .prefix
+                    .strip_prefix(path)
+                    .is_some_and(|suffix| suffix.starts_with('/'))
+        })
+    }
+
     pub fn backend(&self, path: &str) -> Option<&dyn FsBackend> {
         self.resolve_idx(path).map(|i| self.backends[i].as_ref())
     }

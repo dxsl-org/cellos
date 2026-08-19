@@ -336,8 +336,16 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
                 ctl & (1 << 2) != 0
             }
         };
+        let aux_pending = super::bcm2835_legacy_irq::is_aux_irq_pending();
         if src & timer_bits != 0 || timer_fired_by_status {
             super::timer::reset();
+            if aux_pending {
+                // The mini UART has only an eight-symbol RX FIFO. Drain it after
+                // acknowledging the timer but before the scheduler tick can run.
+                unsafe {
+                    vi_handle_uart_irq();
+                }
+            }
             // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
             unsafe {
                 vi_timer_tick();
@@ -349,9 +357,16 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         // (normal path) AND unconditionally as a fallback.  QEMU raspi3b may deliver
         // the BCM2835 IRQ to the CPU nIRQ line without setting bit 8 in
         // CORE0_IRQ_SOURCE (the GPU routing register may not be fully emulated).
-        if super::bcm2835_systimer::is_c1_pending() {
+        let systimer_pending = super::bcm2835_systimer::is_c1_pending();
+        if systimer_pending {
             super::timer::reset(); // ack C1 + re-arm
-                                   // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
+            if aux_pending {
+                // Preserve the same FIFO-first contract for the BCM system timer.
+                unsafe {
+                    vi_handle_uart_irq();
+                }
+            }
+            // SAFETY: vi_timer_tick is #[no_mangle] in kernel/src/task.rs.
             unsafe {
                 vi_timer_tick();
             }
@@ -360,7 +375,7 @@ pub extern "C" fn vi_aarch64_irq_handler(_frame: &mut TrapFrame) {
         // Like the system timer above, check the legacy pending bit directly:
         // some raspi3 environments deliver nIRQ without reflecting GPU routing
         // in CORE0_IRQ_SOURCE.
-        if super::bcm2835_legacy_irq::is_aux_irq_pending() {
+        if aux_pending {
             // Draining AUX_MU_IO deasserts the level-triggered RX interrupt.
             // SAFETY: vi_handle_uart_irq is #[no_mangle] in kernel UART drivers.
             unsafe {

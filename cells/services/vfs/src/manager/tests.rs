@@ -1,5 +1,6 @@
 use crate::caller::Caller;
 use crate::manager::VfsManager;
+use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use types::CellId;
 
 const CELL_OLD: Caller = Caller {
@@ -14,6 +15,42 @@ const CELL_OLD_RESPAWNED: Caller = Caller {
     cell: CellId(44),
     generation: 2,
 };
+
+#[test]
+fn handle_traversal_can_open_mount_parent_directory() {
+    let mut vfs = VfsManager::new();
+    assert!(vfs.is_mount_ancestor("/mnt"));
+    assert!(!vfs.is_mount_ancestor("/mn"));
+    assert!(!vfs.is_mount_ancestor("/mnt/sd"));
+    let _ = vfs.dirs.on_contact(CELL_OLD);
+    vfs.dirs.mark_attested(CELL_OLD);
+
+    let mut resp_buf = [0u8; IPC_BUF_SIZE];
+    let root = match crate::dispatch_dirs::handle(
+        &mut vfs,
+        CELL_OLD,
+        &VfsRequest::OpenRootDir { path: "/" },
+        &mut resp_buf,
+    ) {
+        VfsResponse::DirHandle(handle) => handle,
+        other => panic!("open root failed: {:?}", other),
+    };
+
+    let mnt = match crate::dispatch_dirs::handle(
+        &mut vfs,
+        CELL_OLD,
+        &VfsRequest::OpenDir {
+            dir: root,
+            name: "mnt",
+        },
+        &mut resp_buf,
+    ) {
+        VfsResponse::DirHandle(handle) => handle,
+        other => panic!("open /mnt failed: {:?}", other),
+    };
+
+    assert_eq!(vfs.dirs.dir_path(CELL_OLD, mnt), Some("/mnt"));
+}
 
 #[test]
 fn owner_death_purges_only_the_watched_owner() {

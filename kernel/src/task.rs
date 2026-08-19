@@ -1725,7 +1725,8 @@ pub fn ipc_try_recv(
 /// For most callers, "not ready" still means drop immediately. The input
 /// service is the one exception: if the focused receiver is not in `Recv`, the
 /// kernel may enqueue the event into that receiver's bounded pending mailbox
-/// instead of blocking the sender. The mailbox is capped at 512 input events;
+/// instead of blocking the sender. The mailbox is capped at
+/// `INPUT_EVENT_QUEUE_DEPTH` input events;
 /// once full, this call drops again with `Err(())`.
 pub fn ipc_try_send(
     caller_id: usize,
@@ -1765,8 +1766,9 @@ pub fn ipc_try_send(
         // Target not in Recv. The input service alone may fall back to the
         // receiver's bounded pending mailbox so short bursts of translated key
         // events survive while the focused cell re-enters its next recv. That
-        // mailbox is capped at 512 queued input events; once full, we drop as
-        // before. All other try_send callers keep strict drop-if-not-ready
+        // mailbox is capped at INPUT_EVENT_QUEUE_DEPTH queued input events; once
+        // full, we drop as before. All other try_send callers keep strict
+        // drop-if-not-ready
         // semantics.
         let input_tid = crate::task::drivers::driver_cell::INPUT_CELL_TID
             .load(core::sync::atomic::Ordering::Relaxed);

@@ -62,7 +62,7 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
 - The catalog covers QEMU virt RV64/AArch64, VisionFive 2, Milk-V Pioneer,
   Raspberry Pi 3/4, and QEMU q35 x86_64. Checked DTS assets are
   audit/fallback data; x86 instead consumes Limine's memory map and validated
-  ACPI. `boards/qemu/q35-i686`, `boards/qemu/virt-riscv32`, and
+  ACPI. `boards/qemu/q35-x86_32`, `boards/qemu/virt-riscv32`, and
   `boards/qemu/virt-aarch32` are documentation-only and not part of the
   catalog. Physical-board descriptors remain compile-only without matching runs.
 - Kernel consumers are `kernel/src/board.rs`, `kernel/src/boot.rs`, and `kernel/src/platform.rs`.

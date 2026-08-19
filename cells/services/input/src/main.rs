@@ -226,7 +226,7 @@ fn handle_kernel_event(
                 return;
             }
             let (keysym, character) = translate(code, modifiers.snapshot());
-            dispatcher.dispatch(&InputEvent::Key(KeyEvent {
+            if !dispatcher.dispatch(&InputEvent::Key(KeyEvent {
                 timestamp_ticks: sys_get_time(),
                 scancode: code,
                 keysym,
@@ -234,7 +234,9 @@ fn handle_kernel_event(
                 modifiers: modifiers.snapshot(),
                 state,
                 _pad: [0; 2],
-            }));
+            })) {
+                println("[input] WARNING: clearing failed keyboard focus");
+            }
         }
         1 => {
             if let Some(ev) = mouse.apply_rel(code, value) {
@@ -263,7 +265,7 @@ fn handle_kernel_event(
                 0x09 => (KeySym::Tab, code),
                 _ => (KeySym::Printable, code),
             };
-            dispatcher.dispatch(&InputEvent::Key(KeyEvent {
+            if !dispatcher.dispatch(&InputEvent::Key(KeyEvent {
                 timestamp_ticks: sys_get_time(),
                 scancode: 0,
                 keysym,
@@ -271,7 +273,9 @@ fn handle_kernel_event(
                 modifiers: modifiers.snapshot(),
                 state,
                 _pad: [0; 2],
-            }));
+            })) {
+                println("[input] WARNING: clearing failed keyboard focus");
+            }
         }
         _ => {} // unknown opcode — drop silently
     }

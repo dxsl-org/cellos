@@ -89,7 +89,7 @@ impl fmt::Write for DirectWriter {
             }
             #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
             {
-                crate::hal::uart_bcm_mini::putchar(c);
+                write_rpi3_console_byte(c);
             }
             #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
             {
@@ -101,6 +101,20 @@ impl fmt::Write for DirectWriter {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+fn write_rpi3_console_byte(byte: u8) {
+    loop {
+        // Synchronous exceptions mask IRQs while `sys_log` prints. Keep draining
+        // the eight-symbol RX FIFO into the 4096-byte kernel ring so full-duplex
+        // terminal traffic cannot overrun while TX waits for space.
+        vi_handle_uart_irq();
+        if crate::hal::uart_bcm_mini::try_putchar(byte) {
+            break;
+        }
+        core::hint::spin_loop();
     }
 }
 

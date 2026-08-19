@@ -17,15 +17,14 @@ use api::fs::{BoxFuture, FileResult};
 /// back off.  Messages are drained to the new cell in Step 5 (UNFREEZE).
 pub const HOTSWAP_MSG_QUEUE_DEPTH: usize = 64;
 
-/// Deeper bound for INPUT key events queued to the focused cell.
+/// Deeper bound for nonblocking input-service events queued to a client.
 ///
-/// A paste-speed serial burst produces 2 events/byte while the focused cell
-/// drains one event per recv loop iteration (each echo is an SBI call per
-/// byte on RISC-V — slow on TCG). Backlog accumulates ACROSS commands, so the
-/// shared 64-slot hotswap bound overflowed mid-line and silently dropped
-/// keystrokes ("vcat /tmp/x" arrived as "vcat /t"). 512 events ≈ 256 typed
-/// characters of headroom — beyond any realistic line — while still bounding
-/// a wedged focused cell to ~50 KiB of queued events.
+/// Keyboard events use blocking `sys_send`, so they do not rely on this mailbox
+/// as a paste reservoir. Nonblocking input-service traffic such as mouse events
+/// may use this scheduling cushion while the target is briefly outside `Recv`.
+/// Keeping the bound below the 4096-byte UART RX ring limits scheduler critical-
+/// section work. All other `sys_try_send` callers keep strict drop-if-not-ready
+/// semantics.
 pub const INPUT_EVENT_QUEUE_DEPTH: usize = 512;
 
 #[derive(Debug, Clone, PartialEq)]

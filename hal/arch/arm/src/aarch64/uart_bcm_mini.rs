@@ -98,8 +98,21 @@ pub fn enable_rx_interrupt() {
 
 /// Blocking write — waits until TX FIFO has space, then sends one byte.
 pub fn putchar(byte: u8) {
-    while rd(AUX_MU_LSR) & LSR_TX_EMPTY == 0 {}
+    while !try_putchar(byte) {
+        core::hint::spin_loop();
+    }
+}
+
+/// Attempt one TX write without waiting for FIFO space.
+///
+/// The kernel console uses this to service RX while synchronous user output is
+/// waiting for TX. Early boot and panic paths keep using blocking `putchar`.
+pub fn try_putchar(byte: u8) -> bool {
+    if rd(AUX_MU_LSR) & LSR_TX_EMPTY == 0 {
+        return false;
+    }
     wr(AUX_MU_IO, byte as u32);
+    true
 }
 
 /// Blocking write of a string — calls `putchar` for each byte.
