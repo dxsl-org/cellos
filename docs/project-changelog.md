@@ -2,6 +2,25 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-20] Cell-to-Cell Anywhere closes its local broker and thread foundation
+
+Phase 03 and its user-thread foundation are complete for the approved Candidate B
+local path. The broker now has bounded ingress/reply queues, fair per-caller
+backpressure, request correlation and stale rejection, a 10,000-call soak, a
+statistically comparable warm baseline, and an opt-in restart oracle. The restart
+run drains all broker roles before supervisor respawn, replaces the service TID,
+resets volatile state, reports a stale send as Indeterminate, and accepts a retry.
+
+The remaining multi-architecture compile debt was closed without changing the
+public ABI: AArch64 uses the `qemu-exit` v4 semihosting API and retains its Stage-2
+table by RAII; RV32 follows its SATP=0 TLB contract, uses width-safe syscall and
+stack conversions, routes console output through SBI, rejects unrepresentable ELF
+fields before narrowing, and allocates attested cell generations under a real
+cross-hart spinlock. AArch64 and RV32 clippy gates pass, as do RV64 and x86_64
+release checks. Runtime evidence remains the retained one-hart RV64 QEMU logs;
+AArch64/RV32 results are compile-only, and no CI or hardware pass is claimed.
+Phase 02B secure identity storage still blocks Phase 04/05 remote/public work.
+
 ## [2026-08-19] Cell-to-Cell Anywhere Phase 02A lands the fail-closed export registry slice
 
 `cells/services/net-broker` now loads the boot-provisioned non-secret registry at

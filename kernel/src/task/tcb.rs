@@ -419,7 +419,18 @@ pub struct CompletionWait {
 
 /// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
 /// "generation not attested on this path".
-static NEXT_CELL_GENERATION: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(1);
+/// A real spinlock keeps allocation unique across harts, including RV32 where
+/// the portable 64-bit atomic fallback only masks local interrupts.
+static NEXT_CELL_GENERATION: crate::sync::Spinlock<u64> = crate::sync::Spinlock::new(1);
+
+fn next_cell_generation() -> u64 {
+    let mut next = NEXT_CELL_GENERATION.lock();
+    let generation = *next;
+    *next = generation
+        .checked_add(1)
+        .expect("cell generation space exhausted");
+    generation
+}
 
 impl Task {
     pub fn new(id: usize, cell_id: CellId, name: &str, allowed_drivers: Vec<usize>) -> Self {
@@ -478,8 +489,7 @@ impl Task {
             hotswap_ingress_closed: false,
             is_critical: false,
             pending_msgs: PendingMailbox::new(),
-            cell_generation: NEXT_CELL_GENERATION
-                .fetch_add(1, core::sync::atomic::Ordering::Relaxed),
+            cell_generation: next_cell_generation(),
             inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
             staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
             completion: None,

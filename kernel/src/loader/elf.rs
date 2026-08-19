@@ -15,13 +15,11 @@ use xmas_elf::ElfFile;
 ///
 /// The real boundary is half the SV39 address space: 2^38 = 0x40_0000_0000.
 /// Cells compiled at 0x0040_0000 (4 MB) are safely within this range.
-// SV39 user-half upper bound (256 GB). On riscv32 the address space is 32-bit
-// so this value is clamped to usize::MAX (0xFFFF_FFFF), which is still correct
-// as a "no address may be >= 4 GB" guard for riscv32 cells.
+// SV39 user-half upper bound (256 GB). On 32-bit targets, checked arithmetic
+// below is the address-space bound because usize::MAX cannot represent the
+// exclusive 4 GiB limit.
 #[cfg(not(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")))]
 const USER_VADDR_MAX: usize = 0x40_0000_0000; // 256 GB — SV39 user half
-#[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
-const USER_VADDR_MAX: usize = 0xFFFF_FFFF; // 4 GB — full 32-bit address space
 
 pub struct ElfLoader;
 
@@ -72,12 +70,24 @@ impl ElfLoader {
 
         for (seg_index, ph) in elf.program_iter().enumerate() {
             if let Ok(xmas_elf::program::Type::Load) = ph.get_type() {
-                let file_offset = ph.offset() as usize;
+                let file_offset = usize::try_from(ph.offset())
+                    .map_err(|_| ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
                 // For PIE cells load_base relocates every segment; for fixed-VA
                 // cells load_base == 0 so p_vaddr is used verbatim.
-                let vaddr = (ph.virtual_addr() as usize).wrapping_add(load_base);
-                let mem_size = ph.mem_size() as usize;
-                let file_size = ph.file_size() as usize;
+                let segment_vaddr = usize::try_from(ph.virtual_addr())
+                    .map_err(|_| ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                let vaddr = segment_vaddr
+                    .checked_add(load_base)
+                    .ok_or(ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                let mem_size = usize::try_from(ph.mem_size())
+                    .map_err(|_| ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                let file_size = usize::try_from(ph.file_size())
+                    .map_err(|_| ViError::InvalidInput)
+                    .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
                 let ph_flags = ph.flags();
 
                 // --- Header sanity checks ---
@@ -122,6 +132,11 @@ impl ElfLoader {
                     .checked_add(mem_size)
                     .ok_or(ViError::InvalidInput)
                     .inspect_err(|_| Self::unwind(&mapped, frame_allocator))?;
+                #[cfg(not(any(
+                    target_arch = "riscv32",
+                    target_arch = "x86",
+                    target_arch = "arm"
+                )))]
                 if vaddr >= USER_VADDR_MAX || end_addr > USER_VADDR_MAX {
                     log::error!(
                         "ELF: segment VA range 0x{:X}-0x{:X} outside user space",

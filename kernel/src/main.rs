@@ -70,7 +70,7 @@ pub fn qemu_exit(success: bool) -> ! {
     }
     #[cfg(target_arch = "aarch64")]
     {
-        qemu_exit::AArch64Semihosting::default().exit(if success { 0 } else { 1 });
+        qemu_exit::AArch64::new().exit(if success { 0 } else { 1 });
     }
     #[cfg(target_arch = "x86_64")]
     {

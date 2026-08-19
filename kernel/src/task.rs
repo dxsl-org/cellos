@@ -888,8 +888,14 @@ pub fn yield_cpu() {
                 // same-type-cast lint stays quiet on that target.
                 #[cfg(target_arch = "aarch64")]
                 crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
-                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                #[cfg(not(any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv32"
+                )))]
                 crate::hal::arch::set_kernel_stack(next_ref.sp);
+                #[cfg(target_arch = "riscv32")]
+                crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
             }
