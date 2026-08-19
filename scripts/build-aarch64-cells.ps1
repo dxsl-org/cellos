@@ -121,6 +121,14 @@ Write-Host "Building periph-demo (aarch64_periph_demo_gpio gate)..."
 cargo build --release -p periph-demo --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'periph-demo' $LASTEXITCODE
 
+Write-Host "Building sensor-demo (RPi3 BCM BSC/GPIO gate)..."
+cargo build --release -p sensor-demo --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'sensor-demo' $LASTEXITCODE
+
+Write-Host "Building spi-demo (RPi3 BCM SPI0 gate)..."
+cargo build --release -p spi-demo --target $target 2>&1 | Select-Object -Last 5
+Assert-CellBuild 'spi-demo' $LASTEXITCODE
+
 Write-Host "Building app-init..."
 cargo build --release -p app-init --target $target 2>&1 | Select-Object -Last 5
 Assert-CellBuild 'app-init' $LASTEXITCODE
@@ -143,6 +151,8 @@ $cells = @(
     @{ Bin = "service-input";  Dst = "/bin/input"       },
     @{ Bin = "input-test";     Dst = "/bin/input-test"  },
     @{ Bin = "periph-demo";    Dst = "/bin/periph-demo" },
+    @{ Bin = "sensor-demo";    Dst = "/bin/sensor-demo" },
+    @{ Bin = "spi-demo";       Dst = "/bin/spi-demo"    },
     @{ Bin = "ls";             Dst = "/bin/ls"          },
     @{ Bin = "cat";            Dst = "/bin/cat"         },
     @{ Bin = "echo";           Dst = "/bin/echo"        },
@@ -170,7 +180,7 @@ foreach ($c in $cells) {
     }
 }
 
-foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input')) {
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'service-input', 'sensor-demo', 'spi-demo')) {
     if ($required -notin $found) {
         throw "Required aarch64 cell missing from image inputs: $required"
     }
@@ -208,7 +218,7 @@ Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 # Assert the layout instead of trusting the exit code: mkfat32 exits 0 for images
 # whose destination paths were mangled, and a missing /POLICY.BIN degrades silently.
 $layout = & $python @pythonArgs (Join-Path 'tools' 'inspect_fat.py') $imagePath 2>&1
-foreach ($requiredMarker in @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'")) {
+foreach ($requiredMarker in @('SFN POLICY.BIN', "LFN 'vfs'", "LFN 'input'", "LFN 'sensor-demo'", "LFN 'spi-demo'")) {
     if (($layout | Select-String -Quiet -SimpleMatch $requiredMarker) -eq $false) {
         Write-Error "aarch64 kernel_fs.img missing required entry: $requiredMarker"
         $layout | Write-Host
