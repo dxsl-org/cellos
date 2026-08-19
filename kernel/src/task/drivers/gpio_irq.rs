@@ -60,3 +60,6 @@ pub extern "Rust" fn vi_gpio_notify_irq() {
     // (no PAN on cortex-a57/a72 default).
     let _ = crate::task::ipc_send(0, tid, msg.as_ptr() as usize, 4);
 }
+
+#[cfg(target_arch = "aarch64")]
+const _: crate::hal::GpioNotifyIrq = vi_gpio_notify_irq;

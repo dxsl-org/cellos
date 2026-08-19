@@ -151,6 +151,9 @@ pub extern "Rust" fn vi_tlb_shootdown_test_fault(
     }
 }
 
+#[cfg(target_arch = "riscv64")]
+const _: crate::hal::TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
+
 // Global Scheduler Instance
 pub(crate) static SCHEDULER: Spinlock<Option<Scheduler>> = Spinlock::new(None);
 
@@ -452,6 +455,9 @@ pub extern "Rust" fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: 
     terminate_current_cell_on_fault(cause, pc, fault_addr);
 }
 
+#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+const _: crate::hal::TerminateOnFault = vi_terminate_on_fault;
+
 /// Records AArch64 exception state and the backing instruction word before
 /// delegating to the architecture-neutral Cell fault teardown.
 ///
@@ -501,11 +507,21 @@ pub extern "Rust" fn vi_terminate_on_fault_aarch64(
     terminate_current_cell_on_fault(cause, pc, fault_addr);
 }
 
+#[cfg(target_arch = "aarch64")]
+const _: crate::hal::TerminateOnFaultAarch64 = vi_terminate_on_fault_aarch64;
+
 /// Exposes `scheduler::current_cell_id` to the HAL trap handler.
 #[no_mangle]
 pub extern "Rust" fn vi_current_cell_id() -> usize {
     scheduler::current_cell_id()
 }
+
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "riscv32",
+    target_arch = "aarch64"
+))]
+const _: crate::hal::CurrentCellId = vi_current_cell_id;
 
 /// Called from the S-mode timer ISR via `extern "Rust"` linkage.
 ///
@@ -544,6 +560,14 @@ pub extern "Rust" fn vi_timer_tick() {
     //   (c) trap.S restores the correct ViTrapFrame from the new task's stack
     yield_cpu();
 }
+
+#[cfg(any(
+    target_arch = "riscv64",
+    target_arch = "riscv32",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
+const _: crate::hal::TimerTick = vi_timer_tick;
 
 /// Force-release every global kernel Spinlock during fault teardown.
 ///
