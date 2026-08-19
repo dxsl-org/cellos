@@ -44,9 +44,10 @@ docs to code. It is not a bug-fix plan.
   `rename`, `getcwd`, and `fstat` contain stubs or deferred behavior in
   `kernel/src/task.rs`; Tier 1 must not be documented as POSIX-complete.
 - The hypervisor CI lane is documented as intermittent in
-  `.github/workflows/ci.yml:512`; dependency installation has also timed out
-  before tests on hosted runners. Treat those outcomes as infrastructure
-  blockers, not runtime passes or functional failures.
+  `.github/workflows/ci.yml:512`. Hosted-runner dependency downloads have also
+  exhausted the former 10-minute budget before tests; the affected apt steps
+  now allow 20 minutes, but mirror failures remain infrastructure blockers, not
+  runtime passes or functional failures.
 - Several physical hardware lanes remain hardware-gated. Compile/QEMU evidence
   is useful regression evidence but must not be used as VF2/Pioneer/RPi4 physical
   qualification.
