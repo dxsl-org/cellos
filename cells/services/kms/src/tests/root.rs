@@ -57,6 +57,7 @@ fn missing_anti_rollback_reports_root_gate() {
                 blob_revision: 8,
                 public_key: [9; 32],
             }),
+            open_calls: None,
         },
         journal(3, 8, KmsProviderKind::SiloWrapped),
     );
@@ -79,6 +80,7 @@ fn provider_epoch_older_newer_and_equal_map_correctly() {
             blob_revision: 11,
             public_key: [1; 32],
         }),
+        open_calls: None,
     };
     assert_eq!(
         status(ready, journal(7, 11, KmsProviderKind::HardwareSealed)).state,
@@ -110,6 +112,7 @@ fn blob_revision_cannot_satisfy_epoch_authority() {
                 blob_revision: u64::MAX,
                 public_key: [2; 32],
             }),
+            open_calls: None,
         },
         journal(9, u64::MAX, KmsProviderKind::DiceSealed),
     );
@@ -131,6 +134,7 @@ fn clone_and_measurement_mismatches_fail_closed() {
                 production_capable: true,
             },
             open_result: ProviderOpenResult::DeviceBindingRejected,
+            open_calls: None,
         },
         snapshot.clone(),
     );
@@ -146,6 +150,7 @@ fn clone_and_measurement_mismatches_fail_closed() {
                 production_capable: true,
             },
             open_result: ProviderOpenResult::MeasurementMismatch,
+            open_calls: None,
         },
         snapshot,
     );
@@ -155,7 +160,7 @@ fn clone_and_measurement_mismatches_fail_closed() {
 #[test]
 fn fixture_ready_mapping_requires_production_capability() {
     let provider = FixtureRootProvider {
-        kind: KmsProviderKind::TestHooks,
+        kind: KmsProviderKind::HardwareSealed,
         assessment: ProviderAssessment {
             anti_rollback_capable: true,
             current_epoch: 5,
@@ -167,9 +172,10 @@ fn fixture_ready_mapping_requires_production_capability() {
             blob_revision: 3,
             public_key: [4; 32],
         }),
+        open_calls: None,
     };
-    let status = status(provider, journal(5, 3, KmsProviderKind::TestHooks));
+    let status = status(provider, journal(5, 3, KmsProviderKind::HardwareSealed));
     assert_eq!(status.state, NodeIdentityState::Ready);
     assert_eq!(status.remote_allowed, 1);
-    assert_eq!(status.provider, KmsProviderKind::TestHooks);
+    assert_eq!(status.provider, KmsProviderKind::HardwareSealed);
 }

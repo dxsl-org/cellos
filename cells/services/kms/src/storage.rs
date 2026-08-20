@@ -3,6 +3,7 @@
 mod backend;
 mod journal;
 mod provider;
+mod ready;
 mod record;
 mod root;
 #[cfg(target_os = "none")]
@@ -11,7 +12,7 @@ mod runtime;
 pub(crate) use backend::{StoreError, StoreIo};
 pub(crate) use journal::{JournalLoad, JournalState};
 pub(crate) use provider::{
-    ProviderAssessment, ProviderOpenResult, RootProvider, UnavailableRootProvider,
+    OpenedRoot, ProviderAssessment, ProviderOpenResult, RootProvider, UnavailableRootProvider,
 };
 pub(crate) use record::{JournalKey, JournalRecord, SlotId, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR};
 pub(crate) use root::RootAssessment;
@@ -53,7 +54,7 @@ pub(crate) use journal::ActiveSlot;
 pub(crate) use record::authenticator;
 
 #[cfg(test)]
-pub(crate) use provider::{FixtureRootProvider, OpenedRoot};
+pub(crate) use provider::FixtureRootProvider;
 
 #[cfg(test)]
 pub(crate) fn assess_for_tests(

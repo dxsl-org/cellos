@@ -6,6 +6,8 @@ use super::*;
 mod authorization;
 mod operations;
 mod root;
+mod root_invariants;
+mod root_sequence;
 mod storage;
 
 fn caller(cell_id: u64, generation: u64, sender_tid: usize) -> CallerIdentity {

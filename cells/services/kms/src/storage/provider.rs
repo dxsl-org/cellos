@@ -2,6 +2,9 @@ use types::kms::{KmsProviderKind, RotateNodeIdentityReason};
 
 use super::record::JournalRecord;
 
+#[cfg(test)]
+use core::sync::atomic::{AtomicUsize, Ordering};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct ProviderEpoch(pub u64);
 
@@ -90,6 +93,7 @@ pub(crate) struct FixtureRootProvider {
     pub(crate) kind: KmsProviderKind,
     pub(crate) assessment: ProviderAssessment,
     pub(crate) open_result: ProviderOpenResult,
+    pub(crate) open_calls: Option<&'static AtomicUsize>,
 }
 
 #[cfg(test)]
@@ -105,6 +109,7 @@ impl FixtureRootProvider {
                 production_capable: false,
             },
             open_result: ProviderOpenResult::Unavailable,
+            open_calls: None,
         }
     }
 }
@@ -120,6 +125,9 @@ impl RootProvider for FixtureRootProvider {
     }
 
     fn open_or_provision(&self, _record: Option<&JournalRecord>) -> ProviderOpenResult {
+        if let Some(counter) = self.open_calls {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }
         self.open_result
     }
 

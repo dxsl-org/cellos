@@ -1,6 +1,8 @@
 use types::kms::{BindingEpoch, KmsProviderKind, NodeIdentityState, NodeIdentityStatusPayload};
 
-use super::{JournalRecord, JournalState, ProviderOpenResult, RootProvider};
+use super::{
+    ready::ready_or_mismatch, JournalRecord, JournalState, ProviderOpenResult, RootProvider,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RootAssessment {
@@ -30,19 +32,39 @@ impl RootAssessment {
             return Self::unavailable();
         }
         if provider.seal_epoch().0 != assessment.current_epoch {
-            return unavailable_with(provider_kind, journal);
+            return fail_closed(
+                NodeIdentityState::ProviderUnavailable,
+                provider_kind,
+                journal,
+                0,
+            );
+        }
+        if journal.load == super::JournalLoad::RollbackDetected {
+            return fail_closed(
+                NodeIdentityState::PolicyMismatch,
+                provider_kind,
+                journal,
+                assessment.current_epoch,
+            );
         }
         if !assessment.anti_rollback_capable {
-            return limited(
+            return fail_closed(
                 NodeIdentityState::NoAntiRollback,
                 provider_kind,
                 journal,
                 assessment.current_epoch,
             );
         }
-        let journal_epoch = active_policy_epoch(journal);
-        if journal_epoch > assessment.current_epoch || !assessment.measurement_ok {
-            return limited(
+        if !assessment.production_capable || provider_kind == KmsProviderKind::TestHooks {
+            return fail_closed(
+                NodeIdentityState::PolicyMismatch,
+                provider_kind,
+                journal,
+                assessment.current_epoch,
+            );
+        }
+        if !assessment.measurement_ok {
+            return fail_closed(
                 NodeIdentityState::PolicyMismatch,
                 provider_kind,
                 journal,
@@ -50,52 +72,63 @@ impl RootAssessment {
             );
         }
         if !assessment.device_binding_ok {
-            return limited(
+            return fail_closed(
                 NodeIdentityState::CloneDetected,
                 provider_kind,
                 journal,
                 assessment.current_epoch,
             );
         }
-        match provider.open_or_provision(active_record(journal)) {
-            ProviderOpenResult::Unavailable | ProviderOpenResult::Missing => {
-                unavailable_with(provider_kind, journal)
-            }
-            ProviderOpenResult::DeviceBindingRejected => limited(
+        let Some(active) = active_record(journal) else {
+            return fail_closed(
+                NodeIdentityState::PolicyMismatch,
+                provider_kind,
+                journal,
+                assessment.current_epoch,
+            );
+        };
+        if active.provider != provider_kind {
+            return fail_closed(
+                NodeIdentityState::BindingInvalid,
+                provider_kind,
+                journal,
+                assessment.current_epoch,
+            );
+        }
+        if active.policy_epoch != assessment.current_epoch {
+            return fail_closed(
+                NodeIdentityState::PolicyMismatch,
+                provider_kind,
+                journal,
+                assessment.current_epoch,
+            );
+        }
+        match provider.open_or_provision(Some(active)) {
+            ProviderOpenResult::Unavailable | ProviderOpenResult::Missing => fail_closed(
+                NodeIdentityState::ProviderUnavailable,
+                provider_kind,
+                journal,
+                0,
+            ),
+            ProviderOpenResult::DeviceBindingRejected => fail_closed(
                 NodeIdentityState::CloneDetected,
                 provider_kind,
                 journal,
                 assessment.current_epoch,
             ),
-            ProviderOpenResult::MeasurementMismatch => limited(
+            ProviderOpenResult::MeasurementMismatch => fail_closed(
                 NodeIdentityState::PolicyMismatch,
                 provider_kind,
                 journal,
                 assessment.current_epoch,
             ),
-            ProviderOpenResult::Opened(opened)
-                if !assessment.production_capable
-                    || (journal.active.is_some() && journal_epoch < assessment.current_epoch) =>
-            {
-                Self::new(
-                    NodeIdentityState::PolicyMismatch,
-                    provider_kind,
-                    opened.blob_revision,
-                    assessment.current_epoch,
-                    opened.public_key,
-                )
+            ProviderOpenResult::Opened(opened) => {
+                ready_or_mismatch(provider_kind, active, assessment.current_epoch, opened)
             }
-            ProviderOpenResult::Opened(opened) => Self::new(
-                NodeIdentityState::Ready,
-                provider_kind,
-                opened.blob_revision,
-                assessment.current_epoch,
-                opened.public_key,
-            ),
         }
     }
 
-    const fn new(
+    pub(in crate::storage) const fn new(
         state: NodeIdentityState,
         provider: KmsProviderKind,
         blob_revision: u64,
@@ -126,17 +159,7 @@ impl RootAssessment {
     }
 }
 
-fn unavailable_with(provider: KmsProviderKind, journal: &JournalState) -> RootAssessment {
-    RootAssessment::new(
-        NodeIdentityState::ProviderUnavailable,
-        provider,
-        active_blob_revision(journal),
-        0,
-        [0; 32],
-    )
-}
-
-fn limited(
+fn fail_closed(
     state: NodeIdentityState,
     provider: KmsProviderKind,
     journal: &JournalState,
@@ -156,13 +179,6 @@ fn active_blob_revision(journal: &JournalState) -> u64 {
         .active
         .as_ref()
         .map_or(0, |active| active.record.blob_revision)
-}
-
-fn active_policy_epoch(journal: &JournalState) -> u64 {
-    journal
-        .active
-        .as_ref()
-        .map_or(0, |active| active.record.policy_epoch)
 }
 
 fn active_record(journal: &JournalState) -> Option<&JournalRecord> {
