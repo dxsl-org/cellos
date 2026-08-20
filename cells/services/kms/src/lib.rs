@@ -9,9 +9,11 @@
 mod auth;
 mod dispatch;
 mod reply;
+mod storage;
 
 pub use auth::{BrokerBinding, ServiceRegistrySnapshot};
 pub use dispatch::KmsService;
+pub use storage::boot_probe_store;
 
 #[cfg(test)]
 mod tests;

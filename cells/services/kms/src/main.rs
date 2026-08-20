@@ -6,7 +6,7 @@ extern crate ostd;
 
 use api::caller_identity::CallerIdentity;
 use api::syscall::service;
-use service_kms::{KmsService, ServiceRegistrySnapshot};
+use service_kms::{boot_probe_store, KmsService, ServiceRegistrySnapshot};
 use types::kms::KMS_MESSAGE_LEN;
 
 api::declare_manifest!(block_io = false, network = false, spawn = false);
@@ -16,6 +16,7 @@ ostd::cell_main!(cell_main);
 
 fn cell_main() {
     ostd::io::println("[kms] fail-closed node identity service starting");
+    boot_probe_store();
     let mut service_state = KmsService::new();
     loop {
         let mut buffer = [0u8; api::ipc::IPC_BUF_SIZE];

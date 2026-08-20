@@ -67,10 +67,7 @@ impl DirTable {
         if named.is_empty() {
             return BindOutcome::NothingNamed;
         }
-        let spawner = Caller {
-            cell: CellId(record.spawner_cell_id),
-            generation: record.spawner_generation,
-        };
+        let spawner = Caller::principal(CellId(record.spawner_cell_id), record.spawner_generation);
 
         // Resolve every named handle against the spawner's own entries first.
         // Nothing is inserted until the whole set has checked out.

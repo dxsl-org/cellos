@@ -141,7 +141,7 @@ pub fn handle_request<'a>(
             // Authorize BEFORE the walk: that walk lists the whole subtree, so
             // checking after it would leave a directory-size probe open to callers
             // who may not write the path.
-            if !vfs.access.can_write(caller, p) {
+            if !vfs.access.can_remove_tree(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
             // Measure per file while the tree still exists: rmdir_recursive

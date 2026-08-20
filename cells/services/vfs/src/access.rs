@@ -13,48 +13,80 @@
 //! the kernel reads at spawn (`__ViCell_manifest`, source of `BlockIoCap` /
 //! `NetworkCap` / `SpawnCap`). Per-cell VFS path grants are a separate concern.
 
+mod kms;
 mod rules;
 
 use crate::caller::Caller;
+use kms::{contains_kms_store, is_kms_store_rule, is_kms_store_rule_path, live_kms_matches};
 pub use rules::PathRule;
 
 /// Path rules, evaluated whole-path first and by prefix second.
 pub struct AccessTable {
     exact: &'static [PathRule],
     prefixes: &'static [PathRule],
+    service_lookup: fn(u16) -> Option<usize>,
 }
 
 impl AccessTable {
     /// Initialize with the shipped rule tables.
     pub fn new() -> Self {
+        Self::with_service_lookup(default_service_lookup)
+    }
+
+    fn with_service_lookup(service_lookup: fn(u16) -> Option<usize>) -> Self {
         Self {
             exact: rules::EXACT_RULES,
             prefixes: rules::PREFIX_RULES,
+            service_lookup,
         }
     }
 
     /// Whether `caller` may write to `path`.
     ///
-    /// `caller` is accepted for every decision so that adding a cell-scoped rule
-    /// is a change to [`rules`] alone; no rule discriminates on it today (see the
-    /// [`rules`] module note).
-    pub fn can_write(&self, _caller: Caller, path: &str) -> bool {
-        self.decide(path)
-            .map(|r| r.allow_write_all)
-            .unwrap_or(false)
+    /// `/srv/cellos/kms` is narrower than the broad `/srv/` prefix: only the
+    /// live KMS service instance may touch it.
+    pub fn can_write(&self, caller: Caller, path: &str) -> bool {
+        self.decide(caller, path, AccessKind::Write)
     }
 
     /// Whether `caller` may read `path`.
     ///
     /// Every read op in `dispatch` is gated on this. Returns `false` when no rule
     /// matches — a relative path, for instance, matches no prefix including `/`.
-    pub fn can_read(&self, _caller: Caller, path: &str) -> bool {
-        self.decide(path).map(|r| r.allow_read_all).unwrap_or(false)
+    pub fn can_read(&self, caller: Caller, path: &str) -> bool {
+        self.decide(caller, path, AccessKind::Read)
     }
 
-    /// The rule governing `path`: its whole-path rule if it has one, otherwise the
-    /// first prefix rule it matches, otherwise nothing (deny).
-    fn decide(&self, path: &str) -> Option<&'static PathRule> {
+    /// Interrupt-disabled fast path: never performs service lookup.
+    ///
+    /// The protected KMS prefix is denied here so the ecall path remains the
+    /// only place that can prove "live service::KMS" with a normal lookup.
+    pub fn can_read_fast(&self, caller: Caller, path: &str) -> bool {
+        if is_kms_store_rule_path(path) {
+            return false;
+        }
+        self.decide(caller, path, AccessKind::Read)
+    }
+
+    /// Whether `caller` may recursively remove `path` and its descendants.
+    pub fn can_remove_tree(&self, caller: Caller, path: &str) -> bool {
+        self.can_write(caller, path) && !contains_kms_store(path)
+    }
+
+    fn decide(&self, caller: Caller, path: &str, kind: AccessKind) -> bool {
+        match self.rule_for(path) {
+            Some(rule) if is_kms_store_rule(rule.prefix) => {
+                live_kms_matches(caller, self.service_lookup)
+            }
+            Some(rule) => match kind {
+                AccessKind::Read => rule.allow_read_all,
+                AccessKind::Write => rule.allow_write_all,
+            },
+            None => false,
+        }
+    }
+
+    fn rule_for(&self, path: &str) -> Option<&'static PathRule> {
         self.exact
             .iter()
             .find(|rule| rule.prefix == path)
@@ -72,6 +104,22 @@ impl Default for AccessTable {
     }
 }
 
+#[derive(Clone, Copy)]
+enum AccessKind {
+    Read,
+    Write,
+}
+
+#[cfg(target_os = "none")]
+fn default_service_lookup(service_id: u16) -> Option<usize> {
+    ostd::syscall::sys_lookup_service(service_id)
+}
+
+#[cfg(not(target_os = "none"))]
+fn default_service_lookup(_service_id: u16) -> Option<usize> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -80,6 +128,7 @@ mod tests {
     const CELL: Caller = Caller {
         cell: CellId(5),
         generation: 1,
+        sender_tid: 50,
     };
 
     #[test]
@@ -120,9 +169,11 @@ mod tests {
             allow_read_all: false,
             allow_write_all: false,
         }];
+        let table = AccessTable::with_service_lookup(|_| None);
         let table = AccessTable {
             exact: EXACT,
             prefixes: rules::PREFIX_RULES,
+            service_lookup: table.service_lookup,
         };
         assert!(!table.can_read(CELL, "/data/secret"));
         // Only the exact path is affected; its neighbours still follow /data/.

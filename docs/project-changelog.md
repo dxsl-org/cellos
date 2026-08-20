@@ -2,6 +2,24 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-20] Cell-to-Cell Anywhere Phase 02B slice 3 adds service-bound KMS storage
+
+Phase 02B slice 3 now protects `/srv/cellos/kms` through VFS service-bound
+policy, allowing only the live `service::KMS` provider proven by kernel-attested
+sender tid. The KMS cell also has a two-slot journal/readback layer with a
+test-only BLAKE3 authenticator; production root remains unavailable, provider
+kind stays `None`, and remote/public exports remain disabled.
+
+Verification caught and fixed the slice's boundary regressions: VFS service
+lookup uses the `u16` service id contract, derived VFS principals use
+`Caller::principal`, BLAKE3 uses the pure backend for bare-metal AArch64/RV64,
+recursive delete cannot bypass the protected KMS subtree, and the runtime store
+creates `/srv/cellos` before `/srv/cellos/kms` for RedoxFS. Gates passed:
+`cargo fmt --all --check`, KMS host tests 17/17, KMS type tests 7/7, RV64/AArch64
+`service-vfs`/`service-kms` checks, `gen_disk.ps1`, and RV64 QEMU boot with one
+KMS start, verified registry, shell prompt, remote disabled, and zero
+panic/watchdog/heartbeat/fault markers. QEMU is not hardware evidence.
+
 ## [2026-08-20] Cell-to-Cell Anywhere Phase 02B slice 2 review-passes with fresh RV64 QEMU proof
 
 The Phase 02B KMS runtime scaffold is now review-passed in QEMU with fresh RV64

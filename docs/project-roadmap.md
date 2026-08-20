@@ -7,6 +7,16 @@
 
 > **2026-08-09 phase-note:** `.agents/260808-1544-wx-cross-hart-tlb-shootdown/phase-04-rv64-physical-hart-mapping-hsm-startup.md` is completed; `.agents/260808-1544-wx-cross-hart-tlb-shootdown/phase-03-evidence-and-closure-gates.md` is blocked while real RV64 hardware is host-gated and the AArch64/x86_64 hardware/runtime gates stay open.
 
+> **2026-08-20 Cell-to-Cell Anywhere 02B update:** slice 3 adds a service-bound
+> `/srv/cellos/kms` VFS store and KMS two-slot journal/readback layer. Only the
+> live `service::KMS` provider with kernel-attested sender tid may access the
+> protected prefix; recursive deletes that contain that subtree fail closed, and
+> RedoxFS parent creation is handled one level at a time. Verification passed
+> host KMS/type tests, RV64/AArch64 `service-vfs`/`service-kms` checks,
+> `gen_disk.ps1`, and RV64 QEMU boot with remote disabled and no panic/watchdog
+> markers. Production root, anti-rollback, broker runtime wiring, and hardware
+> evidence remain pending.
+
 > **2026-08-09 phase-note:** SAS/LBI VFS Phases 02 and 03 are complete. The approved bridge is an exact per-request VFS grant-copy lease plus current-caller-cell-only death watch; shell is the sole bounded grant-read pioneer with sender-masked replies, exact bounds, typed failure, and no raw-pointer/fast fallback. Phase 04 file handles are now complete as an append-only ABI delta: `OpenFileAt` / `ReadFileHandle { max: u32 }` / `CloseFile` are appended, `ViVfsFileHandle` is service-local, the file-handle path stays attested-message-only, and `Data` replies are bounded inline at 4000 bytes. RV64 shell, quota, and lifetime QEMU lanes pass; production kernels compile on RV64/AArch64/x86_64; API tests and the existing test-hooks QEMU markers cover the change; no hardware claim is made and global coverage debt remains.
 
 > **D13 correction (2026-08-01):** the earlier "cryptographic origin proof" wording

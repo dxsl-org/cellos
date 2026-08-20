@@ -35,7 +35,11 @@ pub struct PathRule {
 /// to name *which* cell it is narrower for, and see the module note on why that
 /// binding does not exist yet. The lookup ships now so adding a row later is a
 /// data change rather than a control-flow change.
-pub static EXACT_RULES: &[PathRule] = &[];
+pub static EXACT_RULES: &[PathRule] = &[PathRule {
+    prefix: "/srv/cellos/kms",
+    allow_read_all: false,
+    allow_write_all: false,
+}];
 
 /// Prefix rules, first match wins. Ordered specific → general; `/` is last and
 /// matches every absolute path, so a path that reaches it is decided by it.
@@ -71,6 +75,11 @@ pub static PREFIX_RULES: &[PathRule] = &[
     // RedoxFS service volume. Writable like /data: without this rule every /srv
     // write fell through to the read-only "/" rule and failed before reaching the
     // backend.
+    PathRule {
+        prefix: "/srv/cellos/kms/",
+        allow_read_all: false,
+        allow_write_all: false,
+    },
     PathRule {
         prefix: "/srv/",
         allow_read_all: true,

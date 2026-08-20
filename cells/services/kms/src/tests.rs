@@ -5,6 +5,7 @@ use super::*;
 
 mod authorization;
 mod operations;
+mod storage;
 
 fn caller(cell_id: u64, generation: u64, sender_tid: usize) -> CallerIdentity {
     CallerIdentity {
