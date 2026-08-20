@@ -81,6 +81,9 @@ pub fn print_role_gate(pass: bool, broker_tid: usize) {
     ));
 }
 
+// Keep the named metrics explicit at this stable log-schema boundary; grouping
+// them would hide field/order drift from the benchmark evidence parser.
+#[allow(clippy::too_many_arguments)]
 pub fn print_sweep_line(
     n: usize,
     total: ClientSummary,
