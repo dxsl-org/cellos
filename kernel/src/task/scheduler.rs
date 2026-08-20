@@ -336,11 +336,11 @@ impl Scheduler {
     /// syscall allowlist, not by `SpawnCap`:
     ///
     /// 1. [`MAX_THREADS_PER_CELL`] caps live tasks sharing a `CellId`, which is the
-    ///    fragmentation bound — each thread wants a contiguous run of
-    ///    `STACK_PAGES + 1` frames, and contiguity is what runs out first.
+    ///    fragmentation bound — each thread wants two contiguous configured
+    ///    stack extents plus guards, and contiguity is what runs out first.
     /// 2. The stack is charged to the cell's memory quota, which is the *visibility*
-    ///    bound — without it a cell could grow its real footprint by half a megabyte
-    ///    a thread while its reported usage never moved.
+    ///    bound — without it a cell could grow its real footprint while its
+    ///    reported usage never moved.
     ///
     /// Deliberately NOT gated on `SpawnCap`: a thread is the same principal as the
     /// cell that asked for it (same `CellId`, `CapSet`, allowlist and PKU domain),
@@ -353,7 +353,8 @@ impl Scheduler {
     /// - `OutOfMemory` — the cell is at its thread cap, its memory quota cannot
     ///   absorb another stack, or no contiguous run is available. All three are
     ///   recoverable refusals the caller survives; none is a fault.
-    /// - Whatever [`crate::task::stack::Stack::new_kernel`] returns otherwise.
+    /// - Whatever [`crate::task::stack::Stack::new_kernel`] or
+    ///   [`crate::task::stack::Stack::new_user`] returns otherwise.
     pub fn spawn_thread(
         &mut self,
         name: &str,
@@ -389,6 +390,7 @@ impl Scheduler {
         let id = task.id;
 
         let kstack = crate::task::stack::Stack::new_kernel(crate::task::stack_pages_for(name))?;
+        let ustack = crate::task::stack::Stack::new_user(crate::task::stack_pages_for(name))?;
 
         // Charge the frames the thread actually took, read back from the Stack
         // rather than recomputed from STACK_PAGES: a second, independent use of
@@ -396,10 +398,12 @@ impl Scheduler {
         // On refusal `kstack` drops here and its frames go straight back, and
         // `charge` has already rolled its own optimistic add back, so nothing
         // needs unwinding by hand.
-        let stack_bytes = kstack.allocated_bytes();
+        let stack_bytes = kstack
+            .allocated_bytes()
+            .saturating_add(ustack.allocated_bytes());
         if !crate::memory::cell_quota::charge(cell_id.0 as usize, stack_bytes) {
             log::warn!(
-                "[sched] cell {:?} cannot afford a thread stack ({} bytes, {} in use) — refusing spawn_thread",
+                "[sched] cell {:?} cannot afford thread stacks ({} bytes, {} in use) — refusing spawn_thread",
                 cell_id,
                 stack_bytes,
                 crate::memory::cell_quota::in_use(cell_id)
@@ -408,9 +412,10 @@ impl Scheduler {
         }
         task.stack_quota_charge = stack_bytes;
 
-        let stack_top = kstack.top;
+        let user_stack_top = ustack.top;
         let stack_base = kstack.base;
         let kstack_pages = kstack.pages;
+        let ustack_pages = ustack.pages;
 
         // SAFETY: We own the allocated stack memory exclusively. The pointer is valid.
         // Setting up task context with valid register values for thread initialization.
@@ -422,52 +427,29 @@ impl Scheduler {
                 0,
                 kstack_pages * crate::memory::paging::PAGE_SIZE,
             );
+            core::ptr::write_bytes(
+                ustack.usable_start() as *mut u8,
+                0,
+                ustack_pages * crate::memory::paging::PAGE_SIZE,
+            );
             #[cfg(feature = "test-hooks")]
             kstack.test_hook_prime_watermark();
+            #[cfg(feature = "test-hooks")]
+            ustack.test_hook_prime_watermark();
 
-            let (_gp, _tp) = crate::task::get_kernel_gp_tp();
-            let trampoline = crate::hal::arch::thread_trampoline as *const () as usize;
-
-            task.context.sp = stack_top as _;
-            task.trap_frame.sepc = trampoline as _;
-            task.trap_frame.sstatus = 0x120;
-            #[cfg(target_arch = "riscv64")]
-            {
-                task.context.ra = trampoline;
-                task.context.s0 = arg;
-                task.context.s1 = entry;
-                task.context.gp = _gp;
-                task.context.tp = _tp;
-            }
-            #[cfg(target_arch = "riscv32")]
-            {
-                task.context.ra = trampoline as u32;
-                task.context.s0 = arg as u32;
-                task.context.s1 = entry as u32;
-                task.context.gp = _gp as u32;
-                task.context.tp = _tp as u32;
-            }
-            #[cfg(target_arch = "aarch64")]
-            {
-                task.context.x30 = trampoline as u64;
-                task.context.x19 = arg as u64;
-                task.context.x20 = entry as u64;
-            }
-            #[cfg(target_arch = "x86_64")]
-            {
-                // thread_trampoline reads entry from RBX and arg from R12.
-                // CpuContext::switch restores all callee-saved fields before
-                // jumping to context.rip, so store entry/arg there.
-                task.context.rip = trampoline as u64;
-                task.context.rbx = entry as u64; // thread body fn ptr
-                task.context.r12 = arg as u64; // argument
-                task.context.kernel_trap_sp = stack_top as u64;
-            }
             task.kernel_stack = Some(kstack);
+            task.user_stack = Some(ustack);
+            super::prime_user_mode_entry(&mut task, entry, arg);
 
             info!(
-                "Thread '{}' (ID {}): Stack 0x{:X}-0x{:X}, Entry 0x{:X}, Arg 0x{:X}",
-                name, id, stack_base, stack_top, entry, arg
+                "Thread '{}' (ID {}): KStack 0x{:X}-0x{:X}, UStackTop 0x{:X}, Entry 0x{:X}, Arg 0x{:X}",
+                name,
+                id,
+                stack_base,
+                task.kernel_stack.as_ref().map(|stack| stack.top).unwrap_or(0),
+                user_stack_top,
+                entry,
+                arg
             );
         }
 

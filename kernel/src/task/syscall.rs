@@ -4462,6 +4462,8 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 .and_then(|s| s.tasks.get(&caller_id))
                 .map(|t| t.trap_frame.regs[10])
                 .unwrap_or(0);
+            #[cfg(target_arch = "riscv32")]
+            let fired = fired as usize;
             Ok(fired)
         }
 

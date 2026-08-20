@@ -13,7 +13,6 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 // hal-core re-exports hal_arm::* and hal_hypervisor::* on aarch64.
 use hal::aarch64::stage2_regs::{disable_stage2, enable_stage2};
 use hal::aarch64::vcpu::{run_vcpu_impl, AArch64Vcpu};
@@ -50,7 +49,8 @@ const B_DOT: u32 = 0x1400_0000;
 // ── Helper: allocate Stage-2 table + guest RAM + enable Stage-2 ──────────────
 
 struct GuestEnv {
-    table: Stage2Table,
+    // Keep the active Stage-2 allocation alive for the full guest environment.
+    _table: Stage2Table,
     guest_pa: u64,
 }
 
@@ -70,7 +70,10 @@ impl GuestEnv {
         unsafe {
             enable_stage2(SMOKE_VMID, table.root_pa());
         }
-        GuestEnv { table, guest_pa }
+        GuestEnv {
+            _table: table,
+            guest_pa,
+        }
     }
 
     fn write_blob(&self, offset_pages: usize, blob: &[u32]) {

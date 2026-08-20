@@ -1,5 +1,13 @@
 //! Benchmark scenarios — one module per measurement target.
 
+#[allow(dead_code)]
+pub mod c2c_broker_oracle;
+#[allow(dead_code)]
+pub mod c2c_broker_oracle_client;
+pub mod c2c_broker_oracle_orchestrator;
+pub mod c2c_broker_oracle_report;
+#[allow(dead_code)]
+pub mod c2c_broker_oracle_wire;
 pub mod context_switch;
 pub mod control_loop;
 pub mod hotswap_cli_probe;

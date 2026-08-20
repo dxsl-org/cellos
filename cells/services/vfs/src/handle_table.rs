@@ -129,19 +129,10 @@ mod tests {
 
     use types::CellId;
 
-    const CELL_A: Caller = Caller {
-        cell: CellId(11),
-        generation: 1,
-    };
-    const CELL_B: Caller = Caller {
-        cell: CellId(22),
-        generation: 1,
-    };
+    const CELL_A: Caller = Caller::principal(CellId(11), 1);
+    const CELL_B: Caller = Caller::principal(CellId(22), 1);
     /// Cell 22 again after a respawn that reused its id.
-    const CELL_B_RESPAWNED: Caller = Caller {
-        cell: CellId(22),
-        generation: 2,
-    };
+    const CELL_B_RESPAWNED: Caller = Caller::principal(CellId(22), 2);
     const B_CAP: CapId = CapId(7);
 
     /// Table holding exactly one read-only handle owned by `CELL_B`.

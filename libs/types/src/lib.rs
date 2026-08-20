@@ -163,6 +163,7 @@ impl Default for DirEntry {
     }
 }
 
+pub mod kms;
 pub mod silo;
 
 // ─── Host-runnable unit tests ─────────────────────────────────────────────────

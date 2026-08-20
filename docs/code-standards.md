@@ -426,7 +426,7 @@ cells/
 - **apps/** — Interactive/rich user applications; use the tier/runtime profile docs to pick the execution boundary
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
 - **drivers/** — Hardware devices + driver Cells (trusted native cells, mapped via kernel Resource Registry or IPC)
-- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
+- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor, broker-style cells). Cross-machine brokers must fail closed by default; readable configuration is neither authorization nor secret storage.
 - **runtimes/** — Trusted native runtime profiles (Lua; MicroPython is historical only)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)

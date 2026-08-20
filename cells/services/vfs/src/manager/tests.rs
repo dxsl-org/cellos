@@ -3,18 +3,9 @@ use crate::manager::VfsManager;
 use api::ipc::{VfsRequest, VfsResponse, IPC_BUF_SIZE};
 use types::CellId;
 
-const CELL_OLD: Caller = Caller {
-    cell: CellId(44),
-    generation: 1,
-};
-const CELL_OTHER: Caller = Caller {
-    cell: CellId(55),
-    generation: 1,
-};
-const CELL_OLD_RESPAWNED: Caller = Caller {
-    cell: CellId(44),
-    generation: 2,
-};
+const CELL_OLD: Caller = Caller::principal(CellId(44), 1);
+const CELL_OTHER: Caller = Caller::principal(CellId(55), 1);
+const CELL_OLD_RESPAWNED: Caller = Caller::principal(CellId(44), 2);
 
 #[test]
 fn handle_traversal_can_open_mount_parent_directory() {

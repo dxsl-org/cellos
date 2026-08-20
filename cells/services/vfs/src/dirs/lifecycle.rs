@@ -66,10 +66,7 @@ impl DirTable {
                 }
             }
             Some(state) if state.generation < caller.generation => {
-                let replaced_owner = Caller {
-                    cell: caller.cell,
-                    generation: state.generation,
-                };
+                let replaced_owner = Caller::principal(caller.cell, state.generation);
                 let revoked = self.purge_cell(cell);
                 self.insert_cell_state(caller);
                 Contact::NeedsAttestation {

@@ -81,7 +81,8 @@ fn cell_main() {
     // They are spawned after periph-demo in the unsupervised section below so
     // that periph-demo can complete its GPIO IRQ self-test before robot-demo
     // claims the PL061 MMIO region.
-    const NSVC: usize = 9;
+    const NSVC: usize = 10;
+    const SHELL_INDEX: usize = NSVC - 1;
     let paths: [&str; NSVC] = [
         "/bin/vfs",
         "/bin/config",
@@ -89,6 +90,7 @@ fn cell_main() {
         "/bin/net",
         "/bin/compositor",
         "/bin/silo",       // Security Silo — P-256 key isolation (Tier 3a)
+        "/bin/kms",        // Node-identity KMS — fail-closed until production root is ready
         "/bin/net-broker", // Cluster net-broker — cross-machine p2p (spawned AFTER net)
         "/bin/supervisor", // Supervisor Cell — live hotswap orchestration (spawned before shell)
         "/bin/shell",
@@ -105,6 +107,7 @@ fn cell_main() {
         Some(service::NET),
         Some(service::COMPOSITOR),
         Some(types::silo::SILO_SERVICE_ID), // SILO = 6
+        Some(service::KMS),                 // KMS = 13
         Some(service::NET_BROKER),          // NET_BROKER = 8
         Some(service::SUPERVISOR),          // SUPERVISOR = 11
         None,                               // shell is not a registered service
@@ -120,6 +123,7 @@ fn cell_main() {
         Policy::Permanent, // net
         Policy::Permanent, // compositor
         Policy::Permanent, // silo — key service, must stay up
+        Policy::Permanent, // kms — node identity authority, must stay up
         Policy::Permanent, // net-broker — cluster trust anchor, must stay up
         Policy::Permanent, // supervisor — frozen cells need it; must restart quickly
         Policy::Transient, // shell: restart on crash, but a clean `exit` is final
@@ -259,9 +263,13 @@ fn cell_main() {
     // Spawn the interactive shell only after every other boot message has printed.
     // On the shared UART console whoever prints last "owns" the bottom line; if the
     // shell spawned during service bring-up its prompt would be buried under
-    // "Init:"/loader/"[net]" messages and look like a dead shell. paths[8] = shell.
-    match sys_spawn_from_path(paths[8]) {
-        SyscallResult::Ok(tid) => tids[8] = Some(tid),
+    // "Init:"/loader/"[net]" messages and look like a dead shell.
+    if paths[SHELL_INDEX] != "/bin/shell" {
+        println("Init: invalid service table — shell must remain last.");
+        return;
+    }
+    match sys_spawn_from_path(paths[SHELL_INDEX]) {
+        SyscallResult::Ok(tid) => tids[SHELL_INDEX] = Some(tid),
         _ => println("Init: shell spawn failed."),
     }
 

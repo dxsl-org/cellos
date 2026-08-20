@@ -116,7 +116,7 @@ function Add-FailedOptional([string]$what) {
 Build-Cargo -What "core services + drivers" -Tail 5 -Packages @(
     'app-init', 'app-shell', 'service-platform',
     'service-vfs', 'service-config',
-    'service-input', 'service-net', 'service-compositor', 'service-net-broker',
+    'service-input', 'service-net', 'service-compositor', 'service-kms', 'service-net-broker',
     'supervisor', 'driver-nvme', 'driver-e1000', 'driver-virtio-net', 'driver-virtio-blk', 'driver-virtio-gpu')
 Build-Cargo -What "app-bench"      -Packages @('app-bench')       # builds bench + bench-probe
 Build-Cargo -What "app-net-tools"  -Packages @('app-net-tools')
@@ -242,6 +242,7 @@ Add-CellToSign "$rel_dir/platform"
 Add-RequiredCellToSign "$rel_dir/service-vfs" "service-vfs"
 Add-RequiredCellToSign "$rel_dir/service-config" "service-config"
 Add-CellToSign "$rel_dir/service-net"
+Add-RequiredCellToSign "$rel_dir/service-kms" "service-kms"
 Add-CellToSign "$rel_dir/service-net-broker"
 Add-CellToSign "$rel_dir/service-compositor"
 Add-RequiredCellToSign "$rel_dir/supervisor" "supervisor"
@@ -330,6 +331,7 @@ $bench_probe_bin = "$rel_dir/bench-probe"      # bench probe/load child (VA 0x19
 $capacity_probe_bin = "$rel_dir/capacity-probe" # A2/A3 OOM + MemInfo runtime probe
 $input_bin  = "$rel_dir/service-input"     # Phase 14: input service cell
 $net_bin    = "$rel_dir/service-net"       # Phase 15: network service cell
+$kms_bin          = "$rel_dir/service-kms"        # Phase 02B: node-identity authority
 $net_broker_bin   = "$rel_dir/service-net-broker" # L.0: cluster net-broker cell
 $supervisor_bin   = "$rel_dir/supervisor"         # Kernel Boundary Law: hotswap orchestration
 $platform_bin     = "$rel_dir/platform"            # Kernel Boundary Law: PCIe ECAM Platform Cell
@@ -559,6 +561,7 @@ if ($include_capacity_probe -and (Test-Path $capacity_probe_bin)) {
 }
 if (Test-Path $input_bin) { $table_args += "/bin/input=$input_bin" }
 if (Test-Path $net_bin)   { $table_args += "/bin/net=$net_bin" }
+if (Test-Path $kms_bin) { $table_args += "/bin/kms=$kms_bin" }
 if (Test-Path $net_broker_bin) { $table_args += "/bin/net-broker=$net_broker_bin" }
 if (Test-Path $supervisor_bin) { $table_args += "/bin/supervisor=$supervisor_bin" }
 if (Test-Path $platform_bin)   { $table_args += "/bin/platform=$platform_bin" }

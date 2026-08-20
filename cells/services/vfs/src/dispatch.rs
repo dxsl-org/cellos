@@ -124,7 +124,7 @@ pub fn handle_request<'a>(
         api::ipc::VfsRequest::Rmdir(p) => {
             // Destructive: authorize before touching the backend.  A path the caller
             // may not write is a path it may not delete.
-            if !vfs.access.can_write(caller, p) {
+            if !vfs.access.can_remove_dir(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
             // Verifies the target IS a directory — POSIX ENOTDIR semantics.
@@ -141,7 +141,7 @@ pub fn handle_request<'a>(
             // Authorize BEFORE the walk: that walk lists the whole subtree, so
             // checking after it would leave a directory-size probe open to callers
             // who may not write the path.
-            if !vfs.access.can_write(caller, p) {
+            if !vfs.access.can_remove_tree(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
             // Measure per file while the tree still exists: rmdir_recursive

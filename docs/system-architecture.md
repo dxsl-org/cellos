@@ -1041,6 +1041,8 @@ do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guar
 
 Language-Based Isolation is the Rust type system within **one** compiler's address space (SAS). It proves nothing about a remote machine. Therefore **every remote machine is untrusted**, cross-machine messages must be explicitly authenticated, and the kernel only ever sees *local* IPC. All cross-machine logic lives in a **userspace `net-broker` Cell** — zero kernel changes to the transport/auth substrate. Intra-machine zero-copy IPC (Grant) degrades to **one-copy** across machines; every other Cell guarantee (supervisor restart, capability gating, owned buffers) survives.
 
+Phase 02A adds a boot-provisioned, non-secret export registry at `/etc/cellos/c2c-exports.cfg` inside `net-broker`. The registry is policy input, not a secret store: the broker can validate and count exported endpoints, but it still keeps remote/public delivery disabled until a separate secure node-identity authority exists. Readable `/etc/cellos` state is never authorization.
+
 ### Cluster membership: 3 modes
 
 A Cell declares its mode via a new additive `__ViCell_cluster` ELF section (follows the `__ViCell_syscalls` pattern; not a manifest/Law-1 change):

@@ -9,22 +9,10 @@ use crate::caller::Caller;
 use crate::dir_admission;
 use crate::manager::VfsManager;
 
-const CELL_A: Caller = Caller {
-    cell: CellId(11),
-    generation: 1,
-};
-const CELL_B: Caller = Caller {
-    cell: CellId(22),
-    generation: 1,
-};
-const CELL_B_NEW: Caller = Caller {
-    cell: CellId(22),
-    generation: 2,
-};
-const CELL_C: Caller = Caller {
-    cell: CellId(33),
-    generation: 1,
-};
+const CELL_A: Caller = Caller::principal(CellId(11), 1);
+const CELL_B: Caller = Caller::principal(CellId(22), 1);
+const CELL_B_NEW: Caller = Caller::principal(CellId(22), 2);
+const CELL_C: Caller = Caller::principal(CellId(33), 1);
 
 pub fn run() {
     wrong_owner_preserves_entry();

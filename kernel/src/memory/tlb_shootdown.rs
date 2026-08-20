@@ -54,9 +54,15 @@ pub fn flush_range(start: VAddr, size: usize) {
         }
     }
 
-    #[cfg(not(target_arch = "riscv64"))]
+    #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
         let _ = size;
         hal::paging::flush_tlb_page(start);
+    }
+
+    #[cfg(target_arch = "riscv32")]
+    {
+        // RV32 boards use the bare-physical SATP=0 contract and have no TLB.
+        let _ = (start, size);
     }
 }

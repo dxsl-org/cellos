@@ -13,8 +13,9 @@
 //!
 //! ## Design invariants (from plan.md + docs/specs/14-distributed.md)
 //! 1. Broker runs at **NORMAL** priority (init spawns without SpawnPinned).
-//! 2. Re-arms `sys_heartbeat(500)` at the TOP of every dispatch-loop iteration,
-//!    including inside any blocking/spin-poll sub-loop (P04 Noise handshake).
+//! 2. Spawned runtime roles re-arm `sys_heartbeat(1000)` at each cooperative
+//!    turn. Main ingress blocks in `sys_recv_attested` and stays unarmed while
+//!    legitimately idle.
 //! 3. Init registers service::NET_BROKER on the broker's behalf; the broker does
 //!    not self-register (it lacks SpawnCap).
 //! 4. No blocking recv at Init — sockets can be set up, but the first RECV must
@@ -43,18 +44,20 @@ api::declare_cluster!(mode = Private, name = "robots");
 api::declare_syscalls![
     Send,
     Recv,
-    TryRecv,
+    TrySend,
     Reply,
     Log,
     Heartbeat,
     LookupService,
     GetTime,
     GetRandom,
+    Spawn,
+    Yield,
     WaitForEvent,
 ];
 
 mod connection_manager;
-mod identity;
+mod local_runtime;
 mod relay;
 mod rng;
 mod stun;
@@ -66,11 +69,11 @@ mod gossip;
 mod lease;
 mod routing;
 
-use identity::BrokerIdentity;
 use ostd::io::{print, println};
-use ostd::syscall::{sys_heartbeat, sys_try_recv, SyscallResult};
 use relay::RelayClient;
 use rng::BrokerRng;
+use service_net_broker::export_registry::RemoteDisabledReason;
+use service_net_broker::identity::BrokerIdentity;
 use transport::StaticKeypair;
 
 fn print_hex_byte(b: u8) {
@@ -84,12 +87,6 @@ fn print_hex_byte(b: u8) {
         print(s);
     }
 }
-
-/// IPC buffer for incoming dispatch requests.
-const IPC_BUF_SIZE: usize = api::ipc::IPC_BUF_SIZE;
-
-/// Heartbeat interval in milliseconds — re-armed every dispatch-loop iteration.
-const HEARTBEAT_MS: u64 = 500;
 
 ostd::cell_main!(cell_main);
 
@@ -105,10 +102,25 @@ fn cell_main() {
     let static_kp = StaticKeypair::generate(&mut rng);
     let mut identity = BrokerIdentity::from_static_pub(static_kp.public_bytes());
     identity.load_config();
+    identity.load_export_registry();
 
-    // Log the first 4 bytes of NodeId as a boot identifier.
+    match identity.remote_exports().disabled_reason() {
+        RemoteDisabledReason::RegistryAbsent => {
+            println("[net-broker] c2c exports: absent; remote disabled");
+        }
+        RemoteDisabledReason::RegistryInvalid => {
+            println("[net-broker] c2c exports: invalid; remote disabled");
+        }
+        RemoteDisabledReason::NoSecureIdentity => {
+            print("[net-broker] c2c exports: ");
+            ostd::io::print_usize(identity.remote_exports().export_count());
+            println(" loaded, remote disabled (no secure identity)");
+        }
+    }
+
+    // Log the first 4 bytes of the per-run NodeId for local diagnostics only.
     let nid = identity.node_id.0;
-    print("[net-broker] NodeId prefix: ");
+    print("[net-broker] ephemeral NodeId prefix (diagnostic only; remote disabled): ");
     for b in &nid[..4] {
         print_hex_byte(*b);
     }
@@ -123,35 +135,10 @@ fn cell_main() {
     let relay_port = relay_config.map(|(_, pt)| pt).unwrap_or(0);
     let relay_client = RelayClient::new(identity.node_id, relay_ip, relay_port);
 
-    let mut buf = [0u8; IPC_BUF_SIZE];
+    local_runtime::init(relay_client);
+    println("[net-broker] local runtime roles ready");
 
     loop {
-        // INVARIANT: heartbeat re-armed at top of every iteration.
-        sys_heartbeat(HEARTBEAT_MS);
-
-        // Poll relay for inbound frames (non-blocking).
-        // TODO: wire incoming relay frames into routing dispatch.
-        let _ = relay_client.is_connected();
-
-        // TODO P05: check beacon timer; send LAN multicast beacon if due.
-        // TODO P05: try_recv beacon UDP socket.
-        // TODO P08: tick lease renewal / peer-loss sweep.
-
-        buf.fill(0);
-        match sys_try_recv(0, &mut buf) {
-            SyscallResult::Ok(sender) if sender > 0 => {
-                dispatch(&buf, sender);
-            }
-            _ => {
-                ostd::task::yield_now();
-            }
-        }
+        local_runtime::receive_once();
     }
-}
-
-/// Dispatch an incoming IPC message. Extended per phase.
-fn dispatch(_buf: &[u8], _sender: usize) {
-    // TODO P06: route RemoteServiceProxy calls via routing matrix.
-    // TODO P08: handle lease request / renew / release.
-    // TODO P09: handle enrollment / merge-split messages.
 }
