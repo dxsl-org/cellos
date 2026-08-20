@@ -8,6 +8,7 @@ extern crate alloc;
 
 pub mod bench_oracle;
 pub mod export_registry;
+pub mod kms_dh;
 pub mod local_ingress;
 pub mod local_queue;
 pub mod local_runtime_metrics;

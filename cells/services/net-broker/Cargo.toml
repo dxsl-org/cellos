@@ -9,6 +9,7 @@ restart-oracle = []
 
 [dependencies]
 api  = { path = "../../../libs/api", version = "0.1.0" }
+types = { path = "../../../libs/types", version = "0.1.0" }
 
 # P04: Noise KKpsk0 p2p transport (clatter) — CELL-LEVEL DEPS, NOT Law 1
 # use-25519 pulls x25519-dalek; use-chacha20poly1305 + use-sha configure cipher/hash suite.

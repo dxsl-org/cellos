@@ -2,6 +2,14 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-20] Cell-to-Cell Anywhere Phase 02B slice 1 clears production-security review
+
+The KMS ABI + opaque DH compile proof for Phase 02B slice 1 is now review-passed:
+`service::KMS = 13`, the fixed-frame KMS wire contract, the `KmsClient` facade,
+and the broker's opaque static-DH adapter all passed the production-security and
+verification gates. Runtime KMS service/storage/broker wiring remains pending,
+so remote/public exports stay disabled and no hardware evidence is claimed.
+
 ## [2026-08-20] Cell-to-Cell Anywhere closes its local broker and thread foundation
 
 Phase 03 and its user-thread foundation are complete for the approved Candidate B
@@ -19,7 +27,8 @@ fields before narrowing, and allocates attested cell generations under a real
 cross-hart spinlock. AArch64 and RV32 clippy gates pass, as do RV64 and x86_64
 release checks. Runtime evidence remains the retained one-hart RV64 QEMU logs;
 AArch64/RV32 results are compile-only, and no CI or hardware pass is claimed.
-Phase 02B secure identity storage still blocks Phase 04/05 remote/public work.
+Phase 02B secure identity storage still blocks Phase 04/05 remote/public work until
+the runtime KMS service/storage/broker wiring is finished.
 
 ## [2026-08-19] Cell-to-Cell Anywhere Phase 02A lands the fail-closed export registry slice
 

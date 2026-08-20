@@ -909,6 +909,9 @@ pub mod service {
     /// VirtIO GPU Driver Cell — owns the VirtIO GPU MMIO and framebuffer DMA.
     /// Kernel `GpuFlush`/`GpuCursor` syscalls forward to this Cell when registered.
     pub const GPU_DRIVER: u16 = 12;
+    /// Key-management service for stable Cell-to-Cell node identity and opaque
+    /// static DH operations.
+    pub const KMS: u16 = 13;
 }
 
 /// Arguments for `SpawnFromMem`.
