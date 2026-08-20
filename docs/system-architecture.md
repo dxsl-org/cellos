@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-21 (Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+**Last Updated**: 2026-08-21 (Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
 > **Status refresh 2026-08-21**: Manifest v2 keeps its fixed 16-byte record and
 > legacy `tier`/`TIER_*` source surface while exposing canonical
@@ -11,6 +11,14 @@
 > canonical accessors; Zig cells continue to emit the legacy 8-byte v1 record,
 > which the Rust loader upcasts compatibly. This is a naming/API clarification,
 > not implementation of Tier 2 native domains.
+
+> **Status refresh 2026-08-21**: Spec 22 is now the mandatory design and
+> negative-test gate before Tier 2 native domains can be implemented or offered.
+> It covers private page-table ownership and switching, recoverable
+> domain-aware syscall copies, fault/teardown recovery, revocable IPC grants,
+> DMA fencing, adversarial tests, and separate build-capability/runtime-
+> admission rollback. No Tier 2 runtime mechanism exists; current unsigned
+> native cells remain in the shared SAS and are not contained.
 
 > **Status refresh 2026-08-20**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;

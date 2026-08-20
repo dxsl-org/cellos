@@ -1,6 +1,6 @@
 # Technical Milestones
 
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-21
 
 This file is a compact status map. See
 [completed-history.md](completed-history.md) for the condensed completion
@@ -17,7 +17,7 @@ archived traceability notes.
 | Networking | Net service and net-broker pieces exist; broker routing/beacon/lease/enrollment wiring remains incomplete |
 | Scripting | Lua is active; MicroPython is historical and absent from current workspace members |
 | Hotswap/supervisor | Supervisor hotswap path has QEMU smoke evidence; continue keeping authority gates explicit |
-| Security/trust | Signing mechanism exists; fleet enforcement and production key provisioning remain open |
+| Security/trust | Signing mechanism exists; fleet enforcement and production key provisioning remain open; Tier 2 native domains remain unimplemented behind the mandatory [Spec 22 gate](../specs/22-native-domain-cell-implementation-gate.md) |
 
 ## Historical Milestones
 

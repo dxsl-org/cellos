@@ -4,7 +4,7 @@
 > `18b-cell-admission-consent-adr.md` (§2.1, §4), and terminology-normalized on
 > 2026-08-19 by ADR 0003. Supersedes the WASM runtime tier wherever older documents mention it.
 > Tier 2 and fleet-secure Tier-1 admission are accepted designs, not current production
-> mechanisms.
+> mechanisms. Spec 22 is the required Tier-2 implementation gate.
 
 ## 1. Context
 
@@ -132,12 +132,17 @@ Current admission behavior is explicit:
 
 That is the point of the accepted design. A third-party developer would build a normal
 cell ELF with the public SDK, omit a platform signature, withhold source, and run at native
-speed behind an MMU wall once Tier 2 exists. `unsafe` in a Tier-2 cell would corrupt only
-that cell. The costs a Tier-2
+speed behind an MMU wall once Tier 2 exists. `unsafe` in a Tier-2 cell would be confined
+to that domain's direct CPU-memory mappings, not made harmless: kernel bugs, granted pages,
+DMA outside a qualified fence, and unsafe syscall-pointer handling remain separate attack
+surfaces. The costs a Tier-2
 cell pays, relative to Tier 1: address-space switch at its scheduling boundary
 (ASID-tagged, no full TLB flush — VF2/Pioneer/RK3588 all have MMU+ASID; none has
 MTE/PKU, which is why page tables are the mechanism), and copied IPC instead of
-zero-copy grants. Verification buys performance; it is never a license to exist.
+zero-copy grants. Explicit domain grants require their own mapping and revoke protocol;
+they are not the current SAS `GrantShare` mechanism. Verification buys performance; it is
+never a license to exist. The page-table, scheduler, architecture, IPC, DMA, test, and
+rollback gates are defined by `docs/specs/22-native-domain-cell-implementation-gate.md`.
 
 ### 2.3 Upgrade path (G2+, optional)
 
@@ -197,6 +202,7 @@ item; not a prerequisite for anything above.
 | Build-time attestation vs install-time consent | `docs/specs/18b-cell-admission-consent-adr.md` |
 | rustc as TCB, policies F1–F7 | `docs/specs/16-rustc-tcb.md` |
 | Hardware isolation layers (W^X, MPK, domain tables) | `docs/specs/19-hardware-isolation-layers.md` |
+| Tier-2 implementation gate | `docs/specs/22-native-domain-cell-implementation-gate.md` |
 | Signing pipeline (current) | `scripts/sign-cell.py`, `scripts/lib-sign-cells.sh`, `kernel/src/signing.rs` |
 | Capability model / manifest | `docs/specs/01-core.md` |
 | Hypervisor tier (silo) | `.agents/260607-1420-h-ext-hypervisor-cap/` (plan record) |

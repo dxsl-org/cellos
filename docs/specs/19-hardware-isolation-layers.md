@@ -2,7 +2,8 @@
 
 > **Status**: Accepted 2026-07-30; amended 2026-08-01 by D12. **Layer A is implemented**
 > (`midori-lessons` phase 10, 2026-07-30); per-domain page tables belong to the
-> following plan (they are the Tier-2 mechanism of Spec 18). This is the
+> following plan (they are the Tier-2 mechanism of Spec 18). Spec 22 is the
+> required pre-implementation design gate. This is the
 > "layer2_hw_security" document that Spec 16 §8 reserved.
 
 ## 1. Context
@@ -66,8 +67,10 @@ Classic SASOS design (Opal, Nemesis): one address-space *layout*, several protec
 minus every page that doesn't belong to it. ASIDs avoid full TLB flushes on switch.
 This is simultaneously (a) the Tier-2 untrusted-cell mechanism (Spec 18 §2.2) and
 (b) defense-in-depth available for any high-value Tier-1 cell an operator chooses to
-demote into a domain. One kernel investment, two uses. Requires an ADR-level design
-pass on grant mapping and the Spec 17 wire contract before implementation.
+demote into a domain. One kernel investment, two uses. Spec 22 defines the required
+page-table ownership, architecture-switch, domain-aware syscall copies and fault recovery,
+IPC/grant revoke, DMA, negative-test, and rollback gate; this document does not itself
+authorize a Layer-B implementation.
 
 ### Layer C — Per-arch hardening (opportunistic, G2+)
 
@@ -147,6 +150,7 @@ two profiles compose: a large-app cell may still run many futures internally.
 | Topic | Document |
 |-------|----------|
 | Trust tiers consuming these layers | `docs/specs/18-cell-trust-tiers.md` |
+| Tier-2 pre-implementation design gate | `docs/specs/22-native-domain-cell-implementation-gate.md` |
 | Installer Tier-1/Tier-2 choice — gated on Layer B | `docs/specs/18b-cell-admission-consent-adr.md` §5 |
 | Current mapping code / W-for-relocation note | `kernel/src/loader/elf.rs` |
 | Reactor + completion queue (phase 07) | `.agents/260727-2101-midori-lessons-cellos/phase-07-async-reactor.md` |

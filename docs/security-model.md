@@ -113,6 +113,10 @@ used for hostile C/FFI code.
 > **not signed-only**: an absent signature is admitted to the SAS because
 > `signing-required` is off. `/bin/` remains an authorization label, and signature status
 > does not select a memory tier. See Specs 12 and 18.
+> Spec 22 is the mandatory design and negative-test gate before Tier 2 can be implemented
+> or offered; it preserves the current truth that unsigned native code is not contained.
+> That gate also requires recoverable, domain-aware copying for every syscall user pointer:
+> an MMU root alone cannot make a raw kernel dereference of hostile user memory safe.
 
 ### KASLR — Shipped (Phase 24)
 **Severity: Resolved**

@@ -1,6 +1,6 @@
 # Runtime and Platform Tracks
 
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-21
 
 This page groups the runtime and higher-level platform overlays that sit next
 to the physical hardware tracks.
@@ -33,3 +33,7 @@ to the physical hardware tracks.
 - G5 is the later virtualization-platform overlay.
 - Untrusted Linux/POSIX application compatibility stays in Tier 3 VM lanes
   until Tier 2 native domains exist.
+- Tier 2 native domains remain unimplemented. [Spec 22](../specs/22-native-domain-cell-implementation-gate.md)
+  is the mandatory design and negative-test gate before a private-MMU native
+  runtime may be implemented or offered; current native cells remain shared-SAS
+  code and are not treated as contained.

@@ -55,6 +55,10 @@ Cellos is being shaped around product stages, not only phase numbers:
   SDK packaging uses named modules, not numbered tiers. Manifest v2 exposes
   canonical `PROTECTION_CLASS_*` aliases while retaining the ABI-stable `tier`
   byte and legacy `TIER_*` names; Tier 2 native domains remain unimplemented.
+  Any implementation must first satisfy the mandatory [Spec 22 native-domain
+  gate](specs/22-native-domain-cell-implementation-gate.md), including
+  recoverable user-pointer handling, revoke/teardown, DMA, negative-test, and
+  rollback evidence.
 
 ## Immediate Open Gates
 
@@ -67,6 +71,10 @@ Cellos is being shaped around product stages, not only phase numbers:
   above bus 0, real NIC Tx/Rx/DHCP, and the BAR unit-test harness remain open.
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
+- Tier 2 native domains have an accepted design gate but no runtime mechanism;
+  current native cells remain in the shared SAS and are not treated as
+  contained merely because the manifest taxonomy names a future protection
+  class.
 - Net-broker has implemented pieces for Noise/identity/routing, but `main.rs`
   still marks K1 loading, beacon sockets, relay dispatch, leases, and enrollment
   as TODO wiring.

@@ -2,6 +2,16 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Phase 04 Tier 2 native-domain implementation gate is accepted
+
+Spec 22 now defines the mandatory design and negative-test gate for any future
+Tier 2 native-domain implementation. It requires explicit page-table ownership
+and architecture-switch contracts, recoverable domain-aware syscall copies,
+fault and teardown recovery, revocable IPC grants, DMA fencing, adversarial
+tests, and a separate rollback policy for build capability versus runtime
+admission. This is a design-only decision: Tier 2 native domains are not
+implemented or offered, and current unsigned native cells remain uncontained.
+
 ## [2026-08-21] Manifest protection-class taxonomy lands without ABI churn
 
 Manifest v2 now exposes canonical `PROTECTION_CLASS_*` constants and
