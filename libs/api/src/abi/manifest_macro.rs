@@ -8,9 +8,10 @@
 /// section.  The cell linker script must `KEEP` that section or `--gc-sections`
 /// will silently drop it in release/LTO builds.
 ///
-/// The back-compat forms default `tier = TIER_LEGACY` (v1 behaviour preserved).
-/// Add `tier = <TIER_*>` to opt a cell into an explicit isolation domain (e.g. a
-/// Tier-1b C/FFI cell requesting `tier = 2` for PKU key 2).
+/// The back-compat forms default `tier = PROTECTION_CLASS_LEGACY`
+/// (v1 behaviour preserved). Add `tier = <PROTECTION_CLASS_*>` or
+/// `tier = <TIER_*>` to opt a cell into an explicit protection class
+/// (e.g. an FFI cell requesting PKU key 2).
 #[macro_export]
 macro_rules! declare_manifest {
     // Full form + explicit tier (v2 opt-in, including hardware bus classes).

@@ -2,6 +2,20 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Manifest protection-class taxonomy lands without ABI churn
+
+Manifest v2 now exposes canonical `PROTECTION_CLASS_*` constants and
+`CellManifest::protection_class()` / `granted_protection_class()` accessors.
+The loader uses those names for x86 PKU admission while retaining the existing
+16-byte layout, `tier` field, `TIER_*` symbols, `tier()` accessor, and manifest
+macro forms for source compatibility. Zig manifests intentionally remain the
+legacy 8-byte v1 layout and are upcast by the Rust loader.
+
+Phase 2–3 verification passed the API suite (84 tests, four ignored doc tests),
+x86_64 and RISC-V kernel checks, manifest ABI/layout compatibility, parser and
+PKU coverage, Zig v1 compatibility, terminology checks, and diff checks. Tier 2
+native domains remain an accepted but unimplemented design.
+
 ## [2026-08-20] Cell-to-Cell Anywhere adds its fail-closed local and KMS foundation
 
 The approved Candidate B path now has a bounded local broker runtime, strict

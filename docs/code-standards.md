@@ -538,6 +538,12 @@ The App SDK is one family of named modules/layers, not a numbered tier system.
 Application Tier 1/2/3 describes the execution/isolation boundary; runtime
 profiles and SDK modules describe how code is built and which APIs it uses.
 
+Manifest v2 uses a protection-class byte for the x86 PKU floor. New Rust code
+should use `PROTECTION_CLASS_*`, `CellManifest::protection_class()`, and
+`granted_protection_class()`; `tier`, `TIER_*`, `tier()`, and the existing
+manifest macro forms remain compatibility surfaces. The Rust record remains
+16 bytes, while Zig cells intentionally emit the legacy 8-byte v1 record.
+
 **Before (manual dispatch)**:
 ```rust
 #![no_std]

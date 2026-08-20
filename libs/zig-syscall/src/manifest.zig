@@ -1,7 +1,8 @@
-// Cellos cell manifest — must stay in sync with libs/api/src/manifest.rs.
+// Cellos cell manifest — Zig intentionally emits the legacy v1 8-byte record.
 //
-// The __ViCell_manifest ELF section is a fixed 8-byte struct located by the
-// kernel loader to read capability flags before spawning the cell.
+// The Rust loader upcasts this to the 16-byte v2 ABI by zero-extending flags and
+// setting the compatibility protection-class sentinel, so this file MUST keep
+// the v1 layout until Zig cells opt into native v2 explicitly.
 
 pub const MANIFEST_MAGIC: u32 = 0x5649_4345; // "VICE"
 
@@ -17,7 +18,8 @@ pub const Flags = struct {
     pub const PART_LFS:    u8 = 1 << 7; // littlefs partition P4 block access
 };
 
-/// 8-byte cell manifest. Must match libs/api/src/manifest.rs CellManifest exactly.
+/// 8-byte legacy cell manifest. The kernel loader upcasts it into the Rust v2
+/// `CellManifest`; this layout itself must stay 8 bytes.
 pub const CellManifest = extern struct {
     magic:   u32 = MANIFEST_MAGIC,
     version: u8  = 1,

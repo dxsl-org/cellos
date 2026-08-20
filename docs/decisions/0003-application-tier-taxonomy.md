@@ -19,7 +19,7 @@ product-facing application execution tiers in this ADR. Renaming that field
 directly would risk ABI churn without changing the actual Tier-2 mechanism.
 
 The documentation also had a historical Silo classification as a VM tier, a
-WASM "tier" discussion, and numbered SDK labels such as SDK L1/L2. Leaving
+WASM "tier" discussion, and legacy numbered SDK labels such as L1/L2. Leaving
 those terms mixed together would keep producing contradictory guidance for
 which app path to use: Rust `no_std`, planned Rust `std`, C/POSIX, Lua, Tier 2
 native domains, or Linux guests.
@@ -36,7 +36,7 @@ native domains, or Linux guests.
 
 ### Option A: Keep the existing tier/layer vocabulary
 
-This option would leave Tier 1, Tier 1b, Tier 2, Tier 3b, SDK L1/L2, Silo
+This option would leave Tier 1, Tier 1b, Tier 2, Tier 3b, legacy numbered SDK labels, Silo
 layers, and roadmap stages as partially overlapping terms.
 
 - **Pro**: No migration cost for existing docs or code comments.
@@ -130,9 +130,10 @@ application tiers.
 - Existing code still exposes `CellManifest.tier` and `TIER_*` names that now
   conflict with product-facing app tiers.
 - Historical docs, research notes, changelog entries, and guide filenames still
-  contain `Tier 1b`, `Tier 3b`, and SDK L1/L2 language.
-- Future contributors may still confuse signature/admission state with Tier 2
-  until the code-level aliases make the distinction visible.
+  contain `Tier 1b`, `Tier 3b`, and legacy numbered-SDK language.
+- Future contributors may still confuse signature/admission state with Tier 2;
+  the shipped protection-class aliases make the distinction visible in new
+  code, while compatibility names remain available to older callers.
 
 ### Neutral
 

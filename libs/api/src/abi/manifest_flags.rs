@@ -1,7 +1,8 @@
-//! Constants for [`super::manifest::CellManifest`] — magic/version, isolation
-//! tiers, and capability flag bits.  Split out of `manifest.rs` to keep that file
-//! under the 200-LOC law; re-exported from `manifest.rs` so callers see one
-//! surface (`api::manifest::MANIFEST_FLAG_*` etc. keep working unchanged).
+//! Constants for [`super::manifest::CellManifest`] — magic/version, protection
+//! classes, legacy isolation-tier aliases, and capability flag bits. Split out
+//! of `manifest.rs` to keep that file under the 200-LOC law; re-exported from
+//! `manifest.rs` so callers see one surface
+//! (`api::manifest::MANIFEST_FLAG_*` etc. keep working unchanged).
 
 /// Magic value identifying a valid manifest (`0x5649_4345`, "VICE" as a u32).
 pub const MANIFEST_MAGIC: u32 = 0x5649_4345;
@@ -12,23 +13,32 @@ pub const MANIFEST_VERSION: u8 = 2;
 /// The v1 layout version (8-byte record).  Recognised by `from_bytes` for upcast.
 pub const MANIFEST_VERSION_V1: u8 = 1;
 
-// ─── Isolation tiers (x86 PKU protection domain request) ─────────────────────
-// A tier is a FLOOR request, the inverse of a capability: a higher number means
-// MORE isolation / LESS authority.  A cell may always raise its own tier
-// (self-restriction); it may NOT lower it below the floor the loader derives from
-// its capabilities (see `kernel/src/loader.rs`).  This is why declaring a tier is
-// safe without a ceiling check for the raise direction, and gated for the lower.
+// ─── Protection classes / legacy isolation-tier names ─────────────────────────
+// The on-disk byte is a FLOOR request for the x86 PKU protection domain: a
+// higher number means MORE isolation / LESS authority. A cell may always raise
+// its own class (self-restriction); it may NOT lower it below the floor the
+// loader derives from its capabilities (see `kernel/src/loader.rs`). This is why
+// declaring a class is safe without a ceiling check for the raise direction, and
+// gated for the lower.
 
 /// Trusted-core domain (PKU key 0 — no fencing).  Only reachable if the cell's
 /// caps already authorise it (the loader floors non-privileged cells above this).
 pub const TIER_TRUSTED_CORE: u8 = 0;
+/// Canonical alias for `TIER_TRUSTED_CORE`.
+pub const PROTECTION_CLASS_TRUSTED_CORE: u8 = TIER_TRUSTED_CORE;
 /// Standard Rust cell (PKU key 1).  The default authority floor for a plain cell.
 pub const TIER_STANDARD: u8 = 1;
+/// Canonical alias for `TIER_STANDARD`.
+pub const PROTECTION_CLASS_STANDARD: u8 = TIER_STANDARD;
 /// Tier-1b C/FFI cell (PKU key 2).  Fences untrusted FFI code from the cell's Rust
 /// data — the key the v1 `TODO(pku-ffi)` could not reach.
 pub const TIER_TIER1B_FFI: u8 = 2;
+/// Canonical alias for `TIER_TIER1B_FFI`.
+pub const PROTECTION_CLASS_FFI: u8 = TIER_TIER1B_FFI;
 /// Untrusted domain (maps to the most-isolated available key).
 pub const TIER_UNTRUSTED: u8 = 3;
+/// Canonical alias for `TIER_UNTRUSTED`.
+pub const PROTECTION_CLASS_UNTRUSTED: u8 = TIER_UNTRUSTED;
 /// Sentinel meaning "no explicit tier requested — apply the caller's floor
 /// policy (the legacy `is_trusted` heuristic)."  Set automatically on upcast from
 /// a v1 manifest (which had no tier field), AND baked in by the tier-less
@@ -36,6 +46,8 @@ pub const TIER_UNTRUSTED: u8 = 3;
 /// back-compat macro forms) into a native v2 record — so it is a valid value in
 /// BOTH v1-upcast and native-v2 manifests, never an error on its own.
 pub const TIER_LEGACY: u8 = 0xFF;
+/// Canonical alias for `TIER_LEGACY`.
+pub const PROTECTION_CLASS_LEGACY: u8 = TIER_LEGACY;
 
 // ─── Capability flags (u16 in v2; low 8 bits are bit-identical to v1) ─────────
 

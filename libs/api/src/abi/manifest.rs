@@ -1,17 +1,20 @@
 //! Cell capability manifest embedded in the `__ViCell_manifest` ELF section.
 //!
 //! A fixed **16-byte** `#[repr(C)]` record (v2) declaring which privileged
-//! capabilities a Cell requests, its isolation **tier**, and a reserved hook for
-//! future per-cell cap arguments.  The kernel reads it at spawn time (see
-//! `kernel/src/loader.rs::spawn_from_path`) to grant capability tokens, choose the
-//! x86 PKU protection domain, and reject user Cells that over-declare privilege.
+//! capabilities a Cell requests, its protection-class byte (kept in the
+//! ABI-stable `tier` field for compatibility), and a reserved hook for future
+//! per-cell cap arguments. The kernel reads it at spawn time (see
+//! `kernel/src/loader.rs::spawn_from_path`) to grant capability tokens, choose
+//! the x86 PKU protection domain, and reject user Cells that over-declare
+//! privilege.
 //!
 //! Binary layout (16 bytes, little-endian):
 //! ```text
 //!   offset  0–3 : magic        u32  = MANIFEST_MAGIC (0x5649_4345)
 //!   offset  4   : version      u8   = MANIFEST_VERSION (2)
-//!   offset  5   : tier         u8   = TIER_* (isolation floor request; TIER_LEGACY
-//!                                     on upcast from v1 → keep the is_trusted heuristic)
+//!   offset  5   : tier         u8   = PROTECTION_CLASS_* / TIER_* (protection-class
+//!                                     floor request; TIER_LEGACY on upcast from v1
+//!                                     → keep the is_trusted heuristic)
 //!   offset  6–7 : flags        u16  = bitwise-OR of MANIFEST_FLAG_*
 //!   offset  8–11: cap_args_off u32  = RESERVED (0) — future offset into a
 //!                                     __ViCell_cap_args section (do not repurpose)
@@ -21,17 +24,18 @@
 //! ## v1 compatibility
 //! v1 was an 8-byte record `{magic, version=1, flags:u8, _pad:[u8;2]}`.  A v2
 //! kernel reads a v1 manifest via `from_bytes` (zero-extends `flags`, sets
-//! `tier = TIER_LEGACY` so the loader keeps v1's `is_trusted`→PKU-key behaviour
-//! byte-for-byte).  A v1 kernel reading a v2 manifest sees `version != 1` and
-//! rejects it (fail-closed → legacy path grants).  `TIER_LEGACY` is ALSO a valid
-//! tier value in a native v2 record (not just a v1-upcast artifact) — it is what
-//! the tier-less constructors (`CellManifest::new`/`with_parts`) bake in by
-//! default, meaning "no explicit tier requested." ABI-stable — see Law 1.
+//! `tier = PROTECTION_CLASS_LEGACY` so the loader keeps v1's
+//! `is_trusted`→PKU-key behaviour byte-for-byte). A v1 kernel reading a v2
+//! manifest sees `version != 1` and rejects it (fail-closed → legacy path
+//! grants). `PROTECTION_CLASS_LEGACY` is ALSO a valid byte in a native v2 record
+//! (not just a v1-upcast artifact) — it is what the tier-less constructors
+//! (`CellManifest::new`/`with_parts`) bake in by default, meaning "no explicit
+//! protection class requested." ABI-stable — see Law 1.
 
 // Constants (magic/version, tiers, flag bits, mask) live in the sibling
 // `manifest_flags` module (Law 5: `foo.rs` parallel to `foo/`, keeps this file
-// under 200 LOC) and are re-exported here so `api::manifest::MANIFEST_FLAG_*` /
-// `TIER_*` keep resolving unchanged for every existing caller.
+// under 200 LOC) and are re-exported here so `api::manifest::MANIFEST_FLAG_*`,
+// `PROTECTION_CLASS_*`, and `TIER_*` keep resolving unchanged for every caller.
 pub use super::manifest_flags::*;
 
 /// Fixed-layout capability manifest (v2).  ABI-stable — see Law 1.
@@ -46,7 +50,8 @@ pub struct CellManifest {
     /// `MANIFEST_VERSION` (2) for a native v2 manifest; a v1 upcast keeps this at 2
     /// (the value in `tier` records that it came from v1).
     pub version: u8,
-    /// Isolation tier request (`TIER_*`); `TIER_LEGACY` when upcast from v1.
+    /// Protection-class request byte (`PROTECTION_CLASS_*` / `TIER_*`);
+    /// `PROTECTION_CLASS_LEGACY` when upcast from v1.
     pub tier: u8,
     /// Bitwise-OR of `MANIFEST_FLAG_*` constants (u16 in v2).
     pub flags: u16,
@@ -59,8 +64,9 @@ pub struct CellManifest {
 }
 
 impl CellManifest {
-    /// Construct a manifest from capability bits (tier defaults to `TIER_LEGACY`,
-    /// preserving v1's `is_trusted`→PKU-key behaviour for cells that do not opt in).
+    /// Construct a manifest from capability bits (`tier` defaults to
+    /// `PROTECTION_CLASS_LEGACY`, preserving v1's `is_trusted`→PKU-key
+    /// behaviour for cells that do not opt in).
     ///
     /// Evaluates at compile time; safe to use as a `static` initializer.
     pub const fn new(
@@ -117,7 +123,8 @@ impl CellManifest {
         )
     }
 
-    /// Full constructor — all flags + tier.  The macro is the public face.
+    /// Full constructor — all flags plus the raw `tier`/protection-class byte.
+    /// The macro is the public face.
     #[allow(clippy::too_many_arguments)]
     pub const fn with_all(
         block_io: bool,
@@ -207,7 +214,15 @@ impl CellManifest {
         self.flags & MANIFEST_FLAG_SPI != 0
     }
 
-    /// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from v1).
+    /// The declared protection class (`PROTECTION_CLASS_*`; legacy
+    /// compatibility aliases are `TIER_*`).
+    pub fn protection_class(&self) -> u8 {
+        self.tier
+    }
+
+    /// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from
+    /// v1). Compatibility accessor; returns the same byte as
+    /// [`Self::protection_class`].
     pub fn tier(&self) -> u8 {
         self.tier
     }

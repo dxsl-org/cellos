@@ -351,38 +351,50 @@ impl CapSet {
     }
 }
 
-/// Compute the granted x86 PKU isolation tier from the granted caps and the
-/// manifest's requested tier (Manifest v2). Pure logic, host/target-agnostic —
+/// Compute the granted x86 PKU protection class from the granted caps and the
+/// manifest's requested byte (Manifest v2). Pure logic, host/target-agnostic —
 /// extracted so it is unit-testable independent of the loader's spawn plumbing.
 ///
-/// `tier` is a FLOOR, not a ceiling — the inverse of a capability. A higher tier
-/// number means MORE isolation / LESS authority. A cell may always RAISE its own
-/// tier (self-restrict further); it may NEVER lower it below the floor derived
-/// from its granted caps (that would be a privilege escalation). Hence
-/// `max(requested_tier, floor)`, not a plain assignment.
+/// The requested byte is a FLOOR, not a ceiling — the inverse of a capability. A
+/// higher value means MORE isolation / LESS authority. A cell may always RAISE
+/// its own protection class (self-restrict further); it may NEVER lower it below
+/// the floor derived from its granted caps (that would be a privilege
+/// escalation). Hence `max(requested_protection_class, floor)`, not a plain
+/// assignment.
 ///
 /// `floor`: cells holding real system authority (block_io/network/spawn/
-/// hypervisor — the pre-v2 "is_trusted" set) may run at `TIER_TRUSTED_CORE` (0,
-/// unfenced). Everything else has a floor of `TIER_STANDARD` (1) — it can never
-/// claim tier 0 no matter what it asks for.
+/// hypervisor — the pre-v2 "is_trusted" set) may run at
+/// `PROTECTION_CLASS_TRUSTED_CORE` (0, unfenced). Everything else has a floor of
+/// `PROTECTION_CLASS_STANDARD` (1) — it can never claim class 0 no matter what
+/// it asks for.
 ///
-/// `TIER_LEGACY` (manifest absent, or a tier-less manifest) means "no explicit
-/// request" — the granted tier is exactly the floor, reproducing the pre-v2
-/// behaviour byte-for-byte (NOT `max(0xFF, floor)`, which would wrongly force
-/// every such cell to the most-isolated tier).
-pub fn granted_tier(granted: &CapSet, requested_tier: u8) -> u8 {
-    use api::manifest::{TIER_LEGACY, TIER_STANDARD, TIER_TRUSTED_CORE};
+/// `PROTECTION_CLASS_LEGACY` (manifest absent, or a tier-less manifest) means
+/// "no explicit request" — the granted class is exactly the floor,
+/// reproducing the pre-v2 behaviour byte-for-byte (NOT `max(0xFF, floor)`,
+/// which would wrongly force every such cell to the most-isolated class).
+pub fn granted_protection_class(granted: &CapSet, requested_protection_class: u8) -> u8 {
+    use api::manifest::{
+        PROTECTION_CLASS_LEGACY, PROTECTION_CLASS_STANDARD, PROTECTION_CLASS_TRUSTED_CORE,
+    };
     let is_trusted = granted.block_io || granted.network || granted.spawn || granted.hypervisor;
     let floor: u8 = if is_trusted {
-        TIER_TRUSTED_CORE
+        PROTECTION_CLASS_TRUSTED_CORE
     } else {
-        TIER_STANDARD
+        PROTECTION_CLASS_STANDARD
     };
-    if requested_tier == TIER_LEGACY {
+    if requested_protection_class == PROTECTION_CLASS_LEGACY {
         floor
     } else {
-        core::cmp::max(requested_tier, floor)
+        core::cmp::max(requested_protection_class, floor)
     }
+}
+
+/// Compatibility wrapper for callers still using the legacy "tier" terminology.
+#[deprecated(
+    note = "use granted_protection_class(); the manifest byte is now named protection class"
+)]
+pub fn granted_tier(granted: &CapSet, requested_tier: u8) -> u8 {
+    granted_protection_class(granted, requested_tier)
 }
 
 /// Who initiated a spawn — determines the capability ceiling for the new cell.
@@ -399,7 +411,7 @@ pub enum Spawner {
 
 #[cfg(test)]
 mod tests {
-    use super::CapSet;
+    use super::{granted_protection_class, CapSet};
 
     #[test]
     fn manifest_maps_i2c_and_spi_to_distinct_mmio_classes() {
@@ -518,6 +530,34 @@ mod tests {
         assert!(
             requested.intersect(CapSet::ALL).pcie_driver,
             "init's Root ceiling permits the real driver cell"
+        );
+    }
+
+    #[test]
+    fn granted_protection_class_matches_legacy_tier_semantics() {
+        let untrusted_caps = CapSet::EMPTY;
+        let trusted_caps = CapSet {
+            block_io: true,
+            ..CapSet::EMPTY
+        };
+        assert_eq!(
+            granted_protection_class(
+                &untrusted_caps,
+                api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+            ),
+            api::manifest::PROTECTION_CLASS_STANDARD
+        );
+        assert_eq!(
+            granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_TRUSTED_CORE),
+            api::manifest::PROTECTION_CLASS_TRUSTED_CORE
+        );
+        assert_eq!(
+            granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_UNTRUSTED),
+            api::manifest::PROTECTION_CLASS_UNTRUSTED
+        );
+        assert_eq!(
+            granted_protection_class(&trusted_caps, api::manifest::PROTECTION_CLASS_LEGACY),
+            api::manifest::PROTECTION_CLASS_TRUSTED_CORE
         );
     }
 }

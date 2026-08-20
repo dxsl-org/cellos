@@ -325,18 +325,21 @@ pub fn spawn_gated(
             }
 
             // x86_64 PKU: derive the protection-key domain from the granted caps
-            // AND the manifest's declared tier (Manifest v2). See
-            // `cap::granted_tier` for the floor-not-ceiling invariant this encodes.
-            // Tiers map 1:1 onto PKU keys 0-3 (TRUSTED_CORE=0 .. UNTRUSTED=3);
+            // AND the manifest's declared protection class (Manifest v2). See
+            // `cap::granted_protection_class` for the floor-not-ceiling invariant this encodes.
+            // Protection classes map 1:1 onto PKU keys 0-3 (TRUSTED_CORE=0 .. UNTRUSTED=3);
             // `pkru_for_key` handles any key in range generically.
             // On non-x86_64 targets these fields default to 0 and are never consulted.
             #[cfg(target_arch = "x86_64")]
             {
-                let requested_tier = manifest_opt
+                let requested_protection_class = manifest_opt
                     .as_ref()
-                    .map(|m| m.tier())
-                    .unwrap_or(api::manifest::TIER_LEGACY);
-                let key: u8 = crate::task::cap::granted_tier(&granted, requested_tier);
+                    .map(|m| m.protection_class())
+                    .unwrap_or(api::manifest::PROTECTION_CLASS_LEGACY);
+                let key: u8 = crate::task::cap::granted_protection_class(
+                    &granted,
+                    requested_protection_class,
+                );
                 task.pku_key = key;
                 task.pku_value = crate::hal::pku::pkru_for_key(key);
             }

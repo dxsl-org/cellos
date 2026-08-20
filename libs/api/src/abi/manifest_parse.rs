@@ -6,8 +6,8 @@
 
 use super::manifest::CellManifest;
 use super::manifest_flags::{
-    MANIFEST_FLAGS_MASK, MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1, TIER_LEGACY,
-    TIER_UNTRUSTED,
+    MANIFEST_FLAGS_MASK, MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1,
+    PROTECTION_CLASS_LEGACY, PROTECTION_CLASS_UNTRUSTED,
 };
 
 impl CellManifest {
@@ -39,7 +39,7 @@ impl CellManifest {
                 Some(Self {
                     magic,
                     version: MANIFEST_VERSION,
-                    tier: TIER_LEGACY, // → loader keeps the v1 is_trusted heuristic
+                    tier: PROTECTION_CLASS_LEGACY, // → loader keeps the v1 is_trusted heuristic
                     flags,
                     cap_args_off: 0,
                     reserved: 0,
@@ -51,12 +51,13 @@ impl CellManifest {
                     return None;
                 }
                 let tier = bytes[5];
-                // A real domain (0..=TIER_UNTRUSTED), OR the TIER_LEGACY sentinel —
+                // A real protection class (0..=PROTECTION_CLASS_UNTRUSTED), OR the
+                // LEGACY sentinel —
                 // which is valid here too: it is what `CellManifest::new`/`with_parts`
                 // (the tier-less constructors `declare_manifest!` uses by default)
                 // bake into a NATIVE v2 record, meaning "no explicit tier requested,
                 // apply the caller's floor policy." Anything else is malformed.
-                if tier > TIER_UNTRUSTED && tier != TIER_LEGACY {
+                if tier > PROTECTION_CLASS_UNTRUSTED && tier != PROTECTION_CLASS_LEGACY {
                     return None;
                 }
                 let flags = u16::from_le_bytes([bytes[6], bytes[7]]);

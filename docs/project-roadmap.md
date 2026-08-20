@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-20
+**Last updated**: 2026-08-21
 
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
@@ -52,7 +52,9 @@ Cellos is being shaped around product stages, not only phase numbers:
   and is not a current Cargo workspace member.
 - Application execution uses Tier 1/2/3 terminology. `Tier 1b` and `Tier 3b`
   are legacy guide aliases for Tier 1 runtime profiles and Tier 3 Linux guests;
-  SDK packaging uses named modules, not numbered tiers.
+  SDK packaging uses named modules, not numbered tiers. Manifest v2 exposes
+  canonical `PROTECTION_CLASS_*` aliases while retaining the ABI-stable `tier`
+  byte and legacy `TIER_*` names; Tier 2 native domains remain unimplemented.
 
 ## Immediate Open Gates
 

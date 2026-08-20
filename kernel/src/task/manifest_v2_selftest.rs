@@ -2,13 +2,14 @@
 //!
 //! Exercises the exact functions the loader runs on every spawn:
 //! `CellManifest::from_bytes` (v1-upcast and native-v2 parsing) and
-//! `cap::granted_tier` (the tier-floor invariant that drives x86 PKU key
+//! `cap::granted_protection_class` (the protection-class floor invariant that drives x86 PKU key
 //! selection). Pure logic, no scheduler — runs on all three arches.
 
-use super::cap::{granted_tier, CapSet};
+use super::cap::{granted_protection_class, CapSet};
 use api::manifest::{
     CellManifest, MANIFEST_FLAG_BLOCK_IO, MANIFEST_MAGIC, MANIFEST_VERSION, MANIFEST_VERSION_V1,
-    TIER_LEGACY, TIER_STANDARD, TIER_TIER1B_FFI, TIER_TRUSTED_CORE, TIER_UNTRUSTED,
+    PROTECTION_CLASS_FFI, PROTECTION_CLASS_LEGACY, PROTECTION_CLASS_STANDARD,
+    PROTECTION_CLASS_TRUSTED_CORE, PROTECTION_CLASS_UNTRUSTED,
 };
 
 fn v1_bytes(flags: u8) -> [u8; 8] {
@@ -39,36 +40,42 @@ fn v2_bytes(tier: u8, flags: u16) -> [u8; 16] {
     ]
 }
 
-/// Returns true iff manifest v1-upcast/v2-parse and the tier-floor invariant
+/// Returns true iff manifest v1-upcast/v2-parse and the protection-class floor invariant
 /// behave as specified.
 pub fn self_test() -> bool {
     let mut ok = true;
 
-    // ── v1 upcast: flags preserved, tier becomes the LEGACY sentinel ──────────
+    // ── v1 upcast: flags preserved, accessor sees the LEGACY sentinel ─────────
     {
         let bytes = v1_bytes(MANIFEST_FLAG_BLOCK_IO as u8);
         match CellManifest::from_bytes(&bytes) {
-            Some(m) if m.has_block_io() && m.tier() == TIER_LEGACY => {}
+            Some(m)
+                if m.has_block_io()
+                    && m.protection_class() == PROTECTION_CLASS_LEGACY
+                    && m.protection_class() == m.tier() => {}
             other => {
                 ok = false;
                 log::error!(
                     "[selftest] MANIFEST-V2: FAIL — v1 upcast: {:?}",
-                    other.map(|m| m.tier())
+                    other.map(|m| m.protection_class())
                 );
             }
         }
     }
 
-    // ── native v2: tier round-trips exactly ────────────────────────────────────
+    // ── native v2: protection class round-trips exactly ───────────────────────
     {
-        let bytes = v2_bytes(TIER_TIER1B_FFI, MANIFEST_FLAG_BLOCK_IO);
+        let bytes = v2_bytes(PROTECTION_CLASS_FFI, MANIFEST_FLAG_BLOCK_IO);
         match CellManifest::from_bytes(&bytes) {
-            Some(m) if m.has_block_io() && m.tier() == TIER_TIER1B_FFI => {}
+            Some(m)
+                if m.has_block_io()
+                    && m.protection_class() == PROTECTION_CLASS_FFI
+                    && m.protection_class() == m.tier() => {}
             other => {
                 ok = false;
                 log::error!(
                     "[selftest] MANIFEST-V2: FAIL — v2 native parse: {:?}",
-                    other.map(|m| m.tier())
+                    other.map(|m| m.protection_class())
                 );
             }
         }
@@ -76,12 +83,12 @@ pub fn self_test() -> bool {
 
     // ── malformed v2 rejected: bad tier, non-zero reserved ─────────────────────
     {
-        let bad_tier = v2_bytes(4, 0); // one past TIER_UNTRUSTED, not the LEGACY sentinel
+        let bad_tier = v2_bytes(4, 0); // one past PROTECTION_CLASS_UNTRUSTED, not the LEGACY sentinel
         if CellManifest::from_bytes(&bad_tier).is_some() {
             ok = false;
-            log::error!("[selftest] MANIFEST-V2: FAIL — out-of-range tier accepted");
+            log::error!("[selftest] MANIFEST-V2: FAIL — out-of-range protection class accepted");
         }
-        let mut bad_reserved = v2_bytes(TIER_STANDARD, 0);
+        let mut bad_reserved = v2_bytes(PROTECTION_CLASS_STANDARD, 0);
         bad_reserved[12] = 1; // reserved field non-zero
         if CellManifest::from_bytes(&bad_reserved).is_some() {
             ok = false;
@@ -89,8 +96,8 @@ pub fn self_test() -> bool {
         }
     }
 
-    // ── tier-floor invariant: a cell cannot claim a lower tier than its caps
-    //    justify; it CAN self-restrict to a higher one; LEGACY = floor as-is ────
+    // ── floor invariant: a cell cannot claim a lower protection class than its
+    //    caps justify; it CAN self-restrict to a higher one; LEGACY = floor ────
     {
         let untrusted_caps = CapSet::EMPTY; // no block_io/network/spawn/hypervisor
         let trusted_caps = CapSet {
@@ -98,34 +105,44 @@ pub fn self_test() -> bool {
             ..CapSet::EMPTY
         };
 
-        // Untrusted caps requesting tier 0 (trusted-core) → floored to STANDARD.
-        if granted_tier(&untrusted_caps, TIER_TRUSTED_CORE) != TIER_STANDARD {
+        // Untrusted caps requesting class 0 (trusted-core) → floored to STANDARD.
+        if granted_protection_class(&untrusted_caps, PROTECTION_CLASS_TRUSTED_CORE)
+            != PROTECTION_CLASS_STANDARD
+        {
             ok = false;
-            log::error!("[selftest] MANIFEST-V2: FAIL — untrusted cell claimed tier 0 (privilege escalation)");
+            log::error!("[selftest] MANIFEST-V2: FAIL — untrusted cell claimed protection class 0 (privilege escalation)");
         }
-        // Trusted caps requesting tier 0 → granted (floor permits it).
-        if granted_tier(&trusted_caps, TIER_TRUSTED_CORE) != TIER_TRUSTED_CORE {
+        // Trusted caps requesting class 0 → granted (floor permits it).
+        if granted_protection_class(&trusted_caps, PROTECTION_CLASS_TRUSTED_CORE)
+            != PROTECTION_CLASS_TRUSTED_CORE
+        {
             ok = false;
-            log::error!("[selftest] MANIFEST-V2: FAIL — trusted cell denied its justified tier 0");
+            log::error!("[selftest] MANIFEST-V2: FAIL — trusted cell denied its justified protection class 0");
         }
-        // Trusted caps self-restricting to UNTRUSTED (3) → always allowed (raise is free).
-        if granted_tier(&trusted_caps, TIER_UNTRUSTED) != TIER_UNTRUSTED {
+        // Trusted caps self-restricting to UNTRUSTED (3) → always allowed.
+        if granted_protection_class(&trusted_caps, PROTECTION_CLASS_UNTRUSTED)
+            != PROTECTION_CLASS_UNTRUSTED
+        {
             ok = false;
             log::error!(
-                "[selftest] MANIFEST-V2: FAIL — self-restriction to a higher tier was denied"
+                "[selftest] MANIFEST-V2: FAIL — self-restriction to a higher protection class was denied"
             );
         }
         // LEGACY (no explicit request) → exactly the floor, both directions.
-        if granted_tier(&untrusted_caps, TIER_LEGACY) != TIER_STANDARD
-            || granted_tier(&trusted_caps, TIER_LEGACY) != TIER_TRUSTED_CORE
+        if granted_protection_class(&untrusted_caps, PROTECTION_CLASS_LEGACY)
+            != PROTECTION_CLASS_STANDARD
+            || granted_protection_class(&trusted_caps, PROTECTION_CLASS_LEGACY)
+                != PROTECTION_CLASS_TRUSTED_CORE
         {
             ok = false;
-            log::error!("[selftest] MANIFEST-V2: FAIL — TIER_LEGACY did not resolve to the floor");
+            log::error!("[selftest] MANIFEST-V2: FAIL — PROTECTION_CLASS_LEGACY did not resolve to the floor");
         }
     }
 
     if ok {
-        log::info!("[selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + tier-floor invariant)");
+        log::info!(
+            "[selftest] MANIFEST-V2: PASS (v1 upcast + v2 parse + protection-class floor invariant)"
+        );
     } else {
         log::error!("[selftest] MANIFEST-V2: FAIL");
     }

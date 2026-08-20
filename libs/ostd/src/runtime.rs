@@ -282,9 +282,10 @@ macro_rules! app_entry {
                 .run($handler);
         }
     };
-    // Full explicit 3-cap form + explicit tier (Manifest v2 opt-in) — e.g. a
-    // Tier-1b C/FFI cell requesting `tier = api::manifest::TIER_TIER1B_FFI` for
-    // PKU key 2. Additive: every pre-existing form keeps the default TIER_LEGACY.
+    // Full explicit 3-cap form + explicit protection class (Manifest v2 opt-in)
+    // — e.g. an FFI cell requesting
+    // `tier = api::manifest::PROTECTION_CLASS_FFI` for PKU key 2. Additive:
+    // every pre-existing form keeps the default PROTECTION_CLASS_LEGACY.
     (
         block_io = $bio:literal,
         network  = $net:literal,
