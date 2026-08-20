@@ -133,3 +133,20 @@ fn typed_payload_codecs_preserve_canonical_bytes() {
         Some(rotate)
     );
 }
+
+#[test]
+fn status_payload_rejects_noncanonical_alignment_bytes() {
+    let status = NodeIdentityStatusPayload {
+        state: NodeIdentityState::ProviderUnavailable,
+        provider: KmsProviderKind::None,
+        remote_allowed: 0,
+        reserved: 0,
+        binding_epoch: BindingEpoch(1),
+        blob_revision: 0,
+        policy_epoch: 0,
+        public_key: [0; 32],
+    };
+    let mut encoded = status.encode();
+    encoded[4] = 1;
+    assert_eq!(NodeIdentityStatusPayload::decode(&encoded), None);
+}

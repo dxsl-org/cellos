@@ -64,7 +64,7 @@ impl NodeIdentityStatusPayload {
     }
 
     pub fn decode(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() != Self::LEN || !matches!(bytes[2], 0 | 1) || bytes[3] != 0 {
+        if bytes.len() != Self::LEN || !matches!(bytes[2], 0 | 1) || bytes[3..8] != [0; 5] {
             return None;
         }
         Some(Self {
