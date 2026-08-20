@@ -1,6 +1,6 @@
 # Product Stages
 
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-20
 
 ## G1 - Robot & Embedded
 
@@ -32,6 +32,10 @@ Current posture:
 Parked until hardware exists and the team has vendor API experience. The
 contract for accelerators must be hardware-informed; avoid over-specifying
 `ViAccelerator` before RKNN/Hailo/K230/P870-class evidence exists.
+
+The first evidence target is RK3588/RKNN; X390 remains the second implementation
+after usable silicon and software are available. The maintained readiness and
+license gates are in [G3 Accelerator Evidence Envelope](../research/g3-accelerator-evidence.md).
 
 ## G4 - Full Rust std for Tier 1 Cells
 

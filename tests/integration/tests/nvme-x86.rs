@@ -20,6 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use vicell_integration_tests::{qemu_x86_binary, QemuRunner};
 
 const BOOT_TIMEOUT: u64 = 45;
+const CMD_TIMEOUT: u64 = 15;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -52,6 +53,15 @@ fn prerequisites_ok() -> bool {
         eprintln!("SKIP nvme-x86: qemu-system-x86_64 not on PATH");
     }
     vicell_integration_tests::ci_guard(iso_ok && qemu_ok)
+}
+
+fn python_binary() -> Option<&'static str> {
+    ["python", "python3"].into_iter().find(|binary| {
+        std::process::Command::new(binary)
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| output.status.success())
+    })
 }
 
 fn make_nvme_disk() -> PathBuf {
@@ -113,15 +123,10 @@ fn nvme_driver_cell_registers_x86() {
 #[test]
 fn nvme_fat32_mount_x86() {
     if !prerequisites_ok() { return; }
-    let python_ok = std::process::Command::new("python")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !python_ok {
-        eprintln!("SKIP nvme_fat32_mount_x86: python not on PATH (needed for mkfat32_inplace.py)");
+    let Some(python) = python_binary() else {
+        eprintln!("SKIP nvme_fat32_mount_x86: Python 3 not on PATH (needed for mkfat32_inplace.py)");
         return;
-    }
+    };
 
     // 1. Format a 524,288-sector (256 MiB) FAT32 volume in a temp file.
     const FAT_SECTORS: u64 = 524_288; // == api::disk::PART_FAT32_SECTORS
@@ -138,7 +143,7 @@ fn nvme_fat32_mount_x86() {
         f.set_len(FAT_SECTORS * 512).expect("size FAT32 scratch image");
     }
     let mkfat = repo_root().join("tools/mkfat32_inplace.py");
-    let status = std::process::Command::new("python")
+    let status = std::process::Command::new(python)
         .arg(&mkfat)
         .arg(&fat_img)
         .arg(FAT_SECTORS.to_string())
@@ -162,7 +167,7 @@ fn nvme_fat32_mount_x86() {
     let _ = std::fs::remove_file(&fat_img);
 
     // 3. Boot and assert the mount marker.
-    let qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
+    let mut qemu = QemuRunner::boot_x86_bios_with_nic(&iso_path(), &disk.to_string_lossy());
     qemu.wait_for("[vfs] FAT32 /mnt/sd volume mounted", BOOT_TIMEOUT)
         .unwrap_or_else(|e| {
             let _ = std::fs::remove_file(&disk);
@@ -174,6 +179,19 @@ fn nvme_fat32_mount_x86() {
                 qemu.dump()
             )
         });
+
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached after NVMe mount: {e}\n{}", qemu.dump()));
+
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("vwrite /mnt/sd/probe.txt phase05-nvme-ok");
+    qemu.wait_for_after("Cellos >", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("NVMe write command did not complete: {e}\n{}", qemu.dump()));
+
+    let checkpoint = qemu.output_checkpoint();
+    qemu.send_line("vcat /mnt/sd/probe.txt");
+    qemu.wait_for_after("phase05-nvme-ok", checkpoint, CMD_TIMEOUT)
+        .unwrap_or_else(|e| panic!("NVMe read-back marker missing: {e}\n{}", qemu.dump()));
 
     let _ = std::fs::remove_file(&disk);
 }

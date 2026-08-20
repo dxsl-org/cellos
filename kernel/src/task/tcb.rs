@@ -240,11 +240,10 @@ pub struct Task {
     /// Granted by path match `/bin/platform` in loader.rs; at most one holder ever.
     pub platform_cap: Option<super::cap::PlatformCap>,
 
-    /// MMIO device-class capability bitmask (`DEV_GPIO` / `DEV_UART` from
-    /// [`crate::resource_registry`]). Set from the ELF manifest's `gpio`/`uart`
-    /// flags. A cell may `sys_request_mmio` only ranges whose device class is
-    /// present here — a GPIO-only cell cannot claim the UART window (this is the
-    /// parameterized form of the old `mmio_cap: bool`). `0` = no MMIO access.
+    /// MMIO device-class capability bitmask (`DEV_*` from
+    /// [`crate::resource_registry`]). Set from the ELF manifest's hardware flags.
+    /// A cell may `sys_request_mmio` only ranges whose matching device class is
+    /// present here. `0` = no MMIO access.
     pub mmio_devices: u8,
 
     /// Block-I/O partition range grants (Milestone 2.5 P03) — bitmask:

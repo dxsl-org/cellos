@@ -16,6 +16,7 @@ hal-uart     = { path = "../../../hal/traits/uart", version = "0.1.0" }
 [[bin]]
 name = "periph-test"
 path = "src/main.rs"
+test = false
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

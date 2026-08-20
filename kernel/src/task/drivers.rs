@@ -14,6 +14,8 @@ pub mod virtio_hal;
 pub mod uart;
 
 // Drivers
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+mod bcm_pinmux;
 pub mod block;
 pub mod console_drv;
 #[cfg(target_arch = "riscv64")]
@@ -35,7 +37,7 @@ pub mod nic;
 pub mod pcie_ecam; // PCIe ECAM config-space walker (bus 0)
 pub mod virtio_rng; // NIC selector (VirtIO; PCIe NICs are Driver Cells)
                     // virtio_pci deleted (G2 loader redesign phase 06) — x86 block is the NVMe Driver Cell.
-pub mod driver_cell; // Driver Cell registration statics (BLOCK_DRIVER_CELL / NIC_DRIVER_CELL)
+pub mod driver_cell; // Driver Cell role registration and lifecycle teardown.
 pub mod irq_wait; // IRQ wait/pending tables for Driver Cell sys_wait_irq
                   // blk_nvme and nic_e1000 have been migrated to Driver Cells:
                   //   cells/drivers/nvme/   ← NVMe PCIe block driver
@@ -64,6 +66,8 @@ pub fn init() {
     #[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
     {
         let board = crate::board::active();
+        #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+        bcm_pinmux::apply(hal_soc_bcm27xx::BCM2837.mmio.gpio_base, board.wiring);
         if board.has_driver(cellos_boards::DriverId::SdhciArasan)
             || board.has_driver(cellos_boards::DriverId::SdhciDwCqe)
         {

@@ -24,6 +24,8 @@ pub mod manifest;
 pub mod manifest_flags;
 pub mod manifest_macro;
 pub mod manifest_parse;
+#[cfg(test)]
+mod manifest_tests;
 pub mod syscall;
 pub mod syscall_tests;
 pub mod task;

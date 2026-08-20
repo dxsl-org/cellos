@@ -3,12 +3,12 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-20
 
-This file is now the roadmap entrypoint. The previous all-in-one roadmap is
+This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
-[project-roadmap-legacy.md](project-roadmap-legacy.md). Use it
-only when a historical decision is not represented by the current topic pages.
+[project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
+historical decision is not represented by the current topic pages.
 
 ## How to Read the Roadmap
 
@@ -58,9 +58,11 @@ Cellos is being shaped around product stages, not only phase numbers:
 
 - Production signing is not fleet-enforced by default: `signing-required` is
   non-default and the non-dev public key path is still a `[0u8; 32]` placeholder.
-- Physical hardware evidence must remain separate from QEMU/compile evidence.
-  RPi3 smoke has been merged, but VF2/Pioneer/RPi4 physical lanes are still
-  hardware-gated unless logs say otherwise.
+- Physical hardware evidence remains separate from QEMU/compile evidence. RPi3
+  boot/storage/UART and BCM GPIO/I2C/SPI gates pass; VF2, Pioneer, RPi4, and
+  physical x86 remain hardware-gated.
+- The q35 Phase 05 PCIe/NVMe/e1000/VT-d lane passes in QEMU only. PCIe buses
+  above bus 0, real NIC Tx/Rx/DHCP, and the BAR unit-test harness remain open.
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
 - Net-broker has implemented pieces for Noise/identity/routing, but `main.rs`

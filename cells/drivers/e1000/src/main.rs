@@ -44,12 +44,22 @@ static STATE: Mutex<Option<NicState>> = Mutex::new(None);
 fn handler(_ctx: &mut AppContext, event: AppEvent) {
     match event {
         AppEvent::Init => {
-            // 1. Discover the e1000 via the kernel ECAM table.
+            // 1. Discover the e1000 via the kernel ECAM table. Match NVMe's
+            // bounded retry window so Platform registration races fail closed
+            // as "not present" instead of a false permanent absence.
             let mut info = PcieDeviceInfo::zeroed();
-            let Ok(true) = sys_find_pcie_device(ETH_CLASS, ETH_SUB, ETH_PROGIF, &mut info) else {
+            let mut found = false;
+            for _ in 0..200 {
+                if let Ok(true) = sys_find_pcie_device(ETH_CLASS, ETH_SUB, ETH_PROGIF, &mut info) {
+                    found = true;
+                    break;
+                }
+                ostd::task::yield_now();
+            }
+            if !found {
                 // No e1000 on this platform — exit gracefully; kernel NIC remains.
                 ostd::syscall::sys_exit(0);
-            };
+            }
 
             let bar0_base = info.bar0_base as usize;
             let bdf = info.bdf;

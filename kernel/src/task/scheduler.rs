@@ -571,11 +571,10 @@ impl Scheduler {
         // Locks only REGISTRY (a leaf), safe under the SCHEDULER lock.
         crate::cell::service_registry::clear_tid(tid);
 
-        // Input-service registration cleanup: prevent the kernel poll path from pushing
-        // events to a dead/reused TID. Supervisor re-registers after respawn.
-        crate::task::drivers::driver_cell::clear_input_cell_if(tid);
-        crate::task::drivers::driver_cell::deregister_block_driver(tid);
-        crate::task::drivers::driver_cell::deregister_nic_driver(tid);
+        // Driver-role cleanup: prevent service lookups, IRQ cache hits, or the input
+        // poll path from targeting a dead or recycled TID. The supervisor re-registers
+        // replacements.
+        crate::task::drivers::driver_cell::deregister_all_for(tid);
 
         // Remove from every hart's ready queue if present.
         super::hart_local::ready::remove_from_all(tid);

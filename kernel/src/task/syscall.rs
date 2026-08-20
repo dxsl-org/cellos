@@ -3861,9 +3861,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if is_crit {
                 return Err(SyscallError::PermissionDenied);
             }
-            // Deregister driver statics if this cell is a registered driver.
-            crate::task::drivers::driver_cell::deregister_block_driver(target_tid);
-            crate::task::drivers::driver_cell::deregister_nic_driver(target_tid);
             crate::cell::hotswap::exit_task_internal(target_tid, cell_id);
             Ok(exit_code as usize)
         }
@@ -4544,7 +4541,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     user_map(base, len);
                     Ok(0)
                 }
-                Err(types::ViError::PermissionDenied) => Ok(1),
+                Err(types::ViError::PermissionDenied) => {
+                    log::warn!(
+                        "[mmio] DENY caller={} base={:#x} len={:#x} allowed_devices={:#04x}",
+                        caller_id,
+                        base,
+                        len,
+                        allowed_devices
+                    );
+                    Ok(1)
+                }
                 Err(types::ViError::AlreadyExists) => Ok(2),
                 Err(_) => Ok(3),
             }

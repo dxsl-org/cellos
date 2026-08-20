@@ -13,6 +13,9 @@ set -euo pipefail
 KERNEL="${1:-target/aarch64-unknown-none-softfloat/release/cellos-kernel}"
 DISK="${2:-disk_arm_virt.img}"
 BOOT_WINDOW="${BOOT_WINDOW:-55}"
+ASSERT_PHASE04_BASELINE="${ASSERT_PHASE04_BASELINE:-0}"
+OMIT_OPTIONAL_DEVICES="${OMIT_OPTIONAL_DEVICES:-0}"
+MARKER_HELPER="$(dirname "$0")/assert-boot-markers.sh"
 
 if ! command -v qemu-system-aarch64 &>/dev/null; then
     echo "FAIL: qemu-system-aarch64 not found on PATH" >&2
@@ -41,10 +44,16 @@ QEMU_ARGS=(
     -kernel "$KERNEL"
     -drive "if=none,file=$DISK,format=raw,id=hd0"
     -device virtio-blk-device,drive=hd0
-    -netdev user,id=net0
-    -device virtio-net-device,netdev=net0
+    -device virtio-keyboard-device
     -no-reboot
 )
+if [[ "$OMIT_OPTIONAL_DEVICES" != "1" ]]; then
+    QEMU_ARGS+=(
+        -netdev user,id=net0
+        -device virtio-net-device,netdev=net0
+        -device virtio-gpu-device
+    )
+fi
 # Add VirtIO RNG only when /dev/random is available (Linux CI).
 # On Windows QEMU 10, rng-random is invalid; skip it — boot tests don't need RNG.
 if [[ -c /dev/random ]]; then
@@ -64,6 +73,16 @@ if grep -qia "KERNEL PANIC\|\[fault\] Cell" qemu-aarch64.log; then
 fi
 
 if grep -q "Cellos >" qemu-aarch64.log; then
+    if [[ "$ASSERT_PHASE04_BASELINE" == "1" ]]; then
+        REQUIRED_MARKERS=(
+            "block registration:::[driver_cell] block driver registered" \
+            "input registration:::[input] registered input service TID"
+        )
+        if [[ "$OMIT_OPTIONAL_DEVICES" != "1" ]]; then
+            REQUIRED_MARKERS+=("gpu readiness:::VirtIO GPU Driver Cell registered")
+        fi
+        bash "$MARKER_HELPER" qemu-aarch64.log "aarch64-qemu" "${REQUIRED_MARKERS[@]}"
+    fi
     echo "PASS: aarch64 shell prompt reached — full boot successful"
     exit 0
 fi

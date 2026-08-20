@@ -3,17 +3,19 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-20 (application tier taxonomy normalized; HAL/SoC/board hardware gates unchanged)
+**Last Updated**: 2026-08-20 (application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
-> **Status refresh 2026-08-18**: the HAL split covers all seven current
+> **Status refresh 2026-08-20**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
 > `hal/soc/{riscv,arm-virt,bcm27xx,x86}` owns immutable platform facts; `hal/arch`
 > and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
-> pass; QEMU q35 x86_64 is the current x86 integration board. RPi3 has merged
-> physical smoke and external-SD boot evidence; VF2, Pioneer, and RPi4 remain
-> physical-hardware-gated.
+> pass; QEMU q35 x86_64 is the current x86 integration board, and the Phase 05
+> PCIe lane passes in QEMU only with bus 0 ECAM, bounded BAR registration, and
+> q35-gated VT-d before DMA-capable cells. RPi3 has merged physical smoke,
+> external-SD, and BCM GPIO/I2C/SPI evidence; VF2, Pioneer, RPi4, and physical
+> x86 remain hardware-gated.
 
 > **Status refresh 2026-08-19**: HAL↔kernel Rust ABI hooks are now single-sourced
 > in `hal/traits/arch/src/kernel_abi.rs`; HAL arch crates import the shared
@@ -100,10 +102,27 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
   disjoint GPIO/UART/SDHCI pages to cells and keeps GIC mappings kernel-only.
   PCIe is intentionally absent from its enabled-driver list until a BCM2711
   host-controller path is implemented.
+- BCM2837 BSC1 and SPI0 use shared Driver Cell crates with distinct manifest,
+  policy, and MMIO device classes. The RPi3 descriptor selects their pinmux and
+  exact 4-KiB controller windows; GPIO authority cannot claim either window.
+  The current RPi3 head now passes the wired physical I2C/SPI run, while the
+  separate Phase 04 RPi3 boot/storage/input baseline passes TFTP, SDHCI/mount,
+  shell, interactive help, and a lossless 100-command UART burst. DesignWare
+  controllers stay conditional on verified compatible/controller evidence.
+- Phase 04 boot evidence uses freshly packaged RV64/AArch64 images and asserts
+  separate block, input, GPU, and shell markers. Both QEMU architectures also
+  reach the shell with optional GPU/NIC devices omitted. This proves VirtIO
+  fallback behavior separately; the matching RPi3 SDHCI and UART/input physical
+  gates now pass on the current head.
 - `hal/soc/x86` owns static PC-compatible COM1/ISA wiring and bounded legacy
   BIOS/RSDP windows. The kernel selects that profile before early serial output;
   validated ACPI remains the only source for LAPIC, IOAPIC, HPET, and PCIe ECAM
   addresses, so every downstream timer/interrupt/PCIe gate still fails closed.
+  The Phase 05 q35 flow scans PCIe ECAM on bus 0, registers BAR windows through
+  the resource registry, and keeps VT-d board-gated at the q35 fixed base before
+  any DMA-capable Driver Cell starts. That evidence is QEMU-only; physical x86
+  remains gated, bus > 0 is not yet validated, and real NIC Tx/Rx/DHCP is not
+  proven.
 - The shared SDHCI controller receives an immutable runtime access policy;
   BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
   access do not create per-board driver implementations.
