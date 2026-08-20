@@ -2,7 +2,6 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-<<<<<<< HEAD
 ## [2026-08-19] Application tier taxonomy is standardized
 
 Application documentation now reserves Tier 1/2/3 for execution and isolation
@@ -38,7 +37,7 @@ assertion, and `scripts/check-hal-boundaries.sh` now fails any new local HAL
 `cargo check -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc`,
 `bash scripts/check-hal-boundaries.sh`, and `git diff --check`. No public ABI
 changed and no physical-RPi3 claim was added.
-=======
+
 ## [2026-08-20] Phase 05 q35 PCIe storage and network tightens the x86 lane
 
 The current QEMU q35 x86_64 lane now scans PCIe ECAM on bus 0, registers
@@ -55,7 +54,6 @@ tooling after script portability fixes.
 This lane is still QEMU-only. Physical x86 remains gated, bus 0 is the only
 validated enumeration path, real NIC Tx/Rx/DHCP are not proven, and the BAR
 kernel unit-harness gap stays deferred.
->>>>>>> 47fc639b (fix(x86): close phase05 q35 driver gates)
 
 ## [2026-08-20] Phase 03 BCM/RPi3 hardware lane closes
 
