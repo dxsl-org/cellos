@@ -1,6 +1,7 @@
-# Tier 1 Extended — Hardware Isolation via Silo
+# Tier 1 Silo API — Hardware-Backed Key Isolation
 
-> Cryptographic keys and security-sensitive operations in an isolated security domain.
+> Cryptographic keys and security-sensitive operations through a Tier 1 API
+> backed by a hardware fence. Silo is not an application execution tier.
 
 ---
 
@@ -129,25 +130,25 @@ use p256::ecdsa::signature::hazmat::PrehashVerifier;
 
 fn sign_and_verify() -> Result<(), Box<dyn core::fmt::Debug>> {
     let mut handle = ostd::silo::SiloHandle::connect()?;
-    
+
     // Initialize with a deterministic seed
     let seed = [0x99u8; 32];
     let pub_key = handle.init_key(&seed)?;
-    
+
     // Create message digest
     let mut hasher = Sha256::new();
     hasher.update(b"Important transaction");
     let digest: [u8; 32] = hasher.finalize().into();
-    
+
     // Sign in Silo
     let sig = handle.sign(&digest)?;
-    
+
     // Verify locally using p256 crate
     let sig_slice = &sig.bytes[..sig.len as usize];
     let der_sig = DerSignature::try_from(sig_slice)?;
     let vk = VerifyingKey::from_sec1_bytes(&pub_key)?;
     vk.verify_prehash(&digest, &der_sig)?;
-    
+
     println("Signature verified!");
     Ok(())
 }
@@ -162,22 +163,22 @@ use p256::{SecretKey, EncodedPoint};
 
 fn ecdh_derive() -> Result<(), Box<dyn core::fmt::Debug>> {
     let mut handle = ostd::silo::SiloHandle::connect()?;
-    
+
     // Server (Silo) generates long-term key
     let server_seed = [0xAAu8; 32];
     let server_pub = handle.init_key(&server_seed)?;
-    
+
     // Client generates ephemeral key
     let client_secret = SecretKey::random(&mut rand::thread_rng());
     let client_pub_point = client_secret.public_key().to_encoded_point(false);
     let client_pub_bytes: [u8; 65] = client_pub_point
         .as_bytes()
         .try_into()?;
-    
+
     // Server (in Silo) performs ECDH
     let shared_secret = handle.ecdh(&client_pub_bytes)?;
     // shared_secret is now a 32-byte session key
-    
+
     println("Derived {} bytes", shared_secret.len());
     Ok(())
 }
@@ -215,22 +216,23 @@ fn ecdh_derive() -> Result<(), Box<dyn core::fmt::Debug>> {
 
 ---
 
-## When to Use Tier 1 Extended (Silo)
+## When to Use Tier 1 Silo API
 
-✅ Storing private keys (long-term or session)  
-✅ ECDSA signing (blockchain, auth, etc.)  
-✅ ECDH key exchange (TLS, protocols)  
-✅ Fault isolation (untrusted guest code)  
+✅ Storing private keys (long-term or session)
+✅ ECDSA signing (blockchain, auth, etc.)
+✅ ECDH key exchange (TLS, protocols)
+✅ Containing faults inside the dedicated key-isolation backend
 
-❌ General-purpose apps → use Tier 1 Rust + SDK L1  
-❌ Network I/O in Silo → not supported (isolated)  
-❌ RISC-V → use Tier 1 Rust locally  
+❌ General-purpose apps → use Tier 1 Rust + SDK service clients
+❌ Untrusted application code → use Tier 3 today; Tier 2 once native domains exist
+❌ Network I/O in Silo → not supported (isolated)
+❌ RISC-V → use Tier 1 Rust locally
 
 ---
 
 ## Canonical Example
 
-See [cells/apps/silo-test/src/main.rs](../../cells/apps/silo-test/src/main.rs) — comprehensive test suite covering:
+See [cells/tests/silo-test/src/main.rs](../../cells/tests/silo-test/src/main.rs) — comprehensive test suite covering:
 - T1: Service discovery
 - T2: Key init + public key export
 - T3: Sign and verify (p256 crate)
@@ -263,19 +265,19 @@ Output:
 
 ## Troubleshooting
 
-**SiloError::ServiceNotFound?**  
+**SiloError::ServiceNotFound?**
 → Silo not available: running on RISC-V, single-cell boot, or VM not launched. Use Tier 1 Rust locally.
 
-**GuestFault on init_key?**  
+**GuestFault on init_key?**
 → Seed data corrupted or invalid. Try a different seed.
 
-**Signature verification fails?**  
+**Signature verification fails?**
 → Check that the digest is exactly 32 bytes (SHA-256) and DER-decoded correctly.
 
 ---
 
 ## Next Steps
 
-- See [system-architecture.md](../system-architecture.md) § Tier 3 (hypervisor) for internal Silo design.
-- For TLS, see [project-tls-plan.md](../project-tls-plan.md).
+- See **Hardware Key Isolation (Silo)** in the [system architecture](../system-architecture.md) for implementation status.
+- For TLS placement and trust boundaries, see the [security model](../security-model.md).
 - For cryptographic libraries: `p256`, `sha2`, `aes-gcm` all work in Rust Cells.

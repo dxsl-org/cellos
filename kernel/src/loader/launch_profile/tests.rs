@@ -56,6 +56,28 @@ fn shell_service_ipc_tool_edge_is_capability_free() {
 }
 
 #[test]
+fn hardware_bus_demo_edges_are_class_scoped() {
+    let sensor = shell_edge(LaunchRoute::Path, "/bin/sensor-demo");
+    let spi = shell_edge(LaunchRoute::Path, "/bin/spi-demo");
+    assert_eq!(
+        sensor.parent_ceiling.mmio_devices,
+        crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_I2C
+    );
+    assert_eq!(
+        spi.parent_ceiling.mmio_devices,
+        crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_SPI
+    );
+    assert_eq!(
+        sensor.parent_ceiling.mmio_devices & crate::resource_registry::DEV_SPI,
+        0
+    );
+    assert_eq!(
+        spi.parent_ceiling.mmio_devices & crate::resource_registry::DEV_I2C,
+        0
+    );
+}
+
+#[test]
 fn hotswap_cli_is_shell_only() {
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
         assert!(

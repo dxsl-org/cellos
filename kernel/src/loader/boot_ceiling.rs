@@ -21,7 +21,7 @@
 //! path-triggered caps `CapSet::with_path_caps` layers on. A row is therefore
 //! the *expected* authority of that binary, not a guess.
 
-use crate::resource_registry::{DEV_GPIO, DEV_UART};
+use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
 use crate::task::cap::CapSet;
 
 mod selftest;
@@ -41,6 +41,7 @@ const VFS_REGIONS: u8 = 0b1111;
 
 /// The two console peripherals that path-triggered demo rows may request.
 const CONSOLE_MMIO: u8 = DEV_GPIO | DEV_UART;
+const ROOT_MMIO: u8 = CONSOLE_MMIO | DEV_I2C | DEV_SPI;
 
 /// The expected ceiling for `path`, or `None` when `path` is not a boot cell.
 ///
@@ -62,7 +63,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             network: true,              // delegated to /bin/net, /bin/net-broker
             spawn: true,                // delegated to /bin/shell, /bin/supervisor
             hypervisor: true,           // delegated to /bin/silo, /bin/hypervisor
-            mmio_devices: CONSOLE_MMIO, // delegated to /bin/shell
+            mmio_devices: ROOT_MMIO,    // delegated through reviewed launch profiles
             block_regions: VFS_REGIONS, // delegated to /bin/vfs
             pcie_driver: true,          // delegated to the block/NIC/GPU/input drivers
             platform: false,

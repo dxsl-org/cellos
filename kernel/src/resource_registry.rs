@@ -4,7 +4,7 @@
 //! The kernel checks here before handing an `MmioRegion` to the Cell:
 //!
 //! 1. **Allowlist**: the requested range must fall within a known-safe
-//!    device window for the current QEMU target.  Unknown ranges are rejected
+//!    device window for the active target. Unknown ranges are rejected
 //!    so a misbehaving Cell cannot map arbitrary kernel memory as MMIO.
 //!
 //! 2. **Exclusive ownership**: at most one Cell may hold a given MMIO range.
@@ -14,13 +14,14 @@
 //!    a Cell.  Call this from every Cell-exit path alongside
 //!    `cell_quota::deregister`.
 //!
-//! # v1 scope
-//! Allowlist is hardcoded per QEMU target (DTB discovery deferred to v2).
+//! # Current scope
+//! Allowlist is hardcoded per target (DTB discovery remains deferred).
 //!
 //! | Target | Device | Base | Size |
 //! |--------|--------|------|------|
 //! | QEMU ARM virt (aarch64) | PL011 UART0 | 0x0900_0000 | 0x1000 |
 //! | QEMU ARM virt (aarch64) | PL061 GPIO  | 0x0903_0000 | 0x1000 |
+//! | Raspberry Pi 3 | BCM2837 GPIO/BSC1/SPI0/AUX | exact 4-KiB windows | 0x1000 |
 //! | QEMU RISC-V virt (riscv64) | (none yet — kernel serial owns UART) | — | — |
 
 use crate::sync::Spinlock;
@@ -36,23 +37,27 @@ use types::{CellId, ViError, ViResult};
 pub const DEV_UART: u8 = 1 << 0;
 /// GPIO controller window. Set when the manifest declares `gpio = true`.
 pub const DEV_GPIO: u8 = 1 << 1;
-/// PCIe device BAR window. Set on tasks with `PcieDriverCap` — not a manifest flag
-/// (all 8 manifest bits are occupied); gated by the ZST cap instead.
+/// PCIe device BAR window. Set on tasks with `PcieDriverCap`; PCIe authority is
+/// path-gated and intentionally remains separate from hardware manifest flags.
 pub const DEV_PCIE: u8 = 1 << 2;
 /// CAN bus controller window (v2 manifest — freed by the u16 flags widening).
 /// Set when the manifest declares `can = true`.
 pub const DEV_CAN: u8 = 1 << 3;
 /// ADC controller window (v2 manifest). Set when the manifest declares `adc = true`.
 pub const DEV_ADC: u8 = 1 << 4;
+/// I2C controller window (v2 manifest). Set when the manifest declares `i2c = true`.
+pub const DEV_I2C: u8 = 1 << 5;
+/// SPI controller window (v2 manifest). Set when the manifest declares `spi = true`.
+pub const DEV_SPI: u8 = 1 << 6;
 
 // ---------------------------------------------------------------------------
-// Allowlist (per QEMU machine, v1 hardcoded)
+// Allowlist (per active target, currently hardcoded)
 // ---------------------------------------------------------------------------
 
 /// `(base, len, device_class)` triples a Driver Cell may request. The device
 /// class scopes the capability: a cell may claim a range only if it declared
-/// the matching device (manifest gpio/uart flag), so a GPIO-only cell cannot
-/// grab the UART window and vice-versa.
+/// the matching device class, so one peripheral class cannot claim another
+/// class's controller window.
 #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
 const ALLOWED: &[(usize, usize, u8)] = &[
     (
@@ -65,7 +70,16 @@ const ALLOWED: &[(usize, usize, u8)] = &[
         hal_soc_bcm27xx::BCM2837.mmio.aux_grant_size,
         DEV_UART,
     ),
-    // BCM I2C (0x3F804000), SPI (0x3F204000) added when respective drivers land.
+    (
+        hal_soc_bcm27xx::BCM2837.mmio.bsc1_base,
+        hal_soc_bcm27xx::BCM2837.mmio.bsc1_grant_size,
+        DEV_I2C,
+    ),
+    (
+        hal_soc_bcm27xx::BCM2837.mmio.spi0_base,
+        hal_soc_bcm27xx::BCM2837.mmio.spi0_grant_size,
+        DEV_SPI,
+    ),
 ];
 
 #[cfg(all(
@@ -133,6 +147,21 @@ static REGISTRY: Spinlock<BTreeMap<usize, (usize, CellId)>> = Spinlock::new(BTre
 /// `request_mmio` when the caller holds `PcieDriverCap` (DEV_PCIE).
 static PCIE_BARS: Spinlock<BTreeMap<usize, usize>> = Spinlock::new(BTreeMap::new());
 
+fn static_range_allowed(
+    allowed: &[(usize, usize, u8)],
+    base: usize,
+    end: usize,
+    allowed_devices: u8,
+) -> bool {
+    allowed.iter().any(|&(window_base, window_len, class)| {
+        window_base
+            .checked_add(window_len)
+            .is_some_and(|window_end| {
+                base >= window_base && end <= window_end && class & allowed_devices != 0
+            })
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -156,17 +185,48 @@ pub unsafe fn force_unlock_locks() {
 /// Driver Cells may subsequently call `sys_request_mmio` on these ranges
 /// if they hold `PcieDriverCap`.
 pub fn register_pcie_bar(base: usize, len: usize) {
-    if base != 0 && len != 0 {
-        PCIE_BARS.lock().insert(base, len);
+    if !valid_pcie_bar_window(base, len) {
+        log::warn!(
+            "[pcie] rejected invalid BAR window base={:#x} len={:#x}",
+            base,
+            len
+        );
+        return;
     }
+    PCIE_BARS.lock().insert(base, len);
+}
+
+/// Current Driver Cells support bounded conventional BARs only.
+///
+/// ReBAR and larger accelerator apertures need a separate policy because they
+/// materially widen a Cell's MMIO authority.
+fn valid_pcie_bar_window(base: usize, len: usize) -> bool {
+    const MAX_SUPPORTED_BAR_LEN: usize = 1 << 30;
+
+    base != 0
+        && len != 0
+        && len <= MAX_SUPPORTED_BAR_LEN
+        && len.is_power_of_two()
+        && base & (len - 1) == 0
+        && base.checked_add(len).is_some()
 }
 
 /// Return `true` if `[base, base+len)` is a known PCIe BAR window.
 ///
 /// Used by the `RequestMmio` handler to decide whether to take the PCIe path.
 pub fn is_pcie_bar(base: usize, len: usize) -> bool {
+    if len == 0 {
+        return false;
+    }
     let guard = PCIE_BARS.lock();
     guard.get(&base).is_some_and(|&bar_len| len <= bar_len)
+}
+
+fn checked_mmio_end(base: usize, len: usize) -> ViResult<usize> {
+    if len == 0 {
+        return Err(ViError::InvalidInput);
+    }
+    base.checked_add(len).ok_or(ViError::InvalidInput)
 }
 
 /// Request exclusive MMIO ownership without allowlist validation (Platform Cell only).
@@ -176,7 +236,7 @@ pub fn is_pcie_bar(base: usize, len: usize) -> bool {
 /// in `sys_request_mmio` so the Platform Cell can claim the ECAM config-space window
 /// (which is not a device BAR and therefore not in either allowlist).
 pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViResult<()> {
-    let end = base.checked_add(len).ok_or(ViError::InvalidInput)?;
+    let end = checked_mmio_end(base, len)?;
     let mut reg = REGISTRY.lock();
     for (&eb, &(el, _)) in reg.iter() {
         let ee = eb + el;
@@ -196,22 +256,19 @@ pub fn request_mmio_unchecked(cell_id: CellId, base: usize, len: usize) -> ViRes
 /// - `Err(PermissionDenied)` — range not in allowlist, or its device class is
 ///   not among `allowed_devices` (the cell's declared `mmio_devices`).
 /// - `Err(AlreadyExists)` — range overlaps an already-granted region.
-/// - `Err(InvalidInput)` — arithmetic overflow in `base + len`.
+/// - `Err(InvalidInput)` — zero length or arithmetic overflow in `base + len`.
 pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u8) -> ViResult<()> {
     // 1. Allowlist check — the range must fall inside a known device window
     //    AND that window's device class must be one the cell declared.
-    let end = base.checked_add(len).ok_or(ViError::InvalidInput)?;
+    let end = checked_mmio_end(base, len)?;
 
     // PCIe path: validate against the dynamic BAR table populated by pcie_ecam.
     let in_allowlist = if allowed_devices & DEV_PCIE != 0 {
         let bars = PCIE_BARS.lock();
         bars.get(&base).is_some_and(|&bar_len| len <= bar_len)
     } else {
-        // GPIO/UART path: static per-arch allowlist.
-        ALLOWED.iter().any(|&(ab, al, class)| {
-            let ae = ab + al;
-            base >= ab && end <= ae && (class & allowed_devices != 0)
-        })
+        // SoC peripheral path: static per-arch allowlist.
+        static_range_allowed(ALLOWED, base, end, allowed_devices)
     };
     if !in_allowlist {
         return Err(ViError::PermissionDenied);
@@ -294,3 +351,7 @@ pub fn release_bdfs_for(tid: usize) {
 pub unsafe fn force_unlock_bdf_locks() {
     BDF_OWNERS.force_unlock();
 }
+
+#[cfg(test)]
+#[path = "resource_registry_tests.rs"]
+mod tests;

@@ -35,6 +35,8 @@ pub enum DriverId {
     PcieEcam,
     SdhciArasan,
     SdhciDwCqe,
+    I2cBcmBsc,
+    SpiBcm0,
     GpioBcm2837,
     GpioBcm2711,
     Uart16550PortIo,

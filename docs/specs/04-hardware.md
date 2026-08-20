@@ -18,8 +18,10 @@ Cellos không phụ thuộc vào một kiến trúc CPU cụ thể. Mọi tươn
 * **Platform HAL**: Được biên dịch **cùng** Nano Kernel. Chịu trách nhiệm khởi tạo CPU, RAM và các thành phần cốt lõi.
 * **Driver Cells**: Được nạp động dưới dạng **Cells**. Chịu trách nhiệm cho các ngoại vi (NIC, GPU, cảm biến Robot).
 
-### C Driver Isolation qua Tier 1b FFI
-C driver isolation dùng **Tier 1b FFI** (Newlib shim) — xem [specs/05-application.md §3](05-application.md).
+### C Driver Integration via Tier 1 `ffi-posix` runtime profile
+C driver integration uses the trusted Tier 1 `ffi-posix` runtime profile
+(legacy alias: Tier 1b FFI, Newlib/POSIX shim) — see
+[specs/05-application.md §3](05-application.md).
 
 ## 3. Interrupt Model: "Async Waker Dispatch"
 Cellos sử dụng mô hình ngắt bất đồng bộ để tối ưu độ trễ.
@@ -58,7 +60,7 @@ the prevention layer.
 | G2 | RV64 | Milk-V Pioneer (X60, now) | Alibaba C930 (2026) |
 | G2 | x86_64 | QEMU x86_64 | x86 PC (when G2 starts) |
 | G3 | ARM64 | Radxa ROCK 5 / OrangePi 5+ (RK3588) | — |
-| G3 | RV64 | — | SiFive P870 + X390 (Q2 2026) |
+| G3 | RV64 | — | X390-class hardware — blocked until purchasable silicon, board docs, and software stack exist |
 
 **QEMU-first rule:** HAL traits (`ViGpio`, `ViUart`, …) must be **board-agnostic** from v1. Adding a new real-board implementation must require zero kernel changes — only a new `impl ViGpio for Bcm2711Gpio {}`.
 
@@ -115,31 +117,30 @@ In SAS, a NIC performing DMA without IOMMU control can write to **any** physical
 
 ## 9. G3: NPU Driver Path
 
-Two-implementation strategy validates `ViAccelerator` trait generality.
+Two implementations are required before deciding whether a shared accelerator
+contract is justified.
 
-### Level A — Tier 1b FFI (G2 work, no kernel change)
+### Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
 
-- **RKNN Runtime FFI cell** (ARM64, RK3588): Tier 1b C wrapper calls `rknn_init/run/outputs_get`.
+- **RKNN Runtime FFI cell** (ARM64, RK3588): trusted Tier 1 C wrapper calls `rknn_init/run/outputs_get`.
 - Validates real-world `load_model / submit / wait` semantics before freezing trait contract.
-- Prerequisite: Tier 1b entropy shim + net shim (see [05-application.md §3](05-application.md)).
+- Prerequisite: Tier 1 `ffi-posix` entropy shim + net shim (see [05-application.md §3](05-application.md)).
 
 ### Level B — Kernel NPU scheduler (G3)
 
-Design `ViAccelerator` trait only after ≥2 months hands-on with RKNN API on real RK3588 hardware. Trait contract must be hardware-informed, not speculative.
-
-```rust
-// Draft only — validate against real RKNN API before freezing
-pub trait ViAccelerator {
-    fn load_model(&mut self, data: Box<[u8]>) -> ViResult<ModelHandle>;
-    fn submit(&self, handle: &ModelHandle, input: TensorBuffer) -> ViResult<JobId>;
-    fn wait(&self, job: JobId) -> ViResult<TensorBuffer>;
-    fn capabilities(&self) -> AcceleratorCaps;
-}
-```
+Do not draft a concrete trait shape until at least two months of RKNN work on
+real RK3588 hardware and a second implementation have produced comparable
+evidence. Record model-context lifetime, submission/completion behavior,
+capability discovery, buffer ownership, cancellation, and failure semantics as
+observations; do not turn those observations into Law-1 types or methods here.
 
 ### Level B+ — SiFive X390 VCIX (second impl)
 
-Port X390 VCIX driver cell when hardware available (Q2 2026). If both RKNN and X390 fit `ViAccelerator` without changes → trait is correctly abstracted.
+Do not start an X390 VCIX driver cell from an availability forecast. The
+[Phase 06 evidence gate](../research/g3-accelerator-evidence.md) first requires
+purchasable silicon, board documentation, and a usable software stack. Only
+after that hardware evidence may RKNN and X390 observations be compared to
+decide whether a shared accelerator contract is justified.
 
 ### Level C — Zero-copy tensor pipeline (G3, after sys_grant_pages)
 

@@ -1,6 +1,6 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-01
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-19
 
 ---
 
@@ -11,7 +11,7 @@
 | [getting-started.md](getting-started.md) | Setup, build, run, first contribution |
 | [app-development-guide.md](app-development-guide.md) | Write/build/run/test a Cell application (worked examples) |
 | [codebase-summary.md](codebase-summary.md) | Quick reference: LOC, crates, features |
-| [faq.md](faq.md) | Common questions about architecture |
+| [FAQ.md](FAQ.md) | Common questions about architecture |
 
 ---
 
@@ -20,7 +20,15 @@
 | File | Purpose |
 |------|---------|
 | [project-overview-pdr.md](project-overview-pdr.md) | Vision, requirements, success metrics |
-| [project-roadmap.md](project-roadmap.md) | Milestones, phase status, blockers |
+| [project-roadmap.md](project-roadmap.md) | Roadmap entrypoint and links to split roadmap files |
+| [roadmap/README.md](roadmap/README.md) | Roadmap folder index |
+| [roadmap/current-focus.md](roadmap/current-focus.md) | Active stage, current gates, and next work |
+| [roadmap/hardware-tracks.md](roadmap/hardware-tracks.md) | Board, SoC, and physical qualification lanes |
+| [roadmap/product-stages.md](roadmap/product-stages.md) | G1-G5 product-stage overlay |
+| [roadmap/runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md) | Runtime and platform overlays |
+| [roadmap/technical-milestones.md](roadmap/technical-milestones.md) | Current milestone snapshot |
+| [roadmap/completed-history.md](roadmap/completed-history.md) | Condensed completion history |
+| [roadmap/open-risk-register.md](roadmap/open-risk-register.md) | Confirmed open code/readiness risks |
 | [project-changelog.md](project-changelog.md) | History of changes per phase |
 
 ---
@@ -30,8 +38,9 @@
 | File | Purpose |
 |------|---------|
 | [system-architecture.md](system-architecture.md) | System layers, kernel, HAL, IPC |
+| [decisions/0003-application-tier-taxonomy.md](decisions/0003-application-tier-taxonomy.md) | Canonical application tier, runtime profile, and SDK terminology |
 | [code-standards.md](code-standards.md) | The 8 Coding Laws + conventions |
-| [patterns.md](patterns.md) | Common Rust patterns for Cellos |
+| [PATTERNS.md](PATTERNS.md) | Common Rust patterns for Cellos |
 | [security-model.md](security-model.md) | STRIDE analysis, known limitations |
 
 ---
@@ -50,7 +59,7 @@
 
 | File | Purpose |
 |------|---------|
-| [scripting-guide.md](scripting-guide.md) | Lua 5.4 + MicroPython usage |
+| [scripting-guide.md](scripting-guide.md) | Lua 5.4 usage; historical MicroPython status |
 | [hotswap-guide.md](hotswap-guide.md) | Live Cell upgrade protocol |
 | [vfs-api.md](vfs-api.md) | VFS IPC opcodes and protocol |
 | [network-api.md](network-api.md) | Network service IPC, DHCP, socket API |
@@ -71,7 +80,7 @@ Internal design docs — read before implementing a subsystem.
 | [specs/02-memory.md](specs/02-memory.md) | SAS layout, quota, metadata registry |
 | [specs/03-runtime.md](specs/03-runtime.md) | IPC, async/await, hot-swap, boot optimization |
 | [specs/04-hardware.md](specs/04-hardware.md) | Multi-arch HAL, SMP |
-| [specs/05-application.md](specs/05-application.md) | Isolation tiers: Native / Hypervisor |
+| [specs/05-application.md](specs/05-application.md) | Application tiers, runtime profiles, and SDK modules |
 | [specs/06-graphics.md](specs/06-graphics.md) | Compositor, framebuffer, input dispatch |
 | [specs/07-networking.md](specs/07-networking.md) | Network stack, smoltcp, zero-copy |
 | [specs/08-power.md](specs/08-power.md) | Power states, hibernation, thermal |

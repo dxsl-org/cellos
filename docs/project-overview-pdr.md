@@ -3,7 +3,7 @@
 **Project Name**: Cellos (Jarvis Hybrid OS)  
 **Version**: 0.2.1-dev (Mycelium Era)  
 **Status**: Active Development (Phase 1 - Core Stability)  
-**Last Updated**: 2026-08-17 (docs refresh: supervisory hotswap closure verified, root `boards/` descriptor crate added for QEMU RV64, shared drivers stay in `cells/drivers/`, and `hal/soc/riscv` now carries the RISC-V SoC profile slice)
+**Last Updated**: 2026-08-19 (workspace, HAL/board split, roadmap split, and active runtime status refreshed against `origin/main`)
 
 ---
 
@@ -11,13 +11,14 @@
 
 Cellos is a next-generation operating system designed for the **Edge-to-Cloud era**. It combines innovations from Theseus (Live Evolution), Asterinas (FrameKernel Safety), and Tock (Embedded Efficiency) into a unified architecture.
 
-**Product delivery is framed in two use-case stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) → "Two Use-Case Stages"):
+**Product delivery is framed by product stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) and [roadmap/product-stages.md](roadmap/product-stages.md)):
 - **Stage G1 — Robot & Embedded** (now → ~2026 Q4): complete the OS for robots/embedded. Primary target = Tier A SBC with MMU (RV64/ARM64, RPi-class robot brain); sub-track = Tier B MCU (RV32 <512KB, CHERIoT-Nano) for low-level control. Defining traits: never-die, bounded real-time, fault isolation, peripheral I/O (GPIO/I2C/SPI/UART/CAN), instant-on boot.
 - **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage. Untrusted code runs in the Tier 3 Linux VM.
+- **Stages G3-G5**: NPU-native compute, full Rust `std` as a Tier 1 runtime profile, and virtualization remain later overlays with explicit entry gates.
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
-**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain multi-architecture HAL evidence across RV64/ARM/x86 support. QEMU RV64 board policy now lives in root `boards/`, `hal/soc/riscv` owns the SoC profile facts, and legacy board paths remain to be migrated.
+**Current Focus**: Stabilize the nano-kernel, keep the service-service hotswap path aligned with the reviewed supervisor contract, and maintain target-specific HAL evidence across RV64/ARM/x86 support. Root `boards/` owns board descriptors, `hal/soc/*` owns immutable SoC facts, and `hal/traits/arch/src/kernel_abi.rs` owns shared HAL-to-kernel Rust ABI hook signatures.
 
 ---
 
@@ -73,7 +74,7 @@ Traditional operating systems (Linux, Windows, macOS) inherit Unix's process mod
 
 ## Project Structure
 
-### Crates (~40 active)
+### Crates (111 active workspace members)
 
 ```
 Kernel & Core
@@ -81,26 +82,30 @@ Kernel & Core
 
 Hardware Abstraction
 ├── hal/core            Facade (feature-gated)
-├── hal/traits/*        Pure trait definitions
-├── hal/soc/riscv       Data-only RISC-V SoC profiles (QEMU virt, JH7110, SG2042)
-├── hal/arch/riscv      RV64 FULL, RV32 STUB
+├── hal/traits/*        Pure trait definitions, including arch kernel_abi hooks
+├── hal/soc/*           Data-only SoC facts for riscv, arm-virt, bcm27xx, x86
+├── hal/arch/riscv      RV64 and RV32 implementations
 ├── hal/arch/arm        AArch64 FULL (Ring-3 smoke)
 └── hal/arch/x86        x86_64 FULL (Ring-3 smoke)
 
 Boards
-├── boards              Immutable board descriptors (`cellos-boards`, no_std; QEMU RV64 first)
-└── boards/qemu/...     Board-specific fallback assets and audit DTS files
+├── boards              Immutable board descriptors (`cellos-boards`, no_std)
+└── boards/...          Seven active descriptors plus placeholder-only board docs
 
 Public API (Stable ABI)
 ├── libs/types          Core types (VAddr, PAddr, ViError)
-├── libs/api            Kernel-Cell boundary traits (ViFileSystem, ViDriver, etc.)
-└── libs/ostd           Cells' standard library (syscall wrappers, I/O, alloc)
+├── libs/api            Kernel-Cell boundary traits and syscall ABI
+├── libs/ostd           Cells' standard library (syscall wrappers, I/O, alloc)
+└── libs/*              attestation, http-core, text-engine, trusted ffi-posix support, ViUI, agent protocol
 
 Cells
-├── cells/apps/         Applications (8 crates: init, shell, hello, utils, bench, sys-tools, net-tools, test-isolation)
-├── cells/drivers/      Hardware drivers (6 crates; shared, not copied per board)
-├── cells/services/     System services (6 crates)
-└── cells/runtimes/     VMs (2 crates: lua, micropython)
+├── cells/tools/        init, shell, sys-tools, net-tools, wasm
+├── cells/apps/         fb-console, robot-dashboard, Hypha cells
+├── cells/demos/        Feature demos and game/demo cells
+├── cells/drivers/      Shared hardware drivers (17 crates; not copied per board)
+├── cells/services/     System services (12 crates)
+├── cells/tests/        Disposable integration/stress cells
+└── cells/runtimes/     Lua runtime; MicroPython is historical and not in workspace
 ```
 
 ### Total Codebase
@@ -252,7 +257,7 @@ real-board power-cut qualification.
 - [x] DNS resolver (static table + IPv4 literal + UDP A-record fallback)
 - [x] QEMU VirtIO network device support
 - [x] net-tools binaries: ping (stub), curl (HTTP/1.0), wget, nc (multi-conn relay), httpd, mqtt (skeleton)
-- [x] Lua + MicroPython network bindings (vnet module)
+- [x] Lua network bindings (vnet module); MicroPython binding docs are historical
 
 **Effort**: 200 hours (actual: phases A–B–E ~120 hours)  
 **Owner**: Completed Phases A–B–E (2026-06-03 to 2026-06-05)
@@ -315,13 +320,15 @@ real-board power-cut qualification.
 
 **Requirement**: Full Lua 5.4 execution, stdlib access.
 
-**Current Status**: Milestone 3.3 marked ✅ COMPLETE historically (2026-06-05: typed VFS IPC, io.open, vfs.stat/listdir/remove). **Native runtime is NOT actively maintained** — treated as a half-measure. Scripting/R&D story is now Python via the Tier 3 Linux VM. Package manager (luarocks) and further enhancement targets are cancelled.
+**Current Status**: Milestone 3.3 marked ✅ COMPLETE historically (2026-06-05: typed VFS IPC, io.open, vfs.stat/listdir/remove). Lua remains the active native scripting runtime; Python/R&D work belongs in the Tier 3 Linux VM path. Historical roadmap items about future Lua expansion stay archived.
 
 #### 3.4 MicroPython Runtime Enhancement
 
-**Requirement**: Python 3 subset execution environment.
+**Status**: Historical implementation snapshot. MicroPython is not an active Cargo workspace member; current Python-compatible workloads belong in the Tier 3 Linux VM path.
 
-**Current Status**: Milestone 3.4 marked ✅ COMPLETE historically (2026-06-05: `vfs_bridge.rs`, `modvfs.c`, typed VFS IPC). **Native runtime is NOT actively maintained** and the full enhancement targets below (pip, REPL, stdlib expansion) are **dropped**. Python for R&D runs as full CPython inside the **Tier 3 Linux VM** (`apt install python3 pip numpy torch`), not as a native Cell.
+**Historical requirement**: Python 3 subset execution environment.
+
+**Current Status**: Milestone 3.4 is archived historical text (2026-06-05: `vfs_bridge.rs`, `modvfs.c`, typed VFS IPC). MicroPython is not a current workspace member; Python for R&D runs as full CPython inside the **Tier 3 Linux VM** (`apt install python3 pip numpy torch`), not as a native Cell.
 
 **Success Metric**: Total Phase 3 effort = 500 hours (~12 weeks)
 
@@ -348,13 +355,15 @@ real-board power-cut qualification.
 
 **Requirement**: Leasing, grant chains, bulk message passing.
 
-**Current Status**: Basic Send/Recv/Call/Reply only.
+**Current Status**: Send/Recv/Call/Reply plus lease operations,
+SendGather/RecvScatter, and RecvTimeout are implemented. Cross-machine lease
+coordination in `net-broker` remains separate unfinished work.
 
 **Acceptance Criteria**:
-- [ ] Lease: Grant capability for duration, auto-revoke
+- [x] Lease: Grant capability for duration, auto-revoke
 - [ ] Grant chains: Cell A grants to B, B grants to C (transitive)
-- [ ] Bulk messages: Multi-buffer sends, gather/scatter
-- [ ] Timeout support on Recv/Call
+- [x] Bulk messages: Multi-buffer sends, gather/scatter
+- [x] Timeout support on Recv
 
 **Effort**: 60 hours  
 **Owner**: TBD
@@ -363,11 +372,13 @@ real-board power-cut qualification.
 
 **Requirement**: Full multi-architecture deployment.
 
-**Current Status**: Stubs for RV32 (4 LOC), ARM (53 LOC), x86 (46 LOC).
+**Current Status**: RV32-Nano boots under QEMU with context switch, traps,
+timer, heap, and shell coverage. AArch32 has boot/context code and handoff tests,
+but its prerequisites and physical qualification remain explicit gates.
 
 **Acceptance Criteria**:
-- [ ] RISC-V 32-bit (RV32) HAL fully implemented
-- [ ] ARM AArch32 HAL fully implemented
+- [x] RISC-V 32-bit (RV32) HAL and QEMU boot path implemented
+- [ ] ARM AArch32 production qualification complete
 - [ ] Single binary selectable: `cargo build --features rv32 --release`
 - [ ] Boot tests pass on all targets (QEMU simulation)
 
@@ -378,14 +389,17 @@ real-board power-cut qualification.
 
 **Requirement**: Performance analysis, optimization.
 
-**Current Status**: No benchmarks collected.
+**Current Status**: The benchmark cell implements context-switch, IPC,
+syscall, memory-footprint, VFS-breakdown, and real-time scenarios. QEMU
+integration exercises the suite; physical-target performance evidence remains
+hardware-gated.
 
 **Acceptance Criteria**:
 - [ ] Context-switch latency < 100 µs
 - [ ] Message latency (Send/Recv) < 50 µs
 - [ ] Syscall overhead < 10 µs
 - [ ] Memory footprint < 10 MB for kernel + 3 services
-- [ ] Public `ViBenchmark` trait for app profiling
+- [x] Public `ViBenchmark` trait and benchmark runner
 
 **Effort**: 80 hours  
 **Owner**: TBD
@@ -410,7 +424,7 @@ real-board power-cut qualification.
 | Kernel | Rust nightly | 2024+ | ✅ Compiling |
 | HAL | Custom traits | N/A | RV64/AArch64/x86_64 implemented with different smoke/qualification levels |
 | Filesystems | MountTable: BootFS/RamFS/FAT/littlefs/RedoxFS | Existing | FAT writes and littlefs `/data` shipped; RedoxFS and hardware qualification are phased |
-| Runtimes | Lua / MicroPython | 5.4 / 1.24.1 | ⚠️ Native runtimes unmaintained (dropped); Python = Tier 3 VM |
+| Runtimes | Lua active; MicroPython historical | 5.4 / archived 1.24.1 text | Python = Tier 3 VM |
 
 ### Key Dependencies
 
@@ -503,7 +517,7 @@ Phase 2: System Services (2026-07 — 2026-08)
 Phase 3: Applications & Runtimes (2026-09 — 2026-11)
 ├─ Shell enhancements
 ├─ Utility binaries
-├─ Lua/MicroPython integration
+├─ Lua integration; MicroPython archived
 └─ Milestone: User-Ready OS (2026-11-30)
 
 Phase 4: Advanced Features (2026-12 — 2027-03)

@@ -34,8 +34,8 @@ Trước khi code bất kỳ module nào, Agent **BẮT BUỘC** phải đọc f
 ```text
 Cellos/
 ├── kernel/                   # Nano Kernel (Runtime Linker & Manager)
-│   └── src/ 
-│       ├── boot/             # Khởi tạo sơ khai (Handover từ OpenSBI/Limine) 
+│   └── src/
+│       ├── boot/             # Khởi tạo sơ khai (Handover từ OpenSBI/Limine)
 │       ├── cell/             # LINH HỒN: Quản lý Metadata, Registry, Dependency
 │       ├── loader/           # TRÁI TIM: ELF Linker, vá địa chỉ (Relocation)
 │       ├── memory/           # Quản lý Global Heap & Paging (Nền tảng SAS)
@@ -67,19 +67,19 @@ Cellos/
 │       ├── timer/            # Timer trait (extracted)
 │       └── interrupt/        # InterruptController trait (extracted)
 ├── cells/                    # Các đơn vị phần mềm độc lập (.o files)
-│   ├── apps/                 # Ứng dụng người dùng (Tier 1/2/3)
+│   ├── apps/                 # Ứng dụng người dùng (chọn execution tier, rồi runtime profile)
 │   │   ├── init/             #
 │   │   └── shell/            #
-│   ├── drivers/              # Rust Drivers (Tier 1), C/C++ Drivers (Tier 2)
+│   ├── drivers/              # Trusted native drivers (Tier 1 runtime profiles; Rust or reviewed FFI)
 │   │   ├── disk/             #
 │   │   ├── gpu/              #
 │   │   ├── input/            #
 │   │   ├── net/              #
 │   │   └── serial/           #
-│   ├── runtimes/             # Language Runtimes (Lua, MicroPython)
+│   ├── runtimes/             # Language runtimes (Lua trusted Tier 1 profile; MicroPython historical)
 │   │   ├── micropython/      #
 │   │   └── lua/              #
-│   └── services/             # Các dịch vụ hệ thống (Tier 1)
+│   └── services/             # Các dịch vụ hệ thống (Tier 1 trusted native cells)
 │       ├── compositor/       #
 │       ├── config/           #
 │       ├── input/            #
@@ -200,8 +200,8 @@ heap cho large data (>page).
 ### Không nằm trong TCB (by design)
 
 - **Cell code** — `#![forbid(unsafe_code)]` nghĩa là kernel không trust Cell code; violation bị caught bởi rustc trước khi link.
-- **C/C++ thư viện qua Tier 1b FFI** — được isolated trong caller's address space; kernel validate tất cả grant/IPC boundaries.
-- **Lua/VM guests (Tier 1b/3)** — sandbox bởi interpreter manifest restrictions hoặc hypervisor Stage-2 paging.
+- **C/C++ thư viện qua Tier 1 `ffi-posix` profile** — trusted code shares the caller's SAS; kernel validate tất cả grant/IPC boundaries.
+- **Lua and Tier 3 VM guests** — Lua is a trusted Tier 1 runtime profile with interpreter restrictions; VM guests are sandboxed by hypervisor Stage-2 paging.
 
 ### Mitigation: giảm thiểu rủi ro rustc-as-TCB
 

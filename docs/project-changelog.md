@@ -2,67 +2,138 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-20] Cell-to-Cell Anywhere Phase 02B slice 3 adds service-bound KMS storage
+## [2026-08-20] Cell-to-Cell Anywhere adds its fail-closed local and KMS foundation
 
-Phase 02B slice 3 now protects the `/srv/cellos` KMS namespace through VFS
-service-bound policy, allowing only the live `service::KMS` provider proven by kernel-attested
-sender tid. The KMS cell also has a two-slot journal/readback layer with a
-test-only BLAKE3 authenticator; production root remains unavailable, provider
-kind stays `None`, and remote/public exports remain disabled. The code path is
-in place, but live `/srv/cellos` persistence on a formatted RedoxFS volume is
-still unproven.
+The approved Candidate B path now has a bounded local broker runtime, strict
+export-registry parsing, opaque KMS wire types, service-bound `/srv/cellos/kms`
+storage policy, two-slot journal/readback logic, and a side-effect-free root
+assessment seam with monotonic rollback gating. The runtime deliberately keeps
+the production root unavailable (`ProviderUnavailable`, provider kind `None`),
+so remote and public exports remain disabled until a concrete hardware-backed
+root and durable trusted epoch are approved and integrated.
 
-Verification caught and fixed the slice's boundary regressions: VFS service
-lookup uses the `u16` service id contract, derived VFS principals use
-`Caller::principal`, BLAKE3 uses the pure backend for bare-metal AArch64/RV64,
-recursive delete cannot bypass the protected KMS subtree, and the runtime store
-creates `/srv/cellos` before `/srv/cellos/kms` for RedoxFS. Gates passed:
-`cargo fmt --all --check`, KMS host tests 19/19, KMS type tests 7/7, RV64/AArch64
-`service-vfs`/`service-kms` checks, `gen_disk.ps1`, and the retained RV64 QEMU boot witness from
-`phase02b-slice3-qemu-20260820-125328.log` with one KMS start, verified registry, shell prompt,
-remote disabled, and zero panic/watchdog/heartbeat/fault markers. QEMU is not hardware evidence.
-
-## [2026-08-20] Cell-to-Cell Anywhere Phase 02B slice 2 review-passes with fresh RV64 QEMU proof
-
-The Phase 02B KMS runtime scaffold is now review-passed in QEMU with fresh RV64
-proof: one KMS start, verified registry, shell prompt present, remote disabled,
-and zero heartbeat/watchdog/panic markers. Slice 1 still stands as the ABI +
-opaque DH compile proof (`service::KMS = 13`, fixed-frame KMS wire contract,
-`KmsClient`, and the broker's opaque static-DH adapter). QEMU is not hardware,
-and production root, service-bound VFS storage, anti-rollback, and broker
-runtime wiring remain pending, so remote/public exports stay disabled.
+Verification passed formatting and diff checks, 31 KMS host tests, seven KMS
+type tests, RV64/AArch64/x86_64-none KMS checks, and the retained RV64 QEMU boot
+witness with one KMS start, a verified registry, shell readiness, remote
+disabled, and 73/73 VFS integration tests. The QEMU lane could not format a
+RedoxFS volume, so live `/srv/cellos` persistence remains unproven; QEMU is not
+physical-hardware evidence.
 
 ## [2026-08-20] Cell-to-Cell Anywhere closes its local broker and thread foundation
 
-Phase 03 and its user-thread foundation are complete for the approved Candidate B
-local path. The broker now has bounded ingress/reply queues, fair per-caller
-backpressure, request correlation and stale rejection, a 10,000-call soak, a
-statistically comparable warm baseline, and an opt-in restart oracle. The restart
-run drains all broker roles before supervisor respawn, replaces the service TID,
-resets volatile state, reports a stale send as Indeterminate, and accepts a retry.
+The local path now has bounded ingress and reply queues, fair per-caller
+backpressure, request correlation and stale-reply rejection, a 10,000-call
+soak, a statistically comparable warm baseline, and an opt-in restart oracle.
+The restart lane drains broker roles before supervisor respawn, replaces the
+service TID, resets volatile state, treats stale sends as indeterminate, and
+accepts a retry. Multi-architecture compile debt was closed without changing
+the public ABI; AArch64 and RV32 remain compile-only evidence.
 
-The remaining multi-architecture compile debt was closed without changing the
-public ABI: AArch64 uses the `qemu-exit` v4 semihosting API and retains its Stage-2
-table by RAII; RV32 follows its SATP=0 TLB contract, uses width-safe syscall and
-stack conversions, routes console output through SBI, rejects unrepresentable ELF
-fields before narrowing, and allocates attested cell generations under a real
-cross-hart spinlock. AArch64 and RV32 clippy gates pass, as do RV64 and x86_64
-release checks. Runtime evidence remains the retained one-hart RV64 QEMU logs;
-AArch64/RV32 results are compile-only, and no CI or hardware pass is claimed.
-Phase 02B secure identity storage still blocks Phase 04/05 remote/public work until
-the runtime KMS service/storage/broker wiring is finished.
+## [2026-08-19] Cell-to-Cell Anywhere adds a fail-closed export registry
 
-## [2026-08-19] Cell-to-Cell Anywhere Phase 02A lands the fail-closed export registry slice
+`cells/services/net-broker` now loads the boot-provisioned non-secret registry
+at `/etc/cellos/c2c-exports.cfg`, parses strict ASCII `key=value` export
+stanzas, and exposes only the disabled reason plus export count. Remote and
+public exports remain disabled until secure node identity exists; local IPC and
+relay routing are unchanged.
 
-`cells/services/net-broker` now loads the boot-provisioned non-secret registry at
-`/etc/cellos/c2c-exports.cfg`, parses strict ASCII `key=value` export stanzas,
-and exposes only the disabled reason plus export count to the rest of the broker.
-Remote/public exports stay disabled until secure node identity exists, so Phase
-02B durable identity storage remains blocked by the current VFS authority model.
-Local IPC and relay routing are unchanged. Verification stayed on the QEMU and
-host-test lane: 25 host tests passed, the three target compile checks passed,
-formatting/diff checks passed, and the QEMU-TCG boot log showed the registry
-absent path with remote disabled. No hardware evidence is claimed.
+## [2026-08-20] Phase 06 captures the G3 accelerator evidence envelope
+
+Phase 06 is now recorded as a docs-only blocker envelope for G3 accelerator
+readiness. The updated evidence trail keeps RK3588 as the first probe target
+and X390 as the second implementation, records the vendor license and hardware
+gates, and explicitly avoids freezing a `ViAccelerator` ABI, probe crate, or
+kernel scheduler before real hardware evidence exists.
+
+## [2026-08-19] Application tier taxonomy is standardized
+
+Application documentation now reserves Tier 1/2/3 for execution and isolation
+boundaries. Rust `no_std`, planned Rust `std`, POSIX/FFI, Lua, and Linux guest
+paths are runtime profiles; SDK capabilities use named modules/layers rather
+than numbered tiers; G1-G5 remain product stages. `Tier 1b` and `Tier 3b` are
+retained only as legacy aliases and filenames. ADR 0003 records the decision,
+and the follow-up code plan preserves the 16-byte Manifest v2 ABI while adding
+future `protection_class` aliases. This change is documentation and planning
+only; Tier 2 native domains remain unimplemented.
+
+## [2026-08-19] Documentation is reconciled with the current codebase
+
+The roadmap is now a short entrypoint with separate current-focus, product,
+hardware, runtime/platform, milestone, completion-history, and risk-register
+pages. Current docs now reflect the board/SoC/HAL ownership split, the
+single-source HAL↔kernel Rust ABI, Lua as the only active native runtime, and
+the merged RPi3 evidence without promoting other physical boards. A static
+code review also records open socket ownership, TLS framing, runtime allowlist,
+production signing, net-broker, POSIX, and CI-gating risks. This was a docs-only
+reconciliation; no implementation or runtime test claim is added.
+
+## [2026-08-19] HAL↔kernel Rust ABI signatures become single-sourced
+
+`hal/traits/arch/src/kernel_abi.rs` now owns the shared `extern "Rust"` hook
+signatures for HAL arch code and the kernel. The HAL side imports those
+declarations instead of re-declaring local ABI blocks, and the file now carries
+declaration-side const assertions for each hook plus a documented dispatcher
+frame contract. Kernel-side x86 page-fault handling adds the matching
+assertion, and `scripts/check-hal-boundaries.sh` now fails any new local HAL
+`extern "Rust"` declarations. Verification passed `cargo fmt --all --check`,
+`cargo check -p hal-arch-trait --target x86_64-unknown-linux-gnu`,
+`cargo check -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc`,
+`bash scripts/check-hal-boundaries.sh`, and `git diff --check`. No public ABI
+changed and no physical-RPi3 claim was added.
+
+## [2026-08-20] Phase 05 q35 PCIe storage and network tightens the x86 lane
+
+The current QEMU q35 x86_64 lane now scans PCIe ECAM on bus 0, registers
+bounded BAR windows through the resource registry, and keeps invalid BARs
+fail-closed instead of granting MMIO authority. VT-d activation remains
+board-gated behind the q35 fixed base, before any DMA-capable Driver Cell is
+allowed to use the path.
+
+NVMe now has a QEMU FAT32 write/read witness through `/mnt/sd`, and the e1000
+cell closes the unsupported-device path with a bounded discovery retry instead
+of a false permanent absence. The build path also works from WSL/Windows
+tooling after script portability fixes.
+
+This lane is still QEMU-only. Physical x86 remains gated, bus 0 is the only
+validated enumeration path, real NIC Tx/Rx/DHCP are not proven, and the BAR
+kernel unit-harness gap stays deferred.
+
+## [2026-08-20] Phase 03 BCM/RPi3 hardware lane closes
+
+The current RPi3 payload now passes the physical GPIO17-to-GPIO27 rising-edge
+gate, an explicit BCM BSC1 data NACK, GPIO17 actuator readback, and the BCM SPI0
+MOSI-to-MISO `AA55` loopback without panic or Cell faults. Development demo
+cells are loaded from the current embedded VIFS1 image and fail closed on a
+missing entry, preventing stale SD payloads from masking a deployment error.
+
+The AArch64 QEMU regression lane launches demos on demand and proves PL061,
+PL011, and the bounded pinned-worker path without recursive self-spawn. Phase 03
+is complete for BCM/RPi3; DesignWare physical promotion remains conditional on
+a board with verified compatible, MMIO, IRQ, and pinmux evidence.
+
+## [2026-08-19] G1 BCM I2C/SPI controller slice closes hardware-gated integration
+
+Cell manifests, launch ceilings, signed policy, and the resource registry now
+carry distinct I2C and SPI device classes. RPi3 grants exact 4-KiB BSC1 and
+SPI0 windows, keeps GPIO disjoint, and applies descriptor-selected ALT0 pinmux
+before Driver Cells start. Shared polling BCM BSC1 and SPI0 crates implement
+bounded error paths; the BSC combined-transfer sequence waits for an active
+empty FIFO before queueing bytes and arming the repeated start.
+
+Driver Cell teardown now clears all well-known roles through one lifecycle
+entrypoint, and NIC owner plus proven IRQ are published atomically. QEMU image
+packaging now includes the current boot-critical cells and assertions for block,
+input, and GPU registration. Live RV64 and AArch64 boots reach the shell with
+the full baseline and also degrade cleanly when optional GPU/NIC devices are
+omitted. The RPi3 builder now uses host-native paths/tool defaults, fails closed
+on missing required cells, and stages a verified current-head TFTP payload.
+Physical RPi3 TFTP boot now passes with SD discovery, all four MBR partitions,
+FAT16 and `/mnt/sd` mounts, kernel-push Input Service, and shell readiness.
+Interactive `help` and a numbered 100-command UART burst returned without loss.
+The wired GPIO/I2C/SPI promotion now also passes on the current RPi3 head:
+GPIO17->GPIO27 rising edge, BCM BSC1 explicit data NACK, and BCM SPI0
+loopback AA55 all PASS. The BCM/RPi3 lane is closed; DesignWare remains
+conditional on a board with verified compatible/controller evidence.
 
 ## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 

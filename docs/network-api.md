@@ -99,7 +99,9 @@ All requests use a common envelope:
 0x05 = Closed
 ```
 
-**Note:** All opcodes are fully implemented as of Phase A–B (TCP data-path) and Phase E (UDP+DNS).
+**Note:** The socket, TCP, and UDP opcodes in the table are implemented. The
+higher-level `NetRequest::Resolve` service request is not: it currently returns
+`0xFF` from `handlers.rs`.
 
 ---
 
@@ -163,13 +165,17 @@ The kernel driver reads the actual MAC from VirtIO config space at init time.
 
 ## DNS Resolver
 
-The net service includes a built-in DNS resolver with fallback chain (for Lua/Python scripting):
+The Lua `vnet` binding implements a client-side resolver on top of net-service
+UDP sockets. It uses this fallback chain:
 
 1. **Static Hostname Table**: gateway → 10.0.2.2, dns → 10.0.2.3, localhost → 127.0.0.1
 2. **IPv4 Literal**: If hostname is dotted-quad (e.g., 192.168.1.1), return as-is
 3. **UDP A-Record Query**: Send DNS query to 10.0.2.3:53, parse answer section
 
-**MicroPython Binding**: `vnet.resolve(hostname: str) -> str` returns dotted-quad IP or raises exception
+This behavior lives in `cells/runtimes/lua/src/bindings_net.rs`; it must not be
+confused with the unimplemented service-level `NetRequest::Resolve` request.
+
+**Python status**: native MicroPython network bindings are historical only; Python workloads belong in the Tier 3 Linux VM path.
 
 ---
 
@@ -191,9 +197,11 @@ The net service includes a built-in DNS resolver with fallback chain (for Lua/Py
 | File | Purpose |
 |------|---------|
 | `kernel/src/task/drivers/virtio_net.rs` | VirtIO NIC driver (DMA, IRQ) |
-| `cells/services/net/src/lib.rs` | Cell entry point + IPC receive loop |
+| `cells/services/net/src/main.rs` | Cell entry point + IPC receive loop |
 | `cells/services/net/src/interface.rs` | smoltcp Device adapter (RX queue, TX via IPC) |
 | `cells/services/net/src/socket_table.rs` | CapId → smoltcp SocketHandle mapping |
 | `cells/services/net/src/dhcp.rs` | DHCPv4 boot client |
 | `cells/services/net/src/poll_driver.rs` | IPC opcode constants + message decoder |
-| `tests/integration/network_loopback.rs` | QEMU-driven DHCP + TCP tests |
+| `tests/integration/tests/boot.rs` | RISC-V boot and network integration scenarios |
+| `tests/integration/tests/nic-riscv.rs` | RISC-V VirtIO NIC scenarios |
+| `tests/integration/tests/http-smoke.rs` | HTTP/TLS smoke scenarios |

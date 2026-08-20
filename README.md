@@ -1,6 +1,6 @@
 # Cellos
 
-[![CI](https://github.com/dxsl-org/vicell/actions/workflows/ci.yml/badge.svg)](https://github.com/dxsl-org/vicell/actions/workflows/ci.yml)
+[![CI](https://github.com/dxsl-org/cellos/actions/workflows/ci.yml/badge.svg)](https://github.com/dxsl-org/cellos/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-Donate-%23FF5E5B?logo=ko-fi)](https://ko-fi.com/dxsl_org)
 
 A next-generation OS for the Edge-to-Cloud era. Software is organized as **Cells** (not processes) sharing one address space, isolated by the Rust type system rather than hardware MMU.
@@ -15,8 +15,8 @@ A next-generation OS for the Edge-to-Cloud era. Software is organized as **Cells
 **Prerequisites**: Rust nightly · `qemu-system-riscv64` · PowerShell or WSL2
 
 ```powershell
-git clone https://github.com/dxsl-org/vicell.git
-cd vicell
+git clone https://github.com/dxsl-org/cellos.git
+cd cellos
 
 # Build kernel (RV64, -pie, RUSTFLAGS handled by build.rs)
 cargo build --release
@@ -55,11 +55,11 @@ ARM64 target:
 | **ELF Loader** | ✅ | PIE + `R_RISCV_RELATIVE` · loaded from FAT32 `/bin/` |
 | **VFS** | ✅ | RamFS + FAT32 · mkdir/rmdir/unlink/stat/readdir · 8-scenario e2e suite |
 | **Shell** | ✅ | Pipes · redirects · tab completion · echo/cat/ls/pwd/cd/kill/ps |
-| **Network** | ✅ | TCP/UDP/DNS/DHCP/MQTT (Phases A–E) · TLS 1.3 HTTPS demo |
+| **Network** | ⚠️ active | TCP/UDP/DNS/DHCP are integrated; socket ownership and the legacy TLS raw framing remain open risks |
 | **Peripheral I/O** | ✅ | GPIO (PL061 · SiFive) · UART (PL011) · I2C bit-bang · SHT3x sensor demo |
 | **IPC** | ✅ | Zero-copy owned buffers · typed IPC · syscall filter · large-buffer grant pages |
 | **Reliability** | ✅ | Supervisor restart · guard pages · RT watchdog · `NotifyOnExit(204)` · zombie reaper |
-| **RT Latency** | ✅ | All benchmarks pass on QEMU TCG · mtime-based · jitter in-cell |
+| **RT Latency** | ⚠️ measured | QEMU regression benchmarks exist; real-hardware thresholds require separate evidence |
 | **RTC** | ✅ | Goldfish RTC (RV64/ARM64) · CMOS (x86_64) · `date` command |
 | **ViUI v2** | ✅ | Reactive Signal Tree · Dual-Layer DSL · GPU command buffer · embedded/robot readiness (P01–P10) |
 | **Heap Snapshot** | ✅ | Instant-On: snapshot → restore |
@@ -78,22 +78,23 @@ ARM64 target:
 Cellos/
 ├── kernel/             Nano-kernel: scheduler · loader · memory · IPC · syscalls
 ├── hal/
-│   ├── traits/         ViArch · ViTimer · ViUart · ViGpio · ViI2c · ViMmc · ViDisplay
-│   └── arch/           riscv/  arm/  x86/
-├── libs/
-│   ├── types/          VAddr · PAddr · ViError · ViResult
-│   ├── api/            Kernel–Cell ABI (stable, Law 1 protected)
-│   ├── ostd/           Cell std: alloc · mmio · font_atlas · sync
-│   ├── viui/           ViUI v2: Signal tree · DSL · GPU renderer · widgets
-│   └── viui-macros/    vi_design! proc macro
+│   ├── core/           Feature-selected integration facade
+│   ├── soc/            Immutable SoC facts
+│   ├── traits/         Shared architecture and device contracts
+│   └── arch/           RISC-V, ARM, and x86 mechanisms
+├── boards/             Board identity, firmware contracts, wiring, fallbacks
+├── libs/               Public ABI/types, ostd, attestation, HTTP, text, ViUI
 ├── cells/
-│   ├── apps/           init · shell · hello · utils · bench · viui-demo
-│   │                   robot-demo · periph-demo · https-demo
-│   ├── drivers/        disk · gpu · gpio · gpio-sifive · i2c-gpio · input · net · serial
-│   └── services/       vfs · net · input · compositor · config · power
-├── tools/
-│   ├── vi-compiler/    .vi DSL → Rust codegen
-│   └── viui-build/     build-time widget tree builder
+│   ├── tools/          init, shell, system and network CLI cells
+│   ├── apps/           User-facing and Hypha cells
+│   ├── demos/          Feature, hardware, game, and smoke workloads
+│   ├── drivers/        Shared device-driver cells
+│   ├── services/       VFS, net, supervisor, compositor, platform, ...
+│   ├── tests/          Guest-side test cells
+│   └── runtimes/       Lua (active native runtime)
+├── tests/integration/  Host-driven QEMU and image tests
+├── scripts/            Build, image, policy, metrics, and CI helpers
+├── tools/              Host-side compilers and build helpers
 └── docs/               Design specs (00–12) + developer guides
 ```
 
@@ -128,7 +129,7 @@ Build kernel with `RUSTFLAGS=-Crelocation-model=pic` (handled automatically). Ce
 7. **Trait Objects for Polymorphism** — `Arc<dyn ViDriver + Send + Sync>` at system boundaries
 8. **RAII — Implement Drop** — all resources clean up explicitly; no process-based cleanup in SAS
 
-Full rules: [CLAUDE.md](./CLAUDE.md) · [code-standards.md](./docs/code-standards.md)
+Full rules: [CONTRIBUTING.md](./CONTRIBUTING.md) · [code-standards.md](./docs/code-standards.md)
 
 ---
 
@@ -138,13 +139,13 @@ Full rules: [CLAUDE.md](./CLAUDE.md) · [code-standards.md](./docs/code-standard
 |----------|---------|
 | [system-architecture.md](./docs/system-architecture.md) | High-level design |
 | [code-standards.md](./docs/code-standards.md) | Coding rules & 8 Laws |
-| [patterns.md](./docs/patterns.md) | Common Rust patterns (global state, IPC, RAII) |
+| [PATTERNS.md](./docs/PATTERNS.md) | Common Rust patterns (global state, IPC, RAII) |
 | [api-reference.md](./docs/api-reference.md) | Syscall table · trait reference |
 | [project-roadmap.md](./docs/project-roadmap.md) | Phase progress & milestones |
 | [getting-started.md](./docs/getting-started.md) | Setup guide |
 | [security-model.md](./docs/security-model.md) | STRIDE model · known limitations |
 | [hardware-dev-guide.md](./docs/hardware-dev-guide.md) | Real board workflow |
-| [faq.md](./docs/faq.md) | Architecture Q&A |
+| [FAQ.md](./docs/FAQ.md) | Architecture Q&A |
 
 **Design Specifications** (read before coding in a subsystem):
 
@@ -174,7 +175,7 @@ cargo build --release     # build
 cargo test --all          # run tests
 ```
 
-**Before coding**: read [CLAUDE.md](./CLAUDE.md) and the relevant spec in `docs/specs/`.  
+**Before coding**: read [CONTRIBUTING.md](./CONTRIBUTING.md) and the relevant spec in `docs/specs/`.
 **Commit format**: `type(scope): description` — e.g. `feat(vfs): add readdir support`
 
 ---
@@ -189,4 +190,4 @@ Cellos draws ideas from:
 
 ---
 
-**Version**: 1.x Mycelium · **Last Updated**: 2026-06-08 · **Maintained by**: lungmat8
+**Version**: 0.2.1-dev Mycelium · **Last Updated**: 2026-08-19

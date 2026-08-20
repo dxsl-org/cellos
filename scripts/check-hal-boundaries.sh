@@ -59,4 +59,9 @@ if grep -q 'hal.soc.x86\|hal-soc-x86' hal/arch/x86/Cargo.toml; then
     fail 'x86 architecture mechanisms must not depend on SoC policy'
 fi
 
+if grep -RInE '^[[:space:]]*(unsafe[[:space:]]+)?extern "Rust"' \
+    hal/arch --include='*.rs'; then
+    fail 'HAL architecture code must import kernel hooks from hal-arch-trait kernel_abi'
+fi
+
 printf 'PASS: HAL/SoC/board boundaries are intact\n'

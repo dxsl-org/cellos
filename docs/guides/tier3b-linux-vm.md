@@ -1,12 +1,14 @@
-# Tier 3b Linux VM — Full Kernel Guest
+# Tier 3 `linux-guest` Profile — Full Kernel Guest
 
-> Run unmodified Linux binaries in a hypervisor-isolated VM. For legacy code, fork-heavy apps, or untrusted workloads.
+> Legacy name: Tier 3b. Run unmodified Linux binaries in a hypervisor-isolated
+> VM. Use this for legacy code, fork-heavy apps, or untrusted workloads while
+> Tier 2 native domains are not implemented.
 
 ---
 
 ## Overview
 
-Tier 3b lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightweight hypervisor. From the app's perspective, it's a normal Linux environment:
+Tier 3 lets you run a full Linux kernel (e.g., Alpine, Busybox) inside a lightweight hypervisor. From the app's perspective, it's a normal Linux environment:
 
 - Standard libc — **musl today** (Alpine guest, shipped). glibc (Debian) guest is **planned** (see roadmap: broadens binary compatibility for glibc-only software).
 - Full POSIX (fork, mmap, signals, pthreads)
@@ -166,25 +168,25 @@ exit
 
 > ⚠️ **The numbers below are design estimates, not measured.** A real benchmark pass (throughput, trap latency, boot time on QEMU/TCG with its caveats) is planned; treat these as targets until then.
 
-| Operation | Tier 1 Rust | Tier 1 + SDK | Tier 3b Linux *(est.)* |
+| Operation | Tier 1 Rust | Tier 1 + SDK | Tier 3 `linux-guest` *(est.)* |
 |-----------|-------------|--------------|--------------|
 | Syscall latency | ~1 μs | ~2 μs (IPC) | ~10–20 μs (trap) |
 | App startup | <1 ms | <1 ms | 2–5 s (kernel boot) |
 | I/O throughput | Native | ~90% native | ~80% native (VirtIO) |
 | Memory overhead | ~10 KiB | ~50 KiB | ~128 MiB guest RAM (Alpine); more for glibc guest |
 
-**Use Tier 3b when**: boot time and startup latency don't matter, but compatibility and ease-of-deployment do.
+**Use Tier 3 `linux-guest` when**: boot time and startup latency don't matter, but compatibility and ease-of-deployment do.
 
 ---
 
 ## Limits & Constraints
 
-❌ **No nested VMs** — guest cannot create sub-VMs.  
-❌ **No direct hardware access** — I/O goes through Cellos drivers.  
-❌ **No DMA to host memory** — disk/network buffers are copied.  
-⚠️ **Slow boot** — ~2–10 seconds for full Linux init *(estimate)*.  
-✅ **Full fork() / pthreads** — anything Unix-like works.  
-⚠️ **Package managers** — `apk` works on the Alpine guest; persistence across VM reboots needs writable-backing storage (**planned**, not yet shipped). `apt` requires the planned Debian glibc guest.  
+❌ **No nested VMs** — guest cannot create sub-VMs.
+❌ **No direct hardware access** — I/O goes through Cellos drivers.
+❌ **No DMA to host memory** — disk/network buffers are copied.
+⚠️ **Slow boot** — ~2–10 seconds for full Linux init *(estimate)*.
+✅ **Full fork() / pthreads** — anything Unix-like works.
+⚠️ **Package managers** — `apk` works on the Alpine guest; persistence across VM reboots needs writable-backing storage (**planned**, not yet shipped). `apt` requires the planned Debian glibc guest.
 
 ---
 
@@ -213,18 +215,18 @@ cd scripts
 
 ---
 
-## When to Use Tier 3b
+## When to Use Tier 3 `linux-guest`
 
-✅ Existing Linux C/C++ code (no rewrite)  
-✅ Apps that fork() heavily (e.g., nginx, Java)  
-✅ Package managers essential (`apk add` today; `apt install opencv` once the Debian glibc guest ships)  
-✅ Untrusted code (isolated in VM)  
-✅ Learning Linux internals without rewriting  
+✅ Existing Linux C/C++ code (no rewrite)
+✅ Apps that fork() heavily (e.g., nginx, Java)
+✅ Package managers essential (`apk add` today; `apt install opencv` once the Debian glibc guest ships)
+✅ Untrusted code (isolated in VM)
+✅ Learning Linux internals without rewriting
 
-❌ Performance-critical (use Tier 1 Rust)  
-❌ Real-time (VM jitter unacceptable)  
-❌ Embedded systems with 4 MiB RAM (VM needs 64+ MiB)  
-❌ RISC-V (not implemented yet)  
+❌ Performance-critical (use Tier 1 Rust)
+❌ Real-time (VM jitter unacceptable)
+❌ Embedded systems with 4 MiB RAM (VM needs 64+ MiB)
+❌ RISC-V (not implemented yet)
 
 ---
 
@@ -238,16 +240,16 @@ For a full Alpine Linux VM, see kernel build logs (`scripts/build-kernel-alpine.
 
 ## Troubleshooting
 
-**VM boot hangs?**  
+**VM boot hangs?**
 → Check guest ELF load address matches hypervisor's page table setup. Kernel messages usually print; check serial output.
 
-**Disk writes don't persist?**  
+**Disk writes don't persist?**
 → Rootfs is read-only FAT32 (mounted via VirtIO). Write to `/tmp` (tmpfs) or request writable partition.
 
-**Network unreachable?**  
+**Network unreachable?**
 → Cellos net cell may not be running. Check `net-tools` in `/bin/`. Guest IP should be 10.0.2.15, Cellos host at 10.0.2.2.
 
-**Slow network?**  
+**Slow network?**
 → VirtIO performance is ~90% native on QEMU. Real hardware faster. No tuning levers exposed yet.
 
 ---

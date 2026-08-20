@@ -106,6 +106,10 @@ impl VfsManager {
         self.mounts.backend(path)?.stat(path)
     }
 
+    pub fn is_mount_ancestor(&self, path: &str) -> bool {
+        self.mounts.is_mount_ancestor(path)
+    }
+
     pub fn file_size(&self, path: &str) -> u64 {
         self.mounts
             .backend(path)

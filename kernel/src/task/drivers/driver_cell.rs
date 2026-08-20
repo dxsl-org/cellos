@@ -2,23 +2,36 @@
 //!
 //! When a Tier-1 Driver Cell calls `sys_register_block_driver`,
 //! `sys_register_nic_driver`, or `sys_register_gpu_driver`, the kernel records
-//! its TID here.  Service clients use `sys_lookup_service(service::X)` to find
-//! the provider; these statics are the backing store for that lookup.
+//! its TID here. These registrations support service routing and interrupt
+//! ownership checks until the owning Cell exits.
 //!
-//! `0` means "no driver cell registered". Block + NIC fall back to kernel-resident drivers
-//! (virtio_blk / MMC for block; no NIC fallback — NIC is always a Driver Cell).
+//! `0` means "no driver cell registered". Block can fall back to kernel-resident
+//! virtio-blk or MMC; NIC has no kernel fallback and is always a Driver Cell.
 //! GPU has no kernel fallback; compositor refuses to init until a GPU Cell registers.
 
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use crate::sync::Spinlock;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// TID of the registered block Driver Cell (0 = none; kernel virtio_blk/MMC is the fallback).
 pub static BLOCK_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
 
-/// TID of the registered NIC Driver Cell (0 = none; no kernel NIC fallback exists).
-pub static NIC_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
+#[derive(Clone, Copy)]
+struct NicDriverState {
+    owner_tid: usize,
+    virtio_irq: u32,
+}
 
-/// Cached VirtIO IRQ proven to belong to the registered NIC Driver Cell (0 = none).
-static NIC_DRIVER_VIRTIO_IRQ: AtomicU32 = AtomicU32::new(0);
+impl NicDriverState {
+    const fn empty() -> Self {
+        Self {
+            owner_tid: 0,
+            virtio_irq: 0,
+        }
+    }
+}
+
+/// Registered NIC owner paired with the proven VirtIO IRQ, if any.
+static NIC_DRIVER_STATE: Spinlock<NicDriverState> = Spinlock::new(NicDriverState::empty());
 
 /// TID of the registered GPU Driver Cell (0 = none; no kernel GPU fallback).
 pub static GPU_DRIVER_CELL: AtomicUsize = AtomicUsize::new(0);
@@ -59,13 +72,14 @@ pub fn register_block_driver(tid: usize) {
 /// Record `tid` as the active NIC driver.  Overwrites any previous registration.
 /// `warn!` — see `register_block_driver`.
 pub fn register_nic_driver(tid: usize) {
+    let proven_irq = registered_virtio_irq_for_owner(tid).unwrap_or(0);
+
     // Fail closed during replacement: an IRQ only becomes network-owned again
-    // after this TID is recorded and its VirtIO slot ownership is proven.
-    NIC_DRIVER_VIRTIO_IRQ.store(0, Ordering::Release);
-    NIC_DRIVER_CELL.store(tid, Ordering::Release);
-    if let Some(irq) = registered_virtio_irq_for_owner(tid) {
-        NIC_DRIVER_VIRTIO_IRQ.store(irq, Ordering::Release);
-    }
+    // after the replacement publishes both the owner and its proven IRQ together.
+    *NIC_DRIVER_STATE.lock() = NicDriverState {
+        owner_tid: tid,
+        virtio_irq: proven_irq,
+    };
     log::warn!("[driver_cell] NIC driver registered: tid={}", tid);
 }
 
@@ -78,19 +92,16 @@ pub fn deregister_block_driver(tid: usize) {
 
 /// Clear the NIC driver registration (called on cell exit/kill).
 pub fn deregister_nic_driver(tid: usize) {
-    if NIC_DRIVER_CELL
-        .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
-        .is_ok()
-    {
-        NIC_DRIVER_VIRTIO_IRQ.store(0, Ordering::Release);
+    let mut state = NIC_DRIVER_STATE.lock();
+    if state.owner_tid == tid {
+        *state = NicDriverState::empty();
     }
 }
 
 /// Returns true only for the cached VirtIO IRQ proven to belong to the active NIC.
 pub fn owns_registered_nic_irq(irq: u32) -> bool {
-    NIC_DRIVER_CELL.load(Ordering::Acquire) != 0
-        && irq != 0
-        && NIC_DRIVER_VIRTIO_IRQ.load(Ordering::Acquire) == irq
+    let state = NIC_DRIVER_STATE.lock();
+    state.owner_tid != 0 && irq != 0 && state.virtio_irq == irq
 }
 
 /// Record `tid` as the active GPU driver.  Overwrites any previous registration.
@@ -127,4 +138,74 @@ pub fn clear_input_cell_if(tid: usize) {
     INPUT_CELL_TID
         .compare_exchange(tid, 0, Ordering::AcqRel, Ordering::Relaxed)
         .ok();
+}
+
+/// Clear every well-known Driver Cell role owned by `tid`.
+///
+/// This is the single lifecycle teardown entrypoint for task death, force-exit,
+/// and hotswap retirement. Each role clears only on an exact TID match so an
+/// unrelated replacement cannot lose its registration.
+pub fn deregister_all_for(tid: usize) {
+    clear_input_cell_if(tid);
+    deregister_block_driver(tid);
+    deregister_nic_driver(tid);
+    deregister_gpu_driver(tid);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        deregister_all_for, NicDriverState, BLOCK_DRIVER_CELL, GPU_DRIVER_CELL, INPUT_CELL_TID,
+        NIC_DRIVER_STATE,
+    };
+    use core::sync::atomic::Ordering;
+
+    fn seed_roles(owner_tid: usize, nic_irq: u32) {
+        BLOCK_DRIVER_CELL.store(owner_tid, Ordering::Release);
+        *NIC_DRIVER_STATE.lock() = NicDriverState {
+            owner_tid,
+            virtio_irq: nic_irq,
+        };
+        GPU_DRIVER_CELL.store(owner_tid, Ordering::Release);
+        INPUT_CELL_TID.store(owner_tid, Ordering::Release);
+    }
+
+    fn reset_roles() {
+        seed_roles(0, 0);
+    }
+
+    #[test]
+    fn deregister_all_for_respects_tid_matches_and_clears_stale_nic_irq_cache() {
+        reset_roles();
+        seed_roles(41, 29);
+
+        deregister_all_for(7);
+
+        assert_eq!(BLOCK_DRIVER_CELL.load(Ordering::Acquire), 41);
+        let state = *NIC_DRIVER_STATE.lock();
+        assert_eq!(state.owner_tid, 41);
+        assert_eq!(state.virtio_irq, 29);
+        assert_eq!(GPU_DRIVER_CELL.load(Ordering::Acquire), 41);
+        assert_eq!(INPUT_CELL_TID.load(Ordering::Acquire), 41);
+
+        deregister_all_for(41);
+
+        assert_eq!(BLOCK_DRIVER_CELL.load(Ordering::Acquire), 0);
+        let state = *NIC_DRIVER_STATE.lock();
+        assert_eq!(state.owner_tid, 0);
+        assert_eq!(state.virtio_irq, 0);
+        assert_eq!(GPU_DRIVER_CELL.load(Ordering::Acquire), 0);
+        assert_eq!(INPUT_CELL_TID.load(Ordering::Acquire), 0);
+
+        seed_roles(22, 0);
+
+        let state = *NIC_DRIVER_STATE.lock();
+        assert_eq!(state.owner_tid, 22);
+        assert_eq!(
+            state.virtio_irq, 0,
+            "stale NIC IRQ cache must not survive owner teardown"
+        );
+
+        reset_roles();
+    }
 }

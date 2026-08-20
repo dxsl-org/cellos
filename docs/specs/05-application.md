@@ -1,26 +1,38 @@
 # Cellos Architecture: Application Tiers
-**Version**: 0.9 (Security Silo reclassified from Tier 3a → Tier 1 hardware capability)
-**Status**: Definitive — updated 2026-08-01 (D12 hardware-isolation ruling)
+**Version**: 1.0 (canonical tier/runtime/SDK taxonomy)
+**Status**: Definitive — updated 2026-08-20 (ADR 0003)
 
 ---
 
-## 1. Chiến lược phân tầng (The Tiered Strategy)
+## 1. Application tier taxonomy
 
-Cellos phân cấp ứng dụng dựa trên sự cân bằng giữa **Hiệu năng**, **Tính an toàn**, và **Tính tương thích**.
+Cellos uses **tier** only for application execution and isolation classes.
+Do not use `layer` for these classes; `layer` is reserved for architecture
+stacks and hardware-isolation layers. Do not use numbered SDK tiers.
 
-| Đặc điểm | Tier 1: Native | Tier 1b: C Libs | Tier 3: Virtual |
-| :--- | :--- | :--- | :--- |
-| **Công nghệ** | Rust cells (SAS) | Cellos-libc + FFI | Hypervisor Cell |
-| **Hiệu năng** | 100% native | 100% native | ~85-90% native |
-| **Cách ly** | Compiler (LBI) | Compiler (LBI) | Hardware Stage-2 |
-| **Toolchain** | cargo | cargo + cc crate | Linux ecosystem |
-| **Trusted** | Bắt buộc | Bắt buộc | Không cần |
+| Tier | Canonical name | Runtime profiles | Isolation | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 1** | Trusted SAS Cell | `rust-no-std`, future `rust-std`, `ffi-posix`, `lua` | Shared SAS + LBI; fleet posture depends on signing/admission | Shipped for current native Cells; future `rust-std` is G4 |
+| **Tier 2** | Native Domain Cell | Same native Cell shape as Tier 1 | Private MMU domain, explicit mapped grants, copied/domain-aware IPC | Accepted design, **not implemented** |
+| **Tier 3** | VM Guest | `linux-guest` | Hypervisor / Stage-2 | ARM64 guest path exists; broader platform work tracked separately |
 
-**Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md`.**
+Legacy aliases:
+
+- **Tier 1b** now means a Tier 1 runtime profile, usually `ffi-posix`
+  (C/C++/Zig through POSIX shim or mlibc) or `lua`.
+- **Tier 3b** now means the Tier 3 `linux-guest` profile.
+
+The SDK is one family of named modules: Foundation, Runtime profiles, Service
+clients, UI/graphics, Middleware/helpers, Tooling, and Guest integration. The
+SDK is not split into Tier 1/Tier 2/Tier 3 SDKs.
+
+Code note: Manifest v2 currently has a field named `tier` for x86 PKU
+protection-key selection. That is a **protection class**, not this application
+tier taxonomy; compatibility aliases must be preserved if the code is renamed.
 
 ---
 
-## 2. Tier 1: Native Cells
+## 2. Tier 1: Trusted SAS Cells
 
 Dành cho kernel, drivers, services, RT control — bất cứ thứ gì cần hiệu năng tuyệt đối hoặc quyền truy cập hardware.
 
@@ -28,10 +40,13 @@ Dành cho kernel, drivers, services, RT control — bất cứ thứ gì cần h
 - Isolation: Rust type system (Language-Based Isolation)
 - Bắt buộc: `#![forbid(unsafe_code)]` cho Cells; `unsafe` chỉ trong kernel/HAL
 - Không giới hạn file count — full Cargo crate với submodules
+- Runtime profile mặc định hiện tại: `rust-no-std`; `rust-std` là G4 và phải đi
+  qua pure-Rust PAL/custom target, không đi qua mlibc.
 
 ### 2.1 Tier 1 Hardware Extensions (G2 ARM64/x86)
 
-Một số capabilities yêu cầu hardware support nhưng vẫn là **Tier 1 API** — không phải Tier 3, không cần hypervisor.
+Một số capabilities yêu cầu hardware support nhưng vẫn là **Tier 1 API** —
+không biến application thành Tier 3. Backend có thể dùng hypervisor hardware.
 
 #### Hardware Key Isolation (Silo)
 
@@ -44,7 +59,7 @@ Purpose: TLS private keys an toàn ngay cả khi Cellos kernel bị compromise
 Silo không phải là một VM tier. Nó là một Tier 1 Rust API consume một hardware fence:
 
 ```rust
-// cells/apps/silo-test/src/main.rs
+// cells/tests/silo-test/src/main.rs
 let handle = ostd::silo::SiloHandle::connect()?;
 handle.init_key(&entropy)?;
 let sig = handle.sign(&sha256_digest)?;        // P-256 ECDSA
@@ -71,7 +86,7 @@ threat model, implementation, and verification.
 
 ---
 
-## 3. Tier 1b: C Library Integration
+## 3. Tier 1 `ffi-posix` profile (legacy alias: Tier 1b)
 
 Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp vendor SDK, legacy firmware, hoặc thư viện C không có Rust equivalent mà không cần rewrite.
 
@@ -80,13 +95,13 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 - Camera ISP library từ silicon vendor
 - Validated/certified C codebase (DO-178, IEC 62443) — rewrite phá cert
 - Legacy robot firmware C/C++ (10K+ LOC) — rewrite cost quá cao
-- Complex C apps: DOOM, FFmpeg, SQLite, mbedTLS (yêu cầu mlibc Tier B)
+- Complex C apps: DOOM, FFmpeg, SQLite, mbedTLS (usually require the mlibc POSIX profile)
 
-### 3.1 Two-tier C library strategy (G2)
+### 3.1 Two-profile C library strategy (G2)
 
-**Tier A — posix.rs shim** (default, embedded/simple cells, no build overhead):
+**Profile A — posix.rs shim** (default, embedded/simple cells, no build overhead):
 
-| | Tier A: posix.rs | Tier B: mlibc |
+| | Profile A: posix.rs | Profile B: mlibc |
 |---|---|---|
 | Binary size | Small | Larger (Grisu3, slab alloc) |
 | printf float | Limited | Grisu3 (correct %.15g) |
@@ -96,12 +111,12 @@ Dành cho **nhúng thư viện C/C++ vào Rust cell** — link trực tiếp ven
 
 **CRITICAL mutual exclusion:** `api = { features = ["mlibc"] }` suppresses posix.rs. Forget the feature while using mlibc-shim → duplicate-symbol link error. **Never link both.**
 
-See `docs/mlibc-build.md` for the full Tier B build guide.
+See `docs/mlibc-build.md` for the full mlibc build guide.
 
 **Cách hoạt động:** Rust cell link statically với C library. Các lời gọi POSIX bên trong C code (`malloc`, `open`, `read`...) được resolve sang `Cellos-libc` (Newlib + POSIX shim) tại link time — chạy native trong SAS, 0ms overhead.
 
 ```
-[Tier 1b link flow — Tier B mlibc:]
+[Tier 1 ffi-posix link flow - mlibc profile:]
   cell.rs (Rust, owns the cell)
     └── api = { features = ["mlibc"] }  ← posix.rs suppressed
     └── mlibc-shim                      ← links third_party/mlibc/build/libc.a
@@ -109,7 +124,7 @@ See `docs/mlibc-build.md` for the full Tier B build guide.
          ↓ links statically
         librknn_api.a  (vendor SDK, C/C++)
          ↓ malloc/open/read → resolve to
-        libc.a  (mlibc Tier B — sysdeps/Cellos → Cellos_syscall)
+        libc.a  (mlibc profile — sysdeps/Cellos → Cellos_syscall)
          ↓ → ViSyscall (VFS IPC, Net IPC, GetTime, GetRandom)
 ```
 
@@ -142,9 +157,9 @@ See `docs/mlibc-build.md` for the full Tier B build guide.
 - ❌ Libraries dùng `dlopen` (dynamic plugins)
 - ❌ Libraries fork subprocess (libgit2 hooks, ffmpeg filters)
 
-**Tier 1b vs Tier 3b — khi nào dùng cái nào:**
+**Tier 1 ffi-posix vs Tier 3 linux-guest — khi nào dùng cái nào:**
 
-| | Tier 1b: C library link | Tier 3b: Linux VM |
+| | Tier 1 ffi-posix: C library link | Tier 3 linux-guest: Linux VM |
 |---|---|---|
 | Overhead | 0ms — native SAS | 2-10s boot |
 | Isolation | LBI (Rust type system) | Hardware Stage-2 MMU |
@@ -158,18 +173,18 @@ See `docs/mlibc-build.md` for the full Tier B build guide.
 
 ### 4.1 Tại sao cần Tier 3
 
-Tier 1 + Tier 1b tốt cho code tin cậy nhưng thiếu ecosystem. G2 target (server/PC) cần:
+Tier 1 native profiles tốt cho code tin cậy nhưng thiếu ecosystem. G2 target (server/PC) cần:
 - nginx, PostgreSQL, Node.js, Python full, Java — không port được hết lên Cellos
 - **Giải pháp**: Chạy Linux VM bên trong Cellos như 1 Tier 1 Hypervisor Cell
 
 Analogy: WSL2 trên Windows — chạy Windows + Linux side-by-side, Linux disk/net nối vào Windows.
 
-> **Note**: Security Silo đã được reclassify sang §2.1 (Tier 1 Hardware Extensions). Silo KHÔNG phải Tier 3 — nó là Tier 1 API không cần hypervisor, không phải VM tier.
+> **Note**: Security Silo đã được reclassify sang §2.1 (Tier 1 Hardware Extensions). Silo KHÔNG phải Tier 3 — nó là Tier 1 API backed by a hardware fence, không phải app/VM tier.
 
-### 4.2 Tier 3b — Linux VM [G2]
+### 4.2 Tier 3 `linux-guest` profile (legacy alias: Tier 3b) [G2]
 
 ```
-Mục đích: Chạy Linux ecosystem (apt install nginx → works)
+Mục đích: Chạy Linux ecosystem (`apk add nginx` trên Alpine hiện tại)
 Guest: Linux kernel + userspace, khởi động bình thường
 Interface: VirtIO devices (disk, net, console) → forward sang Cellos services
 Boot time: 2-10 giây (Linux init)
@@ -178,7 +193,7 @@ Boot time: 2-10 giây (Linux init)
 Diagram:
 ```
 Cellos (HS-mode)
-├── Tier 1/1b cells (HU-mode) — vfs, net, shell, drivers
+├── Tier 1 cells (HU-mode) — vfs, net, shell, drivers, trusted runtime profiles
 └── Hypervisor Cell (Tier 1, HS-mode capable)
     ├── Cellos_hv/ (minimal VMM, ~9K LOC Rust)
     │   sys_create_vm / sys_create_vcpu
@@ -192,7 +207,7 @@ Cellos (HS-mode)
         virtio-gpu  → sys_send(COMPOSITOR, ...) [G2+]
 
     └── Linux Guest (VS-mode, trong Stage-2 fence)
-            apt install nginx; nginx; → works
+            apk add nginx; nginx; → works
 ```
 
 ### 4.3 VMM: Minimal VMM (custom, ~2.9K LOC shipped; ~9K planned at full device coverage)

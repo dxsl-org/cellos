@@ -1,4 +1,4 @@
-# Tier 1 Rust (Bare) — Minimal Cell Apps
+# Tier 1 `rust-no-std` Profile — Minimal Cell Apps
 
 > Direct syscall access, no SDK abstractions. For apps that are pure compute or need fine-grained control.
 
@@ -63,7 +63,7 @@ api::declare_manifest!(
     spawn = false,      // spawn other Cells
     gpio = false,       // GPIO peripherals
     uart = false,       // UART serial
-    hypervisor = false  // create VMs (Tier 3b, G2+)
+    hypervisor = false  // create VMs (Tier 3 linux-guest, G2+)
 );
 
 api::declare_syscalls![Send, Recv, Log, Exit, GetTime];
@@ -116,27 +116,27 @@ That's it. No IPC, no service clients, no async — just init and exit.
 
 ---
 
-## When to Use Tier 1 Bare
+## When to Use Tier 1 `rust-no-std`
 
-✅ Numeric computation, data processing  
-✅ Pure-Rust no external I/O  
-✅ Extreme performance requirements  
-✅ Learning syscalls directly  
+✅ Numeric computation, data processing
+✅ Pure-Rust no external I/O
+✅ Extreme performance requirements
+✅ Learning syscalls directly
 
-❌ Reading files → use Tier 1 + SDK L1 (VFS client)  
-❌ Talking to other Cells → use Tier 1 + SDK L1 (IPC wrappers)  
-❌ Building UIs → use Tier 1 + ViUI  
+❌ Reading files → use Tier 1 + SDK service clients (VFS client)
+❌ Talking to other Cells → use Tier 1 + SDK service clients (IPC wrappers)
+❌ Building UIs → use Tier 1 + ViUI
 
 ---
 
 ## Canonical Example
 
-See [cells/apps/hello-cell/src/main.rs](../../cells/apps/hello-cell/src/main.rs) — 18 lines total.
+See [cells/demos/hello-cell/src/main.rs](../../cells/demos/hello-cell/src/main.rs) — 18 lines total.
 
 ---
 
 ## Next Steps
 
-- Need services (VFS, network)? → [Tier 1 + SDK L1](tier1-rust-sdk.md)
+- Need services (VFS, network)? → [Tier 1 + SDK service clients](tier1-rust-sdk.md)
 - Need a UI? → [Tier 1 + ViUI](viui-guide.md)
-- Need C interop? → [Tier 1b C/Zig](tier1b-c-zig.md)
+- Need C interop? → [Tier 1 `ffi-posix` profile](tier1b-c-zig.md)

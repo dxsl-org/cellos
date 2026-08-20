@@ -70,11 +70,11 @@ Capability checks at IPC boundaries (does the sender hold the right to request t
 operation?) must be kernel-enforced or enforced in a trusted kernel-adjacent layer —
 not left to individual Cell code. This is what the syscall gate in `syscall.rs` provides.
 
-### 1.4 LBI covers Rust Cells only — the Tier-1b / USER-MMIO gap
+### 1.4 LBI covers safe Rust Cells only — the Tier 1 `ffi-posix` / USER-MMIO gap
 
 LBI is a property of the **Rust compiler**. It isolates Tier-1 Rust Cells
-(`#![forbid(unsafe_code)]`) from each other. It says **nothing** about a Tier-1b
-C/Zig Cell (mlibc/Cellos-libc), which can form an arbitrary raw pointer — the
+(`#![forbid(unsafe_code)]`) from each other. It says **nothing** about trusted
+C/Zig code in the Tier 1 `ffi-posix` profile (mlibc/Cellos-libc), which can form an arbitrary raw pointer — the
 exact thing LBI forbids in Rust.
 
 This matters because Cellos is a **Single Address Space**: there is one page
@@ -84,7 +84,7 @@ table shared by every Cell. Device MMIO that any Driver Cell needs is mapped
 **software ownership registry, not a hardware gate** — it governs the syscall,
 not a raw dereference.
 
-**Threat:** a Tier-1b C/Zig Cell can `*(volatile u32*)0x10001000 = …` directly.
+**Threat:** a Tier 1 C/Zig `ffi-posix` Cell can `*(volatile u32*)0x10001000 = …` directly.
 The page is USER-mapped, so no fault. It can program a VirtIO device's virtqueue
 with **arbitrary physical addresses**; virtio-mmio devices are **not** behind the
 IOMMU (which fronts only the PCIe root complex, §2 Category D), so the device
@@ -92,16 +92,17 @@ then DMAs to/from any physical frame — defeating LBI, the SAS frame-identity
 invariant, and capability enforcement in one step. A Rust Cell cannot do this
 (the pointer needs `unsafe`, which cells forbid).
 
-**Decision (G1):** Tier-1b Cells are **trusted, first-party code** (operator-
-compiled, signed by fleet policy — see the headless-robot posture in the roadmap
-§G.2). A malicious Tier-1b Cell is **out of the G1 threat model**; the USER-mapped
+**Decision (G1):** Tier 1 `ffi-posix` Cells are **trusted, first-party code**
+(operator-compiled, signed by fleet policy — see the headless-robot posture in the roadmap
+§G.2). A malicious FFI Cell is **out of the G1 threat model**; the USER-mapped
 MMIO window is safe under that assumption and is a deliberate performance choice
 (a Driver Cell polls device registers directly instead of via a per-access
 syscall). This assumption is **load-bearing** and must be stated wherever "LBI
-isolates Cells" is claimed — the claim holds for Rust Cells, not for Tier-1b.
+isolates Cells" is claimed — the claim holds for safe Rust Cells, not for FFI code.
 
-**Requirement (G2 / untrusted third-party):** before Tier-1b (or any Cell) may
-run **untrusted**, the MMIO window must be gated in hardware per-Cell:
+**Requirement (G2 / untrusted third-party):** before FFI code (or any native
+Cell) may run **untrusted**, it must execute in Tier 2 once native domains exist;
+today it belongs in a Tier 3 VM. The MMIO window must be gated in hardware per-domain:
 - **RISC-V**: Spec 19 Layer B page-table domains are the implementable S-mode wall.
   PMP/Smepmp would require a separately approved M-mode firmware owner; the current
   runtime cannot program PMP or reconfigure it on a cell switch.
@@ -112,8 +113,9 @@ run **untrusted**, the MMIO window must be gated in hardware per-Cell:
   MPK may add Layer-C hardening only after PTE key tagging and shared/MMIO-page semantics
   are designed and verified; the current PKRU plumbing does not enforce this boundary.
 
-Until then, **do not spawn an untrusted Tier-1b Cell adjacent to USER-mapped
-device MMIO.** Tier-1b is a first-party capability, not a sandbox.
+Until then, **do not spawn an untrusted FFI Cell in the shared SAS adjacent to
+USER-mapped device MMIO.** The Tier 1 `ffi-posix` profile is a trusted integration
+path, not a sandbox.
 
 ---
 

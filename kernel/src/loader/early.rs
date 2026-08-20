@@ -40,6 +40,14 @@ pub const BOOTSTRAP_CELLS: &[&str] = &[
     "/bin/shell",
 ];
 
+/// Cells that intentionally track the kernel's embedded development payload.
+///
+/// Phase03 hardware demos live here so a TFTP kernel update cannot silently run
+/// stale copies from the removable-media bootstrap table. They are not boot
+/// dependencies and therefore remain separate from [`BOOTSTRAP_CELLS`].
+const EMBEDDED_DEVELOPMENT_CELLS: &[&str] =
+    &["/bin/periph-demo", "/bin/sensor-demo", "/bin/spi-demo"];
+
 /// True if `path` is a bootstrap cell that must resolve from the VIFS1 ramdisk
 /// before the block device, so boot does not depend on a kernel block driver.
 pub fn is_bootstrap_path(path: &str) -> bool {
@@ -154,9 +162,9 @@ impl EarlyLoader {
     /// Read a cell ELF into a heap-allocated buffer.
     ///
     /// Resolution order depends on whether the path is a bootstrap cell:
-    /// - **Bootstrap** ([`is_bootstrap_path`]): VIFS1 ramdisk (RAM) FIRST, block
-    ///   table only as a transitional fallback. This is what lets the boot path
-    ///   run with no block driver (G2 loader redesign).
+    /// - **VIFS1-first**: bootstrap cells and embedded development cells resolve
+    ///   from RAM before the block table. This keeps boot independent of block
+    ///   I/O and keeps hardware-gate binaries paired with their TFTP kernel.
     /// - **Non-bootstrap**: block table first, VIFS1 fallback (historical order,
     ///   unchanged until those cells migrate to a VFS-served store — plan phase 03).
     ///
@@ -165,6 +173,16 @@ impl EarlyLoader {
     /// # Errors
     /// Returns `ViError::NotFound` if neither source has the path.
     pub fn read_file(path: &str) -> ViResult<Box<[u8]>> {
+        if EMBEDDED_DEVELOPMENT_CELLS.contains(&path) {
+            return crate::fs::read_file_from_vifs1(path).inspect_err(|error| {
+                log::error!(
+                    "[early] embedded development cell {:?} missing from VIFS1",
+                    path
+                );
+                let _ = error;
+            });
+        }
+
         if is_bootstrap_path(path) {
             match crate::fs::read_file_from_vifs1(path) {
                 Ok(buf) => {
@@ -174,7 +192,7 @@ impl EarlyLoader {
                     // suppressed for vfs/config/shell (spawned by init after the log
                     // level drops to Warn, main.rs) during normal operation.
                     log::info!(
-                        "[early] bootstrap {} <- VIFS1 ramdisk ({} bytes)",
+                        "[early] VIFS1-first {} <- ramdisk ({} bytes)",
                         path,
                         buf.len()
                     );
@@ -182,7 +200,7 @@ impl EarlyLoader {
                 }
                 Err(_) => {
                     log::warn!(
-                        "[early] bootstrap {:?} not in VIFS1 — falling back to block table",
+                        "[early] VIFS1-first {:?} missing — falling back to block table",
                         path
                     );
                     return Self::read_from_block_table(path);

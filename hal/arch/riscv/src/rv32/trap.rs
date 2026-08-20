@@ -5,23 +5,10 @@
 //! - Interrupt bit is bit 31 of scause (not bit 63)
 //! - No PLIC claim in Phase 31 Nano (timer/software interrupts only)
 
-/// Trap frame saved on the stack by `__trap_entry32`.
-///
-/// # Layout invariant
-/// Offsets MUST match `rv32/asm/trap.S` exactly.
-/// regs[N] is at byte offset N*4; CSR fields follow at offset 128+.
-#[derive(Debug, Clone, Copy, Default)]
-#[repr(C)]
-pub struct ViTrapFrame32 {
-    /// General-purpose registers x0..x31 (4 bytes each).
-    pub regs: [u32; 32],
-    pub sstatus: u32,
-    pub sepc: u32,
-    pub stval: u32,
-    pub scause: u32,
-}
-
-const _: () = assert!(core::mem::size_of::<ViTrapFrame32>() == 144);
+pub use hal_arch_trait::ViTrapFrame32;
+use hal_arch_trait::{
+    vi_current_cell_id, vi_terminate_on_fault, vi_timer_tick, ViCell_syscall_dispatch,
+};
 
 extern "C" {
     fn __trap_entry32();
@@ -105,25 +92,5 @@ pub extern "C" fn vi_trap_handler32(frame: &mut ViTrapFrame32) {
 }
 
 fn vi_handle_syscall(frame: &mut ViTrapFrame32) {
-    extern "Rust" {
-        // Same symbol name as riscv64; kernel provides this via cfg-gated stub.
-        fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame32);
-    }
-    unsafe {
-        ViCell_syscall_dispatch(frame);
-    }
-}
-
-extern "Rust" {
-    /// Called on every S-mode timer interrupt. Defined in `kernel::task`.
-    fn vi_timer_tick();
-    /// Terminate the currently-executing Cell on hardware fault. Defined in `kernel::task`.
-    ///
-    /// The arity must match the `#[no_mangle]` definition exactly — this was declared
-    /// with two parameters against a three-parameter definition, so the callee read
-    /// whatever the third argument register happened to hold and reported it as the
-    /// fault address.
-    fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
-    /// Returns CURRENT_CELL_ID (0 = kernel, nonzero = a Cell). Defined in `kernel::task`.
-    fn vi_current_cell_id() -> usize;
+    ViCell_syscall_dispatch(frame);
 }

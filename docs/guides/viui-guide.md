@@ -20,7 +20,7 @@ ViUI is a **no_std Signal-based UI framework** designed for Cellos's constraints
 
 ## Architecture
 
-See [system-architecture.md § ViUI Architecture](../system-architecture.md#viui-architecture-g2-target) for:
+See [system-architecture.md § ViUI Architecture](../system-architecture.md#viui-architecture) for:
 - Signal<T> reactive model
 - Layout node tree
 - DirtyRect damage tracking
@@ -156,19 +156,19 @@ api::declare_syscalls![Send, Recv, Log, Exit, LookupService];
 
 ## When to Use Tier 1 + ViUI
 
-✅ Dashboards, monitoring UIs, control panels  
-✅ Embedded GUIs (robot, drone, terminal UI)  
-✅ Real-time data visualization  
-✅ Learn modern reactive UI patterns  
+✅ Dashboards, monitoring UIs, control panels
+✅ Embedded GUIs (robot, drone, terminal UI)
+✅ Real-time data visualization
+✅ Learn modern reactive UI patterns
 
-❌ Complex web-like apps → port to Tier 3b Linux + web framework  
-❌ Need platform themes → design custom theme for ViUI  
+❌ Complex web-like apps → port to Tier 3 `linux-guest` + web framework
+❌ Need platform themes → design custom theme for ViUI
 
 ---
 
 ## Next Steps
 
-- See [system-architecture.md § ViUI Architecture](../system-architecture.md#viui-architecture-g2-target) for internals.
+- See [system-architecture.md § ViUI Architecture](../system-architecture.md#viui-architecture) for internals.
 - Read the Signal API docs: `libs/viui-core/src/signal.rs`
 - DSL syntax guide: `libs/viui-macros/` (proc_macro attributes)
 - Example apps: `cells/apps/robot-dashboard/`, `cells/apps/sensor-demo/`
@@ -177,11 +177,11 @@ api::declare_syscalls![Send, Recv, Log, Exit, LookupService];
 
 ## Troubleshooting
 
-**Compositor not found?**  
+**Compositor not found?**
 → Start the compositor cell first: `compositor` from shell.
 
-**DSL parse error?**  
+**DSL parse error?**
 → Check .vi syntax. Typos in element names or attributes fail at compile time (expected).
 
-**Surface allocation fails?**  
+**Surface allocation fails?**
 → Compositor may not have enough grant memory. Reduce surface size or check kernel quota.

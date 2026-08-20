@@ -1,6 +1,7 @@
-# Tier 1b Lua — Dynamic Scripting
+# Tier 1 `lua` Profile — Dynamic Scripting
 
-> Lua interpreter Cell for quick scripting, CLI tools, and dynamic workloads.
+> Legacy name: Tier 1b Lua. Lua runs as a trusted Tier 1 interpreter Cell for
+> quick scripting, CLI tools, and dynamic workloads.
 
 ---
 
@@ -181,7 +182,8 @@ end
 - **Heap**: shared with the Lua runtime; no per-script limit
 - **Timeout**: runs until `os.exit()` or kernel watchdog (see `sys_heartbeat`)
 
-For performance-critical work, drop to Tier 1 Rust or Tier 1b C.
+For performance-critical work, drop to Tier 1 Rust or the Tier 1 `ffi-posix`
+profile for trusted C/C++/Zig libraries.
 
 ---
 
@@ -210,16 +212,16 @@ Access via `require("json")` or `dofile("/tmp/json.lua")`.
 
 ---
 
-## When to Use Tier 1b Lua
+## When to Use Tier 1 `lua`
 
-✅ Quick prototyping, one-off scripts  
-✅ CLI tools, text processing  
-✅ Configuration / task automation  
-✅ Learning Cellos syscalls (no Rust needed)  
+✅ Quick prototyping, one-off scripts
+✅ CLI tools, text processing
+✅ Configuration / task automation
+✅ Learning Cellos syscalls (no Rust needed)
 
-❌ Performance-critical code → use Tier 1 Rust  
-❌ Network apps → use Tier 1 Rust + SDK L1  
-❌ Untrusted code → use Tier 3b (Linux VM, G2+)  
+❌ Performance-critical code → use Tier 1 Rust
+❌ Network apps → use Tier 1 Rust + SDK service clients
+❌ Untrusted code → use Tier 3 `linux-guest` while Tier 2 is not implemented
 
 ---
 
@@ -231,13 +233,13 @@ See [cells/runtimes/lua/src/main.rs](../../cells/runtimes/lua/src/main.rs) — t
 
 ## Troubleshooting
 
-**Script hangs / doesn't exit?**  
+**Script hangs / doesn't exit?**
 → Lua is waiting for input (REPL mode). Use `os.exit()` or press Ctrl+C (if supported).
 
-**VFS returns nil?**  
+**VFS returns nil?**
 → Service not registered or file doesn't exist. Check kernel boot output.
 
-**io.popen / os.execute fails?**  
+**io.popen / os.execute fails?**
 → These are intentionally disabled (security boundary). Use VFS + separate Cells instead.
 
 ---
@@ -245,5 +247,5 @@ See [cells/runtimes/lua/src/main.rs](../../cells/runtimes/lua/src/main.rs) — t
 ## Next Steps
 
 - Need performance? → [Tier 1 Rust](tier1-rust-sdk.md)
-- Have C/C++ code? → [Tier 1b C/Zig](tier1b-c-zig.md)
+- Have C/C++ code? → [Tier 1 `ffi-posix` profile](tier1b-c-zig.md)
 - See [scripting-guide.md](../scripting-guide.md) for Lua ecosystem integration.

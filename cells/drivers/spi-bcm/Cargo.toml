@@ -1,0 +1,18 @@
+[package]
+name = "driver-spi-bcm"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[features]
+default = ["runtime"]
+runtime = ["dep:ostd"]
+
+[dependencies]
+hal-soc-bcm27xx = { path = "../../../hal/soc/bcm27xx", version = "0.2.0" }
+hal-spi = { path = "../../../hal/traits/spi", version = "0.1.0" }
+ostd = { path = "../../../libs/ostd", version = "0.2.0", optional = true }
+types = { path = "../../../libs/types", version = "0.1.0" }
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

@@ -11,6 +11,7 @@
 //!   0x0E — #PF (with error code) → `vi_handle_page_fault()`
 
 use core::arch::asm;
+use hal_arch_trait::{vi_handle_page_fault, vi_handle_uart_irq, vi_timer_tick};
 
 /// Interrupt stack frame pushed by the CPU on every exception/interrupt entry.
 #[repr(C)]
@@ -141,26 +142,6 @@ extern "x86-interrupt" fn x86_64_irq_handler(frame: InterruptFrame) {
     // TODO: generate per-vector stubs that push the vector index.
     super::apic::eoi();
     let _ = frame;
-}
-
-// Kernel-provided hooks — defined in kernel::task / kernel::memory.
-// Declared here as externs to let the HAL call them without a crate cycle.
-extern "Rust" {
-    /// LAPIC periodic timer: increment tick counter + run scheduler.
-    /// Defined in `kernel::task` with `#[no_mangle]`.
-    fn vi_timer_tick();
-
-    /// UART RX IRQ: read byte from COM1 into the shared RX buffer.
-    /// Defined in `kernel::task::drivers::uart` with `#[no_mangle]`.
-    fn vi_handle_uart_irq();
-
-    /// #PF handler. Defined in `kernel::memory::paging` with `#[no_mangle]`.
-    /// `rip`/`cs`/`rsp` come from the CPU-pushed interrupt frame so a kernel
-    /// fault panic can be symbolized (and a mis-dispatched #GP recognized —
-    /// this handler serves EVERY error-code vector until per-vector stubs
-    /// exist). `rsp` lets the kernel walk the faulting stack for return
-    /// addresses.
-    fn vi_handle_page_fault(va: usize, error_code: u64, rip: u64, cs: u64, rsp: u64);
 }
 
 /// LAPIC periodic timer handler (vector 0x20).

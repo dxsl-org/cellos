@@ -1557,11 +1557,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
             attest_caller,
         } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.begin_receive_context(mask);
-                }
-            }
             // Identity trailer, when requested, is written at each delivery point
             // AFTER the payload copy and AFTER the scheduler lock is dropped —
             // `attested_identity_of` takes that lock itself.
@@ -1577,6 +1572,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let mut queued_death = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
+                    // Keep VFS caller-context maintenance inside the receive path's
+                    // existing critical section. UART input performs one receive per
+                    // event, so a separate scheduler lock here starves its tiny FIFO.
+                    t.begin_receive_context(mask);
                     if !t.pending_deaths.is_empty() {
                         let (dead_tid, reason) = t.pending_deaths.remove(0);
                         // Deliver the exit reason as the recv payload (NotifyOnExit
@@ -1852,11 +1851,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
             deadline,
         } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.begin_receive_context(mask);
-                }
-            }
             // Drain pending_msgs first (same as Recv). ipc_post_nonblock queues
             // bytes here when the target is busy (e.g. UART burst fills pending_msgs
             // while input service is mid-dispatch). Without this drain, RecvTimeout
@@ -1867,6 +1861,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 // above: a masked RecvTimeout must not consume queued input
                 // events meant for the wildcard read loop.
                 let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
+                    t.begin_receive_context(mask);
                     let slot = t
                         .pending_msgs
                         .iter()
@@ -1981,11 +1976,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_ptr,
             buf_len,
         } => {
-            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.begin_receive_context(mask);
-                }
-            }
             // Drain pending_msgs first (same as Recv / RecvTimeout). ipc_try_send
             // queues input events here when the focused cell is busy-polling (not
             // in Recv). Without this drain a cell that receives via sys_try_recv —
@@ -1994,6 +1984,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Honour the recv mask exactly like the blocking paths.
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
+                    t.begin_receive_context(mask);
                     let slot = t
                         .pending_msgs
                         .iter()
@@ -3870,9 +3861,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if is_crit {
                 return Err(SyscallError::PermissionDenied);
             }
-            // Deregister driver statics if this cell is a registered driver.
-            crate::task::drivers::driver_cell::deregister_block_driver(target_tid);
-            crate::task::drivers::driver_cell::deregister_nic_driver(target_tid);
             crate::cell::hotswap::exit_task_internal(target_tid, cell_id);
             Ok(exit_code as usize)
         }
@@ -4555,7 +4543,16 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     user_map(base, len);
                     Ok(0)
                 }
-                Err(types::ViError::PermissionDenied) => Ok(1),
+                Err(types::ViError::PermissionDenied) => {
+                    log::warn!(
+                        "[mmio] DENY caller={} base={:#x} len={:#x} allowed_devices={:#04x}",
+                        caller_id,
+                        base,
+                        len,
+                        allowed_devices
+                    );
+                    Ok(1)
+                }
                 Err(types::ViError::AlreadyExists) => Ok(2),
                 Err(_) => Ok(3),
             }
@@ -5309,6 +5306,9 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut ViTrapFrame) {
     frame.regs[10] = encode_syscall_result(result, usize::MAX, supports_typed_oom);
 }
 
+#[cfg(not(target_arch = "riscv32"))]
+const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
+
 #[cfg(target_arch = "riscv32")]
 #[no_mangle]
 #[allow(non_snake_case)]
@@ -5362,6 +5362,9 @@ pub extern "Rust" fn ViCell_syscall_dispatch(frame: &mut crate::hal::arch::ViTra
 
     frame.regs[10] = encode_syscall_result(result, u32::MAX as usize, supports_typed_oom) as u32;
 }
+
+#[cfg(target_arch = "riscv32")]
+const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 
 #[cfg(test)]
 mod tests {

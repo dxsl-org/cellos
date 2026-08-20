@@ -1,5 +1,8 @@
 #![no_std]
 
+pub mod kernel_abi;
+pub use kernel_abi::*;
+
 /// Architecture-specific HAL trait.
 pub trait Arch: Send + Sync {
     /// Architecture-specific Context type.

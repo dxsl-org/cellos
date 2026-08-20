@@ -1,18 +1,28 @@
 # Cellos System Architecture
 
-**Audience**: Developers new to Cellos  
-**Level**: High-level (conceptual + key components)  
-**Version**: 0.2.1-dev (Mycelium Era)  
-**Last Updated**: 2026-08-18 (HAL/SoC/board split covers seven selections including QEMU q35 x86_64; physical boards remain hardware-gated)
+**Audience**: Developers new to Cellos
+**Level**: High-level (conceptual + key components)
+**Version**: 0.2.1-dev (Mycelium Era)
+**Last Updated**: 2026-08-20 (application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
-> **Status refresh 2026-08-18**: the HAL split covers all seven current
+> **Status refresh 2026-08-20**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
 > `hal/soc/{riscv,arm-virt,bcm27xx,x86}` owns immutable platform facts; `hal/arch`
 > and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
-> pass; QEMU q35 x86_64 is the current x86 integration board; VF2, Pioneer, RPi3,
-> and RPi4 remain physical-hardware-gated.
+> pass; QEMU q35 x86_64 is the current x86 integration board, and the Phase 05
+> PCIe lane passes in QEMU only with bus 0 ECAM, bounded BAR registration, and
+> q35-gated VT-d before DMA-capable cells. RPi3 has merged physical smoke,
+> external-SD, and BCM GPIO/I2C/SPI evidence; VF2, Pioneer, RPi4, and physical
+> x86 remain hardware-gated.
+
+> **Status refresh 2026-08-19**: HAL↔kernel Rust ABI hooks are now single-sourced
+> in `hal/traits/arch/src/kernel_abi.rs`; HAL arch crates import the shared
+> declarations instead of hand-writing local `extern "Rust"` blocks, and the
+> x86 page-fault hook is declared with a matching compile-time assertion. The
+> boundary script now rejects new local HAL ABI blocks. This is a structural
+> cleanup only: no public ABI changed and no physical-board claim was added.
 
 ---
 
@@ -29,9 +39,9 @@ Cellos is **NOT** a traditional Linux-style OS. It uses:
 
 ### Scope Doctrine — SAS/LBI-first (decided 2026-06-23)
 
-The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer — it runs in a **Tier 3 Linux VM** (`apt install nginx/postgres/python`), except a narrow set of libraries linked into Tier 1/1b cells (crypto, codec, libm, sensor protocols). This keeps Cellos's identity intact and avoids re-implementing what Linux already does well.
+The architecture above is the product. **New capability is built natively only when it leverages SAS/LBI** (zero-copy IPC, type-isolation, never-die, capability model). The wider software ecosystem is **not** ported into the native/kernel layer — it runs in a **Tier 3 Linux VM** (`apk add` today on Alpine; broader package-manager coverage remains platform work), except a narrow set of trusted libraries linked into Tier 1 runtime profiles (crypto, codec, libm, sensor protocols). This keeps Cellos's identity intact and avoids re-implementing what Linux already does well.
 
-Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier 1/1b cell needs → **Tier 1b shim — port the library, not the feature**; (3) general Linux app / fork-based / POSIX → **Tier 3 VM**; (4) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, MicroPython dropped.
+Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted library a native Cell needs → **Tier 1 `ffi-posix` profile — port the library, not the feature**; (3) untrusted native code without source disclosure → **Tier 2 native domain once implemented**; (4) general Linux app / fork-based / POSIX stack → **Tier 3 VM**; (5) replicates Linux into native or erodes SAS/LBI → **reject**. Validated repeatedly: server cluster ("don't clone CNCF, Cellos is a great *node*"), nginx/postgres/CPython (Tier 3), mTLS/X.509 (Tier-3/interop, never PKI in kernel), Noise kept SAS-native, MicroPython dropped.
 
 ---
 
@@ -92,10 +102,27 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) library a Tier
   disjoint GPIO/UART/SDHCI pages to cells and keeps GIC mappings kernel-only.
   PCIe is intentionally absent from its enabled-driver list until a BCM2711
   host-controller path is implemented.
+- BCM2837 BSC1 and SPI0 use shared Driver Cell crates with distinct manifest,
+  policy, and MMIO device classes. The RPi3 descriptor selects their pinmux and
+  exact 4-KiB controller windows; GPIO authority cannot claim either window.
+  The current RPi3 head now passes the wired physical I2C/SPI run, while the
+  separate Phase 04 RPi3 boot/storage/input baseline passes TFTP, SDHCI/mount,
+  shell, interactive help, and a lossless 100-command UART burst. DesignWare
+  controllers stay conditional on verified compatible/controller evidence.
+- Phase 04 boot evidence uses freshly packaged RV64/AArch64 images and asserts
+  separate block, input, GPU, and shell markers. Both QEMU architectures also
+  reach the shell with optional GPU/NIC devices omitted. This proves VirtIO
+  fallback behavior separately; the matching RPi3 SDHCI and UART/input physical
+  gates now pass on the current head.
 - `hal/soc/x86` owns static PC-compatible COM1/ISA wiring and bounded legacy
   BIOS/RSDP windows. The kernel selects that profile before early serial output;
   validated ACPI remains the only source for LAPIC, IOAPIC, HPET, and PCIe ECAM
   addresses, so every downstream timer/interrupt/PCIe gate still fails closed.
+  The Phase 05 q35 flow scans PCIe ECAM on bus 0, registers BAR windows through
+  the resource registry, and keeps VT-d board-gated at the q35 fixed base before
+  any DMA-capable Driver Cell starts. That evidence is QEMU-only; physical x86
+  remains gated, bus > 0 is not yet validated, and real NIC Tx/Rx/DHCP is not
+  proven.
 - The shared SDHCI controller receives an immutable runtime access policy;
   BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
   access do not create per-board driver implementations.
@@ -457,7 +484,7 @@ Device can fire next interrupt (if new data arrives)
 
 **Critical Fix (Phase 05)**: Input device was not calling `ack_irq()`, leaving `InterruptStatus` register set. PLIC would immediately re-fire the same interrupt after `plic_complete()`, creating an infinite interrupt storm. This caused kernel to hang on first keystroke. Fix: Ensured input Driver Cell calls `ack_irq()` on every interrupt; kernel dispatcher invokes the handler. *(Later refactored to Driver Cell architecture in Phase 01, 2026-06-24.)*
 
-### Tier 3b VirtIO-GPU Host Stack
+### Tier 3 VirtIO-GPU Host Stack (legacy: Tier 3b)
 
 - `cells/services/hypervisor/src/virtio_gpu.rs` implements the VirtIO-GPU 2D device model (DeviceID 16, MMIO slot 3, SPI 19) and wires the control/cursor queues into the VMM IRQ path.
 - `cells/services/hypervisor/src/virtio_gpu/resource/{control,render}.rs` owns resource creation, scanout binding, cursor redraw, and the VMM-owned scanout Grant.
@@ -631,8 +658,8 @@ cells/demos/viui-demo/       — ViUI v2 DSL → Rust codegen pipeline (Counter.
 cells/demos/audio-demo/      — VirtIO sound test tone (A4-C#5-E5 arpeggio, S16LE/2ch/44100)
 cells/demos/doom/            — doomgeneric DOOM port (1024×768, 16MB quota, 0x42000000 VA); run: `doom`
 cells/demos/tetris/          — Tetris in Rust-native Cell (ViUI)
-cells/demos/tetris-c/        — Tetris via C platform hooks (demonstrates Tier 1b C pathway)
-cells/demos/tetris-lua/      — Tetris scripted in Lua (demonstrates Tier 1b Lua pathway)
+cells/demos/tetris-c/        — Tetris via C platform hooks (demonstrates Tier 1 ffi-posix profile)
+cells/demos/tetris-lua/      — Tetris scripted in Lua (demonstrates Tier 1 lua profile)
 ```
 
 **Drivers**: Hardware device drivers
@@ -674,20 +701,20 @@ cells/runtimes/lua/       — Lua 5.4 via FFI (⚠️ milestone marked complete 
 cells/tests/bench/           — RT + SMP latency benchmark (3 scenarios)
 cells/tests/vfs-test/        — VFS service test suite (8 scenarios)
 cells/tests/srv-test/        — Spawn + state transfer tests
-cells/tests/hypervisor-test/ — Tier 3b VM lifecycle tests
+cells/tests/hypervisor-test/ — Tier 3 VM lifecycle tests
 cells/tests/gpio-test-rv/    — RISC-V GPIO integration
 cells/tests/periph-test/     — Peripheral driver unit tests
 cells/tests/posix-shim-test/ — POSIX stdio/math/setjmp tests
 cells/tests/c-math-smoke/    — C runtime verification (12 scenarios, 3 arches)
-cells/tests/mlibc-smoke/     — mlibc Tier B integration (Rust + libc.a)
-cells/tests/zig-hello/       — Tier 1b Zig Level A smoke test (raw syscalls, no mlibc)
-cells/tests/zig-mlibc-smoke/ — Tier 1b Zig Level B smoke test (links mlibc libc.a)
+cells/tests/mlibc-smoke/     — mlibc profile integration (Rust + libc.a)
+cells/tests/zig-hello/       — Zig raw-syscall smoke test (no mlibc)
+cells/tests/zig-mlibc-smoke/ — Zig mlibc profile smoke test (links mlibc libc.a)
 cells/tests/input-test/      — Input service focus & event tests
 cells/tests/silo-test/       — Security Silo (6 end-to-end test cases)
 cells/tests/test-isolation/  — Cell fault isolation tests
 ```
 
-**Guests**: Hypervisor guests (Tier 3b)
+**Guests**: Hypervisor guests (Tier 3)
 ```
 cells/guests/silo-guest/  — aarch64-unknown-none bare-metal (p256 ECDSA signing, secure enclave)
 ```
@@ -700,6 +727,9 @@ libs/viui/             — ViUI toolkit (no_std + alloc, MIT)
 ```
 
 ---
+
+<a id="viui-architecture"></a>
+<a id="viui-architecture-g2-target"></a>
 
 ## ViUI Architecture (✅ shipped 2026-06-16)
 
@@ -760,7 +790,7 @@ Notify subscriber widgets (only label in this example)
 Mark label's dirty_rect
     ↓
 Repaint only label region (~80×16 px)
-    ↓  
+    ↓
 surf.damage_rect(dirty)    ← NOT damage_all()
 ```
 
@@ -781,7 +811,8 @@ libs/viui/             (no_std, umbrella) ✅ — re-exports all above + viui_ma
 
 **P06 Proc Macro** (2026-06-08): `libs/viui-macros/` ships with `vi_design!` macro for inline component prototyping. `libs/viui` re-exports both paths (build.rs + macro); users import once, use both. Codegen redesigned to wrap each component in `mod __vi_generated_<Name>` to prevent symbol collisions.
 
-Design brief: [.agents/brainstorms/260608-viui-nextgen-architecture.md](.agents/brainstorms/260608-viui-nextgen-architecture.md)
+The original ViUI design brief is retained in the local, gitignored `.agents/`
+workspace; this section is the repository-owned architectural summary.
 
 ---
 
@@ -971,7 +1002,7 @@ inner-shareable `tlbi vaae1is` (plus `vae2is` when EL2 is active) bracketed by `
 `dsb ish` / `isb`, but multi-PE runtime proof remains gated. The repo therefore does not
 claim D7 complete.
 
-LBI, CFI, DMA isolation, and Tier-3 Silo/VM protection complement this delivery model but
+LBI, CFI, DMA isolation, the Tier 1 Silo capability, and Tier 3 VM protection complement this delivery model but
 do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guarantee.
 
 **Hardware Security Implementations by Architecture:**
@@ -1003,8 +1034,8 @@ do not change its Layer A/B/C ownership or turn MTE/MPK into a side-channel guar
 > broker boot and NodeId generation are wired, transport/relay modules compile, typed
 > forwarding remains a stub, and no two-node runtime is proven. Once generated,
 > `docs/spec-status.generated.md` is the sole owner of volatile implementation status.
-> Research and historical design input:
-> [.agents/260623-remote-cell-ipc-research/](../.agents/260623-remote-cell-ipc-research/).
+> Research and historical design input remains in the local, gitignored
+> `.agents/260623-remote-cell-ipc-research/` workspace.
 
 ### Foundational principle: LBI stops at the machine boundary
 
@@ -1030,11 +1061,11 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 |-------|-----------|----------|
 | **Native Cell↔Cell, G1** | **Noise KKpsk0** (p2p) + **XChaCha20-Poly1305** (gossip) | **K1** PSK (baked, fleet-shared) |
 | **Native Cell↔Cell, G2** | **same Noise core** (identity upgrade, not a transport swap) | **K3** per-node static key + DICE attestation; revocation via KMS Cell |
-| **Interop / external / HTTPS-serving** | **full mTLS (X.509)** — from Tier 3b Linux VM or external LB | CA-rooted PKI |
+| **Interop / external / HTTPS-serving** | **full mTLS (X.509)** — from Tier 3 Linux VM or external LB | CA-rooted PKI |
 
 **Hard rules (architectural invariants):**
 - Native Tier-1 Cells **never speak mTLS** — Noise is the lingua franca at every stage; G1→G2 is an *identity* upgrade (K1→K3), not a transport swap.
-- mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3b Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. (The parked [TLS-server-accept plan](../.agents/260623-1500-tls-server-accept/) is an edge-only fallback for nodes that cannot terminate TLS externally.)
+- mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3 Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. The parked local `.agents/260623-1500-tls-server-accept/` plan is an edge-only fallback for nodes that cannot terminate TLS externally.
 - **Profile-specific entropy gate**: default development/QEMU builds may enable
   `dev-weak-rng`, which supplies predictable xorshift bytes with a warning. Fleet and
   production artifacts must forbid that feature; without trusted entropy `GetRandom`
@@ -1052,9 +1083,9 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 
 ## Current Status (2026-07-25)
 
-> **Status refresh 2026-07-25**: Every item the 2026-06-05 snapshot listed as In-Progress / Planned — KASLR, ARM64 full bring-up, ViUI v2, reliability/supervisor restart, Tier 3b Linux VM, cell signing — has since **shipped** (cross-checked against `docs/project-roadmap.md` milestone table). The Tier 3b VirtIO-GPU host stack is code-complete and documented below, but the strict Linux guest lane remains hardware-gated on ARM64 KVM or real hardware. See the "Recently shipped" block below.
+> **Status refresh 2026-07-25**: Every item the 2026-06-05 snapshot listed as In-Progress / Planned — KASLR, ARM64 full bring-up, ViUI v2, reliability/supervisor restart, Tier 3 Linux VM, cell signing — has since **shipped** (cross-checked against `docs/project-roadmap.md` milestone table). The legacy Tier 3b VirtIO-GPU host stack is code-complete and documented below, but the strict Linux guest lane remains hardware-gated on ARM64 KVM or real hardware. See the "Recently shipped" block below.
 
-### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3b VM, Cell Signing)
+### ✅ Implemented (Phases 01, 02, 05, 10, 14, 15, 16, 18, 20, 24, 26, 31, C–H, A–E, X-1–X-3, Peripheral Driver Track v1, Robot Demo, ViUI v2, Reliability P00–P06, Tier 3 VM, Cell Signing)
 - **RV64, AArch64, x86_64** HAL with paging (SV39/4K/4K respectively)
 - **Responsibility-bounded kernel** ([generated nLOC](code-metrics.generated.md); see Spec 15) with fixed-priority scheduler and RT-hart routing
 - **Exact launch-edge profiles** — kernel-authorized `(caller, route, target)` rows gate shell/init/hypha/tool-spawn/supervisor/pinned launches; shell carries no ambient SpawnCap/gpio/uart, `SpawnFromMem` remains fail-closed, the shell-only `/bin/hotswap` edge stays capability-free, and supervisor replacements are bounded by reviewed target rows, the frozen-task ceiling, and manifest/policy checks
@@ -1093,7 +1124,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
   - **DNS resolver**: static table → IPv4 literal → UDP A-record query
   - **net-tools binaries** (6 total): ping, curl (HTTP/1.0), wget, nc (multi-conn relay), httpd, mqtt (skeleton)
 - **GPU framebuffer** (opt-in, basic compositor)
-- **Tier 3b VirtIO-GPU host stack** — host device model, resource/scanout Grant lifecycle, and compositor bridge are implemented; strict guest verification stays hardware-gated (`TIER3B_GPU_E2E=1` on ARM64 KVM / real hardware).
+- **Tier 3 VirtIO-GPU host stack** (legacy: Tier 3b) — host device model, resource/scanout Grant lifecycle, and compositor bridge are implemented; strict guest verification stays hardware-gated (`TIER3B_GPU_E2E=1` on ARM64 KVM / real hardware).
 - **HotSwap orchestrator** (5-step live Cell replacement, kernel + shell + config + vfs + robot-demo verified)
 - **Peripheral Driver Track v1** (GPIO/UART HAL traits + driver Cells + safe MMIO + Resource Registry)
   - `cells/drivers/driver-gpio/` — PL061 GPIO implementation (QEMU ARM virt)
@@ -1122,7 +1153,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 - **Generic completion contract** — QEMU markers pass for completion-queue reserve/land/bound/defer, net-rx-reservation fill/remember/release, and ipc-pending deferred delivery/bounds/quota; RV64 now enables S-mode external IRQ delivery, VirtIO ACK uses scoped SUM + exact `InterruptStatus`, NIC owner/device-type binding points the NET_RX source and is the only production caller of `signal_net_rx()`, the `[net-rx-producer] irq->completion PASS` witness requires a real RX drain, and shared death/hotswap clears driver roles; the completion path now covers finite `TIMER` as well as `NET_RX`, uses fail-closed source masks, keeps `Recv*`/`WaitForEvent` intact, and `libs/ostd/src/executor.rs` now parks through an `Arc`-backed `RawWaker` on a one-tick TIMER wait with fail-loud authority checks; the exact QEMU parked marker is `[executor] dummy-waker=absent executor=parked source=TIMER PASS`. Peer-death CQ target-generation ABI, `RecvScatter`, and async VFS/DMA remain deferred.
 - **Phase 08 stack-sizing gate baseline** — the measured static table now covers `init`, `shell`, `vfs`, `vfs-test`, `net`, and `virtio-net`; each path lands at 16 usable pages plus 2 guards, using `max(16, ceil(2 * peak / 4096))` from the captured kernel/user watermarks. Unknown or risky paths stay on the 64-page default until they are measured.
 - **Memory quota + ZST caps + panic isolation** — ✅ Phase 26 (per-cell OOM no longer takes down the system).
-- **Tier 3b Linux VM** — ARM64 EL2 boots Alpine 3.21.3 aarch64 and has its CI smoke
+- **Tier 3 Linux VM** (legacy: Tier 3b) — ARM64 EL2 boots Alpine 3.21.3 aarch64 and has its CI smoke
   lane. x86 is backend-specific: AMD SVM has an implemented MVP registry/vCPU/run-loop
   path, while Intel VMX currently enters root operation but lacks VMCS/EPT guest
   execution. Neither x86 path is production hardware-qualified. RISC-V H-extension
@@ -1140,8 +1171,9 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 - Additional architecture ports (RV32 nano, full x86_64 beyond ring-3)
 
 > ⚠️ **Per-Cell SATP isolation at Tier 1 is explicitly NOT pursued** (decided 2026-06-05).
-> Hardware isolation belongs to Tier 3 (per-VM Stage-2 paging), not per-cell page tables.
-> Tier 2 runs unsigned native cells in a private MMU protection domain — see
+> Hardware isolation belongs to Tier 2 native domains and Tier 3 VM guests, not to
+> every Tier-1 Cell. Tier 2 is the future native private-MMU-domain class, not just
+> "unsigned Tier 1" — see
 > `docs/specs/18-cell-trust-tiers.md`. See *Key Design Decisions* below
 > and [specs/05-application.md §6](specs/05-application.md).
 
@@ -1154,7 +1186,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 | Single Address Space | Reduce context-switch overhead, simplify memory management |
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
 | **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
-| Tiered isolation (1 / 2 / 3) | Trusted signed-native (LBI) · Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` · hypervisor hardware silo (Tier 3b Linux VM). |
+| Tiered isolation (1 / 2 / 3) | Tier 1 trusted SAS cells and runtime profiles · Tier 2 native domains in a private MMU protection domain once implemented — see `docs/specs/18-cell-trust-tiers.md` · Tier 3 VM guests (legacy: Tier 3b Linux VM). |
 | Fixed-Priority Scheduler | Three tiers, FIFO within tier, RT-hart routing on RV64 |
 | Capability-Based Access | Fine-grained control, no global permissions |
 | Owned Buffers in Async | Deterministic cleanup in SAS (no process teardown) |

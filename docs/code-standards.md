@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-18
+**Last Updated**: 2026-08-19
 
 ---
 
@@ -15,7 +15,8 @@
 - **Rule**: Any changes require 2x explicit user confirmation
 - **Reason**: These define the stable ABI between kernel and Cells
 - **Implementation**:
-  - Use `#[repr(C)]` for all public traits to ensure C compatibility
+  - Use `#[repr(C)]` on public structs/enums that cross the ABI boundary
+  - Keep public trait method signatures additive and document wire/layout assumptions explicitly
   - Document trait contract in doc comments
   - Preserve method signatures when extending traits
 
@@ -62,6 +63,10 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
   and enabled shared-driver selection.
 - Immutable SoC MMIO, IRQ topology, controller presence, and access quirks live
   under `hal/soc/`.
+- Shared HAL↔kernel Rust ABI declarations live in `hal/traits/arch/src/kernel_abi.rs`.
+  Architecture code must import that shared module instead of re-declaring
+  local `extern "Rust"` blocks, and declaration sites should keep compile-time
+  assertions close to the hook they validate.
 - For x86 PC-compatible targets, `hal/soc/x86` owns static port/ISA wiring and
   bounded legacy firmware windows. LAPIC, IOAPIC, HPET, and ECAM addresses must
   come from validated ACPI and remain unavailable when firmware evidence fails.
@@ -75,10 +80,14 @@ let addr = VAddr(0x8000_0000);  // ✅ ARCH-AGNOSTIC
 
 ### Law 4: Unsafe Code Management
 
-**Cells**:
+**Ordinary Rust Cells**:
 ```rust
 #![forbid(unsafe_code)]  // ABSOLUTE
 ```
+
+Driver, runtime, shim, and FFI cells may carry reviewed unsafe only when listed
+in the unsafe allowlist / signing policy checks. Do not describe Cellos as
+"every Cell forbids unsafe" without that exception.
 
 **Kernel & HAL**:
 - Unsafe only for hardware I/O (CSRs, MMIO)
@@ -403,22 +412,22 @@ Cellos organizes cells into 8 semantic groups (parallel to code, not functionali
 ```
 cells/
 ├─ tools/        — System utilities (shell, init, sys-tools, net-tools)
-├─ apps/         — User applications (robot-dashboard)
+├─ apps/         — User applications (choose tier by execution boundary and runtime profile)
 ├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, audio-demo, etc.)
-├─ drivers/      — Hardware device drivers (gpio, i2c, spi, uart, etc.)
+├─ drivers/      — Hardware device drivers (trusted native cells; gpio, i2c, spi, uart, etc.)
 ├─ services/     — System services (vfs, net, input, compositor, silo, hypervisor, etc.)
-├─ runtimes/     — Scripting VMs (lua)
+├─ runtimes/     — Trusted native runtime profiles (lua; MicroPython historical only)
 ├─ tests/        — Integration & stress test cells (bench, vfs-test, etc.)
 └─ guests/       — Hypervisor guests (silo-guest, aarch64-unknown-none)
 ```
 
 **Classification rules:**
 - **tools/** — Always-running infrastructure (shell, init, system daemons)
-- **apps/** — Interactive/rich user applications with persistent UI (dashboards, productivity tools)
+- **apps/** — Interactive/rich user applications; use the tier/runtime profile docs to pick the execution boundary
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
-- **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
-- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor, broker-style cells). Any cross-machine broker must fail closed by default; readable config is never authorization or secret storage.
-- **runtimes/** — Scripting language interpreters and VMs (Lua, MicroPython)
+- **drivers/** — Hardware devices + driver Cells (trusted native cells, mapped via kernel Resource Registry or IPC)
+- **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor, broker-style cells). Cross-machine brokers must fail closed by default; readable configuration is neither authorization nor secret storage.
+- **runtimes/** — Trusted native runtime profiles (Lua; MicroPython is historical only)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
 
@@ -524,6 +533,10 @@ pub async fn read_with_timeout(path: &str, timeout_ms: u64) -> ViResult<Vec<u8>>
 ### App Development (Cell Writing)
 
 Use the Cellos App SDK (`libs/ostd/`) to eliminate boilerplate:
+
+The App SDK is one family of named modules/layers, not a numbered tier system.
+Application Tier 1/2/3 describes the execution/isolation boundary; runtime
+profiles and SDK modules describe how code is built and which APIs it uses.
 
 **Before (manual dispatch)**:
 ```rust
@@ -636,7 +649,7 @@ pub trait ViAsyncFileSystem {
 | No mod.rs | ❌ FORBIDDEN | CI lint |
 | Owned buffers in async | ❌ FORBIDDEN | Compiler error |
 | Unsafe requires SAFETY comment | ❌ FORBIDDEN | Code review |
-| Cells can't use unsafe | ❌ FORBIDDEN | `#![forbid(unsafe_code)]` |
+| Ordinary Rust Cells can't use unsafe | ❌ FORBIDDEN | `#![forbid(unsafe_code)]`; audited FFI/runtime/driver exceptions only |
 | Vi prefix for public traits | ✅ REQUIRED | Code review |
 | Result<T, E> over panic! | ✅ REQUIRED | Code review |
 | Implement Drop | ✅ REQUIRED | Code review |

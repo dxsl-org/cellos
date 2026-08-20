@@ -13,14 +13,41 @@
 /// Tier-1b C/FFI cell requesting `tier = 2` for PKU key 2).
 #[macro_export]
 macro_rules! declare_manifest {
-    // Full form + explicit tier (v2 opt-in).
+    // Full form + explicit tier (v2 opt-in, including hardware bus classes).
+    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal, part_data = $pd:literal, part_lfs = $pl:literal, can = $can:literal, adc = $adc:literal, i2c = $i2c:literal, spi = $spi:literal, tier = $tier:expr) => {
+        #[used]
+        #[link_section = "__ViCell_manifest"]
+        pub static VICELL_MANIFEST: $crate::manifest::CellManifest =
+            $crate::manifest::CellManifest::with_all(
+                $bio, $net, $spawn, $gpio, $uart, $hv, $pd, $pl, $can, $adc, $i2c, $spi, $tier,
+            );
+    };
+    // Back-compatible v2 full form from before I2C/SPI flags were exposed.
     (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal, part_data = $pd:literal, part_lfs = $pl:literal, can = $can:literal, adc = $adc:literal, tier = $tier:expr) => {
         #[used]
         #[link_section = "__ViCell_manifest"]
         pub static VICELL_MANIFEST: $crate::manifest::CellManifest =
             $crate::manifest::CellManifest::with_all(
-                $bio, $net, $spawn, $gpio, $uart, $hv, $pd, $pl, $can, $adc, $tier,
+                $bio, $net, $spawn, $gpio, $uart, $hv, $pd, $pl, $can, $adc, false, false, $tier,
             );
+    };
+    // Hardware-bus form with the legacy/default isolation tier.
+    (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal, i2c = $i2c:literal, spi = $spi:literal) => {
+        $crate::declare_manifest!(
+            block_io = $bio,
+            network = $net,
+            spawn = $spawn,
+            gpio = $gpio,
+            uart = $uart,
+            hypervisor = $hv,
+            part_data = false,
+            part_lfs = false,
+            can = false,
+            adc = false,
+            i2c = $i2c,
+            spi = $spi,
+            tier = $crate::manifest::TIER_LEGACY
+        );
     };
     // Full form — block-I/O partition range grants (tier defaults to LEGACY).
     (block_io = $bio:literal, network = $net:literal, spawn = $spawn:literal, gpio = $gpio:literal, uart = $uart:literal, hypervisor = $hv:literal, part_data = $pd:literal, part_lfs = $pl:literal) => {

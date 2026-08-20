@@ -236,7 +236,16 @@ unsafe fn clear_ctx_entry(ctx_virt: usize, dev: u8, func: u8) {
 /// Probe Intel VT-d; allocate root + context tables; compute IOTLB register offset.
 /// Does NOT enable VT-d translation — stays silent until `activate()`.
 pub(super) fn init_hw() {
-    // SAFETY: VTD_BASE (0xFED90000) is identity-mapped by init_kernel_paging_x86.
+    if crate::board::selected().soc != cellos_boards::SocId::QemuX86Q35 {
+        log::warn!("[vtd] no DMAR-discovered register base; refusing q35 fallback");
+        return;
+    }
+
+    // q35 exposes a single 4 KiB VT-d register page at this fallback address.
+    // Map it only after validating the compiled board identity; other x86 boards
+    // must discover their register base from DMAR before reaching this driver.
+    crate::memory::paging::map_mmio_x86(VTD_BASE, 0x1000);
+    // SAFETY: the q35 VT-d register page was identity-mapped immediately above.
     let gcap = unsafe { read64(VTD_BASE, VTD_GCAP) };
     if gcap == 0 || gcap == u64::MAX {
         log::info!("[vtd] Intel VT-d not present (GCAP={:#x})", gcap);

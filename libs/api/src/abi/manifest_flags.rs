@@ -61,6 +61,10 @@ pub const MANIFEST_FLAG_PART_LFS: u16 = 1 << 7;
 pub const MANIFEST_FLAG_CAN: u16 = 1 << 8;
 /// ADC controller MMIO (v2).  Grants the ADC device class via `sys_request_mmio`.
 pub const MANIFEST_FLAG_ADC: u16 = 1 << 9;
+/// I2C controller MMIO (v2).  Grants the I2C device class via `sys_request_mmio`.
+pub const MANIFEST_FLAG_I2C: u16 = 1 << 10;
+/// SPI controller MMIO (v2).  Grants the SPI device class via `sys_request_mmio`.
+pub const MANIFEST_FLAG_SPI: u16 = 1 << 11;
 
 /// Bitmask of all defined flags.  `from_bytes` rejects manifests setting any bit
 /// outside this mask (a stale/forward binary is treated as malformed → legacy path
@@ -74,4 +78,6 @@ pub const MANIFEST_FLAGS_MASK: u16 = MANIFEST_FLAG_BLOCK_IO
     | MANIFEST_FLAG_PART_DATA
     | MANIFEST_FLAG_PART_LFS
     | MANIFEST_FLAG_CAN
-    | MANIFEST_FLAG_ADC;
+    | MANIFEST_FLAG_ADC
+    | MANIFEST_FLAG_I2C
+    | MANIFEST_FLAG_SPI;

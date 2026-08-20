@@ -156,16 +156,20 @@ recoverable from the buffer.
   blocking reply to a client that already timed out parks the driver in
   `Sending{client}` forever and desyncs every later request/reply pair (§8.1).
   A dropped reply is safe: the client treats it as a timeout and retries.
-- **The input path is the one exception to try-send-drops.** When the input
-  service (or the kernel UART relay) sends to a focused cell that is momentarily
-  out of `Recv`, the kernel queues the event into the target's `pending_msgs`
-  instead of dropping it, so a paste-speed burst is not lost. Bounds:
-  - `HOTSWAP_MSG_QUEUE_DEPTH = 64` — messages buffered for a *frozen* cell during
-    hot-swap.
-  - `INPUT_EVENT_QUEUE_DEPTH = 512` — input events for the *focused* cell. Deeper
-    because the shell drains one event per loop iteration and each echo is an SBI
-    call per byte on RISC-V (slow on TCG), so backlog accumulates ACROSS commands
-    (§8.4). All other `sys_try_send` callers keep strict drop-if-not-ready.
+- **Keyboard input uses blocking backpressure.** The input service sends keyboard
+  events with `sys_send`, so it stops consuming upstream input until the focused
+  cell re-enters `Recv`. The kernel wakes a blocked sender with an error if the
+  focused cell dies; the input service then clears that stale focus. Mouse delivery
+  remains nonblocking and may be dropped when its bounded queue is saturated.
+  The UART relay reaches the input service through a separate bounded hop so a
+  paste-speed burst is paced end to end. Bounds:
+  - `HOTSWAP_MSG_QUEUE_DEPTH = 64` — kernel-to-input UART staging, also used for
+    messages buffered for a *frozen* cell during hot-swap.
+  - `INPUT_EVENT_QUEUE_DEPTH = 512` — scheduling cushion for nonblocking events
+    sent by the input service, such as pointer traffic. Keyboard delivery does not
+    use this queue as a reservoir.
+  The 64-message UART hop applies pressure into `PENDING_ASCII` and the 4096-byte
+  IRQ RX ring while a blocking keyboard event waits for the focused cell.
 - **Backpressure over drop.** The kernel UART relay, when the input queue is
   full, parks the byte in `PENDING_ASCII` and retries next tick rather than
   dropping it mid-line (`console_drv.rs`).

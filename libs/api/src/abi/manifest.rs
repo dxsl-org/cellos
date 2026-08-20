@@ -82,6 +82,8 @@ impl CellManifest {
             false,
             false,
             false,
+            false,
+            false,
             TIER_LEGACY,
         )
     }
@@ -109,6 +111,8 @@ impl CellManifest {
             part_lfs,
             false,
             false,
+            false,
+            false,
             TIER_LEGACY,
         )
     }
@@ -126,6 +130,8 @@ impl CellManifest {
         part_lfs: bool,
         can: bool,
         adc: bool,
+        i2c: bool,
+        spi: bool,
         tier: u8,
     ) -> Self {
         Self {
@@ -141,7 +147,9 @@ impl CellManifest {
                 | (part_data as u16 * MANIFEST_FLAG_PART_DATA)
                 | (part_lfs as u16 * MANIFEST_FLAG_PART_LFS)
                 | (can as u16 * MANIFEST_FLAG_CAN)
-                | (adc as u16 * MANIFEST_FLAG_ADC),
+                | (adc as u16 * MANIFEST_FLAG_ADC)
+                | (i2c as u16 * MANIFEST_FLAG_I2C)
+                | (spi as u16 * MANIFEST_FLAG_SPI),
             cap_args_off: 0,
             reserved: 0,
         }
@@ -189,6 +197,14 @@ impl CellManifest {
     /// Returns `true` if the cell declared ADC controller MMIO access (v2).
     pub fn has_adc(&self) -> bool {
         self.flags & MANIFEST_FLAG_ADC != 0
+    }
+    /// Returns `true` if the cell declared I2C controller MMIO access (v2).
+    pub fn has_i2c(&self) -> bool {
+        self.flags & MANIFEST_FLAG_I2C != 0
+    }
+    /// Returns `true` if the cell declared SPI controller MMIO access (v2).
+    pub fn has_spi(&self) -> bool {
+        self.flags & MANIFEST_FLAG_SPI != 0
     }
 
     /// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from v1).

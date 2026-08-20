@@ -1,4 +1,4 @@
-use crate::resource_registry::{DEV_GPIO, DEV_UART};
+use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
 use crate::task::cap::CapSet;
 
 use super::super::boot_ceiling;
@@ -7,6 +7,8 @@ use super::{LaunchProfile, LaunchRoute};
 
 const CONSOLE_MMIO: u8 = DEV_GPIO | DEV_UART;
 const GPIO_ONLY_MMIO: u8 = DEV_GPIO;
+const SENSOR_MMIO: u8 = DEV_GPIO | DEV_I2C;
+const SPI_DEMO_MMIO: u8 = DEV_GPIO | DEV_SPI;
 
 pub(super) fn init_profile(route: LaunchRoute, target: &str) -> Option<LaunchProfile> {
     if matches!(route, LaunchRoute::Mem | LaunchRoute::Pinned) {
@@ -100,6 +102,20 @@ pub(super) const fn console_mmio_capset() -> CapSet {
 pub(super) const fn gpio_mmio_capset() -> CapSet {
     CapSet {
         mmio_devices: GPIO_ONLY_MMIO,
+        ..CapSet::EMPTY
+    }
+}
+
+pub(super) const fn sensor_mmio_capset() -> CapSet {
+    CapSet {
+        mmio_devices: SENSOR_MMIO,
+        ..CapSet::EMPTY
+    }
+}
+
+pub(super) const fn spi_demo_mmio_capset() -> CapSet {
+    CapSet {
+        mmio_devices: SPI_DEMO_MMIO,
         ..CapSet::EMPTY
     }
 }

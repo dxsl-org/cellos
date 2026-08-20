@@ -1,6 +1,6 @@
 # Cellos Security Model
 
-**Version:** v0.2.3-dev | **Updated:** 2026-07-07
+**Version:** v0.2.3-dev | **Updated:** 2026-08-19
 
 ## Design Philosophy
 
@@ -23,7 +23,7 @@ relies on:
 | Threat | Mitigation | Status |
 |--------|-----------|--------|
 | Cell forges another Cell's CellId in IPC | Kernel verifies sender ID from TCB on every message; user cannot inject arbitrary sender values | ✅ Mitigated |
-| Cell constructs a valid CapId by guessing | CapIds are kernel-assigned opaque u64 values; 64-bit ID space makes guessing infeasible | ✅ Mitigated |
+| Cell guesses a service-local socket CapId | The net service currently allocates predictable CapIds without binding lookup to the caller, so another network-capable Cell may address a live socket owned by a peer | ❌ Open — see [roadmap/open-risk-register.md](roadmap/open-risk-register.md) |
 | Malformed ELF binary spawns as a different Cell | ELF header validated before execution; Cell registry assigns IDs monotonically | ✅ Mitigated |
 
 ### Tampering
@@ -51,7 +51,7 @@ relies on:
 |--------|-----------|--------|
 | Cell allocates unbounded memory | Frame allocator has a hard cap (total usable RAM); OOM kills the cell | ✅ Mitigated |
 | Cell floods IPC queue | Message queue is bounded; sender blocks when full (future Phase 20) | 🔶 Partial |
-| Lua/MicroPython script infinite loop | Cell exit triggered by kernel timeout (future scheduler enhancement) | ❌ Deferred |
+| Lua script infinite loop | Cell exit triggered by kernel timeout (future scheduler enhancement); MicroPython is an archived runtime experiment, not a current workspace member | ❌ Deferred |
 
 ### Elevation of Privilege
 | Threat | Mitigation | Status |
@@ -61,6 +61,12 @@ relies on:
 | Malformed syscall arguments overflow kernel buffers | All syscall arg lengths validated via `validate_user_buf` before dereference | ✅ Mitigated |
 
 ## Known Architecture Risks
+
+The maintained severity-ranked inventory is
+[roadmap/open-risk-register.md](roadmap/open-risk-register.md). In particular,
+production signing still requires an immutable provisioned key and mandatory
+release policy, while the net service must owner-bind socket handles before it
+can be treated as a capability boundary.
 
 ### Spectre v1/v2 — SAS Worst-Case Scenario
 **Severity: Critical (research/trusted-environment only)**
@@ -75,12 +81,17 @@ SAS is the worst-case environment for Spectre attacks. In a traditional OS, Spec
 - Long-term: CHERIoT RISC-V hardware capabilities — see "Hardware Isolation Roadmap" section below
 
 **Do NOT use Cellos to run untrusted third-party code until either containment tier is
-implemented: Tier 2 (per-domain page tables for unsigned native cells) or Tier 3 (VM).**
-Neither exists today — the kernel holds a single root page table (`memory/paging.rs:38`
-`KERNEL_ROOT`) and no context switch writes `satp`/`TTBR0`/`CR3`, so an unsigned cell in the
-shared address space is contained by nothing but the Rust type system. Tier 2 is the
-designed answer (`specs/18-cell-trust-tiers.md` §2.2) and does not reverse this warning; it
-narrows what the warning will say once the mechanism ships.
+implemented/available for the workload: Tier 2 native domains or Tier 3 VM guests.**
+Tier 2 does not exist today: the native kernel holds a single root page table
+(`memory/paging.rs:38` `KERNEL_ROOT`) and no native Cell context switch writes
+`satp`/`TTBR0`/`CR3`. An unsigned Cell admitted to that shared address space is
+therefore contained by nothing but the Rust type system. The Tier 3 ARM64 guest
+path exists, but its strict lane remains hardware/KVM-gated; where that VM path
+is unavailable or unqualified, untrusted third-party code must not run.
+
+Terminology note: `Tier 1b` is no longer a containment tier. It is a legacy name
+for trusted Tier-1 runtime profiles such as `ffi-posix` and `lua`; it must not be
+used for hostile C/FFI code.
 
 > **Full analysis:** [research/research-hardware-isolation.md](research/research-hardware-isolation.md) — covers the
 > full menu of hardware supplements (CFI, MPK/PKS, MPU/PMP, RISC-V WorldGuard/Smmtt, IOMMU/IOPMP, confidential
@@ -112,7 +123,7 @@ via `kernel/build.rs`), and `limine.conf` sets `KASLR=yes` so consecutive boots 
 at different physical bases. Verified across the integration test suite.
 
 ### Per-Cell DMA Isolation — Shipped (2026-06-22)
-**Severity: Resolved (residual gap for untrusted Tier-1b — see below)**
+**Severity: Resolved (residual gap for untrusted FFI/native code — see below)**
 
 The IOMMU was upgraded from bare passthrough (`DDTP.MODE=1` / VT-d single shared passthrough domain,
 IOVA==PA, no permission table) to **per-Cell translate mode** on both architectures:
@@ -136,9 +147,9 @@ MMIO ownership; DMA capability is tracked **separately** via `sys_grant_dma` and
 translation entries.
 
 > ⚠️ **Residual gap (honest):** the IOMMU fronts only the **PCIe root complex**. **virtio-mmio** devices are
-> **not** behind the IOMMU (see [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) §1.4). A Tier-1b
+> **not** behind the IOMMU (see [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) §1.4). A native
 > C/Zig Cell that can issue raw MMIO writes to a virtio-mmio device can still program its virtqueue with
-> arbitrary physical addresses, and the device will DMA there. This remains open for **untrusted Tier-1b**;
+> arbitrary physical addresses, and the device will DMA there. This remains open for **untrusted FFI/native code**;
 > the load-bearing roadmapped closure is a Spec 19 Layer-B CPU page-table domain plus
 > IOMMU/WorldGuard coverage of virtio-mmio DMA. PMP is only a future alternative if a custom
 > M-mode firmware owner is approved; Cellos S-mode cannot program it. See
@@ -312,8 +323,9 @@ Bước 4: Kernel unsafe blocks
 
 3. **Trusted Cells:** All installed Tier 1 Cells are fully trusted (now enforced by
    Ed25519 verify-at-spawn + SHA-256 measurement). Untrusted third-party code belongs
-   in **Tier 3 (Linux VM / hypervisor)**. Tier 2 runs unsigned native cells in a
-   private MMU protection domain — see
+   in **Tier 3 (Linux VM / hypervisor)** today. Tier 2 is the accepted native private-
+   MMU-domain class but is not implemented; an unsigned or unverified artifact is an
+   admission input, not the definition of Tier 2. See
    [specs/18-cell-trust-tiers.md](specs/18-cell-trust-tiers.md). See Phase 23 for
    community submission review gates.
 
