@@ -124,7 +124,7 @@ pub fn handle_request<'a>(
         api::ipc::VfsRequest::Rmdir(p) => {
             // Destructive: authorize before touching the backend.  A path the caller
             // may not write is a path it may not delete.
-            if !vfs.access.can_write(caller, p) {
+            if !vfs.access.can_remove_dir(caller, p) {
                 return api::ipc::VfsResponse::Err(ERR_DENIED);
             }
             // Verifies the target IS a directory — POSIX ENOTDIR semantics.

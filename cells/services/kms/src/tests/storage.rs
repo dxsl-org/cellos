@@ -5,9 +5,12 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::storage::{
-    load_for_tests, persist_placeholder_for_tests, JournalLoad, JournalRecord, SlotId, StoreError,
-    StoreIo, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR,
+    load_for_tests, persist_placeholder_for_tests, JournalKey, JournalLoad, JournalRecord, SlotId,
+    StoreError, StoreIo, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR,
 };
+
+const TEST_KEY: JournalKey = *b"cellos-kms-test-auth-key-v1-0000";
+const WRONG_KEY: JournalKey = *b"cellos-kms-test-auth-key-v1-0001";
 
 #[derive(Default)]
 struct FakeStore {
@@ -18,7 +21,11 @@ struct FakeStore {
 
 impl FakeStore {
     fn put_record(&mut self, path: &'static str, record: JournalRecord) {
-        self.files.insert(path, record.encode().to_vec());
+        self.put_record_with_key(path, &TEST_KEY, record);
+    }
+
+    fn put_record_with_key(&mut self, path: &'static str, key: &JournalKey, record: JournalRecord) {
+        self.files.insert(path, record.encode(key).to_vec());
     }
 }
 
@@ -54,17 +61,12 @@ impl StoreIo for FakeStore {
         self.files.insert(key, bytes);
         Ok(())
     }
-
-    fn unlink(&mut self, path: &str) -> Result<(), StoreError> {
-        self.files.remove(path);
-        Ok(())
-    }
 }
 
 #[test]
 fn empty_store_loads_nonproduction_state() {
     let mut store = FakeStore::default();
-    let state = load_for_tests(&mut store);
+    let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.load, JournalLoad::Empty);
     assert!(state.active.is_none());
 }
@@ -76,7 +78,7 @@ fn one_valid_slot_loads_as_active() {
         SLOT_A_PATH,
         JournalRecord::placeholder(SlotId::A, 4, 9, [0; 32]),
     );
-    let state = load_for_tests(&mut store);
+    let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.load, JournalLoad::Loaded);
     let active = state.active.unwrap();
     assert_eq!(active.slot, SlotId::A);
@@ -86,11 +88,11 @@ fn one_valid_slot_loads_as_active() {
 #[test]
 fn torn_inactive_write_keeps_previous_slot_active() {
     let mut store = FakeStore::default();
-    let mut state = load_for_tests(&mut store);
-    persist_placeholder_for_tests(&mut state, &mut store, 1).unwrap();
+    let mut state = load_for_tests(&mut store, &TEST_KEY);
+    persist_placeholder_for_tests(&mut state, &mut store, &TEST_KEY, 1).unwrap();
     let active_before = state.active.clone().unwrap();
     store.corrupt_readback = true;
-    let err = persist_placeholder_for_tests(&mut state, &mut store, 2).unwrap_err();
+    let err = persist_placeholder_for_tests(&mut state, &mut store, &TEST_KEY, 2).unwrap_err();
     assert_eq!(err, StoreError::ReadbackMismatch);
     assert_eq!(state.active.unwrap(), active_before);
 }
@@ -100,7 +102,7 @@ fn both_corrupted_slots_fall_back_to_empty() {
     let mut store = FakeStore::default();
     store.files.insert(SLOT_A_PATH, vec![1, 2, 3]);
     store.files.insert(SLOT_B_PATH, vec![4, 5, 6]);
-    let state = load_for_tests(&mut store);
+    let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.load, JournalLoad::Empty);
     assert!(state.active.is_none());
 }
@@ -112,7 +114,7 @@ fn stale_rollback_pair_fails_closed() {
     let newer = JournalRecord::placeholder(SlotId::B, 2, 0, [0; 32]);
     store.put_record(SLOT_A_PATH, older);
     store.put_record(SLOT_B_PATH, newer);
-    let state = load_for_tests(&mut store);
+    let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.load, JournalLoad::RollbackDetected);
     assert!(state.active.is_none());
 }
@@ -121,15 +123,39 @@ fn stale_rollback_pair_fails_closed() {
 fn valid_slot_survives_corrupted_inactive_partner() {
     let mut store = FakeStore::default();
     let older = JournalRecord::placeholder(SlotId::A, 1, 0, [0; 32]);
-    let newer = JournalRecord::placeholder(SlotId::B, 2, 0, older.digest());
+    let newer = JournalRecord::placeholder(SlotId::B, 2, 0, older.digest(&TEST_KEY));
     store.put_record(SLOT_A_PATH, older);
     store
         .files
         .insert(SLOT_B_PATH, vec![0; JournalRecord::ENCODED_LEN]);
-    let state = load_for_tests(&mut store);
+    let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.load, JournalLoad::Loaded);
     assert_eq!(state.active.unwrap().record.blob_revision, 1);
     store.put_record(SLOT_B_PATH, newer);
-    let state = load_for_tests(&mut store);
+    let state = load_for_tests(&mut store, &TEST_KEY);
     assert_eq!(state.active.unwrap().record.blob_revision, 2);
+}
+
+#[test]
+fn wrong_key_rejects_otherwise_valid_slot() {
+    let mut store = FakeStore::default();
+    store.put_record(
+        SLOT_A_PATH,
+        JournalRecord::placeholder(SlotId::A, 1, 0, [0; 32]),
+    );
+    let state = load_for_tests(&mut store, &WRONG_KEY);
+    assert_eq!(state.load, JournalLoad::Empty);
+    assert!(state.active.is_none());
+}
+
+#[test]
+fn keyed_corruption_rejects_slot_decode() {
+    let mut store = FakeStore::default();
+    let record = JournalRecord::placeholder(SlotId::A, 7, 3, [0; 32]);
+    let mut encoded = record.encode(&TEST_KEY);
+    encoded[40] ^= 0xAA;
+    store.files.insert(SLOT_A_PATH, encoded.to_vec());
+    let state = load_for_tests(&mut store, &TEST_KEY);
+    assert_eq!(state.load, JournalLoad::Empty);
+    assert!(state.active.is_none());
 }

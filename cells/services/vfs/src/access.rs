@@ -17,7 +17,10 @@ mod kms;
 mod rules;
 
 use crate::caller::Caller;
-use kms::{contains_kms_store, is_kms_store_rule, is_kms_store_rule_path, live_kms_matches};
+use kms::{
+    contains_kms_namespace, is_canonical_policy_path, is_kms_namespace_path, is_kms_store_rule,
+    live_kms_matches,
+};
 pub use rules::PathRule;
 
 /// Path rules, evaluated whole-path first and by prefix second.
@@ -62,7 +65,7 @@ impl AccessTable {
     /// The protected KMS prefix is denied here so the ecall path remains the
     /// only place that can prove "live service::KMS" with a normal lookup.
     pub fn can_read_fast(&self, caller: Caller, path: &str) -> bool {
-        if is_kms_store_rule_path(path) {
+        if !is_canonical_policy_path(path) || is_kms_namespace_path(path) {
             return false;
         }
         self.decide(caller, path, AccessKind::Read)
@@ -70,10 +73,22 @@ impl AccessTable {
 
     /// Whether `caller` may recursively remove `path` and its descendants.
     pub fn can_remove_tree(&self, caller: Caller, path: &str) -> bool {
-        self.can_write(caller, path) && !contains_kms_store(path)
+        is_canonical_policy_path(path)
+            && self.can_write(caller, path)
+            && !contains_kms_namespace(path)
+    }
+
+    /// Whether `caller` may remove `path` as a directory.
+    pub fn can_remove_dir(&self, caller: Caller, path: &str) -> bool {
+        is_canonical_policy_path(path)
+            && self.can_write(caller, path)
+            && !contains_kms_namespace(path)
     }
 
     fn decide(&self, caller: Caller, path: &str, kind: AccessKind) -> bool {
+        if !is_canonical_policy_path(path) {
+            return false;
+        }
         match self.rule_for(path) {
             Some(rule) if is_kms_store_rule(rule.prefix) => {
                 live_kms_matches(caller, self.service_lookup)

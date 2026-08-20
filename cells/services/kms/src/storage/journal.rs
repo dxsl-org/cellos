@@ -1,7 +1,7 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use super::backend::{StoreError, StoreIo};
-use super::record::{JournalRecord, SlotId, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR};
+use super::record::{JournalKey, JournalRecord, SlotId, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum JournalLoad {
@@ -30,16 +30,16 @@ impl JournalState {
         }
     }
 
-    pub(crate) fn load(io: &mut impl StoreIo) -> Result<Self, StoreError> {
-        let slot_a = read_slot(io, SlotId::A, SLOT_A_PATH)?;
-        let slot_b = read_slot(io, SlotId::B, SLOT_B_PATH)?;
+    pub(crate) fn load(io: &mut impl StoreIo, key: &JournalKey) -> Result<Self, StoreError> {
+        let slot_a = read_slot(io, key, SlotId::A, SLOT_A_PATH)?;
+        let slot_b = read_slot(io, key, SlotId::B, SLOT_B_PATH)?;
         Ok(match (slot_a, slot_b) {
             (None, None) => Self::empty(),
             (Some(active), None) | (None, Some(active)) => Self {
                 load: JournalLoad::Loaded,
                 active: Some(active),
             },
-            (Some(a), Some(b)) => match order_slots(a, b) {
+            (Some(a), Some(b)) => match order_slots(key, a, b) {
                 Some(active) => Self {
                     load: JournalLoad::Loaded,
                     active: Some(active),
@@ -55,6 +55,7 @@ impl JournalState {
     pub(crate) fn persist_placeholder(
         &mut self,
         io: &mut impl StoreIo,
+        key: &JournalKey,
         policy_epoch: u64,
     ) -> Result<ActiveSlot, StoreError> {
         io.ensure_dir(STORE_DIR)?;
@@ -69,10 +70,10 @@ impl JournalState {
         let previous = self
             .active
             .as_ref()
-            .map_or([0; 32], |active| active.record.digest());
+            .map_or([0; 32], |active| active.record.digest(key));
         let record = JournalRecord::placeholder(next_slot, blob_revision, policy_epoch, previous);
         let path = slot_path(next_slot);
-        let bytes = record.encode();
+        let bytes = record.encode(key);
         io.write_file(path, &bytes)?;
         let readback = io
             .read_file(path, JournalRecord::ENCODED_LEN)?
@@ -92,6 +93,7 @@ impl JournalState {
 
 fn read_slot(
     io: &mut impl StoreIo,
+    key: &JournalKey,
     slot: SlotId,
     path: &str,
 ) -> Result<Option<ActiveSlot>, StoreError> {
@@ -105,11 +107,11 @@ fn read_slot(
         .read_file(path, JournalRecord::ENCODED_LEN)?
         .filter(|bytes| bytes.len() == JournalRecord::ENCODED_LEN);
     Ok(bytes
-        .and_then(|bytes| JournalRecord::decode(&bytes, slot))
+        .and_then(|bytes| JournalRecord::decode(&bytes, key, slot))
         .map(|record| ActiveSlot { slot, record }))
 }
 
-fn order_slots(a: ActiveSlot, b: ActiveSlot) -> Option<ActiveSlot> {
+fn order_slots(key: &JournalKey, a: ActiveSlot, b: ActiveSlot) -> Option<ActiveSlot> {
     let (older, newer) = if a.record.blob_revision <= b.record.blob_revision {
         (a, b)
     } else {
@@ -118,7 +120,7 @@ fn order_slots(a: ActiveSlot, b: ActiveSlot) -> Option<ActiveSlot> {
     if older.record.blob_revision == newer.record.blob_revision {
         return None;
     }
-    (newer.record.previous_slot_digest == older.record.digest()).then_some(newer)
+    (newer.record.previous_slot_digest == older.record.digest(key)).then_some(newer)
 }
 
 fn slot_path(slot: SlotId) -> &'static str {

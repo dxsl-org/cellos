@@ -17,5 +17,4 @@ pub(crate) trait StoreIo {
     fn stat(&mut self, path: &str) -> Result<Option<u64>, StoreError>;
     fn read_file(&mut self, path: &str, max_bytes: usize) -> Result<Option<Vec<u8>>, StoreError>;
     fn write_file(&mut self, path: &str, content: &[u8]) -> Result<(), StoreError>;
-    fn unlink(&mut self, path: &str) -> Result<(), StoreError>;
 }

@@ -1,12 +1,13 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
-#[cfg(test)]
 use blake3::Hasher;
+use constant_time_eq::constant_time_eq;
 use types::kms::KmsProviderKind;
 
 pub(crate) const STORE_DIR: &str = "/srv/cellos/kms";
 pub(crate) const SLOT_A_PATH: &str = "/srv/cellos/kms/slot-a.bin";
 pub(crate) const SLOT_B_PATH: &str = "/srv/cellos/kms/slot-b.bin";
+pub(crate) type JournalKey = [u8; 32];
 
 const MAGIC: [u8; 4] = *b"CKMS";
 const VERSION: u8 = 1;
@@ -62,7 +63,7 @@ impl JournalRecord {
         }
     }
 
-    pub(crate) fn encode(&self) -> [u8; Self::ENCODED_LEN] {
+    pub(crate) fn encode(&self, key: &JournalKey) -> [u8; Self::ENCODED_LEN] {
         let mut out = [0u8; Self::ENCODED_LEN];
         out[..4].copy_from_slice(&MAGIC);
         out[4] = VERSION;
@@ -74,13 +75,12 @@ impl JournalRecord {
         out[26..58].copy_from_slice(&self.public_key);
         out[58..122].copy_from_slice(&self.sealed_leaf);
         out[122..154].copy_from_slice(&self.previous_slot_digest);
-        let auth = authenticator(&out[..154]);
+        let auth = authenticator(key, &out[..154]);
         out[154..].copy_from_slice(&auth);
         out
     }
 
-    #[cfg(test)]
-    pub(crate) fn decode(bytes: &[u8], expected_slot: SlotId) -> Option<Self> {
+    pub(crate) fn decode(bytes: &[u8], key: &JournalKey, expected_slot: SlotId) -> Option<Self> {
         if bytes.len() != Self::ENCODED_LEN
             || bytes[..4] != MAGIC
             || bytes[4] != VERSION
@@ -88,11 +88,15 @@ impl JournalRecord {
         {
             return None;
         }
-        let auth = authenticator(&bytes[..154]);
-        if auth != bytes[154..] {
+        let auth = authenticator(key, &bytes[..154]);
+        if !constant_time_eq(&auth, &bytes[154..]) {
             return None;
         }
-        if bytes[6] != KmsProviderKind::None as u8 {
+        let provider = match bytes[6] {
+            x if x == KmsProviderKind::None as u8 => KmsProviderKind::None,
+            _ => return None,
+        };
+        if provider != KmsProviderKind::None {
             return None;
         }
         let payload_len = u16::from_le_bytes([bytes[24], bytes[25]]);
@@ -109,7 +113,7 @@ impl JournalRecord {
             slot: expected_slot,
             blob_revision: u64::from_le_bytes(bytes[8..16].try_into().ok()?),
             policy_epoch: u64::from_le_bytes(bytes[16..24].try_into().ok()?),
-            provider: KmsProviderKind::None,
+            provider,
             public_key,
             payload_len,
             sealed_leaf,
@@ -117,29 +121,17 @@ impl JournalRecord {
         })
     }
 
-    #[cfg(not(test))]
-    pub(crate) fn decode(_bytes: &[u8], _expected_slot: SlotId) -> Option<Self> {
-        None
-    }
-
-    pub(crate) fn digest(&self) -> [u8; DIGEST_LEN] {
+    pub(crate) fn digest(&self, key: &JournalKey) -> [u8; DIGEST_LEN] {
         let mut out = [0; DIGEST_LEN];
-        out.copy_from_slice(blake3::hash(&self.encode()).as_bytes());
+        out.copy_from_slice(blake3::hash(&self.encode(key)).as_bytes());
         out
     }
 }
 
-#[cfg(test)]
-fn authenticator(body: &[u8]) -> [u8; AUTH_LEN] {
-    const TEST_AUTH_KEY: [u8; 32] = *b"cellos-kms-test-auth-key-v1-0000";
-    let mut hasher = Hasher::new_keyed(&TEST_AUTH_KEY);
+pub(crate) fn authenticator(key: &JournalKey, body: &[u8]) -> [u8; AUTH_LEN] {
+    let mut hasher = Hasher::new_keyed(key);
     hasher.update(body);
     let mut out = [0; AUTH_LEN];
     out.copy_from_slice(hasher.finalize().as_bytes());
     out
-}
-
-#[cfg(not(test))]
-fn authenticator(_body: &[u8]) -> [u8; AUTH_LEN] {
-    [0; AUTH_LEN]
 }

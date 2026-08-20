@@ -36,7 +36,7 @@ pub struct PathRule {
 /// binding does not exist yet. The lookup ships now so adding a row later is a
 /// data change rather than a control-flow change.
 pub static EXACT_RULES: &[PathRule] = &[PathRule {
-    prefix: "/srv/cellos/kms",
+    prefix: "/srv/cellos",
     allow_read_all: false,
     allow_write_all: false,
 }];
@@ -76,7 +76,7 @@ pub static PREFIX_RULES: &[PathRule] = &[
     // write fell through to the read-only "/" rule and failed before reaching the
     // backend.
     PathRule {
-        prefix: "/srv/cellos/kms/",
+        prefix: "/srv/cellos/",
         allow_read_all: false,
         allow_write_all: false,
     },

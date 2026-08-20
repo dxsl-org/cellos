@@ -1,19 +1,41 @@
 use crate::caller::Caller;
 use api::syscall::service;
 
+const KMS_NAMESPACE: &str = "/srv/cellos";
+
 pub(super) fn is_kms_store_rule(prefix: &str) -> bool {
-    matches!(prefix, "/srv/cellos/kms" | "/srv/cellos/kms/")
+    matches!(prefix, KMS_NAMESPACE | "/srv/cellos/")
 }
 
-pub(super) fn is_kms_store_rule_path(path: &str) -> bool {
-    path == "/srv/cellos/kms" || path.starts_with("/srv/cellos/kms/")
+pub(super) fn is_kms_namespace_path(path: &str) -> bool {
+    path == KMS_NAMESPACE || path.starts_with("/srv/cellos/")
 }
 
-pub(super) fn contains_kms_store(path: &str) -> bool {
-    path == "/srv/cellos"
-        || path == "/srv/cellos/"
-        || path == "/srv/cellos/kms"
-        || path.starts_with("/srv/cellos/kms/")
+pub(super) fn contains_kms_namespace(path: &str) -> bool {
+    is_kms_namespace_path(path)
+}
+
+pub(super) fn is_canonical_policy_path(path: &str) -> bool {
+    if path == "/" {
+        return true;
+    }
+    if !path.starts_with('/') || path.ends_with("//") {
+        return false;
+    }
+    let mut saw_component = false;
+    for (index, component) in path.split('/').enumerate() {
+        if index == 0 {
+            continue;
+        }
+        if component.is_empty() {
+            return index + 1 == path.split('/').count() && saw_component;
+        }
+        if matches!(component, "." | "..") {
+            return false;
+        }
+        saw_component = true;
+    }
+    saw_component
 }
 
 pub(super) fn live_kms_matches(caller: Caller, lookup: fn(u16) -> Option<usize>) -> bool {
@@ -38,70 +60,104 @@ mod tests {
         sender_tid: 50,
     };
 
+    fn live_table() -> AccessTable {
+        AccessTable::with_service_lookup(|service_id| (service_id == service::KMS).then_some(50))
+    }
+
     #[test]
-    fn kms_store_denies_arbitrary_and_stale_callers() {
-        let table = AccessTable::with_service_lookup(|_| Some(77));
-        for caller in [
-            Caller {
-                cell: CellId(7),
-                generation: 1,
-                sender_tid: 70,
-            },
-            Caller {
-                cell: CellId(7),
-                generation: 0,
-                sender_tid: 77,
-            },
-            Caller {
-                cell: CellId(7),
-                generation: 1,
-                sender_tid: 0,
-            },
+    fn canonical_policy_path_rules_are_strict() {
+        for path in [
+            "",
+            "srv/cellos",
+            "/srv//cellos",
+            "/srv/./cellos",
+            "/srv/../cellos",
+            "/srv/cellos//kms",
         ] {
-            assert!(!table.can_read(caller, "/srv/cellos/kms"));
-            assert!(!table.can_read(caller, "/srv/cellos/kms/slot-a"));
-            assert!(!table.can_write(caller, "/srv/cellos/kms"));
-            assert!(!table.can_write(caller, "/srv/cellos/kms/slot-a"));
+            assert!(
+                !is_canonical_policy_path(path),
+                "{path} should be noncanonical"
+            );
+        }
+        for path in ["/", "/srv", "/srv/", "/srv/cellos", "/srv/cellos/kms/"] {
+            assert!(
+                is_canonical_policy_path(path),
+                "{path} should stay canonical"
+            );
         }
     }
 
     #[test]
-    fn kms_store_allows_only_live_kms_provider() {
-        let caller = Caller {
-            cell: CellId(13),
-            generation: 2,
-            sender_tid: 91,
-        };
-        let table = AccessTable::with_service_lookup(|service_id| {
-            (service_id == service::KMS).then_some(91)
-        });
-        for path in ["/srv/cellos/kms", "/srv/cellos/kms/slot-a"] {
-            assert!(table.can_read(caller, path), "{path} should be readable");
-            assert!(table.can_write(caller, path), "{path} should be writable");
+    fn namespace_is_reserved_to_live_kms_only() {
+        let table = live_table();
+        for path in ["/srv/cellos", "/srv/cellos/", "/srv/cellos/kms/slot-a"] {
+            assert!(
+                table.can_read(CELL, path),
+                "{path} should read for live KMS"
+            );
+            assert!(
+                table.can_write(CELL, path),
+                "{path} should write for live KMS"
+            );
+        }
+        let stale = AccessTable::with_service_lookup(|_| None);
+        for path in ["/srv/cellos", "/srv/cellos/kms/slot-a"] {
+            assert!(!stale.can_read(CELL, path), "{path} should deny stale read");
+            assert!(
+                !stale.can_write(CELL, path),
+                "{path} should deny stale write"
+            );
+            assert!(
+                !stale.can_read_fast(CELL, path),
+                "{path} should deny fast path"
+            );
+            assert!(
+                !stale.can_remove_tree(CELL, path),
+                "{path} should deny remove"
+            );
+            assert!(
+                !stale.can_remove_dir(CELL, path),
+                "{path} should deny directory remove"
+            );
         }
     }
 
     #[test]
-    fn kms_store_fails_closed_when_lookup_fails() {
-        let table = AccessTable::with_service_lookup(|_| None);
-        assert!(!table.can_read(CELL, "/srv/cellos/kms/slot-a"));
-        assert!(!table.can_write(CELL, "/srv/cellos/kms/slot-a"));
-    }
-
-    #[test]
-    fn fast_path_denies_kms_store_without_lookup() {
-        let table = AccessTable::with_service_lookup(|_| panic!("no lookup in fast path"));
-        assert!(!table.can_read_fast(CELL, "/srv/cellos/kms/slot-a"));
-        assert!(table.can_read_fast(CELL, "/srv/other"));
-    }
-
-    #[test]
-    fn recursive_delete_cannot_bypass_kms_store_prefix() {
-        let table = AccessTable::with_service_lookup(|service_id| {
-            (service_id == service::KMS).then_some(50)
-        });
-        assert!(!table.can_remove_tree(CELL, "/srv/cellos"));
-        assert!(!table.can_remove_tree(CELL, "/srv/cellos/kms"));
+    fn alias_paths_fail_before_rule_selection() {
+        let table = live_table();
+        for path in [
+            "/srv/cellos//kms/slot-a",
+            "/srv//cellos/kms/slot-a",
+            "/srv/./cellos",
+            "/srv/cellos/../kms",
+        ] {
+            assert!(!table.can_read(CELL, path), "{path} should not read");
+            assert!(!table.can_write(CELL, path), "{path} should not write");
+            assert!(
+                !table.can_read_fast(CELL, path),
+                "{path} should not fast-read"
+            );
+            assert!(
+                !table.can_remove_tree(CELL, path),
+                "{path} should not remove"
+            );
+            assert!(!table.can_remove_dir(CELL, path), "{path} should not rmdir");
+        }
+        assert!(table.can_read(CELL, "/srv/other"));
+        assert!(table.can_write(CELL, "/srv/other"));
         assert!(table.can_remove_tree(CELL, "/srv/other"));
+        assert!(table.can_remove_dir(CELL, "/srv/other"));
+    }
+
+    #[test]
+    fn directory_removal_cannot_remove_kms_namespace() {
+        let table = live_table();
+        for path in ["/srv/cellos", "/srv/cellos/", "/srv/cellos/kms"] {
+            assert!(!table.can_remove_dir(CELL, path), "{path} should not rmdir");
+            assert!(
+                !table.can_remove_tree(CELL, path),
+                "{path} should not remove"
+            );
+        }
     }
 }

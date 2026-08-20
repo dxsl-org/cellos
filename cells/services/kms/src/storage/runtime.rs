@@ -15,6 +15,14 @@ impl VfsJournalStore {
             client: ostd::clients::vfs::VfsClient::new(),
         }
     }
+
+    pub(crate) fn probe_access(&mut self) -> Result<(), StoreError> {
+        let _ = self.stat("/srv/cellos")?;
+        let _ = self.stat(STORE_DIR)?;
+        let _ = self.stat(super::record::SLOT_A_PATH)?;
+        let _ = self.stat(super::record::SLOT_B_PATH)?;
+        Ok(())
+    }
 }
 
 impl StoreIo for VfsJournalStore {
@@ -43,13 +51,6 @@ impl StoreIo for VfsJournalStore {
 
     fn write_file(&mut self, path: &str, content: &[u8]) -> Result<(), StoreError> {
         self.client.write_file(path, content).map_err(map_vfs_error)
-    }
-
-    fn unlink(&mut self, path: &str) -> Result<(), StoreError> {
-        match self.client.unlink(path) {
-            Ok(()) | Err(ostd::ViError::NotFound) => Ok(()),
-            Err(err) => Err(map_vfs_error(err)),
-        }
     }
 }
 
