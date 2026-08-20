@@ -1,15 +1,16 @@
 use api::caller_identity::CallerIdentity;
 use types::kms::{
-    BindingEpoch, KmsErrorCode, KmsOpcode, KmsProviderKind, KmsRequestV1, KmsResponseV1,
-    NodeIdentityState, NodeIdentityStatusPayload, NoiseStaticDhRequestPayload,
-    RotateNodeIdentityRequestPayload, KMS_NODE_KEY_ID_C2C,
+    BindingEpoch, KmsErrorCode, KmsOpcode, KmsRequestV1, KmsResponseV1,
+    NoiseStaticDhRequestPayload, RotateNodeIdentityRequestPayload, KMS_NODE_KEY_ID_C2C,
 };
 
 use crate::auth::{authorize_supervisor, register_broker, BrokerBinding, ServiceRegistrySnapshot};
 use crate::reply::SuccessPayload;
+use crate::storage::RootAssessment;
 
 pub struct KmsService {
     binding: Option<BrokerBinding>,
+    root: RootAssessment,
     next_binding_epoch: u64,
 }
 
@@ -23,6 +24,7 @@ impl KmsService {
     pub const fn new() -> Self {
         Self {
             binding: None,
+            root: RootAssessment::unavailable(),
             next_binding_epoch: 1,
         }
     }
@@ -89,20 +91,11 @@ impl KmsService {
         if !broker_authorized {
             authorize_supervisor(sender, caller, registry.supervisor_tid)?;
         }
+        let binding_epoch = self
+            .binding
+            .map_or(BindingEpoch(0), |binding| binding.epoch);
         Ok(SuccessPayload::new(
-            &NodeIdentityStatusPayload {
-                state: NodeIdentityState::ProviderUnavailable,
-                provider: KmsProviderKind::None,
-                remote_allowed: 0,
-                reserved: 0,
-                binding_epoch: self
-                    .binding
-                    .map_or(BindingEpoch(0), |binding| binding.epoch),
-                blob_revision: 0,
-                policy_epoch: 0,
-                public_key: [0; 32],
-            }
-            .encode(),
+            &self.root.status_payload(binding_epoch).encode(),
         ))
     }
 

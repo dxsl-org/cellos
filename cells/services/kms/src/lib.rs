@@ -3,8 +3,9 @@
 
 //! Fail-closed runtime boundary for the Cellos node-identity KMS.
 //!
-//! This slice deliberately has no root provider. It proves service lifecycle,
-//! attested authorization, and wire dispatch while making `Ready` impossible.
+//! This slice deliberately keeps the root backend fail-closed. It proves
+//! service lifecycle, attested authorization, and wire dispatch while making
+//! `Ready` impossible without the later production root backend.
 
 mod auth;
 mod dispatch;

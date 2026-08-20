@@ -3,12 +3,14 @@
 mod backend;
 mod journal;
 mod record;
+mod root;
 #[cfg(target_os = "none")]
 mod runtime;
 
 pub(crate) use backend::{StoreError, StoreIo};
 pub(crate) use journal::{JournalLoad, JournalState};
 pub(crate) use record::{JournalKey, JournalRecord, SlotId, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR};
+pub(crate) use root::RootAssessment;
 
 #[cfg(target_os = "none")]
 use runtime::VfsJournalStore;
