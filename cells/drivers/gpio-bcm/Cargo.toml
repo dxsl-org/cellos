@@ -11,6 +11,7 @@ ostd     = { path = "../../../libs/ostd", version = "0.2.0" }
 hal-gpio = { path = "../../../hal/traits/gpio", version = "0.1.0" }
 
 [lib]
+test = false
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

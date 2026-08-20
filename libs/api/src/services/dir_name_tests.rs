@@ -178,7 +178,7 @@ fn a_doubled_or_trailing_separator_is_rejected_rather_than_collapsed() {
 #[test]
 fn an_over_long_root_path_is_rejected() {
     let mut long = vec![b'/'];
-    long.extend(std::iter::repeat(b'a').take(MAX_DIR_PATH_LEN));
+    long.extend(std::iter::repeat_n(b'a', MAX_DIR_PATH_LEN));
     assert_eq!(validate_dir_path(&long), Err(DirNameError::TooLong));
 }
 

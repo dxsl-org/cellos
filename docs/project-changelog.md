@@ -2,6 +2,14 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-20] Phase 06 captures the G3 accelerator evidence envelope
+
+Phase 06 is now recorded as a docs-only blocker envelope for G3 accelerator
+readiness. The updated evidence trail keeps RK3588 as the first probe target
+and X390 as the second implementation, records the vendor license and hardware
+gates, and explicitly avoids freezing a `ViAccelerator` ABI, probe crate, or
+kernel scheduler before real hardware evidence exists.
+
 ## [2026-08-19] Application tier taxonomy is standardized
 
 Application documentation now reserves Tier 1/2/3 for execution and isolation
@@ -37,6 +45,60 @@ assertion, and `scripts/check-hal-boundaries.sh` now fails any new local HAL
 `cargo check -p cellos-kernel --target x86_64-unknown-none -Z build-std=core,alloc`,
 `bash scripts/check-hal-boundaries.sh`, and `git diff --check`. No public ABI
 changed and no physical-RPi3 claim was added.
+
+## [2026-08-20] Phase 05 q35 PCIe storage and network tightens the x86 lane
+
+The current QEMU q35 x86_64 lane now scans PCIe ECAM on bus 0, registers
+bounded BAR windows through the resource registry, and keeps invalid BARs
+fail-closed instead of granting MMIO authority. VT-d activation remains
+board-gated behind the q35 fixed base, before any DMA-capable Driver Cell is
+allowed to use the path.
+
+NVMe now has a QEMU FAT32 write/read witness through `/mnt/sd`, and the e1000
+cell closes the unsupported-device path with a bounded discovery retry instead
+of a false permanent absence. The build path also works from WSL/Windows
+tooling after script portability fixes.
+
+This lane is still QEMU-only. Physical x86 remains gated, bus 0 is the only
+validated enumeration path, real NIC Tx/Rx/DHCP are not proven, and the BAR
+kernel unit-harness gap stays deferred.
+
+## [2026-08-20] Phase 03 BCM/RPi3 hardware lane closes
+
+The current RPi3 payload now passes the physical GPIO17-to-GPIO27 rising-edge
+gate, an explicit BCM BSC1 data NACK, GPIO17 actuator readback, and the BCM SPI0
+MOSI-to-MISO `AA55` loopback without panic or Cell faults. Development demo
+cells are loaded from the current embedded VIFS1 image and fail closed on a
+missing entry, preventing stale SD payloads from masking a deployment error.
+
+The AArch64 QEMU regression lane launches demos on demand and proves PL061,
+PL011, and the bounded pinned-worker path without recursive self-spawn. Phase 03
+is complete for BCM/RPi3; DesignWare physical promotion remains conditional on
+a board with verified compatible, MMIO, IRQ, and pinmux evidence.
+
+## [2026-08-19] G1 BCM I2C/SPI controller slice closes hardware-gated integration
+
+Cell manifests, launch ceilings, signed policy, and the resource registry now
+carry distinct I2C and SPI device classes. RPi3 grants exact 4-KiB BSC1 and
+SPI0 windows, keeps GPIO disjoint, and applies descriptor-selected ALT0 pinmux
+before Driver Cells start. Shared polling BCM BSC1 and SPI0 crates implement
+bounded error paths; the BSC combined-transfer sequence waits for an active
+empty FIFO before queueing bytes and arming the repeated start.
+
+Driver Cell teardown now clears all well-known roles through one lifecycle
+entrypoint, and NIC owner plus proven IRQ are published atomically. QEMU image
+packaging now includes the current boot-critical cells and assertions for block,
+input, and GPU registration. Live RV64 and AArch64 boots reach the shell with
+the full baseline and also degrade cleanly when optional GPU/NIC devices are
+omitted. The RPi3 builder now uses host-native paths/tool defaults, fails closed
+on missing required cells, and stages a verified current-head TFTP payload.
+Physical RPi3 TFTP boot now passes with SD discovery, all four MBR partitions,
+FAT16 and `/mnt/sd` mounts, kernel-push Input Service, and shell readiness.
+Interactive `help` and a numbered 100-command UART burst returned without loss.
+The wired GPIO/I2C/SPI promotion now also passes on the current RPi3 head:
+GPIO17->GPIO27 rising edge, BCM BSC1 explicit data NACK, and BCM SPI0
+loopback AA55 all PASS. The BCM/RPi3 lane is closed; DesignWare remains
+conditional on a board with verified compatible/controller evidence.
 
 ## [2026-08-18] QEMU q35 x86_64 joins the board and SoC ownership model
 

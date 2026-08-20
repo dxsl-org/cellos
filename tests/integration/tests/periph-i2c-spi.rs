@@ -14,10 +14,9 @@
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary_aarch64, QemuRunner};
 
-/// Allow enough time for all supervised services to start and for the best-effort
-/// demo cells (spawned last by init) to run. The demos spawn after bench/periph-demo,
-/// so a full BOOT_TIMEOUT is needed.
+/// Allow enough time for supervised services and the interactive shell to start.
 const BOOT_TIMEOUT: u64 = 60;
+const CMD_TIMEOUT: u64 = 15;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -73,10 +72,11 @@ fn aarch64_spi_demo_tx() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    // spi-demo is spawned best-effort by init after all supervised services.
-    // Use BOOT_TIMEOUT to allow the full bring-up sequence to complete.
-    qemu.wait_for("[spi-demo] SPI TX OK", BOOT_TIMEOUT)
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.send_line("spi-demo &");
+    qemu.wait_for("[spi-demo] SPI TX OK", CMD_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "spi-demo TX probe not seen: {e}\n--- output ---\n{}",
@@ -96,8 +96,11 @@ fn aarch64_i2c_sensor_demo_banner() {
     if !prerequisites_ok() {
         return;
     }
-    let qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
-    qemu.wait_for("[sensor-demo] SHT3x via bit-bang I2C", BOOT_TIMEOUT)
+    let mut qemu = QemuRunner::boot_aarch64_with_disk(&kernel_path(), &disk_path());
+    qemu.wait_for("Cellos >", BOOT_TIMEOUT)
+        .unwrap_or_else(|e| panic!("shell not reached: {e}\n--- output ---\n{}", qemu.dump()));
+    qemu.send_line("sensor-demo &");
+    qemu.wait_for("[sensor-demo] SHT3x via bit-bang I2C", CMD_TIMEOUT)
         .unwrap_or_else(|e| {
             panic!(
                 "sensor-demo banner not seen: {e}\n--- output ---\n{}",

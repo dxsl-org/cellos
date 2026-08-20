@@ -10,28 +10,36 @@ extern crate alloc;
 
 use api::declare_manifest;
 use driver_gpio::Pl061Gpio;
+use driver_spi_bcm::BcmSpi0;
 use driver_spi_gpio::BitBangSpi;
-use hal_spi::ViSpi;
+use hal_spi::{SpiError, ViSpi};
 use ostd::io::println;
 use types::ViError;
 
-// Gate on gpio manifest flag (Option A: bit-bang SPI is GPIO in disguise).
-// This grants PL061 MMIO access at spawn without requiring a dedicated SPI flag.
+// BCM hardware SPI is preferred on RPi3; GPIO remains the QEMU fallback.
 declare_manifest!(
     block_io = false,
     network = false,
     spawn = false,
     gpio = true,
-    uart = false
+    uart = false,
+    hypervisor = false,
+    i2c = false,
+    spi = true
 );
 
 ostd::cell_main!(cell_main);
 
 fn cell_main() {
-    println("[spi-demo] SPI bit-bang demo (MOSI=2, MISO=3, SCK=4, CS=5)");
+    println("[spi-demo] SPI controller probe");
+
+    if let Ok(mut spi) = BcmSpi0::open() {
+        println("[spi-demo] using BCM SPI0 hardware controller");
+        return run_spi_demo(&mut spi, true);
+    }
 
     match Pl061Gpio::open() {
-        Ok(gpio) => run_spi_demo(gpio),
+        Ok(gpio) => run_gpio_spi_demo(gpio),
         Err(ViError::PermissionDenied) => {
             println("[spi-demo] SPI unavailable (gpio cap not granted — non-aarch64 target)");
         }
@@ -41,9 +49,13 @@ fn cell_main() {
     }
 }
 
-fn run_spi_demo(gpio: Pl061Gpio) {
+fn run_gpio_spi_demo(gpio: Pl061Gpio) {
     let mut spi = BitBangSpi::new(gpio);
+    println("[spi-demo] using GPIO bit-bang fallback");
+    run_spi_demo(&mut spi, false);
+}
 
+fn run_spi_demo(spi: &mut impl ViSpi<Error = SpiError>, require_loopback: bool) {
     // ── TX-only write: primary assertion ─────────────────────────────────────
     // write() clocks out bytes via MOSI/SCK/CS without sampling MISO.
     // On QEMU this validates the full GPIO MMIO path.
@@ -61,12 +73,24 @@ fn run_spi_demo(gpio: Pl061Gpio) {
     let mut rx = [0xFFu8; 2];
     match spi.transfer(&[0xAA, 0x55], &mut rx) {
         Ok(()) => {
-            let msg = alloc::format!(
-                "[spi-demo] SPI transfer OK: sent 0xAA 0x55, recv 0x{:02X} 0x{:02X} (QEMU MISO=0)",
-                rx[0],
-                rx[1]
-            );
-            println(&msg);
+            if require_loopback {
+                if rx == [0xAA, 0x55] {
+                    println("[phase03-spi] PASS: BCM SPI0 MOSI-MISO loopback AA55");
+                } else {
+                    let msg = alloc::format!(
+                        "[phase03-spi] FAIL: expected AA55, received {:02X}{:02X}",
+                        rx[0],
+                        rx[1]
+                    );
+                    println(&msg);
+                }
+            } else {
+                let msg = alloc::format!(
+                    "[spi-demo] SPI transfer OK: sent 0xAA 0x55, recv 0x{:02X} 0x{:02X} (QEMU MISO=0)",
+                    rx[0], rx[1]
+                );
+                println(&msg);
+            }
         }
         Err(_) => {
             println("[spi-demo] SPI BusError — transfer failed");

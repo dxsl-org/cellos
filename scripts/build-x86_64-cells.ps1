@@ -23,16 +23,22 @@ $rustflags = "-C relocation-model=pic"
 # the libc declarations (implementations: compiler_builtins + POSIX shim).
 # -mno-red-zone/-mno-sse/-mno-mmx match the Rust x86_64-unknown-none codegen.
 $repoRoot = (Get-Location).Path
+$includeDir = Join-Path $repoRoot 'third_party/freestanding-include'
 if (-not $env:CC_x86_64_unknown_none) {
-    $env:CC_x86_64_unknown_none = "C:\Program Files\LLVM\bin\clang.exe"
+    $env:CC_x86_64_unknown_none = if ($IsWindows) {
+        "C:\Program Files\LLVM\bin\clang.exe"
+    } else {
+        "clang"
+    }
 }
 if (-not $env:CFLAGS_x86_64_unknown_none) {
     $env:CFLAGS_x86_64_unknown_none =
-        "--target=x86_64-unknown-none-elf -ffreestanding -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I$repoRoot\third_party\freestanding-include"
+        "--target=x86_64-unknown-none-elf -ffreestanding -mno-red-zone -mno-sse -mno-mmx -DLFS_NO_INTRINSICS -I$includeDir"
 }
 if (-not $env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none) {
+    $hostInclude = if ($IsWindows) { "" } else { " -I/usr/include/x86_64-linux-gnu" }
     $env:BINDGEN_EXTRA_CLANG_ARGS_x86_64_unknown_none =
-        "--target=x86_64-unknown-none-elf -I$repoRoot\third_party\freestanding-include"
+        "--target=x86_64-unknown-none-elf -I$includeDir$hostInclude"
 }
 if (-not $env:LIBCLANG_PATH) {
     $vsLlvm = "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/Llvm/x64/bin"
@@ -40,6 +46,19 @@ if (-not $env:LIBCLANG_PATH) {
 }
 
 Write-Host "=== Building x86_64 cells (release) ==="
+
+$python = if (Get-Command python -ErrorAction SilentlyContinue) {
+    "python"
+} elseif (Get-Command python3 -ErrorAction SilentlyContinue) {
+    "python3"
+} else {
+    throw "Python 3 is required to package the x86_64 VIFS1 image"
+}
+
+function Convert-ToolPath([string]$Path) {
+    if ($IsWindows) { return $Path }
+    return $Path.Replace('\', '/')
+}
 
 $env:RUSTFLAGS = $rustflags
 
@@ -113,7 +132,8 @@ $cells = @(
     @{ Bin = "kill";           Dst = "/bin/kill"   }
 )
 
-$imgArgs = @("kernel\src\embedded-x86_64\kernel_fs.img")
+$imagePath = "kernel\src\embedded-x86_64\kernel_fs.img"
+$imgArgs = @((Convert-ToolPath $imagePath))
 $found   = @()
 foreach ($c in $cells) {
     $src = "$buildDir\$($c.Bin)"
@@ -121,16 +141,17 @@ foreach ($c in $cells) {
         $kb = [Math]::Round((Get-Item $src).Length / 1KB, 0)
         Write-Host "  Found: $($c.Bin) (${kb} KB) -> $($c.Dst)"
         # mkfat32.py takes space-separated <src> <dst> pairs, NOT src:dst.
-        $imgArgs += @($src, $c.Dst)
+        $imgArgs += @((Convert-ToolPath $src), $c.Dst)
         $found += $c.Bin
     } else {
         Write-Warning "  Not found: $src (will be absent from kernel_fs.img)"
     }
 }
 
-if ($found.Count -eq 0) {
-    Write-Error "No x86_64 cell binaries built — kernel_fs.img not updated."
-    exit 1
+foreach ($required in @('app-shell', 'service-vfs', 'service-config', 'platform', 'driver-nvme', 'driver-e1000')) {
+    if ($required -notin $found) {
+        throw "Required x86_64 cell missing from image inputs: $required"
+    }
 }
 
 # Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
@@ -146,30 +167,30 @@ if ($found.Count -eq 0) {
 # same string works under PowerShell on both platforms.
 $policyTmp = "target/ViCell_x86_POLICY.BIN"
 New-Item -ItemType Directory -Force (Split-Path $policyTmp) | Out-Null
-python scripts\sign-policy.py --out $policyTmp
+& $python (Join-Path 'scripts' 'sign-policy.py') --out $policyTmp
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $policyTmp)) {
     Write-Error "sign-policy.py failed — need 'pip install cryptography'."
     exit 1
 }
 # Root-level, 8.3-uppercase: kernel/src/policy.rs reads exactly /POLICY.BIN.
-$imgArgs += @($policyTmp, "/POLICY.BIN")
+$imgArgs += @((Convert-ToolPath $policyTmp), "/POLICY.BIN")
 
 Write-Host ""
 Write-Host "=== Creating x86_64 kernel_fs.img ==="
-python tools\mkfat32.py @imgArgs
+& $python (Join-Path 'tools' 'mkfat32.py') @imgArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Error "mkfat32.py failed (exit $LASTEXITCODE)"
     exit 1
 }
 Remove-Item $policyTmp -Force -ErrorAction SilentlyContinue
 # Assert the layout instead of trusting the exit code.
-$layout = python tools\inspect_fat.py "kernel\src\embedded-x86_64\kernel_fs.img" 2>&1
+$layout = & $python (Join-Path 'tools' 'inspect_fat.py') (Convert-ToolPath $imagePath) 2>&1
 if (($layout | Select-String -Quiet -SimpleMatch 'SFN POLICY.BIN') -eq $false) {
     Write-Error "x86_64 kernel_fs.img has no /POLICY.BIN in the root directory"
     $layout | Write-Host
     exit 1
 }
-$kb = [Math]::Round((Get-Item "kernel\src\embedded-x86_64\kernel_fs.img").Length / 1KB, 0)
+$kb = [Math]::Round((Get-Item $imagePath).Length / 1KB, 0)
 Write-Host "  kernel_fs.img created: ${kb} KB"
 
 Write-Host ""

@@ -8,9 +8,11 @@ fn bcm2837_controller_addresses_match_peripheral_offsets() {
     assert_eq!(mmio.system_timer_base, mmio.peripheral_base + 0x3000);
     assert_eq!(mmio.legacy_irq_base, mmio.peripheral_base + 0xB200);
     assert_eq!(mmio.gpio_base, mmio.peripheral_base + 0x20_0000);
+    assert_eq!(mmio.spi0_base, mmio.peripheral_base + 0x20_4000);
     assert_eq!(mmio.aux_base, mmio.peripheral_base + 0x21_5000);
     assert_eq!(mmio.mini_uart_io, mmio.aux_base + 0x40);
     assert_eq!(mmio.sdhci_base, mmio.peripheral_base + 0x30_0000);
+    assert_eq!(mmio.bsc1_base, mmio.peripheral_base + 0x80_4000);
 }
 
 #[test]
@@ -21,17 +23,24 @@ fn bcm2837_mapping_and_grant_spans_are_bounded() {
     assert_eq!(peripheral_end, 0x4000_0000);
     assert_eq!(mmio.local_controller_base, peripheral_end);
     assert_eq!(mmio.local_controller_end(), Some(0x4000_1000));
-    assert_eq!(mmio.gpio_grant_size, 0x1_0000);
+    assert_eq!(mmio.gpio_grant_size, 0x1000);
+    assert_eq!(mmio.bsc1_grant_size, 0x1000);
+    assert_eq!(mmio.spi0_grant_size, 0x1000);
     assert_eq!(mmio.aux_grant_size, 0x1000);
     assert!(mmio.system_timer_base < peripheral_end);
     assert!(mmio.legacy_irq_base < peripheral_end);
     assert!(mmio.gpio_base + mmio.gpio_grant_size <= peripheral_end);
+    assert!(mmio.bsc1_base + mmio.bsc1_grant_size <= peripheral_end);
+    assert!(mmio.spi0_base + mmio.spi0_grant_size <= peripheral_end);
     assert!(mmio.aux_base + mmio.aux_grant_size <= peripheral_end);
+    assert!(mmio.gpio_base + mmio.gpio_grant_size <= mmio.spi0_base);
+    assert!(mmio.spi0_base + mmio.spi0_grant_size <= mmio.aux_base);
 }
 
 #[test]
 fn bcm2837_exposes_arasan_word_access_policy() {
-    assert!(BCM2837.sdhci.word_access_only);
+    let word_access_only = core::hint::black_box(BCM2837.sdhci.word_access_only);
+    assert!(word_access_only);
     assert_eq!(BCM2837.sdhci.minimum_write_spacing_us, 6);
 }
 
@@ -85,6 +94,7 @@ fn bcm2711_exposes_bounded_gic_and_emmc2_layout() {
     assert_eq!(mmio.gic_cpu_size, 0x1000);
     assert!(mmio.gic_distributor_base + mmio.gic_distributor_size <= mmio.gic_cpu_base);
     assert!(mmio.gic_cpu_base + mmio.gic_cpu_size <= end);
-    assert!(!BCM2711.sdhci.word_access_only);
+    let word_access_only = core::hint::black_box(BCM2711.sdhci.word_access_only);
+    assert!(!word_access_only);
     assert_eq!(BCM2711.sdhci.minimum_write_spacing_us, 0);
 }

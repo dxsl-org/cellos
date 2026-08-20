@@ -1,6 +1,8 @@
 use crate::task::cap::CapSet;
 
-use super::profiles::{console_mmio_capset, gpio_mmio_capset};
+use super::profiles::{
+    console_mmio_capset, gpio_mmio_capset, sensor_mmio_capset, spi_demo_mmio_capset,
+};
 
 pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
     let caps = match target {
@@ -33,7 +35,9 @@ pub(super) fn reviewed_user_target_ceiling(target: &str) -> Option<CapSet> {
             ..CapSet::EMPTY
         },
         "/bin/periph-demo" | "/bin/periph-test" => console_mmio_capset(),
-        "/bin/pwm-demo" | "/bin/sensor-demo" | "/bin/spi-demo" => gpio_mmio_capset(),
+        "/bin/pwm-demo" => gpio_mmio_capset(),
+        "/bin/sensor-demo" => sensor_mmio_capset(),
+        "/bin/spi-demo" => spi_demo_mmio_capset(),
         "/bin/bench"
         | "/bin/hotswap-demo-v1"
         | "/bin/hotswap-demo-v2"

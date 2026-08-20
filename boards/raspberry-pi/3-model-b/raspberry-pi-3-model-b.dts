@@ -25,5 +25,21 @@
             reg = <0x0 0x3f215040 0x0 0x4>;
             status = "okay";
         };
+
+        i2c@3f804000 {
+            compatible = "brcm,bcm2835-i2c";
+            reg = <0x0 0x3f804000 0x0 0x1000>;
+            interrupts = <0x2 0x15>;
+            clock-frequency = <0x186a0>;
+            status = "okay";
+        };
+
+        spi@3f204000 {
+            compatible = "brcm,bcm2835-spi";
+            reg = <0x0 0x3f204000 0x0 0x1000>;
+            interrupts = <0x2 0x16>;
+            num-cs = <0x2>;
+            status = "okay";
+        };
     };
 };

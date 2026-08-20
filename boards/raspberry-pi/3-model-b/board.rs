@@ -4,15 +4,22 @@ use crate::{
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["raspberrypi,3-model-b", "brcm,bcm2837"];
-const ENABLED_DRIVERS: [DriverId; 6] = [
+const ENABLED_DRIVERS: [DriverId; 8] = [
     DriverId::UartBcmMini,
     DriverId::IrqBcm2836Local,
     DriverId::IrqBcm2835Legacy,
     DriverId::TimerBcm2835System,
     DriverId::SdhciArasan,
+    DriverId::I2cBcmBsc,
+    DriverId::SpiBcm0,
     DriverId::GpioBcm2837,
 ];
-const PINMUX_GROUPS: [&str; 2] = ["uart-gpio14-15-alt5", "sd-gpio48-53-alt3"];
+const PINMUX_GROUPS: [&str; 4] = [
+    "uart-gpio14-15-alt5",
+    "sd-gpio48-53-alt3",
+    "i2c1-gpio2-3-alt0",
+    "spi0-gpio7-11-alt0",
+];
 const WIRING: WiringLayout = WiringLayout {
     pinmux_groups: &PINMUX_GROUPS,
     phy_links: &[],

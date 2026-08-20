@@ -182,7 +182,12 @@ impl CapSet {
         network: true,
         spawn: true,
         hypervisor: true,
-        mmio_devices: crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_UART,
+        mmio_devices: crate::resource_registry::DEV_GPIO
+            | crate::resource_registry::DEV_UART
+            | crate::resource_registry::DEV_CAN
+            | crate::resource_registry::DEV_ADC
+            | crate::resource_registry::DEV_I2C
+            | crate::resource_registry::DEV_SPI,
         block_regions: 0b1111,
         pcie_driver: true,
         platform: true,
@@ -226,6 +231,12 @@ impl CapSet {
         }
         if m.has_adc() {
             mmio |= crate::resource_registry::DEV_ADC;
+        }
+        if m.has_i2c() {
+            mmio |= crate::resource_registry::DEV_I2C;
+        }
+        if m.has_spi() {
+            mmio |= crate::resource_registry::DEV_SPI;
         }
         CapSet {
             block_io: m.has_block_io(),
@@ -389,6 +400,48 @@ pub enum Spawner {
 #[cfg(test)]
 mod tests {
     use super::CapSet;
+
+    #[test]
+    fn manifest_maps_i2c_and_spi_to_distinct_mmio_classes() {
+        let i2c = api::manifest::CellManifest::with_all(
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            api::manifest::TIER_LEGACY,
+        );
+        let spi = api::manifest::CellManifest::with_all(
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            api::manifest::TIER_LEGACY,
+        );
+        assert_eq!(
+            CapSet::from_manifest(&i2c).mmio_devices,
+            crate::resource_registry::DEV_I2C
+        );
+        assert_eq!(
+            CapSet::from_manifest(&spi).mmio_devices,
+            crate::resource_registry::DEV_SPI
+        );
+    }
 
     #[test]
     fn intersect_is_monotonic_downgrade() {

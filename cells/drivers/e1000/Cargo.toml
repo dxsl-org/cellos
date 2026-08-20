@@ -7,6 +7,7 @@ license.workspace = true
 [[bin]]
 name = "driver-e1000"
 path = "src/main.rs"
+test = false
 
 [dependencies]
 types = { path = "../../../libs/types", version = "0.1.0" }

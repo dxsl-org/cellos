@@ -36,6 +36,8 @@ fn rpi3_descriptor_matches_current_fallback_contract() {
         board.fallback_memory[1].base + board.fallback_memory[1].size,
         0x3F00_0000
     );
+    assert!(board.has_driver(DriverId::I2cBcmBsc));
+    assert!(board.has_driver(DriverId::SpiBcm0));
     assert_eq!(board.validate_for(Architecture::Aarch64), Ok(()));
 }
 
