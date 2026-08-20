@@ -61,18 +61,24 @@
 <a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">pub const </span>MANIFEST_FLAG_CAN: u16 = <span class="number">1 </span>&lt;&lt; <span class="number">8</span>;
 <a href=#62 id=62 data-nosnippet>62</a><span class="doccomment">/// ADC controller MMIO (v2).  Grants the ADC device class via `sys_request_mmio`.
 <a href=#63 id=63 data-nosnippet>63</a></span><span class="kw">pub const </span>MANIFEST_FLAG_ADC: u16 = <span class="number">1 </span>&lt;&lt; <span class="number">9</span>;
-<a href=#64 id=64 data-nosnippet>64</a>
-<a href=#65 id=65 data-nosnippet>65</a><span class="doccomment">/// Bitmask of all defined flags.  `from_bytes` rejects manifests setting any bit
-<a href=#66 id=66 data-nosnippet>66</a>/// outside this mask (a stale/forward binary is treated as malformed → legacy path
-<a href=#67 id=67 data-nosnippet>67</a>/// grants, the fail-safe direction).
-<a href=#68 id=68 data-nosnippet>68</a></span><span class="kw">pub const </span>MANIFEST_FLAGS_MASK: u16 = MANIFEST_FLAG_BLOCK_IO
-<a href=#69 id=69 data-nosnippet>69</a>    | MANIFEST_FLAG_NETWORK
-<a href=#70 id=70 data-nosnippet>70</a>    | MANIFEST_FLAG_SPAWN
-<a href=#71 id=71 data-nosnippet>71</a>    | MANIFEST_FLAG_GPIO
-<a href=#72 id=72 data-nosnippet>72</a>    | MANIFEST_FLAG_UART
-<a href=#73 id=73 data-nosnippet>73</a>    | MANIFEST_FLAG_HYPERVISOR
-<a href=#74 id=74 data-nosnippet>74</a>    | MANIFEST_FLAG_PART_DATA
-<a href=#75 id=75 data-nosnippet>75</a>    | MANIFEST_FLAG_PART_LFS
-<a href=#76 id=76 data-nosnippet>76</a>    | MANIFEST_FLAG_CAN
-<a href=#77 id=77 data-nosnippet>77</a>    | MANIFEST_FLAG_ADC;
+<a href=#64 id=64 data-nosnippet>64</a><span class="doccomment">/// I2C controller MMIO (v2).  Grants the I2C device class via `sys_request_mmio`.
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub const </span>MANIFEST_FLAG_I2C: u16 = <span class="number">1 </span>&lt;&lt; <span class="number">10</span>;
+<a href=#66 id=66 data-nosnippet>66</a><span class="doccomment">/// SPI controller MMIO (v2).  Grants the SPI device class via `sys_request_mmio`.
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub const </span>MANIFEST_FLAG_SPI: u16 = <span class="number">1 </span>&lt;&lt; <span class="number">11</span>;
+<a href=#68 id=68 data-nosnippet>68</a>
+<a href=#69 id=69 data-nosnippet>69</a><span class="doccomment">/// Bitmask of all defined flags.  `from_bytes` rejects manifests setting any bit
+<a href=#70 id=70 data-nosnippet>70</a>/// outside this mask (a stale/forward binary is treated as malformed → legacy path
+<a href=#71 id=71 data-nosnippet>71</a>/// grants, the fail-safe direction).
+<a href=#72 id=72 data-nosnippet>72</a></span><span class="kw">pub const </span>MANIFEST_FLAGS_MASK: u16 = MANIFEST_FLAG_BLOCK_IO
+<a href=#73 id=73 data-nosnippet>73</a>    | MANIFEST_FLAG_NETWORK
+<a href=#74 id=74 data-nosnippet>74</a>    | MANIFEST_FLAG_SPAWN
+<a href=#75 id=75 data-nosnippet>75</a>    | MANIFEST_FLAG_GPIO
+<a href=#76 id=76 data-nosnippet>76</a>    | MANIFEST_FLAG_UART
+<a href=#77 id=77 data-nosnippet>77</a>    | MANIFEST_FLAG_HYPERVISOR
+<a href=#78 id=78 data-nosnippet>78</a>    | MANIFEST_FLAG_PART_DATA
+<a href=#79 id=79 data-nosnippet>79</a>    | MANIFEST_FLAG_PART_LFS
+<a href=#80 id=80 data-nosnippet>80</a>    | MANIFEST_FLAG_CAN
+<a href=#81 id=81 data-nosnippet>81</a>    | MANIFEST_FLAG_ADC
+<a href=#82 id=82 data-nosnippet>82</a>    | MANIFEST_FLAG_I2C
+<a href=#83 id=83 data-nosnippet>83</a>    | MANIFEST_FLAG_SPI;
 </code></pre></div></section></main></body></html>

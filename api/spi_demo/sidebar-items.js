@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["cell_main","main","run_spi_demo"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"fn":["cell_main","main","run_gpio_spi_demo","run_spi_demo"],"static":["VICELL_MANIFEST"]};

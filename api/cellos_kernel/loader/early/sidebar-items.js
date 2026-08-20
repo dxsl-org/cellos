@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["BOOTSTRAP_CELLS"],"fn":["is_bootstrap_path"],"static":["CELL_TABLE"],"struct":["EarlyLoader","EarlyTable"]};
+window.SIDEBAR_ITEMS = {"constant":["BOOTSTRAP_CELLS","EMBEDDED_DEVELOPMENT_CELLS"],"fn":["is_bootstrap_path"],"static":["CELL_TABLE"],"struct":["EarlyLoader","EarlyTable"]};

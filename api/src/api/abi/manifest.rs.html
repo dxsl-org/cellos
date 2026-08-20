@@ -82,127 +82,143 @@
 <a href=#82 id=82 data-nosnippet>82</a>            <span class="bool-val">false</span>,
 <a href=#83 id=83 data-nosnippet>83</a>            <span class="bool-val">false</span>,
 <a href=#84 id=84 data-nosnippet>84</a>            <span class="bool-val">false</span>,
-<a href=#85 id=85 data-nosnippet>85</a>            TIER_LEGACY,
-<a href=#86 id=86 data-nosnippet>86</a>        )
-<a href=#87 id=87 data-nosnippet>87</a>    }
-<a href=#88 id=88 data-nosnippet>88</a>
-<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Construct a manifest including block-I/O partition range grants.
-<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub const fn </span>with_parts(
-<a href=#92 id=92 data-nosnippet>92</a>        block_io: bool,
-<a href=#93 id=93 data-nosnippet>93</a>        network: bool,
-<a href=#94 id=94 data-nosnippet>94</a>        spawn: bool,
-<a href=#95 id=95 data-nosnippet>95</a>        gpio: bool,
-<a href=#96 id=96 data-nosnippet>96</a>        uart: bool,
-<a href=#97 id=97 data-nosnippet>97</a>        hypervisor: bool,
-<a href=#98 id=98 data-nosnippet>98</a>        part_data: bool,
-<a href=#99 id=99 data-nosnippet>99</a>        part_lfs: bool,
-<a href=#100 id=100 data-nosnippet>100</a>    ) -&gt; <span class="self">Self </span>{
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="self">Self</span>::with_all(
-<a href=#102 id=102 data-nosnippet>102</a>            block_io,
-<a href=#103 id=103 data-nosnippet>103</a>            network,
-<a href=#104 id=104 data-nosnippet>104</a>            spawn,
-<a href=#105 id=105 data-nosnippet>105</a>            gpio,
-<a href=#106 id=106 data-nosnippet>106</a>            uart,
-<a href=#107 id=107 data-nosnippet>107</a>            hypervisor,
-<a href=#108 id=108 data-nosnippet>108</a>            part_data,
-<a href=#109 id=109 data-nosnippet>109</a>            part_lfs,
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="bool-val">false</span>,
-<a href=#111 id=111 data-nosnippet>111</a>            <span class="bool-val">false</span>,
-<a href=#112 id=112 data-nosnippet>112</a>            TIER_LEGACY,
-<a href=#113 id=113 data-nosnippet>113</a>        )
-<a href=#114 id=114 data-nosnippet>114</a>    }
-<a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="doccomment">/// Full constructor — all flags + tier.  The macro is the public face.
-<a href=#117 id=117 data-nosnippet>117</a>    </span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">pub const fn </span>with_all(
-<a href=#119 id=119 data-nosnippet>119</a>        block_io: bool,
-<a href=#120 id=120 data-nosnippet>120</a>        network: bool,
-<a href=#121 id=121 data-nosnippet>121</a>        spawn: bool,
-<a href=#122 id=122 data-nosnippet>122</a>        gpio: bool,
-<a href=#123 id=123 data-nosnippet>123</a>        uart: bool,
-<a href=#124 id=124 data-nosnippet>124</a>        hypervisor: bool,
-<a href=#125 id=125 data-nosnippet>125</a>        part_data: bool,
-<a href=#126 id=126 data-nosnippet>126</a>        part_lfs: bool,
-<a href=#127 id=127 data-nosnippet>127</a>        can: bool,
-<a href=#128 id=128 data-nosnippet>128</a>        adc: bool,
-<a href=#129 id=129 data-nosnippet>129</a>        tier: u8,
-<a href=#130 id=130 data-nosnippet>130</a>    ) -&gt; <span class="self">Self </span>{
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="self">Self </span>{
-<a href=#132 id=132 data-nosnippet>132</a>            magic: MANIFEST_MAGIC,
-<a href=#133 id=133 data-nosnippet>133</a>            version: MANIFEST_VERSION,
-<a href=#134 id=134 data-nosnippet>134</a>            tier,
-<a href=#135 id=135 data-nosnippet>135</a>            flags: (block_io <span class="kw">as </span>u16 * MANIFEST_FLAG_BLOCK_IO)
-<a href=#136 id=136 data-nosnippet>136</a>                | (network <span class="kw">as </span>u16 * MANIFEST_FLAG_NETWORK)
-<a href=#137 id=137 data-nosnippet>137</a>                | (spawn <span class="kw">as </span>u16 * MANIFEST_FLAG_SPAWN)
-<a href=#138 id=138 data-nosnippet>138</a>                | (gpio <span class="kw">as </span>u16 * MANIFEST_FLAG_GPIO)
-<a href=#139 id=139 data-nosnippet>139</a>                | (uart <span class="kw">as </span>u16 * MANIFEST_FLAG_UART)
-<a href=#140 id=140 data-nosnippet>140</a>                | (hypervisor <span class="kw">as </span>u16 * MANIFEST_FLAG_HYPERVISOR)
-<a href=#141 id=141 data-nosnippet>141</a>                | (part_data <span class="kw">as </span>u16 * MANIFEST_FLAG_PART_DATA)
-<a href=#142 id=142 data-nosnippet>142</a>                | (part_lfs <span class="kw">as </span>u16 * MANIFEST_FLAG_PART_LFS)
-<a href=#143 id=143 data-nosnippet>143</a>                | (can <span class="kw">as </span>u16 * MANIFEST_FLAG_CAN)
-<a href=#144 id=144 data-nosnippet>144</a>                | (adc <span class="kw">as </span>u16 * MANIFEST_FLAG_ADC),
-<a href=#145 id=145 data-nosnippet>145</a>            cap_args_off: <span class="number">0</span>,
-<a href=#146 id=146 data-nosnippet>146</a>            reserved: <span class="number">0</span>,
-<a href=#147 id=147 data-nosnippet>147</a>        }
-<a href=#148 id=148 data-nosnippet>148</a>    }
-<a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="comment">// `from_bytes` (the ELF-section parser) lives in the sibling `manifest_parse`
-<a href=#151 id=151 data-nosnippet>151</a>    // module — see that file for the v1-upcast / v2-parse logic.
-<a href=#152 id=152 data-nosnippet>152</a>
-<a href=#153 id=153 data-nosnippet>153</a>    </span><span class="doccomment">/// Returns `true` if the cell declared raw block-device access.
-<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="kw">pub fn </span>has_block_io(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#155 id=155 data-nosnippet>155</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_BLOCK_IO != <span class="number">0
-<a href=#156 id=156 data-nosnippet>156</a>    </span>}
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="doccomment">/// Returns `true` if the cell declared network transmit/receive.
-<a href=#158 id=158 data-nosnippet>158</a>    </span><span class="kw">pub fn </span>has_network(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#159 id=159 data-nosnippet>159</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_NETWORK != <span class="number">0
-<a href=#160 id=160 data-nosnippet>160</a>    </span>}
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Returns `true` if the cell declared cell-spawning and hot-swap.
-<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">pub fn </span>has_spawn(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_SPAWN != <span class="number">0
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="bool-val">false</span>,
+<a href=#86 id=86 data-nosnippet>86</a>            <span class="bool-val">false</span>,
+<a href=#87 id=87 data-nosnippet>87</a>            TIER_LEGACY,
+<a href=#88 id=88 data-nosnippet>88</a>        )
+<a href=#89 id=89 data-nosnippet>89</a>    }
+<a href=#90 id=90 data-nosnippet>90</a>
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Construct a manifest including block-I/O partition range grants.
+<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#93 id=93 data-nosnippet>93</a>    </span><span class="kw">pub const fn </span>with_parts(
+<a href=#94 id=94 data-nosnippet>94</a>        block_io: bool,
+<a href=#95 id=95 data-nosnippet>95</a>        network: bool,
+<a href=#96 id=96 data-nosnippet>96</a>        spawn: bool,
+<a href=#97 id=97 data-nosnippet>97</a>        gpio: bool,
+<a href=#98 id=98 data-nosnippet>98</a>        uart: bool,
+<a href=#99 id=99 data-nosnippet>99</a>        hypervisor: bool,
+<a href=#100 id=100 data-nosnippet>100</a>        part_data: bool,
+<a href=#101 id=101 data-nosnippet>101</a>        part_lfs: bool,
+<a href=#102 id=102 data-nosnippet>102</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="self">Self</span>::with_all(
+<a href=#104 id=104 data-nosnippet>104</a>            block_io,
+<a href=#105 id=105 data-nosnippet>105</a>            network,
+<a href=#106 id=106 data-nosnippet>106</a>            spawn,
+<a href=#107 id=107 data-nosnippet>107</a>            gpio,
+<a href=#108 id=108 data-nosnippet>108</a>            uart,
+<a href=#109 id=109 data-nosnippet>109</a>            hypervisor,
+<a href=#110 id=110 data-nosnippet>110</a>            part_data,
+<a href=#111 id=111 data-nosnippet>111</a>            part_lfs,
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="bool-val">false</span>,
+<a href=#113 id=113 data-nosnippet>113</a>            <span class="bool-val">false</span>,
+<a href=#114 id=114 data-nosnippet>114</a>            <span class="bool-val">false</span>,
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="bool-val">false</span>,
+<a href=#116 id=116 data-nosnippet>116</a>            TIER_LEGACY,
+<a href=#117 id=117 data-nosnippet>117</a>        )
+<a href=#118 id=118 data-nosnippet>118</a>    }
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// Full constructor — all flags + tier.  The macro is the public face.
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="attr">#[allow(clippy::too_many_arguments)]
+<a href=#122 id=122 data-nosnippet>122</a>    </span><span class="kw">pub const fn </span>with_all(
+<a href=#123 id=123 data-nosnippet>123</a>        block_io: bool,
+<a href=#124 id=124 data-nosnippet>124</a>        network: bool,
+<a href=#125 id=125 data-nosnippet>125</a>        spawn: bool,
+<a href=#126 id=126 data-nosnippet>126</a>        gpio: bool,
+<a href=#127 id=127 data-nosnippet>127</a>        uart: bool,
+<a href=#128 id=128 data-nosnippet>128</a>        hypervisor: bool,
+<a href=#129 id=129 data-nosnippet>129</a>        part_data: bool,
+<a href=#130 id=130 data-nosnippet>130</a>        part_lfs: bool,
+<a href=#131 id=131 data-nosnippet>131</a>        can: bool,
+<a href=#132 id=132 data-nosnippet>132</a>        adc: bool,
+<a href=#133 id=133 data-nosnippet>133</a>        i2c: bool,
+<a href=#134 id=134 data-nosnippet>134</a>        spi: bool,
+<a href=#135 id=135 data-nosnippet>135</a>        tier: u8,
+<a href=#136 id=136 data-nosnippet>136</a>    ) -&gt; <span class="self">Self </span>{
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="self">Self </span>{
+<a href=#138 id=138 data-nosnippet>138</a>            magic: MANIFEST_MAGIC,
+<a href=#139 id=139 data-nosnippet>139</a>            version: MANIFEST_VERSION,
+<a href=#140 id=140 data-nosnippet>140</a>            tier,
+<a href=#141 id=141 data-nosnippet>141</a>            flags: (block_io <span class="kw">as </span>u16 * MANIFEST_FLAG_BLOCK_IO)
+<a href=#142 id=142 data-nosnippet>142</a>                | (network <span class="kw">as </span>u16 * MANIFEST_FLAG_NETWORK)
+<a href=#143 id=143 data-nosnippet>143</a>                | (spawn <span class="kw">as </span>u16 * MANIFEST_FLAG_SPAWN)
+<a href=#144 id=144 data-nosnippet>144</a>                | (gpio <span class="kw">as </span>u16 * MANIFEST_FLAG_GPIO)
+<a href=#145 id=145 data-nosnippet>145</a>                | (uart <span class="kw">as </span>u16 * MANIFEST_FLAG_UART)
+<a href=#146 id=146 data-nosnippet>146</a>                | (hypervisor <span class="kw">as </span>u16 * MANIFEST_FLAG_HYPERVISOR)
+<a href=#147 id=147 data-nosnippet>147</a>                | (part_data <span class="kw">as </span>u16 * MANIFEST_FLAG_PART_DATA)
+<a href=#148 id=148 data-nosnippet>148</a>                | (part_lfs <span class="kw">as </span>u16 * MANIFEST_FLAG_PART_LFS)
+<a href=#149 id=149 data-nosnippet>149</a>                | (can <span class="kw">as </span>u16 * MANIFEST_FLAG_CAN)
+<a href=#150 id=150 data-nosnippet>150</a>                | (adc <span class="kw">as </span>u16 * MANIFEST_FLAG_ADC)
+<a href=#151 id=151 data-nosnippet>151</a>                | (i2c <span class="kw">as </span>u16 * MANIFEST_FLAG_I2C)
+<a href=#152 id=152 data-nosnippet>152</a>                | (spi <span class="kw">as </span>u16 * MANIFEST_FLAG_SPI),
+<a href=#153 id=153 data-nosnippet>153</a>            cap_args_off: <span class="number">0</span>,
+<a href=#154 id=154 data-nosnippet>154</a>            reserved: <span class="number">0</span>,
+<a href=#155 id=155 data-nosnippet>155</a>        }
+<a href=#156 id=156 data-nosnippet>156</a>    }
+<a href=#157 id=157 data-nosnippet>157</a>
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="comment">// `from_bytes` (the ELF-section parser) lives in the sibling `manifest_parse`
+<a href=#159 id=159 data-nosnippet>159</a>    // module — see that file for the v1-upcast / v2-parse logic.
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="doccomment">/// Returns `true` if the cell declared raw block-device access.
+<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">pub fn </span>has_block_io(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_BLOCK_IO != <span class="number">0
 <a href=#164 id=164 data-nosnippet>164</a>    </span>}
-<a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Returns `true` if the cell declared GPIO pin-control access.
-<a href=#166 id=166 data-nosnippet>166</a>    </span><span class="kw">pub fn </span>has_gpio(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#167 id=167 data-nosnippet>167</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_GPIO != <span class="number">0
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Returns `true` if the cell declared network transmit/receive.
+<a href=#166 id=166 data-nosnippet>166</a>    </span><span class="kw">pub fn </span>has_network(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_NETWORK != <span class="number">0
 <a href=#168 id=168 data-nosnippet>168</a>    </span>}
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Returns `true` if the cell declared UART serial access.
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">pub fn </span>has_uart(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_UART != <span class="number">0
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Returns `true` if the cell declared cell-spawning and hot-swap.
+<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">pub fn </span>has_spawn(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_SPAWN != <span class="number">0
 <a href=#172 id=172 data-nosnippet>172</a>    </span>}
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="doccomment">/// Returns `true` if the cell declared H-extension hypervisor CSR access.
-<a href=#174 id=174 data-nosnippet>174</a>    </span><span class="kw">pub fn </span>has_hypervisor(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_HYPERVISOR != <span class="number">0
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="doccomment">/// Returns `true` if the cell declared GPIO pin-control access.
+<a href=#174 id=174 data-nosnippet>174</a>    </span><span class="kw">pub fn </span>has_gpio(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_GPIO != <span class="number">0
 <a href=#176 id=176 data-nosnippet>176</a>    </span>}
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="doccomment">/// Returns `true` if the cell's block I/O is granted the P1 (FAT32) range.
-<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">pub fn </span>has_part_data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_PART_DATA != <span class="number">0
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="doccomment">/// Returns `true` if the cell declared UART serial access.
+<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">pub fn </span>has_uart(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_UART != <span class="number">0
 <a href=#180 id=180 data-nosnippet>180</a>    </span>}
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// Returns `true` if the cell's block I/O is granted the P4 (littlefs) range.
-<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">pub fn </span>has_part_lfs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_PART_LFS != <span class="number">0
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// Returns `true` if the cell declared H-extension hypervisor CSR access.
+<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">pub fn </span>has_hypervisor(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_HYPERVISOR != <span class="number">0
 <a href=#184 id=184 data-nosnippet>184</a>    </span>}
-<a href=#185 id=185 data-nosnippet>185</a>    <span class="doccomment">/// Returns `true` if the cell declared CAN controller MMIO access (v2).
-<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">pub fn </span>has_can(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#187 id=187 data-nosnippet>187</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_CAN != <span class="number">0
+<a href=#185 id=185 data-nosnippet>185</a>    <span class="doccomment">/// Returns `true` if the cell's block I/O is granted the P1 (FAT32) range.
+<a href=#186 id=186 data-nosnippet>186</a>    </span><span class="kw">pub fn </span>has_part_data(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_PART_DATA != <span class="number">0
 <a href=#188 id=188 data-nosnippet>188</a>    </span>}
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Returns `true` if the cell declared ADC controller MMIO access (v2).
-<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">pub fn </span>has_adc(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_ADC != <span class="number">0
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Returns `true` if the cell's block I/O is granted the P4 (littlefs) range.
+<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">pub fn </span>has_part_lfs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_PART_LFS != <span class="number">0
 <a href=#192 id=192 data-nosnippet>192</a>    </span>}
-<a href=#193 id=193 data-nosnippet>193</a>
-<a href=#194 id=194 data-nosnippet>194</a>    <span class="doccomment">/// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from v1).
-<a href=#195 id=195 data-nosnippet>195</a>    </span><span class="kw">pub fn </span>tier(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
-<a href=#196 id=196 data-nosnippet>196</a>        <span class="self">self</span>.tier
-<a href=#197 id=197 data-nosnippet>197</a>    }
-<a href=#198 id=198 data-nosnippet>198</a>
-<a href=#199 id=199 data-nosnippet>199</a>    <span class="doccomment">/// Returns `true` if any privileged capability bit is set.  Used by
-<a href=#200 id=200 data-nosnippet>200</a>    /// `spawn_from_path` to reject over-declaring user Cells (non-`/bin/` paths).
-<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="kw">pub fn </span>declares_any_privilege(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
-<a href=#202 id=202 data-nosnippet>202</a>        <span class="self">self</span>.flags != <span class="number">0
-<a href=#203 id=203 data-nosnippet>203</a>    </span>}
-<a href=#204 id=204 data-nosnippet>204</a>}
-<a href=#205 id=205 data-nosnippet>205</a>
-<a href=#206 id=206 data-nosnippet>206</a><span class="comment">// `declare_manifest!` (embeds a CellManifest into the current Cell's ELF binary)
-<a href=#207 id=207 data-nosnippet>207</a>// lives in the sibling `manifest_macro` module.
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="doccomment">/// Returns `true` if the cell declared CAN controller MMIO access (v2).
+<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">pub fn </span>has_can(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_CAN != <span class="number">0
+<a href=#196 id=196 data-nosnippet>196</a>    </span>}
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="doccomment">/// Returns `true` if the cell declared ADC controller MMIO access (v2).
+<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">pub fn </span>has_adc(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#199 id=199 data-nosnippet>199</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_ADC != <span class="number">0
+<a href=#200 id=200 data-nosnippet>200</a>    </span>}
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="doccomment">/// Returns `true` if the cell declared I2C controller MMIO access (v2).
+<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">pub fn </span>has_i2c(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#203 id=203 data-nosnippet>203</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_I2C != <span class="number">0
+<a href=#204 id=204 data-nosnippet>204</a>    </span>}
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="doccomment">/// Returns `true` if the cell declared SPI controller MMIO access (v2).
+<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">pub fn </span>has_spi(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="self">self</span>.flags &amp; MANIFEST_FLAG_SPI != <span class="number">0
+<a href=#208 id=208 data-nosnippet>208</a>    </span>}
+<a href=#209 id=209 data-nosnippet>209</a>
+<a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// The declared isolation tier (`TIER_*`, or `TIER_LEGACY` if upcast from v1).
+<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">pub fn </span>tier(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u8 {
+<a href=#212 id=212 data-nosnippet>212</a>        <span class="self">self</span>.tier
+<a href=#213 id=213 data-nosnippet>213</a>    }
+<a href=#214 id=214 data-nosnippet>214</a>
+<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// Returns `true` if any privileged capability bit is set.  Used by
+<a href=#216 id=216 data-nosnippet>216</a>    /// `spawn_from_path` to reject over-declaring user Cells (non-`/bin/` paths).
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">pub fn </span>declares_any_privilege(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; bool {
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="self">self</span>.flags != <span class="number">0
+<a href=#219 id=219 data-nosnippet>219</a>    </span>}
+<a href=#220 id=220 data-nosnippet>220</a>}
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a><span class="comment">// `declare_manifest!` (embeds a CellManifest into the current Cell's ELF binary)
+<a href=#223 id=223 data-nosnippet>223</a>// lives in the sibling `manifest_macro` module.
 </span></code></pre></div></section></main></body></html>

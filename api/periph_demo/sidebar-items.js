@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["POLL_PRIORITY","SELF_PATH"],"fn":["cell_main","main"],"static":["VICELL_MANIFEST"]};
+window.SIDEBAR_ITEMS = {"constant":["PINNED_WORKER_ARG","POLL_PRIORITY","SELF_PATH"],"fn":["cell_main","main"],"mod":["bcm_gpio_gate"],"static":["VICELL_MANIFEST"]};

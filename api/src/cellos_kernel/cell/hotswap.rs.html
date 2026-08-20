@@ -313,32 +313,30 @@
 <a href=#313 id=313 data-nosnippet>313</a>        .lock()
 <a href=#314 id=314 data-nosnippet>314</a>        .revoke_all_for(cell_id);
 <a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">crate</span>::memory::cell_quota::deregister(cell_id);
-<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">crate</span>::task::drivers::driver_cell::deregister_block_driver(tid);
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">crate</span>::task::drivers::driver_cell::deregister_nic_driver(tid);
-<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">crate</span>::resource_registry::release_for(cell_id);
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">crate</span>::resource_registry::release_bdfs_for(tid);
-<a href=#320 id=320 data-nosnippet>320</a>    <span class="comment">// Keyed by task id, as at every other call site: this is also the point that
-<a href=#321 id=321 data-nosnippet>321</a>    // releases quarantined frames, so a cell id here would look up nothing and
-<a href=#322 id=322 data-nosnippet>322</a>    // leak them on every swap. The two agree for a loader-spawned cell, which is
-<a href=#323 id=323 data-nosnippet>323</a>    // what let the mismatch go unnoticed.
-<a href=#324 id=324 data-nosnippet>324</a>    </span><span class="kw">crate</span>::task::drivers::iommu::cleanup_cell(tid <span class="kw">as </span>u64);
-<a href=#325 id=325 data-nosnippet>325</a>    <span class="comment">// The completed IOTLB teardown is the acknowledgement for ordinary DMA pins.
-<a href=#326 id=326 data-nosnippet>326</a>    // Drop them before grant reap so those frames are freed instead of entering
-<a href=#327 id=327 data-nosnippet>327</a>    // an orphaned quarantine. VFS request leases remain exact-release scoped.
-<a href=#328 id=328 data-nosnippet>328</a>    </span><span class="kw">crate</span>::task::syscall::release_acked_frames(tid);
-<a href=#329 id=329 data-nosnippet>329</a>
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
-<a href=#331 id=331 data-nosnippet>331</a>        <span class="comment">// 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
-<a href=#332 id=332 data-nosnippet>332</a>        </span>sched.exit_task(tid, <span class="number">0xAAAA_AAAAusize</span>);
-<a href=#333 id=333 data-nosnippet>333</a>    }
-<a href=#334 id=334 data-nosnippet>334</a>
-<a href=#335 id=335 data-nosnippet>335</a>    <span class="comment">// Grant pages are freed outside SCHEDULER lock (lock-order safety).
-<a href=#336 id=336 data-nosnippet>336</a>    // SAFETY: reap_grants_for_task is pub(crate); hotswap.rs is in the same crate.
-<a href=#337 id=337 data-nosnippet>337</a>    </span><span class="kw">crate</span>::task::syscall::reap_grants_for_task(tid);
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a>    <span class="kw">crate</span>::audit::log_event(
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">crate</span>::audit::AuditEvent::CellExit,
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0xAA00_0000u32</span>), <span class="comment">// hot-swap marker
-<a href=#342 id=342 data-nosnippet>342</a>    </span>);
-<a href=#343 id=343 data-nosnippet>343</a>}
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">crate</span>::resource_registry::release_for(cell_id);
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">crate</span>::resource_registry::release_bdfs_for(tid);
+<a href=#318 id=318 data-nosnippet>318</a>    <span class="comment">// Keyed by task id, as at every other call site: this is also the point that
+<a href=#319 id=319 data-nosnippet>319</a>    // releases quarantined frames, so a cell id here would look up nothing and
+<a href=#320 id=320 data-nosnippet>320</a>    // leak them on every swap. The two agree for a loader-spawned cell, which is
+<a href=#321 id=321 data-nosnippet>321</a>    // what let the mismatch go unnoticed.
+<a href=#322 id=322 data-nosnippet>322</a>    </span><span class="kw">crate</span>::task::drivers::iommu::cleanup_cell(tid <span class="kw">as </span>u64);
+<a href=#323 id=323 data-nosnippet>323</a>    <span class="comment">// The completed IOTLB teardown is the acknowledgement for ordinary DMA pins.
+<a href=#324 id=324 data-nosnippet>324</a>    // Drop them before grant reap so those frames are freed instead of entering
+<a href=#325 id=325 data-nosnippet>325</a>    // an orphaned quarantine. VFS request leases remain exact-release scoped.
+<a href=#326 id=326 data-nosnippet>326</a>    </span><span class="kw">crate</span>::task::syscall::release_acked_frames(tid);
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(sched) = <span class="kw">crate</span>::task::SCHEDULER.lock().as_mut() {
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="comment">// 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
+<a href=#330 id=330 data-nosnippet>330</a>        </span>sched.exit_task(tid, <span class="number">0xAAAA_AAAAusize</span>);
+<a href=#331 id=331 data-nosnippet>331</a>    }
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="comment">// Grant pages are freed outside SCHEDULER lock (lock-order safety).
+<a href=#334 id=334 data-nosnippet>334</a>    // SAFETY: reap_grants_for_task is pub(crate); hotswap.rs is in the same crate.
+<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="kw">crate</span>::task::syscall::reap_grants_for_task(tid);
+<a href=#336 id=336 data-nosnippet>336</a>
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">crate</span>::audit::log_event(
+<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">crate</span>::audit::AuditEvent::CellExit,
+<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw-2">&amp;</span><span class="kw">crate</span>::audit::encode_u32x2(tid <span class="kw">as </span>u32, <span class="number">0xAA00_0000u32</span>), <span class="comment">// hot-swap marker
+<a href=#340 id=340 data-nosnippet>340</a>    </span>);
+<a href=#341 id=341 data-nosnippet>341</a>}
 </code></pre></div></section></main></body></html>

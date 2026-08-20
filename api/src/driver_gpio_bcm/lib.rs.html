@@ -21,7 +21,7 @@
 <a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// BCM2837 GPIO MMIO base on Raspberry Pi 3.
 <a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub const </span>BCM_GPIO_BASE: usize = <span class="number">0x3F20_0000</span>;
 <a href=#23 id=23 data-nosnippet>23</a><span class="doccomment">/// MMIO region size mapped for GPIO access.
-<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub const </span>BCM_GPIO_SIZE: usize = <span class="number">0x0001_0000</span>; <span class="comment">// 64 KiB (covers GPPUDCLK1 at 0x9C)
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub const </span>BCM_GPIO_SIZE: usize = <span class="number">0x1000</span>; <span class="comment">// 4 KiB covers all used GPIO registers through 0x9C
 <a href=#25 id=25 data-nosnippet>25</a>
 <a href=#26 id=26 data-nosnippet>26</a>// Register offsets (u32, byte-addressed)
 <a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">const </span>GPFSEL: [usize; <span class="number">6</span>] = [<span class="number">0x00</span>, <span class="number">0x04</span>, <span class="number">0x08</span>, <span class="number">0x0C</span>, <span class="number">0x10</span>, <span class="number">0x14</span>]; <span class="comment">// function select

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CONSOLE_MMIO","VFS_REGIONS"],"fn":["boot_ceiling","log_refusal","lookup","self_test"],"mod":["selftest"]};
+window.SIDEBAR_ITEMS = {"constant":["CONSOLE_MMIO","ROOT_MMIO","VFS_REGIONS"],"fn":["boot_ceiling","log_refusal","lookup","self_test"],"mod":["selftest"]};
