@@ -2,6 +2,14 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-20] Phase 06 captures the G3 accelerator evidence envelope
+
+Phase 06 is now recorded as a docs-only blocker envelope for G3 accelerator
+readiness. The updated evidence trail keeps RK3588 as the first probe target
+and X390 as the second implementation, records the vendor license and hardware
+gates, and explicitly avoids freezing a `ViAccelerator` ABI, probe crate, or
+kernel scheduler before real hardware evidence exists.
+
 ## [2026-08-19] Application tier taxonomy is standardized
 
 Application documentation now reserves Tier 1/2/3 for execution and isolation
