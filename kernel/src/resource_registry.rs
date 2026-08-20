@@ -185,9 +185,30 @@ pub unsafe fn force_unlock_locks() {
 /// Driver Cells may subsequently call `sys_request_mmio` on these ranges
 /// if they hold `PcieDriverCap`.
 pub fn register_pcie_bar(base: usize, len: usize) {
-    if base != 0 && len != 0 {
-        PCIE_BARS.lock().insert(base, len);
+    if !valid_pcie_bar_window(base, len) {
+        log::warn!(
+            "[pcie] rejected invalid BAR window base={:#x} len={:#x}",
+            base,
+            len
+        );
+        return;
     }
+    PCIE_BARS.lock().insert(base, len);
+}
+
+/// Current Driver Cells support bounded conventional BARs only.
+///
+/// ReBAR and larger accelerator apertures need a separate policy because they
+/// materially widen a Cell's MMIO authority.
+fn valid_pcie_bar_window(base: usize, len: usize) -> bool {
+    const MAX_SUPPORTED_BAR_LEN: usize = 1 << 30;
+
+    base != 0
+        && len != 0
+        && len <= MAX_SUPPORTED_BAR_LEN
+        && len.is_power_of_two()
+        && base & (len - 1) == 0
+        && base.checked_add(len).is_some()
 }
 
 /// Return `true` if `[base, base+len)` is a known PCIe BAR window.

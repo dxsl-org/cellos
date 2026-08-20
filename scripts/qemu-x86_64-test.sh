@@ -38,7 +38,7 @@ echo "[qemu-x86_64-test] Booting ISO=$ISO (window=${BOOT_WINDOW}s)"
 
 timeout "$BOOT_WINDOW" qemu-system-x86_64 \
     -machine q35 \
-    -cpu qemu64 \
+    -cpu qemu64,+pdpe1gb \
     -m 256M \
     -nographic \
     -cdrom "$ISO" \

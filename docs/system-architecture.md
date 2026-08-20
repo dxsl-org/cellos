@@ -1,16 +1,24 @@
 # Cellos System Architecture
 
+<<<<<<< HEAD
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
 **Last Updated**: 2026-08-20 (application tier taxonomy normalized; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+=======
+**Audience**: Developers new to Cellos  
+**Level**: High-level (conceptual + key components)  
+**Version**: 0.2.1-dev (Mycelium Era)  
+**Last Updated**: 2026-08-20 (Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+>>>>>>> 47fc639b (fix(x86): close phase05 q35 driver gates)
 
-> **Status refresh 2026-08-18**: the HAL split covers all seven current
+> **Status refresh 2026-08-20**: the HAL split covers all seven current
 > board selections. Root `boards/` descriptors contain integration data only;
 > `hal/soc/{riscv,arm-virt,bcm27xx,x86}` owns immutable platform facts; `hal/arch`
 > and shared Driver Cells own mechanisms. Required-DTB boards fail closed on
 > missing enabled hardware, typed driver lists gate initialization, and CI runs
 > the ownership plus seven-board build matrix. RV64 and AArch64 QEMU runtime gates
+<<<<<<< HEAD
 > pass; QEMU q35 x86_64 is the current x86 integration board. RPi3 has merged
 > physical smoke and external-SD boot evidence; VF2, Pioneer, and RPi4 remain
 > physical-hardware-gated.
@@ -21,6 +29,12 @@
 > x86 page-fault hook is declared with a matching compile-time assertion. The
 > boundary script now rejects new local HAL ABI blocks. This is a structural
 > cleanup only: no public ABI changed and no physical-board claim was added.
+=======
+> pass; QEMU q35 x86_64 is the current x86 integration board, and the Phase 05
+> PCIe lane passes in QEMU only with bus 0 ECAM, bounded BAR registration, and
+> q35-gated VT-d before DMA-capable cells. VF2, Pioneer, RPi3, RPi4, and physical
+> x86 remain hardware-gated.
+>>>>>>> 47fc639b (fix(x86): close phase05 q35 driver gates)
 
 ---
 
@@ -116,6 +130,11 @@ Routing any new idea: (1) uses SAS/LBI → **Tier 1 native**; (2) trusted librar
   BIOS/RSDP windows. The kernel selects that profile before early serial output;
   validated ACPI remains the only source for LAPIC, IOAPIC, HPET, and PCIe ECAM
   addresses, so every downstream timer/interrupt/PCIe gate still fails closed.
+  The Phase 05 q35 flow scans PCIe ECAM on bus 0, registers BAR windows through
+  the resource registry, and keeps VT-d board-gated at the q35 fixed base before
+  any DMA-capable Driver Cell starts. That evidence is QEMU-only; physical x86
+  remains gated, bus > 0 is not yet validated, and real NIC Tx/Rx/DHCP is not
+  proven.
 - The shared SDHCI controller receives an immutable runtime access policy;
   BCM2837 word-only/spaced writes, BCM2711 native access, and JH7110 native
   access do not create per-board driver implementations.

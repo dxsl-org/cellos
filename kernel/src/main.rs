@@ -623,6 +623,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             // yet, so x86 enumeration stays kernel-side and uses the validated
             // runtime base. Driver ownership remains in user-space cells.
             task::drivers::pcie_ecam::init();
+            // The x86 Platform Cell is not spawned on this transitional path,
+            // so no RegisterPciDevice syscall can trigger deferred IOMMU init.
+            // Activate VT-d here, before init can spawn any DMA-capable Driver Cell.
+            task::drivers::iommu::init();
+            task::drivers::iommu::activate_isolation();
         } else {
             log::error!("[x86-gate] PCIe CLOSED: validated MCFG required");
         }

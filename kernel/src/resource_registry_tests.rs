@@ -1,4 +1,6 @@
-use super::{checked_mmio_end, static_range_allowed, DEV_GPIO, DEV_I2C, DEV_SPI};
+use super::{
+    checked_mmio_end, static_range_allowed, valid_pcie_bar_window, DEV_GPIO, DEV_I2C, DEV_SPI,
+};
 use types::ViError;
 
 const BCM_WINDOWS: &[(usize, usize, u8)] = &[
@@ -56,4 +58,15 @@ fn controller_grants_cannot_escape_or_reuse_gpio_authority() {
         0x3F20_5000,
         DEV_GPIO
     ));
+}
+
+#[test]
+fn pcie_bar_windows_reject_unbounded_or_misaligned_authority() {
+    assert!(valid_pcie_bar_window(0xF000_0000, 0x20_000));
+    assert!(!valid_pcie_bar_window(0, 0x4000));
+    assert!(!valid_pcie_bar_window(0xF000_0000, 0));
+    assert!(!valid_pcie_bar_window(0xF000_1000, 0x4000));
+    assert!(!valid_pcie_bar_window(0xF000_0000, 0x3000));
+    assert!(!valid_pcie_bar_window(0x8000_0000, (1 << 30) + 1));
+    assert!(!valid_pcie_bar_window(usize::MAX - 0xFFF, 0x1000));
 }
