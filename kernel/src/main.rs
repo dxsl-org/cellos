@@ -70,7 +70,7 @@ pub fn qemu_exit(success: bool) -> ! {
     }
     #[cfg(target_arch = "aarch64")]
     {
-        qemu_exit::AArch64Semihosting::default().exit(if success { 0 } else { 1 });
+        qemu_exit::AArch64::new().exit(if success { 0 } else { 1 });
     }
     #[cfg(target_arch = "x86_64")]
     {
@@ -715,6 +715,11 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("thread-quota self-test PASS (charged, released, enforced)");
         } else {
             log_info("thread-quota self-test FAIL");
+        }
+        match task::thread_user_entry_selftest::self_test() {
+            Some(true) => log_info("thread-user-entry self-test PASS (U-mode entry+arg+exit)"),
+            Some(false) => log_info("thread-user-entry self-test FAIL"),
+            None => log_info("thread-user-entry self-test SKIP (RV64 runtime gate only)"),
         }
         if task::completion_selftest::self_test() {
             log_info("completion-queue self-test PASS (reserve, land, bound, defer)");

@@ -17,6 +17,7 @@ pub mod syscall;
 pub mod tcb;
 pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
+pub mod thread_user_entry_selftest;
 pub use tcb::Task;
 pub mod drivers;
 pub mod ipc_guardrail_selftest;
@@ -52,6 +53,77 @@ const MEASURED_STACK_PAGES: usize = 16;
 const TRAP_FRAME_SIZE: usize = core::mem::size_of::<crate::hal::arch::ViTrapFrame>();
 extern "C" {
     fn __trap_exit();
+}
+
+/// Prime a task's first context switch to enter `entry(arg)` in user mode.
+///
+/// Contract:
+/// - `task.kernel_stack` and `task.user_stack` must already be installed.
+/// - The helper writes the initial trap frame onto the kernel stack and points
+///   the saved CPU context at the architecture's user-return path.
+/// - Same-cell threads inherit the current process image, so this mirrors the
+///   cell-spawn user-entry contract instead of the kernel-thread trampoline.
+pub(crate) fn prime_user_mode_entry(task: &mut Task, entry: usize, arg: usize) {
+    let kernel_stack = task
+        .kernel_stack
+        .as_ref()
+        .expect("prime_user_mode_entry requires a kernel stack");
+    let user_stack = task
+        .user_stack
+        .as_ref()
+        .expect("prime_user_mode_entry requires a user stack");
+    let tf_ptr = kernel_stack.top - TRAP_FRAME_SIZE;
+    let user_stack_top = user_stack.top;
+    let (_gp, _tp) = get_kernel_gp_tp();
+
+    task.trap_frame = crate::hal::arch::ViTrapFrame::default();
+    task.trap_frame.sepc = entry as _;
+    task.trap_frame.regs[2] = user_stack_top as _;
+    #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+    {
+        task.trap_frame.sstatus = 0x6020_u64 as _;
+        task.trap_frame.regs[10] = arg as _;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        task.trap_frame.regs[0] = arg as _;
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        task.trap_frame.sstatus = 0x202_u64 as _;
+        task.trap_frame.regs[6] = arg as _;
+    }
+
+    unsafe {
+        let tf_dest = &mut *(tf_ptr as *mut crate::hal::arch::ViTrapFrame);
+        *tf_dest = task.trap_frame;
+    }
+
+    task.context.sp = tf_ptr as _;
+    #[cfg(target_arch = "riscv64")]
+    {
+        task.context.ra = __trap_exit as *const () as usize;
+        task.context.sstatus = 0x42120;
+        task.context.gp = _gp;
+        task.context.tp = _tp;
+    }
+    #[cfg(target_arch = "riscv32")]
+    {
+        task.context.ra = __trap_exit as *const () as u32;
+        task.context.sstatus = 0x120_u32;
+        task.context.gp = _gp as u32;
+        task.context.tp = _tp as u32;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        task.context.x30 = __trap_exit as *const () as u64;
+        task.context.sp_el0 = user_stack_top as u64;
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        task.context.rip = __trap_exit as *const () as u64;
+        task.context.kernel_trap_sp = tf_ptr as u64;
+    }
 }
 
 // use alloc::vec::Vec;
@@ -173,12 +245,15 @@ const STACK_BASELINE_NET: u8 = 1 << 4;
 #[cfg(feature = "test-hooks")]
 const STACK_BASELINE_VIRTIO_NET: u8 = 1 << 5;
 #[cfg(feature = "test-hooks")]
+const STACK_BASELINE_THREAD: u8 = 1 << 6;
+#[cfg(feature = "test-hooks")]
 const STACK_BASELINE_ALL: u8 = STACK_BASELINE_INIT
     | STACK_BASELINE_SHELL
     | STACK_BASELINE_VFS
     | STACK_BASELINE_VFS_TEST
     | STACK_BASELINE_NET
-    | STACK_BASELINE_VIRTIO_NET;
+    | STACK_BASELINE_VIRTIO_NET
+    | STACK_BASELINE_THREAD;
 #[cfg(feature = "test-hooks")]
 const STACK_BASELINE_TICK_GATE: usize = 1_500;
 #[cfg(feature = "test-hooks")]
@@ -309,14 +384,14 @@ pub(crate) fn stack_pages_for(name: &str) -> usize {
         // RedoxFS transactions exceed the pre-RedoxFS 64 KiB measurement and
         // must retain the conservative stack until a new watermark is captured.
         "vfs" => STACK_PAGES,
-        "init" | "shell" | "vfs-test" | "net" | "virtio-net" => MEASURED_STACK_PAGES,
+        "init" | "shell" | "vfs-test" | "net" | "virtio-net" | "thread" => MEASURED_STACK_PAGES,
         _ => STACK_PAGES,
     }
 }
 
 #[cfg(feature = "test-hooks")]
 pub(crate) fn stack_sizing_policy_self_test() -> bool {
-    ["init", "shell", "vfs-test", "net", "virtio-net"]
+    ["init", "shell", "vfs-test", "net", "virtio-net", "thread"]
         .into_iter()
         .all(|name| stack_pages_for(name) == MEASURED_STACK_PAGES)
         && stack_pages_for("vfs") == STACK_PAGES
@@ -332,6 +407,7 @@ fn stack_baseline_bit(name: &str) -> Option<u8> {
         "vfs-test" => Some(STACK_BASELINE_VFS_TEST),
         "net" => Some(STACK_BASELINE_NET),
         "virtio-net" => Some(STACK_BASELINE_VIRTIO_NET),
+        "thread" => Some(STACK_BASELINE_THREAD),
         _ => None,
     }
 }
@@ -836,8 +912,14 @@ pub fn yield_cpu() {
                 // same-type-cast lint stays quiet on that target.
                 #[cfg(target_arch = "aarch64")]
                 crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
-                #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                #[cfg(not(any(
+                    target_arch = "x86_64",
+                    target_arch = "aarch64",
+                    target_arch = "riscv32"
+                )))]
                 crate::hal::arch::set_kernel_stack(next_ref.sp);
+                #[cfg(target_arch = "riscv32")]
+                crate::hal::arch::set_kernel_stack(next_ref.sp as usize);
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
             }

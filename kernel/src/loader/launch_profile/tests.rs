@@ -122,6 +122,9 @@ fn init_edge_reuses_boot_ceiling_for_boot_services() {
         profile.parent_ceiling,
         boot_ceiling::boot_ceiling("/bin/vfs")
     );
+    let kms = authorize(caller("init", true, false), LaunchRoute::Path, "/bin/kms")
+        .expect("init kms edge exists");
+    assert_eq!(kms.parent_ceiling, CapSet::EMPTY);
 }
 
 #[test]

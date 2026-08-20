@@ -11,6 +11,53 @@ use types::{VAddr, ViError};
 #[cfg(feature = "test-hooks")]
 const STACK_WATERMARK_PATTERN: u8 = 0xA5;
 
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "riscv64", target_arch = "riscv32")
+))]
+struct SumAccessGuard {
+    restore: bool,
+}
+
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "riscv64", target_arch = "riscv32")
+))]
+impl SumAccessGuard {
+    fn enter() -> Self {
+        const SUM_MASK: usize = 1usize << 18;
+        let status: usize;
+        // SAFETY: test hooks run in supervisor mode. SUM is changed only for
+        // mapped stack sampling and restored by Drop before this scope exits.
+        unsafe {
+            core::arch::asm!("csrr {status}, sstatus", status = out(reg) status, options(nostack));
+            if status & SUM_MASK == 0 {
+                core::arch::asm!("csrs sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
+            }
+        }
+        Self {
+            restore: status & SUM_MASK == 0,
+        }
+    }
+}
+
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "riscv64", target_arch = "riscv32")
+))]
+impl Drop for SumAccessGuard {
+    fn drop(&mut self) {
+        if self.restore {
+            const SUM_MASK: usize = 1usize << 18;
+            // SAFETY: this reverses the matching supervisor CSR change made by
+            // `enter`; the guard is not shared across harts or task switches.
+            unsafe {
+                core::arch::asm!("csrc sstatus, {mask}", mask = in(reg) SUM_MASK, options(nostack));
+            }
+        }
+    }
+}
+
 /// Bottom guard reservation for every kernel and user stack.
 pub const STACK_GUARD_PAGES: usize = 2;
 
@@ -225,6 +272,12 @@ impl Stack {
     /// Prime the usable stack range with a sentinel pattern so later scans can
     /// estimate the deepest downward growth without adding a runtime ABI.
     pub fn test_hook_prime_watermark(&self) {
+        assert!(paging::virt_to_phys(self.usable_start()).is_some());
+        assert!(paging::virt_to_phys(self.top - 1).is_some());
+        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+        let _sum_guard = SumAccessGuard::enter();
+        // SAFETY: Stack allocation maps the asserted usable range contiguously;
+        // this test hook owns the stack before the task can run.
         unsafe {
             core::ptr::write_bytes(
                 self.usable_start() as *mut u8,
@@ -238,10 +291,17 @@ impl Stack {
     /// Return the deepest observed stack footprint in bytes since the sentinel
     /// pattern was primed.
     pub fn test_hook_watermark_bytes(&self) -> usize {
+        assert!(paging::virt_to_phys(self.usable_start()).is_some());
+        assert!(paging::virt_to_phys(self.top - 1).is_some());
+        #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+        let _sum_guard = SumAccessGuard::enter();
+
         let usable = self.usable_bytes();
         let start = self.usable_start() as *const u8;
         let mut untouched_prefix = 0usize;
         while untouched_prefix < usable {
+            // SAFETY: Stack allocation maps the asserted usable range, and the
+            // scan stays within it. Volatile reads observe the live watermark.
             let byte = unsafe { core::ptr::read_volatile(start.add(untouched_prefix)) };
             if byte != STACK_WATERMARK_PATTERN {
                 break;

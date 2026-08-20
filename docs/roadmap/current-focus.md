@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-20
 
 ## Active Stage
 
@@ -18,6 +18,9 @@ without treating QEMU or compile-only checks as board qualification.
 - Shared drivers remain single-copy in kernel integration paths or
   `cells/drivers/*`; boards do not fork UART, SDHCI, GIC/PLIC, PCIe, or
   DesignWare-style mechanisms.
+- Cell-to-Cell Anywhere has landed its bounded local broker and fail-closed KMS
+  foundation. Remote/public operation remains disabled while the production
+  hardware-backed root and trusted monotonic epoch are unavailable.
 
 ## Current Documentation Corrections
 
@@ -29,13 +32,16 @@ without treating QEMU or compile-only checks as board qualification.
 
 ## Next Useful Work
 
-1. Close remaining hardware-gated board evidence with PASS/FAIL/BLOCKED logs.
-2. Decide whether production signing enforcement should become a G1 release
+1. Integrate and qualify a concrete Cell-to-Cell Anywhere production root;
+   keep remote/public exports disabled until root provenance, rollback state,
+   and live `/srv/cellos` persistence all have runtime evidence.
+2. Close remaining hardware-gated board evidence with PASS/FAIL/BLOCKED logs.
+3. Decide whether production signing enforcement should become a G1 release
    gate, because default dev builds still admit unsigned cells.
-3. Continue reducing kernel-resident legacy driver/orchestration code only when
+4. Continue reducing kernel-resident legacy driver/orchestration code only when
    a slice has explicit runtime evidence and rollback notes.
-4. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
+5. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
    or HAL ABI hook declarations change.
-5. Use [hardware-tracks.md](hardware-tracks.md) and
+6. Use [hardware-tracks.md](hardware-tracks.md) and
    [runtime-and-platform-tracks.md](runtime-and-platform-tracks.md) for lane
    status instead of re-reading the archive.

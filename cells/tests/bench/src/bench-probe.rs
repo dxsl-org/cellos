@@ -36,6 +36,7 @@ fn cell_main() {
         scenarios::hotswap_supervisor::run_cached_sender_probe(role);
     }
     match role {
+        "c2c-client" => scenarios::c2c_broker_oracle::run_client(),
         "load" => scenarios::rt_load::run_load(),
         "rt-probe" => scenarios::preempt_latency::run_probe(),
         "ctl-loop" => scenarios::control_loop::run_control_loop(),

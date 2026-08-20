@@ -24,6 +24,7 @@
 //! ```
 
 pub mod input;
+pub mod kms;
 pub mod net;
 pub mod vfs;
 
@@ -41,6 +42,7 @@ pub mod vfs;
 pub mod tls_stream;
 
 pub use input::InputClient;
+pub use kms::KmsClient;
 pub use net::{NetClient, TcpStream};
 #[cfg(any(feature = "http", feature = "json"))]
 pub use tls_stream::TlsStream;

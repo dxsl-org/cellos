@@ -2,6 +2,41 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-20] Cell-to-Cell Anywhere adds its fail-closed local and KMS foundation
+
+The approved Candidate B path now has a bounded local broker runtime, strict
+export-registry parsing, opaque KMS wire types, service-bound `/srv/cellos/kms`
+storage policy, two-slot journal/readback logic, and a side-effect-free root
+assessment seam with monotonic rollback gating. The runtime deliberately keeps
+the production root unavailable (`ProviderUnavailable`, provider kind `None`),
+so remote and public exports remain disabled until a concrete hardware-backed
+root and durable trusted epoch are approved and integrated.
+
+Verification passed formatting and diff checks, 31 KMS host tests, seven KMS
+type tests, RV64/AArch64/x86_64-none KMS checks, and the retained RV64 QEMU boot
+witness with one KMS start, a verified registry, shell readiness, remote
+disabled, and 73/73 VFS integration tests. The QEMU lane could not format a
+RedoxFS volume, so live `/srv/cellos` persistence remains unproven; QEMU is not
+physical-hardware evidence.
+
+## [2026-08-20] Cell-to-Cell Anywhere closes its local broker and thread foundation
+
+The local path now has bounded ingress and reply queues, fair per-caller
+backpressure, request correlation and stale-reply rejection, a 10,000-call
+soak, a statistically comparable warm baseline, and an opt-in restart oracle.
+The restart lane drains broker roles before supervisor respawn, replaces the
+service TID, resets volatile state, treats stale sends as indeterminate, and
+accepts a retry. Multi-architecture compile debt was closed without changing
+the public ABI; AArch64 and RV32 remain compile-only evidence.
+
+## [2026-08-19] Cell-to-Cell Anywhere adds a fail-closed export registry
+
+`cells/services/net-broker` now loads the boot-provisioned non-secret registry
+at `/etc/cellos/c2c-exports.cfg`, parses strict ASCII `key=value` export
+stanzas, and exposes only the disabled reason plus export count. Remote and
+public exports remain disabled until secure node identity exists; local IPC and
+relay routing are unchanged.
+
 ## [2026-08-20] Phase 06 captures the G3 accelerator evidence envelope
 
 Phase 06 is now recorded as a docs-only blocker envelope for G3 accelerator

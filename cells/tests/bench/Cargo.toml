@@ -5,9 +5,13 @@ edition = "2021"
 license.workspace = true
 description = "Cellos performance benchmark cell — measures context-switch, IPC, syscall, and memory targets"
 
+[features]
+restart-oracle = ["service-net-broker/restart-oracle"]
+
 [dependencies]
 ostd = { path = "../../../libs/ostd", version = "0.2.0" }
 api  = { path = "../../../libs/api", version = "0.1.0" }
+service-net-broker = { path = "../../services/net-broker", version = "0.1.0" }
 
 [[bin]]
 name = "bench"

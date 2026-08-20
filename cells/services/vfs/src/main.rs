@@ -132,7 +132,7 @@ unsafe fn vfs_fast_handler(
                     // Sealed and unauthorized are one refusal: this cell may not
                     // read this path, and which rule said so is not the caller's
                     // business.
-                    if vfs.dirs.is_sealed(caller) || !vfs.access.can_read(caller, path) {
+                    if vfs.dirs.is_sealed(caller) || !vfs.access.can_read_fast(caller, path) {
                         api::ipc::VfsResponse::Err(3)
                     } else if let Some((ptr, len)) = vfs.get_file_ptr(path) {
                         api::ipc::VfsResponse::DataPtr {

@@ -18,16 +18,36 @@ use types::CellId;
 /// match: a respawned cell that reused a dead cell's `CellId` is a *different*
 /// principal, and must not inherit the dead cell's handles, pending reads, or
 /// quota credit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 pub struct Caller {
     /// Owning cell of the calling task — the cell, never the thread.
     pub cell: CellId,
     /// Cell epoch from the attestation. Distinguishes a successor cell from the
     /// one it replaced.
     pub generation: u64,
+    /// Sending thread the kernel attested for this request.
+    pub sender_tid: u64,
 }
 
+impl PartialEq for Caller {
+    fn eq(&self, other: &Self) -> bool {
+        self.cell == other.cell && self.generation == other.generation
+    }
+}
+
+impl Eq for Caller {}
+
 impl Caller {
+    /// Build a cell-generation principal when no current sender thread is part
+    /// of the authority being modeled.
+    pub const fn principal(cell: CellId, generation: u64) -> Self {
+        Self {
+            cell,
+            generation,
+            sender_tid: 0,
+        }
+    }
+
     /// Adopt a kernel-attested identity.
     ///
     /// The only constructor outside tests, which is the point: there is no way to
@@ -36,6 +56,7 @@ impl Caller {
         Self {
             cell: CellId(id.cell_id),
             generation: id.generation,
+            sender_tid: id.sender_tid,
         }
     }
 
@@ -71,12 +92,30 @@ mod tests {
         let old = Caller {
             cell: CellId(4),
             generation: 1,
+            sender_tid: 70,
         };
         let respawned = Caller {
             cell: CellId(4),
             generation: 2,
+            sender_tid: 71,
         };
         assert_ne!(old, respawned);
+    }
+
+    #[test]
+    fn same_cell_generation_different_threads_is_the_same_principal() {
+        let left = Caller {
+            cell: CellId(4),
+            generation: 2,
+            sender_tid: 70,
+        };
+        let right = Caller {
+            cell: CellId(4),
+            generation: 2,
+            sender_tid: 71,
+        };
+        assert_eq!(left, right);
+        assert!(left.may_own_state());
     }
 
     #[test]
@@ -84,6 +123,7 @@ mod tests {
         let caller = Caller {
             cell: CellId(4),
             generation: 0,
+            sender_tid: 77,
         };
         assert!(!caller.may_own_state());
     }

@@ -83,7 +83,7 @@ struct DirectWriter;
 impl fmt::Write for DirectWriter {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.bytes() {
-            #[cfg(target_arch = "riscv64")]
+            #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
             {
                 let _ = crate::hal::sbi::console_putchar(c);
             }

@@ -86,6 +86,7 @@ members = [
     "cells/services/power",
     "cells/services/config",
     "cells/services/hypervisor",
+    "cells/services/kms",
     "cells/services/silo",
     "cells/services/supervisor",
     "cells/services/httpd",
