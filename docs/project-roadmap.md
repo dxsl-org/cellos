@@ -33,8 +33,8 @@ Cellos is being shaped around product stages, not only phase numbers:
   large storage, zero-downtime service upgrades, desktop/tooling depth.
 - G3 NPU-native Compute OS: parked until real NPU hardware and vendor API
   experience inform the contract.
-- G4 Full Rust std for Tier 1 Cells: planned as pure-Rust PAL/rustc target work,
-  not `std` over mlibc.
+- G4 Full Rust std for Tier 1 Cells: planned as a `rust-std` runtime profile
+  using pure-Rust PAL/rustc target work, not `std` over mlibc.
 - G5 Virtualization Platform: research/design overlay after G4.
 
 ## Current Codebase Facts
@@ -50,6 +50,9 @@ Cellos is being shaped around product stages, not only phase numbers:
   remain placeholder-only documentation entries.
 - Active native scripting runtime: Lua. MicroPython is historical roadmap text
   and is not a current Cargo workspace member.
+- Application execution uses Tier 1/2/3 terminology. `Tier 1b` and `Tier 3b`
+  are legacy guide aliases for Tier 1 runtime profiles and Tier 3 Linux guests;
+  SDK packaging uses named modules, not numbered tiers.
 
 ## Immediate Open Gates
 

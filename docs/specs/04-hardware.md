@@ -18,8 +18,10 @@ Cellos không phụ thuộc vào một kiến trúc CPU cụ thể. Mọi tươn
 * **Platform HAL**: Được biên dịch **cùng** Nano Kernel. Chịu trách nhiệm khởi tạo CPU, RAM và các thành phần cốt lõi.
 * **Driver Cells**: Được nạp động dưới dạng **Cells**. Chịu trách nhiệm cho các ngoại vi (NIC, GPU, cảm biến Robot).
 
-### C Driver Isolation qua Tier 1b FFI
-C driver isolation dùng **Tier 1b FFI** (Newlib shim) — xem [specs/05-application.md §3](05-application.md).
+### C Driver Integration via Tier 1 `ffi-posix` runtime profile
+C driver integration uses the trusted Tier 1 `ffi-posix` runtime profile
+(legacy alias: Tier 1b FFI, Newlib/POSIX shim) — see
+[specs/05-application.md §3](05-application.md).
 
 ## 3. Interrupt Model: "Async Waker Dispatch"
 Cellos sử dụng mô hình ngắt bất đồng bộ để tối ưu độ trễ.
@@ -117,11 +119,11 @@ In SAS, a NIC performing DMA without IOMMU control can write to **any** physical
 
 Two-implementation strategy validates `ViAccelerator` trait generality.
 
-### Level A — Tier 1b FFI (G2 work, no kernel change)
+### Level A — Tier 1 `ffi-posix` profile (G2 work, no kernel change)
 
-- **RKNN Runtime FFI cell** (ARM64, RK3588): Tier 1b C wrapper calls `rknn_init/run/outputs_get`.
+- **RKNN Runtime FFI cell** (ARM64, RK3588): trusted Tier 1 C wrapper calls `rknn_init/run/outputs_get`.
 - Validates real-world `load_model / submit / wait` semantics before freezing trait contract.
-- Prerequisite: Tier 1b entropy shim + net shim (see [05-application.md §3](05-application.md)).
+- Prerequisite: Tier 1 `ffi-posix` entropy shim + net shim (see [05-application.md §3](05-application.md)).
 
 ### Level B — Kernel NPU scheduler (G3)
 

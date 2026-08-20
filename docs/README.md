@@ -38,6 +38,7 @@
 | File | Purpose |
 |------|---------|
 | [system-architecture.md](system-architecture.md) | System layers, kernel, HAL, IPC |
+| [decisions/0003-application-tier-taxonomy.md](decisions/0003-application-tier-taxonomy.md) | Canonical application tier, runtime profile, and SDK terminology |
 | [code-standards.md](code-standards.md) | The 8 Coding Laws + conventions |
 | [PATTERNS.md](PATTERNS.md) | Common Rust patterns for Cellos |
 | [security-model.md](security-model.md) | STRIDE analysis, known limitations |
@@ -79,7 +80,7 @@ Internal design docs — read before implementing a subsystem.
 | [specs/02-memory.md](specs/02-memory.md) | SAS layout, quota, metadata registry |
 | [specs/03-runtime.md](specs/03-runtime.md) | IPC, async/await, hot-swap, boot optimization |
 | [specs/04-hardware.md](specs/04-hardware.md) | Multi-arch HAL, SMP |
-| [specs/05-application.md](specs/05-application.md) | Isolation tiers: Native / Hypervisor |
+| [specs/05-application.md](specs/05-application.md) | Application tiers, runtime profiles, and SDK modules |
 | [specs/06-graphics.md](specs/06-graphics.md) | Compositor, framebuffer, input dispatch |
 | [specs/07-networking.md](specs/07-networking.md) | Network stack, smoltcp, zero-copy |
 | [specs/08-power.md](specs/08-power.md) | Power states, hibernation, thermal |

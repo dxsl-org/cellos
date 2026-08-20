@@ -1,6 +1,8 @@
-# Tier 1 Rust + SDK L1 — Apps with Services
+# Tier 1 Rust + SDK Service Clients — Apps with Services
 
 > VFS, network, and IPC clients built into AppContext. For most user apps.
+> The SDK is not split into numbered tiers; this guide covers SDK service-client
+> modules for trusted Tier 1 native Cells and future Tier 2 native Cells.
 
 ---
 
@@ -201,20 +203,20 @@ ctx.arm_heartbeat(1000);  // kernel kills us if we don't call any syscall in 100
 
 ## Canonical Example
 
-See [cells/apps/sdk-demo/src/main.rs](../../cells/apps/sdk-demo/src/main.rs) — 64 lines. It demonstrates VFS stat, message echo, and graceful shutdown.
+See [cells/demos/sdk-demo/src/main.rs](../../cells/demos/sdk-demo/src/main.rs) — 64 lines. It demonstrates VFS stat, message echo, and graceful shutdown.
 
 ---
 
-## When to Use Tier 1 + SDK L1
+## When to Use Tier 1 + SDK Service Clients
 
-✅ Reading/writing files (VFS)  
-✅ Network apps (TCP, HTTP)  
-✅ Talking to other Cells (IPC)  
-✅ Most user applications  
+✅ Reading/writing files (VFS)
+✅ Network apps (TCP, HTTP)
+✅ Talking to other Cells (IPC)
+✅ Most user applications
 
-❌ Complex UIs → use Tier 1 + ViUI  
-❌ Cryptographic keys → use Tier 1 Extended (Silo, G2+)  
-❌ C/C++ interop → use Tier 1b C/Zig  
+❌ Complex UIs → use Tier 1 + ViUI
+❌ Cryptographic keys → use Tier 1 Silo API (G2+)
+❌ C/C++ interop → use Tier 1 `ffi-posix` profile
 
 ---
 
@@ -231,6 +233,6 @@ See [cells/apps/sdk-demo/src/main.rs](../../cells/apps/sdk-demo/src/main.rs) —
 ## Next Steps
 
 - Building a UI? → [Tier 1 + ViUI](viui-guide.md)
-- Need cryptographic isolation? → [Tier 1 Extended (Silo)](tier1-silo.md)
-- Have existing C code? → [Tier 1b C/Zig](tier1b-c-zig.md)
+- Need cryptographic isolation? → [Tier 1 Silo API](tier1-silo.md)
+- Have existing C code? → [Tier 1 `ffi-posix` profile](tier1b-c-zig.md)
 - See [api-reference.md](../api-reference.md) for syscall details.

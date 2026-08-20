@@ -1,12 +1,13 @@
-# Tier 1b C/C++/Zig — C ABI via POSIX or mlibc
+# Tier 1 `ffi-posix` Profile — C ABI via POSIX or mlibc
 
-> Call C libraries from Rust Cells, or link C code directly. Two strategies: Tier A (POSIX shim) or Tier B (full mlibc).
+> Legacy name: Tier 1b. Call trusted C/C++/Zig libraries from a Tier 1 Rust Cell,
+> or link C code directly. Two profiles: POSIX shim and full mlibc.
 
 ---
 
-## Tier A vs Tier B
+## POSIX Shim vs mlibc
 
-| | **Tier A: POSIX Shim** | **Tier B: Full mlibc** |
+| | **POSIX shim profile** | **mlibc profile** |
 |---|---|---|
 | **Setup** | `api = { features = ["posix"] }` | Requires `scripts/build-mlibc.sh` in WSL2; then `api = { features = ["mlibc"] }` |
 | **Function coverage** | ~20 POSIX symbols (getentropy, socket, printf, malloc) | Full POSIX + glibc extensions |
@@ -18,7 +19,7 @@
 
 ---
 
-## Tier A: POSIX Shim
+## POSIX Shim Profile
 
 Minimal C ABI for common functions. Declared in `libs/api/src/posix.rs`.
 
@@ -74,7 +75,7 @@ unsafe {
 
 ---
 
-## Tier B: Full mlibc
+## mlibc Profile
 
 Complete C standard library via mlibc (libc.a). Supports fork(), pthread, complex math, etc.
 
@@ -138,7 +139,7 @@ fn main() {
 - **Math**: `sqrt`, `sin`, `cos`, `exp`, `log`
 - **Time**: `clock_gettime`, `gettimeofday`
 - **Entropy**: `getentropy`
-- **Network**: `socket`, `connect`, `send`, `recv`, `close` (as in Tier A)
+- **Network**: `socket`, `connect`, `send`, `recv`, `close` (as in the POSIX shim profile)
 
 ---
 
@@ -175,11 +176,11 @@ fn main() {
 
 Cellos SAS laws apply to C code too (since it's in a Rust Cell):
 
-❌ **Fork / subprocess spawning** — SAS has no fork. Use `spawn = true` manifest + `sys_spawn` (Tier 1 Rust only).  
-❌ **Mmap** — No virtual memory per-cell. Use heap (malloc) or VFS.  
-❌ **Signals / SIGCHLD** — Not applicable in SAS.  
-✅ **Pthreads** — Supported via `sys_task_spawn` (POSIX threads map to kernel tasks).  
-✅ **Sockets** — Full support via POSIX shim or mlibc.  
+❌ **Fork / subprocess spawning** — SAS has no fork. Use `spawn = true` manifest + `sys_spawn` from trusted Rust orchestration only.
+❌ **Mmap** — No virtual memory per-cell. Use heap (malloc) or VFS.
+❌ **Signals / SIGCHLD** — Not applicable in SAS.
+✅ **Pthreads** — Supported via `sys_task_spawn` (POSIX threads map to kernel tasks).
+✅ **Sockets** — Full support via POSIX shim or mlibc.
 
 ---
 
@@ -205,29 +206,29 @@ api::declare_syscalls![
 
 ## Canonical Examples
 
-- **Tier A (POSIX shim)**: [cells/apps/posix-shim-test/src/main.rs](../../cells/apps/posix-shim-test/src/main.rs) — getentropy, socket, connect, send/recv.
-- **Tier B (mlibc)**: [cells/apps/mlibc-smoke/src/main.rs](../../cells/apps/mlibc-smoke/src/main.rs) — malloc, printf, clock_gettime.
+- **POSIX shim profile**: [cells/tests/posix-shim-test/src/main.rs](../../cells/tests/posix-shim-test/src/main.rs) — getentropy, socket, connect, send/recv.
+- **mlibc profile**: [cells/tests/mlibc-smoke/src/main.rs](../../cells/tests/mlibc-smoke/src/main.rs) — malloc, printf, clock_gettime.
 
 ---
 
-## When to Use Tier 1b
+## When to Use Tier 1 `ffi-posix`
 
-✅ Have existing C/C++/Zig code  
-✅ Need glibc functions (complex math, pthreads, stdio)  
-✅ Interfacing with a library (zlib, curl, etc.)  
+✅ Have existing C/C++/Zig code
+✅ Need glibc functions (complex math, pthreads, stdio)
+✅ Interfacing with a library (zlib, curl, etc.)
 
-❌ Building from scratch in Rust → stay with Tier 1  
-❌ Need untrusted code isolation → use Tier 3b (Linux VM)  
+❌ Building from scratch in Rust → stay with Tier 1
+❌ Need untrusted code isolation → use Tier 3 Linux guest today; Tier 2 native domains are not implemented yet.
 
 ---
 
 ## Build & Run
 
 ```bash
-# Tier A (POSIX shim) — no special build
+# POSIX shim profile — no special build
 cargo build --release --target riscv64gc-unknown-none-elf
 
-# Tier B (mlibc) — requires WSL2 + build-mlibc.sh
+# mlibc profile — requires WSL2 + build-mlibc.sh
 # (already built by kernel/Makefile, linked automatically)
 cargo build --release --target riscv64gc-unknown-none-elf
 ```
@@ -236,22 +237,22 @@ cargo build --release --target riscv64gc-unknown-none-elf
 
 ## Troubleshooting
 
-**Linker error: undefined reference to `sqrt`?**  
-→ You're using Tier A. For math functions, build mlibc (Tier B) or implement them in Rust.
+**Linker error: undefined reference to `sqrt`?**
+→ You're using the POSIX shim profile. For math functions, build mlibc or implement them in Rust.
 
-**Both features enabled?**  
+**Both features enabled?**
 → The linker fails with duplicate symbol errors. Remove one feature from Cargo.toml.
 
-**Malloc returns null?**  
+**Malloc returns null?**
 → Heap exhausted (cell quota too small). See [code-standards.md](../code-standards.md) § Cell quotas.
 
 ---
 
 ## Next Steps
 
-- Need to write unsafe code? → Keep it in C via Tier 1b.
+- Need to write unsafe code? → Keep it behind the trusted Tier 1 `ffi-posix` boundary.
 - Need UIs in Rust? → [Tier 1 + ViUI](viui-guide.md)
-- Need cryptographic keys? → [Tier 1 Extended (Silo)](tier1-silo.md)
+- Need cryptographic keys? → [Tier 1 Silo API](tier1-silo.md)
 - See [mlibc-build.md](../mlibc-build.md) for mlibc compilation details.
 - Want to write a cell in Zig? → See **Pure Zig Cells** section below.
 
@@ -261,12 +262,12 @@ cargo build --release --target riscv64gc-unknown-none-elf
 
 Write a Cellos cell entirely in Zig — no Rust, no Cargo. Supported since Cellos v1.x (Mycelium).
 
-Two integration levels mirror the C Tier A/B split:
+Two integration levels mirror the C POSIX-shim/mlibc split:
 
 | Level | C equivalent | mlibc? | Use case |
 |-------|-------------|--------|---------|
-| **A** — raw syscalls | Tier A POSIX shim | No | Minimal Zig logic, custom tooling |
-| **B** — mlibc linked | Tier B full mlibc | Yes | Existing Zig code using libc functions |
+| **A** — raw syscalls | POSIX shim profile | No | Minimal Zig logic, custom tooling |
+| **B** — mlibc linked | mlibc profile | Yes | Existing Zig code using libc functions |
 
 ---
 

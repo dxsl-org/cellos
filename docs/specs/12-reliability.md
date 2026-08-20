@@ -52,11 +52,12 @@ not from retrofitting MMU into the SAS:
 | Tier | Who runs here | Isolation mechanism |
 |------|---------------|---------------------|
 | **Tier 1 — Native (SAS)** | Signed, first-party, `#![forbid(unsafe_code)]` cells: drivers, FS, robot control | Language-Based Isolation (compiler) + signed-cells |
-| **Tier 2 — Managed** | Third-party / portable code | Tier 2 runs unsigned native cells in a private MMU protection domain — see `docs/specs/18-cell-trust-tiers.md` |
-| **Tier 3 — Virtual** | Untrusted / legacy / sensitive silos | Hypervisor cell, **Stage-2 paging** (real hardware MMU barrier, *per-VM*) |
+| **Tier 2 — Native domain** | Third-party / portable native code, once implemented | Private MMU domain; unsigned or unverified state is an admission input, not the tier definition — see [18-cell-trust-tiers.md](18-cell-trust-tiers.md) |
+| **Tier 3 — VM guest** | Untrusted / legacy / sensitive guest stacks | Hypervisor cell, **Stage-2 paging** (real hardware MMU barrier, *per-VM*) |
 
-Hardware isolation thus lives in **Tier 3 (per-VM Stage-2)** — the right place for it —
-**not** smeared across every Tier-1 cell. This **strengthens** the never-die story: with
+Hardware isolation therefore belongs in **Tier 2 native domains** and **Tier 3
+VM guests**, **not** smeared across every Tier-1 cell. This strengthens the
+never-die story: with
 Tier 1 restricted to operationally trusted, F1-reviewed Rust, the intended failure mode is
 a panic (caught + killed),
 not silent memory corruption. Every Tier-1 death becomes a *restartable* event — which is

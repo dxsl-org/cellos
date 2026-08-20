@@ -1,9 +1,10 @@
-# Spec 18 — Cell Trust Tiers (ADR)
+# Spec 18 — Cell Execution Tiers, Runtime Profiles, and Admission (ADR)
 
-> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D13, and again 2026-08-01 by
-> `18b-cell-admission-consent-adr.md` (§2.1, §4). Supersedes the WASM runtime tier
-> wherever older documents mention it. Tier 2 and fleet-secure Tier-1 admission are
-> accepted designs, not current production mechanisms.
+> **Status**: Accepted 2026-07-30; amended 2026-08-01 by D13, again 2026-08-01 by
+> `18b-cell-admission-consent-adr.md` (§2.1, §4), and terminology-normalized on
+> 2026-08-19 by ADR 0003. Supersedes the WASM runtime tier wherever older documents mention it.
+> Tier 2 and fleet-secure Tier-1 admission are accepted designs, not current production
+> mechanisms.
 
 ## 1. Context
 
@@ -30,15 +31,43 @@ no problem the tiers below don't solve better.
 
 ## 2. Decision
 
-Three tiers are the accepted destination. The current loader does **not** assign a memory
-tier from signature verification: every admitted native cell uses the shared SAS. The
-tier decision point arrives only when Spec 19 Layer B is implemented.
+Tier means the execution and isolation boundary only. It does **not** mean language,
+standard library surface, SDK generation, or roadmap stage.
+
+| Term | Meaning | Examples |
+|------|---------|----------|
+| **Tier** | Execution / isolation boundary | Tier 1 trusted SAS, Tier 2 native domain, Tier 3 VM guest |
+| **Profile** | Language/runtime/toolchain surface inside a tier | Rust `no_std`, planned Rust `std`, POSIX/FFI, Lua |
+| **SDK** | Shared API/tooling family | Native SDK Core (`ostd`), higher middleware, guest integration helpers |
+| **Layer** | Internal implementation layer | Spec 19 Layer A/B/C, kernel/HAL/system layers |
+| **Stage** | Product roadmap maturity overlay | G1..G5 |
+
+The accepted destination is three execution tiers. The current loader does **not** assign a
+memory tier from signature verification: every admitted native cell uses the shared SAS.
+The Tier-2 decision point arrives only when Spec 19 Layer B is implemented.
 
 | Tier | Status | Who | Isolation mechanism | Execution speed | IPC |
 |------|--------|-----|---------------------|-----------------|-----|
-| **1 — SAS cell** | SAS shipped; fleet signed-only admission **not shipped** | Operationally trusted first-party/platform cells; future fleet posture requires a controlled signing pipeline | LBI: rustc + F1 policy outside reviewed exceptions | Native, zero-cost boundary | Zero-copy grants |
-| **2 — Domain cell** | **accepted, NOT implemented** | Any unsigned native ELF (third-party developers) | Hardware: private page-table view — same VA layout as the SAS, but *other cells' pages are simply not mapped* | Native inside the domain; `satp`+ASID switch at the boundary | Kernel-copied messages; grants mapped explicitly per-share |
-| **3 — Silo VM** | shipped (aarch64) | Whole legacy stacks (Linux guests) | Stage-2 paging (H-extension) | Native inside guest | virtio / proxy |
+| **1 — Trusted SAS cell** | SAS shipped; fleet signed-only admission **not shipped** | Operationally trusted first-party/platform cells; future fleet posture requires a controlled signing pipeline. Runtime profiles include Rust `no_std`, planned Rust `std`, trusted POSIX/FFI, and Lua. | LBI: rustc + F1 policy outside reviewed exceptions | Native or interpreter-speed by profile; zero-cost SAS boundary | Zero-copy grants |
+| **2 — Native domain cell** | **accepted, NOT implemented** | Unsigned or unverified native ELF once the mechanism exists | Hardware: private page-table view — same VA layout as the SAS, but *other cells' pages are simply not mapped* | Native inside the domain; `satp`+ASID switch at the boundary | Kernel-copied messages; grants mapped explicitly per-share |
+| **3 — VM guest** | ARM64 lane shipped; wider platform coverage staged | Whole legacy stacks, normally Linux guests | Stage-2 paging / hypervisor guest boundary | Native inside guest | virtio / proxy |
+
+Profiles currently planned or shipped on top of those tiers:
+
+- **Tier 1**: Rust `no_std` is the shipped native profile. Rust `std` is a planned G4
+  profile in the same tier, not a new tier. POSIX/FFI profiles for C/C++/Zig and
+  the Lua runtime profile are trusted Tier-1 profiles; legacy docs may call these
+  `Tier 1b`.
+- **Tier 2**: same native language families as Tier 1 in principle, but behind
+  a private-page-table admission path once implemented.
+- **Tier 3**: full Linux guest userspace; legacy docs may call this `Tier 3b`.
+
+Do not define Tier 2 as "Tier 1 but unsigned". The absence of a trusted
+signature is an admission input; Tier 2 is the hardware-domain execution class
+that can contain that native code once implemented.
+
+Silo is **not** its own execution tier. It is Tier-1-facing service/hypervisor
+infrastructure that exposes a hardware-fenced API to trusted cells.
 
 Tier 2 **adds** a containment option; it does not retract the standing advice that untrusted
 third-party code belongs in Tier 3 **until Tier 2's mechanism exists**. Today the kernel has
@@ -126,8 +155,8 @@ item; not a prerequisite for anything above.
   compiler without adding verification: the compiler is still *trusted*, now with fewer
   eyes. Spec 16 already provides the qualified-toolchain path (pin + Ferrocene).
 - **WASM tier** — rejected for execution speed and because it duplicates what Tier 2
-  provides with zero speed penalty and no new runtime to maintain. Historical references
-  remain in `docs/project-changelog.md` and `docs/research/` only.
+  provides with zero speed penalty and no new runtime to maintain. WASM may still exist
+  as a tool/runtime-adjacent host path, but not as a first-class execution tier.
 - **Client-side attestation without TEE** — forgeable by construction; see §1.
 - **Mandatory build service for third parties** — rejected: source-disclosure
   requirement would strangle the ecosystem; Tier 2 removes the need.

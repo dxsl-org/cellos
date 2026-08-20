@@ -9,7 +9,8 @@ to the physical hardware tracks.
 
 - Lua 5.4 is the active native scripting runtime.
 - It is the only current native scripting runtime that should be documented as
-  supported in-tree.
+  supported in-tree. It is a trusted Tier 1 `lua` runtime profile, not a
+  separate application tier.
 
 ## Historical Runtime
 
@@ -23,9 +24,12 @@ to the physical hardware tracks.
 - The WASM host cell is a tool/runtime-adjacent path for `.wasm` workloads.
 - Native Tier 1 remains the Rust-first path; use the platform boundary instead
   of drifting POSIX assumptions into native cells.
+- Trusted C/C++/Zig interop is the Tier 1 `ffi-posix` profile. Historical
+  `Tier 1b` text refers to that profile, not a distinct execution tier.
 
 ## Platform Overlays
 
-- G4 is the planned pure-Rust `std` overlay for Tier 1.
+- G4 is the planned pure-Rust `rust-std` runtime profile for Tier 1.
 - G5 is the later virtualization-platform overlay.
-- Untrusted Linux/POSIX application compatibility stays in Tier 3 VM lanes.
+- Untrusted Linux/POSIX application compatibility stays in Tier 3 VM lanes
+  until Tier 2 native domains exist.

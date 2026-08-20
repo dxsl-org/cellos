@@ -14,7 +14,7 @@ Cellos is a next-generation operating system designed for the **Edge-to-Cloud er
 **Product delivery is framed by product stages** (overlay on the technical phases below — see [project-roadmap.md](project-roadmap.md) and [roadmap/product-stages.md](roadmap/product-stages.md)):
 - **Stage G1 — Robot & Embedded** (now → ~2026 Q4): complete the OS for robots/embedded. Primary target = Tier A SBC with MMU (RV64/ARM64, RPi-class robot brain); sub-track = Tier B MCU (RV32 <512KB, CHERIoT-Nano) for low-level control. Defining traits: never-die, bounded real-time, fault isolation, peripheral I/O (GPIO/I2C/SPI/UART/CAN), instant-on boot.
 - **Stage G2 — Server & Specialized PC** (~2027): expand to servers/PCs. Adds SMP multi-core, full desktop compositor, zero-downtime hot migration, x86_64 full bring-up, large storage. Untrusted code runs in the Tier 3 Linux VM.
-- **Stages G3-G5**: NPU-native compute, full Rust `std` for Tier 1, and virtualization remain later overlays with explicit entry gates.
+- **Stages G3-G5**: NPU-native compute, full Rust `std` as a Tier 1 runtime profile, and virtualization remain later overlays with explicit entry gates.
 
 **Key Innovation**: Cellular Single Address Space (SAS) using Language-Based Isolation (LBI) via Rust's type system. Software is organized as **Cells** (not processes) sharing one address space, isolated by Rust's compiler rather than hardware MMU.
 
@@ -96,7 +96,7 @@ Public API (Stable ABI)
 ├── libs/types          Core types (VAddr, PAddr, ViError)
 ├── libs/api            Kernel-Cell boundary traits and syscall ABI
 ├── libs/ostd           Cells' standard library (syscall wrappers, I/O, alloc)
-└── libs/*              attestation, http-core, text-engine, mlibc shim, ViUI, agent protocol
+└── libs/*              attestation, http-core, text-engine, trusted ffi-posix support, ViUI, agent protocol
 
 Cells
 ├── cells/tools/        init, shell, sys-tools, net-tools, wasm

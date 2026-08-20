@@ -412,22 +412,22 @@ Cellos organizes cells into 8 semantic groups (parallel to code, not functionali
 ```
 cells/
 ├─ tools/        — System utilities (shell, init, sys-tools, net-tools)
-├─ apps/         — User applications (robot-dashboard)
+├─ apps/         — User applications (choose tier by execution boundary and runtime profile)
 ├─ demos/        — Demonstrations & graphical showcases (periph-demo, sensor-demo, doom, tetris*, audio-demo, etc.)
-├─ drivers/      — Hardware device drivers (gpio, i2c, spi, uart, etc.)
+├─ drivers/      — Hardware device drivers (trusted native cells; gpio, i2c, spi, uart, etc.)
 ├─ services/     — System services (vfs, net, input, compositor, silo, hypervisor, etc.)
-├─ runtimes/     — Scripting VMs (lua)
+├─ runtimes/     — Trusted native runtime profiles (lua; MicroPython historical only)
 ├─ tests/        — Integration & stress test cells (bench, vfs-test, etc.)
 └─ guests/       — Hypervisor guests (silo-guest, aarch64-unknown-none)
 ```
 
 **Classification rules:**
 - **tools/** — Always-running infrastructure (shell, init, system daemons)
-- **apps/** — Interactive/rich user applications with persistent UI (dashboards, productivity tools)
+- **apps/** — Interactive/rich user applications; use the tier/runtime profile docs to pick the execution boundary
 - **demos/** — Showcases of system capabilities: hardware drivers, rendering, audio, scripting, games. Run on-demand from the shell; never auto-spawned at boot.
-- **drivers/** — Hardware devices + driver Cells (mapped via kernel Resource Registry or IPC)
+- **drivers/** — Hardware devices + driver Cells (trusted native cells, mapped via kernel Resource Registry or IPC)
 - **services/** — Long-lived stateful services with IPC servers (VFS, net, input, compositor)
-- **runtimes/** — Scripting language interpreters and VMs (Lua; MicroPython is historical only)
+- **runtimes/** — Trusted native runtime profiles (Lua; MicroPython is historical only)
 - **tests/** — Integration test & benchmark cells spawned by CI or manual runs (disposable, single-purpose)
 - **guests/** — Hypervisor guest binaries (bare-metal or minimal OS images, non-x86/ARM64 targets)
 
@@ -533,6 +533,10 @@ pub async fn read_with_timeout(path: &str, timeout_ms: u64) -> ViResult<Vec<u8>>
 ### App Development (Cell Writing)
 
 Use the Cellos App SDK (`libs/ostd/`) to eliminate boilerplate:
+
+The App SDK is one family of named modules/layers, not a numbered tier system.
+Application Tier 1/2/3 describes the execution/isolation boundary; runtime
+profiles and SDK modules describe how code is built and which APIs it uses.
 
 **Before (manual dispatch)**:
 ```rust

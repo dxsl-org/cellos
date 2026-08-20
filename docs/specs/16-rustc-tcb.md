@@ -146,7 +146,8 @@ layers outside `rustc`'s purview.
 **Outside the TCB by design:**
 
 - Cell code (`#![forbid(unsafe_code)]`) — verified *by* the TCB, not *part of* it.
-- C/Zig Tier 1b libraries via FFI — sandboxed by the `unsafe` boundary and grant/IPC validation.
+- Trusted C/Zig libraries via the Tier 1 `ffi-posix` profile — bounded by the
+  `unsafe` boundary and grant/IPC validation.
 - Lua/VM guests — sandboxed by interpreter manifest restrictions or hypervisor Stage-2 paging.
 - `std` / `alloc` — Cell-visible only via `libs/ostd`; TCB does not extend to `std` internals.
 

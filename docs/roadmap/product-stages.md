@@ -35,12 +35,12 @@ contract for accelerators must be hardware-informed; avoid over-specifying
 
 ## G4 - Full Rust std for Tier 1 Cells
 
-Direction: pure-Rust PAL plus a custom `*-unknown-cellos` rustc target. Do not
-route native Tier 1 `std` through mlibc, because that pulls C/POSIX assumptions
-into the trusted Tier 1 path.
+Direction: a Tier 1 `rust-std` runtime profile using pure-Rust PAL plus a custom
+`*-unknown-cellos` rustc target. Do not route native Tier 1 `std` through mlibc,
+because that pulls C/POSIX assumptions into the trusted Tier 1 path.
 
 ## G5 - Virtualization Platform
 
 Research/design overlay after G4. The intended shape is one VMM core with
-profiled modes, not two separate codebases. Golden-frame poisoning remains a
-named trust-anchor risk before production use.
+profiled Tier 3 guest modes, not two separate codebases. Golden-frame poisoning
+remains a named trust-anchor risk before production use.

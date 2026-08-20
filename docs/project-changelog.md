@@ -2,6 +2,17 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-19] Application tier taxonomy is standardized
+
+Application documentation now reserves Tier 1/2/3 for execution and isolation
+boundaries. Rust `no_std`, planned Rust `std`, POSIX/FFI, Lua, and Linux guest
+paths are runtime profiles; SDK capabilities use named modules/layers rather
+than numbered tiers; G1-G5 remain product stages. `Tier 1b` and `Tier 3b` are
+retained only as legacy aliases and filenames. ADR 0003 records the decision,
+and the follow-up code plan preserves the 16-byte Manifest v2 ABI while adding
+future `protection_class` aliases. This change is documentation and planning
+only; Tier 2 native domains remain unimplemented.
+
 ## [2026-08-19] Documentation is reconciled with the current codebase
 
 The roadmap is now a short entrypoint with separate current-focus, product,
