@@ -1,6 +1,9 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
-use blake3::Hasher;
+use blake2::{
+    digest::{KeyInit, Mac},
+    Blake2s256, Blake2sMac256, Digest,
+};
 use constant_time_eq::constant_time_eq;
 use types::kms::KmsProviderKind;
 
@@ -117,15 +120,15 @@ impl JournalRecord {
 
     pub(crate) fn digest(&self, key: &JournalKey) -> [u8; DIGEST_LEN] {
         let mut out = [0; DIGEST_LEN];
-        out.copy_from_slice(blake3::hash(&self.encode(key)).as_bytes());
+        out.copy_from_slice(&Blake2s256::digest(self.encode(key)));
         out
     }
 }
 
 pub(crate) fn authenticator(key: &JournalKey, body: &[u8]) -> [u8; AUTH_LEN] {
-    let mut hasher = Hasher::new_keyed(key);
-    hasher.update(body);
+    let mut hasher = <Blake2sMac256 as KeyInit>::new(key.into());
+    Mac::update(&mut hasher, body);
     let mut out = [0; AUTH_LEN];
-    out.copy_from_slice(hasher.finalize().as_bytes());
+    out.copy_from_slice(&hasher.finalize().into_bytes());
     out
 }
