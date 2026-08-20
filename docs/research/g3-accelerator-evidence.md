@@ -1,7 +1,7 @@
 # G3 Accelerator Evidence Envelope
 
-**Date**: 2026-08-20  
-**Status**: BLOCKED — no accelerator hardware or accepted vendor SDK is available  
+**Date**: 2026-08-20
+**Status**: BLOCKED — no accelerator hardware or accepted vendor SDK is available
 **Scope**: Phase 06 readiness ledger; no stable ABI or kernel scheduler
 
 ## Decision
