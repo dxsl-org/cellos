@@ -12,7 +12,14 @@ pub(super) fn is_kms_namespace_path(path: &str) -> bool {
 }
 
 pub(super) fn contains_kms_namespace(path: &str) -> bool {
-    is_kms_namespace_path(path)
+    if is_kms_namespace_path(path) {
+        return true;
+    }
+
+    let ancestor = path.strip_suffix('/').unwrap_or(path);
+    KMS_NAMESPACE
+        .strip_prefix(ancestor)
+        .is_some_and(|remainder| remainder.starts_with('/'))
 }
 
 pub(super) fn is_canonical_policy_path(path: &str) -> bool {
@@ -152,11 +159,25 @@ mod tests {
     #[test]
     fn directory_removal_cannot_remove_kms_namespace() {
         let table = live_table();
-        for path in ["/srv/cellos", "/srv/cellos/", "/srv/cellos/kms"] {
+        for path in [
+            "/",
+            "/srv",
+            "/srv/",
+            "/srv/cellos",
+            "/srv/cellos/",
+            "/srv/cellos/kms",
+        ] {
             assert!(!table.can_remove_dir(CELL, path), "{path} should not rmdir");
             assert!(
                 !table.can_remove_tree(CELL, path),
                 "{path} should not remove"
+            );
+        }
+
+        for path in ["/sr", "/srv-other", "/srv/other"] {
+            assert!(
+                !contains_kms_namespace(path),
+                "{path} should not contain the KMS namespace"
             );
         }
     }

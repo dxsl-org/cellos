@@ -8,6 +8,9 @@ pub enum TrySendResult {
 
 pub const MAX_REPLY_SEND_ATTEMPTS: u8 = 32;
 
+// The reply remains inline and Copy because this no-alloc retry path must hand
+// ownership back to its caller when the bounded queue is saturated.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RetainBusyResult {
     Queued,

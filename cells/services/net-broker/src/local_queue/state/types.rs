@@ -40,6 +40,9 @@ pub struct QueuedReply {
     pub attempts: u8,
 }
 
+// This no-alloc boundary returns the fixed-size reply by value so saturation
+// never drops ownership or hides an allocation failure.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IngressDecision {
     Accepted,
