@@ -6,7 +6,7 @@ use types::kms::{
 
 use crate::auth::{authorize_supervisor, register_broker, BrokerBinding, ServiceRegistrySnapshot};
 use crate::reply::SuccessPayload;
-use crate::storage::RootAssessment;
+use crate::storage::{runtime_root, RootAssessment};
 
 pub struct KmsService {
     binding: Option<BrokerBinding>,
@@ -21,10 +21,10 @@ impl Default for KmsService {
 }
 
 impl KmsService {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             binding: None,
-            root: RootAssessment::unavailable(),
+            root: runtime_root(),
             next_binding_epoch: 1,
         }
     }

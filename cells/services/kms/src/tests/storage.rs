@@ -159,3 +159,24 @@ fn keyed_corruption_rejects_slot_decode() {
     assert_eq!(state.load, JournalLoad::Empty);
     assert!(state.active.is_none());
 }
+
+#[test]
+fn known_provider_kind_decodes_without_expanding_unknown_values() {
+    let mut store = FakeStore::default();
+    let mut record = JournalRecord::placeholder(SlotId::A, 2, 5, [0; 32]);
+    record.provider = types::kms::KmsProviderKind::DiceSealed;
+    store.put_record(SLOT_A_PATH, record);
+    let state = load_for_tests(&mut store, &TEST_KEY);
+    assert_eq!(
+        state.active.unwrap().record.provider,
+        types::kms::KmsProviderKind::DiceSealed
+    );
+
+    let mut encoded = JournalRecord::placeholder(SlotId::A, 2, 5, [0; 32]).encode(&TEST_KEY);
+    encoded[6] = 99;
+    let auth = crate::storage::authenticator(&TEST_KEY, &encoded[..154]);
+    encoded[154..].copy_from_slice(&auth);
+    store.files.insert(SLOT_A_PATH, encoded.to_vec());
+    let state = load_for_tests(&mut store, &TEST_KEY);
+    assert_eq!(state.load, JournalLoad::Empty);
+}

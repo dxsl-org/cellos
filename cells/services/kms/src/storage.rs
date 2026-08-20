@@ -2,6 +2,7 @@
 
 mod backend;
 mod journal;
+mod provider;
 mod record;
 mod root;
 #[cfg(target_os = "none")]
@@ -9,6 +10,9 @@ mod runtime;
 
 pub(crate) use backend::{StoreError, StoreIo};
 pub(crate) use journal::{JournalLoad, JournalState};
+pub(crate) use provider::{
+    ProviderAssessment, ProviderOpenResult, RootProvider, UnavailableRootProvider,
+};
 pub(crate) use record::{JournalKey, JournalRecord, SlotId, SLOT_A_PATH, SLOT_B_PATH, STORE_DIR};
 pub(crate) use root::RootAssessment;
 
@@ -36,4 +40,25 @@ pub(crate) fn persist_placeholder_for_tests(
     policy_epoch: u64,
 ) -> Result<(), backend::StoreError> {
     state.persist_placeholder(io, key, policy_epoch).map(|_| ())
+}
+
+pub(crate) fn runtime_root() -> RootAssessment {
+    RootAssessment::from_provider(&UnavailableRootProvider, &JournalState::empty())
+}
+
+#[cfg(test)]
+pub(crate) use journal::ActiveSlot;
+
+#[cfg(test)]
+pub(crate) use record::authenticator;
+
+#[cfg(test)]
+pub(crate) use provider::{FixtureRootProvider, OpenedRoot};
+
+#[cfg(test)]
+pub(crate) fn assess_for_tests(
+    provider: &impl RootProvider,
+    journal: &JournalState,
+) -> RootAssessment {
+    RootAssessment::from_provider(provider, journal)
 }

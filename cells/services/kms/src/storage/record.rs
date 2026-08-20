@@ -92,13 +92,7 @@ impl JournalRecord {
         if !constant_time_eq(&auth, &bytes[154..]) {
             return None;
         }
-        let provider = match bytes[6] {
-            x if x == KmsProviderKind::None as u8 => KmsProviderKind::None,
-            _ => return None,
-        };
-        if provider != KmsProviderKind::None {
-            return None;
-        }
+        let provider = KmsProviderKind::try_from(bytes[6]).ok()?;
         let payload_len = u16::from_le_bytes([bytes[24], bytes[25]]);
         if payload_len as usize > SEALED_BYTES_LEN {
             return None;

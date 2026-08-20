@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
+#[cfg_attr(test, allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StoreError {
     Io,
