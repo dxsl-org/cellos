@@ -909,61 +909,64 @@
 <a href=#909 id=909 data-nosnippet>909</a>    <span class="doccomment">/// VirtIO GPU Driver Cell — owns the VirtIO GPU MMIO and framebuffer DMA.
 <a href=#910 id=910 data-nosnippet>910</a>    /// Kernel `GpuFlush`/`GpuCursor` syscalls forward to this Cell when registered.
 <a href=#911 id=911 data-nosnippet>911</a>    </span><span class="kw">pub const </span>GPU_DRIVER: u16 = <span class="number">12</span>;
-<a href=#912 id=912 data-nosnippet>912</a>}
-<a href=#913 id=913 data-nosnippet>913</a>
-<a href=#914 id=914 data-nosnippet>914</a><span class="doccomment">/// Arguments for `SpawnFromMem`.
-<a href=#915 id=915 data-nosnippet>915</a>///
-<a href=#916 id=916 data-nosnippet>916</a>/// Using `repr(C)` for ABI stability. The caller supplies raw ELF bytes plus a
-<a href=#917 id=917 data-nosnippet>917</a>/// caller-chosen label; the kernel may use that label only for mem-route
-<a href=#918 id=918 data-nosnippet>918</a>/// bookkeeping and diagnostics, never as `/bin/*` path authority.
-<a href=#919 id=919 data-nosnippet>919</a></span><span class="attr">#[repr(C)]
-<a href=#920 id=920 data-nosnippet>920</a></span><span class="kw">pub struct </span>ViSpawnArgs {
-<a href=#921 id=921 data-nosnippet>921</a>    <span class="doccomment">/// Address of buffer containing ELF.
-<a href=#922 id=922 data-nosnippet>922</a>    </span><span class="kw">pub </span>buffer_addr: usize,
-<a href=#923 id=923 data-nosnippet>923</a>    <span class="doccomment">/// Size of buffer.
-<a href=#924 id=924 data-nosnippet>924</a>    </span><span class="kw">pub </span>buffer_size: usize,
-<a href=#925 id=925 data-nosnippet>925</a>    <span class="doccomment">/// Pointer to name string (utf8).
-<a href=#926 id=926 data-nosnippet>926</a>    </span><span class="kw">pub </span>name_ptr: usize,
-<a href=#927 id=927 data-nosnippet>927</a>    <span class="doccomment">/// Length of name string.
-<a href=#928 id=928 data-nosnippet>928</a>    </span><span class="kw">pub </span>name_len: usize,
-<a href=#929 id=929 data-nosnippet>929</a>    <span class="doccomment">/// Pointer to arguments string (utf8, space separated or null separated).
-<a href=#930 id=930 data-nosnippet>930</a>    </span><span class="kw">pub </span>args_ptr: usize,
-<a href=#931 id=931 data-nosnippet>931</a>    <span class="doccomment">/// Length of arguments string.
-<a href=#932 id=932 data-nosnippet>932</a>    </span><span class="kw">pub </span>args_len: usize,
-<a href=#933 id=933 data-nosnippet>933</a>}
-<a href=#934 id=934 data-nosnippet>934</a>
-<a href=#935 id=935 data-nosnippet>935</a><span class="attr">#[repr(C)]
-<a href=#936 id=936 data-nosnippet>936</a>#[derive(Debug, Clone, Copy, Default)]
-<a href=#937 id=937 data-nosnippet>937</a></span><span class="kw">pub struct </span>ProcessInfo {
-<a href=#938 id=938 data-nosnippet>938</a>    <span class="kw">pub </span>id: usize,
-<a href=#939 id=939 data-nosnippet>939</a>    <span class="kw">pub </span>state: usize, <span class="comment">// 0=Ready, 1=Running, 2=Waiting, 3=Terminated
-<a href=#940 id=940 data-nosnippet>940</a>    </span><span class="kw">pub </span>name: [u8; <span class="number">32</span>],
-<a href=#941 id=941 data-nosnippet>941</a>}
-<a href=#942 id=942 data-nosnippet>942</a>
-<a href=#943 id=943 data-nosnippet>943</a><span class="attr">#[repr(C)]
-<a href=#944 id=944 data-nosnippet>944</a>#[derive(Debug, Clone, Copy, Default)]
-<a href=#945 id=945 data-nosnippet>945</a></span><span class="kw">pub struct </span>ProcessInfoV2 {
-<a href=#946 id=946 data-nosnippet>946</a>    <span class="kw">pub </span>id: u64,
-<a href=#947 id=947 data-nosnippet>947</a>    <span class="kw">pub </span>state: u32, <span class="comment">// 0=Ready, 1=Running, 2=Waiting, 3=Terminated
-<a href=#948 id=948 data-nosnippet>948</a>    </span><span class="kw">pub </span>reserved0: u32,
-<a href=#949 id=949 data-nosnippet>949</a>    <span class="kw">pub </span>name: [u8; <span class="number">32</span>],
-<a href=#950 id=950 data-nosnippet>950</a>    <span class="kw">pub </span>sample_ticks: u64,
-<a href=#951 id=951 data-nosnippet>951</a>    <span class="kw">pub </span>cpu_run_ticks: u64,
-<a href=#952 id=952 data-nosnippet>952</a>    <span class="kw">pub </span>heap_bytes: u64,
-<a href=#953 id=953 data-nosnippet>953</a>    <span class="kw">pub </span>owned_bytes: u64,
-<a href=#954 id=954 data-nosnippet>954</a>}
-<a href=#955 id=955 data-nosnippet>955</a>
-<a href=#956 id=956 data-nosnippet>956</a><span class="doccomment">/// Version 1 global physical-frame allocator snapshot.
-<a href=#957 id=957 data-nosnippet>957</a>///
-<a href=#958 id=958 data-nosnippet>958</a>/// All fields are fixed-width so the layout is identical on RV32, RV64,
-<a href=#959 id=959 data-nosnippet>959</a>/// AArch64, and x86_64. `used_frames` measures allocator-committed frames,
-<a href=#960 id=960 data-nosnippet>960</a>/// including frames reserved for the kernel heap.
-<a href=#961 id=961 data-nosnippet>961</a></span><span class="attr">#[repr(C)]
-<a href=#962 id=962 data-nosnippet>962</a>#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-<a href=#963 id=963 data-nosnippet>963</a></span><span class="kw">pub struct </span>ViMemInfoV1 {
-<a href=#964 id=964 data-nosnippet>964</a>    <span class="kw">pub </span>total_frames: u64,
-<a href=#965 id=965 data-nosnippet>965</a>    <span class="kw">pub </span>used_frames: u64,
-<a href=#966 id=966 data-nosnippet>966</a>    <span class="kw">pub </span>free_frames: u64,
-<a href=#967 id=967 data-nosnippet>967</a>    <span class="kw">pub </span>page_size: u64,
-<a href=#968 id=968 data-nosnippet>968</a>}
+<a href=#912 id=912 data-nosnippet>912</a>    <span class="doccomment">/// Key-management service for stable Cell-to-Cell node identity and opaque
+<a href=#913 id=913 data-nosnippet>913</a>    /// static DH operations.
+<a href=#914 id=914 data-nosnippet>914</a>    </span><span class="kw">pub const </span>KMS: u16 = <span class="number">13</span>;
+<a href=#915 id=915 data-nosnippet>915</a>}
+<a href=#916 id=916 data-nosnippet>916</a>
+<a href=#917 id=917 data-nosnippet>917</a><span class="doccomment">/// Arguments for `SpawnFromMem`.
+<a href=#918 id=918 data-nosnippet>918</a>///
+<a href=#919 id=919 data-nosnippet>919</a>/// Using `repr(C)` for ABI stability. The caller supplies raw ELF bytes plus a
+<a href=#920 id=920 data-nosnippet>920</a>/// caller-chosen label; the kernel may use that label only for mem-route
+<a href=#921 id=921 data-nosnippet>921</a>/// bookkeeping and diagnostics, never as `/bin/*` path authority.
+<a href=#922 id=922 data-nosnippet>922</a></span><span class="attr">#[repr(C)]
+<a href=#923 id=923 data-nosnippet>923</a></span><span class="kw">pub struct </span>ViSpawnArgs {
+<a href=#924 id=924 data-nosnippet>924</a>    <span class="doccomment">/// Address of buffer containing ELF.
+<a href=#925 id=925 data-nosnippet>925</a>    </span><span class="kw">pub </span>buffer_addr: usize,
+<a href=#926 id=926 data-nosnippet>926</a>    <span class="doccomment">/// Size of buffer.
+<a href=#927 id=927 data-nosnippet>927</a>    </span><span class="kw">pub </span>buffer_size: usize,
+<a href=#928 id=928 data-nosnippet>928</a>    <span class="doccomment">/// Pointer to name string (utf8).
+<a href=#929 id=929 data-nosnippet>929</a>    </span><span class="kw">pub </span>name_ptr: usize,
+<a href=#930 id=930 data-nosnippet>930</a>    <span class="doccomment">/// Length of name string.
+<a href=#931 id=931 data-nosnippet>931</a>    </span><span class="kw">pub </span>name_len: usize,
+<a href=#932 id=932 data-nosnippet>932</a>    <span class="doccomment">/// Pointer to arguments string (utf8, space separated or null separated).
+<a href=#933 id=933 data-nosnippet>933</a>    </span><span class="kw">pub </span>args_ptr: usize,
+<a href=#934 id=934 data-nosnippet>934</a>    <span class="doccomment">/// Length of arguments string.
+<a href=#935 id=935 data-nosnippet>935</a>    </span><span class="kw">pub </span>args_len: usize,
+<a href=#936 id=936 data-nosnippet>936</a>}
+<a href=#937 id=937 data-nosnippet>937</a>
+<a href=#938 id=938 data-nosnippet>938</a><span class="attr">#[repr(C)]
+<a href=#939 id=939 data-nosnippet>939</a>#[derive(Debug, Clone, Copy, Default)]
+<a href=#940 id=940 data-nosnippet>940</a></span><span class="kw">pub struct </span>ProcessInfo {
+<a href=#941 id=941 data-nosnippet>941</a>    <span class="kw">pub </span>id: usize,
+<a href=#942 id=942 data-nosnippet>942</a>    <span class="kw">pub </span>state: usize, <span class="comment">// 0=Ready, 1=Running, 2=Waiting, 3=Terminated
+<a href=#943 id=943 data-nosnippet>943</a>    </span><span class="kw">pub </span>name: [u8; <span class="number">32</span>],
+<a href=#944 id=944 data-nosnippet>944</a>}
+<a href=#945 id=945 data-nosnippet>945</a>
+<a href=#946 id=946 data-nosnippet>946</a><span class="attr">#[repr(C)]
+<a href=#947 id=947 data-nosnippet>947</a>#[derive(Debug, Clone, Copy, Default)]
+<a href=#948 id=948 data-nosnippet>948</a></span><span class="kw">pub struct </span>ProcessInfoV2 {
+<a href=#949 id=949 data-nosnippet>949</a>    <span class="kw">pub </span>id: u64,
+<a href=#950 id=950 data-nosnippet>950</a>    <span class="kw">pub </span>state: u32, <span class="comment">// 0=Ready, 1=Running, 2=Waiting, 3=Terminated
+<a href=#951 id=951 data-nosnippet>951</a>    </span><span class="kw">pub </span>reserved0: u32,
+<a href=#952 id=952 data-nosnippet>952</a>    <span class="kw">pub </span>name: [u8; <span class="number">32</span>],
+<a href=#953 id=953 data-nosnippet>953</a>    <span class="kw">pub </span>sample_ticks: u64,
+<a href=#954 id=954 data-nosnippet>954</a>    <span class="kw">pub </span>cpu_run_ticks: u64,
+<a href=#955 id=955 data-nosnippet>955</a>    <span class="kw">pub </span>heap_bytes: u64,
+<a href=#956 id=956 data-nosnippet>956</a>    <span class="kw">pub </span>owned_bytes: u64,
+<a href=#957 id=957 data-nosnippet>957</a>}
+<a href=#958 id=958 data-nosnippet>958</a>
+<a href=#959 id=959 data-nosnippet>959</a><span class="doccomment">/// Version 1 global physical-frame allocator snapshot.
+<a href=#960 id=960 data-nosnippet>960</a>///
+<a href=#961 id=961 data-nosnippet>961</a>/// All fields are fixed-width so the layout is identical on RV32, RV64,
+<a href=#962 id=962 data-nosnippet>962</a>/// AArch64, and x86_64. `used_frames` measures allocator-committed frames,
+<a href=#963 id=963 data-nosnippet>963</a>/// including frames reserved for the kernel heap.
+<a href=#964 id=964 data-nosnippet>964</a></span><span class="attr">#[repr(C)]
+<a href=#965 id=965 data-nosnippet>965</a>#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+<a href=#966 id=966 data-nosnippet>966</a></span><span class="kw">pub struct </span>ViMemInfoV1 {
+<a href=#967 id=967 data-nosnippet>967</a>    <span class="kw">pub </span>total_frames: u64,
+<a href=#968 id=968 data-nosnippet>968</a>    <span class="kw">pub </span>used_frames: u64,
+<a href=#969 id=969 data-nosnippet>969</a>    <span class="kw">pub </span>free_frames: u64,
+<a href=#970 id=970 data-nosnippet>970</a>    <span class="kw">pub </span>page_size: u64,
+<a href=#971 id=971 data-nosnippet>971</a>}
 </code></pre></div></section></main></body></html>

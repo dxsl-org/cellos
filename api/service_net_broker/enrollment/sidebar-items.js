@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["EnrollmentStatus"],"struct":["EnrollRequest","EnrollResponse","EnrollmentState"]};

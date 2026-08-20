@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["LOCAL_PAYLOAD_CAP","MAX_REPLY_BODY","MAX_REQUEST_BODY","REQUEST_HEADER_LEN","RESPONSE_HEADER_LEN","STATUS_TAG"],"enum":["ParseError","ReplyStatus"],"fn":["encode_reply","parse_request"],"struct":["ParsedLocalRequest"]};

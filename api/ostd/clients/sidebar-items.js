@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["input","net","tls_stream","vfs"]};
+window.SIDEBAR_ITEMS = {"mod":["input","kms","net","tls_stream","vfs"]};

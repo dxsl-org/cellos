@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["rules"],"struct":["AccessTable"]};
+window.SIDEBAR_ITEMS = {"enum":["AccessKind"],"fn":["default_service_lookup"],"mod":["kms","rules"],"struct":["AccessTable"]};

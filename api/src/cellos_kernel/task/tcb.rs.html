@@ -417,182 +417,192 @@
 <a href=#417 id=417 data-nosnippet>417</a>
 <a href=#418 id=418 data-nosnippet>418</a><span class="doccomment">/// Source of [`Task::cell_generation`]. Starts at 1 so 0 stays available as
 <a href=#419 id=419 data-nosnippet>419</a>/// "generation not attested on this path".
-<a href=#420 id=420 data-nosnippet>420</a></span><span class="kw">static </span>NEXT_CELL_GENERATION: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(<span class="number">1</span>);
-<a href=#421 id=421 data-nosnippet>421</a>
-<a href=#422 id=422 data-nosnippet>422</a><span class="kw">impl </span>Task {
-<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">pub fn </span>new(id: usize, cell_id: CellId, name: <span class="kw-2">&amp;</span>str, allowed_drivers: Vec&lt;usize&gt;) -&gt; <span class="self">Self </span>{
-<a href=#424 id=424 data-nosnippet>424</a>        <span class="self">Self </span>{
-<a href=#425 id=425 data-nosnippet>425</a>            id,
-<a href=#426 id=426 data-nosnippet>426</a>            cell_id,
-<a href=#427 id=427 data-nosnippet>427</a>            name: String::from(name),
-<a href=#428 id=428 data-nosnippet>428</a>            state: TaskState::Ready,
-<a href=#429 id=429 data-nosnippet>429</a>            context: Context::default(),
-<a href=#430 id=430 data-nosnippet>430</a>            trap_frame: ViTrapFrame::default(),
-<a href=#431 id=431 data-nosnippet>431</a>            allowed_drivers,
-<a href=#432 id=432 data-nosnippet>432</a>            leases: alloc::collections::BTreeMap::new(),
-<a href=#433 id=433 data-nosnippet>433</a>            next_lease_id: <span class="number">1</span>, <span class="comment">// Start efficiently
-<a href=#434 id=434 data-nosnippet>434</a>            </span>grant_table: alloc::collections::BTreeMap::new(),
-<a href=#435 id=435 data-nosnippet>435</a>            next_grant_id: <span class="number">1</span>,
-<a href=#436 id=436 data-nosnippet>436</a>            open_files: alloc::collections::BTreeMap::new(),
-<a href=#437 id=437 data-nosnippet>437</a>            current_caller: <span class="prelude-val">None</span>,
-<a href=#438 id=438 data-nosnippet>438</a>            current_caller_cell_id: <span class="number">0</span>,
-<a href=#439 id=439 data-nosnippet>439</a>            current_caller_cell_generation: <span class="number">0</span>,
-<a href=#440 id=440 data-nosnippet>440</a>            current_caller_request_generation: <span class="number">0</span>,
-<a href=#441 id=441 data-nosnippet>441</a>            next_caller_request_generation: <span class="number">1</span>,
-<a href=#442 id=442 data-nosnippet>442</a>            reply_value: <span class="prelude-val">None</span>,
-<a href=#443 id=443 data-nosnippet>443</a>            cwd: String::from(<span class="string">"/"</span>),
-<a href=#444 id=444 data-nosnippet>444</a>            kernel_stack: <span class="prelude-val">None</span>,
-<a href=#445 id=445 data-nosnippet>445</a>            user_stack: <span class="prelude-val">None</span>,
-<a href=#446 id=446 data-nosnippet>446</a>            segment_mem: <span class="prelude-val">None</span>,
-<a href=#447 id=447 data-nosnippet>447</a>            stack_quota_charge: <span class="number">0</span>,
-<a href=#448 id=448 data-nosnippet>448</a>            waiters: Vec::new(),
-<a href=#449 id=449 data-nosnippet>449</a>            exit_code: <span class="prelude-val">None</span>,
-<a href=#450 id=450 data-nosnippet>450</a>            pending_deaths: Vec::new(),
-<a href=#451 id=451 data-nosnippet>451</a>            pending_exit_reason: <span class="prelude-val">None</span>,
-<a href=#452 id=452 data-nosnippet>452</a>            pending_future: <span class="prelude-val">None</span>,
-<a href=#453 id=453 data-nosnippet>453</a>            block_io_cap: <span class="prelude-val">None</span>,
-<a href=#454 id=454 data-nosnippet>454</a>            network_cap: <span class="prelude-val">None</span>,
-<a href=#455 id=455 data-nosnippet>455</a>            spawn_cap: <span class="prelude-val">None</span>,
-<a href=#456 id=456 data-nosnippet>456</a>            hypervisor_cap: <span class="prelude-val">None</span>,
-<a href=#457 id=457 data-nosnippet>457</a>            supervisor_cap: <span class="prelude-val">None</span>,
-<a href=#458 id=458 data-nosnippet>458</a>            pcie_driver_cap: <span class="prelude-val">None</span>,
-<a href=#459 id=459 data-nosnippet>459</a>            platform_cap: <span class="prelude-val">None</span>,
-<a href=#460 id=460 data-nosnippet>460</a>            mmio_devices: <span class="number">0</span>,
-<a href=#461 id=461 data-nosnippet>461</a>            block_regions: <span class="number">0</span>,
-<a href=#462 id=462 data-nosnippet>462</a>            pku_key: <span class="number">0</span>,
-<a href=#463 id=463 data-nosnippet>463</a>            pku_value: <span class="number">0</span>,
-<a href=#464 id=464 data-nosnippet>464</a>            priority: api::TaskPriority::Normal <span class="kw">as </span>u8,
-<a href=#465 id=465 data-nosnippet>465</a>            cluster_mode: <span class="number">0</span>,
-<a href=#466 id=466 data-nosnippet>466</a>            cluster_id: <span class="number">0</span>,
-<a href=#467 id=467 data-nosnippet>467</a>            syscall_allowlist: u64::MAX, <span class="comment">// permit-all until ELF section is read
-<a href=#468 id=468 data-nosnippet>468</a>            </span>run_ticks: <span class="number">0</span>,
-<a href=#469 id=469 data-nosnippet>469</a>            cpu_run_ticks: <span class="number">0</span>,
-<a href=#470 id=470 data-nosnippet>470</a>            deadline_misses: <span class="number">0</span>,
-<a href=#471 id=471 data-nosnippet>471</a>            rt_overrun_warned: <span class="bool-val">false</span>,
-<a href=#472 id=472 data-nosnippet>472</a>            heartbeat_deadline: <span class="prelude-val">None</span>,
-<a href=#473 id=473 data-nosnippet>473</a>            vma: <span class="kw">crate</span>::memory::vma::VmaList::new(),
-<a href=#474 id=474 data-nosnippet>474</a>            hotswap_ready: <span class="bool-val">false</span>,
-<a href=#475 id=475 data-nosnippet>475</a>            hotswap_source_tid: <span class="prelude-val">None</span>,
-<a href=#476 id=476 data-nosnippet>476</a>            hotswap_ingress_closed: <span class="bool-val">false</span>,
-<a href=#477 id=477 data-nosnippet>477</a>            is_critical: <span class="bool-val">false</span>,
-<a href=#478 id=478 data-nosnippet>478</a>            pending_msgs: PendingMailbox::new(),
-<a href=#479 id=479 data-nosnippet>479</a>            cell_generation: NEXT_CELL_GENERATION
-<a href=#480 id=480 data-nosnippet>480</a>                .fetch_add(<span class="number">1</span>, core::sync::atomic::Ordering::Relaxed),
-<a href=#481 id=481 data-nosnippet>481</a>            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
-<a href=#482 id=482 data-nosnippet>482</a>            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
-<a href=#483 id=483 data-nosnippet>483</a>            completion: <span class="prelude-val">None</span>,
-<a href=#484 id=484 data-nosnippet>484</a>            completion_wait: <span class="prelude-val">None</span>,
-<a href=#485 id=485 data-nosnippet>485</a>        }
-<a href=#486 id=486 data-nosnippet>486</a>    }
-<a href=#487 id=487 data-nosnippet>487</a>
-<a href=#488 id=488 data-nosnippet>488</a>    <span class="kw">pub fn </span>add_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, attributes: LeaseAttributes) -&gt; usize {
-<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_lease_id;
-<a href=#490 id=490 data-nosnippet>490</a>        <span class="self">self</span>.next_lease_id += <span class="number">1</span>;
-<a href=#491 id=491 data-nosnippet>491</a>
-<a href=#492 id=492 data-nosnippet>492</a>        <span class="kw">let </span>lease = Lease {
-<a href=#493 id=493 data-nosnippet>493</a>            id,
-<a href=#494 id=494 data-nosnippet>494</a>            ptr,
-<a href=#495 id=495 data-nosnippet>495</a>            len,
-<a href=#496 id=496 data-nosnippet>496</a>            attributes,
-<a href=#497 id=497 data-nosnippet>497</a>        };
-<a href=#498 id=498 data-nosnippet>498</a>
-<a href=#499 id=499 data-nosnippet>499</a>        <span class="self">self</span>.leases.insert(id, lease);
-<a href=#500 id=500 data-nosnippet>500</a>        id
-<a href=#501 id=501 data-nosnippet>501</a>    }
-<a href=#502 id=502 data-nosnippet>502</a>
-<a href=#503 id=503 data-nosnippet>503</a>    <span class="kw">pub fn </span>get_lease(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Lease&gt; {
-<a href=#504 id=504 data-nosnippet>504</a>        <span class="self">self</span>.leases.get(<span class="kw-2">&amp;</span>id)
-<a href=#505 id=505 data-nosnippet>505</a>    }
-<a href=#506 id=506 data-nosnippet>506</a>
-<a href=#507 id=507 data-nosnippet>507</a>    <span class="kw">pub fn </span>revoke_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) {
-<a href=#508 id=508 data-nosnippet>508</a>        <span class="self">self</span>.leases.remove(<span class="kw-2">&amp;</span>id);
-<a href=#509 id=509 data-nosnippet>509</a>    }
-<a href=#510 id=510 data-nosnippet>510</a>
-<a href=#511 id=511 data-nosnippet>511</a>    <span class="comment">// --- Grant Table Methods ---
-<a href=#512 id=512 data-nosnippet>512</a>    </span><span class="kw">pub fn </span>add_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -&gt; usize {
-<a href=#513 id=513 data-nosnippet>513</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_grant_id;
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="self">self</span>.next_grant_id += <span class="number">1</span>;
-<a href=#515 id=515 data-nosnippet>515</a>        <span class="self">self</span>.grant_table.insert(
-<a href=#516 id=516 data-nosnippet>516</a>            id,
-<a href=#517 id=517 data-nosnippet>517</a>            GrantEntry {
-<a href=#518 id=518 data-nosnippet>518</a>                ptr,
-<a href=#519 id=519 data-nosnippet>519</a>                len,
-<a href=#520 id=520 data-nosnippet>520</a>                flags,
-<a href=#521 id=521 data-nosnippet>521</a>                sender_id,
-<a href=#522 id=522 data-nosnippet>522</a>            },
-<a href=#523 id=523 data-nosnippet>523</a>        );
-<a href=#524 id=524 data-nosnippet>524</a>        id
-<a href=#525 id=525 data-nosnippet>525</a>    }
-<a href=#526 id=526 data-nosnippet>526</a>
-<a href=#527 id=527 data-nosnippet>527</a>    <span class="kw">pub fn </span>get_grant(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>GrantEntry&gt; {
-<a href=#528 id=528 data-nosnippet>528</a>        <span class="self">self</span>.grant_table.get(<span class="kw-2">&amp;</span>id)
-<a href=#529 id=529 data-nosnippet>529</a>    }
-<a href=#530 id=530 data-nosnippet>530</a>
-<a href=#531 id=531 data-nosnippet>531</a>    <span class="kw">pub fn </span>remove_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;GrantEntry&gt; {
-<a href=#532 id=532 data-nosnippet>532</a>        <span class="self">self</span>.grant_table.remove(<span class="kw-2">&amp;</span>id)
-<a href=#533 id=533 data-nosnippet>533</a>    }
-<a href=#534 id=534 data-nosnippet>534</a>
-<a href=#535 id=535 data-nosnippet>535</a>    <span class="kw">pub fn </span>set_current_caller_context(
-<a href=#536 id=536 data-nosnippet>536</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#537 id=537 data-nosnippet>537</a>        sender_tid: usize,
-<a href=#538 id=538 data-nosnippet>538</a>        sender_cell_id: u64,
-<a href=#539 id=539 data-nosnippet>539</a>        sender_generation: u64,
-<a href=#540 id=540 data-nosnippet>540</a>    ) {
-<a href=#541 id=541 data-nosnippet>541</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">Some</span>(sender_tid);
-<a href=#542 id=542 data-nosnippet>542</a>        <span class="self">self</span>.current_caller_cell_id = sender_cell_id;
-<a href=#543 id=543 data-nosnippet>543</a>        <span class="self">self</span>.current_caller_cell_generation = sender_generation;
-<a href=#544 id=544 data-nosnippet>544</a>        <span class="self">self</span>.current_caller_request_generation = <span class="self">self</span>.next_caller_request_generation;
-<a href=#545 id=545 data-nosnippet>545</a>        <span class="self">self</span>.next_caller_request_generation = <span class="self">self</span>.next_caller_request_generation.saturating_add(<span class="number">1</span>);
-<a href=#546 id=546 data-nosnippet>546</a>    }
-<a href=#547 id=547 data-nosnippet>547</a>
-<a href=#548 id=548 data-nosnippet>548</a>    <span class="kw">pub fn </span>set_received_caller_context(
-<a href=#549 id=549 data-nosnippet>549</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#550 id=550 data-nosnippet>550</a>        sender_tid: usize,
-<a href=#551 id=551 data-nosnippet>551</a>        sender_cell_id: u64,
-<a href=#552 id=552 data-nosnippet>552</a>        sender_generation: u64,
-<a href=#553 id=553 data-nosnippet>553</a>    ) {
-<a href=#554 id=554 data-nosnippet>554</a>        <span class="comment">// VFS may perform nested IPC while serving a request. Its outer caller
-<a href=#555 id=555 data-nosnippet>555</a>        // remains the authority for grants and owner-death watches until VFS
-<a href=#556 id=556 data-nosnippet>556</a>        // sends that caller's response; a storage reply must not replace it.
-<a href=#557 id=557 data-nosnippet>557</a>        </span><span class="kw">if </span><span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize)
-<a href=#558 id=558 data-nosnippet>558</a>            &amp;&amp; <span class="self">self</span>.current_caller.is_some()
-<a href=#559 id=559 data-nosnippet>559</a>        {
-<a href=#560 id=560 data-nosnippet>560</a>            <span class="kw">return</span>;
-<a href=#561 id=561 data-nosnippet>561</a>        }
-<a href=#562 id=562 data-nosnippet>562</a>        <span class="self">self</span>.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
-<a href=#563 id=563 data-nosnippet>563</a>    }
-<a href=#564 id=564 data-nosnippet>564</a>
-<a href=#565 id=565 data-nosnippet>565</a>    <span class="kw">pub fn </span>begin_receive_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>, mask: usize) {
-<a href=#566 id=566 data-nosnippet>566</a>        <span class="comment">// VFS uses a wildcard receive only at its public request loop. Masked
-<a href=#567 id=567 data-nosnippet>567</a>        // receives are nested dependency replies and keep the outer authority.
-<a href=#568 id=568 data-nosnippet>568</a>        </span><span class="kw">if </span>mask == <span class="number">0 </span>&amp;&amp; <span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
-<a href=#569 id=569 data-nosnippet>569</a>            <span class="self">self</span>.clear_current_caller_context();
-<a href=#570 id=570 data-nosnippet>570</a>        }
-<a href=#571 id=571 data-nosnippet>571</a>    }
-<a href=#572 id=572 data-nosnippet>572</a>
-<a href=#573 id=573 data-nosnippet>573</a>    <span class="kw">pub fn </span>allows_current_caller_owner_watch(<span class="kw-2">&amp;</span><span class="self">self</span>, watched: usize) -&gt; bool {
-<a href=#574 id=574 data-nosnippet>574</a>        <span class="self">self</span>.current_caller_cell_id != <span class="number">0 </span>&amp;&amp; watched == <span class="self">self</span>.current_caller_cell_id <span class="kw">as </span>usize
-<a href=#575 id=575 data-nosnippet>575</a>    }
-<a href=#576 id=576 data-nosnippet>576</a>
-<a href=#577 id=577 data-nosnippet>577</a>    <span class="kw">pub fn </span>clear_current_caller_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#578 id=578 data-nosnippet>578</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">None</span>;
-<a href=#579 id=579 data-nosnippet>579</a>        <span class="self">self</span>.current_caller_cell_id = <span class="number">0</span>;
-<a href=#580 id=580 data-nosnippet>580</a>        <span class="self">self</span>.current_caller_cell_generation = <span class="number">0</span>;
-<a href=#581 id=581 data-nosnippet>581</a>        <span class="self">self</span>.current_caller_request_generation = <span class="number">0</span>;
-<a href=#582 id=582 data-nosnippet>582</a>    }
-<a href=#583 id=583 data-nosnippet>583</a>
-<a href=#584 id=584 data-nosnippet>584</a>    <span class="kw">pub fn </span>clear_current_caller_context_if(
-<a href=#585 id=585 data-nosnippet>585</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#586 id=586 data-nosnippet>586</a>        sender_tid: usize,
-<a href=#587 id=587 data-nosnippet>587</a>        request_generation: u64,
-<a href=#588 id=588 data-nosnippet>588</a>    ) -&gt; bool {
-<a href=#589 id=589 data-nosnippet>589</a>        <span class="kw">if </span><span class="self">self</span>.current_caller == <span class="prelude-val">Some</span>(sender_tid)
-<a href=#590 id=590 data-nosnippet>590</a>            &amp;&amp; <span class="self">self</span>.current_caller_request_generation == request_generation
-<a href=#591 id=591 data-nosnippet>591</a>        {
-<a href=#592 id=592 data-nosnippet>592</a>            <span class="self">self</span>.clear_current_caller_context();
-<a href=#593 id=593 data-nosnippet>593</a>            <span class="kw">return </span><span class="bool-val">true</span>;
-<a href=#594 id=594 data-nosnippet>594</a>        }
-<a href=#595 id=595 data-nosnippet>595</a>        <span class="bool-val">false
-<a href=#596 id=596 data-nosnippet>596</a>    </span>}
-<a href=#597 id=597 data-nosnippet>597</a>}
+<a href=#420 id=420 data-nosnippet>420</a>/// A real spinlock keeps allocation unique across harts, including RV32 where
+<a href=#421 id=421 data-nosnippet>421</a>/// the portable 64-bit atomic fallback only masks local interrupts.
+<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">static </span>NEXT_CELL_GENERATION: <span class="kw">crate</span>::sync::Spinlock&lt;u64&gt; = <span class="kw">crate</span>::sync::Spinlock::new(<span class="number">1</span>);
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a><span class="kw">fn </span>next_cell_generation() -&gt; u64 {
+<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span><span class="kw-2">mut </span>next = NEXT_CELL_GENERATION.lock();
+<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>generation = <span class="kw-2">*</span>next;
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw-2">*</span>next = generation
+<a href=#428 id=428 data-nosnippet>428</a>        .checked_add(<span class="number">1</span>)
+<a href=#429 id=429 data-nosnippet>429</a>        .expect(<span class="string">"cell generation space exhausted"</span>);
+<a href=#430 id=430 data-nosnippet>430</a>    generation
+<a href=#431 id=431 data-nosnippet>431</a>}
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a><span class="kw">impl </span>Task {
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">pub fn </span>new(id: usize, cell_id: CellId, name: <span class="kw-2">&amp;</span>str, allowed_drivers: Vec&lt;usize&gt;) -&gt; <span class="self">Self </span>{
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="self">Self </span>{
+<a href=#436 id=436 data-nosnippet>436</a>            id,
+<a href=#437 id=437 data-nosnippet>437</a>            cell_id,
+<a href=#438 id=438 data-nosnippet>438</a>            name: String::from(name),
+<a href=#439 id=439 data-nosnippet>439</a>            state: TaskState::Ready,
+<a href=#440 id=440 data-nosnippet>440</a>            context: Context::default(),
+<a href=#441 id=441 data-nosnippet>441</a>            trap_frame: ViTrapFrame::default(),
+<a href=#442 id=442 data-nosnippet>442</a>            allowed_drivers,
+<a href=#443 id=443 data-nosnippet>443</a>            leases: alloc::collections::BTreeMap::new(),
+<a href=#444 id=444 data-nosnippet>444</a>            next_lease_id: <span class="number">1</span>, <span class="comment">// Start efficiently
+<a href=#445 id=445 data-nosnippet>445</a>            </span>grant_table: alloc::collections::BTreeMap::new(),
+<a href=#446 id=446 data-nosnippet>446</a>            next_grant_id: <span class="number">1</span>,
+<a href=#447 id=447 data-nosnippet>447</a>            open_files: alloc::collections::BTreeMap::new(),
+<a href=#448 id=448 data-nosnippet>448</a>            current_caller: <span class="prelude-val">None</span>,
+<a href=#449 id=449 data-nosnippet>449</a>            current_caller_cell_id: <span class="number">0</span>,
+<a href=#450 id=450 data-nosnippet>450</a>            current_caller_cell_generation: <span class="number">0</span>,
+<a href=#451 id=451 data-nosnippet>451</a>            current_caller_request_generation: <span class="number">0</span>,
+<a href=#452 id=452 data-nosnippet>452</a>            next_caller_request_generation: <span class="number">1</span>,
+<a href=#453 id=453 data-nosnippet>453</a>            reply_value: <span class="prelude-val">None</span>,
+<a href=#454 id=454 data-nosnippet>454</a>            cwd: String::from(<span class="string">"/"</span>),
+<a href=#455 id=455 data-nosnippet>455</a>            kernel_stack: <span class="prelude-val">None</span>,
+<a href=#456 id=456 data-nosnippet>456</a>            user_stack: <span class="prelude-val">None</span>,
+<a href=#457 id=457 data-nosnippet>457</a>            segment_mem: <span class="prelude-val">None</span>,
+<a href=#458 id=458 data-nosnippet>458</a>            stack_quota_charge: <span class="number">0</span>,
+<a href=#459 id=459 data-nosnippet>459</a>            waiters: Vec::new(),
+<a href=#460 id=460 data-nosnippet>460</a>            exit_code: <span class="prelude-val">None</span>,
+<a href=#461 id=461 data-nosnippet>461</a>            pending_deaths: Vec::new(),
+<a href=#462 id=462 data-nosnippet>462</a>            pending_exit_reason: <span class="prelude-val">None</span>,
+<a href=#463 id=463 data-nosnippet>463</a>            pending_future: <span class="prelude-val">None</span>,
+<a href=#464 id=464 data-nosnippet>464</a>            block_io_cap: <span class="prelude-val">None</span>,
+<a href=#465 id=465 data-nosnippet>465</a>            network_cap: <span class="prelude-val">None</span>,
+<a href=#466 id=466 data-nosnippet>466</a>            spawn_cap: <span class="prelude-val">None</span>,
+<a href=#467 id=467 data-nosnippet>467</a>            hypervisor_cap: <span class="prelude-val">None</span>,
+<a href=#468 id=468 data-nosnippet>468</a>            supervisor_cap: <span class="prelude-val">None</span>,
+<a href=#469 id=469 data-nosnippet>469</a>            pcie_driver_cap: <span class="prelude-val">None</span>,
+<a href=#470 id=470 data-nosnippet>470</a>            platform_cap: <span class="prelude-val">None</span>,
+<a href=#471 id=471 data-nosnippet>471</a>            mmio_devices: <span class="number">0</span>,
+<a href=#472 id=472 data-nosnippet>472</a>            block_regions: <span class="number">0</span>,
+<a href=#473 id=473 data-nosnippet>473</a>            pku_key: <span class="number">0</span>,
+<a href=#474 id=474 data-nosnippet>474</a>            pku_value: <span class="number">0</span>,
+<a href=#475 id=475 data-nosnippet>475</a>            priority: api::TaskPriority::Normal <span class="kw">as </span>u8,
+<a href=#476 id=476 data-nosnippet>476</a>            cluster_mode: <span class="number">0</span>,
+<a href=#477 id=477 data-nosnippet>477</a>            cluster_id: <span class="number">0</span>,
+<a href=#478 id=478 data-nosnippet>478</a>            syscall_allowlist: u64::MAX, <span class="comment">// permit-all until ELF section is read
+<a href=#479 id=479 data-nosnippet>479</a>            </span>run_ticks: <span class="number">0</span>,
+<a href=#480 id=480 data-nosnippet>480</a>            cpu_run_ticks: <span class="number">0</span>,
+<a href=#481 id=481 data-nosnippet>481</a>            deadline_misses: <span class="number">0</span>,
+<a href=#482 id=482 data-nosnippet>482</a>            rt_overrun_warned: <span class="bool-val">false</span>,
+<a href=#483 id=483 data-nosnippet>483</a>            heartbeat_deadline: <span class="prelude-val">None</span>,
+<a href=#484 id=484 data-nosnippet>484</a>            vma: <span class="kw">crate</span>::memory::vma::VmaList::new(),
+<a href=#485 id=485 data-nosnippet>485</a>            hotswap_ready: <span class="bool-val">false</span>,
+<a href=#486 id=486 data-nosnippet>486</a>            hotswap_source_tid: <span class="prelude-val">None</span>,
+<a href=#487 id=487 data-nosnippet>487</a>            hotswap_ingress_closed: <span class="bool-val">false</span>,
+<a href=#488 id=488 data-nosnippet>488</a>            is_critical: <span class="bool-val">false</span>,
+<a href=#489 id=489 data-nosnippet>489</a>            pending_msgs: PendingMailbox::new(),
+<a href=#490 id=490 data-nosnippet>490</a>            cell_generation: next_cell_generation(),
+<a href=#491 id=491 data-nosnippet>491</a>            inherited_dirs: api::dir_handles::InheritedDirHandles::NONE,
+<a href=#492 id=492 data-nosnippet>492</a>            staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
+<a href=#493 id=493 data-nosnippet>493</a>            completion: <span class="prelude-val">None</span>,
+<a href=#494 id=494 data-nosnippet>494</a>            completion_wait: <span class="prelude-val">None</span>,
+<a href=#495 id=495 data-nosnippet>495</a>        }
+<a href=#496 id=496 data-nosnippet>496</a>    }
+<a href=#497 id=497 data-nosnippet>497</a>
+<a href=#498 id=498 data-nosnippet>498</a>    <span class="kw">pub fn </span>add_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, attributes: LeaseAttributes) -&gt; usize {
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_lease_id;
+<a href=#500 id=500 data-nosnippet>500</a>        <span class="self">self</span>.next_lease_id += <span class="number">1</span>;
+<a href=#501 id=501 data-nosnippet>501</a>
+<a href=#502 id=502 data-nosnippet>502</a>        <span class="kw">let </span>lease = Lease {
+<a href=#503 id=503 data-nosnippet>503</a>            id,
+<a href=#504 id=504 data-nosnippet>504</a>            ptr,
+<a href=#505 id=505 data-nosnippet>505</a>            len,
+<a href=#506 id=506 data-nosnippet>506</a>            attributes,
+<a href=#507 id=507 data-nosnippet>507</a>        };
+<a href=#508 id=508 data-nosnippet>508</a>
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="self">self</span>.leases.insert(id, lease);
+<a href=#510 id=510 data-nosnippet>510</a>        id
+<a href=#511 id=511 data-nosnippet>511</a>    }
+<a href=#512 id=512 data-nosnippet>512</a>
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">pub fn </span>get_lease(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Lease&gt; {
+<a href=#514 id=514 data-nosnippet>514</a>        <span class="self">self</span>.leases.get(<span class="kw-2">&amp;</span>id)
+<a href=#515 id=515 data-nosnippet>515</a>    }
+<a href=#516 id=516 data-nosnippet>516</a>
+<a href=#517 id=517 data-nosnippet>517</a>    <span class="kw">pub fn </span>revoke_lease(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) {
+<a href=#518 id=518 data-nosnippet>518</a>        <span class="self">self</span>.leases.remove(<span class="kw-2">&amp;</span>id);
+<a href=#519 id=519 data-nosnippet>519</a>    }
+<a href=#520 id=520 data-nosnippet>520</a>
+<a href=#521 id=521 data-nosnippet>521</a>    <span class="comment">// --- Grant Table Methods ---
+<a href=#522 id=522 data-nosnippet>522</a>    </span><span class="kw">pub fn </span>add_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, ptr: VAddr, len: usize, flags: u32, sender_id: usize) -&gt; usize {
+<a href=#523 id=523 data-nosnippet>523</a>        <span class="kw">let </span>id = <span class="self">self</span>.next_grant_id;
+<a href=#524 id=524 data-nosnippet>524</a>        <span class="self">self</span>.next_grant_id += <span class="number">1</span>;
+<a href=#525 id=525 data-nosnippet>525</a>        <span class="self">self</span>.grant_table.insert(
+<a href=#526 id=526 data-nosnippet>526</a>            id,
+<a href=#527 id=527 data-nosnippet>527</a>            GrantEntry {
+<a href=#528 id=528 data-nosnippet>528</a>                ptr,
+<a href=#529 id=529 data-nosnippet>529</a>                len,
+<a href=#530 id=530 data-nosnippet>530</a>                flags,
+<a href=#531 id=531 data-nosnippet>531</a>                sender_id,
+<a href=#532 id=532 data-nosnippet>532</a>            },
+<a href=#533 id=533 data-nosnippet>533</a>        );
+<a href=#534 id=534 data-nosnippet>534</a>        id
+<a href=#535 id=535 data-nosnippet>535</a>    }
+<a href=#536 id=536 data-nosnippet>536</a>
+<a href=#537 id=537 data-nosnippet>537</a>    <span class="kw">pub fn </span>get_grant(<span class="kw-2">&amp;</span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>GrantEntry&gt; {
+<a href=#538 id=538 data-nosnippet>538</a>        <span class="self">self</span>.grant_table.get(<span class="kw-2">&amp;</span>id)
+<a href=#539 id=539 data-nosnippet>539</a>    }
+<a href=#540 id=540 data-nosnippet>540</a>
+<a href=#541 id=541 data-nosnippet>541</a>    <span class="kw">pub fn </span>remove_grant(<span class="kw-2">&amp;mut </span><span class="self">self</span>, id: usize) -&gt; <span class="prelude-ty">Option</span>&lt;GrantEntry&gt; {
+<a href=#542 id=542 data-nosnippet>542</a>        <span class="self">self</span>.grant_table.remove(<span class="kw-2">&amp;</span>id)
+<a href=#543 id=543 data-nosnippet>543</a>    }
+<a href=#544 id=544 data-nosnippet>544</a>
+<a href=#545 id=545 data-nosnippet>545</a>    <span class="kw">pub fn </span>set_current_caller_context(
+<a href=#546 id=546 data-nosnippet>546</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#547 id=547 data-nosnippet>547</a>        sender_tid: usize,
+<a href=#548 id=548 data-nosnippet>548</a>        sender_cell_id: u64,
+<a href=#549 id=549 data-nosnippet>549</a>        sender_generation: u64,
+<a href=#550 id=550 data-nosnippet>550</a>    ) {
+<a href=#551 id=551 data-nosnippet>551</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">Some</span>(sender_tid);
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="self">self</span>.current_caller_cell_id = sender_cell_id;
+<a href=#553 id=553 data-nosnippet>553</a>        <span class="self">self</span>.current_caller_cell_generation = sender_generation;
+<a href=#554 id=554 data-nosnippet>554</a>        <span class="self">self</span>.current_caller_request_generation = <span class="self">self</span>.next_caller_request_generation;
+<a href=#555 id=555 data-nosnippet>555</a>        <span class="self">self</span>.next_caller_request_generation = <span class="self">self</span>.next_caller_request_generation.saturating_add(<span class="number">1</span>);
+<a href=#556 id=556 data-nosnippet>556</a>    }
+<a href=#557 id=557 data-nosnippet>557</a>
+<a href=#558 id=558 data-nosnippet>558</a>    <span class="kw">pub fn </span>set_received_caller_context(
+<a href=#559 id=559 data-nosnippet>559</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#560 id=560 data-nosnippet>560</a>        sender_tid: usize,
+<a href=#561 id=561 data-nosnippet>561</a>        sender_cell_id: u64,
+<a href=#562 id=562 data-nosnippet>562</a>        sender_generation: u64,
+<a href=#563 id=563 data-nosnippet>563</a>    ) {
+<a href=#564 id=564 data-nosnippet>564</a>        <span class="comment">// VFS may perform nested IPC while serving a request. Its outer caller
+<a href=#565 id=565 data-nosnippet>565</a>        // remains the authority for grants and owner-death watches until VFS
+<a href=#566 id=566 data-nosnippet>566</a>        // sends that caller's response; a storage reply must not replace it.
+<a href=#567 id=567 data-nosnippet>567</a>        </span><span class="kw">if </span><span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize)
+<a href=#568 id=568 data-nosnippet>568</a>            &amp;&amp; <span class="self">self</span>.current_caller.is_some()
+<a href=#569 id=569 data-nosnippet>569</a>        {
+<a href=#570 id=570 data-nosnippet>570</a>            <span class="kw">return</span>;
+<a href=#571 id=571 data-nosnippet>571</a>        }
+<a href=#572 id=572 data-nosnippet>572</a>        <span class="self">self</span>.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
+<a href=#573 id=573 data-nosnippet>573</a>    }
+<a href=#574 id=574 data-nosnippet>574</a>
+<a href=#575 id=575 data-nosnippet>575</a>    <span class="kw">pub fn </span>begin_receive_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>, mask: usize) {
+<a href=#576 id=576 data-nosnippet>576</a>        <span class="comment">// VFS uses a wildcard receive only at its public request loop. Masked
+<a href=#577 id=577 data-nosnippet>577</a>        // receives are nested dependency replies and keep the outer authority.
+<a href=#578 id=578 data-nosnippet>578</a>        </span><span class="kw">if </span>mask == <span class="number">0 </span>&amp;&amp; <span class="kw">crate</span>::fast_ipc::is_registered_vfs_cell(<span class="self">self</span>.cell_id.<span class="number">0 </span><span class="kw">as </span>usize) {
+<a href=#579 id=579 data-nosnippet>579</a>            <span class="self">self</span>.clear_current_caller_context();
+<a href=#580 id=580 data-nosnippet>580</a>        }
+<a href=#581 id=581 data-nosnippet>581</a>    }
+<a href=#582 id=582 data-nosnippet>582</a>
+<a href=#583 id=583 data-nosnippet>583</a>    <span class="kw">pub fn </span>allows_current_caller_owner_watch(<span class="kw-2">&amp;</span><span class="self">self</span>, watched: usize) -&gt; bool {
+<a href=#584 id=584 data-nosnippet>584</a>        <span class="self">self</span>.current_caller_cell_id != <span class="number">0 </span>&amp;&amp; watched == <span class="self">self</span>.current_caller_cell_id <span class="kw">as </span>usize
+<a href=#585 id=585 data-nosnippet>585</a>    }
+<a href=#586 id=586 data-nosnippet>586</a>
+<a href=#587 id=587 data-nosnippet>587</a>    <span class="kw">pub fn </span>clear_current_caller_context(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#588 id=588 data-nosnippet>588</a>        <span class="self">self</span>.current_caller = <span class="prelude-val">None</span>;
+<a href=#589 id=589 data-nosnippet>589</a>        <span class="self">self</span>.current_caller_cell_id = <span class="number">0</span>;
+<a href=#590 id=590 data-nosnippet>590</a>        <span class="self">self</span>.current_caller_cell_generation = <span class="number">0</span>;
+<a href=#591 id=591 data-nosnippet>591</a>        <span class="self">self</span>.current_caller_request_generation = <span class="number">0</span>;
+<a href=#592 id=592 data-nosnippet>592</a>    }
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a>    <span class="kw">pub fn </span>clear_current_caller_context_if(
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#596 id=596 data-nosnippet>596</a>        sender_tid: usize,
+<a href=#597 id=597 data-nosnippet>597</a>        request_generation: u64,
+<a href=#598 id=598 data-nosnippet>598</a>    ) -&gt; bool {
+<a href=#599 id=599 data-nosnippet>599</a>        <span class="kw">if </span><span class="self">self</span>.current_caller == <span class="prelude-val">Some</span>(sender_tid)
+<a href=#600 id=600 data-nosnippet>600</a>            &amp;&amp; <span class="self">self</span>.current_caller_request_generation == request_generation
+<a href=#601 id=601 data-nosnippet>601</a>        {
+<a href=#602 id=602 data-nosnippet>602</a>            <span class="self">self</span>.clear_current_caller_context();
+<a href=#603 id=603 data-nosnippet>603</a>            <span class="kw">return </span><span class="bool-val">true</span>;
+<a href=#604 id=604 data-nosnippet>604</a>        }
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="bool-val">false
+<a href=#606 id=606 data-nosnippet>606</a>    </span>}
+<a href=#607 id=607 data-nosnippet>607</a>}
 </code></pre></div></section></main></body></html>

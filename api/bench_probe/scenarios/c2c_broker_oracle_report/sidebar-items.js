@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BROKER_CALIBRATION_SAMPLES","BROKER_CALIBRATION_WARMUP","DIRECT_IPC_REFERENCE_P99_NS","MAX_CLIENTS","SOAK_CALLS","SWEEP_LEVELS"],"fn":["aggregate","percentile_pair","print_overflow_line","print_role_gate","print_soak_line","print_sweep_line","snapshot_delta"],"mod":["calibration"],"struct":["SnapshotDelta"]};

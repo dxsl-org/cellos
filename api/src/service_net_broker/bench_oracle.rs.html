@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `cells/services/net-broker/src/bench_oracle.rs`."><title>bench_oracle.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="service_net_broker" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0-nightly (f53b654a8 2026-04-30)" data-channel="nightly" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-aa4d37ac.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">service_net_broker/</div>bench_oracle.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span><span class="kw">crate</span>::local_ingress::{MAX_REPLY_BODY, MAX_REQUEST_BODY};
+<a href=#2 id=2 data-nosnippet>2</a><span class="kw">use </span><span class="kw">crate</span>::local_queue::BrokerCounters;
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use </span><span class="kw">crate</span>::local_queue::{
+<a href=#4 id=4 data-nosnippet>4</a>    QueuedReply, RequestKey, WorkerRequest, IN_FLIGHT_CAP, LOCAL_REPLY_QUEUE_CAP,
+<a href=#5 id=5 data-nosnippet>5</a>    LOCAL_REQUEST_QUEUE_CAP, STALE_REPLY_RING_CAP,
+<a href=#6 id=6 data-nosnippet>6</a>};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>core::mem::size_of;
+<a href=#8 id=8 data-nosnippet>8</a>
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">mod </span>commands;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">mod </span>frames;
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">mod </span>snapshot;
+<a href=#12 id=12 data-nosnippet>12</a><span class="attr">#[cfg(test)]
+<a href=#13 id=13 data-nosnippet>13</a></span><span class="kw">mod </span>tests;
+<a href=#14 id=14 data-nosnippet>14</a>
+<a href=#15 id=15 data-nosnippet>15</a><span class="attr">#[cfg(feature = <span class="string">"restart-oracle"</span>)]
+<a href=#16 id=16 data-nosnippet>16</a></span><span class="kw">pub use </span>commands::OP_RESTART;
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">pub use </span>commands::{
+<a href=#18 id=18 data-nosnippet>18</a>    decode_timed_echo_reply, encode_echo_command, encode_hold_command, encode_snapshot_command,
+<a href=#19 id=19 data-nosnippet>19</a>    encode_timed_echo_reply, parse_command, stamp_timed_echo_reply, OracleCommand, OracleError,
+<a href=#20 id=20 data-nosnippet>20</a>    TimedEchoTimestamps, MAX_HOLD_TURNS, OP_ECHO, OP_HOLD, OP_SNAPSHOT, OP_TIMED_ECHO_REPLY,
+<a href=#21 id=21 data-nosnippet>21</a>    TIMED_ECHO_TRAILER_BYTES,
+<a href=#22 id=22 data-nosnippet>22</a>};
+<a href=#23 id=23 data-nosnippet>23</a><span class="attr">#[cfg(feature = <span class="string">"restart-oracle"</span>)]
+<a href=#24 id=24 data-nosnippet>24</a></span><span class="kw">pub use </span>frames::encode_restart_request;
+<a href=#25 id=25 data-nosnippet>25</a><span class="kw">pub use </span>frames::{
+<a href=#26 id=26 data-nosnippet>26</a>    decode_reply_frame, encode_echo_request, encode_hold_request, encode_snapshot_request,
+<a href=#27 id=27 data-nosnippet>27</a>    stamp_timed_echo_reply_frame, DecodedReply,
+<a href=#28 id=28 data-nosnippet>28</a>};
+<a href=#29 id=29 data-nosnippet>29</a><span class="kw">pub use </span>snapshot::{
+<a href=#30 id=30 data-nosnippet>30</a>    decode_snapshot_payload, encode_snapshot_payload, OracleSnapshot, SNAPSHOT_BYTES,
+<a href=#31 id=31 data-nosnippet>31</a>    SNAPSHOT_U64_FIELDS, SNAPSHOT_VERSION,
+<a href=#32 id=32 data-nosnippet>32</a>};
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub const </span>STATIC_FOOTPRINT_LIMIT_BYTES: usize = <span class="number">512 </span>* <span class="number">1024</span>;
+<a href=#35 id=35 data-nosnippet>35</a><span class="kw">pub const </span>STATIC_FOOTPRINT_BYTES: usize =
+<a href=#36 id=36 data-nosnippet>36</a>    size_of::&lt;[<span class="prelude-ty">Option</span>&lt;WorkerRequest&gt;; LOCAL_REQUEST_QUEUE_CAP]&gt;()
+<a href=#37 id=37 data-nosnippet>37</a>        + size_of::&lt;[<span class="prelude-ty">Option</span>&lt;QueuedReply&gt;; LOCAL_REPLY_QUEUE_CAP]&gt;()
+<a href=#38 id=38 data-nosnippet>38</a>        + size_of::&lt;[<span class="prelude-ty">Option</span>&lt;RequestKey&gt;; IN_FLIGHT_CAP]&gt;()
+<a href=#39 id=39 data-nosnippet>39</a>        + size_of::&lt;[<span class="prelude-ty">Option</span>&lt;RequestKey&gt;; STALE_REPLY_RING_CAP]&gt;()
+<a href=#40 id=40 data-nosnippet>40</a>        + size_of::&lt;BrokerCounters&gt;()
+<a href=#41 id=41 data-nosnippet>41</a>        + MAX_REQUEST_BODY
+<a href=#42 id=42 data-nosnippet>42</a>        + MAX_REPLY_BODY;
+<a href=#43 id=43 data-nosnippet>43</a><span class="kw">const _</span>: usize = STATIC_FOOTPRINT_LIMIT_BYTES - STATIC_FOOTPRINT_BYTES;
+</code></pre></div></section></main></body></html>

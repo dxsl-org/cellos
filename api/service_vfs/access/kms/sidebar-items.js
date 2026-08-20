@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["KMS_NAMESPACE"],"fn":["contains_kms_namespace","is_canonical_policy_path","is_kms_namespace_path","is_kms_store_rule","live_kms_matches"]};
