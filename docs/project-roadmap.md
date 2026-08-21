@@ -81,11 +81,18 @@ Cellos is being shaped around product stages, not only phase numbers:
   [acceptance ledger](app-tier-acceptance-ledger.json) is recorded through
   `LEDGER_RECORDED`. The ratified revision is `798e8b04`; the implemented,
   verified, and attested lifecycle commits are `92340d05`, `635600c8`, and
-  `c538df84`. Phase 03 remains `PLANNED` and unblocked. The qualification
+  `c538df84`. Phase 03 remains `PLANNED`; its production-admission work remains
+  blocked. The qualification
   result remains `NOT_COMPLETE`: compile, test/runtime, delivery, hardware,
   admission, and hostile-test witnesses remain mandatory before any applicable
   SDK cell can be promoted to `USABLE`; FFI, `rust-std`, and Tier-2 scopes
   without ratified applicability remain non-qualifying.
+- [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
+  is **proposed**, pending security-owner and independent-reviewer approval. It
+  introduces no producer, parser, production profile, or admission path; it
+  does not alter the ledger's Phase 03 `PLANNED` status or unblock production work. Production
+  admission remains disabled pending qualified and approved external-floor and
+  owner-record gates.
 - Net-broker has implemented pieces for Noise/identity/routing, but `main.rs`
   still marks K1 loading, beacon sockets, relay dispatch, leases, and enrollment
   as TODO wiring.

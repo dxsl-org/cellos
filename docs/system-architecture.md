@@ -18,6 +18,14 @@
 > ratified applicability remain non-qualifying. This changes no ABI, source API,
 > loader, signing policy, or runtime profile and does not implement Tier 2 native
 > domains.
+>
+> **Status refresh 2026-08-21**: [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
+> is a **proposed** Claim-A contract, pending security-owner and
+> independent-reviewer approval. It introduces no producer, kernel parser,
+> production build profile, or admission path, and does not change the Phase 03
+> ledger state (`PLANNED`) or unblock production work. Production admission remains disabled
+> until the external-floor and owner-record gates are qualified and approved.
+>
 
 > **Status refresh 2026-08-21**: Manifest v2 keeps its fixed 16-byte record and
 > legacy `tier`/`TIER_*` source surface while exposing canonical

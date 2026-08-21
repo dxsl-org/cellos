@@ -2,6 +2,16 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Publisher Provenance Envelope is proposed
+
+[Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
+defines a proposed Claim-A publisher-provenance contract for future Tier 1
+production admission. It awaits security-owner and independent-reviewer
+approval; it introduces no producer, kernel parser, production build profile,
+or admission path. Phase 03 remains `PLANNED`; production admission and later
+child phases remain blocked pending qualified and approved external-floor and
+owner-record gates.
+
 ## [2026-08-21] Phase 02 app-tier acceptance ledger lifecycle is recorded
 
 The repository now carries one strict JSON ledger for the 60 Native SDK matrix
@@ -14,7 +24,8 @@ validator and 26 adversarial tests. Current qualification remains
 gates stay visible and no capability cell is promoted to `USABLE`. The
 ratified revision is `798e8b04`; the implemented, verified, and attested
 lifecycle commits are `92340d05`, `635600c8`, and `c538df84`, completing Phase
-02 through `LEDGER_RECORDED`. Phase 03 remains `PLANNED` and unblocked. FFI,
+02 through `LEDGER_RECORDED`. Phase 03 remains `PLANNED`; its production-admission
+work remains blocked. FFI,
 `rust-std`, and Tier-2 scopes without ratified applicability remain
 non-qualifying.
 
