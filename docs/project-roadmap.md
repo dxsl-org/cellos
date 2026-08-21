@@ -102,6 +102,19 @@ Cellos is being shaped around product stages, not only phase numbers:
   physical hostile evidence, provisioned owner/publisher anchors, production
   loader/task/audit wiring with no-task-on-denial evidence, both required human
   approvals, and governed ledger/release closure.
+- **RUST `STD` FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN
+  APPROVAL BLOCKED:** the pinned scope reconciles 27/27 sys modules and 36
+  hooks (8 Supported, 10 Unsupported, 18 Deferred), selects a conditional
+  content-addressed private source overlay, and verifies a fixture-only,
+  non-promotional benchmark validator. `PAL-019` remains Deferred while the
+  default development tuple reports predictable `dev-weak-rng` bytes as
+  successful entropy over a zero-byte RNG source; `PAL-031` remains Deferred
+  while `GetRandom` lacks bounded caller-owned writable output validation.
+  There is no PAL, target, sysroot, runtime, live capture, approval, or
+  promotion. All six approval rows remain `NOT GRANTED`, the implementation
+  checkpoint is `BLOCKED`, and umbrella Phase 06 remains pending and
+  dependency-blocked on Phase 03. Maintained detail is in
+  [runtime-and-platform-tracks.md](roadmap/runtime-and-platform-tracks.md).
 - [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
   is **proposed**, pending security-owner and independent-reviewer approval. It
   introduces no producer, parser, production profile, or admission path; it

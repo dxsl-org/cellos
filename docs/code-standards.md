@@ -3,7 +3,7 @@
 **Scope**: Rust code across kernel, HAL, libraries, and Cells  
 **Edition**: 2021  
 **Nightly**: Required for `no_std` bare-metal features  
-**Last Updated**: 2026-08-19
+**Last Updated**: 2026-08-21
 
 ---
 
@@ -102,6 +102,42 @@ in the unsafe allowlist / signing policy checks. Do not describe Cellos as
 // CSR access is safe: no concurrent hart touches mepc during boot.
 unsafe { riscv::register::mepc::write(func as usize); }
 ```
+
+#### Security-Sensitive Raw Output Buffers
+
+- An allowlist bit proves only that a caller may request an operation. It does
+  not prove pointer provenance or authorize the pointed-to range.
+- Before constructing a mutable slice or writing any output, syscall code must
+  checked-add and cap the length, then prove that the complete range is mapped,
+  caller-owned, and writable.
+- Null, overflowed, oversized, unmapped, kernel, and peer-cell ranges must be
+  rejected before any read or write. Tests for a qualifying boundary must call
+  the syscall directly with each hostile class; a typed wrapper alone is not
+  evidence.
+- Entropy APIs must return admitted real entropy or an observable zero/error
+  when unavailable. Predictable `dev-weak-rng` output is permitted only in an
+  explicit development profile and is never production, cryptographic, PAL
+  support, or promotion evidence.
+
+#### Pinned Rust Toolchain and Feasibility Evidence
+
+- A private Rust `std` integration must use an exact, content-addressed,
+  no-fuzz source overlay against the matching pinned compiler checkout. Base
+  source, patch, result, target metadata, private sysroot, and linker inputs
+  must remain provenance-bound.
+- Cellos `std` means an internal `library/std` PAL selected by matching rustc
+  target metadata. External PAL plug-ins, target-OS impersonation, `std` over
+  mlibc/POSIX, fake/unsupported `std`, and renamed `core` + `alloc` are not
+  acceptable substitutes.
+- Fixture-only benchmark validators may test schemas, parity, ordering,
+  interference rejection, and closed linker inputs. Synthetic fixture reports
+  are non-promotional and must never be described as live capture,
+  authenticated evidence, human approval, runtime availability, or target
+  qualification.
+- Feasibility verification does not authorize implementation. A PAL, target,
+  sysroot, runtime, target/triple publication, or promotion may be claimed only
+  after its named human approvals and implementation/production gates are
+  explicitly granted.
 
 ### Law 5: Modern Module Structure
 

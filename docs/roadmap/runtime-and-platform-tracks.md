@@ -37,3 +37,34 @@ to the physical hardware tracks.
   is the mandatory design and negative-test gate before a private-MMU native
   runtime may be implemented or offered; current native cells remain shared-SAS
   code and are not treated as contained.
+
+## Tier 1 Rust `std` Feasibility
+
+The Phase 06 feasibility package is verified, but security backing and human
+approval remain blocked. The pinned Rust `std` boundary covers 27/27 sys
+modules and 36 hooks: 8 Supported, 10 Unsupported, and 18 Deferred, across 46
+pinned Rust source files. The selected conditional strategy is an exact,
+no-fuzz, content-addressed source overlay against a private matching Rust
+checkout, producing an in-tree Cellos PAL and private sysroot. It is not an
+external PAL plug-in, target-OS impersonation, `std` over mlibc/POSIX, or
+permission to publish a target or triple.
+
+The implemented benchmark validator is fixture-only and non-promotional. Its
+synthetic runs can verify deterministic schema, parity, ordering, interference,
+and closed-linker-input behavior; they are not live captures or authenticated
+promotion evidence.
+
+Implementation remains blocked. `PAL-019` is Deferred because the current
+default development tuple enables predictable `dev-weak-rng` success over a
+zero-byte VirtIO RNG source. `PAL-031` is Deferred because `GetRandom`
+constructs a mutable output slice without first proving bounded, complete,
+caller-owned writable provenance. A later implementation child must close both
+backing defects and every other blocking Deferred row, retain the exact
+six-path kernel security inventory, obtain all six named human approvals and
+the implementation checkpoint, and satisfy umbrella Phase 03 production
+gates.
+
+There is currently no Cellos PAL, target JSON, private or published sysroot,
+published triple, or Tier 1 `rust-std` runtime. No live benchmark was captured,
+no approval is granted, no promotion is authorized, and umbrella Phase 06
+remains pending and dependency-blocked on Phase 03.

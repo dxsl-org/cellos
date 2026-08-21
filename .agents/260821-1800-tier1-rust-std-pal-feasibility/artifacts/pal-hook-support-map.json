@@ -1,0 +1,1651 @@
+{
+  "hooks": [
+    {
+      "capability_effect": "No host/POSIX PAL may be selected.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "A real profile requires an in-tree `pal::cellos`; the current selector does not expose an external registration point.",
+      "dependencies": [],
+      "error_semantics": "Current `cellos` falls through to unsupported; feasibility must not call this Supported.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/pal/mod.rs:6,63-66",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-001",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Pinned selector proves the external-plugin route is impossible.",
+      "required_by": "PAL routing",
+      "safety_invariants": "Selector and target metadata must agree; base commit is hash-guarded.",
+      "symbol": "cfg_select! target_os selector",
+      "upstream_path": "library/std/src/sys/pal/mod.rs"
+    },
+    {
+      "capability_effect": "No capability discovery or grant occurs during init.",
+      "cellos_backend": "ostd startup handoff exists",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Later PAL must initialize exactly once after loader register/stack setup and before Rust main; no implicit host initialization.",
+      "dependencies": [
+        "PAL-001",
+        "PAL-005"
+      ],
+      "error_semantics": "Initialization failure aborts with the Cellos panic status; it never continues partially initialized.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/pal/unsupported/common.rs:4-6",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:16-24",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-002",
+      "owner": "Rust std/PAL owner",
+      "rationale": "The existing fallback is a no-op and the exact std/ostd ordering remains implementation work.",
+      "required_by": "runtime initialization",
+      "safety_invariants": "argc/argv pointers remain loader-owned and valid for the documented init interval.",
+      "symbol": "unsafe fn init",
+      "upstream_path": "library/std/src/sys/pal/unsupported/common.rs"
+    },
+    {
+      "capability_effect": "Cleanup cannot revoke another cell\u2019s resources.",
+      "cellos_backend": "ostd exit releases task resources",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Later PAL calls cleanup at most once on normal return; abort/OOM does not promise cleanup.",
+      "dependencies": [
+        "PAL-006",
+        "PAL-026"
+      ],
+      "error_semantics": "Cleanup failure cannot turn termination into success; log only under existing disclosure policy then exit.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/pal/unsupported/common.rs:8-10",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/syscall.rs:230-236",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-003",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Fallback no-op does not prove destructor ordering.",
+      "required_by": "runtime cleanup",
+      "safety_invariants": "No destructor touches capabilities after kernel task teardown begins.",
+      "symbol": "unsafe fn cleanup",
+      "upstream_path": "library/std/src/sys/pal/unsupported/common.rs"
+    },
+    {
+      "capability_effect": "No new authority; optional logging uses the caller\u2019s admitted Log syscall.",
+      "cellos_backend": "ostd panic handler / ViSyscall::Exit",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Diverges immediately; no unwind or cleanup guarantee.",
+      "dependencies": [],
+      "error_semantics": "Abort is terminal and uses the frozen panic exit code.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/pal/unsupported/common.rs:19-21",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:87-98",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-004",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Cellos already has abort-only terminal behavior.",
+      "required_by": "abort",
+      "safety_invariants": "Never returns; panic text must obey disclosure policy.",
+      "symbol": "fn abort_internal -> !",
+      "upstream_path": "library/std/src/sys/pal/unsupported/common.rs"
+    },
+    {
+      "capability_effect": "Startup grants no authority beyond the admitted manifest.",
+      "cellos_backend": "ostd::_start and entry macro",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Loader enters one architecture-specific `_start`, establishes ABI registers/stack, then calls the cell main exactly once.",
+      "dependencies": [
+        "PAL-002"
+      ],
+      "error_semantics": "Malformed handoff or returning forbidden entry aborts.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/rt.rs:145-190",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:13-24",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-005",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Existing x86_64/aarch64/riscv64 entry paths are concrete backing, though std glue is not implemented.",
+      "required_by": "loader startup and entry",
+      "safety_invariants": "Stack alignment, gp setup, and single entry are architecture obligations.",
+      "symbol": "lang_start_internal / PAL init boundary",
+      "upstream_path": "library/std/src/rt.rs"
+    },
+    {
+      "capability_effect": "Exit is always permitted and grants nothing.",
+      "cellos_backend": "ostd::syscall::sys_exit",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Main return becomes the exact Cellos exit code after normal cleanup; sys_exit never returns.",
+      "dependencies": [
+        "PAL-003"
+      ],
+      "error_semantics": "Kernel Exit is terminal; fallback yield loop is unreachable defense.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/exit.rs:1-16",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/syscall.rs:230-236; libs/api/src/abi/syscall.rs:33",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-006",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Frozen Exit syscall provides the required terminal primitive.",
+      "required_by": "normal termination",
+      "safety_invariants": "No code executes after task resource release.",
+      "symbol": "exit / unique_thread_exit",
+      "upstream_path": "library/std/src/sys/exit.rs"
+    },
+    {
+      "capability_effect": "Heap pages stay owned by the current cell.",
+      "cellos_backend": "ostd::heap::CellAllocator",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Per-cell allocate/deallocate/reallocate honors Layout; zero-size follows Rust allocator contract; OOM diverges.",
+      "dependencies": [
+        "PAL-025"
+      ],
+      "error_semantics": "Allocation returns null only to the Rust allocation handler; OOM terminates, never fabricates memory.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/alloc/mod.rs:3-18",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/heap.rs:10-20",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-007",
+      "owner": "Rust std/PAL owner",
+      "rationale": "A real freeing allocator exists with an explicit single-task premise.",
+      "required_by": "global allocation",
+      "safety_invariants": "Single-task/single-hart non-overlap and alignment are mandatory.",
+      "symbol": "System GlobalAlloc methods",
+      "upstream_path": "library/std/src/sys/alloc/mod.rs"
+    },
+    {
+      "capability_effect": "Args are per-task private and cannot read another spawn slot.",
+      "cellos_backend": "ostd::args::args",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Expose loader-provided bytes with frozen encoding and ownership; repeated std enumeration must be coherent.",
+      "dependencies": [
+        "PAL-002"
+      ],
+      "error_semantics": "Invalid encoding follows OsString policy; unavailable storage is not silently invented.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/args/mod.rs:16-45",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/args.rs:3-9,65-71",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-008",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Private backend exists, but std snapshot/repeat semantics are unresolved.",
+      "required_by": "program arguments",
+      "safety_invariants": "Current one-shot consume semantics must be adapted without double ownership.",
+      "symbol": "args::Args / args()",
+      "upstream_path": "library/std/src/sys/args/mod.rs"
+    },
+    {
+      "capability_effect": "No host environment or service secrets are inherited.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "Initial profile has no ambient process environment.",
+      "dependencies": [],
+      "error_semantics": "Enumeration/mutation returns Unsupported; lookup absence cannot mask denial.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/env/unsupported.rs:19-29",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-009",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No frozen ABI or ostd environment service exists.",
+      "required_by": "environment variables",
+      "safety_invariants": "No success-shaped mutation or hidden global map.",
+      "symbol": "env/getenv/setenv/unsetenv",
+      "upstream_path": "library/std/src/sys/env/unsupported.rs"
+    },
+    {
+      "capability_effect": "Pure representation creates no authority.",
+      "cellos_backend": "core byte representation",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Cellos uses byte-oriented OsStr without host locale conversion.",
+      "dependencies": [],
+      "error_semantics": "Invalid conversions return the standard encoding error.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/os_str/mod.rs:3-15",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/args.rs:74-90",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-010",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Pinned byte implementation matches Cellos byte arguments.",
+      "required_by": "OsStr representation",
+      "safety_invariants": "Borrowed slices preserve lifetime and bounds.",
+      "symbol": "Buf / Slice",
+      "upstream_path": "library/std/src/sys/os_str/mod.rs"
+    },
+    {
+      "capability_effect": "No capability effect.",
+      "cellos_backend": "core slice representation",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Vectored buffer wrappers are pure bounded views.",
+      "dependencies": [],
+      "error_semantics": "Bounds violations panic before any syscall.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/io/io_slice/unsupported.rs:3-28",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/syscall.rs:63-103",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-011",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No OS ABI is needed for representation.",
+      "required_by": "I/O slice representation",
+      "safety_invariants": "Mutable aliasing and advance bounds follow slice rules.",
+      "symbol": "IoSlice / IoSliceMut",
+      "upstream_path": "library/std/src/sys/io/io_slice/unsupported.rs"
+    },
+    {
+      "capability_effect": "Every operation requires the held file capability and admitted syscall.",
+      "cellos_backend": "capability-backed ostd::fs::File",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Later PAL maps owned std handles to single-owner CapId values and closes exactly once.",
+      "dependencies": [
+        "PAL-013"
+      ],
+      "error_semantics": "Denied/invalid handles map distinctly; never EOF/success for denial.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/fd/mod.rs:5-22",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/fs.rs:3-8,50-56",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-012",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Capability backend exists; std handle ABI and error map do not.",
+      "required_by": "owned descriptors and file handles",
+      "safety_invariants": "Move transfers ownership; Drop revokes once; no ambient fd namespace.",
+      "symbol": "OwnedFd/BorrowedFd platform implementation",
+      "upstream_path": "library/std/src/sys/fd/mod.rs"
+    },
+    {
+      "capability_effect": "Paths do not grant authority; successful open returns a capability.",
+      "cellos_backend": "ostd::fs and VFS client",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Candidate surface is capability-backed open/read/write/seek/stat/close/read_dir; others Unsupported.",
+      "dependencies": [
+        "PAL-012"
+      ],
+      "error_semantics": "Denial stays PermissionDenied; absence NotFound; unsupported methods Unsupported.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/fs/unsupported.rs:9-30",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/fs.rs:44-56,78-140",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-013",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Backing exists but comprehensive std mapping requires implementation.",
+      "required_by": "filesystem",
+      "safety_invariants": "Buffers bounds-checked; ownership linear.",
+      "symbol": "File/ReadDir/OpenOptions/metadata operations",
+      "upstream_path": "library/std/src/sys/fs/unsupported.rs"
+    },
+    {
+      "capability_effect": "Requires admitted syscalls/service capabilities.",
+      "cellos_backend": "ostd::clients::net service",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Candidate uses admission-checked TCP/UDP service; DNS/listen/options stay Unsupported until mapped.",
+      "dependencies": [
+        "PAL-031"
+      ],
+      "error_semantics": "Denial, unavailable service, and network failure remain distinct; no host fallback.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/net/connection/unsupported.rs:7-15,121-126",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/clients/net.rs:169-189",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-014",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Client exists, but std socket surface/error map are incomplete.",
+      "required_by": "networking",
+      "safety_invariants": "Socket IDs are service-scoped; Drop closes owned ID.",
+      "symbol": "TcpStream/TcpListener/UdpSocket/LookupHost",
+      "upstream_path": "library/std/src/sys/net/connection/unsupported.rs"
+    },
+    {
+      "capability_effect": "Prevents topology/name disclosure.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "No ambient hostname is exposed.",
+      "dependencies": [],
+      "error_semantics": "Always ErrorKind::Unsupported.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/net/hostname/unsupported.rs:4-6",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-015",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No capability-preserving hostname contract exists.",
+      "required_by": "hostname",
+      "safety_invariants": "Never substitutes board, service, or host name.",
+      "symbol": "hostname",
+      "upstream_path": "library/std/src/sys/net/hostname/unsupported.rs"
+    },
+    {
+      "capability_effect": "No directory authority is implied from a string.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "No ambient cwd, home, temp, or executable path.",
+      "dependencies": [],
+      "error_semantics": "Result APIs return Unsupported; pure split/join remains pure.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/paths/unsupported.rs:7-18",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/fs.rs:3-8",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-016",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Cellos file authority is capability based.",
+      "required_by": "current/home/temp/executable paths",
+      "safety_invariants": "Never maps host paths or invents `/tmp`.",
+      "symbol": "getcwd/chdir/current_exe/home_dir/temp_dir",
+      "upstream_path": "library/std/src/sys/paths/unsupported.rs"
+    },
+    {
+      "capability_effect": "No covert IPC channel.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "Anonymous process pipes are absent.",
+      "dependencies": [],
+      "error_semantics": "pipe() returns ErrorKind::Unsupported.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/pipe/unsupported.rs:4-9",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-017",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Cell IPC is explicit and not a POSIX pipe substitute.",
+      "required_by": "anonymous pipes",
+      "safety_invariants": "No success-shaped inert endpoints.",
+      "symbol": "Pipe / pipe",
+      "upstream_path": "library/std/src/sys/pipe/unsupported.rs"
+    },
+    {
+      "capability_effect": "No ambient executable lookup; SpawnCap cannot be acquired through std.",
+      "cellos_backend": "none for std::process",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "std::process is unavailable; Cell spawning remains explicit ostd API.",
+      "dependencies": [],
+      "error_semantics": "Effectful Command operations return Unsupported.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/process/unsupported.rs:11-35,105-107",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi/syscall.rs:38-58,605-618",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-018",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Privileged spawn ABI is incompatible with ambient std::process.",
+      "required_by": "child processes and command execution",
+      "safety_invariants": "No shell, PATH, inherited stdio, or environment.",
+      "symbol": "Command/Child/ExitStatus/output",
+      "upstream_path": "library/std/src/sys/process/unsupported.rs"
+    },
+    {
+      "capability_effect": "Future qualification requires the GetRandom allowlist bit and a real kernel entropy source; no ambient host RNG or development fallback.",
+      "cellos_backend": "Current ViSyscall::GetRandom backing is non-qualifying: the VirtIO RNG stub returns zero and the default kernel feature tuple enables dev-weak-rng xorshift success.",
+      "cfg_gate": "target_os=\"cellos\"; future production kernel tuple must omit `dev-weak-rng`",
+      "classification": "Deferred",
+      "contract": "Current backing is not approval evidence. A later implementation may qualify only when GetRandom returns bytes from a real admitted entropy source, or returns zero/error without writing synthetic bytes when entropy is unavailable; hashmap keys use the same source.",
+      "dependencies": [
+        "PAL-031",
+        "production kernel tuple without dev-weak-rng",
+        "real entropy source or zero/error behavior",
+        "hostile direct-syscall evidence"
+      ],
+      "error_semantics": "Missing device, denial, short entropy, or source failure returns zero/error and never success-shaped deterministic bytes, addresses, timer seeds, host randomness, or partial success.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/random/unsupported.rs:3-14",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi/syscall.rs:271-272,673-678,804-805; libs/ostd/src/syscall.rs:1592-1604",
+          "kind": "cellos"
+        },
+        {
+          "anchor": "kernel/Cargo.toml:69-80; kernel/src/task/syscall.rs:4561-4603; kernel/src/task/drivers/virtio_rng.rs:1-10",
+          "kind": "kernel-security-backing"
+        }
+      ],
+      "hook_id": "PAL-019",
+      "owner": "Kernel entropy owner and Rust std/PAL owner",
+      "rationale": "The syscall surface exists, but the current default feature tuple turns a zero-byte RNG stub into xorshift bytes reported as success. That behavior is development-only and cannot qualify entropy.",
+      "required_by": "entropy",
+      "safety_invariants": "Exactly requested initialized bytes from admitted real entropy or an observable zero/error; never use dev-weak-rng in a production evidence tuple.",
+      "symbol": "fill_bytes / hashmap_random_keys",
+      "upstream_path": "library/std/src/sys/random/unsupported.rs"
+    },
+    {
+      "capability_effect": "Log/Input admission retained; no host console.",
+      "cellos_backend": "ostd logging/input services",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "stdout/stderr use admitted logging; stdin uses explicit input service.",
+      "dependencies": [
+        "PAL-031"
+      ],
+      "error_semantics": "Unavailable/denied streams return Unsupported or PermissionDenied, never success-shaped writes/EOF.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/stdio/unsupported.rs:3-25",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi/syscall.rs:167,620; libs/ostd/src/io.rs:92-100",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-020",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Current unsupported stdio behavior is insufficient.",
+      "required_by": "standard I/O",
+      "safety_invariants": "Writes bounded; panic logging disclosure-limited.",
+      "symbol": "Stdin/Stdout/Stderr",
+      "upstream_path": "library/std/src/sys/stdio/unsupported.rs"
+    },
+    {
+      "capability_effect": "No device introspection.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "Cell streams are not terminals initially.",
+      "dependencies": [],
+      "error_semantics": "Returns false as a predicate, not I/O success.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/io/is_terminal/unsupported.rs:1-3",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-021",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No terminal/ioctl contract exists.",
+      "required_by": "terminal detection",
+      "safety_invariants": "Consistent across stdin/out/err.",
+      "symbol": "is_terminal",
+      "upstream_path": "library/std/src/sys/io/is_terminal/unsupported.rs"
+    },
+    {
+      "capability_effect": "No cross-cell sharing.",
+      "cellos_backend": "ostd::sync::Mutex",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Single-task mutual exclusion only after proving no blocking behavior.",
+      "dependencies": [
+        "PAL-025"
+      ],
+      "error_semantics": "Impossible contention is not allowed to spin forever.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/sync/mod.rs:1-14",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/sync.rs:1-6; libs/ostd/src/heap.rs:10-17",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-022",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Early std contention behavior needs proof.",
+      "required_by": "mutex",
+      "safety_invariants": "Allocator RELRO and single-task assumptions remain intact.",
+      "symbol": "Mutex",
+      "upstream_path": "library/std/src/sys/sync/mod.rs"
+    },
+    {
+      "capability_effect": "No cross-cell synchronization.",
+      "cellos_backend": "no_threads algorithms candidate",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Use pinned no_threads implementations only after semantic proof.",
+      "dependencies": [
+        "PAL-025"
+      ],
+      "error_semantics": "Impossible waits fail rather than silently wake; poison observable.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/sync/mod.rs:1-14",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/sync.rs:1-6",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-023",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Target cfg selection is unresolved.",
+      "required_by": "condvar/rwlock/once",
+      "safety_invariants": "Once publishes with Rust ordering guarantees.",
+      "symbol": "Condvar/RwLock/Once",
+      "upstream_path": "library/std/src/sys/sync/mod.rs"
+    },
+    {
+      "capability_effect": "No scheduler/timer authority implicitly.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "Parking/unparking unavailable.",
+      "dependencies": [],
+      "error_semantics": "Pinned no-op must not be treated as success.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/sync/thread_parking/unsupported.rs:4-10",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/heap.rs:10-17",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-024",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No-op Parker is observably invalid.",
+      "required_by": "thread parking",
+      "safety_invariants": "No lost-wakeup claim.",
+      "symbol": "Parker",
+      "upstream_path": "library/std/src/sys/sync/thread_parking/unsupported.rs"
+    },
+    {
+      "capability_effect": "No SpawnCap through std::thread.",
+      "cellos_backend": "ViSyscall::Yield exists; single-task contract can report NonZero(1); no thread creation",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Thread creation, join, naming, OS ID, and sleep remain Unsupported; available_parallelism must return NonZero(1), and yield_now must issue exactly one admitted ViSyscall::Yield.",
+      "dependencies": [
+        "PAL-031"
+      ],
+      "error_semantics": "Thread creation returns Unsupported and sleep follows the approved divergence contract; UNKNOWN_THREAD_COUNT and a no-op yield are prohibited Cellos fallbacks.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/thread/unsupported.rs:17-45",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi/syscall.rs:161; libs/ostd/src/syscall.rs:63-103",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-025",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Pinned unsupported PAL reports UNKNOWN_THREAD_COUNT and makes yield_now a no-op, which contradicts the Cellos one-task/Yield contract and requires real PAL implementation.",
+      "required_by": "std::thread queries and cooperative yield",
+      "safety_invariants": "Never treats another cell as a thread.",
+      "symbol": "Thread/new/sleep/yield_now/available_parallelism",
+      "upstream_path": "library/std/src/sys/thread/unsupported.rs"
+    },
+    {
+      "capability_effect": "TLS is per cell.",
+      "cellos_backend": "pinned no_threads model candidate",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "One logical thread permits static TLS; normal cleanup runs reverse destructors. Network TLS is unrelated.",
+      "dependencies": [
+        "PAL-003",
+        "PAL-025"
+      ],
+      "error_semantics": "Access after destruction follows Rust TLS failure; abort has no cleanup.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/thread_local/mod.rs:1-8",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/heap.rs:10-17; libs/ostd/src/clients/tls_stream.rs:1-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-026",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No target metadata proves language-TLS selection.",
+      "required_by": "language TLS",
+      "safety_invariants": "Target metadata must select no_threads; reentrancy bounded.",
+      "symbol": "thread_local backend/destructors",
+      "upstream_path": "library/std/src/sys/thread_local/mod.rs"
+    },
+    {
+      "capability_effect": "Requires admitted GetTime.",
+      "cellos_backend": "ViSyscall::GetTime",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "Instant is monotonic per cell with declared frequency; not wall time.",
+      "dependencies": [
+        "PAL-031"
+      ],
+      "error_semantics": "Denied/untrusted timer fails; no fabricated zero.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/time/unsupported.rs:3-17",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi/syscall.rs:178-180,637",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-027",
+      "owner": "Rust std/PAL owner",
+      "rationale": "GetTime exists; units/trust/std mapping need proof.",
+      "required_by": "monotonic time",
+      "safety_invariants": "Nondecreasing and checked arithmetic.",
+      "symbol": "Instant::now",
+      "upstream_path": "library/std/src/sys/time/unsupported.rs"
+    },
+    {
+      "capability_effect": "Prevents host time disclosure/false freshness.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "No trusted wall clock.",
+      "dependencies": [],
+      "error_semantics": "Never returns synthetic epoch as now.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/time/unsupported.rs:6-13",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-028",
+      "owner": "Rust std/PAL owner",
+      "rationale": "GetTime cannot be relabeled wall time.",
+      "required_by": "wall-clock time",
+      "safety_invariants": "UNIX_EPOCH constant does not imply clock availability.",
+      "symbol": "SystemTime::now / UNIX_EPOCH",
+      "upstream_path": "library/std/src/sys/time/unsupported.rs"
+    },
+    {
+      "capability_effect": "No address/symbol disclosure.",
+      "cellos_backend": "none",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Unsupported",
+      "contract": "Capture and symbolization unavailable.",
+      "dependencies": [],
+      "error_semantics": "Reports unsupported/disabled; panic omits frames.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/backtrace.rs:1-18",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:87-98",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-029",
+      "owner": "Rust std/PAL owner",
+      "rationale": "No unwinder/symbolizer proof.",
+      "required_by": "backtraces",
+      "safety_invariants": "No untrusted stack walk.",
+      "symbol": "Backtrace capture/printing",
+      "upstream_path": "library/std/src/sys/backtrace.rs"
+    },
+    {
+      "capability_effect": "Logging capability-gated.",
+      "cellos_backend": "ostd abort-only panic handler",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Supported",
+      "contract": "Initial profile is panic=abort; unwind/catch success unavailable; double panic aborts.",
+      "dependencies": [
+        "PAL-004",
+        "PAL-006"
+      ],
+      "error_semantics": "Panic logs under policy then exits; OOM same divergence class.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/rt.rs:145-190",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:87-98",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-030",
+      "owner": "Rust std/PAL owner",
+      "rationale": "Runtime is explicitly abort-only.",
+      "required_by": "panic and unwinding",
+      "safety_invariants": "No unwind tables/foreign unwinding implied.",
+      "symbol": "panic runtime / personality",
+      "upstream_path": "library/std/src/rt.rs"
+    },
+    {
+      "capability_effect": "Future qualification keeps allowlists and resource capabilities authoritative and accepts only bounded caller-owned writable buffers.",
+      "cellos_backend": "Current ostd syscall wrappers / frozen ViSyscall ABI exist, but the GetRandom handler constructs a mutable slice from the raw cell pointer without `validate_user_buf`.",
+      "cfg_gate": "target_os=\"cellos\" (currently reaches `_` unsupported branch unless noted)",
+      "classification": "Deferred",
+      "contract": "PAL calls only typed frozen syscalls/services. Before any dereference or write, the kernel must reject null, overflowed, oversized, unmapped, kernel, and peer-cell ranges and prove the entire output is caller-owned and writable; IPC preserves buffer/ownership contracts.",
+      "dependencies": [
+        "PAL-001",
+        "bounded caller-owned writable validation",
+        "hostile direct-syscall evidence"
+      ],
+      "error_semantics": "Invalid pointer provenance or bounds returns InvalidInput/PermissionDenied without dereference or write; denial, invalid input, OOM, and service-down remain distinct.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/mod.rs:3-34",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/syscall.rs:63-103,1592-1604; libs/api/src/abi/syscall.rs:9-30,271-272,673-678,804-805",
+          "kind": "cellos"
+        },
+        {
+          "anchor": "kernel/src/task/syscall.rs:621-646,1261-1263,1441-1442,4561-4570,4777-5039,5172-5299",
+          "kind": "kernel-security-backing"
+        }
+      ],
+      "hook_id": "PAL-031",
+      "owner": "Kernel syscall-security owner and Rust std/PAL owner",
+      "rationale": "The primitive boundary and allowlist exist, but current GetRandom pointer provenance is not validated before mutable-slice construction, so the boundary is not yet qualifying.",
+      "required_by": "raw syscall and IPC transport",
+      "safety_invariants": "Every pointer/length is overflow-checked, capped, fully mapped, caller-owned, writable for outputs, and rejected before access when it names null, unmapped, kernel, or peer memory; replies remain bounded with no cross-cell aliasing.",
+      "symbol": "platform service boundary used by Cellos PAL",
+      "upstream_path": "library/std/src/sys/mod.rs"
+    },
+    {
+      "capability_effect": "No new authority; CPU feature detection reads only target-approved state.",
+      "cellos_backend": "none; later private sysroot/loader contract must prove feature selection and initializer execution",
+      "cfg_gate": "aarch64 + outline-atomics + !lse + !compiler-builtins-c",
+      "classification": "Deferred",
+      "contract": "When outline atomics may be emitted without known LSE, .init_array.90 executes once before user code and calls the exact compiler-builtins enable symbol only after feature detection.",
+      "dependencies": [
+        "PAL-002",
+        "private target specification",
+        "compiler-builtins manifest",
+        "Cellos loader init-array contract"
+      ],
+      "error_semantics": "Missing initializer, symbol, feature detection, or ordering blocks the aarch64 std image; LSE is never assumed.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/configure_builtins.rs:1-62",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:13-24",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-032",
+      "owner": "Rust toolchain/PAL owner",
+      "rationale": "The target-sensitive aarch64 constructor is part of std startup and Cellos has no proved init-array/feature-detection integration.",
+      "required_by": "aarch64 compiler-builtins startup",
+      "safety_invariants": "Initializer address and link section are exact, execute once, and precede user init arrays.",
+      "symbol": "RUST_LSE_INIT / __rust_enable_lse",
+      "upstream_path": "library/std/src/sys/configure_builtins.rs"
+    },
+    {
+      "capability_effect": "No authority; abort remains terminal and backtrace disclosure stays Unsupported.",
+      "cellos_backend": "abort handler exists; no verified Cellos personality/lang-item selection",
+      "cfg_gate": "target_os=\"cellos\" through pinned cfg_select personality branches",
+      "classification": "Deferred",
+      "contract": "The private target must select and link the pinned non-unwinding personality behavior required by compiler codegen; panic=abort does not waive C-unwind personality requirements.",
+      "dependencies": [
+        "PAL-004",
+        "PAL-029",
+        "PAL-030",
+        "private target specification",
+        "panic=abort codegen proof"
+      ],
+      "error_semantics": "Missing or foreign personality selection is a link/codegen blocker; never import a POSIX unwinder.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/personality/mod.rs:1-49",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/ostd/src/startup.rs:87-98",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-033",
+      "owner": "Rust toolchain/PAL owner",
+      "rationale": "Personality remains compiler-required in cases documented by pinned std even with panic=abort; selection is not yet proved for Cellos.",
+      "required_by": "panic=abort C-unwind boundary and ARM EHABI/backtrace codegen",
+      "safety_invariants": "Foreign exceptions cannot unwind through Cellos frames; the selected lang item matches target codegen.",
+      "symbol": "rust_eh_personality target selection",
+      "upstream_path": "library/std/src/sys/personality/mod.rs"
+    },
+    {
+      "capability_effect": "No capability or ambient dynamic-library authority.",
+      "cellos_backend": "none; exact compiler-builtins-provided symbol set must be pinned",
+      "cfg_gate": "not(test); target-specific cfg_select for float shims",
+      "classification": "Deferred",
+      "contract": "Every referenced f32/f64/f128 math symbol is supplied by the content-addressed private sysroot inputs, without mlibc, POSIX libc, or ambient host libraries.",
+      "dependencies": [
+        "compiler-builtins manifest",
+        "private sysroot linker-input manifest"
+      ],
+      "error_semantics": "Any unresolved, substituted, or host-provided math symbol blocks the std image.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/cmath.rs:1-52,54-123",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-034",
+      "owner": "Rust toolchain/PAL owner",
+      "rationale": "The module declares external math symbols, while Cellos exposes no backing ABI and must not gain mlibc/POSIX transitively.",
+      "required_by": "std floating-point math APIs",
+      "safety_invariants": "C ABI signatures and symbol identities exactly match pinned std declarations.",
+      "symbol": "libm/compiler-builtins C math symbol surface",
+      "upstream_path": "library/std/src/sys/cmath.rs"
+    },
+    {
+      "capability_effect": "Constants grant no environment or loader authority.",
+      "cellos_backend": "none; private target patch must add explicit Cellos constants",
+      "cfg_gate": "target_os=\"cellos\" currently reaches cfg_unordered fallback",
+      "classification": "Deferred",
+      "contract": "Cellos has an explicit mutually-exclusive target row with reviewed FAMILY/OS/DLL/EXE constants; the empty catch-all is not accepted as Cellos identity.",
+      "dependencies": [
+        "PAL-001",
+        "private target specification",
+        "loader/artifact contract"
+      ],
+      "error_semantics": "Fallback selection or foreign OS identity blocks the private sysroot.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/env_consts.rs:3-12,414-424",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-035",
+      "owner": "Rust toolchain/PAL owner",
+      "rationale": "Unknown targets receive empty fallback constants; explicit Cellos identity is required before a real std sysroot.",
+      "required_by": "std::env::consts and artifact identity",
+      "safety_invariants": "Constants describe the Cellos artifact contract and never impersonate Unix, Linux, WASI, or another OS.",
+      "symbol": "env_consts::os target constants",
+      "upstream_path": "library/std/src/sys/env_consts.rs"
+    },
+    {
+      "capability_effect": "No platform probing or host information disclosure.",
+      "cellos_backend": "none required for the pinned empty non-Apple module",
+      "cfg_gate": "only target_vendor=\"apple\" has a backend in the pinned source",
+      "classification": "Supported",
+      "contract": "The Cellos build selects no platform-version backend. Any future exported Cellos call or new cfg branch requires re-inventory.",
+      "dependencies": [
+        "PAL-001"
+      ],
+      "error_semantics": "No callable pinned Cellos operation exists; a future API cannot inherit this classification.",
+      "evidence": [
+        {
+          "anchor": "library/std/src/sys/platform_version/mod.rs:1-13",
+          "kind": "pinned_std"
+        },
+        {
+          "anchor": "libs/api/src/abi.rs:3-12",
+          "kind": "cellos"
+        }
+      ],
+      "hook_id": "PAL-036",
+      "owner": "Rust std/PAL owner",
+      "rationale": "The pinned non-Apple module has no implementation surface beyond the module declaration.",
+      "required_by": "pinned std sys module completeness",
+      "safety_invariants": "No Apple/Darwin backend is selected for Cellos.",
+      "symbol": "platform_version module surface",
+      "upstream_path": "library/std/src/sys/platform_version/mod.rs"
+    }
+  ],
+  "schema_version": "cellos-pal-hook-support-map/v1",
+  "scope": {
+    "basis": "every module declaration at pinned library/std/src/sys/mod.rs:3-30 plus PAL lifecycle, allocation, panic, startup, and Cellos syscall/IPC backing required by Phase 01",
+    "coverage_percent": 100,
+    "declared_sys_modules": 27,
+    "duplicate_hook_ids": [],
+    "mapped_sys_modules": 27,
+    "module_coverage_percent": 100,
+    "omitted_sys_modules": [],
+    "scope_hook_ids": [
+      "PAL-001",
+      "PAL-002",
+      "PAL-003",
+      "PAL-004",
+      "PAL-005",
+      "PAL-006",
+      "PAL-007",
+      "PAL-008",
+      "PAL-009",
+      "PAL-010",
+      "PAL-011",
+      "PAL-012",
+      "PAL-013",
+      "PAL-014",
+      "PAL-015",
+      "PAL-016",
+      "PAL-017",
+      "PAL-018",
+      "PAL-019",
+      "PAL-020",
+      "PAL-021",
+      "PAL-022",
+      "PAL-023",
+      "PAL-024",
+      "PAL-025",
+      "PAL-026",
+      "PAL-027",
+      "PAL-028",
+      "PAL-029",
+      "PAL-030",
+      "PAL-031",
+      "PAL-032",
+      "PAL-033",
+      "PAL-034",
+      "PAL-035",
+      "PAL-036"
+    ],
+    "sys_module_manifest": [
+      {
+        "declaration_line": 3,
+        "evidence": "library/std/src/sys/mod.rs:3",
+        "hook_ids": [
+          "PAL-007"
+        ],
+        "module": "alloc",
+        "source_path": "library/std/src/sys/alloc/mod.rs",
+        "source_sha256": "d7be5b7c291a7251961192c61272f0cf5c8be8bd749f0f3d320708faa45fcaa2",
+        "visibility": "private"
+      },
+      {
+        "declaration_line": 4,
+        "evidence": "library/std/src/sys/mod.rs:4",
+        "hook_ids": [
+          "PAL-032"
+        ],
+        "module": "configure_builtins",
+        "source_path": "library/std/src/sys/configure_builtins.rs",
+        "source_sha256": "5588bd53667af63a85d4f5175fb84681d24d2eabc710607d34acd734eee6856c",
+        "visibility": "private"
+      },
+      {
+        "declaration_line": 5,
+        "evidence": "library/std/src/sys/mod.rs:5",
+        "hook_ids": [
+          "PAL-031"
+        ],
+        "module": "helpers",
+        "source_path": "library/std/src/sys/helpers/mod.rs",
+        "source_sha256": "e8fbb280056a6cff488873c997e92c25ad39843ef5ff97a7e3ecee368f258dac",
+        "visibility": "private"
+      },
+      {
+        "declaration_line": 6,
+        "evidence": "library/std/src/sys/mod.rs:6",
+        "hook_ids": [
+          "PAL-001"
+        ],
+        "module": "pal",
+        "source_path": "library/std/src/sys/pal/mod.rs",
+        "source_sha256": "251dee50eff49b81ae5283ffd9871635dc63c316e0156a0f6f69672657ddbec3",
+        "visibility": "private"
+      },
+      {
+        "declaration_line": 7,
+        "evidence": "library/std/src/sys/mod.rs:7",
+        "hook_ids": [
+          "PAL-033"
+        ],
+        "module": "personality",
+        "source_path": "library/std/src/sys/personality/mod.rs",
+        "source_sha256": "667ea2b4b2e161c9b4c0bbda54721c3de86c39799f478de06db8bd644c1bfbc3",
+        "visibility": "private"
+      },
+      {
+        "declaration_line": 9,
+        "evidence": "library/std/src/sys/mod.rs:9",
+        "hook_ids": [
+          "PAL-008"
+        ],
+        "module": "args",
+        "source_path": "library/std/src/sys/args/mod.rs",
+        "source_sha256": "24ab9d0b2ba7dd6c08ea101cae007669a5a25bcd8c776cc335f17eb74033d0d4",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 10,
+        "evidence": "library/std/src/sys/mod.rs:10",
+        "hook_ids": [
+          "PAL-029"
+        ],
+        "module": "backtrace",
+        "source_path": "library/std/src/sys/backtrace.rs",
+        "source_sha256": "f05f2a973d7399f374bb93b0b8bc91c92c18ff146e13a83588f47925cc2a60ce",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 11,
+        "evidence": "library/std/src/sys/mod.rs:11",
+        "hook_ids": [
+          "PAL-034"
+        ],
+        "module": "cmath",
+        "source_path": "library/std/src/sys/cmath.rs",
+        "source_sha256": "31dd70d368cf823cb3e37925d13c99f904e6007a6a0ddef711a1e4fb1fc75762",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 12,
+        "evidence": "library/std/src/sys/mod.rs:12",
+        "hook_ids": [
+          "PAL-009"
+        ],
+        "module": "env",
+        "source_path": "library/std/src/sys/env/mod.rs",
+        "source_sha256": "289b1cbe20f832c77397b87d996dbb17944ec96f48228f7bfd2a09a6cc9601c4",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 13,
+        "evidence": "library/std/src/sys/mod.rs:13",
+        "hook_ids": [
+          "PAL-035"
+        ],
+        "module": "env_consts",
+        "source_path": "library/std/src/sys/env_consts.rs",
+        "source_sha256": "5444e0a4d1277453b42bc40f6a9286bca1233885e81f9c7b12ae92855cc9236f",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 14,
+        "evidence": "library/std/src/sys/mod.rs:14",
+        "hook_ids": [
+          "PAL-006"
+        ],
+        "module": "exit",
+        "source_path": "library/std/src/sys/exit.rs",
+        "source_sha256": "d0dabb634031b997d0a85d602d126ff85cbeebe1e576c0de07c87d57de087f43",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 15,
+        "evidence": "library/std/src/sys/mod.rs:15",
+        "hook_ids": [
+          "PAL-012"
+        ],
+        "module": "fd",
+        "source_path": "library/std/src/sys/fd/mod.rs",
+        "source_sha256": "6a272e616abee71040f8bf0bd6c036f7071d05d6abae169a2125709a2c4edffe",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 16,
+        "evidence": "library/std/src/sys/mod.rs:16",
+        "hook_ids": [
+          "PAL-013"
+        ],
+        "module": "fs",
+        "source_path": "library/std/src/sys/fs/mod.rs",
+        "source_sha256": "f1137a6a7ec3f048c29a6709fae1d4c1d20d4496ff163e555fa66acabbfcbf60",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 17,
+        "evidence": "library/std/src/sys/mod.rs:17",
+        "hook_ids": [
+          "PAL-011",
+          "PAL-020",
+          "PAL-021"
+        ],
+        "module": "io",
+        "source_path": "library/std/src/sys/io/mod.rs",
+        "source_sha256": "a6c3fcc9355d143ec9f17f5a1b2b07179d9a1ab3738d28eb210aca9a31efc256",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 18,
+        "evidence": "library/std/src/sys/mod.rs:18",
+        "hook_ids": [
+          "PAL-014",
+          "PAL-015"
+        ],
+        "module": "net",
+        "source_path": "library/std/src/sys/net/mod.rs",
+        "source_sha256": "1a9b24a2f57017d1663cd51d46d3d64665d9c4db35a593756bdf723701916fde",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 19,
+        "evidence": "library/std/src/sys/mod.rs:19",
+        "hook_ids": [
+          "PAL-010"
+        ],
+        "module": "os_str",
+        "source_path": "library/std/src/sys/os_str/mod.rs",
+        "source_sha256": "7b3461545c26ca943ab6c0d424e1dd0d8416dc025c66742744d5fead1d723b4b",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 20,
+        "evidence": "library/std/src/sys/mod.rs:20",
+        "hook_ids": [
+          "PAL-013",
+          "PAL-016"
+        ],
+        "module": "path",
+        "source_path": "library/std/src/sys/path/mod.rs",
+        "source_sha256": "fa0ba10212457cf7f4601254a0d4aef627d01a4552edb4c61ac55b596a4e7760",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 21,
+        "evidence": "library/std/src/sys/mod.rs:21",
+        "hook_ids": [
+          "PAL-016"
+        ],
+        "module": "paths",
+        "source_path": "library/std/src/sys/paths/mod.rs",
+        "source_sha256": "d2b6b44f179f85a542fcd9ee1cf97029b048190165a3aced16cd9e154a58ca51",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 22,
+        "evidence": "library/std/src/sys/mod.rs:22",
+        "hook_ids": [
+          "PAL-017"
+        ],
+        "module": "pipe",
+        "source_path": "library/std/src/sys/pipe/mod.rs",
+        "source_sha256": "613fc85805097e868c11fb255f5bafd9284856def75f1b0831100c6c44639d0c",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 23,
+        "evidence": "library/std/src/sys/mod.rs:23",
+        "hook_ids": [
+          "PAL-036"
+        ],
+        "module": "platform_version",
+        "source_path": "library/std/src/sys/platform_version/mod.rs",
+        "source_sha256": "12c2dbd485627ca416213224977ecebf78809cb2ee8ab8c2b651e1ff73f16e5f",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 24,
+        "evidence": "library/std/src/sys/mod.rs:24",
+        "hook_ids": [
+          "PAL-018"
+        ],
+        "module": "process",
+        "source_path": "library/std/src/sys/process/mod.rs",
+        "source_sha256": "160c144dc4d1714837bda9d42f6d503798113763801fae551d7188e3f4e3b59e",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 25,
+        "evidence": "library/std/src/sys/mod.rs:25",
+        "hook_ids": [
+          "PAL-019"
+        ],
+        "module": "random",
+        "source_path": "library/std/src/sys/random/mod.rs",
+        "source_sha256": "58e6c9fa2f0a5eaa796c5a6172a0b25ef59fc47c6d9ca2e78e93ba23ef7c094f",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 26,
+        "evidence": "library/std/src/sys/mod.rs:26",
+        "hook_ids": [
+          "PAL-020"
+        ],
+        "module": "stdio",
+        "source_path": "library/std/src/sys/stdio/mod.rs",
+        "source_sha256": "ffc59c348ecc12e0d4748855309112f13979392983cafb677be6b82fc6e74d59",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 27,
+        "evidence": "library/std/src/sys/mod.rs:27",
+        "hook_ids": [
+          "PAL-022",
+          "PAL-023",
+          "PAL-024"
+        ],
+        "module": "sync",
+        "source_path": "library/std/src/sys/sync/mod.rs",
+        "source_sha256": "e57838920a0f8c38ef94dc6ab0724e59e4b3335a603b7e63f70c16d354da6816",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 28,
+        "evidence": "library/std/src/sys/mod.rs:28",
+        "hook_ids": [
+          "PAL-025"
+        ],
+        "module": "thread",
+        "source_path": "library/std/src/sys/thread/mod.rs",
+        "source_sha256": "3590ca4dc8b112c787b14fcc5585add929a6e7c827ce01c329c2ef43e45587d6",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 29,
+        "evidence": "library/std/src/sys/mod.rs:29",
+        "hook_ids": [
+          "PAL-026"
+        ],
+        "module": "thread_local",
+        "source_path": "library/std/src/sys/thread_local/mod.rs",
+        "source_sha256": "56a94ba2ad4d2c30fc82c8f0b1c728bc05f8817340e7821019f7b05606a7456e",
+        "visibility": "public"
+      },
+      {
+        "declaration_line": 30,
+        "evidence": "library/std/src/sys/mod.rs:30",
+        "hook_ids": [
+          "PAL-027",
+          "PAL-028"
+        ],
+        "module": "time",
+        "source_path": "library/std/src/sys/time/mod.rs",
+        "source_sha256": "449afdd86955252a302d889032a6cb2cbb04dd786f8cb81d9a9059ad933e7e4c",
+        "visibility": "public"
+      }
+    ],
+    "unclassified_hook_ids": []
+  },
+  "kernel_security_backing_inventory": {
+    "closure": "exact-set",
+    "digest_algorithm": "sha256(canonical-json(entries))",
+    "entry_count": 6,
+    "inventory_digest": "f7a7bedadf67c960e26b989e51fd58b53c80bc4eef707b133180ac0ff30c7295",
+    "entries": [
+      {
+        "path": "kernel/Cargo.toml",
+        "roles": [
+          "kernel feature defaults",
+          "production dev-weak-rng exclusion"
+        ],
+        "sha256": "f9b837e66768727f992443ebdf8343c3db38e6982094092aa457346d1173f9f3"
+      },
+      {
+        "path": "kernel/src/task/drivers.rs",
+        "roles": [
+          "VirtIO RNG module wiring"
+        ],
+        "sha256": "2a28bba0f6d552e0f607ecf7f909b9287a1d6b09af8e9c2579f5ed8e3d06bbd6"
+      },
+      {
+        "path": "kernel/src/task/drivers/virtio_rng.rs",
+        "roles": [
+          "current entropy source implementation",
+          "zero-byte unavailable behavior"
+        ],
+        "sha256": "ff18f0062e9d1178ed11d24be4aa6b67271ba894854e5e7481c107a88efa4a6e"
+      },
+      {
+        "path": "kernel/src/task/syscall.rs",
+        "roles": [
+          "kernel syscall ABI decoder",
+          "allowlist gate",
+          "architecture dispatch",
+          "GetRandom handler",
+          "user-buffer validation primitives"
+        ],
+        "sha256": "e4ac459d328c1ccf1c8450ed4f571e0e7c6454048cbb9e6988a479eb30d2fb18"
+      },
+      {
+        "path": "libs/api/src/abi/syscall.rs",
+        "roles": [
+          "frozen syscall opcode decoder",
+          "GetRandom allowlist-bit mapping"
+        ],
+        "sha256": "3cd2ac33eaff030e4263b8c1dc552018b4578554af5c6499aaf9e67cf4c3f020"
+      },
+      {
+        "path": "libs/ostd/src/syscall.rs",
+        "roles": [
+          "typed GetRandom caller wrapper"
+        ],
+        "sha256": "51227ca82372aabd6b5e1a6737b1c5b6f96a0906014cc1ecef87f6add4366b82"
+      }
+    ],
+    "required_paths": [
+      "kernel/Cargo.toml",
+      "kernel/src/task/drivers.rs",
+      "kernel/src/task/drivers/virtio_rng.rs",
+      "kernel/src/task/syscall.rs",
+      "libs/api/src/abi/syscall.rs",
+      "libs/ostd/src/syscall.rs"
+    ]
+  },
+  "source_manifest": [
+    {
+      "path": "library/std/src/rt.rs",
+      "sha256": "f435576c645fb30eaca560e819c2a113b556452d79c0303f49ffd4487018c01f"
+    },
+    {
+      "path": "library/std/src/sys/alloc/mod.rs",
+      "sha256": "d7be5b7c291a7251961192c61272f0cf5c8be8bd749f0f3d320708faa45fcaa2"
+    },
+    {
+      "path": "library/std/src/sys/args/mod.rs",
+      "sha256": "24ab9d0b2ba7dd6c08ea101cae007669a5a25bcd8c776cc335f17eb74033d0d4"
+    },
+    {
+      "path": "library/std/src/sys/args/unsupported.rs",
+      "sha256": "672ef07ed0ee640c62928a2e304d692d4cf45d0de05ca560592873d19af6d6ac"
+    },
+    {
+      "path": "library/std/src/sys/backtrace.rs",
+      "sha256": "f05f2a973d7399f374bb93b0b8bc91c92c18ff146e13a83588f47925cc2a60ce"
+    },
+    {
+      "path": "library/std/src/sys/cmath.rs",
+      "sha256": "31dd70d368cf823cb3e37925d13c99f904e6007a6a0ddef711a1e4fb1fc75762"
+    },
+    {
+      "path": "library/std/src/sys/configure_builtins.rs",
+      "sha256": "5588bd53667af63a85d4f5175fb84681d24d2eabc710607d34acd734eee6856c"
+    },
+    {
+      "path": "library/std/src/sys/env/mod.rs",
+      "sha256": "289b1cbe20f832c77397b87d996dbb17944ec96f48228f7bfd2a09a6cc9601c4"
+    },
+    {
+      "path": "library/std/src/sys/env/unsupported.rs",
+      "sha256": "98dfdc48510c03fa3cbab5886ff1f2fc7497c0caa362da44a7ae75936d116bb1"
+    },
+    {
+      "path": "library/std/src/sys/env_consts.rs",
+      "sha256": "5444e0a4d1277453b42bc40f6a9286bca1233885e81f9c7b12ae92855cc9236f"
+    },
+    {
+      "path": "library/std/src/sys/exit.rs",
+      "sha256": "d0dabb634031b997d0a85d602d126ff85cbeebe1e576c0de07c87d57de087f43"
+    },
+    {
+      "path": "library/std/src/sys/fd/mod.rs",
+      "sha256": "6a272e616abee71040f8bf0bd6c036f7071d05d6abae169a2125709a2c4edffe"
+    },
+    {
+      "path": "library/std/src/sys/fs/mod.rs",
+      "sha256": "f1137a6a7ec3f048c29a6709fae1d4c1d20d4496ff163e555fa66acabbfcbf60"
+    },
+    {
+      "path": "library/std/src/sys/fs/unsupported.rs",
+      "sha256": "b173c5b64f6bb235254f2106a80d900e1f67706100b2f2d21de7ecce17d511c9"
+    },
+    {
+      "path": "library/std/src/sys/helpers/mod.rs",
+      "sha256": "e8fbb280056a6cff488873c997e92c25ad39843ef5ff97a7e3ecee368f258dac"
+    },
+    {
+      "path": "library/std/src/sys/io/io_slice/unsupported.rs",
+      "sha256": "a4e5e8ebe6f8c313ed7d41b00ad851118d8980bc3109a0e2d123ac5fa1dcd568"
+    },
+    {
+      "path": "library/std/src/sys/io/is_terminal/unsupported.rs",
+      "sha256": "53842dfd07adab0c638b770ac18a17c2c967bd7a5e8d9abf7ca7fea20392ad6c"
+    },
+    {
+      "path": "library/std/src/sys/io/mod.rs",
+      "sha256": "a6c3fcc9355d143ec9f17f5a1b2b07179d9a1ab3738d28eb210aca9a31efc256"
+    },
+    {
+      "path": "library/std/src/sys/mod.rs",
+      "sha256": "d93045a69c7fd40a106e910d3ace9fc960d09719cb4847dc8c40f4506902a914"
+    },
+    {
+      "path": "library/std/src/sys/net/connection/unsupported.rs",
+      "sha256": "25e2541ef10a54e5ea8d9b78f2e6110b532f9eb9a7d4acdfee7d8fc64cf42c70"
+    },
+    {
+      "path": "library/std/src/sys/net/hostname/unsupported.rs",
+      "sha256": "7d66e808239db8d2224d7b05e937cc83629dd07ba295c9504db98f04c67de29b"
+    },
+    {
+      "path": "library/std/src/sys/net/mod.rs",
+      "sha256": "1a9b24a2f57017d1663cd51d46d3d64665d9c4db35a593756bdf723701916fde"
+    },
+    {
+      "path": "library/std/src/sys/os_str/mod.rs",
+      "sha256": "7b3461545c26ca943ab6c0d424e1dd0d8416dc025c66742744d5fead1d723b4b"
+    },
+    {
+      "path": "library/std/src/sys/pal/mod.rs",
+      "sha256": "251dee50eff49b81ae5283ffd9871635dc63c316e0156a0f6f69672657ddbec3"
+    },
+    {
+      "path": "library/std/src/sys/pal/unsupported/common.rs",
+      "sha256": "1e7db842b7ce44a4c7eecf2d2cf07e0e3ec37caf1d81bfb164f1acfa1458b7e1"
+    },
+    {
+      "path": "library/std/src/sys/pal/unsupported/mod.rs",
+      "sha256": "f0011c3fab62a6f499de06c89027812b917bece4292510116edc35b9697a4ae6"
+    },
+    {
+      "path": "library/std/src/sys/path/mod.rs",
+      "sha256": "fa0ba10212457cf7f4601254a0d4aef627d01a4552edb4c61ac55b596a4e7760"
+    },
+    {
+      "path": "library/std/src/sys/paths/mod.rs",
+      "sha256": "d2b6b44f179f85a542fcd9ee1cf97029b048190165a3aced16cd9e154a58ca51"
+    },
+    {
+      "path": "library/std/src/sys/paths/unsupported.rs",
+      "sha256": "9d8936d020e26b76da68094e41bef0dcbd78a932eaa0052e02d3299ff64cdc44"
+    },
+    {
+      "path": "library/std/src/sys/personality/mod.rs",
+      "sha256": "667ea2b4b2e161c9b4c0bbda54721c3de86c39799f478de06db8bd644c1bfbc3"
+    },
+    {
+      "path": "library/std/src/sys/pipe/mod.rs",
+      "sha256": "613fc85805097e868c11fb255f5bafd9284856def75f1b0831100c6c44639d0c"
+    },
+    {
+      "path": "library/std/src/sys/pipe/unsupported.rs",
+      "sha256": "8d927a7dcd7fba7ebe495acfcb12eb639e0d0dac85f47a97ae44770f62dabda8"
+    },
+    {
+      "path": "library/std/src/sys/platform_version/mod.rs",
+      "sha256": "12c2dbd485627ca416213224977ecebf78809cb2ee8ab8c2b651e1ff73f16e5f"
+    },
+    {
+      "path": "library/std/src/sys/process/mod.rs",
+      "sha256": "160c144dc4d1714837bda9d42f6d503798113763801fae551d7188e3f4e3b59e"
+    },
+    {
+      "path": "library/std/src/sys/process/unsupported.rs",
+      "sha256": "5fc64c74fdf6766b2ef3c01e6e97b1f3b07d5a2314dcc7c310b1f00485068cd8"
+    },
+    {
+      "path": "library/std/src/sys/random/mod.rs",
+      "sha256": "58e6c9fa2f0a5eaa796c5a6172a0b25ef59fc47c6d9ca2e78e93ba23ef7c094f"
+    },
+    {
+      "path": "library/std/src/sys/random/unsupported.rs",
+      "sha256": "26c9c231cc3f23a0815ac28dbac9e4f2d53c09ee56510c954b38f856cd593e50"
+    },
+    {
+      "path": "library/std/src/sys/stdio/mod.rs",
+      "sha256": "ffc59c348ecc12e0d4748855309112f13979392983cafb677be6b82fc6e74d59"
+    },
+    {
+      "path": "library/std/src/sys/stdio/unsupported.rs",
+      "sha256": "1fd09fcb0a7f21d2b453dcd2447f14ba3cc957cbb489d582a4964e689959d987"
+    },
+    {
+      "path": "library/std/src/sys/sync/mod.rs",
+      "sha256": "e57838920a0f8c38ef94dc6ab0724e59e4b3335a603b7e63f70c16d354da6816"
+    },
+    {
+      "path": "library/std/src/sys/sync/thread_parking/unsupported.rs",
+      "sha256": "0528fd6c4687f69a5ee5661a4b7aa4521910a89b2c019ad4d928ee428a239745"
+    },
+    {
+      "path": "library/std/src/sys/thread/mod.rs",
+      "sha256": "3590ca4dc8b112c787b14fcc5585add929a6e7c827ce01c329c2ef43e45587d6"
+    },
+    {
+      "path": "library/std/src/sys/thread/unsupported.rs",
+      "sha256": "cbdbe5561b93229d695732485c6a981e6d97f2a063436545bdbdea37848df268"
+    },
+    {
+      "path": "library/std/src/sys/thread_local/mod.rs",
+      "sha256": "56a94ba2ad4d2c30fc82c8f0b1c728bc05f8817340e7821019f7b05606a7456e"
+    },
+    {
+      "path": "library/std/src/sys/time/mod.rs",
+      "sha256": "449afdd86955252a302d889032a6cb2cbb04dd786f8cb81d9a9059ad933e7e4c"
+    },
+    {
+      "path": "library/std/src/sys/time/unsupported.rs",
+      "sha256": "e1022bb35359dfaffdb76c4b14d03360ed1ccf8e9b002a89aacec16249c3444a"
+    }
+  ],
+  "summary": {
+    "blocking_deferred_hook_ids": [
+      "PAL-002",
+      "PAL-003",
+      "PAL-008",
+      "PAL-019",
+      "PAL-022",
+      "PAL-023",
+      "PAL-025",
+      "PAL-026",
+      "PAL-031",
+      "PAL-032",
+      "PAL-033",
+      "PAL-034",
+      "PAL-035"
+    ],
+    "deferred": 18,
+    "evidence_free": 0,
+    "implementation_readiness": "BLOCKED_ON_NON_QUALIFYING_KERNEL_SECURITY_BACKING",
+    "supported": 8,
+    "total": 36,
+    "unclassified": 0,
+    "unsupported": 10
+  },
+  "toolchain": {
+    "channel": "nightly-2026-05-01",
+    "commit_hash": "f53b654a8",
+    "digest_algorithm": "sha256(canonical-json(source_manifest))",
+    "rust_src_root": "/home/dmin/.rustup/toolchains/nightly-2026-05-01-x86_64-unknown-linux-gnu/lib/rustlib/src/rust",
+    "rustc_version": "1.97.0-nightly",
+    "source_digest": "b984d50da89e342974ada8822321edd6b1d091d1da3dcf8ec1819a8986a4b105"
+  }
+}

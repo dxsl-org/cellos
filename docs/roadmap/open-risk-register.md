@@ -23,6 +23,19 @@ docs to code. It is not a bug-fix plan.
   its tri-state/tooling acceptance, but it blocks production loader readiness
   until the signed envelope covers every load-affecting input and relocation
   writes are confined to writable pages owned by the new Cell.
+- **`CELLOS-RUSTSTD-PTR-004` — Critical, owner: later authorized
+  PAL/target/runtime implementation child with the kernel syscall-security and
+  Rust `std`/PAL owners.** `GetRandom` currently constructs a mutable slice
+  from the Cell-supplied output pointer without first applying the available
+  user-buffer validator or otherwise proving bounded, complete, caller-owned
+  writable provenance (`kernel/src/task/syscall.rs`). A caller granted the
+  syscall can therefore present null, overflowed, oversized, unmapped, kernel,
+  or peer-cell ranges to an unsafe write boundary. `PAL-031` remains Deferred.
+  Qualification requires rejection of every hostile class before access,
+  evidenced by direct-syscall tests, while preserving allowlist enforcement and
+  the frozen ABI. This later child is not authorized until all six human
+  approvals, its implementation checkpoint, and umbrella Phase 03 production
+  gates are granted.
 
 ## High
 
@@ -45,6 +58,21 @@ docs to code. It is not a bug-fix plan.
   floor and persistent recovery, production gate/task/audit integration,
   physical hostile evidence, provisioned anchors, both human approvals, and
   ledger/release closure.
+- **`CELLOS-RUSTSTD-ENTROPY-005` — High, owner: later authorized
+  PAL/target/runtime implementation child with the kernel entropy and Rust
+  `std`/PAL owners.** The default development kernel feature tuple enables
+  `dev-weak-rng`; the current VirtIO RNG source returns zero bytes, after which
+  `GetRandom` emits predictable xorshift bytes and reports success
+  (`kernel/Cargo.toml`, `kernel/src/task/drivers/virtio_rng.rs`,
+  `kernel/src/task/syscall.rs`). This may support disposable development/QEMU
+  identities with an explicit warning, but it is not production entropy,
+  cryptographic evidence, PAL support, or qualification. `PAL-019` remains
+  Deferred until a production tuple omits `dev-weak-rng` and proves real
+  admitted entropy or observable zero/error without synthetic or partial
+  success. Drift in any of the exact six kernel security-backing paths
+  invalidates the feasibility approval input. The later child remains
+  unauthorized behind the six human approvals, implementation checkpoint, and
+  umbrella Phase 03 production gates.
 - **`CELLOS-LOADER-RACE-002` — High, owner: Phase 07 atomic loader/task
   publication.** A successfully parsed child can enter a ready queue before its
   syscall allowlist, quota, capabilities, operator policy, and protection class

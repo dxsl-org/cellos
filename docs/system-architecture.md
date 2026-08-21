@@ -52,6 +52,19 @@
 > and ledger/release closure remain external gates; production stays disabled
 > and Phase 04 stays `BLOCKED`.
 >
+> **Status refresh 2026-08-21 — RUST `STD` FEASIBILITY PACKAGE VERIFIED /
+> SECURITY BACKING AND HUMAN APPROVAL BLOCKED:** the pinned inventory reconciles
+> 27/27 sys modules, 36/36 hooks (8 Supported, 10 Unsupported, 18 Deferred), 46
+> Rust sources, and an exact six-path kernel security inventory. Verification
+> passed 33/33 feasibility cases, 57/57 validator adversarial attacks, 36/36
+> security-manifest tamper attacks, and the unchanged host baseline of 105
+> passed, 0 failed, and 4 ignored; all 101 approval inputs and their links and
+> digests match. This verifies only the conditional compiler/runtime contract
+> and fixture-only validator. There is no PAL, target, sysroot, runtime, live
+> capture, or promotion. All six human approval rows remain `NOT GRANTED`, the
+> implementation checkpoint is `BLOCKED`, and Phase 06 remains pending and
+> dependency-blocked on Phase 03.
+>
 > **Status refresh 2026-08-21**: [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
 > is a **proposed** Claim-A contract, pending security-owner and
 > independent-reviewer approval. It introduces no producer, kernel parser,
@@ -729,6 +742,26 @@ async fn run() {
 
 **Impact**: Apps no longer need to understand manifests, syscall allowlists, or raw IPC — all abstracted by the SDK. Foundation for L2 middleware (HTTP servers, databases, pub-sub), unblocking G2 real application development.
 
+### Planned Tier 1 Rust `std` Profile
+
+The feasibility decision conditionally selects an exact, no-fuzz,
+content-addressed source overlay against a private checkout matching the pinned
+Rust compiler. A later authorized implementation would add a real internal
+Cellos PAL under `library/std`, select it through matching rustc target metadata,
+and produce a private, provenance-bound sysroot. An external PAL plug-in,
+target-OS impersonation, `std` over mlibc/POSIX, unsupported/fake `std`, and a
+renamed `core` + `alloc` are rejected. Upstreaming is only a later exit path;
+the decision does not authorize publishing a target or triple.
+
+The current package contains contracts, inventories, and a fixture-only
+benchmark validator, not a PAL implementation. The support map classifies all
+36 hooks as 8 Supported, 10 Unsupported, and 18 Deferred. Blocking Deferred
+rows include entropy (`PAL-019`) and the raw output-buffer boundary
+(`PAL-031`). A later PAL/target/runtime child remains barred until those and
+every other blocking row are implemented and evidenced, all six named human
+approvals are granted, the implementation checkpoint passes, and umbrella
+Phase 03 production gates are approved.
+
 ### Cell Types
 
 **Tools**: System utilities & CLI applications
@@ -1169,11 +1202,19 @@ Routing (cross-machine): Private→Public ✓ · Public→Private ✗ · Private
 **Hard rules (architectural invariants):**
 - Native Tier-1 Cells **never speak mTLS** — Noise is the lingua franca at every stage; G1→G2 is an *identity* upgrade (K1→K3), not a transport swap.
 - mTLS lives **only at the Tier-3/interop boundary**, sourced from the Tier 3 Linux VM (rustls/OpenSSL native) or an external LB — **never build X.509 PKI inside the Cellos kernel**. The parked local `.agents/260623-1500-tls-server-accept/` plan is an edge-only fallback for nodes that cannot terminate TLS externally.
-- **Profile-specific entropy gate**: default development/QEMU builds may enable
-  `dev-weak-rng`, which supplies predictable xorshift bytes with a warning. Fleet and
-  production artifacts must forbid that feature; without trusted entropy `GetRandom`
-  fails closed. Weak dev entropy may only produce disposable test identities; it must
-  never be treated as fleet credentials, release signatures, or production Noise keys.
+- **Profile-specific entropy and output-buffer gate**: the current default
+  development/QEMU tuple enables `dev-weak-rng`. Because the current VirtIO RNG
+  source returns zero bytes, `GetRandom` substitutes predictable xorshift bytes
+  and reports success. That is an explicitly development-only posture, not
+  production qualification. Fleet and production artifacts must omit
+  `dev-weak-rng` and prove real admitted entropy or observable zero/error
+  without synthetic success. The current handler also constructs a mutable
+  slice from the raw output pointer before proving bounded, complete,
+  caller-owned writable provenance. Production qualification therefore also
+  requires null, overflowed, oversized, unmapped, kernel, and peer pointers to
+  be rejected before any access. Weak development entropy may produce only
+  disposable test identities; it is never fleet credential, release-signature,
+  production Noise-key, PAL support, or promotion evidence.
 - `ClusterId` is routing-only; the PSK/Noise handshake is the sole authenticator. Multicast gossip is ~G1-only (cloud VPCs block multicast → G2 discovery shifts to a registry).
 
 ### Robot swarm (G1) vs server cluster (G2/G3)

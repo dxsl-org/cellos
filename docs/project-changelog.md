@@ -2,6 +2,55 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Tier 1 Rust `std` feasibility package verifies without implementation authority
+
+The verified Phase 06 feasibility slice reconciles all 27/27 pinned Rust
+`library/std` sys modules and 36/36 PAL hooks: 8 Supported, 10 Unsupported, and
+18 Deferred, with zero omitted, duplicate, unclassified, or evidence-free
+rows. The source closure contains 46 pinned Rust files. Its exact six-path
+kernel security inventory covers kernel feature defaults, VirtIO RNG wiring
+and source, syscall decode/allowlist/dispatch and `GetRandom`, output-buffer
+validation primitives, the frozen syscall opcode mapping, and the typed caller
+wrapper. The exact set is `kernel/Cargo.toml`,
+`kernel/src/task/drivers.rs`, `kernel/src/task/drivers/virtio_rng.rs`,
+`kernel/src/task/syscall.rs`, `libs/api/src/abi/syscall.rs`, and
+`libs/ostd/src/syscall.rs`. The canonical approval manifest binds 101 inputs;
+all recorded digests and links match.
+
+The conditional compiler strategy is an exact, no-fuzz, content-addressed
+source overlay against a private matching Rust checkout. Any later authorized
+implementation must add a real internal Cellos PAL and private
+provenance-bound sysroot. External PAL plug-ins, target-OS impersonation,
+`std` over mlibc/POSIX, unsupported/fake `std`, and relabeled `core` + `alloc`
+are rejected. Upstreaming remains a later exit path, not permission to publish
+a target or triple.
+
+The benchmark schema, CLI, eight synthetic fixtures, and two expected reports
+remain fixture-only and non-promotional. Verification passed 33/33 feasibility
+tests, 57/57 validator adversarial attacks, 36/36 security-manifest tamper
+attacks, and the unchanged host baseline of 105 passed, 0 failed, and 4
+ignored. Final quality and security reviews passed with no findings. These
+results verify the package and validator, not live runtime behavior,
+authenticated benchmark evidence, human approval, or promotion.
+
+Two current kernel weaknesses remain implementation blockers. `PAL-019` is
+Deferred because the default development tuple enables predictable
+`dev-weak-rng` success over a zero-byte VirtIO RNG source. `PAL-031` is Deferred
+because `GetRandom` constructs a mutable output slice without proving bounded,
+complete, caller-owned writable provenance. Development/QEMU weak entropy is
+distinct from production qualification: a production tuple must omit the weak
+feature and prove real admitted entropy or observable zero/error, while hostile
+null, overflowed, oversized, unmapped, kernel, and peer pointers must be
+rejected before access.
+
+There is no PAL, target JSON, private or published sysroot, target/triple,
+Tier 1 `rust-std` runtime, live capture, authenticated promotion evidence, or
+promotion. All six human approval rows remain `NOT GRANTED`; the implementation
+checkpoint remains `BLOCKED`; umbrella Phase 06 remains pending and
+dependency-blocked on Phase 03. A later PAL/target/runtime child owns
+implementation only after its kernel entropy and syscall-security owners close
+the blockers and every approval and production gate is explicitly granted.
+
 ## [2026-08-21] Tier 1 admission prequalification infrastructure lands without admissible evidence
 
 The canonical machine-readable catalog now pins all 18 mandatory rows to the

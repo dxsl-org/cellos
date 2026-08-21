@@ -30,7 +30,7 @@ The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK c
 | 03 | [Tier 1 Baseline/Admission C3](phase-03-tier1-baseline-admission.md) | 4w | 01,02; child Phase 01 approvals; qualified external floor; signed CI or secure measured runner | pending / production-blocked — Core+harness and Phase 04 prequalification infrastructure complete; admissible evidence blocked |
 | 04 | [Tier 3 Qualification C5](phase-04-tier3-qualification.md) | 8w | 01,02 | pending |
 | 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | completed — v2 compatibility baseline frozen; loader risks transferred |
-| 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03 |
+| 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03; feasibility package verified, security backing and human approval blocked |
 | 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04; loader-risk handoff from 05 | pending — dependency-blocked on Phases 03 and 04; owns `CELLOS-LOADER-RACE-002` and `CELLOS-LOADER-CLEANUP-003` |
 | 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 05,07 | pending — Phase 05 baseline available, still dependency-blocked on Phase 07 |
 | 09 | [Final Completion Gate C9](phase-09-final-completion-gate.md) | 1w | 01-08 approved/implemented, verified, ledger-recorded | pending |
@@ -59,6 +59,12 @@ The v1-upcast/v2-read corpus, exact v1/v2 lengths and v2 layout, compatibility a
 
 Production loader readiness remains blocked by three unresolved pre-existing risks. `CELLOS-LOADER-SIG-001` (Critical) transfers to the Phase 03 provenance/signature boundary because load-affecting section and relocation metadata, including `.rela.dyn`, is not covered and can redirect unchecked kernel writes. `CELLOS-LOADER-RACE-002` (High) transfers to Phase 07 atomic task publication because a task becomes runnable before admission state is installed. `CELLOS-LOADER-CLEANUP-003` (Medium) transfers to Phase 07 denial rollback/cleanup because PlatformCap singleton denial can leave an already-ready task alive. These risks are recorded, not fixed.
 
+
+## Phase 06 Feasibility Evidence and Status
+
+The Phase 06 child feasibility plan reached **FEASIBILITY PACKAGE VERIFIED / SECURITY BACKING AND HUMAN APPROVAL BLOCKED**. Final verification passed 33/33 feasibility tests, 57/57 validator adversarial attacks, 36/36 security-manifest tamper attacks, and host 105 passed / 0 failed / 4 ignored. Reconciliation confirmed 27/27 modules; 36 hooks at 8 Supported / 10 Unsupported / 18 Deferred; 46 pinned Rust sources; the exact six-path kernel security-backing inventory; and all 101 canonical approval inputs with matching digests and links. Final independent quality review and final independent security review each returned PASS with no findings.
+
+This verified sub-slice is fixture-only and non-promotional. `PAL-019` remains Deferred because the current default tuple enables `dev-weak-rng` over a zero-byte RNG stub; `PAL-031` remains Deferred because `GetRandom` lacks bounded caller-owned writable validation. All six named human approval rows remain `NOT GRANTED`, `PAL-IMPLEMENTATION-CHECKPOINT` remains `BLOCKED`, and no PAL/target/runtime, private or published sysroot/triple, authenticated live capture, readiness, or promotion exists. The recommendation remains **CONDITIONAL GO** only after both security backings are implemented and evidenced, every named human approval is explicitly granted, the checkpoint is unblocked, and umbrella Phase 03 production gates are approved. Umbrella Phase 06 remains pending and dependency-blocked on Phase 03.
 
 ## Parallel Ownership
 
