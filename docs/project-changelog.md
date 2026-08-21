@@ -2,7 +2,7 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-21] Phase 02 adds the authoritative app-tier acceptance ledger
+## [2026-08-21] Phase 02 app-tier acceptance ledger lifecycle is recorded
 
 The repository now carries one strict JSON ledger for the 60 Native SDK matrix
 cells, QEMU/KVM/physical subjects, blockers, hostile tests, and Phase 01–08
@@ -11,11 +11,12 @@ content-addressed class-specific witnesses, Git provenance, TTLs, append-only
 reviewed state deltas, and the deterministic C9 terminal state. CI runs the
 validator and 26 adversarial tests. Current qualification remains
 `NOT_COMPLETE`; all unresolved hardware, admission, Tier 2, and semihosting
-gates stay visible and no capability cell is promoted to `USABLE`.
-The validator/CI gate has been reviewed, but Phase 02 remains in progress: the
-seed ledger still needs a ratified Git revision and one adjacent append-only
-lifecycle event before that phase can advance. FFI, `rust-std`, and Tier-2
-scopes without ratified applicability remain non-qualifying.
+gates stay visible and no capability cell is promoted to `USABLE`. The
+ratified revision is `798e8b04`; the implemented, verified, and attested
+lifecycle commits are `92340d05`, `635600c8`, and `c538df84`, completing Phase
+02 through `LEDGER_RECORDED`. Phase 03 remains `PLANNED` and unblocked. FFI,
+`rust-std`, and Tier-2 scopes without ratified applicability remain
+non-qualifying.
 
 ## [2026-08-21] Spec 23 Native SDK contract is ratified
 

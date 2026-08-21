@@ -1,6 +1,6 @@
 # Cellos Documentation Index
 
-**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-19
+**Version**: v0.2.1-dev (Mycelium Era) | **Last updated**: 2026-08-21
 
 ---
 

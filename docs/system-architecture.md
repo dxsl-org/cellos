@@ -8,10 +8,11 @@
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
 > uses named modules and keeps execution tier, runtime profile, stability, and
-> availability separate. The Phase 02 acceptance ledger and validator are now
-> implemented and reviewed, but Phase 02 remains in progress pending a ratified
-> Git revision and one adjacent append-only lifecycle event. Its current C9
-> result is `NOT_COMPLETE`; compile, test/runtime, delivery, hardware,
+> availability separate. The Phase 02 acceptance ledger is recorded through
+> `LEDGER_RECORDED` at ratified revision `798e8b04`, with implemented, verified,
+> and attested lifecycle commits `92340d05`, `635600c8`, and `c538df84`. Phase
+> 03 remains `PLANNED` and unblocked. Its current C9 result is
+> `NOT_COMPLETE`; compile, test/runtime, delivery, hardware,
 > admission, and hostile-test witnesses remain mandatory before any applicable
 > cell can be called `USABLE`. FFI, `rust-std`, and Tier-2 scopes without
 > ratified applicability remain non-qualifying. This changes no ABI, source API,
