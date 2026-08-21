@@ -1,0 +1,187 @@
+{
+  "schema_version": 1,
+  "designation": "PREQUALIFICATION_ONLY",
+  "phase_status": "BLOCKED",
+  "production_admission": "DISABLED",
+  "matrix": [
+    {
+      "row_id": "P04-N01",
+      "scenario": "unsigned ELF; stripped __ViCell_sig; malformed, missing, or short signature",
+      "required_result": "production gate denies before parse or task creation with no development fallback",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["production publisher parser and common-gate wiring", "task-creation absence witness", "named production profile"]
+    },
+    {
+      "row_id": "P04-N02",
+      "scenario": "wrong publisher key, development key, unchecked-development signature, tampered PT_LOAD, or tampered manifest",
+      "required_result": "Claim A denies and owner authorization cannot override it",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["production publisher parser and provisioned publisher anchor", "production payload binding", "common-gate task witness"]
+    },
+    {
+      "row_id": "P04-N03",
+      "scenario": "valid current payload signature with missing, malformed, or unknown-version provenance envelope",
+      "required_result": "Claim A denies",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["approved provenance encoding", "production provenance parser and producer", "common-gate task witness"]
+    },
+    {
+      "row_id": "P04-N04",
+      "scenario": "final ELF hash mismatch; stale source, lock, toolchain, or recipe identity; envelope from another ELF",
+      "required_result": "Claim A denies",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["controlled production provenance producer", "final-ELF binding parser", "named production toolchain profile"]
+    },
+    {
+      "row_id": "P04-N05",
+      "scenario": "missing owner anchor, wrong owner key, unsigned or malformed store, unknown store version, duplicate or conflicting owner records",
+      "required_result": "Claim B denies without panic",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["approved owner-store encoding", "production owner parser", "boot-provisioned owner anchor"]
+    },
+    {
+      "row_id": "P04-N06",
+      "scenario": "valid publisher provenance without owner entry, or owner entry with stale or wrong ELF or provenance digest",
+      "required_result": "Claim B denies",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["production owner parser and persistence", "publisher-to-owner digest binding", "common-gate task witness"]
+    },
+    {
+      "row_id": "P04-N07",
+      "scenario": "owner record attempts to authorize unsigned, wrong-key, tampered, or unprovenanced ELF",
+      "required_result": "publisher failure still denies under the narrow-never-widen invariant",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["production publisher and owner parsers", "ordered common-gate wiring", "task-creation absence witness"]
+    },
+    {
+      "row_id": "P04-N08",
+      "scenario": "stale generation slot; wrong expected generation; wrong transaction ID or intent digest; uncommitted, missing, or invalid slot",
+      "required_result": "a valid externally-current slot is never displaced by its authentic stale partner; otherwise recovery-required or deny with no task and no floor advancement from slot data",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-001", "C3-ADM-002", "C3-ADM-003", "C3-ADM-005", "C3-ADM-007", "C3-ADM-008", "C3-ADM-009", "C3-ADM-028", "C3-ADM-031"],
+      "blocked_by": ["production slot parser and persistence", "qualified floor backend", "task-creation absence witness"]
+    },
+    {
+      "row_id": "P04-N09",
+      "scenario": "torn slot write or power loss before write, after intent write, after slot verification, after external advance, and before or after commit marker",
+      "required_result": "deterministic authenticated recovery or deny only; never auto-admit",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-007", "C3-ADM-018", "C3-ADM-019", "C3-ADM-020", "C3-ADM-021", "C3-ADM-022", "C3-ADM-023", "C3-ADM-024", "C3-ADM-025"],
+      "blocked_by": ["actual qualified backend transaction implementation", "physical or equivalently non-replayable fault injection", "production recovery wiring"]
+    },
+    {
+      "row_id": "P04-N10",
+      "scenario": "floor is ahead of both slots",
+      "required_result": "recovery-required; never choose the highest slot or reconstruct or advance the floor from slots",
+      "status": "PREQUALIFICATION",
+      "executable_ids": ["C3-ADM-003", "C3-ADM-010", "C3-ADM-031"],
+      "blocked_by": []
+    },
+    {
+      "row_id": "P04-N11",
+      "scenario": "either slot is ahead of floor",
+      "required_result": "recovery-required; never admit or advance from slot contents",
+      "status": "PREQUALIFICATION",
+      "executable_ids": ["C3-ADM-004", "C3-ADM-011", "C3-ADM-031"],
+      "blocked_by": []
+    },
+    {
+      "row_id": "P04-N12",
+      "scenario": "replay slot A with a previously valid old generation after floor advance, with current B present and with current B missing or invalid",
+      "required_result": "valid current B wins without displacement; without valid current B recovery-required with no old-A fallback",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-001", "C3-ADM-032"],
+      "blocked_by": ["qualified floor backend", "authenticated historical slot fixture", "physical replay and no-task evidence"]
+    },
+    {
+      "row_id": "P04-N13",
+      "scenario": "replay slot B with a previously valid old generation after floor advance, with current A present and with current A missing or invalid",
+      "required_result": "valid current A wins without displacement; without valid current A recovery-required with no old-B fallback",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-002", "C3-ADM-033"],
+      "blocked_by": ["qualified floor backend", "authenticated historical slot fixture", "physical replay and no-task evidence"]
+    },
+    {
+      "row_id": "P04-N14",
+      "scenario": "replay both otherwise-valid old A and B slots together after floor advance",
+      "required_result": "deny or recovery-required with no rollback, task, or slot-derived repair",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-003"],
+      "blocked_by": ["qualified floor backend", "two authenticated historical slot fixtures", "physical replay and no-task evidence"]
+    },
+    {
+      "row_id": "P04-N15",
+      "scenario": "replay old external response; conflicting same-generation intent; duplicate advance",
+      "required_result": "authenticated floor contract rejects or identifies it with no ambiguous admission",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-004", "C3-ADM-005", "C3-ADM-012", "C3-ADM-026", "C3-ADM-027"],
+      "blocked_by": ["actual qualified backend", "authenticated freshness protocol", "physical replay evidence"]
+    },
+    {
+      "row_id": "P04-N16",
+      "scenario": "floor unavailable, backend identity changed or replaced, counter exhausted, or unauthorized reset",
+      "required_result": "deny; only separately authorized reprovisioning may restore service",
+      "status": "BLOCKED",
+      "executable_ids": ["C3-ADM-006", "C3-ADM-013", "C3-ADM-014", "C3-ADM-015", "C3-ADM-016", "C3-ADM-017", "C3-ADM-029", "C3-ADM-030"],
+      "blocked_by": ["actual qualified backend", "identity and firmware evidence", "authorized reset and reprovisioning procedure"]
+    },
+    {
+      "row_id": "P04-N17",
+      "scenario": "SpawnFromMem with /bin-style, traversal, separator, or long hostile name",
+      "required_result": "common publisher and owner gate still applies and label cannot select authorization or privilege",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["production common-gate wiring", "SpawnFromMem hostile-name harness", "task-creation absence witness"]
+    },
+    {
+      "row_id": "P04-N18",
+      "scenario": "invalid policy, path, or manifest after otherwise valid admission",
+      "required_result": "existing later narrowing still denies and admission does not widen capabilities",
+      "status": "BLOCKED",
+      "executable_ids": [],
+      "blocked_by": ["production admission wiring", "later-narrowing integration harness", "task and capability-state witness"]
+    }
+  ],
+  "executables": [
+    {"id": "C3-ADM-001", "name": "old_a_replay_admits_current_b_only", "matrix_rows": ["P04-N08", "P04-N12"]},
+    {"id": "C3-ADM-002", "name": "old_b_replay_admits_current_a_only", "matrix_rows": ["P04-N08", "P04-N13"]},
+    {"id": "C3-ADM-003", "name": "both_old_slots_deny", "matrix_rows": ["P04-N08", "P04-N10", "P04-N14"]},
+    {"id": "C3-ADM-004", "name": "stale_floor_response_denies", "matrix_rows": ["P04-N11", "P04-N15"]},
+    {"id": "C3-ADM-005", "name": "wrong_transaction_binding_denies", "matrix_rows": ["P04-N08", "P04-N15"]},
+    {"id": "C3-ADM-006", "name": "wrong_backend_binding_denies", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-007", "name": "torn_uncommitted_slot_denies", "matrix_rows": ["P04-N08", "P04-N09"]},
+    {"id": "C3-ADM-008", "name": "missing_slot_denies", "matrix_rows": ["P04-N08"]},
+    {"id": "C3-ADM-009", "name": "invalid_slot_denies", "matrix_rows": ["P04-N08"]},
+    {"id": "C3-ADM-010", "name": "floor_ahead_denies", "matrix_rows": ["P04-N10"]},
+    {"id": "C3-ADM-011", "name": "slot_ahead_denies", "matrix_rows": ["P04-N11"]},
+    {"id": "C3-ADM-012", "name": "duplicate_current_slots_deny_as_ambiguous", "matrix_rows": ["P04-N15"]},
+    {"id": "C3-ADM-013", "name": "missing_backend_denies", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-014", "name": "invalid_backend_evidence_denies", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-015", "name": "replaced_backend_denies", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-016", "name": "unavailable_backend_denies", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-017", "name": "exhausted_backend_denies", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-018", "name": "power_loss_before_intent_write", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-019", "name": "power_loss_after_intent_write", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-020", "name": "power_loss_after_intent_verify", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-021", "name": "power_loss_before_floor_advance", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-022", "name": "power_loss_after_floor_advance", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-023", "name": "power_loss_before_commit_write", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-024", "name": "power_loss_after_commit_write", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-025", "name": "power_loss_after_commit_verify", "matrix_rows": ["P04-N09"]},
+    {"id": "C3-ADM-026", "name": "duplicate_advance_is_exactly_once", "matrix_rows": ["P04-N15"]},
+    {"id": "C3-ADM-027", "name": "conflicting_advance_fails_closed", "matrix_rows": ["P04-N15"]},
+    {"id": "C3-ADM-028", "name": "wrong_expected_generation_fails_closed", "matrix_rows": ["P04-N08"]},
+    {"id": "C3-ADM-029", "name": "unavailable_advance_fails_closed", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-030", "name": "exhausted_advance_fails_closed", "matrix_rows": ["P04-N16"]},
+    {"id": "C3-ADM-031", "name": "local_history_cannot_admit_or_advance_floor", "matrix_rows": ["P04-N08", "P04-N10", "P04-N11"]},
+    {"id": "C3-ADM-032", "name": "old_a_replay_without_valid_current_b_denies", "matrix_rows": ["P04-N12"]},
+    {"id": "C3-ADM-033", "name": "old_b_replay_without_valid_current_a_denies", "matrix_rows": ["P04-N13"]}
+  ]
+}

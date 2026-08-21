@@ -19,7 +19,7 @@ The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK c
 
 ## Data Flow
 
-`C2 contract approval + SDK matrix → C8 schema validation → Phase 01–08 evidence → C8 status → C9 closure`. Admission flows `artifact → manifest/signature/provenance → policy/owner decision → execution tier`; Phase 03 remains pending/production-blocked until its child-plan approvals, external-floor qualification, production integration, physical/hostile evidence, and ledger closure are complete.
+`C2 contract approval + SDK matrix → C8 schema validation → Phase 01–08 evidence → C8 status → C9 closure`. Admission flows `artifact → manifest/signature/provenance → policy/owner decision → execution tier`; Phase 03 remains pending/production-blocked until its child-plan approvals, external-floor qualification, production integration, physical/hostile evidence, authenticated evidence retention under signed CI or a secure measured runner, and ledger closure are complete.
 
 ## Phases
 
@@ -27,7 +27,7 @@ The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK c
 |---|---|---:|---|---|
 | 01 | [Native SDK Contract C2](phase-01-native-sdk-contract.md) | 2w | — | completed |
 | 02 | [Unified Acceptance Ledger C8](phase-02-unified-acceptance-ledger.md) | 1w | 01 | completed |
-| 03 | [Tier 1 Baseline/Admission C3](phase-03-tier1-baseline-admission.md) | 4w | 01,02; child Phase 01 approvals; qualified external floor | pending / production-blocked — Core+harness-only sub-slice complete |
+| 03 | [Tier 1 Baseline/Admission C3](phase-03-tier1-baseline-admission.md) | 4w | 01,02; child Phase 01 approvals; qualified external floor; signed CI or secure measured runner | pending / production-blocked — Core+harness and Phase 04 prequalification infrastructure complete; admissible evidence blocked |
 | 04 | [Tier 3 Qualification C5](phase-04-tier3-qualification.md) | 8w | 01,02 | pending |
 | 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | pending |
 | 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03 |
@@ -42,6 +42,14 @@ The child admission plan records the proposed provenance contract at [`docs/spec
 The authorized Core+harness-only sub-slice is complete. `bash scripts/build-test-hooks-ci.sh` passed exit 0 under RV64 `test-hooks` with `RUSTFLAGS="-D warnings -C relocation-model=pic"`; the bare-metal path logged `[INFO] admission-core self-test PASS (fail-closed A/B floor model)`; the documented QEMU test-hooks runner passed 1/1; all 31 named cases are reachable; no-default and `policy-required,signing-required` RV64 builds passed while excluding hostile/test modules; and the host baseline stayed at 101 passed, 0 failed, and 4 ignored. Independent quality review returned PASS/CORRECT with no findings, and independent static security review returned PASS with zero Critical, High, or Medium findings.
 
 Those reviews are code/evidence review only, not human security-owner approval or independent production-design approval. Umbrella Phase 03 remains **pending / production-blocked**, not complete. Child Phases 02–04 remain **BLOCKED**, and umbrella Phases 06 and 07 remain dependency-blocked. Non-waivable gates remain: both recorded design approvals; a real qualified non-replayable external floor with physical rollback/replay and power-loss evidence; approval of parsers/persistence and provisioning of owner/publisher anchors; controlled final-ELF provenance production; common loader/task-creation runtime wiring and no-task-on-denial proof; final hostile/release approvals; and governed ledger PASS. Changes to the core/harness semantics or evidence surfaces invalidate that sub-slice evidence; changes to anchors, encodings, backend/firmware, recovery, runtime gate, or production profile invalidate the eventual production evidence and approvals.
+
+### Phase 04 Prequalification Infrastructure
+
+The child Phase 04 status is **PREQUALIFICATION INFRASTRUCTURE COMPLETE / ADMISSIBLE EVIDENCE BLOCKED**. Its canonical byte-pinned catalog covers all 18 mandatory rows, maps all 33 stable compiled `C3-ADM-*` test-hooks IDs, and retains a strict ordered runtime parser. The fixed CLI validates only that catalog and has no local capture, runner, custom-input, or evidence-writer path. The former local capture/runner and generated `b7997` bundle were removed because hashing same-process self-reported command, toolchain, source/kernel origin, backend, and replay claims did not authenticate them.
+
+Final local verification passed Python 13/13, RV64 33/33 exactly once in canonical order plus aggregate PASS, documented QEMU integration 1/1, production-build test-marker exclusion, and the unchanged host aggregate of 101 passed, 0 failed, 4 ignored. Final agent quality review returned correct/KEEPABLE with no findings; final agent security review returned PASS with no Critical, High, or Medium findings. Local verification is non-admissible and was not retained. The agent reviews are not human security-owner approval, independent human production-design approval, release approval, or ledger PASS.
+
+Signed CI or a secure measured runner is an explicit prerequisite before retaining content-addressed Phase 04 runtime evidence. A qualified floor with physical replay/power-loss evidence; production parsers, task-creation witnesses and provisioned anchors; controlled final-ELF provenance; the production profile; both required human approvals; release approval; and Phase 02 ledger validation remain open. The ledger is unchanged. Umbrella Phase 03 remains pending/production-blocked, umbrella Phase 04 remains pending, and Phases 06 and 07 remain dependency-blocked.
 
 ## Parallel Ownership
 

@@ -3,8 +3,8 @@
 
 use super::hostile::{backend_identity, state};
 use super::{
-    decide, AdmissionDecision, DenyReason, FloorPortOutcome, RecoveryReason, SlotId,
-    SlotObservation,
+    decide, report_selftest_case, AdmissionDecision, DenyReason, FloorPortOutcome, RecoveryReason,
+    SlotId, SlotObservation,
 };
 
 fn committed(generation: u64, tag: u8) -> SlotObservation {
@@ -17,6 +17,22 @@ pub(super) fn old_a_replay_admits_current_b_only() -> bool {
 
 pub(super) fn old_b_replay_admits_current_a_only() -> bool {
     decide(&FloorPortOutcome::Authenticated(state(2, 2)), &[committed(2, 2), committed(1, 1)]) == AdmissionDecision::Admit(SlotId::A)
+}
+
+pub(super) fn old_a_replay_without_valid_current_b_denies() -> bool {
+    let floor = FloorPortOutcome::Authenticated(state(2, 2));
+    decide(&floor, &[committed(1, 1), SlotObservation::Missing])
+        == AdmissionDecision::RecoveryRequired(RecoveryReason::SlotMissing)
+        && decide(&floor, &[committed(1, 1), SlotObservation::Invalid])
+            == AdmissionDecision::RecoveryRequired(RecoveryReason::SlotInvalid)
+}
+
+pub(super) fn old_b_replay_without_valid_current_a_denies() -> bool {
+    let floor = FloorPortOutcome::Authenticated(state(2, 2));
+    decide(&floor, &[SlotObservation::Missing, committed(1, 1)])
+        == AdmissionDecision::RecoveryRequired(RecoveryReason::SlotMissing)
+        && decide(&floor, &[SlotObservation::Invalid, committed(1, 1)])
+            == AdmissionDecision::RecoveryRequired(RecoveryReason::SlotInvalid)
 }
 
 pub(super) fn both_old_slots_deny() -> bool {
@@ -90,23 +106,30 @@ pub(super) fn exhausted_backend_denies() -> bool {
 }
 
 pub(super) fn run() -> bool {
+    let cases: [(&str, fn() -> bool); 19] = [
+        ("C3-ADM-001", old_a_replay_admits_current_b_only),
+        ("C3-ADM-002", old_b_replay_admits_current_a_only),
+        ("C3-ADM-003", both_old_slots_deny),
+        ("C3-ADM-004", stale_floor_response_denies),
+        ("C3-ADM-005", wrong_transaction_binding_denies),
+        ("C3-ADM-006", wrong_backend_binding_denies),
+        ("C3-ADM-007", torn_uncommitted_slot_denies),
+        ("C3-ADM-008", missing_slot_denies),
+        ("C3-ADM-009", invalid_slot_denies),
+        ("C3-ADM-010", floor_ahead_denies),
+        ("C3-ADM-011", slot_ahead_denies),
+        ("C3-ADM-012", duplicate_current_slots_deny_as_ambiguous),
+        ("C3-ADM-013", missing_backend_denies),
+        ("C3-ADM-014", invalid_backend_evidence_denies),
+        ("C3-ADM-015", replaced_backend_denies),
+        ("C3-ADM-016", unavailable_backend_denies),
+        ("C3-ADM-017", exhausted_backend_denies),
+        ("C3-ADM-032", old_a_replay_without_valid_current_b_denies),
+        ("C3-ADM-033", old_b_replay_without_valid_current_a_denies),
+    ];
     let mut ok = true;
-    ok &= old_a_replay_admits_current_b_only();
-    ok &= old_b_replay_admits_current_a_only();
-    ok &= both_old_slots_deny();
-    ok &= stale_floor_response_denies();
-    ok &= wrong_transaction_binding_denies();
-    ok &= wrong_backend_binding_denies();
-    ok &= torn_uncommitted_slot_denies();
-    ok &= missing_slot_denies();
-    ok &= invalid_slot_denies();
-    ok &= floor_ahead_denies();
-    ok &= slot_ahead_denies();
-    ok &= duplicate_current_slots_deny_as_ambiguous();
-    ok &= missing_backend_denies();
-    ok &= invalid_backend_evidence_denies();
-    ok &= replaced_backend_denies();
-    ok &= unavailable_backend_denies();
-    ok &= exhausted_backend_denies();
+    for (id, case) in cases {
+        ok &= report_selftest_case(id, case());
+    }
     ok
 }

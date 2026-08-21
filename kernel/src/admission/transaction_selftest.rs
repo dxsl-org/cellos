@@ -5,7 +5,10 @@ use super::hostile::{
     intent_digest, state, transaction_id, AdvanceOutcome, CrashBoundary, NonQualifyingFakeFloor,
     TransactionHarness,
 };
-use super::{decide, AdmissionDecision, FloorPortOutcome, RecoveryReason, SlotId, SlotObservation};
+use super::{
+    decide, report_selftest_case, AdmissionDecision, FloorPortOutcome, RecoveryReason, SlotId,
+    SlotObservation,
+};
 
 fn boundary_case(
     boundary: CrashBoundary,
@@ -135,20 +138,25 @@ pub(super) fn local_history_cannot_admit_or_advance_floor() -> bool {
 }
 
 pub(super) fn run() -> bool {
+    let cases: [(&str, fn() -> bool); 14] = [
+        ("C3-ADM-018", power_loss_before_intent_write),
+        ("C3-ADM-019", power_loss_after_intent_write),
+        ("C3-ADM-020", power_loss_after_intent_verify),
+        ("C3-ADM-021", power_loss_before_floor_advance),
+        ("C3-ADM-022", power_loss_after_floor_advance),
+        ("C3-ADM-023", power_loss_before_commit_write),
+        ("C3-ADM-024", power_loss_after_commit_write),
+        ("C3-ADM-025", power_loss_after_commit_verify),
+        ("C3-ADM-026", duplicate_advance_is_exactly_once),
+        ("C3-ADM-027", conflicting_advance_fails_closed),
+        ("C3-ADM-028", wrong_expected_generation_fails_closed),
+        ("C3-ADM-029", unavailable_advance_fails_closed),
+        ("C3-ADM-030", exhausted_advance_fails_closed),
+        ("C3-ADM-031", local_history_cannot_admit_or_advance_floor),
+    ];
     let mut ok = true;
-    ok &= power_loss_before_intent_write();
-    ok &= power_loss_after_intent_write();
-    ok &= power_loss_after_intent_verify();
-    ok &= power_loss_before_floor_advance();
-    ok &= power_loss_after_floor_advance();
-    ok &= power_loss_before_commit_write();
-    ok &= power_loss_after_commit_write();
-    ok &= power_loss_after_commit_verify();
-    ok &= duplicate_advance_is_exactly_once();
-    ok &= conflicting_advance_fails_closed();
-    ok &= wrong_expected_generation_fails_closed();
-    ok &= unavailable_advance_fails_closed();
-    ok &= exhausted_advance_fails_closed();
-    ok &= local_history_cannot_admit_or_advance_floor();
+    for (id, case) in cases {
+        ok &= report_selftest_case(id, case());
+    }
     ok
 }

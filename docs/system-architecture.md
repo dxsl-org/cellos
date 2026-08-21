@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-21 (backend-neutral Tier 1 admission core and non-qualifying hostile harness land without production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+**Last Updated**: 2026-08-21 (Tier 1 admission prequalification catalog and strict test parser land without admissible evidence or production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -36,6 +36,21 @@
 > provisioned owner/publisher anchors, production integration and
 > no-task-on-denial evidence, required security-owner and independent
 > production approvals, and governed ledger/release closure.
+>
+> **Status refresh 2026-08-21 — PREQUALIFICATION INFRASTRUCTURE COMPLETE /
+> ADMISSIBLE EVIDENCE BLOCKED:** the machine-readable 18-row catalog pins all
+> 33 stable `C3-ADM-*` `test-hooks` IDs, and its strict parser validates ordered
+> runtime output. The public CLI validates only that canonical catalog; it has
+> no capture, context, or evidence-writing path. Focused verification recorded
+> Python 13/13, RV64 33/33 plus the aggregate test PASS marker, QEMU integration
+> 1/1, production-marker exclusion PASS, and an unchanged host baseline of 101
+> passed, 0 failed, and 4 ignored. The rejected local capture/writer and its
+> generated bundle were removed rather than relabeled. Local runs remain
+> non-admissible and retain no Phase 04 evidence. Production parsing/task
+> creation, a qualified floor and persistent recovery, physical hostile
+> evidence, the production profile, provisioned anchors, both human approvals,
+> and ledger/release closure remain external gates; production stays disabled
+> and Phase 04 stays `BLOCKED`.
 >
 > **Status refresh 2026-08-21**: [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
 > is a **proposed** Claim-A contract, pending security-owner and

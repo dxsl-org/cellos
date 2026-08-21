@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-08-20
+**Last updated**: 2026-08-21
 
 ## Active Stage
 
@@ -21,6 +21,10 @@ without treating QEMU or compile-only checks as board qualification.
 - Cell-to-Cell Anywhere has landed its bounded local broker and fail-closed KMS
   foundation. Remote/public operation remains disabled while the production
   hardware-backed root and trusted monotonic epoch are unavailable.
+- Tier 1 admission prequalification now has its canonical 18-row catalog, all
+  33 stable `test-hooks` IDs, and a strict runtime parser. This is test
+  infrastructure only: local runs are non-admissible, production admission is
+  disabled, and Phase 04 remains blocked.
 
 ## Current Documentation Corrections
 
@@ -36,8 +40,10 @@ without treating QEMU or compile-only checks as board qualification.
    keep remote/public exports disabled until root provenance, rollback state,
    and live `/srv/cellos` persistence all have runtime evidence.
 2. Close remaining hardware-gated board evidence with PASS/FAIL/BLOCKED logs.
-3. Decide whether production signing enforcement should become a G1 release
-   gate, because default dev builds still admit unsigned cells.
+3. Keep Phase 04 blocked until signed CI or a secure measured runner can retain
+   authenticated evidence for a qualified floor, persistent recovery, physical
+   hostile cases, provisioned anchors, production wiring, and both human
+   approvals; local verification cannot satisfy this gate.
 4. Continue reducing kernel-resident legacy driver/orchestration code only when
    a slice has explicit runtime evidence and rollback notes.
 5. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,

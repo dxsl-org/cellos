@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### 🚀 Improvements
+- security: land non-admissible Tier 1 admission catalog/test infrastructure; Phase 04 production evidence remains blocked
 - kernel: enforce post-relocation W^X page permissions
 - signing: gate cells through F1/F5 admission
 - ipc: add bounded per-cell completion queues

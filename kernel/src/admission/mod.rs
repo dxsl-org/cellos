@@ -150,6 +150,16 @@ fn classify_mismatch(a: &FloorState, b: &FloorState, floor: &FloorState) -> Admi
 }
 
 #[cfg(feature = "test-hooks")]
+fn report_selftest_case(id: &str, passed: bool) -> bool {
+    if passed {
+        log::info!("[selftest] {}: PASS", id);
+    } else {
+        log::info!("[selftest] {}: FAIL", id);
+    }
+    passed
+}
+
+#[cfg(feature = "test-hooks")]
 pub(crate) fn self_test() -> bool {
     state_selftest::run() & transaction_selftest::run()
 }

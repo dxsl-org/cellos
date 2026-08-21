@@ -2,6 +2,29 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Tier 1 admission prequalification infrastructure lands without admissible evidence
+
+The canonical machine-readable catalog now pins all 18 mandatory rows to the
+33 stable `C3-ADM-*` `test-hooks` IDs, with a strict ordered runtime-log parser.
+The public CLI validates only that catalog and has no capture, context, kernel,
+backend, source, output, or evidence-writing interface.
+
+Focused verification passed Python 13/13, RV64 33/33 plus its aggregate test
+PASS marker, QEMU integration 1/1, and production-marker exclusion PASS; the
+host baseline remained 101 passed, 0 failed, and 4 ignored. Final code-quality and
+security reviews reported no findings for this infrastructure slice, but those
+reviews are not the required human production approvals.
+
+The earlier P04-PREQ-002 local capture/runner could not authenticate its own
+shell, toolchain, prebuilt-kernel origin, backend identity, or replay resistance.
+It and the generated `b7997` bundle were removed rather than accepted or
+relabeled. Local runs remain useful verification but are non-admissible and are
+not retained as Phase 04 evidence. Phase 04 remains `BLOCKED`, production
+admission remains disabled, and no ledger PASS is recorded pending signed CI or
+a secure measured runner, a qualified floor and persistent recovery, physical
+hostile evidence, provisioned anchors, production parser/task/audit wiring,
+both required human approvals, and governed ledger/release closure.
+
 ## [2026-08-21] Tier 1 admission Core and hostile harness land test-only
 
 The kernel now has a private, backend-neutral admission seam with a fixed

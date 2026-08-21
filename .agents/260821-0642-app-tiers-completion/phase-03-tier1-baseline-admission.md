@@ -4,7 +4,7 @@
 `.agents/TODO.md:14-19`; `docs/specs/18-cell-trust-tiers.md:84-129`; `docs/specs/18b-cell-admission-consent-adr.md:9-24`; `docs/specs/18c-publisher-provenance-envelope.md`; `docs/roadmap/open-risk-register.md:26-30`.
 
 ## Overview
-Lock `rust-no-std` baseline and truthful production admission. **Status: pending (production-blocked); Core+harness-only sub-slice: complete.** The documentation-only publisher-provenance design is ready for required approval; neither it nor the completed bounded sub-slice qualifies a floor, completes this umbrella phase, enables production admission, or permits ledger PASS.
+Lock `rust-no-std` baseline and truthful production admission. **Status: pending (production-blocked); Core+harness-only and Phase 04 prequalification-infrastructure sub-slices: complete.** The documentation-only publisher-provenance design is ready for required approval. Neither that design nor either completed bounded sub-slice qualifies a floor, creates admissible runtime evidence, completes this umbrella phase, enables production admission, or permits ledger PASS.
 
 ## Key Insights
 Publisher provenance and owner authorization are independent; developer mode is not production.
@@ -24,6 +24,14 @@ Publisher provenance and owner authorization are independent; developer mode is 
 - Independent quality review returned PASS/CORRECT with no findings. Independent static security review returned PASS with zero Critical, High, or Medium findings.
 
 This completes only the backend-neutral decision core and explicitly non-qualifying `test-hooks` harness. The reviews are code/evidence review, not human security-owner approval or independent production-design approval. Open non-waivable blockers remain: a qualified non-replayable floor and physical replay/power-loss evidence; approved parsers and persistence; boot provisioning of owner/publisher anchors; controlled provenance production; common loader/task-creation runtime wiring and no-task-on-denial proof; human approvals; Phase 04 hostile/release evidence; and governed ledger PASS. Exact evidence and invalidation rules are retained in `.agents/260821-1700-tier1-baseline-admission/phase-03-core-harness-blocker-resolution.md`.
+
+## Phase 04 Prequalification Infrastructure Evidence
+
+- **PREQUALIFICATION INFRASTRUCTURE COMPLETE / ADMISSIBLE EVIDENCE BLOCKED:** the byte-pinned catalog covers all 18 mandatory Phase 04 matrix rows, maps all 33 stable compiled `C3-ADM-*` test-hooks IDs, and retains a strict ordered runtime parser as pure validation logic. The CLI validates only the canonical catalog and has no capture, runner, custom-input, or evidence-writer path.
+- Final local verification passed Python 13/13; RV64 all 33 IDs exactly once in canonical order plus aggregate PASS; documented QEMU integration 1/1; both production-shaped builds with test-marker exclusion; and the unchanged host aggregate of 101 passed, 0 failed, 4 ignored. These local results are non-admissible, and no runtime log or evidence artifact was retained.
+- Final agent quality review returned correct/KEEPABLE with no findings; final agent security review returned PASS with no Critical, High, or Medium findings. Neither review is human security-owner approval, independent human production-design approval, release approval, or ledger PASS.
+- The former local capture/runner and generated `b7997` bundle were removed rather than relabeled. Their same-process self-reported environment, kernel/source origin, backend, and replay claims were not authentic evidence.
+- Signed CI or a secure measured runner is now an explicit prerequisite before any content-addressed Phase 04 runtime evidence is retained. It must authenticate execution provenance and actual replay/fault evidence. The qualified floor, production parser/task wiring and anchors, controlled final-ELF provenance, production profile, human approvals, release approval, and Phase 02 ledger validation remain blocked.
 
 ## Requirements
 Characterize SDK/examples/FFI/Lua and bind source/dependencies/toolchain/recipe/ELF digest into publisher provenance. The authoritative owner-admission design is a signed, digest-pinned atomic A/B store whose generations are bound to a non-replayable floor outside both replaceable slots: a qualified hardware monotonic counter or authenticated append-only anchor with equivalent rollback resistance. Each slot carries authenticated contents, generation, transaction identity, and commit marker. Production admission stays disabled until the floor backend qualifies. Test wrong-key/tamper/old-generation/torn-write/power-loss plus replay of both otherwise-valid old slots.
@@ -59,7 +67,8 @@ Lockout, floor loss, rollback replay, or accidental SAS admission. Any unresolve
 Keys are provisioned/rotatable; authority only narrows; malformed stores fail closed.
 
 ## Next Steps
-Obtain the two required Phase 01 approvals, qualify an actual external floor with physical replay/power-loss evidence, and complete the blocked production integration and Phase 04/ledger gates. Phase 06 and Phase 07 remain dependency-blocked until the complete Phase 03 child plan—not merely its bounded Core+harness sub-slice—is implemented, verified, approved, and ledger-recorded.
+Obtain the two required Phase 01 human approvals; qualify an actual external floor with physical replay/power-loss evidence; provision signed CI or a secure measured runner before retaining admissible Phase 04 runtime evidence; and complete the blocked production integration, hostile/release evidence, and ledger gates. Umbrella Phase 03 remains pending/production-blocked, umbrella Phase 04 remains pending, and Phases 06 and 07 remain dependency-blocked until their complete prerequisites—not merely the bounded Core/harness and prequalification-infrastructure sub-slices—are implemented, verified, human-approved where required, and ledger-recorded.
 
 ## Deviation Log
-- 2026-08-21: Recorded the completed Core+harness-only sub-slice and its final build, execution, reachability, baseline, and independent review evidence. Umbrella Phase 03 remains pending/production-blocked; all floor, integration, human-approval, physical-evidence, and ledger gates remain open.
+- 2026-08-21: Recorded the completed Core+harness-only sub-slice and its final build, execution, reachability, baseline, and independent agent-review evidence. Umbrella Phase 03 remains pending/production-blocked; all floor, integration, human-approval, physical-evidence, authenticated-runner, and ledger gates remain open.
+- 2026-08-21: Recorded Phase 04 prequalification infrastructure as complete and admissible evidence as blocked. The verified 18-row/33-ID catalog/parser has no local evidence writer; the former local capture/bundle was removed. Signed CI or a secure measured runner is required before retention, the ledger is unchanged, and no agent review is treated as human approval.

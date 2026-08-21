@@ -87,17 +87,21 @@ Cellos is being shaped around product stages, not only phase numbers:
   admission, and hostile-test witnesses remain mandatory before any applicable
   SDK cell can be promoted to `USABLE`; FFI, `rust-std`, and Tier-2 scopes
   without ratified applicability remain non-qualifying.
-- The backend-neutral Tier 1 admission decision core and its private fake/hostile
-  harness are complete as test infrastructure only. All 31 named state and
-  transaction cases pass under `test-hooks`, and production builds exclude the
-  fake and self-tests. The core is not wired into the loader, signing, boot, or
-  task paths, so production admission remains disabled and Phase 03 remains
-  `PLANNED` and blocked. The current RPi3 is not a qualified independent
-  external floor. Qualification still requires a real authenticated,
-  rollback-resistant floor; persistent slot/evidence and recovery paths;
-  physical hostile evidence; provisioned owner/publisher anchors; production
-  loader/task/audit integration with no-task-on-denial evidence; the required
-  human security and production approvals; and governed ledger/release closure.
+- **PREQUALIFICATION INFRASTRUCTURE COMPLETE / ADMISSIBLE EVIDENCE
+  BLOCKED:** the backend-neutral Tier 1 admission core remains test-only, while
+  the canonical 18-row prequalification catalog now maps all 33 stable
+  `C3-ADM-*` `test-hooks` cases and the strict parser/validator pins their
+  runtime ordering. Verification is Python 13/13, RV64 33/33 plus its aggregate
+  test PASS marker, QEMU integration 1/1, production-marker exclusion PASS,
+  with the host baseline unchanged at 101 passed, 0 failed, and 4 ignored. The
+  rejected local capture/writer and its generated bundle were removed; local
+  runs are verification only, non-admissible, and retain no Phase 04 evidence.
+  Production admission remains disabled, Phase 03 remains `PLANNED`, and Phase
+  04 remains `BLOCKED` pending a signed CI or secure measured runner, a qualified
+  authenticated rollback-resistant floor, persistent slot/evidence recovery,
+  physical hostile evidence, provisioned owner/publisher anchors, production
+  loader/task/audit wiring with no-task-on-denial evidence, both required human
+  approvals, and governed ledger/release closure.
 - [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
   is **proposed**, pending security-owner and independent-reviewer approval. It
   introduces no producer, parser, production profile, or admission path; it

@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-19
+**Last updated**: 2026-08-21
 
 This register tracks confirmed production-readiness gaps found while syncing
 docs to code. It is not a bug-fix plan.
@@ -23,11 +23,17 @@ docs to code. It is not a bug-fix plan.
   syscall pair required by their argv/VFS paths
   (`cells/runtimes/lua/src/main.rs:11`, `cells/tools/wasm/src/main.rs:16-20`).
   Those paths can fail under the enforced syscall allowlist.
-- Production cell admission is not signed-only by default. `kernel/src/signing.rs`
-  uses the reproducible dev public key under `dev-signing-key`; without that
-  feature the key is a zero placeholder (`kernel/src/signing.rs:33`), while
-  `signing-required` remains opt-in (`kernel/Cargo.toml:69`). Release builds
-  need explicit key provisioning and mandatory signing/policy features.
+- Production cell admission is not signed-only by default. The 18-row catalog,
+  33 stable `test-hooks` cases, and strict runtime parser are prequalification
+  infrastructure only; local runs are explicitly non-admissible and the former
+  local capture/writer was removed rather than accepted as evidence.
+  `kernel/src/signing.rs` still uses the reproducible dev public key under
+  `dev-signing-key`; without that feature the
+  key is a zero placeholder, while `signing-required` remains opt-in. Phase 04
+  stays blocked pending authenticated runner evidence, a qualified external
+  floor and persistent recovery, production gate/task/audit integration,
+  physical hostile evidence, provisioned anchors, both human approvals, and
+  ledger/release closure.
 
 ## Medium
 
