@@ -20,7 +20,9 @@ from app_tier_acceptance.checks import canonical_digest  # noqa: E402
 from fixtures import append_event, claim, cohort, refresh_event  # noqa: E402
 
 NOW = dt.datetime(2026, 8, 21, 12, tzinfo=dt.timezone.utc)
-SEED = json.loads((ROOT / "docs/app-tier-acceptance-ledger.json").read_text())
+SEED = json.loads(
+    (ROOT / "tests/app-tier-acceptance/fixture-data/app-tier-acceptance-seed.json").read_text()
+)
 
 
 def digest(path: Path) -> str:
@@ -45,6 +47,9 @@ class LedgerTests(unittest.TestCase):
 
     def test_seed_is_truthful_and_exact(self) -> None:
         self.assertEqual(validator.validate(SEED, NOW), "NOT_COMPLETE")
+        self.assertEqual(len(SEED["events"]), 1)
+        self.assertEqual(SEED["phase_lifecycle"][1]["status"], "PLANNED")
+        self.assertEqual(SEED["source_binding"]["ratified_revision"], "")
         cells = [cell for row in SEED["rows"] for cell in row["cells"]]
         self.assertEqual((len(cells), sum(cell["required_for_c9"] for cell in cells)), (60, 44))
 
