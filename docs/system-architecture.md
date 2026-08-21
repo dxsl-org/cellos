@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-21 (Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+**Last Updated**: 2026-08-21 (backend-neutral Tier 1 admission core and non-qualifying hostile harness land without production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -11,20 +11,39 @@
 > availability separate. The Phase 02 acceptance ledger is recorded through
 > `LEDGER_RECORDED` at ratified revision `798e8b04`, with implemented, verified,
 > and attested lifecycle commits `92340d05`, `635600c8`, and `c538df84`. Phase
-> 03 remains `PLANNED` and unblocked. Its current C9 result is
-> `NOT_COMPLETE`; compile, test/runtime, delivery, hardware,
+> 03 remains `PLANNED`; its production-admission work remains blocked. Its
+> current C9 result is `NOT_COMPLETE`; compile, test/runtime, delivery, hardware,
 > admission, and hostile-test witnesses remain mandatory before any applicable
 > cell can be called `USABLE`. FFI, `rust-std`, and Tier-2 scopes without
 > ratified applicability remain non-qualifying. This changes no ABI, source API,
 > loader, signing policy, or runtime profile and does not implement Tier 2 native
 > domains.
 >
+> **Status refresh 2026-08-21**: `kernel/src/admission` now contains a private,
+> backend-neutral Tier 1 admission seam: a fixed authenticated floor tuple,
+> explicit slot/backend outcomes, and a pure borrowed decision function. It
+> admits only an exact committed floor binding with an authenticated,
+> same-backend stale committed partner; ambiguity, conflicting or forward
+> state, and backend failure fail closed to denial or recovery, never floor
+> advancement. A private fake plus 17 state and 14 transaction checks exercise
+> the model only under `test-hooks`; production builds exclude that harness.
+> Independent code and security reviews passed this Core+harness slice, but
+> they are not human production approvals. No loader, signing, boot, task, or
+> audit path consumes the decision. The existing RPi3 is not a qualified
+> independent external floor, so production admission stays disabled and Phase
+> 03 stays blocked pending a qualified authenticated rollback-resistant floor,
+> persistent production slot/evidence recovery, physical hostile evidence,
+> provisioned owner/publisher anchors, production integration and
+> no-task-on-denial evidence, required security-owner and independent
+> production approvals, and governed ledger/release closure.
+>
 > **Status refresh 2026-08-21**: [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
 > is a **proposed** Claim-A contract, pending security-owner and
 > independent-reviewer approval. It introduces no producer, kernel parser,
 > production build profile, or admission path, and does not change the Phase 03
-> ledger state (`PLANNED`) or unblock production work. Production admission remains disabled
-> until the external-floor and owner-record gates are qualified and approved.
+> ledger state (`PLANNED`) or unblock production work. Production admission
+> remains disabled until the external-floor and owner-record gates are qualified
+> and approved.
 >
 
 > **Status refresh 2026-08-21**: Manifest v2 keeps its fixed 16-byte record and

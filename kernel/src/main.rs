@@ -21,6 +21,7 @@ use core::panic::PanicInfo;
 
 // Core kernel modules
 pub mod acpi;
+mod admission;
 pub mod audit;
 mod board;
 pub mod boot;
@@ -812,6 +813,12 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("cell signing self-test PASS");
         } else {
             log_info("cell signing self-test FAIL — cell signature gate unsafe");
+        }
+        #[cfg(feature = "test-hooks")]
+        if crate::admission::self_test() {
+            log_info("admission-core self-test PASS (fail-closed A/B floor model)");
+        } else {
+            log_info("admission-core self-test FAIL");
         }
         // P-TRUST: privileged path-caps are bounded by the spawn ceiling. Pure
         // CapSet logic (no scheduler), so it runs here alongside the crypto tests,

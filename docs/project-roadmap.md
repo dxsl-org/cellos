@@ -87,12 +87,23 @@ Cellos is being shaped around product stages, not only phase numbers:
   admission, and hostile-test witnesses remain mandatory before any applicable
   SDK cell can be promoted to `USABLE`; FFI, `rust-std`, and Tier-2 scopes
   without ratified applicability remain non-qualifying.
+- The backend-neutral Tier 1 admission decision core and its private fake/hostile
+  harness are complete as test infrastructure only. All 31 named state and
+  transaction cases pass under `test-hooks`, and production builds exclude the
+  fake and self-tests. The core is not wired into the loader, signing, boot, or
+  task paths, so production admission remains disabled and Phase 03 remains
+  `PLANNED` and blocked. The current RPi3 is not a qualified independent
+  external floor. Qualification still requires a real authenticated,
+  rollback-resistant floor; persistent slot/evidence and recovery paths;
+  physical hostile evidence; provisioned owner/publisher anchors; production
+  loader/task/audit integration with no-task-on-denial evidence; the required
+  human security and production approvals; and governed ledger/release closure.
 - [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
   is **proposed**, pending security-owner and independent-reviewer approval. It
   introduces no producer, parser, production profile, or admission path; it
-  does not alter the ledger's Phase 03 `PLANNED` status or unblock production work. Production
-  admission remains disabled pending qualified and approved external-floor and
-  owner-record gates.
+  does not alter the ledger's Phase 03 `PLANNED` status or unblock production
+  work. Production admission remains disabled pending qualified and approved
+  external-floor and owner-record gates.
 - Net-broker has implemented pieces for Noise/identity/routing, but `main.rs`
   still marks K1 loading, beacon sockets, relay dispatch, leases, and enrollment
   as TODO wiring.

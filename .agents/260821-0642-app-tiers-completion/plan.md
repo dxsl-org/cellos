@@ -1,0 +1,82 @@
+---
+title: "Cellos App Tiers Completion"
+description: "Risk-gated umbrella program for Native SDK and application-tier completion."
+status: in-progress
+priority: P1
+effort: 37 weeks
+branch: main
+tags: [app-tiers, sdk, admission, virtualization, abi, security]
+created: 2026-08-21
+---
+
+# Cellos App Tiers Completion
+
+## Program Contract
+
+This umbrella coordinates child plans for TODO C2–C9. Each child requires approval before Cook. Tier 2 and Manifest v3 require independent security/ABI approvals. Security evidence is non-waivable.
+
+The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK contract is approved, its matrix is validated by Phase 02, and every Phase 01–08 child is implemented, verified, and ledger-recorded. Otherwise the program is `NOT_COMPLETE`; BLOCKED/PLANNED work remains visible but cannot close the program or be removed from scope by steering.
+
+## Data Flow
+
+`C2 contract approval + SDK matrix → C8 schema validation → Phase 01–08 evidence → C8 status → C9 closure`. Admission flows `artifact → manifest/signature/provenance → policy/owner decision → execution tier`; Phase 03 remains pending/production-blocked until its child-plan approvals, external-floor qualification, production integration, physical/hostile evidence, and ledger closure are complete.
+
+## Phases
+
+| ID | Phase | Effort | Depends on | Status |
+|---|---|---:|---|---|
+| 01 | [Native SDK Contract C2](phase-01-native-sdk-contract.md) | 2w | — | completed |
+| 02 | [Unified Acceptance Ledger C8](phase-02-unified-acceptance-ledger.md) | 1w | 01 | completed |
+| 03 | [Tier 1 Baseline/Admission C3](phase-03-tier1-baseline-admission.md) | 4w | 01,02; child Phase 01 approvals; qualified external floor | pending / production-blocked — Core+harness-only sub-slice complete |
+| 04 | [Tier 3 Qualification C5](phase-04-tier3-qualification.md) | 8w | 01,02 | pending |
+| 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | pending |
+| 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03 |
+| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04 | pending — dependency-blocked on Phases 03 and 04 |
+| 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 05,07 | pending |
+| 09 | [Final Completion Gate C9](phase-09-final-completion-gate.md) | 1w | 01-08 approved/implemented, verified, ledger-recorded | pending |
+
+## Phase 03 Evidence and Status
+
+The child admission plan records the proposed provenance contract at [`docs/specs/18c-publisher-provenance-envelope.md`](../../docs/specs/18c-publisher-provenance-envelope.md). Its documentation-only Phase 01 recorded host aggregate evidence (`cargo test -p types -p api --target x86_64-unknown-linux-gnu`: 101 passed, 0 failed, 4 ignored), correction of two contract-review defects with a focused recheck passing, and a final independent document review with no blocking document defect.
+
+The authorized Core+harness-only sub-slice is complete. `bash scripts/build-test-hooks-ci.sh` passed exit 0 under RV64 `test-hooks` with `RUSTFLAGS="-D warnings -C relocation-model=pic"`; the bare-metal path logged `[INFO] admission-core self-test PASS (fail-closed A/B floor model)`; the documented QEMU test-hooks runner passed 1/1; all 31 named cases are reachable; no-default and `policy-required,signing-required` RV64 builds passed while excluding hostile/test modules; and the host baseline stayed at 101 passed, 0 failed, and 4 ignored. Independent quality review returned PASS/CORRECT with no findings, and independent static security review returned PASS with zero Critical, High, or Medium findings.
+
+Those reviews are code/evidence review only, not human security-owner approval or independent production-design approval. Umbrella Phase 03 remains **pending / production-blocked**, not complete. Child Phases 02–04 remain **BLOCKED**, and umbrella Phases 06 and 07 remain dependency-blocked. Non-waivable gates remain: both recorded design approvals; a real qualified non-replayable external floor with physical rollback/replay and power-loss evidence; approval of parsers/persistence and provisioning of owner/publisher anchors; controlled final-ELF provenance production; common loader/task-creation runtime wiring and no-task-on-denial proof; final hostile/release approvals; and governed ledger PASS. Changes to the core/harness semantics or evidence surfaces invalidate that sub-slice evidence; changes to anchors, encodings, backend/firmware, recovery, runtime gate, or production profile invalidate the eventual production evidence and approvals.
+
+## Parallel Ownership
+
+After 01, Phase 02 runs first as the ledger-schema gate. Only after its schema is approved may Phases 03–05 run evidence work in parallel: 03 owns admission, 04 hypervisor lanes, and 05 v2 tooling/loader tri-state. 06 owns new PAL/target files. 07 receives loader/kernel ownership after 03/05. 08 receives manifest ABI ownership after 05/07.
+
+## Program Gates
+
+No Tier 2 exposure before Spec 22 negatives. No Manifest v3 without 2× ABI approval. The Raspberry Pi 3 ARM64 lane must be hardware-qualified. PASS needs reproducible evidence. V2, Tier 1 SAS fast path, and Tier 3 fallback remain compatible. Phase 01 must be contract-approved and its SDK matrix accepted by Phase 02; every implementation child then follows `design-approved → child-linked → implemented → verified → ledger-recorded`. Skipping a state or remaining BLOCKED/PLANNED prevents closure.
+
+## Approval Matrix
+
+| Gate | Approver roles | Required artifact | Independence | Invalidation |
+|---|---|---|---|---|
+| SDK/baseline | SDK owner + tester | contract, conformance report | tester is not implementer | public/API drift |
+| Tier 1 admission | security owner + reviewer | threat model, negative evidence | reviewer did not author change | key/policy/provenance change |
+| Tier 3 lane | platform custodian + tester | hardware log, recovery report | evidence runner differs from implementer | firmware/hardware/VMM change |
+| Tier 2 | security owner + two reviewers | Spec 22 matrix, rollback drill | reviewers independent of implementer | MMU/syscall/grant/DMA change |
+| Manifest v3 | ABI owner + two explicit confirmations | ADR, fixture hashes, migration report | confirmations from distinct roles | layout/parser/signing change |
+
+## Rollback
+
+Rollback is child-scoped. Tier 2 drains to safe roots and reboots; never converts domains to SAS. V3 rollback keeps v2 writer/parser. Published stable SDK/ABI promises cannot silently disappear.
+
+## Validation
+
+Full verification roles; re-grep cited paths and enumerate changed-contract consumers before each child approval.
+
+## Red Team Review
+
+Adjudicated findings added one fully-qualified terminal state, mandatory child lifecycle, independent approvals, content-addressed evidence, anti-rollback admission, hardware custody, hostile/failure tests, bounded Tier 2 rollback, and authenticated v3 downgrade protection. No evidence may be waived and steering cannot remove C2–C9 scope.
+
+## Validation Log
+
+1. **1B:** only `FULLY_QUALIFIED|NOT_COMPLETE`; impacts Phase 02 and Phase 09 closure.
+2. **2A override:** primary Tier 3 hardware is available ARM64 Raspberry Pi 3; impacts Phase 04 evidence gate.
+3. **3A:** signed atomic A/B owner store with monotonic generation/fail-closed recovery; impacts Phase 03.
+4. **4A:** v3 extends publisher-signed envelope; owner consent stays separate; impacts Phase 08.
+5. **5A:** rust-std p99 syscall/IPC regression ≤5% under pinned measurement rules; impacts Phase 06.

@@ -2,6 +2,32 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Tier 1 admission Core and hostile harness land test-only
+
+The kernel now has a private, backend-neutral admission seam with a fixed
+authenticated floor tuple, explicit slot/backend outcomes, and a pure borrowed
+decision function. Admission requires an exact committed floor binding and an
+authenticated same-backend stale committed partner. Missing, malformed,
+ambiguous, conflicting, forward, or backend-failure states fail closed to
+denial or recovery; the decision cannot advance the floor.
+
+The private fake and all 31 named hostile checks (17 state and 14 transaction)
+run only with `test-hooks`; production builds exclude the fake and self-tests.
+Independent code and security reviews passed this Core+harness slice, with no
+code-review findings and no Critical/High/Medium security findings. Neither is
+a human production approval. The core is deliberately disconnected from
+loader, signing, boot, task, and audit paths.
+
+Production admission therefore remains disabled and Phase 03 remains
+`PLANNED` and blocked. The existing RPi3 is not a qualified independent
+external floor. Remaining non-waivable gates include a qualified authenticated
+rollback-resistant floor; persistent production slot/evidence parsing and
+recovery; physical replay, power-loss, and hostile evidence; provisioned
+owner/publisher anchors and provenance; production loader/task/audit wiring
+with no-task-on-denial evidence; security-owner and independent non-author
+production approvals; Phase 04 and release approval; and governed ledger
+closure.
+
 ## [2026-08-21] Publisher Provenance Envelope is proposed
 
 [Spec 18c Publisher Provenance Envelope](specs/18c-publisher-provenance-envelope.md)
