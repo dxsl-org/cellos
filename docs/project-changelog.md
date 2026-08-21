@@ -2,6 +2,34 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-21] Phase 02 adds the authoritative app-tier acceptance ledger
+
+The repository now carries one strict JSON ledger for the 60 Native SDK matrix
+cells, QEMU/KVM/physical subjects, blockers, hostile tests, and Phase 01–08
+lifecycle. Its validator binds exact source bytes, typed claim tuples,
+content-addressed class-specific witnesses, Git provenance, TTLs, append-only
+reviewed state deltas, and the deterministic C9 terminal state. CI runs the
+validator and 26 adversarial tests. Current qualification remains
+`NOT_COMPLETE`; all unresolved hardware, admission, Tier 2, and semihosting
+gates stay visible and no capability cell is promoted to `USABLE`.
+The validator/CI gate has been reviewed, but Phase 02 remains in progress: the
+seed ledger still needs a ratified Git revision and one adjacent append-only
+lifecycle event before that phase can advance. FFI, `rust-std`, and Tier-2
+scopes without ratified applicability remain non-qualifying.
+
+## [2026-08-21] Spec 23 Native SDK contract is ratified
+
+Spec 23 now defines the one Cellos Native SDK family as named modules with
+separate execution-tier, runtime-profile, stability, and availability axes.
+The contract covers the current Tier 1 Trusted SAS Cell and constrains the
+future Tier 2 Native Domain Cell without changing the frozen ABI, source API,
+package versions, manifest layout, loader, signing policy, or runtime profiles.
+
+Current SDK matrix cells remain `PARTIAL`: the contract records source anchors,
+but compile, test/runtime, and delivery witnesses must be bound in the Phase 02
+acceptance ledger before any cell can be promoted to `USABLE`. No SDK runtime,
+Tier 2 mechanism, or app-tier implementation is claimed by this ratification.
+
 ## [2026-08-21] Phase 04 Tier 2 native-domain implementation gate is accepted
 
 Spec 22 now defines the mandatory design and negative-test gate for any future

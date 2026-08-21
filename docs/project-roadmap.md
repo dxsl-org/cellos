@@ -52,7 +52,9 @@ Cellos is being shaped around product stages, not only phase numbers:
   and is not a current Cargo workspace member.
 - Application execution uses Tier 1/2/3 terminology. `Tier 1b` and `Tier 3b`
   are legacy guide aliases for Tier 1 runtime profiles and Tier 3 Linux guests;
-  SDK packaging uses named modules, not numbered tiers. Manifest v2 exposes
+  SDK packaging uses named modules, not numbered tiers. The ratified [Spec 23
+  Native SDK contract](specs/23-native-sdk-contract.md) keeps execution tier,
+  runtime profile, stability, and availability as separate axes. Manifest v2 exposes
   canonical `PROTECTION_CLASS_*` aliases while retaining the ABI-stable `tier`
   byte and legacy `TIER_*` names; Tier 2 native domains remain unimplemented.
   Any implementation must first satisfy the mandatory [Spec 22 native-domain
@@ -75,6 +77,15 @@ Cellos is being shaped around product stages, not only phase numbers:
   current native cells remain in the shared SAS and are not treated as
   contained merely because the manifest taxonomy names a future protection
   class.
+- The Native SDK contract is ratified and the authoritative Phase 02
+  [acceptance ledger](app-tier-acceptance-ledger.json) is implemented. Its
+  validator and CI gate have been reviewed, but Phase 02 remains in progress.
+  Its next state transition is pending a ratified Git revision plus one
+  adjacent append-only lifecycle event. The current result is `NOT_COMPLETE`:
+  compile, test/runtime, delivery, hardware, admission, and hostile-test
+  witnesses remain mandatory before any applicable SDK cell can be promoted to
+  `USABLE`; FFI, `rust-std`, and Tier-2 scopes without ratified applicability
+  remain non-qualifying.
 - Net-broker has implemented pieces for Noise/identity/routing, but `main.rs`
   still marks K1 loading, beacon sockets, relay dispatch, leases, and enrollment
   as TODO wiring.

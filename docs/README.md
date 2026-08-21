@@ -52,6 +52,8 @@
 | [api-reference.md](api-reference.md) | Syscall ABI, trait definitions, examples |
 | [performance-report.md](performance-report.md) | Hardware-qualified IPC latency targets and QEMU regression tracking |
 | [code-metrics.generated.md](code-metrics.generated.md) | Generated kernel-size metrics owner; canonical moving counts |
+| [app-tier-acceptance-ledger.json](app-tier-acceptance-ledger.json) | Authoritative content-addressed app-tier qualification ledger |
+| [app-tier-acceptance-matrix.md](app-tier-acceptance-matrix.md) | Review-only projection of the app-tier ledger |
 
 ---
 
@@ -94,3 +96,4 @@ Internal design docs — read before implementing a subsystem.
 | [specs/15-kernel-boundary.md](specs/15-kernel-boundary.md) | Kernel whitelist/blacklist law + theory |
 | [specs/16-rustc-tcb.md](specs/16-rustc-tcb.md) | rustc as TCB — LBI guarantees, limits, policies |
 | [specs/17-ipc-wire-contract.md](specs/17-ipc-wire-contract.md) | Cell IPC: framing, recv-mask, byte-0 registry |
+| [specs/23-native-sdk-contract.md](specs/23-native-sdk-contract.md) | Ratified Native SDK family contract and evidence matrix |

@@ -5,6 +5,19 @@
 **Version**: 0.2.1-dev (Mycelium Era)
 **Last Updated**: 2026-08-21 (Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
+> **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
+> is ratified as the normative contract for the single Native SDK family. It
+> uses named modules and keeps execution tier, runtime profile, stability, and
+> availability separate. The Phase 02 acceptance ledger and validator are now
+> implemented and reviewed, but Phase 02 remains in progress pending a ratified
+> Git revision and one adjacent append-only lifecycle event. Its current C9
+> result is `NOT_COMPLETE`; compile, test/runtime, delivery, hardware,
+> admission, and hostile-test witnesses remain mandatory before any applicable
+> cell can be called `USABLE`. FFI, `rust-std`, and Tier-2 scopes without
+> ratified applicability remain non-qualifying. This changes no ABI, source API,
+> loader, signing policy, or runtime profile and does not implement Tier 2 native
+> domains.
+
 > **Status refresh 2026-08-21**: Manifest v2 keeps its fixed 16-byte record and
 > legacy `tier`/`TIER_*` source surface while exposing canonical
 > `PROTECTION_CLASS_*` names. The x86 loader derives PKU protection from the
@@ -1202,6 +1215,7 @@ Same foundation, **opposite coordination semantics** → two separate problems:
 | Language-Based Isolation | Rust's type system enforces isolation better than hardware |
 | **No per-Cell SATP (Tier 1)** | Per-cell page tables would break Tier 1 zero-copy IPC and add `sfence.vma` cost on every switch (ASID broken on most RV silicon). Untrusted code is confined to the **Tier 3 Linux VM** (Stage-2/EPT). Decided 2026-06-05. |
 | Tiered isolation (1 / 2 / 3) | Tier 1 trusted SAS cells and runtime profiles · Tier 2 native domains in a private MMU protection domain once implemented — see `docs/specs/18-cell-trust-tiers.md` · Tier 3 VM guests (legacy: Tier 3b Linux VM). |
+| Native SDK contract | One named-module SDK family shared by Tier 1 and the future Tier 2; availability is evidence-gated by Spec 23 and the Phase 02 acceptance ledger. |
 | Fixed-Priority Scheduler | Three tiers, FIFO within tier, RT-hart routing on RV64 |
 | Capability-Based Access | Fine-grained control, no global permissions |
 | Owned Buffers in Async | Deterministic cleanup in SAS (no process teardown) |
