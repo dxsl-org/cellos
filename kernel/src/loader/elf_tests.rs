@@ -41,6 +41,7 @@ pub fn run_all() {
     test_manifest_v2_tier_out_of_range_rejected();
     test_manifest_v2_tier_legacy_is_valid_native();
     test_manifest_network_false_grants_no_network_cap();
+    super::manifest_section_tests::run_all();
     test_force_exit_opcode_mapped();
     test_force_exit_allowlist_bit_none();
     // Cell signing tests.
@@ -51,7 +52,7 @@ pub fn run_all() {
     test_signing_required_flag_off_in_dev_build();
     // W^X post-relocation flag derivation.
     super::wx::run_self_tests();
-    log::info!("=== ELF Loader Tests PASSED ===");
+    log::info!("[selftest] ELF-LOADER: PASS");
 }
 
 // ─── spawn_from_path path validation ─────────────────────────────────────────

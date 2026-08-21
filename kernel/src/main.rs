@@ -698,6 +698,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     task::init();
     log_info("Scheduler initialized");
 
+    // The loader corpus exercises real spawn_gated denials and snapshots the
+    // scheduler around every malformed image. Run it after task::init(), while
+    // the scheduler is available but still empty and before secondary harts or
+    // unrelated boot tasks can add noise. Assertions make any failure boot-fatal.
+    #[cfg(feature = "test-hooks")]
+    crate::loader::elf_tests::run_all();
+
     // 7a. Trust-model self-tests (thread identity inheritance + honest revoke).
     // Runs HERE — after the scheduler exists but BEFORE secondaries start — so the
     // synthetic thread it spawns cannot be raced onto another hart before teardown.

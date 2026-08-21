@@ -71,6 +71,24 @@ api::declare_syscalls![Send, Recv, Log, Exit, GetTime];
 
 **Capabilities** are kernel grants (honored only for `/bin/*` binaries). **Syscalls** are the thin whitelist the kernel enforces. Omit what you don't use.
 
+The Rust macro emits the exact 16-byte Manifest-v2 ABI. Its ABI-stable `tier`
+byte is a PKU **protection class**, not this guide's application execution tier;
+new code should use `protection_class` terminology. Legacy Zig Cells continue
+to emit exact 8-byte v1 records, which the Rust loader upcasts without changing
+their behavior.
+
+Inspect a built Cell without modifying it:
+
+```bash
+python3 tools/check_elf.py path/to/cell.elf
+```
+
+Read `Execution tier`, `Runtime profile`, `Protection class`, `Capabilities`,
+and `Evidence` as separate claims. The inspector does not prove a signature or
+runtime measurement. At load time, only a structurally valid ELF with no
+manifest selects explicit legacy path policy; a malformed or duplicate
+manifest is denied before task creation.
+
 ---
 
 ## Syscall Allowlist

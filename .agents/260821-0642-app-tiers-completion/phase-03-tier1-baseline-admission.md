@@ -54,6 +54,7 @@ Freeze baseline; qualify external floor backend; design source-to-ELF provenance
 - [ ] Security owner approves the provenance/owner separation, exact encoding, A/B recovery state machine, and threat model.
 - [ ] Independent reviewer who did not author the design approves it separately.
 - [ ] Qualify an actual external non-replayable floor with authenticated intent binding and real rollback/replay and power-loss evidence.
+- [ ] Resolve `CELLOS-LOADER-SIG-001` by authenticating all load-affecting ELF section and relocation metadata, including `.rela.dyn`, before any relocation write.
 - [ ] Implement boot-provisioned anchors and mandatory publisher-plus-owner production admission, then pass hostile evidence and ledger closure.
 - [ ] Keep production/developer claims separated.
 
@@ -61,10 +62,10 @@ Freeze baseline; qualify external floor backend; design source-to-ELF provenance
 Production cannot enable without a qualified external floor. Governed paths admit only `publisher ∧ owner slot generation == floor`; replaying both old valid slots, floor-ahead, slot-ahead, partial writes, or invalid transaction binding creates no task/fallback. Recovery never auto-admits or derives the floor from slots.
 
 ## Risk Assessment
-Lockout, floor loss, rollback replay, or accidental SAS admission. Any unresolved floor/slot mismatch enters authenticated recovery or denies; it never selects “highest slot.” Developer posture is a separate explicit reboot choice; floor reset is a separately authorized reprovisioning event.
+Lockout, floor loss, rollback replay, or accidental SAS admission. `CELLOS-LOADER-SIG-001` is a Critical pre-existing production blocker: the signed envelope omits load-affecting section/relocation metadata, so redirected `.rela.dyn` metadata can drive unchecked kernel writes. This phase owns the provenance/signature-boundary resolution; Phase 05 only recorded and transferred it. Any unresolved floor/slot mismatch enters authenticated recovery or denies; it never selects “highest slot.” Developer posture is a separate explicit reboot choice; floor reset is a separately authorized reprovisioning event.
 
 ## Security Considerations
-Keys are provisioned/rotatable; authority only narrows; malformed stores fail closed.
+Keys are provisioned/rotatable; authority only narrows; malformed stores fail closed. Production admission remains blocked until `CELLOS-LOADER-SIG-001` is fixed and independently approved; the Phase 05 narrow tooling PASS is not evidence of that fix.
 
 ## Next Steps
 Obtain the two required Phase 01 human approvals; qualify an actual external floor with physical replay/power-loss evidence; provision signed CI or a secure measured runner before retaining admissible Phase 04 runtime evidence; and complete the blocked production integration, hostile/release evidence, and ledger gates. Umbrella Phase 03 remains pending/production-blocked, umbrella Phase 04 remains pending, and Phases 06 and 07 remain dependency-blocked until their complete prerequisites—not merely the bounded Core/harness and prequalification-infrastructure sub-slices—are implemented, verified, human-approved where required, and ledger-recorded.

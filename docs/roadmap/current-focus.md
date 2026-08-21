@@ -25,6 +25,17 @@ without treating QEMU or compile-only checks as board qualification.
   33 stable `test-hooks` IDs, and a strict runtime parser. This is test
   infrastructure only: local runs are non-admissible, production admission is
   disabled, and Phase 04 remains blocked.
+- Manifest-v2 tooling Phase 05 is complete. The loader now classifies a unique
+  manifest section as `Absent`, `Valid` (v1 or v2), or `Malformed` before task
+  creation; only genuine absence selects the explicit legacy path policy.
+  Rust v2 remains exactly 16 bytes and Zig v1 exactly 8 bytes, with compatible
+  upcast behavior and protection-class terminology separated from application
+  execution tiers.
+- That tooling completion is not production loader readiness. Three adjacent,
+  pre-existing blockers are registered as `CELLOS-LOADER-SIG-001` (Critical;
+  Phase 03 provenance/signature boundary), `CELLOS-LOADER-RACE-002` (High;
+  Phase 07 atomic task publication), and `CELLOS-LOADER-CLEANUP-003` (Medium;
+  Phase 07 denial rollback). Phase 08 remains dependent on Phase 07.
 
 ## Current Documentation Corrections
 
@@ -44,10 +55,13 @@ without treating QEMU or compile-only checks as board qualification.
    authenticated evidence for a qualified floor, persistent recovery, physical
    hostile cases, provisioned anchors, production wiring, and both human
    approvals; local verification cannot satisfy this gate.
-4. Continue reducing kernel-resident legacy driver/orchestration code only when
+4. Close the three registered loader-security blockers under their Phase 03
+   and Phase 07 owners before claiming production loader readiness; do not
+   reopen completed Manifest-v2 tooling acceptance to absorb that work.
+5. Continue reducing kernel-resident legacy driver/orchestration code only when
    a slice has explicit runtime evidence and rollback notes.
-5. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
+6. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
    or HAL ABI hook declarations change.
-6. Use [hardware-tracks.md](hardware-tracks.md) and
+7. Use [hardware-tracks.md](hardware-tracks.md) and
    [runtime-and-platform-tracks.md](runtime-and-platform-tracks.md) for lane
    status instead of re-reading the archive.

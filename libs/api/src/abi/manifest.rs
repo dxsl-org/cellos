@@ -25,9 +25,10 @@
 //! v1 was an 8-byte record `{magic, version=1, flags:u8, _pad:[u8;2]}`.  A v2
 //! kernel reads a v1 manifest via `from_bytes` (zero-extends `flags`, sets
 //! `tier = PROTECTION_CLASS_LEGACY` so the loader keeps v1's
-//! `is_trusted`→PKU-key behaviour byte-for-byte). A v1 kernel reading a v2
-//! manifest sees `version != 1` and rejects it (fail-closed → legacy path
-//! grants). `PROTECTION_CLASS_LEGACY` is ALSO a valid byte in a native v2 record
+//! `is_trusted`→PKU-key behaviour byte-for-byte). A v1 kernel sees
+//! `version != 1`; v2 loaders classify unsupported versions as malformed and
+//! deny them before task creation.
+//! `PROTECTION_CLASS_LEGACY` is also valid in a native v2 record
 //! (not just a v1-upcast artifact) — it is what the tier-less constructors
 //! (`CellManifest::new`/`with_parts`) bake in by default, meaning "no explicit
 //! protection class requested." ABI-stable — see Law 1.

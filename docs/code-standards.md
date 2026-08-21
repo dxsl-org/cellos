@@ -539,10 +539,32 @@ Application Tier 1/2/3 describes the execution/isolation boundary; runtime
 profiles and SDK modules describe how code is built and which APIs it uses.
 
 Manifest v2 uses a protection-class byte for the x86 PKU floor. New Rust code
-should use `PROTECTION_CLASS_*`, `CellManifest::protection_class()`, and
-`granted_protection_class()`; `tier`, `TIER_*`, `tier()`, and the existing
-manifest macro forms remain compatibility surfaces. The Rust record remains
-16 bytes, while Zig cells intentionally emit the legacy 8-byte v1 record.
+must use `PROTECTION_CLASS_*`, `CellManifest::protection_class()`, and
+`granted_protection_class()`; do not call this byte an application execution
+tier. The ABI-stable `tier` field, `TIER_*`, `tier()`, constructors, and existing
+manifest macro forms remain compatibility surfaces.
+
+The binary contracts are exact:
+
+- Rust v2 is the 16-byte little-endian record
+  `{magic:u32, version=2:u8, tier:u8, flags:u16, cap_args_off=0:u32,
+  reserved=0:u32}`. Reserved fields must remain zero.
+- Zig v1 is the 8-byte record
+  `{magic:u32, version=1:u8, flags:u8, pad=[0;2]}`. The Rust parser
+  zero-extends its flags and assigns legacy protection behavior.
+
+The kernel classifies the unique `__ViCell_manifest` section before task
+creation as `Absent`, `Valid` (v1 or v2), or `Malformed`. Only structurally
+valid absence may use the explicit legacy path policy. Never turn malformed
+metadata, duplicate sections, a named `SHT_NOBITS` section, unknown
+class/flags, non-zero reserved bytes, or version/length mismatch into absence.
+
+Use `python3 tools/check_elf.py <path>` for strict, read-only inspection. Its
+labels have deliberately separate meanings: `Execution tier` is external
+application policy, `Runtime profile` is the build/runtime choice, `Protection
+class` is the manifest PKU request, `Capabilities` are requested manifest bits,
+and `Evidence` states only what the manifest section proves. The tool does not
+assert a signature or runtime measurement and does not mutate the ELF.
 
 **Before (manual dispatch)**:
 ```rust

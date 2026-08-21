@@ -12,6 +12,17 @@ docs to code. It is not a bug-fix plan.
   `cells/services/net/src/handlers.rs:157,177,202` do not owner-bind resolution
   to the caller. Another network-capable Cell can therefore guess or reuse a
   live cap and operate on a peer's socket.
+- **`CELLOS-LOADER-SIG-001` — Critical, owner: Phase 03
+  provenance/signature boundary.** The current Cell signature envelope does not
+  authenticate all load-affecting ELF section metadata or relocation records.
+  An attacker can redirect `.rela.dyn` to appended data and reach the loader's
+  unchecked wrapping relocation write (`scripts/sign-cell.py:8-14`,
+  `kernel/src/signing.rs:85-119`, `kernel/src/task.rs:1137-1146`,
+  `kernel/src/loader/reloc.rs:83-127`). Manifest-v2 range checking does not
+  authenticate those bytes. This pre-existed Phase 05 and does not invalidate
+  its tri-state/tooling acceptance, but it blocks production loader readiness
+  until the signed envelope covers every load-affecting input and relocation
+  writes are confined to writable pages owned by the new Cell.
 
 ## High
 
@@ -34,6 +45,15 @@ docs to code. It is not a bug-fix plan.
   floor and persistent recovery, production gate/task/audit integration,
   physical hostile evidence, provisioned anchors, both human approvals, and
   ledger/release closure.
+- **`CELLOS-LOADER-RACE-002` — High, owner: Phase 07 atomic loader/task
+  publication.** A successfully parsed child can enter a ready queue before its
+  syscall allowlist, quota, capabilities, operator policy, and protection class
+  are installed (`kernel/src/task.rs:987-1016,1163-1178`,
+  `kernel/src/loader.rs:197-354`). Another hart can therefore observe transient
+  permit-all or unlimited defaults. This pre-existing race does not defeat
+  Phase 05's malformed-manifest-before-task guarantee, but production readiness
+  requires full fail-closed initialization before one atomic publication.
+  Phase 08 remains dependent on Phase 07.
 
 ## Medium
 
@@ -59,6 +79,14 @@ docs to code. It is not a bug-fix plan.
   qualification.
 - AArch64 test-hooks runtime proof remains blocked where the host-side
   `qemu_exit::AArch64Semihosting` issue is still present.
+- **`CELLOS-LOADER-CLEANUP-003` — Medium, owner: Phase 07 loader/task
+  rollback.** `PlatformCap` singleton refusal occurs after task creation,
+  quota registration, and capability application, then returns without
+  exiting the ready child, deregistering quota, or reclaiming its resources
+  (`kernel/src/loader.rs:197-203,327-365`,
+  `kernel/src/task.rs:1001-1016`). This pre-existing cleanup defect is outside
+  Phase 05's manifest-classification acceptance, but production readiness
+  requires reservation before publication or complete rollback on denial.
 
 ## Low
 

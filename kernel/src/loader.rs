@@ -18,6 +18,8 @@ pub mod elf_tests;
 pub mod launch_profile;
 /// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
 pub mod mem_spawn_gate;
+mod manifest_section;
+mod manifest_section_tests;
 pub mod reloc;
 pub mod va_alloc;
 /// W^X: lower cell pages to their ELF `p_flags` once relocation has finished.
@@ -117,11 +119,28 @@ pub fn spawn_gated(
     path: &str,
     spawner: crate::task::cap::Spawner,
 ) -> ViResult<usize> {
+    // Classify the unique manifest section before any task can be created.
+    // Only a structurally valid ELF with no such section reaches the explicit
+    // legacy path policy; malformed metadata or manifest bytes fail closed.
+    let manifest_opt = match manifest_section::classify(elf_bytes) {
+        manifest_section::ManifestSection::Absent => None,
+        manifest_section::ManifestSection::Valid { manifest, version } => {
+            log::debug!("[loader] {:?}: valid {:?} manifest", path, version);
+            Some(manifest)
+        }
+        manifest_section::ManifestSection::Malformed => {
+            log::warn!("[loader] DENY {:?}: malformed ELF manifest metadata", path);
+            crate::audit::log_event(
+                crate::audit::AuditEvent::CellSpawnDenied,
+                &crate::audit::encode_u32x2(0, 1),
+            );
+            return Err(ViError::PermissionDenied);
+        }
+    };
     // ── Binary signature gate ─────────────────────────────────────────────────
-    // Verify the Ed25519 signature in __ViCell_sig before any ELF parsing or
-    // task creation. With `signing-required`, an absent signature is treated
-    // the same as an invalid one (fail-closed). In dev mode (default), an
-    // absent signature is permitted so unsigned dev cells keep working.
+    // Verify the Ed25519 signature after the bounded structural classification
+    // and before task creation. With `signing-required`, an absent signature is
+    // treated like an invalid one (fail-closed). Dev mode permits unsigned cells.
     match crate::signing::extract_sig(elf_bytes) {
         Some(sig) => {
             if !crate::signing::verify_cell(elf_bytes, &sig) {
@@ -153,15 +172,6 @@ pub fn spawn_gated(
         }
     }
 
-    let elf_loader = ElfLoader;
-
-    // Read capability manifest from `__ViCell_manifest` ELF section.
-    // Absent or malformed → None (falls back to legacy hardcoded path grants).
-    let manifest_opt: Option<api::manifest::CellManifest> =
-        match elf_loader.get_section(elf_bytes, "__ViCell_manifest") {
-            Ok(bytes) => api::manifest::CellManifest::from_bytes(bytes),
-            Err(_) => None,
-        };
 
     // Privilege gate: a user Cell (path NOT under /bin/) may NOT declare any
     // privileged capability.  Runs BEFORE spawn_from_mem — no task is created

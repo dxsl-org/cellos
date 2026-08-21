@@ -29,10 +29,10 @@ The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK c
 | 02 | [Unified Acceptance Ledger C8](phase-02-unified-acceptance-ledger.md) | 1w | 01 | completed |
 | 03 | [Tier 1 Baseline/Admission C3](phase-03-tier1-baseline-admission.md) | 4w | 01,02; child Phase 01 approvals; qualified external floor; signed CI or secure measured runner | pending / production-blocked — Core+harness and Phase 04 prequalification infrastructure complete; admissible evidence blocked |
 | 04 | [Tier 3 Qualification C5](phase-04-tier3-qualification.md) | 8w | 01,02 | pending |
-| 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | pending |
+| 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | completed — v2 compatibility baseline frozen; loader risks transferred |
 | 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03 |
-| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04 | pending — dependency-blocked on Phases 03 and 04 |
-| 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 05,07 | pending |
+| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04; loader-risk handoff from 05 | pending — dependency-blocked on Phases 03 and 04; owns `CELLOS-LOADER-RACE-002` and `CELLOS-LOADER-CLEANUP-003` |
+| 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 05,07 | pending — Phase 05 baseline available, still dependency-blocked on Phase 07 |
 | 09 | [Final Completion Gate C9](phase-09-final-completion-gate.md) | 1w | 01-08 approved/implemented, verified, ledger-recorded | pending |
 
 ## Phase 03 Evidence and Status
@@ -51,13 +51,22 @@ Final local verification passed Python 13/13, RV64 33/33 exactly once in canonic
 
 Signed CI or a secure measured runner is an explicit prerequisite before retaining content-addressed Phase 04 runtime evidence. A qualified floor with physical replay/power-loss evidence; production parsers, task-creation witnesses and provisioned anchors; controlled final-ELF provenance; the production profile; both required human approvals; release approval; and Phase 02 ledger validation remain open. The ledger is unchanged. Umbrella Phase 03 remains pending/production-blocked, umbrella Phase 04 remains pending, and Phases 06 and 07 remain dependency-blocked.
 
+## Phase 05 Evidence and Status
+
+Umbrella Phase 05 is **completed** at its exact Manifest-v2 tooling boundary. Verification recorded API manifest 8/0, ABI baseline 4/0, host 105/0/4 with four new tests, Python 6/0, direct tool matrix 21/21, a Rust corpus of 128 mutations, a Python corpus of 367 mutation candidates, RV64 `-D warnings` build PASS, a real `spawn_gated` runtime corpus with 12 malformed denials/full scheduler unchanged/one `ELF-LOADER PASS`, documented QEMU integration 1/1, and both production-shaped builds PASS. Independent quality review returned correct with no findings; independent security review found no patch-introduced finding and passed the narrow Phase 05 scope.
+
+The v1-upcast/v2-read corpus, exact v1/v2 lengths and v2 layout, compatibility aliases, default byte-identical v2 writer, canonical protection-class terminology, and tri-state parser contract are frozen as the Phase 08 compatibility baseline. This completion does not enable Tier 2, Manifest v3, or production admission.
+
+Production loader readiness remains blocked by three unresolved pre-existing risks. `CELLOS-LOADER-SIG-001` (Critical) transfers to the Phase 03 provenance/signature boundary because load-affecting section and relocation metadata, including `.rela.dyn`, is not covered and can redirect unchecked kernel writes. `CELLOS-LOADER-RACE-002` (High) transfers to Phase 07 atomic task publication because a task becomes runnable before admission state is installed. `CELLOS-LOADER-CLEANUP-003` (Medium) transfers to Phase 07 denial rollback/cleanup because PlatformCap singleton denial can leave an already-ready task alive. These risks are recorded, not fixed.
+
+
 ## Parallel Ownership
 
-After 01, Phase 02 runs first as the ledger-schema gate. Only after its schema is approved may Phases 03–05 run evidence work in parallel: 03 owns admission, 04 hypervisor lanes, and 05 v2 tooling/loader tri-state. 06 owns new PAL/target files. 07 receives loader/kernel ownership after 03/05. 08 receives manifest ABI ownership after 05/07.
+After 01, Phase 02 runs first as the ledger-schema gate. Only after its schema is approved may Phases 03–05 run evidence work in parallel: 03 owns admission and the `CELLOS-LOADER-SIG-001` provenance/signature boundary, 04 hypervisor lanes, and completed 05 owns the frozen v2 tooling/tri-state baseline. Phase 07 receives loader/task ownership after Phase 05 verification and must resolve `CELLOS-LOADER-RACE-002` plus `CELLOS-LOADER-CLEANUP-003`; it remains blocked on Phases 03 and 04. Phase 08 receives manifest ABI ownership after 05/07 and remains blocked on Phase 07.
 
 ## Program Gates
 
-No Tier 2 exposure before Spec 22 negatives. No Manifest v3 without 2× ABI approval. The Raspberry Pi 3 ARM64 lane must be hardware-qualified. PASS needs reproducible evidence. V2, Tier 1 SAS fast path, and Tier 3 fallback remain compatible. Phase 01 must be contract-approved and its SDK matrix accepted by Phase 02; every implementation child then follows `design-approved → child-linked → implemented → verified → ledger-recorded`. Skipping a state or remaining BLOCKED/PLANNED prevents closure.
+No Tier 2 exposure before Spec 22 negatives and resolution of Phase 07 loader/task atomicity and cleanup risks. No Manifest v3 without completed Phase 07 qualification and 2× ABI approval. The Raspberry Pi 3 ARM64 lane must be hardware-qualified. PASS needs reproducible evidence. V2, Tier 1 SAS fast path, and Tier 3 fallback remain compatible. Phase 01 must be contract-approved and its SDK matrix accepted by Phase 02; every implementation child then follows `design-approved → child-linked → implemented → verified → ledger-recorded`. Skipping a state or remaining BLOCKED/PLANNED prevents closure. Phase 05 completion alone grants no Tier 2, v3, or production-admission claim.
 
 ## Approval Matrix
 

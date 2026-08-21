@@ -101,19 +101,46 @@ tests, and a separate rollback policy for build capability versus runtime
 admission. This is a design-only decision: Tier 2 native domains are not
 implemented or offered, and current unsigned native cells remain uncontained.
 
-## [2026-08-21] Manifest protection-class taxonomy lands without ABI churn
+## [2026-08-21] Phase 05 Manifest-v2 tooling completes without ABI churn
 
-Manifest v2 now exposes canonical `PROTECTION_CLASS_*` constants and
-`CellManifest::protection_class()` / `granted_protection_class()` accessors.
-The loader uses those names for x86 PKU admission while retaining the existing
-16-byte layout, `tier` field, `TIER_*` symbols, `tier()` accessor, and manifest
-macro forms for source compatibility. Zig manifests intentionally remain the
-legacy 8-byte v1 layout and are upcast by the Rust loader.
+The loader now performs bounded, allocation-free ELF32/ELF64 manifest
+classification before task creation. A structurally valid ELF with no
+`__ViCell_manifest` is `Absent` and follows only the explicit legacy path
+policy; an exact v1/v2 record is `Valid`; malformed ELF/section/name metadata,
+duplicates, `SHT_NOBITS` manifests, invalid lengths/version/class/flags/reserved
+bytes, and unsupported extended numbering are `Malformed` and denied before
+scheduler state changes.
 
-Phase 2–3 verification passed the API suite (84 tests, four ignored doc tests),
-x86_64 and RISC-V kernel checks, manifest ABI/layout compatibility, parser and
-PKU coverage, Zig v1 compatibility, terminology checks, and diff checks. Tier 2
-native domains remain an accepted but unimplemented design.
+The Rust ABI remains exactly 16 little-endian bytes:
+`{magic:u32, version=2:u8, tier:u8, flags:u16, cap_args_off=0:u32,
+reserved=0:u32}`. Canonical `PROTECTION_CLASS_*`,
+`CellManifest::protection_class()`, and `granted_protection_class()` describe
+the x86 PKU request without conflating it with application execution tiers.
+The ABI-stable `tier` field, `TIER_*`, `tier()`, constructors, and manifest
+macro forms remain compatible. Zig continues to emit exact 8-byte v1
+`{magic:u32, version=1:u8, flags:u8, pad=[0;2]}`, which Rust upcasts to legacy
+protection behavior. The read-only ELF inspector reports execution tier,
+runtime profile, protection class, capabilities, and evidence as separate
+claims; it does not imply signature or runtime-measurement proof.
+
+Verification recorded API manifest 8/0, ABI baseline 4/0, host 105 passed/0
+failed/4 ignored (including four new tests), Python 6/0, direct tool matrix
+21/21, 128 Rust mutations, 367 Python malformed candidates, an RV64
+warnings-as-errors build PASS, a real `spawn_gated` runtime corpus with 12
+malformed denials and unchanged full scheduler state plus one ELF-loader PASS,
+QEMU integration 1/1, and both production-shaped builds PASS. Independent
+quality review found no issues; security review found no patch-introduced
+findings and passed the narrow Phase 05 surface.
+
+This completes Phase 05, not production loader readiness. The review recorded
+three adjacent pre-existing blockers: Critical `CELLOS-LOADER-SIG-001`
+(unsigned load-affecting section/relocation metadata can reach unchecked kernel
+writes; Phase 03 provenance/signature owner), High
+`CELLOS-LOADER-RACE-002` (the task can become runnable before
+allowlist/quota/capability/policy/protection installation; Phase 07 atomic
+publication owner), and Medium `CELLOS-LOADER-CLEANUP-003` (`PlatformCap`
+singleton denial leaves a ready task alive; Phase 07 rollback owner). Phase 08
+remains dependent on Phase 07.
 
 ## [2026-08-20] Cell-to-Cell Anywhere adds its fail-closed local and KMS foundation
 

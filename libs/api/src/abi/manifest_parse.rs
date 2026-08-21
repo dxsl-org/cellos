@@ -11,16 +11,17 @@ use super::manifest_flags::{
 };
 
 impl CellManifest {
-    /// Parse a manifest from raw ELF section bytes.  Field-by-field — never casts
-    /// the slice to `&Self` (alignment hazard in `no_std`).  Accepts both the v2
-    /// 16-byte record and the legacy v1 8-byte record (upcast).
+    /// Parse one complete manifest record from raw ELF section bytes.
+    /// Field-by-field — never casts the slice to `&Self` (alignment hazard in
+    /// `no_std`). Accepts exactly an 8-byte v1 record (upcast) or a 16-byte v2
+    /// record; trailing bytes are rejected rather than silently ignored.
     ///
     /// # Returns
-    /// `None` if the bytes are too short, the magic mismatches, the version is
-    /// unsupported, a reserved field is non-zero, the tier is out of range, or a
-    /// flag bit outside `MANIFEST_FLAGS_MASK` is set.
+    /// `None` if the record length does not exactly match its version, the magic
+    /// or version is unsupported, reserved data is non-zero, the protection
+    /// class is out of range, or an unknown flag bit is set.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() < 8 {
+        if bytes.len() != 8 && bytes.len() != 16 {
             return None;
         }
         let magic = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
@@ -28,14 +29,15 @@ impl CellManifest {
             return None;
         }
         match bytes[4] {
-            // ── v1 upcast: 8-byte record, u8 flags, no tier ──────────────────
+            // ── v1 upcast: exact 8-byte record, u8 flags, zero padding ─────────
             MANIFEST_VERSION_V1 => {
+                if bytes.len() != 8 || bytes[6] != 0 || bytes[7] != 0 {
+                    return None;
+                }
                 let flags = bytes[5] as u16;
                 if flags & !MANIFEST_FLAGS_MASK != 0 {
                     return None;
                 }
-                // _pad (bytes[6..8]) was "must be [0,0]" in v1; tolerate it either
-                // way (v1 kernels never validated it) but do not import it.
                 Some(Self {
                     magic,
                     version: MANIFEST_VERSION,
@@ -45,9 +47,9 @@ impl CellManifest {
                     reserved: 0,
                 })
             }
-            // ── native v2: 16-byte record ────────────────────────────────────
+            // ── native v2: exact 16-byte record ───────────────────────────────
             MANIFEST_VERSION => {
-                if bytes.len() < 16 {
+                if bytes.len() != 16 {
                     return None;
                 }
                 let tier = bytes[5];

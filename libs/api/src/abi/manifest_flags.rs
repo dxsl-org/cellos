@@ -78,9 +78,9 @@ pub const MANIFEST_FLAG_I2C: u16 = 1 << 10;
 /// SPI controller MMIO (v2).  Grants the SPI device class via `sys_request_mmio`.
 pub const MANIFEST_FLAG_SPI: u16 = 1 << 11;
 
-/// Bitmask of all defined flags.  `from_bytes` rejects manifests setting any bit
-/// outside this mask (a stale/forward binary is treated as malformed → legacy path
-/// grants, the fail-safe direction).
+/// Bitmask of all defined flags. `from_bytes` rejects manifests setting any bit
+/// outside this mask; the loader classifies such a record as malformed and
+/// denies it before task creation.
 pub const MANIFEST_FLAGS_MASK: u16 = MANIFEST_FLAG_BLOCK_IO
     | MANIFEST_FLAG_NETWORK
     | MANIFEST_FLAG_SPAWN

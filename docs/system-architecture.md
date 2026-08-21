@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-21 (Tier 1 admission prequalification catalog and strict test parser land without admissible evidence or production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest v2 protection-class aliases landed without ABI change; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+**Last Updated**: 2026-08-21 (Tier 1 admission prequalification catalog and strict test parser land without admissible evidence or production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest-v2 tri-state loader classification and tooling completed without ABI change, while three pre-existing loader-security risks still block production readiness; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -61,12 +61,33 @@
 > and approved.
 >
 
-> **Status refresh 2026-08-21**: Manifest v2 keeps its fixed 16-byte record and
-> legacy `tier`/`TIER_*` source surface while exposing canonical
-> `PROTECTION_CLASS_*` names. The x86 loader derives PKU protection from the
-> canonical accessors; Zig cells continue to emit the legacy 8-byte v1 record,
-> which the Rust loader upcasts compatibly. This is a naming/API clarification,
-> not implementation of Tier 2 native domains.
+> **Status refresh 2026-08-21 — MANIFEST-V2 TOOLING COMPLETE / PRODUCTION
+> LOADER BLOCKED:** Before task creation, the bounded ELF32/ELF64 classifier
+> returns exactly `Absent`, `Valid` (v1 or v2), or `Malformed`. Only a
+> structurally valid ELF with no manifest uses the explicit legacy path policy;
+> malformed ELF metadata, duplicate or `SHT_NOBITS` manifest sections, invalid
+> lengths/version/class/flags/reserved bytes, and unsupported extended numbering
+> fail closed. Rust v2 remains the exact 16-byte little-endian record
+> `{magic:u32, version=2:u8, tier:u8, flags:u16, cap_args_off=0:u32,
+> reserved=0:u32}`. The ABI-stable `tier` field, `TIER_*`, `tier()`, constructors,
+> and macro forms remain; canonical `PROTECTION_CLASS_*`,
+> `protection_class()`, and `granted_protection_class()` describe the byte
+> honestly. Zig continues to emit exact 8-byte v1
+> `{magic:u32, version=1:u8, flags:u8, pad=[0;2]}`, which the Rust loader upcasts
+> to legacy protection behavior.
+>
+> The focused acceptance recorded API manifest 8/0, ABI compatibility 4/0,
+> host 105 passed/0 failed/4 ignored, Python 6/0, direct inspector 21/21,
+> 128 Rust mutation cases, 367 Python malformed candidates, RV64
+> warnings-as-errors PASS, a real `spawn_gated` corpus with 12 malformed denials,
+> unchanged scheduler state, and one valid ELF-loader PASS, QEMU integration
+> 1/1, and both production-shaped builds PASS. Independent quality review found
+> no defects; security review found no patch-introduced defects in the Phase 05
+> surface. This completes Phase 05 only. Production loader readiness remains
+> blocked by the pre-existing Critical unsigned load-metadata/relocation risk
+> `CELLOS-LOADER-SIG-001` (Phase 03), High pre-initialization runnable-task race
+> `CELLOS-LOADER-RACE-002` (Phase 07), and Medium `PlatformCap` denial cleanup
+> leak `CELLOS-LOADER-CLEANUP-003` (Phase 07). Phase 08 still depends on Phase 07.
 
 > **Status refresh 2026-08-21**: Spec 22 is now the mandatory design and
 > negative-test gate before Tier 2 native domains can be implemented or offered.
@@ -391,6 +412,17 @@ pub struct Grant {
 - `SpawnFromPath`, `SpawnFromElf`, and `SpawnPinned` are authorized by exact
   launch-profile rows in `kernel/src/loader/launch_profile`; `SpawnFromMem`
   has no active profile and remains fail-closed for shell/user cells.
+- Manifest classification is a pre-task tri-state: `Absent` selects only the
+  explicit legacy path policy, `Valid` carries an exact v1/v2 record, and
+  `Malformed` is audited and denied before scheduler state changes.
+- `tools/check_elf.py` is a strict, read-only structural inspector. Its
+  `Execution tier`, `Runtime profile`, `Protection class`, `Capabilities`, and
+  `Evidence` lines deliberately keep product/runtime policy separate from
+  manifest assertions; they are not signature or runtime-measurement proof.
+- The loader is **not production-ready** despite completed Manifest-v2 tooling:
+  `CELLOS-LOADER-SIG-001`, `CELLOS-LOADER-RACE-002`, and
+  `CELLOS-LOADER-CLEANUP-003` remain open under the Phase 03/07 owners recorded
+  in the [open-risk register](roadmap/open-risk-register.md).
 
 ### 6. **Filesystem (FAT32)** (`kernel/src/fs/`)
 
