@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-21
+**Last updated**: 2026-08-22
 
 This register tracks confirmed production-readiness gaps found while syncing
 docs to code. It is not a bug-fix plan.
@@ -47,6 +47,21 @@ docs to code. It is not a bug-fix plan.
   syscall pair required by their argv/VFS paths
   (`cells/runtimes/lua/src/main.rs:11`, `cells/tools/wasm/src/main.rs:16-20`).
   Those paths can fail under the enforced syscall allowlist.
+- **`CELLOS-VFS-SMP-006` — High, owner: separate VFS repair.** A fresh
+  two-hart direct-QEMU run completed all Phase 07 atomic-publication markers
+  and then the VFS client reported `40 PASS, 10 FAIL`. The pre-Phase07 client
+  sends to VFS but receives replies with wildcard `sys_recv(0)`, permitting
+  concurrent traffic to be decoded as a VFS response
+  (`cells/tests/vfs-test/src/main.rs:69-79`). This is not a confirmed Phase 07
+  atomic-publication regression—there is no pre-Phase07 two-hart VFS
+  baseline—but it is an unbaselined release blocker. Repair `vfs_raw` to use
+  the existing masked typed IPC helper, or an equivalent
+  `sys_recv(vfs_tid(), ...)` with sender and decode validation. Qualification
+  requires a deterministic `QemuRunner::boot_rv64_smp(..., 2)` regression that
+  observes `[smp] hart 1 online`, all atomic terminal markers, and
+  `[vfs-test] ALL TESTS PASSED` with no `[FAIL]`; it must also yield `84 PASS,
+  0 FAIL`. One-hart VFS success and AP-00–15 success are insufficient
+  (`.agents/debug/debug-260822-0749-smp-vfs.md`).
 - Production cell admission is not signed-only by default. The 18-row catalog,
   33 stable `test-hooks` cases, and strict runtime parser are prequalification
   infrastructure only; local runs are explicitly non-admissible and the former
@@ -73,15 +88,7 @@ docs to code. It is not a bug-fix plan.
   invalidates the feasibility approval input. The later child remains
   unauthorized behind the six human approvals, implementation checkpoint, and
   umbrella Phase 03 production gates.
-- **`CELLOS-LOADER-RACE-002` — High, owner: Phase 07 atomic loader/task
-  publication.** A successfully parsed child can enter a ready queue before its
-  syscall allowlist, quota, capabilities, operator policy, and protection class
-  are installed (`kernel/src/task.rs:987-1016,1163-1178`,
-  `kernel/src/loader.rs:197-354`). Another hart can therefore observe transient
-  permit-all or unlimited defaults. This pre-existing race does not defeat
-  Phase 05's malformed-manifest-before-task guarantee, but production readiness
-  requires full fail-closed initialization before one atomic publication.
-  Phase 08 remains dependent on Phase 07.
+ 
 
 ## Medium
 
@@ -107,14 +114,6 @@ docs to code. It is not a bug-fix plan.
   qualification.
 - AArch64 test-hooks runtime proof remains blocked where the host-side
   `qemu_exit::AArch64Semihosting` issue is still present.
-- **`CELLOS-LOADER-CLEANUP-003` — Medium, owner: Phase 07 loader/task
-  rollback.** `PlatformCap` singleton refusal occurs after task creation,
-  quota registration, and capability application, then returns without
-  exiting the ready child, deregistering quota, or reclaiming its resources
-  (`kernel/src/loader.rs:197-203,327-365`,
-  `kernel/src/task.rs:1001-1016`). This pre-existing cleanup defect is outside
-  Phase 05's manifest-classification acceptance, but production readiness
-  requires reservation before publication or complete rollback on denial.
 
 ## Low
 

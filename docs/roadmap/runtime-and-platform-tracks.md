@@ -1,6 +1,6 @@
 # Runtime and Platform Tracks
 
-**Last updated**: 2026-08-21
+**Last updated**: 2026-08-22
 
 This page groups the runtime and higher-level platform overlays that sit next
 to the physical hardware tracks.
@@ -37,6 +37,21 @@ to the physical hardware tracks.
   is the mandatory design and negative-test gate before a private-MMU native
   runtime may be implemented or offered; current native cells remain shared-SAS
   code and are not treated as contained.
+
+## Manifest-v3 ABI Predesign
+
+Phase 08's Manifest-v3 ABI predesign has a final validator PASS (20/20) and
+pinned consumer-inventory/content-digest artifacts. It is explicitly
+`PREDESIGN_COMPLETE / PHASE08_BLOCKED`, with direct dependencies on Phases 03,
+05, and 07. It adds no Manifest-v3 implementation, readiness determination, or
+approval; Phase 08 is not a Tier 2 implementation authorization.
+
+The Phase 07 atomic-publication prerequisite is separately verified, but full
+Phase 07 and Phase 08 remain blocked by the Phase 03 provenance/signature,
+Phase 04 production-admission, and Tier 2 native-domain gates. An unbaselined
+two-hart VFS `40 PASS, 10 FAIL` result remains a release blocker until the VFS
+request/reply receive is service-TID-masked and a deterministic two-hart VFS
+regression passes.
 
 ## Tier 1 Rust `std` Feasibility
 

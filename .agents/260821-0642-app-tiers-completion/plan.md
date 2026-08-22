@@ -31,8 +31,8 @@ The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK c
 | 04 | [Tier 3 Qualification C5](phase-04-tier3-qualification.md) | 8w | 01,02 | pending |
 | 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | completed — v2 compatibility baseline frozen; loader risks transferred |
 | 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03; feasibility package verified, security backing and human approval blocked |
-| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04; loader-risk handoff from 05 | pending — dependency-blocked on Phases 03 and 04; owns `CELLOS-LOADER-RACE-002` and `CELLOS-LOADER-CLEANUP-003` |
-| 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 05,07 | pending — Phase 05 baseline available, still dependency-blocked on Phase 07 |
+| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04; loader-risk handoff from 05 | pending — `ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED` verified; full Tier 2 qualification remains dependency-blocked on Phases 03 and 04; no Tier 2 readiness/release/approval |
+| 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 03,05,07 | pending — `PREDESIGN_COMPLETE / PHASE08_BLOCKED` verified; direct dependencies are 03,05,07; no V3 code/readiness/approval |
 | 09 | [Final Completion Gate C9](phase-09-final-completion-gate.md) | 1w | 01-08 approved/implemented, verified, ledger-recorded | pending |
 
 ## Phase 03 Evidence and Status
@@ -57,7 +57,7 @@ Umbrella Phase 05 is **completed** at its exact Manifest-v2 tooling boundary. Ve
 
 The v1-upcast/v2-read corpus, exact v1/v2 lengths and v2 layout, compatibility aliases, default byte-identical v2 writer, canonical protection-class terminology, and tri-state parser contract are frozen as the Phase 08 compatibility baseline. This completion does not enable Tier 2, Manifest v3, or production admission.
 
-Production loader readiness remains blocked by three unresolved pre-existing risks. `CELLOS-LOADER-SIG-001` (Critical) transfers to the Phase 03 provenance/signature boundary because load-affecting section and relocation metadata, including `.rela.dyn`, is not covered and can redirect unchecked kernel writes. `CELLOS-LOADER-RACE-002` (High) transfers to Phase 07 atomic task publication because a task becomes runnable before admission state is installed. `CELLOS-LOADER-CLEANUP-003` (Medium) transfers to Phase 07 denial rollback/cleanup because PlatformCap singleton denial can leave an already-ready task alive. These risks are recorded, not fixed.
+Production loader readiness remains blocked by the unresolved pre-existing `CELLOS-LOADER-SIG-001` (Critical), owned by the Phase 03 provenance/signature boundary because load-affecting section and relocation metadata, including `.rela.dyn`, is not covered and can redirect unchecked kernel writes. The Phase 07 atomic child has verified `CELLOS-LOADER-RACE-002` (High) and `CELLOS-LOADER-CLEANUP-003` (Medium) closed only at its atomic-publication prerequisite boundary; that result does not complete full Phase 07, qualify Tier 2, or close `SIG-001`.
 
 
 ## Phase 06 Feasibility Evidence and Status
@@ -66,13 +66,27 @@ The Phase 06 child feasibility plan reached **FEASIBILITY PACKAGE VERIFIED / SEC
 
 This verified sub-slice is fixture-only and non-promotional. `PAL-019` remains Deferred because the current default tuple enables `dev-weak-rng` over a zero-byte RNG stub; `PAL-031` remains Deferred because `GetRandom` lacks bounded caller-owned writable validation. All six named human approval rows remain `NOT GRANTED`, `PAL-IMPLEMENTATION-CHECKPOINT` remains `BLOCKED`, and no PAL/target/runtime, private or published sysroot/triple, authenticated live capture, readiness, or promotion exists. The recommendation remains **CONDITIONAL GO** only after both security backings are implemented and evidenced, every named human approval is explicitly granted, the checkpoint is unblocked, and umbrella Phase 03 production gates are approved. Umbrella Phase 06 remains pending and dependency-blocked on Phase 03.
 
+## Phase 07 Atomic-Publication Prerequisite Status
+
+The narrow atomic prerequisite is verified at exactly **`ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED`**. A fresh test-hooks build/sign passed; the populated-fixture one-hart VFS run passed `1/1` with `AP-00`–`AP-11` and `AP-15` passing and `AP-13` explicitly `SKIP`; and the distinct SMP atomic run passed `1/1` with `AP-00`–`AP-15`, `AP-02` PTE/TLB cleanup proof, the `AP-13` remote-hart witness, and terminal `ATOMIC_PUBLICATION_ALL: PASS`.
+
+This resolves `CELLOS-LOADER-RACE-002` and `CELLOS-LOADER-CLEANUP-003` only at that prerequisite boundary. Umbrella Phase 07 remains blocked on Phases 03 and 04 plus full independent Tier 2 qualification; it is neither a Tier 2 completion/readiness claim nor a security, release, ledger, or human approval.
+
+The unbaselined SMP VFS result is a separate release blocker: after the atomic terminal markers, VFS reported `40 PASS, 10 FAIL`, with a probable pre-existing wildcard VFS RPC receive cause and no pre-Phase07 two-hart baseline. The next owner is the separate VFS SMP repair workstream (VFS test/client request-reply transport owner), with required reproduction/regression in [`debug-260822-0749-smp-vfs.md`](../debug/debug-260822-0749-smp-vfs.md). It is not a Phase 07 atomic regression claim and does not weaken the atomic proof.
+
+## Phase 08 Pre-Design Status
+
+The non-promotional Phase 08 child is verified at exactly **`PREDESIGN_COMPLETE / PHASE08_BLOCKED`**: the final strict validator passed, focused validator tests passed `20/20`, and the final independent pre-design review passed. Current pins record 574 corpus fixtures (`668a23a5a9f7831d113eda5c9a683c90dab1fc38b122f8f1cfa5f6751f83766c`), 151 inventory consumers with occurrence-v2 754-match pin `aa60b7d0021532ccaec3301194d94050a95f02f8c579fa134c913a92ae388b8b`, and 240 downgrade-matrix rows (`17f19d2cd3f1a25642e44f9e166d1caf83f7cb3173a748070edf2a635f149c1c`); the full content and source-state pins are in [`predesign-validation-report.json`](../260822-phase08-manifest-predesign/artifacts/predesign-validation-report.json).
+
+This is only a frozen v1/v2 corpus, consumer-inventory, and downgrade-model verification. Phase 08 remains directly blocked on Phase 03 + Phase 05 + full Phase 07. It does not create any Manifest v3 bytes/code, design readiness, ABI/security/release/ledger approval, or Tier 2 claim.
+
 ## Parallel Ownership
 
-After 01, Phase 02 runs first as the ledger-schema gate. Only after its schema is approved may Phases 03–05 run evidence work in parallel: 03 owns admission and the `CELLOS-LOADER-SIG-001` provenance/signature boundary, 04 hypervisor lanes, and completed 05 owns the frozen v2 tooling/tri-state baseline. Phase 07 receives loader/task ownership after Phase 05 verification and must resolve `CELLOS-LOADER-RACE-002` plus `CELLOS-LOADER-CLEANUP-003`; it remains blocked on Phases 03 and 04. Phase 08 receives manifest ABI ownership after 05/07 and remains blocked on Phase 07.
+After 01, Phase 02 runs first as the ledger-schema gate. Only after its schema is approved may Phases 03–05 run evidence work in parallel: 03 owns admission and the unresolved `CELLOS-LOADER-SIG-001` provenance/signature boundary, 04 hypervisor lanes, and completed 05 owns the frozen v2 tooling/tri-state baseline. The verified Phase 07 atomic child closed `CELLOS-LOADER-RACE-002` and `CELLOS-LOADER-CLEANUP-003` only at its prerequisite boundary; full Phase 07 remains blocked on 03 and 04 plus independent Tier 2 qualification. Phase 08 has corrected direct dependencies on 03, 05, and full 07; its verified pre-design child does not unblock real v3 work.
 
 ## Program Gates
 
-No Tier 2 exposure before Spec 22 negatives and resolution of Phase 07 loader/task atomicity and cleanup risks. No Manifest v3 without completed Phase 07 qualification and 2× ABI approval. The Raspberry Pi 3 ARM64 lane must be hardware-qualified. PASS needs reproducible evidence. V2, Tier 1 SAS fast path, and Tier 3 fallback remain compatible. Phase 01 must be contract-approved and its SDK matrix accepted by Phase 02; every implementation child then follows `design-approved → child-linked → implemented → verified → ledger-recorded`. Skipping a state or remaining BLOCKED/PLANNED prevents closure. Phase 05 completion alone grants no Tier 2, v3, or production-admission claim.
+No Tier 2 exposure before Spec 22 negatives and full Phase 07 qualification. No Manifest v3 without completed Phase 03 provenance/signature closure, Phase 05 compatibility pin, full Phase 07 qualification, and 2× ABI approval. The Raspberry Pi 3 ARM64 lane must be hardware-qualified. PASS needs reproducible evidence. V2, Tier 1 SAS fast path, and Tier 3 fallback remain compatible. Phase 01 must be contract-approved and its SDK matrix accepted by Phase 02; every implementation child then follows `design-approved → child-linked → implemented → verified → ledger-recorded`. Skipping a state or remaining BLOCKED/PLANNED prevents closure. The verified Phase 07 atomic prerequisite and Phase 08 pre-design child grant no Tier 2, v3, or production-admission claim.
 
 ## Approval Matrix
 

@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-08-21
+**Last updated**: 2026-08-22
 
 ## Active Stage
 
@@ -31,11 +31,28 @@ without treating QEMU or compile-only checks as board qualification.
   Rust v2 remains exactly 16 bytes and Zig v1 exactly 8 bytes, with compatible
   upcast behavior and protection-class terminology separated from application
   execution tiers.
-- That tooling completion is not production loader readiness. Three adjacent,
-  pre-existing blockers are registered as `CELLOS-LOADER-SIG-001` (Critical;
-  Phase 03 provenance/signature boundary), `CELLOS-LOADER-RACE-002` (High;
-  Phase 07 atomic task publication), and `CELLOS-LOADER-CLEANUP-003` (Medium;
-  Phase 07 denial rollback). Phase 08 remains dependent on Phase 07.
+- The Phase 07 atomic-publication prerequisite is verified, not full Phase 07
+  completion: a fresh `test-hooks` build/sign, a populated-fixture one-hart VFS
+  run (1/1; AP-00–11 and AP-15; AP-13 explicitly `SKIP`), and an SMP atomic
+  run (1/1; AP-00–15) passed. The SMP proof includes AP-02 live-PTE/TLB
+  restoration evidence, an AP-13 remote-hart scheduler witness, and the
+  terminal/aggregate markers. Its terminal state remains
+  `ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED`.
+- Phase 08 Manifest-v3 ABI predesign is validated (20/20), with pinned consumer
+  inventory and content digests. Its state is
+  `PREDESIGN_COMPLETE / PHASE08_BLOCKED`: it depends directly on Phases 03, 05,
+  and 07 and adds no Manifest-v3 code, readiness claim, or approval.
+- Full Phase 07 and Phase 08 remain blocked by the Phase 03
+  provenance/signature boundary, the Phase 04 production-admission gate, and
+  the Tier 2 native-domain gate. The verified atomic prerequisite does not
+  clear those release conditions.
+- A separate, unbaselined two-hart VFS run is a release blocker: it completed
+  the atomic markers but reported `40 PASS, 10 FAIL` because the VFS client
+  receives request/reply traffic with wildcard `sys_recv(0)`. Its required
+  repair is a service-TID-masked receive (with sender/decode verification) and
+  a deterministic two-hart VFS regression that observes hart 1, all atomic
+  terminal markers, and `[vfs-test] ALL TESTS PASSED` with no `[FAIL]`
+  (`.agents/debug/debug-260822-0749-smp-vfs.md`).
 
 ## Current Documentation Corrections
 
@@ -55,9 +72,13 @@ without treating QEMU or compile-only checks as board qualification.
    authenticated evidence for a qualified floor, persistent recovery, physical
    hostile cases, provisioned anchors, production wiring, and both human
    approvals; local verification cannot satisfy this gate.
-4. Close the three registered loader-security blockers under their Phase 03
-   and Phase 07 owners before claiming production loader readiness; do not
-   reopen completed Manifest-v2 tooling acceptance to absorb that work.
+4. Keep full Phase 07 and Phase 08 blocked until the Phase 03 provenance,
+   Phase 04 production-admission, and Tier 2 native-domain gates are closed;
+   the verified atomic prerequisite and Phase 08 predesign do not authorize
+   production loader or Manifest-v3 claims.
+5. Repair the VFS client's wildcard request/reply receive and establish the
+   required deterministic two-hart VFS baseline before release; a one-hart
+   VFS pass or atomic AP-00–15 pass is not a substitute.
 5. Continue reducing kernel-resident legacy driver/orchestration code only when
    a slice has explicit runtime evidence and rollback notes.
 6. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,

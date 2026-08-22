@@ -74,33 +74,42 @@
 > and approved.
 >
 
-> **Status refresh 2026-08-21 — MANIFEST-V2 TOOLING COMPLETE / PRODUCTION
-> LOADER BLOCKED:** Before task creation, the bounded ELF32/ELF64 classifier
-> returns exactly `Absent`, `Valid` (v1 or v2), or `Malformed`. Only a
-> structurally valid ELF with no manifest uses the explicit legacy path policy;
-> malformed ELF metadata, duplicate or `SHT_NOBITS` manifest sections, invalid
-> lengths/version/class/flags/reserved bytes, and unsupported extended numbering
-> fail closed. Rust v2 remains the exact 16-byte little-endian record
-> `{magic:u32, version=2:u8, tier:u8, flags:u16, cap_args_off=0:u32,
-> reserved=0:u32}`. The ABI-stable `tier` field, `TIER_*`, `tier()`, constructors,
-> and macro forms remain; canonical `PROTECTION_CLASS_*`,
-> `protection_class()`, and `granted_protection_class()` describe the byte
-> honestly. Zig continues to emit exact 8-byte v1
-> `{magic:u32, version=1:u8, flags:u8, pad=[0;2]}`, which the Rust loader upcasts
-> to legacy protection behavior.
+> **Status refresh 2026-08-22 — MANIFEST-V2 TOOLING COMPLETE / PHASE 07
+> ATOMIC PREREQUISITE VERIFIED / PHASE 08 PREDESIGN BLOCKED**: Manifest-v2
+> tooling remains complete, not production-loader readiness. It retains the
+> completed unique-section classification—`Absent`, `Valid` (v1/v2), or
+> `Malformed`—before task creation; only genuine absence follows the explicit
+> legacy policy. Malformed ELF metadata, duplicate or `SHT_NOBITS` manifest
+> sections, invalid lengths/version/class/flags/reserved bytes, and unsupported
+> extended numbering fail closed. Rust v2 remains the exact 16-byte
+> little-endian record, and Zig continues to emit its exact 8-byte v1 record
+> with compatible legacy upcast behavior.
 >
-> The focused acceptance recorded API manifest 8/0, ABI compatibility 4/0,
-> host 105 passed/0 failed/4 ignored, Python 6/0, direct inspector 21/21,
-> 128 Rust mutation cases, 367 Python malformed candidates, RV64
-> warnings-as-errors PASS, a real `spawn_gated` corpus with 12 malformed denials,
-> unchanged scheduler state, and one valid ELF-loader PASS, QEMU integration
-> 1/1, and both production-shaped builds PASS. Independent quality review found
-> no defects; security review found no patch-introduced defects in the Phase 05
-> surface. This completes Phase 05 only. Production loader readiness remains
-> blocked by the pre-existing Critical unsigned load-metadata/relocation risk
-> `CELLOS-LOADER-SIG-001` (Phase 03), High pre-initialization runnable-task race
-> `CELLOS-LOADER-RACE-002` (Phase 07), and Medium `PlatformCap` denial cleanup
-> leak `CELLOS-LOADER-CLEANUP-003` (Phase 07). Phase 08 still depends on Phase 07.
+> The Phase 07 atomic-publication prerequisite passed after a fresh `test-hooks`
+> build/sign:
+> a populated-fixture one-hart VFS run (1/1; AP-00–11 and AP-15, with AP-13
+> explicitly `SKIP`) and an SMP atomic run (1/1; AP-00–15). The SMP proof
+> includes AP-02 PTE/TLB restoration evidence, an AP-13 remote-hart scheduler
+> witness, and terminal/aggregate completion markers. Its state remains
+> `ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED`.
+>
+> Phase 08's Manifest-v3 ABI predesign validator passes 20/20 with pinned
+> consumer-inventory/content-digest artifacts, but its state is
+> `PREDESIGN_COMPLETE / PHASE08_BLOCKED`; it depends directly on Phases 03, 05,
+> and 07 and introduces no Manifest-v3 code, readiness decision, or approval.
+> Full Phase 07 and Phase 08 remain blocked by `CELLOS-LOADER-SIG-001`'s Phase
+> 03 provenance/signature boundary, the Phase 04 production-admission gate,
+> and the Tier 2 native-domain gate.
+>
+> Independently, the unbaselined two-hart VFS result is a release blocker: all
+> atomic markers completed before VFS reported `40 PASS, 10 FAIL`. The
+> pre-Phase07 VFS request/reply client uses wildcard `sys_recv(0)`, so
+> concurrent traffic can be decoded as a VFS response. This is not attributed
+> to Phase 07 without a pre-Phase07 SMP VFS baseline. It requires a
+> service-TID-masked receive with sender/decode validation and a deterministic
+> two-hart VFS regression proving hart 1, all atomic terminal markers, and
+> `[vfs-test] ALL TESTS PASSED` with no `[FAIL]`
+> (`.agents/debug/debug-260822-0749-smp-vfs.md`).
 
 > **Status refresh 2026-08-21**: Spec 22 is now the mandatory design and
 > negative-test gate before Tier 2 native domains can be implemented or offered.
