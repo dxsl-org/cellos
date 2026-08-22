@@ -313,6 +313,75 @@ impl PageTable {
     }
 }
 
+impl PageTable {
+    /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
+    pub fn prune_empty(
+        &mut self,
+        virt: VAddr,
+        dealloc: &mut dyn FnMut(PhysAddr),
+    ) {
+        let i3 = (virt >> 39) & 0x1FF;
+        let root_entry = self.entries[i3];
+        if root_entry & PTE_P == 0 || root_entry & PTE_PS != 0 {
+            return;
+        }
+        let pdpt_phys = (root_entry & PTE_ADDR_MASK) as PhysAddr;
+        // SAFETY: a present non-huge root entry names a live PDPT.
+        let pdpt = unsafe {
+            &mut *(phys_to_virt_ptr(pdpt_phys) as *mut PageTable)
+        };
+        let i2 = (virt >> 30) & 0x1FF;
+        let pdpt_entry = pdpt.entries[i2];
+        if pdpt_entry & PTE_P == 0 {
+            if !pdpt.entries.iter().any(|entry| entry & PTE_P != 0) {
+                self.entries[i3] = 0;
+                dealloc(pdpt_phys);
+            }
+            return;
+        }
+        if pdpt_entry & PTE_PS != 0 {
+            return;
+        }
+        let pd_phys = (pdpt_entry & PTE_ADDR_MASK) as PhysAddr;
+        // SAFETY: a present non-huge PDPT entry names a live page directory.
+        let pd = unsafe { &mut *(phys_to_virt_ptr(pd_phys) as *mut PageTable) };
+        let i1 = (virt >> 21) & 0x1FF;
+        let pd_entry = pd.entries[i1];
+        if pd_entry & PTE_P == 0 {
+            if !pd.entries.iter().any(|entry| entry & PTE_P != 0) {
+                pdpt.entries[i2] = 0;
+                dealloc(pd_phys);
+                if !pdpt.entries.iter().any(|entry| entry & PTE_P != 0) {
+                    self.entries[i3] = 0;
+                    dealloc(pdpt_phys);
+                }
+            }
+            return;
+        }
+        if pd_entry & PTE_PS != 0 {
+            return;
+        }
+        let pt_phys = (pd_entry & PTE_ADDR_MASK) as PhysAddr;
+        // SAFETY: a present non-huge directory entry names a live page table.
+        let pt = unsafe { &mut *(phys_to_virt_ptr(pt_phys) as *mut PageTable) };
+        if pt.entries.iter().any(|entry| entry & PTE_P != 0) {
+            return;
+        }
+        pd.entries[i1] = 0;
+        dealloc(pt_phys);
+        if pd.entries.iter().any(|entry| entry & PTE_P != 0) {
+            return;
+        }
+        pdpt.entries[i2] = 0;
+        dealloc(pd_phys);
+        if pdpt.entries.iter().any(|entry| entry & PTE_P != 0) {
+            return;
+        }
+        self.entries[i3] = 0;
+        dealloc(pdpt_phys);
+    }
+}
+
 impl PageTableTrait for PageTable {
     fn init(&mut self) -> ViResult<PhysAddr> {
         self.entries = [0u64; 512];

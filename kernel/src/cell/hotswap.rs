@@ -19,13 +19,25 @@ use types::{CellId, ViError, ViResult};
 static FROZEN: Spinlock<alloc::collections::BTreeSet<u64>> =
     Spinlock::new(alloc::collections::BTreeSet::new());
 
-/// One live replacement ceiling per frozen task id.
-///
-/// The record is written only after the supervisor captures the task's current
-/// CapSet and is cleared on every resume/kill terminal path. Missing records
-/// fail closed so replacement spawn never falls back to ambient caller caps.
-static SWAP_CEILINGS: Spinlock<BTreeMap<usize, crate::task::cap::CapSet>> =
+/// One replacement ceiling per exact frozen task incarnation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CeilingState {
+    Available {
+        ceiling: crate::task::cap::CapSet,
+        generation: u64,
+        swap_id: u64,
+        freeze_nonce: u64,
+    },
+    Reserved {
+        generation: u64,
+        swap_id: u64,
+        freeze_nonce: u64,
+    },
+}
+
+static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> =
     Spinlock::new(BTreeMap::new());
+static NEXT_FREEZE_NONCE: Spinlock<u64> = Spinlock::new(1);
 
 /// Force-release this module's lock during fault teardown.
 ///
@@ -34,6 +46,14 @@ static SWAP_CEILINGS: Spinlock<BTreeMap<usize, crate::task::cap::CapSet>> =
 pub unsafe fn force_unlock_locks() {
     FROZEN.force_unlock();
     SWAP_CEILINGS.force_unlock();
+    NEXT_FREEZE_NONCE.force_unlock();
+}
+
+fn next_freeze_nonce() -> u64 {
+    let mut next = NEXT_FREEZE_NONCE.lock();
+    let nonce = *next;
+    *next = next.checked_add(1).expect("freeze nonce space exhausted");
+    nonce
 }
 
 /// Mark `cell_id` as frozen.  Subsequent `sys_send` calls to this cell will
@@ -54,52 +74,163 @@ pub fn unfreeze(cell_id: CellId) {
     log::info!("[hotswap] unfroze cell {}", cell_id.0);
 }
 
-/// Consume the live frozen task's ceiling for one replacement spawn attempt.
-///
-/// A freeze record is a one-shot authority token. Consuming it prevents a
-/// compromised supervisor from cloning multiple privileged replacements from
-/// one frozen task. A failed spawn must be rolled back with resume/refreeze.
-///
-/// Lock order is `SCHEDULER -> SWAP_CEILINGS`, shared by freeze, resume, exit,
-/// and consume. Holding both locks makes the live-Frozen check and token removal
-/// one atomic authority decision.
-pub(crate) fn take_frozen_replacement_ceiling(tid: usize) -> Option<crate::task::cap::CapSet> {
+/// Exclusive rollback owner for one exact frozen task incarnation.
+pub(crate) struct ReplacementReservation {
+    source_tid: usize,
+    source_generation: u64,
+    swap_id: u64,
+    freeze_nonce: u64,
+    ceiling: Option<crate::task::cap::CapSet>,
+}
+
+impl ReplacementReservation {
+    pub(crate) fn ceiling(&self) -> crate::task::cap::CapSet {
+        self.ceiling.expect("live replacement reservation")
+    }
+
+    /// Check the binding while the caller holds `SCHEDULER`.
+    pub(crate) fn can_bind(&self, sched: &crate::task::scheduler::Scheduler) -> bool {
+        let source_matches = sched.tasks.get(&self.source_tid).is_some_and(|task| {
+            task.cell_generation == self.source_generation
+                && matches!(task.state, crate::task::tcb::TaskState::Frozen { swap_id } if swap_id == self.swap_id)
+        });
+        source_matches
+            && matches!(
+                SWAP_CEILINGS.lock().get(&self.source_tid),
+                Some(CeilingState::Reserved {
+                    generation,
+                    swap_id,
+                    freeze_nonce,
+                }) if *generation == self.source_generation
+                    && *swap_id == self.swap_id
+                    && *freeze_nonce == self.freeze_nonce
+            )
+    }
+
+    /// Consume the ceiling and install the source binding on an unpublished TCB.
+    pub(crate) fn commit_into(mut self, task: &mut crate::task::Task) {
+        task.hotswap_source_tid = Some(self.source_tid);
+        self.ceiling = None;
+        let removed = SWAP_CEILINGS.lock().remove(&self.source_tid);
+        debug_assert!(matches!(
+            removed,
+            Some(CeilingState::Reserved {
+                generation,
+                swap_id,
+                freeze_nonce,
+            }) if generation == self.source_generation
+                && swap_id == self.swap_id
+                && freeze_nonce == self.freeze_nonce
+        ));
+    }
+
+    /// Construct a deliberately unbindable reservation for publication-boundary
+    /// tests. It owns no ceiling, so dropping it cannot mutate swap state.
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn invalid_for_test() -> Self {
+        Self {
+            source_tid: usize::MAX,
+            source_generation: 0,
+            swap_id: 0,
+            freeze_nonce: 0,
+            ceiling: None,
+        }
+    }
+}
+
+impl Drop for ReplacementReservation {
+    fn drop(&mut self) {
+        let Some(ceiling) = self.ceiling.take() else {
+            return;
+        };
+        let mut ceilings = SWAP_CEILINGS.lock();
+        if matches!(
+            ceilings.get(&self.source_tid),
+            Some(CeilingState::Reserved {
+                generation,
+                swap_id,
+                freeze_nonce,
+            }) if *generation == self.source_generation
+                && *swap_id == self.swap_id
+                && *freeze_nonce == self.freeze_nonce
+        ) {
+            ceilings.insert(
+                self.source_tid,
+                CeilingState::Available {
+                    ceiling,
+                    generation: self.source_generation,
+                    swap_id: self.swap_id,
+                    freeze_nonce: self.freeze_nonce,
+                },
+            );
+        }
+    }
+}
+
+/// Reserve the live frozen task's one-shot replacement ceiling.
+pub(crate) fn reserve_frozen_replacement(
+    tid: usize,
+) -> Option<ReplacementReservation> {
     use crate::task::tcb::TaskState;
 
     let scheduler = crate::task::SCHEDULER.lock();
     let task = scheduler.as_ref()?.tasks.get(&tid)?;
-    if !matches!(task.state, TaskState::Frozen { .. }) {
+    let TaskState::Frozen { swap_id } = task.state else {
         return None;
-    }
-    SWAP_CEILINGS.lock().remove(&tid)
+    };
+    let generation = task.cell_generation;
+    let mut ceilings = SWAP_CEILINGS.lock();
+    let (ceiling, freeze_nonce) = match ceilings.get(&tid).copied()? {
+        CeilingState::Available {
+            ceiling,
+            generation: available_generation,
+            swap_id: available_swap_id,
+            freeze_nonce,
+        } if available_generation == generation && available_swap_id == swap_id => {
+            (ceiling, freeze_nonce)
+        }
+        CeilingState::Available { .. } | CeilingState::Reserved { .. } => return None,
+    };
+    ceilings.insert(
+        tid,
+        CeilingState::Reserved {
+            generation,
+            swap_id,
+            freeze_nonce,
+        },
+    );
+    Some(ReplacementReservation {
+        source_tid: tid,
+        source_generation: generation,
+        swap_id,
+        freeze_nonce,
+        ceiling: Some(ceiling),
+    })
 }
 
 pub(crate) fn clear_swap_ceiling(tid: usize) {
     SWAP_CEILINGS.lock().remove(&tid);
 }
 
-/// Bind a freshly spawned replacement to the frozen task whose one-shot
-/// capability ceiling authorized its creation.
-pub(crate) fn bind_replacement(source_tid: usize, target_tid: usize) -> bool {
-    let mut scheduler = crate::task::SCHEDULER.lock();
-    let Some(sched) = scheduler.as_mut() else {
-        return false;
-    };
-    let source_is_frozen = sched
-        .tasks
-        .get(&source_tid)
-        .is_some_and(|task| matches!(task.state, crate::task::tcb::TaskState::Frozen { .. }));
-    if !source_is_frozen {
-        return false;
-    }
-    let Some(target) = sched.tasks.get_mut(&target_tid) else {
-        return false;
-    };
-    if target.hotswap_source_tid.is_some() {
-        return false;
-    }
-    target.hotswap_source_tid = Some(source_tid);
-    true
+#[cfg(feature = "test-hooks")]
+pub(crate) fn replacement_ceiling_snapshot(
+) -> alloc::vec::Vec<(usize, Option<(crate::task::cap::CapSet, u64, u64, u64)>)> {
+    SWAP_CEILINGS
+        .lock()
+        .iter()
+        .map(|(tid, state)| {
+            let reservation = match state {
+                CeilingState::Available {
+                    ceiling,
+                    generation,
+                    swap_id,
+                    freeze_nonce,
+                } => Some((*ceiling, *generation, *swap_id, *freeze_nonce)),
+                CeilingState::Reserved { .. } => None,
+            };
+            (*tid, reservation)
+        })
+        .collect()
 }
 
 // ─── HotSwapReady flag ───────────────────────────────────────────────────────
@@ -146,8 +277,18 @@ pub(crate) fn freeze_task_with_ceiling(tid: usize, swap_id: u64) -> ViResult<()>
         return Err(ViError::PermissionDenied);
     }
     let ceiling = crate::task::cap::CapSet::of_task(task);
+    let generation = task.cell_generation;
+    let freeze_nonce = next_freeze_nonce();
     enter_frozen_state(task, swap_id);
-    ceilings.insert(tid, ceiling);
+    ceilings.insert(
+        tid,
+        CeilingState::Available {
+            ceiling,
+            generation,
+            swap_id,
+            freeze_nonce,
+        },
+    );
     crate::task::hart_local::ready::remove_from_all(tid);
     Ok(())
 }
@@ -338,4 +479,59 @@ pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
         crate::audit::AuditEvent::CellExit,
         &crate::audit::encode_u32x2(tid as u32, 0xAA00_0000u32), // hot-swap marker
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CeilingState, ReplacementReservation, SWAP_CEILINGS};
+    use crate::task::cap::CapSet;
+
+    #[test]
+    fn stale_reservation_cannot_restore_a_new_freeze() {
+        const TID: usize = usize::MAX - 1;
+        let old = CapSet {
+            spawn: true,
+            ..CapSet::EMPTY
+        };
+        let new = CapSet {
+            network: true,
+            ..CapSet::EMPTY
+        };
+        SWAP_CEILINGS.lock().insert(
+            TID,
+            CeilingState::Reserved {
+                generation: 3,
+                swap_id: 9,
+                freeze_nonce: 41,
+            },
+        );
+        let stale = ReplacementReservation {
+            source_tid: TID,
+            source_generation: 3,
+            swap_id: 9,
+            freeze_nonce: 41,
+            ceiling: Some(old),
+        };
+        SWAP_CEILINGS.lock().insert(
+            TID,
+            CeilingState::Available {
+                ceiling: new,
+                generation: 3,
+                swap_id: 9,
+                freeze_nonce: 42,
+            },
+        );
+
+        drop(stale);
+
+        assert!(matches!(
+            SWAP_CEILINGS.lock().remove(&TID),
+            Some(CeilingState::Available {
+                ceiling,
+                generation: 3,
+                swap_id: 9,
+                freeze_nonce: 42,
+            }) if ceiling == new
+        ));
+    }
 }

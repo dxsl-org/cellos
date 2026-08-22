@@ -436,10 +436,14 @@ pub fn map_page(
     let root_lock = KERNEL_ROOT.lock();
     if let Some(root_phys) = *root_lock {
         let root_table = unsafe { &mut *(root_phys as *mut PageTable) };
-        let mut alloc_closure = || allocator.allocate_frame();
-        root_table
-            .map(vaddr, paddr, flags, &mut alloc_closure)
-            .map_err(|_| PageTableError::OutOfMemory)?;
+        let result = {
+            let mut alloc_closure = || allocator.allocate_frame();
+            root_table.map(vaddr, paddr, flags, &mut alloc_closure)
+        };
+        if result.is_err() {
+            root_table.prune_empty(vaddr, &mut |frame| allocator.deallocate_frame(frame));
+            return Err(PageTableError::OutOfMemory);
+        }
         Ok(())
     } else {
         Err(PageTableError::NotSupported)
@@ -636,10 +640,17 @@ pub fn map_page_x86(
     let root_phys = (*root_lock).ok_or(PageTableError::NotSupported)?;
     let pml4_virt = phys_to_virt(root_phys) as *mut u64;
 
-    let mut alloc_fn = || allocator.allocate_frame();
-    // SAFETY: pml4_virt is the kernel's active PML4 (stored at boot).
-    let pte_ptr = unsafe { walk_create(pml4_virt, vaddr, &mut alloc_fn) }
-        .ok_or(PageTableError::OutOfMemory)?;
+    let pte_ptr = {
+        let mut alloc_fn = || allocator.allocate_frame();
+        // SAFETY: pml4_virt is the kernel's active PML4 (stored at boot).
+        unsafe { walk_create(pml4_virt, vaddr, &mut alloc_fn) }
+    };
+    let Some(pte_ptr) = pte_ptr else {
+        // SAFETY: `hal::PageTable` is the architecture's 4096-byte PML4 layout.
+        let table = unsafe { &mut *(pml4_virt as *mut hal::PageTable) };
+        table.prune_empty(vaddr, &mut |frame| allocator.deallocate_frame(frame));
+        return Err(PageTableError::OutOfMemory);
+    };
     // SAFETY: pte_ptr is the leaf PTE address; writing it installs the mapping.
     unsafe {
         core::ptr::write_volatile(pte_ptr, paddr as u64 | flags);
@@ -773,6 +784,65 @@ pub fn unmap_page(vaddr: VAddr) -> PagingResult<()> {
     unmap_page_x86(vaddr)
 }
 
+/// Intermediate page-table frames detached from the active root.
+pub struct ReclaimedPageTables {
+    frames: [PhysAddr; 3],
+    len: usize,
+}
+
+impl ReclaimedPageTables {
+    fn new() -> Self {
+        Self { frames: [0; 3], len: 0 }
+    }
+
+    fn record(&mut self, frame: PhysAddr) {
+        assert!(self.len < self.frames.len(), "page-table depth exceeds reclaim bound");
+        self.frames[self.len] = frame;
+        self.len += 1;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn release(self, allocator: &mut FrameAllocator) {
+        for frame in self.frames[..self.len].iter().copied() {
+            allocator.deallocate_frame(frame);
+        }
+    }
+}
+
+/// Detach empty intermediate tables after their final leaf was unmapped.
+#[cfg(any(target_arch = "riscv64", target_arch = "aarch64"))]
+pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
+    let mut reclaimed = ReclaimedPageTables::new();
+    let root = KERNEL_ROOT.lock();
+    if let Some(root_phys) = *root {
+        // SAFETY: KERNEL_ROOT names the live architecture page-table root.
+        let table = unsafe { &mut *(root_phys as *mut PageTable) };
+        table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
+    }
+    reclaimed
+}
+
+#[cfg(target_arch = "x86_64")]
+pub fn prune_empty_tables(vaddr: VAddr) -> ReclaimedPageTables {
+    let mut reclaimed = ReclaimedPageTables::new();
+    let root = KERNEL_ROOT.lock();
+    if let Some(root_phys) = *root {
+        let root_virt = crate::memory::frame::phys_to_virt(root_phys);
+        // SAFETY: the HHDM alias names the live PML4 root.
+        let table = unsafe { &mut *(root_virt as *mut hal::PageTable) };
+        table.prune_empty(vaddr, &mut |frame| reclaimed.record(frame));
+    }
+    reclaimed
+}
+
+#[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
+pub fn prune_empty_tables(_vaddr: VAddr) -> ReclaimedPageTables {
+    ReclaimedPageTables::new()
+}
+
 // ─── remap_range_user ────────────────────────────────────────────────────────
 
 /// Remap a range of already-allocated pages with user (U/S=1) permissions.
@@ -840,6 +910,66 @@ pub fn map_page(
 
 #[cfg(any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm"))]
 pub fn remap_range_user(_start: PhysAddr, _pages: usize) {}
+
+/// Hardware translation observed at one virtual address.
+///
+/// The raw leaf entry retains architecture-specific access bits so rollback
+/// probes can distinguish an absent translation from a mapping with altered
+/// permissions.
+#[cfg(feature = "test-hooks")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct TranslationProbe {
+    pub(crate) phys: PhysAddr,
+    pub(crate) pte: u64,
+}
+
+/// Read the active page table's leaf entry without relying on VMA bookkeeping.
+#[cfg(all(feature = "test-hooks", any(target_arch = "riscv64", target_arch = "aarch64")))]
+pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
+    #[cfg(target_arch = "riscv64")]
+    {
+        let satp: usize;
+        unsafe { core::arch::asm!("csrr {}, satp", out(reg) satp) };
+        let root_phys = (satp & ((1 << 44) - 1)) << 12;
+        let root = (root_phys != 0).then(|| unsafe { &*(root_phys as *const hal::PageTable) })?;
+        let pte = root.leaf_entry(vaddr)? as u64;
+        return Some(TranslationProbe {
+            phys: (((pte >> 10) & 0x003F_FFFF_FFFF_FFFF) as usize) << 12 | (vaddr & 0xFFF),
+            pte,
+        });
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        let ttbr0: usize;
+        unsafe { core::arch::asm!("mrs {}, ttbr0_el1", out(reg) ttbr0, options(nomem, nostack)) };
+        let root = unsafe { &*((ttbr0 & !0xFFF) as *const hal::PageTable) };
+        let pte = root.leaf_entry(vaddr)?;
+        return Some(TranslationProbe {
+            phys: ((pte & 0x0000_FFFF_FFFF_F000) as usize) | (vaddr & 0xFFF),
+            pte,
+        });
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
+#[cfg(all(feature = "test-hooks", target_arch = "x86_64"))]
+pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
+    use crate::memory::frame::phys_to_virt;
+    use hal::paging::{walk_read, PTE_ADDR_MASK, PTE_PRESENT};
+
+    let root_phys = (*KERNEL_ROOT.lock())?;
+    let pte = unsafe { walk_read(phys_to_virt(root_phys) as *const u64, vaddr) }?;
+    (pte & PTE_PRESENT != 0).then_some(TranslationProbe {
+        phys: ((pte & PTE_ADDR_MASK) as usize) | (vaddr & 0xFFF),
+        pte,
+    })
+}
+
+#[cfg(all(feature = "test-hooks", any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")))]
+pub(crate) fn translation_probe(_vaddr: VAddr) -> Option<TranslationProbe> {
+    None
+}
 
 // ─── virt_to_phys ────────────────────────────────────────────────────────────
 

@@ -131,6 +131,7 @@ members = [
     "cells/demos/hotswap-demo-v2",
 
     # Cells - Tests
+    "cells/tests/atomic-publication-probe",
     "cells/tests/bench",
     "cells/tests/vfs-test",
     "cells/tests/srv-test",

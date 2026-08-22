@@ -97,6 +97,59 @@ impl PageTable {
             entries: [0u64; 512],
         }
     }
+
+    /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
+    pub fn prune_empty(
+        &mut self,
+        virt: VAddr,
+        dealloc: &mut dyn FnMut(PhysAddr),
+    ) {
+        let l1_index = (virt >> 30) & 0x1FF;
+        let l1_entry = self.entries[l1_index];
+        if l1_entry & PTE_VALID == 0 {
+            return;
+        }
+        let l2_phys = (l1_entry & !0xFFF) as PhysAddr;
+        // SAFETY: a valid table descriptor names a live L2 table.
+        let l2 = unsafe { &mut *(l2_phys as *mut PageTable) };
+        let l2_index = (virt >> 21) & 0x1FF;
+        let l2_entry = l2.entries[l2_index];
+        if l2_entry & PTE_VALID == 0 {
+            if !l2.entries.iter().any(|entry| entry & PTE_VALID != 0) {
+                self.entries[l1_index] = 0;
+                dealloc(l2_phys);
+            }
+            return;
+        }
+        let l3_phys = (l2_entry & !0xFFF) as PhysAddr;
+        // SAFETY: a valid table descriptor names a live L3 table.
+        let l3 = unsafe { &mut *(l3_phys as *mut PageTable) };
+        if l3.entries.iter().any(|entry| entry & PTE_VALID != 0) {
+            return;
+        }
+        l2.entries[l2_index] = 0;
+        dealloc(l3_phys);
+        if l2.entries.iter().any(|entry| entry & PTE_VALID != 0) {
+            return;
+        }
+        self.entries[l1_index] = 0;
+        dealloc(l2_phys);
+    }
+    /// Return the hardware leaf entry for `virt` without synthesizing flags.
+    pub fn leaf_entry(&self, virt: VAddr) -> Option<u64> {
+        let l1 = self.entries[(virt >> 30) & 0x1FF];
+        if l1 & PTE_VALID == 0 {
+            return None;
+        }
+        let l2 = unsafe { &*((l1 & !0xFFF) as *const PageTable) };
+        let l2_entry = l2.entries[(virt >> 21) & 0x1FF];
+        if l2_entry & PTE_VALID == 0 {
+            return None;
+        }
+        let l3 = unsafe { &*((l2_entry & !0xFFF) as *const PageTable) };
+        let leaf = l3.entries[(virt >> 12) & 0x1FF];
+        (leaf & PTE_VALID != 0).then_some(leaf)
+    }
 }
 
 impl PageTableTrait for PageTable {

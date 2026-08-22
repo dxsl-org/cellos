@@ -53,9 +53,10 @@ fn prerequisites_ok() -> bool {
     vicell_integration_tests::ci_guard(kernel.exists() && qemu_ok)
 }
 
-/// Boot the test-hooks kernel (no disk — embedded FS only, guarantees the
-/// test-hooks service-vfs with 2 KiB quota runs), then wait for vfs-test to
-/// report all scenarios passed.
+/// Boot the single-hart test-hooks kernel (no disk — embedded FS only,
+/// guarantees the test-hooks service-vfs with 2 KiB quota runs). AP-12/AP-14
+/// still prove governed pre-ready publication, while AP-13 explicitly skips:
+/// this runner has no live remote scheduler barrier to certify.
 fn wait_for_or_dump(runner: &QemuRunner, pattern: &str) {
     runner.wait_for(pattern, 60).unwrap_or_else(|e| {
         eprintln!("--- serial output ---\n{}\n---", runner.dump());
@@ -69,9 +70,18 @@ fn riscv64_vfs_quota_all_pass() {
         return;
     }
 
-    // boot_rv64: no disk, no extra production cells — clean environment for
-    // the quota integration test.
+    // boot_rv64 intentionally remains single-hart: this is the VFS contract,
+    // not the separate SMP atomic-publication contract.
     let runner = QemuRunner::boot_rv64(&test_hooks_kernel());
+
+    for marker in [
+        "ATOMIC_PUBLICATION_AP-12: PASS",
+        "ATOMIC_PUBLICATION_AP-14: PASS",
+        "ATOMIC_PUBLICATION_AP-13: SKIP (hart 1 not online; SMP probe not required)",
+        "ATOMIC_PUBLICATION_AP-15: PASS",
+    ] {
+        wait_for_or_dump(&runner, marker);
+    }
 
     wait_for_or_dump(
         &runner,
@@ -125,5 +135,10 @@ fn riscv64_vfs_quota_all_pass() {
         !serial.contains("[FAIL] grant:"),
         "--- serial output ---\n{}\n---",
         serial
+    );
+    assert!(
+        !serial.contains("ATOMIC_PUBLICATION_AP-13: PASS")
+            && !serial.contains("ATOMIC_PUBLICATION_ALL: PASS"),
+        "single-hart VFS runner must not certify the SMP atomic contract:\n{serial}",
     );
 }

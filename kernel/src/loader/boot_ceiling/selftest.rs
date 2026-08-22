@@ -127,7 +127,7 @@ pub fn run() -> bool {
     }
     for route in [LaunchRoute::Path, LaunchRoute::Elf] {
         match authorize(SHELL, route, "/bin/hotswap") {
-            Some(profile) if profile.parent_ceiling == CapSet::EMPTY => {}
+            Some(profile) if profile.child_ceiling == CapSet::EMPTY => {}
             Some(_) => {
                 ok = false;
                 log::error!(

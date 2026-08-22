@@ -25,6 +25,23 @@ pub const MAX_ENTRIES: usize = 64;
 /// FNV hash of the cell name), so a replacement instance reads the same slot.
 static STASH: Spinlock<BTreeMap<u64, Vec<u8>>> = Spinlock::new(BTreeMap::new());
 
+const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
+
+pub(crate) fn spawn_argv_key(task_id: usize) -> u64 {
+    SPAWN_ARGV_KEY ^ ((task_id as u64) << 32)
+}
+
+/// Consume argv at the syscall boundary so a failed attempt cannot leak it to a
+/// later child. The returned allocation is owned by the unpublished launch.
+pub(crate) fn take_spawn_argv(task_id: usize) -> Option<Vec<u8>> {
+    STASH.lock().remove(&spawn_argv_key(task_id))
+}
+
+/// Install already-owned argv before the child reaches a ready queue.
+pub(crate) fn install_spawn_argv(task_id: usize, argv: Vec<u8>) {
+    STASH.lock().insert(spawn_argv_key(task_id), argv);
+}
+
 /// Store `bytes` under `key`, replacing any previous value. Returns the number
 /// of bytes stored (clamped to [`MAX_STASH_LEN`]), or 0 if the stash is full
 /// (at [`MAX_ENTRIES`] distinct keys) and `key` is not already present.
@@ -61,6 +78,15 @@ pub fn restore(key: u64, buf: &mut [u8]) -> usize {
 /// accumulate toward [`MAX_ENTRIES`]. No-op when `key` is absent.
 pub fn remove(key: u64) {
     STASH.lock().remove(&key);
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn snapshot() -> alloc::vec::Vec<(u64, Vec<u8>)> {
+    STASH
+        .lock()
+        .iter()
+        .map(|(key, bytes)| (*key, bytes.clone()))
+        .collect()
 }
 
 /// Boot-time self-test of the state-transfer primitive: stash a sentinel under

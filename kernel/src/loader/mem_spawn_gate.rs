@@ -37,10 +37,8 @@ const MAX_LABEL_NAME: usize = 64;
 /// reduced to a `/mem/` label before the gate sees it and can only ever cost the
 /// child privilege, never gain it.
 ///
-/// The child's identity is derived by `task::spawn_from_mem` from the sentinel
-/// `CellId(0)` that `spawn_gated` passes — a cell spawned here must never keep
-/// `CellId(0)`, since both fault handlers treat a user-mode fault attributed to
-/// cell 0 as unattributable and panic.
+/// The child's identity is derived inside atomic publication; no runnable task
+/// can retain the kernel `CellId(0)` sentinel.
 ///
 /// # Errors
 /// - `ViError::PermissionDenied` — signature invalid, or absent under
@@ -51,7 +49,7 @@ const MAX_LABEL_NAME: usize = 64;
 pub fn spawn_from_mem_gated(
     elf_bytes: &[u8],
     caller_name: &str,
-    spawner: crate::task::cap::Spawner,
+    request: super::SpawnRequest,
 ) -> ViResult<usize> {
     let label = mem_label(caller_name);
     log::info!(
@@ -60,7 +58,7 @@ pub fn spawn_from_mem_gated(
         elf_bytes.len(),
         caller_name
     );
-    super::spawn_gated(elf_bytes, &label, spawner)
+    super::spawn_gated(elf_bytes, &label, request)
 }
 
 /// Reduce an untrusted name to a `/mem/`-prefixed advisory label.

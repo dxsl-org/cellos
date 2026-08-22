@@ -52,6 +52,8 @@ pub fn run_all() {
     test_signing_required_flag_off_in_dev_build();
     // W^X post-relocation flag derivation.
     super::wx::run_self_tests();
+    #[cfg(feature = "test-hooks")]
+    super::atomic_publication_tests::run_all();
     log::info!("[selftest] ELF-LOADER: PASS");
 }
 
@@ -65,20 +67,24 @@ fn expect_invalid(res: ViResult<usize>, label: &str) {
 }
 
 fn test_spawn_path_empty_rejected() {
-    let res = crate::loader::spawn_from_path("", crate::task::cap::Spawner::Root);
+    let res = crate::loader::spawn_from_path("", crate::loader::SpawnRequest::governed_boot());
     expect_invalid(res, "empty path");
     log::info!("  [ok] empty path rejected");
 }
 
 fn test_spawn_path_no_leading_slash_rejected() {
-    let res = crate::loader::spawn_from_path("bin/shell", crate::task::cap::Spawner::Root);
+    let res = crate::loader::spawn_from_path(
+        "bin/shell",
+        crate::loader::SpawnRequest::governed_boot(),
+    );
     expect_invalid(res, "no leading slash");
     log::info!("  [ok] path without leading '/' rejected");
 }
 
 fn test_spawn_path_too_long_rejected() {
     let long: alloc::string::String = "/".repeat(300);
-    let res = crate::loader::spawn_from_path(&long, crate::task::cap::Spawner::Root);
+    let res =
+        crate::loader::spawn_from_path(&long, crate::loader::SpawnRequest::governed_boot());
     expect_invalid(res, "path too long");
     log::info!("  [ok] path longer than MAX_CELL_PATH rejected");
 }
@@ -88,7 +94,7 @@ fn test_spawn_path_valid_format_accepted() {
     // that is acceptable; only InvalidInput counts as a format rejection.
     let res = crate::loader::spawn_from_path(
         "/bin/nonexistent-elf-for-test",
-        crate::task::cap::Spawner::Root,
+        crate::loader::SpawnRequest::governed_boot(),
     );
     match res {
         Err(ViError::NotFound) | Ok(_) => {}

@@ -780,6 +780,9 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();
 
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
+
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
     // x86_64 now included (Phase 04): embedded init ELF at embedded-x86_64/init.
@@ -876,52 +879,42 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
         // Failure is non-fatal: kernel-side PCI_DEVICES stays empty; Driver Cells
         // that rely on sys_find_pcie_device will simply not find their device.
         #[cfg(target_arch = "riscv64")]
-        match crate::loader::spawn_from_path("/bin/platform", crate::task::cap::Spawner::Root) {
+        match crate::loader::spawn_from_path(
+            "/bin/platform",
+            crate::loader::SpawnRequest::governed_boot(),
+        ) {
             Ok(_) => log_info("Platform Cell spawned (PCIe ECAM scanner)"),
             Err(_) => log_info("Platform Cell absent — PCIe BARs will not be pre-registered"),
         }
 
-        // Copy to Vec to ensure alignment (include_bytes! is align 1, parsing needs align 8)
-        // CellId(0) asks spawn_from_mem to derive CellId(init_tid), the same
-        // convention every other spawn route uses. A hardcoded CellId(1) here
-        // would COLLIDE with the Platform Cell, which spawns first (tid=1 →
-        // CellId(1)); the collision commingled their per-cell quota slots and
-        // made fault attribution ambiguous ("Cell 1" meant either).
-        let init_data = alloc::vec::Vec::from(INIT_ELF);
-        match task::spawn_from_mem(&init_data, "init", types::CellId(0), alloc::vec![]) {
-            Ok((init_tid, _load_base)) => {
-                log_info("Successfully spawned init");
-                // Probe 'V': confirms spawn_from_mem succeeded → init is in ready queue.
+        // `aligned_elf::bytes` borrows an already aligned embedded image and only
+        // materializes an aligned copy when the linker did not provide one. Do not
+        // unconditionally duplicate init on the kernel heap at this boot boundary.
+        #[cfg(feature = "test-hooks")]
+        {
+            log_info("ATOMIC_PUBLICATION_AP-15: arming trusted init");
+            crate::loader::atomic_publication_tests::arm_trusted_success();
+            log_info("ATOMIC_PUBLICATION_AP-15: armed for trusted init");
+        }
+        log_info("Publishing trusted init");
+        match crate::loader::spawn_trusted_init(INIT_ELF) {
+            Ok(tid) => {
+                #[cfg(feature = "test-hooks")]
+                crate::loader::atomic_publication_tests::finish_trusted_success(tid);
+                log::info!(
+                    "Successfully spawned init with complete root authority (tid={})",
+                    tid
+                );
                 #[cfg(feature = "board-rpi3")]
                 crate::hal::uart_bcm_mini::probe_put(b'V');
-                // init is the ROOT AUTHORITY (P2 monotonic-downgrade). It is
-                // spawned via spawn_from_mem (NOT spawn_from_path), so its
-                // manifest is never read — this direct TCB write is the only
-                // place its caps come from, and it takes them from the SAME
-                // per-path boot table every other boot cell is bound by, so
-                // there is exactly one place that describes boot authority.
-                // init then delegates subsets to vfs/net/shell/... via the
-                // SpawnFromPath syscall, where each child is intersected against
-                // init's caps. Escalation-oracle bound: init's spawn targets MUST
-                // remain compile-time constants (no data-derived paths).
-                if let Some(sched) = task::SCHEDULER.lock().as_mut() {
-                    if let Some(t) = sched.tasks.get_mut(&init_tid) {
-                        crate::loader::boot_ceiling::boot_ceiling("/bin/init").apply_to(t);
-                        // SupervisorCap is NOT in CapSet (not delegatable via intersection).
-                        // Init holds it so it can unfreeze cells if the Supervisor Cell crashes.
-                        t.supervisor_cap = Some(task::cap::SupervisorCap::new());
-                        // init is the restart-tree root — freeze/kill must be refused
-                        // even by the Supervisor Cell (which also holds SupervisorCap).
-                        t.is_critical = true;
-                    }
-                }
-                log_info("init granted root authority (boot_ceiling(/bin/init) + SupervisorCap)");
             }
             Err(_e) => {
                 log_info("Failed to spawn init");
-                // Probe 'F': spawn_from_mem failed, init NOT in ready queue.
+                // Failure occurs before init reaches any ready queue.
                 #[cfg(feature = "board-rpi3")]
                 crate::hal::uart_bcm_mini::probe_put(b'F');
+                #[cfg(feature = "test-hooks")]
+                panic!("atomic-publication trusted-init success contract did not publish init");
             }
         }
     }

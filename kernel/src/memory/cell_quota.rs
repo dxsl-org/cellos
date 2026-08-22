@@ -80,6 +80,61 @@ pub fn deregister(cell_id: CellId) {
     QUOTA_LIMITS.lock().remove(&id);
 }
 
+/// Rollback owner for a quota row belonging to an unpublished cell.
+pub(crate) struct QuotaReservation {
+    cell_id: CellId,
+    committed: bool,
+}
+
+impl QuotaReservation {
+    /// Reserve the exact requested CellId.
+    pub(crate) fn reserve(cell_id: CellId, limit: usize) -> Result<Self, types::ViError> {
+        let id = cell_id.0 as usize;
+        if id == 0 || id >= MAX_CELLS {
+            return Err(types::ViError::PermissionDenied);
+        }
+        if QUOTA_LIMITS.lock().contains_key(&id) {
+            return Err(types::ViError::AlreadyExists);
+        }
+        register(cell_id, limit);
+        Ok(Self {
+            cell_id,
+            committed: false,
+        })
+    }
+
+    /// Reserve the lowest vacant bounded identity. Cell identity is independent
+    /// from the monotonic task ID, so exited cells release their quota slot for
+    /// later publication rather than permanently exhausting `MAX_CELLS`.
+    pub(crate) fn reserve_next(limit: usize) -> Result<Self, types::ViError> {
+        for raw in 1..MAX_CELLS {
+            match Self::reserve(CellId(raw as u64), limit) {
+                Ok(reservation) => return Ok(reservation),
+                Err(types::ViError::AlreadyExists) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Err(types::ViError::PermissionDenied)
+    }
+
+    pub(crate) fn cell_id(&self) -> CellId {
+        self.cell_id
+    }
+
+    /// Transfer cleanup responsibility to the published task exit path.
+    pub(crate) fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for QuotaReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            deregister(self.cell_id);
+        }
+    }
+}
+
 /// Charge `size` bytes to the Cell.
 ///
 /// Returns `false` if the quota would be exceeded — the caller (`QuotaAlloc::alloc`)
@@ -179,4 +234,60 @@ pub fn record_dma_unmapped(cell_id_raw: usize, size: usize) {
     let _ = DMA_IN_USE[cell_id_raw].fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
         Some(cur.saturating_sub(size))
     });
+}
+
+#[cfg(feature = "test-hooks")]
+#[derive(Debug, PartialEq)]
+pub(crate) struct QuotaSnapshot {
+    limits: [Option<usize>; MAX_CELLS],
+    heap: [usize; MAX_CELLS],
+    dma: [usize; MAX_CELLS],
+}
+
+#[cfg(feature = "test-hooks")]
+/// Copies quota state into fixed-size cells so `QUOTA_LIMITS` is never held
+/// across an allocation that would re-enter `charge`.
+pub(crate) fn snapshot() -> QuotaSnapshot {
+    let mut limits = [None; MAX_CELLS];
+    for (&cell_id, &limit) in QUOTA_LIMITS.lock().iter() {
+        if cell_id < MAX_CELLS {
+            limits[cell_id] = Some(limit);
+        }
+    }
+
+    let mut heap = [0; MAX_CELLS];
+    let mut dma = [0; MAX_CELLS];
+    for cell_id in 0..MAX_CELLS {
+        heap[cell_id] = IN_USE[cell_id].load(Ordering::Acquire);
+        dma[cell_id] = DMA_IN_USE[cell_id].load(Ordering::Acquire);
+    }
+    QuotaSnapshot { limits, heap, dma }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn registered_limit_for_test(cell_id: CellId) -> Option<usize> {
+    QUOTA_LIMITS.lock().get(&(cell_id.0 as usize)).copied()
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn reusable_cell_id_contract() -> bool {
+    let before = snapshot();
+    let mut held = alloc::vec::Vec::new();
+    loop {
+        match QuotaReservation::reserve_next(DEFAULT_QUOTA_BYTES) {
+            Ok(reservation) => held.push(reservation),
+            Err(types::ViError::PermissionDenied) => break,
+            Err(_) => return false,
+        }
+    }
+    let Some(released) = held.pop() else {
+        return false;
+    };
+    let released_id = released.cell_id();
+    drop(released);
+    let reused = QuotaReservation::reserve_next(DEFAULT_QUOTA_BYTES)
+        .map(|reservation| reservation.cell_id() == released_id)
+        .unwrap_or(false);
+    drop(held);
+    reused && snapshot() == before
 }

@@ -141,6 +141,18 @@ pub fn clear_tid(tid: usize) {
     }
 }
 
+#[cfg(feature = "test-hooks")]
+pub(crate) fn snapshot() -> alloc::vec::Vec<(u16, usize, bool)> {
+    REGISTRY
+        .lock()
+        .iter()
+        .map(|(service_id, entry)| match entry {
+            ServiceEntry::Active(tid) => (*service_id, *tid, false),
+            ServiceEntry::Paused(tid) => (*service_id, *tid, true),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

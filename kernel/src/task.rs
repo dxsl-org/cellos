@@ -8,6 +8,7 @@ pub mod completion;
 pub mod completion_selftest;
 pub mod completion_wait;
 pub mod dir_inherit;
+mod elf_prepare;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
 pub mod net_rx_selftest;
@@ -18,6 +19,9 @@ pub mod tcb;
 pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
+pub use elf_prepare::{prepare_elf_task, PreparedElfTask};
+pub use launch::{publish_prepared, CallerLaunchAuthority, LaunchRoutes, StagedMeasurement, TaskLaunchState};
+mod launch;
 pub use tcb::Task;
 pub mod drivers;
 pub mod ipc_guardrail_selftest;
@@ -790,6 +794,9 @@ pub fn terminate_current_cell_on_fault(cause: usize, pc: usize, fault_addr: usiz
 
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
 pub fn yield_cpu() {
+    #[cfg(feature = "test-hooks")]
+    crate::loader::atomic_publication_tests::observe_schedule_attempt();
+
     // x86_64: disable interrupts for the entire scheduler critical section.
     // Without this, the LAPIC timer fires mid-lock and causes a nested
     // yield_cpu call that deadlocks on the same spinlock (IRQ-in-lock deadlock).
@@ -963,51 +970,6 @@ pub fn spawn_with_stacks(
     }
 }
 
-/// Register a cell's task and give it a per-cell identity in one critical section.
-///
-/// `requested == CellId(0)` means "derive one": the caller has no identity to
-/// impose, so the task id is reused as the cell id. Every ELF-loading spawn
-/// route funnels through here for that derivation instead of each remembering to
-/// patch `task.cell_id` afterwards, because a user cell left on `CellId(0)`:
-///
-/// - shares the kernel's per-cell memory quota slot, whose `charge()` is a
-///   short-circuit for id 0, so its allocations are never accounted; and
-/// - is unattributable at fault time — the unserviceable-fault handlers on every
-///   arch refuse to terminate a fault they cannot pin on a cell and panic
-///   instead, turning one cell's memory bug into a whole-system halt.
-///
-/// A non-zero `requested` is honoured verbatim: a thread joining an existing
-/// cell must keep that cell's identity, not invent a second one.
-///
-/// The derivation shares the registration's scheduler lock so the task is never
-/// observable with the placeholder id.
-///
-/// # Errors
-/// `ViError::Unknown` if the scheduler is not initialised yet.
-fn spawn_cell_task(
-    name: &str,
-    requested: CellId,
-    allowed_drivers: alloc::vec::Vec<usize>,
-    kstack: stack::Stack,
-    ustack: stack::Stack,
-) -> Result<usize, ViError> {
-    let spawner = current_task_id();
-    let mut guard = SCHEDULER.lock();
-    let sched = guard.as_mut().ok_or(ViError::Unknown)?;
-    let tid = sched.spawn_with_stacks(name, requested, allowed_drivers, kstack, ustack);
-    if requested == CellId(0) {
-        if let Some(task) = sched.tasks.get_mut(&tid) {
-            task.cell_id = CellId(tid as u64);
-        }
-    }
-    // Inside the same critical section that made the task reachable: the child
-    // is already on a ready queue, and any hart that could pick it up must first
-    // take this lock. Installing after the guard drops would leave a window in
-    // which the child runs and the filesystem service reads "inherited nothing"
-    // for a cell that was in fact given a set.
-    dir_inherit::install_on_child(sched, tid, spawner);
-    Ok(tid)
-}
 
 pub fn spawn_with_arg(
     name: &str,
@@ -1032,261 +994,6 @@ fn elf_is_pie(data: &[u8]) -> bool {
     data.len() >= 18 && u16::from_le_bytes([data[16], data[17]]) == 3
 }
 
-/// Spawn a cell from an ELF image already in memory.
-///
-/// Applies ELF relocations internally (`.rela.dyn`) so callers need not do it.
-///
-/// Pass `CellId(0)` unless the cell's identity is already fixed by something
-/// else; the task is then given a derived per-cell identity before it is
-/// reachable — see [`spawn_cell_task`] for why no caller should patch
-/// `task.cell_id` itself.
-///
-/// Returns `(tid, load_base)` where `load_base` is:
-/// - `0` for fixed-VA (non-PIE) cells — load address comes from the ELF itself.
-/// - The allocated VA base for PIE cells (informational; relocations already applied).
-pub fn spawn_from_mem(
-    data: &[u8],
-    name: &str,
-    cell_id: CellId,
-    allowed_drivers: alloc::vec::Vec<usize>,
-) -> core::result::Result<(usize, usize), ViError> {
-    use crate::loader::{ElfLoader, ElfParser};
-
-    // 1. Check Magic
-    if data.len() < 4 || &data[0..4] != b"\x7fELF" {
-        log::error!("Spawn: Invalid ELF magic");
-        return Err(ViError::InvalidInput);
-    }
-
-    // 2. Parse ELF Header
-    log::info!("Spawn: parsing elf from memory ({} bytes)", data.len());
-
-    // Ensure alignment (xmas-elf requires it)
-    use alloc::vec::Vec;
-    let mut _aligned_storage: Option<Vec<u8>> = None;
-    let elf_data = if !(data.as_ptr() as usize).is_multiple_of(8) {
-        log::warn!(
-            "Spawn: Unaligned ELF data (0x{:X}). Copying to aligned buffer...",
-            data.as_ptr() as usize
-        );
-        let mut v = Vec::with_capacity(data.len());
-        v.extend_from_slice(data);
-        _aligned_storage = Some(v);
-        _aligned_storage.as_ref().unwrap()
-    } else {
-        data
-    };
-
-    let loader = ElfLoader;
-    let header = loader.parse_header(elf_data)?;
-
-    // 3. Determine load base.
-    //    PIE cells (ET_DYN) get a fresh VA slot; fixed-VA cells use p_vaddr.
-    let load_base: usize = if elf_is_pie(elf_data) {
-        crate::loader::va_alloc::alloc_cell_va().ok_or_else(|| {
-            log::error!("Spawn: cell VA space exhausted");
-            ViError::OutOfMemory
-        })?
-    } else {
-        0
-    };
-
-    // 4. Load Segments — capture the mapped (vaddr, frame) pairs so the cell's
-    // segment frames are reclaimed when it dies (see stack::CellSegments).
-    let seg_pages = {
-        let mut frame_guard = crate::memory::frame::FRAME_ALLOCATOR.lock();
-        let frame_allocator = frame_guard.as_mut().ok_or(ViError::OutOfMemory)?;
-        loader
-            .load_segments(elf_data, frame_allocator, load_base)
-            .inspect_err(|_| {
-                // If segment loading fails after allocating a PIE VA slot,
-                // return the slot so it can be reused.
-                if load_base != 0 {
-                    crate::loader::va_alloc::free_cell_va(load_base);
-                }
-            })?
-    };
-
-    // Target permissions per page, kept alive until step 6 lowers them. Derived
-    // in `load_segments` because only it sees the per-segment p_flags and the
-    // boundary-page merge; recomputing here would risk the two disagreeing.
-    let wx_pages: alloc::vec::Vec<(usize, crate::memory::paging::Flags)> =
-        seg_pages.iter().map(|p| (p.va, p.final_flags)).collect();
-
-    // 5. Take ownership of the mapped segment frames NOW, before anything else
-    //    can fail. From here on every error path frees the frames and the PIE VA
-    //    slot by dropping `segments`; load_base is transferred into its
-    //    pie_va_base field, so it must not also be freed manually.
-    let entry_va = header.entry.wrapping_add(load_base);
-    let segments = crate::task::stack::CellSegments::new(
-        seg_pages.iter().map(|p| (p.va, p.frame)).collect(),
-        load_base,
-    );
-
-    // 6. Relocate, then lock the pages down — both BEFORE the task exists.
-    //
-    //    Relocation is the last kernel write through the cell's own USER
-    //    mapping, so it must precede the lowering or the loader would fault on
-    //    its own patches. The lowering in turn must precede task registration:
-    //    registering pushes the task onto a ready queue, and another hart can
-    //    steal and start it on its next tick. A cell that starts before this
-    //    point runs unrelocated, with every page still writable, and caches
-    //    those writable PTEs in a TLB no cross-hart shootdown exists to clear.
-    if load_base != 0 {
-        if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
-            if let Err(e) = crate::loader::reloc::apply_relocations(load_base, rela) {
-                log::error!("Spawn: relocation failed for '{}': {:?}", name, e);
-                return Err(e);
-            }
-        }
-    }
-    if let Err(e) = crate::loader::wx::enforce(&wx_pages, name) {
-        log::error!("Spawn: W^X enforcement failed for '{}': {:?}", name, e);
-        return Err(e);
-    }
-
-    // 7. Pre-allocate the remaining per-task resources BEFORE touching the
-    //    scheduler. Rust Drop cleans up on any error path — no manual free here.
-    let stack_pages = stack_pages_for(name);
-    let kstack =
-        crate::task::stack::Stack::new_kernel(stack_pages).map_err(|_| ViError::OutOfMemory)?;
-    let ustack =
-        crate::task::stack::Stack::new_user(stack_pages).map_err(|_| ViError::OutOfMemory)?;
-    let kstack_top = kstack.top;
-    let user_stack_top = ustack.top;
-
-    // 8. Spawn Task — creates the scheduler entry, derives the cell identity, and
-    //    takes ownership of the stacks allocated in step 7. Handing them over
-    //    instead of letting the scheduler allocate its own pair is what keeps
-    //    this path to ONE contiguous run per stack: the scheduler's pair used to
-    //    be overwritten and dropped right here, so each spawn asked the allocator
-    //    for four 65-frame runs and kept two. `segments` still drops on failure.
-    let tid = spawn_cell_task(name, cell_id, allowed_drivers, kstack, ustack)?;
-
-    // 9. Wire the remaining pre-allocated resources into the task under the
-    //    scheduler lock. Option::take() transfers ownership; untaken Somes drop at
-    //    end of scope.
-    let mut segments_o = Some(segments);
-    let mut setup_ok = false;
-    if let Some(sched) = SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.tasks.get_mut(&tid) {
-            log::info!("Spawn: Setting up context for Task {}...", tid);
-            task.segment_mem = segments_o.take();
-            task.trap_frame.sepc = entry_va as _;
-            task.trap_frame.sstatus = 0x20; // placeholder; overwritten per-arch below
-
-            // Setup TrapFrame on KERNEL Stack
-            let tf_ptr = kstack_top - TRAP_FRAME_SIZE;
-
-            // Set User SP in TrapFrame
-            task.trap_frame.regs[2] = user_stack_top as _;
-
-            // CRITICAL: Set User Mode Status in TrapFrame!
-            #[cfg(not(target_arch = "x86_64"))]
-            {
-                task.trap_frame.sstatus = 0x6020;
-            }
-            #[cfg(target_arch = "x86_64")]
-            {
-                task.trap_frame.sstatus = 0x202;
-            } // RFLAGS: IF=1, reserved=1
-
-            // Copy TrapFrame to Kernel Stack
-            unsafe {
-                let tf_dest = &mut *(tf_ptr as *mut crate::hal::arch::ViTrapFrame);
-                *tf_dest = task.trap_frame;
-            }
-
-            // board-rpi3 debug: print tf_ptr and actual [tf_ptr+264] (sepc) after copy.
-            // '1'<tf_ptr hex>:   address of TrapFrame on kstack.
-            // '2'<sepc hex>:     what was written to [tf_ptr+264] (should == entry_va).
-            // '3'<entry hex>:    entry_va value (expected sepc).
-            // '4'<kstack_top>:   kstack_top (tf_ptr should be kstack_top - 288).
-            // Uses the HAL's FIFO-safe byte writer so task setup reuses the
-            // shared mini-UART readiness contract.
-            #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-            {
-                macro_rules! fifo_hex {
-                    ($val:expr) => {{
-                        let v: u64 = $val;
-                        // Correct: shifts 60,56,...,4,0 (16 nibbles, MSB first).
-                        for i in (0..16usize).rev() {
-                            let n = ((v >> (i * 4)) & 0xF) as u8;
-                            crate::hal::uart_bcm_mini::probe_put(if n < 10 {
-                                b'0' + n
-                            } else {
-                                b'a' + n - 10
-                            });
-                        }
-                    }};
-                }
-                crate::hal::uart_bcm_mini::probe_put(b'1');
-                fifo_hex!(tf_ptr as u64);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-                crate::hal::uart_bcm_mini::probe_put(b'2');
-                // SAFETY: the TrapFrame was copied to this live kernel-stack slot above.
-                let sepc_on_kstack =
-                    unsafe { core::ptr::read_volatile((tf_ptr + 264) as *const u64) };
-                fifo_hex!(sepc_on_kstack);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-                crate::hal::uart_bcm_mini::probe_put(b'3');
-                fifo_hex!(entry_va as u64);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-                crate::hal::uart_bcm_mini::probe_put(b'4');
-                fifo_hex!(kstack_top as u64);
-                crate::hal::uart_bcm_mini::probe_put(b'\n');
-            }
-
-            // Point Context to Kernel Stack (sp field exists on all Context types)
-            task.context.sp = tf_ptr as _;
-            #[cfg(target_arch = "riscv64")]
-            {
-                task.context.ra = __trap_exit as *const () as usize;
-                task.context.sstatus = 0x42120;
-            } // SUM=1, FS=1, SPP=1, SPIE=1
-            #[cfg(target_arch = "riscv32")]
-            {
-                task.context.ra = __trap_exit as *const () as u32;
-                task.context.sstatus = 0x120_u32;
-            } // SPP=1, SPIE=1
-            #[cfg(target_arch = "aarch64")]
-            {
-                task.context.x30 = __trap_exit as *const () as u64;
-                // SP_EL0 is banked and not auto-saved by hardware on exception entry.
-                // __switch saves/restores it explicitly; seed it here so the first
-                // context switch loads the correct user SP before __trap_exit also sets it.
-                task.context.sp_el0 = user_stack_top as u64;
-            }
-            #[cfg(target_arch = "x86_64")]
-            {
-                task.context.rip = __trap_exit as *const () as u64;
-                // kernel_trap_sp = fixed syscall-entry RSP; never changes after spawn.
-                // yield_cpu uses this (not context.sp) for set_kernel_stack so that
-                // CPU_LOCAL.kernel_rsp stays at the top of a fresh syscall frame even
-                // after the task has blocked and context.sp has moved deeper.
-                task.context.kernel_trap_sp = tf_ptr as u64;
-            }
-
-            info!(
-                "Spawned ELF task '{}' (ID {}) from memory at entry 0x{:X} (load_base=0x{:X})",
-                name, tid, entry_va, load_base
-            );
-            setup_ok = true;
-        }
-    }
-
-    if !setup_ok {
-        // Scheduler or task entry not found (shouldn't happen after a successful spawn,
-        // but be safe).  Untaken options drop here → frames/VA/stacks freed. ✅
-        // Kill the orphaned task so it never runs without a context.
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.exit_task(tid, 0xff);
-        }
-        return Err(ViError::Unknown);
-    }
-
-    Ok((tid, load_base))
-}
 
 pub fn spawn_from_file(path: &str) -> core::result::Result<usize, ViError> {
     // 1. Request file from VFS (Cell 3)

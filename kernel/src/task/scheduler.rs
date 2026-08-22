@@ -134,6 +134,16 @@ impl Scheduler {
         }
     }
 
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn publication_snapshot_counters(&self) -> (usize, usize, usize, usize) {
+        (
+            self.pending_grant_reap.len(),
+            self.pending_vfs_lease_release.len(),
+            self.pending_completion_release.len(),
+            self.last_global_sweep_tick,
+        )
+    }
+
     /// Push task `id` onto the CALLING hart's local ready queue.
     ///
     /// Returns the priority level used so callers can optionally call

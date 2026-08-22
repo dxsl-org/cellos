@@ -29,19 +29,22 @@ pub struct CallerLaunchState<'a> {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct LaunchProfile {
-    pub parent_ceiling: CapSet,
+    /// Maximum authority a child on this exact reviewed edge may receive.
+    /// This is deliberately independent of the caller capability snapshot used
+    /// to authorize publication.
+    pub child_ceiling: CapSet,
     pub denial_label: &'static str,
     pub requires_lifecycle_authority: bool,
 }
 
 impl LaunchProfile {
     pub(super) const fn new(
-        parent_ceiling: CapSet,
+        child_ceiling: CapSet,
         denial_label: &'static str,
         requires_lifecycle_authority: bool,
     ) -> Self {
         Self {
-            parent_ceiling,
+            child_ceiling,
             denial_label,
             requires_lifecycle_authority,
         }
@@ -73,7 +76,7 @@ pub fn authorize(
     // profile that carries authority. Service-IPC tools use an empty ceiling;
     // capability-bearing ELF routes remain lifecycle-only.
     if matches!(route, LaunchRoute::Elf)
-        && profile.parent_ceiling != CapSet::EMPTY
+        && profile.child_ceiling != CapSet::EMPTY
         && !profile.requires_lifecycle_authority
     {
         return None;

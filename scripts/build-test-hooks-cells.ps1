@@ -36,24 +36,32 @@ cargo build --release -p app-shell -p service-config 2>&1 | Select-Object -Last 
 # ── Step 2: build test-hooks variants of vfs and vfs-test.
 # init is built without features; vfs-test spawn is unconditional in init/main.rs
 # (silently returns NotFound in production images that do not contain vfs-test).
-Write-Host "==> Building init (normal) and test-hooks cells (vfs, vfs-test)..."
+Write-Host "==> Building init and test-hooks cells (vfs, vfs-test, atomic-publication-probe)..."
 cargo build --release -p app-init 2>&1 | Select-Object -Last 3
 cargo build --release -p service-vfs   --features test-hooks 2>&1 | Select-Object -Last 3
 cargo build --release -p app-vfs-test  --features test-hooks 2>&1 | Select-Object -Last 3
+cargo build --release -p atomic-publication-probe 2>&1 | Select-Object -Last 3
 
 # Verify all required binaries exist.
 $required = @{
     "app-init"                   = "$rel\app-init"
     "service-vfs (test-hooks)"  = "$rel\service-vfs"
     "app-vfs-test (test-hooks)" = "$rel\vfs-test"
+    "atomic-publication-probe" = "$rel\atomic-publication-probe"
     "app-shell"                 = "$rel\app-shell"
     "service-config"            = "$rel\service-config"
 }
 foreach ($kv in $required.GetEnumerator()) {
     if (-not (Test-Path $kv.Value)) {
+
         Write-Error "Missing: $($kv.Key) at $($kv.Value)"
     }
 }
+
+# The atomic probe is spawned through the normal signature gate, so sign the
+# fresh test-only artifact before placing it in VIFS1.
+python "$root\scripts\cellos-sign" --sign "$rel\atomic-publication-probe" `
+    --objcopy riscv-none-elf-objcopy
 
 # ── Step 3: assemble kernel_fs.img from test-hooks binaries.
 Write-Host "==> Building kernel_fs.img (test-hooks)..."
@@ -71,6 +79,7 @@ python "$tools\mkfat32.py" `
     "$rel\service-vfs"    "/bin/vfs" `
     "$rel\service-config" "/bin/config" `
     "$rel\vfs-test"       "/bin/vfs-test" `
+    "$rel\atomic-publication-probe" "/bin/atomic-probe" `
     "$tmpDir\hostname"    "/etc/hostname"
 
 if (-not (Test-Path "$th_dir\kernel_fs.img")) {
@@ -88,7 +97,7 @@ Write-Host "   init binary:   $([math]::Round((Get-Item "$th_dir\init").Length /
 Write-Host "==> Building test-hooks kernel (riscv64, PIC)..."
 $env:EMBEDDED_OVERRIDE = $th_dir
 $env:RUSTFLAGS = "-C relocation-model=pic"
-cargo build --release -p cellos-kernel `
+cargo build --release -p cellos-kernel --features test-hooks `
     --target riscv64gc-unknown-none-elf 2>&1 | Select-Object -Last 5
 Remove-Item Env:\EMBEDDED_OVERRIDE -ErrorAction SilentlyContinue
 Remove-Item Env:\RUSTFLAGS          -ErrorAction SilentlyContinue

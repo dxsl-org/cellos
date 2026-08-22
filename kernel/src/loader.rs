@@ -10,17 +10,23 @@ use types::*;
 static BLOCK_IO_REGISTERED: AtomicBool = AtomicBool::new(false);
 
 /// Per-path capability ceiling for the cells named in the boot manifest.
+#[cfg(feature = "test-hooks")]
+pub mod atomic_publication_tests;
+pub(crate) mod aligned_elf;
 pub mod boot_ceiling;
 pub mod disk_layout;
 pub mod early;
 pub mod elf;
 pub mod elf_tests;
+mod governed_spawn;
 pub mod launch_profile;
 /// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
 pub mod mem_spawn_gate;
 mod manifest_section;
 mod manifest_section_tests;
 pub mod reloc;
+mod spawn_request;
+pub use spawn_request::SpawnRequest;
 pub mod va_alloc;
 /// W^X: lower cell pages to their ELF `p_flags` once relocation has finished.
 pub mod wx;
@@ -43,24 +49,9 @@ pub struct ElfHeader {
     pub shoff: usize,
 }
 
-/// Spawn a cell by reading its ELF from a filesystem path.
+/// Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
 ///
-/// Resolution order:
-/// 1. If the early-boot cell table has been probed (via `early::EarlyLoader::probe`),
-///    reads the ELF directly from the block device at the known LBA.
-/// 2. Otherwise returns `ViError::NotFound` — the caller must ensure the early
-///    table is probed before calling `spawn_from_path` during bootstrapping.
-///
-/// After the ELF is loaded into memory, relocations are applied and the cell is
-/// enqueued via `crate::task::spawn_from_mem`.
-///
-/// # Errors
-/// - `ViError::NotFound` — path absent from the bootstrap table.
-/// - `ViError::InvalidInput` — malformed ELF or unsupported relocation.
-/// - `ViError::OutOfMemory` — cannot allocate frames for segments.
-///   Legacy hardcoded path grants for cells lacking a `__ViCell_manifest`.
-///   Mirrors the pre-manifest behavior; only `/bin/` paths gain privilege. The
-///   returned set is still subject to spawner intersection in `spawn_from_path`.
+/// Only `/bin/` paths gain privilege, still bounded by the launch request.
 fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
     let mut c = crate::task::cap::CapSet::EMPTY;
     if path.starts_with("/bin/") {
@@ -78,318 +69,81 @@ fn legacy_path_caps(path: &str) -> crate::task::cap::CapSet {
     c
 }
 
-/// Spawn a cell from a filesystem path. `spawner` sets the capability ceiling:
-/// `Root` (boot/init) grants the full manifest; `User(tid)`/`Ceiling(caps)`
-/// intersect the manifest with the spawner's caps (P2 monotonic downgrade).
-pub fn spawn_from_path(path: &str, spawner: crate::task::cap::Spawner) -> ViResult<usize> {
-    // Validate path: non-empty, leading slash, bounded length, no traversal sequences.
-    // Reject '..' and '//' to prevent a future VFS-backed spawn from escaping /bin/
-    // via a /bin/-prefixed traversal path (defense-in-depth; currently harmless since
-    // the early loader uses exact-match, but cheap to enforce here unconditionally).
+/// Spawn a governed cell from the early filesystem with all route decisions
+/// already represented by `request`.
+pub fn spawn_from_path(path: &str, request: SpawnRequest) -> ViResult<usize> {
     if path.is_empty()
         || !path.starts_with('/')
         || path.len() > disk_layout::MAX_CELL_PATH
         || path.contains("..")
         || path.contains("//")
     {
-        log::error!("[loader] invalid path {:?}", path);
         return Err(ViError::InvalidInput);
     }
-
-    log::info!("[loader] SpawnFromPath: {}", path);
-
-    // Read ELF bytes from the early bootstrap table.
-    let elf_bytes = early::EarlyLoader::read_file(path)?;
-    spawn_gated(&elf_bytes, path, spawner)
+    let elf = early::EarlyLoader::read_file(path)?;
+    spawn_gated(&elf, path, request)
 }
 
-/// Verify and spawn a cell from ELF bytes already resident in memory.
-///
-/// Shared by `spawn_from_path` (bytes from the boot ramdisk / P2 table) and the
-/// `SpawnFromElf` syscall (bytes a userspace spawner read from VFS). The trust
-/// gate — Ed25519 signature, manifest-privilege check, capability intersection
-/// (P2 downgrade), operator policy, syscall allowlist, cluster membership,
-/// memory quota, and integrity measurement — is applied to the BYTES, so the
-/// source of the bytes is irrelevant to trust. `path` is advisory: it drives the
-/// `/bin/` privilege check, policy lookup, measurement label, and the path-based
-/// capability grants below. A caller lying about `path` can only LOSE privilege
-/// (a non-`/bin/` hint yields the user ceiling), never gain it.
-pub fn spawn_gated(
-    elf_bytes: &[u8],
-    path: &str,
-    spawner: crate::task::cap::Spawner,
-) -> ViResult<usize> {
-    // Classify the unique manifest section before any task can be created.
-    // Only a structurally valid ELF with no such section reaches the explicit
-    // legacy path policy; malformed metadata or manifest bytes fail closed.
-    let manifest_opt = match manifest_section::classify(elf_bytes) {
-        manifest_section::ManifestSection::Absent => None,
-        manifest_section::ManifestSection::Valid { manifest, version } => {
-            log::debug!("[loader] {:?}: valid {:?} manifest", path, version);
-            Some(manifest)
-        }
-        manifest_section::ManifestSection::Malformed => {
-            log::warn!("[loader] DENY {:?}: malformed ELF manifest metadata", path);
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellSpawnDenied,
-                &crate::audit::encode_u32x2(0, 1),
-            );
-            return Err(ViError::PermissionDenied);
-        }
-    };
-    // ── Binary signature gate ─────────────────────────────────────────────────
-    // Verify the Ed25519 signature after the bounded structural classification
-    // and before task creation. With `signing-required`, an absent signature is
-    // treated like an invalid one (fail-closed). Dev mode permits unsigned cells.
-    match crate::signing::extract_sig(elf_bytes) {
-        Some(sig) => {
-            if !crate::signing::verify_cell(elf_bytes, &sig) {
-                log::warn!("[loader] DENY {:?}: cell signature INVALID", path);
-                crate::audit::log_event(
-                    crate::audit::AuditEvent::CellSignatureFailed,
-                    &crate::audit::encode_u32x2(0, 0),
-                );
-                return Err(ViError::PermissionDenied);
-            }
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellSignatureVerified,
-                &crate::audit::encode_u32x2(0, 0),
-            );
-        }
-        None if crate::signing::signing_required() => {
-            log::warn!(
-                "[loader] DENY {:?}: no __ViCell_sig (signing-required)",
-                path
-            );
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellSignatureFailed,
-                &crate::audit::encode_u32x2(0, 0),
-            );
-            return Err(ViError::PermissionDenied);
-        }
-        None => {
-            // Dev mode: unsigned cell permitted.
-        }
-    }
+/// Govern and atomically publish resident ELF bytes.
+pub fn spawn_gated(elf: &[u8], path: &str, request: SpawnRequest) -> ViResult<usize> {
+    #[cfg(feature = "test-hooks")]
+    atomic_publication_tests::begin_governed_attempt();
+    let result = governed_spawn::spawn_gated(elf, path, request);
+    #[cfg(feature = "test-hooks")]
+    atomic_publication_tests::finish_governed_attempt(&result);
+    result
+}
 
+/// Explicit embedded-init path. This deliberately bypasses manifest/signature
+/// admission but still publishes a fully configured root task in one commit.
+pub fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
+    governed_spawn::spawn_trusted_init(elf)
+}
 
-    // Privilege gate: a user Cell (path NOT under /bin/) may NOT declare any
-    // privileged capability.  Runs BEFORE spawn_from_mem — no task is created
-    // for a rejected Cell.
-    if let Some(ref m) = manifest_opt {
-        if !path.starts_with("/bin/") && m.declares_any_privilege() {
-            log::error!(
-                "[loader] DENY spawn {:?}: user cell over-declares caps (flags={:#04x})",
-                path,
-                m.flags
-            );
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellSpawnDenied,
-                &crate::audit::encode_u32x2(m.flags as u32, 0u32),
-            );
-            return Err(ViError::PermissionDenied);
-        }
-    }
-
-    // Extract cell name from the last path component (e.g. "/bin/shell" → "shell").
-    let name = path.rsplit('/').next().unwrap_or(path);
-
-    // Spawn via the in-memory path.  spawn_from_mem applies .rela.dyn
-    // relocations internally, so no separate apply_relocations call is needed,
-    // and CellId(0) asks it to derive a unique per-cell identity before the task
-    // becomes reachable — do not patch task.cell_id here.
-    let (tid, _load_base) =
-        crate::task::spawn_from_mem(elf_bytes, name, CellId(0), alloc::vec::Vec::new())?;
-    let cell_id = CellId(tid as u64);
-
-    crate::audit::log_event(
-        crate::audit::AuditEvent::CellSpawn,
-        &crate::audit::encode_u32x2(tid as u32, 0u32),
-    );
-
-    // Integrity measurement (IMA-style): hash the ELF image and record it in the
-    // append-only measurement log BEFORE the cell is scheduled. Evidence for
-    // future DICE/EAT attestation — orthogonal to (and complements) Cell signing.
-    crate::measurement_log::measure(tid, path, elf_bytes);
-
-    // Read per-Cell syscall allowlist from ELF section __ViCell_syscalls.
-    // The section (if present) contains a u64 LE bitset; absent = permit-all.
-    {
-        let allowlist = match ElfLoader.get_section(elf_bytes, "__ViCell_syscalls") {
-            Ok(bytes) if bytes.len() >= 8 => {
-                // SAFETY: bytes slice is valid data from the loaded ELF.
-                u64::from_le_bytes(
-                    bytes[..8]
-                        .try_into()
-                        .expect("8-byte __ViCell_syscalls section"),
-                )
-            }
-            _ => u64::MAX, // no section → permit-all (backwards compatible)
-        };
-        if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            if let Some(task) = sched.tasks.get_mut(&tid) {
-                task.syscall_allowlist = allowlist;
-            }
-        }
-    }
-
-    // Read cluster membership from ELF section __ViCell_cluster.
-    // Layout: u8 mode, u8 pad[7], u64 cluster_id (LE) = 16 bytes.
-    // Absent section → Isolated mode (mode=0, cluster_id=0); backwards compatible.
-    {
-        let (mode, cid) = match ElfLoader.get_section(elf_bytes, "__ViCell_cluster") {
-            Ok(bytes) if bytes.len() >= 16 => {
-                // SAFETY: bytes slice is valid data from the loaded ELF.
-                let mode = bytes[0];
-                let cid = u64::from_le_bytes(bytes[8..16].try_into().expect("8-byte cluster_id"));
-                (mode, cid)
-            }
-            _ => (0u8, 0u64), // no section → Isolated, no cluster
-        };
-        if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            if let Some(task) = sched.tasks.get_mut(&tid) {
-                task.cluster_mode = mode;
-                task.cluster_id = cid;
-            }
-        }
-    }
-
-    // Register per-cell memory quota (4 MiB default) using the real CellId.
-    crate::memory::cell_quota::register(cell_id, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES);
-
-    // ── Capability grant (P2 — spawn-time monotonic downgrade) ───────────────
-    // 1. `requested` = caps the manifest declares (absent → legacy path grants).
-    // 2. `granted`   = requested ∩ spawner-ceiling — a cell cannot hand a child a
-    //    cap it does not itself hold. `init` (Spawner::Root) is the root authority
-    //    and is exempt; HotSwap passes the replaced cell's caps as the ceiling.
-    use crate::task::cap::{CapSet, Spawner};
-    // `requested` = manifest (or legacy) caps, PLUS the privileged path-triggered
-    // caps (pcie_driver/platform/supervisor) layered on by `with_path_caps`. Folding
-    // them into `requested` means the single ceiling intersection below governs them
-    // too — closing the pre-P-TRUST hole where they were minted by a raw path match
-    // after (and blind to) the intersection.
-    let requested: CapSet = match manifest_opt {
-        Some(ref m) => CapSet::from_manifest(m),
-        None => legacy_path_caps(path),
-    }
-    .with_path_caps(path);
-    // Snapshot the spawner's caps in its OWN lock scope; the guard is DROPPED
-    // before the child-mutation lock below (the Spinlock is non-reentrant).
-    let after_spawner: CapSet = match spawner {
-        // Boot/kernel-initiated spawn. There is no spawner task to snapshot, so
-        // the ceiling comes from the per-path boot table: a boot cell may hold
-        // exactly the authority its row states, and a path with no row holds
-        // none. A refusal here is loud (`log_refusal`) because the only evidence
-        // available to whoever debugs it is the boot log.
-        Spawner::Root => {
-            let ceiling = boot_ceiling::boot_ceiling(path);
-            let bounded = requested.intersect(ceiling);
-            if bounded != requested {
-                boot_ceiling::log_refusal(path, requested, ceiling, bounded);
-            }
-            bounded
-        }
-        Spawner::Ceiling(ceil) => requested.intersect(ceil),
-        Spawner::User(stid) => {
-            let ceil = crate::task::SCHEDULER
-                .lock()
-                .as_ref()
-                .and_then(|s| s.tasks.get(&stid))
-                .map(|t| CapSet::of_task(t))
-                .unwrap_or(CapSet::EMPTY); // unknown spawner → no caps (fail-safe)
-            requested.intersect(ceil)
-        }
-    };
-    // 3. Operator policy (P5/Phase 04): `granted = after_spawner ∩ policy(path)`,
-    //    with trusted-core recovery + fail-safe. `policy::apply` takes the POLICY
-    //    lock internally — called OUTSIDE the SCHEDULER guard above to avoid lock
-    //    nesting.
-    //
-    //    The root-authority policy exemption is scoped to spawns that happen
-    //    BEFORE the policy is resolved: subjecting the boot path to a policy that
-    //    does not exist yet is circular, but once it is resolved there is no
-    //    circularity left to protect and Root is bound like every other spawner.
-    let granted: CapSet = match spawner {
-        Spawner::Root if !crate::policy::is_resolved() => after_spawner,
-        _ => crate::policy::apply(path, tid, after_spawner),
-    };
-
-    if path == "/bin/vfs" && granted.block_regions != 0b1111 {
-        log::error!(
-            "[loader] /bin/vfs granted block_regions {:#06b}, expected 0b1111",
-            granted.block_regions
-        );
-        if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-            sched.exit_task(tid, usize::MAX);
-        }
-        crate::memory::cell_quota::deregister(cell_id);
-        return Err(types::ViError::PermissionDenied);
-    }
-
-    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-        if let Some(task) = sched.tasks.get_mut(&tid) {
-            granted.apply_to(task);
-
-            if path == "/bin/vfs" {
-                log::info!("[loader] /bin/vfs block_regions=0b1111");
-            }
-
-            // x86_64 PKU: derive the protection-key domain from the granted caps
-            // AND the manifest's declared protection class (Manifest v2). See
-            // `cap::granted_protection_class` for the floor-not-ceiling invariant this encodes.
-            // Protection classes map 1:1 onto PKU keys 0-3 (TRUSTED_CORE=0 .. UNTRUSTED=3);
-            // `pkru_for_key` handles any key in range generically.
-            // On non-x86_64 targets these fields default to 0 and are never consulted.
-            #[cfg(target_arch = "x86_64")]
-            {
-                let requested_protection_class = manifest_opt
-                    .as_ref()
-                    .map(|m| m.protection_class())
-                    .unwrap_or(api::manifest::PROTECTION_CLASS_LEGACY);
-                let key: u8 = crate::task::cap::granted_protection_class(
-                    &granted,
-                    requested_protection_class,
-                );
-                task.pku_key = key;
-                task.pku_value = crate::hal::pku::pkru_for_key(key);
-            }
-
-            // Privileged path-caps (PcieDriverCap / SupervisorCap) are now written by
-            // `granted.apply_to(task)` above — they ride in the CapSet and are bounded
-            // by the ceiling intersection (P-TRUST). Only the two exceptions remain here:
-            //
-            // 1. PlatformCap — ceiling-gated via `granted.platform`, THEN the one-holder
-            //    singleton latch (`try_grant_platform`). It is not written by `apply_to`
-            //    because a plain bool cannot enforce the singleton.
-            if granted.platform {
-                match crate::task::cap::try_grant_platform() {
-                    Some(cap) => task.platform_cap = Some(cap),
-                    None => {
-                        log::error!("[loader] PlatformCap already granted — refusing 2nd /bin/platform spawn");
-                        return Err(types::ViError::PermissionDenied);
-                    }
-                }
-            }
-        }
-    }
-
-    // Side effect keyed off the GRANTED (not requested) block-io bit: the VFS
-    // fast-IPC handler must point at whoever actually received block_io.
-    if granted.block_io {
-        // Re-registration is valid on VFS hot-swap; just re-point the handler.
+pub(crate) fn commit_launch_routes(
+    tid: usize,
+    cell_id: CellId,
+    routes: crate::task::LaunchRoutes,
+) {
+    if routes.block_io {
         let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
         if already {
-            log::warn!("[loader] block_io re-registration — VFS hot-swap or second block_io cell");
+            log::warn!("[loader] block_io route replaced by task {}", tid);
         }
         crate::fast_ipc::set_vfs_handler_cell(cell_id.0 as usize);
     }
-    // Register the input service endpoint so console_drv can route UART bytes to it.
-    // (Service-registry registration is done by init via sys_register_service.)
-    if path.ends_with("/bin/input") {
+    if routes.input {
         crate::task::drivers::driver_cell::set_input_cell(tid);
     }
-    Ok(tid)
 }
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn block_io_registered_snapshot() -> bool {
+    BLOCK_IO_REGISTERED.load(Ordering::Acquire)
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn restore_block_io_registration_for_test(registered: bool) {
+    BLOCK_IO_REGISTERED.store(registered, Ordering::Release);
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn atomic_checkpoint(case: &'static str) -> ViResult<()> {
+    atomic_publication_tests::checkpoint(case)
+}
+
+#[cfg(not(feature = "test-hooks"))]
+pub(crate) fn atomic_checkpoint(_case: &'static str) -> ViResult<()> {
+    Ok(())
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn observe_pre_ready(sched: &crate::task::scheduler::Scheduler, tid: usize) {
+    atomic_publication_tests::observe_complete(sched, tid);
+}
+
+#[cfg(not(feature = "test-hooks"))]
+pub(crate) fn observe_pre_ready(_sched: &crate::task::scheduler::Scheduler, _tid: usize) {}
 
 /// Linker trait (reserved for future dynamic-linking support).
 #[allow(dead_code)] // reason: trait body used by future Cell hot-swap (Phase 20)

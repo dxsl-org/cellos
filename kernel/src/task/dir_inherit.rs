@@ -14,10 +14,8 @@
 //! direction widens what a cell may reach without anything failing to compile.
 //!
 //! ## Ordering contract
-//! [`install_on_child`] runs inside the scheduler-lock critical section that
-//! creates the child, before the child is reachable by any hart. A child is
-//! therefore never observable with an unset record, so the service can never
-//! read "no set" for a cell that was in fact given one.
+//! [`take_for_launch`] runs while the scheduler lock is held and produces the
+//! complete record installed in the unpublished child before insertion.
 
 use api::dir_handles::{DirHandleSet, InheritedDirHandles};
 
@@ -42,47 +40,34 @@ pub fn clear_staged(tid: usize) {
     stage(tid, DirHandleSet::EMPTY);
 }
 
-/// Move `spawner`'s staged set onto the freshly created `child`.
+/// Consume `spawner`'s staged set and build the child's immutable provenance.
 ///
-/// Call while holding the scheduler lock that created `child` and before
-/// releasing it; see the module ordering contract. `spawner` of `0` (kernel
-/// boot, no calling task) installs nothing.
-///
-/// The spawner's identity is captured here rather than trusted later: by the
-/// time the filesystem service asks, the spawner may be gone or replaced.
-pub fn install_on_child(sched: &mut super::scheduler::Scheduler, child: usize, spawner: usize) {
-    if spawner == 0 || spawner == child {
-        return;
+/// Call while holding the scheduler lock immediately before atomic publication.
+pub(crate) fn take_for_launch(
+    sched: &mut super::scheduler::Scheduler,
+    spawner: usize,
+) -> InheritedDirHandles {
+    if spawner == 0 {
+        return InheritedDirHandles::NONE;
     }
     let Some(spawner_task) = sched.tasks.get_mut(&spawner) else {
-        return;
+        return InheritedDirHandles::NONE;
     };
     let set = core::mem::replace(&mut spawner_task.staged_dirs, DirHandleSet::EMPTY);
-    if set.is_empty() {
-        return;
+    if set.is_empty() || spawner_task.cell_id.0 == 0 {
+        return InheritedDirHandles::NONE;
     }
-    let spawner_cell_id = spawner_task.cell_id.0;
-    let spawner_generation = spawner_task.cell_generation;
-    // A set whose source the kernel cannot name is worthless to the service that
-    // must check it against that source, so drop it rather than pass an
-    // unattributable grant.
-    if spawner_cell_id == 0 {
-        log::warn!("[dirs] dropping staged set from unattributable spawner tid {spawner}");
-        return;
-    }
-    if let Some(child_task) = sched.tasks.get_mut(&child) {
-        child_task.inherited_dirs = InheritedDirHandles {
-            spawner_cell_id,
-            spawner_generation,
-            set,
-        };
-        log::info!(
-            "[dirs] cell {} inherits {} dir handle(s) from cell {}",
-            child,
-            set.len(),
-            spawner_cell_id
-        );
-    }
+    let inherited = InheritedDirHandles {
+        spawner_cell_id: spawner_task.cell_id.0,
+        spawner_generation: spawner_task.cell_generation,
+        set,
+    };
+    log::info!(
+        "[dirs] next cell inherits {} dir handle(s) from cell {}",
+        set.len(),
+        inherited.spawner_cell_id
+    );
+    inherited
 }
 
 /// What the kernel is prepared to state about `cell_id`'s inherited handles.

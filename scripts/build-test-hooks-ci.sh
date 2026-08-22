@@ -41,7 +41,7 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p app-init -p app-shell -p service-config
 
-echo "==> Building test-hooks cells (service-vfs, app-vfs-test)..."
+echo "==> Building test-hooks cells (service-vfs, app-vfs-test, atomic-publication-probe)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
     -Z build-std=core,alloc \
@@ -52,6 +52,11 @@ cargo build --release \
     -Z build-std=core,alloc \
     -p app-vfs-test --features test-hooks
 
+cargo build --release \
+    --target riscv64gc-unknown-none-elf \
+    -Z build-std=core,alloc \
+    -p atomic-publication-probe
+
 echo "==> Building stack-sizing paths (service-net, driver-virtio-net)..."
 cargo build --release \
     --target riscv64gc-unknown-none-elf \
@@ -59,7 +64,7 @@ cargo build --release \
     -p service-net -p driver-virtio-net
 
 echo "==> Verifying cell binaries..."
-for bin in app-init app-shell service-vfs service-config vfs-test service-net driver-virtio-net; do
+for bin in app-init app-shell service-vfs service-config vfs-test service-net driver-virtio-net atomic-publication-probe; do
     if [[ ! -f "$REL/$bin" ]]; then
         echo "FAIL: missing required binary: $REL/$bin" >&2; exit 1
     fi
@@ -71,7 +76,7 @@ source scripts/lib-sign-cells.sh
 echo "==> Signing cells..."
 sign_cells "$REL/app-init" "$REL/app-shell" "$REL/service-vfs" \
            "$REL/service-config" "$REL/vfs-test" "$REL/service-net" \
-           "$REL/driver-virtio-net"
+           "$REL/driver-virtio-net" "$REL/atomic-publication-probe"
 
 echo "==> Assembling kernel_fs.img (test-hooks)..."
 mkdir -p "$TH_DIR"
@@ -92,6 +97,7 @@ bake_policy "$TMPDIR_KFS/POLICY.BIN"
     "$REL/vfs-test"         /bin/vfs-test \
     "$REL/service-net"      /bin/net \
     "$REL/driver-virtio-net" /bin/virtio-net \
+    "$REL/atomic-publication-probe" /bin/atomic-probe \
     "$TMPDIR_KFS/hostname"  /etc/hostname \
     "$TMPDIR_KFS/POLICY.BIN" /POLICY.BIN
 
@@ -105,7 +111,8 @@ fi
 if ! grep -q -- '--- /bin ---' "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'vfs-test'" "$TMPDIR_KFS/fat-layout.txt" ||
    ! grep -q -- "LFN 'net'" "$TMPDIR_KFS/fat-layout.txt" ||
-   ! grep -q -- "LFN 'virtio-net'" "$TMPDIR_KFS/fat-layout.txt"; then
+   ! grep -q -- "LFN 'virtio-net'" "$TMPDIR_KFS/fat-layout.txt" ||
+   ! grep -q -- "LFN 'atomic-probe'" "$TMPDIR_KFS/fat-layout.txt"; then
     echo "FAIL: kernel_fs.img lacks a required test-hooks cell" >&2
     cat "$TMPDIR_KFS/fat-layout.txt" >&2
     exit 1

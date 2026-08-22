@@ -229,6 +229,15 @@ pub fn dropped_count() -> usize {
     RING.dropped.load(Ordering::Relaxed)
 }
 
+#[cfg(feature = "test-hooks")]
+pub(crate) fn snapshot() -> (usize, usize, usize) {
+    (
+        RING.head.load(Ordering::Acquire),
+        RING.tail.load(Ordering::Acquire),
+        RING.dropped.load(Ordering::Acquire),
+    )
+}
+
 // ── Payload helpers ────────────────────────────────────────────────────────
 
 /// Encode two `u32` values into a fixed 8-byte payload.

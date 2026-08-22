@@ -47,17 +47,10 @@ pub unsafe fn force_unlock_locks() {
     LOG.force_unlock();
 }
 
-/// Measure a cell's ELF image: hash it, append to the log, extend the aggregate,
-/// and emit a `CellMeasure` audit event. Returns the digest.
-///
-/// Call BEFORE the cell is scheduled (the loader does this right after spawn,
-/// while still single-threaded in kernel context — the cell cannot have run yet).
-pub fn measure(tid: usize, path: &str, elf: &[u8]) -> [u8; 32] {
-    let hash = crate::sha256::sha256(elf);
-
+/// Commit a digest and owned label staged before atomic publication.
+pub(crate) fn commit_staged(tid: usize, path: String, hash: [u8; 32]) {
     {
         let mut log = LOG.lock();
-        // Extend the aggregate: agg = SHA256(agg || hash).
         let mut buf = [0u8; 64];
         buf[..32].copy_from_slice(&log.aggregate);
         buf[32..].copy_from_slice(&hash);
@@ -67,7 +60,7 @@ pub fn measure(tid: usize, path: &str, elf: &[u8]) -> [u8; 32] {
             log.entries.push(MeasureEntry {
                 tid: tid as u32,
                 hash,
-                path: String::from(path),
+                path,
             });
         } else {
             log::warn!(
@@ -77,13 +70,11 @@ pub fn measure(tid: usize, path: &str, elf: &[u8]) -> [u8; 32] {
         }
     }
 
-    // Audit: tid + first 4 hash bytes for quick correlation (full hash lives here).
     let hp = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]);
     crate::audit::log_event(
         crate::audit::AuditEvent::CellMeasure,
         &crate::audit::encode_u32x2(tid as u32, hp),
     );
-    hash
 }
 
 /// Rolling aggregate over every measured cell (for future remote attestation).

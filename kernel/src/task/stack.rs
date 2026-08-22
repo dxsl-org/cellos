@@ -377,6 +377,11 @@ impl CellSegments {
     ) -> Self {
         Self { pages, pie_va_base }
     }
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn unpublished_pages(&self) -> &[(types::VAddr, types::PhysAddr)] {
+        &self.pages
+    }
+
 
     /// Total physical bytes reserved for this cell's ELF segment frames.
     pub fn allocated_bytes(&self) -> usize {
@@ -406,16 +411,25 @@ impl CellSegments {
 
 impl Drop for CellSegments {
     fn drop(&mut self) {
-        // The shootdown must complete before either the frame or PIE slot can
-        // become reusable; do not hold FRAME_ALLOCATOR across firmware RFENCE.
+        // Leaf and parent invalidations must reach every hart before either
+        // backing or page-table frames return to the allocator.
         self.eager_unmap();
+        for &(vaddr, _frame) in &self.pages {
+            let reclaimed = paging::prune_empty_tables(vaddr);
+            if !reclaimed.is_empty() {
+                crate::memory::tlb_shootdown::flush_page(vaddr);
+                let mut frames = FRAME_ALLOCATOR.lock();
+                if let Some(allocator) = frames.as_mut() {
+                    reclaimed.release(allocator);
+                }
+            }
+        }
         let mut frame_guard = FRAME_ALLOCATOR.lock();
         if let Some(allocator) = frame_guard.as_mut() {
             for &(_vaddr, frame) in &self.pages {
                 allocator.deallocate_frame(frame);
             }
         }
-        // Return the PIE VA slot to the allocator so it can be reused.
         if self.pie_va_base != 0 {
             crate::loader::va_alloc::free_cell_va(self.pie_va_base);
         }

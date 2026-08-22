@@ -300,6 +300,14 @@ impl ElfLoader {
                         }
                     }
 
+                    #[cfg(feature = "test-hooks")]
+                    crate::loader::atomic_publication_tests::observe_unpublished_pages(&mapped);
+
+                    if let Err(error) = crate::loader::atomic_checkpoint("AP-02") {
+                        Self::unwind(&mapped, frame_allocator);
+                        return Err(error);
+                    }
+
                     current_page += 4096;
                 }
 
@@ -326,6 +334,14 @@ impl ElfLoader {
     fn unwind(mapped: &[LoadedPage], frame_allocator: &mut crate::memory::frame::FrameAllocator) {
         for page in mapped {
             let _ = crate::memory::paging::unmap_page(page.va);
+            crate::memory::tlb_shootdown::flush_page(page.va);
+        }
+        for page in mapped {
+            let reclaimed = crate::memory::paging::prune_empty_tables(page.va);
+            if !reclaimed.is_empty() {
+                crate::memory::paging::tlb_flush_all();
+            }
+            reclaimed.release(frame_allocator);
             frame_allocator.deallocate_frame(page.frame);
         }
     }

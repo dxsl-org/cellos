@@ -71,7 +71,7 @@ pub fn lookup(path: &str) -> Option<CapSet> {
         },
         // PCIe ECAM enumeration + BAR registration. Kernel-spawned before init.
         // Its manifest declares nothing; `with_path_caps` is the request signal,
-        // and `try_grant_platform` still enforces one holder ever.
+        // and the owned reservation still enforces one holder ever.
         "/bin/platform" => CapSet {
             platform: true,
             ..CapSet::EMPTY

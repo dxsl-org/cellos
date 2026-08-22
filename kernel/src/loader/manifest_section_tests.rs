@@ -229,7 +229,11 @@ fn test_malformed_images_deny_before_task_creation() {
         assert!(matches!(classify(&image), ManifestSection::Malformed), "{}", label);
         let before = scheduler_snapshot();
         assert_eq!(
-            super::spawn_gated(&image, "/bin/manifest-negative", crate::task::cap::Spawner::Root),
+            super::spawn_gated(
+                &image,
+                "/bin/manifest-negative",
+                super::SpawnRequest::governed_boot(),
+            ),
             Err(ViError::PermissionDenied),
             "{} must be denied",
             label

@@ -72,6 +72,26 @@ pub(crate) fn is_registered_vfs_cell(cell_id_raw: usize) -> bool {
     cell_id_raw != 0 && VFS_HANDLER_CELL.load(Ordering::Relaxed) == cell_id_raw
 }
 
+#[cfg(feature = "test-hooks")]
+pub(crate) fn vfs_handler_cell_snapshot() -> usize {
+    VFS_HANDLER_CELL.load(Ordering::Acquire)
+}
+
+/// Snapshot the registered handler pointer separately from its Cell owner.
+/// Fixture code may exercise owner routing but must never clear another
+/// component's registered handler.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn vfs_handler_pointer_snapshot() -> usize {
+    VFS_HANDLER_PTR.load(Ordering::Acquire) as usize
+}
+
+/// Restore a pointer obtained from `vfs_handler_pointer_snapshot` after a
+/// test-only fixture temporarily registers its own handler.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn restore_vfs_handler_pointer_for_test(handler: usize) {
+    VFS_HANDLER_PTR.store(handler as *mut (), Ordering::Release);
+}
+
 /// RAII guard that restores the S-mode interrupt-enable bit (SIE) on drop.
 ///
 /// Constructed by disabling SIE and recording its prior state.  `Drop` restores

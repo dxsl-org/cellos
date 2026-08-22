@@ -26,26 +26,26 @@ fn shell_has_no_mem_launch_edge() {
 #[test]
 fn shell_service_ipc_tool_edge_is_capability_free() {
     assert_eq!(
-        shell_edge(LaunchRoute::Path, "/bin/httpd").parent_ceiling,
+        shell_edge(LaunchRoute::Path, "/bin/httpd").child_ceiling,
         CapSet::EMPTY
     );
     assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/httpd").parent_ceiling,
+        shell_edge(LaunchRoute::Elf, "/bin/httpd").child_ceiling,
         CapSet::EMPTY,
         "service-IPC tools must not carry ambient network authority"
     );
     assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/vfs-test").parent_ceiling,
+        shell_edge(LaunchRoute::Elf, "/bin/vfs-test").child_ceiling,
         CapSet::EMPTY,
         "capability-free ELF targets remain launchable"
     );
     assert_eq!(
-        shell_edge(LaunchRoute::Path, "/bin/hotswap").parent_ceiling,
+        shell_edge(LaunchRoute::Path, "/bin/hotswap").child_ceiling,
         CapSet::EMPTY,
         "the hotswap CLI must not inherit lifecycle or service authority"
     );
     assert_eq!(
-        shell_edge(LaunchRoute::Elf, "/bin/hotswap").parent_ceiling,
+        shell_edge(LaunchRoute::Elf, "/bin/hotswap").child_ceiling,
         CapSet::EMPTY,
         "the VFS-loaded hotswap CLI must remain capability-free"
     );
@@ -60,19 +60,19 @@ fn hardware_bus_demo_edges_are_class_scoped() {
     let sensor = shell_edge(LaunchRoute::Path, "/bin/sensor-demo");
     let spi = shell_edge(LaunchRoute::Path, "/bin/spi-demo");
     assert_eq!(
-        sensor.parent_ceiling.mmio_devices,
+        sensor.child_ceiling.mmio_devices,
         crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_I2C
     );
     assert_eq!(
-        spi.parent_ceiling.mmio_devices,
+        spi.child_ceiling.mmio_devices,
         crate::resource_registry::DEV_GPIO | crate::resource_registry::DEV_SPI
     );
     assert_eq!(
-        sensor.parent_ceiling.mmio_devices & crate::resource_registry::DEV_SPI,
+        sensor.child_ceiling.mmio_devices & crate::resource_registry::DEV_SPI,
         0
     );
     assert_eq!(
-        spi.parent_ceiling.mmio_devices & crate::resource_registry::DEV_I2C,
+        spi.child_ceiling.mmio_devices & crate::resource_registry::DEV_I2C,
         0
     );
 }
@@ -100,7 +100,7 @@ fn capability_bearing_elf_route_requires_lifecycle_authority() {
     assert_eq!(
         authorize(caller("init", true, false), LaunchRoute::Elf, "/bin/vfs")
             .expect("init lifecycle authority keeps the boot-service edge")
-            .parent_ceiling,
+            .child_ceiling,
         boot_ceiling::boot_ceiling("/bin/vfs")
     );
     assert!(
@@ -119,12 +119,12 @@ fn init_edge_reuses_boot_ceiling_for_boot_services() {
     let profile = authorize(caller("init", true, false), LaunchRoute::Path, "/bin/vfs")
         .expect("init vfs edge exists");
     assert_eq!(
-        profile.parent_ceiling,
+        profile.child_ceiling,
         boot_ceiling::boot_ceiling("/bin/vfs")
     );
     let kms = authorize(caller("init", true, false), LaunchRoute::Path, "/bin/kms")
         .expect("init kms edge exists");
-    assert_eq!(kms.parent_ceiling, CapSet::EMPTY);
+    assert_eq!(kms.child_ceiling, CapSet::EMPTY);
 }
 
 #[test]

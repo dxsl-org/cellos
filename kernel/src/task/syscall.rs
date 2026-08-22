@@ -533,17 +533,51 @@ const SPAWN_ARGV_KEY: u64 = 0x0061_7267_7600_0000;
 const SPAWN_ARGV_MAX: usize = 512;
 
 fn spawn_argv_slot(task_id: usize) -> u64 {
-    SPAWN_ARGV_KEY ^ ((task_id as u64) << 32)
+    crate::cell::state_stash::spawn_argv_key(task_id)
 }
 
-fn transfer_spawn_argv(caller_id: usize, child_id: usize) {
-    let staging_key = spawn_argv_slot(caller_id);
-    let mut argv_buf = alloc::vec![0u8; SPAWN_ARGV_MAX];
-    let n = crate::cell::state_stash::restore(staging_key, &mut argv_buf);
-    crate::cell::state_stash::remove(staging_key);
-    if n > 0 {
-        crate::cell::state_stash::stash(spawn_argv_slot(child_id), &argv_buf[..n]);
-    }
+fn governed_spawn_request(
+    caller_id: usize,
+    child_ceiling: super::cap::CapSet,
+    priority: u8,
+) -> Result<crate::loader::SpawnRequest, SyscallError> {
+    let (generation, caller_authority) = super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id))
+        .map(|task| (task.cell_generation, super::cap::CapSet::of_task(task)))
+        .ok_or(SyscallError::PermissionDenied)?;
+    let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
+    Ok(crate::loader::SpawnRequest::governed_caller(
+        caller_id,
+        generation,
+        caller_authority,
+        child_ceiling,
+        priority,
+        argv,
+    ))
+}
+
+fn governed_replacement_request(
+    caller_id: usize,
+    route_ceiling: super::cap::CapSet,
+    replacement: crate::cell::hotswap::ReplacementReservation,
+) -> Result<crate::loader::SpawnRequest, SyscallError> {
+    let (generation, caller_authority) = super::SCHEDULER
+        .lock()
+        .as_ref()
+        .and_then(|sched| sched.tasks.get(&caller_id))
+        .map(|task| (task.cell_generation, super::cap::CapSet::of_task(task)))
+        .ok_or(SyscallError::PermissionDenied)?;
+    let argv = crate::cell::state_stash::take_spawn_argv(caller_id);
+    Ok(crate::loader::SpawnRequest::governed_replacement(
+        caller_id,
+        generation,
+        caller_authority,
+        route_ceiling,
+        replacement,
+        argv,
+    ))
 }
 
 fn caller_launch_state(caller_id: usize) -> Option<(String, bool, bool)> {
@@ -2741,10 +2775,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::loader::launch_profile::LaunchRoute::Path,
                 path_str,
             )?;
-            let spawned = crate::loader::spawn_from_path(
-                path_str,
-                crate::task::cap::Spawner::Ceiling(profile.parent_ceiling),
-            );
+            let request = match governed_spawn_request(
+                caller_id,
+                profile.child_ceiling,
+                api::TaskPriority::Normal as u8,
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    crate::task::dir_inherit::clear_staged(caller_id);
+                    return Err(error);
+                }
+            };
+            let spawned = crate::loader::spawn_from_path(path_str, request);
             // A successful spawn consumed any staged directory-handle set inside
             // task creation. Clearing unconditionally covers the failure paths:
             // a set left staged by a spawn that never produced a child would be
@@ -2762,7 +2804,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 _ => SyscallError::InvalidInput,
             })?;
-            transfer_spawn_argv(caller_id, task_id);
             Ok(task_id)
         }
 
@@ -2895,11 +2936,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // in this syscall, so it cannot free the grant before spawn_gated copies
             // the ELF segments into fresh frames.
             let elf_bytes = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
-            let spawned = crate::loader::spawn_gated(
-                elf_bytes,
-                path_str,
-                crate::task::cap::Spawner::Ceiling(profile.parent_ceiling),
-            );
+            let request = match governed_spawn_request(
+                caller_id,
+                profile.child_ceiling,
+                api::TaskPriority::Normal as u8,
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    crate::task::dir_inherit::clear_staged(caller_id);
+                    return Err(error);
+                }
+            };
+            let spawned = crate::loader::spawn_gated(elf_bytes, path_str, request);
             // See `SpawnFromPath`: consumed on success, cleared here so a failed
             // spawn cannot leave its set for an unrelated later child.
             crate::task::dir_inherit::clear_staged(caller_id);
@@ -2917,7 +2965,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 _ => SyscallError::InvalidInput,
             })?;
-            transfer_spawn_argv(caller_id, task_id);
             Ok(task_id)
         }
 
@@ -2953,11 +3000,18 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::loader::launch_profile::LaunchRoute::Pinned,
                 path_str,
             )?;
-            // Spawn at requested priority; future SMP can use core_id for affinity.
-            let spawned = crate::loader::spawn_from_path(
-                path_str,
-                crate::task::cap::Spawner::Ceiling(profile.parent_ceiling),
-            );
+            let request = match governed_spawn_request(
+                caller_id,
+                profile.child_ceiling,
+                priority,
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    crate::task::dir_inherit::clear_staged(caller_id);
+                    return Err(error);
+                }
+            };
+            let spawned = crate::loader::spawn_from_path(path_str, request);
             // See `SpawnFromPath`: consumed on success, cleared here so a failed
             // spawn cannot leave its set for an unrelated later child.
             crate::task::dir_inherit::clear_staged(caller_id);
@@ -2973,34 +3027,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 }
                 _ => SyscallError::InvalidInput,
             })?;
-            transfer_spawn_argv(caller_id, task_id);
-            // Enforce the RT-barring invariant: a cell that declares cluster membership
-            // (cluster_mode != Isolated) MUST NOT run at RealTime priority.
-            // `cluster_mode` was written by the loader's __ViCell_cluster read;
-            // `priority` comes from the syscall arg.  This is the ONLY enforcement
-            // point — ProcessInfo has no priority field so runtime self-declaration
-            // is impossible/forgeable.
-            const RT_PRIORITY: u8 = api::TaskPriority::RealTime as u8;
-            if priority == RT_PRIORITY {
-                let cluster_mode = crate::task::SCHEDULER
-                    .lock()
-                    .as_ref()
-                    .and_then(|s| s.tasks.get(&task_id))
-                    .map(|t| t.cluster_mode)
-                    .unwrap_or(0);
-                if cluster_mode != 0 {
-                    if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-                        sched.exit_task(task_id, 0xff);
-                    }
-                    return Err(SyscallError::PermissionDenied);
-                }
-            }
-            // Set priority on the spawned task.
-            if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
-                if let Some(task) = sched.tasks.get_mut(&task_id) {
-                    task.priority = priority;
-                }
-            }
             Ok(task_id)
         }
 
@@ -3343,25 +3369,27 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     core::str::from_utf8(name_slice).unwrap_or("unknown"),
                 )
             };
-            authorize_launch_edge(
+            let profile = authorize_launch_edge(
                 caller_id,
                 crate::loader::launch_profile::LaunchRoute::Mem,
                 name,
             )?;
+            let request = match governed_spawn_request(
+                caller_id,
+                profile.child_ceiling,
+                api::TaskPriority::Normal as u8,
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    crate::task::dir_inherit::clear_staged(caller_id);
+                    return Err(error);
+                }
+            };
 
-            // The image goes through the same admission gate as every other spawn
-            // path (signature, manifest, ceiling, policy) — the gate belongs to the
-            // BYTES, so their source is irrelevant to trust. `name` is caller-chosen
-            // and is NOT a path: `mem_spawn_gate` reduces it to a `/mem/` label so it
-            // cannot select the path-derived authority a real install path carries.
-            // The gate also passes the `CellId(0)` sentinel down to
-            // `task::spawn_from_mem`, which is what gives this cell a derived
-            // per-cell identity instead of the kernel's.
-            let spawned = crate::loader::mem_spawn_gate::spawn_from_mem_gated(
-                elf_bytes,
-                name,
-                crate::task::cap::Spawner::User(caller_id),
-            );
+            // The untrusted name is reduced to a neutral `/mem/` label before
+            // governed admission; it cannot select install-path authority.
+            let spawned =
+                crate::loader::mem_spawn_gate::spawn_from_mem_gated(elf_bytes, name, request);
             // See `SpawnFromPath`: consumed on success, cleared here so a failed
             // spawn cannot leave its set for an unrelated later child.
             crate::task::dir_inherit::clear_staged(caller_id);
@@ -3914,13 +3942,20 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::loader::launch_profile::LaunchRoute::Path,
                 path_str,
             )?;
-            let frozen_ceiling = crate::cell::hotswap::take_frozen_replacement_ceiling(old_tid)
+            let replacement = crate::cell::hotswap::reserve_frozen_replacement(old_tid)
                 .ok_or(SyscallError::PermissionDenied)?;
-            let ceiling = frozen_ceiling.intersect(profile.parent_ceiling);
-            let spawned = crate::loader::spawn_from_path(
-                path_str,
-                crate::task::cap::Spawner::Ceiling(ceiling),
-            );
+            let request = match governed_replacement_request(
+                caller_id,
+                profile.child_ceiling,
+                replacement,
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    crate::task::dir_inherit::clear_staged(caller_id);
+                    return Err(error);
+                }
+            };
+            let spawned = crate::loader::spawn_from_path(path_str, request);
             // Mirror the regular spawn contract: a successful replacement spawn
             // consumes any staged directory set, and a failed one must clear it
             // so it cannot attach to an unrelated later child.
@@ -3939,22 +3974,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 types::ViError::PermissionDenied => SyscallError::PermissionDenied,
                 _ => SyscallError::InvalidInput,
             })?;
-            if !crate::cell::hotswap::bind_replacement(old_tid, task_id) {
-                log::error!(
-                    "[hotswap] replacement binding failed: old_tid={} new_tid={}",
-                    old_tid,
-                    task_id
-                );
-                let cell_id = super::SCHEDULER
-                    .lock()
-                    .as_ref()
-                    .and_then(|sched| sched.tasks.get(&task_id).map(|task| task.cell_id));
-                if let Some(cell_id) = cell_id {
-                    crate::cell::hotswap::exit_task_internal(task_id, cell_id);
-                }
-                return Err(SyscallError::Unknown);
-            }
-            transfer_spawn_argv(caller_id, task_id);
             Ok(task_id)
         }
 

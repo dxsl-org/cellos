@@ -78,7 +78,65 @@ impl PageTable {
             entries: [PageTableEntry(0); 512],
         }
     }
+
+    /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
+    pub fn prune_empty(
+        &mut self,
+        virt: VAddr,
+        dealloc: &mut dyn FnMut(PhysAddr),
+    ) {
+        let root_index = (virt >> 30) & 0x1FF;
+        let level1_entry = self.entries[root_index];
+        if !level1_entry.is_valid() || level1_entry.is_leaf() {
+            return;
+        }
+        let level1_phys = level1_entry.to_phys();
+        // SAFETY: a valid non-leaf root entry names a live level-1 table.
+        let level1 = unsafe { &mut *(level1_phys as *mut PageTable) };
+        let level1_index = (virt >> 21) & 0x1FF;
+        let level0_entry = level1.entries[level1_index];
+        if !level0_entry.is_valid() {
+            if !level1.entries.iter().any(PageTableEntry::is_valid) {
+                self.entries[root_index] = PageTableEntry(0);
+                dealloc(level1_phys);
+            }
+            return;
+        }
+        if level0_entry.is_leaf() {
+            return;
+        }
+        let level0_phys = level0_entry.to_phys();
+        // SAFETY: a valid non-leaf level-1 entry names a live level-0 table.
+        let level0 = unsafe { &mut *(level0_phys as *mut PageTable) };
+        if level0.entries.iter().any(PageTableEntry::is_valid) {
+            return;
+        }
+        level1.entries[level1_index] = PageTableEntry(0);
+        dealloc(level0_phys);
+        if level1.entries.iter().any(PageTableEntry::is_valid) {
+            return;
+        }
+        self.entries[root_index] = PageTableEntry(0);
+        dealloc(level1_phys);
+    }
+    /// Return the hardware leaf entry for `virt` without synthesizing flags.
+    pub fn leaf_entry(&self, virt: VAddr) -> Option<usize> {
+        let mut table = self;
+        for level in (0..3).rev() {
+            let shift = 12 + (level * 9);
+            let entry = table.entries[(virt >> shift) & 0x1FF];
+            if !entry.is_valid() {
+                return None;
+            }
+            if entry.is_leaf() {
+                return Some(entry.0);
+            }
+            table = unsafe { &*(entry.to_phys() as *const PageTable) };
+        }
+        None
+    }
 }
+
 
 impl PageTableTrait for PageTable {
     fn init(&mut self) -> ViResult<PhysAddr> {

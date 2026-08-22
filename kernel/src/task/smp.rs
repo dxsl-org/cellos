@@ -284,6 +284,8 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
     // Between ticks we sit in WFI to save power.  Interrupts are enabled on
     // entry (ARCH.init() sets sstatus.SIE=1), so WFI fires on the timer ISR.
     loop {
+        #[cfg(feature = "test-hooks")]
+        crate::loader::atomic_publication_tests::observe_schedule_attempt();
         // SAFETY: wfi suspends until the next interrupt; state is unchanged.
         #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
         unsafe {

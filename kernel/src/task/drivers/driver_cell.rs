@@ -133,6 +133,11 @@ pub fn set_input_cell(tid: usize) {
     log::warn!("[input] registered input service TID {}", tid);
 }
 
+#[cfg(feature = "test-hooks")]
+pub(crate) fn input_cell_snapshot() -> usize {
+    INPUT_CELL_TID.load(Ordering::Acquire)
+}
+
 /// Clear the input service registration if it matches `tid` (called on cell death).
 pub fn clear_input_cell_if(tid: usize) {
     INPUT_CELL_TID

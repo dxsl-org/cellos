@@ -94,7 +94,7 @@ pub fn spawn() -> Result<usize, ViError> {
             // sepc = ENTRY; sret will jump here in U-mode.
             task.trap_frame.sepc = ENTRY as _;
             // sstatus: SPP=0 (U-mode), SPIE=1, FS=Initial (bits 13-14 = 01).
-            // Matches spawn_from_mem convention so FP state is consistent.
+            // Matches the prepared-ELF user-entry convention so FP state is consistent.
             task.trap_frame.sstatus = 0x6020_u64 as _;
 
             let kstack = Stack::new_kernel(STACK_PAGES).map_err(|_| ViError::OutOfMemory)?;

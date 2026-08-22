@@ -430,6 +430,16 @@ fn next_cell_generation() -> u64 {
     generation
 }
 
+#[cfg(feature = "test-hooks")]
+pub(crate) fn cell_generation_snapshot() -> u64 {
+    *NEXT_CELL_GENERATION.lock()
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn restore_cell_generation_for_test(next: u64) {
+    *NEXT_CELL_GENERATION.lock() = next;
+}
+
 impl Task {
     pub fn new(id: usize, cell_id: CellId, name: &str, allowed_drivers: Vec<usize>) -> Self {
         Self {

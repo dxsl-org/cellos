@@ -7,12 +7,35 @@
 use crate::memory::paging::PAGE_SIZE;
 use types::VAddr;
 
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[cfg(feature = "test-hooks")]
 use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Test-only negative-control switch. It is absent from production kernels.
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
 static TEST_SKIP_REMOTE_RFENCE: AtomicBool = AtomicBool::new(false);
+
+#[cfg(feature = "test-hooks")]
+static TEST_FLUSH_TRACKING: AtomicBool = AtomicBool::new(false);
+#[cfg(feature = "test-hooks")]
+static TEST_FLUSHED_PAGES: crate::sync::Spinlock<alloc::vec::Vec<VAddr>> =
+    crate::sync::Spinlock::new(alloc::vec::Vec::new());
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn begin_test_flush_observation() {
+    TEST_FLUSHED_PAGES.lock().clear();
+    TEST_FLUSH_TRACKING.store(true, Ordering::Release);
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn test_flush_observed(vaddr: VAddr) -> bool {
+    let page = vaddr & !(PAGE_SIZE - 1);
+    TEST_FLUSHED_PAGES.lock().iter().any(|&entry| entry == page)
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn finish_test_flush_observation() {
+    TEST_FLUSH_TRACKING.store(false, Ordering::Release);
+}
 
 /// Enable the test-only negative control around one known self-test operation.
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
@@ -23,7 +46,12 @@ pub(crate) fn set_test_skip_remote_rfence(enabled: bool) {
 /// Invalidate the translation for one changed page before its memory can run or reuse.
 #[inline]
 pub fn flush_page(vaddr: VAddr) {
-    flush_range(vaddr & !(PAGE_SIZE - 1), PAGE_SIZE);
+    let page = vaddr & !(PAGE_SIZE - 1);
+    #[cfg(feature = "test-hooks")]
+    if TEST_FLUSH_TRACKING.load(Ordering::Acquire) {
+        TEST_FLUSHED_PAGES.lock().push(page);
+    }
+    flush_range(page, PAGE_SIZE);
 }
 
 /// Invalidate a page-aligned range after its PTEs have changed.

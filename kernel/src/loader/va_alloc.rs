@@ -110,7 +110,22 @@ pub fn free_cell_va(base: usize) {
     if slot >= MAX_SLOTS {
         return;
     }
-    let word = &FREE[slot / 64];
-    let mask = 1u64 << (slot % 64);
-    word.fetch_or(mask, Ordering::Release);
+    // Restore the bump cursor exactly when this is the most recently minted
+    // slot. If another allocation raced ahead, publish it to the free bitmap.
+    if BUMP
+        .compare_exchange(slot + 1, slot, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        let word = &FREE[slot / 64];
+        let mask = 1u64 << (slot % 64);
+        word.fetch_or(mask, Ordering::Release);
+    }
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn snapshot() -> (usize, alloc::vec::Vec<u64>) {
+    (
+        BUMP.load(Ordering::Acquire),
+        FREE.iter().map(|word| word.load(Ordering::Acquire)).collect(),
+    )
 }

@@ -104,28 +104,56 @@ pub struct PlatformCap(());
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
-/// Singleton latch: set when PlatformCap has been granted to any task.
-/// Once true, `try_grant_platform()` returns `None` for all future callers.
+/// Singleton latch: held by either the one live reservation or the permanently
+/// committed Platform task. A reservation owns the only transition back to
+/// `false`; once committed, the latch intentionally remains set forever.
 static PLATFORM_CAP_GRANTED: AtomicBool = AtomicBool::new(false);
 
 impl PlatformCap {
-    /// Create a `PlatformCap` token.  Only callable within the kernel crate.
+    /// Create a `PlatformCap` token. Only callable within the kernel crate.
     pub(crate) fn new() -> Self {
         Self(())
     }
 }
 
-/// Attempt to grant `PlatformCap`.
-///
-/// Returns `Some(PlatformCap)` on the first call, `None` on all subsequent calls
-/// (singleton enforcement). The compare_exchange is sequentially consistent to
-/// avoid races on SMP (even though Cellos is currently UP, the invariant must hold
-/// under future SMP enablement).
-pub(crate) fn try_grant_platform() -> Option<PlatformCap> {
+/// Rollback owner for the Platform singleton while a task is unpublished.
+pub(crate) struct PlatformCapReservation {
+    committed: bool,
+}
+
+impl PlatformCapReservation {
+    /// Permanently transfer the singleton grant into a complete unpublished TCB.
+    pub(crate) fn commit_into(mut self, task: &mut super::tcb::Task) {
+        task.platform_cap = Some(PlatformCap::new());
+        self.committed = true;
+    }
+}
+
+impl Drop for PlatformCapReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            let reset = PLATFORM_CAP_GRANTED.compare_exchange(
+                true,
+                false,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            );
+            debug_assert!(reset.is_ok(), "Platform reservation lost singleton ownership");
+        }
+    }
+}
+
+/// Reserve the singleton grant until atomic task publication commits.
+pub(crate) fn reserve_platform() -> Result<PlatformCapReservation, types::ViError> {
     PLATFORM_CAP_GRANTED
         .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .ok()
-        .map(|_| PlatformCap::new())
+        .map(|_| PlatformCapReservation { committed: false })
+        .map_err(|_| types::ViError::PermissionDenied)
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn platform_reserved_or_committed() -> bool {
+    PLATFORM_CAP_GRANTED.load(Ordering::SeqCst)
 }
 
 // ─── Capability set + spawn-delegation (P2 — monotonic downgrade) ────────────
@@ -344,10 +372,8 @@ impl CapSet {
         t.block_regions = self.block_regions;
         t.pcie_driver_cap = self.pcie_driver.then(PcieDriverCap::new);
         t.supervisor_cap = self.supervisor.then(SupervisorCap::new);
-        // NOTE: `platform_cap` is deliberately NOT written here. It is a singleton
-        // (`try_grant_platform` enforces one-holder-ever); the loader consults the
-        // latch when `granted.platform` is set. Writing it from a plain bool would
-        // bypass the latch and allow two holders.
+        // `platform_cap` is transferred only from `PlatformCapReservation`.
+        // Applying a plain capability snapshot must never bypass the singleton.
     }
 }
 
