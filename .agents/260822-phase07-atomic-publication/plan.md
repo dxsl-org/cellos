@@ -61,8 +61,10 @@ The atomic prerequisite is verified, not a full Phase 07 qualification or releas
 
 This closes only the atomic-publication prerequisite. It does not qualify Tier 2, close Phase 03 provenance/signature work, complete Phase 04, or grant any security, release, ledger, or human approval.
 
-## Separate SMP VFS release blocker and handoff
+## Separate SMP VFS closure and Phase 07 boundary
 
-The unbaselined two-hart VFS result remains a separate release blocker: after the atomic terminal markers, VFS reported `40 PASS, 10 FAIL`. The probable cause is the pre-existing wildcard VFS RPC receive, not a claimed Phase 07 regression; no pre-Phase07 two-hart VFS baseline exists. Evidence and required regression are in [`debug-260822-0749-smp-vfs.md`](../debug/debug-260822-0749-smp-vfs.md).
+`CELLOS-VFS-SMP-006` is closed at **`CELLOS-VFS-SMP-006_CLOSED_VERIFIED_RV64`**. Its implementation passed API `90/0`, RV32 release compilation, fresh test-hooks, one-hart VFS `2/2`, and the RV64 two-hart VFS lifecycle regression `7/7`; the latter covers context, heartbeat, quota fault, root exit, retiring syscall, leases, owner watches, AP/init, and VFS lifecycle behavior. Its final quality and security closure are PASS. The record is [`CELLOS-VFS-SMP-006 owner-lifetime closure`](../260822-cellos-vfs-smp-006-owner-lifetime/plan.md#closure-record--2026-08-22); its repository-reference hash is `85a5b873c5961c911ea8e04473c4fcb61de68b4a`.
 
-**Next owner:** the separate VFS SMP repair workstream, specifically the VFS test/client request-reply transport owner. It must make the receive sender-aware and establish the required two-hart VFS regression; this work is not part of the verified atomic prerequisite.
+RV32 runtime remains unexecuted solely because the host lacks OpenSBI firmware. This is documented as a non-blocking host-firmware evidence gap; no RV32 runtime result is claimed.
+
+This VFS closure changes neither the atomic terminal nor the full-program gate: `ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED` remains exact. Full Phase 07 is still blocked on Phase 03, Phase 04, and independent Tier 2 qualification; it does not expose Tier 2, close Phase 08, or grant release, ledger, security-owner, or human approval.

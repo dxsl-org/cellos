@@ -3,7 +3,7 @@
 **Audience**: Developers new to Cellos
 **Level**: High-level (conceptual + key components)
 **Version**: 0.2.1-dev (Mycelium Era)
-**Last Updated**: 2026-08-21 (Tier 1 admission prequalification catalog and strict test parser land without admissible evidence or production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest-v2 tri-state loader classification and tooling completed without ABI change, while three pre-existing loader-security risks still block production readiness; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
+**Last Updated**: 2026-08-22 (VFS SMP owner-lifetime lifecycle closure is verified; RV32 runtime remains a non-blocking host-firmware evidence gap; Tier 1 admission prequalification catalog and strict test parser land without admissible evidence or production wiring; Spec 22 accepted the Tier 2 native-domain implementation gate; Manifest-v2 tri-state loader classification and tooling completed without ABI change, while three pre-existing loader-security risks still block production readiness; application tier taxonomy normalized; Phase 05 q35 PCIe storage/network QEMU lane passes; Phase 04 QEMU and physical RPi3 boot/storage/input baselines pass; Phase 03 BCM GPIO/I2C/SPI hardware gate also passes on the current RPi3 head)
 
 > **Status refresh 2026-08-21**: [Spec 23 Native SDK contract](specs/23-native-sdk-contract.md)
 > is ratified as the normative contract for the single Native SDK family. It
@@ -101,15 +101,12 @@
 > 03 provenance/signature boundary, the Phase 04 production-admission gate,
 > and the Tier 2 native-domain gate.
 >
-> Independently, the unbaselined two-hart VFS result is a release blocker: all
-> atomic markers completed before VFS reported `40 PASS, 10 FAIL`. The
-> pre-Phase07 VFS request/reply client uses wildcard `sys_recv(0)`, so
-> concurrent traffic can be decoded as a VFS response. This is not attributed
-> to Phase 07 without a pre-Phase07 SMP VFS baseline. It requires a
-> service-TID-masked receive with sender/decode validation and a deterministic
-> two-hart VFS regression proving hart 1, all atomic terminal markers, and
-> `[vfs-test] ALL TESTS PASSED` with no `[FAIL]`
-> (`.agents/debug/debug-260822-0749-smp-vfs.md`).
+> `CELLOS-VFS-SMP-006` is closed after the owner-lifetime lifecycle
+> implementation passed API90, an RV32 release compile, fresh `test-hooks`,
+> one-hart VFS 2/2, and two-hart VFS 7/7, followed by final quality and
+> security closure PASS. RV32 runtime remains unavailable on this host because
+> OpenSBI firmware is missing; it is a non-blocking compile-only evidence gap,
+> not a runtime claim.
 
 > **Status refresh 2026-08-21**: Spec 22 is now the mandatory design and
 > negative-test gate before Tier 2 native domains can be implemented or offered.

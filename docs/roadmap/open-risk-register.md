@@ -47,21 +47,6 @@ docs to code. It is not a bug-fix plan.
   syscall pair required by their argv/VFS paths
   (`cells/runtimes/lua/src/main.rs:11`, `cells/tools/wasm/src/main.rs:16-20`).
   Those paths can fail under the enforced syscall allowlist.
-- **`CELLOS-VFS-SMP-006` — High, owner: separate VFS repair.** A fresh
-  two-hart direct-QEMU run completed all Phase 07 atomic-publication markers
-  and then the VFS client reported `40 PASS, 10 FAIL`. The pre-Phase07 client
-  sends to VFS but receives replies with wildcard `sys_recv(0)`, permitting
-  concurrent traffic to be decoded as a VFS response
-  (`cells/tests/vfs-test/src/main.rs:69-79`). This is not a confirmed Phase 07
-  atomic-publication regression—there is no pre-Phase07 two-hart VFS
-  baseline—but it is an unbaselined release blocker. Repair `vfs_raw` to use
-  the existing masked typed IPC helper, or an equivalent
-  `sys_recv(vfs_tid(), ...)` with sender and decode validation. Qualification
-  requires a deterministic `QemuRunner::boot_rv64_smp(..., 2)` regression that
-  observes `[smp] hart 1 online`, all atomic terminal markers, and
-  `[vfs-test] ALL TESTS PASSED` with no `[FAIL]`; it must also yield `84 PASS,
-  0 FAIL`. One-hart VFS success and AP-00–15 success are insufficient
-  (`.agents/debug/debug-260822-0749-smp-vfs.md`).
 - Production cell admission is not signed-only by default. The 18-row catalog,
   33 stable `test-hooks` cases, and strict runtime parser are prequalification
   infrastructure only; local runs are explicitly non-admissible and the former

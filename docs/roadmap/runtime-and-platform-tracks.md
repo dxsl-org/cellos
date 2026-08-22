@@ -48,10 +48,14 @@ approval; Phase 08 is not a Tier 2 implementation authorization.
 
 The Phase 07 atomic-publication prerequisite is separately verified, but full
 Phase 07 and Phase 08 remain blocked by the Phase 03 provenance/signature,
-Phase 04 production-admission, and Tier 2 native-domain gates. An unbaselined
-two-hart VFS `40 PASS, 10 FAIL` result remains a release blocker until the VFS
-request/reply receive is service-TID-masked and a deterministic two-hart VFS
-regression passes.
+Phase 04 production-admission, and Tier 2 native-domain gates.
+
+`CELLOS-VFS-SMP-006` is closed: the owner-lifetime lifecycle implementation
+passed API90, an RV32 release compile, fresh `test-hooks`, one-hart VFS 2/2,
+and two-hart VFS 7/7, followed by final quality and security closure PASS.
+RV32 runtime remains unavailable on this host because OpenSBI firmware is
+missing; this is a non-blocking compile-only evidence gap, not runtime
+evidence.
 
 ## Tier 1 Rust `std` Feasibility
 

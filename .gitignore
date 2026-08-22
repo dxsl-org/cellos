@@ -52,6 +52,14 @@ test_error*.txt
 # Reference materials
 .references/
 .agents/
+# Keep the baseline's causal record and implementation plan reproducible while
+# leaving all other agent scratch artifacts ignored.
+!/.agents/
+!/.agents/debug/
+!/.agents/debug/debug-260822-1439-init-hart0-differential.md
+!/.agents/debug/debug-260822-1742-rv64-context-tp-migration.md
+!/.agents/260822-cellos-vfs-smp-006-owner-lifetime/
+!/.agents/260822-cellos-vfs-smp-006-owner-lifetime/plan.md
 .claude/
 CLAUDE.md
 .cargo/

@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-21
+**Last updated**: 2026-08-22
 
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
@@ -73,6 +73,9 @@ Cellos is being shaped around product stages, not only phase numbers:
   above bus 0, real NIC Tx/Rx/DHCP, and the BAR unit-test harness remain open.
 - AArch64 test-hooks runtime evidence remains host-gated where the existing
   `qemu_exit::AArch64Semihosting` issue blocks the lane.
+- RV32 release compilation is verified, but RV32 runtime cannot run on this
+  host without OpenSBI firmware. This is a non-blocking compile-only evidence
+  gap, not runtime qualification.
 - Tier 2 native domains have an accepted design gate but no runtime mechanism;
   current native cells remain in the shared SAS and are not treated as
   contained merely because the manifest taxonomy names a future protection

@@ -2,6 +2,19 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-22] VFS SMP owner-lifetime lifecycle closure is verified
+
+`CELLOS-VFS-SMP-006` is closed after the owner-lifetime lifecycle
+implementation passed API90, an RV32 release compile, fresh `test-hooks`,
+one-hart VFS 2/2, and two-hart VFS 7/7. Final quality and security closure
+both passed.
+
+RV32 runtime was not exercised: the host lacks OpenSBI firmware. That remains
+a non-blocking compile-only evidence gap and is not claimed as runtime
+evidence. Full Phase 07 remains blocked by the Phase 03 provenance/signature
+boundary, the Phase 04 production-admission gate, and the Tier 2 native-domain
+gate.
+
 ## [2026-08-21] Tier 1 Rust `std` feasibility package verifies without implementation authority
 
 The verified Phase 06 feasibility slice reconciles all 27/27 pinned Rust

@@ -31,7 +31,7 @@ The only successful terminal state is `FULLY_QUALIFIED`: Phase 01's Native SDK c
 | 04 | [Tier 3 Qualification C5](phase-04-tier3-qualification.md) | 8w | 01,02 | pending |
 | 05 | [Manifest-v2 Tooling C7-A](phase-05-manifest-v2-tooling.md) | 2w | 01,02 | completed — v2 compatibility baseline frozen; loader risks transferred |
 | 06 | [Tier 1 rust-std PAL C4](phase-06-tier1-rust-std-pal.md) | 3w | 03 | pending — dependency-blocked on Phase 03; feasibility package verified, security backing and human approval blocked |
-| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04; loader-risk handoff from 05 | pending — `ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED` verified; full Tier 2 qualification remains dependency-blocked on Phases 03 and 04; no Tier 2 readiness/release/approval |
+| 07 | [Tier 2 Native Domain C6](phase-07-tier2-native-domain.md) | 12w | 02,03,04; loader-risk handoff from 05 | pending — `ATOMIC_PUBLICATION_PREREQUISITE_COMPLETE / PHASE07_BLOCKED` verified and `CELLOS-VFS-SMP-006_CLOSED_VERIFIED_RV64` separately closed; full Tier 2 qualification remains dependency-blocked on Phases 03 and 04; no Tier 2 readiness/release/approval |
 | 08 | [Manifest-v3 ABI C7-B](phase-08-manifest-v3-abi.md) | 4w | 03,05,07 | pending — `PREDESIGN_COMPLETE / PHASE08_BLOCKED` verified; direct dependencies are 03,05,07; no V3 code/readiness/approval |
 | 09 | [Final Completion Gate C9](phase-09-final-completion-gate.md) | 1w | 01-08 approved/implemented, verified, ledger-recorded | pending |
 
@@ -72,7 +72,9 @@ The narrow atomic prerequisite is verified at exactly **`ATOMIC_PUBLICATION_PRER
 
 This resolves `CELLOS-LOADER-RACE-002` and `CELLOS-LOADER-CLEANUP-003` only at that prerequisite boundary. Umbrella Phase 07 remains blocked on Phases 03 and 04 plus full independent Tier 2 qualification; it is neither a Tier 2 completion/readiness claim nor a security, release, ledger, or human approval.
 
-The unbaselined SMP VFS result is a separate release blocker: after the atomic terminal markers, VFS reported `40 PASS, 10 FAIL`, with a probable pre-existing wildcard VFS RPC receive cause and no pre-Phase07 two-hart baseline. The next owner is the separate VFS SMP repair workstream (VFS test/client request-reply transport owner), with required reproduction/regression in [`debug-260822-0749-smp-vfs.md`](../debug/debug-260822-0749-smp-vfs.md). It is not a Phase 07 atomic regression claim and does not weaken the atomic proof.
+`CELLOS-VFS-SMP-006` is separately closed at exactly **`CELLOS-VFS-SMP-006_CLOSED_VERIFIED_RV64`**. Its evidence is API `90/0`, RV32 release compilation, fresh test-hooks, one-hart VFS `2/2`, and RV64 two-hart VFS lifecycle `7/7`, covering context, heartbeat, quota fault, root exit, retiring syscall, leases, owner watches, AP/init, and VFS behavior. Final quality and security closure are PASS. The exact source status and repository-reference hash `85a5b873c5961c911ea8e04473c4fcb61de68b4a` are recorded in the [owner-lifetime closure plan](../260822-cellos-vfs-smp-006-owner-lifetime/plan.md#closure-record--2026-08-22).
+
+RV32 runtime remains an explicit non-blocking host-firmware evidence gap because the host lacks OpenSBI firmware; only the RV32 release compile is claimed. This closure is independent of the atomic proof and does not weaken or remove any full Phase 07 gate.
 
 ## Phase 08 Pre-Design Status
 

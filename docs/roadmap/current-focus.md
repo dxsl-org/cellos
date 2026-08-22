@@ -46,13 +46,12 @@ without treating QEMU or compile-only checks as board qualification.
   provenance/signature boundary, the Phase 04 production-admission gate, and
   the Tier 2 native-domain gate. The verified atomic prerequisite does not
   clear those release conditions.
-- A separate, unbaselined two-hart VFS run is a release blocker: it completed
-  the atomic markers but reported `40 PASS, 10 FAIL` because the VFS client
-  receives request/reply traffic with wildcard `sys_recv(0)`. Its required
-  repair is a service-TID-masked receive (with sender/decode verification) and
-  a deterministic two-hart VFS regression that observes hart 1, all atomic
-  terminal markers, and `[vfs-test] ALL TESTS PASSED` with no `[FAIL]`
-  (`.agents/debug/debug-260822-0749-smp-vfs.md`).
+- `CELLOS-VFS-SMP-006` is closed after the owner-lifetime lifecycle
+  implementation passed API90, an RV32 release compile, fresh `test-hooks`,
+  one-hart VFS 2/2, and two-hart VFS 7/7. Final quality and security closure
+  both passed. RV32 runtime remains unavailable on this host because OpenSBI
+  firmware is missing; that compile-only evidence gap is non-blocking and is
+  not a runtime claim.
 
 ## Current Documentation Corrections
 
@@ -76,9 +75,6 @@ without treating QEMU or compile-only checks as board qualification.
    Phase 04 production-admission, and Tier 2 native-domain gates are closed;
    the verified atomic prerequisite and Phase 08 predesign do not authorize
    production loader or Manifest-v3 claims.
-5. Repair the VFS client's wildcard request/reply receive and establish the
-   required deterministic two-hart VFS baseline before release; a one-hart
-   VFS pass or atomic AP-00–15 pass is not a substitute.
 5. Continue reducing kernel-resident legacy driver/orchestration code only when
    a slice has explicit runtime evidence and rollback notes.
 6. Keep HAL/board boundary checks in CI whenever board descriptors, SoC facts,
