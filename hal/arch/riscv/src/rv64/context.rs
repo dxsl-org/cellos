@@ -22,20 +22,79 @@ pub struct Context {
     pub sscratch: usize,
 }
 
-// Assembly implementation handled by build.rs
+// Assembly implementation handled by build.rs.
+
+/// Atomically capture the complete outgoing supervisor status and mask SIE.
+///
+/// The scheduler calls this before it publishes any selection state. Keeping
+/// the full value, rather than only a boolean SIE snapshot, lets `__switch`
+/// persist the exact outgoing status in its `Context`.
+#[inline(always)]
+pub fn save_and_disable_interrupts() -> usize {
+    let sstatus: usize;
+    // SAFETY: `csrrci` is an atomic S-mode CSR read/modify/write. Omitting
+    // `nomem` makes this a compiler barrier for the scheduling publications
+    // that follow it.
+    unsafe {
+        core::arch::asm!(
+            "csrrci {saved}, sstatus, 0x2",
+            saved = out(reg) sstatus,
+            options(nostack),
+        );
+    }
+    sstatus
+}
+
+/// Restore a value returned by [`save_and_disable_interrupts`].
+///
+/// # Safety
+/// `sstatus` must be a supervisor-status snapshot captured on this hart.
+#[inline(always)]
+pub unsafe fn restore_sstatus(sstatus: usize) {
+    core::arch::asm!(
+        "csrw sstatus, {saved}",
+        saved = in(reg) sstatus,
+        options(nostack),
+    );
+}
 
 impl Context {
-    /// Perform a context switch.
+    /// Perform a context switch after masking interrupts at this call boundary.
+    ///
+    /// Scheduler code must use [`Context::switch_with_saved_sstatus`] instead:
+    /// it has to mask SIE before selection, not merely at the assembly boundary.
     ///
     /// # Safety
     /// This function performs a raw context switch and must be called with valid pointers.
     #[inline(always)]
     pub unsafe fn switch(old: *mut Context, new: *const Context) {
-        // External assembly implementation
+        let outgoing_sstatus = save_and_disable_interrupts();
+        Self::switch_with_saved_sstatus(old, new, outgoing_sstatus);
+    }
+
+    /// Switch contexts while saving the caller's pre-mask `sstatus` in `old`.
+    ///
+    /// The current hart must still have SIE masked from the matching
+    /// [`save_and_disable_interrupts`] call. `__switch` restores the incoming
+    /// context's saved `sstatus` only after its registers and stack are complete.
+    ///
+    /// # Safety
+    /// Both pointers must be valid context slots, and `outgoing_sstatus` must be
+    /// the snapshot captured on this hart before scheduler selection.
+    #[inline(always)]
+    pub unsafe fn switch_with_saved_sstatus(
+        old: *mut Context,
+        new: *const Context,
+        outgoing_sstatus: usize,
+    ) {
         extern "C" {
-            fn __switch(old: *mut Context, new: *const Context);
+            fn __switch(
+                old: *mut Context,
+                new: *const Context,
+                outgoing_sstatus: usize,
+            );
         }
-        __switch(old, new);
+        __switch(old, new, outgoing_sstatus);
     }
 }
 

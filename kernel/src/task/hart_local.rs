@@ -15,6 +15,10 @@ pub mod ready;
 use crate::task::smp::MAX_HARTS;
 use alloc::collections::{BTreeMap, VecDeque};
 use core::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(not(target_arch = "riscv32"))]
+use core::sync::atomic::AtomicU64;
+#[cfg(target_arch = "riscv32")]
+use portable_atomic::AtomicU64;
 
 /// Per-hart local state.
 ///
@@ -35,9 +39,37 @@ pub struct ViHartLocal {
     /// Per-hart ready queues keyed by priority (`u8`; higher = higher priority).
     /// Leaf lock: may be locked while holding SCHEDULER, never the reverse.
     pub ready: crate::sync::Spinlock<BTreeMap<u8, VecDeque<usize>>>,
-    /// Task ID currently running on this hart.  0 = idle.
-    /// Written by this hart only (in pick_next); read by others for zombie-reap.
+    /// Task selected by the scheduler for this hart.  This can lead the actual
+    /// CPU context while `Context::switch` is in flight.
     pub current_task_id: AtomicUsize,
+    /// Task whose saved context is actually executing on this hart.  Published
+    /// by the incoming context only after the raw switch has changed stacks.
+    pub executing_task_id: AtomicUsize,
+    /// Incoming task whose raw Context has been selected but has not yet
+    /// completed the stack/register switch.  This is a transient ownership pin:
+    /// retirement must treat it as live until the incoming-side completion hook
+    /// publishes `executing_task_id` and clears this field.
+    pub selected_task_id: AtomicUsize,
+    /// Runnable outgoing task whose Context save is in flight.  It may be on
+    /// this hart's ready queue for round-robin fairness, but another hart must
+    /// not steal it until the raw switch has saved its Context.
+    pub outgoing_context_save_task_id: AtomicUsize,
+    /// Generation paired with `current_cell_id` for the task currently selected
+    /// on this hart.  Trap code snapshots it with the CellId before surrendering
+    /// allocation attribution to the kernel.
+    current_cell_generation: AtomicU64,
+    /// Fixed retirement handoff slot.  A trap fault or clean `Exit` writes
+    /// scalar state here before scheduler-owned collections are touched; the
+    /// scheduler consumes it later with kernel allocation attribution.
+    deferred_retirement_pending: AtomicUsize,
+    deferred_retirement_kind: AtomicUsize,
+    deferred_retirement_tid: AtomicUsize,
+    deferred_retirement_cell_id: AtomicUsize,
+    deferred_retirement_generation: AtomicU64,
+    deferred_retirement_exit_code: AtomicUsize,
+    deferred_retirement_fault_cause: AtomicUsize,
+    deferred_retirement_fault_pc: AtomicUsize,
+    deferred_retirement_fault_addr: AtomicUsize,
 }
 
 /// Static array of per-hart local state, one entry per supported hart.
@@ -60,6 +92,19 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
         kernel_tp_for_cells: 0,
         ready: crate::sync::Spinlock::new(BTreeMap::new()),
         current_task_id: AtomicUsize::new(0),
+        executing_task_id: AtomicUsize::new(0),
+        selected_task_id: AtomicUsize::new(0),
+        outgoing_context_save_task_id: AtomicUsize::new(0),
+        current_cell_generation: AtomicU64::new(0),
+        deferred_retirement_pending: AtomicUsize::new(0),
+        deferred_retirement_kind: AtomicUsize::new(0),
+        deferred_retirement_tid: AtomicUsize::new(0),
+        deferred_retirement_cell_id: AtomicUsize::new(0),
+        deferred_retirement_generation: AtomicU64::new(0),
+        deferred_retirement_exit_code: AtomicUsize::new(0),
+        deferred_retirement_fault_cause: AtomicUsize::new(0),
+        deferred_retirement_fault_pc: AtomicUsize::new(0),
+        deferred_retirement_fault_addr: AtomicUsize::new(0),
     };
     [ZERO; MAX_HARTS]
 };
@@ -106,6 +151,8 @@ pub fn install(hart_id: usize) {
         core::ptr::addr_of_mut!((*ptr).kernel_tp_for_cells).write(tp);
     }
     hl.current_cell_id.store(0, Ordering::Relaxed);
+    hl.current_cell_generation.store(0, Ordering::Relaxed);
+    hl.deferred_retirement_pending.store(0, Ordering::Relaxed);
 
     // Publish this logical hart's restore pointer before installing its stvec.
     // The hart-specific trap stub reads only its own array slot.
@@ -120,6 +167,8 @@ pub fn install(hart_id: usize) {
     #[cfg(target_arch = "riscv64")]
     crate::hal::trap::init_for_hart(hart_id);
 }
+
+
 
 /// Return a reference to the calling hart's `ViHartLocal`.
 ///
@@ -187,6 +236,268 @@ pub fn current_cell_id() -> usize {
     #[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
     {
         HART_LOCALS[0].current_cell_id.load(Ordering::Relaxed)
+    }
+}
+
+/// Provenance required to place a fault in the recoverable scheduler funnel.
+///
+/// A Cell attribution is accounting state, not evidence that the current CPU
+/// context was executing Cell code.  In particular, kernel code servicing a
+/// Cell syscall retains that attribution while it holds kernel locks.  Only a
+/// trap handler that has established a U-mode origin can mint this capability.
+#[derive(Clone, Copy)]
+pub struct TrapProvenUserFault(());
+
+impl TrapProvenUserFault {
+    #[inline(always)]
+    pub(super) const fn new() -> Self {
+        Self(())
+    }
+}
+
+/// Origin of a fault considered for deferred Cell retirement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FaultOrigin {
+    TrapProvenUser,
+    #[cfg(test)]
+    KernelPanic,
+}
+
+impl FaultOrigin {
+    #[inline(always)]
+    const fn permits_deferred_retirement(self) -> bool {
+        matches!(self, Self::TrapProvenUser)
+    }
+}
+
+/// Scalar fault state captured by a trap-proven U-mode fault and consumed by
+/// the scheduler.
+///
+/// This deliberately contains no task name or heap-backed diagnostic payload:
+/// quota-exhausted Cell faults must be able to hand off without allocating.
+#[derive(Clone, Copy)]
+pub struct DeferredFault {
+    pub tid: usize,
+    pub cell_id: usize,
+    pub generation: u64,
+    pub cause: usize,
+    pub pc: usize,
+    pub fault_addr: usize,
+    origin: FaultOrigin,
+}
+
+/// Scalar clean-exit state captured before the exiting Cell's allocation
+/// attribution is surrendered.  Root versus worker classification belongs to
+/// the scheduler, where it can use the authoritative task table.
+#[derive(Clone, Copy)]
+pub struct DeferredExit {
+    pub tid: usize,
+    pub cell_id: usize,
+    pub generation: u64,
+    pub code: usize,
+}
+
+/// One allocation-free handoff record per hart.  A task can reach only one of
+/// these paths before yielding, so a single fixed slot preserves the ordering
+/// between the attribution handoff and scheduler retirement.
+#[derive(Clone, Copy)]
+pub enum DeferredRetirement {
+    Fault(DeferredFault),
+    Exit(DeferredExit),
+}
+
+impl DeferredFault {
+    /// Construct the sole recoverable deferred-fault record.
+    ///
+    /// `TrapProvenUserFault` cannot be minted outside `task`; this prevents
+    /// Cell accounting attribution or a kernel panic from entering the
+    /// scheduler retirement path.
+    #[inline(always)]
+    pub(super) fn from_user_trap(
+        _provenance: TrapProvenUserFault,
+        tid: usize,
+        cell_id: usize,
+        generation: u64,
+        cause: usize,
+        pc: usize,
+        fault_addr: usize,
+    ) -> Self {
+        Self::from_origin(
+            FaultOrigin::TrapProvenUser,
+            tid,
+            cell_id,
+            generation,
+            cause,
+            pc,
+            fault_addr,
+        )
+        .expect("trap-proven U-mode origin must permit deferred retirement")
+    }
+
+    #[inline(always)]
+    fn from_origin(
+        origin: FaultOrigin,
+        tid: usize,
+        cell_id: usize,
+        generation: u64,
+        cause: usize,
+        pc: usize,
+        fault_addr: usize,
+    ) -> Option<Self> {
+        origin.permits_deferred_retirement().then(|| Self {
+            tid,
+            cell_id,
+            generation,
+            cause,
+            pc,
+            fault_addr,
+            origin,
+        })
+    }
+
+    #[inline(always)]
+    pub fn is_trap_proven_user_fault(self) -> bool {
+        self.origin.permits_deferred_retirement()
+    }
+}
+
+#[cfg(test)]
+impl DeferredFault {
+    /// Unit-test-only constructor for the same origin produced by the trap ABI.
+    pub(crate) fn test_trap_proven_user(
+        tid: usize,
+        cell_id: usize,
+        generation: u64,
+        cause: usize,
+        pc: usize,
+        fault_addr: usize,
+    ) -> Self {
+        Self::from_user_trap(
+            TrapProvenUserFault::new(),
+            tid,
+            cell_id,
+            generation,
+            cause,
+            pc,
+            fault_addr,
+        )
+    }
+}
+
+#[cfg(test)]
+mod fault_origin_tests {
+    use super::{DeferredFault, FaultOrigin};
+
+    #[test]
+    fn kernel_panic_with_cell_attribution_cannot_enter_deferred_retirement() {
+        // Model a kernel panic while SCHEDULER is held for Cell 71: attribution
+        // must not be mistaken for a U-mode execution proof.
+        assert!(
+            DeferredFault::from_origin(FaultOrigin::KernelPanic, 9, 71, 3, 0, 0, 0).is_none()
+        );
+    }
+
+    #[test]
+    fn trap_proven_user_fault_remains_recoverable() {
+        let fault =
+            DeferredFault::from_origin(FaultOrigin::TrapProvenUser, 9, 71, 3, 0xf, 0, 0)
+                .expect("U-mode trap provenance must enter deferred retirement");
+        assert!(fault.is_trap_proven_user_fault());
+    }
+}
+
+/// Read the generation paired with the currently attributed Cell.
+#[inline(always)]
+pub fn current_cell_generation() -> u64 {
+    unsafe { current_hart() }
+        .current_cell_generation
+        .load(Ordering::Relaxed)
+}
+
+/// Update the current Cell attribution and its generation together.
+///
+/// Scheduler dispatch uses this before entering a Cell.  Callers that only
+/// temporarily suppress allocation attribution preserve the generation with
+/// `set_current_cell_id(0)` and restore the original CellId afterwards.
+#[inline(always)]
+pub fn set_current_cell_context(id: usize, generation: u64) {
+    let hart = unsafe { current_hart() };
+    hart.current_cell_generation.store(generation, Ordering::Relaxed);
+    hart.current_cell_id.store(id, Ordering::Relaxed);
+}
+
+const DEFERRED_RETIREMENT_EXIT: usize = 1;
+const DEFERRED_RETIREMENT_FAULT: usize = 2;
+
+/// Publish a fixed, per-hart fault record without allocating or acquiring a
+/// lock. Trap entry has interrupts masked, so only this hart can produce it.
+#[inline(always)]
+pub fn defer_fault(fault: DeferredFault) {
+    let hart = unsafe { current_hart() };
+    hart.deferred_retirement_tid.store(fault.tid, Ordering::Relaxed);
+    hart.deferred_retirement_cell_id
+        .store(fault.cell_id, Ordering::Relaxed);
+    hart.deferred_retirement_generation
+        .store(fault.generation, Ordering::Relaxed);
+    hart.deferred_retirement_fault_cause
+        .store(fault.cause, Ordering::Relaxed);
+    hart.deferred_retirement_fault_pc.store(fault.pc, Ordering::Relaxed);
+    hart.deferred_retirement_fault_addr
+        .store(fault.fault_addr, Ordering::Relaxed);
+    hart.deferred_retirement_kind
+        .store(DEFERRED_RETIREMENT_FAULT, Ordering::Relaxed);
+    hart.deferred_retirement_pending.store(1, Ordering::Release);
+}
+
+/// Publish a clean task exit before surrendering the exiting Cell's allocation
+/// attribution.  Root classification and every heap-backed lifecycle action
+/// remain deferred to the scheduler.
+#[inline(always)]
+pub fn defer_exit(exit: DeferredExit) {
+    let hart = unsafe { current_hart() };
+    hart.deferred_retirement_tid.store(exit.tid, Ordering::Relaxed);
+    hart.deferred_retirement_cell_id
+        .store(exit.cell_id, Ordering::Relaxed);
+    hart.deferred_retirement_generation
+        .store(exit.generation, Ordering::Relaxed);
+    hart.deferred_retirement_exit_code
+        .store(exit.code, Ordering::Relaxed);
+    hart.deferred_retirement_kind
+        .store(DEFERRED_RETIREMENT_EXIT, Ordering::Relaxed);
+    hart.deferred_retirement_pending.store(1, Ordering::Release);
+}
+
+/// Consume this hart's pending retirement record after allocation attribution
+/// has switched to Cell 0 and normal scheduler locking is permitted.
+#[inline(always)]
+pub fn take_deferred_retirement() -> Option<DeferredRetirement> {
+    let hart = unsafe { current_hart() };
+    if hart.deferred_retirement_pending.swap(0, Ordering::AcqRel) == 0 {
+        return None;
+    }
+
+    let tid = hart.deferred_retirement_tid.load(Ordering::Relaxed);
+    let cell_id = hart.deferred_retirement_cell_id.load(Ordering::Relaxed);
+    let generation = hart.deferred_retirement_generation.load(Ordering::Relaxed);
+    match hart.deferred_retirement_kind.load(Ordering::Relaxed) {
+        DEFERRED_RETIREMENT_EXIT => Some(DeferredRetirement::Exit(DeferredExit {
+            tid,
+            cell_id,
+            generation,
+            code: hart.deferred_retirement_exit_code.load(Ordering::Relaxed),
+        })),
+        DEFERRED_RETIREMENT_FAULT => Some(DeferredRetirement::Fault(
+            DeferredFault::from_user_trap(
+                TrapProvenUserFault::new(),
+                tid,
+                cell_id,
+                generation,
+                hart.deferred_retirement_fault_cause.load(Ordering::Relaxed),
+                hart.deferred_retirement_fault_pc.load(Ordering::Relaxed),
+                hart.deferred_retirement_fault_addr.load(Ordering::Relaxed),
+            ),
+        )),
+        kind => panic!("[task] invalid deferred retirement kind {kind}"),
     }
 }
 

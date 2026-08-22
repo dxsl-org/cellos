@@ -21,6 +21,11 @@
 //! rest, so a trailer at a fixed offset past the payload is invisible to every
 //! existing parser, on both the kernel and the cell side.
 //!
+//! The trailer deliberately does not carry a Cell root TID. It remains exactly
+//! 32 bytes and reports the sender for transport diagnostics; VFS obtains the
+//! separately attested root lifetime endpoint through `ResolveCellOwner` or the
+//! atomic `WatchCellOwner` syscall record.
+//!
 //! ## Invariants
 //! - Opting in **reserves** the tail: a receiver that passes the flag must treat
 //!   `buf[buf_len - CALLER_IDENTITY_LEN ..]` as kernel-owned and must not expect

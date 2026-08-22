@@ -12,6 +12,7 @@
 //! - Even additions require 2× confirmation (they change the build contract).
 
 pub mod caller_identity;
+pub mod cell_owner;
 pub mod cap;
 pub mod completion;
 pub mod dir_attestation;

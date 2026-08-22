@@ -55,10 +55,12 @@ static FAILED: AtomicU32 = AtomicU32::new(0);
 
 fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
     let mut send_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-    let n = api::ipc::encode(req, &mut send_buf)
-        .map(|s| s.len())
-        .unwrap_or(0);
-    vfs_raw(&send_buf[..n])
+    // Leak the receive buffer so VfsResponse::Data borrows from it safely.
+    // This is fine in a test cell that runs and exits.
+    let recv_buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
+        alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; api::ipc::IPC_BUF_SIZE]));
+    ostd::ipc::service_call_typed(vfs_tid(), req, &mut send_buf, recv_buf)
+        .unwrap_or(api::ipc::VfsResponse::Err(0xFD))
 }
 
 /// Send bytes to the VFS exactly as given, without encoding them first.
@@ -67,15 +69,22 @@ fn vfs_req(req: &api::ipc::VfsRequest<'_>) -> api::ipc::VfsResponse<'static> {
 /// express — an invalid-UTF-8 name, for instance, which Rust will not let a
 /// `&str` hold but a hostile sender has no trouble producing.
 fn vfs_raw(msg: &[u8]) -> api::ipc::VfsResponse<'static> {
-    ostd::syscall::sys_send(vfs_tid(), msg);
-    // Leak the recv buffer so VfsResponse::Data borrows from it safely.
-    // This is fine in a test cell that runs and exits.
+    let service_tid = vfs_tid();
+    if let ostd::syscall::SyscallResult::Err(_) = ostd::syscall::sys_send(service_tid, msg) {
+        return api::ipc::VfsResponse::Err(0xFD);
+    }
+
+    // Raw requests cannot use service_call_typed, but replies still must come
+    // from VFS and an unexpected sender must never be decoded as a reply.
     let buf: &'static mut [u8; api::ipc::IPC_BUF_SIZE] =
         alloc::boxed::Box::leak(alloc::boxed::Box::new([0u8; api::ipc::IPC_BUF_SIZE]));
-    match ostd::syscall::sys_recv(0, buf) {
-        ostd::syscall::SyscallResult::Ok(_) => api::ipc::decode::<api::ipc::VfsResponse>(buf)
-            .unwrap_or(api::ipc::VfsResponse::Err(0xFE)),
-        _ => api::ipc::VfsResponse::Err(0xFD),
+    match ostd::syscall::sys_recv(service_tid, buf) {
+        ostd::syscall::SyscallResult::Ok(sender) if sender == service_tid => {
+            api::ipc::decode::<api::ipc::VfsResponse>(buf)
+                .unwrap_or(api::ipc::VfsResponse::Err(0xFE))
+        }
+        ostd::syscall::SyscallResult::Ok(_) => api::ipc::VfsResponse::Err(0xFC),
+        ostd::syscall::SyscallResult::Err(_) => api::ipc::VfsResponse::Err(0xFD),
     }
 }
 

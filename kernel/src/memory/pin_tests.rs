@@ -157,19 +157,43 @@ fn vfs_release_is_exact_to_the_request_and_target() {
 }
 
 #[test]
-fn owner_death_quarantines_until_the_matching_vfs_release() {
+fn owner_death_pending_revokes_until_the_matching_vfs_release() {
     let base = arena(13);
     assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 913, 302, 8, 9), Ok(()));
-    assert_eq!(quarantine_task(913), 1);
+    assert!(mark_vfs_lease_pending_revoke(302, 913, 9));
+    assert!(vfs_lease_pending_revoke(302, 913, 9));
     let before = quarantined_pages();
-    assert!(withhold_vfs_frames(base, 1, 302, 913, 9));
+    assert_eq!(
+        withhold_pinned_frames(base, 1),
+        FrameTransfer::Withheld
+    );
     assert_eq!(quarantined_pages(), before + 1);
     let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
-    assert!(held.quarantined);
+    assert!(held.quarantined && held.pending_revoke);
     assert_eq!(release_vfs_lease(302, 913, 8), alloc::vec![]);
     assert_eq!(quarantined_pages(), before + 1);
     assert_eq!(release_vfs_lease(302, 913, 9), alloc::vec![(base, 1)]);
     assert_eq!(quarantined_pages(), before);
+}
+
+#[test]
+fn smp_vfs_holder_release_before_reaper_transfer_leaves_no_orphan() {
+    // This is the release-wins side of the SMP interleaving. Owner death has
+    // pending-revoked the exact lease, then the holder completes before the
+    // reaper's transfer transaction linearizes. The reaper must free normally,
+    // not create a quarantine entry keyed to the vanished lease.
+    let base = arena(18);
+    let before = quarantined_pages();
+    assert_eq!(pin_vfs_lease(base, PAGE_SIZE, 918, 306, 13, 3), Ok(()));
+    assert!(mark_vfs_lease_pending_revoke(306, 918, 3));
+    assert_eq!(release_vfs_lease(306, 918, 3), alloc::vec![]);
+
+    assert!(!withhold_vfs_frames(base, 1, 306, 918, 3));
+    assert_eq!(quarantined_pages(), before);
+
+    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Free);
+    assert_eq!(quarantined_pages(), before);
+    assert!(holder_of(base, PAGE_SIZE).is_none());
 }
 
 #[test]

@@ -57,8 +57,12 @@ const _: () = assert!(core::mem::size_of::<ViTrapFrame32>() == 144);
 
 /// Timer interrupt callback supplied by the kernel scheduler.
 pub type TimerTick = unsafe extern "Rust" fn();
-/// Cell-fault callback supplied by the kernel task layer.
-pub type TerminateOnFault = unsafe extern "Rust" fn(cause: usize, pc: usize, fault_addr: usize);
+/// Trap-proven U-mode Cell-fault callback supplied by the kernel task layer.
+///
+/// The caller must establish the interrupted context was U-mode before
+/// invoking this symbol; Cell accounting attribution alone is insufficient.
+pub type TerminateOnUserTrapFault =
+    unsafe extern "Rust" fn(cause: usize, pc: usize, fault_addr: usize);
 /// Current-cell lookup supplied by the kernel scheduler.
 pub type CurrentCellId = unsafe extern "Rust" fn() -> usize;
 /// UART interrupt callback supplied by the kernel driver layer.
@@ -104,13 +108,13 @@ pub type HandlePageFault =
 
 extern "Rust" {
     pub fn vi_timer_tick();
-    pub fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize);
+    pub fn vi_terminate_on_user_trap_fault(cause: usize, pc: usize, fault_addr: usize);
     pub fn vi_current_cell_id() -> usize;
     pub fn vi_handle_uart_irq();
 }
 
 const _: TimerTick = vi_timer_tick;
-const _: TerminateOnFault = vi_terminate_on_fault;
+const _: TerminateOnUserTrapFault = vi_terminate_on_user_trap_fault;
 const _: CurrentCellId = vi_current_cell_id;
 const _: HandleUartIrq = vi_handle_uart_irq;
 

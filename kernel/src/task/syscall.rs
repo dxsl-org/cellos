@@ -339,41 +339,24 @@ pub(crate) fn reap_grants_for_task(dead_tid: usize) {
 /// Whether the reaper must withhold `pages` frames at `base` instead of freeing
 /// them, because an in-flight operation still holds part of the region.
 ///
-/// A pin held by a task OTHER than the one dying counts: a driver cell may have
-/// authorised DMA against a buffer belonging to the cell now being reaped, and
-/// that driver — not the corpse — is the one whose acknowledgement must arrive.
-/// The frames are charged to the holder so its acknowledgement releases them.
+/// Pin lookup and the quarantine transfer are one registry transaction. This
+/// is essential for VFS leases: if the holder completes the exact lease before
+/// the transaction, the reaper must free these frames rather than install an
+/// orphaned release key; if the transfer wins, that exact release owns it.
 ///
 /// Returns `true` when the frames must not be freed. A full quarantine also
 /// returns `true`: leaking the frames is the only safe answer left.
 fn withhold_or_free(base: usize, pages: usize) -> bool {
-    let size = pages * 4096;
-    let Some(held) = crate::memory::pin::holder_of(base, size) else {
-        return false;
-    };
-    if held.request_generation != 0 {
-        if !crate::memory::pin::withhold_vfs_frames(
-            base,
-            pages,
-            held.holder_tid,
-            held.owner,
-            held.request_generation,
-        ) {
+    match crate::memory::pin::withhold_pinned_frames(base, pages) {
+        crate::memory::pin::FrameTransfer::Free => false,
+        crate::memory::pin::FrameTransfer::Withheld => true,
+        crate::memory::pin::FrameTransfer::Full => {
             log::error!(
-                "[grant] VFS quarantine full: leaking {pages} page(s) at {base:#x} for holder {} request {}",
-                held.holder_tid,
-                held.request_generation
+                "[grant] quarantine full: leaking {pages} page(s) at {base:#x} protected by a live pin"
             );
+            true
         }
-        return true;
     }
-    if !crate::memory::pin::withhold_frames(base, pages, held.owner) {
-        log::error!(
-            "[grant] quarantine full: leaking {pages} page(s) at {base:#x} pinned by task {}",
-            held.owner
-        );
-    }
-    true
 }
 
 /// Return quarantined frames owned by `tid` to the allocator once the driver has
@@ -402,6 +385,19 @@ pub(crate) fn release_vfs_holder_leases(tid: usize) {
         log::info!(
             "[grant] VFS holder {tid} died: releasing {pages} quarantined page(s) at {base:#x}"
         );
+        free_grant_pages(base, pages);
+    }
+}
+
+/// Release the exact VFS lease whose owner death cleared the holder's caller
+/// context. This runs outside SCHEDULER after grant reaping has quarantined any
+/// owner-dead frames.
+pub(crate) fn release_vfs_context_lease(release: super::scheduler::VfsLeaseRelease) {
+    for (base, pages) in crate::memory::pin::release_vfs_lease(
+        release.holder_tid,
+        release.grant_owner,
+        release.request_generation,
+    ) {
         free_grant_pages(base, pages);
     }
 }
@@ -666,6 +662,25 @@ pub(super) fn validate_user_buf(ptr: usize, len: usize, max: usize) -> Result<()
     Ok(())
 }
 
+/// Decode the additive fixed-record owner lookup request used on RV32.
+fn read_cell_owner_request(
+    request_ptr: usize,
+    request_len: usize,
+) -> Result<api::cell_owner::CellOwnerRequest, SyscallError> {
+    let len = api::cell_owner::CELL_OWNER_REQUEST_LEN;
+    if request_len < len {
+        return Err(SyscallError::BufferTooSmall);
+    }
+    validate_user_buf(request_ptr, len, MAX_USER_BUF)?;
+    let mut bytes = [0u8; api::cell_owner::CELL_OWNER_REQUEST_LEN];
+    // SAFETY: the request range was validated as a caller-owned readable
+    // buffer. Copy into kernel storage before taking SCHEDULER.
+    unsafe {
+        core::ptr::copy_nonoverlapping(request_ptr as *const u8, bytes.as_mut_ptr(), len);
+    }
+    api::cell_owner::CellOwnerRequest::from_bytes(&bytes).ok_or(SyscallError::InvalidInput)
+}
+
 /// Delivery selected when a blocked receive resumes.
 pub(super) enum ResumeDelivery {
     Death { sender_tid: usize, reason: usize },
@@ -675,6 +690,18 @@ pub(super) enum ResumeDelivery {
 
 /// Consume the wake-owned event before any later queued message.
 pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> ResumeDelivery {
+    // Owner-watch events are capability-tokenized internally and are visible
+    // only to VFS's wildcard public receive. A masked backend receive must
+    // leave them queued for the outer request loop.
+    if super::Task::owner_death_matches_receive_mask(mask) {
+        if let Some((_, root_tid, reason)) = task.pending_owner_deaths.first().copied() {
+            task.pending_owner_deaths.remove(0);
+            return ResumeDelivery::Death {
+                sender_tid: root_tid,
+                reason,
+            };
+        }
+    }
     if let Some(reason) = task.pending_exit_reason.take() {
         return ResumeDelivery::Death {
             sender_tid: task.current_caller.unwrap_or(0),
@@ -704,24 +731,28 @@ pub(super) fn take_resume_delivery(task: &mut super::Task, mask: usize) -> Resum
 /// that owns nothing" — owning nothing still reads unowned state.
 pub fn attested_identity_of(sender_tid: usize) -> Option<api::caller_identity::CallerIdentity> {
     let sched_guard = super::SCHEDULER.lock();
-    let task = sched_guard.as_ref()?.tasks.get(&sender_tid)?;
-    if task.cell_id.0 == 0 {
-        return None;
-    }
-    Some(api::caller_identity::CallerIdentity {
-        cell_id: task.cell_id.0,
-        generation: task.cell_generation,
-        sender_tid: sender_tid as u64,
-    })
+    let sched = sched_guard.as_ref()?;
+    let task = sched.tasks.get(&sender_tid)?;
+    let owner = sched.resolve_live_cell_owner(task.cell_id, task.cell_generation)?;
+    (owner.cell_id == task.cell_id.0 && owner.generation == task.cell_generation).then_some(
+        api::caller_identity::CallerIdentity {
+            cell_id: task.cell_id.0,
+            generation: task.cell_generation,
+            sender_tid: sender_tid as u64,
+        },
+    )
 }
 
 #[derive(Clone, Copy)]
-struct VfsGrantContext {
+pub(super) struct VfsGrantContext {
     grant_owner: usize,
+    grant_owner_cell_id: u64,
+    grant_owner_cell_generation: u64,
     request_generation: u64,
+    pending_revoke: bool,
 }
 
-enum VfsGrantLookup {
+pub(super) enum VfsGrantLookup {
     NotVfs,
     MissingContext,
     Active(VfsGrantContext),
@@ -743,7 +774,7 @@ fn sender_cell_context_in_sched(
     super::sender_context(sched, sender_tid)
 }
 
-fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
+pub(super) fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
     let sched_guard = super::SCHEDULER.lock();
     let Some(task) = sched_guard
         .as_ref()
@@ -757,7 +788,14 @@ fn current_vfs_grant_lookup(caller_id: usize) -> VfsGrantLookup {
     match task.current_caller {
         Some(grant_owner) => VfsGrantLookup::Active(VfsGrantContext {
             grant_owner,
+            grant_owner_cell_id: task.current_caller_cell_id,
+            grant_owner_cell_generation: task.current_caller_cell_generation,
             request_generation: task.current_caller_request_generation,
+            pending_revoke: crate::memory::pin::vfs_lease_pending_revoke(
+                caller_id,
+                grant_owner,
+                task.current_caller_request_generation,
+            ),
         }),
         None => VfsGrantLookup::MissingContext,
     }
@@ -786,6 +824,67 @@ fn finish_vfs_send_release(caller_id: usize, target: usize, context: Option<VfsG
     }
 }
 
+/// End a VFS request abandoned at its public receive boundary. Entering that
+/// receive proves the holder has stopped using the prior GrantSlice pointer.
+fn finish_vfs_context_drop(caller_id: usize, dropped: Option<(usize, u64)>) {
+    let Some((grant_owner, request_generation)) = dropped else {
+        return;
+    };
+    for (base, pages) in
+        crate::memory::pin::release_vfs_lease(caller_id, grant_owner, request_generation)
+    {
+        free_grant_pages(base, pages);
+    }
+}
+
+/// Install a VFS lease only while the scheduler still attests the snapshot.
+///
+/// `exit_task` takes `SCHEDULER` before it either tombstones this context or
+/// marks an existing exact lease pending-revoke. Taking the same lock here
+/// makes the context/lease pair one transaction: exit wins and this denies, or
+/// install wins and exit observes the lease to pending-revoke. The raw pointer
+/// is returned only after this transaction completes.
+pub(super) fn install_vfs_lease_if_context_live(
+    caller_id: usize,
+    context: VfsGrantContext,
+    base: usize,
+    size: usize,
+    grant_id: usize,
+) -> bool {
+    let sched_guard = super::SCHEDULER.lock();
+    let Some(sched) = sched_guard.as_ref() else {
+        return false;
+    };
+    let Some(holder) = sched.tasks.get(&caller_id) else {
+        return false;
+    };
+    if !crate::fast_ipc::is_registered_vfs_cell(holder.cell_id.0 as usize)
+        || holder.current_caller != Some(context.grant_owner)
+        || holder.current_caller_cell_id != context.grant_owner_cell_id
+        || holder.current_caller_cell_generation != context.grant_owner_cell_generation
+        || holder.current_caller_request_generation != context.request_generation
+    {
+        return false;
+    }
+    let Some(owner) = sched.tasks.get(&context.grant_owner) else {
+        return false;
+    };
+    if owner.cell_id.0 != context.grant_owner_cell_id
+        || owner.cell_generation != context.grant_owner_cell_generation
+    {
+        return false;
+    }
+    crate::memory::pin::pin_vfs_lease(
+        base,
+        size,
+        context.grant_owner,
+        caller_id,
+        grant_id,
+        context.request_generation,
+    )
+    .is_ok()
+}
+
 fn grant_is_sliceable(
     caller_id: usize,
     grant_owner: usize,
@@ -798,15 +897,7 @@ fn grant_is_sliceable(
     if let Some(context) = vfs_context {
         return grant_owner == context.grant_owner
             && shared_to_tid == Some(caller_id)
-            && crate::memory::pin::pin_vfs_lease(
-                base,
-                size,
-                context.grant_owner,
-                caller_id,
-                grant_id,
-                context.request_generation,
-            )
-            .is_ok();
+            && install_vfs_lease_if_context_live(caller_id, context, base, size, grant_id);
     }
     grant_owner == caller_id || shared_to_tid == Some(caller_id)
 }
@@ -875,7 +966,7 @@ fn encode_task_state(state: &TaskState) -> u32 {
     match state {
         TaskState::Ready => 0,
         TaskState::Running => 1,
-        TaskState::Terminated => 3,
+        TaskState::Terminated | TaskState::Retiring => 3,
         _ => 2,
     }
 }
@@ -1089,6 +1180,36 @@ pub enum Syscall {
         cell_id: u64,
         buf_ptr: usize,
         buf_len: usize,
+    },
+    /// 244: attest the root task owning the current VFS receive principal.
+    ResolveCellOwner {
+        cell_id: u64,
+        generation: u64,
+        out_ptr: usize,
+        out_len: usize,
+    },
+    /// 245: atomically attest and subscribe to the principal's root death.
+    WatchCellOwner {
+        cell_id: u64,
+        generation: u64,
+        out_ptr: usize,
+        out_len: usize,
+    },
+    /// 246: idempotently cancel one VFS root-death subscription.
+    CancelCellOwnerWatch { token: u64 },
+    /// 247: RV32-safe owner attestation through a fixed request record.
+    ResolveCellOwnerRecord {
+        request_ptr: usize,
+        request_len: usize,
+        out_ptr: usize,
+        out_len: usize,
+    },
+    /// 248: RV32-safe atomic owner watch through a fixed request record.
+    WatchCellOwnerRecord {
+        request_ptr: usize,
+        request_len: usize,
+        out_ptr: usize,
+        out_len: usize,
     },
     /// 13: OpenCap — open a file and return a CapId.
     OpenCap { path_ptr: usize, path_len: usize },
@@ -1383,17 +1504,22 @@ pub enum Syscall {
     ReadLog { buf_ptr: usize, max: usize },
 }
 
-/// Read the per-Cell syscall allowlist from the TCB.
+/// Return the syscall allowlist only for an active caller.
 ///
-/// Returns `u64::MAX` (permit-all) for unknown tids — safe default during
-/// early boot before the scheduler is initialised.
-fn get_syscall_allowlist(caller_id: usize) -> u64 {
+/// Task ID zero is the explicit kernel-context sentinel. Every nonzero caller
+/// must still have a dispatch-visible, non-terminal task record; a missing or
+/// terminal user task is denied rather than inheriting kernel authority.
+fn syscall_allowlist_for(caller_id: usize) -> Option<u64> {
+    if caller_id == 0 {
+        return Some(u64::MAX);
+    }
+
     super::SCHEDULER
         .lock()
         .as_ref()
-        .and_then(|s| s.tasks.get(&caller_id))
-        .map(|t| t.syscall_allowlist)
-        .unwrap_or(u64::MAX)
+        .and_then(|scheduler| scheduler.tasks.get(&caller_id))
+        .filter(|task| !matches!(task.state, TaskState::Retiring | TaskState::Terminated))
+        .map(|task| task.syscall_allowlist)
 }
 
 /// Map a kernel-internal `Syscall` variant to its `ViSyscall` representation
@@ -1499,7 +1625,12 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
         | Syscall::CapRevoke { .. }
         // SpawnCap / VFS-provider gated at dispatch; see ViSyscall::allowlist_bit.
         | Syscall::SpawnSetDirs { .. }
-        | Syscall::QueryDirHandles { .. } => return None,
+        | Syscall::QueryDirHandles { .. }
+        | Syscall::ResolveCellOwner { .. }
+        | Syscall::WatchCellOwner { .. }
+        | Syscall::CancelCellOwnerWatch { .. }
+        | Syscall::ResolveCellOwnerRecord { .. }
+        | Syscall::WatchCellOwnerRecord { .. } => return None,
         // Raw block-I/O (500-503): ZST BlockIoCap gated at dispatch.
         Syscall::BlkRead { .. }
         | Syscall::BlkWrite { .. }
@@ -1514,12 +1645,19 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
 ///
 /// `caller_id` is the ID of the task invoking the syscall.
 pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
+    let Some(allowed) = syscall_allowlist_for(caller_id) else {
+        log::warn!(
+            "[kernel] syscall denied for non-live tid {}",
+            caller_id
+        );
+        return Err(SyscallError::PermissionDenied);
+    };
+
     // Syscall allowlist enforcement: reject if this syscall's bit is not set in
     // the per-Cell bitset loaded from ELF section `__ViCell_syscalls`.
-    // Cells without that section default to u64::MAX (permit-all, backwards compat).
+    // Cells without that section retain their TCB's `u64::MAX` allowlist.
     if let Some(vi) = syscall_to_vi(&syscall) {
         if let Some(bit) = vi.allowlist_bit() {
-            let allowed = get_syscall_allowlist(caller_id);
             if (allowed >> bit) & 1 == 0 {
                 log::warn!(
                     "[kernel] syscall {:?} denied for tid {} (allowlist={:#018x})",
@@ -1604,14 +1742,26 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Recv) was queued; deliver it now without blocking. The dead tid is
             // returned as the "sender" so a supervisor never misses a child death.
             let mut queued_death = None;
+            let mut vfs_context_drop = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(t) = sched.tasks.get_mut(&caller_id) {
                     // Keep VFS caller-context maintenance inside the receive path's
                     // existing critical section. UART input performs one receive per
                     // event, so a separate scheduler lock here starves its tiny FIFO.
-                    t.begin_receive_context(mask);
-                    if !t.pending_deaths.is_empty() {
-                        let (dead_tid, reason) = t.pending_deaths.remove(0);
+                    vfs_context_drop = t.begin_receive_context(mask);
+                    // Owner death is a VFS public-plane event. Preserve it while
+                    // a nested backend `Recv(mask != 0)` is waiting for its reply.
+                    let owner_death = super::Task::owner_death_matches_receive_mask(mask)
+                        .then(|| t.pending_owner_deaths.first().copied())
+                        .flatten()
+                        .map(|(_, dead_tid, reason)| {
+                            t.pending_owner_deaths.remove(0);
+                            (dead_tid, reason)
+                        });
+                    let death = owner_death.or_else(|| {
+                        (!t.pending_deaths.is_empty()).then(|| t.pending_deaths.remove(0))
+                    });
+                    if let Some((dead_tid, reason)) = death {
                         // Deliver the exit reason as the recv payload (NotifyOnExit
                         // contract) so a supervisor can apply a restart policy.
                         if buf_len >= core::mem::size_of::<u64>()
@@ -1628,6 +1778,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     }
                 }
             }
+            finish_vfs_context_drop(caller_id, vfs_context_drop);
             if let Some(dead_tid) = queued_death {
                 attest(dead_tid);
                 return Ok(dead_tid);
@@ -1890,12 +2041,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // while input service is mid-dispatch). Without this drain, RecvTimeout
             // would call ipc_recv which only sees TaskState::Sending tasks, missing
             // anything queued via ipc_post_nonblock.
+            let mut vfs_context_drop = None;
+            let mut immediate_sender = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 // Honour the recv mask in the drain — same contract as Recv
                 // above: a masked RecvTimeout must not consume queued input
                 // events meant for the wildcard read loop.
                 let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
-                    t.begin_receive_context(mask);
+                    vfs_context_drop = t.begin_receive_context(mask);
                     let slot = t
                         .pending_msgs
                         .iter()
@@ -1925,8 +2078,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             sender_generation,
                         );
                     }
-                    return Ok(sender_tid);
+                    immediate_sender = Some(sender_tid);
                 }
+            }
+            finish_vfs_context_drop(caller_id, vfs_context_drop);
+            if let Some(sender_tid) = immediate_sender {
+                return Ok(sender_tid);
             }
 
             // Fast path: check for a pending message immediately.
@@ -2016,9 +2173,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // every viui app polling through ostd::input::poll_events — would never
             // see queued key/mouse events (ipc_try_recv only scans Sending tasks).
             // Honour the recv mask exactly like the blocking paths.
+            let mut vfs_context_drop = None;
+            let mut immediate_sender = None;
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 let drained = sched.tasks.get_mut(&caller_id).and_then(|t| {
-                    t.begin_receive_context(mask);
+                    vfs_context_drop = t.begin_receive_context(mask);
                     let slot = t
                         .pending_msgs
                         .iter()
@@ -2048,8 +2207,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                             sender_generation,
                         );
                     }
-                    return Ok(sender_tid);
+                    immediate_sender = Some(sender_tid);
                 }
+            }
+            finish_vfs_context_drop(caller_id, vfs_context_drop);
+            if let Some(sender_tid) = immediate_sender {
+                return Ok(sender_tid);
             }
             // Non-blocking Recv (scan Sending tasks)
             let res = super::ipc_try_recv(caller_id, mask, buf_ptr, buf_len);
@@ -2115,8 +2278,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
         Syscall::Wait { pid } => {
             if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                 if let Some(target) = sched.tasks.get_mut(&pid) {
-                    if target.state == TaskState::Terminated {
-                        // Already dead? Return exit code if stored or just 0?
+                    if matches!(target.state, TaskState::Terminated | TaskState::Retiring) {
+                        // A retiring root-generation record is terminal even
+                        // while it remains dispatch-visible for remote
+                        // quiescence.
                         let code = target.exit_code.unwrap_or(0);
                         return Ok(code);
                     } else {
@@ -2230,67 +2395,33 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             super::ipc_map(caller_id, grant_id).map_err(|_| SyscallError::PermissionDenied)
         }
         Syscall::Exit { code } => {
-            crate::audit::log_event(
-                crate::audit::AuditEvent::CellExit,
-                &crate::audit::encode_u32x2(caller_id as u32, code as u32),
-            );
-            log::info!(
-                "Syscall::Exit: task {} exited with code {}",
-                caller_id,
-                code
-            );
+            // TID zero is the explicit kernel-context sentinel. It has no Cell
+            // generation to retire; a kernel scheduling point remains explicit
+            // rather than fabricating a user-exit record.
+            if caller_id == 0 {
+                super::yield_cpu();
+                return Ok(0);
+            }
 
-            // Capture cell_id BEFORE exit_task removes the task — querying after
-            // returns None, which would deregister quota for CellId(0) (a latent
-            // bug in the old code path; fixed here).  exit_task now also wakes
-            // Wait(caller_id) waiters with `code`, so no in-handler wake loop.
-            let cell_id = if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-                let cid = sched
-                    .tasks
-                    .get(&caller_id)
-                    .map(|t| t.cell_id)
-                    .unwrap_or(types::CellId(0));
-                if let Some(task) = sched.tasks.get_mut(&caller_id) {
-                    task.exit_code = Some(code);
-                }
-                // Move task to sched.zombies so its context pointer remains valid
-                // across the context switch in yield_cpu; pick_next checks zombies.
-                sched.exit_task(caller_id, code);
-                cid
-            } else {
-                types::CellId(0)
+            // Do not inspect the task table, log, audit, or call
+            // `Scheduler::exit_task` while the exiting Cell is still charged.
+            // A root exit can retire every member and grow scheduler vectors;
+            // the fixed record is therefore the entire victim-attributed path.
+            let exit = super::hart_local::DeferredExit {
+                tid: caller_id,
+                cell_id: super::hart_local::current_cell_id(),
+                generation: super::hart_local::current_cell_generation(),
+                code,
             };
+            super::hart_local::defer_exit(exit);
+            super::hart_local::set_current_cell_id(0);
 
-            // Revoke all capabilities owned by this cell so the cap table doesn't
-            // retain orphaned entries and so a future cell with the same ID cannot
-            // inherit them.
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .revoke_all_for(cell_id);
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            super::retirement_selftest::observe_exit_deferred_record_commit(exit);
 
-            // Release the Cell's memory quota entry and any MMIO regions it held.
-            crate::memory::cell_quota::deregister(cell_id);
-            crate::resource_registry::release_for(cell_id);
-
-            // Free any grant pages this cell owned or held as grantee.
-            reap_grants_for_task(caller_id);
-
-            // Clear any fast-IPC handler registered by this cell so a future
-            // call_vfs does not jump into the now-freed ELF pages.
-            // (fault/watchdog paths already call this; voluntary Exit did not.)
-            crate::fast_ipc::clear_vfs_if_cell(cell_id.0 as usize);
-
-            // Release any PCIe BDF ownerships (for sys_grant_dma authorization).
-            crate::resource_registry::release_bdfs_for(caller_id);
-
-            // Flush IOTLB for any DMA domains this Cell held; zero DC/context entries.
-            // Must run BEFORE yield_cpu returns frames to the allocator (frame quarantine).
-            super::drivers::iommu::cleanup_cell(caller_id as u64);
-            // The flush above is the acknowledgement the quarantine waits on.
-            release_acked_frames(caller_id);
-            release_vfs_holder_leases(caller_id);
-
-            // yield_cpu switches away; this task is never rescheduled.
+            // `yield_cpu` consumes the fixed record under normal scheduler
+            // locking and routes roots through quiescent retirement. A worker
+            // still reaches the task-local branch of `exit_task`.
             super::yield_cpu();
             Ok(0)
         }
@@ -2301,7 +2432,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidCommand);
             }
 
-            let target_cell_id;
 
             // Single SCHEDULER lock: SpawnCap gate + all cleanup in one scope.
             // Two separate acquisitions would create a TOCTOU window where the target
@@ -2340,15 +2470,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     return Err(SyscallError::PermissionDenied);
                 }
 
-                // Capture cell_id and waiters BEFORE exit_task() removes the task from
-                // sched.tasks.  Querying after returns None — the Exit handler (syscall.rs:645)
-                // has this latent bug; we deliberately avoid replicating it here.
                 let task = match sched.tasks.get_mut(&tid) {
                     Some(t) => t,
                     // Target self-exited between the lock boundary — already dead; mission done.
                     None => return Ok(0),
                 };
-                target_cell_id = task.cell_id;
                 task.exit_code = Some(usize::MAX); // sentinel: force-killed
 
                 // exit_task: zombie move + ready-queue purge + stuck-sender unblock,
@@ -2358,27 +2484,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidCommand);
             }
 
-            // Cap + quota + MMIO cleanup — same as Exit handler.
-            crate::cell::cap_registry::CAP_TABLE
-                .lock()
-                .revoke_all_for(target_cell_id);
-            crate::memory::cell_quota::deregister(target_cell_id);
-            crate::resource_registry::release_for(target_cell_id);
-            reap_grants_for_task(tid);
 
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellExit,
                 &crate::audit::encode_u32x2(tid as u32, 0xFFFF_FFFFu32), // force-kill marker
             );
 
-            // Release any PCIe BDF ownerships the target Cell held.
-            crate::resource_registry::release_bdfs_for(tid);
-
-            // Flush IOTLB for any DMA domains the target Cell held.
-            super::drivers::iommu::cleanup_cell(tid as u64);
-            // The flush above is the acknowledgement the quarantine waits on.
-            release_acked_frames(tid);
-            release_vfs_holder_leases(tid);
 
             log::info!(
                 "[kernel] ForceExit: task {} killed by task {}",
@@ -2507,16 +2618,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 let has_spawn = sched
                     .tasks
                     .get(&caller_id)
-                    .map(|t| t.spawn_cap.is_some())
-                    .unwrap_or(false);
-                let allowed_vfs_watch = sched.tasks.get(&caller_id).is_some_and(|task| {
-                    crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
-                        && task.allows_current_caller_owner_watch(watched)
-                });
-                if !has_spawn && !allowed_vfs_watch {
+                    .is_some_and(|task| task.spawn_cap.is_some());
+                if !has_spawn {
                     return Err(SyscallError::PermissionDenied);
                 }
-                if sched.tasks.contains_key(&watched) {
+                if sched.tasks.get(&watched).is_some_and(|task| {
+                    !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
+                }) {
                     super::scheduler::subscribe_death(watched, caller_id);
                 } else {
                     // Task already dead — queue synthetic death so watcher never stalls.
@@ -2558,8 +2666,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let tid_is_live = super::SCHEDULER
                 .lock()
                 .as_ref()
-                .map(|scheduler| scheduler.tasks.contains_key(&tid))
-                .unwrap_or(false);
+                .is_some_and(|scheduler| {
+                    scheduler.tasks.get(&tid).is_some_and(|task| {
+                        !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
+                    })
+                });
             if !tid_is_live {
                 return Err(SyscallError::InvalidInput);
             }
@@ -2850,17 +2961,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             buf_len,
         } => {
             if !may_query_dir_handles(caller_id, cell_id) {
-                log::warn!(
-                    "[dirs] tid {} denied a provenance query for cell {}",
-                    caller_id,
-                    cell_id
-                );
                 return Err(SyscallError::PermissionDenied);
             }
             let len = api::dir_attestation::DIR_ATTESTATION_LEN;
-            // A short buffer is an error, not a partial write: a truncated
-            // record reads as a smaller set than the kernel recorded, which is
-            // exactly the silent narrowing this path must not produce.
             if buf_len < len {
                 return Err(SyscallError::BufferTooSmall);
             }
@@ -2868,13 +2971,131 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let record = crate::task::dir_inherit::attestation_for(cell_id)
                 .ok_or(SyscallError::InvalidInput)?
                 .to_bytes();
-            // SAFETY: `buf_ptr..buf_ptr+len` was validated as a caller-owned
-            // range of exactly this size, and we run in that caller's syscall
-            // context with SUM=1, so the write is to the caller's own memory.
             unsafe {
                 core::ptr::copy_nonoverlapping(record.as_ptr(), buf_ptr as *mut u8, len);
             }
             Ok(len)
+        }
+
+        Syscall::ResolveCellOwner {
+            cell_id,
+            generation,
+            out_ptr,
+            out_len,
+        } => {
+            let len = api::cell_owner::CELL_OWNER_LEN;
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            let owner = {
+                let guard = super::SCHEDULER.lock();
+                let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+                let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
+                    crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
+                        && task.current_caller_cell_id == cell_id
+                        && task.current_caller_cell_generation == generation
+                });
+                if !allowed {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                sched
+                    .resolve_live_cell_owner(types::CellId(cell_id), generation)
+                    .ok_or(SyscallError::PermissionDenied)?
+            };
+            let bytes = owner.to_bytes();
+            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            Ok(len)
+        }
+
+        Syscall::WatchCellOwner {
+            cell_id,
+            generation,
+            out_ptr,
+            out_len,
+        } => {
+            let len = api::cell_owner::CELL_OWNER_LEN;
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            let (owner, token) = super::SCHEDULER
+                .lock()
+                .as_mut()
+                .and_then(|sched| {
+                    sched.watch_live_cell_owner(caller_id, types::CellId(cell_id), generation)
+                })
+                .ok_or(SyscallError::PermissionDenied)?;
+            let bytes = owner.to_bytes();
+            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
+        }
+
+        Syscall::ResolveCellOwnerRecord {
+            request_ptr,
+            request_len,
+            out_ptr,
+            out_len,
+        } => {
+            let request = read_cell_owner_request(request_ptr, request_len)?;
+            let len = api::cell_owner::CELL_OWNER_LEN;
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            let owner = {
+                let guard = super::SCHEDULER.lock();
+                let sched = guard.as_ref().ok_or(SyscallError::PermissionDenied)?;
+                let allowed = sched.tasks.get(&caller_id).is_some_and(|task| {
+                    crate::fast_ipc::is_registered_vfs_cell(task.cell_id.0 as usize)
+                        && task.current_caller_cell_id == request.cell_id
+                        && task.current_caller_cell_generation == request.generation
+                });
+                if !allowed {
+                    return Err(SyscallError::PermissionDenied);
+                }
+                sched
+                    .resolve_live_cell_owner(types::CellId(request.cell_id), request.generation)
+                    .ok_or(SyscallError::PermissionDenied)?
+            };
+            let bytes = owner.to_bytes();
+            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            Ok(len)
+        }
+
+        Syscall::WatchCellOwnerRecord {
+            request_ptr,
+            request_len,
+            out_ptr,
+            out_len,
+        } => {
+            let request = read_cell_owner_request(request_ptr, request_len)?;
+            let len = api::cell_owner::CELL_OWNER_LEN;
+            if out_len < len {
+                return Err(SyscallError::BufferTooSmall);
+            }
+            validate_user_buf(out_ptr, len, MAX_USER_BUF)?;
+            let (owner, token) = super::SCHEDULER
+                .lock()
+                .as_mut()
+                .and_then(|sched| {
+                    sched.watch_live_cell_owner(
+                        caller_id,
+                        types::CellId(request.cell_id),
+                        request.generation,
+                    )
+                })
+                .ok_or(SyscallError::PermissionDenied)?;
+            let bytes = owner.to_bytes();
+            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, len) };
+            usize::try_from(token).map_err(|_| SyscallError::PermissionDenied)
+        }
+
+        Syscall::CancelCellOwnerWatch { token } => {
+            if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+                sched.cancel_cell_owner_watch(caller_id, token);
+            }
+            Ok(0)
         }
 
         Syscall::SpawnFromElf {
@@ -4320,6 +4541,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             let vfs_context = match current_vfs_grant_lookup(caller_id) {
                 VfsGrantLookup::NotVfs => None,
                 VfsGrantLookup::MissingContext => return Ok(usize::MAX),
+                VfsGrantLookup::Active(context) if context.pending_revoke => return Ok(usize::MAX),
                 VfsGrantLookup::Active(context) => Some(context),
             };
             // Check PAGE_GRANT_TABLE first.
@@ -4327,22 +4549,23 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 let tbl = grant_table_lock().lock();
                 tbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
                     (
-                        grant_is_sliceable(
-                            caller_id,
-                            grant.owner,
-                            grant.shared_to.as_ref().map(|(tid, _)| *tid),
-                            grant.base,
-                            grant.size,
-                            grant_id,
-                            vfs_context,
-                        ),
+                        grant.owner,
+                        grant.shared_to.as_ref().map(|(tid, _)| *tid),
                         grant.base,
                         grant.size,
                     )
                 })
             };
-            if let Some((allowed, base, size)) = page_grant {
-                if allowed {
+            if let Some((grant_owner, shared_to_tid, base, size)) = page_grant {
+                if grant_is_sliceable(
+                    caller_id,
+                    grant_owner,
+                    shared_to_tid,
+                    base,
+                    size,
+                    grant_id,
+                    vfs_context,
+                ) {
                     super::user_out::write_optional_usize(caller_id, size_out_ptr, size)?;
                     return Ok(base);
                 }
@@ -4353,28 +4576,28 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 let rtbl = reg_grant_table_lock().lock();
                 rtbl.as_ref().and_then(|m| m.get(&grant_id)).map(|grant| {
                     (
-                        grant_is_sliceable(
-                            caller_id,
-                            grant.owner,
-                            grant.shared_to.as_ref().map(|(tid, _)| *tid),
-                            grant.base,
-                            grant.size,
-                            grant_id,
-                            vfs_context,
-                        ),
+                        grant.owner,
+                        grant.shared_to.as_ref().map(|(tid, _)| *tid),
                         grant.base,
                         grant.size,
                     )
                 })
             };
-            match reg_grant {
-                None => Ok(usize::MAX),
-                Some((true, base, size)) => {
+            if let Some((grant_owner, shared_to_tid, base, size)) = reg_grant {
+                if grant_is_sliceable(
+                    caller_id,
+                    grant_owner,
+                    shared_to_tid,
+                    base,
+                    size,
+                    grant_id,
+                    vfs_context,
+                ) {
                     super::user_out::write_optional_usize(caller_id, size_out_ptr, size)?;
-                    Ok(base)
+                    return Ok(base);
                 }
-                Some((false, _, _)) => Ok(usize::MAX),
             }
+            Ok(usize::MAX)
         }
 
         Syscall::GrantFree { grant_id } => {
@@ -4862,11 +5085,38 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             priority: a2 as u8,
             core_id: a3,
         },
+        ViSyscall::ResolveCellOwnerRecord => Syscall::ResolveCellOwnerRecord {
+            request_ptr: a0,
+            request_len: a1,
+            out_ptr: a2,
+            out_len: a3,
+        },
+        ViSyscall::WatchCellOwnerRecord => Syscall::WatchCellOwnerRecord {
+            request_ptr: a0,
+            request_len: a1,
+            out_ptr: a2,
+            out_len: a3,
+        },
         ViSyscall::SpawnSetDirs => Syscall::SpawnSetDirs { carrier_ptr: a0 },
         ViSyscall::QueryDirHandles => Syscall::QueryDirHandles {
             cell_id: a0 as u64,
             buf_ptr: a1,
             buf_len: a2,
+        },
+        ViSyscall::ResolveCellOwner => Syscall::ResolveCellOwner {
+            cell_id: a0 as u64,
+            generation: a1 as u64,
+            out_ptr: a2,
+            out_len: a3,
+        },
+        ViSyscall::WatchCellOwner => Syscall::WatchCellOwner {
+            cell_id: a0 as u64,
+            generation: a1 as u64,
+            out_ptr: a2,
+            out_len: a3,
+        },
+        ViSyscall::CancelCellOwnerWatch => Syscall::CancelCellOwnerWatch {
+            token: a0 as u64,
         },
         ViSyscall::OpenCap => Syscall::OpenCap {
             path_ptr: a0,
@@ -5214,12 +5464,14 @@ fn check_allowlist(syscall_id: usize, caller_id: usize) -> Result<(), SyscallErr
         3 | 100 | 106 | 107 | 108 | 110 | 111 | 500 | 501 | 502 | 503
     );
 
-    let allowlist = super::SCHEDULER
-        .lock()
-        .as_ref()
-        .and_then(|s| s.tasks.get(&caller_id))
-        .map(|t| t.syscall_allowlist)
-        .unwrap_or(0); // task absent → deny-all for safety
+    let Some(allowlist) = syscall_allowlist_for(caller_id) else {
+        log::warn!(
+            "[kernel] syscall opcode {} denied for non-live tid {}",
+            syscall_id,
+            caller_id
+        );
+        return Err(SyscallError::PermissionDenied);
+    };
 
     // Deny truly-unknown opcodes that land in the legacy inner-match fallback —
     // their allowlist_bit() returns None, so without this guard they bypass the
@@ -5389,7 +5641,7 @@ const _: crate::hal::SyscallDispatch = ViCell_syscall_dispatch;
 mod tests {
     use super::{
         check_allowlist, encode_syscall_result, map_syscall, supports_typed_spawn_oom,
-        syscall_to_vi, Syscall, SyscallError,
+        syscall_to_vi, withhold_or_free, Syscall, SyscallError,
     };
     use crate::sync::Spinlock;
     use crate::task::{scheduler::Scheduler, SCHEDULER};
@@ -5500,5 +5752,30 @@ mod tests {
         with_scheduler_task(1u64 << 56, |tid| {
             assert_eq!(check_allowlist(ViSyscall::MemInfo as usize, tid), Ok(()));
         });
+    }
+
+    #[test]
+    fn vfs_holder_release_before_reap_frees_without_orphaning_quarantine() {
+        const BASE: usize = 0x4f00_0000;
+        const HOLDER: usize = 30_601;
+        const OWNER: usize = 30_602;
+        const GENERATION: u64 = 41;
+
+        let before = crate::memory::pin::quarantined_pages();
+        assert_eq!(
+            crate::memory::pin::pin_vfs_lease(BASE, 4096, OWNER, HOLDER, 1, GENERATION),
+            Ok(())
+        );
+        assert!(crate::memory::pin::mark_vfs_lease_pending_revoke(
+            HOLDER, OWNER, GENERATION
+        ));
+        assert_eq!(
+            crate::memory::pin::release_vfs_lease(HOLDER, OWNER, GENERATION),
+            alloc::vec![]
+        );
+
+        assert!(!withhold_or_free(BASE, 1));
+        assert_eq!(crate::memory::pin::quarantined_pages(), before);
+        assert!(crate::memory::pin::holder_of(BASE, 4096).is_none());
     }
 }

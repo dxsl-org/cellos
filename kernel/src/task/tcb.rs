@@ -55,6 +55,11 @@ pub enum TaskState {
     },
     /// This task has finished running.
     Terminated,
+    /// Removed from scheduling while its root generation waits for every hart
+    /// to finish switching away. The task record remains dispatch-visible so a
+    /// stale remote Context is denied rather than treated as an early-boot
+    /// kernel caller.
+    Retiring,
     /// Blocked on a Futex wait.
     /// `addr`: The address being waited on.
     FutexWait {
@@ -143,6 +148,9 @@ pub enum SyscallFuture {
 pub struct Task {
     pub id: usize,
     pub cell_id: CellId, // OWNER CELL
+    /// Immutable root task for this Cell generation. A root starts as its own
+    /// endpoint; `spawn_thread` replaces this with the registry-attested root.
+    pub root_tid: usize,
     pub name: String,
     pub state: TaskState,
     pub context: Context,
@@ -202,19 +210,19 @@ pub struct Task {
     pub waiters: Vec<usize>,
     pub exit_code: Option<usize>,
     /// Death-notification queue (NotifyOnExit): tids of watched tasks that died
-    /// while this watcher was NOT parked in Recv. Drained (highest-priority) by the
-    /// next `Recv` so a supervisor never misses a child death during a respawn.
-    /// Each entry is `(dead_tid, exit_reason)` — the reason is delivered as the recv
-    /// payload (the NotifyOnExit contract) so a supervisor can apply a restart policy
-    /// (e.g. transient = restart only on abnormal exit). `exit_reason` is the exit code
-    /// for a clean exit (0) or `usize::MAX` for a fault / watchdog kill.
+    /// while this watcher was NOT parked in Recv. Drained by the next `Recv`
+    /// regardless of mask, preserving the public NotifyOnExit contract.
     pub pending_deaths: Vec<(usize, usize)>,
+    /// VFS root-owner death events, kept separate from generic task watches.
+    ///
+    /// The opaque watch token never crosses the syscall ABI: it binds this queued
+    /// event to the exact subscription so a stale cancellation cannot affect a
+    /// successor. These events are delivered only by a wildcard public receive;
+    /// a masked backend receive must never consume them.
+    pub pending_owner_deaths: Vec<(u64, usize, usize)>,
 
-    /// Exit reason for a death notification delivered to a watcher that was PARKED in
-    /// `Recv` (set by `exit_task`). It is written into the watcher's recv buffer when its
-    /// `Recv` resumes — in the watcher's own syscall context, where writing a USER buffer
-    /// is valid (SSTATUS.SUM). It must NOT be written from `exit_task`/the trap context,
-    /// where an S-mode store to a USER page faults. `None` = the wake was a real message.
+    /// Exit reason for a generic `NotifyOnExit` wake delivered while this task
+    /// was parked in `Recv`. Owner-watch wakes use `pending_owner_deaths` instead.
     pub pending_exit_reason: Option<usize>,
 
     // Async Kernel Support
@@ -445,6 +453,7 @@ impl Task {
         Self {
             id,
             cell_id,
+            root_tid: id,
             name: String::from(name),
             state: TaskState::Ready,
             context: Context::default(),
@@ -469,6 +478,7 @@ impl Task {
             waiters: Vec::new(),
             exit_code: None,
             pending_deaths: Vec::new(),
+            pending_owner_deaths: Vec::new(),
             pending_exit_reason: None,
             pending_future: None,
             block_io_cap: None,
@@ -582,17 +592,32 @@ impl Task {
         self.set_current_caller_context(sender_tid, sender_cell_id, sender_generation);
     }
 
-    pub fn begin_receive_context(&mut self, mask: usize) {
+    /// Drop VFS's public request context and return the exact lease identity
+    /// that must be released after the scheduler lock is dropped.
+    pub fn begin_receive_context(&mut self, mask: usize) -> Option<(usize, u64)> {
         // VFS uses a wildcard receive only at its public request loop. Masked
         // receives are nested dependency replies and keep the outer authority.
         if mask == 0 && crate::fast_ipc::is_registered_vfs_cell(self.cell_id.0 as usize) {
+            let dropped = self
+                .current_caller
+                .map(|grant_owner| (grant_owner, self.current_caller_request_generation));
             self.clear_current_caller_context();
+            return dropped;
         }
+        None
     }
 
-    pub fn allows_current_caller_owner_watch(&self, watched: usize) -> bool {
-        self.current_caller_cell_id != 0 && watched == self.current_caller_cell_id as usize
+    /// Whether a receive mask may dequeue a tokenized VFS owner-death event.
+    ///
+    /// Owner death is routed on VFS's public plane only. Its root TID and
+    /// subscription token identify the event after this predicate succeeds;
+    /// neither is a sender match and therefore neither can authorize a masked
+    /// backend receive.
+    #[inline]
+    pub(super) const fn owner_death_matches_receive_mask(mask: usize) -> bool {
+        mask == 0
     }
+
 
     pub fn clear_current_caller_context(&mut self) {
         self.current_caller = None;

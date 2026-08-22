@@ -39,6 +39,11 @@ mod tests {
         (241, ViSyscall::QueryDirHandles),
         (242, ViSyscall::WaitCompletion),
         (243, ViSyscall::MemInfo),
+        (244, ViSyscall::ResolveCellOwner),
+        (245, ViSyscall::WatchCellOwner),
+        (246, ViSyscall::CancelCellOwnerWatch),
+        (247, ViSyscall::ResolveCellOwnerRecord),
+        (248, ViSyscall::WatchCellOwnerRecord),
         (20, ViSyscall::ShmAlloc),
         (21, ViSyscall::ShmMap),
         (30, ViSyscall::GetProcs),
@@ -99,6 +104,11 @@ mod tests {
         assert_eq!(ViSyscall::QueryDirHandles as usize, 241);
         assert_eq!(ViSyscall::WaitCompletion as usize, 242);
         assert_eq!(ViSyscall::MemInfo as usize, 243);
+        assert_eq!(ViSyscall::ResolveCellOwner as usize, 244);
+        assert_eq!(ViSyscall::WatchCellOwner as usize, 245);
+        assert_eq!(ViSyscall::CancelCellOwnerWatch as usize, 246);
+        assert_eq!(ViSyscall::ResolveCellOwnerRecord as usize, 247);
+        assert_eq!(ViSyscall::WatchCellOwnerRecord as usize, 248);
         assert_eq!(ViSyscall::HotSwapReady as usize, 401);
         assert_eq!(ViSyscall::Snapshot as usize, 420);
         assert_eq!(ViSyscall::SpawnReplacement as usize, 421);
@@ -117,6 +127,11 @@ mod tests {
                     | ViSyscall::QueryDirHandles
                     | ViSyscall::WaitCompletion
                     | ViSyscall::MemInfo
+                    | ViSyscall::ResolveCellOwner
+                    | ViSyscall::WatchCellOwner
+                    | ViSyscall::CancelCellOwnerWatch
+                    | ViSyscall::ResolveCellOwnerRecord
+                    | ViSyscall::WatchCellOwnerRecord
                     | ViSyscall::SpawnReplacement
                     | ViSyscall::PauseService
             ) {
@@ -126,12 +141,17 @@ mod tests {
             assert_ne!(id, ViSyscall::QueryDirHandles as usize);
             assert_ne!(id, ViSyscall::WaitCompletion as usize);
             assert_ne!(id, ViSyscall::MemInfo as usize);
+            assert_ne!(id, ViSyscall::ResolveCellOwner as usize);
+            assert_ne!(id, ViSyscall::WatchCellOwner as usize);
+            assert_ne!(id, ViSyscall::CancelCellOwnerWatch as usize);
             assert_ne!(id, ViSyscall::SpawnReplacement as usize);
             assert_ne!(id, ViSyscall::PauseService as usize);
+            assert_ne!(id, ViSyscall::ResolveCellOwnerRecord as usize);
+            assert_ne!(id, ViSyscall::WatchCellOwnerRecord as usize);
         }
         // Previously unmapped ids must still decode as Unknown, so nothing that
         // used to be rejected is now silently accepted as a new opcode.
-        assert_eq!(ViSyscall::from(244), ViSyscall::Unknown);
+        assert_eq!(ViSyscall::from(249), ViSyscall::Unknown);
         assert_eq!(ViSyscall::from(400), ViSyscall::Unknown);
         assert_eq!(ViSyscall::from(423), ViSyscall::Unknown);
     }
@@ -282,6 +302,11 @@ mod allowlist {
         assert!(SyscallSet::EMPTY.permits(ViSyscall::Exit));
         assert!(SyscallSet::EMPTY.permits(ViSyscall::Yield));
         assert!(SyscallSet::EMPTY.permits(ViSyscall::NotifyOnExit));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::ResolveCellOwner));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::WatchCellOwner));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::CancelCellOwnerWatch));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::ResolveCellOwnerRecord));
+        assert!(SyscallSet::EMPTY.permits(ViSyscall::WatchCellOwnerRecord));
     }
 
     #[test]

@@ -37,6 +37,10 @@ pub mod user_hello;
 pub mod user_out;
 #[cfg(feature = "test-hooks")]
 pub mod vfs_lifecycle_selftest;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod retirement_selftest;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod context_handoff_selftest;
 pub mod waker;
 
 #[cfg(test)]
@@ -157,10 +161,12 @@ pub(crate) fn queue_pending_msg(
 }
 
 fn sender_context(sched: &Scheduler, sender_tid: usize) -> (u64, u64) {
+    let Some(task) = sched.tasks.get(&sender_tid) else {
+        return (0, 0);
+    };
     sched
-        .tasks
-        .get(&sender_tid)
-        .map(|task| (task.cell_id.0, task.cell_generation))
+        .resolve_live_cell_owner(task.cell_id, task.cell_generation)
+        .map(|owner| (owner.cell_id, owner.generation))
         .unwrap_or((0, 0))
 }
 
@@ -188,6 +194,17 @@ fn paused_target_rejects(sched: &Scheduler, caller_id: usize, target_id: usize) 
     }
     crate::cell::service_registry::is_paused_tid(target_id)
         && !matches!(target.state, TaskState::Frozen { .. })
+}
+/// Arm the current hart's outgoing Context before publishing an IPC-blocked
+/// state.  A peer may observe that state and wake/queue this task before the
+/// syscall reaches `yield_cpu`; the handoff guard bridges that interval until
+/// the raw switch has saved this stack.
+#[inline(always)]
+fn arm_ipc_block_handoff(caller_id: usize) {
+    let hart = hart_local::current_hart_id();
+    if hart_local::ready::current_task_id_for(hart) == caller_id {
+        hart_local::ready::begin_outgoing_context_save(hart, caller_id);
+    }
 }
 
 /// Return whether every IPC accepted before a service pause has drained.
@@ -263,29 +280,33 @@ const STACK_BASELINE_TICK_GATE: usize = 1_500;
 #[cfg(feature = "test-hooks")]
 static STACK_BASELINE_EMITTED: AtomicU8 = AtomicU8::new(0);
 
-// Helper context to save the initial boot/kernel state during first task switch
+// Every hart returns to its own scheduler/idle stack when no task is runnable.
+// A shared context would restore the boot hart's `tp` on a remote fallback,
+// misroute the incoming-context retirement completion to hart 0, and corrupt
+// the remote hart's local scheduler state.
 #[cfg(target_arch = "riscv64")]
-static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
-    ra: 0,
-    sp: 0,
-    s0: 0,
-    s1: 0,
-    s2: 0,
-    s3: 0,
-    s4: 0,
-    s5: 0,
-    s6: 0,
-    s7: 0,
-    s8: 0,
-    s9: 0,
-    s10: 0,
-    s11: 0,
-    sepc: 0,
-    sstatus: 0x102,
-    gp: 0,
-    tp: 0,
-    sscratch: 0,
-};
+static mut BOOT_CONTEXTS: [crate::hal::arch::Context; smp::MAX_HARTS] =
+    [crate::hal::arch::Context {
+        ra: 0,
+        sp: 0,
+        s0: 0,
+        s1: 0,
+        s2: 0,
+        s3: 0,
+        s4: 0,
+        s5: 0,
+        s6: 0,
+        s7: 0,
+        s8: 0,
+        s9: 0,
+        s10: 0,
+        s11: 0,
+        sepc: 0,
+        sstatus: 0x102,
+        gp: 0,
+        tp: 0,
+        sscratch: 0,
+    }; smp::MAX_HARTS];
 #[cfg(target_arch = "aarch64")]
 static mut BOOT_CONTEXT: crate::hal::arch::Context = crate::hal::arch::Context {
     x19: 0,
@@ -523,20 +544,42 @@ pub fn init() {
     }
 }
 
-/// Exposes `terminate_current_cell_on_fault` to the HAL trap handler via
+/// Exposes the trap-proven U-mode fault funnel to the RISC-V HAL via
 /// `extern "Rust"` linkage.
 ///
-/// # Arguments
-/// Architecture-neutral by necessity — every HAL trap handler calls this symbol,
-/// so the parameters name the *role* each value plays, not the register it came
-/// from. See [`terminate_current_cell_on_fault`] for the per-architecture mapping.
+/// This symbol is deliberately not a generic "terminate current Cell" entry
+/// point: its only callers are trap arms that proved their saved privilege
+/// state was U-mode.  Kernel panics retain Cell accounting attribution while
+/// locks may be held and must take the non-recoverable panic path instead.
 #[no_mangle]
-pub extern "Rust" fn vi_terminate_on_fault(cause: usize, pc: usize, fault_addr: usize) {
-    terminate_current_cell_on_fault(cause, pc, fault_addr);
+pub extern "Rust" fn vi_terminate_on_user_trap_fault(
+    cause: usize,
+    pc: usize,
+    fault_addr: usize,
+) {
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::observe_fault_task_entry();
+    terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
 }
 
 #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-const _: crate::hal::TerminateOnFault = vi_terminate_on_fault;
+const _: crate::hal::TerminateOnUserTrapFault = vi_terminate_on_user_trap_fault;
+
+/// Test-hook equivalent of the post-validation RV64 trap boundary.
+///
+/// Production code may enter the recoverable funnel only through
+/// `vi_terminate_on_user_trap_fault`.  The SMP retirement self-test models an
+/// already-validated U-mode fault while it holds its deterministic remote
+/// scheduler guard, without fabricating an ABI caller in the HAL.
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub(crate) fn terminate_test_hook_trap_proven_user_fault(
+    cause: usize,
+    pc: usize,
+    fault_addr: usize,
+) {
+    retirement_selftest::observe_fault_task_entry();
+    terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
+}
 
 /// Records AArch64 exception state and the backing instruction word before
 /// delegating to the architecture-neutral Cell fault teardown.
@@ -584,7 +627,7 @@ pub extern "Rust" fn vi_terminate_on_fault_aarch64(
             fault_addr
         ),
     }
-    terminate_current_cell_on_fault(cause, pc, fault_addr);
+    terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -610,6 +653,9 @@ const _: crate::hal::CurrentCellId = vi_current_cell_id;
 /// current task if a higher-priority task has become runnable.
 #[no_mangle]
 pub extern "Rust" fn vi_timer_tick() {
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::observe_forced_ssip_trap();
+
     tick();
 
     #[cfg(feature = "test-hooks")]
@@ -641,6 +687,58 @@ pub extern "Rust" fn vi_timer_tick() {
     yield_cpu();
 }
 
+
+/// Retire a remote-root switch only from the incoming context, after the raw
+/// context switch has changed stacks. Trap entry is intentionally not an ACK:
+/// the interrupted retiring task can still execute its outgoing kernel path.
+#[no_mangle]
+pub extern "C" fn vi_context_switch_complete() {
+    let hart = hart_local::current_hart_id();
+    // A zero selected TID with an outgoing-save guard denotes task→boot,
+    // rather than an unpinned task switch. Keep the terminal task's identity
+    // published until this incoming boot context proves the old Context was
+    // saved; otherwise a stale user trap could be dispatched as caller 0.
+    let pinned = hart_local::ready::selected_task_id_for(hart);
+    let switched_to_boot = pinned == 0
+        && hart_local::ready::outgoing_context_save_task_id_for(hart) != 0;
+    // RV64 reaches this callback only after `__switch` has saved every
+    // callee-save register and CSR of the outgoing Context. Release the
+    // ready-queue steal guard before publishing the incoming ownership.
+    hart_local::ready::complete_outgoing_context_save(hart);
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    context_handoff_selftest::observe_outgoing_save_completion(hart);
+    let selected = if pinned != 0 {
+        pinned
+    } else if switched_to_boot {
+        0
+    } else {
+        hart_local::ready::current_task_id_for(hart)
+    };
+    hart_local::ready::complete_selected_switch(hart, selected);
+    if switched_to_boot {
+        hart_local::ready::set_current_task_id(hart, 0);
+        hart_local::set_current_cell_context(0, 0);
+        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+        retirement_selftest::observe_heartbeat_boot_completion(hart);
+    }
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    context_handoff_selftest::observe_origin_ownership_release(hart);
+
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    log::info!(
+        "[selftest] SMP-RETIREMENT: stage=rv64-switch-boundary hart={} selected={} executing={}",
+        hart,
+        selected,
+        hart_local::ready::executing_task_id_for(hart),
+    );
+
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::hold_before_switch_completion(hart);
+    smp::complete_retirement_switch(hart);
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::observe_switch_completion(hart);
+}
+
 #[cfg(any(
     target_arch = "riscv64",
     target_arch = "riscv32",
@@ -649,151 +747,89 @@ pub extern "Rust" fn vi_timer_tick() {
 ))]
 const _: crate::hal::TimerTick = vi_timer_tick;
 
-/// Force-release every global kernel Spinlock during fault teardown.
-///
-/// A Cell holds no kernel lock legitimately, so on a genuine U-mode Cell fault
-/// these are all free.  The real hazard is a kernel `panic!`/`expect()` raised
-/// *while servicing a Cell's syscall* (`CURRENT_CELL_ID != 0`) that was holding
-/// one of these — without releasing it the lock stays held forever and the next
-/// acquirer deadlocks, hanging the whole kernel.
-///
-/// # Safety
-/// Single-hart kernel, called only from the fault/panic teardown path with
-/// interrupts disabled.  No other context can hold these; force-unlocking an
-/// already-free Spinlock is a no-op.
-///
-/// NOTE: the linked_list_allocator heap lock is intentionally not covered (no
-/// external force-unlock API); a panic *inside* the allocator implies heap
-/// corruption — a reboot-class fault, not a recoverable Cell kill.
-unsafe fn force_unlock_all_kernel_locks() {
-    SCHEDULER.force_unlock();
-    crate::memory::frame::FRAME_ALLOCATOR.force_unlock();
-    crate::cell::registry::CELL_REGISTRY.force_unlock();
-    crate::cell::cap_registry::CAP_TABLE.force_unlock();
-    crate::memory::cell_quota::force_unlock_locks();
-    crate::memory::pin::force_unlock();
-    crate::memory::rt_heap::force_unlock_locks();
-    crate::cell::hotswap::force_unlock_locks();
-    crate::cell::service_registry::force_unlock_locks();
-    // virtio_blk force-unlock removed (G2 loader redesign phase 06): the kernel no
-    // longer owns the block device — the virtio-blk Driver Cell does.
-    crate::task::drivers::input_irq_ack::force_unlock_locks();
-    crate::task::drivers::mmc::force_unlock_locks();
-    crate::resource_registry::force_unlock_locks();
-    crate::measurement_log::force_unlock_locks();
-    crate::policy::force_unlock_locks();
-}
 
-/// Terminate the currently-executing Cell due to a hardware fault.
+/// Terminate the currently-executing Cell due to a trap-proven U-mode fault.
 ///
-/// Called from the trap handler when an unrecoverable exception fires in a
-/// Cell context (`scheduler::CURRENT_CELL_ID != 0`).  The Cell moves to the
-/// zombie list; the kernel continues running the next ready task.
+/// The trap half only snapshots fixed scalar state into the calling hart's
+/// deferred-fault record, then changes allocation attribution to Cell 0.  It
+/// must not clone `Task::name`, format a diagnostic, or mutate scheduler
+/// collections while the exhausted victim Cell remains attributed.  The
+/// scheduler half consumes the record under its normal lock and funnels the
+/// matching Cell generation through `exit_task`.
 ///
 /// # Arguments
-/// Named for the role each value plays, not for one architecture's register, because
-/// every HAL trap handler funnels into here. Previously these were `scause`/`sepc`/
-/// `stval`, which read as RISC-V CSRs on every architecture and did mislead an ARM64
-/// investigation into decoding an `ESR_EL2` value as a RISC-V cause code.
 ///
-/// * `cause` — trap syndrome: `scause` on RISC-V, `ESR_EL2` on AArch64. Also carries
-///   `scheduler`'s `WATCHDOG_FAULT_CAUSE` sentinel for a watchdog kill, which is not a
-///   hardware trap at all.
-/// * `pc` — faulting instruction address: `sepc` on RISC-V, `ELR_EL2` on AArch64.
-/// * `fault_addr` — faulting data/instruction address: `stval` on RISC-V, `FAR_EL2`
-///   on AArch64. Zero when the trap carries no address.
+/// Named for the role each value plays, not for one architecture's register:
+/// `cause` is the trap syndrome, `pc` the faulting instruction address, and
+/// `fault_addr` the faulting data/instruction address (zero if unavailable).
 ///
-/// # Safety
-/// Must be called from trap context with S-mode interrupts disabled.
-/// Force-unlocks ALL global kernel locks first (see
-/// [`force_unlock_all_kernel_locks`]) so a panic that fired while holding one
-/// (e.g. mid-syscall OOM during a scheduler/allocator insert) cannot deadlock
-/// the kernel after we resume the next task.
-pub fn terminate_current_cell_on_fault(cause: usize, pc: usize, fault_addr: usize) {
-    let cell_id_raw = hart_local::current_cell_id();
-
-    // Name the victim. A bare cell ID cannot be resolved after the fact — IDs are
-    // handed out by a running counter, not by boot order — so a CI log leaves the
-    // reader guessing which cell died. The name comes from the running task's TCB
-    // (`Task::name`), which is the only populated source: `CellRegistry` looks like
-    // the natural place, but nothing in the tree ever calls its `register`.
-    //
-    // MUST use try_lock, and MUST run before force_unlock_all_kernel_locks(): a
-    // plain lock() deadlocks when the fault interrupted the scheduler's own
-    // holder, and once the force-unlock has run, acquiring the lock no longer
-    // proves the map was not mid-mutation.
-    let faulting_tid = hart_local::ready::current_task_id_for(hart_local::current_hart_id());
-    let cell_name = SCHEDULER.try_lock().and_then(|sched| {
-        sched
-            .as_ref()
-            .and_then(|s| s.tasks.get(&faulting_tid))
-            .map(|task| task.name.clone())
-    });
-
-    // The `[fault] Cell` prefix is load-bearing: scripts/qemu-hypervisor-smoke.sh
-    // greps for it as its first fatal gate. Do not reword it.
-    log::error!(
-        "[fault] Cell {} (task {} '{}') terminated: cause={:#x} pc={:#x} addr={:#x}",
-        cell_id_raw,
-        faulting_tid,
-        cell_name.as_deref().unwrap_or("unknown"),
+/// `provenance` is an unforgeable capability minted only after an architecture
+/// trap handler has proved the interrupted context was U-mode and has a
+/// non-zero Cell attribution. Kernel panic code has no equivalent capability
+/// and cannot enter this scheduling path.
+///
+/// Recoverable Cell faults never force-release kernel locks.  On SMP, a lock
+/// held by another hart protects live mutable state; clearing it from this hart
+/// would allow concurrent access through the other hart's still-live guard.
+pub fn terminate_current_cell_on_fault(
+    provenance: hart_local::TrapProvenUserFault,
+    cause: usize,
+    pc: usize,
+    fault_addr: usize,
+) {
+    let hart = hart_local::current_hart_id();
+    let fault = hart_local::DeferredFault::from_user_trap(
+        provenance,
+        hart_local::ready::current_task_id_for(hart),
+        hart_local::current_cell_id(),
+        hart_local::current_cell_generation(),
         cause,
         pc,
-        fault_addr
-    );
-    crate::audit::log_event(
-        crate::audit::AuditEvent::CellFault,
-        &crate::audit::encode_u32x2(cell_id_raw as u32, cause as u32),
+        fault_addr,
     );
 
-    // The panic/fault may have fired while kernel code (servicing this Cell's
-    // syscall) held one or more global locks.  Release ALL of them before we
-    // re-acquire anything, else the next acquirer deadlocks forever.
-    // SAFETY: single-hart kernel, interrupts disabled here; no other context
-    // holds these, and force-unlocking a free lock is a no-op.
-    unsafe {
-        force_unlock_all_kernel_locks();
-    }
-
-    let task_id = if faulting_tid > 0 {
-        Some(faulting_tid)
-    } else {
-        None
-    };
-
-    if let Some(tid) = task_id {
-        if let Some(sched) = SCHEDULER.lock().as_mut() {
-            // usize::MAX = fault reason; also wakes any Wait(tid) waiters.
-            sched.exit_task(tid, usize::MAX);
-        }
-        // Deregister quota and MMIO regions for the killed Cell.
-        let cell_id = types::CellId(cell_id_raw as u64);
-        crate::memory::cell_quota::deregister(cell_id);
-        crate::resource_registry::release_for(cell_id);
-        // Reap grant/registered-grant pages for this cell. SCHEDULER lock is
-        // already released (the block above exited), so the
-        // FRAME_ALLOCATOR → KERNEL_ROOT path inside reap_grants_for_task is safe.
-        // (free_grant_pages takes FRAME_ALLOCATOR first and holds it across
-        // unmap_page/map_page, which take KERNEL_ROOT — not the reverse.)
-        crate::task::syscall::reap_grants_for_task(tid);
-        // Reap any VMs (guest RAM + Stage-2 tables) owned by this cell.
-        crate::hypervisor::registry::reap_vms_for_task(tid);
-    }
-
-    // If the faulting cell owned the fast-IPC VFS handler, null the pointer so
-    // future call_vfs() invocations don't jump into dead/replaced cell state.
-    crate::fast_ipc::clear_vfs_if_cell(cell_id_raw);
-
-    // Reset cell ID to 0 (kernel context) so subsequent allocations are not
-    // charged to the now-dead Cell.
+    // This fixed record is the only fault-path publication before the allocator
+    // is uncharged from the victim.  Do not move logging, task lookup, or
+    // scheduler collection work above this attribution handoff.
+    hart_local::defer_fault(fault);
     hart_local::set_current_cell_id(0);
+
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::observe_fault_deferred_record_commit(fault);
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::observe_fault_kernel_attribution(fault.cell_id);
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    retirement_selftest::observe_fault_funnel_entry(fault.tid);
+
 
     // Switch to the next ready task.  Does not return to the faulting Cell.
     yield_cpu();
 }
 
+/// Mint the capability at an architecture trap boundary that has already
+/// proved its interrupted context was U-mode.
+#[inline(always)]
+pub(crate) fn terminate_current_cell_on_user_trap_fault(
+    cause: usize,
+    pc: usize,
+    fault_addr: usize,
+) {
+    terminate_current_cell_on_fault(
+        hart_local::TrapProvenUserFault::new(),
+        cause,
+        pc,
+        fault_addr,
+    );
+}
+
 /// Core scheduling logic: picks next task and performs switch OUTSIDE of the lock.
 pub fn yield_cpu() {
+    // RV64 cooperative yields can enter with SIE set (not only from trap
+    // context). Capture and clear it before any scheduler lock or publication;
+    // masking only at `__switch` leaves current/selected scheduler state interruptible.
+    #[cfg(target_arch = "riscv64")]
+    let outgoing_sstatus = crate::hal::arch::save_and_disable_interrupts();
+
     #[cfg(feature = "test-hooks")]
     crate::loader::atomic_publication_tests::observe_schedule_attempt();
 
@@ -812,6 +848,40 @@ pub fn yield_cpu() {
     // (FRAME_ALLOCATOR / KERNEL_ROOT) never run while SCHEDULER is held. This is
     // what frees a dead cell's stacks — without it every cell death leaked them
     // (e.g. the shell-supervisor restart loop would grow until OOM).
+
+    // Trap faults and clean exits publish only fixed records. Retirement starts
+    // here, in the scheduler's ordinary masked/locked phase, after attribution
+    // is already kernel-owned. This is deliberately before zombie reaping and
+    // task selection so every terminal path participates in the same quiescence
+    // lifecycle.
+    let deferred_retired = match hart_local::take_deferred_retirement() {
+        Some(hart_local::DeferredRetirement::Fault(fault)) => {
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            retirement_selftest::observe_fault_scheduler_funnel_attempt(fault.tid);
+            let mut guard = SCHEDULER.lock();
+            let scheduler = guard
+                .as_mut()
+                .expect("[fault] deferred handoff before scheduler initialization");
+            scheduler.retire_deferred_fault(fault);
+            Some(fault.tid)
+        }
+        Some(hart_local::DeferredRetirement::Exit(exit)) => {
+            let mut guard = SCHEDULER.lock();
+            let scheduler = guard
+                .as_mut()
+                .expect("[task] deferred Exit before scheduler initialization");
+            scheduler.retire_deferred_exit(exit);
+            None
+        }
+        None => None,
+    };
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if let Some(tid) = deferred_retired {
+        retirement_selftest::observe_fault_scheduler_retirement(tid);
+        retirement_selftest::hold_after_fault_scheduler_retirement(tid);
+    }
+    #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
+    let _ = deferred_retired;
     let reaped = {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
             sched.take_reapable_zombies()
@@ -837,9 +907,8 @@ pub fn yield_cpu() {
         let _ = queue.release(slot);
     }
 
-    // Reap grant pages for watchdog-killed tasks. The watchdog enqueues task IDs
-    // here because free_grant_pages (FRAME_ALLOCATOR → KERNEL_ROOT) must not run
-    // while SCHEDULER is held — same pattern as take_reapable_zombies above.
+    // The common retirement funnel owns every task-local release. Worker exits
+    // contribute one tid; a root contributes its entire quiesced generation.
     let grant_tids = {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
             sched.take_pending_grant_reap()
@@ -848,25 +917,88 @@ pub fn yield_cpu() {
         }
     };
     for tid in grant_tids {
-        crate::resource_registry::release_bdfs_for(tid);
-        // IOFENCE/IOTLB flush must complete before frames are returned to the allocator.
-        crate::task::drivers::iommu::cleanup_cell(tid as u64);
-        // The flush above is the acknowledgement the pin quarantine waits on.
-        // Running it before the reaper is fine: the pins are dropped here, so
-        // the reaper finds nothing quarantined and frees the frames itself.
-        crate::task::syscall::release_acked_frames(tid);
-        crate::task::syscall::reap_grants_for_task(tid);
-        crate::hypervisor::registry::reap_vms_for_task(tid);
+        reap_retired_task_resources(tid);
     }
 
-    let vfs_lease_tids = {
+    let root_retirements = {
         if let Some(sched) = SCHEDULER.lock().as_mut() {
-            sched.take_pending_vfs_lease_release()
+            sched.take_quiescent_root_retirements()
         } else {
             alloc::vec::Vec::new()
         }
     };
-    for tid in vfs_lease_tids {
+    for retirement in root_retirements {
+        for tid in retirement.member_tids.iter().copied() {
+            reap_retired_task_resources(tid);
+            crate::task::syscall::release_vfs_holder_leases(tid);
+        }
+        // `take_quiescent_root_retirements` removed these exact zombies while
+        // holding SCHEDULER after all remote switch proofs completed. Drop their
+        // stacks before exposing the CellId or quota to a new generation.
+        drop(retirement.zombies);
+        crate::cell::cap_registry::CAP_TABLE
+            .lock()
+            .revoke_all_for(types::CellId(retirement.owner.cell_id));
+        crate::fast_ipc::clear_vfs_if_cell(retirement.owner.cell_id as usize);
+        crate::resource_registry::release_for(types::CellId(retirement.owner.cell_id));
+        // The quota row is the admission gate for `reserve_next`. Keep it
+        // registered until every generation-scoped resource is gone and the
+        // retiring owner slot has been released; otherwise another hart can
+        // reserve this CellId while the scheduler still identifies it as
+        // `Retiring`.
+        let owner_slot_released = SCHEDULER
+            .lock()
+            .as_mut()
+            .is_some_and(|sched| sched.finish_root_retirement(retirement.owner));
+        if owner_slot_released {
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            log::info!(
+                "[selftest] SMP-RETIREMENT: stage=owner-slot-released-before-quota cell={} generation={} root={}",
+                retirement.owner.cell_id,
+                retirement.owner.generation,
+                retirement.owner.root_tid,
+            );
+            crate::memory::cell_quota::deregister(types::CellId(retirement.owner.cell_id));
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            {
+                log::info!(
+                    "[selftest] SMP-RETIREMENT: stage=quota-deregistered-after-owner-slot cell={} generation={} root={}",
+                    retirement.owner.cell_id,
+                    retirement.owner.generation,
+                    retirement.owner.root_tid,
+                );
+                retirement_selftest::observe_cell_id_release(retirement.owner);
+            }
+        } else {
+            log::error!(
+                "[task] root retirement retained CellId quota: owner slot did not match retiring owner cell={} generation={} root={}",
+                retirement.owner.cell_id,
+                retirement.owner.generation,
+                retirement.owner.root_tid,
+            );
+        }
+
+    }
+
+    let vfs_context_releases = {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.take_pending_vfs_context_release()
+        } else {
+            alloc::vec::Vec::new()
+        }
+    };
+    for release in vfs_context_releases {
+        crate::task::syscall::release_vfs_context_lease(release);
+    }
+
+    let vfs_holder_tids = {
+        if let Some(sched) = SCHEDULER.lock().as_mut() {
+            sched.take_pending_vfs_holder_release()
+        } else {
+            alloc::vec::Vec::new()
+        }
+    };
+    for tid in vfs_holder_tids {
         crate::task::syscall::release_vfs_holder_leases(tid);
     }
 
@@ -886,6 +1018,31 @@ pub fn yield_cpu() {
     } else {
         None
     };
+    // The scheduler lock is now released but the terminal Context is still
+    // executing. Exercise the real trap admission boundary in this exact
+    // pre-switch interval; the regression proves a heartbeat victim cannot
+    // become caller 0 before boot owns the incoming Context.
+    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    if let Some((_, next)) = switch_info {
+        if next.is_null() {
+            retirement_selftest::observe_heartbeat_terminal_current();
+        }
+    }
+    if switch_info.is_none() {
+        // Selection is normally published only with a concrete switch tuple.
+        // Clear defensively on the no-switch/abort path so a stale pin cannot
+        // retain a retired Context indefinitely.
+        hart_local::ready::abort_selected_switch(hart_id);
+    }
+    #[cfg(target_arch = "riscv64")]
+    if switch_info.is_none() {
+        // No incoming Context will restore status for us. Preserve the caller's
+        // exact SIE state instead of unconditionally enabling interrupts.
+        unsafe {
+            crate::hal::arch::restore_sstatus(outgoing_sstatus);
+        }
+    }
+
 
     #[cfg(target_arch = "x86_64")]
     if switch_info.is_none() {
@@ -897,17 +1054,30 @@ pub fn yield_cpu() {
     if let Some((curr, next)) = switch_info {
         unsafe {
             let final_curr = if curr.is_null() {
-                &raw mut BOOT_CONTEXT as *mut _
+                #[cfg(target_arch = "riscv64")]
+                {
+                    &raw mut BOOT_CONTEXTS[hart_id]
+                }
+                #[cfg(not(target_arch = "riscv64"))]
+                {
+                    &raw mut BOOT_CONTEXT
+                }
             } else {
                 curr
             };
 
             let final_next = if next.is_null() {
-                &raw const BOOT_CONTEXT as *const _
+                #[cfg(target_arch = "riscv64")]
+                {
+                    &raw const BOOT_CONTEXTS[hart_id]
+                }
+                #[cfg(not(target_arch = "riscv64"))]
+                {
+                    &raw const BOOT_CONTEXT
+                }
             } else {
                 next
             };
-
             if !next.is_null() {
                 // Set TSS.rsp0 / KERNEL_GS_BASE for the next task's syscall path.
                 // On x86_64 use kernel_trap_sp (= kstack_top - TRAP_FRAME_SIZE, fixed
@@ -930,6 +1100,16 @@ pub fn yield_cpu() {
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::arch::set_kernel_stack(next_ref.kernel_trap_sp as usize);
             }
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            retirement_selftest::hold_after_selection_before_switch(hart_id);
+
+            #[cfg(target_arch = "riscv64")]
+            crate::hal::arch::Context::switch_with_saved_sstatus(
+                final_curr,
+                final_next,
+                outgoing_sstatus,
+            );
+            #[cfg(not(target_arch = "riscv64"))]
             crate::hal::arch::Context::switch(final_curr, final_next);
 
             // Execution resumes here when this context is switched BACK to.
@@ -940,6 +1120,19 @@ pub fn yield_cpu() {
             core::arch::asm!("sti", options(nomem, nostack));
         }
     }
+}
+
+/// Reap state keyed by a concrete task TID. This is intentionally shared by
+/// worker and root retirement so a root cannot leave a member's grant, pin,
+/// IOMMU domain, BDF, VM, or VFS lease behind for a reused CellId.
+fn reap_retired_task_resources(tid: usize) {
+    crate::resource_registry::release_bdfs_for(tid);
+    // IOFENCE/IOTLB completion is the acknowledgement required before pinned
+    // frames may leave quarantine.
+    crate::task::drivers::iommu::cleanup_cell(tid as u64);
+    crate::task::syscall::release_acked_frames(tid);
+    crate::task::syscall::reap_grants_for_task(tid);
+    crate::hypervisor::registry::reap_vms_for_task(tid);
 }
 
 /// Allocate a stack pair and register a task. `Err` on OOM — never a panic: this
@@ -1352,6 +1545,10 @@ pub fn ipc_send(
             // requeues Running tasks), permanently deadlocking the caller.
             return Ok(0);
         } else {
+            // Publish the Context handoff before `Sending` makes this task
+            // discoverable by a peer's `ipc_recv`. The peer may wake and queue
+            // us while this syscall still runs on the old stack.
+            arm_ipc_block_handoff(caller_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
                 // A prior dead-peer wake leaves an error in reply_value. Each new
                 // blocking send owns its resume result, so stale state must not
@@ -1466,6 +1663,10 @@ pub fn ipc_recv(
             }
             return Ok(sender_id);
         } else {
+            // `Recv` is externally wakeable as soon as it is published. Arm
+            // first so an immediate sender cannot select this still-running
+            // Context on another hart before the syscall yields.
+            arm_ipc_block_handoff(caller_id);
             if let Some(caller) = sched.tasks.get_mut(&caller_id) {
                 caller.state = TaskState::Recv {
                     mask,

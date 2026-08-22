@@ -4,8 +4,9 @@
 
 pub use hal_arch_trait::ViTrapFrame;
 use hal_arch_trait::{
-    vi_current_cell_id, vi_handle_riscv_external_irq, vi_riscv_plic_context, vi_terminate_on_fault,
-    vi_timer_tick, vi_tlb_shootdown_test_fault, ViCell_syscall_dispatch,
+    vi_current_cell_id, vi_handle_riscv_external_irq, vi_riscv_plic_context,
+    vi_terminate_on_user_trap_fault, vi_timer_tick, vi_tlb_shootdown_test_fault,
+    ViCell_syscall_dispatch,
 };
 
 // External assembly functions
@@ -14,6 +15,7 @@ extern "C" {
     fn __trap_entry_hart0();
     fn __trap_entry_hart1();
     pub fn vi_set_sscratch(kernel_stack_top: usize);
+
 }
 
 /// Initialize trap handling by setting stvec
@@ -73,7 +75,9 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 // Cleared here before yield so it does not re-fire immediately.
                 // SAFETY: csrci on sip.SSIP is permitted from S-mode (priv spec §4.1.3).
                 unsafe { core::arch::asm!("csrci sip, 0x2") };
-                // Reuse the timer tick path: just run the scheduler.
+                // Trap entry only proves the interrupted context entered the
+                // kernel. The incoming side of Context::switch publishes the
+                // completion epoch after the outgoing stack is no longer live.
                 unsafe {
                     vi_timer_tick();
                 }
@@ -128,20 +132,26 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                 // but the CPU is in S-mode.  Misclassifying that as a Cell fault
                 // silently kills the Cell and hides the kernel bug.
                 //
-                // SAFETY: vi_current_cell_id and vi_terminate_on_fault are defined
-                // in kernel::task and linked via extern "Rust".
+                // SAFETY: vi_current_cell_id and
+                // vi_terminate_on_user_trap_fault are defined in kernel::task
+                // and linked via extern "Rust".
                 if code == 15 && unsafe { vi_tlb_shootdown_test_fault(frame) } {
                     return;
                 }
                 let from_user = (frame.sstatus & 0x100) == 0; // SPP bit: 0=U-mode
                 let cell_id = unsafe { vi_current_cell_id() };
                 if from_user && cell_id != 0 {
-                    // Genuine U-mode Cell fault — terminate the Cell, let kernel continue.
+                    // This branch is the proof carried by the uniquely named
+                    // trap-fault ABI: only an interrupted U-mode Cell may
+                    // publish a deferred retirement record.  A kernel panic
+                    // can retain cell attribution while it holds SCHEDULER,
+                    // so it must never invoke this entry point.
                     unsafe {
-                        vi_terminate_on_fault(code, frame.sepc, frame.stval);
+                        vi_terminate_on_user_trap_fault(code, frame.sepc, frame.stval);
                     }
-                    // vi_terminate_on_fault calls yield_cpu() which switches away.
-                    // We should not reach here, but return safely if we do.
+                    // The callback calls yield_cpu() and switches away from
+                    // the faulting Cell. We should not reach here, but return
+                    // safely if we do.
                 } else {
                     // True kernel fault (S-mode) or U-mode fault without a registered Cell.
                     panic!(

@@ -46,6 +46,23 @@ fn dummy_raw_waker() -> RawWaker {
 static DUMMY_VTABLE: RawWakerVTable =
     RawWakerVTable::new(|_| dummy_raw_waker(), |_| {}, |_| {}, |_| {});
 
+/// Publish boot ownership at the task→boot boundary on targets without an
+/// incoming-side completion hook.
+///
+/// RV64 leaves the outgoing task and Cell visible until
+/// `vi_context_switch_complete` runs on the boot stack after the raw Context
+/// save. RV32, AArch64, and x86_64 cannot make that post-switch publication, so
+/// they must enter boot with the scheduler identity already cleared.
+#[inline(always)]
+fn prepare_task_to_boot_switch(hart_id: usize) {
+    use super::hart_local::ready as rl;
+
+    if rl::CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH {
+        rl::set_current_task_id(hart_id, 0);
+        super::hart_local::set_current_cell_context(0, 0);
+    }
+}
+
 /// CPU-monopoly watchdog budget, in 10 ms scheduler ticks. A task may run this
 /// many consecutive ticks WITHOUT voluntarily blocking before it is deemed a
 /// runaway (infinite loop / livelock) and terminated. 500 ticks = 5 s of
@@ -78,6 +95,46 @@ const WATCHDOG_FAULT_CAUSE: u32 = 0x0000_DEAD;
 static DEATH_SUBSCRIBERS: crate::sync::Spinlock<BTreeMap<usize, Vec<usize>>> =
     crate::sync::Spinlock::new(BTreeMap::new());
 
+/// Scheduler-owned lifetime record for a bounded reusable CellId slot.
+///
+/// This is intentionally an array, not a task-table lookup: CellIds are quota
+/// slots and task IDs are monotonic transport identities.
+#[derive(Clone, Copy)]
+enum CellOwnerSlot {
+    Empty,
+    Live(api::cell_owner::CellOwner),
+    Retiring(api::cell_owner::CellOwner),
+}
+
+#[derive(Clone, Copy)]
+struct CellOwnerWatch {
+    watched_root_tid: usize,
+    watcher_tid: usize,
+}
+
+pub(crate) struct RootRetirement {
+    pub owner: api::cell_owner::CellOwner,
+    pub member_tids: Vec<usize>,
+    /// Matching zombies move with their generation's resource release, rather
+    /// than waiting for a later global zombie sweep after quota is reusable.
+    pub zombies: Vec<Box<Task>>,
+    requested_switch_completion: [usize; super::smp::MAX_HARTS],
+}
+
+/// Exact VFS lease release deferred after a holder abandons its request context.
+///
+/// The key remains holder+owner+generation so only that request can release its
+/// lease or owner-dead quarantined frames.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VfsLeaseRelease {
+    pub holder_tid: usize,
+    pub grant_owner: usize,
+    pub request_generation: u64,
+}
+
+const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
+
+
 /// Register `watcher` to be notified when `watched` exits or faults.
 pub fn subscribe_death(watched: usize, watcher: usize) {
     DEATH_SUBSCRIBERS
@@ -96,6 +153,12 @@ pub fn subscribe_death(watched: usize, watcher: usize) {
 pub struct Scheduler {
     pub tasks: BTreeMap<usize, Box<Task>>,
     pub zombies: Vec<Box<Task>>,
+    /// Fixed CellId/generation → root-TID authority. A slot leaves `Live`
+    /// before any root resources are released or its CellId is reusable.
+    cell_owners: [CellOwnerSlot; crate::memory::cell_quota::MAX_CELLS],
+    /// Token-indexed VFS-only root-death subscriptions.
+    cell_owner_watches: BTreeMap<u64, CellOwnerWatch>,
+    next_cell_owner_watch: u64,
     pub next_task_id: usize,
     /// Task IDs whose grant pages must be reaped outside the SCHEDULER lock.
     ///
@@ -103,9 +166,19 @@ pub struct Scheduler {
     /// because free_grant_pages acquires KERNEL_ROOT and FRAME_ALLOCATOR while the
     /// watchdog runs inside SCHEDULER — inverting the documented lock order.
     /// yield_cpu() drains this list after dropping SCHEDULER, matching the zombie-reaper pattern.
+    /// Task IDs whose task-local resources must be reaped outside SCHEDULER.
+    /// Root-member IDs remain in `pending_root_retirements` until every hart
+    /// has completed a switch away from the retiring generation.
     pub(super) pending_grant_reap: Vec<usize>,
-    /// VFS per-request leases held by dead tasks, released outside SCHEDULER.
-    pub(super) pending_vfs_lease_release: Vec<usize>,
+    /// Root retirements awaiting completed context switches before CellId-wide
+    /// resource release and owner-slot reuse.
+    pending_root_retirements: Vec<RootRetirement>,
+    /// Dead VFS holder IDs. Every lease held by a dead task releases only
+    /// after its saved context is no longer executing on any hart.
+    pub(super) pending_vfs_holder_release: Vec<usize>,
+    /// Exact VFS request contexts released at a public boundary. These records
+    /// retain holder, owner, and generation, unlike the holder-death queue.
+    pending_vfs_context_release: Vec<VfsLeaseRelease>,
     /// TIMER reservations owned by dead tasks, released outside SCHEDULER.
     pending_completion_release: Vec<(
         usize,
@@ -126,11 +199,159 @@ impl Scheduler {
         Self {
             tasks: BTreeMap::new(),
             zombies: Vec::new(),
+            cell_owners: [CellOwnerSlot::Empty; crate::memory::cell_quota::MAX_CELLS],
+            cell_owner_watches: BTreeMap::new(),
+            next_cell_owner_watch: 1,
             next_task_id: 1,
             pending_grant_reap: Vec::new(),
-            pending_vfs_lease_release: Vec::new(),
+            pending_root_retirements: Vec::new(),
+            pending_vfs_holder_release: Vec::new(),
+            pending_vfs_context_release: Vec::new(),
             pending_completion_release: Vec::new(),
             last_global_sweep_tick: 0,
+        }
+    }
+
+    /// Return the root endpoint only while this exact Cell generation is live.
+    pub fn resolve_live_cell_owner(
+        &self,
+        cell_id: CellId,
+        generation: u64,
+    ) -> Option<api::cell_owner::CellOwner> {
+        let slot = self.cell_owners.get(cell_id.0 as usize)?;
+        let CellOwnerSlot::Live(owner) = slot else {
+            return None;
+        };
+        if owner.cell_id != cell_id.0 || owner.generation != generation || !owner.is_live() {
+            return None;
+        }
+        let root = self.tasks.get(&(owner.root_tid as usize))?;
+        (root.id as u64 == owner.root_tid
+            && root.root_tid as u64 == owner.root_tid
+            && root.cell_id.0 == owner.cell_id
+            && root.cell_generation == owner.generation)
+            .then_some(*owner)
+    }
+
+    /// Publish the owner slot during the launch commit, after task initialization
+    /// and before the task is made runnable.
+    pub(crate) fn publish_live_cell_owner(&mut self, owner: api::cell_owner::CellOwner) -> bool {
+        let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) else {
+            return false;
+        };
+        if !owner.is_live() || !matches!(slot, CellOwnerSlot::Empty) {
+            return false;
+        }
+        *slot = CellOwnerSlot::Live(owner);
+        true
+    }
+
+    pub(crate) fn cell_owner_slot_is_empty(&self, cell_id: CellId) -> bool {
+        self.cell_owners
+            .get(cell_id.0 as usize)
+            .is_some_and(|slot| matches!(slot, CellOwnerSlot::Empty))
+    }
+
+    pub(crate) fn live_cell_owner_for_id(
+        &self,
+        cell_id: CellId,
+    ) -> Option<api::cell_owner::CellOwner> {
+        let CellOwnerSlot::Live(owner) = self.cell_owners.get(cell_id.0 as usize)? else {
+            return None;
+        };
+        self.resolve_live_cell_owner(cell_id, owner.generation)
+    }
+
+    fn begin_root_retirement(&mut self, owner: api::cell_owner::CellOwner) {
+        if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
+            *slot = CellOwnerSlot::Retiring(owner);
+        }
+    }
+    /// Withdraw a retiring owner slot at the post-quiescence release boundary.
+    ///
+    /// The result is the admission invariant: callers MUST retain the matching
+    /// CellId quota unless this exact `Retiring(owner)` slot became `Empty`.
+    pub(crate) fn finish_root_retirement(&mut self, owner: api::cell_owner::CellOwner) -> bool {
+        let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) else {
+            return false;
+        };
+        if matches!(slot, CellOwnerSlot::Retiring(current) if *current == owner) {
+            *slot = CellOwnerSlot::Empty;
+            true
+        } else {
+            false
+        }
+    }
+
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: api::cell_owner::CellOwner) {
+        if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
+            if matches!(slot, CellOwnerSlot::Live(current) if *current == owner) {
+                *slot = CellOwnerSlot::Empty;
+            }
+        }
+    }
+
+    /// Snapshot every live or zombie task that belongs to `owner`'s exact
+    /// generation. A zombie remains a member because its saved context can be
+    /// the one still executing on another hart.
+    fn root_generation_member_tids(&self, owner: api::cell_owner::CellOwner) -> Vec<usize> {
+        self.tasks
+            .values()
+            .chain(self.zombies.iter())
+            .filter_map(|task| {
+                (task.cell_id.0 == owner.cell_id
+                    && task.cell_generation == owner.generation
+                    && task.root_tid as u64 == owner.root_tid)
+                    .then_some(task.id)
+            })
+            .collect()
+    }
+
+    /// Take one positive token representable by every syscall return ABI.
+    fn take_cell_owner_watch_token(&mut self) -> Option<u64> {
+        let token = self.next_cell_owner_watch;
+        if token == 0 || token > MAX_RETURNABLE_OWNER_WATCH_TOKEN {
+            return None;
+        }
+        // Never expose a token the syscall return ABI cannot carry. Saturating
+        // the sequence at zero fails closed after the final valid token instead
+        // of wrapping into a live token.
+        self.next_cell_owner_watch = token.checked_add(1).unwrap_or(0);
+        Some(token)
+    }
+
+    /// Atomically attest the VFS receive principal and install an exact root
+    /// death subscription. The caller holds no authority over other cells.
+    pub fn watch_live_cell_owner(
+        &mut self,
+        watcher_tid: usize,
+        cell_id: CellId,
+        generation: u64,
+    ) -> Option<(api::cell_owner::CellOwner, u64)> {
+        let watcher = self.tasks.get(&watcher_tid)?;
+        if !crate::fast_ipc::is_registered_vfs_cell(watcher.cell_id.0 as usize)
+            || watcher.current_caller_cell_id != cell_id.0
+            || watcher.current_caller_cell_generation != generation
+        {
+            return None;
+        }
+        let owner = self.resolve_live_cell_owner(cell_id, generation)?;
+        let token = self.take_cell_owner_watch_token()?;
+        self.cell_owner_watches.insert(
+            token,
+            CellOwnerWatch { watched_root_tid: owner.root_tid as usize, watcher_tid },
+        );
+        Some((owner, token))
+    }
+
+    pub fn cancel_cell_owner_watch(&mut self, watcher_tid: usize, token: u64) {
+        if self
+            .cell_owner_watches
+            .get(&token)
+            .is_some_and(|watch| watch.watcher_tid == watcher_tid)
+        {
+            self.cell_owner_watches.remove(&token);
         }
     }
 
@@ -138,7 +359,7 @@ impl Scheduler {
     pub(crate) fn publication_snapshot_counters(&self) -> (usize, usize, usize, usize) {
         (
             self.pending_grant_reap.len(),
-            self.pending_vfs_lease_release.len(),
+            self.pending_vfs_holder_release.len(),
             self.pending_completion_release.len(),
             self.last_global_sweep_tick,
         )
@@ -340,31 +561,7 @@ impl Scheduler {
         id
     }
 
-    /// Spawn an additional thread inside an existing cell.
-    ///
-    /// Bounded per cell twice over, because `Syscall::Spawn` is gated only by the
-    /// syscall allowlist, not by `SpawnCap`:
-    ///
-    /// 1. [`MAX_THREADS_PER_CELL`] caps live tasks sharing a `CellId`, which is the
-    ///    fragmentation bound — each thread wants two contiguous configured
-    ///    stack extents plus guards, and contiguity is what runs out first.
-    /// 2. The stack is charged to the cell's memory quota, which is the *visibility*
-    ///    bound — without it a cell could grow its real footprint while its
-    ///    reported usage never moved.
-    ///
-    /// Deliberately NOT gated on `SpawnCap`: a thread is the same principal as the
-    /// cell that asked for it (same `CellId`, `CapSet`, allowlist and PKU domain),
-    /// so requiring the capability to create *another cell* as the price of
-    /// intra-cell concurrency would hand every worker-thread user a far stronger
-    /// authority than it needs. Denying thread creation outright is expressible
-    /// today by omitting `Spawn` from the cell's syscall allowlist.
-    ///
-    /// # Errors
-    /// - `OutOfMemory` — the cell is at its thread cap, its memory quota cannot
-    ///   absorb another stack, or no contiguous run is available. All three are
-    ///   recoverable refusals the caller survives; none is a fault.
-    /// - Whatever [`crate::task::stack::Stack::new_kernel`] or
-    ///   [`crate::task::stack::Stack::new_user`] returns otherwise.
+    /// Spawn a thread only after resolving the Cell's live root record.
     pub fn spawn_thread(
         &mut self,
         name: &str,
@@ -373,7 +570,21 @@ impl Scheduler {
         entry: usize,
         arg: usize,
     ) -> Result<usize, ViError> {
-        let live = self.tasks.values().filter(|t| t.cell_id == cell_id).count();
+        let owner = self
+            .cell_owners
+            .get(cell_id.0 as usize)
+            .and_then(|slot| match slot {
+                CellOwnerSlot::Live(owner) => {
+                    self.resolve_live_cell_owner(cell_id, owner.generation)
+                }
+                _ => None,
+            })
+            .ok_or(ViError::PermissionDenied)?;
+        let live = self
+            .tasks
+            .values()
+            .filter(|task| task.cell_id == cell_id && task.cell_generation == owner.generation)
+            .count();
         if live >= MAX_THREADS_PER_CELL {
             log::warn!(
                 "[sched] cell {:?} at thread cap ({}) — refusing spawn_thread",
@@ -389,14 +600,8 @@ impl Scheduler {
 
         let mut task = Box::new(Task::new(self.next_task_id, cell_id, name, allowed_drivers));
         task.state = TaskState::Ready;
-        // A thread shares its cell's identity, so it must also share the epoch
-        // that identity is attested with; otherwise a service would see the
-        // thread as a different principal than the cell that spawned it and
-        // refuse it access to the cell's own state. `Task::new` mints a fresh
-        // epoch for a new cell; a thread discards it for its cell's.
-        if let Some(cell_task) = self.tasks.get(&(cell_id.0 as usize)) {
-            task.cell_generation = cell_task.cell_generation;
-        }
+        task.cell_generation = owner.generation;
+        task.root_tid = owner.root_tid as usize;
         let id = task.id;
 
         let kstack = crate::task::stack::Stack::new_kernel(crate::task::stack_pages_for(name))?;
@@ -469,6 +674,112 @@ impl Scheduler {
         Ok(id)
     }
 
+    /// Consume one trap-captured fault after the trap path has changed
+    /// allocation attribution to the kernel. The fixed record protects the
+    /// fault funnel from heap work; this scheduler-side operation may use the
+    /// ordinary retirement vectors and locks.
+    ///
+    /// A task ID alone is not sufficient because CellId slots are reusable. A
+    /// matching zombie is an idempotent terminal handoff: a selected Context
+    /// may fault after its root already moved the exact generation out of
+    /// `tasks`, but a mismatched generation remains a fatal integrity error.
+    pub fn retire_deferred_fault(&mut self, fault: super::hart_local::DeferredFault) {
+        assert!(
+            fault.is_trap_proven_user_fault(),
+            "[fault] deferred handoff lacks trap-proven U-mode origin"
+        );
+
+        let matches_fault = self.tasks.get(&fault.tid).is_some_and(|task| {
+            task.cell_id.0 as usize == fault.cell_id && task.cell_generation == fault.generation
+        });
+        if !matches_fault {
+            let already_retired = self.zombies.iter().any(|task| {
+                task.id == fault.tid
+                    && task.cell_id.0 as usize == fault.cell_id
+                    && task.cell_generation == fault.generation
+            });
+            if already_retired {
+                // A selected Context may take a deferred fault after its root
+                // already retired it. The matching zombie is terminal state,
+                // not an invalid cross-generation handoff.
+                return;
+            }
+            panic!(
+                "[fault] invalid deferred handoff: cell={} generation={} task={} cause={:#x} pc={:#x} addr={:#x}",
+                fault.cell_id,
+                fault.generation,
+                fault.tid,
+                fault.cause,
+                fault.pc,
+                fault.fault_addr,
+            );
+        }
+
+        // The `[fault] Cell` prefix is consumed by the QEMU smoke gate.  Keep
+        // diagnostics scalar-only: cloning `Task::name` in trap context can
+        // re-enter the exhausted Cell allocator.
+        log::error!(
+            "[fault] Cell {} (task {} generation {}) terminated: cause={:#x} pc={:#x} addr={:#x}",
+            fault.cell_id,
+            fault.tid,
+            fault.generation,
+            fault.cause,
+            fault.pc,
+            fault.fault_addr,
+        );
+        crate::audit::log_event(
+            crate::audit::AuditEvent::CellFault,
+            &crate::audit::encode_u32x2(fault.cell_id as u32, fault.cause as u32),
+        );
+        self.exit_task(fault.tid, usize::MAX);
+    }
+
+    /// Consume one clean `Exit` captured before the caller surrendered its Cell
+    /// allocation attribution.  The scheduler owns root classification, so a
+    /// worker remains task-local while a root enters the established quiescent
+    /// generation-retirement funnel.
+    pub fn retire_deferred_exit(&mut self, exit: super::hart_local::DeferredExit) {
+        let matches_exit = self.tasks.get(&exit.tid).is_some_and(|task| {
+            task.cell_id.0 as usize == exit.cell_id && task.cell_generation == exit.generation
+        });
+        if !matches_exit {
+            let already_retired = self.zombies.iter().any(|task| {
+                task.id == exit.tid
+                    && task.cell_id.0 as usize == exit.cell_id
+                    && task.cell_generation == exit.generation
+            });
+            if already_retired {
+                return;
+            }
+            panic!(
+                "[task] invalid deferred Exit: cell={} generation={} task={}",
+                exit.cell_id, exit.generation, exit.tid
+            );
+        }
+
+        if self
+            .tasks
+            .get(&exit.tid)
+            .is_some_and(|task| task.state == TaskState::Retiring)
+        {
+            return;
+        }
+
+        if let Some(task) = self.tasks.get_mut(&exit.tid) {
+            task.exit_code = Some(exit.code);
+        }
+        crate::audit::log_event(
+            crate::audit::AuditEvent::CellExit,
+            &crate::audit::encode_u32x2(exit.tid as u32, exit.code as u32),
+        );
+        log::info!(
+            "Syscall::Exit: task {} exited with code {}",
+            exit.tid,
+            exit.code
+        );
+        self.exit_task(exit.tid, exit.code);
+    }
+
     /// Reap a task: move it to the zombie list, purge ready queues, unblock
     /// senders stuck on it, and wake any `Wait`-ers with `exit_reason`.
     ///
@@ -479,12 +790,90 @@ impl Scheduler {
     /// the fault path previously skipped it, so `Wait(tid)` hung forever when the
     /// target died by fault.
     pub fn exit_task(&mut self, tid: usize, exit_reason: usize) {
-        info!("Task {} exiting (reason={:#x})...", tid, exit_reason);
-        let dead_caller = self
+        // A deferred fault can arrive from a Context whose root retirement
+        // already marked it terminal. Its task record stays in `tasks` until
+        // every remote switch completes; do not run terminal cleanup twice.
+        if self
             .tasks
             .get(&tid)
-            .map(|task| (task.cell_id.0, task.cell_generation))
-            .unwrap_or((0, 0));
+            .is_some_and(|task| task.state == TaskState::Retiring)
+        {
+            return;
+        }
+
+        let root_owner = self.tasks.get(&tid).and_then(|task| {
+            (task.root_tid == tid).then(|| {
+                self.resolve_live_cell_owner(task.cell_id, task.cell_generation)
+            })?
+        });
+        if let Some(owner) = root_owner {
+            // A root's exit terminates its whole generation. Mark it retiring
+            // before selecting members so neither thread creation nor owner
+            // attestation can race the teardown.
+            self.begin_root_retirement(owner);
+            let live_members: Vec<usize> = self
+                .tasks
+                .iter()
+                .filter_map(|(&member_tid, task)| {
+                    (member_tid != tid
+                        && task.cell_id.0 == owner.cell_id
+                        && task.cell_generation == owner.generation
+                        && task.root_tid as u64 == owner.root_tid)
+                        .then_some(member_tid)
+                })
+                .collect();
+            for member_tid in live_members {
+                self.exit_task(member_tid, exit_reason);
+            }
+            // A worker can already be a zombie while its saved context remains
+            // current on a remote hart. Snapshot both tables after every live
+            // member has entered the same retirement funnel so its resources,
+            // owner slot, and CellId all share one post-switch release point.
+            let members = self.root_generation_member_tids(owner);
+            // A member that exited before its root may still have task-local
+            // cleanup queued. Transfer it to the generation funnel so no
+            // remaining grant, pin, IOMMU mapping, BDF, VM, or VFS lease is
+            // released ahead of this retirement's switch completion.
+            self.pending_grant_reap
+                .retain(|pending_tid| !members.contains(pending_tid));
+            self.pending_vfs_holder_release
+                .retain(|pending_tid| !members.contains(pending_tid));
+            self.pending_root_retirements.push(RootRetirement {
+                owner,
+                member_tids: members,
+                zombies: Vec::new(),
+                requested_switch_completion: [0; super::smp::MAX_HARTS],
+            });
+        }
+        let (dead_caller, retiring_member) = self
+            .tasks
+            .get(&tid)
+            .map(|task| {
+                let retiring_member = matches!(
+                    self.cell_owners.get(task.cell_id.0 as usize),
+                    Some(CellOwnerSlot::Retiring(owner))
+                        if owner.cell_id == task.cell_id.0
+                            && owner.generation == task.cell_generation
+                            && owner.root_tid as usize == task.root_tid
+                );
+                ((task.cell_id.0, task.cell_generation), retiring_member)
+            })
+            .unwrap_or(((0, 0), false));
+        // Keep retiring root members in the dispatch table through remote
+        // quiescence. A stale Context can still trap on another hart during
+        // this interval, and syscall dispatch must identify it as retiring
+        // rather than falling back to early-boot/kernel authority.
+        if retiring_member {
+            if let Some(task) = self.tasks.get_mut(&tid) {
+                task.state = TaskState::Retiring;
+            }
+        }
+
+
+        // A dead VFS watcher cannot retain subscriptions after its task-local
+        // state is removed. Exact watcher matching preserves other tokens.
+        self.cell_owner_watches
+            .retain(|_, watch| watch.watcher_tid != tid);
 
         // Scheduler exit is the terminal lifecycle funnel for clean exits,
         // faults, watchdogs, and hot-swap retirement. Clear any replacement
@@ -536,26 +925,29 @@ impl Scheduler {
         // Free the dying cell's address space NOW (unmap its segment VAs) so a
         // respawn can reuse the fixed VA and the load-time overwrite guard only
         // ever sees LIVE cells' mappings. Frames are freed lazily at reap.
-        if let Some(t) = self.tasks.get(&tid) {
-            if let Some(seg) = &t.segment_mem {
-                seg.eager_unmap();
+        // A remote root member may still be executing its saved context. Its
+        // address space remains mapped until the retirement IPI is acknowledged
+        // and the member has switched away; task reaping then drops it safely.
+        if !retiring_member {
+            if let Some(t) = self.tasks.get(&tid) {
+                if let Some(seg) = &t.segment_mem {
+                    seg.eager_unmap();
+                }
             }
         }
 
-        // Async-future safety: a task may die while Polling, holding a `pending_future`
-        // that captured a raw pointer into THIS cell's buffer (see fat.rs::read_async).
-        // Removing it from `self.tasks` here — BEFORE its frames are freed at reap — takes
-        // it out of the scheduler poll set (the loop iterates `self.tasks`, gated on
-        // `state == Polling`), so the dangling buffer write can never execute. The future
-        // itself is dropped at reap (outside the SCHEDULER lock) without touching the
-        // buffer, because the inner read is synchronous (no DMA outlives the future).
-        // INVARIANT for future work: if a real async-DMA driver lands (the fat.rs TODO) or
-        // the kernel goes SMP, hardware could write into freed frames — add a descriptor
-        // cancel / frame-unpin point HERE before the frames are reclaimed.
-        if let Some(task) = self.tasks.remove(&tid) {
-            self.zombies.push(task);
+        // Async-future safety: terminal tasks must not remain in the poll set.
+        // Retiring root members stay in `tasks` as dispatch-visible tombstones,
+        // but `TaskState::Retiring` is not polled and they move to zombies only
+        // after the remote switch-completion proof.
+        if !retiring_member {
+            if let Some(task) = self.tasks.remove(&tid) {
+                self.zombies.push(task);
+            }
         }
-        self.pending_vfs_lease_release.push(tid);
+        if !retiring_member {
+            self.pending_vfs_holder_release.push(tid);
+        }
 
         // Service-registry cleanup: drop any well-known service_id that pointed at this
         // tid, so a client lookup in the death→respawn window returns "none" (and retries)
@@ -588,7 +980,30 @@ impl Scheduler {
                 }
             }
             if task.current_caller == Some(tid) {
-                task.clear_current_caller_context();
+                // A live VFS holder may still be using the raw GrantSlice
+                // pointer. Mark precisely its holder+owner+generation lease
+                // pending revoke, but retain the task context and pin until it
+                // completes the reply or drops the request at a public receive.
+                let release = VfsLeaseRelease {
+                    holder_tid: *id,
+                    grant_owner: tid,
+                    request_generation: task.current_caller_request_generation,
+                };
+                if crate::memory::pin::mark_vfs_lease_pending_revoke(
+                    release.holder_tid,
+                    release.grant_owner,
+                    release.request_generation,
+                ) {
+                    log::info!(
+                        "[grant] owner {tid} pending-revoked VFS lease holder={} request={}",
+                        release.holder_tid,
+                        release.request_generation
+                    );
+                } else {
+                    // A context without a GrantSlice is ordinary IPC state and
+                    // has no raw pointer whose lifetime must be extended.
+                    task.clear_current_caller_context();
+                }
             }
         }
         for id in to_wake {
@@ -632,11 +1047,48 @@ impl Scheduler {
         for w in woken_watchers {
             self.push_ready(w);
         }
+
+        // Owner watches are token-indexed and use a distinct delivery lane.
+        // Backend receives are masked to a service TID, so only a wildcard VFS
+        // public receive may wake for this event; masked receives leave it queued.
+        let owner_watchers: Vec<(u64, usize)> = self
+            .cell_owner_watches
+            .iter()
+            .filter_map(|(&token, watch)| {
+                (watch.watched_root_tid == tid).then_some((token, watch.watcher_tid))
+            })
+            .collect();
+        let mut woken_owner_watchers = Vec::new();
+        for (token, watcher) in owner_watchers {
+            self.cell_owner_watches.remove(&token);
+            if let Some(task) = self.tasks.get_mut(&watcher) {
+                task.pending_owner_deaths.push((token, tid, exit_reason));
+                if matches!(
+                    task.state,
+                    TaskState::Recv { mask, .. }
+                        if Task::owner_death_matches_receive_mask(mask)
+                ) {
+                    task.set_received_caller_context(tid, dead_caller.0, dead_caller.1);
+                    task.state = TaskState::Ready;
+                    woken_owner_watchers.push(watcher);
+                }
+            }
+        }
+        for watcher in woken_owner_watchers {
+            self.push_ready(watcher);
+        }
+
+        // Worker exit is task-local. Root-member resources and CellId-wide
+        // resources are released only by the deferred retirement funnel after
+        // completed context-switch proof.
+        if root_owner.is_none() && !retiring_member {
+            self.pending_grant_reap.push(tid);
+        }
     }
 
-    /// Remove and return zombies that have already been switched away from — every
-    /// zombie except the one still set as `current_task_id` (whose context is about
-    /// to be used for the outgoing half of the next switch, so it must stay valid).
+    /// Remove and return zombies whose saved context is neither selected nor
+    /// executing on any hart. Scheduler selection is published before the raw
+    /// switch, so both ownership identities are part of the liveness proof.
     ///
     /// The caller MUST drop the returned tasks OUTSIDE the SCHEDULER lock: dropping
     /// a `Box<Task>` runs `Stack::drop`, which locks `FRAME_ALLOCATOR` and unmaps
@@ -650,12 +1102,15 @@ impl Scheduler {
         if self.zombies.is_empty() {
             return Vec::new();
         }
+
         let mut keep = Vec::new();
         let mut reap = Vec::new();
         for z in core::mem::take(&mut self.zombies) {
-            // A zombie is reapable only if NO hart is currently context-switching
-            // through its saved Context.  Check all harts' current_task_id.
-            if super::hart_local::ready::any_hart_running(z.id) {
+            let retained_by_root_retirement = self
+                .pending_root_retirements
+                .iter()
+                .any(|retirement| retirement.member_tids.contains(&z.id));
+            if super::hart_local::ready::any_hart_running(z.id) || retained_by_root_retirement {
                 keep.push(z);
             } else {
                 reap.push(z);
@@ -665,16 +1120,107 @@ impl Scheduler {
         reap
     }
 
-    /// Take task IDs whose grant pages must be freed outside the SCHEDULER lock.
-    ///
-    /// The caller MUST call reap_grants_for_task for each returned ID OUTSIDE the lock —
-    /// free_grant_pages locks KERNEL_ROOT and FRAME_ALLOCATOR; holding SCHEDULER inverts order.
+    /// Take task IDs whose resources can be reaped outside SCHEDULER. A task
+    /// remains pending until its outgoing saved context has stopped executing.
     pub fn take_pending_grant_reap(&mut self) -> Vec<usize> {
-        core::mem::take(&mut self.pending_grant_reap)
+        let mut reap = Vec::new();
+        self.pending_grant_reap.retain(|tid| {
+            if super::hart_local::ready::any_hart_running(*tid) {
+                true
+            } else {
+                reap.push(*tid);
+                false
+            }
+        });
+        reap
     }
 
-    pub fn take_pending_vfs_lease_release(&mut self) -> Vec<usize> {
-        core::mem::take(&mut self.pending_vfs_lease_release)
+    /// Return root retirements only after every member has left every hart and
+    /// each remote hart that selected or executed a member has completed its raw
+    /// context switch. The owner slot remains `Retiring` while this returns
+    /// nothing, so neither quota nor CellId reuse can race a selected Context.
+    pub(crate) fn take_quiescent_root_retirements(&mut self) -> Vec<RootRetirement> {
+        let current_hart = super::hart_local::current_hart_id();
+        let mut ready = Vec::new();
+        let mut pending = Vec::new();
+        for mut retirement in core::mem::take(&mut self.pending_root_retirements) {
+            let mut members_live = false;
+            for hart in 0..super::smp::MAX_HARTS {
+                // Read selection before execution. Switch completion publishes
+                // executing (Release) before clearing selection (Release), so
+                // these Acquire loads cannot observe a false quiescent gap.
+                let selected = super::hart_local::ready::selected_task_id_for(hart);
+                let current = super::hart_local::ready::current_task_id_for(hart);
+                let executing = super::hart_local::ready::executing_task_id_for(hart);
+                if retirement.member_tids.contains(&selected)
+                    || retirement.member_tids.contains(&current)
+                    || retirement.member_tids.contains(&executing)
+                {
+                    members_live = true;
+                    if hart != current_hart
+                        && (retirement.requested_switch_completion[hart] == 0
+                            || super::smp::retirement_switch_completed(
+                                hart,
+                                retirement.requested_switch_completion[hart],
+                            ))
+                    {
+                        // A completed epoch while the member is still live only
+                        // proves a switch *into* (or back to) that member. Arm a
+                        // fresh epoch so release waits for its eventual switch-away.
+                        retirement.requested_switch_completion[hart] =
+                            super::smp::request_retirement_switch(hart);
+                    }
+                }
+            }
+            let completed = retirement
+                .requested_switch_completion
+                .iter()
+                .enumerate()
+                .all(|(hart, &epoch)| super::smp::retirement_switch_completed(hart, epoch));
+            if !members_live && completed {
+                // Retiring members remain in `tasks` until this exact
+                // quiescence boundary so a stale remote Context is visibly
+                // terminal to syscall dispatch. Move those records and any
+                // pre-existing matching zombies together before resources or
+                // the owner slot can be released.
+                let mut retirement_zombies = Vec::new();
+                for member_tid in &retirement.member_tids {
+                    if let Some(task) = self.tasks.remove(member_tid) {
+                        retirement_zombies.push(task);
+                    }
+                }
+                let mut other_zombies = Vec::new();
+                for zombie in core::mem::take(&mut self.zombies) {
+                    if retirement.member_tids.contains(&zombie.id) {
+                        retirement_zombies.push(zombie);
+                    } else {
+                        other_zombies.push(zombie);
+                    }
+                }
+                self.zombies = other_zombies;
+                retirement.zombies = retirement_zombies;
+                ready.push(retirement);
+            } else {
+                pending.push(retirement);
+            }
+        }
+        self.pending_root_retirements = pending;
+        ready
+    }
+
+    /// Take holders proven no longer current, then release all of each
+    /// holder's leases outside the scheduler lock.
+    pub fn take_pending_vfs_holder_release(&mut self) -> Vec<usize> {
+        let mut release = Vec::new();
+        self.pending_vfs_holder_release.retain(|tid| {
+            if super::hart_local::ready::any_hart_running(*tid) {
+                true
+            } else {
+                release.push(*tid);
+                false
+            }
+        });
+        release
     }
 
     /// Take dead-task TIMER slots for release outside the scheduler lock.
@@ -688,6 +1234,10 @@ impl Scheduler {
         core::mem::take(&mut self.pending_completion_release)
     }
 
+
+    pub(crate) fn take_pending_vfs_context_release(&mut self) -> Vec<VfsLeaseRelease> {
+        core::mem::take(&mut self.pending_vfs_context_release)
+    }
     /// Picks the next task to run on `hart_id` and returns pointers for context switch.
     ///
     /// Hart 0 also runs the global sweep (timer wakes, heartbeat, async-poll, watchdog).
@@ -722,6 +1272,7 @@ impl Scheduler {
             //    infinite-block-on-dead-peer hazard. Deadlines are absolute
             //    `system_ticks` (the dispatch stores `system_ticks() + timeout`).
             let mut waking_tasks = VecDeque::new();
+            let mut vfs_context_drops = Vec::new();
             for (id, task) in self.tasks.iter_mut() {
                 let mut should_wake = false;
                 let mut timed_out = false;
@@ -772,15 +1323,30 @@ impl Scheduler {
                     // return register is regs[10], restored by sret when the task runs.
                     if timed_out {
                         task.trap_frame.regs[10] = 0;
-                        // Clear the last sender so the RecvTimeout syscall handler,
-                        // which reads current_caller after yield to build its return
-                        // value, sees "no sender" (0) on a genuine timeout instead of
-                        // the PREVIOUS sender. A stale tid here made every 200 ms
-                        // input-read timeout re-deliver the last keystroke's sender +
-                        // stale buffer, duplicating characters ("wget_out.txt" →
-                        // "wget_ooooo…"). Only the timeout branch clears it, so the
-                        // blocking Recv path (VFS request/reply) is untouched.
-                        task.clear_current_caller_context();
+                        // A timed-out public VFS receive drops the old request
+                        // at this syscall boundary. Queue only its exact lease
+                        // for release outside SCHEDULER; a masked backend wait
+                        // retains the outer request context.
+                        if let Some((grant_owner, request_generation)) =
+                            task.begin_receive_context(0)
+                        {
+                            let release = VfsLeaseRelease {
+                                holder_tid: *id,
+                                grant_owner,
+                                request_generation,
+                            };
+                            if crate::memory::pin::find_vfs_lease(
+                                release.holder_tid,
+                                release.grant_owner,
+                                release.request_generation,
+                            )
+                            .is_some()
+                            {
+                                vfs_context_drops.push(release);
+                            }
+                        } else {
+                            task.clear_current_caller_context();
+                        }
                         task.deadline_misses = task.deadline_misses.saturating_add(1);
                         // Observability: an RT cell whose awaited message missed its deadline
                         // is a missed control-loop cycle — record it (no enforcement). Gated to
@@ -799,6 +1365,7 @@ impl Scheduler {
                     waking_tasks.push_back(*id);
                 }
             }
+            self.pending_vfs_context_release.extend(vfs_context_drops);
             for id in waking_tasks {
                 self.push_ready(id);
             }
@@ -845,20 +1412,12 @@ impl Scheduler {
                     &crate::audit::encode_u32x2(cell_raw as u32, tid as u32),
                 );
                 // Release resources the hung cell owned (each locks its own state, not
-                // SCHEDULER, so they are safe to call inline here — mirrors the watchdog kill).
-                crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
-                crate::memory::cell_quota::deregister(CellId(cell_raw));
-                crate::resource_registry::release_for(CellId(cell_raw));
-                // Grant reap deferred: free_grant_pages acquires KERNEL_ROOT + FRAME_ALLOCATOR,
-                // which must not be held under SCHEDULER. yield_cpu() drains this list after unlock.
-                self.pending_grant_reap.push(tid);
+                // `exit_task` classifies worker versus root teardown. Root
+                // CellId-wide cleanup waits for the common quiescent funnel.
                 self.exit_task(tid, usize::MAX);
-                // If this hart was running the hung task, clear its attribution.
-                let hart_id = super::hart_local::current_hart_id();
-                if super::hart_local::ready::current_task_id_for(hart_id) == tid {
-                    super::hart_local::set_current_cell_id(0);
-                    super::hart_local::ready::set_current_task_id(hart_id, 0);
-                }
+                // The terminal task remains this hart's identity until the raw
+                // task→boot switch has saved its Context. `vi_context_switch_complete`
+                // clears the task and Cell tuple from the incoming boot stack.
             }
         }
 
@@ -982,39 +1541,57 @@ impl Scheduler {
                         crate::audit::AuditEvent::CellFault,
                         &crate::audit::encode_u32x2(cell_raw as u32, WATCHDOG_FAULT_CAUSE),
                     );
-                    crate::fast_ipc::clear_vfs_if_cell(cell_raw as usize);
-                    crate::memory::cell_quota::deregister(CellId(cell_raw));
-                    crate::resource_registry::release_for(CellId(cell_raw));
-                    // Grant reap deferred: free_grant_pages acquires KERNEL_ROOT + FRAME_ALLOCATOR,
-                    // which must not be held under SCHEDULER. yield_cpu() drains this list after unlock.
-                    self.pending_grant_reap.push(cid);
+                    // `exit_task` defers root teardown until all members have
+                    // acknowledged a scheduling boundary.
                     self.exit_task(cid, usize::MAX);
-                    super::hart_local::set_current_cell_id(0);
-                    rl::set_current_task_id(hart_id, 0);
                 }
                 WdAction::None => {}
             }
         }
 
         // 4. Get next task: local queue first, then work-steal from busiest other hart.
-        let next_id = rl::pick_local(hart_id).or_else(|| {
+        // A wake may have queued a task while its origin still owns the old
+        // Context. `pick_local_eligible` leaves that entry deferred until the
+        // incoming completion hook releases the origin handoff state.
+        let next_id = rl::pick_local_eligible(hart_id).or_else(|| {
             super::hart_local::ready::steal_from_busiest(hart_id);
-            rl::pick_local(hart_id)
+            rl::pick_local_eligible(hart_id)
         });
 
         if let Some(nid) = next_id {
             if let Some(next_task) = self.tasks.get_mut(&nid) {
                 next_task.state = TaskState::Running;
-                super::hart_local::set_current_cell_id(next_task.cell_id.0 as usize);
+                super::hart_local::set_current_cell_context(
+                    next_task.cell_id.0 as usize,
+                    next_task.cell_generation,
+                );
+
+                // An RV64 Context carries kernel `tp`. A task can be selected
+                // on a different hart from the one that created it, so bind it
+                // to the destination before the raw switch invokes its
+                // incoming-side completion callback.
+                #[cfg(target_arch = "riscv64")]
+                {
+                    next_task.context.tp = super::hart_local::HART_LOCAL_TP_ADDRS[hart_id]
+                        .load(core::sync::atomic::Ordering::Acquire);
+                }
+
                 // x86_64 PKU: update CPU_LOCAL.pku_value for the incoming task so
                 // the asm ring-3 exit path restores the correct PKRU. Must run while
                 // we still hold a reference to the task (before releasing the lock).
                 #[cfg(target_arch = "x86_64")]
                 crate::hal::syscall::set_task_pku(next_task.pku_value);
             }
+
+            // A controlled test reservation protects only the queued interval:
+            // once this hart has removed the task from its queue, no peer can
+            // steal it. Release before the raw switch so the reservation cannot
+            // survive until the task next runs on an unrelated stack.
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            let _ = rl::release_test_dispatch_on_hart(hart_id, nid);
             if Some(nid) == current_id {
                 rl::set_current_task_id(hart_id, nid);
-                return None; // No switch needed
+                return None;
             }
             // SAFETY: Box<Task> pins the Task on the heap; pointer is valid until reap.
             let next_ctx: *const crate::hal::arch::Context = self
@@ -1034,9 +1611,20 @@ impl Scheduler {
                         core::ptr::null_mut()
                     };
                 if !curr_ctx.is_null() && !next_ctx.is_null() {
+                    // `cid` has been requeued but its saved Context is still
+                    // live on this CPU.  Publish the no-steal guard immediately
+                    // before relinquishing SCHEDULER; RV64 clears it only after
+                    // `__switch` saved this Context on the incoming stack.
+                    rl::begin_outgoing_context_save(hart_id, cid);
+                    if rl::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
+                        rl::set_selected_task_id(hart_id, nid);
+                    }
                     return Some((curr_ctx, next_ctx));
                 }
             } else if !next_ctx.is_null() {
+                if rl::HAS_INCOMING_SWITCH_COMPLETION_HOOK {
+                    rl::set_selected_task_id(hart_id, nid);
+                }
                 return Some((core::ptr::null_mut(), next_ctx)); // first switch from boot context
             }
         } else {
@@ -1051,7 +1639,13 @@ impl Scheduler {
                         .find(|t| t.id == cid)
                         .map(|t| &mut t.context as *mut _);
                     if let Some(c) = curr_ctx {
-                        rl::set_current_task_id(hart_id, 0);
+                        // There is no task successor, but boot is still an
+                        // incoming Context. RV64 keeps the outgoing zombie and
+                        // its hart attribution live until boot-side completion
+                        // has saved the Context; targets without that hook must
+                        // clear before entering boot.
+                        rl::begin_outgoing_context_save(hart_id, cid);
+                        prepare_task_to_boot_switch(hart_id);
                         return Some((c, core::ptr::null()));
                     }
                 } else if let Some(task) = self.tasks.get_mut(&cid) {
@@ -1064,17 +1658,29 @@ impl Scheduler {
                     // current_task_id is reset to 0 — causing every subsequent
                     // SVC to be denied.
                     //
-                    // BOOT_CONTEXT is valid here: it is saved by __switch on the
-                    // very first boot→task context switch, which always precedes
-                    // any cell SVC.
+                    // The yielding hart's boot context is valid here: its first
+                    // boot→task switch saved the scheduler stack and hart-local
+                    // registers before any cell SVC.
                     let curr_ctx = &mut task.context as *mut _;
-                    rl::set_current_task_id(hart_id, 0);
+                    // A remote IPC wake can race this task→idle fallback. Arm
+                    // before the raw switch; RV64 boot completion releases the
+                    // saved Context and clears attribution, while non-hook
+                    // targets clear before switching to boot.
+                    rl::begin_outgoing_context_save(hart_id, cid);
+                    prepare_task_to_boot_switch(hart_id);
                     return Some((curr_ctx, core::ptr::null()));
                 } else {
-                    rl::set_current_task_id(hart_id, 0);
+                    // A nonzero current TID must retain a Context in either
+                    // `tasks` or `zombies`. Returning to an unaccounted user
+                    // stack would be worse than failing closed.
+                    panic!(
+                        "[scheduler] current task {} has no Context for required task→boot switch",
+                        cid
+                    );
                 }
             } else {
                 rl::set_current_task_id(hart_id, 0);
+                super::hart_local::set_current_cell_context(0, 0);
             }
         }
         None
@@ -1102,6 +1708,254 @@ impl Scheduler {
 
     pub fn has_ready_tasks(&self) -> bool {
         super::hart_local::ready::total_ready_count() > 0
+    }
+
+}
+
+#[cfg(test)]
+mod retirement_tests {
+    use super::*;
+    #[cfg(not(target_arch = "riscv64"))]
+    #[test]
+    fn blocked_task_requeued_from_boot_is_selectable() {
+        const TID: usize = 60_004;
+        const CELL_RAW: u64 = 61;
+        let hart = super::super::hart_local::current_hart_id();
+        let old_tid = super::super::hart_local::ready::current_task_id_for(hart);
+        let old_cell = super::super::hart_local::current_cell_id();
+        let old_generation = super::super::hart_local::current_cell_generation();
+        let mut scheduler = Scheduler::new();
+        let mut blocked = Box::new(Task::new(TID, CellId(CELL_RAW), "blocked-boot", alloc::vec![]));
+        blocked.state = TaskState::Waiting { target: 0 };
+        scheduler.tasks.insert(TID, blocked);
+
+        super::super::hart_local::ready::set_current_task_id(hart, TID);
+        super::super::hart_local::set_current_cell_context(CELL_RAW as usize, 1);
+        let (_, boot) = scheduler
+            .pick_next_local(hart, 0)
+            .expect("blocked task must switch to boot");
+        assert!(boot.is_null());
+        assert_eq!(
+            super::super::hart_local::ready::current_task_id_for(hart),
+            0,
+            "non-hook task→boot must not retain the blocked task identity"
+        );
+        assert_eq!(super::super::hart_local::current_cell_id(), 0);
+
+        scheduler.tasks.get_mut(&TID).expect("blocked task").state = TaskState::Ready;
+        super::super::hart_local::ready::push_on_hart(
+            hart,
+            TID,
+            api::TaskPriority::Normal as u8,
+        );
+        let (curr, next) = scheduler
+            .pick_next_local(hart, 0)
+            .expect("woken task must be selectable from boot");
+        assert!(curr.is_null());
+        assert!(!next.is_null());
+
+        super::super::hart_local::ready::remove_from_all(TID);
+        super::super::hart_local::ready::set_current_task_id(hart, old_tid);
+        super::super::hart_local::set_current_cell_context(old_cell, old_generation);
+    }
+
+    #[cfg(not(target_arch = "riscv64"))]
+    #[test]
+    fn faulted_task_to_boot_allows_successor_selection() {
+        const FAULTED_TID: usize = 60_005;
+        const SUCCESSOR_TID: usize = 60_006;
+        const CELL_RAW: u64 = 60;
+        let hart = super::super::hart_local::current_hart_id();
+        let old_tid = super::super::hart_local::ready::current_task_id_for(hart);
+        let old_cell = super::super::hart_local::current_cell_id();
+        let old_generation = super::super::hart_local::current_cell_generation();
+        let mut scheduler = Scheduler::new();
+        let mut faulted = Box::new(Task::new(
+            FAULTED_TID,
+            CellId(CELL_RAW),
+            "faulted-boot",
+            alloc::vec![],
+        ));
+        faulted.state = TaskState::Terminated;
+        scheduler.zombies.push(faulted);
+        scheduler.tasks.insert(
+            SUCCESSOR_TID,
+            Box::new(Task::new(
+                SUCCESSOR_TID,
+                CellId(CELL_RAW),
+                "boot-successor",
+                alloc::vec![],
+            )),
+        );
+
+        super::super::hart_local::ready::set_current_task_id(hart, FAULTED_TID);
+        super::super::hart_local::set_current_cell_context(CELL_RAW as usize, 1);
+        let (_, boot) = scheduler
+            .pick_next_local(hart, 0)
+            .expect("faulted task must switch to boot");
+        assert!(boot.is_null());
+        assert_eq!(
+            super::super::hart_local::ready::current_task_id_for(hart),
+            0,
+            "non-hook task→boot must not retain the faulted task identity"
+        );
+        assert_eq!(super::super::hart_local::current_cell_id(), 0);
+
+        super::super::hart_local::ready::push_on_hart(
+            hart,
+            SUCCESSOR_TID,
+            api::TaskPriority::Normal as u8,
+        );
+        let (curr, next) = scheduler
+            .pick_next_local(hart, 0)
+            .expect("successor must be selectable from boot");
+        assert!(curr.is_null());
+        assert!(!next.is_null());
+
+        super::super::hart_local::ready::remove_from_all(SUCCESSOR_TID);
+        super::super::hart_local::ready::set_current_task_id(hart, old_tid);
+        super::super::hart_local::set_current_cell_context(old_cell, old_generation);
+    }
+
+    #[test]
+    fn remote_root_retirement_waits_for_zombie_worker_switch_before_slot_reuse() {
+        const ROOT_TID: usize = 60_001;
+        const WORKER_TID: usize = 60_002;
+        const CELL_RAW: u64 = 63;
+        const GENERATION: u64 = 7;
+        let remote_hart = if super::super::hart_local::current_hart_id()
+            == super::super::smp::HART_RT
+        {
+            0
+        } else {
+            super::super::smp::HART_RT
+        };
+
+        let owner = api::cell_owner::CellOwner::new(CELL_RAW, GENERATION, ROOT_TID as u64);
+        let mut scheduler = Scheduler::new();
+        let mut root = Box::new(Task::new(
+            ROOT_TID,
+            CellId(CELL_RAW),
+            "retirement-root",
+            alloc::vec![],
+        ));
+        root.cell_generation = GENERATION;
+        let mut worker = Box::new(Task::new(
+            WORKER_TID,
+            CellId(CELL_RAW),
+            "retirement-worker-zombie",
+            alloc::vec![],
+        ));
+        worker.root_tid = ROOT_TID;
+        worker.cell_generation = GENERATION;
+        scheduler.tasks.insert(ROOT_TID, root);
+        scheduler.zombies.push(worker);
+        assert!(scheduler.publish_live_cell_owner(owner));
+        scheduler.begin_root_retirement(owner);
+
+        let members = scheduler.root_generation_member_tids(owner);
+        assert!(members.contains(&ROOT_TID) && members.contains(&WORKER_TID));
+        scheduler.pending_root_retirements.push(RootRetirement {
+            owner,
+            member_tids: members,
+            zombies: Vec::new(),
+            requested_switch_completion: [0; super::super::smp::MAX_HARTS],
+        });
+
+        let old_current =
+            super::super::hart_local::ready::current_task_id_for(remote_hart);
+        let old_selected =
+            super::super::hart_local::ready::selected_task_id_for(remote_hart);
+        let old_executing =
+            super::super::hart_local::ready::executing_task_id_for(remote_hart);
+
+        // Deterministically model root exit after the worker Context pointer was
+        // selected but before the incoming switch published it as executing.
+        super::super::hart_local::ready::set_current_task_id(remote_hart, WORKER_TID);
+        super::super::hart_local::ready::set_executing_task_id(remote_hart, 0);
+        super::super::hart_local::ready::set_selected_task_id(remote_hart, WORKER_TID);
+
+        assert!(scheduler.take_reapable_zombies().is_empty());
+        assert!(scheduler.take_quiescent_root_retirements().is_empty());
+        assert!(!scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
+
+        // Incoming-side completion transfers the ownership pin without a gap:
+        // executing is published before selection is cleared.
+        super::super::hart_local::ready::complete_selected_switch(remote_hart, WORKER_TID);
+        assert_eq!(
+            super::super::hart_local::ready::selected_task_id_for(remote_hart),
+            0
+        );
+        assert_eq!(
+            super::super::hart_local::ready::executing_task_id_for(remote_hart),
+            WORKER_TID
+        );
+        assert!(scheduler.take_quiescent_root_retirements().is_empty());
+
+        super::super::hart_local::ready::set_current_task_id(remote_hart, 0);
+        super::super::hart_local::ready::set_executing_task_id(remote_hart, 0);
+        super::super::smp::complete_retirement_switch(remote_hart);
+        // Model the ordinary zombie sweep happening between remote completion
+        // and the root-retirement sweep. The generation-owned zombie must stay
+        // retained until it moves with the quiescent retirement.
+        assert!(scheduler.take_reapable_zombies().is_empty());
+        let mut ready = scheduler.take_quiescent_root_retirements();
+        assert_eq!(ready.len(), 1);
+        let retirement = ready.pop().expect("one quiescent retirement");
+        assert!(retirement.member_tids.contains(&WORKER_TID));
+        assert_eq!(retirement.zombies.len(), 1);
+        assert_eq!(retirement.zombies[0].id, WORKER_TID);
+        assert!(!scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
+        let owner = retirement.owner;
+        drop(retirement.zombies);
+        scheduler.finish_root_retirement(owner);
+        assert!(scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW)));
+
+        super::super::hart_local::ready::set_current_task_id(remote_hart, old_current);
+        super::super::hart_local::ready::set_executing_task_id(remote_hart, old_executing);
+        super::super::hart_local::ready::set_selected_task_id(remote_hart, old_selected);
+    }
+
+    #[test]
+    fn matching_zombie_deferred_fault_is_idempotent() {
+        const TID: usize = 60_003;
+        const CELL_RAW: u64 = 62;
+        const GENERATION: u64 = 9;
+        let mut scheduler = Scheduler::new();
+        let mut zombie = Box::new(Task::new(TID, CellId(CELL_RAW), "faulted-zombie", alloc::vec![]));
+        zombie.cell_generation = GENERATION;
+        scheduler.zombies.push(zombie);
+
+        scheduler.retire_deferred_fault(
+            super::super::hart_local::DeferredFault::test_trap_proven_user(
+                TID,
+                CELL_RAW as usize,
+                GENERATION,
+                0xdead,
+                0,
+                0,
+            ),
+        );
+
+        assert_eq!(scheduler.zombies.len(), 1);
+        assert_eq!(scheduler.zombies[0].id, TID);
+    }
+
+    #[test]
+    fn owner_watch_tokens_stop_before_the_signed_return_boundary() {
+        let mut scheduler = Scheduler::new();
+        scheduler.next_cell_owner_watch = MAX_RETURNABLE_OWNER_WATCH_TOKEN;
+
+        assert_eq!(
+            scheduler.take_cell_owner_watch_token(),
+            Some(MAX_RETURNABLE_OWNER_WATCH_TOKEN)
+        );
+        assert_eq!(
+            scheduler.next_cell_owner_watch,
+            MAX_RETURNABLE_OWNER_WATCH_TOKEN + 1
+        );
+        assert_eq!(scheduler.take_cell_owner_watch_token(), None);
+        assert!(scheduler.cell_owner_watches.is_empty());
     }
 }
 

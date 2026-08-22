@@ -120,6 +120,9 @@ pub fn publish_prepared(
         crate::memory::cell_quota::QuotaReservation::reserve(requested_cell_id, state.quota_limit)?
     };
     let cell_id = quota.cell_id();
+    if !sched.cell_owner_slot_is_empty(cell_id) {
+        return Err(ViError::AlreadyExists);
+    }
     crate::loader::atomic_checkpoint("AP-07")?;
     crate::loader::atomic_checkpoint("AP-08")?;
     let accounting_cell = super::hart_local::current_cell_id();
@@ -135,6 +138,8 @@ pub fn publish_prepared(
     task.pku_key = state.pku_key;
     task.pku_value = state.pku_value;
     task.is_critical = state.is_critical;
+    task.root_tid = tid;
+    let owner = api::cell_owner::CellOwner::new(cell_id.0, task.cell_generation, tid as u64);
     state.granted.apply_to(&mut task);
     if let Some(platform) = state.platform.take() {
         platform.commit_into(&mut task);
@@ -144,6 +149,7 @@ pub fn publish_prepared(
     }
 
     sched.tasks.insert(tid, task);
+    assert!(sched.publish_live_cell_owner(owner), "reserved CellId owner slot must be empty");
     sched.next_task_id = tid.checked_add(1).expect("task id space exhausted");
     quota.commit();
     crate::loader::commit_launch_routes(tid, cell_id, state.routes);

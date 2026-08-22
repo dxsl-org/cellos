@@ -7,7 +7,6 @@
 //! Invariant: hart 0 calls `start_secondaries()` only AFTER `task::init()`
 //! completes — the SCHEDULER and heap are live before any secondary runs.
 
-#[cfg(target_arch = "riscv64")]
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -23,6 +22,64 @@ pub const HART_RT: usize = 1;
 /// Set to `true` by each secondary hart once its trap vector and timer are ready.
 /// Hart 0's bounded wait reads this via `Acquire` to observe all preceding stores.
 pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), AtomicBool::new(false)];
+
+/// Monotonic switch-completion epochs for root-retirement quiescence. A retiring
+/// generation cannot release its CellId slot until every requested hart has
+/// switched to a different context and published that completion.
+static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] =
+    [AtomicUsize::new(0), AtomicUsize::new(0)];
+static RETIRE_SWITCH_COMPLETE: [AtomicUsize; MAX_HARTS] =
+    [AtomicUsize::new(0), AtomicUsize::new(0)];
+
+/// Request that `hart_id` schedules through a retirement boundary and return
+/// the epoch that its incoming context must complete.
+pub fn request_retirement_switch(hart_id: usize) -> usize {
+    if hart_id >= MAX_HARTS {
+        return 0;
+    }
+    let epoch = RETIRE_SWITCH_REQUEST[hart_id].fetch_add(1, Ordering::AcqRel) + 1;
+    #[cfg(feature = "test-hooks")]
+    log::info!(
+        "[selftest] SMP-RETIREMENT: stage=remote-switch-requested hart={} epoch={}",
+        hart_id,
+        epoch
+    );
+    #[cfg(target_arch = "riscv64")]
+    if hart_id != crate::task::hart_local::current_hart_id() {
+        if let Some((mask, base)) = logical_sbi_target(hart_id) {
+            let _ = hal::common::sbi::sbi_send_ipi(mask, base);
+        }
+    }
+    epoch
+}
+
+/// Publish the requested epoch from the incoming side of `Context::switch`.
+///
+/// The release store is deliberately after the raw context switch has changed
+/// stacks: an IPI/trap entry only proves that the outgoing task entered the
+/// kernel, while this proves that its saved context no longer executes.
+pub fn complete_retirement_switch(hart_id: usize) {
+    if hart_id < MAX_HARTS {
+        let epoch = RETIRE_SWITCH_REQUEST[hart_id].load(Ordering::Acquire);
+        let completed = RETIRE_SWITCH_COMPLETE[hart_id].load(Ordering::Acquire);
+        if completed < epoch {
+            RETIRE_SWITCH_COMPLETE[hart_id].store(epoch, Ordering::Release);
+            #[cfg(feature = "test-hooks")]
+            log::info!(
+                "[selftest] SMP-RETIREMENT: stage=remote-switch-completed hart={} epoch={}",
+                hart_id,
+                epoch
+            );
+        }
+    }
+}
+
+pub fn retirement_switch_completed(hart_id: usize, epoch: usize) -> bool {
+    epoch == 0
+        || RETIRE_SWITCH_COMPLETE
+            .get(hart_id)
+            .is_some_and(|complete| complete.load(Ordering::Acquire) >= epoch)
+}
 
 #[cfg(target_arch = "riscv64")]
 static BOOT_PHYSICAL_HART: AtomicUsize = AtomicUsize::new(usize::MAX);
@@ -266,13 +323,29 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
         hal::common::sbi::set_timer(next);
     }
 
-    // Signal hart 0's bounded wait that we are ready.
+    // `ARCH.init()` enables SSIE in `sie`, but it deliberately leaves the
+    // per-hart global SIE bit clear. A secondary otherwise wakes from WFI with
+    // a pending IPI but never takes the SSIP trap that enters `yield_cpu()`;
+    // explicitly enable delivery before advertising this hart as schedulable.
+    #[cfg(target_arch = "riscv64")]
+    {
+        use hal::Arch;
+        hal::ARCH.enable_interrupts();
+        if !hal::ARCH.interrupts_enabled() {
+            panic!("[smp] hart {} could not enable supervisor interrupts", hart_id);
+        }
+    }
+
+    // Signal hart 0's bounded wait only after this hart can actually take the
+    // dispatch IPI and run its local scheduler.
     if hart_id < MAX_HARTS {
         log::info!(
-            "[smp] physical {} -> logical {} trap-ready",
+            "[smp] physical {} -> logical {} trap-ready, interrupts-enabled",
             physical_hart,
             hart_id
         );
+        #[cfg(feature = "test-hooks")]
+        log::info!("[selftest] SMP-RETIREMENT: stage=hart{}-interrupts-enabled", hart_id);
         HART_ONLINE[hart_id].store(true, Ordering::Release);
     }
 

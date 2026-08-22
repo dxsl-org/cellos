@@ -1,6 +1,9 @@
 #![allow(unsafe_code)]
 
 use api::completion::{ViCompletion, COMPLETION_LEN};
+use api::cell_owner::{CellOwner, CELL_OWNER_LEN};
+#[cfg(target_pointer_width = "32")]
+use api::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
 use api::syscall::{ViMemInfoV1, ViSpawnArgs, ViSyscall};
 use core::arch::asm;
 
@@ -732,6 +735,86 @@ pub fn sys_query_dir_handles(
         return None;
     }
     api::dir_attestation::ViDirHandleAttestation::from_bytes(buf)
+}
+
+/// Resolve the root lifetime endpoint for the current VFS receive principal.
+#[cfg(not(target_pointer_width = "32"))]
+pub fn sys_resolve_cell_owner(cell_id: u64, generation: u64) -> Option<CellOwner> {
+    let mut bytes = [0; CELL_OWNER_LEN];
+    let ret = unsafe {
+        syscall(
+            ViSyscall::ResolveCellOwner,
+            cell_id as usize,
+            generation as usize,
+            bytes.as_mut_ptr() as usize,
+            bytes.len(),
+        )
+    };
+    ((ret as usize) == CELL_OWNER_LEN).then(|| CellOwner::from_bytes(&bytes))?
+}
+
+/// RV32 uses the additive fixed-record ABI so both identity words remain exact.
+#[cfg(target_pointer_width = "32")]
+pub fn sys_resolve_cell_owner(cell_id: u64, generation: u64) -> Option<CellOwner> {
+    let request = CellOwnerRequest::new(cell_id, generation);
+    let mut bytes = [0; CELL_OWNER_LEN];
+    let ret = unsafe {
+        syscall(
+            ViSyscall::ResolveCellOwnerRecord,
+            (&request as *const CellOwnerRequest) as usize,
+            CELL_OWNER_REQUEST_LEN,
+            bytes.as_mut_ptr() as usize,
+            bytes.len(),
+        )
+    };
+    ((ret as usize) == CELL_OWNER_LEN).then(|| CellOwner::from_bytes(&bytes))?
+}
+
+/// Atomically subscribe to the current principal's root death. The token is
+/// opaque and must be cancelled when its local provisional record is removed.
+#[cfg(not(target_pointer_width = "32"))]
+pub fn sys_watch_cell_owner(cell_id: u64, generation: u64) -> Option<(CellOwner, u64)> {
+    let mut bytes = [0; CELL_OWNER_LEN];
+    let token = unsafe {
+        syscall(
+            ViSyscall::WatchCellOwner,
+            cell_id as usize,
+            generation as usize,
+            bytes.as_mut_ptr() as usize,
+            bytes.len(),
+        )
+    };
+    if token <= 0 {
+        return None;
+    }
+    Some((CellOwner::from_bytes(&bytes)?, token as u64))
+}
+
+/// RV32 uses the additive fixed-record ABI so both identity words remain exact.
+#[cfg(target_pointer_width = "32")]
+pub fn sys_watch_cell_owner(cell_id: u64, generation: u64) -> Option<(CellOwner, u64)> {
+    let request = CellOwnerRequest::new(cell_id, generation);
+    let mut bytes = [0; CELL_OWNER_LEN];
+    let token = unsafe {
+        syscall(
+            ViSyscall::WatchCellOwnerRecord,
+            (&request as *const CellOwnerRequest) as usize,
+            CELL_OWNER_REQUEST_LEN,
+            bytes.as_mut_ptr() as usize,
+            bytes.len(),
+        )
+    };
+    if token <= 0 {
+        return None;
+    }
+    Some((CellOwner::from_bytes(&bytes)?, token as u64))
+}
+
+/// Cancel one owner watch. The kernel makes repeated cancellation harmless.
+pub fn sys_cancel_cell_owner_watch(token: u64) {
+    unsafe {
+        let _ = syscall(ViSyscall::CancelCellOwnerWatch, token as usize, 0, 0, 0);
+    }
 }
 
 /// Resolve a well-known `service_id` to its current provider tid.

@@ -197,18 +197,27 @@ pub extern "C" fn vi_aarch64_trap_handler(frame: &mut TrapFrame) {
         // EC 0x24 = Data Abort from lower EL (EL0 cell).
         // With HCR_EL2.TGE=1 all EL0 exceptions trap to EL2 — these ECs only
         // arrive from EL0 in our setup (there is no EL1 guest).
-        // Forward to the kernel fault handler: kills the cell, lets the OS continue.
         0x20 | 0x24 => {
-            // SAFETY: vi_terminate_on_fault_aarch64 is #[no_mangle] in kernel::task.
-            // It force-unlocks all kernel locks, sends NotifyOnExit, and calls
-            // yield_cpu() which switches away from this (now dead) cell.
-            unsafe {
-                vi_terminate_on_fault_aarch64(
-                    esr as usize,            // fault class (ESR_EL2)
-                    frame.elr_el1 as usize,  // faulting instruction PC (ELR_EL2)
-                    frame.far_el1 as usize,  // faulting address (FAR_EL2)
-                    frame.spsr_el1 as usize, // lower-EL PSTATE (SPSR_EL2)
-                    vector_kind,
+            // Lower-EL EC proves the privilege origin, but a recoverable Cell
+            // fault also needs a live attribution.  Never manufacture a
+            // deferred record for an inconsistent unowned EL0 trap.
+            let cell_id = unsafe { vi_current_cell_id() };
+            if cell_id != 0 {
+                // SAFETY: vi_terminate_on_fault_aarch64 is #[no_mangle] in
+                // kernel::task; this lower-EL trap has proved the origin.
+                unsafe {
+                    vi_terminate_on_fault_aarch64(
+                        esr as usize,
+                        frame.elr_el1 as usize,
+                        frame.far_el1 as usize,
+                        frame.spsr_el1 as usize,
+                        vector_kind,
+                    );
+                }
+            } else {
+                panic!(
+                    "[aarch64] unowned lower-EL trap ec=0x{:X} esr=0x{:X} elr=0x{:X} far=0x{:X} spsr=0x{:X}",
+                    ec, esr, frame.elr_el1, frame.far_el1, frame.spsr_el1
                 );
             }
         }

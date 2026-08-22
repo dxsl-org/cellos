@@ -176,66 +176,55 @@ pub fn main() {
         // and charged its quota to a ledger row nothing owned.
         match ostd::syscall::sys_recv_attested(0, &mut buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                if api::caller_identity::CallerIdentity::from_recv_buf(&buf).is_none() {
-                    if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
-                        let _ = vfs.handle_unattributed_owner_death(sender);
+                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf) else {
+                    let cancellations = GLOBAL_VFS
+                        .lock()
+                        .as_mut()
+                        .map(|vfs| {
+                            let _ = vfs.handle_unattributed_owner_death(sender);
+                            vfs.take_owner_watch_cancellations()
+                        })
+                        .unwrap_or_default();
+                    for token in cancellations {
+                        ostd::syscall::sys_cancel_cell_owner_watch(token);
                     }
                     buf = [0u8; api::ipc::IPC_BUF_SIZE];
                     continue;
-                }
-                // Encode the response into a local buffer while holding the VFS lock,
-                // then DROP the lock before sys_send.  If ipc_send blocks (client not
-                // yet in Recv), yield_cpu switches to another cell.  That cell may call
-                // call_vfs which also acquires GLOBAL_VFS — a deadlock if we still hold
-                // the lock during the send.
-                let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
-                let mut encoded_len: usize;
-                let watch;
-                {
-                    let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
-                    // Acquire VFS state; released at end of this block, before sys_send.
-                    let mut gvfs = GLOBAL_VFS.lock();
-                    let vfs = gvfs
-                        .as_mut()
-                        .expect("VFS initialized before serving requests");
-                    // `None` here (no trailer, or a sender the kernel could no
-                    // longer attribute) makes every op deny — see handle_request.
-                    let attested = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
-                        .map(caller::Caller::from_attested);
-                    let resp = dispatch::handle_request(vfs, &buf, attested, &mut resp_buf);
-                    watch = attested.and_then(|caller| {
-                        vfs.should_watch_after_response(caller, &resp)
-                            .map(|owner_tid| (owner_tid, caller))
-                    });
-                    // Encode while holding the lock (safe: no sys_send yet).
-                    encoded_len = api::ipc::encode(&resp, &mut encoded)
-                        .map(|s| s.len())
+                };
+                let caller = caller::Caller::from_attested(identity);
+                // The atomic kernel operation verifies this exact receive context
+                // and registers root death before VFS can persist any state.
+                let Some((owner, token)) =
+                    ostd::syscall::sys_watch_cell_owner(caller.cell.0, caller.generation)
+                else {
+                    let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
+                    let len = api::ipc::encode(&api::ipc::VfsResponse::Err(3), &mut encoded)
+                        .map(|bytes| bytes.len())
                         .unwrap_or(0);
-                } // GLOBAL_VFS lock released here — before sys_send
-
-                if let Some((owner_tid, caller)) = watch {
-                    match ostd::syscall::sys_notify_on_exit(owner_tid) {
-                        ostd::syscall::SyscallResult::Ok(_) => {}
-                        _ => {
-                            if let Some(vfs) = GLOBAL_VFS.lock().as_mut() {
-                                vfs.rollback_owner_watch(caller);
-                            }
-                            encoded_len =
-                                api::ipc::encode(&api::ipc::VfsResponse::Err(3), &mut encoded)
-                                    .map(|s| s.len())
-                                    .unwrap_or(0);
-                        }
-                    }
+                    ostd::syscall::sys_send(sender, &encoded[..len]);
+                    buf = [0u8; api::ipc::IPC_BUF_SIZE];
+                    continue;
+                };
+                let mut encoded = [0u8; api::ipc::IPC_BUF_SIZE];
+                let (encoded_len, cancellations) = {
+                    let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
+                    let mut guard = GLOBAL_VFS.lock();
+                    let vfs = guard.as_mut().expect("VFS initialized before serving requests");
+                    vfs.install_owner_watch(caller, owner.root_tid as usize, token);
+                    let response = dispatch::handle_request(vfs, &buf, Some(caller), &mut resp_buf);
+                    let len = api::ipc::encode(&response, &mut encoded)
+                        .map(|bytes| bytes.len())
+                        .unwrap_or(0);
+                    (len, vfs.take_owner_watch_cancellations())
+                };
+                for cancelled in cancellations {
+                    ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
                 }
-
-                // Send after releasing the lock so a blocked ipc_send + yield_cpu
-                // cannot switch to a cell that deadlocks on GLOBAL_VFS.
+                // `GLOBAL_VFS` is unlocked for every kernel call and send.
                 ostd::syscall::sys_send(sender, &encoded[..encoded_len]);
                 buf = [0u8; api::ipc::IPC_BUF_SIZE];
             }
-            _ => {
-                ostd::task::yield_now();
-            }
+            _ => ostd::task::yield_now(),
         }
     }
 }

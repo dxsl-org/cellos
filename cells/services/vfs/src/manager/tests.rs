@@ -63,16 +63,10 @@ fn owner_death_purges_only_the_watched_owner() {
         .insert(CELL_OTHER, "/tmp/new.txt", other_dir.0)
         .expect("other file");
 
-    assert_eq!(
-        vfs.should_watch_after_response(CELL_OLD, &api::ipc::VfsResponse::FileHandle(old_file)),
-        Some(CELL_OLD.cell.0 as usize)
-    );
-    assert_eq!(
-        vfs.should_watch_after_response(CELL_OTHER, &api::ipc::VfsResponse::PendingHandle(2)),
-        Some(CELL_OTHER.cell.0 as usize)
-    );
+    vfs.install_owner_watch(CELL_OLD, 7001, 1);
+    vfs.install_owner_watch(CELL_OTHER, 7002, 2);
 
-    assert!(vfs.handle_unattributed_owner_death(CELL_OLD.cell.0 as usize));
+    assert!(vfs.handle_unattributed_owner_death(7001));
     assert_eq!(vfs.pending.poll(CELL_OLD, old_pending), None);
     assert_eq!(vfs.pending.poll(CELL_OTHER, other_pending), Some(vec![2u8]));
     assert_eq!(vfs.dirs.dir_path(CELL_OLD, old_dir), None);

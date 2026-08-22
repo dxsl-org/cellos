@@ -7,7 +7,8 @@
 
 pub use hal_arch_trait::ViTrapFrame32;
 use hal_arch_trait::{
-    vi_current_cell_id, vi_terminate_on_fault, vi_timer_tick, ViCell_syscall_dispatch,
+    vi_current_cell_id, vi_terminate_on_user_trap_fault, vi_timer_tick,
+    ViCell_syscall_dispatch,
 };
 
 extern "C" {
@@ -68,18 +69,20 @@ pub extern "C" fn vi_trap_handler32(frame: &mut ViTrapFrame32) {
                 frame.sepc += 4; // advance past ecall instruction
             }
             _ => {
-                // Exception: illegal instruction, page fault, misalign, etc.
-                // If a Cell is running, kill it; otherwise panic.
+                // SPP=0 proves the interrupted context was U-mode.  A
+                // non-zero Cell attribution by itself can belong to kernel
+                // syscall handling and is never sufficient for recovery.
+                let from_user = (frame.sstatus & 0x100) == 0;
                 let cell_id = unsafe { vi_current_cell_id() };
-                if cell_id != 0 {
+                if from_user && cell_id != 0 {
                     unsafe {
-                        vi_terminate_on_fault(
+                        vi_terminate_on_user_trap_fault(
                             code as usize,
                             frame.sepc as usize,
                             frame.stval as usize,
                         );
                     }
-                    // vi_terminate_on_fault calls yield_cpu() — we should not reach here.
+                    // The callback calls yield_cpu() — we should not reach here.
                 } else {
                     panic!(
                         "Cellos/RV32: kernel exception scause={} sepc={:#x} stval={:#x}",

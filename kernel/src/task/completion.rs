@@ -360,13 +360,17 @@ pub fn wakes_pending() -> bool {
 
 /// A state a completion wake may leave, versus one it must not disturb.
 ///
-/// `Ready`/`Running` are already runnable, a `Terminated` task has nowhere to go,
-/// and `Frozen` is held deliberately by hot-swap — unfreezing it here would run a
-/// cell mid-swap.
+/// `Ready`/`Running` are already runnable, and terminal task records must not
+/// be revived. `Frozen` is held deliberately by hot-swap — unfreezing it here
+/// would run a cell mid-swap.
 fn is_parked(state: &TaskState) -> bool {
     !matches!(
         state,
-        TaskState::Ready | TaskState::Running | TaskState::Terminated | TaskState::Frozen { .. }
+        TaskState::Ready
+            | TaskState::Running
+            | TaskState::Terminated
+            | TaskState::Retiring
+            | TaskState::Frozen { .. }
     )
 }
 

@@ -777,8 +777,13 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
     task::smp::start_secondaries();
 
+
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    task::context_handoff_selftest::run_primary();
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    task::retirement_selftest::run_primary();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
@@ -1044,73 +1049,15 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 }
 
-/// Panic handler.
+/// Non-recoverable kernel panic handler.
 ///
-/// If the panic occurs while a Cell is running (`CURRENT_CELL_ID != 0`),
-/// kills the Cell instead of halting the system (e.g. OOM after QuotaAlloc
-/// returns null → Cell's alloc panics → we kill it, kernel continues).
-/// True kernel panics (cell_id == 0) halt as before.
+/// `current_cell_id` is allocation attribution, not an execution-mode proof:
+/// kernel code can hold scheduler or other kernel locks while servicing a
+/// Cell.  Therefore this handler never schedules or retires a Cell.  Only the
+/// architecture trap path, after proving an interrupted U-mode context, may
+/// enter the deferred retirement funnel.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    let cell_id = task::hart_local::current_cell_id();
-
-    if cell_id != 0 {
-        // Cell OOM/panic — kill the Cell, kernel survives. Print the panic
-        // FIRST: this path used to swallow the message entirely, leaving only
-        // a meaningless "cause=0x0 pc=0x0" fault line to debug from.
-        {
-            #[inline(always)]
-            fn cell_panic_putchar(c: u8) {
-                #[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
-                {
-                    let _ = crate::hal::sbi::console_putchar(c);
-                }
-                #[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
-                {
-                    crate::hal::uart_bcm_mini::putchar(c);
-                }
-                #[cfg(all(target_arch = "aarch64", not(feature = "board-rpi3")))]
-                {
-                    crate::hal::uart_pl011::putchar(c);
-                }
-                #[cfg(target_arch = "arm")]
-                {
-                    crate::hal::uart_pl011::putchar(c);
-                }
-                #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-                {
-                    crate::hal::uart_16550::putchar(c);
-                }
-            }
-            struct CellPanicWriter;
-            impl core::fmt::Write for CellPanicWriter {
-                fn write_str(&mut self, s: &str) -> core::fmt::Result {
-                    for c in s.bytes() {
-                        cell_panic_putchar(c);
-                    }
-                    Ok(())
-                }
-            }
-            use core::fmt::Write;
-            let _ = write!(CellPanicWriter, "\n[panic-in-cell {}] {}\n", cell_id, info);
-        }
-        // SAFETY: panic context, interrupts disabled (abort mode), single-hart.
-        task::terminate_current_cell_on_fault(0, 0, 0);
-        // terminate_current_cell_on_fault calls yield_cpu() which switches away.
-        // In abort mode we never return here, but placate the compiler:
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        loop {
-            unsafe {
-                core::arch::asm!("cli; hlt", options(nomem, nostack));
-            }
-        }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
-        loop {
-            unsafe {
-                core::arch::asm!("wfi");
-            }
-        }
-    }
 
     // True kernel panic: print diagnostics and halt.
     #[inline(always)]

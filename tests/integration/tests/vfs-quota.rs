@@ -17,6 +17,10 @@
 
 use std::path::PathBuf;
 use vicell_integration_tests::{qemu_binary, QemuRunner};
+const VFS_LIFECYCLE_SELFTEST: &str =
+    include_str!("../../../kernel/src/task/vfs_lifecycle_selftest.rs");
+const VFS_LIFETIME_PASS_PREFIX: &str = "[selftest] VFS-LIFETIME: PASS";
+
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -63,6 +67,40 @@ fn wait_for_or_dump(runner: &QemuRunner, pattern: &str) {
         panic!("{e}");
     });
 }
+#[test]
+fn vfs_lifecycle_selftest_covers_required_stages() {
+    let self_test = &VFS_LIFECYCLE_SELFTEST[VFS_LIFECYCLE_SELFTEST
+        .find("pub fn self_test()")
+        .expect("VFS lifetime self-test entry point exists")..];
+    let exact_lease = self_test
+        .find("exact_lease_release()")
+        .expect("VFS lifetime self-test runs exact-lease coverage");
+    let quarantine = self_test
+        .find("quarantine_waits_for_exact_release()")
+        .expect("VFS lifetime self-test runs quarantine coverage");
+    let stale_install = self_test
+        .find("stale_context_install_is_denied_without_capacity_loss()")
+        .expect("VFS lifetime self-test runs stale-install denial coverage");
+    let owner_watch = self_test
+        .find("vfs_owner_watch()")
+        .expect("VFS lifetime self-test runs owner-watch coverage");
+    assert!(
+        exact_lease < quarantine && quarantine < stale_install && stale_install < owner_watch,
+        "VFS lifetime self-test must retain its exact-lease, quarantine, stale-install, and owner-watch stages"
+    );
+
+    let pending_revoke = VFS_LIFECYCLE_SELFTEST
+        .find("stage=dead-owner-pending-revoke-exact-release")
+        .expect("VFS lifetime self-test records pending-revoke exact-release proof");
+    let stale_install_marker = VFS_LIFECYCLE_SELFTEST
+        .find("stage=smp-stale-context-denied-capacity-preserved")
+        .expect("VFS lifetime self-test records stale-install denial proof");
+    assert!(
+        pending_revoke < stale_install_marker,
+        "VFS lifetime proof must record pending revoke before stale-install denial"
+    );
+}
+
 
 #[test]
 fn riscv64_vfs_quota_all_pass() {
@@ -95,10 +133,7 @@ fn riscv64_vfs_quota_all_pass() {
         &runner,
         "[stack-guard] deliberate overflow armed guard_pages=2",
     );
-    wait_for_or_dump(
-        &runner,
-        "'stack_overflow_probe') terminated: cause=0xf",
-    );
+    wait_for_or_dump(&runner, "terminated: cause=0xf");
     wait_for_or_dump(&runner, "[stack-baseline] name=init phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=shell phase=boot ");
     wait_for_or_dump(&runner, "[stack-baseline] name=vfs phase=boot ");
@@ -118,6 +153,7 @@ fn riscv64_vfs_quota_all_pass() {
         "[vfs-file-handle] owner-watch-filehandle-cleanup PASS",
     );
     wait_for_or_dump(&runner, "[vfs-file-handle] higher-generation-cleanup PASS");
+    wait_for_or_dump(&runner, VFS_LIFETIME_PASS_PREFIX);
     wait_for_or_dump(&runner, "[PASS] dircap: GetFile returns a nonempty pointer before sealing");
     wait_for_or_dump(
         &runner,

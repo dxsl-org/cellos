@@ -25,7 +25,8 @@ pub struct Caller {
     /// Cell epoch from the attestation. Distinguishes a successor cell from the
     /// one it replaced.
     pub generation: u64,
-    /// Sending thread the kernel attested for this request.
+    /// Sending thread, retained only for the reply transport. It is never a
+    /// lifetime endpoint; root identity comes from a tokenized owner watch.
     pub sender_tid: u64,
 }
 

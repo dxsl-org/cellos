@@ -1,36 +1,60 @@
 use crate::caller::Caller;
-use crate::manager::VfsManager;
+use crate::manager::{VfsManager, WatchedOwner};
 
 impl VfsManager {
-    pub fn should_watch_after_response(
-        &mut self,
-        caller: Caller,
-        response: &api::ipc::VfsResponse<'_>,
-    ) -> Option<usize> {
-        if !caller.may_own_state() || !Self::response_creates_owned_state(response) {
-            return None;
-        }
-        match self.watched_owners.insert(caller.cell.0, caller) {
-            Some(existing) if existing == caller => None,
-            Some(existing) => {
-                self.purge_owned_state(existing);
-                Some(caller.cell.0 as usize)
+    /// Install a root-lifetime watch before dispatch can create durable state.
+    /// A reused CellId retires only the predecessor principal, never a broad
+    /// CellId row, and its token is cancelled after the VFS lock is released.
+    pub fn install_owner_watch(&mut self, caller: Caller, root_tid: usize, token: u64) {
+        let stale: alloc::vec::Vec<(u64, u64)> = self
+            .watched_owners
+            .keys()
+            .filter(|(cell_id, generation)| *cell_id == caller.cell.0 && *generation != caller.generation)
+            .copied()
+            .collect();
+        for key in stale {
+            if let Some(previous) = self.watched_owners.remove(&key) {
+                self.purge_owned_state(previous.principal);
+                self.cancelled_owner_watch_tokens.push(previous.token);
             }
-            None => Some(caller.cell.0 as usize),
         }
+        let key = (caller.cell.0, caller.generation);
+        if self.watched_owners.contains_key(&key) {
+            self.cancelled_owner_watch_tokens.push(token);
+            return;
+        }
+        self.watched_owners.insert(
+            key,
+            WatchedOwner {
+                principal: caller,
+                root_tid,
+                token,
+            },
+        );
     }
 
-    pub fn handle_unattributed_owner_death(&mut self, owner_tid: usize) -> bool {
-        let Some(caller) = self.watched_owners.remove(&(owner_tid as u64)) else {
-            return false;
-        };
-        self.purge_owned_state(caller);
-        true
+    /// A death notification has no caller trailer. It is attributable only when
+    /// its root TID matches a live, tokenized local owner record.
+    pub fn handle_unattributed_owner_death(&mut self, root_tid: usize) -> bool {
+        let matches: alloc::vec::Vec<(u64, u64)> = self
+            .watched_owners
+            .iter()
+            .filter_map(|(&key, owner)| (owner.root_tid == root_tid).then_some(key))
+            .collect();
+        let mut purged = false;
+        for key in matches {
+            if let Some(owner) = self.watched_owners.remove(&key) {
+                self.purge_owned_state(owner.principal);
+                self.cancelled_owner_watch_tokens.push(owner.token);
+                purged = true;
+            }
+        }
+        purged
     }
 
-    pub fn rollback_owner_watch(&mut self, caller: Caller) {
-        self.watched_owners.remove(&caller.cell.0);
-        self.purge_owned_state(caller);
+
+    pub fn take_owner_watch_cancellations(&mut self) -> alloc::vec::Vec<u64> {
+        core::mem::take(&mut self.cancelled_owner_watch_tokens)
     }
 
     fn purge_owned_state(&mut self, caller: Caller) -> usize {
@@ -40,14 +64,5 @@ impl VfsManager {
         let handles = self.handles.purge_owner(caller);
         let pending = self.pending.purge_owner(caller);
         dirs.count + revoked_files + files + handles + pending
-    }
-
-    fn response_creates_owned_state(response: &api::ipc::VfsResponse<'_>) -> bool {
-        matches!(
-            response,
-            api::ipc::VfsResponse::DirHandle(_)
-                | api::ipc::VfsResponse::PendingHandle(_)
-                | api::ipc::VfsResponse::FileHandle(_)
-        )
     }
 }

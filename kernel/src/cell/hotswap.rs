@@ -447,33 +447,16 @@ fn rollback_mailbox_appends(
 /// is Frozen at this point; the regular `ForceExit` syscall would reject the
 /// request with `PermissionDenied`.
 ///
-/// Mirrors the cleanup sequence from the `ForceExit` handler — must remain in sync.
-pub(crate) fn exit_task_internal(tid: usize, cell_id: CellId) {
-    // Resource cleanup (same order as ForceExit handler).
-    crate::cell::cap_registry::CAP_TABLE
-        .lock()
-        .revoke_all_for(cell_id);
-    crate::memory::cell_quota::deregister(cell_id);
-    crate::resource_registry::release_for(cell_id);
-    crate::resource_registry::release_bdfs_for(tid);
-    // Keyed by task id, as at every other call site: this is also the point that
-    // releases quarantined frames, so a cell id here would look up nothing and
-    // leak them on every swap. The two agree for a loader-spawned cell, which is
-    // what let the mismatch go unnoticed.
-    crate::task::drivers::iommu::cleanup_cell(tid as u64);
-    // The completed IOTLB teardown is the acknowledgement for ordinary DMA pins.
-    // Drop them before grant reap so those frames are freed instead of entering
-    // an orphaned quarantine. VFS request leases remain exact-release scoped.
-    crate::task::syscall::release_acked_frames(tid);
+/// Uses the same scheduler retirement funnel as every other exit path. The
+/// `CellId` is retained only to preserve this internal call shape; it must not
+/// authorize Cell-wide cleanup for a worker target.
+pub(crate) fn exit_task_internal(tid: usize, _cell_id: CellId) {
 
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         // 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
         sched.exit_task(tid, 0xAAAA_AAAAusize);
     }
 
-    // Grant pages are freed outside SCHEDULER lock (lock-order safety).
-    // SAFETY: reap_grants_for_task is pub(crate); hotswap.rs is in the same crate.
-    crate::task::syscall::reap_grants_for_task(tid);
 
     crate::audit::log_event(
         crate::audit::AuditEvent::CellExit,

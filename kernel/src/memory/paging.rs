@@ -1177,8 +1177,9 @@ const _: crate::hal::HandlePageFault = vi_handle_page_fault;
 /// the scheduler state is inconsistent, and killing "the current cell" would
 /// destroy an innocent task or nothing at all.
 ///
-/// Does not return when a cell is killed — `terminate_current_cell_on_fault`
-/// ends in `yield_cpu()`, which switches to another task.
+/// Does not return when a cell is killed —
+/// `terminate_current_cell_on_user_trap_fault` ends in `yield_cpu()`, which
+/// switches to another task.
 #[cfg(target_arch = "x86_64")]
 fn fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: &str) {
     let cell_id = crate::task::hart_local::current_cell_id();
@@ -1196,7 +1197,12 @@ fn fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: &str) {
         cs,
         why
     );
-    // `cause` carries the raw #PF error code, mirroring how riscv64 passes
-    // `scause` and aarch64 passes `ESR_EL2` into the same reporting path.
-    crate::task::terminate_current_cell_on_fault(error_code as usize, rip as usize, va);
+    // The #PF dispatcher established error-code U/S before entering this
+    // helper, so this is the x86 user-trap provenance required by the
+    // deferred retirement funnel.
+    crate::task::terminate_current_cell_on_user_trap_fault(
+        error_code as usize,
+        rip as usize,
+        va,
+    );
 }

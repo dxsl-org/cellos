@@ -1,6 +1,5 @@
 use alloc::string::String;
 
-use api::ipc::VfsResponse;
 use api::vfs_file_handles::ViVfsFileHandle;
 use types::CellId;
 
@@ -102,11 +101,8 @@ fn owner_watch_reaps_file_handles() {
         .files
         .insert(CELL_B, "/tmp/watched", dir.0)
         .expect("file");
-    assert_eq!(
-        vfs.should_watch_after_response(CELL_B, &VfsResponse::FileHandle(file)),
-        Some(CELL_B.cell.0 as usize)
-    );
-    assert!(vfs.handle_unattributed_owner_death(CELL_B.cell.0 as usize));
+    vfs.install_owner_watch(CELL_B, 8101, 1);
+    assert!(vfs.handle_unattributed_owner_death(8101));
     assert!(!vfs.files.contains(file));
     ostd::io::println("[vfs-file-handle] owner-watch-filehandle-cleanup PASS");
 }

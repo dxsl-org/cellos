@@ -468,6 +468,30 @@ pub enum ViSyscall {
     /// which is what lets one parked thread serve several outstanding
     /// operations. Both exist; neither replaces the other.
     WaitCompletion = 242,
+    /// 244: Attest the root task currently owning a Cell principal.
+    ///
+    /// ABI: a0 = cell_id, a1 = generation, a2 = output pointer, a3 = output
+    /// length. The record is available only to the registered VFS provider while
+    /// it is handling that exact principal.
+    ResolveCellOwner = 244,
+    /// 245: Atomically attest and subscribe to a Cell root's death.
+    ///
+    /// Uses the same arguments as `ResolveCellOwner`; returns an opaque non-zero
+    /// watch token and writes the owner record on success.
+    WatchCellOwner = 245,
+    /// 246: Cancel exactly one live Cell-owner watch. ABI: a0 = token.
+    CancelCellOwnerWatch = 246,
+    /// 247: RV32-safe root-owner attestation.
+    ///
+    /// ABI: a0 = [`crate::cell_owner::CellOwnerRequest`] pointer, a1 = request
+    /// length, a2 = owner-record output pointer, a3 = output length. This is an
+    /// additive record ABI; 244 remains unchanged for existing 64-bit callers.
+    ResolveCellOwnerRecord = 247,
+    /// 248: RV32-safe atomic root-owner watch.
+    ///
+    /// Uses the same fixed request and owner response records as 247. Its
+    /// positive token result remains bounded to `isize::MAX`.
+    WatchCellOwnerRecord = 248,
 }
 
 /// Bit constants for the `cap_mask` argument of `ViSyscall::CapRevoke`.
@@ -749,6 +773,11 @@ impl ViSyscall {
             | Self::CapRevoke
             | Self::SpawnSetDirs
             | Self::QueryDirHandles
+            | Self::ResolveCellOwner
+            | Self::WatchCellOwner
+            | Self::CancelCellOwnerWatch
+            | Self::ResolveCellOwnerRecord
+            | Self::WatchCellOwnerRecord
             | Self::Unknown => None,
         }
     }
@@ -832,6 +861,11 @@ impl From<usize> for ViSyscall {
             241 => ViSyscall::QueryDirHandles,
             242 => ViSyscall::WaitCompletion,
             243 => ViSyscall::MemInfo,
+            244 => ViSyscall::ResolveCellOwner,
+            245 => ViSyscall::WatchCellOwner,
+            246 => ViSyscall::CancelCellOwnerWatch,
+            247 => ViSyscall::ResolveCellOwnerRecord,
+            248 => ViSyscall::WatchCellOwnerRecord,
             300 => ViSyscall::GpuFlush,
             301 => ViSyscall::GpuCursor,
             302 => ViSyscall::GpuGetResolution,

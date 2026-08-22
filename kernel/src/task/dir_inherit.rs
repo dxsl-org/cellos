@@ -70,24 +70,19 @@ pub(crate) fn take_for_launch(
     inherited
 }
 
-/// What the kernel is prepared to state about `cell_id`'s inherited handles.
-///
-/// Returns `None` when `cell_id` names no live cell. The record lives on the
-/// cell's own task — the one whose tid the `CellId` is derived from — so a
-/// thread of that cell resolves to the same answer rather than to an empty set
-/// of its own.
+/// Returns `None` when `cell_id` names no live root-owned Cell generation.
+/// Cell IDs are bounded reusable quota slots, never task-table indexes.
 pub fn attestation_for(cell_id: u64) -> Option<api::dir_attestation::ViDirHandleAttestation> {
     if cell_id == 0 {
         return None;
     }
     let guard = super::SCHEDULER.lock();
-    let task = guard.as_ref()?.tasks.get(&(cell_id as usize))?;
-    if task.cell_id.0 != cell_id {
-        return None;
-    }
+    let sched = guard.as_ref()?;
+    let owner = sched.live_cell_owner_for_id(types::CellId(cell_id))?;
+    let task = sched.tasks.get(&(owner.root_tid as usize))?;
     Some(api::dir_attestation::ViDirHandleAttestation {
         cell_id,
-        generation: task.cell_generation,
+        generation: owner.generation,
         spawner_cell_id: task.inherited_dirs.spawner_cell_id,
         spawner_generation: task.inherited_dirs.spawner_generation,
         set: task.inherited_dirs.set,

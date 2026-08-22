@@ -40,6 +40,10 @@ name = "atomic-publication"
 path = "tests/atomic-publication.rs"
 
 [[test]]
+name = "vfs-smp"
+path = "tests/vfs-smp.rs"
+
+[[test]]
 name = "x86_64-boot"
 path = "tests/x86_64-boot.rs"
 

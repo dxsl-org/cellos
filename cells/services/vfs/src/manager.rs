@@ -28,6 +28,13 @@ use crate::mount::MountTable;
 use crate::pending::PendingTable;
 use crate::quota::QuotaTracker;
 
+
+#[derive(Clone, Copy)]
+pub(crate) struct WatchedOwner {
+    pub principal: Caller,
+    pub root_tid: usize,
+    pub token: u64,
+}
 pub struct VfsManager {
     mounts: MountTable,
     pub handles: HandleTable,
@@ -38,7 +45,8 @@ pub struct VfsManager {
     /// Directory capabilities. Deliberately not serialised across a hot-swap —
     /// see `dirs::lifecycle`, where the reasoning for that lives.
     pub dirs: DirTable,
-    watched_owners: BTreeMap<u64, Caller>,
+    watched_owners: BTreeMap<(u64, u64), WatchedOwner>,
+    cancelled_owner_watch_tokens: Vec<u64>,
 }
 
 impl VfsManager {
@@ -88,6 +96,7 @@ impl VfsManager {
             files: FileHandleTable::new(),
             dirs: DirTable::new(),
             watched_owners: BTreeMap::new(),
+            cancelled_owner_watch_tokens: Vec::new(),
         }
     }
 

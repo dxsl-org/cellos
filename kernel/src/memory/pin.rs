@@ -63,7 +63,7 @@ const MAX_PINS_PER_TASK: usize = 48;
 /// by the reaper, one per grant a dying cell had pinned, so the bound is the
 /// number of grants that can be in flight across all dead cells at once.
 const MAX_QUARANTINED_REGIONS: usize = 64;
-const MAX_VFS_LEASES: usize = 32;
+pub(crate) const MAX_VFS_LEASES: usize = 32;
 
 /// Why a region could not be pinned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,6 +101,8 @@ pub struct PinHolder {
     pub holds: u32,
     /// The owner has died and these frames are withheld from the allocator.
     pub quarantined: bool,
+    /// The grant owner died; only the active holder may complete this lease.
+    pub pending_revoke: bool,
     /// Exact VFS request generation when this hold belongs to a VFS lease.
     pub request_generation: u64,
     /// VFS task holding the lease, or 0 for owner-wide DMA pins.
@@ -126,6 +128,9 @@ struct VfsLeaseEntry {
     grant_id: usize,
     request_generation: u64,
     quarantined: bool,
+    /// Owner death has revoked future slices but not the holder's existing raw
+    /// pointer. The holder alone ends this exact lease.
+    pending_revoke: bool,
 }
 
 /// Frames the reaper declined to return to the allocator, awaiting an
@@ -148,6 +153,19 @@ enum ReleaseKey {
         request_generation: u64,
     },
 }
+/// Result of the reaper's single-transaction pin-to-quarantine transfer.
+///
+/// `Free` means no live pin protected the range at the transfer linearization
+/// point, so the reaper may return the frames to the allocator. `Full` means a
+/// live pin did protect them but the bounded quarantine has no slot; callers
+/// must leak rather than free in that case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FrameTransfer {
+    Free,
+    Withheld,
+    Full,
+}
+
 
 const EMPTY_PIN: PinEntry = PinEntry {
     base: 0,
@@ -171,6 +189,7 @@ const EMPTY_VFS_LEASE: VfsLeaseEntry = VfsLeaseEntry {
     grant_id: 0,
     request_generation: 0,
     quarantined: false,
+    pending_revoke: false,
 };
 
 struct Registry {
@@ -208,6 +227,7 @@ fn pin_holder_from_pin(entry: &PinEntry) -> PinHolder {
         owner: entry.owner,
         holds: entry.holds,
         quarantined: entry.quarantined,
+        pending_revoke: false,
         request_generation: 0,
         holder_tid: 0,
     }
@@ -220,6 +240,7 @@ fn pin_holder_from_vfs_lease(entry: &VfsLeaseEntry) -> PinHolder {
         owner: entry.grant_owner,
         holds: 1,
         quarantined: entry.quarantined,
+        pending_revoke: entry.pending_revoke,
         request_generation: entry.request_generation,
         holder_tid: entry.holder_tid,
     }
@@ -363,7 +384,7 @@ pub(crate) fn vfs_holder_of_owner(
         .map(pin_holder_from_vfs_lease)
 }
 
-/// Mark every pin owned by `tid` as quarantined and report how many.
+/// Mark every non-VFS pin owned by `tid` as quarantined and report how many.
 ///
 /// Called from the grant reaper before the grant tables are swept. Marking does
 /// not free anything and does not wait: the dying task proceeds immediately.
@@ -376,12 +397,10 @@ pub fn quarantine_task(tid: usize) -> usize {
             marked += 1;
         }
     }
-    for e in reg.vfs_leases.iter_mut() {
-        if e.pages != 0 && e.grant_owner == tid {
-            e.quarantined = true;
-            marked += 1;
-        }
-    }
+    // VFS leases are per-request and held by another task. Their owner death
+    // is marked by `mark_vfs_lease_pending_revoke` from the scheduler while it
+    // still has the holder+owner+generation context; broad owner-wide marking
+    // would let an unrelated holder release a live raw pointer.
     marked
 }
 
@@ -402,6 +421,11 @@ pub fn withhold_frames(base: usize, pages: usize, owner: usize) -> bool {
     hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::Owner(owner))
 }
 
+/// Take custody of `pages` VFS-lease frames that the reaper declined to free.
+///
+/// The exact lease is checked while holding the registry lock before the
+/// quarantine entry is installed. A missing lease therefore cannot leave an
+/// orphaned [`ReleaseKey::VfsLease`] that nobody can release.
 pub fn withhold_vfs_frames(
     base: usize,
     pages: usize,
@@ -410,6 +434,13 @@ pub fn withhold_vfs_frames(
     request_generation: u64,
 ) -> bool {
     let mut reg = REGISTRY.lock();
+    if !reg
+        .vfs_leases
+        .iter()
+        .any(|entry| same_vfs_lease(entry, holder_tid, grant_owner, request_generation))
+    {
+        return false;
+    }
     hold_quarantined_frames(
         &mut reg,
         base,
@@ -420,6 +451,54 @@ pub fn withhold_vfs_frames(
             request_generation,
         },
     )
+}
+
+/// Atomically decide whether a dying owner's frames must be quarantined.
+///
+/// Lookup and custody transfer share the `REGISTRY` transaction. In
+/// particular, a VFS holder that completes its exact lease first removes that
+/// lease before this function can install its release key, and the reaper then
+/// receives [`FrameTransfer::Free`]. If this function wins, that same exact
+/// release key owns the quarantine entry until the holder releases it.
+pub(crate) fn withhold_pinned_frames(base: usize, pages: usize) -> FrameTransfer {
+    let Some(len) = pages.checked_mul(PAGE_SIZE) else {
+        return FrameTransfer::Free;
+    };
+    let Some(probe) = span(base, len) else {
+        return FrameTransfer::Free;
+    };
+    let mut reg = REGISTRY.lock();
+
+    if let Some(entry) = reg
+        .pins
+        .iter()
+        .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
+    {
+        let owner = entry.owner;
+        return if hold_quarantined_frames(&mut reg, base, pages, ReleaseKey::Owner(owner)) {
+            FrameTransfer::Withheld
+        } else {
+            FrameTransfer::Full
+        };
+    }
+
+    let Some(entry) = reg
+        .vfs_leases
+        .iter()
+        .find(|entry| entry.pages != 0 && overlaps(probe, (entry.base, entry.pages)))
+    else {
+        return FrameTransfer::Free;
+    };
+    let release = ReleaseKey::VfsLease {
+        holder_tid: entry.holder_tid,
+        grant_owner: entry.grant_owner,
+        request_generation: entry.request_generation,
+    };
+    if hold_quarantined_frames(&mut reg, base, pages, release) {
+        FrameTransfer::Withheld
+    } else {
+        FrameTransfer::Full
+    }
 }
 
 /// Driver acknowledgement for `tid`: drop its pins and hand back the
@@ -476,8 +555,45 @@ pub fn pin_vfs_lease(
         grant_id,
         request_generation,
         quarantined: false,
+        pending_revoke: false,
     };
     Ok(())
+}
+
+/// Mark one live holder's lease revoked because its grant owner has died.
+///
+/// This preserves the pin and caller context until the holder completes or
+/// drops that exact request, while preventing another `GrantSlice` from being
+/// issued from the stale context.
+pub fn mark_vfs_lease_pending_revoke(
+    holder_tid: usize,
+    grant_owner: usize,
+    request_generation: u64,
+) -> bool {
+    let mut reg = REGISTRY.lock();
+    let Some(entry) = reg
+        .vfs_leases
+        .iter_mut()
+        .find(|entry| same_vfs_lease(entry, holder_tid, grant_owner, request_generation))
+    else {
+        return false;
+    };
+    entry.quarantined = true;
+    entry.pending_revoke = true;
+    true
+}
+
+/// Whether the exact live VFS lease has been revoked by owner death.
+pub fn vfs_lease_pending_revoke(
+    holder_tid: usize,
+    grant_owner: usize,
+    request_generation: u64,
+) -> bool {
+    let reg = REGISTRY.lock();
+    reg.vfs_leases
+        .iter()
+        .find(|entry| same_vfs_lease(entry, holder_tid, grant_owner, request_generation))
+        .is_some_and(|entry| entry.pending_revoke)
 }
 
 pub fn release_vfs_lease(
