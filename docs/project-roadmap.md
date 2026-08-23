@@ -3,8 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-22
-
+**Last updated**: 2026-08-23
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -56,12 +55,12 @@ Cellos is being shaped around product stages, not only phase numbers:
   Native SDK contract](specs/23-native-sdk-contract.md) keeps execution tier,
   runtime profile, stability, and availability as separate axes. Manifest v2 exposes
   canonical `PROTECTION_CLASS_*` aliases while retaining the ABI-stable `tier`
-  byte and legacy `TIER_*` names; Tier 2 native domains remain unimplemented.
-  Any implementation must first satisfy the mandatory [Spec 22 native-domain
-  gate](specs/22-native-domain-cell-implementation-gate.md), including
-  recoverable user-pointer handling, revoke/teardown, DMA, negative-test, and
-  rollback evidence.
-
+  byte and legacy `TIER_*` names.
+- Tier 2 RV64 native-domain substrate and scheduler transitions (Spec 22 Items 2–3)
+  are implemented behind `native-domains` and `test-hooks` with verified one-hart
+  (`switch`, `sas-fastpath`) and two-hart (`migration`) QEMU evidence. Production
+  admission remains disabled by default, SAS remains the default view, and no
+  Manifest v3 bytes, installer UI, or qualification claims are exposed.
 ## Immediate Open Gates
 
 - Production signing is not fleet-enforced by default: `signing-required` is
@@ -76,10 +75,9 @@ Cellos is being shaped around product stages, not only phase numbers:
 - RV32 release compilation is verified, but RV32 runtime cannot run on this
   host without OpenSBI firmware. This is a non-blocking compile-only evidence
   gap, not runtime qualification.
-- Tier 2 native domains have an accepted design gate but no runtime mechanism;
-  current native cells remain in the shared SAS and are not treated as
-  contained merely because the manifest taxonomy names a future protection
-  class.
+- Tier 2 native domains have implemented RV64 QEMU substrate and cross-hart
+  migration evidence, but remain unqualified for production release; physical
+  hardware containment, DMA quarantine, and approval gates remain open.
 - The Native SDK contract is ratified and the authoritative Phase 02
   [acceptance ledger](app-tier-acceptance-ledger.json) is recorded through
   `LEDGER_RECORDED`. The ratified revision is `798e8b04`; the implemented,

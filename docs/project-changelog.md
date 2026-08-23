@@ -2,6 +2,50 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-23] RPi3 USB Authority Locked Pending Policy v3 (Phase 05a)
+
+RPi3 hardware-completion phase 05a substrate: steps 1–4 complete (DWC2 MMIO
+facts, USB legacy IRQ 9 topology, AArch64 cache DMA primitives, DriverIds),
+steps 5–6 implemented as explicit denials pending policy v3.
+
+- DWC2 window removed from the MMIO allowlist (was mis-tagged `DEV_PCIE`);
+  denial locked by a QEMU-executed boot-time self-test asserting the
+  production table directly: positive control on a known window, then
+  full-aperture and edge-word DWC2 denial swept across every device class
+  plus the full mask. The manifest `mmio_devices` byte is full — a signed
+  policy-v3 USB byte is the only path to grant this authority, since any
+  plain bool cap is zeroed by Permit intersection.
+- `/bin/dwc2-usb` and `/bin/lan9514` boot-ceiling rows are EMPTY and pinned by
+  the power-on selftest; `with_path_caps` mints nothing for them.
+- Legacy IRQ 9 routing intentionally disabled (level-triggered W1C device,
+  one-shot mask/unmask contract required); read-only facts shipped in
+  `bcm2835_legacy_irq.rs`. Generic `vi_signal_cell_irq` bridge rejected:
+  WaitIrq lacks `(irq, mmio_base)` ownership verification and ACKs a
+  VirtIO-hardcoded offset.
+- Verified: compile pass on aarch64 board-rpi3, aarch64 QEMU-virt, rv64, x86_64;
+  QEMU raspi3b boot shows policy/P-TRUST/boot-ceiling/mmio-allowlist selftests
+  PASS (`mmio-allowlist self-test PASS (known windows live, DWC2 denied)`).
+
+## [2026-08-23] RV64 Native-Domain Substrate and QEMU Migration Evidence Verified
+
+RV64 native-domain substrate and scheduler domain transitions (Spec 22 Items 2–3)
+have passed strict `-D warnings` compilation across all feature combinations,
+QEMU one-hart verification (`switch`, `sas-fastpath`), and QEMU two-hart
+cross-hart migration verification (`migration`).
+
+Key fixes and invariants:
+- Task address space binding (`TaskAddressSpace::Sas | Domain(Arc<AddressSpace>)`)
+  and `SwitchPlan` root selection ensure zero SATP writes and no mandatory flushes
+  during SAS-to-SAS transitions.
+- Release-build supervisor range unregistration fixed in `Stack::drop` and
+  `AddressSpace::drop`.
+- AP-13 pre-ready probe task synchronously drained on Hart 0 before secondary
+  harts boot, resolving quota lifetime race during probe reuse.
+- UART oracle output timing synchronized in `run_primary` after worker save,
+  preventing interleaved serial output on SMP RISC-V.
+- Non-qualifying QEMU evidence boundary maintained: production admission remains
+  disabled, SAS remains default, and `C9=NOT_COMPLETE` is preserved in the
+  acceptance ledger.
 ## [2026-08-22] VFS SMP owner-lifetime lifecycle closure is verified
 
 `CELLOS-VFS-SMP-006` is closed after the owner-lifetime lifecycle

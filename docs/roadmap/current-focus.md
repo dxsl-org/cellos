@@ -1,6 +1,6 @@
 # Current Focus
 
-**Last updated**: 2026-08-22
+**Last updated**: 2026-08-23
 
 ## Active Stage
 
@@ -52,6 +52,12 @@ without treating QEMU or compile-only checks as board qualification.
   both passed. RV32 runtime remains unavailable on this host because OpenSBI
   firmware is missing; that compile-only evidence gap is non-blocking and is
   not a runtime claim.
+- RV64 native-domain substrate and scheduler transitions (Spec 22 Items 2–3)
+  have passed one-hart (`switch`, `sas-fastpath`) and two-hart (`migration`)
+  QEMU evidence runners. AP-13 pre-ready quota drain race, release-build supervisor
+  unregistration, and SMP UART timing were resolved. Production admission remains
+  disabled, SAS remains default, and no Manifest v3 or ledger qualification claims
+  are made.
 
 ## Current Documentation Corrections
 
