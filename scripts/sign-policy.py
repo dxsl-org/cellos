@@ -101,6 +101,7 @@ DEV_POLICY = [
     ("/bin/virtio-net",  0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/e1000",       0, 0, 0, 0, 0, 0,     1, 0, 0),
     ("/bin/virtio-gpu",  0, 0, 0, 0, 0, 0,     1, 0, 0),
+    ("/bin/bcm-display", 0, 0, 0, 0, 0, 0,     1, 0, 0),
     # ── shell-launched cells that need MMIO or spawn ──────────────────────────
     ("/bin/periph-demo", 0, 0, 0, 0, 3, 0,     0, 0, 0),
     ("/bin/periph-test", 0, 0, 0, 0, 3, 0,     0, 0, 0),
