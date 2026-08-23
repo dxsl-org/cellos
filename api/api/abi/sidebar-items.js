@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["caller_identity","cap","completion","dir_attestation","dir_handles","disk","fast_ipc","hypervisor","manifest","manifest_flags","manifest_macro","manifest_parse","syscall","syscall_tests","task","vm"]};
+window.SIDEBAR_ITEMS = {"mod":["caller_identity","cap","cell_owner","completion","dir_attestation","dir_handles","disk","fast_ipc","hypervisor","manifest","manifest_flags","manifest_macro","manifest_parse","syscall","syscall_tests","task","vm"]};

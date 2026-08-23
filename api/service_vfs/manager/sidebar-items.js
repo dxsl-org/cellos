@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["owned_state","state_transfer"],"struct":["VfsManager"]};
+window.SIDEBAR_ITEMS = {"mod":["owned_state","state_transfer"],"struct":["VfsManager","WatchedOwner"]};

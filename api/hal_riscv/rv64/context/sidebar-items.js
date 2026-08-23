@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_gp_tp","read_tp","write_tp"],"struct":["Context"]};
+window.SIDEBAR_ITEMS = {"fn":["get_gp_tp","read_tp","restore_sstatus","save_and_disable_interrupts","write_tp"],"struct":["Context"]};

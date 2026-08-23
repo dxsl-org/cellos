@@ -72,98 +72,118 @@
 <a href=#72 id=72 data-nosnippet>72</a>    cell_id_raw != <span class="number">0 </span>&amp;&amp; VFS_HANDLER_CELL.load(Ordering::Relaxed) == cell_id_raw
 <a href=#73 id=73 data-nosnippet>73</a>}
 <a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a><span class="doccomment">/// RAII guard that restores the S-mode interrupt-enable bit (SIE) on drop.
-<a href=#76 id=76 data-nosnippet>76</a>///
-<a href=#77 id=77 data-nosnippet>77</a>/// Constructed by disabling SIE and recording its prior state.  `Drop` restores
-<a href=#78 id=78 data-nosnippet>78</a>/// it, so SIE is always restored even if the handler panics (Rust drop glue runs
-<a href=#79 id=79 data-nosnippet>79</a>/// before the panic handler, giving the guard a chance to clean up).
-<a href=#80 id=80 data-nosnippet>80</a></span><span class="kw">struct </span>SieGuard(
-<a href=#81 id=81 data-nosnippet>81</a>    <span class="doccomment">/// `true` if SIE was set before we disabled it; `false` = was already clear.
-<a href=#82 id=82 data-nosnippet>82</a>    </span>bool,
-<a href=#83 id=83 data-nosnippet>83</a>);
-<a href=#84 id=84 data-nosnippet>84</a>
-<a href=#85 id=85 data-nosnippet>85</a><span class="kw">impl </span>SieGuard {
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// Disable SIE and return a guard that will restore it.
-<a href=#87 id=87 data-nosnippet>87</a>    ///
-<a href=#88 id=88 data-nosnippet>88</a>    /// # Safety
-<a href=#89 id=89 data-nosnippet>89</a>    /// Must be called from S-mode.
-<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="attr">#[inline]
-<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">unsafe fn </span>disable() -&gt; <span class="self">Self </span>{
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#93 id=93 data-nosnippet>93</a>        </span>{
-<a href=#94 id=94 data-nosnippet>94</a>            <span class="kw">let </span>v: usize;
-<a href=#95 id=95 data-nosnippet>95</a>            <span class="comment">// SAFETY: csrrci reads-and-clears sstatus.SIE (bit 1) atomically.
-<a href=#96 id=96 data-nosnippet>96</a>            </span><span class="macro">core::arch::asm!</span>(<span class="string">"csrrci {}, sstatus, 0x2"</span>, out(reg) v);
-<a href=#97 id=97 data-nosnippet>97</a>            <span class="self">Self</span>(v &amp; <span class="number">0x2 </span>!= <span class="number">0</span>)
-<a href=#98 id=98 data-nosnippet>98</a>        }
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="attr">#[cfg(not(target_arch = <span class="string">"riscv64"</span>))]
-<a href=#100 id=100 data-nosnippet>100</a>        </span><span class="self">Self</span>(<span class="bool-val">false</span>)
-<a href=#101 id=101 data-nosnippet>101</a>    }
-<a href=#102 id=102 data-nosnippet>102</a>}
-<a href=#103 id=103 data-nosnippet>103</a>
-<a href=#104 id=104 data-nosnippet>104</a><span class="kw">impl </span>Drop <span class="kw">for </span>SieGuard {
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
-<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0 </span>{
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="comment">// SAFETY: restoring SIE to the value saved in disable(); S-mode only.
-<a href=#108 id=108 data-nosnippet>108</a>            </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
-<a href=#109 id=109 data-nosnippet>109</a>            </span><span class="kw">unsafe </span>{
-<a href=#110 id=110 data-nosnippet>110</a>                <span class="macro">core::arch::asm!</span>(<span class="string">"csrsi sstatus, 0x2"</span>);
-<a href=#111 id=111 data-nosnippet>111</a>            }
-<a href=#112 id=112 data-nosnippet>112</a>        }
-<a href=#113 id=113 data-nosnippet>113</a>    }
-<a href=#114 id=114 data-nosnippet>114</a>}
-<a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a><span class="doccomment">/// Call the registered VFS handler directly, bypassing the `ecall` trap. Returns
-<a href=#117 id=117 data-nosnippet>117</a>/// bytes written into `out`, or 0 if no handler is registered (caller falls back
-<a href=#118 id=118 data-nosnippet>118</a>/// to the `sys_send`/`sys_recv` path).
-<a href=#119 id=119 data-nosnippet>119</a>///
-<a href=#120 id=120 data-nosnippet>120</a>/// The stable symbol name is retained for the reviewed bridge design; no client
-<a href=#121 id=121 data-nosnippet>121</a>/// Cell import resolves here today.
-<a href=#122 id=122 data-nosnippet>122</a>///
-<a href=#123 id=123 data-nosnippet>123</a>/// # Note (PIE limitation)
-<a href=#124 id=124 data-nosnippet>124</a>/// For non-PIE cells (current default), each cell ELF links `libs/ostd` statically
-<a href=#125 id=125 data-nosnippet>125</a>/// and gets its own copy of `VFS_HANDLER_PTR` — so `call_vfs` in the shell reads
-<a href=#126 id=126 data-nosnippet>126</a>/// null and always takes the ecall fallback.  The fast path becomes effective once
-<a href=#127 id=127 data-nosnippet>127</a>/// cells are compiled as PIE and a reviewed loader import bridge resolves this
-<a href=#128 id=128 data-nosnippet>128</a>/// kernel function. The fallback is always safe; that bridge is absent today.
-<a href=#129 id=129 data-nosnippet>129</a>///
-<a href=#130 id=130 data-nosnippet>130</a>/// # Caller identity
-<a href=#131 id=131 data-nosnippet>131</a>/// This path does not go through `ecall`, so the request carries no sender tid
-<a href=#132 id=132 data-nosnippet>132</a>/// and the handler has nothing of its own to authorize against. The identity is
-<a href=#133 id=133 data-nosnippet>133</a>/// therefore derived HERE, from live scheduler state for the task currently
-<a href=#134 id=134 data-nosnippet>134</a>/// running on this hart — never from an argument, because every argument on this
-<a href=#135 id=135 data-nosnippet>135</a>/// path is chosen by the cell being authorized. That makes the fast path exactly
-<a href=#136 id=136 data-nosnippet>136</a>/// as attested as the message path; without it, gating `GetFile` on the message
-<a href=#137 id=137 data-nosnippet>137</a>/// path would only move the hole rather than close it.
-<a href=#138 id=138 data-nosnippet>138</a>///
-<a href=#139 id=139 data-nosnippet>139</a>/// `TrustedHandle` is not the control: its own contract says it is advisory.
-<a href=#140 id=140 data-nosnippet>140</a>///
-<a href=#141 id=141 data-nosnippet>141</a>/// # Safety
-<a href=#142 id=142 data-nosnippet>142</a>/// The caller must own `out` exclusively for the call. `_handle` documents that
-<a href=#143 id=143 data-nosnippet>143</a>/// the caller was granted fast-path access; it is not enforced at runtime.
-<a href=#144 id=144 data-nosnippet>144</a></span><span class="attr">#[no_mangle]
-<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">pub unsafe extern </span><span class="string">"Rust" </span><span class="kw">fn </span>call_vfs(
-<a href=#146 id=146 data-nosnippet>146</a>    _handle: TrustedHandle&lt;VfsCell&gt;,
-<a href=#147 id=147 data-nosnippet>147</a>    req: <span class="kw-2">&amp;</span>VfsRequest&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#148 id=148 data-nosnippet>148</a>    out: <span class="kw-2">&amp;mut </span>[u8; IPC_BUF_SIZE],
-<a href=#149 id=149 data-nosnippet>149</a>) -&gt; usize {
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="kw">let </span>ptr = VFS_HANDLER_PTR.load(Ordering::Acquire);
-<a href=#151 id=151 data-nosnippet>151</a>    <span class="kw">if </span>ptr.is_null() {
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">return </span><span class="number">0</span>; <span class="comment">// VFS not yet registered — caller falls back to ecall path.
-<a href=#153 id=153 data-nosnippet>153</a>    </span>}
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="comment">// Resolve identity BEFORE disabling interrupts: it takes the scheduler lock,
-<a href=#155 id=155 data-nosnippet>155</a>    // and holding that lock across the handler would deadlock the VFS backends.
-<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="kw">let </span>caller = <span class="kw">crate</span>::task::syscall::attested_identity_of(<span class="kw">crate</span>::task::current_task_id());
-<a href=#157 id=157 data-nosnippet>157</a>
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="comment">// SAFETY: ptr was stored by register_vfs from a valid VfsFastHandler.
-<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">let </span>handler: VfsFastHandler = core::mem::transmute(ptr);
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a>    <span class="comment">// Disable S-mode interrupts for the handler's duration. The VFS FAT16 driver
-<a href=#162 id=162 data-nosnippet>162</a>    // holds a spinlock; timer preemption mid-handler to another VFS caller would
-<a href=#163 id=163 data-nosnippet>163</a>    // deadlock on it. SieGuard restores SIE on drop — safe even on handler panic.
-<a href=#164 id=164 data-nosnippet>164</a>    // SAFETY: called from S-mode trap handler context.
-<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">let </span>_sie = SieGuard::disable();
-<a href=#166 id=166 data-nosnippet>166</a>
-<a href=#167 id=167 data-nosnippet>167</a>    handler(caller, req, out)
-<a href=#168 id=168 data-nosnippet>168</a>}
+<a href=#75 id=75 data-nosnippet>75</a><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>vfs_handler_cell_snapshot() -&gt; usize {
+<a href=#77 id=77 data-nosnippet>77</a>    VFS_HANDLER_CELL.load(Ordering::Acquire)
+<a href=#78 id=78 data-nosnippet>78</a>}
+<a href=#79 id=79 data-nosnippet>79</a>
+<a href=#80 id=80 data-nosnippet>80</a><span class="doccomment">/// Snapshot the registered handler pointer separately from its Cell owner.
+<a href=#81 id=81 data-nosnippet>81</a>/// Fixture code may exercise owner routing but must never clear another
+<a href=#82 id=82 data-nosnippet>82</a>/// component's registered handler.
+<a href=#83 id=83 data-nosnippet>83</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#84 id=84 data-nosnippet>84</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>vfs_handler_pointer_snapshot() -&gt; usize {
+<a href=#85 id=85 data-nosnippet>85</a>    VFS_HANDLER_PTR.load(Ordering::Acquire) <span class="kw">as </span>usize
+<a href=#86 id=86 data-nosnippet>86</a>}
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a><span class="doccomment">/// Restore a pointer obtained from `vfs_handler_pointer_snapshot` after a
+<a href=#89 id=89 data-nosnippet>89</a>/// test-only fixture temporarily registers its own handler.
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="attr">#[cfg(feature = <span class="string">"test-hooks"</span>)]
+<a href=#91 id=91 data-nosnippet>91</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>restore_vfs_handler_pointer_for_test(handler: usize) {
+<a href=#92 id=92 data-nosnippet>92</a>    VFS_HANDLER_PTR.store(handler <span class="kw">as </span><span class="kw-2">*mut </span>(), Ordering::Release);
+<a href=#93 id=93 data-nosnippet>93</a>}
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a><span class="doccomment">/// RAII guard that restores the S-mode interrupt-enable bit (SIE) on drop.
+<a href=#96 id=96 data-nosnippet>96</a>///
+<a href=#97 id=97 data-nosnippet>97</a>/// Constructed by disabling SIE and recording its prior state.  `Drop` restores
+<a href=#98 id=98 data-nosnippet>98</a>/// it, so SIE is always restored even if the handler panics (Rust drop glue runs
+<a href=#99 id=99 data-nosnippet>99</a>/// before the panic handler, giving the guard a chance to clean up).
+<a href=#100 id=100 data-nosnippet>100</a></span><span class="kw">struct </span>SieGuard(
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="doccomment">/// `true` if SIE was set before we disabled it; `false` = was already clear.
+<a href=#102 id=102 data-nosnippet>102</a>    </span>bool,
+<a href=#103 id=103 data-nosnippet>103</a>);
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a><span class="kw">impl </span>SieGuard {
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="doccomment">/// Disable SIE and return a guard that will restore it.
+<a href=#107 id=107 data-nosnippet>107</a>    ///
+<a href=#108 id=108 data-nosnippet>108</a>    /// # Safety
+<a href=#109 id=109 data-nosnippet>109</a>    /// Must be called from S-mode.
+<a href=#110 id=110 data-nosnippet>110</a>    </span><span class="attr">#[inline]
+<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">unsafe fn </span>disable() -&gt; <span class="self">Self </span>{
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#113 id=113 data-nosnippet>113</a>        </span>{
+<a href=#114 id=114 data-nosnippet>114</a>            <span class="kw">let </span>v: usize;
+<a href=#115 id=115 data-nosnippet>115</a>            <span class="comment">// SAFETY: csrrci reads-and-clears sstatus.SIE (bit 1) atomically.
+<a href=#116 id=116 data-nosnippet>116</a>            </span><span class="macro">core::arch::asm!</span>(<span class="string">"csrrci {}, sstatus, 0x2"</span>, out(reg) v);
+<a href=#117 id=117 data-nosnippet>117</a>            <span class="self">Self</span>(v &amp; <span class="number">0x2 </span>!= <span class="number">0</span>)
+<a href=#118 id=118 data-nosnippet>118</a>        }
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="attr">#[cfg(not(target_arch = <span class="string">"riscv64"</span>))]
+<a href=#120 id=120 data-nosnippet>120</a>        </span><span class="self">Self</span>(<span class="bool-val">false</span>)
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>}
+<a href=#123 id=123 data-nosnippet>123</a>
+<a href=#124 id=124 data-nosnippet>124</a><span class="kw">impl </span>Drop <span class="kw">for </span>SieGuard {
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">if </span><span class="self">self</span>.<span class="number">0 </span>{
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="comment">// SAFETY: restoring SIE to the value saved in disable(); S-mode only.
+<a href=#128 id=128 data-nosnippet>128</a>            </span><span class="attr">#[cfg(target_arch = <span class="string">"riscv64"</span>)]
+<a href=#129 id=129 data-nosnippet>129</a>            </span><span class="kw">unsafe </span>{
+<a href=#130 id=130 data-nosnippet>130</a>                <span class="macro">core::arch::asm!</span>(<span class="string">"csrsi sstatus, 0x2"</span>);
+<a href=#131 id=131 data-nosnippet>131</a>            }
+<a href=#132 id=132 data-nosnippet>132</a>        }
+<a href=#133 id=133 data-nosnippet>133</a>    }
+<a href=#134 id=134 data-nosnippet>134</a>}
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a><span class="doccomment">/// Call the registered VFS handler directly, bypassing the `ecall` trap. Returns
+<a href=#137 id=137 data-nosnippet>137</a>/// bytes written into `out`, or 0 if no handler is registered (caller falls back
+<a href=#138 id=138 data-nosnippet>138</a>/// to the `sys_send`/`sys_recv` path).
+<a href=#139 id=139 data-nosnippet>139</a>///
+<a href=#140 id=140 data-nosnippet>140</a>/// The stable symbol name is retained for the reviewed bridge design; no client
+<a href=#141 id=141 data-nosnippet>141</a>/// Cell import resolves here today.
+<a href=#142 id=142 data-nosnippet>142</a>///
+<a href=#143 id=143 data-nosnippet>143</a>/// # Note (PIE limitation)
+<a href=#144 id=144 data-nosnippet>144</a>/// For non-PIE cells (current default), each cell ELF links `libs/ostd` statically
+<a href=#145 id=145 data-nosnippet>145</a>/// and gets its own copy of `VFS_HANDLER_PTR` — so `call_vfs` in the shell reads
+<a href=#146 id=146 data-nosnippet>146</a>/// null and always takes the ecall fallback.  The fast path becomes effective once
+<a href=#147 id=147 data-nosnippet>147</a>/// cells are compiled as PIE and a reviewed loader import bridge resolves this
+<a href=#148 id=148 data-nosnippet>148</a>/// kernel function. The fallback is always safe; that bridge is absent today.
+<a href=#149 id=149 data-nosnippet>149</a>///
+<a href=#150 id=150 data-nosnippet>150</a>/// # Caller identity
+<a href=#151 id=151 data-nosnippet>151</a>/// This path does not go through `ecall`, so the request carries no sender tid
+<a href=#152 id=152 data-nosnippet>152</a>/// and the handler has nothing of its own to authorize against. The identity is
+<a href=#153 id=153 data-nosnippet>153</a>/// therefore derived HERE, from live scheduler state for the task currently
+<a href=#154 id=154 data-nosnippet>154</a>/// running on this hart — never from an argument, because every argument on this
+<a href=#155 id=155 data-nosnippet>155</a>/// path is chosen by the cell being authorized. That makes the fast path exactly
+<a href=#156 id=156 data-nosnippet>156</a>/// as attested as the message path; without it, gating `GetFile` on the message
+<a href=#157 id=157 data-nosnippet>157</a>/// path would only move the hole rather than close it.
+<a href=#158 id=158 data-nosnippet>158</a>///
+<a href=#159 id=159 data-nosnippet>159</a>/// `TrustedHandle` is not the control: its own contract says it is advisory.
+<a href=#160 id=160 data-nosnippet>160</a>///
+<a href=#161 id=161 data-nosnippet>161</a>/// # Safety
+<a href=#162 id=162 data-nosnippet>162</a>/// The caller must own `out` exclusively for the call. `_handle` documents that
+<a href=#163 id=163 data-nosnippet>163</a>/// the caller was granted fast-path access; it is not enforced at runtime.
+<a href=#164 id=164 data-nosnippet>164</a></span><span class="attr">#[no_mangle]
+<a href=#165 id=165 data-nosnippet>165</a></span><span class="kw">pub unsafe extern </span><span class="string">"Rust" </span><span class="kw">fn </span>call_vfs(
+<a href=#166 id=166 data-nosnippet>166</a>    _handle: TrustedHandle&lt;VfsCell&gt;,
+<a href=#167 id=167 data-nosnippet>167</a>    req: <span class="kw-2">&amp;</span>VfsRequest&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#168 id=168 data-nosnippet>168</a>    out: <span class="kw-2">&amp;mut </span>[u8; IPC_BUF_SIZE],
+<a href=#169 id=169 data-nosnippet>169</a>) -&gt; usize {
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="kw">let </span>ptr = VFS_HANDLER_PTR.load(Ordering::Acquire);
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="kw">if </span>ptr.is_null() {
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw">return </span><span class="number">0</span>; <span class="comment">// VFS not yet registered — caller falls back to ecall path.
+<a href=#173 id=173 data-nosnippet>173</a>    </span>}
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="comment">// Resolve identity BEFORE disabling interrupts: it takes the scheduler lock,
+<a href=#175 id=175 data-nosnippet>175</a>    // and holding that lock across the handler would deadlock the VFS backends.
+<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">let </span>caller = <span class="kw">crate</span>::task::syscall::attested_identity_of(<span class="kw">crate</span>::task::current_task_id());
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="comment">// SAFETY: ptr was stored by register_vfs from a valid VfsFastHandler.
+<a href=#179 id=179 data-nosnippet>179</a>    </span><span class="kw">let </span>handler: VfsFastHandler = core::mem::transmute(ptr);
+<a href=#180 id=180 data-nosnippet>180</a>
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="comment">// Disable S-mode interrupts for the handler's duration. The VFS FAT16 driver
+<a href=#182 id=182 data-nosnippet>182</a>    // holds a spinlock; timer preemption mid-handler to another VFS caller would
+<a href=#183 id=183 data-nosnippet>183</a>    // deadlock on it. SieGuard restores SIE on drop — safe even on handler panic.
+<a href=#184 id=184 data-nosnippet>184</a>    // SAFETY: called from S-mode trap handler context.
+<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">let </span>_sie = SieGuard::disable();
+<a href=#186 id=186 data-nosnippet>186</a>
+<a href=#187 id=187 data-nosnippet>187</a>    handler(caller, req, out)
+<a href=#188 id=188 data-nosnippet>188</a>}
 </code></pre></div></section></main></body></html>

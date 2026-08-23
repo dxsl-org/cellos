@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["MAX_ENTRIES","MAX_STASH_LEN"],"fn":["remove","restore","self_test","stash"],"static":["STASH"]};
+window.SIDEBAR_ITEMS = {"constant":["MAX_ENTRIES","MAX_STASH_LEN","SPAWN_ARGV_KEY"],"fn":["install_spawn_argv","remove","restore","self_test","spawn_argv_key","stash","take_spawn_argv"],"static":["STASH"]};

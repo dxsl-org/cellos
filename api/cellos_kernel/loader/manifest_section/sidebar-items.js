@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ELFCLASS32","ELFCLASS64","ELFDATA2LSB","ELFDATA2MSB","ELF_MAGIC","MANIFEST_NAME","SHN_XINDEX","SHT_NOBITS"],"enum":["ManifestSection","ManifestVersion"],"fn":["checked_range","classify","classify_inner","read","section_header","section_name","to_usize"],"struct":["Header","Section"]};

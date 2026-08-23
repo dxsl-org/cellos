@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALT_I2C_ADDR","DEFAULT_I2C_ADDR"],"struct":["ImuData","Mpu6050"]};

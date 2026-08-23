@@ -2,39 +2,44 @@
 <a href=#2 id=2 data-nosnippet>2</a></span><span class="attr">#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 <a href=#3 id=3 data-nosnippet>3</a></span><span class="kw">pub struct </span>Bcm27xxIrqTopology {
 <a href=#4 id=4 data-nosnippet>4</a>    <span class="kw">pub </span>system_timer_c1: u32,
-<a href=#5 id=5 data-nosnippet>5</a>    <span class="kw">pub </span>aux: u32,
-<a href=#6 id=6 data-nosnippet>6</a>    <span class="kw">pub </span>gpio_bank0: u32,
-<a href=#7 id=7 data-nosnippet>7</a>    <span class="kw">pub </span>gpio_bank1: u32,
-<a href=#8 id=8 data-nosnippet>8</a>    <span class="kw">pub </span>local_timer_ns_mask: u32,
-<a href=#9 id=9 data-nosnippet>9</a>    <span class="kw">pub </span>local_timer_hp_mask: u32,
-<a href=#10 id=10 data-nosnippet>10</a>    <span class="kw">pub </span>local_gpu_mask: u32,
-<a href=#11 id=11 data-nosnippet>11</a>}
-<a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">impl </span>Bcm27xxIrqTopology {
-<a href=#14 id=14 data-nosnippet>14</a>    <span class="doccomment">/// Returns whether legacy IRQs and local-source masks form a valid topology.
-<a href=#15 id=15 data-nosnippet>15</a>    </span><span class="kw">pub const fn </span>is_valid(<span class="self">self</span>) -&gt; bool {
-<a href=#16 id=16 data-nosnippet>16</a>        <span class="kw">let </span>legacy_in_range = <span class="self">self</span>.system_timer_c1 &lt; <span class="number">64
-<a href=#17 id=17 data-nosnippet>17</a>            </span>&amp;&amp; <span class="self">self</span>.aux &lt; <span class="number">64
-<a href=#18 id=18 data-nosnippet>18</a>            </span>&amp;&amp; <span class="self">self</span>.gpio_bank0 &lt; <span class="number">64
-<a href=#19 id=19 data-nosnippet>19</a>            </span>&amp;&amp; <span class="self">self</span>.gpio_bank1 &lt; <span class="number">64</span>;
-<a href=#20 id=20 data-nosnippet>20</a>        <span class="kw">let </span>legacy_unique = <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.aux
-<a href=#21 id=21 data-nosnippet>21</a>            &amp;&amp; <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.gpio_bank0
-<a href=#22 id=22 data-nosnippet>22</a>            &amp;&amp; <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.gpio_bank1
-<a href=#23 id=23 data-nosnippet>23</a>            &amp;&amp; <span class="self">self</span>.aux != <span class="self">self</span>.gpio_bank0
-<a href=#24 id=24 data-nosnippet>24</a>            &amp;&amp; <span class="self">self</span>.aux != <span class="self">self</span>.gpio_bank1
-<a href=#25 id=25 data-nosnippet>25</a>            &amp;&amp; <span class="self">self</span>.gpio_bank0 != <span class="self">self</span>.gpio_bank1;
-<a href=#26 id=26 data-nosnippet>26</a>        <span class="kw">let </span>local_one_hot = is_one_hot(<span class="self">self</span>.local_timer_ns_mask)
-<a href=#27 id=27 data-nosnippet>27</a>            &amp;&amp; is_one_hot(<span class="self">self</span>.local_timer_hp_mask)
-<a href=#28 id=28 data-nosnippet>28</a>            &amp;&amp; is_one_hot(<span class="self">self</span>.local_gpu_mask);
-<a href=#29 id=29 data-nosnippet>29</a>        <span class="kw">let </span>local_disjoint = <span class="self">self</span>.local_timer_ns_mask &amp; <span class="self">self</span>.local_timer_hp_mask == <span class="number">0
-<a href=#30 id=30 data-nosnippet>30</a>            </span>&amp;&amp; <span class="self">self</span>.local_timer_ns_mask &amp; <span class="self">self</span>.local_gpu_mask == <span class="number">0
-<a href=#31 id=31 data-nosnippet>31</a>            </span>&amp;&amp; <span class="self">self</span>.local_timer_hp_mask &amp; <span class="self">self</span>.local_gpu_mask == <span class="number">0</span>;
-<a href=#32 id=32 data-nosnippet>32</a>
-<a href=#33 id=33 data-nosnippet>33</a>        legacy_in_range &amp;&amp; legacy_unique &amp;&amp; local_one_hot &amp;&amp; local_disjoint
-<a href=#34 id=34 data-nosnippet>34</a>    }
-<a href=#35 id=35 data-nosnippet>35</a>}
-<a href=#36 id=36 data-nosnippet>36</a>
-<a href=#37 id=37 data-nosnippet>37</a><span class="kw">const fn </span>is_one_hot(mask: u32) -&gt; bool {
-<a href=#38 id=38 data-nosnippet>38</a>    mask != <span class="number">0 </span>&amp;&amp; mask &amp; (mask - <span class="number">1</span>) == <span class="number">0
-<a href=#39 id=39 data-nosnippet>39</a></span>}
+<a href=#5 id=5 data-nosnippet>5</a>    <span class="kw">pub </span>usb: u32,
+<a href=#6 id=6 data-nosnippet>6</a>    <span class="kw">pub </span>aux: u32,
+<a href=#7 id=7 data-nosnippet>7</a>    <span class="kw">pub </span>gpio_bank0: u32,
+<a href=#8 id=8 data-nosnippet>8</a>    <span class="kw">pub </span>gpio_bank1: u32,
+<a href=#9 id=9 data-nosnippet>9</a>    <span class="kw">pub </span>local_timer_ns_mask: u32,
+<a href=#10 id=10 data-nosnippet>10</a>    <span class="kw">pub </span>local_timer_hp_mask: u32,
+<a href=#11 id=11 data-nosnippet>11</a>    <span class="kw">pub </span>local_gpu_mask: u32,
+<a href=#12 id=12 data-nosnippet>12</a>}
+<a href=#13 id=13 data-nosnippet>13</a>
+<a href=#14 id=14 data-nosnippet>14</a><span class="kw">impl </span>Bcm27xxIrqTopology {
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="doccomment">/// Returns whether legacy IRQs and local-source masks form a valid topology.
+<a href=#16 id=16 data-nosnippet>16</a>    </span><span class="kw">pub const fn </span>is_valid(<span class="self">self</span>) -&gt; bool {
+<a href=#17 id=17 data-nosnippet>17</a>        <span class="kw">let </span>legacy_in_range = <span class="self">self</span>.system_timer_c1 &lt; <span class="number">64
+<a href=#18 id=18 data-nosnippet>18</a>            </span>&amp;&amp; <span class="self">self</span>.usb &lt; <span class="number">64
+<a href=#19 id=19 data-nosnippet>19</a>            </span>&amp;&amp; <span class="self">self</span>.aux &lt; <span class="number">64
+<a href=#20 id=20 data-nosnippet>20</a>            </span>&amp;&amp; <span class="self">self</span>.gpio_bank0 &lt; <span class="number">64
+<a href=#21 id=21 data-nosnippet>21</a>            </span>&amp;&amp; <span class="self">self</span>.gpio_bank1 &lt; <span class="number">64</span>;
+<a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">let </span>legacy_unique = <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.usb
+<a href=#23 id=23 data-nosnippet>23</a>            &amp;&amp; <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.aux
+<a href=#24 id=24 data-nosnippet>24</a>            &amp;&amp; <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.gpio_bank0
+<a href=#25 id=25 data-nosnippet>25</a>            &amp;&amp; <span class="self">self</span>.system_timer_c1 != <span class="self">self</span>.gpio_bank1
+<a href=#26 id=26 data-nosnippet>26</a>            &amp;&amp; <span class="self">self</span>.usb != <span class="self">self</span>.aux
+<a href=#27 id=27 data-nosnippet>27</a>            &amp;&amp; <span class="self">self</span>.usb != <span class="self">self</span>.gpio_bank0
+<a href=#28 id=28 data-nosnippet>28</a>            &amp;&amp; <span class="self">self</span>.usb != <span class="self">self</span>.gpio_bank1
+<a href=#29 id=29 data-nosnippet>29</a>            &amp;&amp; <span class="self">self</span>.aux != <span class="self">self</span>.gpio_bank0
+<a href=#30 id=30 data-nosnippet>30</a>            &amp;&amp; <span class="self">self</span>.aux != <span class="self">self</span>.gpio_bank1
+<a href=#31 id=31 data-nosnippet>31</a>            &amp;&amp; <span class="self">self</span>.gpio_bank0 != <span class="self">self</span>.gpio_bank1;
+<a href=#32 id=32 data-nosnippet>32</a>        <span class="kw">let </span>local_one_hot = is_one_hot(<span class="self">self</span>.local_timer_ns_mask)
+<a href=#33 id=33 data-nosnippet>33</a>            &amp;&amp; is_one_hot(<span class="self">self</span>.local_timer_hp_mask)
+<a href=#34 id=34 data-nosnippet>34</a>            &amp;&amp; is_one_hot(<span class="self">self</span>.local_gpu_mask);
+<a href=#35 id=35 data-nosnippet>35</a>        <span class="kw">let </span>local_disjoint = <span class="self">self</span>.local_timer_ns_mask &amp; <span class="self">self</span>.local_timer_hp_mask == <span class="number">0
+<a href=#36 id=36 data-nosnippet>36</a>            </span>&amp;&amp; <span class="self">self</span>.local_timer_ns_mask &amp; <span class="self">self</span>.local_gpu_mask == <span class="number">0
+<a href=#37 id=37 data-nosnippet>37</a>            </span>&amp;&amp; <span class="self">self</span>.local_timer_hp_mask &amp; <span class="self">self</span>.local_gpu_mask == <span class="number">0</span>;
+<a href=#38 id=38 data-nosnippet>38</a>        legacy_in_range &amp;&amp; legacy_unique &amp;&amp; local_one_hot &amp;&amp; local_disjoint
+<a href=#39 id=39 data-nosnippet>39</a>    }
+<a href=#40 id=40 data-nosnippet>40</a>}
+<a href=#41 id=41 data-nosnippet>41</a>
+<a href=#42 id=42 data-nosnippet>42</a><span class="kw">const fn </span>is_one_hot(mask: u32) -&gt; bool {
+<a href=#43 id=43 data-nosnippet>43</a>    mask != <span class="number">0 </span>&amp;&amp; mask &amp; (mask - <span class="number">1</span>) == <span class="number">0
+<a href=#44 id=44 data-nosnippet>44</a></span>}
 </code></pre></div></section></main></body></html>

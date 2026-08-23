@@ -354,131 +354,152 @@
 <a href=#354 id=354 data-nosnippet>354</a></span><span class="kw">pub static </span>FRAME_ALLOCATOR: <span class="kw">crate</span>::sync::Spinlock&lt;<span class="prelude-ty">Option</span>&lt;FrameAllocator&gt;&gt; =
 <a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">crate</span>::sync::Spinlock::new(<span class="prelude-val">None</span>);
 <a href=#356 id=356 data-nosnippet>356</a>
-<a href=#357 id=357 data-nosnippet>357</a><span class="attr">#[cfg(test)]
-<a href=#358 id=358 data-nosnippet>358</a></span><span class="kw">mod </span>tests {
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">use </span>super::{FrameAllocator, PAGE_SIZE};
-<a href=#360 id=360 data-nosnippet>360</a>
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">fn </span>allocator(total_frames: usize) -&gt; FrameAllocator {
-<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>bitmap = alloc::boxed::Box::leak(
-<a href=#363 id=363 data-nosnippet>363</a>            <span class="macro">alloc::vec!</span>[<span class="number">0u64</span>; total_frames.div_ceil(<span class="number">64</span>)].into_boxed_slice(),
-<a href=#364 id=364 data-nosnippet>364</a>        );
-<a href=#365 id=365 data-nosnippet>365</a>        FrameAllocator {
-<a href=#366 id=366 data-nosnippet>366</a>            memory_start: PAGE_SIZE,
-<a href=#367 id=367 data-nosnippet>367</a>            memory_end: PAGE_SIZE * (total_frames + <span class="number">1</span>),
-<a href=#368 id=368 data-nosnippet>368</a>            total_frames,
-<a href=#369 id=369 data-nosnippet>369</a>            used_frames: <span class="number">0</span>,
-<a href=#370 id=370 data-nosnippet>370</a>            bitmap,
-<a href=#371 id=371 data-nosnippet>371</a>            last_alloc_index: <span class="number">0</span>,
-<a href=#372 id=372 data-nosnippet>372</a>        }
-<a href=#373 id=373 data-nosnippet>373</a>    }
-<a href=#374 id=374 data-nosnippet>374</a>
-<a href=#375 id=375 data-nosnippet>375</a>    <span class="attr">#[test]
-<a href=#376 id=376 data-nosnippet>376</a>    </span><span class="kw">fn </span>accounting_changes_only_on_bitmap_transitions() {
-<a href=#377 id=377 data-nosnippet>377</a>        <span class="kw">let </span><span class="kw-2">mut </span>allocator = allocator(<span class="number">32</span>);
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">let </span>frame = allocator.allocate_frame().expect(<span class="string">"single frame"</span>);
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">1</span>);
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="macro">assert_eq!</span>(allocator.free_frames(), <span class="number">31</span>);
+<a href=#357 id=357 data-nosnippet>357</a><span class="doccomment">/// A non-copyable allocation lease returned to the bitmap only on drop.
+<a href=#358 id=358 data-nosnippet>358</a></span><span class="kw">pub struct </span>OwnedFrame(PhysAddr);
+<a href=#359 id=359 data-nosnippet>359</a>
+<a href=#360 id=360 data-nosnippet>360</a><span class="kw">impl </span>OwnedFrame {
+<a href=#361 id=361 data-nosnippet>361</a>    <span class="kw">pub fn </span>allocate() -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>&gt; {
+<a href=#362 id=362 data-nosnippet>362</a>        FRAME_ALLOCATOR.lock().as_mut()<span class="question-mark">?</span>.allocate_frame().map(<span class="self">Self</span>)
+<a href=#363 id=363 data-nosnippet>363</a>    }
+<a href=#364 id=364 data-nosnippet>364</a>
+<a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">pub const fn </span>physical_address(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; PhysAddr {
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="self">self</span>.<span class="number">0
+<a href=#367 id=367 data-nosnippet>367</a>    </span>}
+<a href=#368 id=368 data-nosnippet>368</a>}
+<a href=#369 id=369 data-nosnippet>369</a>
+<a href=#370 id=370 data-nosnippet>370</a><span class="kw">impl </span>Drop <span class="kw">for </span>OwnedFrame {
+<a href=#371 id=371 data-nosnippet>371</a>    <span class="kw">fn </span>drop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) {
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(frames) = FRAME_ALLOCATOR.lock().as_mut() {
+<a href=#373 id=373 data-nosnippet>373</a>            frames.deallocate_frame(<span class="self">self</span>.<span class="number">0</span>);
+<a href=#374 id=374 data-nosnippet>374</a>        }
+<a href=#375 id=375 data-nosnippet>375</a>    }
+<a href=#376 id=376 data-nosnippet>376</a>}
+<a href=#377 id=377 data-nosnippet>377</a>
+<a href=#378 id=378 data-nosnippet>378</a><span class="attr">#[cfg(test)]
+<a href=#379 id=379 data-nosnippet>379</a></span><span class="kw">mod </span>tests {
+<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">use </span>super::{FrameAllocator, PAGE_SIZE};
 <a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>        allocator.mark_range_used(<span class="number">0</span>, <span class="number">1</span>);
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="macro">assert_eq!</span>(
-<a href=#384 id=384 data-nosnippet>384</a>            allocator.used_frames(),
-<a href=#385 id=385 data-nosnippet>385</a>            <span class="number">1</span>,
-<a href=#386 id=386 data-nosnippet>386</a>            <span class="string">"repeated mark must be idempotent"
-<a href=#387 id=387 data-nosnippet>387</a>        </span>);
-<a href=#388 id=388 data-nosnippet>388</a>
-<a href=#389 id=389 data-nosnippet>389</a>        allocator.deallocate_frame(frame);
-<a href=#390 id=390 data-nosnippet>390</a>        allocator.deallocate_frame(frame);
-<a href=#391 id=391 data-nosnippet>391</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">0</span>, <span class="string">"double free must not underflow"</span>);
-<a href=#392 id=392 data-nosnippet>392</a>        <span class="macro">assert_eq!</span>(allocator.total_frames(), allocator.free_frames());
-<a href=#393 id=393 data-nosnippet>393</a>    }
-<a href=#394 id=394 data-nosnippet>394</a>
-<a href=#395 id=395 data-nosnippet>395</a>    <span class="attr">#[test]
-<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="kw">fn </span>contiguous_and_aligned_allocations_account_exactly() {
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">let </span><span class="kw-2">mut </span>allocator = allocator(<span class="number">32</span>);
-<a href=#398 id=398 data-nosnippet>398</a>        allocator.allocate_contiguous(<span class="number">3</span>).expect(<span class="string">"contiguous run"</span>);
-<a href=#399 id=399 data-nosnippet>399</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">3</span>);
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">let </span>aligned = allocator
-<a href=#401 id=401 data-nosnippet>401</a>            .allocate_contiguous_aligned(<span class="number">2</span>, PAGE_SIZE * <span class="number">2</span>)
-<a href=#402 id=402 data-nosnippet>402</a>            .expect(<span class="string">"aligned run"</span>);
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="macro">assert_eq!</span>(aligned % (PAGE_SIZE * <span class="number">2</span>), <span class="number">0</span>);
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">5</span>);
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="macro">assert_eq!</span>(
-<a href=#406 id=406 data-nosnippet>406</a>            allocator.total_frames(),
-<a href=#407 id=407 data-nosnippet>407</a>            allocator.used_frames() + allocator.free_frames()
-<a href=#408 id=408 data-nosnippet>408</a>        );
-<a href=#409 id=409 data-nosnippet>409</a>    }
-<a href=#410 id=410 data-nosnippet>410</a>}
-<a href=#411 id=411 data-nosnippet>411</a>
-<a href=#412 id=412 data-nosnippet>412</a><span class="doccomment">/// Allocate N contiguous physical frames for guest VM RAM using a chunked scan.
-<a href=#413 id=413 data-nosnippet>413</a>///
-<a href=#414 id=414 data-nosnippet>414</a>/// Releases `FRAME_ALLOCATOR` every `PROBE_CHUNK` frames during the search phase
-<a href=#415 id=415 data-nosnippet>415</a>/// to keep lock-hold time bounded and prevent the RT watchdog from firing during
-<a href=#416 id=416 data-nosnippet>416</a>/// a 512 MiB (131 072-frame) contiguous search (Red-Team M2).
-<a href=#417 id=417 data-nosnippet>417</a>///
-<a href=#418 id=418 data-nosnippet>418</a>/// # TOCTOU
-<a href=#419 id=419 data-nosnippet>419</a>/// After locating a candidate run, the lock is re-acquired to re-verify and mark
-<a href=#420 id=420 data-nosnippet>420</a>/// all frames atomically.  Transparent on QEMU TCG (single CPU).  A production
-<a href=#421 id=421 data-nosnippet>421</a>/// SMP build would use a buddy allocator with a free-run index.
-<a href=#422 id=422 data-nosnippet>422</a></span><span class="kw">pub fn </span>allocate_guest_ram(n_pages: usize) -&gt; <span class="prelude-ty">Option</span>&lt;PhysAddr&gt; {
-<a href=#423 id=423 data-nosnippet>423</a>    <span class="kw">const </span>PROBE_CHUNK: usize = <span class="number">256</span>;
-<a href=#424 id=424 data-nosnippet>424</a>
-<a href=#425 id=425 data-nosnippet>425</a>    <span class="kw">let </span>total = FRAME_ALLOCATOR.lock().as_ref()<span class="question-mark">?</span>.total_frames;
-<a href=#426 id=426 data-nosnippet>426</a>    <span class="kw">let </span>limit = total.saturating_sub(n_pages);
-<a href=#427 id=427 data-nosnippet>427</a>    <span class="kw">let </span><span class="kw-2">mut </span>candidate = <span class="number">0usize</span>; <span class="comment">// current candidate run start (frame index)
-<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>run_len = <span class="number">0usize</span>; <span class="comment">// confirmed free frames from candidate onward
-<a href=#429 id=429 data-nosnippet>429</a>
-<a href=#430 id=430 data-nosnippet>430</a>    </span><span class="kw">while </span>candidate &lt;= limit {
-<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw">let </span>probe_from = candidate + run_len;
-<a href=#432 id=432 data-nosnippet>432</a>        <span class="kw">if </span>probe_from &gt;= total {
-<a href=#433 id=433 data-nosnippet>433</a>            <span class="kw">break</span>;
-<a href=#434 id=434 data-nosnippet>434</a>        }
-<a href=#435 id=435 data-nosnippet>435</a>
-<a href=#436 id=436 data-nosnippet>436</a>        <span class="comment">// Probe up to PROBE_CHUNK frames under a bounded lock hold.
-<a href=#437 id=437 data-nosnippet>437</a>        </span><span class="kw">let </span>(chunk_free, first_used) = {
-<a href=#438 id=438 data-nosnippet>438</a>            <span class="kw">let </span>g = FRAME_ALLOCATOR.lock();
-<a href=#439 id=439 data-nosnippet>439</a>            <span class="kw">let </span>a = g.as_ref()<span class="question-mark">?</span>;
-<a href=#440 id=440 data-nosnippet>440</a>            <span class="kw">let </span>probe_end = (probe_from + PROBE_CHUNK).min(total);
-<a href=#441 id=441 data-nosnippet>441</a>            <span class="kw">let </span><span class="kw-2">mut </span>free_cnt = <span class="number">0usize</span>;
-<a href=#442 id=442 data-nosnippet>442</a>            <span class="kw">let </span><span class="kw-2">mut </span>used_at = <span class="prelude-val">None</span>;
-<a href=#443 id=443 data-nosnippet>443</a>            <span class="kw">for </span>idx <span class="kw">in </span>probe_from..probe_end {
-<a href=#444 id=444 data-nosnippet>444</a>                <span class="kw">if </span>a.is_frame_allocated(idx) {
-<a href=#445 id=445 data-nosnippet>445</a>                    used_at = <span class="prelude-val">Some</span>(idx);
-<a href=#446 id=446 data-nosnippet>446</a>                    <span class="kw">break</span>;
-<a href=#447 id=447 data-nosnippet>447</a>                }
-<a href=#448 id=448 data-nosnippet>448</a>                free_cnt += <span class="number">1</span>;
-<a href=#449 id=449 data-nosnippet>449</a>            }
-<a href=#450 id=450 data-nosnippet>450</a>            (free_cnt, used_at)
-<a href=#451 id=451 data-nosnippet>451</a>        }; <span class="comment">// lock dropped — other kernel tasks may run
-<a href=#452 id=452 data-nosnippet>452</a>
-<a href=#453 id=453 data-nosnippet>453</a>        </span>run_len += chunk_free;
-<a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">if </span>run_len &gt;= n_pages {
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="comment">// Candidate run is long enough — re-verify and allocate under lock.
-<a href=#457 id=457 data-nosnippet>457</a>            </span><span class="kw">let </span>result = {
-<a href=#458 id=458 data-nosnippet>458</a>                <span class="kw">let </span><span class="kw-2">mut </span>g = FRAME_ALLOCATOR.lock();
-<a href=#459 id=459 data-nosnippet>459</a>                <span class="kw">let </span>a = g.as_mut()<span class="question-mark">?</span>;
-<a href=#460 id=460 data-nosnippet>460</a>                <span class="kw">let </span>all_free = (<span class="number">0</span>..n_pages).all(|i| !a.is_frame_allocated(candidate + i));
-<a href=#461 id=461 data-nosnippet>461</a>                <span class="kw">if </span>all_free {
-<a href=#462 id=462 data-nosnippet>462</a>                    a.mark_range_used(candidate, n_pages);
-<a href=#463 id=463 data-nosnippet>463</a>                    <span class="prelude-val">Some</span>(a.frame_addr(candidate))
-<a href=#464 id=464 data-nosnippet>464</a>                } <span class="kw">else </span>{
-<a href=#465 id=465 data-nosnippet>465</a>                    <span class="prelude-val">None </span><span class="comment">// race: another CPU grabbed a frame; restart
-<a href=#466 id=466 data-nosnippet>466</a>                </span>}
-<a href=#467 id=467 data-nosnippet>467</a>            };
-<a href=#468 id=468 data-nosnippet>468</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(pa) = result {
-<a href=#469 id=469 data-nosnippet>469</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(pa);
+<a href=#382 id=382 data-nosnippet>382</a>    <span class="kw">fn </span>allocator(total_frames: usize) -&gt; FrameAllocator {
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span>bitmap = alloc::boxed::Box::leak(
+<a href=#384 id=384 data-nosnippet>384</a>            <span class="macro">alloc::vec!</span>[<span class="number">0u64</span>; total_frames.div_ceil(<span class="number">64</span>)].into_boxed_slice(),
+<a href=#385 id=385 data-nosnippet>385</a>        );
+<a href=#386 id=386 data-nosnippet>386</a>        FrameAllocator {
+<a href=#387 id=387 data-nosnippet>387</a>            memory_start: PAGE_SIZE,
+<a href=#388 id=388 data-nosnippet>388</a>            memory_end: PAGE_SIZE * (total_frames + <span class="number">1</span>),
+<a href=#389 id=389 data-nosnippet>389</a>            total_frames,
+<a href=#390 id=390 data-nosnippet>390</a>            used_frames: <span class="number">0</span>,
+<a href=#391 id=391 data-nosnippet>391</a>            bitmap,
+<a href=#392 id=392 data-nosnippet>392</a>            last_alloc_index: <span class="number">0</span>,
+<a href=#393 id=393 data-nosnippet>393</a>        }
+<a href=#394 id=394 data-nosnippet>394</a>    }
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a>    <span class="attr">#[test]
+<a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">fn </span>accounting_changes_only_on_bitmap_transitions() {
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span><span class="kw-2">mut </span>allocator = allocator(<span class="number">32</span>);
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>frame = allocator.allocate_frame().expect(<span class="string">"single frame"</span>);
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">1</span>);
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="macro">assert_eq!</span>(allocator.free_frames(), <span class="number">31</span>);
+<a href=#402 id=402 data-nosnippet>402</a>
+<a href=#403 id=403 data-nosnippet>403</a>        allocator.mark_range_used(<span class="number">0</span>, <span class="number">1</span>);
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert_eq!</span>(
+<a href=#405 id=405 data-nosnippet>405</a>            allocator.used_frames(),
+<a href=#406 id=406 data-nosnippet>406</a>            <span class="number">1</span>,
+<a href=#407 id=407 data-nosnippet>407</a>            <span class="string">"repeated mark must be idempotent"
+<a href=#408 id=408 data-nosnippet>408</a>        </span>);
+<a href=#409 id=409 data-nosnippet>409</a>
+<a href=#410 id=410 data-nosnippet>410</a>        allocator.deallocate_frame(frame);
+<a href=#411 id=411 data-nosnippet>411</a>        allocator.deallocate_frame(frame);
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">0</span>, <span class="string">"double free must not underflow"</span>);
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="macro">assert_eq!</span>(allocator.total_frames(), allocator.free_frames());
+<a href=#414 id=414 data-nosnippet>414</a>    }
+<a href=#415 id=415 data-nosnippet>415</a>
+<a href=#416 id=416 data-nosnippet>416</a>    <span class="attr">#[test]
+<a href=#417 id=417 data-nosnippet>417</a>    </span><span class="kw">fn </span>contiguous_and_aligned_allocations_account_exactly() {
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span><span class="kw-2">mut </span>allocator = allocator(<span class="number">32</span>);
+<a href=#419 id=419 data-nosnippet>419</a>        allocator.allocate_contiguous(<span class="number">3</span>).expect(<span class="string">"contiguous run"</span>);
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">3</span>);
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">let </span>aligned = allocator
+<a href=#422 id=422 data-nosnippet>422</a>            .allocate_contiguous_aligned(<span class="number">2</span>, PAGE_SIZE * <span class="number">2</span>)
+<a href=#423 id=423 data-nosnippet>423</a>            .expect(<span class="string">"aligned run"</span>);
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="macro">assert_eq!</span>(aligned % (PAGE_SIZE * <span class="number">2</span>), <span class="number">0</span>);
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="macro">assert_eq!</span>(allocator.used_frames(), <span class="number">5</span>);
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="macro">assert_eq!</span>(
+<a href=#427 id=427 data-nosnippet>427</a>            allocator.total_frames(),
+<a href=#428 id=428 data-nosnippet>428</a>            allocator.used_frames() + allocator.free_frames()
+<a href=#429 id=429 data-nosnippet>429</a>        );
+<a href=#430 id=430 data-nosnippet>430</a>    }
+<a href=#431 id=431 data-nosnippet>431</a>}
+<a href=#432 id=432 data-nosnippet>432</a>
+<a href=#433 id=433 data-nosnippet>433</a><span class="doccomment">/// Allocate N contiguous physical frames for guest VM RAM using a chunked scan.
+<a href=#434 id=434 data-nosnippet>434</a>///
+<a href=#435 id=435 data-nosnippet>435</a>/// Releases `FRAME_ALLOCATOR` every `PROBE_CHUNK` frames during the search phase
+<a href=#436 id=436 data-nosnippet>436</a>/// to keep lock-hold time bounded and prevent the RT watchdog from firing during
+<a href=#437 id=437 data-nosnippet>437</a>/// a 512 MiB (131 072-frame) contiguous search (Red-Team M2).
+<a href=#438 id=438 data-nosnippet>438</a>///
+<a href=#439 id=439 data-nosnippet>439</a>/// # TOCTOU
+<a href=#440 id=440 data-nosnippet>440</a>/// After locating a candidate run, the lock is re-acquired to re-verify and mark
+<a href=#441 id=441 data-nosnippet>441</a>/// all frames atomically.  Transparent on QEMU TCG (single CPU).  A production
+<a href=#442 id=442 data-nosnippet>442</a>/// SMP build would use a buddy allocator with a free-run index.
+<a href=#443 id=443 data-nosnippet>443</a></span><span class="kw">pub fn </span>allocate_guest_ram(n_pages: usize) -&gt; <span class="prelude-ty">Option</span>&lt;PhysAddr&gt; {
+<a href=#444 id=444 data-nosnippet>444</a>    <span class="kw">const </span>PROBE_CHUNK: usize = <span class="number">256</span>;
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="kw">let </span>total = FRAME_ALLOCATOR.lock().as_ref()<span class="question-mark">?</span>.total_frames;
+<a href=#447 id=447 data-nosnippet>447</a>    <span class="kw">let </span>limit = total.saturating_sub(n_pages);
+<a href=#448 id=448 data-nosnippet>448</a>    <span class="kw">let </span><span class="kw-2">mut </span>candidate = <span class="number">0usize</span>; <span class="comment">// current candidate run start (frame index)
+<a href=#449 id=449 data-nosnippet>449</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>run_len = <span class="number">0usize</span>; <span class="comment">// confirmed free frames from candidate onward
+<a href=#450 id=450 data-nosnippet>450</a>
+<a href=#451 id=451 data-nosnippet>451</a>    </span><span class="kw">while </span>candidate &lt;= limit {
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">let </span>probe_from = candidate + run_len;
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">if </span>probe_from &gt;= total {
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw">break</span>;
+<a href=#455 id=455 data-nosnippet>455</a>        }
+<a href=#456 id=456 data-nosnippet>456</a>
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="comment">// Probe up to PROBE_CHUNK frames under a bounded lock hold.
+<a href=#458 id=458 data-nosnippet>458</a>        </span><span class="kw">let </span>(chunk_free, first_used) = {
+<a href=#459 id=459 data-nosnippet>459</a>            <span class="kw">let </span>g = FRAME_ALLOCATOR.lock();
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="kw">let </span>a = g.as_ref()<span class="question-mark">?</span>;
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="kw">let </span>probe_end = (probe_from + PROBE_CHUNK).min(total);
+<a href=#462 id=462 data-nosnippet>462</a>            <span class="kw">let </span><span class="kw-2">mut </span>free_cnt = <span class="number">0usize</span>;
+<a href=#463 id=463 data-nosnippet>463</a>            <span class="kw">let </span><span class="kw-2">mut </span>used_at = <span class="prelude-val">None</span>;
+<a href=#464 id=464 data-nosnippet>464</a>            <span class="kw">for </span>idx <span class="kw">in </span>probe_from..probe_end {
+<a href=#465 id=465 data-nosnippet>465</a>                <span class="kw">if </span>a.is_frame_allocated(idx) {
+<a href=#466 id=466 data-nosnippet>466</a>                    used_at = <span class="prelude-val">Some</span>(idx);
+<a href=#467 id=467 data-nosnippet>467</a>                    <span class="kw">break</span>;
+<a href=#468 id=468 data-nosnippet>468</a>                }
+<a href=#469 id=469 data-nosnippet>469</a>                free_cnt += <span class="number">1</span>;
 <a href=#470 id=470 data-nosnippet>470</a>            }
-<a href=#471 id=471 data-nosnippet>471</a>            candidate += <span class="number">1</span>;
-<a href=#472 id=472 data-nosnippet>472</a>            run_len = <span class="number">0</span>;
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">continue</span>;
-<a href=#474 id=474 data-nosnippet>474</a>        }
+<a href=#471 id=471 data-nosnippet>471</a>            (free_cnt, used_at)
+<a href=#472 id=472 data-nosnippet>472</a>        }; <span class="comment">// lock dropped — other kernel tasks may run
+<a href=#473 id=473 data-nosnippet>473</a>
+<a href=#474 id=474 data-nosnippet>474</a>        </span>run_len += chunk_free;
 <a href=#475 id=475 data-nosnippet>475</a>
-<a href=#476 id=476 data-nosnippet>476</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(used_idx) = first_used {
-<a href=#477 id=477 data-nosnippet>477</a>            candidate = used_idx + <span class="number">1</span>;
-<a href=#478 id=478 data-nosnippet>478</a>            run_len = <span class="number">0</span>;
-<a href=#479 id=479 data-nosnippet>479</a>        }
-<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// If chunk was all free but run_len &lt; n_pages: loop to probe next chunk.
-<a href=#481 id=481 data-nosnippet>481</a>    </span>}
-<a href=#482 id=482 data-nosnippet>482</a>    <span class="prelude-val">None
-<a href=#483 id=483 data-nosnippet>483</a></span>}
+<a href=#476 id=476 data-nosnippet>476</a>        <span class="kw">if </span>run_len &gt;= n_pages {
+<a href=#477 id=477 data-nosnippet>477</a>            <span class="comment">// Candidate run is long enough — re-verify and allocate under lock.
+<a href=#478 id=478 data-nosnippet>478</a>            </span><span class="kw">let </span>result = {
+<a href=#479 id=479 data-nosnippet>479</a>                <span class="kw">let </span><span class="kw-2">mut </span>g = FRAME_ALLOCATOR.lock();
+<a href=#480 id=480 data-nosnippet>480</a>                <span class="kw">let </span>a = g.as_mut()<span class="question-mark">?</span>;
+<a href=#481 id=481 data-nosnippet>481</a>                <span class="kw">let </span>all_free = (<span class="number">0</span>..n_pages).all(|i| !a.is_frame_allocated(candidate + i));
+<a href=#482 id=482 data-nosnippet>482</a>                <span class="kw">if </span>all_free {
+<a href=#483 id=483 data-nosnippet>483</a>                    a.mark_range_used(candidate, n_pages);
+<a href=#484 id=484 data-nosnippet>484</a>                    <span class="prelude-val">Some</span>(a.frame_addr(candidate))
+<a href=#485 id=485 data-nosnippet>485</a>                } <span class="kw">else </span>{
+<a href=#486 id=486 data-nosnippet>486</a>                    <span class="prelude-val">None </span><span class="comment">// race: another CPU grabbed a frame; restart
+<a href=#487 id=487 data-nosnippet>487</a>                </span>}
+<a href=#488 id=488 data-nosnippet>488</a>            };
+<a href=#489 id=489 data-nosnippet>489</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(pa) = result {
+<a href=#490 id=490 data-nosnippet>490</a>                <span class="kw">return </span><span class="prelude-val">Some</span>(pa);
+<a href=#491 id=491 data-nosnippet>491</a>            }
+<a href=#492 id=492 data-nosnippet>492</a>            candidate += <span class="number">1</span>;
+<a href=#493 id=493 data-nosnippet>493</a>            run_len = <span class="number">0</span>;
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="kw">continue</span>;
+<a href=#495 id=495 data-nosnippet>495</a>        }
+<a href=#496 id=496 data-nosnippet>496</a>
+<a href=#497 id=497 data-nosnippet>497</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(used_idx) = first_used {
+<a href=#498 id=498 data-nosnippet>498</a>            candidate = used_idx + <span class="number">1</span>;
+<a href=#499 id=499 data-nosnippet>499</a>            run_len = <span class="number">0</span>;
+<a href=#500 id=500 data-nosnippet>500</a>        }
+<a href=#501 id=501 data-nosnippet>501</a>        <span class="comment">// If chunk was all free but run_len &lt; n_pages: loop to probe next chunk.
+<a href=#502 id=502 data-nosnippet>502</a>    </span>}
+<a href=#503 id=503 data-nosnippet>503</a>    <span class="prelude-val">None
+<a href=#504 id=504 data-nosnippet>504</a></span>}
 </code></pre></div></section></main></body></html>

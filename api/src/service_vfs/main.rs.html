@@ -176,67 +176,59 @@
 <a href=#176 id=176 data-nosnippet>176</a>        // and charged its quota to a ledger row nothing owned.
 <a href=#177 id=177 data-nosnippet>177</a>        </span><span class="kw">match </span>ostd::syscall::sys_recv_attested(<span class="number">0</span>, <span class="kw-2">&amp;mut </span>buf) {
 <a href=#178 id=178 data-nosnippet>178</a>            ostd::syscall::SyscallResult::Ok(sender) <span class="kw">if </span>sender &gt; <span class="number">0 </span>=&gt; {
-<a href=#179 id=179 data-nosnippet>179</a>                <span class="kw">if </span>api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf).is_none() {
-<a href=#180 id=180 data-nosnippet>180</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(vfs) = GLOBAL_VFS.lock().as_mut() {
-<a href=#181 id=181 data-nosnippet>181</a>                        <span class="kw">let _ </span>= vfs.handle_unattributed_owner_death(sender);
-<a href=#182 id=182 data-nosnippet>182</a>                    }
-<a href=#183 id=183 data-nosnippet>183</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#184 id=184 data-nosnippet>184</a>                    <span class="kw">continue</span>;
-<a href=#185 id=185 data-nosnippet>185</a>                }
-<a href=#186 id=186 data-nosnippet>186</a>                <span class="comment">// Encode the response into a local buffer while holding the VFS lock,
-<a href=#187 id=187 data-nosnippet>187</a>                // then DROP the lock before sys_send.  If ipc_send blocks (client not
-<a href=#188 id=188 data-nosnippet>188</a>                // yet in Recv), yield_cpu switches to another cell.  That cell may call
-<a href=#189 id=189 data-nosnippet>189</a>                // call_vfs which also acquires GLOBAL_VFS — a deadlock if we still hold
-<a href=#190 id=190 data-nosnippet>190</a>                // the lock during the send.
-<a href=#191 id=191 data-nosnippet>191</a>                </span><span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#192 id=192 data-nosnippet>192</a>                <span class="kw">let </span><span class="kw-2">mut </span>encoded_len: usize;
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="kw">let </span>watch;
-<a href=#194 id=194 data-nosnippet>194</a>                {
-<a href=#195 id=195 data-nosnippet>195</a>                    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#196 id=196 data-nosnippet>196</a>                    <span class="comment">// Acquire VFS state; released at end of this block, before sys_send.
-<a href=#197 id=197 data-nosnippet>197</a>                    </span><span class="kw">let </span><span class="kw-2">mut </span>gvfs = GLOBAL_VFS.lock();
-<a href=#198 id=198 data-nosnippet>198</a>                    <span class="kw">let </span>vfs = gvfs
-<a href=#199 id=199 data-nosnippet>199</a>                        .as_mut()
-<a href=#200 id=200 data-nosnippet>200</a>                        .expect(<span class="string">"VFS initialized before serving requests"</span>);
-<a href=#201 id=201 data-nosnippet>201</a>                    <span class="comment">// `None` here (no trailer, or a sender the kernel could no
-<a href=#202 id=202 data-nosnippet>202</a>                    // longer attribute) makes every op deny — see handle_request.
-<a href=#203 id=203 data-nosnippet>203</a>                    </span><span class="kw">let </span>attested = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf)
-<a href=#204 id=204 data-nosnippet>204</a>                        .map(caller::Caller::from_attested);
-<a href=#205 id=205 data-nosnippet>205</a>                    <span class="kw">let </span>resp = dispatch::handle_request(vfs, <span class="kw-2">&amp;</span>buf, attested, <span class="kw-2">&amp;mut </span>resp_buf);
-<a href=#206 id=206 data-nosnippet>206</a>                    watch = attested.and_then(|caller| {
-<a href=#207 id=207 data-nosnippet>207</a>                        vfs.should_watch_after_response(caller, <span class="kw-2">&amp;</span>resp)
-<a href=#208 id=208 data-nosnippet>208</a>                            .map(|owner_tid| (owner_tid, caller))
-<a href=#209 id=209 data-nosnippet>209</a>                    });
-<a href=#210 id=210 data-nosnippet>210</a>                    <span class="comment">// Encode while holding the lock (safe: no sys_send yet).
-<a href=#211 id=211 data-nosnippet>211</a>                    </span>encoded_len = api::ipc::encode(<span class="kw-2">&amp;</span>resp, <span class="kw-2">&amp;mut </span>encoded)
-<a href=#212 id=212 data-nosnippet>212</a>                        .map(|s| s.len())
-<a href=#213 id=213 data-nosnippet>213</a>                        .unwrap_or(<span class="number">0</span>);
-<a href=#214 id=214 data-nosnippet>214</a>                } <span class="comment">// GLOBAL_VFS lock released here — before sys_send
-<a href=#215 id=215 data-nosnippet>215</a>
-<a href=#216 id=216 data-nosnippet>216</a>                </span><span class="kw">if let </span><span class="prelude-val">Some</span>((owner_tid, caller)) = watch {
-<a href=#217 id=217 data-nosnippet>217</a>                    <span class="kw">match </span>ostd::syscall::sys_notify_on_exit(owner_tid) {
-<a href=#218 id=218 data-nosnippet>218</a>                        ostd::syscall::SyscallResult::Ok(<span class="kw">_</span>) =&gt; {}
-<a href=#219 id=219 data-nosnippet>219</a>                        <span class="kw">_ </span>=&gt; {
-<a href=#220 id=220 data-nosnippet>220</a>                            <span class="kw">if let </span><span class="prelude-val">Some</span>(vfs) = GLOBAL_VFS.lock().as_mut() {
-<a href=#221 id=221 data-nosnippet>221</a>                                vfs.rollback_owner_watch(caller);
-<a href=#222 id=222 data-nosnippet>222</a>                            }
-<a href=#223 id=223 data-nosnippet>223</a>                            encoded_len =
-<a href=#224 id=224 data-nosnippet>224</a>                                api::ipc::encode(<span class="kw-2">&amp;</span>api::ipc::VfsResponse::Err(<span class="number">3</span>), <span class="kw-2">&amp;mut </span>encoded)
-<a href=#225 id=225 data-nosnippet>225</a>                                    .map(|s| s.len())
-<a href=#226 id=226 data-nosnippet>226</a>                                    .unwrap_or(<span class="number">0</span>);
-<a href=#227 id=227 data-nosnippet>227</a>                        }
-<a href=#228 id=228 data-nosnippet>228</a>                    }
-<a href=#229 id=229 data-nosnippet>229</a>                }
-<a href=#230 id=230 data-nosnippet>230</a>
-<a href=#231 id=231 data-nosnippet>231</a>                <span class="comment">// Send after releasing the lock so a blocked ipc_send + yield_cpu
-<a href=#232 id=232 data-nosnippet>232</a>                // cannot switch to a cell that deadlocks on GLOBAL_VFS.
-<a href=#233 id=233 data-nosnippet>233</a>                </span>ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..encoded_len]);
-<a href=#234 id=234 data-nosnippet>234</a>                buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
-<a href=#235 id=235 data-nosnippet>235</a>            }
-<a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">_ </span>=&gt; {
-<a href=#237 id=237 data-nosnippet>237</a>                ostd::task::yield_now();
-<a href=#238 id=238 data-nosnippet>238</a>            }
-<a href=#239 id=239 data-nosnippet>239</a>        }
-<a href=#240 id=240 data-nosnippet>240</a>    }
-<a href=#241 id=241 data-nosnippet>241</a>}
+<a href=#179 id=179 data-nosnippet>179</a>                <span class="kw">let </span><span class="prelude-val">Some</span>(identity) = api::caller_identity::CallerIdentity::from_recv_buf(<span class="kw-2">&amp;</span>buf)
+<a href=#180 id=180 data-nosnippet>180</a>                <span class="kw">else </span>{
+<a href=#181 id=181 data-nosnippet>181</a>                    <span class="kw">let </span>cancellations = GLOBAL_VFS
+<a href=#182 id=182 data-nosnippet>182</a>                        .lock()
+<a href=#183 id=183 data-nosnippet>183</a>                        .as_mut()
+<a href=#184 id=184 data-nosnippet>184</a>                        .map(|vfs| {
+<a href=#185 id=185 data-nosnippet>185</a>                            <span class="kw">let _ </span>= vfs.handle_unattributed_owner_death(sender);
+<a href=#186 id=186 data-nosnippet>186</a>                            vfs.take_owner_watch_cancellations()
+<a href=#187 id=187 data-nosnippet>187</a>                        })
+<a href=#188 id=188 data-nosnippet>188</a>                        .unwrap_or_default();
+<a href=#189 id=189 data-nosnippet>189</a>                    <span class="kw">for </span>token <span class="kw">in </span>cancellations {
+<a href=#190 id=190 data-nosnippet>190</a>                        ostd::syscall::sys_cancel_cell_owner_watch(token);
+<a href=#191 id=191 data-nosnippet>191</a>                    }
+<a href=#192 id=192 data-nosnippet>192</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#193 id=193 data-nosnippet>193</a>                    <span class="kw">continue</span>;
+<a href=#194 id=194 data-nosnippet>194</a>                };
+<a href=#195 id=195 data-nosnippet>195</a>                <span class="kw">let </span>caller = caller::Caller::from_attested(identity);
+<a href=#196 id=196 data-nosnippet>196</a>                <span class="comment">// The atomic kernel operation verifies this exact receive context
+<a href=#197 id=197 data-nosnippet>197</a>                // and registers root death before VFS can persist any state.
+<a href=#198 id=198 data-nosnippet>198</a>                </span><span class="kw">let </span><span class="prelude-val">Some</span>((owner, token)) =
+<a href=#199 id=199 data-nosnippet>199</a>                    ostd::syscall::sys_watch_cell_owner(caller.cell.<span class="number">0</span>, caller.generation)
+<a href=#200 id=200 data-nosnippet>200</a>                <span class="kw">else </span>{
+<a href=#201 id=201 data-nosnippet>201</a>                    <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#202 id=202 data-nosnippet>202</a>                    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>api::ipc::VfsResponse::Err(<span class="number">3</span>), <span class="kw-2">&amp;mut </span>encoded)
+<a href=#203 id=203 data-nosnippet>203</a>                        .map(|bytes| bytes.len())
+<a href=#204 id=204 data-nosnippet>204</a>                        .unwrap_or(<span class="number">0</span>);
+<a href=#205 id=205 data-nosnippet>205</a>                    ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..len]);
+<a href=#206 id=206 data-nosnippet>206</a>                    buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#207 id=207 data-nosnippet>207</a>                    <span class="kw">continue</span>;
+<a href=#208 id=208 data-nosnippet>208</a>                };
+<a href=#209 id=209 data-nosnippet>209</a>                <span class="kw">let </span><span class="kw-2">mut </span>encoded = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#210 id=210 data-nosnippet>210</a>                <span class="kw">let </span>(encoded_len, cancellations) = {
+<a href=#211 id=211 data-nosnippet>211</a>                    <span class="kw">let </span><span class="kw-2">mut </span>resp_buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#212 id=212 data-nosnippet>212</a>                    <span class="kw">let </span><span class="kw-2">mut </span>guard = GLOBAL_VFS.lock();
+<a href=#213 id=213 data-nosnippet>213</a>                    <span class="kw">let </span>vfs = guard
+<a href=#214 id=214 data-nosnippet>214</a>                        .as_mut()
+<a href=#215 id=215 data-nosnippet>215</a>                        .expect(<span class="string">"VFS initialized before serving requests"</span>);
+<a href=#216 id=216 data-nosnippet>216</a>                    vfs.install_owner_watch(caller, owner.root_tid <span class="kw">as </span>usize, token);
+<a href=#217 id=217 data-nosnippet>217</a>                    <span class="kw">let </span>response = dispatch::handle_request(vfs, <span class="kw-2">&amp;</span>buf, <span class="prelude-val">Some</span>(caller), <span class="kw-2">&amp;mut </span>resp_buf);
+<a href=#218 id=218 data-nosnippet>218</a>                    <span class="kw">let </span>len = api::ipc::encode(<span class="kw-2">&amp;</span>response, <span class="kw-2">&amp;mut </span>encoded)
+<a href=#219 id=219 data-nosnippet>219</a>                        .map(|bytes| bytes.len())
+<a href=#220 id=220 data-nosnippet>220</a>                        .unwrap_or(<span class="number">0</span>);
+<a href=#221 id=221 data-nosnippet>221</a>                    (len, vfs.take_owner_watch_cancellations())
+<a href=#222 id=222 data-nosnippet>222</a>                };
+<a href=#223 id=223 data-nosnippet>223</a>                <span class="kw">for </span>cancelled <span class="kw">in </span>cancellations {
+<a href=#224 id=224 data-nosnippet>224</a>                    ostd::syscall::sys_cancel_cell_owner_watch(cancelled);
+<a href=#225 id=225 data-nosnippet>225</a>                }
+<a href=#226 id=226 data-nosnippet>226</a>                <span class="comment">// `GLOBAL_VFS` is unlocked for every kernel call and send.
+<a href=#227 id=227 data-nosnippet>227</a>                </span>ostd::syscall::sys_send(sender, <span class="kw-2">&amp;</span>encoded[..encoded_len]);
+<a href=#228 id=228 data-nosnippet>228</a>                buf = [<span class="number">0u8</span>; api::ipc::IPC_BUF_SIZE];
+<a href=#229 id=229 data-nosnippet>229</a>            }
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">_ </span>=&gt; ostd::task::yield_now(),
+<a href=#231 id=231 data-nosnippet>231</a>        }
+<a href=#232 id=232 data-nosnippet>232</a>    }
+<a href=#233 id=233 data-nosnippet>233</a>}
 </code></pre></div></section></main></body></html>
