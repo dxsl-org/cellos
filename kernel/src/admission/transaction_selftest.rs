@@ -139,8 +139,10 @@ pub(super) fn local_history_cannot_admit_or_advance_floor() -> bool {
         && floor.read() == FloorPortOutcome::Authenticated(state(1, 1))
 }
 
+type TransactionCase = (&'static str, fn() -> bool);
+
 pub(super) fn run() -> bool {
-    let cases: [(&str, fn() -> bool); 14] = [
+    let cases: [TransactionCase; 14] = [
         ("C3-ADM-018", power_loss_before_intent_write),
         ("C3-ADM-019", power_loss_after_intent_write),
         ("C3-ADM-020", power_loss_after_intent_verify),

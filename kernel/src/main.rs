@@ -1003,7 +1003,7 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
                     n /= 10;
                 }
             }
-            let _ = core::str::from_utf8(&buf[i..]).map(|s| puts(s));
+            let _ = core::str::from_utf8(&buf[i..]).map(puts);
             puts("\n");
             let _ = tid; // suppress unused warning
         }

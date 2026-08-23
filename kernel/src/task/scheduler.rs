@@ -117,7 +117,7 @@ pub(crate) struct RootRetirement {
     pub member_tids: Vec<usize>,
     /// Matching zombies move with their generation's resource release, rather
     /// than waiting for a later global zombie sweep after quota is reusable.
-    pub zombies: Vec<Box<Task>>,
+    pub zombies: Vec<Task>,
     requested_switch_completion: [usize; super::smp::MAX_HARTS],
 }
 
@@ -1194,13 +1194,13 @@ impl Scheduler {
                 let mut retirement_zombies = Vec::new();
                 for member_tid in &retirement.member_tids {
                     if let Some(task) = self.tasks.remove(member_tid) {
-                        retirement_zombies.push(task);
+                        retirement_zombies.push(*task);
                     }
                 }
                 let mut other_zombies = Vec::new();
                 for zombie in core::mem::take(&mut self.zombies) {
                     if retirement.member_tids.contains(&zombie.id) {
-                        retirement_zombies.push(zombie);
+                        retirement_zombies.push(*zombie);
                     } else {
                         other_zombies.push(zombie);
                     }
@@ -1579,13 +1579,19 @@ impl Scheduler {
             rl::pick_local_eligible(hart_id)
         });
 
+        // Execution-pin gate runs here, BEFORE the task is dequeued or marked
+        // Running: a root that flipped Dying under `SCHEDULER` fails
+        // begin_execution and takes the same dequeue-and-retire rollback as a
+        // root that died earlier, so no task is ever selected-attributed
+        // without its pin. After this point retirement of the pinned root is
+        // legal and drain-safe; the switch plan must proceed.
         #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
         let next_id = next_id.filter(|id| {
-            if self
-                .tasks
-                .get(id)
-                .is_some_and(|task| task.address_space_is_live())
-            {
+            let selected =
+                self.tasks
+                    .get(id)
+                    .is_some_and(|task| task.begin_execution(hart_id).is_ok());
+            if selected {
                 return true;
             }
             rl::remove_from_all(*id);

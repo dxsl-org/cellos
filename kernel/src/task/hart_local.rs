@@ -78,6 +78,15 @@ pub struct ViHartLocal {
     deferred_retirement_fault_cause: AtomicUsize,
     deferred_retirement_fault_pc: AtomicUsize,
     deferred_retirement_fault_addr: AtomicUsize,
+    /// Private root whose execution pin this hart currently holds. Mirrors
+    /// `current_domain_id` in lifetime: set on successful activation, moved out
+    /// when the hart plans a transition away.
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    pinned_domain: execution_pin::HartOwnedSlot,
+    /// Outgoing root awaiting release at the switch-completion hook. Staged
+    /// under `SCHEDULER`, consumed exactly once per completed transition away.
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    staged_domain_release: execution_pin::HartOwnedSlot,
 }
 
 /// Static array of per-hart local state, one entry per supported hart.
@@ -117,6 +126,10 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
         deferred_retirement_fault_cause: AtomicUsize::new(0),
         deferred_retirement_fault_pc: AtomicUsize::new(0),
         deferred_retirement_fault_addr: AtomicUsize::new(0),
+        #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+        pinned_domain: execution_pin::HartOwnedSlot(core::cell::UnsafeCell::new(None)),
+        #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+        staged_domain_release: execution_pin::HartOwnedSlot(core::cell::UnsafeCell::new(None)),
     };
     [ZERO; MAX_HARTS]
 };
@@ -358,7 +371,7 @@ impl DeferredFault {
         pc: usize,
         fault_addr: usize,
     ) -> Option<Self> {
-        origin.permits_deferred_retirement().then(|| Self {
+        origin.permits_deferred_retirement().then_some(Self {
             tid,
             cell_id,
             generation,
@@ -475,6 +488,54 @@ pub(crate) fn mark_safe_root_pending() {
         .safe_root_pending
         .store(1, Ordering::Release);
 }
+
+/// Execution-pin bookkeeping for native domains. The slots are touched only by
+/// the owning hart, and only inside the interrupt-masked window from plan
+/// construction to the incoming-side completion hook — no other hart can
+/// observe a partially updated slot.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+mod execution_pin {
+    use super::current_hart;
+    use alloc::sync::Arc;
+    use core::cell::UnsafeCell;
+    use crate::memory::address_space::AddressSpace;
+
+    /// Hart-owned slot. `HART_LOCALS` is shared across harts as a static, so
+    /// the wrapper carries `Sync`; soundness rests on the single-owner rule
+    /// documented on [`super::ViHartLocal`], not on this impl.
+    pub(crate) struct HartOwnedSlot(pub(crate) UnsafeCell<Option<Arc<AddressSpace>>>);
+    unsafe impl Sync for HartOwnedSlot {}
+
+    /// Advance this hart's execution-pin slot to `next`, staging any displaced
+    /// root for release at the switch-completion hook. Called under `SCHEDULER`
+    /// while planning a transition, so the displaced root cannot be selected
+    /// again on this hart before its pin is released.
+    pub(crate) fn advance(next: Option<Arc<AddressSpace>>) {
+        let hart = unsafe { current_hart() };
+        // SAFETY: sole access is this hart within the masked plan→completion
+        // window documented on the slot fields.
+        unsafe {
+            let pinned = &mut *hart.pinned_domain.0.get();
+            let displaced = pinned.take();
+            *pinned = next;
+            if displaced.is_some() {
+                *hart.staged_domain_release.0.get() = displaced;
+            }
+        }
+    }
+
+    /// Consume the staged outgoing-root release. Returns `None` on every switch
+    /// that did not leave a pinned root.
+    pub(crate) fn take_staged() -> Option<Arc<AddressSpace>> {
+        // SAFETY: sole access is this hart, within the masked window above.
+        unsafe { (*current_hart().staged_domain_release.0.get()).take() }
+    }
+}
+
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+pub(crate) use execution_pin::{
+    advance as advance_execution_pin, take_staged as take_staged_execution_release,
+};
 
 #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
 #[inline(always)]

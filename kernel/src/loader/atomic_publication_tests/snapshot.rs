@@ -35,7 +35,7 @@ pub(super) struct StateSnapshot {
     pub(super) quota: crate::memory::cell_quota::QuotaSnapshot,
     platform: bool,
     va: (usize, alloc::vec::Vec<u64>),
-    replacement: alloc::vec::Vec<(usize, Option<(crate::task::cap::CapSet, u64, u64, u64)>)>,
+    replacement: alloc::vec::Vec<crate::cell::hotswap::CeilingSnapshotEntry>,
     block_io_registered: bool,
     vfs_tid: usize,
     vfs_handler: usize,

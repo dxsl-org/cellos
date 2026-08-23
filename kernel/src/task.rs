@@ -245,7 +245,7 @@ pub extern "Rust" fn vi_tlb_shootdown_test_fault(
 ) -> bool {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     {
-        return crate::memory::tlb_shootdown_selftest::handle_store_fault(frame);
+        crate::memory::tlb_shootdown_selftest::handle_store_fault(frame)
     }
     #[cfg(not(all(feature = "test-hooks", target_arch = "riscv64")))]
     {
@@ -731,6 +731,13 @@ pub extern "C" fn vi_context_switch_complete() {
         let safe_root = hart_local::take_safe_root_pending();
         if switched_to_boot || safe_root {
             hart_local::acknowledge_safe_root();
+        }
+        // Safe-root completion owns outgoing attribution release: clear this
+        // hart's execution pin on whatever root the completed switch left.
+        // Unconditional take — a direct private→private switch leaves no
+        // safe-root pending yet still owes the displaced root a release.
+        if let Some(space) = hart_local::take_staged_execution_release() {
+            let _ = space.set_current_hart(hart, false);
         }
     }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]

@@ -210,8 +210,14 @@ pub(crate) fn clear_swap_ceiling(tid: usize) {
 }
 
 #[cfg(feature = "test-hooks")]
+/// One frozen swap ceiling: `(tid, Some((ceiling, generation, swap_id, freeze_nonce)))`.
+#[cfg(feature = "test-hooks")]
+pub(crate) type CeilingSnapshotEntry =
+    (usize, Option<(crate::task::cap::CapSet, u64, u64, u64)>);
+
+#[cfg(feature = "test-hooks")]
 pub(crate) fn replacement_ceiling_snapshot(
-) -> alloc::vec::Vec<(usize, Option<(crate::task::cap::CapSet, u64, u64, u64)>)> {
+) -> alloc::vec::Vec<CeilingSnapshotEntry> {
     SWAP_CEILINGS
         .lock()
         .iter()

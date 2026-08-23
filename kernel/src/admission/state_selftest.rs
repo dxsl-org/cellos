@@ -143,8 +143,10 @@ pub(super) fn exhausted_backend_denies() -> bool {
     floor_failure(FloorPortOutcome::Exhausted, DenyReason::FloorExhausted)
 }
 
+type AdmissionCase = (&'static str, fn() -> bool);
+
 pub(super) fn run() -> bool {
-    let cases: [(&str, fn() -> bool); 19] = [
+    let cases: [AdmissionCase; 19] = [
         ("C3-ADM-001", old_a_replay_admits_current_b_only),
         ("C3-ADM-002", old_b_replay_admits_current_a_only),
         ("C3-ADM-003", both_old_slots_deny),

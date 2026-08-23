@@ -105,10 +105,18 @@ assert_runtime_hart_count() {
         exit 1
     fi
 }
-
-
-
-for case_id in "${REQUESTED_CASES[@]}"; do
+# SWITCH logs one line per genuine Activate transition (domain_switch.rs
+# root_switch), so multi-stage fixtures emit it several times per boot; its
+# gate is at-least-one. Other markers are boot-terminal aggregates and stay
+# exactly-one (min 0 = exact).
+terminal_min_for() {
+    case "$1" in
+        switch) echo 1 ;;
+        *)      echo 0 ;;
+    esac
+}
+ 
+ for case_id in "${REQUESTED_CASES[@]}"; do
     marker="$(marker_for "$case_id")"
     terminal_pattern="$(terminal_pattern_for "$case_id")"
 
@@ -156,9 +164,14 @@ for case_id in "${REQUESTED_CASES[@]}"; do
         fi
     done < <(grep -F '[fault] Cell' "$normalized_log" || true)
     assert_runtime_hart_count
-
     terminal_count="$(grep -Ec "$terminal_pattern" "$normalized_log" || true)"
-    if [[ "$terminal_count" != "1" ]]; then
+    terminal_min="$(terminal_min_for "$case_id")"
+    if [[ "$terminal_min" -gt 0 ]]; then
+        if [[ "$terminal_count" -lt "$terminal_min" ]]; then
+            echo "FAIL: expected at least $terminal_min terminal for case=$case_id: $marker; found $terminal_count; see $normalized_log" >&2
+            exit 1
+        fi
+    elif [[ "$terminal_count" != "1" ]]; then
         echo "FAIL: expected exactly one terminal for case=$case_id: $marker; found $terminal_count; see $normalized_log" >&2
         exit 1
     fi

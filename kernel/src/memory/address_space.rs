@@ -78,7 +78,7 @@ impl SupervisorMapping {
         physical_address: PhysAddr,
         flags: Flags,
     ) -> Result<Self, AddressSpaceError> {
-        if physical_address % PAGE_SIZE != 0 || flags.bits() & Flags::USER != 0 {
+        if !physical_address.is_multiple_of(PAGE_SIZE) || flags.bits() & Flags::USER != 0 {
             return Err(AddressSpaceError::InvalidMapping);
         }
         Ok(Self {
@@ -123,6 +123,11 @@ pub struct AddressSpaceBuilder {
     supervisor: Vec<SupervisorMapping>,
     requests: Vec<RequestedMapping>,
 }
+impl Default for AddressSpaceBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl AddressSpaceBuilder {
     pub fn new() -> Self {
         Self {
@@ -131,6 +136,7 @@ impl AddressSpaceBuilder {
             requests: Vec::new(),
         }
     }
+
     #[cfg(feature = "test-hooks")]
     pub(crate) fn allow_supervisor(&mut self, mapping: SupervisorMapping) {
         self.supervisor.push(mapping);
@@ -327,6 +333,34 @@ impl AddressSpace {
         }
         Ok(())
     }
+    /// Pins this hart as an executor of this root, failing closed against the
+    /// selection-time TOCTOU where retirement lands between the Live check and
+    /// the pin. Mirrors `acquire_copy_reader`'s double-check: a retirement that
+    /// races the pin makes it unavailable, while retirement AFTER a successful
+    /// pin is legal — the set bit pins the space against teardown drain until
+    /// the owning hart clears it on its next transition away from this root.
+    pub fn begin_execution(&self, hart: usize) -> Result<(), AddressSpaceError> {
+        if hart >= usize::BITS as usize {
+            return Err(AddressSpaceError::InvalidHart);
+        }
+        if self.state.load(Ordering::Acquire) != AddressSpaceState::Live as u8 {
+            return Err(AddressSpaceError::Dying);
+        }
+        let bit = 1usize << hart;
+        let prior = self.current_harts.fetch_or(bit, Ordering::AcqRel);
+        if self.state.load(Ordering::Acquire) == AddressSpaceState::Live as u8 {
+            Ok(())
+        } else if prior & bit == 0 {
+            // Roll back only our own pin: the bit may have been set before we
+            // raced (same-domain reselection already executing this root), and
+            // erasing a pre-existing pin would drop the hart out of the drain
+            // set while it still executes on this root.
+            self.current_harts.fetch_and(!bit, Ordering::Release);
+            Err(AddressSpaceError::Dying)
+        } else {
+            Err(AddressSpaceError::Dying)
+        }
+    }
     pub fn current_harts(&self) -> usize {
         self.current_harts.load(Ordering::Acquire)
     }
@@ -503,7 +537,7 @@ impl AsidLease {
 }
 
 fn validate_user_mapping(virtual_address: VAddr, flags: Flags) -> Result<(), AddressSpaceError> {
-    if virtual_address >= USER_LIMIT || virtual_address % PAGE_SIZE != 0 {
+    if virtual_address >= USER_LIMIT || !virtual_address.is_multiple_of(PAGE_SIZE) {
         return Err(AddressSpaceError::InvalidMapping);
     }
     if flags.bits() & Flags::WRITE != 0 && flags.bits() & Flags::EXECUTE != 0 {

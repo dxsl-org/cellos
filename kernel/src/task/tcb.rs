@@ -550,11 +550,18 @@ impl Task {
         self.address_space = TaskAddressSpace::Domain(address_space);
     }
 
+    /// Acquire the fail-closed execution pin for this task's root. Sas tasks
+    /// carry no private root and pass trivially. Must run under `SCHEDULER`
+    /// before the task is dequeued or attributed: a Dying root rejects here,
+    /// while retirement after a successful pin is legal and drain-safe.
     #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
-    pub(crate) fn address_space_is_live(&self) -> bool {
+    pub(crate) fn begin_execution(
+        &self,
+        hart_id: usize,
+    ) -> Result<(), crate::memory::address_space::AddressSpaceError> {
         match &self.address_space {
-            TaskAddressSpace::Sas => true,
-            TaskAddressSpace::Domain(space) => space.is_live(),
+            TaskAddressSpace::Sas => Ok(()),
+            TaskAddressSpace::Domain(space) => space.begin_execution(hart_id),
         }
     }
 

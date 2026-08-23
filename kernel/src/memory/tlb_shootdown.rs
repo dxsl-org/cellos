@@ -29,7 +29,7 @@ pub(crate) fn begin_test_flush_observation() {
 #[cfg(feature = "test-hooks")]
 pub(crate) fn test_flush_observed(vaddr: VAddr) -> bool {
     let page = vaddr & !(PAGE_SIZE - 1);
-    TEST_FLUSHED_PAGES.lock().iter().any(|&entry| entry == page)
+    TEST_FLUSHED_PAGES.lock().contains(&page)
 }
 
 #[cfg(feature = "test-hooks")]

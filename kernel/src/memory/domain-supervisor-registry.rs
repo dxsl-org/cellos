@@ -100,7 +100,11 @@ pub(crate) fn register(
     kind: SupervisorRangeKind,
     owner: SupervisorRangeOwner,
 ) -> Result<SupervisorRangeId, ()> {
-    if !is_active() || start >= end || start % PAGE_SIZE != 0 || end % PAGE_SIZE != 0 {
+    if !is_active()
+        || start >= end
+        || !start.is_multiple_of(PAGE_SIZE)
+        || !end.is_multiple_of(PAGE_SIZE)
+    {
         return Err(());
     }
     let mut ranges = RANGES.lock();

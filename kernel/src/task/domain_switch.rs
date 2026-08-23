@@ -11,11 +11,14 @@ use alloc::sync::Arc;
 pub(crate) struct DomainRef(Arc<AddressSpace>);
 
 impl DomainRef {
+    /// No liveness re-check here: the execution pin acquired in pick_next_local
+    /// makes a later retire() legal and drain-safe, so a pinned task's plan
+    /// MUST still derive Activate instead of diverting to the safe root under
+    /// KERNEL_ROOT with none of its mappings.
     fn from_task(task: &Task) -> Option<Self> {
         match &task.address_space {
             TaskAddressSpace::Sas => None,
-            TaskAddressSpace::Domain(space) if space.is_live() => Some(Self(Arc::clone(space))),
-            TaskAddressSpace::Domain(_) => None,
+            TaskAddressSpace::Domain(space) => Some(Self(Arc::clone(space))),
         }
     }
 
@@ -46,16 +49,26 @@ impl SwitchPlan {
         incoming: *const Context,
         task: Option<&Task>,
     ) -> Option<Self> {
-        if task.is_some_and(|task| !task.address_space_is_live()) {
-            return None;
-        }
+        // No liveness gate here: the execution pin was already acquired in
+        // pick_next_local's filter, before the task was dequeued or attributed,
+        // so a plan that reaches this point MUST proceed — returning `None`
+        // would strand a selected task. A retirement flipping the pinned root
+        // Dying after acquisition is legal and drain-safe.
         let transition = match task.and_then(DomainRef::from_task) {
             Some(domain) if hart_local::current_domain() == domain.tuple() => {
                 DomainTransition::SameDomain
             }
-            Some(domain) => DomainTransition::Activate(domain),
+            Some(domain) => {
+                hart_local::advance_execution_pin(Some(Arc::clone(&domain.0)));
+                DomainTransition::Activate(domain)
+            }
             None if hart_local::current_domain().0 == 0 => DomainTransition::SasToSas,
-            None => DomainTransition::ToSafeRoot,
+            None => {
+                // Leaving the pinned private root: hand its release to the
+                // safe-root completion hook alongside outgoing attribution.
+                hart_local::advance_execution_pin(None);
+                DomainTransition::ToSafeRoot
+            }
         };
         Some(Self {
             outgoing,
@@ -71,9 +84,9 @@ impl SwitchPlan {
             DomainTransition::Activate(domain) => {
                 let (id, generation) = domain.tuple();
                 let root = (domain.0.root_ppn(), domain.0.asid());
-                let _ = domain
-                    .0
-                    .set_current_hart(hart_local::current_hart_id(), true);
+                // The execution pin was acquired at selection time under
+                // scheduler-stable state; programming the dead root's SATP here
+                // is exactly what begin_execution's recheck prevents.
                 hart_local::set_current_domain(id, generation);
                 crate::hal::domain::observe_switch_activation();
                 #[cfg(feature = "test-hooks")]

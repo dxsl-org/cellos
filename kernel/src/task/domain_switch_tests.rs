@@ -96,7 +96,83 @@ pub(crate) fn run_primary() -> bool {
     } else {
         log::error!("S22-RV64-PLAN: FAIL");
     }
-    plan_ok
+    plan_ok && run_pinned_retire_regression()
+}
+
+/// Regression for the pin→plan window: `retire()` is a bare atomic store that
+/// takes no lock, so it can land between the execution pin (pick_next_local
+/// filter) and `SwitchPlan::new`. A successfully pinned task must still derive
+/// Activate and program ITS root — never the KERNEL_ROOT safe-root tuple.
+pub(crate) fn run_pinned_retire_regression() -> bool {
+    let kernel_stack = match crate::task::stack::Stack::new_kernel(2) {
+        Ok(stack) => stack,
+        Err(error) => {
+            log::error!("S22-RV64-PIN-DYING: FAIL stack={:?}", error);
+            return false;
+        }
+    };
+    let mut builder = AddressSpaceBuilder::new();
+    builder.map_registered_execution(&kernel_stack);
+    let address_space = match builder.build() {
+        Ok(address_space) => address_space,
+        Err(error) => {
+            log::error!("S22-RV64-PIN-DYING: FAIL address-space={:?}", error);
+            return false;
+        }
+    };
+    let hart = hart_local::current_hart_id();
+    if address_space.begin_execution(hart).is_err() {
+        log::error!("S22-RV64-PIN-DYING: FAIL pin-rejected-live-root");
+        return false;
+    }
+    let bit = 1usize << hart;
+    if address_space.current_harts() & bit == 0 {
+        log::error!("S22-RV64-PIN-DYING: FAIL pin-bit-unset");
+        return false;
+    }
+    address_space.retire();
+    // Re-pinning a root that died after the first pin must fail closed AND
+    // leave the pre-existing execution pin intact — erasing it would drop this
+    // executing hart out of the drain set.
+    if !matches!(
+        address_space.begin_execution(hart),
+        Err(crate::memory::address_space::AddressSpaceError::Dying)
+    ) || address_space.current_harts() & bit == 0
+    {
+        log::error!("S22-RV64-PIN-DYING: FAIL repin-erased-preexisting-pin");
+        return false;
+    }
+    let mut pinned_task = Task::new(91_003, CellId(91_003), "domain-pin-dying", Vec::new());
+    pinned_task.bind_address_space_for_test(alloc::sync::Arc::clone(&address_space));
+    let Some(plan) = SwitchPlan::new(core::ptr::null_mut(), core::ptr::null(), Some(&pinned_task))
+    else {
+        log::error!("S22-RV64-PIN-DYING: FAIL plan-rejected-after-pin");
+        return false;
+    };
+    if plan.is_sas_fast_path() {
+        log::error!("S22-RV64-PIN-DYING: FAIL diverted-to-fast-path");
+        return false;
+    }
+    let (root_ppn, asid) = plan.root_switch();
+    let expected = (address_space.root_ppn(), address_space.asid());
+    // The safe-root diversion this regression guards against surfaces as the
+    // kernel tuple (KERNEL_ROOT>>12, asid 0); a private root has asid != 0.
+    if (root_ppn, asid) == expected && asid != 0 {
+        log::info!(
+            "S22-RV64-PIN-DYING: PASS harts={}",
+            super::smp::online_hart_count()
+        );
+        true
+    } else {
+        log::error!(
+            "S22-RV64-PIN-DYING: FAIL root=({:#x},{:#x}) expected=({:#x},{:#x})",
+            root_ppn,
+            asid,
+            expected.0,
+            expected.1
+        );
+        false
+    }
 }
 
 /// Verify that a pre-dispatch domain binding survived cross-hart selection.

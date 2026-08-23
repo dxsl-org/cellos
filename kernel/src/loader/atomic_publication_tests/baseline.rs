@@ -83,9 +83,10 @@ pub(super) fn populated_baseline_teardown_restores_state() -> bool {
     let pre_fixture = snapshot();
     let baseline = SharedStateBaseline::install();
     let populated = baseline.owners_are_populated();
-    let handlers_distinct = (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const ()
-        as usize
-        != (preexisting_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const () as usize;
+    let handlers_distinct = !core::ptr::eq(
+        (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const (),
+        (preexisting_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const (),
+    );
     drop(baseline);
     let restored = snapshot_matches("FIXTURE", "fixture-roundtrip", &pre_fixture, &snapshot());
     crate::fast_ipc::restore_vfs_handler_pointer_for_test(original_handler);
