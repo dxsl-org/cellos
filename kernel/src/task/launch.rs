@@ -82,7 +82,10 @@ impl TaskLaunchState {
     }
 }
 
-fn authority_is_current(sched: &super::scheduler::Scheduler, authority: &CallerLaunchAuthority) -> bool {
+fn authority_is_current(
+    sched: &super::scheduler::Scheduler,
+    authority: &CallerLaunchAuthority,
+) -> bool {
     sched.tasks.get(&authority.tid).is_some_and(|task| {
         task.cell_generation == authority.generation
             && super::cap::CapSet::of_task(task).intersect(authority.ceiling) == authority.ceiling
@@ -104,13 +107,21 @@ pub fn publish_prepared(
     {
         return Err(ViError::PermissionDenied);
     }
-    if state.caller.as_ref().is_some_and(|a| !authority_is_current(sched, a)) {
+    if state
+        .caller
+        .as_ref()
+        .is_some_and(|a| !authority_is_current(sched, a))
+    {
         return Err(ViError::PermissionDenied);
     }
     // AP-11 must be injectable at the binding boundary even when this boot
     // corpus has no frozen replacement source to invalidate.
     crate::loader::atomic_checkpoint("AP-11")?;
-    if state.replacement.as_ref().is_some_and(|r| !r.can_bind(sched)) {
+    if state
+        .replacement
+        .as_ref()
+        .is_some_and(|r| !r.can_bind(sched))
+    {
         return Err(ViError::PermissionDenied);
     }
 
@@ -149,7 +160,10 @@ pub fn publish_prepared(
     }
 
     sched.tasks.insert(tid, task);
-    assert!(sched.publish_live_cell_owner(owner), "reserved CellId owner slot must be empty");
+    assert!(
+        sched.publish_live_cell_owner(owner),
+        "reserved CellId owner slot must be empty"
+    );
     sched.next_task_id = tid.checked_add(1).expect("task id space exhausted");
     quota.commit();
     crate::loader::commit_launch_routes(tid, cell_id, state.routes);

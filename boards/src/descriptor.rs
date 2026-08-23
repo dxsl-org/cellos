@@ -44,6 +44,9 @@ pub enum DriverId {
     Hpet,
     NvmePci,
     EthernetE1000,
+    DisplayBcmMailbox,
+    UsbDwc2,
+    EthernetLan9514,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -28,11 +28,11 @@ const TARGET_TID: usize = 9002;
 const CTRL_TID: usize = 9003;
 /// Separate cell for the thread-cap section, so its fillers cannot be mistaken
 /// for (or collide with) the identity-inheritance section's parent cell.
-const DOS_CELL_ID: u64 = 0x00D0_5000;
+const DOS_CELL_ID: u64 = (crate::memory::cell_quota::MAX_CELLS - 4) as u64;
 const DOS_FILLER_BASE: usize = 9100;
 
 // Distinctive sentinels so an inherited value is unambiguously the parent's.
-const TEST_CELL_ID: u64 = 0x00C0_FFEE;
+const TEST_CELL_ID: u64 = (crate::memory::cell_quota::MAX_CELLS - 2) as u64;
 // A restricted allowlist that still PERMITS the Spawn syscall (so the global
 // allowlist gate in handle_syscall lets the call through) yet differs from the
 // Task::new default of u64::MAX — bit 63 is unassigned (real syscalls use bits
@@ -56,6 +56,14 @@ fn mk_task(tid: usize, cell: u64) -> alloc::boxed::Box<Task> {
 /// Insert a task into the scheduler map (no ready-queue push — never scheduled).
 fn insert(task: alloc::boxed::Box<Task>) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
+            let owner = api::cell_owner::CellOwner::new(
+                task.cell_id.0,
+                task.cell_generation,
+                task.root_tid as u64,
+            );
+            sched.publish_live_cell_owner(owner);
+        }
         sched.tasks.insert(task.id, task);
     }
 }
@@ -63,7 +71,16 @@ fn insert(task: alloc::boxed::Box<Task>) {
 /// Remove a tid from the scheduler map AND every hart's ready queue.
 fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-        sched.tasks.remove(&tid);
+        if let Some(task) = sched.tasks.remove(&tid) {
+            if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
+                let owner = api::cell_owner::CellOwner::new(
+                    task.cell_id.0,
+                    task.cell_generation,
+                    task.root_tid as u64,
+                );
+                sched.clear_live_cell_owner_for_test(owner);
+            }
+        }
     }
     super::hart_local::ready::remove_from_all(tid);
 }

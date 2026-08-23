@@ -1,0 +1,25 @@
+[package]
+name = "driver-display-ssd1306"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+types           = { path = "../../../libs/types", version = "0.1.0" }
+api             = { path = "../../../libs/api", version = "0.1.0" }
+ostd            = { path = "../../../libs/ostd", version = "0.2.0" }
+driver-spi-bcm  = { path = "../spi-bcm", version = "0.1.0" }
+driver-gpio-bcm = { path = "../gpio-bcm", version = "0.1.0" }
+hal-spi         = { path = "../../../hal/traits/spi", version = "0.1.0" }
+hal-gpio        = { path = "../../../hal/traits/gpio", version = "0.1.0" }
+
+[[bin]]
+name = "driver-display-ssd1306"
+path = "src/main.rs"
+
+[lib]
+name = "driver_display_ssd1306"
+path = "src/lib.rs"
+
+[build-dependencies]
+cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

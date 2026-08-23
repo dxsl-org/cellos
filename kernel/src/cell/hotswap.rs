@@ -35,8 +35,7 @@ enum CeilingState {
     },
 }
 
-static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> =
-    Spinlock::new(BTreeMap::new());
+static SWAP_CEILINGS: Spinlock<BTreeMap<usize, CeilingState>> = Spinlock::new(BTreeMap::new());
 static NEXT_FREEZE_NONCE: Spinlock<u64> = Spinlock::new(1);
 
 /// Force-release this module's lock during fault teardown.
@@ -168,9 +167,7 @@ impl Drop for ReplacementReservation {
 }
 
 /// Reserve the live frozen task's one-shot replacement ceiling.
-pub(crate) fn reserve_frozen_replacement(
-    tid: usize,
-) -> Option<ReplacementReservation> {
+pub(crate) fn reserve_frozen_replacement(tid: usize) -> Option<ReplacementReservation> {
     use crate::task::tcb::TaskState;
 
     let scheduler = crate::task::SCHEDULER.lock();
@@ -451,12 +448,10 @@ fn rollback_mailbox_appends(
 /// `CellId` is retained only to preserve this internal call shape; it must not
 /// authorize Cell-wide cleanup for a worker target.
 pub(crate) fn exit_task_internal(tid: usize, _cell_id: CellId) {
-
     if let Some(sched) = crate::task::SCHEDULER.lock().as_mut() {
         // 0xAAAA_AAAA = hot-swap sentinel (distinguishes from clean exit 0 or watchdog MAX).
         sched.exit_task(tid, 0xAAAA_AAAAusize);
     }
-
 
     crate::audit::log_event(
         crate::audit::AuditEvent::CellExit,

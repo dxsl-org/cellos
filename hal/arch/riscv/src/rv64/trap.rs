@@ -15,6 +15,8 @@ extern "C" {
     fn __trap_entry_hart0();
     fn __trap_entry_hart1();
     pub fn vi_set_sscratch(kernel_stack_top: usize);
+    #[cfg(feature = "test-hooks")]
+    fn vi_rv64_kernel_fault_snapshot(satp: usize, stval: usize);
 
 }
 
@@ -154,6 +156,20 @@ pub extern "C" fn vi_trap_handler(frame: &mut ViTrapFrame) {
                     // safely if we do.
                 } else {
                     // True kernel fault (S-mode) or U-mode fault without a registered Cell.
+                    #[cfg(feature = "test-hooks")]
+                    {
+                        let satp: usize;
+                        // SAFETY: SATP reads have no side effects and the kernel
+                        // snapshot is a test-only, allocation-free UART trace.
+                        unsafe {
+                            core::arch::asm!(
+                                "csrr {satp}, satp",
+                                satp = out(reg) satp,
+                                options(nostack, nomem)
+                            );
+                            vi_rv64_kernel_fault_snapshot(satp, frame.stval);
+                        }
+                    }
                     panic!(
                         "Cellos: Kernel exception: scause={} sepc={:#x} stval={:#x} sstatus={:#x}",
                         code, frame.sepc, frame.stval, frame.sstatus

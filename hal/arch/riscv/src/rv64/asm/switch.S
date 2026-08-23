@@ -1,10 +1,9 @@
 .section .text
 .global __switch
 
-# fn __switch(old: *mut Context, new: *const Context, outgoing_sstatus: usize);
-# a0: old context ptr
-# a1: new context ptr
-# a2: complete outgoing sstatus captured before scheduler selection
+# fn __switch(old, new, outgoing_sstatus, root_ppn, asid);
+# a0: old context ptr; a1: new context ptr; a2: outgoing sstatus
+# a3: destination root PPN (0 = no root write); a4: destination ASID
 
 __switch:
     # SIE is already masked. The Rust yield path captured a2 before acquiring
@@ -35,6 +34,22 @@ __switch:
     sd t0, 14*8(a0)
     sd gp, 16*8(a0)
     sd tp, 17*8(a0)
+    # Root activation belongs after the outgoing save and before incoming
+    # registers/stack restore. A zero PPN preserves the SAS/same-domain path.
+    beqz a3, 1f
+    li t0, 8
+    slli t0, t0, 60
+    li t1, 0xffff
+    and t2, a4, t1
+    slli t2, t2, 44
+    or t0, t0, t2
+    li t1, 0xfffffffffff
+    and t2, a3, t1
+    or t0, t0, t2
+    fence rw, rw
+    csrw satp, t0
+    sfence.vma zero, a4
+1:
     # sscratch is intentionally NOT saved/restored (bug #7 fix): the nested-safe
     # protocol keeps sscratch == 0 for the entire time a hart is in S-mode, and
     # context switches only ever happen in S-mode. The trap-exit path loads the

@@ -126,6 +126,8 @@ pub fn free_cell_va(base: usize) {
 pub(crate) fn snapshot() -> (usize, alloc::vec::Vec<u64>) {
     (
         BUMP.load(Ordering::Acquire),
-        FREE.iter().map(|word| word.load(Ordering::Acquire)).collect(),
+        FREE.iter()
+            .map(|word| word.load(Ordering::Acquire))
+            .collect(),
     )
 }

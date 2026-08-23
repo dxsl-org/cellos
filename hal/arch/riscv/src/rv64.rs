@@ -7,6 +7,7 @@ pub use crate::common::uart_ns16550a as uart;
 
 mod asm;
 pub mod context;
+pub mod domain;
 pub mod paging;
 pub mod trap;
 pub use paging::*;

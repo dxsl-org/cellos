@@ -105,5 +105,7 @@ board-rpi4 = ["hal/board-rpi4"]
 # Raspberry Pi 3 (BCM2837): load@0x80000, BCM mini UART, BCM2836 local IRQ,
 # SDHCI at 0x3F300000. Propagates to hal-arm for IRQ/timer/UART dispatch.
 board-rpi3 = ["hal/board-rpi3"]
+# Enables the unpublished RV64 private-root substrate. Admission remains policy-off.
+native-domains = []
 # Enable in-kernel test harnesses (smoke tests, integration probes). Never in release builds.
-test-hooks = ["dep:qemu-exit"]
+test-hooks = ["dep:qemu-exit", "hal/test-hooks"]

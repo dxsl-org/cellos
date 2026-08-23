@@ -99,11 +99,7 @@ impl PageTable {
     }
 
     /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
-    pub fn prune_empty(
-        &mut self,
-        virt: VAddr,
-        dealloc: &mut dyn FnMut(PhysAddr),
-    ) {
+    pub fn prune_empty(&mut self, virt: VAddr, dealloc: &mut dyn FnMut(PhysAddr)) {
         let l1_index = (virt >> 30) & 0x1FF;
         let l1_entry = self.entries[l1_index];
         if l1_entry & PTE_VALID == 0 {

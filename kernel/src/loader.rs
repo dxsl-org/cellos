@@ -9,10 +9,10 @@ use types::*;
 /// skips `spawn_from_path`, so re-registration never fires spuriously.
 static BLOCK_IO_REGISTERED: AtomicBool = AtomicBool::new(false);
 
+pub(crate) mod aligned_elf;
 /// Per-path capability ceiling for the cells named in the boot manifest.
 #[cfg(feature = "test-hooks")]
 pub mod atomic_publication_tests;
-pub(crate) mod aligned_elf;
 pub mod boot_ceiling;
 pub mod disk_layout;
 pub mod early;
@@ -20,10 +20,10 @@ pub mod elf;
 pub mod elf_tests;
 mod governed_spawn;
 pub mod launch_profile;
-/// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
-pub mod mem_spawn_gate;
 mod manifest_section;
 mod manifest_section_tests;
+/// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
+pub mod mem_spawn_gate;
 pub mod reloc;
 mod spawn_request;
 pub use spawn_request::SpawnRequest;
@@ -100,11 +100,7 @@ pub fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
     governed_spawn::spawn_trusted_init(elf)
 }
 
-pub(crate) fn commit_launch_routes(
-    tid: usize,
-    cell_id: CellId,
-    routes: crate::task::LaunchRoutes,
-) {
+pub(crate) fn commit_launch_routes(tid: usize, cell_id: CellId, routes: crate::task::LaunchRoutes) {
     if routes.block_io {
         let already = BLOCK_IO_REGISTERED.swap(true, Ordering::SeqCst);
         if already {

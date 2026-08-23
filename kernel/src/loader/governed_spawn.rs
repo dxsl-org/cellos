@@ -1,8 +1,8 @@
 //! Immutable governed preflight followed by owned preparation and one commit.
 
+use super::ElfParser;
 use alloc::string::ToString;
 use types::{CellId, ViError, ViResult};
-use super::ElfParser;
 
 fn next_tid_hint() -> usize {
     crate::task::SCHEDULER
@@ -187,9 +187,24 @@ pub(super) fn spawn_trusted_init(elf: &[u8]) -> ViResult<usize> {
     let granted = super::boot_ceiling::boot_ceiling("/bin/init");
     let prepared = crate::task::prepare_elf_task(elf, "init", CellId(0), alloc::vec::Vec::new())?;
     let state = crate::task::TaskLaunchState::complete(
-        None, granted, None, None, crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
-        u64::MAX, 0, 0, api::TaskPriority::Normal as u8, 0, 0, true, 0, None,
-        crate::task::LaunchRoutes { block_io: false, input: false },
+        None,
+        granted,
+        None,
+        None,
+        crate::memory::cell_quota::DEFAULT_QUOTA_BYTES,
+        u64::MAX,
+        0,
+        0,
+        api::TaskPriority::Normal as u8,
+        0,
+        0,
+        true,
+        0,
+        None,
+        crate::task::LaunchRoutes {
+            block_io: false,
+            input: false,
+        },
         Some(crate::task::StagedMeasurement {
             path: "/bin/init".to_string(),
             digest: crate::sha256::sha256(elf),

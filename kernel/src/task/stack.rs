@@ -99,6 +99,14 @@ pub struct Stack {
     pub guard_pages: usize,
     /// Top of the stack (initial SP).
     pub top: VAddr,
+    /// Test-only lifetime registration for a kernel stack selected by a
+    /// native-domain private root.
+    #[cfg(all(
+        feature = "native-domains",
+        feature = "test-hooks",
+        target_arch = "riscv64"
+    ))]
+    supervisor_registration: Option<crate::memory::domain_supervisor_registry::SupervisorRangeId>,
 }
 
 impl Stack {
@@ -236,6 +244,28 @@ impl Stack {
         // Top is at the END of the allocated range.
         let top = base_addr + (total_pages * PAGE_SIZE);
 
+        #[cfg(all(
+            feature = "native-domains",
+            feature = "test-hooks",
+            target_arch = "riscv64"
+        ))]
+        let supervisor_registration =
+            if user_mode || !crate::memory::domain_supervisor_registry::is_active() {
+                None
+            } else {
+                match crate::memory::domain_supervisor_registry::register(
+                    base_addr + (guard_pages * PAGE_SIZE),
+                    top,
+                    crate::memory::domain_supervisor_registry::SupervisorRangeKind::KernelStack,
+                    crate::memory::domain_supervisor_registry::SupervisorRangeOwner::TaskStack,
+                ) {
+                    Ok(id) => Some(id),
+                    Err(()) => {
+                        release_frames(allocator, base_addr, total_pages);
+                        return Err(ViError::NotSupported);
+                    }
+                }
+            };
         trace!(
             "Allocated Stack: Base=0x{:X}, Top=0x{:X}, Pages={}, Guards={}, User={}",
             base_addr,
@@ -250,6 +280,12 @@ impl Stack {
             pages,
             guard_pages,
             top,
+            #[cfg(all(
+                feature = "native-domains",
+                feature = "test-hooks",
+                target_arch = "riscv64"
+            ))]
+            supervisor_registration,
         })
     }
 
@@ -344,6 +380,15 @@ pub fn stack_probe_self_test() -> bool {
 
 impl Drop for Stack {
     fn drop(&mut self) {
+        #[cfg(all(
+            feature = "native-domains",
+            feature = "test-hooks",
+            target_arch = "riscv64"
+        ))]
+        if let Some(id) = self.supervisor_registration.take() {
+            let unregistered = crate::memory::domain_supervisor_registry::unregister(id);
+            debug_assert!(unregistered);
+        }
         trace!("Dropping Stack at 0x{:X}", self.base);
 
         let total_pages = self.pages + self.guard_pages;
@@ -381,7 +426,6 @@ impl CellSegments {
     pub(crate) fn unpublished_pages(&self) -> &[(types::VAddr, types::PhysAddr)] {
         &self.pages
     }
-
 
     /// Total physical bytes reserved for this cell's ELF segment frames.
     pub fn allocated_bytes(&self) -> usize {

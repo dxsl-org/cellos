@@ -2,6 +2,7 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Bcm27xxIrqTopology {
     pub system_timer_c1: u32,
+    pub usb: u32,
     pub aux: u32,
     pub gpio_bank0: u32,
     pub gpio_bank1: u32,
@@ -14,12 +15,17 @@ impl Bcm27xxIrqTopology {
     /// Returns whether legacy IRQs and local-source masks form a valid topology.
     pub const fn is_valid(self) -> bool {
         let legacy_in_range = self.system_timer_c1 < 64
+            && self.usb < 64
             && self.aux < 64
             && self.gpio_bank0 < 64
             && self.gpio_bank1 < 64;
-        let legacy_unique = self.system_timer_c1 != self.aux
+        let legacy_unique = self.system_timer_c1 != self.usb
+            && self.system_timer_c1 != self.aux
             && self.system_timer_c1 != self.gpio_bank0
             && self.system_timer_c1 != self.gpio_bank1
+            && self.usb != self.aux
+            && self.usb != self.gpio_bank0
+            && self.usb != self.gpio_bank1
             && self.aux != self.gpio_bank0
             && self.aux != self.gpio_bank1
             && self.gpio_bank0 != self.gpio_bank1;
@@ -29,7 +35,6 @@ impl Bcm27xxIrqTopology {
         let local_disjoint = self.local_timer_ns_mask & self.local_timer_hp_mask == 0
             && self.local_timer_ns_mask & self.local_gpu_mask == 0
             && self.local_timer_hp_mask & self.local_gpu_mask == 0;
-
         legacy_in_range && legacy_unique && local_one_hot && local_disjoint
     }
 }

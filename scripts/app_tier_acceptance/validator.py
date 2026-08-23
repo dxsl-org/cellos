@@ -123,7 +123,7 @@ def _validate_snapshot(data: object, as_of: dt.datetime, root: Path) -> str:
     if any(claim["status"] == "PASS" and claim_id not in referenced for claim_id, claim in claim_map.items()):
         raise ValueError("PASS claim is not referenced by a matrix cell")
     states, event_ids = events.history(value, root, state_digest, as_of)
-    blocks = ledger.blockers(value, subject_map, root)
+    blocks = ledger.blockers(value, subject_map, root, as_of)
     hostile = ledger.negatives(value, subject_map, root, as_of)
     phases = ledger.lifecycle(value, states, event_ids)
     complete = promoted and blocks and hostile and phases

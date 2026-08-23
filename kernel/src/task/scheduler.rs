@@ -134,7 +134,6 @@ pub(crate) struct VfsLeaseRelease {
 
 const MAX_RETURNABLE_OWNER_WATCH_TOKEN: u64 = isize::MAX as u64;
 
-
 /// Register `watcher` to be notified when `watched` exits or faults.
 pub fn subscribe_death(watched: usize, watcher: usize) {
     DEATH_SUBSCRIBERS
@@ -283,7 +282,6 @@ impl Scheduler {
         }
     }
 
-    #[cfg(feature = "test-hooks")]
     pub(crate) fn clear_live_cell_owner_for_test(&mut self, owner: api::cell_owner::CellOwner) {
         if let Some(slot) = self.cell_owners.get_mut(owner.cell_id as usize) {
             if matches!(slot, CellOwnerSlot::Live(current) if *current == owner) {
@@ -340,7 +338,10 @@ impl Scheduler {
         let token = self.take_cell_owner_watch_token()?;
         self.cell_owner_watches.insert(
             token,
-            CellOwnerWatch { watched_root_tid: owner.root_tid as usize, watcher_tid },
+            CellOwnerWatch {
+                watched_root_tid: owner.root_tid as usize,
+                watcher_tid,
+            },
         );
         Some((owner, token))
     }
@@ -800,11 +801,19 @@ impl Scheduler {
         {
             return;
         }
+        #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+        {
+            let is_test_root = self.tasks.get(&tid).is_some_and(|t| {
+                t.root_tid == tid && (t.name == "vfs-test" || t.name == "app-vfs-test")
+            });
+            if is_test_root {
+                crate::qemu_exit(exit_reason == 0);
+            }
+        }
 
         let root_owner = self.tasks.get(&tid).and_then(|task| {
-            (task.root_tid == tid).then(|| {
-                self.resolve_live_cell_owner(task.cell_id, task.cell_generation)
-            })?
+            (task.root_tid == tid)
+                .then(|| self.resolve_live_cell_owner(task.cell_id, task.cell_generation))?
         });
         if let Some(owner) = root_owner {
             // A root's exit terminates its whole generation. Mark it retiring
@@ -868,7 +877,6 @@ impl Scheduler {
                 task.state = TaskState::Retiring;
             }
         }
-
 
         // A dead VFS watcher cannot retain subscriptions after its task-local
         // state is removed. Exact watcher matching preserves other tokens.
@@ -1234,7 +1242,6 @@ impl Scheduler {
         core::mem::take(&mut self.pending_completion_release)
     }
 
-
     pub(crate) fn take_pending_vfs_context_release(&mut self) -> Vec<VfsLeaseRelease> {
         core::mem::take(&mut self.pending_vfs_context_release)
     }
@@ -1473,6 +1480,20 @@ impl Scheduler {
         self.pick_next_local(hart_id, now)
     }
 
+    /// Convert the stable scheduler choice into the RV64-only root plan.  The
+    /// plan owns any private-root reference until the raw-switch boundary.
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    pub(crate) fn pick_next_domain(
+        &mut self,
+        hart_id: usize,
+    ) -> Option<super::domain_switch::SwitchPlan> {
+        let (outgoing, incoming) = self.pick_next(hart_id)?;
+        let incoming_task = (!incoming.is_null())
+            .then(|| super::hart_local::ready::current_task_id_for(hart_id))
+            .and_then(|id| self.tasks.get(&id).map(|task| &**task));
+        super::domain_switch::SwitchPlan::new(outgoing, incoming, incoming_task)
+    }
+
     /// Per-hart task selection: watchdog on current task, then pop from local queue
     /// (with work-stealing fallback).  Called by `pick_next` for both hart 0
     /// (after global sweep) and all other harts.
@@ -1556,6 +1577,27 @@ impl Scheduler {
         let next_id = rl::pick_local_eligible(hart_id).or_else(|| {
             super::hart_local::ready::steal_from_busiest(hart_id);
             rl::pick_local_eligible(hart_id)
+        });
+
+        #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+        let next_id = next_id.filter(|id| {
+            if self
+                .tasks
+                .get(id)
+                .is_some_and(|task| task.address_space_is_live())
+            {
+                return true;
+            }
+            rl::remove_from_all(*id);
+            if let Some(task) = self.tasks.get_mut(id) {
+                task.state = TaskState::Retiring;
+            }
+            #[cfg(feature = "test-hooks")]
+            log::info!(
+                "S22-RV64-DYING-NONSCHEDULABLE: PASS harts={}",
+                super::smp::online_hart_count()
+            );
+            false
         });
 
         if let Some(nid) = next_id {
@@ -1709,7 +1751,6 @@ impl Scheduler {
     pub fn has_ready_tasks(&self) -> bool {
         super::hart_local::ready::total_ready_count() > 0
     }
-
 }
 
 #[cfg(test)]
@@ -1725,7 +1766,12 @@ mod retirement_tests {
         let old_cell = super::super::hart_local::current_cell_id();
         let old_generation = super::super::hart_local::current_cell_generation();
         let mut scheduler = Scheduler::new();
-        let mut blocked = Box::new(Task::new(TID, CellId(CELL_RAW), "blocked-boot", alloc::vec![]));
+        let mut blocked = Box::new(Task::new(
+            TID,
+            CellId(CELL_RAW),
+            "blocked-boot",
+            alloc::vec![],
+        ));
         blocked.state = TaskState::Waiting { target: 0 };
         scheduler.tasks.insert(TID, blocked);
 
@@ -1743,11 +1789,7 @@ mod retirement_tests {
         assert_eq!(super::super::hart_local::current_cell_id(), 0);
 
         scheduler.tasks.get_mut(&TID).expect("blocked task").state = TaskState::Ready;
-        super::super::hart_local::ready::push_on_hart(
-            hart,
-            TID,
-            api::TaskPriority::Normal as u8,
-        );
+        super::super::hart_local::ready::push_on_hart(hart, TID, api::TaskPriority::Normal as u8);
         let (curr, next) = scheduler
             .pick_next_local(hart, 0)
             .expect("woken task must be selectable from boot");
@@ -1823,13 +1865,12 @@ mod retirement_tests {
         const WORKER_TID: usize = 60_002;
         const CELL_RAW: u64 = 63;
         const GENERATION: u64 = 7;
-        let remote_hart = if super::super::hart_local::current_hart_id()
-            == super::super::smp::HART_RT
-        {
-            0
-        } else {
-            super::super::smp::HART_RT
-        };
+        let remote_hart =
+            if super::super::hart_local::current_hart_id() == super::super::smp::HART_RT {
+                0
+            } else {
+                super::super::smp::HART_RT
+            };
 
         let owner = api::cell_owner::CellOwner::new(CELL_RAW, GENERATION, ROOT_TID as u64);
         let mut scheduler = Scheduler::new();
@@ -1862,12 +1903,9 @@ mod retirement_tests {
             requested_switch_completion: [0; super::super::smp::MAX_HARTS],
         });
 
-        let old_current =
-            super::super::hart_local::ready::current_task_id_for(remote_hart);
-        let old_selected =
-            super::super::hart_local::ready::selected_task_id_for(remote_hart);
-        let old_executing =
-            super::super::hart_local::ready::executing_task_id_for(remote_hart);
+        let old_current = super::super::hart_local::ready::current_task_id_for(remote_hart);
+        let old_selected = super::super::hart_local::ready::selected_task_id_for(remote_hart);
+        let old_executing = super::super::hart_local::ready::executing_task_id_for(remote_hart);
 
         // Deterministically model root exit after the worker Context pointer was
         // selected but before the incoming switch published it as executing.
@@ -1922,7 +1960,12 @@ mod retirement_tests {
         const CELL_RAW: u64 = 62;
         const GENERATION: u64 = 9;
         let mut scheduler = Scheduler::new();
-        let mut zombie = Box::new(Task::new(TID, CellId(CELL_RAW), "faulted-zombie", alloc::vec![]));
+        let mut zombie = Box::new(Task::new(
+            TID,
+            CellId(CELL_RAW),
+            "faulted-zombie",
+            alloc::vec![],
+        ));
         zombie.cell_generation = GENERATION;
         scheduler.zombies.push(zombie);
 

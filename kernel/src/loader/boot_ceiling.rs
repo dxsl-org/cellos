@@ -21,7 +21,7 @@
 //! path-triggered caps `CapSet::with_path_caps` layers on. A row is therefore
 //! the *expected* authority of that binary, not a guess.
 
-use crate::resource_registry::{DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
+use crate::resource_registry::{DEV_DISPLAY, DEV_GPIO, DEV_I2C, DEV_SPI, DEV_UART};
 use crate::task::cap::CapSet;
 
 mod selftest;
@@ -41,8 +41,7 @@ const VFS_REGIONS: u8 = 0b1111;
 
 /// The two console peripherals that path-triggered demo rows may request.
 const CONSOLE_MMIO: u8 = DEV_GPIO | DEV_UART;
-const ROOT_MMIO: u8 = CONSOLE_MMIO | DEV_I2C | DEV_SPI;
-
+const ROOT_MMIO: u8 = CONSOLE_MMIO | DEV_I2C | DEV_SPI | DEV_DISPLAY;
 /// The expected ceiling for `path`, or `None` when `path` is not a boot cell.
 ///
 /// Every row carries the reason that path holds those caps. Prefer a row that is
@@ -104,14 +103,20 @@ pub fn lookup(path: &str) -> Option<CapSet> {
             hypervisor: true,
             ..CapSet::EMPTY
         },
-        // Driver cells: each claims a BAR/MMIO range and authorises DMA, which
-        // needs `pcie_driver`. Their manifests declare nothing — the install
-        // path is the request signal (`with_path_caps`).
+        // PCIe driver cells: each claims a BAR/MMIO range and authorises DMA.
+        // `pcie_driver` + `DEV_DISPLAY` are set here; `with_path_caps` adds them
+        // to the request before the ceiling intersection.
         "/bin/block" | "/bin/nvme" | "/bin/e1000" | "/bin/virtio-net" | "/bin/virtio-gpu"
-        | "/bin/input" => CapSet {
+        | "/bin/bcm-display" | "/bin/input" => CapSet {
             pcie_driver: true,
+            mmio_devices: DEV_DISPLAY,
             ..CapSet::EMPTY
         },
+        // USB driver cells: intentionally EMPTY until policy v3 introduces a
+        // signed USB host authority byte. `with_path_caps` grants them nothing;
+        // the ceiling here is the cross-check. Listed explicitly (not `_ => None`)
+        // so a boot-log denial can report "row intentionally empty" vs "row missing".
+        "/bin/dwc2-usb" | "/bin/lan9514" => CapSet::EMPTY,
         // Known boot cells that need no authority at all: pure IPC clients. They
         // are listed rather than left to the unknown-path fallback so a denial
         // report can distinguish "needs nothing" from "row missing".

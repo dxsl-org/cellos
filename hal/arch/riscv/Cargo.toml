@@ -21,6 +21,7 @@ cc = "1.0"
 [features]
 default = []
 critical-section-impl = ["dep:critical-section"]
+test-hooks = []
 
 [lib]
 crate-type = ["rlib"]

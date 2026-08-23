@@ -17,7 +17,11 @@ pub struct PreparedElfTask {
 }
 
 impl PreparedElfTask {
-    pub(super) fn into_task(self, id: usize, cell_id: CellId) -> (alloc::boxed::Box<super::Task>, usize) {
+    pub(super) fn into_task(
+        self,
+        id: usize,
+        cell_id: CellId,
+    ) -> (alloc::boxed::Box<super::Task>, usize) {
         let mut task = alloc::boxed::Box::new(super::Task::new(
             id,
             cell_id,
@@ -78,7 +82,10 @@ pub fn prepare_elf_task(
             }
         }
     };
-    let final_flags = seg_pages.iter().map(|p| (p.va, p.final_flags)).collect::<Vec<_>>();
+    let final_flags = seg_pages
+        .iter()
+        .map(|p| (p.va, p.final_flags))
+        .collect::<Vec<_>>();
     let segments = super::stack::CellSegments::new(
         seg_pages.iter().map(|p| (p.va, p.frame)).collect(),
         load_base,

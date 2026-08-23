@@ -53,3 +53,63 @@ pub unsafe fn sync_instruction_cache(data_start: usize, instruction_start: usize
         core::arch::asm!("dsb ish", "isb", options(nostack));
     }
 }
+/// Clean data cache lines covering `[start, start + len)` to Point of Coherency (PoC).
+///
+/// Used before initiating a device DMA read from RAM.
+pub fn clean_data_cache_range(start: usize, len: usize) {
+    if len == 0 {
+        return;
+    }
+    let dline = 64usize;
+    let end = start + len;
+    let mut line = start & !(dline - 1);
+    while line < end {
+        unsafe {
+            core::arch::asm!("dc cvac, {line}", line = in(reg) line, options(nostack));
+        }
+        line += dline;
+    }
+    unsafe {
+        core::arch::asm!("dsb sy", options(nostack));
+    }
+}
+
+/// Invalidate data cache lines covering `[start, start + len)` from Point of Coherency (PoC).
+///
+/// Used after a device finishes a DMA write into RAM, before CPU reads.
+pub fn invalidate_data_cache_range(start: usize, len: usize) {
+    if len == 0 {
+        return;
+    }
+    let dline = 64usize;
+    let end = start + len;
+    let mut line = start & !(dline - 1);
+    while line < end {
+        unsafe {
+            core::arch::asm!("dc ivac, {line}", line = in(reg) line, options(nostack));
+        }
+        line += dline;
+    }
+    unsafe {
+        core::arch::asm!("dsb sy", options(nostack));
+    }
+}
+
+/// Clean and invalidate data cache lines covering `[start, start + len)` to/from PoC.
+pub fn clean_invalidate_data_cache_range(start: usize, len: usize) {
+    if len == 0 {
+        return;
+    }
+    let dline = 64usize;
+    let end = start + len;
+    let mut line = start & !(dline - 1);
+    while line < end {
+        unsafe {
+            core::arch::asm!("dc civac, {line}", line = in(reg) line, options(nostack));
+        }
+        line += dline;
+    }
+    unsafe {
+        core::arch::asm!("dsb sy", options(nostack));
+    }
+}

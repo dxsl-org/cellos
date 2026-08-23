@@ -156,9 +156,21 @@ class LedgerTests(unittest.TestCase):
         binding.update(sha256=digest(spec), matrix_sha256=source.matrix_digest(root), ratified_revision=revision)
         raw_artifact = artifact(root, "evidence/trace.log", "log")
         baseline_artifact = artifact(root, "evidence/baseline.log")
+        subjects = {subject["id"]: subject for subject in data["subjects"]}
         for item in data["blockers"]:
             item["evidence"] = [baseline_artifact]
-            item.update(status="PASS", resolution={"event_id": "phase-2-implemented", "artifacts": [raw_artifact]})
+            subject = subjects[item["subject"]]
+            physical = subject["environment"] == "physical"
+            item.update(status="PASS", resolution={
+                "event_id": "phase-2-implemented", "subject": item["subject"],
+                "architecture": subject["architecture"], "environment": subject["environment"],
+                "hardware": subject["board_revision"] if physical else subject["host_vmm"],
+                "firmware_sha256": subject["firmware_digest"] if physical else "N/A",
+                "owner": "blocker-owner", "runner": "independent-runner",
+                "command": "verify-blocker-resolution",
+                "recorded_at": "2026-08-20T00:00:00Z", "expires_at": "2026-08-22T00:00:00Z",
+                "ttl_seconds": 172800, "artifacts": [raw_artifact],
+            })
         for item in baseline["blockers"]:
             item["evidence"] = [baseline_artifact]
         baseline["security_negatives"][0]["evidence"] = [baseline_artifact]

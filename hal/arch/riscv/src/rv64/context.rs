@@ -69,7 +69,7 @@ impl Context {
     #[inline(always)]
     pub unsafe fn switch(old: *mut Context, new: *const Context) {
         let outgoing_sstatus = save_and_disable_interrupts();
-        Self::switch_with_saved_sstatus(old, new, outgoing_sstatus);
+        Self::switch_with_saved_sstatus(old, new, outgoing_sstatus, 0, 0);
     }
 
     /// Switch contexts while saving the caller's pre-mask `sstatus` in `old`.
@@ -86,15 +86,21 @@ impl Context {
         old: *mut Context,
         new: *const Context,
         outgoing_sstatus: usize,
+        root_ppn: usize,
+        asid: usize,
+        // ABI extension of `__switch(old, new, outgoing_sstatus)`: root/asid
+        // remain trailing so the complete pre-mask status stays in a2.
     ) {
         extern "C" {
             fn __switch(
                 old: *mut Context,
                 new: *const Context,
                 outgoing_sstatus: usize,
+                root_ppn: usize,
+                asid: usize,
             );
         }
-        __switch(old, new, outgoing_sstatus);
+        __switch(old, new, outgoing_sstatus, root_ppn, asid);
     }
 }
 

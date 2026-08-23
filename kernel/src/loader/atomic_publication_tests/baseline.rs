@@ -33,7 +33,6 @@ unsafe fn preexisting_vfs_handler(
     1
 }
 
-
 /// Run a denial against the same populated owners that production admission
 /// observes. `audit_records` is the documented request evidence the denial
 /// appends; fixture installation and teardown must append no audit records.
@@ -84,14 +83,15 @@ pub(super) fn populated_baseline_teardown_restores_state() -> bool {
     let pre_fixture = snapshot();
     let baseline = SharedStateBaseline::install();
     let populated = baseline.owners_are_populated();
-    let handlers_distinct =
-        (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const () as usize
-            != (preexisting_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const () as usize;
+    let handlers_distinct = (fixture_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const ()
+        as usize
+        != (preexisting_vfs_handler as crate::fast_ipc::VfsFastHandler) as *const () as usize;
     drop(baseline);
     let restored = snapshot_matches("FIXTURE", "fixture-roundtrip", &pre_fixture, &snapshot());
     crate::fast_ipc::restore_vfs_handler_pointer_for_test(original_handler);
     crate::fast_ipc::set_vfs_handler_cell(original_owner);
-    let setup_restored = snapshot_matches("FIXTURE", "fixture-setup-teardown", &original, &snapshot());
+    let setup_restored =
+        snapshot_matches("FIXTURE", "fixture-setup-teardown", &original, &snapshot());
     populated && handlers_distinct && restored && setup_restored
 }
 
@@ -117,28 +117,47 @@ impl SharedStateBaseline {
                 (VFS_TID, VFS_CELL, "atomic-vfs-owner"),
                 (INPUT_TID, INPUT_CELL, "atomic-input-owner"),
                 (SERVICE_TID, SERVICE_CELL, "atomic-service-owner"),
-                (REPLACEMENT_TID, REPLACEMENT_CELL, "atomic-replacement-owner"),
+                (
+                    REPLACEMENT_TID,
+                    REPLACEMENT_CELL,
+                    "atomic-replacement-owner",
+                ),
                 (QUOTA_TID, QUOTA_CELL, "atomic-quota-owner"),
                 (ROUTE_TID, ROUTE_CELL, "atomic-route-owner"),
             ] {
                 let mut task = crate::task::Task::new(tid, cell, name, alloc::vec::Vec::new());
                 task.priority = (tid - VFS_TID + 1) as u8;
                 task.syscall_allowlist = 1u64 << (tid - VFS_TID);
-                assert!(sched.tasks.insert(tid, alloc::boxed::Box::new(task)).is_none());
+                assert!(sched
+                    .tasks
+                    .insert(tid, alloc::boxed::Box::new(task))
+                    .is_none());
             }
         }
         crate::memory::cell_quota::register(QUOTA_CELL, 0x2345_0000);
         crate::loader::commit_launch_routes(
             ROUTE_TID,
             ROUTE_CELL,
-            crate::task::LaunchRoutes { block_io: true, input: false },
+            crate::task::LaunchRoutes {
+                block_io: true,
+                input: false,
+            },
         );
         crate::fast_ipc::register_vfs(fixture_vfs_handler);
         crate::fast_ipc::set_vfs_handler_cell(VFS_CELL.0 as usize);
         crate::task::drivers::driver_cell::set_input_cell(INPUT_TID);
-        assert!(crate::cell::service_registry::register(SERVICE_ID, SERVICE_TID));
+        assert!(crate::cell::service_registry::register(
+            SERVICE_ID,
+            SERVICE_TID
+        ));
         assert!(crate::cell::hotswap::freeze_task_with_ceiling(REPLACEMENT_TID, 0xfeed).is_ok());
-        Self { next_generation, block_io_registered, vfs_tid, vfs_handler, input_tid }
+        Self {
+            next_generation,
+            block_io_registered,
+            vfs_tid,
+            vfs_handler,
+            input_tid,
+        }
     }
 
     fn owners_are_populated(&self) -> bool {
@@ -154,7 +173,12 @@ impl SharedStateBaseline {
                 (ROUTE_TID, ROUTE_CELL),
             ]
             .iter()
-            .all(|&(tid, cell)| sched.tasks.get(&tid).is_some_and(|task| task.cell_id == cell))
+            .all(|&(tid, cell)| {
+                sched
+                    .tasks
+                    .get(&tid)
+                    .is_some_and(|task| task.cell_id == cell)
+            })
         };
         let replacement_present = crate::cell::hotswap::replacement_ceiling_snapshot()
             .iter()
@@ -191,7 +215,14 @@ impl Drop for SharedStateBaseline {
         crate::memory::cell_quota::deregister(QUOTA_CELL);
         let mut scheduler = crate::task::SCHEDULER.lock();
         let sched = scheduler.as_mut().expect("atomic corpus needs scheduler");
-        for tid in [VFS_TID, INPUT_TID, SERVICE_TID, REPLACEMENT_TID, QUOTA_TID, ROUTE_TID] {
+        for tid in [
+            VFS_TID,
+            INPUT_TID,
+            SERVICE_TID,
+            REPLACEMENT_TID,
+            QUOTA_TID,
+            ROUTE_TID,
+        ] {
             assert!(sched.tasks.remove(&tid).is_some());
         }
         drop(scheduler);

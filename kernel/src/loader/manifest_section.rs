@@ -82,7 +82,11 @@ fn classify_inner(data: &[u8]) -> Option<ManifestSection> {
         checked_range(data, phoff, phentsize.checked_mul(phnum)?)?;
         for index in 0..phnum {
             let base = phoff.checked_add(phentsize.checked_mul(index)?)?;
-            let (offset_at, size_at) = if class == ELFCLASS32 { (4, 16) } else { (8, 32) };
+            let (offset_at, size_at) = if class == ELFCLASS32 {
+                (4, 16)
+            } else {
+                (8, 32)
+            };
             let kind = read(data, base, 4, little)?;
             let offset = to_usize(read(data, base.checked_add(offset_at)?, width, little)?)?;
             let size = to_usize(read(data, base.checked_add(size_at)?, width, little)?)?;
@@ -193,7 +197,11 @@ fn read(data: &[u8], offset: usize, width: usize, little: bool) -> Option<u64> {
     let bytes = data.get(offset..offset.checked_add(width)?)?;
     let mut value = 0u64;
     for (index, byte) in bytes.iter().enumerate() {
-        let shift = if little { index * 8 } else { (width - index - 1) * 8 };
+        let shift = if little {
+            index * 8
+        } else {
+            (width - index - 1) * 8
+        };
         value |= (*byte as u64) << shift;
     }
     Some(value)

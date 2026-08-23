@@ -17,15 +17,38 @@ const ALL_FLAGS: [u16; 12] = [
 
 fn v1(flags: u8) -> [u8; 8] {
     let magic = MANIFEST_MAGIC.to_le_bytes();
-    [magic[0], magic[1], magic[2], magic[3], MANIFEST_VERSION_V1, flags, 0, 0]
+    [
+        magic[0],
+        magic[1],
+        magic[2],
+        magic[3],
+        MANIFEST_VERSION_V1,
+        flags,
+        0,
+        0,
+    ]
 }
 
 fn v2(class: u8, flags: u16) -> [u8; 16] {
     let magic = MANIFEST_MAGIC.to_le_bytes();
     let flags = flags.to_le_bytes();
     [
-        magic[0], magic[1], magic[2], magic[3], MANIFEST_VERSION, class,
-        flags[0], flags[1], 0, 0, 0, 0, 0, 0, 0, 0,
+        magic[0],
+        magic[1],
+        magic[2],
+        magic[3],
+        MANIFEST_VERSION,
+        class,
+        flags[0],
+        flags[1],
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     ]
 }
 
@@ -41,13 +64,24 @@ fn v2_layout_and_aliases_remain_byte_identical() {
     assert_eq!(
         v2(PROTECTION_CLASS_STANDARD, MANIFEST_FLAGS_MASK),
         [
-            0x45, 0x43, 0x49, 0x56, 0x02, 0x01, 0xff, 0x0f,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x45, 0x43, 0x49, 0x56, 0x02, 0x01, 0xff, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
         ],
         "canonical v2 bytes are an ABI fixture",
     );
     let emitted = CellManifest::with_all(
-        true, true, true, true, true, true, true, true, true, true, true, true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
         PROTECTION_CLASS_STANDARD,
     );
     assert_eq!(emitted.magic, MANIFEST_MAGIC);

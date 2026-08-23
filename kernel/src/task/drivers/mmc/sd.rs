@@ -75,6 +75,10 @@ impl SdBlock {
     pub fn sector_count(&self) -> u64 {
         self.info.sector_count
     }
+
+    pub fn flush(&mut self) -> ViResult<()> {
+        self.core.wait_ready_and_flush(self.info.rca)
+    }
 }
 
 impl Drop for SdBlock {

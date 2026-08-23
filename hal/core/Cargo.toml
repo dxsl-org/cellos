@@ -40,3 +40,4 @@ critical-section-impl = [
 # Propagate board-rpi3 to hal-arm so BCM2837-specific dispatch is compiled in.
 board-rpi3 = ["hal-arm?/board-rpi3"]
 board-rpi4 = ["hal-arm?/board-rpi4"]
+test-hooks = ["hal-riscv?/test-hooks"]

@@ -88,7 +88,7 @@ pub fn run() -> bool {
 
     // Positive direction: each privileged boot cell must still receive the cap
     // its install path requests once the ceiling is intersected.
-    let privileged: [PrivCapCase; 8] = [
+    let privileged: [PrivCapCase; 9] = [
         ("/bin/platform", |c| c.platform),
         ("/bin/supervisor", |c| c.supervisor),
         ("/bin/block", |c| c.pcie_driver),
@@ -96,6 +96,7 @@ pub fn run() -> bool {
         ("/bin/e1000", |c| c.pcie_driver),
         ("/bin/virtio-net", |c| c.pcie_driver),
         ("/bin/virtio-gpu", |c| c.pcie_driver),
+        ("/bin/bcm-display", |c| c.pcie_driver),
         ("/bin/input", |c| c.pcie_driver),
     ];
     for (path, held) in privileged {
@@ -105,6 +106,23 @@ pub fn run() -> bool {
             log::error!(
                 "[selftest] boot-ceiling: {} would LOSE its privileged cap — row over-tightened",
                 path
+            );
+        }
+    }
+
+    // Negative direction: the USB driver cells hold NO authority until policy v3
+    // adds a signed USB host byte. `with_path_caps` mints nothing for them and
+    // their ceiling rows are EMPTY; if either side starts granting `pcie_driver`
+    // or `DEV_DISPLAY`, this fails the power-on self-test.
+    for path in ["/bin/dwc2-usb", "/bin/lan9514"] {
+        let requested = CapSet::EMPTY.with_path_caps(path);
+        let granted = requested.intersect(boot_ceiling(path));
+        if granted != CapSet::EMPTY {
+            ok = false;
+            log::error!(
+                "[selftest] boot-ceiling: {} granted {:?} without USB policy v3 — must stay EMPTY",
+                path,
+                granted
             );
         }
     }

@@ -55,9 +55,9 @@ pub(super) fn ap02_cleanup_complete() -> bool {
     let Some(mappings) = AP02_MAPPINGS.lock().take() else {
         return false;
     };
-    let tlb_absent = mappings.iter().all(|mapping| {
-        crate::memory::tlb_shootdown::test_flush_observed(mapping.va)
-    });
+    let tlb_absent = mappings
+        .iter()
+        .all(|mapping| crate::memory::tlb_shootdown::test_flush_observed(mapping.va));
     crate::memory::tlb_shootdown::finish_test_flush_observation();
     !mappings.is_empty()
         && tlb_absent

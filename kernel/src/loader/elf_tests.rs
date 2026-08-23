@@ -73,18 +73,15 @@ fn test_spawn_path_empty_rejected() {
 }
 
 fn test_spawn_path_no_leading_slash_rejected() {
-    let res = crate::loader::spawn_from_path(
-        "bin/shell",
-        crate::loader::SpawnRequest::governed_boot(),
-    );
+    let res =
+        crate::loader::spawn_from_path("bin/shell", crate::loader::SpawnRequest::governed_boot());
     expect_invalid(res, "no leading slash");
     log::info!("  [ok] path without leading '/' rejected");
 }
 
 fn test_spawn_path_too_long_rejected() {
     let long: alloc::string::String = "/".repeat(300);
-    let res =
-        crate::loader::spawn_from_path(&long, crate::loader::SpawnRequest::governed_boot());
+    let res = crate::loader::spawn_from_path(&long, crate::loader::SpawnRequest::governed_boot());
     expect_invalid(res, "path too long");
     log::info!("  [ok] path longer than MAX_CELL_PATH rejected");
 }

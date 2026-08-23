@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 from . import cohort, security_negative, source
-from .checks import canonical_digest, exact, text
+from .checks import canonical_digest, exact, integer, text, timestamp
 from .validator import LIFE, STATUS, artifact_list
 
 
@@ -69,20 +70,50 @@ def cells(root: dict, claim_map: dict, subject_map: dict, as_of, path: Path) -> 
     return complete
 
 
-def blockers(root: dict, subject_map: dict, path: Path) -> bool:
-    """Validate bounded blocker scope and raw immutable PASS resolution evidence."""
+RESOLUTION_KEYS = {
+    "event_id", "subject", "architecture", "environment", "hardware", "firmware_sha256",
+    "owner", "runner", "command", "recorded_at", "expires_at", "ttl_seconds", "artifacts",
+}
+
+
+def blocker_resolution(path: Path, value: object, subject_id: str, subject: dict, as_of) -> str:
+    """Bind a passing blocker to fresh raw evidence from its exact subject."""
+    resolution = exact(value, RESOLUTION_KEYS, "blocker resolution")
+    for key in ("event_id", "subject", "owner", "runner", "command"):
+        text(resolution[key], f"blocker resolution {key}")
+    if resolution["subject"] != subject_id:
+        raise ValueError("blocker resolution subject mismatch")
+    if resolution["owner"] == resolution["runner"]:
+        raise ValueError("blocker resolution owner and runner must be independent")
+    if resolution["architecture"] != subject["architecture"] or resolution["environment"] != subject["environment"]:
+        raise ValueError("blocker resolution execution subject mismatch")
+    hardware = subject["board_revision"] if subject["environment"] == "physical" else subject["host_vmm"]
+    firmware = subject["firmware_digest"] if subject["environment"] == "physical" else "N/A"
+    if resolution["hardware"] != hardware or resolution["firmware_sha256"] != firmware:
+        raise ValueError("blocker resolution hardware identity mismatch")
+    recorded = timestamp(resolution["recorded_at"], "blocker resolution recorded")
+    expires = timestamp(resolution["expires_at"], "blocker resolution expiry")
+    ttl = integer(resolution["ttl_seconds"], "blocker resolution ttl")
+    if ttl <= 0 or expires != recorded + dt.timedelta(seconds=ttl) or recorded > as_of or expires <= as_of:
+        raise ValueError("blocker resolution TTL invalid")
+    artifact_list(path, resolution["artifacts"], "blocker resolution")
+    if not any(artifact["kind"] == "log" for artifact in resolution["artifacts"]):
+        raise ValueError("blocker resolution needs a raw log")
+    return resolution["event_id"]
+
+
+def blockers(root: dict, subject_map: dict, path: Path, as_of) -> bool:
+    """Validate bounded blocker scope and subject-bound PASS resolution evidence."""
     for item in root["blockers"]:
         exact(item, {"id", "status", "subject", "scope", "evidence", "resolution"}, "blocker")
         if item["status"] not in STATUS or item["subject"] not in subject_map or not text(item["scope"], "blocker scope"):
             raise ValueError("blocker identity invalid")
         artifact_list(path, item["evidence"], "blocker evidence")
         if item["status"] == "PASS":
-            resolution = exact(item["resolution"], {"event_id", "artifacts"}, "blocker resolution")
-            event_id = text(resolution["event_id"], "resolution event")
+            event_id = blocker_resolution(path, item["resolution"], item["subject"], subject_map[item["subject"]], as_of)
             event = next((event for event in root["events"] if event["event_id"] == event_id), None)
             if event is None or not any(change["section"] == "blockers" for change in event["action"].get("changes", [])):
                 raise ValueError("blocker resolution event is missing or unrelated")
-            artifact_list(path, resolution["artifacts"], "blocker resolution")
         elif item["resolution"] is not None:
             raise ValueError("unresolved blocker cannot have resolution")
     return all(item["status"] == "PASS" for item in root["blockers"])

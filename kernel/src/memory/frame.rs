@@ -354,6 +354,27 @@ impl FrameAllocator {
 pub static FRAME_ALLOCATOR: crate::sync::Spinlock<Option<FrameAllocator>> =
     crate::sync::Spinlock::new(None);
 
+/// A non-copyable allocation lease returned to the bitmap only on drop.
+pub struct OwnedFrame(PhysAddr);
+
+impl OwnedFrame {
+    pub fn allocate() -> Option<Self> {
+        FRAME_ALLOCATOR.lock().as_mut()?.allocate_frame().map(Self)
+    }
+
+    pub const fn physical_address(&self) -> PhysAddr {
+        self.0
+    }
+}
+
+impl Drop for OwnedFrame {
+    fn drop(&mut self) {
+        if let Some(frames) = FRAME_ALLOCATOR.lock().as_mut() {
+            frames.deallocate_frame(self.0);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{FrameAllocator, PAGE_SIZE};

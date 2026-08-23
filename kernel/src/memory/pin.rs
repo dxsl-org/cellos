@@ -166,7 +166,6 @@ pub(crate) enum FrameTransfer {
     Full,
 }
 
-
 const EMPTY_PIN: PinEntry = PinEntry {
     base: 0,
     pages: 0,

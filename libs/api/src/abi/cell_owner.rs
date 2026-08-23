@@ -24,7 +24,10 @@ pub struct CellOwnerRequest {
 
 impl CellOwnerRequest {
     pub const fn new(cell_id: u64, generation: u64) -> Self {
-        Self { cell_id, generation }
+        Self {
+            cell_id,
+            generation,
+        }
     }
 
     pub fn to_bytes(self) -> [u8; CELL_OWNER_REQUEST_LEN] {
@@ -57,7 +60,12 @@ pub struct CellOwner {
 
 impl CellOwner {
     pub const fn new(cell_id: u64, generation: u64, root_tid: u64) -> Self {
-        Self { cell_id, generation, root_tid, reserved: 0 }
+        Self {
+            cell_id,
+            generation,
+            root_tid,
+            reserved: 0,
+        }
     }
 
     pub const fn is_live(&self) -> bool {
@@ -77,7 +85,9 @@ impl CellOwner {
             return None;
         }
         let word = |offset: usize| -> Option<u64> {
-            Some(u64::from_le_bytes(bytes[offset..offset + 8].try_into().ok()?))
+            Some(u64::from_le_bytes(
+                bytes[offset..offset + 8].try_into().ok()?,
+            ))
         };
         let owner = Self {
             cell_id: word(0)?,
@@ -104,7 +114,13 @@ mod tests {
     #[test]
     fn request_preserves_full_identity_words() {
         let request = CellOwnerRequest::new(0x89ab_cdef_0123_4567, 0xfeed_cafe_0123_4567);
-        assert_eq!(core::mem::size_of::<CellOwnerRequest>(), CELL_OWNER_REQUEST_LEN);
-        assert_eq!(CellOwnerRequest::from_bytes(&request.to_bytes()), Some(request));
+        assert_eq!(
+            core::mem::size_of::<CellOwnerRequest>(),
+            CELL_OWNER_REQUEST_LEN
+        );
+        assert_eq!(
+            CellOwnerRequest::from_bytes(&request.to_bytes()),
+            Some(request)
+        );
     }
 }

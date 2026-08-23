@@ -44,13 +44,26 @@ fn insert_parent() {
         alloc::vec::Vec::new(),
     ));
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
+        if (QUOTA_CELL as usize) < crate::memory::cell_quota::MAX_CELLS {
+            let owner = api::cell_owner::CellOwner::new(QUOTA_CELL, 1, PARENT_TID as u64);
+            sched.publish_live_cell_owner(owner);
+        }
         sched.tasks.insert(PARENT_TID, parent);
     }
 }
 
 fn remove(tid: usize) {
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
-        sched.tasks.remove(&tid);
+        if let Some(task) = sched.tasks.remove(&tid) {
+            if (task.cell_id.0 as usize) < crate::memory::cell_quota::MAX_CELLS {
+                let owner = api::cell_owner::CellOwner::new(
+                    task.cell_id.0,
+                    task.cell_generation,
+                    task.root_tid as u64,
+                );
+                sched.clear_live_cell_owner_for_test(owner);
+            }
+        }
     }
     super::hart_local::ready::remove_from_all(tid);
 }

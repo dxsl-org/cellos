@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 from unittest import mock
 
 from validator_test_support import ARTIFACTS, ROOT, VALIDATOR, ValidatorBehaviorTests, load
@@ -98,6 +99,19 @@ class CorpusValidatorBehaviorTests(ValidatorBehaviorTests):
         inventory = copy.deepcopy(self.inventory)
         inventory["entries"][0]["classified_occurrences"][0]["classification"]["roles"] = ["reader"]
         self.rejected(inventory=inventory)
+
+    def test_current_source_content_modification_fails_derived_state_pin(self):
+        pinned_path = self.corpus["derived_source_state"]["inputs"][0]["path"]
+        original_file_digest = VALIDATOR.file_digest
+
+        def modified_source_digest(path):
+            if Path(path) == ROOT / pinned_path:
+                return "0" * 64
+            return original_file_digest(path)
+
+        with mock.patch("manifest_abi_predesign.state.file_digest", side_effect=modified_source_digest):
+            with self.assertRaisesRegex(ValueError, r"^corpus source input content drift$"):
+                self.validate()
 
     def test_source_scan_drift_requires_occurrence_repin_and_reclassification(self):
         drift = copy.deepcopy(VALIDATOR.scan_sources(ROOT))

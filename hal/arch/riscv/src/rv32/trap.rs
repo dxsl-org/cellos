@@ -7,8 +7,7 @@
 
 pub use hal_arch_trait::ViTrapFrame32;
 use hal_arch_trait::{
-    vi_current_cell_id, vi_terminate_on_user_trap_fault, vi_timer_tick,
-    ViCell_syscall_dispatch,
+    vi_current_cell_id, vi_terminate_on_user_trap_fault, vi_timer_tick, ViCell_syscall_dispatch,
 };
 
 extern "C" {

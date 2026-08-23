@@ -5,6 +5,8 @@ use crate::hal::arch::ViTrapFrame;
 use alloc::string::String;
 use alloc::vec::Vec;
 // use alloc::sync::Arc;
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+use alloc::sync::Arc;
 use types::*;
 
 use api::fs::{BoxFuture, FileResult};
@@ -106,6 +108,24 @@ pub enum TaskState {
     },
 }
 
+/// The address-space binding is fixed before a task can enter a ready queue.
+///
+/// Native domains are deliberately unavailable on every non-RV64 target and
+/// default to SAS until a test-only fixture binds a private root.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[derive(Clone)]
+pub(crate) enum TaskAddressSpace {
+    Sas,
+    #[cfg_attr(
+        not(feature = "test-hooks"),
+        expect(
+            dead_code,
+            reason = "domain admission is intentionally unavailable outside native-domain test hooks"
+        )
+    )]
+    Domain(Arc<crate::memory::address_space::AddressSpace>),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LeaseAttributes(pub u32);
 
@@ -154,6 +174,9 @@ pub struct Task {
     pub name: String,
     pub state: TaskState,
     pub context: Context,
+    /// Immutable scheduler dispatch binding; no loader or syscall may replace it.
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    pub(crate) address_space: TaskAddressSpace,
     pub trap_frame: ViTrapFrame,
     pub allowed_drivers: Vec<usize>,
     // Maps LeaseID -> Lease
@@ -457,6 +480,8 @@ impl Task {
             name: String::from(name),
             state: TaskState::Ready,
             context: Context::default(),
+            #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+            address_space: TaskAddressSpace::Sas,
             trap_frame: ViTrapFrame::default(),
             allowed_drivers,
             leases: alloc::collections::BTreeMap::new(),
@@ -512,6 +537,24 @@ impl Task {
             staged_dirs: api::dir_handles::DirHandleSet::EMPTY,
             completion: None,
             completion_wait: None,
+        }
+    }
+
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    #[cfg(feature = "test-hooks")]
+    pub(crate) fn bind_address_space_for_test(
+        &mut self,
+        address_space: Arc<crate::memory::address_space::AddressSpace>,
+    ) {
+        assert!(matches!(self.address_space, TaskAddressSpace::Sas));
+        self.address_space = TaskAddressSpace::Domain(address_space);
+    }
+
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    pub(crate) fn address_space_is_live(&self) -> bool {
+        match &self.address_space {
+            TaskAddressSpace::Sas => true,
+            TaskAddressSpace::Domain(space) => space.is_live(),
         }
     }
 
@@ -617,7 +660,6 @@ impl Task {
     pub(super) const fn owner_death_matches_receive_mask(mask: usize) -> bool {
         mask == 0
     }
-
 
     pub fn clear_current_caller_context(&mut self) {
         self.current_caller = None;

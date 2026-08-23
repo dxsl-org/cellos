@@ -93,10 +93,7 @@ fn committed(slot: &SlotObservation) -> Result<&FloorState, RecoveryReason> {
 /// Admission requires exactly one current committed slot and one authenticated
 /// stale committed partner from the same backend. Local bytes never select the
 /// highest generation and this function has no floor-advance capability.
-pub(crate) fn decide(
-    floor: &FloorPortOutcome,
-    slots: &[SlotObservation; 2],
-) -> AdmissionDecision {
+pub(crate) fn decide(floor: &FloorPortOutcome, slots: &[SlotObservation; 2]) -> AdmissionDecision {
     let floor = match floor {
         FloorPortOutcome::Authenticated(state) => state,
         FloorPortOutcome::Missing => return AdmissionDecision::Deny(DenyReason::FloorMissing),
@@ -115,7 +112,8 @@ pub(crate) fn decide(
         Ok(state) => state,
         Err(reason) => return AdmissionDecision::RecoveryRequired(reason),
     };
-    if a.backend_identity != floor.backend_identity || b.backend_identity != floor.backend_identity {
+    if a.backend_identity != floor.backend_identity || b.backend_identity != floor.backend_identity
+    {
         return AdmissionDecision::RecoveryRequired(RecoveryReason::BackendMismatch);
     }
 
@@ -129,7 +127,11 @@ pub(crate) fn decide(
     }
 }
 
-fn classify_partner(current: SlotId, partner: &FloorState, floor: &FloorState) -> AdmissionDecision {
+fn classify_partner(
+    current: SlotId,
+    partner: &FloorState,
+    floor: &FloorState,
+) -> AdmissionDecision {
     if partner.generation < floor.generation {
         AdmissionDecision::Admit(current)
     } else if partner.generation > floor.generation {

@@ -4,7 +4,7 @@ use crate::{
 };
 
 const BOARD_COMPATIBLES: [&str; 2] = ["raspberrypi,3-model-b", "brcm,bcm2837"];
-const ENABLED_DRIVERS: [DriverId; 8] = [
+const ENABLED_DRIVERS: [DriverId; 11] = [
     DriverId::UartBcmMini,
     DriverId::IrqBcm2836Local,
     DriverId::IrqBcm2835Legacy,
@@ -13,6 +13,9 @@ const ENABLED_DRIVERS: [DriverId; 8] = [
     DriverId::I2cBcmBsc,
     DriverId::SpiBcm0,
     DriverId::GpioBcm2837,
+    DriverId::DisplayBcmMailbox,
+    DriverId::UsbDwc2,
+    DriverId::EthernetLan9514,
 ];
 const PINMUX_GROUPS: [&str; 4] = [
     "uart-gpio14-15-alt5",

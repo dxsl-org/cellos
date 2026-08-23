@@ -8,6 +8,14 @@ pub mod completion;
 pub mod completion_selftest;
 pub mod completion_wait;
 pub mod dir_inherit;
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+pub(crate) mod domain_switch;
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) mod domain_switch_tests;
 mod elf_prepare;
 pub mod hart_local;
 pub mod manifest_v2_selftest;
@@ -20,14 +28,20 @@ pub mod thread_cap_selftest;
 pub mod thread_quota_selftest;
 pub mod thread_user_entry_selftest;
 pub use elf_prepare::{prepare_elf_task, PreparedElfTask};
-pub use launch::{publish_prepared, CallerLaunchAuthority, LaunchRoutes, StagedMeasurement, TaskLaunchState};
+pub use launch::{
+    publish_prepared, CallerLaunchAuthority, LaunchRoutes, StagedMeasurement, TaskLaunchState,
+};
 mod launch;
 pub use tcb::Task;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod context_handoff_selftest;
 pub mod drivers;
 pub mod ipc_guardrail_selftest;
 pub mod ipc_pending_selftest;
 pub mod ipc_test;
 pub mod pending_mailbox;
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+pub mod retirement_selftest;
 pub mod scheduler;
 pub mod stack;
 #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
@@ -37,10 +51,6 @@ pub mod user_hello;
 pub mod user_out;
 #[cfg(feature = "test-hooks")]
 pub mod vfs_lifecycle_selftest;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod retirement_selftest;
-#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
-pub mod context_handoff_selftest;
 pub mod waker;
 
 #[cfg(test)]
@@ -552,11 +562,7 @@ pub fn init() {
 /// state was U-mode.  Kernel panics retain Cell accounting attribution while
 /// locks may be held and must take the non-recoverable panic path instead.
 #[no_mangle]
-pub extern "Rust" fn vi_terminate_on_user_trap_fault(
-    cause: usize,
-    pc: usize,
-    fault_addr: usize,
-) {
+pub extern "Rust" fn vi_terminate_on_user_trap_fault(cause: usize, pc: usize, fault_addr: usize) {
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_fault_task_entry();
     terminate_current_cell_on_user_trap_fault(cause, pc, fault_addr);
@@ -687,7 +693,6 @@ pub extern "Rust" fn vi_timer_tick() {
     yield_cpu();
 }
 
-
 /// Retire a remote-root switch only from the incoming context, after the raw
 /// context switch has changed stacks. Trap entry is intentionally not an ACK:
 /// the interrupted retiring task can still execute its outgoing kernel path.
@@ -699,8 +704,8 @@ pub extern "C" fn vi_context_switch_complete() {
     // published until this incoming boot context proves the old Context was
     // saved; otherwise a stale user trap could be dispatched as caller 0.
     let pinned = hart_local::ready::selected_task_id_for(hart);
-    let switched_to_boot = pinned == 0
-        && hart_local::ready::outgoing_context_save_task_id_for(hart) != 0;
+    let switched_to_boot =
+        pinned == 0 && hart_local::ready::outgoing_context_save_task_id_for(hart) != 0;
     // RV64 reaches this callback only after `__switch` has saved every
     // callee-save register and CSR of the outgoing Context. Release the
     // ready-queue steal guard before publishing the incoming ownership.
@@ -720,6 +725,13 @@ pub extern "C" fn vi_context_switch_complete() {
         hart_local::set_current_cell_context(0, 0);
         #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
         retirement_selftest::observe_heartbeat_boot_completion(hart);
+    }
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    {
+        let safe_root = hart_local::take_safe_root_pending();
+        if switched_to_boot || safe_root {
+            hart_local::acknowledge_safe_root();
+        }
     }
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     context_handoff_selftest::observe_origin_ownership_release(hart);
@@ -746,7 +758,6 @@ pub extern "C" fn vi_context_switch_complete() {
     target_arch = "x86_64"
 ))]
 const _: crate::hal::TimerTick = vi_timer_tick;
-
 
 /// Terminate the currently-executing Cell due to a trap-proven U-mode fault.
 ///
@@ -800,7 +811,6 @@ pub fn terminate_current_cell_on_fault(
     retirement_selftest::observe_fault_kernel_attribution(fault.cell_id);
     #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
     retirement_selftest::observe_fault_funnel_entry(fault.tid);
-
 
     // Switch to the next ready task.  Does not return to the faulting Cell.
     yield_cpu();
@@ -977,7 +987,6 @@ pub fn yield_cpu() {
                 retirement.owner.root_tid,
             );
         }
-
     }
 
     let vfs_context_releases = {
@@ -1013,6 +1022,13 @@ pub fn yield_cpu() {
     }
 
     let hart_id = hart_local::current_hart_id();
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
+        sched.pick_next_domain(hart_id)
+    } else {
+        None
+    };
+    #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
     let switch_info = if let Some(sched) = SCHEDULER.lock().as_mut() {
         sched.pick_next(hart_id)
     } else {
@@ -1022,7 +1038,11 @@ pub fn yield_cpu() {
     // executing. Exercise the real trap admission boundary in this exact
     // pre-switch interval; the regression proves a heartbeat victim cannot
     // become caller 0 before boot owns the incoming Context.
-    #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+    #[cfg(all(
+        feature = "test-hooks",
+        target_arch = "riscv64",
+        not(feature = "native-domains")
+    ))]
     if let Some((_, next)) = switch_info {
         if next.is_null() {
             retirement_selftest::observe_heartbeat_terminal_current();
@@ -1043,7 +1063,6 @@ pub fn yield_cpu() {
         }
     }
 
-
     #[cfg(target_arch = "x86_64")]
     if switch_info.is_none() {
         unsafe {
@@ -1051,6 +1070,33 @@ pub fn yield_cpu() {
             core::arch::asm!("sti", options(nomem, nostack));
         }
     }
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if let Some(plan) = switch_info {
+        unsafe {
+            let final_curr = if plan.outgoing.is_null() {
+                &raw mut BOOT_CONTEXTS[hart_id]
+            } else {
+                plan.outgoing
+            };
+            let final_next = if plan.incoming.is_null() {
+                &raw const BOOT_CONTEXTS[hart_id]
+            } else {
+                plan.incoming
+            };
+            if !plan.incoming.is_null() {
+                crate::hal::arch::set_kernel_stack((&*plan.incoming).sp);
+            }
+            let (root_ppn, asid) = plan.root_switch();
+            crate::hal::arch::Context::switch_with_saved_sstatus(
+                final_curr,
+                final_next,
+                outgoing_sstatus,
+                root_ppn,
+                asid,
+            );
+        }
+    }
+    #[cfg(not(all(feature = "native-domains", target_arch = "riscv64")))]
     if let Some((curr, next)) = switch_info {
         unsafe {
             let final_curr = if curr.is_null() {
@@ -1108,6 +1154,8 @@ pub fn yield_cpu() {
                 final_curr,
                 final_next,
                 outgoing_sstatus,
+                0,
+                0,
             );
             #[cfg(not(target_arch = "riscv64"))]
             crate::hal::arch::Context::switch(final_curr, final_next);
@@ -1163,7 +1211,6 @@ pub fn spawn_with_stacks(
     }
 }
 
-
 pub fn spawn_with_arg(
     name: &str,
     cell_id: CellId,
@@ -1186,7 +1233,6 @@ fn elf_is_pie(data: &[u8]) -> bool {
     // ELF64 header: bytes [16..18] = e_type (u16 LE).  ET_DYN == 3.
     data.len() >= 18 && u16::from_le_bytes([data[16], data[17]]) == 3
 }
-
 
 pub fn spawn_from_file(path: &str) -> core::result::Result<usize, ViError> {
     // 1. Request file from VFS (Cell 3)

@@ -123,6 +123,14 @@ path = "tests/policy-noentry.rs"
 name = "launch-profile"
 path = "tests/launch-profile.rs"
 
+[[test]]
+name = "manifest-qemu-continuity"
+path = "tests/manifest-qemu-continuity.rs"
+
+[[test]]
+name = "native-domain-qemu"
+path = "tests/native-domain-qemu.rs"
+
 [dev-dependencies]
 tempfile = "3"
 

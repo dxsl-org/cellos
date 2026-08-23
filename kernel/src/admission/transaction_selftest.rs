@@ -104,8 +104,7 @@ pub(super) fn conflicting_advance_fails_closed() -> bool {
 
 pub(super) fn wrong_expected_generation_fails_closed() -> bool {
     let mut floor = NonQualifyingFakeFloor::new(state(2, 2));
-    floor.advance(0, transaction_id(3), intent_digest(3))
-        == AdvanceOutcome::WrongExpectedGeneration
+    floor.advance(0, transaction_id(3), intent_digest(3)) == AdvanceOutcome::WrongExpectedGeneration
         && floor.successful_advances == 0
 }
 
@@ -128,10 +127,13 @@ pub(super) fn exhausted_advance_fails_closed() -> bool {
 pub(super) fn local_history_cannot_admit_or_advance_floor() -> bool {
     let floor = NonQualifyingFakeFloor::new(state(1, 1));
     let before = (floor.advance_calls, floor.successful_advances);
-    let decision = decide(&floor.read(), &[
-        SlotObservation::AuthenticatedCommitted(state(98, 8)),
-        SlotObservation::AuthenticatedCommitted(state(99, 9)),
-    ]);
+    let decision = decide(
+        &floor.read(),
+        &[
+            SlotObservation::AuthenticatedCommitted(state(98, 8)),
+            SlotObservation::AuthenticatedCommitted(state(99, 9)),
+        ],
+    );
     decision == AdmissionDecision::RecoveryRequired(RecoveryReason::SlotAhead)
         && before == (floor.advance_calls, floor.successful_advances)
         && floor.read() == FloorPortOutcome::Authenticated(state(1, 1))

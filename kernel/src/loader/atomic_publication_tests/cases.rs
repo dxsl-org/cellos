@@ -1,12 +1,12 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use super::snapshot::snapshot;
+#[cfg(target_arch = "riscv64")]
+use super::success::{arm_pre_ready_success, arm_smp_success, skip_smp_success};
 use super::success::{
     arm_trusted_success, finish_governed_success, finish_trusted_success,
     trusted_arming_completes_from_cell_context, GovernedSuccess,
 };
-#[cfg(target_arch = "riscv64")]
-use super::success::{arm_pre_ready_success, arm_smp_success, skip_smp_success};
 
 const SUCCESS_PRE_READY: u8 = 0b001;
 const SUCCESS_SMP: u8 = 0b010;
@@ -21,11 +21,13 @@ fn complete_success_part(part: u8) {
     }
 }
 
-
 fn unaligned_elf_preparation_restores_state() -> bool {
     let mut storage = alloc::vec![0u64; (crate::INIT_ELF.len() + 8) / 8];
     let bytes = unsafe {
-        core::slice::from_raw_parts_mut(storage.as_mut_ptr().cast::<u8>(), crate::INIT_ELF.len() + 1)
+        core::slice::from_raw_parts_mut(
+            storage.as_mut_ptr().cast::<u8>(),
+            crate::INIT_ELF.len() + 1,
+        )
     };
     bytes[1..].copy_from_slice(crate::INIT_ELF);
     let unaligned = &bytes[1..];
@@ -59,7 +61,6 @@ pub(super) fn run_all() {
     );
     log::info!("ATOMIC_PUBLICATION_CELL_ID_REUSE: PASS");
 
-
     assert!(
         super::baseline::populated_baseline_teardown_restores_state(),
         "populated atomic-publication fixture must restore only its owned state",
@@ -80,8 +81,7 @@ pub(super) fn run_all() {
     #[cfg(target_arch = "riscv64")]
     {
         arm_pre_ready_success();
-        super::spawn_governed_probe()
-            .expect("atomic-publication pre-ready probe must publish");
+        super::spawn_governed_probe().expect("atomic-publication pre-ready probe must publish");
     }
 }
 
@@ -95,8 +95,7 @@ pub(super) fn run_governed_success_after_secondaries() {
         return;
     }
     arm_smp_success();
-    super::spawn_governed_probe()
-        .expect("atomic-publication SMP probe must publish");
+    super::spawn_governed_probe().expect("atomic-publication SMP probe must publish");
 }
 
 pub(super) fn finish_governed_success_case(tid: usize) {
@@ -112,7 +111,15 @@ pub(super) fn finish_governed_success_case(tid: usize) {
                     log::error!("ATOMIC_PUBLICATION_{}: FAIL", case);
                 }
             }
-            assert!(passed, "atomic-publication pre-ready success contract failed");
+            assert!(
+                passed,
+                "atomic-publication pre-ready success contract failed"
+            );
+            crate::task::hart_local::ready::remove_from_all(tid);
+            if let Some(scheduler) = crate::task::SCHEDULER.lock().as_mut() {
+                scheduler.exit_task(tid, 0);
+            }
+            crate::task::yield_cpu();
             complete_success_part(SUCCESS_PRE_READY);
         }
         GovernedSuccess::Smp => {
@@ -139,5 +146,8 @@ pub(super) fn finish_trusted_success_case(tid: usize) {
     } else {
         log::error!("ATOMIC_PUBLICATION_AP-15: FAIL");
     }
-    assert!(passed, "atomic-publication trusted-init success contract failed");
+    assert!(
+        passed,
+        "atomic-publication trusted-init success contract failed"
+    );
 }

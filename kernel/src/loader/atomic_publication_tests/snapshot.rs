@@ -5,7 +5,6 @@ use super::harness::{arm_failure, failure_reached};
 
 pub(super) const AUDIT_RECORD_BYTES: usize = 18;
 
-
 #[derive(Debug, PartialEq)]
 pub(super) struct TaskSnapshot {
     pub(super) id: usize,
@@ -30,9 +29,8 @@ pub(super) struct StateSnapshot {
     pub(super) next_task_id: usize,
     scheduler_counters: (usize, usize, usize, usize),
     current: alloc::vec::Vec<(usize, usize, usize)>,
-    pub(super) ready: alloc::vec::Vec<
-        alloc::collections::BTreeMap<u8, alloc::collections::VecDeque<usize>>,
-    >,
+    pub(super) ready:
+        alloc::vec::Vec<alloc::collections::BTreeMap<u8, alloc::collections::VecDeque<usize>>>,
     free_frames: Option<usize>,
     pub(super) quota: crate::memory::cell_quota::QuotaSnapshot,
     platform: bool,
@@ -48,56 +46,74 @@ pub(super) struct StateSnapshot {
     pub(super) audit: (usize, usize, usize),
 }
 
-
-
 pub(super) fn snapshot() -> StateSnapshot {
     let (tasks, zombies, next_task_id, scheduler_counters) = {
         let scheduler = crate::task::SCHEDULER.lock();
         let sched = scheduler.as_ref().expect("atomic corpus needs scheduler");
         (
-            sched.tasks.values().map(|task| TaskSnapshot {
-                id: task.id,
-                cell_id: task.cell_id.0,
-                generation: task.cell_generation,
-                state: task.state.clone(),
-                priority: task.priority,
-                cluster: (task.cluster_mode, task.cluster_id),
-                allowlist: task.syscall_allowlist,
-                protection: (task.pku_key, task.pku_value),
-                caps: crate::task::cap::CapSet::of_task(task),
-                critical: task.is_critical,
-                replacement: task.hotswap_source_tid,
-                dirs: (
-                    task.inherited_dirs.spawner_cell_id,
-                    task.inherited_dirs.spawner_generation,
-                    task.inherited_dirs.set.len(),
-                ),
-                mappings: task.vma.0.iter().map(|mapping| (
-                    mapping.va_start,
-                    mapping.va_end,
-                    mapping.pa_start,
-                    mapping.flags,
-                    mapping.kind.clone(),
-                )).collect(),
-            }).collect(),
-            sched.zombies.iter().map(|task| (
-                task.id, task.cell_id.0, task.state.clone(),
-            )).collect(),
+            sched
+                .tasks
+                .values()
+                .map(|task| TaskSnapshot {
+                    id: task.id,
+                    cell_id: task.cell_id.0,
+                    generation: task.cell_generation,
+                    state: task.state.clone(),
+                    priority: task.priority,
+                    cluster: (task.cluster_mode, task.cluster_id),
+                    allowlist: task.syscall_allowlist,
+                    protection: (task.pku_key, task.pku_value),
+                    caps: crate::task::cap::CapSet::of_task(task),
+                    critical: task.is_critical,
+                    replacement: task.hotswap_source_tid,
+                    dirs: (
+                        task.inherited_dirs.spawner_cell_id,
+                        task.inherited_dirs.spawner_generation,
+                        task.inherited_dirs.set.len(),
+                    ),
+                    mappings: task
+                        .vma
+                        .0
+                        .iter()
+                        .map(|mapping| {
+                            (
+                                mapping.va_start,
+                                mapping.va_end,
+                                mapping.pa_start,
+                                mapping.flags,
+                                mapping.kind.clone(),
+                            )
+                        })
+                        .collect(),
+                })
+                .collect(),
+            sched
+                .zombies
+                .iter()
+                .map(|task| (task.id, task.cell_id.0, task.state.clone()))
+                .collect(),
             sched.next_task_id,
             sched.publication_snapshot_counters(),
         )
     };
-    let current = crate::task::hart_local::HART_LOCALS.iter().map(|hart| (
-        hart.hart_id,
-        hart.current_task_id.load(Ordering::Acquire),
-        hart.current_cell_id.load(Ordering::Acquire),
-    )).collect();
+    let current = crate::task::hart_local::HART_LOCALS
+        .iter()
+        .map(|hart| {
+            (
+                hart.hart_id,
+                hart.current_task_id.load(Ordering::Acquire),
+                hart.current_cell_id.load(Ordering::Acquire),
+            )
+        })
+        .collect();
     let ready = crate::task::hart_local::HART_LOCALS
         .iter()
         .map(|hart| hart.ready.lock().clone())
         .collect();
     let free_frames = crate::memory::frame::FRAME_ALLOCATOR
-        .lock().as_ref().map(|allocator| allocator.free_frames());
+        .lock()
+        .as_ref()
+        .map(|allocator| allocator.free_frames());
     StateSnapshot {
         tasks,
         zombies,
@@ -141,8 +157,8 @@ pub(super) fn exclude_proven_audit_delta(
         expected.audit.1,
         expected.audit.2,
     );
-    let verified = before_teardown.audit == expected_audit
-        && observed.audit == before_teardown.audit;
+    let verified =
+        before_teardown.audit == expected_audit && observed.audit == before_teardown.audit;
     if verified {
         observed.audit = expected.audit;
     }
@@ -165,7 +181,12 @@ pub(super) fn snapshot_matches(
     );
     report_task_mismatches(case, stage, &before.tasks, &after.tasks);
     report_mismatch(case, stage, "zombies", before.zombies != after.zombies);
-    report_mismatch(case, stage, "next-task-id", before.next_task_id != after.next_task_id);
+    report_mismatch(
+        case,
+        stage,
+        "next-task-id",
+        before.next_task_id != after.next_task_id,
+    );
     report_mismatch(
         case,
         stage,
@@ -174,14 +195,19 @@ pub(super) fn snapshot_matches(
     );
     report_mismatch(case, stage, "hart-current", before.current != after.current);
     report_mismatch(case, stage, "ready-queues", before.ready != after.ready);
-    report_mismatch(case, stage, "free-frames", before.free_frames != after.free_frames);
     report_mismatch(
         case,
         stage,
-        "quota",
-        before.quota != after.quota,
+        "free-frames",
+        before.free_frames != after.free_frames,
     );
-    report_mismatch(case, stage, "platform-reservation", before.platform != after.platform);
+    report_mismatch(case, stage, "quota", before.quota != after.quota);
+    report_mismatch(
+        case,
+        stage,
+        "platform-reservation",
+        before.platform != after.platform,
+    );
     report_mismatch(case, stage, "cell-va", before.va != after.va);
     report_mismatch(
         case,
@@ -202,7 +228,12 @@ pub(super) fn snapshot_matches(
         "vfs-handler",
         before.vfs_handler != after.vfs_handler,
     );
-    report_mismatch(case, stage, "input-route", before.input_tid != after.input_tid);
+    report_mismatch(
+        case,
+        stage,
+        "input-route",
+        before.input_tid != after.input_tid,
+    );
     report_mismatch(
         case,
         stage,
@@ -254,15 +285,69 @@ fn report_task_mismatches(
             );
             return;
         }
-        report_task_field(case, stage, expected.id, "cell-id", expected.cell_id != actual.cell_id);
-        report_task_field(case, stage, expected.id, "generation", expected.generation != actual.generation);
-        report_task_field(case, stage, expected.id, "state", expected.state != actual.state);
-        report_task_field(case, stage, expected.id, "priority", expected.priority != actual.priority);
-        report_task_field(case, stage, expected.id, "cluster", expected.cluster != actual.cluster);
-        report_task_field(case, stage, expected.id, "allowlist", expected.allowlist != actual.allowlist);
-        report_task_field(case, stage, expected.id, "protection", expected.protection != actual.protection);
-        report_task_field(case, stage, expected.id, "caps", expected.caps != actual.caps);
-        report_task_field(case, stage, expected.id, "critical", expected.critical != actual.critical);
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "cell-id",
+            expected.cell_id != actual.cell_id,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "generation",
+            expected.generation != actual.generation,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "state",
+            expected.state != actual.state,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "priority",
+            expected.priority != actual.priority,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "cluster",
+            expected.cluster != actual.cluster,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "allowlist",
+            expected.allowlist != actual.allowlist,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "protection",
+            expected.protection != actual.protection,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "caps",
+            expected.caps != actual.caps,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "critical",
+            expected.critical != actual.critical,
+        );
         report_task_field(
             case,
             stage,
@@ -270,8 +355,20 @@ fn report_task_mismatches(
             "replacement-source",
             expected.replacement != actual.replacement,
         );
-        report_task_field(case, stage, expected.id, "dirs", expected.dirs != actual.dirs);
-        report_task_field(case, stage, expected.id, "mappings", expected.mappings != actual.mappings);
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "dirs",
+            expected.dirs != actual.dirs,
+        );
+        report_task_field(
+            case,
+            stage,
+            expected.id,
+            "mappings",
+            expected.mappings != actual.mappings,
+        );
     }
     if before.len() != after.len() {
         log::error!(
@@ -355,7 +452,6 @@ pub(super) fn denied_with_governed_rollback(
     denied && reached && audited && restored
 }
 
-
 /// A denial audit record is evidence of the rejected request, not publication
 /// residue. Keep it out of the rollback comparison only after proving its
 /// exact, fixed-size record was appended.
@@ -382,14 +478,11 @@ pub(super) fn denied_with_logged_denial(
     denied && reached && logged_denial && restored
 }
 
-
 pub(super) fn platform_singleton_denial() -> bool {
     // The in-memory embedded ELF is admitted under the real /bin/platform path,
     // so AP-05 and AP-06 still traverse its ceiling, policy, and singleton flow.
     let injected = denied_with_governed_rollback("AP-05", 2, || {
-        super::spawn_governed_platform(
-            super::super::SpawnRequest::governed_boot(),
-        ).map(|_| ())
+        super::spawn_governed_platform(super::super::SpawnRequest::governed_boot()).map(|_| ())
     });
     let before = snapshot();
     let Ok(held_platform) = crate::task::cap::reserve_platform() else {
@@ -398,17 +491,16 @@ pub(super) fn platform_singleton_denial() -> bool {
     };
     let held = snapshot();
     let denied = matches!(
-        super::spawn_governed_platform(
-            super::super::SpawnRequest::governed_boot(),
-        ),
+        super::spawn_governed_platform(super::super::SpawnRequest::governed_boot(),),
         Err(ViError::PermissionDenied)
     );
     let mut after = snapshot();
-    let audited = after.audit == (
-        held.audit.0.wrapping_add(AUDIT_RECORD_BYTES * 2),
-        held.audit.1,
-        held.audit.2,
-    );
+    let audited = after.audit
+        == (
+            held.audit.0.wrapping_add(AUDIT_RECORD_BYTES * 2),
+            held.audit.1,
+            held.audit.2,
+        );
     report_contract("AP-05", "platform-singleton-audit", audited);
     after.audit = held.audit;
     let held_restored = snapshot_matches("AP-05", "platform-held-denial", &held, &after);

@@ -1,9 +1,9 @@
 #![allow(unsafe_code)]
 
-use api::completion::{ViCompletion, COMPLETION_LEN};
 use api::cell_owner::{CellOwner, CELL_OWNER_LEN};
 #[cfg(target_pointer_width = "32")]
 use api::cell_owner::{CellOwnerRequest, CELL_OWNER_REQUEST_LEN};
+use api::completion::{ViCompletion, COMPLETION_LEN};
 use api::syscall::{ViMemInfoV1, ViSpawnArgs, ViSyscall};
 use core::arch::asm;
 

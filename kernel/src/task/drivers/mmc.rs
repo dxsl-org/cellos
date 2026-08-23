@@ -92,6 +92,12 @@ impl MmcDevice {
             Self::Sd(d) => d.sector_count(),
         }
     }
+    fn flush(&mut self) -> ViResult<()> {
+        match self {
+            Self::Emmc(d) => d.flush(),
+            Self::Sd(d) => d.flush(),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +135,7 @@ impl ViBlockDevice for MmcBlock {
         512
     }
     fn flush(&self) -> ViResult<()> {
-        Ok(())
+        MMC_DEVICE.lock().as_mut().ok_or(ViError::NotFound)?.flush()
     }
 }
 

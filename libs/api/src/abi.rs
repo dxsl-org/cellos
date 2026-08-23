@@ -12,8 +12,8 @@
 //! - Even additions require 2× confirmation (they change the build contract).
 
 pub mod caller_identity;
-pub mod cell_owner;
 pub mod cap;
+pub mod cell_owner;
 pub mod completion;
 pub mod dir_attestation;
 pub mod dir_handles;
@@ -22,13 +22,13 @@ pub mod disk;
 pub mod fast_ipc;
 pub mod hypervisor;
 pub mod manifest;
+#[cfg(test)]
+mod manifest_compat_tests;
 pub mod manifest_flags;
 pub mod manifest_macro;
 pub mod manifest_parse;
 #[cfg(test)]
 mod manifest_tests;
-#[cfg(test)]
-mod manifest_compat_tests;
 pub mod syscall;
 pub mod syscall_tests;
 pub mod task;

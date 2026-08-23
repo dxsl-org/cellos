@@ -47,9 +47,12 @@ pub const DEV_CAN: u8 = 1 << 3;
 pub const DEV_ADC: u8 = 1 << 4;
 /// I2C controller window (v2 manifest). Set when the manifest declares `i2c = true`.
 pub const DEV_I2C: u8 = 1 << 5;
-/// SPI controller window (v2 manifest). Set when the manifest declares `spi = true`.
 pub const DEV_SPI: u8 = 1 << 6;
-
+/// Firmware / display controller window.
+pub const DEV_DISPLAY: u8 = 1 << 7;
+// DEV_USB is intentionally absent: the u8 manifest byte is full (bits 0–7 used).
+// USB host controller authority requires policy v3 with an explicit signed byte.
+// Gate with a test matrix in policy::self_test before implementing.
 // ---------------------------------------------------------------------------
 // Allowlist (per active target, currently hardcoded)
 // ---------------------------------------------------------------------------
@@ -79,6 +82,11 @@ const ALLOWED: &[(usize, usize, u8)] = &[
         hal_soc_bcm27xx::BCM2837.mmio.spi0_base,
         hal_soc_bcm27xx::BCM2837.mmio.spi0_grant_size,
         DEV_SPI,
+    ),
+    (
+        hal_soc_bcm27xx::BCM2837.mmio.mailbox_base,
+        hal_soc_bcm27xx::BCM2837.mmio.mailbox_grant_size,
+        DEV_DISPLAY,
     ),
 ];
 
@@ -286,6 +294,80 @@ pub fn request_mmio(cell_id: CellId, base: usize, len: usize, allowed_devices: u
 
     reg.insert(base, (len, cell_id));
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Boot-time allowlist self-test (runs on every boot, QEMU-visible)
+// ---------------------------------------------------------------------------
+
+/// Power-on self-test of the MMIO allowlist. Non-RPi3 targets have nothing
+/// pinned yet; the test exists so the boot chain can call it unconditionally.
+#[cfg(not(all(target_arch = "aarch64", feature = "board-rpi3")))]
+pub fn self_test() -> bool {
+    true
+}
+
+/// Power-on self-test of the RPi3 production MMIO allowlist.
+///
+/// Pins two properties on the REAL table (`ALLOWED`), not a synthetic copy:
+///
+/// 1. Positive control — a known window (mailbox/DEV_DISPLAY) still authorizes.
+///    Without this, an accidentally emptied table would make every denial
+///    below vacuous.
+/// 2. DWC2 denial — the DWC2 USB window must be rejected for every device
+///    class, full masks included, over the whole aperture AND at its edges.
+///    The entry was previously present mis-tagged `DEV_PCIE`; it may return
+///    only via policy v3 with a signed USB-host authority byte.
+#[cfg(all(target_arch = "aarch64", feature = "board-rpi3"))]
+pub fn self_test() -> bool {
+    let mmio = hal_soc_bcm27xx::BCM2837.mmio;
+
+    // 1. Positive control: the table is live.
+    let mbox_base = mmio.mailbox_base;
+    let mbox_end = mbox_base + mmio.mailbox_grant_size;
+    if !static_range_allowed(ALLOWED, mbox_base, mbox_end, DEV_DISPLAY) {
+        log::error!("[selftest] mmio-allowlist: FAIL — mailbox window no longer authorized");
+        return false;
+    }
+
+    // 2. DWC2 denial across the full aperture, per class and combined masks.
+    let dwc2_base = mmio.dwc2_base;
+    let dwc2_end = dwc2_base + mmio.dwc2_grant_size;
+    let classes = [
+        DEV_UART,
+        DEV_GPIO,
+        DEV_PCIE,
+        DEV_CAN,
+        DEV_ADC,
+        DEV_I2C,
+        DEV_SPI,
+        DEV_DISPLAY,
+        0xFF,
+    ];
+    for class in classes {
+        if static_range_allowed(ALLOWED, dwc2_base, dwc2_end, class) {
+            log::error!(
+                "[selftest] mmio-allowlist: FAIL — DWC2 window authorized for class {class:#04x}"
+            );
+            return false;
+        }
+    }
+
+    // Edge words: same full class sweep as the whole aperture — a future
+    // sub-range entry tagged with ANY class must fail the boot self-test.
+    let last_word = dwc2_end - 4;
+    for addr in [dwc2_base, last_word] {
+        for class in classes {
+            if static_range_allowed(ALLOWED, addr, addr + 4, class) {
+                log::error!(
+                    "[selftest] mmio-allowlist: FAIL — DWC2 edge word {addr:#x} authorized \
+                     for class {class:#04x}"
+                );
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Release all MMIO regions owned by `cell_id`.

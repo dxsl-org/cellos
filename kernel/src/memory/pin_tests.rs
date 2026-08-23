@@ -163,10 +163,7 @@ fn owner_death_pending_revokes_until_the_matching_vfs_release() {
     assert!(mark_vfs_lease_pending_revoke(302, 913, 9));
     assert!(vfs_lease_pending_revoke(302, 913, 9));
     let before = quarantined_pages();
-    assert_eq!(
-        withhold_pinned_frames(base, 1),
-        FrameTransfer::Withheld
-    );
+    assert_eq!(withhold_pinned_frames(base, 1), FrameTransfer::Withheld);
     assert_eq!(quarantined_pages(), before + 1);
     let held = holder_of(base, PAGE_SIZE).expect("lease stays tracked while quarantined");
     assert!(held.quarantined && held.pending_revoke);

@@ -12,7 +12,7 @@ use types::CellId;
 
 const SENDER: usize = 9321;
 const RECEIVER: usize = 9322;
-const TEST_CELL: u64 = 9421;
+const TEST_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 3) as u64;
 const QUOTA_CELL: u64 = (crate::memory::cell_quota::MAX_CELLS - 1) as u64;
 const INVALID_RECV_PTR: usize = usize::MAX - 64;
 

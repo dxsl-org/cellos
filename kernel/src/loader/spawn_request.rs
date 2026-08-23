@@ -96,6 +96,9 @@ mod tests {
         );
 
         assert!(matches!(request.spawner, Spawner::Ceiling(CapSet::EMPTY)));
-        assert_eq!(request.caller.expect("caller authority").ceiling, caller_authority);
+        assert_eq!(
+            request.caller.expect("caller authority").ceiling,
+            caller_authority
+        );
     }
 }

@@ -9,7 +9,9 @@ impl VfsManager {
         let stale: alloc::vec::Vec<(u64, u64)> = self
             .watched_owners
             .keys()
-            .filter(|(cell_id, generation)| *cell_id == caller.cell.0 && *generation != caller.generation)
+            .filter(|(cell_id, generation)| {
+                *cell_id == caller.cell.0 && *generation != caller.generation
+            })
             .copied()
             .collect();
         for key in stale {
@@ -51,7 +53,6 @@ impl VfsManager {
         }
         purged
     }
-
 
     pub fn take_owner_watch_cancellations(&mut self) -> alloc::vec::Vec<u64> {
         core::mem::take(&mut self.cancelled_owner_watch_tokens)

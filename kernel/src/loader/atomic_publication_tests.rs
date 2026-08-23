@@ -1,11 +1,11 @@
 //! Deterministic boot-time failure injection for atomic ELF publication.
 
-mod cases;
 mod baseline;
+mod cases;
 mod denials;
 mod harness;
-mod snapshot;
 mod probe;
+mod snapshot;
 mod success;
 
 pub(crate) use harness::{checkpoint, observe_complete};
@@ -35,10 +35,10 @@ pub(super) fn spawn_governed_platform(request: super::SpawnRequest) -> types::Vi
 /// Publish the signed, authority-free probe packaged only in the test-hooks
 /// VIFS1 image. This reaches the ordinary file lookup, signature, policy, and
 /// governed publication path before normal boot.
+#[cfg(target_arch = "riscv64")]
 pub(super) fn spawn_governed_probe() -> types::ViResult<usize> {
     super::spawn_from_path("/bin/atomic-probe", super::SpawnRequest::governed_boot())
 }
-
 
 pub(crate) fn begin_governed_attempt() {
     success::begin_governed_attempt();

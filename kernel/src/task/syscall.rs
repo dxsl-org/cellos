@@ -1646,10 +1646,7 @@ fn syscall_to_vi(syscall: &Syscall) -> Option<api::syscall::ViSyscall> {
 /// `caller_id` is the ID of the task invoking the syscall.
 pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
     let Some(allowed) = syscall_allowlist_for(caller_id) else {
-        log::warn!(
-            "[kernel] syscall denied for non-live tid {}",
-            caller_id
-        );
+        log::warn!("[kernel] syscall denied for non-live tid {}", caller_id);
         return Err(SyscallError::PermissionDenied);
     };
 
@@ -2432,7 +2429,6 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidCommand);
             }
 
-
             // Single SCHEDULER lock: SpawnCap gate + all cleanup in one scope.
             // Two separate acquisitions would create a TOCTOU window where the target
             // self-exits between them, causing a spurious InvalidCommand return.
@@ -2484,12 +2480,10 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 return Err(SyscallError::InvalidCommand);
             }
 
-
             crate::audit::log_event(
                 crate::audit::AuditEvent::CellExit,
                 &crate::audit::encode_u32x2(tid as u32, 0xFFFF_FFFFu32), // force-kill marker
             );
-
 
             log::info!(
                 "[kernel] ForceExit: task {} killed by task {}",
@@ -2663,14 +2657,11 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             if !caller_has_spawn(caller_id) {
                 return Err(SyscallError::PermissionDenied);
             }
-            let tid_is_live = super::SCHEDULER
-                .lock()
-                .as_ref()
-                .is_some_and(|scheduler| {
-                    scheduler.tasks.get(&tid).is_some_and(|task| {
-                        !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
-                    })
-                });
+            let tid_is_live = super::SCHEDULER.lock().as_ref().is_some_and(|scheduler| {
+                scheduler.tasks.get(&tid).is_some_and(|task| {
+                    !matches!(task.state, TaskState::Retiring | TaskState::Terminated)
+                })
+            });
             if !tid_is_live {
                 return Err(SyscallError::InvalidInput);
             }
@@ -3221,11 +3212,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                 crate::loader::launch_profile::LaunchRoute::Pinned,
                 path_str,
             )?;
-            let request = match governed_spawn_request(
-                caller_id,
-                profile.child_ceiling,
-                priority,
-            ) {
+            let request = match governed_spawn_request(caller_id, profile.child_ceiling, priority) {
                 Ok(request) => request,
                 Err(error) => {
                     crate::task::dir_inherit::clear_staged(caller_id);
@@ -4165,17 +4152,14 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             )?;
             let replacement = crate::cell::hotswap::reserve_frozen_replacement(old_tid)
                 .ok_or(SyscallError::PermissionDenied)?;
-            let request = match governed_replacement_request(
-                caller_id,
-                profile.child_ceiling,
-                replacement,
-            ) {
-                Ok(request) => request,
-                Err(error) => {
-                    crate::task::dir_inherit::clear_staged(caller_id);
-                    return Err(error);
-                }
-            };
+            let request =
+                match governed_replacement_request(caller_id, profile.child_ceiling, replacement) {
+                    Ok(request) => request,
+                    Err(error) => {
+                        crate::task::dir_inherit::clear_staged(caller_id);
+                        return Err(error);
+                    }
+                };
             let spawned = crate::loader::spawn_from_path(path_str, request);
             // Mirror the regular spawn contract: a successful replacement spawn
             // consumes any staged directory set, and a failed one must clear it
@@ -4360,8 +4344,13 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             }
         }
         Syscall::Shutdown => {
-            // RISC-V: SBI System Reset via ecall. ARM64: spin loop (PSCI not yet wired).
-            #[cfg(target_arch = "riscv64")]
+            #[cfg(all(feature = "test-hooks", target_arch = "aarch64"))]
+            crate::qemu_exit(true);
+
+            #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+            crate::qemu_exit(true);
+
+            #[cfg(all(not(feature = "test-hooks"), target_arch = "riscv64"))]
             unsafe {
                 // SAFETY: ecall traps to OpenSBI which powers off QEMU; no return.
                 core::arch::asm!(
@@ -4373,13 +4362,27 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                     options(noreturn)
                 );
             }
+            #[cfg(all(not(feature = "test-hooks"), target_arch = "aarch64"))]
+            unsafe {
+                // PSCI SYSTEM_OFF via HVC (QEMU virt machine default)
+                core::arch::asm!(
+                    "mov x0, #0x0008",
+                    "movk x0, #0x8400, lsl #16",
+                    "hvc #0",
+                    options(noreturn)
+                );
+            }
             #[cfg(target_arch = "x86_64")]
             loop {
                 unsafe {
                     core::arch::asm!("hlt", options(nomem, nostack));
                 }
             }
-            #[cfg(not(any(target_arch = "riscv64", target_arch = "x86_64")))]
+            #[cfg(not(any(
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "x86_64"
+            )))]
             loop {
                 unsafe {
                     core::arch::asm!("wfi", options(nomem, nostack));
@@ -5115,9 +5118,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             out_ptr: a2,
             out_len: a3,
         },
-        ViSyscall::CancelCellOwnerWatch => Syscall::CancelCellOwnerWatch {
-            token: a0 as u64,
-        },
+        ViSyscall::CancelCellOwnerWatch => Syscall::CancelCellOwnerWatch { token: a0 as u64 },
         ViSyscall::OpenCap => Syscall::OpenCap {
             path_ptr: a0,
             path_len: a1,

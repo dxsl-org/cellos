@@ -33,6 +33,18 @@ fn wait_for(expected: u8) {
     }
 }
 
+/// Keep the post-init cross-hart fixture independent from production stack
+/// sizing; it executes only a bounded kernel handoff path.
+fn spawn_handoff_task(
+    scheduler: &mut super::scheduler::Scheduler,
+    name: &str,
+    cell_id: CellId,
+) -> Result<usize, types::ViError> {
+    let kernel_stack = super::stack::Stack::new_kernel(1)?;
+    let user_stack = super::stack::Stack::new_user(1)?;
+    Ok(scheduler.spawn_with_stacks(name, cell_id, vec![], kernel_stack, user_stack))
+}
+
 /// Called from the incoming Context after its assembly prologue has saved the
 /// outgoing hart's Context and cleared the handoff guard.
 pub fn observe_outgoing_save_completion(hart: usize) {
@@ -162,9 +174,18 @@ extern "C" fn blocked_worker_entry() -> ! {
             core::hint::spin_loop();
         }
     }
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    if !super::domain_switch_tests::resumed_worker_domain_matches(worker_tid) {
+        log::error!(
+            "[selftest] S22-RV64-MIGRATION: FAIL marker=DOMAIN-TUPLE worker={}",
+            worker_tid
+        );
+        loop {
+            core::hint::spin_loop();
+        }
+    }
     log::info!("[selftest] SMP-CONTEXT-HANDOFF: PASS marker=CTX-HANDOFF-03 hart=0");
     PHASE.store(MIGRATED_AFTER_SAVE, Ordering::Release);
-
     if let Some(scheduler) = super::SCHEDULER.lock().as_mut() {
         scheduler.exit_task(worker_tid, 0);
     }
@@ -189,12 +210,17 @@ pub fn run_primary() {
             log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP scheduler-unavailable");
             return;
         };
-        let Ok(root_tid) = scheduler.spawn("smp-context-root", CellId(ROOT_CELL), vec![]) else {
+        let Ok(root_tid) = spawn_handoff_task(scheduler, "smp-context-root", CellId(ROOT_CELL))
+        else {
             log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP root-stack");
             return;
         };
-        let Ok(worker_tid) = scheduler.spawn("smp-context-worker", CellId(WORKER_CELL), vec![]) else {
-            log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP worker-stack");
+        let Ok(worker_tid) =
+            spawn_handoff_task(scheduler, "smp-context-worker", CellId(WORKER_CELL))
+        else {
+            log::error!(
+                "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP worker-stack"
+            );
             return;
         };
         super::hart_local::ready::remove_from_all(root_tid);
@@ -207,17 +233,39 @@ pub fn run_primary() {
         // call `ipc_recv` below to perform the wake at the controlled point.
         root.state = super::tcb::TaskState::Running;
         let Some(worker) = scheduler.tasks.get_mut(&worker_tid) else {
-            log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP worker-lost");
+            log::error!(
+                "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP worker-lost"
+            );
             return;
         };
+        #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+        {
+            let binding = (|| {
+                let kernel_stack = worker
+                    .kernel_stack
+                    .as_ref()
+                    .ok_or(crate::memory::address_space::AddressSpaceError::InvalidMapping)?;
+                let mut builder = crate::memory::address_space::AddressSpaceBuilder::new();
+                builder.map_registered_execution(kernel_stack);
+                worker.bind_address_space_for_test(builder.build()?);
+                Ok::<(), crate::memory::address_space::AddressSpaceError>(())
+            })();
+            if let Err(error) = binding {
+                log::error!(
+                    "[selftest] S22-RV64-MIGRATION: FAIL marker=DOMAIN-BIND error={:?}",
+                    error
+                );
+                return;
+            }
+        }
         worker.context.ra = blocked_worker_entry as *const () as usize;
         super::hart_local::ready::push_on_hart(0, worker_tid, worker.priority);
         super::hart_local::ready::remove_from_all(worker_tid);
-        if !super::hart_local::ready::reserve_test_dispatch_on_hart(
-            super::smp::HART_RT,
-            worker_tid,
-        ) {
-            log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP dispatch-pin");
+        if !super::hart_local::ready::reserve_test_dispatch_on_hart(super::smp::HART_RT, worker_tid)
+        {
+            log::error!(
+                "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP dispatch-pin"
+            );
             return;
         }
         super::hart_local::ready::push_on_hart(super::smp::HART_RT, worker_tid, worker.priority);
@@ -232,7 +280,9 @@ pub fn run_primary() {
             super::smp::HART_RT,
             worker_tid,
         );
-        log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP dispatch-target");
+        log::error!(
+            "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-SETUP dispatch-target"
+        );
         return;
     };
     if hal::common::sbi::sbi_send_ipi(mask, base).is_err() {
@@ -275,7 +325,9 @@ pub fn run_primary() {
         != worker_tid
     {
         let _ = super::hart_local::ready::release_test_dispatch_on_hart(0, worker_tid);
-        log::error!("[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-01 selection-ran-before-save");
+        log::error!(
+            "[selftest] SMP-CONTEXT-HANDOFF: FAIL marker=CTX-HANDOFF-01 selection-ran-before-save"
+        );
         return;
     }
     log::info!("[selftest] SMP-CONTEXT-HANDOFF: stage=remote-wake-deferred marker=CTX-HANDOFF-01");
@@ -292,8 +344,10 @@ pub fn run_primary() {
     // The same queued wake is now eligible and must resume exactly once.
     super::yield_cpu();
     wait_for(MIGRATED_AFTER_SAVE);
+    #[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+    log::info!("S22-RV64-MIGRATION: PASS harts=2");
     // This is the stable UART oracle. `MIGRATED_AFTER_SAVE` is published only
-    // after CTX03, and the preceding phase transitions prove CTX00–02.
+    // after CTX03, and the preceding phase transitions prove CTX00-02.
     log::info!("[selftest] SMP-CONTEXT-HANDOFF: PASS aggregate=CTX00-03");
     if let Some(scheduler) = super::SCHEDULER.lock().as_mut() {
         scheduler.exit_task(root_tid, 0);

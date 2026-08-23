@@ -176,7 +176,8 @@ pub fn main() {
         // and charged its quota to a ledger row nothing owned.
         match ostd::syscall::sys_recv_attested(0, &mut buf) {
             ostd::syscall::SyscallResult::Ok(sender) if sender > 0 => {
-                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf) else {
+                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf)
+                else {
                     let cancellations = GLOBAL_VFS
                         .lock()
                         .as_mut()
@@ -209,7 +210,9 @@ pub fn main() {
                 let (encoded_len, cancellations) = {
                     let mut resp_buf = [0u8; api::ipc::IPC_BUF_SIZE];
                     let mut guard = GLOBAL_VFS.lock();
-                    let vfs = guard.as_mut().expect("VFS initialized before serving requests");
+                    let vfs = guard
+                        .as_mut()
+                        .expect("VFS initialized before serving requests");
                     vfs.install_owner_watch(caller, owner.root_tid as usize, token);
                     let response = dispatch::handle_request(vfs, &buf, Some(caller), &mut resp_buf);
                     let len = api::ipc::encode(&response, &mut encoded)

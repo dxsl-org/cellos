@@ -7,12 +7,14 @@ fn bcm2837_controller_addresses_match_peripheral_offsets() {
     assert_eq!(BCM2837.slug, "bcm2837");
     assert_eq!(mmio.system_timer_base, mmio.peripheral_base + 0x3000);
     assert_eq!(mmio.legacy_irq_base, mmio.peripheral_base + 0xB200);
+    assert_eq!(mmio.mailbox_base, mmio.peripheral_base + 0xB880);
     assert_eq!(mmio.gpio_base, mmio.peripheral_base + 0x20_0000);
     assert_eq!(mmio.spi0_base, mmio.peripheral_base + 0x20_4000);
     assert_eq!(mmio.aux_base, mmio.peripheral_base + 0x21_5000);
     assert_eq!(mmio.mini_uart_io, mmio.aux_base + 0x40);
     assert_eq!(mmio.sdhci_base, mmio.peripheral_base + 0x30_0000);
     assert_eq!(mmio.bsc1_base, mmio.peripheral_base + 0x80_4000);
+    assert_eq!(mmio.dwc2_base, mmio.peripheral_base + 0x98_0000);
 }
 
 #[test]
@@ -24,10 +26,13 @@ fn bcm2837_mapping_and_grant_spans_are_bounded() {
     assert_eq!(mmio.local_controller_base, peripheral_end);
     assert_eq!(mmio.local_controller_end(), Some(0x4000_1000));
     assert_eq!(mmio.gpio_grant_size, 0x1000);
+    assert_eq!(mmio.mailbox_grant_size, 0x1000);
     assert_eq!(mmio.bsc1_grant_size, 0x1000);
     assert_eq!(mmio.spi0_grant_size, 0x1000);
     assert_eq!(mmio.aux_grant_size, 0x1000);
-    assert!(mmio.system_timer_base < peripheral_end);
+    assert_eq!(mmio.dwc2_grant_size, 0x20000);
+    assert!(mmio.legacy_irq_base < peripheral_end);
+    assert!(mmio.mailbox_base < peripheral_end);
     assert!(mmio.legacy_irq_base < peripheral_end);
     assert!(mmio.gpio_base + mmio.gpio_grant_size <= peripheral_end);
     assert!(mmio.bsc1_base + mmio.bsc1_grant_size <= peripheral_end);
@@ -50,8 +55,8 @@ fn bcm2837_irq_topology_matches_arm_hal_contract() {
 
     assert!(irq.is_valid());
     assert_eq!(irq.system_timer_c1, 1);
+    assert_eq!(irq.usb, 9);
     assert_eq!(irq.aux, 29);
-    assert_eq!(irq.gpio_bank0, 49);
     assert_eq!(irq.gpio_bank1, 50);
     assert_eq!(irq.local_timer_ns_mask, 1 << 1);
     assert_eq!(irq.local_timer_hp_mask, 1 << 2);

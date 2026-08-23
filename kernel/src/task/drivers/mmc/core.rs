@@ -318,4 +318,29 @@ impl MmcCore {
         };
         Ok(sectors)
     }
+
+    /// Issue CMD13 (SEND_STATUS) in a polling loop until the card enters
+    /// the TRAN (Transfer) state with READY_FOR_DATA set, ensuring that all
+    /// preceding write operations have completed on the physical media.
+    pub fn wait_ready_and_flush(&mut self, rca: u16) -> ViResult<()> {
+        let arg = (rca as u32) << 16;
+        let cmd = MmcCmd {
+            index: 13,
+            arg,
+            resp_type: RespType::R1,
+            has_data: false,
+        };
+        for _ in 0..10_000 {
+            let r = self.host.send_cmd(cmd)?;
+            let resp = r[0];
+            let state = (resp >> 9) & 0xF;
+            let ready_for_data = (resp & (1 << 8)) != 0;
+            // State 4 = TRAN (Transfer State)
+            if state == 4 && ready_for_data {
+                return Ok(());
+            }
+        }
+        log::warn!("[mmc] flush wait timeout for RCA {}", rca);
+        Err(ViError::IO)
+    }
 }

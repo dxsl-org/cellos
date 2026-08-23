@@ -147,7 +147,6 @@ impl log::Log for SimpleLogger {
 
     fn flush(&self) {}
 }
-
 static LOGGER: SimpleLogger = SimpleLogger;
 
 pub fn init() {

@@ -138,7 +138,10 @@ impl Drop for PlatformCapReservation {
                 Ordering::SeqCst,
                 Ordering::SeqCst,
             );
-            debug_assert!(reset.is_ok(), "Platform reservation lost singleton ownership");
+            debug_assert!(
+                reset.is_ok(),
+                "Platform reservation lost singleton ownership"
+            );
         }
     }
 }
@@ -305,9 +308,15 @@ impl CapSet {
                 | "/bin/block"
                 | "/bin/input"
                 | "/bin/virtio-gpu"
+                | "/bin/bcm-display"
         ) {
             self.pcie_driver = true;
+            self.mmio_devices |= crate::resource_registry::DEV_DISPLAY;
         }
+        // NOTE: /bin/dwc2-usb and /bin/lan9514 intentionally receive NO path-triggered
+        // caps here. USB host controller authority (DWC2 MMIO + IRQ) requires policy v3
+        // with a signed USB byte before it can be expressed through the capability system.
+        // Gate with a test matrix in policy::self_test first. See resource_registry.rs.
         if path == "/bin/platform" {
             self.platform = true;
         }

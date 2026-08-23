@@ -14,9 +14,9 @@ pub mod ready;
 
 use crate::task::smp::MAX_HARTS;
 use alloc::collections::{BTreeMap, VecDeque};
-use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(not(target_arch = "riscv32"))]
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(target_arch = "riscv32")]
 use portable_atomic::AtomicU64;
 
@@ -58,6 +58,14 @@ pub struct ViHartLocal {
     /// on this hart.  Trap code snapshots it with the CellId before surrendering
     /// allocation attribution to the kernel.
     current_cell_generation: AtomicU64,
+    /// Private-root identity selected for this hart. Zero is the shared SAS root.
+    current_domain_id: AtomicU64,
+    /// Immutable generation paired with `current_domain_id`.
+    current_domain_generation: AtomicU64,
+    /// Last safe-root completion acknowledgement for remote retirement.
+    domain_ack_generation: AtomicU64,
+    /// A safe root is active but its incoming Context has not yet acknowledged it.
+    safe_root_pending: AtomicUsize,
     /// Fixed retirement handoff slot.  A trap fault or clean `Exit` writes
     /// scalar state here before scheduler-owned collections are touched; the
     /// scheduler consumes it later with kernel allocation attribution.
@@ -96,6 +104,10 @@ pub static HART_LOCALS: [ViHartLocal; MAX_HARTS] = {
         selected_task_id: AtomicUsize::new(0),
         outgoing_context_save_task_id: AtomicUsize::new(0),
         current_cell_generation: AtomicU64::new(0),
+        current_domain_id: AtomicU64::new(0),
+        current_domain_generation: AtomicU64::new(0),
+        domain_ack_generation: AtomicU64::new(0),
+        safe_root_pending: AtomicUsize::new(0),
         deferred_retirement_pending: AtomicUsize::new(0),
         deferred_retirement_kind: AtomicUsize::new(0),
         deferred_retirement_tid: AtomicUsize::new(0),
@@ -152,6 +164,10 @@ pub fn install(hart_id: usize) {
     }
     hl.current_cell_id.store(0, Ordering::Relaxed);
     hl.current_cell_generation.store(0, Ordering::Relaxed);
+    hl.current_domain_id.store(0, Ordering::Relaxed);
+    hl.current_domain_generation.store(0, Ordering::Relaxed);
+    hl.domain_ack_generation.store(0, Ordering::Relaxed);
+    hl.safe_root_pending.store(0, Ordering::Relaxed);
     hl.deferred_retirement_pending.store(0, Ordering::Relaxed);
 
     // Publish this logical hart's restore pointer before installing its stvec.
@@ -167,8 +183,6 @@ pub fn install(hart_id: usize) {
     #[cfg(target_arch = "riscv64")]
     crate::hal::trap::init_for_hart(hart_id);
 }
-
-
 
 /// Return a reference to the calling hart's `ViHartLocal`.
 ///
@@ -392,16 +406,13 @@ mod fault_origin_tests {
     fn kernel_panic_with_cell_attribution_cannot_enter_deferred_retirement() {
         // Model a kernel panic while SCHEDULER is held for Cell 71: attribution
         // must not be mistaken for a U-mode execution proof.
-        assert!(
-            DeferredFault::from_origin(FaultOrigin::KernelPanic, 9, 71, 3, 0, 0, 0).is_none()
-        );
+        assert!(DeferredFault::from_origin(FaultOrigin::KernelPanic, 9, 71, 3, 0, 0, 0).is_none());
     }
 
     #[test]
     fn trap_proven_user_fault_remains_recoverable() {
-        let fault =
-            DeferredFault::from_origin(FaultOrigin::TrapProvenUser, 9, 71, 3, 0xf, 0, 0)
-                .expect("U-mode trap provenance must enter deferred retirement");
+        let fault = DeferredFault::from_origin(FaultOrigin::TrapProvenUser, 9, 71, 3, 0xf, 0, 0)
+            .expect("U-mode trap provenance must enter deferred retirement");
         assert!(fault.is_trap_proven_user_fault());
     }
 }
@@ -422,10 +433,71 @@ pub fn current_cell_generation() -> u64 {
 #[inline(always)]
 pub fn set_current_cell_context(id: usize, generation: u64) {
     let hart = unsafe { current_hart() };
-    hart.current_cell_generation.store(generation, Ordering::Relaxed);
+    hart.current_cell_generation
+        .store(generation, Ordering::Relaxed);
     hart.current_cell_id.store(id, Ordering::Relaxed);
 }
 
+/// Publish the private root selected while the scheduler state was stable.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[inline(always)]
+pub(crate) fn set_current_domain(id: u64, generation: u64) {
+    let hart = unsafe { current_hart() };
+    hart.current_domain_generation
+        .store(generation, Ordering::Release);
+    hart.current_domain_id.store(id, Ordering::Release);
+}
+
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[inline(always)]
+pub(crate) fn current_domain() -> (u64, u64) {
+    let hart = unsafe { current_hart() };
+    (
+        hart.current_domain_id.load(Ordering::Acquire),
+        hart.current_domain_generation.load(Ordering::Acquire),
+    )
+}
+
+/// Clear a domain only after the incoming safe-root context has completed.
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+pub(crate) fn acknowledge_safe_root() {
+    let hart = unsafe { current_hart() };
+    let generation = hart.current_domain_generation.swap(0, Ordering::AcqRel);
+    hart.current_domain_id.store(0, Ordering::Release);
+    hart.domain_ack_generation
+        .store(generation, Ordering::Release);
+}
+
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[inline(always)]
+pub(crate) fn mark_safe_root_pending() {
+    unsafe { current_hart() }
+        .safe_root_pending
+        .store(1, Ordering::Release);
+}
+
+#[cfg(all(feature = "native-domains", target_arch = "riscv64"))]
+#[inline(always)]
+pub(crate) fn take_safe_root_pending() -> bool {
+    unsafe { current_hart() }
+        .safe_root_pending
+        .swap(0, Ordering::AcqRel)
+        != 0
+}
+
+/// Remote retirement tests observe this generation after an incoming safe-root
+/// completion; a root remains owned until every relevant hart reports it.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) fn domain_ack_generation_for(hart_id: usize) -> u64 {
+    HART_LOCALS
+        .get(hart_id)
+        .map(|hart| hart.domain_ack_generation.load(Ordering::Acquire))
+        .unwrap_or(0)
+}
 const DEFERRED_RETIREMENT_EXIT: usize = 1;
 const DEFERRED_RETIREMENT_FAULT: usize = 2;
 
@@ -434,14 +506,16 @@ const DEFERRED_RETIREMENT_FAULT: usize = 2;
 #[inline(always)]
 pub fn defer_fault(fault: DeferredFault) {
     let hart = unsafe { current_hart() };
-    hart.deferred_retirement_tid.store(fault.tid, Ordering::Relaxed);
+    hart.deferred_retirement_tid
+        .store(fault.tid, Ordering::Relaxed);
     hart.deferred_retirement_cell_id
         .store(fault.cell_id, Ordering::Relaxed);
     hart.deferred_retirement_generation
         .store(fault.generation, Ordering::Relaxed);
     hart.deferred_retirement_fault_cause
         .store(fault.cause, Ordering::Relaxed);
-    hart.deferred_retirement_fault_pc.store(fault.pc, Ordering::Relaxed);
+    hart.deferred_retirement_fault_pc
+        .store(fault.pc, Ordering::Relaxed);
     hart.deferred_retirement_fault_addr
         .store(fault.fault_addr, Ordering::Relaxed);
     hart.deferred_retirement_kind
@@ -455,7 +529,8 @@ pub fn defer_fault(fault: DeferredFault) {
 #[inline(always)]
 pub fn defer_exit(exit: DeferredExit) {
     let hart = unsafe { current_hart() };
-    hart.deferred_retirement_tid.store(exit.tid, Ordering::Relaxed);
+    hart.deferred_retirement_tid
+        .store(exit.tid, Ordering::Relaxed);
     hart.deferred_retirement_cell_id
         .store(exit.cell_id, Ordering::Relaxed);
     hart.deferred_retirement_generation
@@ -486,8 +561,8 @@ pub fn take_deferred_retirement() -> Option<DeferredRetirement> {
             generation,
             code: hart.deferred_retirement_exit_code.load(Ordering::Relaxed),
         })),
-        DEFERRED_RETIREMENT_FAULT => Some(DeferredRetirement::Fault(
-            DeferredFault::from_user_trap(
+        DEFERRED_RETIREMENT_FAULT => {
+            Some(DeferredRetirement::Fault(DeferredFault::from_user_trap(
                 TrapProvenUserFault::new(),
                 tid,
                 cell_id,
@@ -495,8 +570,8 @@ pub fn take_deferred_retirement() -> Option<DeferredRetirement> {
                 hart.deferred_retirement_fault_cause.load(Ordering::Relaxed),
                 hart.deferred_retirement_fault_pc.load(Ordering::Relaxed),
                 hart.deferred_retirement_fault_addr.load(Ordering::Relaxed),
-            ),
-        )),
+            )))
+        }
         kind => panic!("[task] invalid deferred retirement kind {kind}"),
     }
 }

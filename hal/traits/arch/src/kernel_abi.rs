@@ -143,7 +143,6 @@ const _: RiscvPlicContext = vi_riscv_plic_context;
 const _: HandleRiscvExternalIrq = vi_handle_riscv_external_irq;
 #[cfg(target_arch = "riscv64")]
 const _: TlbShootdownTestFault = vi_tlb_shootdown_test_fault;
-
 #[cfg(target_arch = "aarch64")]
 extern "Rust" {
     pub fn vi_terminate_on_fault_aarch64(

@@ -8,10 +8,10 @@
 //! and root teardown prove switch completion gates Context free, owner release,
 //! and CellId reuse.
 
-use alloc::vec;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use super::syscall::{handle_syscall, Syscall, SyscallError};
+use alloc::vec;
 use api::syscall::ViSyscall;
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use types::CellId;
 
 const CELL_RAW: u64 = 63;
@@ -95,13 +95,9 @@ pub fn observe_cell_id_release(owner: api::cell_owner::CellOwner) {
         CELL_ID_RELEASE_ORDER_OK.store(true, Ordering::Release);
         if owner.root_tid as usize == RETIRING_ROOT_TID.load(Ordering::Acquire) {
             ROOT_EXIT_QUOTA_RELEASED.store(true, Ordering::Release);
-            log::info!(
-                "[selftest] SMP-ROOT-EXIT-QUOTA: stage=clean-exit-terminal-quota-release"
-            );
+            log::info!("[selftest] SMP-ROOT-EXIT-QUOTA: stage=clean-exit-terminal-quota-release");
         }
-        log::info!(
-            "[selftest] SMP-RETIREMENT: stage=cell-id-admission-after-owner-release"
-        );
+        log::info!("[selftest] SMP-RETIREMENT: stage=cell-id-admission-after-owner-release");
     } else {
         log::error!(
             "[selftest] SMP-RETIREMENT: FAIL — CellId admission preceded owner release owner-empty={} quota-reusable={}",
@@ -123,16 +119,12 @@ pub fn observe_exit_deferred_record_commit(exit: super::hart_local::DeferredExit
     }
 
     let kernel_attribution = super::hart_local::current_cell_id() == 0;
-    let allocator_accepts = crate::memory::cell_quota::charge(
-        super::hart_local::current_cell_id(),
-        1,
-    );
+    let allocator_accepts =
+        crate::memory::cell_quota::charge(super::hart_local::current_cell_id(), 1);
     if allocator_accepts {
         crate::memory::cell_quota::refund(0, 1);
     }
-    if ROOT_EXIT_QUOTA_SATURATED.load(Ordering::Acquire)
-        && kernel_attribution
-        && allocator_accepts
+    if ROOT_EXIT_QUOTA_SATURATED.load(Ordering::Acquire) && kernel_attribution && allocator_accepts
     {
         ROOT_EXIT_DEFERRED_COMMITTED.store(true, Ordering::Release);
         ROOT_EXIT_KERNEL_ATTRIBUTION.store(true, Ordering::Release);
@@ -219,8 +211,6 @@ pub fn observe_heartbeat_boot_completion(hart: usize) {
     }
 }
 
-
-
 fn wait_for(expected: u8) {
     while PHASE.load(Ordering::Acquire) != expected {
         core::hint::spin_loop();
@@ -262,7 +252,6 @@ pub fn observe_fault_task_entry() {
             tid
         );
     }
-
 }
 /// Mark the real fixed-record publication after `defer_fault` has released its
 /// pending flag and the faulting Cell is no longer charged for this path.
@@ -335,10 +324,8 @@ pub fn observe_fault_kernel_attribution(victim_cell: usize) {
         return;
     }
     let kernel_attribution = super::hart_local::current_cell_id() == 0;
-    let allocator_accepts = crate::memory::cell_quota::charge(
-        super::hart_local::current_cell_id(),
-        1,
-    );
+    let allocator_accepts =
+        crate::memory::cell_quota::charge(super::hart_local::current_cell_id(), 1);
     if allocator_accepts {
         crate::memory::cell_quota::refund(0, 1);
     }
@@ -409,9 +396,7 @@ pub fn hold_after_selection_before_switch(hart: usize) {
         }
         if sstatus & 0x2 != 0 {
             FORCED_SSIP_EARLY.store(true, Ordering::Release);
-            log::error!(
-                "[selftest] SMP-RETIREMENT: FAIL — post-pick hook remained interruptible"
-            );
+            log::error!("[selftest] SMP-RETIREMENT: FAIL — post-pick hook remained interruptible");
         } else {
             FORCED_SSIP_ARMED.store(true, Ordering::Release);
             unsafe {
@@ -427,9 +412,7 @@ pub fn hold_after_selection_before_switch(hart: usize) {
                     "[selftest] SMP-RETIREMENT: FAIL — forced SSIP nested before raw switch"
                 );
             } else {
-                log::info!(
-                    "[selftest] SMP-RETIREMENT: stage=forced-post-pick-ssip-deferred"
-                );
+                log::info!("[selftest] SMP-RETIREMENT: stage=forced-post-pick-ssip-deferred");
             }
         }
         wait_for(ALLOW_SELECTED_SWITCH);
@@ -463,18 +446,12 @@ pub fn observe_forced_ssip_trap() {
 
     if PHASE.load(Ordering::Acquire) == SELECTED_BEFORE_EXECUTING {
         FORCED_SSIP_EARLY.store(true, Ordering::Release);
-        log::error!(
-            "[selftest] SMP-RETIREMENT: FAIL — forced SSIP entered post-pick window"
-        );
+        log::error!("[selftest] SMP-RETIREMENT: FAIL — forced SSIP entered post-pick window");
     } else {
         FORCED_SSIP_DELIVERED.store(true, Ordering::Release);
-        log::info!(
-            "[selftest] SMP-RETIREMENT: stage=forced-post-pick-ssip-delivered-after-switch"
-        );
+        log::info!("[selftest] SMP-RETIREMENT: stage=forced-post-pick-ssip-delivered-after-switch");
     }
 }
-
-
 
 /// Called from the incoming side of RV64 `Context::switch`, after the new stack
 /// is active but before `complete_retirement_switch` publishes its epoch.
@@ -500,9 +477,7 @@ pub fn hold_before_switch_completion(hart: usize) {
 
 /// Record that the held incoming context has now published the completion epoch.
 pub fn observe_switch_completion(hart: usize) {
-    if hart == super::smp::HART_RT
-        && PHASE.load(Ordering::Acquire) == ALLOW_COMPLETION
-    {
+    if hart == super::smp::HART_RT && PHASE.load(Ordering::Acquire) == ALLOW_COMPLETION {
         // `complete_retirement_switch` has already made the raw-switch epoch
         // visible. Publish the selftest observation only after that boundary.
         log::info!("[selftest] SMP-RETIREMENT: stage=completion-epoch-published");
@@ -543,10 +518,22 @@ fn retiring_syscalls_denied(tid: usize) -> bool {
         handle_syscall(tid, Syscall::ReadLog { buf_ptr: 0, max: 0 }),
         Err(SyscallError::PermissionDenied)
     ) && matches!(
-        handle_syscall(tid, Syscall::GetProcs2 { buf_ptr: 0, buf_len: 0 }),
+        handle_syscall(
+            tid,
+            Syscall::GetProcs2 {
+                buf_ptr: 0,
+                buf_len: 0
+            }
+        ),
         Err(SyscallError::PermissionDenied)
     ) && matches!(
-        handle_syscall(tid, Syscall::MemInfo { out_ptr: 0, out_len: 0 }),
+        handle_syscall(
+            tid,
+            Syscall::MemInfo {
+                out_ptr: 0,
+                out_len: 0
+            }
+        ),
         Err(SyscallError::PermissionDenied)
     )
 }
@@ -602,9 +589,7 @@ extern "C" fn remote_worker_entry() -> ! {
     let quota_exhausted = quota_charged && allocation_rejected;
     if quota_exhausted {
         FAULT_QUOTA_EXHAUSTED.store(true, Ordering::Release);
-        log::info!(
-            "[selftest] SMP-FAULT-RETIREMENT: stage=quota-exhausted-user-fault-confirmed"
-        );
+        log::info!("[selftest] SMP-FAULT-RETIREMENT: stage=quota-exhausted-user-fault-confirmed");
     } else {
         log::error!(
             "[selftest] SMP-FAULT-RETIREMENT: FAIL — could not deterministically exhaust worker Cell quota"
@@ -616,9 +601,7 @@ extern "C" fn remote_worker_entry() -> ! {
     // and block on hart 0's guard before this worker reaches the fault funnel.
     // A real trap enters with SIE clear, so matching that ordering is essential.
     let _worker_sstatus = crate::hal::arch::save_and_disable_interrupts();
-    log::info!(
-        "[selftest] SMP-FAULT-RETIREMENT: stage=hart1-direct-trap-sie-masked"
-    );
+    log::info!("[selftest] SMP-FAULT-RETIREMENT: stage=hart1-direct-trap-sie-masked");
     while !FAULT_ARMED.load(Ordering::Acquire) {
         core::hint::spin_loop();
     }
@@ -646,18 +629,14 @@ fn run_heartbeat_terminal_identity_regression() {
     ) {
         Ok(reservation) => reservation,
         Err(_) => {
-            log::error!(
-                "[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — quota reservation"
-            );
+            log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — quota reservation");
             return;
         }
     };
     let tid = {
         let mut guard = super::SCHEDULER.lock();
         let Some(scheduler) = guard.as_mut() else {
-            log::error!(
-                "[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — scheduler unavailable"
-            );
+            log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — scheduler unavailable");
             return;
         };
         let Ok(tid) = scheduler.spawn(
@@ -665,29 +644,20 @@ fn run_heartbeat_terminal_identity_regression() {
             CellId(HEARTBEAT_CELL_RAW),
             vec![],
         ) else {
-            log::error!(
-                "[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — task stack allocation"
-            );
+            log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — task stack allocation");
             return;
         };
         let Some(task) = scheduler.tasks.get_mut(&tid) else {
-            log::error!(
-                "[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — task disappeared"
-            );
+            log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — task disappeared");
             return;
         };
         task.heartbeat_deadline = Some(0);
         task.syscall_allowlist = 0;
         task.context.ra = heartbeat_no_successor_entry as *const () as usize;
-        let owner = api::cell_owner::CellOwner::new(
-            HEARTBEAT_CELL_RAW,
-            task.cell_generation,
-            tid as u64,
-        );
+        let owner =
+            api::cell_owner::CellOwner::new(HEARTBEAT_CELL_RAW, task.cell_generation, tid as u64);
         if !scheduler.publish_live_cell_owner(owner) {
-            log::error!(
-                "[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — owner publication"
-            );
+            log::error!("[selftest] HEARTBEAT-TERMINAL-IDENTITY: FAIL — owner publication");
             return;
         }
         tid
@@ -782,7 +752,8 @@ pub fn run_primary() {
             buf_len: 0,
             deadline: None,
         };
-        let owner = api::cell_owner::CellOwner::new(CELL_RAW, root.cell_generation, root_tid as u64);
+        let owner =
+            api::cell_owner::CellOwner::new(CELL_RAW, root.cell_generation, root_tid as u64);
         if !scheduler.publish_live_cell_owner(owner) {
             log::error!("[selftest] SMP-RETIREMENT: FAIL — root owner publication");
             return;
@@ -862,7 +833,12 @@ pub fn run_primary() {
         "[selftest] SMP-ROOT-EXIT-QUOTA: stage=hart0-root-quota-saturated-before-clean-exit"
     );
     if !matches!(
-        handle_syscall(root_tid, Syscall::Exit { code: ROOT_EXIT_CODE }),
+        handle_syscall(
+            root_tid,
+            Syscall::Exit {
+                code: ROOT_EXIT_CODE
+            }
+        ),
         Ok(0)
     ) {
         super::hart_local::set_current_cell_id(0);
@@ -881,12 +857,14 @@ pub fn run_primary() {
         let guard = super::SCHEDULER.lock();
         guard.as_ref().is_some_and(|scheduler| {
             !scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW))
-                && scheduler.tasks.get(&worker_tid).is_some_and(|task| {
-                    task.state == super::tcb::TaskState::Retiring
-                })
-                && scheduler.tasks.get(&root_tid).is_some_and(|task| {
-                    task.state == super::tcb::TaskState::Retiring
-                })
+                && scheduler
+                    .tasks
+                    .get(&worker_tid)
+                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
+                && scheduler
+                    .tasks
+                    .get(&root_tid)
+                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
         })
     };
     if !selected_reap_blocked {
@@ -895,9 +873,7 @@ pub fn run_primary() {
         );
         return;
     }
-    log::info!(
-        "[selftest] SMP-RETIREMENT: stage=selected-context-blocked-retirement-and-reap"
-    );
+    log::info!("[selftest] SMP-RETIREMENT: stage=selected-context-blocked-retirement-and-reap");
 
     PHASE.store(ALLOW_SELECTED_SWITCH, Ordering::Release);
     log::info!("[selftest] SMP-RETIREMENT: stage=selected-switch-permitted");
@@ -907,9 +883,7 @@ pub fn run_primary() {
         return;
     }
     if !RETIRING_SYSCALLS_DENIED.load(Ordering::Acquire) {
-        log::error!(
-            "[selftest] SMP-RETIREMENT: FAIL — stale remote syscall denied marker missing"
-        );
+        log::error!("[selftest] SMP-RETIREMENT: FAIL — stale remote syscall denied marker missing");
         return;
     }
 
@@ -919,9 +893,7 @@ pub fn run_primary() {
     // yield between acquiring the guard and publishing it can re-enter
     // `SCHEDULER` on H0 while H1 is deliberately paused at attribution.
     let primary_sstatus = crate::hal::arch::save_and_disable_interrupts();
-    log::info!(
-        "[selftest] SMP-FAULT-RETIREMENT: stage=hart0-owner-proof-sie-masked"
-    );
+    log::info!("[selftest] SMP-FAULT-RETIREMENT: stage=hart0-owner-proof-sie-masked");
     FAULT_ARMED.store(true, Ordering::Release);
     while !FAULT_KERNEL_ATTRIBUTION.load(Ordering::Acquire) {
         core::hint::spin_loop();
@@ -975,9 +947,7 @@ pub fn run_primary() {
     unsafe {
         crate::hal::arch::restore_sstatus(primary_sstatus);
     }
-    log::info!(
-        "[selftest] SMP-FAULT-RETIREMENT: stage=hart0-owner-proof-sie-restored"
-    );
+    log::info!("[selftest] SMP-FAULT-RETIREMENT: stage=hart0-owner-proof-sie-restored");
     if !owner_retained {
         return;
     }
@@ -994,12 +964,14 @@ pub fn run_primary() {
         let mut guard = super::SCHEDULER.lock();
         guard.as_mut().is_some_and(|scheduler| {
             !scheduler.cell_owner_slot_is_empty(CellId(CELL_RAW))
-                && scheduler.tasks.get(&worker_tid).is_some_and(|task| {
-                    task.state == super::tcb::TaskState::Retiring
-                })
-                && scheduler.tasks.get(&root_tid).is_some_and(|task| {
-                    task.state == super::tcb::TaskState::Retiring
-                })
+                && scheduler
+                    .tasks
+                    .get(&worker_tid)
+                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
+                && scheduler
+                    .tasks
+                    .get(&root_tid)
+                    .is_some_and(|task| task.state == super::tcb::TaskState::Retiring)
         })
     };
     if !selected_window_blocked {
@@ -1048,9 +1020,7 @@ pub fn run_primary() {
     let reused = {
         let mut guard = super::SCHEDULER.lock();
         guard.as_mut().is_some_and(|scheduler| {
-            let member_cleanup_complete = !scheduler
-                .tasks
-                .contains_key(&root_tid)
+            let member_cleanup_complete = !scheduler.tasks.contains_key(&root_tid)
                 && !scheduler.tasks.contains_key(&worker_tid)
                 && !scheduler
                     .zombies
@@ -1079,18 +1049,11 @@ pub fn run_primary() {
         );
         return;
     }
-    log::info!(
-        "[selftest] SMP-ROOT-EXIT-QUOTA: stage=clean-exit-terminal-release-observed"
-    );
-    if !FORCED_SSIP_DELIVERED.load(Ordering::Acquire)
-        || FORCED_SSIP_EARLY.load(Ordering::Acquire)
-    {
-        log::error!(
-            "[selftest] SMP-RETIREMENT: FAIL — forced post-pick SSIP ordering"
-        );
+    log::info!("[selftest] SMP-ROOT-EXIT-QUOTA: stage=clean-exit-terminal-release-observed");
+    if !FORCED_SSIP_DELIVERED.load(Ordering::Acquire) || FORCED_SSIP_EARLY.load(Ordering::Acquire) {
+        log::error!("[selftest] SMP-RETIREMENT: FAIL — forced post-pick SSIP ordering");
         return;
     }
-
 
     let rt = super::smp::HART_RT;
     let idle_current = super::hart_local::ready::current_task_id_for(rt);
@@ -1112,9 +1075,7 @@ pub fn run_primary() {
     log::info!(
         "[selftest] SMP-RETIREMENT: stage=idle-attribution-cleared current=0 executing=0 selected=0 cell=0"
     );
-    log::info!(
-        "[selftest] SMP-FAULT-RETIREMENT: stage=hart1-fault-retirement-quiesced"
-    );
+    log::info!("[selftest] SMP-FAULT-RETIREMENT: stage=hart1-fault-retirement-quiesced");
 
     if reused {
         log::info!(

@@ -315,11 +315,7 @@ impl PageTable {
 
 impl PageTable {
     /// Reclaim empty intermediate tables on an already-unmapped 4 KiB path.
-    pub fn prune_empty(
-        &mut self,
-        virt: VAddr,
-        dealloc: &mut dyn FnMut(PhysAddr),
-    ) {
+    pub fn prune_empty(&mut self, virt: VAddr, dealloc: &mut dyn FnMut(PhysAddr)) {
         let i3 = (virt >> 39) & 0x1FF;
         let root_entry = self.entries[i3];
         if root_entry & PTE_P == 0 || root_entry & PTE_PS != 0 {
@@ -327,9 +323,7 @@ impl PageTable {
         }
         let pdpt_phys = (root_entry & PTE_ADDR_MASK) as PhysAddr;
         // SAFETY: a present non-huge root entry names a live PDPT.
-        let pdpt = unsafe {
-            &mut *(phys_to_virt_ptr(pdpt_phys) as *mut PageTable)
-        };
+        let pdpt = unsafe { &mut *(phys_to_virt_ptr(pdpt_phys) as *mut PageTable) };
         let i2 = (virt >> 30) & 0x1FF;
         let pdpt_entry = pdpt.entries[i2];
         if pdpt_entry & PTE_P == 0 {

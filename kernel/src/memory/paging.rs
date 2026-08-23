@@ -792,11 +792,17 @@ pub struct ReclaimedPageTables {
 
 impl ReclaimedPageTables {
     fn new() -> Self {
-        Self { frames: [0; 3], len: 0 }
+        Self {
+            frames: [0; 3],
+            len: 0,
+        }
     }
 
     fn record(&mut self, frame: PhysAddr) {
-        assert!(self.len < self.frames.len(), "page-table depth exceeds reclaim bound");
+        assert!(
+            self.len < self.frames.len(),
+            "page-table depth exceeds reclaim bound"
+        );
         self.frames[self.len] = frame;
         self.len += 1;
     }
@@ -924,7 +930,10 @@ pub(crate) struct TranslationProbe {
 }
 
 /// Read the active page table's leaf entry without relying on VMA bookkeeping.
-#[cfg(all(feature = "test-hooks", any(target_arch = "riscv64", target_arch = "aarch64")))]
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "riscv64", target_arch = "aarch64")
+))]
 pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
     #[cfg(target_arch = "riscv64")]
     {
@@ -966,7 +975,10 @@ pub(crate) fn translation_probe(vaddr: VAddr) -> Option<TranslationProbe> {
     })
 }
 
-#[cfg(all(feature = "test-hooks", any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")))]
+#[cfg(all(
+    feature = "test-hooks",
+    any(target_arch = "riscv32", target_arch = "x86", target_arch = "arm")
+))]
 pub(crate) fn translation_probe(_vaddr: VAddr) -> Option<TranslationProbe> {
     None
 }
@@ -1200,9 +1212,5 @@ fn fault_kill_cell(va: usize, error_code: u64, rip: u64, cs: u64, why: &str) {
     // The #PF dispatcher established error-code U/S before entering this
     // helper, so this is the x86 user-trap provenance required by the
     // deferred retirement funnel.
-    crate::task::terminate_current_cell_on_user_trap_fault(
-        error_code as usize,
-        rip as usize,
-        va,
-    );
+    crate::task::terminate_current_cell_on_user_trap_fault(error_code as usize, rip as usize, va);
 }

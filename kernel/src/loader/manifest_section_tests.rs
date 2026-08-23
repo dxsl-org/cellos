@@ -1,12 +1,12 @@
 //! Bare-metal behavioral tests for manifest-section admission.
 
 use super::manifest_section::{classify, ManifestSection, ManifestVersion};
+use crate::task::tcb::TaskState;
 use api::manifest::{
     MANIFEST_FLAGS_MASK, MANIFEST_MAGIC, MANIFEST_VERSION, PROTECTION_CLASS_STANDARD,
 };
-use crate::task::tcb::TaskState;
-use types::{CellId, ViError};
 use core::sync::atomic::Ordering;
+use types::{CellId, ViError};
 
 const NAMES: &[u8] = b"\0.shstrtab\0__ViCell_manifest\0";
 const MANIFEST_OFFSET: usize = 96;
@@ -88,7 +88,13 @@ fn section64(elf: &mut [u8], index: usize, name: u32, kind: u32, off: usize, siz
 }
 
 fn section32(
-    elf: &mut [u8], shoff: usize, index: usize, name: u32, kind: u32, off: usize, size: usize,
+    elf: &mut [u8],
+    shoff: usize,
+    index: usize,
+    name: u32,
+    kind: u32,
+    off: usize,
+    size: usize,
 ) {
     let base = shoff + index * 40;
     put32(elf, base, name);
@@ -170,11 +176,23 @@ fn scheduler_snapshot() -> SchedulerSnapshot {
 
 fn test_supported_classes_and_absence_policy() {
     let record = manifest(MANIFEST_VERSION, 16);
-    assert!(matches!(classify(&elf32(&record)), ManifestSection::Valid { .. }));
-    assert!(matches!(classify(&elf64(None, false)), ManifestSection::Absent));
+    assert!(matches!(
+        classify(&elf32(&record)),
+        ManifestSection::Valid { .. }
+    ));
+    assert!(matches!(
+        classify(&elf64(None, false)),
+        ManifestSection::Absent
+    ));
     let legacy = super::legacy_path_caps("/bin/vfs");
-    assert!(legacy.block_io, "manifest absence keeps the explicit legacy /bin policy");
-    assert_eq!(super::legacy_path_caps("/user/vfs"), crate::task::cap::CapSet::EMPTY);
+    assert!(
+        legacy.block_io,
+        "manifest absence keeps the explicit legacy /bin policy"
+    );
+    assert_eq!(
+        super::legacy_path_caps("/user/vfs"),
+        crate::task::cap::CapSet::EMPTY
+    );
 }
 
 fn test_valid_versions_classify_uniquely() {
@@ -182,11 +200,17 @@ fn test_valid_versions_classify_uniquely() {
     let v2 = manifest(MANIFEST_VERSION, 16);
     assert!(matches!(
         classify(&elf64(Some(&v1), false)),
-        ManifestSection::Valid { version: ManifestVersion::V1, .. }
+        ManifestSection::Valid {
+            version: ManifestVersion::V1,
+            ..
+        }
     ));
     assert!(matches!(
         classify(&elf64(Some(&v2), false)),
-        ManifestSection::Valid { version: ManifestVersion::V2, .. }
+        ManifestSection::Valid {
+            version: ManifestVersion::V2,
+            ..
+        }
     ));
 }
 
@@ -226,7 +250,11 @@ fn test_malformed_images_deny_before_task_creation() {
         ("bad section table", bad_table),
         ("bad name table", bad_names),
     ] {
-        assert!(matches!(classify(&image), ManifestSection::Malformed), "{}", label);
+        assert!(
+            matches!(classify(&image), ManifestSection::Malformed),
+            "{}",
+            label
+        );
         let before = scheduler_snapshot();
         assert_eq!(
             super::spawn_gated(
@@ -238,6 +266,11 @@ fn test_malformed_images_deny_before_task_creation() {
             "{} must be denied",
             label
         );
-        assert_eq!(scheduler_snapshot(), before, "{} changed scheduler state", label);
+        assert_eq!(
+            scheduler_snapshot(),
+            before,
+            "{} changed scheduler state",
+            label
+        );
     }
 }

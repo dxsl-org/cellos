@@ -324,12 +324,9 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
         CLIENT_WORKER_TID,
         request_generation,
     );
-    let lease_cleared = crate::memory::pin::find_vfs_lease(
-        VFS_WORKER_TID,
-        CLIENT_WORKER_TID,
-        request_generation,
-    )
-    .is_none();
+    let lease_cleared =
+        crate::memory::pin::find_vfs_lease(VFS_WORKER_TID, CLIENT_WORKER_TID, request_generation)
+            .is_none();
 
     crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
     remove(VFS_WORKER_TID);
@@ -377,9 +374,7 @@ fn registered_grant_owner_death_reaps_leased_entry() -> bool {
             "holder completion left the pending-revoked lease registered",
         );
     }
-    log::info!(
-        "[selftest] VFS-LIFETIME: stage=dead-owner-pending-revoke-exact-release"
-    );
+    log::info!("[selftest] VFS-LIFETIME: stage=dead-owner-pending-revoke-exact-release");
     true
 }
 
@@ -469,18 +464,17 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
             .get(&CLIENT_WORKER_TID)
             .map(|task| task.cell_generation)?;
         let holder = sched.tasks.get_mut(&VFS_WORKER_TID)?;
-        holder.set_current_caller_context(
-            CLIENT_WORKER_TID,
-            CLIENT_CELL_ID,
-            owner_generation,
-        );
+        holder.set_current_caller_context(CLIENT_WORKER_TID, CLIENT_CELL_ID, owner_generation);
         Some(holder.current_caller_request_generation)
     });
     let Some(request_generation) = request_generation else {
         crate::fast_ipc::clear_vfs_if_cell(VFS_OWNER_TID);
         remove(VFS_WORKER_TID);
         remove(CLIENT_WORKER_TID);
-        return fail("stale-install", "could not establish the VFS holder context");
+        return fail(
+            "stale-install",
+            "could not establish the VFS holder context",
+        );
     };
     let snapshot = match super::syscall::current_vfs_grant_lookup(VFS_WORKER_TID) {
         super::syscall::VfsGrantLookup::Active(context) => context,
@@ -505,12 +499,9 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
             0x9000 + slot,
         )
     });
-    let stale_lease_absent = crate::memory::pin::find_vfs_lease(
-        VFS_WORKER_TID,
-        CLIENT_WORKER_TID,
-        request_generation,
-    )
-    .is_none();
+    let stale_lease_absent =
+        crate::memory::pin::find_vfs_lease(VFS_WORKER_TID, CLIENT_WORKER_TID, request_generation)
+            .is_none();
 
     let mut capacity_available = true;
     for slot in 0..crate::memory::pin::MAX_VFS_LEASES {
@@ -528,14 +519,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
         }
     }
     let table_full_only_after_capacity = matches!(
-        crate::memory::pin::pin_vfs_lease(
-            arena(100),
-            PAGE_SIZE,
-            0xE000,
-            0xF000,
-            0x10000,
-            0x11000,
-        ),
+        crate::memory::pin::pin_vfs_lease(arena(100), PAGE_SIZE, 0xE000, 0xF000, 0x10000, 0x11000,),
         Err(crate::memory::pin::VfsLeaseError::TableFull)
     );
     for slot in 0..crate::memory::pin::MAX_VFS_LEASES {
@@ -562,9 +546,7 @@ fn stale_context_install_is_denied_without_capacity_loss() -> bool {
             "stale install consumed VFS lease capacity before live leases filled the table",
         );
     }
-    log::info!(
-        "[selftest] VFS-LIFETIME: stage=smp-stale-context-denied-capacity-preserved"
-    );
+    log::info!("[selftest] VFS-LIFETIME: stage=smp-stale-context-denied-capacity-preserved");
     true
 }
 
@@ -696,16 +678,8 @@ fn holder_death_is_selective() -> bool {
 }
 
 fn vfs_owner_watch() -> bool {
-    insert(mk_task(
-        VFS_OWNER_TID,
-        VFS_CELL_ID,
-        "vfs-owner-selftest",
-    ));
-    insert(mk_task(
-        VFS_WORKER_TID,
-        VFS_CELL_ID,
-        "vfs-worker-selftest",
-    ));
+    insert(mk_task(VFS_OWNER_TID, VFS_CELL_ID, "vfs-owner-selftest"));
+    insert(mk_task(VFS_WORKER_TID, VFS_CELL_ID, "vfs-worker-selftest"));
     insert(mk_task(
         CLIENT_OWNER_TID,
         CLIENT_CELL_ID,
@@ -773,19 +747,22 @@ fn vfs_owner_watch() -> bool {
     });
 
     let (owner_watch_token, denied) =
-        super::SCHEDULER.lock().as_mut().map_or((None, true), |sched| {
-            let owner_watch_token = sched
-                .watch_live_cell_owner(
-                    VFS_WORKER_TID,
-                    CellId(CLIENT_CELL_ID),
-                    owner_generation,
-                )
-                .map(|(_, token)| token);
-            let denied = sched
-                .watch_live_cell_owner(VFS_WORKER_TID, CellId(OTHER_TID as u64), owner_generation)
-                .is_none();
-            (owner_watch_token, denied)
-        });
+        super::SCHEDULER
+            .lock()
+            .as_mut()
+            .map_or((None, true), |sched| {
+                let owner_watch_token = sched
+                    .watch_live_cell_owner(VFS_WORKER_TID, CellId(CLIENT_CELL_ID), owner_generation)
+                    .map(|(_, token)| token);
+                let denied = sched
+                    .watch_live_cell_owner(
+                        VFS_WORKER_TID,
+                        CellId(OTHER_TID as u64),
+                        owner_generation,
+                    )
+                    .is_none();
+                (owner_watch_token, denied)
+            });
 
     let (worker_exit_clean, masked_backend_preserved, owner_death_delivered) = {
         let mut guard = super::SCHEDULER.lock();
@@ -798,8 +775,10 @@ fn vfs_owner_watch() -> bool {
             .get(&VFS_WORKER_TID)
             .is_some_and(|task| task.current_caller.is_none());
         sched.exit_task(CLIENT_OWNER_TID, 9);
-        let (masked_backend_preserved, owner_death_delivered) =
-            sched.tasks.get_mut(&VFS_WORKER_TID).map_or((false, false), |task| {
+        let (masked_backend_preserved, owner_death_delivered) = sched
+            .tasks
+            .get_mut(&VFS_WORKER_TID)
+            .map_or((false, false), |task| {
                 // A nested backend receive must return its matching reply without
                 // consuming the tokenized owner event reserved for VFS's public
                 // wildcard receive.
@@ -808,8 +787,7 @@ fn vfs_owner_watch() -> bool {
                     super::syscall::ResumeDelivery::Message(message)
                         if message.sender_tid == OTHER_TID
                 ) && owner_watch_token.is_some_and(|token| {
-                    task.pending_owner_deaths.as_slice()
-                        == [(token, CLIENT_OWNER_TID, 9)]
+                    task.pending_owner_deaths.as_slice() == [(token, CLIENT_OWNER_TID, 9)]
                 });
                 let public = matches!(
                     super::syscall::take_resume_delivery(task, 0),
@@ -820,25 +798,21 @@ fn vfs_owner_watch() -> bool {
                 ) && task.pending_owner_deaths.is_empty();
                 (masked, public)
             });
-        (worker_exit_clean, masked_backend_preserved, owner_death_delivered)
+        (
+            worker_exit_clean,
+            masked_backend_preserved,
+            owner_death_delivered,
+        )
     };
 
     if let Some(sched) = super::SCHEDULER.lock().as_mut() {
         if let Some(task) = sched.tasks.get_mut(&VFS_WORKER_TID) {
-            task.set_current_caller_context(
-                CLIENT_WORKER_TID,
-                CLIENT_CELL_ID,
-                owner_generation,
-            );
+            task.set_current_caller_context(CLIENT_WORKER_TID, CLIENT_CELL_ID, owner_generation);
         }
     }
     let already_dead = super::SCHEDULER.lock().as_mut().is_some_and(|sched| {
         sched
-            .watch_live_cell_owner(
-                VFS_WORKER_TID,
-                CellId(CLIENT_CELL_ID),
-                owner_generation,
-            )
+            .watch_live_cell_owner(VFS_WORKER_TID, CellId(CLIENT_CELL_ID), owner_generation)
             .is_none()
     });
 

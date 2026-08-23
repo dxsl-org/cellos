@@ -75,6 +75,8 @@ members = [
     "cells/drivers/gpio-sifive",
     "cells/drivers/serial",
     "cells/drivers/wasm",
+    "cells/drivers/imu-mpu6050",
+    "cells/drivers/display-ssd1306",
     
     # Cells - Services
     "cells/services/platform",

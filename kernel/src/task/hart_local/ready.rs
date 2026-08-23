@@ -93,7 +93,11 @@ pub const HAS_INCOMING_SWITCH_COMPLETION_HOOK: bool = cfg!(target_arch = "riscv6
 
 #[cfg(target_arch = "riscv64")]
 const _: [(); 1] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
-#[cfg(any(target_arch = "riscv32", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 /// Whether task→boot must clear scheduler identity before the raw switch.
 ///
@@ -101,14 +105,16 @@ const _: [(); 0] = [(); HAS_INCOMING_SWITCH_COMPLETION_HOOK as usize];
 /// outgoing Context has been saved. The other targets have no such callback,
 /// so retaining the old task through a boot switch would strand a subsequently
 /// requeued task behind stale ownership.
-pub const CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH: bool =
-    !HAS_INCOMING_SWITCH_COMPLETION_HOOK;
+pub const CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH: bool = !HAS_INCOMING_SWITCH_COMPLETION_HOOK;
 
 #[cfg(target_arch = "riscv64")]
 const _: [(); 0] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
-#[cfg(any(target_arch = "riscv32", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 const _: [(); 1] = [(); CLEAR_TASK_TO_BOOT_IDENTITY_BEFORE_SWITCH as usize];
-
 
 /// Whether this target can prove the outgoing Context save from the incoming
 /// side of the same raw switch.  Keep Ready publication architecture-neutral:
@@ -118,7 +124,11 @@ pub const HAS_OUTGOING_CONTEXT_SAVE_HOOK: bool = cfg!(target_arch = "riscv64");
 
 #[cfg(target_arch = "riscv64")]
 const _: [(); 1] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
-#[cfg(any(target_arch = "riscv32", target_arch = "aarch64", target_arch = "x86_64"))]
+#[cfg(any(
+    target_arch = "riscv32",
+    target_arch = "aarch64",
+    target_arch = "x86_64"
+))]
 const _: [(); 0] = [(); HAS_OUTGOING_CONTEXT_SAVE_HOOK as usize];
 
 /// Push task `id` with `priority` onto `hart_id`'s local ready queue.
@@ -359,7 +369,6 @@ pub fn outgoing_context_save_task_id_for(hart_id: usize) -> usize {
     0
 }
 
-
 /// Returns true while `task_id` is selected or executing on any hart.
 ///
 /// The selected load must precede the executing load. Completion publishes the
@@ -434,13 +443,10 @@ pub fn steal_from_busiest(thief: usize) {
             // victim=1(g1) → thief=0(g0)
             if let Some(vq) = g1.get_mut(&p) {
                 while stolen < to_steal {
-                    match vq
-                        .iter()
-                        .position(|&id| {
-                            !owned_by_another_hart(thief, id)
-                                && !test_dispatch_reserved_by_another_hart(thief, id)
-                        })
-                    {
+                    match vq.iter().position(|&id| {
+                        !owned_by_another_hart(thief, id)
+                            && !test_dispatch_reserved_by_another_hart(thief, id)
+                    }) {
                         Some(index) => {
                             let id = vq
                                 .remove(index)
@@ -456,13 +462,10 @@ pub fn steal_from_busiest(thief: usize) {
             // victim=0(g0) → thief=1(g1)
             if let Some(vq) = g0.get_mut(&p) {
                 while stolen < to_steal {
-                    match vq
-                        .iter()
-                        .position(|&id| {
-                            !owned_by_another_hart(thief, id)
-                                && !test_dispatch_reserved_by_another_hart(thief, id)
-                        })
-                    {
+                    match vq.iter().position(|&id| {
+                        !owned_by_another_hart(thief, id)
+                            && !test_dispatch_reserved_by_another_hart(thief, id)
+                    }) {
                         Some(index) => {
                             let id = vq
                                 .remove(index)

@@ -26,8 +26,7 @@ pub static HART_ONLINE: [AtomicBool; MAX_HARTS] = [AtomicBool::new(false), Atomi
 /// Monotonic switch-completion epochs for root-retirement quiescence. A retiring
 /// generation cannot release its CellId slot until every requested hart has
 /// switched to a different context and published that completion.
-static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] =
-    [AtomicUsize::new(0), AtomicUsize::new(0)];
+static RETIRE_SWITCH_REQUEST: [AtomicUsize; MAX_HARTS] = [AtomicUsize::new(0), AtomicUsize::new(0)];
 static RETIRE_SWITCH_COMPLETE: [AtomicUsize; MAX_HARTS] =
     [AtomicUsize::new(0), AtomicUsize::new(0)];
 
@@ -136,6 +135,24 @@ pub fn remote_online_sbi_target() -> Option<(usize, usize)> {
     let remote = if current == 0 { HART_RT } else { 0 };
     let online = remote == 0 || HART_ONLINE[remote].load(Ordering::Acquire);
     online.then(|| logical_sbi_target(remote)).flatten()
+}
+
+/// Return the harts that completed kernel bring-up for the current boot.
+///
+/// Hart zero is the active boot hart; each secondary contributes only after
+/// publishing `HART_ONLINE`, so test evidence cannot confuse configured SMP
+/// capacity with observed runtime availability.
+#[cfg(all(
+    feature = "native-domains",
+    feature = "test-hooks",
+    target_arch = "riscv64"
+))]
+pub(crate) fn online_hart_count() -> usize {
+    1 + HART_ONLINE
+        .iter()
+        .skip(1)
+        .filter(|online| online.load(Ordering::Acquire))
+        .count()
 }
 
 /// How many 10 ms ticks hart 0 waits for each secondary to come online before
@@ -332,7 +349,10 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
         use hal::Arch;
         hal::ARCH.enable_interrupts();
         if !hal::ARCH.interrupts_enabled() {
-            panic!("[smp] hart {} could not enable supervisor interrupts", hart_id);
+            panic!(
+                "[smp] hart {} could not enable supervisor interrupts",
+                hart_id
+            );
         }
     }
 
@@ -345,7 +365,10 @@ pub extern "C" fn smp_hart_entry(physical_hart: usize) -> ! {
             hart_id
         );
         #[cfg(feature = "test-hooks")]
-        log::info!("[selftest] SMP-RETIREMENT: stage=hart{}-interrupts-enabled", hart_id);
+        log::info!(
+            "[selftest] SMP-RETIREMENT: stage=hart{}-interrupts-enabled",
+            hart_id
+        );
         HART_ONLINE[hart_id].store(true, Ordering::Release);
     }
 

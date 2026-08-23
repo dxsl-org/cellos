@@ -23,6 +23,8 @@ const IRQ_DISABLE2: usize = IRQ_BASE + 0x20;
 pub const GPIO_BANK0_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.gpio_bank0;
 pub const GPIO_BANK1_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.gpio_bank1;
 pub const AUX_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.aux;
+/// USB OTG/DWC2 legacy IRQ number (BCM2835 bank 1, bit 9).
+pub const USB_IRQ: u32 = hal_soc_bcm27xx::BCM2837.irq.usb;
 const GPIO_BANK0_PENDING2_MASK: u32 = 1 << (GPIO_BANK0_IRQ - 32);
 const GPIO_BANK1_PENDING2_MASK: u32 = 1 << (GPIO_BANK1_IRQ - 32);
 
@@ -67,6 +69,20 @@ pub fn disable_irq(irq: u32) {
 /// Return whether the AUX block has asserted its legacy peripheral IRQ.
 pub fn is_aux_irq_pending() -> bool {
     rd(IRQ_PENDING1) & (1 << AUX_IRQ) != 0
+}
+
+/// Return whether the DWC2 USB host controller has asserted its legacy IRQ
+/// (BCM2835 bank 1, bit 9).
+///
+/// ROUTING INTENTIONALLY DISABLED. DWC2 asserts this line level-style and
+/// self-clears only via W1C writes to its own GINTSTS/HCINT registers, which
+/// only the owning driver cell may perform. A plain `irq_wait::signal_irq`
+/// route would re-fire before the cell runs (IRQ storm). Enabling requires:
+/// a USB host authority cap (policy v3), WaitIrq ownership verification for
+/// `(irq, mmio_base)`, and a one-shot contract — ISR masks legacy IRQ 9 here,
+/// the driver's next `sys_wait_irq` unmasks it after clearing GINTSTS.
+pub fn is_usb_irq_pending() -> bool {
+    rd(IRQ_PENDING1) & (1 << USB_IRQ) != 0
 }
 
 /// Identify a pending GPIO bank IRQ from the legacy controller.

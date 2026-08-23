@@ -9,6 +9,8 @@ pub struct Bcm27xxMmioLayout {
     pub local_controller_size: usize,
     pub system_timer_base: usize,
     pub legacy_irq_base: usize,
+    pub mailbox_base: usize,
+    pub mailbox_grant_size: usize,
     pub gpio_base: usize,
     pub gpio_grant_size: usize,
     pub bsc1_base: usize,
@@ -19,6 +21,8 @@ pub struct Bcm27xxMmioLayout {
     pub aux_grant_size: usize,
     pub mini_uart_io: usize,
     pub sdhci_base: usize,
+    pub dwc2_base: usize,
+    pub dwc2_grant_size: usize,
 }
 
 impl Bcm27xxMmioLayout {
@@ -52,6 +56,8 @@ pub const BCM2837: Bcm27xxSocProfile = Bcm27xxSocProfile {
         local_controller_size: 0x1000,
         system_timer_base: 0x3F00_3000,
         legacy_irq_base: 0x3F00_B200,
+        mailbox_base: 0x3F00_B880,
+        mailbox_grant_size: 0x1000,
         gpio_base: 0x3F20_0000,
         gpio_grant_size: 0x1000,
         bsc1_base: 0x3F80_4000,
@@ -62,9 +68,12 @@ pub const BCM2837: Bcm27xxSocProfile = Bcm27xxSocProfile {
         aux_grant_size: 0x1000,
         mini_uart_io: 0x3F21_5040,
         sdhci_base: 0x3F30_0000,
+        dwc2_base: 0x3F98_0000,
+        dwc2_grant_size: 0x20000,
     },
     irq: Bcm27xxIrqTopology {
         system_timer_c1: 1,
+        usb: 9,
         aux: 29,
         gpio_bank0: 49,
         gpio_bank1: 50,

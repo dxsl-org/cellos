@@ -19,8 +19,12 @@ extern crate alloc;
 
 use core::panic::PanicInfo;
 
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+static TEST_SAFE_ROOT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
 // Core kernel modules
 pub mod acpi;
+#[cfg(feature = "test-hooks")]
 mod admission;
 pub mod audit;
 mod board;
@@ -405,6 +409,8 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             memory::paging::activate_paging(root_table_phys);
         }
         *memory::paging::KERNEL_ROOT.lock() = Some(root_table_phys);
+        #[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+        TEST_SAFE_ROOT.store(root_table_phys, core::sync::atomic::Ordering::Release);
         unsafe {
             core::ptr::write(
                 &mut *memory::frame::FRAME_ALLOCATOR.lock(),
@@ -777,16 +783,44 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     #[cfg(target_arch = "riscv64")]
     task::smp::start_secondaries();
 
-
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::memory::tlb_shootdown_selftest::run_primary();
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    task::context_handoff_selftest::run_primary();
-    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
-    task::retirement_selftest::run_primary();
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    crate::memory::address_space::address_space_tests::run_primary();
 
     #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
     crate::loader::atomic_publication_tests::run_governed_success_after_secondaries();
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    memory::domain_supervisor_registry::activate();
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    memory::domain_supervisor_registry::register_static_image()
+        .expect("kernel static ranges must be disjoint");
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    memory::domain_supervisor_registry::register(
+        heap_start,
+        heap_start
+            .checked_add(heap_size)
+            .expect("kernel heap range overflow"),
+        memory::domain_supervisor_registry::SupervisorRangeKind::KernelHeap,
+        memory::domain_supervisor_registry::SupervisorRangeOwner::SharedKernel,
+    )
+    .expect("kernel heap registration must be unique");
 
     // 8. Spawn Embedded Init
     // RV32 Nano bring-up: no init binary — boot to idle loop.
@@ -850,6 +884,14 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             log_info("boot-ceiling self-test PASS (per-path table, no union collapse)");
         } else {
             log_info("boot-ceiling self-test FAIL — a boot cell may lose caps");
+        }
+        // MMIO allowlist: the production table must still authorize its known
+        // windows and must keep denying the DWC2 USB window (USB host authority
+        // awaits policy v3 with a signed byte). Runs on the REAL allowlist.
+        if crate::resource_registry::self_test() {
+            log_info("mmio-allowlist self-test PASS (known windows live, DWC2 denied)");
+        } else {
+            log_info("mmio-allowlist self-test FAIL — DWC2 window or allowlist shape changed");
         }
         // Manifest v2: v1-upcast/v2-parse + the tier-floor invariant. Pure logic,
         // no scheduler — runs alongside the other crypto/trust self-tests.
@@ -923,6 +965,22 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
             }
         }
     }
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    if !task::domain_switch_tests::run_primary() {
+        log::error!("native-domain SAS scheduler fixture failed");
+    }
+    #[cfg(all(
+        target_arch = "riscv64",
+        feature = "native-domains",
+        feature = "test-hooks"
+    ))]
+    task::context_handoff_selftest::run_primary();
+    #[cfg(all(target_arch = "riscv64", feature = "test-hooks"))]
+    task::retirement_selftest::run_primary();
 
     // Ring-3 smoke test: spawn a minimal U-mode task that logs and exits.
     // RISC-V only — task writes RISC-V machine code directly.
@@ -1049,16 +1107,84 @@ pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
     }
 }
 
+/// Emit an allocation-free RV64 fault snapshot before the panic path.
+#[cfg(all(feature = "test-hooks", target_arch = "riscv64"))]
+#[no_mangle]
+pub extern "C" fn vi_rv64_kernel_fault_snapshot(satp: usize, stval: usize) {
+    fn put_hex(value: usize) {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        for shift in (0..16).rev().map(|n| n * 4) {
+            let _ = crate::hal::sbi::console_putchar(HEX[(value >> shift) & 0xf]);
+        }
+    }
+
+    fn put_label(label: &[u8], value: usize) {
+        for byte in label {
+            let _ = crate::hal::sbi::console_putchar(*byte);
+        }
+        put_hex(value);
+    }
+
+    unsafe fn read_pte(table_phys: usize, index: usize) -> usize {
+        (table_phys as *const usize).add(index).read_volatile()
+    }
+
+    fn next_table(entry: usize) -> usize {
+        ((entry >> 10) & 0x003f_ffff_ffff_ffff) << 12
+    }
+
+    for byte in b"\n[selftest] RV64-FAULT satp=0x" {
+        let _ = crate::hal::sbi::console_putchar(*byte);
+    }
+    put_hex(satp);
+    for byte in b" stval=0x" {
+        let _ = crate::hal::sbi::console_putchar(*byte);
+    }
+    put_hex(stval);
+
+    let kernel_root = TEST_SAFE_ROOT.load(core::sync::atomic::Ordering::Acquire);
+    if kernel_root != 0 {
+        let kernel_satp = (8usize << 60) | (kernel_root >> 12);
+        // SAFETY: this test-only panic snapshot switches to the known-safe
+        // shared root so it can inspect private page-table memory by physical VA.
+        unsafe {
+            core::arch::asm!(
+                "csrw satp, {satp}",
+                "sfence.vma zero, zero",
+                satp = in(reg) kernel_satp,
+                options(nostack)
+            );
+        }
+        let root_phys = (satp & ((1usize << 44) - 1)) << 12;
+        let vpn2 = (stval >> 30) & 0x1ff;
+        let vpn1 = (stval >> 21) & 0x1ff;
+        let vpn0 = (stval >> 12) & 0x1ff;
+        let pte2 = unsafe { read_pte(root_phys, vpn2) };
+        let pte1 = if pte2 & 1 != 0 {
+            unsafe { read_pte(next_table(pte2), vpn1) }
+        } else {
+            0
+        };
+        let pte0 = if pte1 & 1 != 0 {
+            unsafe { read_pte(next_table(pte1), vpn0) }
+        } else {
+            0
+        };
+        put_label(b" pte2=0x", pte2);
+        put_label(b" pte1=0x", pte1);
+        put_label(b" pte0=0x", pte0);
+    }
+}
+
 /// Non-recoverable kernel panic handler.
 ///
 /// `current_cell_id` is allocation attribution, not an execution-mode proof:
 /// kernel code can hold scheduler or other kernel locks while servicing a
-/// Cell.  Therefore this handler never schedules or retires a Cell.  Only the
+/// Cell. Therefore this handler never schedules or retires a Cell. Only the
 /// architecture trap path, after proving an interrupted U-mode context, may
 /// enter the deferred retirement funnel.
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-
     // True kernel panic: print diagnostics and halt.
     #[inline(always)]
     fn panic_putchar(c: u8) {

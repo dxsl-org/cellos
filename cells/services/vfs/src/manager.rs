@@ -28,7 +28,6 @@ use crate::mount::MountTable;
 use crate::pending::PendingTable;
 use crate::quota::QuotaTracker;
 
-
 #[derive(Clone, Copy)]
 pub(crate) struct WatchedOwner {
     pub principal: Caller,

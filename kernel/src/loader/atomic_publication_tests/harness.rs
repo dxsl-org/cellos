@@ -1,6 +1,6 @@
-use core::sync::atomic::{AtomicU16, AtomicU8, Ordering};
 #[cfg(target_arch = "riscv64")]
 use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU16, AtomicU8, Ordering};
 use types::ViError;
 
 static FAIL_AT: AtomicU8 = AtomicU8::new(0);
@@ -96,13 +96,13 @@ pub(crate) fn observe_schedule_attempt() {
         let excluded = tid != usize::MAX
             && crate::task::hart_local::HART_LOCALS.iter().all(|hart| {
                 hart.current_task_id.load(Ordering::Acquire) != tid
-                    && hart.ready.lock().values().all(|queue| !queue.contains(&tid))
+                    && hart
+                        .ready
+                        .lock()
+                        .values()
+                        .all(|queue| !queue.contains(&tid))
             });
-        // `1` is a remote, negative-visibility witness; `2` acknowledges that
-        // hart 1 reached the scheduler entry point but observed publication.
         AP13_REMOTE_ACK.store(if excluded { 1 } else { 2 }, Ordering::Release);
-        // Do not enter SCHEDULER before the publisher is done. This preserves
-        // the competing attempt without inverting the scheduler/ready lock order.
         while AP13_BARRIER.load(Ordering::Acquire) == 1 {
             core::hint::spin_loop();
         }
@@ -128,26 +128,28 @@ fn competing_hart_schedule_attempt(tid: usize) -> bool {
     AP13_TARGET_TID.store(tid, Ordering::Release);
     AP13_REMOTE_ACK.store(0, Ordering::Release);
     AP13_BARRIER.store(1, Ordering::Release);
-    let sent = crate::task::smp::logical_sbi_target(crate::task::smp::HART_RT)
-        .is_some_and(|(mask, base)| hal::common::sbi::sbi_send_ipi(mask, base).is_ok());
-    if !sent {
+    let target = crate::task::smp::logical_sbi_target(crate::task::smp::HART_RT);
+    let Some((mask, base)) = target else {
+        disarm_competing_hart();
+        return false;
+    };
+    if hal::common::sbi::sbi_send_ipi(mask, base).is_err() {
         disarm_competing_hart();
         return false;
     }
-    let start_tick = crate::task::system_ticks();
-    for _ in 0..100_000_000 {
-        match AP13_REMOTE_ACK.load(Ordering::Acquire) {
-            1 => return true,
-            2 => {
-                disarm_competing_hart();
-                return false;
+    for _ in 0..20 {
+        for _ in 0..5_000_000 {
+            match AP13_REMOTE_ACK.load(Ordering::Acquire) {
+                1 => return true,
+                2 => {
+                    disarm_competing_hart();
+                    return false;
+                }
+                _ => {}
             }
-            _ => {}
+            core::hint::spin_loop();
         }
-        if crate::task::system_ticks().wrapping_sub(start_tick) >= 100 {
-            break;
-        }
-        core::hint::spin_loop();
+        let _ = hal::common::sbi::sbi_send_ipi(mask, base);
     }
     disarm_competing_hart();
     false
@@ -157,7 +159,6 @@ fn competing_hart_schedule_attempt(tid: usize) -> bool {
 fn competing_hart_schedule_attempt(_tid: usize) -> bool {
     false
 }
-
 
 pub(crate) fn observe_complete(sched: &crate::task::scheduler::Scheduler, tid: usize) {
     let Some(task) = sched.tasks.get(&tid) else {
@@ -175,8 +176,7 @@ pub(crate) fn observe_complete(sched: &crate::task::scheduler::Scheduler, tid: u
     }
     OBSERVE_AT.fetch_and(!expected, Ordering::AcqRel);
     let ap13 = 1u16 << code("AP-13");
-    let competing_hart_observed =
-        expected & ap13 == 0 || competing_hart_schedule_attempt(tid);
+    let competing_hart_observed = expected & ap13 == 0 || competing_hart_schedule_attempt(tid);
     let complete = competing_hart_observed
         && task.cell_id.0 != 0
         && task.kernel_stack.is_some()

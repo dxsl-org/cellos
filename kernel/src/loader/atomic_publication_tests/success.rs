@@ -41,7 +41,6 @@ fn observed_success(cases: &[&str], before: &StateSnapshot, tid: usize) -> bool 
         && after.measurements.0 == before.measurements.0 + 1
         && expected_evidence
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum GovernedSuccess {
     PreReady,
@@ -56,6 +55,7 @@ impl GovernedSuccess {
         }
     }
 
+    #[cfg(target_arch = "riscv64")]
     fn code(self) -> u8 {
         match self {
             Self::PreReady => GOVERNED_PRE_READY,
@@ -64,6 +64,7 @@ impl GovernedSuccess {
     }
 }
 
+#[cfg(target_arch = "riscv64")]
 fn arm_governed_success(case: GovernedSuccess) {
     assert!(
         GOVERNED_CASE
@@ -79,10 +80,12 @@ fn arm_governed_success(case: GovernedSuccess) {
     arm_observations(case.cases());
 }
 
+#[cfg(target_arch = "riscv64")]
 pub(super) fn arm_pre_ready_success() {
     arm_governed_success(GovernedSuccess::PreReady);
 }
 
+#[cfg(target_arch = "riscv64")]
 pub(super) fn arm_smp_success() {
     arm_governed_success(GovernedSuccess::Smp);
 }
@@ -119,6 +122,7 @@ pub(super) fn finish_governed_success(tid: usize) -> Option<(GovernedSuccess, bo
     Some((observed, passed))
 }
 
+#[cfg(target_arch = "riscv64")]
 pub(super) fn skip_smp_success() {
     assert_eq!(
         GOVERNED_CASE.swap(GOVERNED_IDLE, Ordering::AcqRel),
@@ -137,7 +141,10 @@ pub(super) fn arm_trusted_success() {
     );
     let before = snapshot();
     let mut pending = TRUSTED_PENDING.lock();
-    assert!(pending.is_none(), "trusted publication observation already armed");
+    assert!(
+        pending.is_none(),
+        "trusted publication observation already armed"
+    );
     *pending = Some(before);
     arm_observations(&["AP-15"]);
 }

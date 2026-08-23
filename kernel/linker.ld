@@ -15,11 +15,15 @@ SECTIONS
      * may drop it under release LTO and the kernel never boots.
      */
     .text : {
+        __domain_text_start = .;
         KEEP(*(.text.boot))
         *(.text .text.*)
+        . = ALIGN(4096);
+        __domain_text_end = .;
     } >ram
 
     .rodata : ALIGN(4096) {
+        __domain_readonly_start = .;
         *(.rodata .rodata.*)
         *(.srodata .srodata.*)
     } >ram
@@ -35,9 +39,12 @@ SECTIONS
         __rela_dyn_start = .;
         *(.rela .rela.*)
         __rela_dyn_end = .;
+        . = ALIGN(4096);
+        __domain_readonly_end = .;
     } >ram
 
     .data : ALIGN(4096) {
+        __domain_writable_start = .;
         . = ALIGN(16);
         __global_pointer$ = . + 0x800;
         *(.data .data.*)
@@ -66,6 +73,8 @@ SECTIONS
      * allocator could immediately reuse and overwrite it. */
     .got : ALIGN(4096) {
         *(.got .got.*)
+        . = ALIGN(4096);
+        __domain_writable_end = .;
     } >ram
     __kernel_end = .;
 
