@@ -6,8 +6,7 @@
     },
     Sending {
         target: usize,
-        msg_ptr: <a class="type" href="../../type.VAddr.html" title="type cellos_kernel::VAddr">VAddr</a>,
-        msg_len: usize,
+        delivery_id: u64,
     },
     Recv {
         mask: usize,
@@ -39,9 +38,10 @@
         irq: u8,
     },
 </details>}</code></pre><h2 id="variants" class="variants section-header">Variants<a href="#variants" class="anchor">§</a></h2><div class="variants"><section id="variant.Ready" class="variant"><a href="#variant.Ready" class="anchor">§</a><h3 class="code-header">Ready</h3></section><section id="variant.Running" class="variant"><a href="#variant.Running" class="anchor">§</a><h3 class="code-header">Running</h3></section><section id="variant.Sleeping" class="variant"><a href="#variant.Sleeping" class="anchor">§</a><h3 class="code-header">Sleeping</h3></section><div class="docblock"><p>Sleeping until a specific monotonic time (ticks/ms)</p>
-</div><div class="sub-variant" id="variant.Sleeping.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Sleeping.field.until" class="section-header"><a href="#variant.Sleeping.field.until" class="anchor field">§</a><code>until: usize</code></span></div></div><section id="variant.Sending" class="variant"><a href="#variant.Sending" class="anchor">§</a><h3 class="code-header">Sending</h3></section><div class="docblock"><p>Blocked waiting to send a message to <code>target_id</code>.
-Stores the message pointer and length temporarily.</p>
-</div><div class="sub-variant" id="variant.Sending.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Sending.field.target" class="section-header"><a href="#variant.Sending.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.Sending.field.msg_ptr" class="section-header"><a href="#variant.Sending.field.msg_ptr" class="anchor field">§</a><code>msg_ptr: <a class="type" href="../../type.VAddr.html" title="type cellos_kernel::VAddr">VAddr</a></code></span></div><div class="sub-variant-field"><span id="variant.Sending.field.msg_len" class="section-header"><a href="#variant.Sending.field.msg_len" class="anchor field">§</a><code>msg_len: usize</code></span></div></div><section id="variant.Recv" class="variant"><a href="#variant.Recv" class="anchor">§</a><h3 class="code-header">Recv</h3></section><div class="docblock"><p>Blocked waiting to receive a message.</p>
+</div><div class="sub-variant" id="variant.Sleeping.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Sleeping.field.until" class="section-header"><a href="#variant.Sleeping.field.until" class="anchor field">§</a><code>until: usize</code></span></div></div><section id="variant.Sending" class="variant"><a href="#variant.Sending" class="anchor">§</a><h3 class="code-header">Sending</h3></section><div class="docblock"><p>Blocked waiting for the receiver to consume the message published
+under <code>delivery_id</code>. The payload lives in the receiver’s kernel-owned
+mailbox; this variant holds only the delivery token.</p>
+</div><div class="sub-variant" id="variant.Sending.fields"><h4>Fields</h4><div class="sub-variant-field"><span id="variant.Sending.field.target" class="section-header"><a href="#variant.Sending.field.target" class="anchor field">§</a><code>target: usize</code></span></div><div class="sub-variant-field"><span id="variant.Sending.field.delivery_id" class="section-header"><a href="#variant.Sending.field.delivery_id" class="anchor field">§</a><code>delivery_id: u64</code></span></div></div><section id="variant.Recv" class="variant"><a href="#variant.Recv" class="anchor">§</a><h3 class="code-header">Recv</h3></section><div class="docblock"><p>Blocked waiting to receive a message.</p>
 <p><code>mask</code>: sender filter (0 = any sender).
 <code>deadline</code>: optional monotonic tick count after which the kernel wakes
 this task with <code>ViError::Timeout</code>.  <code>None</code> = wait indefinitely.</p>

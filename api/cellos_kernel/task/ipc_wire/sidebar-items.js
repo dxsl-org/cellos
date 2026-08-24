@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_IPC_WIRE_PAYLOAD"],"struct":["IpcWireHeader","IpcWireMessage"]};
