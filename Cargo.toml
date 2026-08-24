@@ -77,6 +77,7 @@ members = [
     "cells/drivers/wasm",
     "cells/drivers/imu-mpu6050",
     "cells/drivers/display-ssd1306",
+    "cells/drivers/bcm-display",
     
     # Cells - Services
     "cells/services/platform",
