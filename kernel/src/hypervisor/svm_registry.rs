@@ -259,6 +259,15 @@ pub fn run_vcpu_hal(owner: usize, vm_id: usize, vcpu_id: usize) -> ViResult<HalV
     }
     // SAFETY: SVM root operation is active (P01 latched has_x86_virt); IF=0.
     let exit = unsafe { vcpu.run() };
+    if matches!(exit, HalVmExit::Shutdown) {
+        let (rip, rflags, cr0) = vcpu.shutdown_diagnostics();
+        log::error!(
+            "[hv-x86] guest triple-fault: rip={:#x} rflags={:#x} cr0={:#x}",
+            rip,
+            rflags,
+            cr0
+        );
+    }
     if if_was_set {
         // SAFETY: restore the caller's interrupt-enable state.
         unsafe {

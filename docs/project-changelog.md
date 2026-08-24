@@ -2,6 +2,40 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-24] Tier 3 VM-boot lanes: ARM64 machinery verified, x86 boot blocked on TCG translation
+
+The "Boot Linux VM tối thiểu trên ARM64/x86" TODO item was worked to a clean
+evidence boundary on this host:
+
+- ARM64 machinery smoke PASS: `scripts/qemu-hypervisor-smoke.sh` (machinery
+  mode, `--features qemu-virt-1g` kernel) with the new `hypervisor-min` init
+  profile. Boot-to-shell remains KVM/hardware-gated by the documented TCG
+  address-size fault signature.
+- New `app-init` `hypervisor-min` feature: brings up only VFS + the hypervisor
+  cell (no host shell — its `sys_read(0)` loop races the hypervisor for guest
+  console keystrokes), selected via `HV_INIT_MIN=1` in both
+  `make-hypervisor-fs*.sh` scripts. This also sidesteps an unrelated full-
+  bring-up stall (init hangs spawning cells after config; see TODO) that
+  blocked all service spawns on this host.
+- x86 hv image now ships `/bin/shell` (host interactive console pre-GUI, per
+  user direction); the UART RX race remains a documented known limitation and
+  `hypervisor-min` still excludes the shell so VM gates run shell-less.
+- `fetch-alpine-x86.sh` now pins the versioned `netboot-3.21.7` directory
+  (Linux 6.12.81-0-virt — the artifact set recorded as booting in commit
+  `1827b8f3`) with fixed SHA256 defaults; the previous moving `netboot` URL
+  silently drifted across Alpine point releases. Also fixed `python` → probed
+  `python3` interpreter selection in `make-hypervisor-fs.sh` /
+  `format-disk-hv-arm.sh`.
+- New `scripts/qemu-hypervisor-smoke-x86.sh` (machinery/boot modes) and SVM
+  triple-fault diagnostics (`SvmVcpu::shutdown_diagnostics`, logged as
+  `[hv-x86] guest triple-fault: rip=… rflags=… cr0=…`).
+
+x86 guest boot itself is BLOCKED on this host: registered as
+`CELLOS-HV-X86-TCG-001` in [open-risk-register.md](roadmap/open-risk-register.md)
+(High). Guest RAM content is correct cell-side; the vCPU fetches zeros at the
+entry GPA under QEMU-TCG 8.2.2, deterministic across CPU models and both pinned
+Alpine artifact sets. No x86 guest-boot PASS is claimed from this host.
+
 ## [2026-08-24] Cell signature envelope covers the final ELF container (ADR-0004)
 
 `CELLOS-LOADER-SIG-001`'s unauthenticated-metadata exposure is closed and the

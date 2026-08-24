@@ -40,20 +40,24 @@ fi
 
 # ── Step 2: Build x86 cells as PIE ──────────────────────────────────────────
 echo "[make-hv-x86] Building x86 cells (service-hypervisor + core cells)..."
+INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min}"
 RUSTFLAGS="-C relocation-model=pic" cargo build --release \
     --target "$TARGET" \
     -Z build-std=core,alloc \
-    -p app-init -p service-vfs -p service-config \
+    $INIT_FEATURES \
+    -p app-init -p app-shell -p service-vfs -p service-config \
     -p service-net -p service-hypervisor
 
 # ── Step 3: Assemble kernel_fs.img ──────────────────────────────────────────
 mkdir -p "$EMBEDDED_HV"
-# NO /bin/shell in this image: the kernel UART RX ring (sys_read fd 0) is a
-# shared stream, and the shell's read_line loop would race the hypervisor for
-# keystrokes destined for the guest console. Init tolerates the absence
-# ("shell spawn failed") — the Linux guest's /bin/sh IS the console here.
+# /bin/shell IS included (host interactive console before any GUI exists), with a
+# known limitation: the kernel UART RX ring (sys_read fd 0) is a shared stream, so
+# while a host shell session is reading, it races the hypervisor for keystrokes
+# destined for the guest console. The hypervisor-min init profile (HV_INIT_MIN=1)
+# skips the host shell entirely — VM smoke gates run shell-less so the guest's
+# `/ #` is the only console.
 MKFAT_ARGS=()
-for cell in init vfs config; do
+for cell in init vfs config shell; do
     src="$BIN_DIR/app-$cell"
     [[ ! -f "$src" ]] && src="$BIN_DIR/service-$cell"
     if [[ -f "$src" ]]; then

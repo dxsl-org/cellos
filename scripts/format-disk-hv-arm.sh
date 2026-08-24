@@ -100,7 +100,14 @@ fi
 MKFAT_ARGS+=("$HOSTNAME_TMP" "etc/hostname")
 
 echo "[format-disk-hv] Creating $OUT with tools/mkfat32.py..."
-PYTHON_BIN="${PYTHON_BIN:-python}"
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    else
+        PYTHON_BIN=python
+    fi
+fi
 "$PYTHON_BIN" tools/mkfat32.py "$OUT" "${MKFAT_ARGS[@]}"
 
 rm -f "$HOSTNAME_TMP"

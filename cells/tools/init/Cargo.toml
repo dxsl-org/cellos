@@ -14,6 +14,9 @@ default = []
 # When enabled, init spawns /bin/vfs-test after the main service stack is up.
 # Only used in CI test-hooks kernel builds — never in production.
 test-hooks = []
+# When enabled, init brings up only VFS + shell + hypervisor — the Tier-3 VM
+# boot profile used by the hypervisor filesystem images and smoke lanes.
+hypervisor-min = []
 
 [build-dependencies]
 cell-build = { path = "../../../libs/cell-build", version = "0.2.0" }

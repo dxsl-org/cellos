@@ -9,12 +9,12 @@
 use hal_hypervisor::ViVmExit;
 
 use super::vmcb::{
-    VmcbView, EFER_SVME, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1, OFF_EXITINFO2, OFF_INT_SHADOW,
-    OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
+    VmcbView, EFER_SVME, OFF_CR0, OFF_EVENTINJ, OFF_EXITCODE, OFF_EXITINFO1, OFF_EXITINFO2,
+    OFF_INT_SHADOW, OFF_NRIP, OFF_RAX, OFF_RFLAGS, OFF_RIP,
 };
 use super::vmexit_decode::{
     decode, VMEXIT_CPUID, VMEXIT_HLT, VMEXIT_INTR, VMEXIT_INVALID, VMEXIT_IOIO, VMEXIT_MSR,
-    VMEXIT_NPF, VMEXIT_PAUSE, VMEXIT_VMMCALL,
+    VMEXIT_NPF, VMEXIT_PAUSE, VMEXIT_SHUTDOWN, VMEXIT_VMMCALL,
 };
 use super::world_switch::svm_vmrun;
 
@@ -155,6 +155,15 @@ impl SvmVcpu {
     /// Reset the guest program counter (for the register-isolation smoke loop).
     pub fn set_rip(&mut self, rip: u64) {
         self.vmcb.w64(OFF_RIP, rip);
+    }
+
+    /// `(rip, rflags, cr0)` snapshot for triple-fault diagnostics.
+    pub fn shutdown_diagnostics(&self) -> (u64, u64, u64) {
+        (
+            self.vmcb.r64(OFF_RIP),
+            self.vmcb.r64(OFF_RFLAGS),
+            self.vmcb.r64(OFF_CR0),
+        )
     }
 
     /// Queue a maskable external interrupt for delivery on the next `VMRUN`.
@@ -327,6 +336,11 @@ impl SvmVcpu {
                 }
                 VMEXIT_NPF => {
                     return decode(code, info1, info2, self.gpr[0], self.gpr[1], self.gpr[2]);
+                }
+                VMEXIT_SHUTDOWN => {
+                    // Triple fault inside the guest: surface immediately so the
+                    // registry can snapshot the VMCB for diagnostics.
+                    return ViVmExit::Shutdown;
                 }
                 VMEXIT_INVALID => {
                     return ViVmExit::Unknown {

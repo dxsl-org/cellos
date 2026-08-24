@@ -81,8 +81,22 @@ fn cell_main() {
     // They are spawned after periph-demo in the unsupervised section below so
     // that periph-demo can complete its GPIO IRQ self-test before robot-demo
     // claims the PL061 MMIO region.
+    #[cfg(feature = "hypervisor-min")]
+    const NSVC: usize = 1;
+    #[cfg(not(feature = "hypervisor-min"))]
     const NSVC: usize = 10;
+    // Unused by the hypervisor-min table below (no shell row there).
+    #[cfg(not(feature = "hypervisor-min"))]
     const SHELL_INDEX: usize = NSVC - 1;
+    // hypervisor-min: Tier-3 VM boot profile — VFS only. The hypervisor cell reads
+    // the guest kernel/initramfs through VFS. No host shell row: the host shell's
+    // sys_read(0) loop races the hypervisor for guest-console keystrokes, so the
+    // guest's own `/ #` is the only shell this profile brings up. Drivers and
+    // optional cells are likewise skipped so the VM gate does not depend on the
+    // full robot bring-up or on binaries absent from a given filesystem image.
+    #[cfg(feature = "hypervisor-min")]
+    let paths: [&str; NSVC] = ["/bin/vfs"];
+    #[cfg(not(feature = "hypervisor-min"))]
     let paths: [&str; NSVC] = [
         "/bin/vfs",
         "/bin/config",
@@ -100,6 +114,9 @@ fn cell_main() {
     // Well-known service ID per path (None = not a looked-up service, e.g. shell).
     // The supervisor registers each service's CURRENT tid here so clients resolve it
     // via sys_lookup_service and reconnect transparently across a respawn.
+    #[cfg(feature = "hypervisor-min")]
+    let svc_ids: [Option<u16>; NSVC] = [Some(service::VFS)];
+    #[cfg(not(feature = "hypervisor-min"))]
     let svc_ids: [Option<u16>; NSVC] = [
         Some(service::VFS),
         Some(service::CONFIG),
@@ -116,6 +133,9 @@ fn cell_main() {
     // Restart policy per service. All current services are Permanent (a robot must keep
     // them up); the machinery supports Transient (restart only on abnormal exit) and
     // Temporary (never restart) for future one-shot/optional cells.
+    #[cfg(feature = "hypervisor-min")]
+    let policy: [Policy; NSVC] = [Policy::Permanent];
+    #[cfg(not(feature = "hypervisor-min"))]
     let policy: [Policy; NSVC] = [
         Policy::Permanent, // vfs
         Policy::Permanent, // config
@@ -140,13 +160,16 @@ fn cell_main() {
     // mount), so the winning Block Cell MUST register before VFS spawns — wait
     // (bounded) for it here. Each cell exits cleanly when its device is absent,
     // so spawning both costs nothing on either platform.
-    let _ = sys_spawn_from_path("/bin/block");
-    let _ = sys_spawn_from_path("/bin/nvme");
-    for _ in 0..400 {
-        if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
-            break;
+    #[cfg(not(feature = "hypervisor-min"))]
+    {
+        let _ = sys_spawn_from_path("/bin/block");
+        let _ = sys_spawn_from_path("/bin/nvme");
+        for _ in 0..400 {
+            if sys_lookup_service(service::BLOCK_DRIVER).is_some() {
+                break;
+            }
+            ostd::task::yield_now();
         }
-        ostd::task::yield_now();
     }
 
     for i in 0..NSVC {
@@ -230,6 +253,7 @@ fn cell_main() {
     // ── Optional system services (auto-start when binary is present) ──────────
     // fb-console: mirrors kernel user-log to HDMI display (background surface).
     // Spawned after compositor is up (index 4 in the supervised list).
+    #[cfg(not(feature = "hypervisor-min"))]
     let _ = sys_spawn_from_path("/bin/fb-console");
 
     // Hypervisor: AArch64 + virtualization=on kernel builds only. Keep a death
@@ -247,9 +271,12 @@ fn cell_main() {
     // ── CI / test-image-only cells (not present in normal disk images) ────────
     // bench is intentionally NOT auto-started — run '/bin/bench' from the shell.
     // Auto-spawning floods the terminal for ~270 s and obscures the shell prompt.
-    let _ = sys_spawn_from_path("/bin/silo-test"); // Security Silo end-to-end tests
-    let _ = sys_spawn_from_path("/bin/vfs-test"); // VFS integration test suite
-    let _ = sys_spawn_from_path("/bin/srv-test"); // RedoxFS /srv integration suite
+    #[cfg(not(feature = "hypervisor-min"))]
+    {
+        let _ = sys_spawn_from_path("/bin/silo-test"); // Security Silo end-to-end tests
+        let _ = sys_spawn_from_path("/bin/vfs-test"); // VFS integration test suite
+        let _ = sys_spawn_from_path("/bin/srv-test"); // RedoxFS /srv integration suite
+    }
 
     // ── Demos: all run on-demand from the shell ───────────────────────────────
     // Philosophy: demos should not pollute boot output or steal focus.
@@ -264,13 +291,16 @@ fn cell_main() {
     // On the shared UART console whoever prints last "owns" the bottom line; if the
     // shell spawned during service bring-up its prompt would be buried under
     // "Init:"/loader/"[net]" messages and look like a dead shell.
-    if paths[SHELL_INDEX] != "/bin/shell" {
-        println("Init: invalid service table — shell must remain last.");
-        return;
-    }
-    match sys_spawn_from_path(paths[SHELL_INDEX]) {
-        SyscallResult::Ok(tid) => tids[SHELL_INDEX] = Some(tid),
-        _ => println("Init: shell spawn failed."),
+    #[cfg(not(feature = "hypervisor-min"))]
+    {
+        if paths[SHELL_INDEX] != "/bin/shell" {
+            println("Init: invalid service table — shell must remain last.");
+            return;
+        }
+        match sys_spawn_from_path(paths[SHELL_INDEX]) {
+            SyscallResult::Ok(tid) => tids[SHELL_INDEX] = Some(tid),
+            _ => println("Init: shell spawn failed."),
+        }
     }
 
     // Register a death notification for every live service. A single recv loop

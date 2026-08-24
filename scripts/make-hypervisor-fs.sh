@@ -66,8 +66,10 @@ if [[ -z "${LIBCLANG_PATH:-}" ]]; then
     [[ -f "$VS_LLVM/libclang.dll" ]] && export LIBCLANG_PATH="$VS_LLVM"
 fi
 echo "[make-hv-fs] Building aarch64 cells (service-hypervisor + core cells)..."
+INIT_FEATURES="${HV_INIT_MIN:+--features app-init/hypervisor-min}"
 cargo build --release \
     --target "$TARGET" \
+    $INIT_FEATURES \
     -p app-init -p app-shell -p service-vfs -p service-config \
     -p service-net -p service-input -p service-compositor -p supervisor \
     -p driver-virtio-gpu -p service-hypervisor
@@ -142,7 +144,14 @@ MKFAT_ARGS+=("$VMLINUZ" "vmlinuz")
 echo "  /initrd.gz <- $INITRD ($(du -sh "$INITRD" | cut -f1))"
 MKFAT_ARGS+=("$INITRD" "initrd.gz")
 
-PYTHON_BIN="${PYTHON_BIN:-python}"
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    else
+        PYTHON_BIN=python
+    fi
+fi
 
 # Signed operator policy. Without /POLICY.BIN the kernel takes the `Absent` branch,
 # which is dev-permissive: the whole policy layer runs and changes nothing. Destination

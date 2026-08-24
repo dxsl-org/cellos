@@ -15,12 +15,14 @@
 
 set -euo pipefail
 
-ALPINE_VERSION="${ALPINE_VERSION:-3.21.3}"
+ALPINE_VERSION="${ALPINE_VERSION:-3.21.7}"
 DEST="${1:-.alpine-cache-x86}"
-CDN="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION%.*}/releases/x86_64/netboot"
+CDN="https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_VERSION%.*}/releases/x86_64/netboot-${ALPINE_VERSION}"
 
-VMLINUZ_SHA256="${VMLINUZ_SHA256:-UPDATE_ME_FROM_SHA256SUMS}"
-INITRD_SHA256="${INITRD_SHA256:-UPDATE_ME_FROM_SHA256SUMS}"
+# 6.12.81-0-virt — the artifact set recorded as booting under the SVM lane
+# (commit 1827b8f3); 3.21.3's 6.12.13 triple-faults early in PVH entry.
+VMLINUZ_SHA256="${VMLINUZ_SHA256:-26bf81ada3e8fc30fd4d81805fe6c8c60be5c7fb18a43563c707e49117e624ca}"
+INITRD_SHA256="${INITRD_SHA256:-e2562e019a506f9bdac24d06953823106a2ab29da50eea01185d005a3ca4acdf}"
 
 mkdir -p "$DEST"
 
