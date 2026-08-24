@@ -2,15 +2,14 @@
 //!
 //! The kernel holds only a public key (fleet trust anchor). Cell binaries are
 //! signed offline with the corresponding private key and carry the 64-byte
-//! signature in an `__ViCell_sig` ELF section (non-loadable, not in any PT_LOAD).
+//! signature in an `__ViCell_sig` ELF section.
 //!
-//! Canonical signed payload:
-//!   1. PT_LOAD segments sorted by (p_offset, p_filesz, phdr_index) — execution content
-//!   2. `__ViCell_manifest` section bytes — capability claims (signed even if outside PT_LOAD)
-//!
-//! The ELF header is NOT included: `objcopy --add-section` mutates `e_shnum`/`e_shoff` when
-//! embedding `__ViCell_sig`, so including the header would break verification. PT_LOAD covers
-//! all executable code; the manifest covers all capability claims.
+//! Canonical signed payload: every byte of the final ELF container except the
+//! 64 signature bytes themselves. The signature section header remains covered,
+//! so section names, offsets, types, flags, links, relocation metadata, ELF
+//! headers, program headers, and all load-affecting payload bytes are immutable.
+//! The signer first adds a zero-filled signature section, signs that stable
+//! container, then replaces only those excluded bytes.
 //!
 //! Verify-only: the kernel never signs (private key lives offline).
 
@@ -41,78 +40,68 @@ pub const fn signing_required() -> bool {
 
 /// Extract the 64-byte Ed25519 signature from the `__ViCell_sig` ELF section.
 ///
-/// Returns `None` if the section is absent or not exactly 64 bytes.
+/// Returns `None` unless exactly one in-bounds signature section has 64 bytes.
 pub fn extract_sig(elf_bytes: &[u8]) -> Option<[u8; 64]> {
-    use crate::loader::ElfParser;
-    let raw = crate::loader::ElfLoader
-        .get_section(elf_bytes, "__ViCell_sig")
-        .ok()?;
-    if raw.len() != 64 {
+    let (offset, size) = signature_range(elf_bytes)?;
+    if size != 64 {
         return None;
     }
     let mut sig = [0u8; 64];
-    sig.copy_from_slice(raw);
+    sig.copy_from_slice(&elf_bytes[offset..offset + size]);
     Some(sig)
 }
 
 /// Verify the Ed25519 signature of a cell ELF binary.
 ///
 /// Returns `false` on any malformed input, missing section, or signature
-/// mismatch — never panics. Canonically covers the ELF header, all PT_LOAD
-/// segments, and the `__ViCell_manifest` section.
+/// mismatch — never panics. The signature covers every final ELF byte except
+/// its own 64-byte payload, including all relocation section headers and data.
 pub fn verify_cell(elf_bytes: &[u8], sig: &[u8; 64]) -> bool {
     verify_cell_with_key(elf_bytes, sig, &CELL_SIGNER_PUBKEY)
+}
+
+/// Locate the single file-backed fixed-size signature payload with the bounded
+/// ELF parser. Returning its byte range lets verification cover the table
+/// itself without creating a signature recursion.
+fn signature_range(elf_bytes: &[u8]) -> Option<(usize, usize)> {
+    const SHT_PROGBITS: u64 = 1;
+
+    let elf = crate::loader::elf_section::ElfSections::parse(elf_bytes)?;
+    let names = elf.names()?;
+    let mut signature = None;
+    for index in 0..elf.count() {
+        let section = elf.section(index)?;
+        if elf.name(names, section)? != b"__ViCell_sig" {
+            continue;
+        }
+        // Only a file-backed, ordinary data section can carry the excluded
+        // bytes. Every other section's metadata stays inside the signed input.
+        if signature.is_some() || section.kind != SHT_PROGBITS || section.size != 64 {
+            return None;
+        }
+        elf.bytes(section)?;
+        signature = Some((section.offset, section.size));
+    }
+    signature
 }
 
 /// Inner implementation; accepts an explicit key so `self_test` can use
 /// the precomputed test key without touching `CELL_SIGNER_PUBKEY`.
 fn verify_cell_with_key(elf_bytes: &[u8], sig: &[u8; 64], pubkey: &[u8; 32]) -> bool {
-    use xmas_elf::program::Type;
-    use xmas_elf::ElfFile;
-
-    let elf = match ElfFile::new(elf_bytes) {
-        Ok(e) => e,
-        Err(_) => return false,
+    let (signature_offset, signature_size) = match signature_range(elf_bytes) {
+        Some(range @ (_, 64)) => range,
+        _ => return false,
     };
-
-    // Build the signed payload.
-    let mut payload: Vec<u8> = Vec::new();
-
-    // 1. PT_LOAD segments — sort by (p_offset, p_filesz, phdr_index) for a
-    //    deterministic total order even when two segments share an offset.
-    let mut segments: Vec<(u64, u64, usize)> = elf
-        .program_iter()
-        .enumerate()
-        .filter_map(|(i, ph)| {
-            if ph.get_type() == Ok(Type::Load) && ph.file_size() > 0 {
-                Some((ph.offset(), ph.file_size(), i))
-            } else {
-                None
-            }
-        })
-        .collect();
-    segments.sort_by_key(|&(off, fsz, idx)| (off, fsz, idx));
-
-    for (offset, filesz, _) in &segments {
-        let start = *offset as usize;
-        let end = match start.checked_add(*filesz as usize) {
-            Some(e) if e <= elf_bytes.len() => e,
-            _ => return false, // out-of-bounds PT_LOAD — malformed ELF
-        };
-        payload.extend_from_slice(&elf_bytes[start..end]);
+    if extract_sig(elf_bytes).as_ref() != Some(sig) {
+        return false;
     }
 
-    // 2. __ViCell_manifest section — capability claims. Explicitly included
-    //    because the manifest may fall outside PT_LOAD in some linker layouts.
-    //    A missing manifest means the cell declares no capabilities; we include
-    //    an empty slice (nothing to absorb) so manifest-less cells are signable.
-    if let Ok(manifest) = {
-        use crate::loader::ElfParser;
-        crate::loader::ElfLoader.get_section(elf_bytes, "__ViCell_manifest")
-    } {
-        payload.extend_from_slice(manifest);
-    }
-
+    // The signature section itself is the only excluded interval. Its header
+    // and placement stay in the signed byte stream, so no parser-selected
+    // relocation data can move outside authenticated bytes.
+    let mut payload = Vec::with_capacity(elf_bytes.len() - signature_size);
+    payload.extend_from_slice(&elf_bytes[..signature_offset]);
+    payload.extend_from_slice(&elf_bytes[signature_offset + signature_size..]);
     crate::ed25519::verify(pubkey, &payload, sig)
 }
 

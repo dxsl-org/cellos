@@ -96,7 +96,7 @@ pub fn prepare_elf_task(
 
     if load_base != 0 {
         if let Ok(rela) = loader.get_section(elf_data, ".rela.dyn") {
-            crate::loader::reloc::apply_relocations(load_base, rela)?;
+            crate::loader::reloc::apply_relocations(load_base, &seg_pages, rela)?;
         }
     }
     crate::loader::atomic_checkpoint("AP-03")?;

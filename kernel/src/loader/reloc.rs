@@ -53,15 +53,20 @@ impl Rela64 {
 
 /// Apply all relocations in the `.rela.dyn` section of an already-mapped ELF.
 ///
-/// `base` is the load base chosen by the kernel.  For cells compiled at a fixed
-/// VA (non-PIE linker script), `base == 0` and this function is a no-op beyond
-/// bounds checks.  For PIE cells (base-address randomisation or known-base
-/// placement), this patches every `R_RISCV_RELATIVE` entry.
+/// `base` is the load base chosen by the kernel. `owned_pages` is the exact
+/// page set allocated for the new Cell; every word-sized write must stay within
+/// one of those pages. For fixed-VA cells (non-PIE linker script), `base == 0`
+/// and this function is a no-op beyond bounds checks.
 ///
 /// # Errors
-/// Returns `ViError::InvalidInput` on malformed or oversized relocation tables.
+/// Returns `ViError::InvalidInput` on malformed or oversized relocation tables,
+/// wrapping arithmetic, or a target outside the new Cell's owned pages.
 /// Returns `ViError::NotSupported` if an unsupported relocation type is found.
-pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
+pub fn apply_relocations(
+    base: VAddr,
+    owned_pages: &[crate::loader::elf::LoadedPage],
+    rela_section: &[u8],
+) -> ViResult<()> {
     let entry_size = core::mem::size_of::<Rela64>();
     if !rela_section.len().is_multiple_of(entry_size) {
         log::error!(
@@ -91,12 +96,14 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
             core::ptr::read_unaligned(rela_section.as_ptr().add(offset) as *const Rela64)
         };
 
-        // Shared helper: applies the base+addend formula used by all
-        // *_RELATIVE types across every supported architecture.
         macro_rules! apply_relative {
-            ($label:literal) => {{
-                let patch_va = base.wrapping_add(entry.offset as usize);
-                let value = base.wrapping_add(entry.addend as usize);
+            () => {{
+                let (patch_va, value) = crate::loader::reloc_target::relative_word(
+                    base,
+                    entry.offset,
+                    entry.addend,
+                    owned_pages,
+                )?;
 
                 // On AArch64 non-VHE (EL2 kernel), AP[1]=1 in the EL2 stage-1 PTE
                 // means the page is read-only from EL2 — the same bit that grants EL0
@@ -106,15 +113,14 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
                 #[cfg(target_arch = "aarch64")]
                 let write_ptr: *mut usize = {
                     let phys = crate::memory::paging::virt_to_phys(patch_va)
-                        .expect("apply_relocations: relocation target VA not mapped");
-                    // phys includes the in-page offset (translate returns full PA).
+                        .expect("apply_relocations: owned relocation target unmapped");
                     crate::memory::frame::phys_to_virt(phys) as *mut usize
                 };
                 #[cfg(not(target_arch = "aarch64"))]
-                // SAFETY: patch_va is within the cell's mapped pages (SAS);
-                // SSTATUS.SUM=1 lets S-mode write to U-mode pages on RISC-V.
                 let write_ptr: *mut usize = patch_va as *mut usize;
 
+                // SAFETY: `relative_word` proved the full machine word remains
+                // inside one page mapped exclusively for this new Cell.
                 unsafe { write_ptr.write_unaligned(value) };
             }};
         }
@@ -128,7 +134,7 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
 
             // ── RISC-V ────────────────────────────────────────────────────────
             riscv_reloc_type::R_RISCV_RELATIVE => {
-                apply_relative!("R_RISCV_RELATIVE");
+                apply_relative!();
             }
             riscv_reloc_type::R_RISCV_64 => {
                 // R_RISCV_64 with sym_index == 0 is an absolute-address fixup;
@@ -141,17 +147,17 @@ pub fn apply_relocations(base: VAddr, rela_section: &[u8]) -> ViResult<()> {
                     );
                     return Err(ViError::NotSupported);
                 }
-                apply_relative!("R_RISCV_64");
+                apply_relative!();
             }
 
             // ── AArch64 ───────────────────────────────────────────────────────
             aarch64_reloc_type::R_AARCH64_RELATIVE => {
-                apply_relative!("R_AARCH64_RELATIVE");
+                apply_relative!();
             }
 
             // ── x86-64 ────────────────────────────────────────────────────────
             x86_64_reloc_type::R_X86_64_RELATIVE => {
-                apply_relative!("R_X86_64_RELATIVE");
+                apply_relative!();
             }
 
             other => {

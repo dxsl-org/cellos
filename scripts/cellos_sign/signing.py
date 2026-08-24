@@ -74,9 +74,9 @@ def sign_and_verify(
 ) -> None:
     """Sign each ELF in place, then re-verify it.
 
-    Verifying separately is not redundant: objcopy can exit 0 having produced a
-    layout the kernel's payload rules reject (the ELF header is deliberately
-    outside the signed bytes), so a successful embed is not a valid signature.
+    The signer first creates a final, zero-signature ELF layout. Only then can
+    it sign the canonical payload and replace the excluded signature bytes;
+    successful objcopy alone never proves the kernel-compatible result.
     """
     guard_prod_key(seed_hex)
     signer = load_signer(repo)
@@ -93,10 +93,11 @@ def sign_and_verify(
     for target in targets:
         if not target.is_file():
             raise SigningRefused(f"cannot sign missing binary: {target}")
-        payload = signer._pt_load_payload(target.read_bytes())
-        signature = priv.sign(payload)
-        signer._embed_sig(str(target), signature, str(target) + ".signed", objcopy)
-        os.replace(str(target) + ".signed", str(target))
+        temporary = Path(str(target) + ".signed")
+        signer._add_signature_placeholder(str(target), str(temporary), objcopy)
+        signature = priv.sign(signer._signed_payload(temporary.read_bytes()))
+        signer._write_signature(str(temporary), signature)
+        os.replace(temporary, target)
         _verify(signer, target, pub)
 
 
@@ -105,15 +106,17 @@ def _verify(signer: ModuleType, target: Path, pub: bytes) -> None:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
     elf = target.read_bytes()
-    payload = signer._pt_load_payload(elf)
-    bits = 64 if elf[4] == 2 else 32
-    if bits == 64:
-        header = (signer._read_u64le(elf, 40), signer._read_u16le(elf, 58),
-                  signer._read_u16le(elf, 60), signer._read_u16le(elf, 62))
-    else:
-        header = (signer._read_u32le(elf, 32), signer._read_u16le(elf, 46),
-                  signer._read_u16le(elf, 48), signer._read_u16le(elf, 50))
-    sig = signer._find_section(elf, signer.SIG_SECTION, *header, bits)
+    payload = signer._signed_payload(elf)
+    bits, e_shoff, e_shentsize, e_shnum, e_shstrndx = signer._section_table(elf)
+    sig = signer._find_section(
+        elf,
+        signer.SIG_SECTION,
+        e_shoff,
+        e_shentsize,
+        e_shnum,
+        e_shstrndx,
+        bits,
+    )
     if sig is None or len(sig) != 64:
         raise SigningRefused(f"{target}: no valid {signer.SIG_SECTION} section after signing")
     try:

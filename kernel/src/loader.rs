@@ -17,6 +17,7 @@ pub mod boot_ceiling;
 pub mod disk_layout;
 pub mod early;
 pub mod elf;
+pub(crate) mod elf_section;
 pub mod elf_tests;
 mod governed_spawn;
 pub mod launch_profile;
@@ -24,6 +25,7 @@ mod manifest_section;
 mod manifest_section_tests;
 /// Admission of caller-supplied in-memory ELF images (`Syscall::SpawnFromMem`).
 pub mod mem_spawn_gate;
+mod reloc_target;
 pub mod reloc;
 mod spawn_request;
 pub use spawn_request::SpawnRequest;

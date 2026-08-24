@@ -45,4 +45,5 @@ pub(crate) use range::{CopyError, CopyView, UserReadSlice, UserWriteSlice};
 pub(crate) use sv39_probe::{current_satp_root, sv39_leaf};
 #[cfg(feature = "test-hooks")]
 pub(crate) use guard::forced_guard_fault_recovers_for_test;
+#[cfg(feature = "test-hooks")]
 pub(crate) use sv39_probe::stage_domain_for_test;

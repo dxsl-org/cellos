@@ -1,6 +1,6 @@
 # Open Risk Register
 
-**Last updated**: 2026-08-22
+**Last updated**: 2026-08-24
 
 This register tracks confirmed production-readiness gaps found while syncing
 docs to code. It is not a bug-fix plan.
@@ -13,16 +13,15 @@ docs to code. It is not a bug-fix plan.
   to the caller. Another network-capable Cell can therefore guess or reuse a
   live cap and operate on a peer's socket.
 - **`CELLOS-LOADER-SIG-001` — Critical, owner: Phase 03
-  provenance/signature boundary.** The current Cell signature envelope does not
-  authenticate all load-affecting ELF section metadata or relocation records.
-  An attacker can redirect `.rela.dyn` to appended data and reach the loader's
-  unchecked wrapping relocation write (`scripts/sign-cell.py:8-14`,
-  `kernel/src/signing.rs:85-119`, `kernel/src/task.rs:1137-1146`,
-  `kernel/src/loader/reloc.rs:83-127`). Manifest-v2 range checking does not
-  authenticate those bytes. This pre-existed Phase 05 and does not invalidate
-  its tri-state/tooling acceptance, but it blocks production loader readiness
-  until the signed envelope covers every load-affecting input and relocation
-  writes are confined to writable pages owned by the new Cell.
+  provenance/signature boundary.** ADR-0004 binds every final ELF byte except
+  the 64-byte `__ViCell_sig` payload, so post-sign mutation of section metadata
+  or `.rela.dyn` invalidates the signature. Relocation writes are confined to
+  pages owned by the new Cell: `apply_relocations` receives the `LoadedPage`
+  set and rejects any word-sized write not wholly inside one owned page
+  (`kernel/src/loader/reloc.rs`, `kernel/src/loader/reloc_target.rs`). The
+  finding remains open because fleet key provisioning, the production
+  provenance/signature gate, and `signing-required` enforcement are still
+  unfinished; development builds still admit unsigned cells by default.
 - **`CELLOS-RUSTSTD-PTR-004` — Critical, owner: later authorized
   PAL/target/runtime implementation child with the kernel syscall-security and
   Rust `std`/PAL owners.** `GetRandom` currently constructs a mutable slice

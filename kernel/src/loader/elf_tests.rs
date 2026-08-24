@@ -30,6 +30,10 @@ pub fn run_all() {
     test_reloc_unsupported_type_rejected();
     test_reloc_none_type_noop();
     test_reloc_relative_patches_memory();
+    test_reloc_target_outside_owned_pages_rejected();
+    test_reloc_target_hole_rejected();
+    test_reloc_target_cross_page_rejected();
+    test_reloc_target_overflow_rejected();
     test_manifest_size_is_16();
     test_manifest_parsing_valid();
     test_manifest_v1_upcast();
@@ -49,6 +53,8 @@ pub fn run_all() {
     test_signing_extract_sig_none_for_empty_slice();
     test_signing_extract_sig_none_for_non_elf();
     test_signing_extract_sig_some_from_constructed_elf();
+    test_signing_extract_sig_some_with_non_utf8_unrelated_section_name();
+    test_signing_extract_sig_none_for_nobits_signature();
     test_signing_required_flag_off_in_dev_build();
     // W^X post-relocation flag derivation.
     super::wx::run_self_tests();
@@ -218,7 +224,7 @@ fn make_rela(offset: u64, r_type: u32, addend: i64) -> [u8; 24] {
 }
 
 fn test_reloc_empty_section_ok() {
-    let res = crate::loader::reloc::apply_relocations(0, &[]);
+    let res = crate::loader::reloc::apply_relocations(0, &[], &[]);
     assert!(res.is_ok(), "empty section should succeed: {:?}", res);
     log::info!("  [ok] empty .rela.dyn → Ok");
 }
@@ -226,7 +232,7 @@ fn test_reloc_empty_section_ok() {
 fn test_reloc_non_multiple_size_rejected() {
     // 7 bytes is not a multiple of 24 (sizeof Rela64).
     let bad = [0u8; 7];
-    let res = crate::loader::reloc::apply_relocations(0, &bad);
+    let res = crate::loader::reloc::apply_relocations(0, &[], &bad);
     assert_eq!(
         res,
         Err(ViError::InvalidInput),
@@ -239,7 +245,7 @@ fn test_reloc_too_many_entries_rejected() {
     // 65_537 * 24 bytes > MAX_RELA_ENTRIES limit.
     const OVER_LIMIT: usize = 65_537;
     let big = alloc::vec![0u8; OVER_LIMIT * 24];
-    let res = crate::loader::reloc::apply_relocations(0, &big);
+    let res = crate::loader::reloc::apply_relocations(0, &[], &big);
     assert_eq!(
         res,
         Err(ViError::InvalidInput),
@@ -251,7 +257,7 @@ fn test_reloc_too_many_entries_rejected() {
 fn test_reloc_unsupported_type_rejected() {
     // Type 0xFF is not a recognised RISC-V relocation.
     let entry = make_rela(0, 0xFF, 0);
-    let res = crate::loader::reloc::apply_relocations(0, &entry);
+    let res = crate::loader::reloc::apply_relocations(0, &[], &entry);
     assert_eq!(
         res,
         Err(ViError::NotSupported),
@@ -263,33 +269,79 @@ fn test_reloc_unsupported_type_rejected() {
 fn test_reloc_none_type_noop() {
     // R_RISCV_NONE (type=0) must be silently skipped.
     let entry = make_rela(0, 0, 0); // type=0
-    let res = crate::loader::reloc::apply_relocations(0, &entry);
+    let res = crate::loader::reloc::apply_relocations(0, &[], &entry);
     assert!(res.is_ok(), "R_RISCV_NONE should be a no-op: {:?}", res);
     log::info!("  [ok] R_RISCV_NONE → no-op, Ok");
 }
 
-fn test_reloc_relative_patches_memory() {
-    // Allocate a writable buffer; use its address as `base`.
-    // Create R_RISCV_RELATIVE (type=3): offset=0, addend=0x400.
-    // Expected result: *(base + 0) = base + 0x400.
-    let mut buf = alloc::vec![0u8; 64];
-    let base = buf.as_mut_ptr() as usize;
+fn owned_relocation_page(va: usize) -> crate::loader::elf::LoadedPage {
+    crate::loader::elf::LoadedPage {
+        va,
+        frame: 0,
+        final_flags: crate::memory::paging::Flags::from_bits(0),
+    }
+}
 
-    let entry = make_rela(0, 3, 0x400_i64); // R_RISCV_RELATIVE
-    let res = crate::loader::reloc::apply_relocations(base, &entry);
+fn test_reloc_relative_patches_memory() {
+    let mut storage = alloc::vec![0u8; crate::memory::paging::PAGE_SIZE * 2];
+    let base = (storage.as_mut_ptr() as usize + crate::memory::paging::PAGE_SIZE - 1)
+        & !(crate::memory::paging::PAGE_SIZE - 1);
+    let owned = [owned_relocation_page(base)];
+    let entry = make_rela(0, 3, 0x400_i64);
+    let res = crate::loader::reloc::apply_relocations(base, &owned, &entry);
     assert!(res.is_ok(), "R_RISCV_RELATIVE should succeed: {:?}", res);
 
-    // Read back the patched value (usize-width, unaligned-safe).
-    // SAFETY: buf is alive for the duration of this test; we wrote exactly
-    // sizeof(usize) bytes at offset 0 via apply_relocations.
-    let patched: usize = unsafe { core::ptr::read_unaligned(buf.as_ptr() as *const usize) };
-    let expected = base.wrapping_add(0x400);
+    let patched: usize = unsafe { core::ptr::read_unaligned(base as *const usize) };
+    let expected = base + 0x400;
     assert_eq!(patched, expected, "R_RISCV_RELATIVE patch value mismatch");
-    log::info!(
-        "  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}",
-        base,
-        expected
+    log::info!("  [ok] R_RISCV_RELATIVE patched 0x{:X} → 0x{:X}", base, expected);
+}
+
+fn test_reloc_target_outside_owned_pages_rejected() {
+    let base = 0x10_000usize;
+    let owned = [owned_relocation_page(base)];
+    let entry = make_rela(crate::memory::paging::PAGE_SIZE as u64, 3, 0);
+    assert_eq!(
+        crate::loader::reloc::apply_relocations(base, &owned, &entry),
+        Err(ViError::InvalidInput)
     );
+    log::info!("  [ok] relocation target outside owned pages rejected");
+}
+
+fn test_reloc_target_hole_rejected() {
+    let base = 0x20_000usize;
+    let page = crate::memory::paging::PAGE_SIZE;
+    let owned = [owned_relocation_page(base), owned_relocation_page(base + 2 * page)];
+    let entry = make_rela(page as u64, 3, 0);
+    assert_eq!(
+        crate::loader::reloc::apply_relocations(base, &owned, &entry),
+        Err(ViError::InvalidInput)
+    );
+    log::info!("  [ok] relocation target in owned-page hole rejected");
+}
+
+fn test_reloc_target_cross_page_rejected() {
+    let base = 0x30_000usize;
+    let page = crate::memory::paging::PAGE_SIZE;
+    let owned = [owned_relocation_page(base), owned_relocation_page(base + page)];
+    let offset = page - core::mem::size_of::<usize>() + 1;
+    let entry = make_rela(offset as u64, 3, 0);
+    assert_eq!(
+        crate::loader::reloc::apply_relocations(base, &owned, &entry),
+        Err(ViError::InvalidInput)
+    );
+    log::info!("  [ok] cross-page relocation word rejected");
+}
+
+fn test_reloc_target_overflow_rejected() {
+    let base = 0x40_000usize;
+    let owned = [owned_relocation_page(base)];
+    let entry = make_rela(u64::MAX, 3, 0);
+    assert_eq!(
+        crate::loader::reloc::apply_relocations(base, &owned, &entry),
+        Err(ViError::InvalidInput)
+    );
+    log::info!("  [ok] overflowing relocation target rejected");
 }
 
 // ─── CellManifest parsing ────────────────────────────────────────────────────
@@ -621,6 +673,29 @@ fn test_signing_extract_sig_some_from_constructed_elf() {
         "extracted signature bytes must match embedded sentinel (0xAB×64)"
     );
     log::info!("  [ok] extract_sig(constructed elf) → Some([0xAB; 64])");
+}
+
+/// Section names are byte strings. An unrelated non-UTF-8 name must not let an
+/// untrusted ELF panic the verifier while it scans for duplicate signatures.
+fn test_signing_extract_sig_some_with_non_utf8_unrelated_section_name() {
+    let mut elf = build_minimal_signed_elf([0xABu8; 64]);
+    elf[384 + 14] = 0xff; // First byte of `.shstrtab`.
+    assert!(
+        crate::signing::extract_sig(&elf).is_some(),
+        "unrelated non-UTF-8 section names must not panic or hide the signature"
+    );
+    log::info!("  [ok] extract_sig tolerates unrelated non-UTF-8 section name");
+}
+
+/// A NOBITS declaration cannot designate the file-backed excluded payload.
+fn test_signing_extract_sig_none_for_nobits_signature() {
+    let mut elf = build_minimal_signed_elf([0xABu8; 64]);
+    elf[196..200].copy_from_slice(&8u32.to_le_bytes()); // SHT_NOBITS
+    assert!(
+        crate::signing::extract_sig(&elf).is_none(),
+        "NOBITS signature declarations must be rejected"
+    );
+    log::info!("  [ok] extract_sig rejects NOBITS signature declaration");
 }
 
 fn test_signing_required_flag_off_in_dev_build() {

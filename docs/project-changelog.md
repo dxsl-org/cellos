@@ -2,6 +2,31 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
+## [2026-08-24] Cell signature envelope covers the final ELF container (ADR-0004)
+
+`CELLOS-LOADER-SIG-001`'s unauthenticated-metadata exposure is closed and the
+relocation half is contained:
+
+- The canonical signed payload is now every byte of the final ELF container
+  except the 64-byte `__ViCell_sig` payload itself. The signer embeds a
+  zero-filled placeholder, signs that stable container, then rewrites only the
+  excluded 64 bytes. ELF/program/section headers, section names, offsets, the
+  manifest, and `.rela.dyn` metadata are all inside the signature.
+- Kernel verification uses a new bounded byte-oriented ELF parser
+  (`kernel/src/loader/elf_section.rs`) shared with manifest classification:
+  no `xmas_elf` string decoding on untrusted names, NOBITS/NULL/duplicate or
+  non-64-byte signature declarations rejected, tables bounds-checked.
+- Relocation writes are confined to pages owned by the new Cell: a word-sized
+  write must fall wholly within one `LoadedPage`, with checked arithmetic;
+  hostile out-of-range, hole, cross-page, and overflow targets are rejected by
+  boot-time self-tests (`kernel/src/loader/reloc_target.rs`).
+- Verified: RV64 QEMU boot shows signing + relocation self-tests PASS and
+  `[selftest] ELF-LOADER: PASS`; `scripts/test-cell-signing.sh` round trip
+  (sign/verify/PT_LOAD tamper/section-metadata tamper) passes; compile pass on
+  rv64gc (`native-domains,test-hooks`), aarch64, x86_64-none. Pre-existing,
+  unrelated self-test failures in the working tree remain: `IPC-PENDING`
+  caller-identity trailer and `S22-RV64-GRANT-REVOKE`.
+
 ## [2026-08-23] RPi3 USB Authority Locked Pending Policy v3 (Phase 05a)
 
 RPi3 hardware-completion phase 05a substrate: steps 1–4 complete (DWC2 MMIO

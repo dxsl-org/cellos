@@ -6,14 +6,14 @@ matches CELL_SIGNER_PUBKEY in kernel/src/signing.rs (`dev-signing-key` feature).
 Production signing uses --seed-hex or a KMS; never the hardcoded dev seed.
 
 Signed payload (MUST match kernel/src/signing.rs::verify_cell_with_key):
-  1. PT_LOAD segments sorted by (p_offset, p_filesz, phdr_index)
-  2. __ViCell_manifest section bytes (if present)
+  every byte of the final ELF container except the 64-byte `__ViCell_sig`
+  payload itself. The signature section header stays covered, which authenticates
+  ELF/program/section headers, all section names and offsets, and `.rela.dyn`
+  metadata before the loader can use it.
 
-  NOTE: The ELF header is NOT signed — objcopy mutates e_shnum/e_shoff when
-  embedding __ViCell_sig, so including the header would break verification.
-
-The signature is embedded as a non-loadable ELF section `__ViCell_sig` (64 bytes)
-via `objcopy`. The section must not have the ALLOC flag — it must never be in PT_LOAD.
+Signing first adds a zero-filled signature section, signs that stable container,
+then replaces only the excluded 64-byte payload. The signature section must not
+have the ALLOC flag — it must never be in PT_LOAD.
 
 Usage:
     python scripts/cellos-sign --sign cell.elf                        (the only signing route)
@@ -87,133 +87,125 @@ def _read_u64le(data: bytes, offset: int) -> int:
     return struct.unpack_from("<Q", data, offset)[0]
 
 
-def _pt_load_payload(elf: bytes) -> bytes:
-    """Return the signed payload: sorted PT_LOAD data || manifest section.
-
-    The ELF header is NOT signed: objcopy mutates e_shnum/e_shoff when adding
-    __ViCell_sig, which would invalidate the signature at verify time. PT_LOAD
-    covers all executable code; the manifest covers all capability claims.
-    """
+def _section_table(elf: bytes) -> tuple[int, int, int, int, int]:
+    """Return (bits, section-table offset, entry size, count, string-table index)."""
     assert elf[:4] == ELF_MAGIC, f"Not an ELF file (magic={elf[:4].hex()})"
-    ei_class = elf[4]   # 1=32-bit, 2=64-bit
-    ei_data  = elf[5]   # 1=LE, 2=BE
-    assert ei_class in (1, 2), f"Unsupported ELF class: {ei_class}"
-    assert ei_data == 1,       f"Only little-endian ELF supported (ei_data={ei_data})"
-
-    bits = 64 if ei_class == 2 else 32
-
+    assert len(elf) >= 52, f"ELF header truncated ({len(elf)} bytes)"
+    bits = 64 if elf[4] == 2 else 32 if elf[4] == 1 else 0
+    assert bits, f"Unsupported ELF class: {elf[4]}"
+    assert elf[5] == 1, f"Only little-endian ELF supported (ei_data={elf[5]})"
     if bits == 64:
-        e_phoff     = _read_u64le(elf, 32)
-        e_phentsize = _read_u16le(elf, 54)
-        e_phnum     = _read_u16le(elf, 56)
-
-        def read_phdr(i: int):
-            base = e_phoff + i * e_phentsize
-            p_type   = _read_u32le(elf, base)
-            p_offset = _read_u64le(elf, base + 8)
-            p_filesz = _read_u64le(elf, base + 32)
-            return p_type, p_offset, p_filesz
-
-        e_shoff     = _read_u64le(elf, 40)
-        e_shentsize = _read_u16le(elf, 58)
-        e_shnum     = _read_u16le(elf, 60)
-        e_shstrndx  = _read_u16le(elf, 62)
-
-        def read_shdr(i: int):
-            base = e_shoff + i * e_shentsize
-            sh_name   = _read_u32le(elf, base)
-            sh_offset = _read_u64le(elf, base + 24)
-            sh_size   = _read_u64le(elf, base + 32)
-            return sh_name, sh_offset, sh_size
-    else:
-        e_phoff     = _read_u32le(elf, 28)
-        e_phentsize = _read_u16le(elf, 42)
-        e_phnum     = _read_u16le(elf, 44)
-
-        def read_phdr(i: int):
-            base = e_phoff + i * e_phentsize
-            p_type   = _read_u32le(elf, base)
-            p_offset = _read_u32le(elf, base + 4)
-            p_filesz = _read_u32le(elf, base + 16)
-            return p_type, p_offset, p_filesz
-
-        e_shoff     = _read_u32le(elf, 32)
-        e_shentsize = _read_u16le(elf, 46)
-        e_shnum     = _read_u16le(elf, 48)
-        e_shstrndx  = _read_u16le(elf, 50)
-
-        def read_shdr(i: int):
-            base = e_shoff + i * e_shentsize
-            sh_name   = _read_u32le(elf, base)
-            sh_offset = _read_u32le(elf, base + 16)
-            sh_size   = _read_u32le(elf, base + 20)
-            return sh_name, sh_offset, sh_size
-
-    PT_LOAD = 1
-
-    # 1. PT_LOAD segments sorted by (p_offset, p_filesz, phdr_index)
-    segments = []
-    for i in range(e_phnum):
-        p_type, p_offset, p_filesz = read_phdr(i)
-        if p_type == PT_LOAD and p_filesz > 0:
-            segments.append((p_offset, p_filesz, i))
-    segments.sort()   # lexicographic on (p_offset, p_filesz, phdr_index)
-
-    payload = bytearray()
-    for p_offset, p_filesz, _ in segments:
-        payload += elf[p_offset : p_offset + p_filesz]
-
-    # 2. __ViCell_manifest section bytes (if present)
-    manifest = _find_section(elf, MANIFEST_SECTION, e_shoff, e_shentsize, e_shnum, e_shstrndx, bits)
-    if manifest is not None:
-        payload += manifest
-
-    return bytes(payload)
+        assert len(elf) >= 64, f"ELF64 header truncated ({len(elf)} bytes)"
+        return (
+            bits,
+            _read_u64le(elf, 40),
+            _read_u16le(elf, 58),
+            _read_u16le(elf, 60),
+            _read_u16le(elf, 62),
+        )
+    return (
+        bits,
+        _read_u32le(elf, 32),
+        _read_u16le(elf, 46),
+        _read_u16le(elf, 48),
+        _read_u16le(elf, 50),
+    )
 
 
-def _find_section(elf: bytes, name: str, e_shoff: int, e_shentsize: int,
-                  e_shnum: int, e_shstrndx: int, bits: int) -> bytes | None:
-    """Return raw bytes of the named ELF section, or None if not found."""
-    if e_shnum == 0 or e_shoff == 0:
+def _find_section_range(
+    elf: bytes,
+    name: str,
+    e_shoff: int,
+    e_shentsize: int,
+    e_shnum: int,
+    e_shstrndx: int,
+    bits: int,
+) -> tuple[int, int] | None:
+    """Return a uniquely named in-bounds section's (offset, size), or None."""
+    if not e_shnum or not e_shoff or e_shentsize == 0:
         return None
+    table_end = e_shoff + e_shentsize * e_shnum
+    if table_end > len(elf) or e_shstrndx >= e_shnum:
+        return None
+    reader = _read_shdr64 if bits == 64 else _read_shdr32
+    _, strtab_kind, strtab_offset, strtab_size = reader(
+        elf, e_shoff, e_shentsize, e_shstrndx
+    )
+    if strtab_kind != 3 or strtab_offset + strtab_size > len(elf):
+        return None
+    wanted = name.encode("ascii")
 
-    if bits == 64:
-        strtab_sh_name, strtab_offset, strtab_size = _read_shdr64(elf, e_shoff, e_shentsize, e_shstrndx)
-    else:
-        strtab_sh_name, strtab_offset, strtab_size = _read_shdr32(elf, e_shoff, e_shentsize, e_shstrndx)
+    def read_name(sh_name: int) -> bytes | None:
+        if sh_name >= strtab_size:
+            return None
+        start = strtab_offset + sh_name
+        end = elf.find(b"\x00", start, strtab_offset + strtab_size)
+        if end < 0:
+            return None
+        return elf[start:end]
 
-    def read_name(sh_name: int) -> str:
-        end = elf.index(b'\x00', strtab_offset + sh_name)
-        return elf[strtab_offset + sh_name : end].decode('ascii', errors='replace')
-
+    found = None
     for i in range(e_shnum):
-        if bits == 64:
-            sh_name, sh_offset, sh_size = _read_shdr64(elf, e_shoff, e_shentsize, i)
-        else:
-            sh_name, sh_offset, sh_size = _read_shdr32(elf, e_shoff, e_shentsize, i)
-        if sh_size == 0:
+        sh_name, sh_kind, sh_offset, sh_size = reader(elf, e_shoff, e_shentsize, i)
+        if read_name(sh_name) != wanted:
             continue
-        try:
-            if read_name(sh_name) == name:
-                return elf[sh_offset : sh_offset + sh_size]
-        except (ValueError, IndexError):
-            continue
-    return None
+        if sh_kind != 1 or sh_offset + sh_size > len(elf):
+            return None
+        if found is not None:
+            return None
+        found = (sh_offset, sh_size)
+    return found
 
 
-def _read_shdr64(elf: bytes, e_shoff: int, e_shentsize: int, i: int):
-    base = e_shoff + i * e_shentsize
-    sh_name   = _read_u32le(elf, base)
-    sh_offset = _read_u64le(elf, base + 24)
-    sh_size   = _read_u64le(elf, base + 32)
-    return sh_name, sh_offset, sh_size
+def _find_section(
+    elf: bytes,
+    name: str,
+    e_shoff: int,
+    e_shentsize: int,
+    e_shnum: int,
+    e_shstrndx: int,
+    bits: int,
+) -> bytes | None:
+    section = _find_section_range(elf, name, e_shoff, e_shentsize, e_shnum, e_shstrndx, bits)
+    if section is None:
+        return None
+    offset, size = section
+    return elf[offset : offset + size]
 
-def _read_shdr32(elf: bytes, e_shoff: int, e_shentsize: int, i: int):
-    base = e_shoff + i * e_shentsize
-    sh_name   = _read_u32le(elf, base)
-    sh_offset = _read_u32le(elf, base + 16)
-    sh_size   = _read_u32le(elf, base + 20)
-    return sh_name, sh_offset, sh_size
+
+def _signed_payload(elf: bytes) -> bytes:
+    """Return every final ELF byte except the fixed signature payload."""
+    bits, e_shoff, e_shentsize, e_shnum, e_shstrndx = _section_table(elf)
+    signature = _find_section_range(
+        elf, SIG_SECTION, e_shoff, e_shentsize, e_shnum, e_shstrndx, bits
+    )
+    assert signature is not None, f"Missing {SIG_SECTION} section"
+    offset, size = signature
+    assert size == 64, f"{SIG_SECTION} must be 64 bytes, got {size}"
+    return elf[:offset] + elf[offset + size :]
+
+def _read_shdr64(
+    elf: bytes, e_shoff: int, e_shentsize: int, index: int
+) -> tuple[int, int, int, int]:
+    base = e_shoff + index * e_shentsize
+    return (
+        _read_u32le(elf, base),
+        _read_u32le(elf, base + 4),
+        _read_u64le(elf, base + 24),
+        _read_u64le(elf, base + 32),
+    )
+
+
+def _read_shdr32(
+    elf: bytes, e_shoff: int, e_shentsize: int, index: int
+) -> tuple[int, int, int, int]:
+    base = e_shoff + index * e_shentsize
+    return (
+        _read_u32le(elf, base),
+        _read_u32le(elf, base + 4),
+        _read_u32le(elf, base + 16),
+        _read_u32le(elf, base + 20),
+    )
 
 
 # ── Key helpers ───────────────────────────────────────────────────────────────
@@ -228,16 +220,16 @@ def _pub_bytes(priv: Ed25519PrivateKey) -> bytes:
 
 # ── Embed signature via objcopy ───────────────────────────────────────────────
 
-def _embed_sig(elf_path: str, sig: bytes, out_path: str, objcopy: str) -> None:
-    assert len(sig) == 64
+def _add_signature_placeholder(elf_path: str, out_path: str, objcopy: str) -> None:
+    """Create the stable final ELF layout with an excluded zero signature."""
     with tempfile.NamedTemporaryFile(suffix=".sig", delete=False) as f:
-        f.write(sig)
+        f.write(bytes(64))
         sig_file = f.name
     try:
         subprocess.run(
             [
                 objcopy,
-                f"--remove-section={SIG_SECTION}",   # strip stale sig (no-op if absent)
+                f"--remove-section={SIG_SECTION}",
                 f"--add-section={SIG_SECTION}={sig_file}",
                 f"--set-section-flags={SIG_SECTION}=noload,readonly",
                 elf_path,
@@ -247,6 +239,23 @@ def _embed_sig(elf_path: str, sig: bytes, out_path: str, objcopy: str) -> None:
         )
     finally:
         os.unlink(sig_file)
+
+
+def _write_signature(elf_path: str, sig: bytes) -> None:
+    """Replace exactly the canonical payload's excluded signature bytes."""
+    assert len(sig) == 64
+    with open(elf_path, "rb") as f:
+        elf = bytearray(f.read())
+    bits, e_shoff, e_shentsize, e_shnum, e_shstrndx = _section_table(elf)
+    signature = _find_section_range(
+        elf, SIG_SECTION, e_shoff, e_shentsize, e_shnum, e_shstrndx, bits
+    )
+    assert signature is not None, f"Missing {SIG_SECTION} after objcopy"
+    offset, size = signature
+    assert size == len(sig), f"{SIG_SECTION} has invalid size {size}"
+    elf[offset : offset + size] = sig
+    with open(elf_path, "wb") as f:
+        f.write(elf)
 
 
 # ── Rust array literal helper ─────────────────────────────────────────────────
@@ -332,55 +341,46 @@ def main() -> None:
     with open(args.inp, "rb") as f:
         elf = f.read()
 
-    payload = _pt_load_payload(elf)
-
     if args.verify:
-        # Extract __ViCell_sig from the ELF
-        ei_class = elf[4]
-        bits = 64 if ei_class == 2 else 32
-        if bits == 64:
-            e_shoff     = _read_u64le(elf, 40)
-            e_shentsize = _read_u16le(elf, 58)
-            e_shnum     = _read_u16le(elf, 60)
-            e_shstrndx  = _read_u16le(elf, 62)
-        else:
-            e_shoff     = _read_u32le(elf, 32)
-            e_shentsize = _read_u16le(elf, 46)
-            e_shnum     = _read_u16le(elf, 48)
-            e_shstrndx  = _read_u16le(elf, 50)
-        sig_bytes = _find_section(elf, SIG_SECTION, e_shoff, e_shentsize, e_shnum, e_shstrndx, bits)
-        if sig_bytes is None or len(sig_bytes) != 64:
-            print(f"FAIL: no valid {SIG_SECTION} section in {args.inp}", file=sys.stderr)
-            sys.exit(3)
-        pubkey_obj = Ed25519PublicKey.from_public_bytes(pub)
         try:
-            pubkey_obj.verify(sig_bytes, payload)
+            bits, e_shoff, e_shentsize, e_shnum, e_shstrndx = _section_table(elf)
+            sig_bytes = _find_section(
+                elf, SIG_SECTION, e_shoff, e_shentsize, e_shnum, e_shstrndx, bits
+            )
+            if sig_bytes is None or len(sig_bytes) != 64:
+                raise ValueError(f"no valid {SIG_SECTION} section")
+            Ed25519PublicKey.from_public_bytes(pub).verify(sig_bytes, _signed_payload(elf))
             print(f"OK: signature valid ({args.inp})")
-        except Exception as e:
-            print(f"FAIL: signature invalid — {e}", file=sys.stderr)
+        except Exception as exc:
+            print(f"FAIL: signature invalid — {exc}", file=sys.stderr)
             sys.exit(3)
         return
 
-    # Sign mode
-    sig = priv.sign(payload)
-    assert len(sig) == 64
-
     out_path = args.out or args.inp
-    # If signing in-place, write to a temp then replace.
     if out_path == args.inp:
-        with tempfile.NamedTemporaryFile(suffix=".elf", delete=False, dir=os.path.dirname(args.inp) or ".") as tf:
-            tf_path = tf.name
-        try:
-            _embed_sig(args.inp, sig, tf_path, args.objcopy)
-            os.replace(tf_path, out_path)
-        except Exception:
-            try: os.unlink(tf_path)
-            except OSError: pass
-            raise
+        with tempfile.NamedTemporaryFile(
+            suffix=".elf", delete=False, dir=os.path.dirname(args.inp) or "."
+        ) as temporary:
+            target_path = temporary.name
     else:
-        _embed_sig(args.inp, sig, out_path, args.objcopy)
+        target_path = out_path
 
-    print(f"OK: signed -> {out_path} ({len(elf)} + 64 B sig)")
+    try:
+        _add_signature_placeholder(args.inp, target_path, args.objcopy)
+        with open(target_path, "rb") as f:
+            stable_elf = f.read()
+        _write_signature(target_path, priv.sign(_signed_payload(stable_elf)))
+        if target_path != out_path:
+            os.replace(target_path, out_path)
+    except Exception:
+        if target_path != out_path:
+            try:
+                os.unlink(target_path)
+            except OSError:
+                pass
+        raise
+
+    print(f"OK: signed -> {out_path} ({len(elf)} source bytes)")
 
 
 if __name__ == "__main__":
