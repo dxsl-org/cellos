@@ -23,8 +23,8 @@ use alloc::string::{String, ToString};
 use types::{CellId, ViError, ViResult};
 
 /// Default per-cell quota: 32 MB.
+#[allow(dead_code)]
 const DEFAULT_QUOTA_BYTES: u64 = 32 * 1024 * 1024;
-
 /// Per-cell quota and usage tracker.
 ///
 /// Keyed by `CellId` alone, without the caller generation: a respawned service
@@ -38,6 +38,7 @@ pub struct QuotaTracker {
 }
 
 impl QuotaTracker {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             used: BTreeMap::new(),

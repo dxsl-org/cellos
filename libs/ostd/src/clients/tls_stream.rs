@@ -38,8 +38,8 @@ use crate::tls::{tls_close, tls_connect, tls_read, tls_write};
 use crate::{ViError, ViResult};
 
 /// Max bytes accepted by a single [`tls_write`] IPC call (mirrors the cap in
-/// `tls.rs`: 512-byte IPC buffer minus the 9-byte `[op][cap]` header).
-const MAX_TLS_WRITE: usize = 503;
+/// `tls.rs`: 512-byte IPC buffer minus the 11-byte `[op][cap][len]` header).
+const MAX_TLS_WRITE: usize = 501;
 
 /// Number of consecutive 0-byte reads tolerated before [`Read::read`] gives up.
 ///

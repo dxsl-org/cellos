@@ -222,6 +222,7 @@ fn pending_drain_keeps_sender_context_without_relocking() -> bool {
             mask: SENDER,
             buf_ptr: recv_buf.as_mut_ptr() as usize,
             buf_len: payload.len(),
+            attest_caller: false,
         },
     );
     let preserved = {
@@ -243,6 +244,64 @@ fn pending_drain_keeps_sender_context_without_relocking() -> bool {
         || fail("pending-message drain did not preserve sender context under one scheduler lock")
 }
 
+fn try_recv_attestation_writes_identity_trailer() -> bool {
+    prepare_receiver(0);
+    let payload = b"attested-try-recv";
+    let mut recv_buf = [0u8; 64];
+    let result = {
+        let mut guard = super::SCHEDULER.lock();
+        let Some(sched) = guard.as_mut() else {
+            return fail("scheduler missing during try_recv attestation selftest");
+        };
+        let receiver = sched
+            .tasks
+            .get_mut(&RECEIVER)
+            .expect("synthetic receiver exists");
+        receiver.pending_msgs.try_push(super::tcb::PendingMsg {
+            sender_tid: SENDER,
+            data: super::pending_mailbox::PendingMsgData::try_copy(payload, TEST_CELL as usize)
+                .expect("inline payload copy must fit"),
+            wire: None,
+            enqueued_tick: 0,
+        })
+    };
+    if result.is_err() {
+        reset();
+        return fail("could not enqueue pending message for try_recv attestation test");
+    }
+
+    let sender_generation = {
+        let guard = super::SCHEDULER.lock();
+        guard
+            .as_ref()
+            .and_then(|sched| sched.tasks.get(&SENDER))
+            .map(|task| task.cell_generation)
+            .unwrap_or(0)
+    };
+
+    // Case 1: attest_caller = true
+    let delivered = super::syscall::handle_syscall(
+        RECEIVER,
+        super::syscall::Syscall::TryRecv {
+            mask: SENDER,
+            buf_ptr: recv_buf.as_mut_ptr() as usize,
+            buf_len: recv_buf.len(),
+            attest_caller: true,
+        },
+    );
+    let identity = api::caller_identity::CallerIdentity::from_recv_buf(&recv_buf);
+    let attested_ok = matches!(delivered, Ok(id) if id == SENDER)
+        && recv_buf[..payload.len()] == *payload
+        && identity == Some(api::caller_identity::CallerIdentity {
+            cell_id: TEST_CELL,
+            generation: sender_generation,
+            sender_tid: SENDER as u64,
+        });
+
+    reset();
+    attested_ok || fail("try_recv with attest_caller=true did not write valid CallerIdentity trailer")
+}
+
 /// Returns true iff all IPC producers defer foreign writes and fail safely.
 pub fn self_test() -> bool {
     let ok = all_producers_defer_foreign_writes()
@@ -250,7 +309,8 @@ pub fn self_test() -> bool {
         & quota_failure_is_fallible()
         & heap_payload_refunds_receiver_quota()
         & death_wake_precedes_later_message()
-        & pending_drain_keeps_sender_context_without_relocking();
+        & pending_drain_keeps_sender_context_without_relocking()
+        & try_recv_attestation_writes_identity_trailer();
     if ok {
         log::info!("[selftest] IPC-PENDING: PASS (deferred, bounded, quota-safe)");
     }

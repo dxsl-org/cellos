@@ -65,6 +65,7 @@ unsafe impl GlobalAlloc for CellAllocator {
     }
 }
 
+#[cfg(target_os = "none")]
 #[global_allocator]
 static ALLOCATOR: CellAllocator = CellAllocator;
 
@@ -73,6 +74,7 @@ static ALLOCATOR: CellAllocator = CellAllocator;
 /// leave a paralyzed-but-alive cell the supervisor cannot detect — log via the
 /// raw syscall (no allocation) and exit abnormally so the supervisor restarts the
 /// cell with a fresh heap. That is the "never-die" response to OOM.
+#[cfg(all(not(test), target_os = "none"))]
 #[alloc_error_handler]
 fn alloc_error(_layout: Layout) -> ! {
     let _ = crate::syscall::sys_log("OOM: cell heap exhausted — exiting for restart\n");

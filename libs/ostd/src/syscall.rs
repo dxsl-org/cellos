@@ -1078,6 +1078,26 @@ pub fn sys_try_recv(mask: usize, buf: &mut [u8]) -> SyscallResult {
     SyscallResult::Ok(ret as usize)
 }
 
+/// Non-blocking receive with kernel-attested caller identity.
+///
+/// Identical to [`sys_try_recv`] except that the kernel writes a
+/// `api::caller_identity::CallerIdentity` into the **last
+/// `CALLER_IDENTITY_LEN` bytes of `buf`** when a message is returned. Read it
+/// with `CallerIdentity::from_recv_buf(buf)`; `None` means the caller is unknown
+/// and the request must be denied.
+pub fn sys_try_recv_attested(mask: usize, buf: &mut [u8]) -> SyscallResult {
+    let ret = unsafe {
+        syscall(
+            ViSyscall::TryRecv,
+            mask,
+            buf.as_mut_ptr() as usize,
+            buf.len(),
+            api::caller_identity::RECV_ATTEST_CALLER,
+        )
+    };
+    SyscallResult::Ok(ret as usize)
+}
+
 /// Receive a message with a timeout deadline.
 ///
 /// `timeout_ticks` is the maximum number of **scheduler ticks** to wait (one tick

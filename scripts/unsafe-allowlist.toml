@@ -185,6 +185,20 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
+path = "cells/drivers/bcm-display/src/lib.rs"
+class = "driver-mmio"
+reason = "Driver Cell: row-copy dirty rect into VideoCore IV framebuffer memory via raw pointer."
+approver = "cellos-maintainers"
+date = "2026-08-23"
+
+[[file]]
+path = "cells/drivers/bcm-display/src/main.rs"
+class = "driver-mmio"
+reason = "Driver Cell: construct slice from GpuFlush raw pointer payload in single address space."
+approver = "cellos-maintainers"
+date = "2026-08-23"
+
+[[file]]
 path = "cells/guests/silo-guest/src/mailbox.rs"
 class = "hypervisor"
 reason = "Hypervisor world switch: guest register save/restore and stage-2 mapped mailboxes have no safe representation — the guest owns the memory on the other side of every one of these accesses."
@@ -269,11 +283,11 @@ approver = "cellos-maintainers"
 date = "2026-07-14"
 
 [[file]]
-path = "cells/services/net/src/handlers.rs"
+path = "cells/services/net/src/tls_handler.rs"
 class = "legacy-raw-ptr"
-reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
+reason = "Raw-pointer plumbing for single-threaded TLS context and handshake passing to underlying embedded-tls transport."
 approver = "cellos-maintainers"
-date = "2026-07-14"
+date = "2026-08-23"
 
 [[file]]
 path = "cells/services/net/src/tls/socket.rs"
@@ -284,13 +298,6 @@ date = "2026-07-14"
 
 [[file]]
 path = "cells/services/net/src/tls/transport.rs"
-class = "legacy-raw-ptr"
-reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
-approver = "cellos-maintainers"
-date = "2026-07-14"
-
-[[file]]
-path = "cells/tools/wasm/src/main.rs"
 class = "legacy-raw-ptr"
 reason = "Legacy raw-pointer plumbing that predates the ratchet. Tracked tech debt — refactor to a safe abstraction rather than adding neighbours to this class."
 approver = "cellos-maintainers"
@@ -358,15 +365,6 @@ approver = "cellos-maintainers"
 date = "2026-07-30"
 review_by = "2026-10-28"
 tracking = "midori-lessons phase 07 (grant/pointer audit)"
-
-[[file]]
-path = "cells/tools/shell/src/cmd_fs.rs"
-class = "temporary-audit"
-reason = "Two blocks only: ostd::fast_ipc::call_vfs is an unsafe fn in ostd, and the VfsResponse::DataPtr copy dereferences a pointer into the VFS Cell's own memory. Both disappear when DataPtr does; the rest of the shell was brought to zero unsafe in phase 11."
-approver = "cellos-maintainers"
-date = "2026-07-30"
-review_by = "2026-10-28"
-tracking = "midori-lessons phase 06 (DataPtr removal)"
 
 # ── Crate exemptions from the attribute rule ─────────────────────────────────────
 #
@@ -466,6 +464,13 @@ reason = "Owns allowlisted unsafe under cells/services/input/ — see the [[file
 approver = "cellos-maintainers"
 date = "2026-07-14"
 
+
+[[crate]]
+name = "driver-bcm-display"
+class = "driver-mmio"
+reason = "Owns allowlisted unsafe under cells/drivers/bcm-display/ — see the [[file]] entries of class \"driver-mmio\" for the justification."
+approver = "cellos-maintainers"
+date = "2026-08-23"
 [[crate]]
 name = "app-silo-test"
 class = "hypervisor"
@@ -491,13 +496,6 @@ date = "2026-07-14"
 name = "silo-guest"
 class = "hypervisor"
 reason = "Owns allowlisted unsafe under cells/guests/silo-guest/ — see the [[file]] entries of class \"hypervisor\" for the justification."
-approver = "cellos-maintainers"
-date = "2026-07-14"
-
-[[crate]]
-name = "app-wasm"
-class = "legacy-raw-ptr"
-reason = "Owns allowlisted unsafe under cells/tools/wasm/ — see the [[file]] entries of class \"legacy-raw-ptr\" for the justification."
 approver = "cellos-maintainers"
 date = "2026-07-14"
 

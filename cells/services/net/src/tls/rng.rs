@@ -18,27 +18,33 @@ impl ViRng {
     /// # Panics
     /// Panics if VirtIO-RNG is absent (returns 0 bytes consistently after 64 attempts).
     pub fn new() -> Self {
-        let mut seed = [0u8; 32];
-        let mut filled = 0usize;
-        let mut attempts = 0u32;
-        while filled < 32 {
-            let n = sys_get_random(&mut seed[filled..]);
-            if n > 0 {
-                filled += n;
-            } else {
-                attempts += 1;
-                // After 64 failed attempts, the device is not present.
-                assert!(
-                    attempts < 64,
-                    "[net/tls] VirtIO-RNG absent — cannot generate TLS entropy. \
-                     Add -object rng-random,id=rng0 -device virtio-rng-device,rng=rng0 to QEMU."
-                );
-                for _ in 0..1000 {
-                    core::hint::spin_loop();
+        #[cfg(test)]
+        {
+            Self(ChaCha20Rng::from_seed([0x42; 32]))
+        }
+        #[cfg(not(test))]
+        {
+            let mut seed = [0u8; 32];
+            let mut filled = 0usize;
+            let mut attempts = 0u32;
+            while filled < 32 {
+                let n = sys_get_random(&mut seed[filled..]);
+                if n > 0 {
+                    filled += n;
+                } else {
+                    attempts += 1;
+                    assert!(
+                        attempts < 64,
+                        "[net/tls] VirtIO-RNG absent — cannot generate TLS entropy. \
+                         Add -object rng-random,id=rng0 -device virtio-rng-device,rng=rng0 to QEMU."
+                    );
+                    for _ in 0..1000 {
+                        core::hint::spin_loop();
+                    }
                 }
             }
+            Self(ChaCha20Rng::from_seed(seed))
         }
-        Self(ChaCha20Rng::from_seed(seed))
     }
 }
 

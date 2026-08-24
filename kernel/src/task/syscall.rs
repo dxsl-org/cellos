@@ -1263,6 +1263,7 @@ pub enum Syscall {
         mask: usize,
         buf_ptr: usize,
         buf_len: usize,
+        attest_caller: bool,
     },
     /// 8: Spawn (Create new Task/Thread) - Returns Task ID
     Spawn { entry: usize, arg: usize },
@@ -2361,6 +2362,7 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             mask,
             buf_ptr,
             buf_len,
+            attest_caller,
         } => {
             let mut vfs_context_drop = None;
             let pending_msg_info: Result<Option<_>, ()> = {
@@ -2413,6 +2415,9 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
                         .write_bytes(buf_ptr, &data[..copy_len])
                         .map_err(|_| SyscallError::InvalidInput)?;
                 }
+                if attest_caller {
+                    write_caller_identity(buf_ptr, buf_len, sender_tid);
+                }
                 if let Some(sched) = super::SCHEDULER.lock().as_mut() {
                     if let Some(t) = sched.tasks.get_mut(&caller_id) {
                         // Commit by delivery_id (wire) or position+sender_tid (inline).
@@ -2439,7 +2444,12 @@ pub fn handle_syscall(caller_id: usize, syscall: Syscall) -> SyscallResult {
             // Non-blocking Recv (scan Sending tasks)
             let res = super::ipc_try_recv(caller_id, mask, buf_ptr, buf_len);
             match res {
-                Ok(id) => Ok(id),
+                Ok(id) => {
+                    if attest_caller && id > 0 {
+                        write_caller_identity(buf_ptr, buf_len, id);
+                    }
+                    Ok(id)
+                }
                 Err(_) => Err(SyscallError::InvalidCommand),
             }
         }
@@ -5070,6 +5080,7 @@ fn map_syscall(syscall_id: usize, a0: usize, a1: usize, a2: usize, a3: usize) ->
             mask: a0,
             buf_ptr: a1,
             buf_len: a2,
+            attest_caller: a3 & api::caller_identity::RECV_ATTEST_CALLER != 0,
         },
         ViSyscall::SendGather => Syscall::SendGather {
             target: a0,

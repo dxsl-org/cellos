@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(target_os = "none", no_std)]
+#![cfg_attr(target_os = "none", no_main)]
 
 //! Net Service Cell.
 //!
@@ -39,7 +39,8 @@ mod poll_driver;
 mod socket_state;
 mod socket_table;
 mod tls;
-
+mod tls_handler;
+mod tls_wire;
 use crate::tls::socket::TlsSocketEntry;
 use alloc::collections::BTreeMap;
 use api::syscall::events::NET_RX;
@@ -47,14 +48,14 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use dhcp::{add_dhcp_socket, poll_dhcp, DhcpState};
 use interface::VirtioNetDevice;
 use ostd::io::println;
-use ostd::syscall::{sys_get_time, sys_try_recv, sys_wait_completion, SyscallResult};
+use ostd::syscall::{sys_get_time, sys_try_recv_attested, sys_wait_completion, SyscallResult};
 use poll_driver::POLL_INTERVAL_MS;
 use smoltcp::{
     iface::{Config, Interface, SocketSet, SocketStorage},
     time::Instant,
     wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr},
 };
-use socket_table::{SocketTable, MAX_SOCKETS};
+use socket_table::{SocketOwner, SocketTable, MAX_SOCKETS};
 
 /// IPC receive buffer — must hold the largest request, including L2Send (1514-byte frame).
 const IPC_BUF_SIZE: usize = 4096;
@@ -80,6 +81,7 @@ pub(crate) fn now_instant() -> Instant {
     Instant::from_micros((sys_get_time() / 10) as i64)
 }
 
+#[cfg(target_os = "none")]
 #[no_mangle]
 pub fn main() {
     println("[net] Network Service v0.1: smoltcp + VirtIO net + DHCP");
@@ -165,11 +167,22 @@ pub fn main() {
         }
 
         buf.fill(0);
-        match sys_try_recv(0, &mut buf) {
+        match sys_try_recv_attested(0, &mut buf) {
             SyscallResult::Ok(sender) if sender > 0 => {
+                let Some(identity) = api::caller_identity::CallerIdentity::from_recv_buf(&buf) else {
+                    continue;
+                };
+                if identity.cell_id == 0 || identity.generation == 0 {
+                    continue;
+                }
+                let owner = SocketOwner {
+                    cell_id: identity.cell_id,
+                    generation: identity.generation,
+                };
                 handlers::handle_request(
                     &buf,
                     sender,
+                    owner,
                     &mut iface,
                     &mut device,
                     &mut sockets,
