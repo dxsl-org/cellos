@@ -6,7 +6,7 @@
 # (see scripts/make-hypervisor-fs-x86.sh) so the embedded filesystem carries
 # /bin/hypervisor plus /vmlinux and /initrd.gz.
 #
-# Two assertion tiers (HV_SMOKE_MODE):
+# Three assertion tiers (HV_SMOKE_MODE):
 #
 #   HV_SMOKE_MODE=machinery (default) — asserts the VMM constructed a runnable
 #     vCPU and entered the guest (liveness marker), with no panic/cell-fault/
@@ -25,6 +25,9 @@
 # through host KVM is Intel-host-incompatible (KVM exposes VT-x, not AMD-V), so
 # unlike the ARM lane there is no KVM fast path here; TCG emulation of SVM makes
 # the runs slow — give BOOT_WINDOW generous headroom.
+# QEMU-TCG 10.2.0 is qualified for this lane at 1G and 2G. Ubuntu 24.04's
+# 8.2.2 build deterministically triple-faults on the same ISO; select another
+# runtime with QEMU_X86_BIN.
 #
 # Usage:
 #   bash scripts/qemu-hypervisor-smoke-x86.sh [iso]
@@ -33,6 +36,8 @@
 # Environment:
 #   HV_SMOKE_MODE  machinery (default) | boot | host-shell
 #   BOOT_WINDOW    seconds to wait (default: 900; host-shell: 60)
+#   QEMU_X86_BIN   emulator executable (default: qemu-system-x86_64)
+#   QEMU_MEMORY    outer Cellos VM memory (default: 1G)
 #   LOG_TAIL       lines of qemu-hv-x86.log printed on any failure (default 200)
 #
 # Exit codes:
@@ -43,6 +48,8 @@ set -euo pipefail
 
 ISO="${1:-build/vicell-x86-hv.iso}"
 HV_SMOKE_MODE="${HV_SMOKE_MODE:-machinery}"
+QEMU_X86_BIN="${QEMU_X86_BIN:-qemu-system-x86_64}"
+QEMU_MEMORY="${QEMU_MEMORY:-1G}"
 if [[ "$HV_SMOKE_MODE" == "host-shell" ]]; then
     BOOT_WINDOW="${BOOT_WINDOW:-60}"
 else
@@ -54,8 +61,8 @@ if [[ "$HV_SMOKE_MODE" != "machinery" && "$HV_SMOKE_MODE" != "boot" && "$HV_SMOK
     exit 1
 fi
 
-if ! command -v qemu-system-x86_64 &>/dev/null; then
-    echo "FAIL: qemu-system-x86_64 not found on PATH" >&2
+if ! command -v "$QEMU_X86_BIN" &>/dev/null; then
+    echo "FAIL: QEMU executable not found: $QEMU_X86_BIN" >&2
     exit 1
 fi
 
@@ -68,15 +75,26 @@ if [[ ! -f "$ISO" ]]; then
     exit 1
 fi
 
-echo "[hv-smoke-x86] mode=$HV_SMOKE_MODE iso=$ISO (window=${BOOT_WINDOW}s)"
+QEMU_ISO="$ISO"
+if [[ "${QEMU_X86_BIN,,}" == *.exe ]]; then
+    if ! command -v wslpath &>/dev/null; then
+        echo "FAIL: Windows QEMU requires wslpath to translate the ISO path" >&2
+        exit 1
+    fi
+    QEMU_ISO="$(wslpath -w "$(realpath "$ISO")")"
+fi
+QEMU_VERSION="$("$QEMU_X86_BIN" --version | sed -n '1p')"
 
-timeout "$BOOT_WINDOW" qemu-system-x86_64 \
+echo "[hv-smoke-x86] mode=$HV_SMOKE_MODE iso=$ISO memory=$QEMU_MEMORY (window=${BOOT_WINDOW}s)"
+echo "[hv-smoke-x86] $QEMU_VERSION"
+
+timeout "$BOOT_WINDOW" "$QEMU_X86_BIN" \
     -machine q35 \
     -accel tcg \
     -cpu qemu64,+pdpe1gb,+svm \
-    -m 1G \
+    -m "$QEMU_MEMORY" \
     -nographic \
-    -cdrom "$ISO" \
+    -cdrom "$QEMU_ISO" \
     -boot d \
     -no-reboot \
     < /dev/null > qemu-hv-x86.raw.log 2>&1 || true
@@ -108,8 +126,15 @@ if [[ "$HV_SMOKE_MODE" == "host-shell" ]]; then
     exit 1
 fi
 
+if grep -qi "\[hv-x86\] guest triple-fault" qemu-hv-x86.log; then
+    echo "FAIL: guest triple-fault under $QEMU_VERSION" >&2
+    echo "  QEMU-TCG 8.2.2 is a known-incompatible SVM runtime; use QEMU_X86_BIN with the qualified 10.2.0 build." >&2
+    dump_log
+    exit 1
+fi
+
 # Hypervisor-cell failures are fatal in both guest modes.
-if grep -qi "\[hv-x86\] .*fail\|\[hv-x86\] .*error\|\[hv-x86\] unhandled\|\[hv-x86\] unexpected\|\[hv-x86\] guest exited" qemu-hv-x86.log; then
+if grep -qi "\[hv-x86\] .*fail\|\[hv-x86\] .*error\|\[hv-x86\] unhandled guest MMIO\|\[hv-x86\] unexpected\|\[hv-x86\] guest exited" qemu-hv-x86.log; then
     echo "FAIL: hypervisor cell error before/during guest boot" >&2
     grep -i "\[hv-x86\]" qemu-hv-x86.log | tail -20 >&2
     dump_log

@@ -2,7 +2,7 @@
 
 **Format**: [YYYY-MM-DD] Brief summary of changes, versioned by phase.
 
-## [2026-08-24] Tier 3 VM-boot lanes: ARM64 machinery verified, x86 boot blocked on TCG translation
+## [2026-08-24] Tier 3 VM-boot lanes: ARM64 machinery and x86 Linux shell verified
 
 The "Boot Linux VM tối thiểu trên ARM64/x86" TODO item was worked to a clean
 evidence boundary on this host:
@@ -32,15 +32,17 @@ evidence boundary on this host:
   `python3` interpreter selection in `make-hypervisor-fs.sh` /
   `format-disk-hv-arm.sh`.
 - `scripts/qemu-hypervisor-smoke-x86.sh` now provides machinery, boot, and
-  host-shell modes. SVM triple-fault diagnostics remain
-  (`SvmVcpu::shutdown_diagnostics`, logged as
+  host-shell modes, accepts `QEMU_X86_BIN` / `QEMU_MEMORY`, and translates ISO
+  paths for a Windows QEMU executable under WSL. SVM triple-fault diagnostics
+  remain (`SvmVcpu::shutdown_diagnostics`, logged as
   `[hv-x86] guest triple-fault: rip=… rflags=… cr0=…`).
 
-x86 guest boot itself is BLOCKED on this host: registered as
-`CELLOS-HV-X86-TCG-001` in [open-risk-register.md](roadmap/open-risk-register.md)
-(High). Guest RAM content is correct cell-side; the vCPU fetches zeros at the
-entry GPA under QEMU-TCG 8.2.2, deterministic across CPU models and both pinned
-Alpine artifact sets. No x86 guest-boot PASS is claimed from this host.
+x86 strict guest boot PASS is now recorded with QEMU-TCG 10.2.0 at both 1 GiB
+and 2 GiB: the unchanged ISO reaches Linux 6.12.81, runs `/bin/sh` as init, and
+prints the BusyBox `~ #` prompt. Ubuntu 24.04's QEMU-TCG 8.2.2 still
+deterministically fetches zeros at the entry GPA and triple-faults at either
+memory size. `CELLOS-HV-X86-TCG-001` remains as a Medium emulator-compatibility
+risk; it no longer blocks the qualified x86 Tier 3 lane.
 
 ## [2026-08-24] Cell signature envelope covers the final ELF container (ADR-0004)
 

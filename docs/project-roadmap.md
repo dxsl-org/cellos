@@ -3,7 +3,7 @@
 **Project**: Cellos (Jarvis Hybrid OS)
 **Current version**: 0.2.1-dev (Mycelium Era)
 **Current phase**: Phase 1 - Core Stability; active product stage G1 Robot & Embedded
-**Last updated**: 2026-08-23
+**Last updated**: 2026-08-24
 This file is the roadmap entrypoint. The previous all-in-one roadmap is
 preserved as a read-only content snapshot at
 [project-roadmap-legacy.md](project-roadmap-legacy.md). Use it only when a
@@ -61,6 +61,11 @@ Cellos is being shaped around product stages, not only phase numbers:
   (`switch`, `sas-fastpath`) and two-hart (`migration`) QEMU evidence. Production
   admission remains disabled by default, SAS remains the default view, and no
   Manifest v3 bytes, installer UI, or qualification claims are exposed.
+- Tier 3 x86 QEMU qualification reaches the pinned Alpine 3.21.7
+  Linux 6.12.81 `/bin/sh` BusyBox prompt under QEMU-TCG 10.2.0 at both 1 GiB
+  and 2 GiB. Ubuntu 24.04's QEMU-TCG 8.2.2 remains an explicit compatibility
+  risk; physical x86 qualification remains hardware-gated.
+
 ## Immediate Open Gates
 
 - Production signing is not fleet-enforced by default: `signing-required` is

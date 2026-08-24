@@ -73,20 +73,18 @@ docs to code. It is not a bug-fix plan.
   unauthorized behind the six human approvals, implementation checkpoint, and
   umbrella Phase 03 production gates.
  
-- **`CELLOS-HV-X86-TCG-001` — High, owner: Tier 3 x86 VM lane.** The SVM
-  personality cannot boot the pinned Alpine guest on QEMU-TCG 8.2.2
-  (Ubuntu 24.04/WSL2): the cell writes and reads back correct vmlinux bytes at
-  the entry GPA, yet the vCPU fetches zeros there and triple-faults
-  (`rip=0x1127370 cr0=0x11`, deterministic across `-cpu qemu64,+svm` and
-  `-cpu max`, Alpine 3.21.3 and 3.21.7). The recorded known-good x86 boot
-  (commit `1827b8f3`, Linux 6.12.81, `-m 2G`) ran on a different (Windows)
-  QEMU build, so the mismatch is between Cellos' VMCB/NPT setup and this
-  host's TCG `vmrun`, not the guest artifacts. Resolution requires either a
-  NPT/VMCB investigation against the failing TCG build or runtime evidence
-  from KVM/nested-SVM hardware; until then no x86 guest-boot PASS may be
-  recorded from this host.
 
 ## Medium
+
+- **`CELLOS-HV-X86-TCG-001` — Medium, owner: Tier 3 x86 VM lane.** The
+  qualified QEMU-TCG 10.2.0 runtime boots the pinned Alpine 3.21.7 guest at
+  both 1 GiB and 2 GiB, reaches Linux 6.12.81, runs `/bin/sh`, and exposes the
+  BusyBox `~ #` prompt. Ubuntu 24.04's QEMU-TCG 8.2.2 remains incompatible:
+  the same ISO, VMCB/NPT code, CPU model, and memory sizes fetch zeros at the
+  entry GPA and triple-fault (`rip=0x1127370 cr0=0x11`). The smoke runner
+  accepts `QEMU_X86_BIN` so CI and WSL can select the qualified emulator and
+  emits a specific diagnostic for the 8.2.2 signature. Hardware nested-SVM
+  evidence and the precise upstream TCG regression range remain open.
 
 - Net-broker is still partial wiring. `cells/services/net-broker/src/main.rs`
   marks K1 PSK loading, LAN beacon sockets, relay dispatch, lease renewal, and
